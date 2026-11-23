@@ -610,5 +610,92 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+# Lane seq-blocks-3 (2026-11-22): the Sequential sequence blocks' baselines, each one seeded step on 32 fixture
+# sequences (one epoch of one full unshuffled batch, SGD with momentum, so the momentum buffer is the gradient):
+# the epoch loss, the gradient, the updated parameters (a batch norm's running statistics included) and the
+# probabilities on the training and held-out sequences. The recurrent lanes pass `lengths` (1 .. 8 of 8 steps).
+def _sequence_blocks_data(X, yc, Xh, channels_first):
+    x = np.ascontiguousarray(X[:256, :4], dtype=np.float32).reshape(32, 8, 4)
+    xh = np.ascontiguousarray((X if Xh is None else Xh)[:256, :4], dtype=np.float32).reshape(32, 8, 4)
+    if channels_first:
+        # (sequences, channels 4, length 8)
+        x = np.ascontiguousarray(x.transpose(0, 2, 1))
+        xh = np.ascontiguousarray(xh.transpose(0, 2, 1))
+    y = np.ascontiguousarray(yc[7:256:8], dtype=np.int64)
+    return x, y, xh
+
+
+def _sequence_blocks_step(ml, m, x, y, xh, lengths=None):
+    B = _sequence_tape_binding(ml)
+    m = m.compile(loss="cross_entropy", optimizer="momentum", lr=0.05, momentum=0.9)
+    m = m.fit(x, y, epochs=1, batch_size=32, shuffle=False, seed=0, lengths=lengths)
+    d = lambda a: _sequence_tape_digest(B, a)
+    return _fit(dict(loss=d(np.asarray(m.loss_curve_, dtype=np.float32)), grad=d(m.optimizer_m_),
+                     params=d(m.params_), proba=d(m.predict_proba(x, lengths=lengths)),
+                     held_proba=d(m.predict_proba(xh, lengths=lengths))))
+
+
+@lane("sequence-blocks-cnn1d")
+def _(ml, X, yc, yr, Xh=None):
+    """A 1D-CNN (conv1d, relu, max_pool1d, conv1d, relu, adaptive_avg_pool1d, linear) on 32 sequences of 4
+    channels and 8 steps: one seeded training step."""
+    x, y, xh = _sequence_blocks_data(X, yc, Xh, True)
+    S = ml.Sequential
+    m = (S(input_shape=(4, 8), numeric_mode="identical").conv1d(8, 3, padding=1).relu().max_pool1d(2)
+         .conv1d(8, 3, padding=1).relu().adaptive_avg_pool1d(1).flatten().linear(2))
+    return _sequence_blocks_step(ml, m, x, y, xh)
+
+
+@lane("sequence-blocks-resnet1d")
+def _(ml, X, yc, yr, Xh=None):
+    """A ResNet-1D with batch norm (a conv-bn-relu stem, a residual block of two conv-bn layers with a 1x1
+    conv-bn shortcut): one seeded training step; the running statistics are part of the parameters' digest."""
+    x, y, xh = _sequence_blocks_data(X, yc, Xh, True)
+    S = ml.Sequential
+    body = S().conv1d(8, 3, padding=1, bias=False).batch_norm1d(8).relu().conv1d(8, 3, padding=1, bias=False).batch_norm1d(8)
+    m = (S(input_shape=(4, 8), numeric_mode="identical").conv1d(8, 5, padding=2, bias=False).batch_norm1d(8).relu()
+         .residual_block(body, S().conv1d(8, 1, bias=False).batch_norm1d(8)).relu()
+         .adaptive_avg_pool1d(1).flatten().linear(2))
+    return _sequence_blocks_step(ml, m, x, y, xh)
+
+
+@lane("sequence-blocks-inceptiontime")
+def _(ml, X, yc, yr, Xh=None):
+    """An InceptionTime module with batch norm (three parallel branches: bottleneck conv5, bottleneck conv3,
+    max_pool3 conv1; joined on the channels, batch norm, relu): one seeded training step."""
+    x, y, xh = _sequence_blocks_data(X, yc, Xh, True)
+    S = ml.Sequential
+    m = (S(input_shape=(4, 8), numeric_mode="identical")
+         .parallel(S().conv1d(4, 1, bias=False).conv1d(4, 5, padding=2, bias=False),
+                   S().conv1d(4, 1, bias=False).conv1d(4, 3, padding=1, bias=False),
+                   S().max_pool1d(3, 1, padding=1).conv1d(4, 1, bias=False))
+         .batch_norm1d(12).relu().adaptive_avg_pool1d(1).flatten().linear(2))
+    return _sequence_blocks_step(ml, m, x, y, xh)
+
+
+def _sequence_blocks_recurrent(ml, X, yc, Xh, kind):
+    x, y, xh = _sequence_blocks_data(X, yc, Xh, False)
+    lengths = (np.arange(32) % 8 + 1).astype(np.int64)
+    S = ml.Sequential
+    m = S(input_shape=(8, 4), numeric_mode="identical")
+    m = (m.gru(8) if kind == "gru" else m.lstm(8)).narrow(0, 7, 1).flatten().linear(2)
+    return _sequence_blocks_step(ml, m, x, y, xh, lengths)
+
+
+@lane("sequence-blocks-gru-lengths")
+def _(ml, X, yc, yr, Xh=None):
+    """A GRU layer over 32 sequences of 8 steps with lengths 1 .. 8 (packed: the padded steps never enter the
+    state), its last step into a linear head: one seeded training step."""
+    return _sequence_blocks_recurrent(ml, X, yc, Xh, "gru")
+
+
+@lane("sequence-blocks-lstm-lengths")
+def _(ml, X, yc, yr, Xh=None):
+    """The LSTM form of sequence-blocks-gru-lengths."""
+    return _sequence_blocks_recurrent(ml, X, yc, Xh, "lstm")
+
+
 _batch_decl("n/a:training-step (the lane checks one seeded training step through the tape; its forward "
-            "outputs are train parts, digested whole)", "sequence-tape-sequential", "sequence-tape-program")
+            "outputs are train parts, digested whole)", "sequence-tape-sequential", "sequence-tape-program",
+            "sequence-blocks-cnn1d", "sequence-blocks-resnet1d", "sequence-blocks-inceptiontime",
+            "sequence-blocks-gru-lengths", "sequence-blocks-lstm-lengths")

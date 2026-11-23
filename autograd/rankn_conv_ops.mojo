@@ -31,7 +31,9 @@
 # Codes OP_RNV_FIRST..OP_RNV_LAST (4500..4519) are this family; 4508..4517
 # are the batch norm of Sequential (lane seq-blocks-3, below), 4518..4519
 # reserved. sequence/dispatch.mojo routes and fences them.
+from std.math import sqrt
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from sequence.ops import Args, FP
 from checks.numerics import ftz, identical_div
 from autograd.rankn import rn_word
@@ -154,7 +156,10 @@ def op_rnv_conv_out(t: Int, a: Args):
     var n = _ud(s, OC)
     var r = (n * OH + oh) * OW + ow
     var v = ftz(a.p0.unsafe_load(r * OC + oc))
-    if rn_word(d, CP_BIAS) != 0:
+    var with_bias = rn_word(d, CP_BIAS) != 0
+    comptime if SEQ_BLOCKS_SABOTAGE_CONV:
+        with_bias = False
+    if with_bias:
         v = ftz(v + ftz(a.p1.unsafe_load(oc)))
     a.p2.unsafe_store(t, _canon(v))
 
@@ -403,6 +408,13 @@ def op_rnv_avgpool_vjp(t: Int, a: Args):
 # aux: [eps, momentum] then seven per-channel arrays (x_cnn's BN_* slots).
 
 
+# SABOTAGE ARMS (lane seq-blocks-3), test builds only, never defaults: each perturbs one block family so its
+# check is shown to catch it (checks/native_tests/sequence_blocks.mojo, sequential_lengths.mojo). BN: the
+# unbiased variance normalizes. CONV: the conv output without its bias. (MASK: sequence/ops.mojo op_cell_fwd.)
+comptime SEQ_BLOCKS_SABOTAGE_BN = is_defined["MOJOLEARN_SEQ_BLOCKS_SABOTAGE_BN"]()
+comptime SEQ_BLOCKS_SABOTAGE_CONV = is_defined["MOJOLEARN_SEQ_BLOCKS_SABOTAGE_CONV"]()
+
+
 @always_inline
 def _xf(p: FP) -> XFP:
     return p.unsafe_origin_cast[MutAnyOrigin]()
@@ -456,6 +468,12 @@ def op_rnv_bn_var(c: Int, a: Args):
     (bn_blk_var_running_at): part p0, aux p1, running p2."""
     var x = _xf(a.p0)
     bn_blk_var_running_at(c, x, _xf(a.p1), _xf(a.p2), x, _xd(a.p11), _xd(a.p11))
+    comptime if SEQ_BLOCKS_SABOTAGE_BN:
+        # the unbiased variance normalizes (PyTorch normalizes with the biased one)
+        var C = rn_word(a.p11, 1)
+        var count = Float32(rn_word(a.p11, 0) * rn_word(a.p11, 2))
+        var vu = a.p1.unsafe_load(2 + C + c) * count / (count - Float32(1))
+        a.p1.unsafe_store(2 + 2 * C + c, ftz(Float32(1) / sqrt(vu + a.p1.unsafe_load(0))))
 
 
 @always_inline

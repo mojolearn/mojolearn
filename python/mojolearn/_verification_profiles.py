@@ -8,7 +8,10 @@ CLASSICAL_SEQUENCE = frozenset(('sequence-autoarima', 'sequence-stl', 'sequence-
 # One seeded forward, backward and optimizer step through the autograd tape
 # (tools/identity_lanes/sequence.py): 64 rows, seconds, so routine `verify`
 # covers the tape while full neural training stays opt-in.
-ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program'))
+ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
+                          # lane seq-blocks-3: the sequence-block baselines, one seeded step on 32 sequences
+                          'sequence-blocks-cnn1d', 'sequence-blocks-resnet1d', 'sequence-blocks-inceptiontime',
+                          'sequence-blocks-gru-lengths', 'sequence-blocks-lstm-lengths'))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',
                               'byte-lm-host-infer-threaded', 'language-model-config',

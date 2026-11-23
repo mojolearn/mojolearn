@@ -591,6 +591,9 @@ def op_colsum(t: Int, a: Args):
     st(a.p1, t, acc)
 
 
+comptime SEQ_LENGTHS_SABOTAGE_MASK = is_defined["MOJOLEARN_SEQ_BLOCKS_SABOTAGE_MASK"]()
+
+
 def op_cell_fwd(t: Int, a: Args):
     """One time step of the cell for element t = b*H + u.
     p0 GX [B, G*H] (input projection + b_ih), p1 GH [B, G*H] (h @ W_hh^T +
@@ -607,7 +610,11 @@ def op_cell_fwd(t: Int, a: Args):
     var b = t // H
     var u = t - b * H
     var row = b * G * H
-    if a.i9 != 0 and Float32(a.i8) >= ld(a.p10, b):
+    var past = Float32(a.i8) >= ld(a.p10, b) if a.i9 != 0 else False
+    comptime if SEQ_LENGTHS_SABOTAGE_MASK:
+        # the sabotage arm (lane seq-blocks-3, test builds only): off by one, a row's own last step is masked
+        past = a.i9 != 0 and Float32(a.i8 + 1) >= ld(a.p10, b)
+    if past:
         st(a.p5, t, ld(a.p3, t))
         if cell == CELL_LSTM:
             st(a.p6, t, ld(a.p4, t))
