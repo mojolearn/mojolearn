@@ -123,6 +123,16 @@ from gbdt.host.gbdt_oracle import (
     gbdt_f64_token,
     gbdt_host_grid,
     _nan_token,
+    _ns_project_index,
+    _sample_tree_folds,
+)
+from gbdt.host.gbdt_oracle_eval import (
+    GbdtHostEval,
+    GbdtHostEvalFit,
+    gbdt_eval_add_tree,
+    gbdt_eval_detector,
+    gbdt_eval_shrink_point,
+    gbdt_eval_test_bins,
 )
 from gbdt.lapack.linear_system import solve_linear_system_cholesky
 
@@ -152,6 +162,15 @@ struct GbdtHostMultiModel(Movable):
 
     def n_trees(self) -> Int:
         return len(self.tree_split_offsets) - 1
+
+
+@fieldwise_init
+struct GbdtHostMultiFit(Movable):
+    """`gbdt_multi_host_fit`'s pair: the ensemble and what its HELD-OUT arm
+    reports (`GbdtHostEvalFit`), as `GbdtHostFitWithEval` for one output."""
+
+    var model: GbdtHostMultiModel
+    var eval: GbdtHostEvalFit
 
 
 def _stat_chunks(n_stats: Int) -> Int:
@@ -729,6 +748,9 @@ def gbdt_multi_host_fit(
     params: GbdtHostParams,
     objective: Int,
     class_weights: List[Float32],
+    # the held-out pool (`GbdtHostEval.none()` for none; lane
+    # gbdt-cpu-rest-2, 2026-11-23)
+    eval: GbdtHostEval,
     bootstrap_kind: Int = -1,
     bootstrap_param: Float32 = Float32(1.0),
     random_strength: Float32 = Float32(0.0),
@@ -738,8 +760,25 @@ def gbdt_multi_host_fit(
     # 2026-11-23): the device's one `weights` column, which the class
     # weights multiply (`train`'s product, data_providers.cpp:168)
     sample_weights: List[Float32] = List[Float32](),
-) raises -> GbdtHostMultiModel:
-    """`train` then `fit_with_test` on the covered configurations."""
+    # the per-tree feature sample (lane gbdt-cpu-rest-2, 2026-11-23)
+    feature_fraction: Float64 = 1.0,
+) raises -> GbdtHostMultiFit:
+    """`train` then `fit_with_test` on the covered configurations.
+
+    `eval` is the HELD-OUT arm (lane gbdt-cpu-rest-2), the statements of
+    `gbdt_oracle.mojo::gbdt_host_boost` at `dim` values per leaf: the test
+    rows binarized against the fit's grid, the test cursor `dim` planes of
+    `n_eval` from zero (`CreateCursors`; no boost from average here), the
+    last tree's `2^depth * dim` stored values added `[d * n + row] +=
+    [leaf * dim + d]` (`compute_bins_and_add_kernel` at the cursor stride),
+    the held-out loss through the SAME value-and-der launch the learn loss
+    uses at unit weight (`_test_loss_enqueue`), the detector and
+    `ShrinkToBestIteration`. MultiRMSE refuses an eval set on both columns
+    (`train`'s words).
+
+    `feature_fraction` below 1 is the device's per-tree feature sample
+    through `_sample_tree_folds` and `_ns_project_index`, as
+    `gbdt_host_boost` runs it."""
     if len(sample_weights) != 0 and len(sample_weights) != n_rows:
         raise Error("sample_weight size mismatch")
     if n_rows < 1 or n_features < 1:
@@ -820,6 +859,58 @@ def gbdt_multi_host_fit(
             bf_feature[Int(lf.first_fold_index) + b] = f
             bf_bin[Int(lf.first_fold_index) + b] = b
 
+    # ---- the HELD-OUT arm (gbdt/host/gbdt_oracle_eval.mojo) ----
+    ref ev = eval
+    var has_test = ev.n_rows > 0
+    if has_test and is_mrmse:
+        # `train`'s words (gbdt/train.mojo)
+        raise Error(
+            "loss='MultiRMSE' with eval_set is not carried here: the"
+            " held-out arm's target is one value per row"
+        )
+    if has_test:
+        if len(ev.x_colmajor) != ev.n_rows * n_features:
+            raise Error("eval_set x_colmajor size mismatch")
+        if len(ev.y) != ev.n_rows:
+            raise Error("eval_set y size mismatch")
+    var n_eval = ev.n_rows if has_test else 1
+    var test_cindex = List[UInt32]()
+    if has_test:
+        test_cindex = _binarize_columns(
+            ev.x_colmajor, ev.n_rows, n_features, grid, layout
+        )
+    var test_cursor = List[Float32](length=dim * n_eval, fill=Float32(0.0))
+    var test_stats = List[Float32](length=stat_count * n_eval, fill=Float32(0.0))
+    var test_blocks = (n_eval + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
+    var test_fv_part = List[Float32](length=test_blocks, fill=Float32(0.0))
+    var test_mag_part = List[Float32](length=2 * test_blocks, fill=Float32(0.0))
+    var no_weights = List[Float32]()
+    var detector = gbdt_eval_detector(ev)
+    var test_losses = List[Float64]()
+    var stopped_early = False
+    var feat_offset = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_mask = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_one_hot = List[Bool](length=n_features, fill=False)
+    for f in range(n_features):  # driver-loop: over the features (one record each)
+        feat_offset[f] = layout.features[f].offset
+        feat_mask[f] = layout.features[f].mask
+        feat_shift[f] = layout.features[f].shift
+        feat_one_hot[f] = layout.features[f].one_hot_feature
+
+    # ---- the per-tree feature sample's state (`gbdt_host_boost`'s) ----
+    var ff_on = feature_fraction < 1.0
+    var s_layout = layout.copy()
+    var s_blocks = blocks.copy()
+    var s_hist_cells = hist_cells
+    var s_bf_feature = bf_feature.copy()
+    var s_bf_bin = bf_bin.copy()
+    var full_cindex = List[UInt32]()
+    if ff_on:
+        full_cindex = cindex.copy()
+    var ff_one_hot = List[Bool](length=n_features, fill=False)
+    var feature_random = TRandom(params.random_seed ^ UInt64(0x4645415455524553))
+
     var max_depth = params.max_depth
     var max_leaves = 1 << max_depth
     var lr = params.learning_rate
@@ -870,6 +961,25 @@ def gbdt_multi_host_fit(
             score_std_dev = Float32(Float64(Float32(noise_mult * Float64(random_strength))) * _target_std_dev(stats, n_rows, stat_count, is_mc))
         var level_rand = TRandom(tree_seed)
 
+        # ---- the per-tree feature sample (`feature_fraction < 1`) ----
+        if ff_on:
+            var tree_folds = _sample_tree_folds(
+                grid.fold_counts, feature_fraction, feature_random
+            )
+            s_layout = build_layout(tree_folds, ff_one_hot)
+            s_blocks = blocks_for(s_layout, n_rows)
+            cindex = _ns_project_index(
+                full_cindex, layout, s_layout, tree_folds, n_rows, n_features
+            )
+            s_hist_cells = s_layout.hist_cells
+            s_bf_feature = List[Int](length=s_hist_cells, fill=0)
+            s_bf_bin = List[Int](length=s_hist_cells, fill=0)
+            for f in range(n_features):  # driver-loop: over the features and their borders (the tree layout)
+                ref lf = s_layout.features[f]
+                for b in range(Int(lf.folds)):
+                    s_bf_feature[Int(lf.first_fold_index) + b] = f
+                    s_bf_bin[Int(lf.first_fold_index) + b] = b
+
         # ---- `run_tree_layout_traced` at `stat_count` planes (TWIN of the
         # loop in `gbdt_oracle.mojo::gbdt_host_fit`) ----
         var row_index = List[Int](length=n_rows, fill=0)
@@ -878,7 +988,7 @@ def gbdt_multi_host_fit(
         var p_sz = List[Int](length=max_leaves, fill=0)
         p_sz[0] = n_rows
         var hist = List[Float32](
-            length=max_leaves * stat_count * hist_cells, fill=Float32(0.0)
+            length=max_leaves * stat_count * s_hist_cells, fill=Float32(0.0)
         )
         var ids_compute = List[Int](length=max_leaves, fill=0)
         var sub_from = List[Int](length=max_leaves, fill=0)
@@ -899,37 +1009,37 @@ def gbdt_multi_host_fit(
                     compute.append(j)
 
             var block_first_bin = 0
-            for b in range(len(blocks)):
-                ref blk = blocks[b]
+            for b in range(len(s_blocks)):
+                ref blk = s_blocks[b]
                 var total = 0
                 for k in range(blk.count()):
                     total += Int(blk.folds[k])
                 if blk.policy == POLICY_BINARY:
                     _binary_block_n(
-                        blk, block_first_bin, hist_cells, stat_count, compute,
+                        blk, block_first_bin, s_hist_cells, stat_count, compute,
                         depth, p_off, p_sz, row_index, stats, cindex, n_rows,
                         fixed_scale, hist,
                     )
                 elif blk.policy == POLICY_HALF_BYTE:
                     _half_byte_block_n(
-                        blk, block_first_bin, hist_cells, stat_count, compute,
+                        blk, block_first_bin, s_hist_cells, stat_count, compute,
                         depth, p_off, p_sz, row_index, stats, cindex, n_rows,
                         fixed_scale, hist,
                     )
                 elif blk.policy == POLICY_ONE_BYTE:
                     _one_byte_block_n(
-                        blk, block_first_bin, hist_cells, stat_count, compute,
-                        p_off, p_sz, row_index, stats, cindex, layout, n_rows,
+                        blk, block_first_bin, s_hist_cells, stat_count, compute,
+                        p_off, p_sz, row_index, stats, cindex, s_layout, n_rows,
                         fixed_scale, hist,
                     )
                 block_first_bin += total
 
             # `scan_histograms_kernel` over the computed leaves, every plane
-            _scan_histograms(hist, hist_cells, stat_count, compute, layout, n_features)
+            _scan_histograms(hist, s_hist_cells, stat_count, compute, s_layout, n_features)
 
             # `substract_histograms_kernel`: the larger sibling, in place
             if planned and half > 0:
-                _subtract_histograms(hist, hist_cells, sub_from, sub_what, half, stat_count)
+                _subtract_histograms(hist, s_hist_cells, sub_from, sub_what, half, stat_count)
 
             # `compute_partition_stats` over the live leaves, at the chunk
             # count of `stat_count` planes (`_stat_chunks`)
@@ -941,10 +1051,10 @@ def gbdt_multi_host_fit(
 
             # the score and the device winner
             var gains = _cosine_gains_n(
-                hist, hist_cells, stat_count, part_stats, n_live,
-                params.l2_leaf_reg, is_mc, score_std_dev, level_seed, bf_feature,
+                hist, s_hist_cells, stat_count, part_stats, n_live,
+                params.l2_leaf_reg, is_mc, score_std_dev, level_seed, s_bf_feature,
             )
-            var best_bin = _gain_winner(gains, hist_cells)
+            var best_bin = _gain_winner(gains, s_hist_cells)
             var best_gain = -GBDT_FLOAT32_MAX
             if best_bin != GBDT_SENTINEL:
                 best_gain = gains[Int(best_bin)]
@@ -957,14 +1067,14 @@ def gbdt_multi_host_fit(
             if best_bin != GBDT_SENTINEL:
                 bf_split = Int(best_bin)
 
-            var split_f = bf_feature[bf_split] if hist_cells > 0 else 0
-            var split_b = bf_bin[bf_split] if hist_cells > 0 else 0
-            ref sfeat = layout.features[split_f]
+            var split_f = s_bf_feature[bf_split] if s_hist_cells > 0 else 0
+            var split_b = s_bf_bin[bf_split] if s_hist_cells > 0 else 0
+            ref sfeat = s_layout.features[split_f]
             # the split chain, every live leaf, every plane
             _split_level(
                 cindex, Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
                 UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
-                n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
+                n_live, s_hist_cells, row_index, stats, p_off, p_sz, hist,
                 ids_compute, sub_from, sub_what, stat_count,
             )
             n_live = n_live * 2
@@ -975,7 +1085,7 @@ def gbdt_multi_host_fit(
         for d in range(max_depth):
             var best_score = winners_score[d]
             var best_bin_u = winners_bf[d]
-            if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= hist_cells:
+            if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
                 raise Error(
                     "All splits have infinite score. Probably, numerical"
                     " overflow occurs in loss function and/or split score"
@@ -984,8 +1094,8 @@ def gbdt_multi_host_fit(
                     " [level " + String(d) + ", live leaves "
                     + String(1 << d) + "]"
                 )
-            var cf_ = bf_feature[Int(best_bin_u)]
-            var cb_ = bf_bin[Int(best_bin_u)]
+            var cf_ = s_bf_feature[Int(best_bin_u)]
+            var cb_ = s_bf_bin[Int(best_bin_u)]
             if not (best_score > Float32(0.0)):
                 break
             var repeated = False
@@ -1033,6 +1143,28 @@ def gbdt_multi_host_fit(
             model_leaves.append(scaled[i])
         tree_leaf_offsets.append(len(model_leaves))
 
+        # ---- `AppendModels(..., testCursor)` and the detector ----
+        if has_test:
+            if grown > 0:
+                var test_bins = gbdt_eval_test_bins(
+                    test_cindex, n_eval, tree_features, tree_bins,
+                    feat_offset, feat_mask, feat_shift, feat_one_hot,
+                )
+                gbdt_eval_add_tree(test_cursor, test_bins, scaled, dim)
+            # `_test_loss_enqueue`: the learn loss's own launch, unit weight
+            _multi_pass(
+                objective, num_classes, ev.y, no_weights, False, test_cursor,
+                n_eval, True, False, test_stats, test_fv_part, test_mag_part,
+            )
+            var t_fv = _deterministic_sum_lanes(test_fv_part, 1, test_blocks)[0]
+            var t_loss = -Float64(t_fv) / Float64(n_eval)
+            test_losses.append(t_loss)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                # their break is BEFORE the learn loss append
+                stopped_early = True
+                break
+
         if len(losses) < params.n_estimators:
             var v = Float64(fv)
             if iteration + 1 > 1:
@@ -1044,10 +1176,30 @@ def gbdt_multi_host_fit(
     )
     var final_fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
     losses.append(-Float64(final_fv) / Float64(n_rows))
-    return GbdtHostMultiModel(
+    # ---- `ShrinkToBestIteration` (`gbdt/train.mojo:2241-2254`) ----
+    var shrink_to = gbdt_eval_shrink_point(
+        test_losses, ev.want_best_model, ev.best_model_min_trees
+    )
+    var n_trees = len(tree_split_offsets) - 1
+    if 0 < shrink_to and shrink_to < n_trees:
+        while len(tree_split_offsets) - 1 > shrink_to:
+            _ = tree_split_offsets.pop()
+            _ = tree_leaf_offsets.pop()
+        split_features.resize(
+            tree_split_offsets[len(tree_split_offsets) - 1], 0
+        )
+        split_bins.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
+        model_leaves.resize(
+            tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0)
+        )
+    var model = GbdtHostMultiModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
         model_leaves^, losses^, dim,
+    )
+    return GbdtHostMultiFit(
+        model^,
+        GbdtHostEvalFit(test_losses^, detector.best_iteration, stopped_early),
     )
 
 

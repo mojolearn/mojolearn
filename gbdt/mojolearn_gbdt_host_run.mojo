@@ -1231,15 +1231,22 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # (gbdt_oracle_losses.mojo::gbdt_losses_host_fit, the held-out arm of
     # gbdt_host_boost); the grouped losses refuse an eval set on both
     # columns, in `train`'s words
+    if is_multi_rmse and n_eval_rows != 0:
+        raise Error(
+            "loss='MultiRMSE' with eval_set is not carried here: the"
+            " held-out arm's target is one value per row"
+        )
     if pw_grouped and n_eval_rows != 0:
         raise Error(
             "loss='" + loss + "' with eval_set is not implemented here: the"
             " held-out loss needs the eval pool's own grouping"
         )
+    # and MultiClass / MultiClassOneVsAll (gbdt_oracle_multiclass.mojo,
+    # the same arm at `dim` values per leaf)
     var eval_arm_ok = (
         (loss == String("Logloss") or is_rmse) and not is_pointwise
         and not is_multi
-    ) or (is_pointwise and not pw_grouped)
+    ) or (is_pointwise and not pw_grouped) or (is_multi and not is_multi_rmse)
     if n_eval_rows != 0 and not eval_arm_ok:
         _refuse(
             "eval_set outside Logloss and RMSE (the held-out arm of"
@@ -1285,7 +1292,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # same two helpers), and the symmetric pointwise losses, grouped ones
     # included (gbdt_losses_host_fit, the same statements; lane
     # gbdt-cpu-rest-2)
-    if feature_fraction != 1.0 and grow_code == 0 and (ranking_pointwise or is_multi):
+    if feature_fraction != 1.0 and grow_code == 0 and ranking_pointwise:
         _refuse("feature_fraction=" + String(feature_fraction) + " under SymmetricTree with loss='" + loss + "'")
     if not (feature_fraction > 0.0) or feature_fraction > 1.0:
         raise Error("feature_fraction must be finite and in (0, 1]")
@@ -1530,14 +1537,23 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             multi_objective = GBDT_OBJ_MULTICLASS
         elif is_multi_rmse:
             multi_objective = GBDT_OBJ_MULTIRMSE
-        var multi_model = gbdt_multi_host_fit(
+        # the held-out arm and the feature sample (lane gbdt-cpu-rest-2)
+        var multi_ev = _gbdt_host_eval_arm(
+            eval_x_address, eval_y_address, n_eval_rows, n_features,
+            od_kind, od.auto_stop_p_value, od.iterations_wait,
+            use_best_model, best_model_min_trees,
+        )
+        var multi_fit = gbdt_multi_host_fit(
             x, y, n_rows, n_features, p,
             multi_objective,
-            class_weights, sym_boot_kind, sym_boot_param, random_strength,
-            target_dim, row_weights,
+            class_weights, multi_ev^, sym_boot_kind, sym_boot_param,
+            random_strength, target_dim, row_weights, feature_fraction,
         )
-        text = gbdt_multi_host_model_text(multi_model)
-        losses = multi_model.losses.copy()
+        text = gbdt_multi_host_model_text(multi_fit.model)
+        losses = multi_fit.model.losses.copy()
+        best_iteration = multi_fit.eval.best_iteration
+        stopped_early = multi_fit.eval.stopped_early
+        test_losses = multi_fit.eval.test_losses.copy()
     elif is_pointwise:
         # gbdt/host/gbdt_oracle_losses.mojo
         # `AdjustBoostFromAverageDefaultValue`: unset is True for MAE,
