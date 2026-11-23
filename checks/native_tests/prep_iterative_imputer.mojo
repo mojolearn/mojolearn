@@ -30,10 +30,23 @@ correlated, 15% NaN) for seeds 0 to 3, with scikit-learn 1.9.1's results, in `fi
                           Fail-proof: in `_member_step`, read the predict block at `a + 4 * go` instead of
                           `a + 4 * gm`; unit 0 fails naming an Xt word.
 
-sample_posterior with BayesianRidge stays a public refusal (its plan serves no predict_std) and the GaussianProcess
-member's PREDICT_STD route (the same query's mean in `call.y`) needs the GP provider's host route and kernel words:
-both are in tools/mf_iterimp_digests.py, as are the public refusals. Every unit is independent and runs across the
-host cores; the two posterior sets run one after the other, each with its twelve seeds across the host cores.
+    estimator transform units 0-2   (lane mf-iterimp2) transform(X3) of the same three fits through
+                          x_prep/iterimp_run.mojo `iterimp_member_transform` over each step's member state (the held
+                          state the fit hands its estimator), against the door's per-step transform rounds over the
+                          public fitted estimators before this lane (the base build;
+                          tools/py2mojo_native_fixtures_mf_iterimp2.py, pack `mf_iterimp2`): word for word.
+                          Fail-proof: in `iterimp_member_transform` run the steps from the last to the first; unit 0
+                          fails naming an Xt word.
+    estimator posterior units 0-1   (lane mf-iterimp2) sample_posterior with estimator=BayesianRidge() through the
+                          member rounds (PREDICT_STD with the mean, core/xlinear_member.mojo), and with bounds
+                          [-0.5, 0.5]: the posterior sets' statistical checks against scikit-learn's reference (whose
+                          default estimator is BayesianRidge()). Fail-proof: in x_linear/bayes.mojo `bayes_std_row`
+                          return `fsqrt(s)` (no 1 / alpha_ term): the spread check fails.
+
+The GaussianProcess member's PREDICT_STD route (the same query's mean in `call.y`) needs the GP provider's host route
+and kernel words: it is in tools/mf_iterimp_digests.py, as are the public refusals. Every unit is independent and
+runs across the host cores; the posterior sets run one after the other, each with its twelve seeds across the host
+cores.
 """
 from std.math import isnan, sqrt
 from std.testing import TestSuite
@@ -47,8 +60,10 @@ from checks.native_tests.bm_rest_iterimp_host import (
 from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN
 from x_prep.iterimp_run import (
     iterimp_fit, iterimp_prepare, iterimp_member_rounds, iterimp_member_free, IterImpFitted, IterImpMember,
-    IterImpMemberFit, II_NONE, II_ASCENDING, II_DESCENDING, II_RANDOM,
+    IterImpMemberFit, II_NONE, II_ASCENDING, II_DESCENDING, II_RANDOM, IterImpHeldStep, IterImpApply,
+    IterImpStep, iterimp_member_transform,
 )
+from bindings.prep_encode_imputer_run import ImputerApply
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.device_route import DeviceRoute, DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_word
@@ -69,6 +84,7 @@ comptime N = 400
 comptime D = 5
 comptime SEEDS = 12
 comptime MF_ITERIMP_DIR = "checks/native_tests/fixtures/mf_iterimp/"
+comptime MF_ITERIMP2_DIR = "checks/native_tests/fixtures/mf_iterimp2/"
 
 
 def _x(seed: Int) raises -> List[Float32]:
@@ -155,7 +171,17 @@ def random_case(unit: Int) raises:
 
 
 def posterior_case(unit: Int) raises:
+    _posterior_set(unit, False)
+
+
+def estimator_posterior_case(unit: Int) raises:
+    _posterior_set(unit, True)
+
+
+def _posterior_set(unit: Int, with_member: Bool) raises:
     var label = String("IterativeImputer sample_posterior set ") + String(unit)
+    if with_member:
+        label += " (estimator=BayesianRidge(), member rounds)"
     var x = _x(2)
     var cells = List[Int]()
     for i in range(N * D):  # small-loop(oracle: the missing cells of one block)
@@ -170,16 +196,27 @@ def posterior_case(unit: Int) raises:
     var mp = messages.unsafe_ptr()
     var xp = x.unsafe_ptr()
     var cp = cells.unsafe_ptr()
-    def seed_fit(seed: Int) {imm dp, imm fp, imm mp, imm xp, imm cp, imm unit, imm m}:
+    def seed_fit(seed: Int) {imm dp, imm fp, imm mp, imm xp, imm cp, imm unit, imm m, imm with_member}:
         try:
             var lo = -0.5 if unit == 1 else neg_inf()
             var hi = 0.5 if unit == 1 else pos_inf()
             var request = ii_request(N, D, IMP_MEAN, II_ASCENDING, 10, II_NONE, UInt64(seed), lo, hi, True, False)
             var runner = HostIterRunner(Int(xp))
-            var fitted = iterimp_fit(runner, request)
-            var values = ii_output(runner, fitted, N)
-            for c in range(m):  # small-loop(oracle: the missing cells of one fit)
-                dp.unsafe_store(seed * m + c, values[Int(cp[c])])
+            if with_member:
+                var fitted = IterImpFitted()
+                var plan = iterimp_prepare(runner, request, fitted)
+                var member = IterImpMember(_estimator_plan(2), False, True)
+                var fit = IterImpMemberFit()
+                iterimp_member_rounds(runner, request, plan, fitted, member, fit)
+                var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
+                for c in range(m):  # small-loop(oracle: the missing cells of one fit)
+                    dp.unsafe_store(seed * m + c, src[fit.out_offset + Int(cp[c])])
+                iterimp_member_free(member, fit)
+            else:
+                var fitted = iterimp_fit(runner, request)
+                var values = ii_output(runner, fitted, N)
+                for c in range(m):  # small-loop(oracle: the missing cells of one fit)
+                    dp.unsafe_store(seed * m + c, values[Int(cp[c])])
         except problem:
             mp[unsafe_offset=seed] = String(problem)
             fp.unsafe_store(seed, 1)
@@ -317,6 +354,45 @@ def estimator_case(unit: Int) raises:
     _ = len(x)  # X stays alive past every program that read it
 
 
+def estimator_transform_case(unit: Int) raises:
+    var names: List[String] = ["Ridge(alpha=1)", "LinearRegression()", "BayesianRidge()"]
+    var label = String("IterativeImputer estimator=") + names[unit] + " transform"
+    var x = fixture_f32(MF_ITERIMP2_DIR + "x.f32", N * D)
+    var xh = fixture_f32(MF_ITERIMP2_DIR + "xh.f32", N * D)
+    var request = ii_request(N, D, IMP_MEAN, II_ASCENDING, 10, II_NONE, 0, neg_inf(), pos_inf(), False, False)
+    var runner = HostIterRunner(Int(x.unsafe_ptr()))
+    var fitted = IterImpFitted()
+    var plan = iterimp_prepare(runner, request, fitted)
+    var member = IterImpMember(_estimator_plan(unit), False, False)
+    var fit = IterImpMemberFit()
+    iterimp_member_rounds(runner, request, plan, fitted, member, fit)
+    try:
+        # the door's UNPACK of transform: each fitted step's held state (here the fit's own states), the initial
+        # imputer's fill, the fitted fields
+        var steps = List[IterImpHeldStep]()
+        for s in range(len(fit.states)):  # small-loop(oracle: the fitted steps)
+            steps.append(IterImpHeldStep(fit.seq_j[s], fit.seq_nbl[s].copy(), member.plan.copy(), fit.states[s]))
+        var init = ImputerApply(N, D, 0, request.init.mark, request.init.missing, 1, len(fitted.fill),
+                                fitted.keep.copy(), List[Int]())
+        var apply = IterImpApply(init^, Int(fitted.fill.unsafe_ptr()), N, D, request.mark, request.missing,
+                                 request.work_on, False, fitted.keep.copy(), fitted.bounds.copy(),
+                                 fitted.indicator.copy(), False, 0, 0, List[IterImpStep]())
+        var rng = fit.rng
+        var other = HostIterRunner(Int(xh.unsafe_ptr()))
+        var applied = iterimp_member_transform(other, apply, steps, rng)
+        require(applied.cols == D, label + ": width " + String(applied.cols))
+        var got = List[Float32](length=N * D, fill=0.0)
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=other.words(applied.out_handle))
+        for i in range(N * D):  # small-loop(oracle: one result block)
+            got[i] = src[applied.out_offset + i]
+        same_bits(got, fixture_f32(MF_ITERIMP2_DIR + "est-" + String(unit) + "-tr.f32", N * D), label)
+    finally:
+        iterimp_member_free(member, fit)
+    _ = len(x)  # X, Xh and the fill stay alive past every program that read them
+    _ = len(xh)
+    _ = len(fitted.fill)
+
+
 def test_iterative() raises:
     check_cases("iterative", 3, iterative_case)
 
@@ -336,6 +412,15 @@ def test_iterative_posterior() raises:
 
 def test_iterative_estimator() raises:
     check_cases("iterative_estimator", 3, estimator_case)
+
+
+def test_iterative_estimator_transform() raises:
+    check_cases("iterative_estimator_transform", 3, estimator_transform_case)
+
+
+def test_iterative_estimator_posterior() raises:
+    # the two sets one after the other: each runs its twelve seeds across the host cores
+    check_cases_serial("iterative_estimator_posterior", 2, estimator_posterior_case)
 
 
 def main() raises:
