@@ -2,10 +2,9 @@
 # Shared steps of the native classifier owner (bindings/prep_classify_native.mojo):
 # the model's kind and numeric mode, the connected optional x_prep exports, the
 # X admission of `_expansion_prep._x2d`, the CSR admission, the user parameter
-# lists, the statistics stage groups (`_col_stats`, `_cs`, `_cls`,
-# `_class_stats`, `_gram`, `_qda_cov`, `_nb_counts`) and the partial_fit class
-# codes. Every stage group stages the words, operands and order the Python
-# helper of the same name staged.
+# lists, the image's mode words and the partial_fit class codes (UNPACK; the
+# statistics stage groups and the label staging are the typed builders of
+# bindings/prep_classify_prog_run.mojo).
 from std.os import getenv
 from bindings.native_array_storage_door import native_array_empty, native_array_unfilled
 from bindings.native_loaded_module_door import native_loaded_module
@@ -23,7 +22,7 @@ from bindings.admitted_meta_scope_unpack import admitted_held_verify
 from core.host_finite_scan import host_all_finite_f32
 from bindings.classical_labels_door import ClassicalLabels, classical_encode_labels
 from bindings.prep_classify_prog_door import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
-from bindings.prep_classify_prog_run import cls_col_stats, cls_class_stats, cls_nb_counts, ClsDaMode
+from bindings.prep_classify_prog_run import ClsDaMode, ClsLabels
 from bindings.sequential_admission_door import _one_of
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.prep_keys_unpack import prep_keys
@@ -33,15 +32,8 @@ comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
-# x_prep stage codes (_expansion_prep._OPS) used by the statistics groups.
-comptime OP_LOOKUP = 7
-comptime OP_COUNT_NEG = 8
-comptime OP_LAB_LOAD = 119
+# x_prep stage codes (_expansion_prep._OPS).
 comptime OP_CSR_DENSE = 164
-comptime OP_F2_CLAMP0 = 235
-
-# x_prep/blocked.mojo XB: the rows a block unit folds (_expansion_prep._XB).
-comptime XB = 2048
 # _IDN_FAM bits.
 comptime IDN_STATS_BLOCKED = 1
 comptime IDN_CLASS_ONEPASS = 2
@@ -457,25 +449,7 @@ def da_solver_is(fields: PythonObject, name: String) raises -> Bool:
     return py_type(solver) is cls_builtins().str and String(solver) == name
 
 
-# ---------------------------------------------------------------- statistics stage groups
-
-
-def col_stats(mut pr: ClsProg, xo: Int, n: Int, d: Int, out_buf: Int, variance: Bool = True):
-    """`_col_stats`: six rows of d (count, mean, variance, min, max, max |x|),
-    in the blocked order when `_blocked()`: the typed group
-    (bindings/prep_classify_prog_run.mojo `cls_col_stats`)."""
-    cls_col_stats(pr.program, xo, n, d, out_buf, variance, blocked())
-
-
-def class_stats(mut pr: ClsProg, wo: Int, total: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int,
-                cnt: Int, mean_in: Int, var_: Int, sums: Int, mode: PythonObject, context: PythonObject,
-                with_mode: Bool) raises:
-    """`_class_stats` (wo NONE: unweighted; with_mode: its `mode=` was given):
-    the typed group (`cls_class_stats`), the image's one-pass bit read here
-    only for a blocked group."""
-    var is_blocked = blocked()
-    var onepass = is_blocked and with_mode and (idn_fam(mode, context) & IDN_CLASS_ONEPASS) != 0
-    cls_class_stats(pr.program, wo, total, xo, n, d, yo, K, cnt, mean_in, var_, sums, is_blocked, onepass)
+# ---------------------------------------------------------------- the image's mode words
 
 
 def cls_da_mode(mode: PythonObject, context: PythonObject) raises -> ClsDaMode:
@@ -492,13 +466,6 @@ def cls_da_mode(mode: PythonObject, context: PythonObject) raises -> ClsDaMode:
 
 def nb_onepass(mode: PythonObject, context: PythonObject) raises -> Bool:
     return blocked() and (idn_int(mode, context) & IDN_NB_ONEPASS) != 0
-
-
-def nb_counts(mut pr: ClsProg, wo: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int, cnt: Int, sums: Int,
-              thr: Int, neg: Int):
-    """`_nb_counts`: the typed group (bindings/prep_classify_prog_run.mojo
-    `cls_nb_counts`)."""
-    cls_nb_counts(pr.program, wo, xo, n, d, yo, K, cnt, sums, thr, neg)
 
 
 # ---------------------------------------------------------------- labels
@@ -670,25 +637,24 @@ def label_words(y: PythonObject, n: Int, context: PythonObject) raises -> Tuple[
     return (spec[0], size, classical_wrap_array(store, Python.tuple(nw), "<i4", "C", py_item(context, nk[].k_output_context)))
 
 
-def stage_partial_codes(mut pr: ClsProg, pc: PartialCodes, context: PythonObject) raises -> Tuple[Int, Int]:
-    """`_stage_partial_codes`: (the float class codes' offset, the unknown
-    label count's offset, NONE for the walk's codes)."""
+def partial_labels(pc: PartialCodes) raises -> ClsLabels:
+    """UNPACK of `_partial_codes`' answer for the typed builders
+    (bindings/prep_classify_prog_run.mojo `cls_partial_codes`): the word
+    counts of its buffers, which the caller owns in that order
+    (`own_partial_labels`)."""
     if not pc.dev:
-        return (pr.put_codes(pc.codes), NONE)
-    var n = pc.n
-    var K = Int(py=pc.cats.size)
-    var x = pr.work(n)
-    var w = pr.put_words(pc.words)
-    pr.stage(OP_LAB_LOAD, n, w, pc.kind, x)
-    var c = pr.work(n)
-    var neg = pr.alloc(1)
-    var yo = pr.alloc(n)
-    var co = pr.put(pc.cats)
-    var ko = pr.put_scalar(Float64(K), context)
-    pr.stage(OP_LOOKUP, n, x, n, 1, co, K, ko, c)
-    pr.stage(OP_COUNT_NEG, 1, c, n, 1, neg)
-    pr.stage(OP_F2_CLAMP0, n, c, yo)
-    return (yo, neg)
+        return ClsLabels(False, pc.n, Int(py=pc.codes.size), 0, 0, 0)
+    return ClsLabels(True, pc.n, 0, Int(py=pc.words.size), pc.kind, Int(py=pc.cats.size))
+
+
+def own_partial_labels(mut pr: ClsProg, pc: PartialCodes):
+    """The owners of `cls_partial_codes`' buffer records, in record order:
+    the walk's codes, or the raw label words and the class words."""
+    if not pc.dev:
+        pr.own(pc.codes)
+        return
+    pr.own(pc.words)
+    pr.own(pc.cats)
 
 
 def partial_refuse(pr: ClsProg, neg: Int, fields: PythonObject, pc: PartialCodes, context: PythonObject) raises:
