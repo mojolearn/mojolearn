@@ -659,6 +659,9 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_NN40_WS_HEADROOM"](), "removed 2026-11-15 (lane/expdel2-27-neural): NN40_WS_HEADROOM (unmeasured opt-in arm: GEMM workspace grow-ahead headroom) is gone; the default stays; code recoverable at 340d379a3c; restore: experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch"
     # Lane expdel2-28-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_CNN_PREDICT_PROGRAM_COPY: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
+    # TOMBSTONE: MOJOLEARN_CNN_PREDICT_PROGRAM_COPY (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_CNN_PREDICT_PROGRAM_COPY"](), "removed 2026-11-23 (lane/ab-prep-neural, removed without measurement: plumbing, rule 2026-11-22: the B arm's per-call zero fills, new prepared replay and per-chunk OP_COPY ran the same replay and OPS_SOFTMAX / OPS_ARGMAX on the same words as the default, sequence/cnn_classifier_program.mojo _resident_predict); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.ab-prep.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch
     comptime assert not is_defined["MOJOLEARN_IDN_AF_COL_CHUNK_FOLD"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_AF_COL_CHUNK_FOLD (unmeasured opt-in arm) is gone; the default is kept; code at ab421749bb; restore: experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch
