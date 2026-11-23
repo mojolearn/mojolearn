@@ -5,7 +5,7 @@ TransformerBlock, Mamba1Block, Mamba2Block and Mamba3Block take `device=` with t
 LinearRegression (test_linear_device_boundary.py): None is this installation's device, an unknown value is refused,
 an explicit `device="gpu"` on a CPU-only installation is refused in words that name `device="cpu"`. The value is read
 once, at construction, into the block's route; `get_params`, `set_params`, clone and pickle carry it. On a GPU
-installation `device="cpu"` runs the host kernels the `*Inference` classes run (`vendor_used() == "cpu"`) and returns
+installation `device="cpu"` runs the host kernels (`vendor_used() == "cpu"`) and returns
 the bits the GPU block returns; `backward` on it is refused in the shared words. What needs two devices is
 skipped by name on a CPU-only installation.
 """
