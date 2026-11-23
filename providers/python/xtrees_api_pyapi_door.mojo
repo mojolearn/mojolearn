@@ -31,7 +31,6 @@ from xtrees.oob import (
     E64_MAX_ROWS, count_equal_device, count_equal_host, count_rows_device, count_rows_host, oob_r2_device, oob_r2_host,
 )
 from xtrees import agnostic_device as agn_dev
-from xtrees import agnostic_host as agn_host
 from core.forest_auxiliary_device import forest_auxiliary_device
 from core.forest_auxiliary_units import forest_auxiliary_host
 from xtrees.ops_device import (
@@ -42,13 +41,13 @@ from xtrees import ops_device_elem as elem_dev
 from xtrees import ops_device_boost as boost_dev
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from xtrees.api_kernels import (
-    class_priors, dart_rescale, dart_thresholds, host_folds, kshap_schedule, scatter_rows_check,
+    class_priors, dart_rescale, dart_thresholds, host_folds, scatter_rows_check,
 )
 
 # The device/host choice and the moved glue bodies (lane calltable-trees):
 # this file keeps only their Python unpack.
 from xtrees.glue_abi import XtOwned
-from xtrees.xtrees_api_run import _count, _kshap_check
+from xtrees.xtrees_api_run import _count
 from xtrees.glue_runs import (
     XTREES_DEVICE_OPS, accumulate_run, accumulate_cols_run, accumulate_onehot_run, accumulate_rows_run,
     apply_run, argmax_rows_run, bag_rows_run, binary_proba_run, class_counts_run, class_priors_run,
@@ -69,7 +68,7 @@ from xtrees.ops import (
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
     check_weights_f32, mul_f32,
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
-    onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
+    onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
     bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba, class_counts, remap_cols, positive_codes,
     rows_any_unset,
@@ -585,18 +584,6 @@ def log64_binding(x: PythonObject) raises -> PythonObject:
     return PythonObject(value)
 
 
-def logit_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
-    """In place x = log(x / (1 - x)); params = [n]."""
-    _need(params, 1, "x_trees_logit")
-    var n = _count(_i(params, 0), "x_trees_logit")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.logit_device(f64_ptr(Int(py=x)), n)
-        else:
-            logit(f64_ptr(Int(py=x)), n)
-    return PythonObject(n)
-
-
 def normalize_rows_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
     # Unpack only; the body is xtrees/glue_runs.mojo::normalize_rows_run, also reached
     # natively through the trees entry table (XT_NORMALIZE_ROWS).
@@ -1036,30 +1023,6 @@ def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: Python
     return PythonObject(result)
 
 
-def _agn_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
-    _need(params, n, who)
-    var out = List[Int]()
-    for i in range(n):  # driver-loop: over fixed call structure, small-loop(params words)
-        out.append(_i(params, i))
-    return out^
-
-
-def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [m, nb, k]; res float64 m x k (on the device in a GPU build,
-    xtrees/agnostic_device.mojo; the same words)."""
-    _need(params, 3, "x_trees_block_mean")
-    var m = _count(_i(params, 0), "x_trees_block_mean")
-    var nb = _i(params, 1)
-    if nb < 1:
-        raise Error("x_trees_block_mean: nb must be >= 1")
-    if m > 0:
-        comptime if XTREES_DEVICE_OPS:
-            agn_dev.bg_mean(Int(py=y), Int(py=res), m, nb, _count(_i(params, 2), "x_trees_block_mean"))
-        else:
-            agn_host.bg_mean(Int(py=y), Int(py=res), m, nb, _count(_i(params, 2), "x_trees_block_mean"))
-    return PythonObject(m)
-
-
 def normalized_weights_binding(w: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
     """AdaBoost's initial weights (lane cgr4-py-compute, out of Python):
     out[i] = w[i] / sum(w) in float64 from float32 w, the sum in
@@ -1095,185 +1058,9 @@ def fill_class_major_f64_binding(inits_addr: PythonObject, out_addr: PythonObjec
     return PythonObject(result)
 
 
-def kshap_schedule_binding(tables: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
-    """KernelExplainer's coalition schedule (shap `KernelExplainer.explain`
-    over subset SIZES; lane cgr4-py-compute moved it out of Python): params
-    = [M, nsamples] with M > 1; tables = (size_off Int64 M // 2 + 1, size_w
-    float64 max(1, M // 2), cdf float64 max(1, M // 2)); out = Int64 6:
-    [m, nfixed, nfull, npaired, L, wrand_bits] (`dst`). The sums run in index
-    order (one fixed fold, the same on every column)."""
-    _need(params, 2, "x_trees_kshap_schedule")
-    var M = _i(params, 0)
-    var nsamples = _count(_i(params, 1), "x_trees_kshap_schedule")
-    if M < 2:
-        raise Error("x_trees_kshap_schedule: needs M > 1")
-    var off = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=tables[0]))
-    var sw = f64_ptr(Int(py=tables[1]))
-    var cdf = f64_ptr(Int(py=tables[2]))
-    var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst))
-    var nfull = kshap_schedule(M, nsamples, off, sw, cdf, res)
-    return PythonObject(nfull)
-
-
-def kshap_synth_binding(x: PythonObject, bg: PythonObject, tables: PythonObject, syn: PythonObject,
-                        params: PythonObject) raises -> PythonObject:
-    """KernelExplainer's synthetic rows of a chunk (lane cgr2-metrics-shap):
-    x Float32 R x d, bg Float32 nb x d, tables = (size_off Int64 nfull+1,
-    size_w float64 nfull, cdf float64 L), syn Float32 (R m nb) x d; params =
-    [R, nb, d, nfixed, m, nfull, L, npaired, row0, seed, wrand_bits]."""
-    var p = _agn_ints(params, 11, "x_trees_kshap_synth")
-    _kshap_check(p, "x_trees_kshap_synth")
-    comptime if XTREES_DEVICE_OPS:
-        agn_dev.kshap_synth(Int(py=x), Int(py=bg), Int(py=tables[0]), Int(py=tables[1]), Int(py=tables[2]),
-                            Int(py=syn), p[0], p[1], p[2], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]))
-    else:
-        agn_host.kshap_synth(Int(py=x), Int(py=bg), Int(py=tables[0]), Int(py=tables[1]), Int(py=tables[2]),
-                             Int(py=syn), p[0], p[1], p[2], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]))
-    return PythonObject(p[0])
-
-
-def agn_pool_release_binding() raises -> PythonObject:
-    """Lane idn-all: frees the IDENTICAL explainers' pooled synthetic device
-    buffer (xtrees/agnostic_device.mojo `pool_release`); the Python
-    explainers call it when `shap_values` ends. Nothing to free on the host
-    column or a build without MOJOLEARN_AGN_IDN_SYN_POOL."""
-    comptime if XTREES_DEVICE_OPS:
-        agn_dev.pool_release()
-    return PythonObject(0)
-
-
-def kshap_solve_binding(yout: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
-                        phi: PythonObject, params: PythonObject) raises -> PythonObject:
-    """KernelExplainer's values of a chunk: out Float32 (R m nb) x k (the
-    model on the synthetic rows), fx Float32 R x k (the model on the rows),
-    fnull float64 k (linked), phi float64 R x d x k; params = [R, nb, d,
-    nfixed, m, nfull, L, npaired, row0, seed, wrand_bits, k, link]."""
-    var p = _agn_ints(params, 13, "x_trees_kshap_solve")
-    _kshap_check(p, "x_trees_kshap_solve")
-    if p[11] < 1:
-        raise Error("x_trees_kshap_solve: needs outputs")
-    comptime if XTREES_DEVICE_OPS:
-        agn_dev.kshap_solve(Int(py=yout), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
-                            Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
-                            p[9], p[8], UInt64(p[10]), p[12] != 0)
-    else:
-        agn_host.kshap_solve(Int(py=yout), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
-                             Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
-                             p[9], p[8], UInt64(p[10]), p[12] != 0)
-    return PythonObject(p[0])
-
-
-def kshap_means_binding(yout: PythonObject, ey: PythonObject, params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_KSHAP_FAST_BATCH: a chunk's linked background means, ey
-    float64 R x m x k; params = [R, nb, m, k, link]. Refused in a build
-    without the define (x_trees_fast_switches bit 8 is 0 there)."""
-    var p = _agn_ints(params, 5, "x_trees_kshap_means")
-    if p[0] < 0 or p[1] < 1 or p[2] < 0 or p[3] < 1:
-        raise Error("x_trees_kshap_means: bad counts")
-    comptime if agn_dev.KSHAP_FAST_BATCH:
-        agn_dev.kshap_means(Int(py=yout), Int(py=ey), p[0], p[1], p[3], p[2], p[4] != 0)
-    else:
-        raise Error("x_trees_kshap_means: built without MOJOLEARN_KSHAP_FAST_BATCH")
-    return PythonObject(p[0])
-
-
 # TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise: kernel-shap istella neutral, verdicts batch 6) deleted 2026-10-09
 # on lane/owed-deletions-D1 (next chunk's synthetic rows + download overlapped with the model); code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
-
-
-def kshap_solve_ey_binding(ey: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
-                           phi: PythonObject, params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_KSHAP_FAST_BATCH: `x_trees_kshap_solve` from the rows'
-    means (`x_trees_kshap_means`); params as x_trees_kshap_solve's (nb is
-    unused)."""
-    var p = _agn_ints(params, 13, "x_trees_kshap_solve_ey")
-    _kshap_check(p, "x_trees_kshap_solve_ey")
-    if p[11] < 1:
-        raise Error("x_trees_kshap_solve_ey: needs outputs")
-    comptime if agn_dev.KSHAP_FAST_BATCH:
-        agn_dev.kshap_solve_ey(Int(py=ey), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
-                               Int(py=tables[2]), Int(py=phi), p[0], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
-                               p[9], p[8], UInt64(p[10]), p[12] != 0)
-    else:
-        raise Error("x_trees_kshap_solve_ey: built without MOJOLEARN_KSHAP_FAST_BATCH")
-    return PythonObject(p[0])
-
-
-def pshap_synth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, params: PythonObject) raises -> PythonObject:
-    """PermutationExplainer's synthetic rows of a chunk: syn Float32
-    (R np (2d + 1) nb) x d; params = [R, nb, d, np, row0, seed]."""
-    var p = _agn_ints(params, 6, "x_trees_pshap_synth")
-    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
-        raise Error("x_trees_pshap_synth: bad counts")
-    comptime if XTREES_DEVICE_OPS:
-        agn_dev.pshap_synth(Int(py=x), Int(py=bg), Int(py=syn), p[0], p[1], p[2], p[3], p[5], p[4])
-    else:
-        agn_host.pshap_synth(Int(py=x), Int(py=bg), Int(py=syn), p[0], p[1], p[2], p[3], p[5], p[4])
-    return PythonObject(p[0])
-
-
-def pshap_values_binding(yout: PythonObject, phi: PythonObject, params: PythonObject) raises -> PythonObject:
-    """PermutationExplainer's values of a chunk: out Float32 (R np (2d + 1)
-    nb) x k, phi float64 R x d x k; params = [R, nb, d, np, row0, seed, k]."""
-    var p = _agn_ints(params, 7, "x_trees_pshap_values")
-    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
-        raise Error("x_trees_pshap_values: bad counts")
-    comptime if XTREES_DEVICE_OPS:
-        agn_dev.pshap_values(Int(py=yout), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
-    else:
-        agn_host.pshap_values(Int(py=yout), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
-    return PythonObject(p[0])
-
-
-def agn_model_load_binding(forest: PythonObject, bg: PythonObject, params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: uploads the explained flat forest and
-    the background for one `shap_values` call. forest = (offsets Int32
-    trees + 1, feature ids Int32 nodes, thresholds Float32 nodes, left
-    children Int32 nodes, leaves Float32 nodes x k), the snapshot the
-    forest's own predict validated; bg Float32 nb x d; params = [trees,
-    nodes, k, d, nb, rf_input]. Refused in a build without the define
-    (x_trees_fast_switches bit 64 is 0 there)."""
-    var p = _agn_ints(params, 6, "x_trees_agn_model_load")
-    if len(forest) != 5:
-        raise Error("x_trees_agn_model_load: forest must hold 5 arrays")
-    comptime if _XT_AGN_DEVICE_MODEL:
-        agn_dev.model_load(Int(py=forest[0]), Int(py=forest[1]), Int(py=forest[2]), Int(py=forest[3]),
-                           Int(py=forest[4]), Int(py=bg), p[0], p[1], p[2], p[3], p[4], p[5] != 0)
-    else:
-        raise Error("x_trees_agn_model_load: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
-    return PythonObject(p[0])
-
-
-def agn_model_release_binding() raises -> PythonObject:
-    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: frees the device forest and
-    background (`x_trees_agn_model_load`); the Python explainers call it
-    when `shap_values` ends. Nothing to free in a build without the define."""
-    comptime if _XT_AGN_DEVICE_MODEL:
-        agn_dev.model_release()
-    return PythonObject(0)
-
-
-def kshap_solve_model_binding(x: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
-                              phi: PythonObject, params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: KernelExplainer's values of a chunk
-    over the loaded forest, `x_trees_kshap_synth` + the model +
-    `x_trees_kshap_solve` without leaving the device: x Float32 R x d (the
-    chunk's rows), fx Float32 R x k, fnull float64 k (linked), phi float64
-    R x d x k; params as x_trees_kshap_solve's = [R, nb, d, nfixed, m,
-    nfull, L, npaired, row0, seed, wrand_bits, k, link] (nb must be the
-    loaded background's)."""
-    var p = _agn_ints(params, 13, "x_trees_kshap_solve_model")
-    _kshap_check(p, "x_trees_kshap_solve_model")
-    if p[11] < 1:
-        raise Error("x_trees_kshap_solve_model: needs outputs")
-    comptime if _XT_AGN_DEVICE_MODEL:
-        agn_dev.kshap_solve_model(Int(py=x), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
-                                  Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7],
-                                  p[6], p[9], p[8], UInt64(p[10]), p[12] != 0)
-    else:
-        raise Error("x_trees_kshap_solve_model: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
-    return PythonObject(p[0])
 
 
 def pshap_linear_ok_binding() raises -> PythonObject:
@@ -1285,75 +1072,9 @@ def pshap_linear_ok_binding() raises -> PythonObject:
     return PythonObject(0)
 
 
-def pshap_values_linear_binding(x: PythonObject, bg: PythonObject, wb: PythonObject, phi: PythonObject,
-                                params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_IDN_PSHAP_RESIDENT (lane/neighbors-small-ports): a chunk of
-    PermutationExplainer values over one of this library's linear
-    regressors, the synthetic rows and the model on the device: x Float32
-    R x d, bg Float32 nb x d, wb Float32 k x (d + 1), phi float64 R x d x k;
-    params = [R, nb, d, np, row0, seed, k, link]."""
-    var p = _agn_ints(params, 8, "x_trees_pshap_values_linear")
-    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1 or p[7] < 0 or p[7] > 2:
-        raise Error("x_trees_pshap_values_linear: bad counts")
-    comptime if XTREES_DEVICE_OPS and agn_dev.PSHAP_IDN_RESIDENT:
-        agn_dev.pshap_values_linear(Int(py=x), Int(py=bg), Int(py=wb), Int(py=phi), p[0], p[1], p[2], p[6], p[3],
-                                    p[5], p[4], p[7])
-    else:
-        raise Error("x_trees_pshap_values_linear: built without MOJOLEARN_IDN_PSHAP_RESIDENT")
-    return PythonObject(p[0])
-
-
-def pshap_values_model_binding(x: PythonObject, phi: PythonObject, params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: PermutationExplainer's values of a
-    chunk over the loaded forest, `x_trees_pshap_synth` + the model +
-    `x_trees_pshap_values` without leaving the device: x Float32 R x d,
-    phi float64 R x d x k; params as x_trees_pshap_values' = [R, nb, d, np,
-    row0, seed, k] (nb must be the loaded background's)."""
-    var p = _agn_ints(params, 7, "x_trees_pshap_values_model")
-    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
-        raise Error("x_trees_pshap_values_model: bad counts")
-    comptime if _XT_AGN_DEVICE_MODEL:
-        agn_dev.pshap_values_model(Int(py=x), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
-    else:
-        raise Error("x_trees_pshap_values_model: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
-    return PythonObject(p[0])
-
-
-def pshap_dsynth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, tot: PythonObject,
-                         params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_PSHAP_DELTA: the chunk's varying synthetic rows only (in
-    full order) into syn (Float32, room for (R np (2d + 1) nb) x d), their
-    count into tot (Int64 1); params as x_trees_pshap_synth's. Refused when the FAST Apple default is inactive or _OFF is set
-    (x_trees_fast_switches bit 32 is 0 there)."""
-    var p = _agn_ints(params, 6, "x_trees_pshap_dsynth")
-    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
-        raise Error("x_trees_pshap_dsynth: bad counts")
-    comptime if agn_dev.PSHAP_DELTA:
-        agn_dev.pshap_dsynth(Int(py=x), Int(py=bg), Int(py=syn), Int(py=tot), p[0], p[1], p[2], p[3], p[5], p[4])
-    else:
-        raise Error("x_trees_pshap_dsynth: FAST Apple delta disabled (MOJOLEARN_PSHAP_DELTA_OFF)")
-    return PythonObject(p[0])
-
-
 # TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
 # on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
-
-
-def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject, phi: PythonObject,
-                          tot: PythonObject, params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_PSHAP_DELTA: phi float64 R x d x k from out Float32 (rows
-    x k, the model on x_trees_pshap_dsynth's rows); tot Int64 1 scratch;
-    params = [R, nb, d, np, row0, seed, k]."""
-    var p = _agn_ints(params, 7, "x_trees_pshap_dvalues")
-    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
-        raise Error("x_trees_pshap_dvalues: bad counts")
-    comptime if agn_dev.PSHAP_DELTA:
-        agn_dev.pshap_dvalues(Int(py=x), Int(py=bg), Int(py=yout), Int(py=phi), Int(py=tot), p[0], p[1], p[2],
-                              p[6], p[3], p[5], p[4])
-    else:
-        raise Error("x_trees_pshap_dvalues: FAST Apple delta disabled (MOJOLEARN_PSHAP_DELTA_OFF)")
-    return PythonObject(p[0])
 
 
 # ---- lane py-runtime-b: DART's per-tree bookkeeping and the class priors
@@ -1457,7 +1178,6 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[mul_f32_binding]("x_trees_mul_f32")
     m.def_function[log64_binding]("x_trees_log64")
     m.def_function[normalize_rows_binding]("x_trees_normalize_rows")
-    m.def_function[logit_binding]("x_trees_logit")
     m.def_function[scatter_binding]("x_trees_scatter")
     m.def_function[platt_fit_binding]("x_trees_platt_fit")
     m.def_function[platt_apply_binding]("x_trees_platt_apply")
@@ -1492,23 +1212,7 @@ def register(mut m: PythonModuleBuilder) raises:
     # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, umbrella) deleted 2026-11-15 by lane/expdel2-37-series; this read folded by lane/expdel2-sweep.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-sweep.patch; record in docs/TOMBSTONES.md.
     m.def_function[tree_shape_binding]("x_trees_tree_shape")
-    m.def_function[block_mean_binding]("x_trees_block_mean")
-    m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
     m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
     m.def_function[iota_i32_binding]("x_trees_iota_i32")
     m.def_function[fill_class_major_f64_binding]("x_trees_fill_class_major_f64")
-    m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
-    m.def_function[agn_pool_release_binding]("x_trees_agn_pool_release")
-    m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
-    m.def_function[kshap_means_binding]("x_trees_kshap_means")
-    m.def_function[kshap_solve_ey_binding]("x_trees_kshap_solve_ey")
-    m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
-    m.def_function[pshap_values_binding]("x_trees_pshap_values")
-    m.def_function[agn_model_load_binding]("x_trees_agn_model_load")
-    m.def_function[agn_model_release_binding]("x_trees_agn_model_release")
-    m.def_function[kshap_solve_model_binding]("x_trees_kshap_solve_model")
-    m.def_function[pshap_values_model_binding]("x_trees_pshap_values_model")
     m.def_function[pshap_linear_ok_binding]("x_trees_pshap_linear_ok")
-    m.def_function[pshap_values_linear_binding]("x_trees_pshap_values_linear")
-    m.def_function[pshap_dsynth_binding]("x_trees_pshap_dsynth")
-    m.def_function[pshap_dvalues_binding]("x_trees_pshap_dvalues")

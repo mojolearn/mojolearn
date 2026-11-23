@@ -14,7 +14,8 @@ a trend break at i = 100, a weekly sine, a holiday every 50 days from day 7,
 NumPy default_rng(0) noise; y stored as float32 words in
 `fixtures/sequence_prophet_structure/` by `tools/py2mojo_native_fixtures_b8.py`)
 through the column's glue entry with the door's typed calls (bindings/
-xseq_prophet_native_door.mojo `prophet_fit`, `prophet_predict`: the default
+xseq_prophet_native_door.mojo `prophet_fit`, `prophet_predict`; the predict through its typed setup RUN
+`prophet_run_predict_setup` over the fit's own plan, lane bm-rest-graph: the default
 settings, the automatic weekly seasonality, one holiday column, prior scales
 10, changepoint prior 0.05, 2000 iterations): the in-sample forecast's mean
 absolute error is below 0.3, the 14 future days are finite, and the first row of
@@ -39,7 +40,7 @@ from sequence.xseq_glue_host import x_sequence_glue_host_v1
 from sequence.xseq_glue_device import x_sequence_glue_device_v1
 from sequence.xseq_prophet_run import (
     PROPHET_AUTO_AUTO, ProphetAuto, ProphetFitInput, ProphetSeason, ProphetTimes, prophet_run_fit_plan,
-    prophet_run_prepare_fit, ProphetFitPlan, ProphetPredictRequest, prophet_run_days, prophet_run_predict,
+    prophet_run_prepare_fit, ProphetFitPlan, ProphetPredictInput, prophet_predict_plan, prophet_run_predict_setup,
     prophet_run_prior_count, prophet_run_parameter_count,
 )
 
@@ -456,40 +457,24 @@ def _rs_fit(entry: EntryRef, plan: ProphetFitPlan, y: List[Float32], batch: Int,
 
 def _rs_predict(entry: EntryRef, plan: ProphetFitPlan, params: List[Float32], info: List[Float32],
                 first_day: Int, m: Int, k: Int) raises -> List[Float32]:
-    """`m.predict(t, holidays=...)` for days 18000 + first_day .. (the fused predict, as the door for a nonempty t)."""
+    """`m.predict(t, holidays=...)` for days 18000 + first_day .. : the door's typed predict setup
+    (`prophet_run_predict_setup`) over the plan of the fit's own output (`prophet_predict_plan`)."""
     var t = List[Float64](length=m, fill=0)
     for i in range(m):  # small-loop(fixture: day words)
         t[i] = Float64(18000 + first_day + i)
-    var days = List[Float64](length=m, fill=0)
-    var day_info = List[Float64](length=3, fill=0)
-    prophet_run_days(entry, Int(t.unsafe_ptr()), Int(days.unsafe_ptr()), Int(day_info.unsafe_ptr()), m, False)
-    var ns = len(plan.seasons)
-    var periods = List[Float64](length=max(ns, 1), fill=1.0)
-    var orders = List[Float32](length=max(ns, 1), fill=0.0)
-    for i in range(ns):  # driver-loop: over the seasonalities
-        periods[i] = plan.seasons[i].period
-        orders[i] = Float32(plan.seasons[i].fourier_order)
-    var cpts = List[Float32](length=max(plan.s, 1), fill=0)
-    for i in range(plan.s):  # small-loop(the fitted changepoints)
-        cpts[i] = plan.changepoints[i]
     var holidays = _rs_holidays(first_day, m)
     var yhat = List[Float32](length=m, fill=0)
     var trend = List[Float32](length=m, fill=0)
-    var request = ProphetPredictRequest(True, Int(days.unsafe_ptr()), Int(periods.unsafe_ptr()), 0, 0,
-        Int(params.unsafe_ptr()), Int(info.unsafe_ptr()), Int(orders.unsafe_ptr()), Int(holidays.unsafe_ptr()),
-        Int(cpts.unsafe_ptr()), Int(yhat.unsafe_ptr()), Int(trend.unsafe_ptr()), 1, m, ns, 1, k, plan.s, False,
-        plan.start, plan.t_scale)
-    prophet_run_predict(entry, request)
+    var fitted = prophet_predict_plan(plan, Int(params.unsafe_ptr()), 1, Int(info.unsafe_ptr()), 1, k, False)
+    var request = ProphetPredictInput(ProphetTimes(Int(t.unsafe_ptr()), m, False), Int(holidays.unsafe_ptr()), 1,
+                                      Int(yhat.unsafe_ptr()), Int(trend.unsafe_ptr()))
+    prophet_run_predict_setup(entry, fitted, request)
     _ = t^
-    _ = days^
-    _ = day_info^
-    _ = periods^
-    _ = orders^
-    _ = cpts^
     _ = holidays^
     _ = trend^
     _ = params
     _ = info
+    _ = plan  # the fitted plan's changepoints are read by address
     return yhat^
 
 

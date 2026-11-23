@@ -17,18 +17,31 @@ statistics) and with the blocks off.
     predict_proba   rtol 1e-3, atol 1e-5; predict_log_proba rtol 1e-3, atol 1e-4; predict: more than 99% of the
                     codes equal scikit-learn's
 
-Stays in Python: CategoricalNB (its fit programs are staged by the door over Python objects,
-bindings/prep_classify_native_door.mojo `_cat_fit_programs`; no typed builder yet), the string labels' encoding
-and the public attribute shapes (the public boundary). Every case is an independent unit; the case tables run
-across host cores.
+CategoricalNB (`test_categorical`, the CategoricalNB half of `test_sample_weight_and_min_categories`) and the
+partial_fit of every kind (test_x_prep_parity.py `test_nb_partial_fit`) were added by lane bm-rest-nb (2026-11-23),
+on the typed builders that replaced the door's staging over Python objects, with inputs and references in
+`fixtures/prep_nbx/` (`tools/py2mojo_native_fixtures_bm_rest_nb.py`) and the host runs of `prep_nb_bm_host.mojo`:
+
+    CategoricalNB   n_categories_ equal; feature_log_prob_ blocks rtol 2e-4, atol 2e-5 (weighted: rtol 1e-4,
+                    atol 1e-5); predict_proba rtol 1e-3, atol 1e-5; predict: more than 99% equal
+    partial_fit     three batches (the first without class 2, the last weighted): class_count_ rtol 1e-6;
+                    predict_proba atol 5e-3 (GaussianNB) or 1e-4; theta_ rtol 1e-5, atol 1e-6; feature_count_
+                    rtol 1e-5; category_count_ rtol 1e-6; one partial_fit over all rows equals fit bit for bit
+
+Stays in Python: the string labels' encoding and the public attribute shapes (the public boundary). Every case is
+an independent unit; the case tables run across host cores.
 """
 from bindings.prep_classify_prog_run import (
-    CLS_KIND_GNB, CLS_KIND_MNB, CLS_KIND_BNB, CLS_KIND_CNB, CLS_PRIOR_FIT, CLS_PRIOR_UNIFORM,
+    CLS_KIND_GNB, CLS_KIND_MNB, CLS_KIND_BNB, CLS_KIND_CNB, CLS_KIND_CAT, CLS_PRIOR_FIT, CLS_PRIOR_UNIFORM,
 )
 from checks.native_tests.prep_cls_host import (
     PREP_NB_DIR, NbModel, ClsAnswer, check_close, agreement, abs_words, gnb_fit, dnb_fit, cls_scores,
 )
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
+from checks.native_tests.prep_nb_bm_host import (
+    GnbState, DnbState, CatState, NbProba, gnb_empty, dnb_empty, cat_empty, gnb_partial, dnb_partial, cat_fit,
+    cat_blocks, gnb_proba, dnb_proba, cat_proba, take_rows, take_codes, pick_rows, pick_codes,
+)
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
 
@@ -178,6 +191,193 @@ def weighted_unit(unit: Int) raises:
 
 def test_sample_weight() raises:
     check_cases("naive_bayes_sample_weight", 8, weighted_unit)
+
+
+# ---- test_categorical: CategoricalNB(alpha=0.5), 500 x 4 categories 0..4, x the two routes ----
+comptime NBX_DIR = "checks/native_tests/fixtures/prep_nbx/"
+
+
+def nbx_f32(name: String, count: Int) raises -> List[Float32]:
+    return fixture_f32(NBX_DIR + name, count)
+
+
+def nbx_i32(name: String, count: Int) raises -> List[Int32]:
+    return fixture_i32(NBX_DIR + name, count)
+
+
+def nbx_f64(name: String, count: Int) raises -> List[Float64]:
+    return fixture_f64(NBX_DIR + name, count)
+
+
+def check_ncat(got: List[Int], want: List[Int32], label: String) raises -> Int:
+    """n_categories_ equal; answers the words of the concatenated blocks (K times their sum)."""
+    require(len(got) == len(want), label + ": " + String(len(got)) + " features, reference " + String(len(want)))
+    var total = 0
+    for j in range(len(want)):  # small-loop(oracle: the features' category counts)
+        require(got[j] == Int(want[j]), label + ": n_categories_[" + String(j) + "] " + String(got[j])
+            + " expected " + String(want[j]))
+        total += got[j]
+    return NB_K * total
+
+
+def check_same(got: List[Float32], want: List[Float32], label: String) raises:
+    """assert_array_equal over two answers of the same extent; the first differing word is named."""
+    require(len(got) == len(want), label + ": " + String(len(got)) + " values, other " + String(len(want)))
+    for i in range(len(want)):  # small-loop(oracle: one answer)
+        require(got[i] == want[i], label + " word " + String(i) + ": " + String(got[i]) + " vs " + String(want[i]))
+
+
+def categorical_unit(unit: Int) raises:
+    var n = 500
+    var d = 4
+    var K = NB_K
+    var blocked = unit == 0
+    var label = "cat blocked " + String(blocked)
+    var x = nbx_f32("cat-x.f32", n * d)
+    var y = nbx_i32("cat-y.i32", n)
+    var xh = nbx_f32("cat-xh.f32", 100 * d)
+    var m = cat_fit(cat_empty(), x, y, List[Float32](), d, K, 0.5, False, List[Int](), False, blocked)
+    var words = check_ncat(m.ncat, nbx_i32("cat-ncat.i32", d), label)
+    check_close(cat_blocks(m.flp, d, K, m.cmax, m.ncat), nbx_f64("cat-flp.f64", words), 2e-4, 2e-5,
+        label + ": feature_log_prob_")
+    var a = cat_proba(m, xh, 100, d, K, blocked)
+    check_close(a.proba, nbx_f64("cat-proba.f64", 100 * K), 1e-3, 1e-5, label + ": predict_proba")
+    var share = agreement(a.codes, nbx_i32("cat-predict.i32", 100))
+    require(share > 0.99, label + ": predict agrees with scikit-learn on " + String(share) + " of the rows")
+
+
+def test_categorical() raises:
+    check_cases("categorical_nb", 2, categorical_unit)
+
+
+# ---- test_sample_weight_and_min_categories, the CategoricalNB half: (), min_categories=6, min_categories=[2, 7, 5]
+# with float64 weights (admitted as float32 words) x the two routes ----
+def categorical_weighted_unit(unit: Int) raises:
+    var n = 500
+    var d = 3
+    var K = NB_K
+    var k = unit // 2
+    var blocked = unit % 2 == 0
+    var label = "wcat" + String(k) + " blocked " + String(blocked)
+    var x = nbx_f32("wcat-x.f32", n * d)
+    var y = nbx_i32("wcat-y.i32", n)
+    var w = nbx_f32("wcat-w.f32", n)
+    var mins = List[Int]()
+    if k == 1:
+        mins = List[Int](length=d, fill=6)
+    elif k == 2:
+        mins = [2, 7, 5]
+    var m = cat_fit(cat_empty(), x, y, w, d, K, 1.0, k > 0, mins, False, blocked)
+    var words = check_ncat(m.ncat, nbx_i32("wcat" + String(k) + "-ncat.i32", d), label)
+    check_close(cat_blocks(m.flp, d, K, m.cmax, m.ncat), nbx_f64("wcat" + String(k) + "-flp.f64", words), 1e-4,
+        1e-5, label + ": feature_log_prob_")
+    var a = cat_proba(m, take_rows(x, d, 0, 50), 50, d, K, blocked)
+    check_close(a.proba, nbx_f64("wcat" + String(k) + "-proba.f64", 50 * K), 1e-3, 1e-5, label + ": predict_proba")
+
+
+def test_categorical_sample_weight() raises:
+    check_cases("categorical_nb_sample_weight", 6, categorical_weighted_unit)
+
+
+# ---- test_nb_partial_fit (test_x_prep_parity.py): MultinomialNB, ComplementNB, BernoulliNB, CategoricalNB,
+# GaussianNB, each fitted in three batches (the selected first rows without class 2 with classes=[0, 1, 2], rows
+# 200-449, rows 450-599 weighted), x the two routes ----
+comptime PF_N = 600
+comptime PF_D = 5
+
+
+def pf_tag(which: Int) -> String:
+    var tags: List[String] = ["multinomialnb", "complementnb", "bernoullinb", "categoricalnb", "gaussiannb"]
+    return tags[which]
+
+
+def pf_kind(which: Int) -> Int:
+    var kinds: List[Int] = [CLS_KIND_MNB, CLS_KIND_CNB, CLS_KIND_BNB, CLS_KIND_CAT, CLS_KIND_GNB]
+    return kinds[which]
+
+
+def pf_data(which: Int) raises -> List[Float32]:
+    """The original's data per estimator: |X| (Multinomial, Complement), X (Bernoulli, Gaussian), Xc (Categorical)."""
+    if which == 3:
+        return nbx_f32("pf-xc.f32", PF_N * PF_D)
+    var x = nbx_f32("pf-x.f32", PF_N * PF_D)
+    if which <= 1:
+        return abs_words(x)
+    return x^
+
+
+def partial_unit(unit: Int) raises:
+    var which = unit // 2
+    var blocked = unit % 2 == 0
+    var n = PF_N
+    var d = PF_D
+    var K = NB_K
+    var tag = pf_tag(which)
+    var kind = pf_kind(which)
+    var label = tag + " partial_fit blocked " + String(blocked)
+    var data = pf_data(which)
+    var y = nbx_i32("pf-y.i32", n)
+    var w = nbx_f32("pf-w.f32", n)
+    var sel = nbx_i32("pf-sel.i32", -1)
+    var none = List[Float32]()
+    var x1 = pick_rows(data, d, sel)
+    var y1 = pick_codes(y, sel)
+    var x2 = take_rows(data, d, 200, 450)
+    var y2 = take_codes(y, 200, 450)
+    var x3 = take_rows(data, d, 450, n)
+    var y3 = take_codes(y, 450, n)
+    var w3 = take_rows(w, 1, 450, n)
+    var tol = 5e-3 if kind == CLS_KIND_GNB else 1e-4
+    var want_count = nbx_f64("pf-" + tag + "-class_count.f64", K)
+    var want_proba = nbx_f64("pf-" + tag + "-proba.f64", n * K)
+    var proba = List[Float32]()
+    var once = List[Float32]()
+    var fitted = List[Float32]()
+    if kind == CLS_KIND_GNB:
+        var m = gnb_partial(gnb_empty(), x1, y1, none, d, K, blocked)
+        m = gnb_partial(m, x2, y2, none, d, K, blocked)
+        m = gnb_partial(m, x3, y3, w3, d, K, blocked)
+        check_close(m.cnt, want_count, 1e-6, 0.0, label + ": class_count_")
+        check_close(m.theta, nbx_f64("pf-" + tag + "-theta.f64", K * d), 1e-5, 1e-6, label + ": theta_")
+        proba = gnb_proba(m, data, n, d, K, blocked).proba.copy()
+        once = gnb_proba(gnb_partial(gnb_empty(), data, y, none, d, K, blocked), data, n, d, K, blocked).proba.copy()
+        var f = gnb_fit(data, y, none, n, d, K, List[Float64](), blocked)
+        var g = GnbState(f.theta.copy(), f.var_.copy(), f.cst.copy(), f.class_count.copy(), List[Float32]())
+        fitted = gnb_proba(g, data, n, d, K, blocked).proba.copy()
+    elif kind == CLS_KIND_CAT:
+        var m = cat_fit(cat_empty(), x1, y1, none, d, K, 1.0, False, List[Int](), True, blocked)
+        m = cat_fit(m, x2, y2, none, d, K, 1.0, False, List[Int](), True, blocked)
+        m = cat_fit(m, x3, y3, w3, d, K, 1.0, False, List[Int](), True, blocked)
+        check_close(m.cnt, want_count, 1e-6, 0.0, label + ": class_count_")
+        var words = check_ncat(m.ncat, nbx_i32("pf-" + tag + "-ncat.i32", d), label)
+        check_close(cat_blocks(m.cc, d, K, m.cmax, m.ncat), nbx_f64("pf-" + tag + "-category_count.f64", words), 1e-6,
+            0.0, label + ": category_count_")
+        proba = cat_proba(m, data, n, d, K, blocked).proba.copy()
+        var one = cat_fit(cat_empty(), data, y, none, d, K, 1.0, False, List[Int](), True, blocked)
+        once = cat_proba(one, data, n, d, K, blocked).proba.copy()
+        var full = cat_fit(cat_empty(), data, y, none, d, K, 1.0, False, List[Int](), False, blocked)
+        fitted = cat_proba(full, data, n, d, K, blocked).proba.copy()
+    else:
+        var m = dnb_partial(kind, dnb_empty(), x1, y1, none, d, K, blocked)
+        m = dnb_partial(kind, m, x2, y2, none, d, K, blocked)
+        m = dnb_partial(kind, m, x3, y3, w3, d, K, blocked)
+        check_close(m.cnt, want_count, 1e-6, 0.0, label + ": class_count_")
+        check_close(m.fc, nbx_f64("pf-" + tag + "-feature_count.f64", K * d), 1e-5, 0.0, label + ": feature_count_")
+        proba = dnb_proba(kind, m, data, n, d, K, blocked).proba.copy()
+        var one = dnb_partial(kind, dnb_empty(), data, y, none, d, K, blocked)
+        once = dnb_proba(kind, one, data, n, d, K, blocked).proba.copy()
+        var f = dnb_fit(kind, data, y, none, n, d, K, 1.0, CLS_PRIOR_FIT, List[Float64](), kind == CLS_KIND_BNB, 0.0,
+            False, blocked)
+        var g = DnbState(f.class_count.copy(), f.feature_count.copy(), f.log_prior.copy(), f.log_prob.copy(),
+            f.w.copy(), f.bias.copy())
+        fitted = dnb_proba(kind, g, data, n, d, K, blocked).proba.copy()
+    check_close(proba, want_proba, 1e-7, tol, label + ": predict_proba")
+    # one partial_fit is fit, bit for bit
+    check_same(once, fitted, label + ": one partial_fit against fit, predict_proba")
+
+
+def test_nb_partial_fit() raises:
+    check_cases("nb_partial_fit", 10, partial_unit)
 
 
 def main() raises:

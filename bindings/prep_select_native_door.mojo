@@ -5,6 +5,12 @@
 # programs the Python built (the same stages, operands and arena order, so
 # the same bits) and the fitted attributes or the returned scores.
 #
+# UNPACK / RUN / PACK (lane bm-rest-sel, 2026-11-23): every program here is
+# staged by the typed builders of bindings/prep_select_run.mojo (no Python
+# object in them), and a native member's round (fit, export of its
+# importance block) is the typed `rfe_member_importances` there; this door
+# reads the arguments, owns the programs' caller buffers and packs results.
+#
 # RFE runs its elimination rounds here (one driver loop over the rounds); its
 # estimator must be a mojolearn estimator with a connected native plan. Its
 # clone, fit, predict, predict_proba, decision_function and score run as the
@@ -19,7 +25,6 @@
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from std.memory import unsafe_memcpy
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
 from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
 from bindings.member_fit_notices_pack import member_fit_notices_raise
@@ -27,8 +32,7 @@ from core.member_notices import member_notices_take
 from bindings.member_owner_unpack import MemberOwner
 from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
-    MemberCall, MemberMatrix, MemberPlan, member_call, member_new, member_free, member_kind_capabilities,
-    MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES,
+    MemberPlan, member_new, member_free, member_kind_capabilities, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES,
     MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32, MEMBER_I32,
     MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
 )
@@ -46,13 +50,19 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_labels_door import classical_encode_labels
 from bindings.admitted_input_unpack import admit_f32, admitted_vector
 from bindings.scaler_native_door import _ptr
-from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.x_prep_native_owner_door import xprep_values
-from bindings.prep_stateless_native_door import _select_transform, _select_gather, _support_columns, _words
+from bindings.prep_stateless_native_door import _select_transform, _select_gather, _support_columns, _words, _fam
 from bindings.prep_encode_native_door import (
-    EncProg, _cs, _codes, _fit_categories, _take1, _take2, _word, _iword, _put_codes, _default_mode,
-    _seed64, _score_words)
+    EncProg, _fit_categories, _take1, _take2, _default_mode, _seed64, _score_words, _category_build, _cat_block,
+    _record_sizes, IDN_STATS_BLOCKED)
+from bindings.prep_encode_cats_run import CatBlock
+from bindings.prep_select_run import (
+    mi_check_neighbors, mi_check_shape, mi_mask_of_bools, mi_mask_of_indices, mi_columns, mi_gather_stage,
+    mi_class_count_stage, mi_int_words, mi_class_check, mi_discrete_check, mi_stage, mi_scatter, MiProgram,
+    RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_SELECT_COUNT, rfe_select_count, rfe_step_count, RfeKeys,
+    rfe_first_stage, rfe_round_stage, rfe_member_importances, rfe_member_fit, rfe_final_plan,
+)
 from bindings.prep_classify_prog_door import ClsProg, f32_array
 from bindings.prep_classify_common_door import cls_x2d, cls_mode, XIn
 from bindings.prep_classify_native_door import resident_enter_min, _resident_exit
@@ -69,28 +79,6 @@ from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
-comptime INT32_MAX = 2147483647
-
-# x_prep stage codes (_expansion_prep._OPS).
-comptime OP_GATHER_COLS = 61
-comptime OP_MI_COLSCALE = 66
-comptime OP_MI_NOISE = 67
-comptime OP_MI_CC = 68
-comptime OP_MI_CD = 69
-comptime OP_MI_REDUCE = 70
-comptime OP_SQSUM_COLS = 71
-comptime OP_CODE_COUNTS = 88
-comptime OP_I2F = 10
-comptime OP_MI_DC = 94
-comptime OP_MI_DD = 95
-comptime OP_P2M_CCOUNT = 200
-comptime OP_P2M_CSCAN = 201
-comptime OP_C2_KEY64 = 253
-comptime OP_C2_RFE_STEP = 256
-comptime OP_C2_RFE_RANK = 257
-comptime OP_C2_RFE_KEEP = 271
-# `_II_CH`: the p2m units' chunk rows.
-comptime II_CH = 1024
 
 
 # ---------------------------------------------------------------- calls into estimators
@@ -136,30 +124,18 @@ def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, fit_pa
 # TOMBSTONE: _gather_cls (one gather program per round plus one for the final fit, each putting X) deleted
 # 2026-11-09 by d6f2d5ed09 (lane w1-readmission-rfe); code recoverable at d6f2d5ed09^.
 # Restore: git apply experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch
-def _stage_block(mut pr: ClsProg, x_value: PythonObject, n: Int, d: Int, sup: Int,
-                 k: Int) raises -> Tuple[Int, Int]:
-    """Stage the next round's block: the supported columns of the support
-    mask at `sup` compacted on the device (c2_rfe_keep) and those k columns
-    of X gathered into an (n, k) block (gather_cols, bit for bit). X is the
-    one admitted value every round puts: the rounds' resident scope keeps
-    its single device copy. Returns the offsets of the int32 column ids and
-    of the block."""
-    var xo = pr.put(x_value)
-    var kf = pr.alloc(d)
-    var ki = pr.alloc(d)
-    pr.stage(OP_C2_RFE_KEEP, d, sup, d, kf, ki)
-    var out = pr.alloc(n * k)
-    pr.stage(OP_GATHER_COLS, n * k, xo, n, d, kf, k, out)
-    return (ki, out)
-
-
+# The round programs are typed (lane bm-rest-sel, 2026-11-23): bindings/prep_select_run.mojo
+# `rfe_first_stage`, `rfe_round_stage`, `rfe_keys_stage`, `rfe_block_stage` stage what `_stage_block` and
+# `_keys_of` staged here over the Python-holding program, in the same order; this door gives each caller
+# buffer record its owner (`ClsProg.own`, record order).
 def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonObject, context: PythonObject,
-                     cc: PythonObject) raises -> Int:
-    """`_stage_importance_keys(pr, est, m, getter)`: the ordered keys
-    (c2_key64) of the fitted estimator's m column importances: coef_ squared
-    (summed over rows when 2-D) on the device, else feature_importances_ as
-    given; a dotted attribute path picks the importances instead (squared).
-    Returns the keys' offset."""
+                     cc: PythonObject) raises -> RfeKeys:
+    """UNPACK of the fitted estimator's m column importances for the typed
+    key stages (`_stage_importance_keys(pr, est, m, getter)`): coef_
+    (squared, summed over rows when 2-D, on the device), else
+    feature_importances_ as given; a dotted attribute path picks the
+    importances instead (squared). The words become the round program's
+    first caller buffer."""
     var b = native_loaded_module("builtins")
     var auto = py_type(getter) is b.str and String(getter) == "auto"
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
@@ -177,16 +153,15 @@ def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonO
 
 
 def _keys_of(mut pr: ClsProg, values: PythonObject, squared: Bool, m: Int, context: PythonObject,
-             cc: PythonObject) raises -> Int:
-    """The ordered keys (c2_key64) of m column importances: `values` as
-    given, or (`squared`: a coefficient block, 1-D or rows x m) squared and
-    summed over its rows on the device. Returns the keys' offset."""
-    var key = pr.work(2 * m)
+             cc: PythonObject) raises -> RfeKeys:
+    """UNPACK of m column importances: `values` as given (their own words
+    and c2_key64 kind), or (`squared`: a coefficient block, 1-D or rows x m)
+    admitted as float32 rows. The words are owned by `pr` as the next
+    caller buffer; returns what `rfe_keys_stage` stages."""
     if not squared:
         var got = _score_words(values, m, context)
-        var wo = pr.put_words(got[0])
-        pr.stage(OP_C2_KEY64, m, wo, got[1], key)
-        return key
+        pr.own(got[0])
+        return RfeKeys(m, 1, False, got[1])
     var coef = py_present(values)
     # `as_f32_c(coef, ndim=None)` then `rows, d = (1, len) if 1-D else shape`
     var raw = classical_input(py_or_none(coef), cc, "coef_")
@@ -204,12 +179,8 @@ def _keys_of(mut pr: ClsProg, values: PythonObject, squared: Bool, m: Int, conte
         raise Error("too many values to unpack (expected 2)")
     if d != m:
         raise Error("mojolearn: RFE importances have " + String(d) + " columns, expected " + String(m))
-    var c = admit_x(py_or_none(coef), nd, "coef_", cc)
-    var out = pr.work(d)
-    var co = pr.put(c)
-    pr.stage(OP_SQSUM_COLS, d, co, rows, d, out)
-    pr.stage(OP_C2_KEY64, d, out, 0, key)
-    return key
+    pr.own(admit_x(py_or_none(coef), nd, "coef_", cc))
+    return RfeKeys(m, rows, True, 0)
 
 
 # ---------------------------------------------------------------- RFE over a native member
@@ -349,82 +320,55 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
     return member^
 
 
-def _rfe_member_fit(member: RfeMember, plan: MemberPlan, block: PythonObject, n: Int, k: Int) raises -> MemberCall:
-    """One member state of `plan` (the member's own plan, or the final fit's
-    copy of it) fitted on the round's (n, k) float32 host block. THE GIL RULE:
-    the GIL is released around the fit only for a kind with `MEMBER_GIL_FREE`;
-    any other kind is fitted with the GIL held (its route's entries release
-    inside, as for the estimator's own door). The caller frees it (`member_free`) and keeps
-    `plan` alive until then (the call holds the address of its words)."""
-    var call = member_new(plan)
-    var done = False
+def _rfe_member_words(member: RfeMember, block: PythonObject, n: Int, m: Int, mut rows: Int) raises -> List[Float32]:
+    """A round over a native member: a new state of the member's plan, the
+    typed fit and EXPORT of its importance block (bindings/prep_select_run.mojo
+    `rfe_member_importances`: rows x m native words, `rows` set; no Python
+    attribute), the state released. THE GIL RULE: the GIL is released around
+    the member's calls only for a kind with MEMBER_GIL_FREE or
+    MEMBER_GIL_DOOR; any other kind is called with the GIL held (its route's
+    entries release inside, as for the estimator's own door). Raises when
+    the member refuses the round; the caller then runs the estimator's own
+    doors (nothing was staged)."""
+    var notices = List[Float64]()
+    var words = List[Float32]()
+    var x = Int(py=classical_address(block))
+    var call = member_new(member.owner.plan)
     try:
-        call.x = MemberMatrix(Int(py=classical_address(block)), n, k)
-        call.y = MemberMatrix(member.y_address, n, 1, member.y_dtype)
         if member.gil_free:
             var py = Python()
             with GILReleased(py):
-                _ = member_call(plan.member, MEMBER_OP_FIT, call)
+                words = rfe_member_importances(member.owner.plan, call, x, n, m, member.y_address, member.y_dtype,
+                                               member.block, member.squared, notices, rows)
         else:
-            _ = member_call(plan.member, MEMBER_OP_FIT, call)
-        done = True
-    finally:
-        if not done:
-            member_free(plan, call)
-        _ = block  # keep the Python objects alive through the native call above
-        _ = member.y
-    return call^
-
-
-def _rfe_member_words(member: RfeMember, block: PythonObject, n: Int, m: Int,
-                      cc: PythonObject) raises -> PythonObject:
-    """A round over a native member: fit a new state on the block, read its
-    importance block by EXPORT (a view of words the state owns; no Python
-    attribute) and release the state. Returns the block as the float32 Array
-    `_keys_of` stages: m words, or (rows, m) for a coefficient block with one
-    row per class or output. Raises when the member refuses the round; the
-    caller then runs the estimator's own doors (nothing was staged)."""
-    var call = _rfe_member_fit(member, member.owner.plan, block, n, m)
-    var words = PythonObject(None)
-    var notices = List[Float64]()
-    try:
-        member_notices_take(member.owner.plan, call.state, notices)
-        call.block = member.block
-        call.flags = 0
-        _ = member_call(member.owner.plan.member, MEMBER_OP_EXPORT, call)
-        var view = call.dst
-        var rows = view.rows
-        if not view.dense_host(MEMBER_F32) or view.cols != m or rows < 1 or (rows > 1 and not member.squared):
-            raise Error("mojolearn: RFE importances are " + String(view.rows) + " x " + String(view.cols)
-                        + " words, expected " + String(m) + " columns")
-        # rows * m words, copied once into the Array the round's program
-        # puts; the view dies with the state below.
-        if rows == 1:
-            words = f32_array(m, cc)
-        else:
-            words = classical_typed(Python.tuple(rows, m), "<f4", cc["output_context"])
-        unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.data), count=rows * m)
+            words = rfe_member_importances(member.owner.plan, call, x, n, m, member.y_address, member.y_dtype,
+                                           member.block, member.squared, notices, rows)
     finally:
         member_free(member.owner.plan, call)
+        _ = block  # keep the Python objects alive through the native calls above
+        _ = member.y
     # The round's fit notices, as the estimator's own fit of the round raised them.
     member_fit_notices_raise(notices, member.member_context)
-    return words
+    return words^
 
 
 def _rfe_member_final(member: RfeMember, block: PythonObject, n: Int, k: Int, b: PythonObject) raises -> PythonObject:
     """The final estimator over a native member: fitted on the selected
-    block, its state written into the clone (`member_pack`, a classifier
-    with its labels: the attributes its own fit writes, so RFE's predict /
-    score / transform read it as before) and released."""
-    # The final fit is the estimator's plain fit: the importance word this
-    # door set for the rounds is cleared (nobody reads the final fit's
-    # importances, and computing them costs a column-major copy of the block).
-    var plan = member.owner.plan.copy()
-    if member.importance_word:
-        plan.params[10] = 0.0
-    var call = _rfe_member_fit(member, plan, block, n, k)
+    block (`rfe_member_fit` on `rfe_final_plan`, the GIL as for a round),
+    its state written into the clone (`member_pack`, a classifier with its
+    labels: the attributes its own fit writes, so RFE's predict / score /
+    transform read it as before) and released."""
+    var plan = rfe_final_plan(member.owner.plan, member.importance_word)
     var notices = List[Float64]()
+    var x = Int(py=classical_address(block))
+    var call = member_new(plan)
     try:
+        if member.gil_free:
+            var py = Python()
+            with GILReleased(py):
+                rfe_member_fit(plan, call, x, n, k, member.y_address, member.y_dtype)
+        else:
+            rfe_member_fit(plan, call, x, n, k, member.y_address, member.y_dtype)
         member_notices_take(plan, call.state, notices)
         if member.labels is None:
             member_pack(member.template, member.fields, member.member_context, b, plan, call.state)
@@ -433,6 +377,8 @@ def _rfe_member_final(member: RfeMember, block: PythonObject, n: Int, k: Int, b:
                                 call.state, member.labels)
     finally:
         member_free(plan, call)
+        _ = block  # keep the Python objects alive through the native calls above
+        _ = member.y
     member_fit_notices_raise(notices, member.member_context)
     return member.template
 
@@ -529,26 +475,29 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     var n = arr.n
     var d = arr.d
     var mode = cls_mode(cc)
-    # n_features_to_select: None -> d // 2; a float in (0, 1) -> int(nsel * d); then max(1, int(nsel))
+    # UNPACK of n_features_to_select and step; their counts are typed
+    # (bindings/prep_select_run.mojo `rfe_select_count`, `rfe_step_count`).
     var nsel_arg = py_item(fields, nk[].k_n_features_to_select)
-    var nsel = 0
+    var nsel_kind = RFE_SELECT_COUNT
+    var nsel_fraction = 0.0
+    var nsel_count = 0
     if nsel_arg is None:
-        nsel = d // 2
+        nsel_kind = RFE_SELECT_HALF
     elif Bool(py=py_call(b.isinstance, nsel_arg, b.float)) and Float64(py=nsel_arg) > 0.0 and Float64(py=nsel_arg) < 1.0:
-        nsel = Int(Float64(py=nsel_arg) * Float64(d))
+        nsel_kind = RFE_SELECT_FRACTION
+        nsel_fraction = Float64(py=nsel_arg)
     else:
-        nsel = Int(py=py_call_typed(b.int, nsel_arg))
-    nsel = max(1, nsel)
-    # step: a float below 1 -> int(max(1, step * d)); else int(step)
+        nsel_count = Int(py=py_call_typed(b.int, nsel_arg))
+    var nsel = rfe_select_count(d, nsel_kind, nsel_fraction, nsel_count)
     var step_arg = py_item(fields, nk[].k_step)
-    var step = 0
-    if Bool(py=py_call(b.isinstance, step_arg, b.float)) and Float64(py=step_arg) < 1.0:
-        var v = Float64(py=step_arg) * Float64(d)
-        step = 1 if v <= 1.0 else Int(v)
+    var step_fraction = Bool(py=py_call(b.isinstance, step_arg, b.float)) and Float64(py=step_arg) < 1.0
+    var step_value = 0.0
+    var step_count = 0
+    if step_fraction:
+        step_value = Float64(py=step_arg)
     else:
-        step = Int(py=py_call_typed(b.int, step_arg))
-    if step <= 0:
-        raise Error("mojolearn: step must be > 0")
+        step_count = Int(py=py_call_typed(b.int, step_arg))
+    var step = rfe_step_count(d, step_fraction, step_value, step_count)
     # One program per elimination round (lane w1-readmission-rfe): the
     # fitted estimator's importance keys, c2_rfe_step on the support mask,
     # c2_rfe_rank, then the next block staged from the updated mask
@@ -558,8 +507,9 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     # once, after the last round. Each round drops exactly min(step, nsup -
     # nsel) columns (c2_rfe_step's stable rank is a total order), so the
     # round count and every block width are known before the program runs.
-    # Same stages on the same words as the two programs per round they
-    # replace: no bit moves.
+    # The programs are the typed builders of bindings/prep_select_run.mojo;
+    # this door owns their caller buffers in record order.
+    var x_words = Int(py=arr.value.size)
     var support = f32_array(d, cc)
     var sp = _ptr(support)
     var ranking = f32_array(d, cc)
@@ -570,11 +520,12 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         _ = support  # keep the Python object alive through the native call above
         _ = ranking  # keep the Python object alive through the native call above
     var pr0 = ClsProg()
-    var sup0 = pr0.put(support)
-    var first = _stage_block(pr0, arr.value, n, d, sup0, d)
+    var first = rfe_first_stage(pr0.program, x_words, n, d)
+    pr0.own(support)
+    pr0.own(arr.value)
     pr0.run(mode, cc)
-    var feat = pr0.get_i32(first[0], d, cc)
-    var block = pr0.get(first[1], n, d, cc)
+    var feat = pr0.get_i32(first.ids, d, cc)
+    var block = pr0.get(first.block, n, d, cc)
     var nsup = d
     # The estimator as a native member (admitted once for the whole fit) when
     # its family has published what RFE reads; else its own doors per round.
@@ -585,34 +536,35 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         var drop = min(step, nsup - nsel)
         var k = nsup - drop
         var pr = ClsProg()
-        var key = 0
         # A member that refuses a round (a view or dtype its family does not
         # read, a fit failure) is dropped for the rest of the fit: this round
         # and the later ones run the estimator's own doors, which raise the
         # estimator's own words if the request is wrong (the fallback rule).
-        var words = PythonObject(None)
+        var keys = RfeKeys(nsup, 1, False, 0)
+        var words = List[Float32]()
+        var native = False
         if member.native and classical_is_array(block, cc):
             try:
-                words = _rfe_member_words(member, block, n, nsup, cc)
+                var rows = 1
+                words = _rfe_member_words(member, block, n, nsup, rows)
+                keys = RfeKeys(nsup, rows, member.squared, 0)
+                native = True
             except:
                 member.native = False
-        if words is not None:
-            key = _keys_of(pr, words, member.squared, nsup, context, cc)
-        else:
+        if not native:
             _rfe_hold_block(block, hold, mark, cc)
             var est = _fit_clone(estimator, block, y, fit_params, context)
-            key = _importance_keys(pr, est, nsup, g, context, cc)
-        var sup = pr.put(support, True)
-        var rk = pr.put(ranking, True)
-        var fo = pr.put_words(feat)
-        pr.stage(OP_C2_RFE_STEP, nsup, key, fo, nsup, drop, sup)
-        pr.stage(OP_C2_RFE_RANK, d, sup, rk)
-        var nxt = _stage_block(pr, arr.value, n, d, sup, k)
+            keys = _importance_keys(pr, est, nsup, g, context, cc)
+        var staged = rfe_round_stage(pr.program, keys, words^, x_words, n, d, nsup, drop, k)
+        pr.own(support)
+        pr.own(ranking)
+        pr.own(feat)
+        pr.own(arr.value)
         pr.run(mode, cc)
-        support = pr.get(sup, d, 0, cc)
-        ranking = pr.get(rk, d, 0, cc)
-        feat = pr.get_i32(nxt[0], k, cc)
-        block = pr.get(nxt[1], n, k, cc)
+        support = pr.get(staged.support, d, 0, cc)
+        ranking = pr.get(staged.ranking, d, 0, cc)
+        feat = pr.get_i32(staged.next.ids, k, cc)
+        block = pr.get(staged.next.block, n, k, cc)
         nsup = k
     var final = PythonObject(None)
     if member.native and classical_is_array(block, cc):
@@ -734,8 +686,10 @@ def prep_rfe_call(model: PythonObject, op: Int, operation: String, args: PythonO
 
 # ---------------------------------------------------------------- mutual information
 def _discrete_mask(df: PythonObject, d: Int, context: PythonObject) raises -> List[Bool]:
-    """`_mi_discrete_mask(discrete_features, d)`: 'auto' (none), a bool for
-    every column, a bool mask of length d, or column indices."""
+    """UNPACK of `discrete_features` (`_mi_discrete_mask`): 'auto' (none), a
+    bool for every column, a bool mask of length d, or column indices, read
+    into the typed mask (bindings/prep_select_run.mojo `mi_mask_of_bools`,
+    `mi_mask_of_indices`)."""
     var nk = prep_keys()
     var b = native_loaded_module("builtins")
     if Bool(py=py_call(b.isinstance, df, b.str)):
@@ -760,125 +714,87 @@ def _discrete_mask(df: PythonObject, d: Int, context: PythonObject) raises -> Li
             all_bool = False
             break
     if all_bool:
-        if count != d:
-            raise Error("mojolearn: discrete_features mask has " + String(count) + " entries; X has " + String(d) + " features")
-        var mask = List[Bool]()
+        var given = List[Bool](capacity=count)
         for i in range(count):  # driver-loop: over the discrete_features mask
-            mask.append(Bool(py=vals[i]))
-        return mask^
-    var mask = List[Bool](length=d, fill=False)
+            given.append(Bool(py=vals[i]))
+        return mi_mask_of_bools(given, d)
     # (int, numbers.Integral), connected once (python/mojolearn/_native_prep_encode_bridge.py);
     # the per-call numbers import fallback is gone.
     var integral = py_item(context, nk[].k_integral_type)
+    var indices = List[Int](capacity=count)
     for i in range(count):  # driver-loop: over the discrete_features indices
         var v = vals[i]
         if Bool(py=py_call(b.isinstance, v, b.bool)) or not Bool(py=py_call(b.isinstance, v, integral)):
+            # An earlier index out of bounds is refused first, as the one
+            # admission loop refused it before reaching this entry.
+            _ = mi_mask_of_indices(indices, d)
             raise Error("mojolearn: discrete_features must be 'auto', a bool, a bool mask or indices")
-        var j = Int(py=py_call_typed(b.int, v))
-        if not (-d <= j and j < d):
-            raise Error("IndexError: mojolearn: discrete_features index " + String(j) + " is out of bounds for " + String(d) + " features")
-        mask[j + d if j < 0 else j] = True
-    return mask^
+        indices.append(Int(py=py_call_typed(b.int, v)))
+    return mi_mask_of_indices(indices, d)
 
 
-def _gather_enc(values: PythonObject, cols: List[Int], entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_gather(arr, cols, mode)` on the encode transport; returns the
-    gathered block as an `xprep_values` record (0, Array, None, n, k)."""
+def _mi_gather(values: PythonObject, cols: List[Int], entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The columns `cols` of X (`xprep_values` record) as an `xprep_values`
+    record (0, Array, None, n, k): UNPACK of X, the typed gather
+    (bindings/prep_select_run.mojo `mi_gather_stage`), the run, PACK."""
     var n = Int(py=values[3])
-    var d = Int(py=values[4])
     var k = len(cols)
     var p = EncProg()
-    var xo = p.put_x(values)
-    var fl = List[Float64]()
-    for i in range(k):  # driver-loop: over the selected column ids (feature metadata)
-        fl.append(Float64(cols[i]))
-    var ko = p.put_floats(fl, context)
-    var out = p.alloc(n * k)
-    _stage(p.prog.program, OP_GATHER_COLS, n * k, xo, n, d, ko, k, out)
+    var x = p.own_x(values)
+    var dst = mi_gather_stage(p.prog, x, n, Int(py=values[4]), cols)
     var ran = p.run(entries, context)
-    return Python.tuple(0, _take2(ran, out, n, k, context), PythonObject(None), n, k)
-
-
-def _class_counts(codes: PythonObject, n: Int, K: Int, entries: PythonObject, context: PythonObject) raises -> List[Int]:
-    """`_class_counts(codes, K)`: one program of p2m_ccount / p2m_cscan."""
-    if n == 0 or K <= 0:
-        return List[Int](length=max(K, 0), fill=0)
-    var p = EncProg()
-    var co = _put_codes(p, codes)
-    # `_p2m_chunks(n, K)`
-    var ch = max(II_CH, (n + II_CH - 1) // II_CH, (n * K + 16777215) // 16777216, 1)
-    var nch = max(1, (n + ch - 1) // ch)
-    var cnt = p.alloc(nch * K)
-    var tot = p.alloc(K)
-    _stage(p.prog.program, OP_P2M_CCOUNT, nch, co, n, K, ch, cnt)
-    _stage(p.prog.program, OP_P2M_CSCAN, K, cnt, nch, K, tot)
-    var ran = p.run(entries, context)
-    var out = List[Int]()
-    for i in range(K):  # driver-loop: over the class counts (class count)
-        out.append(_iword(ran, tot + i))
-    return out^
-
-
-def _work(mut p: EncProg, words: Int, scratch: Bool) -> Int:
-    # `work`: pr.work under MOJOLEARN_MI_WORK on the FAST tier, else pr.alloc.
-    return p.work(words) if scratch else p.alloc(words)
+    return Python.tuple(0, _take2(ran, dst, n, k, context), PythonObject(None), n, k)
 
 
 def prep_mutual_info_call(op: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_mutual_info(X, y, discrete_target, discrete_features, n_neighbors,
-    random_state)`: continuous columns scaled and noised (the 1e-10-scaled
-    noise kept as a second word), then per column Kraskov, Ross or the
-    contingency table, in one program."""
+    random_state)`. UNPACK: the arguments, X, the targets and the discrete
+    block's categories as owners of the programs and typed words; RUN: the
+    typed builders of bindings/prep_select_run.mojo (`mi_class_count_stage`,
+    `mi_gather_stage`, `mi_stage`) on the encode owner's transport; PACK:
+    the float32 scores Array."""
     var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var discrete_target = op == PREP_OPN_MUTUAL_INFO_CLASSIF
     var x = args[0]
     var y = args[1]
     var k = Int(py=py_call_typed(b.int, args[3]))
-    if not (1 <= k and k <= 32):
-        raise Error("NotImplementedError: mojolearn: mutual_info supports 1 <= n_neighbors <= 32")
+    mi_check_neighbors(k)
     var mode = _default_mode(context)
     var entries = _entries(mode, context)
     var values = xprep_values(x, entries, context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    if n == 0 or d == 0:
-        raise Error("mojolearn: X must be a nonempty two-dimensional array")
-    if n * d > INT32_MAX:
-        raise Error("mojolearn: X exceeds the native Int32 indexing bound")
-    var mask = _discrete_mask(args[2], d, context)
-    var cont = List[Int]()
-    var disc = List[Int]()
-    for j in range(d):  # driver-loop: over the column kinds (feature count)
-        if mask[j]:
-            disc.append(j)
-        else:
-            cont.append(j)
+    mi_check_shape(n, d)
+    var columns = mi_columns(_discrete_mask(args[2], d, context))
+    var cont = columns[0].copy()
+    var disc = columns[1].copy()
     var seed = _seed64(args[4])[0] & 0x3FFFFFFF
     var scratch = Bool(py=py_item(context, nk[].k_select_mi_work)) and String(mode) == "fast"
+    # The image's IDN_STATS_BLOCKED word, read once, where the column
+    # statistics run (a continuous column or a continuous target).
+    var stats_blocked = False
+    if len(cont) > 0 or not discrete_target:
+        stats_blocked = (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0
     var p = EncProg()
-    var yo = -1
-    var lc = -1
-    var K = 0
+    var y_owner = -1
+    var y_words = 0
     var counts = List[Int]()
     var target = PythonObject(None)
     if discrete_target:
         var labels = classical_encode_labels(y, context)
         if labels.n != n:
             raise Error("mojolearn: X and y have different numbers of rows")
-        K = len(labels.classes)
-        counts = _class_counts(labels.codes, n, K, entries, context)
-        var most = 0
-        for i in range(len(counts)):  # driver-loop: over the class counts (class count)
-            most = max(most, counts[i])
-        if len(cont) > 0 and most < 2:
-            raise Error("mojolearn: mutual_info: every class has one sample (the reference's "
-                        + "neighbour search over the classes with more than one finds 0 samples)")
-        yo = _put_codes(p, labels.codes)
-        var fl = List[Float64]()
-        for i in range(len(counts)):  # driver-loop: over the class counts (class count)
-            fl.append(Float64(counts[i]))
-        lc = p.put_floats(fl, context)
+        var K = len(labels.classes)
+        y_words = Int(py=labels.codes.size)
+        var pc = EncProg()
+        var held = pc.own(labels.codes, y_words)
+        var tot = mi_class_count_stage(pc.prog, held, y_words, n, K)
+        var counted = pc.run(entries, context)
+        counts = mi_int_words(Int(py=counted[0][1]), tot, K)
+        _ = counted^  # the arena store lives through the reads above
+        mi_class_check(counts, len(cont) > 0)
+        y_owner = p.own(labels.codes, y_words)
     else:
         var t = admit_f32(y, 1, "y", context, finite=False)
         if t.rows != n:
@@ -887,94 +803,33 @@ def prep_mutual_info_call(op: Int, args: PythonObject, context: PythonObject) ra
         unsafe_memcpy(dest=_ptr(target), src=F32P(unsafe_from_address=t.address), count=n)
         _ = target  # keep the Python object alive through the native call above
         _ = t^
-    var dc = len(cont)
-    var z = -1
-    var zs = -1
-    if dc > 0:
-        var xo = 0
-        if len(disc) > 0:
-            xo = p.put_x(_gather_enc(values, cont, entries, context))
-        else:
-            xo = p.put_x(values)
-        var st = p.alloc(6 * dc)
-        var sc = p.alloc(dc)
-        var ma = p.alloc(dc)
-        z = _work(p, n * dc, scratch)
-        zs = _work(p, n * dc, scratch)
-        _cs(p, mode, entries, xo, n, dc, st)
-        _stage(p.prog.program, OP_MI_COLSCALE, dc, xo, n, dc, st, sc, ma)
-        _stage(p.prog.program, OP_MI_NOISE, n * dc, xo, n, dc, sc, ma, 2 * seed, z, zs + 1)
-    var zy = -1
-    var zys = -1
-    if not discrete_target:
-        yo = p.put(target, n)
-        var sty = p.alloc(6)
-        var scy = p.alloc(1)
-        var may = p.alloc(1)
-        zy = _work(p, n, scratch)
-        zys = _work(p, n, scratch)
-        _cs(p, mode, entries, yo, n, 1, sty)
-        _stage(p.prog.program, OP_MI_COLSCALE, 1, yo, n, 1, sty, scy, may)
-        _stage(p.prog.program, OP_MI_NOISE, n, yo, n, 1, scy, may, 2 * seed + 1, zy, zys + 1)
-    var outc = -1
-    if dc > 0:
-        var term = _work(p, n * dc, scratch)
-        outc = p.alloc(dc)
-        if discrete_target:
-            _stage(p.prog.program, OP_MI_CD, n * dc, z, n, dc, yo, lc, k, term, zs + 1)
-            _stage(p.prog.program, OP_MI_REDUCE, dc, term, n, dc, 3, k, 0, outc, lc, len(counts))
-        else:
-            _stage(p.prog.program, OP_MI_CC, n * dc, z, n, dc, zy, k, term, zs + 1, zys + 1)
-            _stage(p.prog.program, OP_MI_REDUCE, dc, term, n, dc, 0, k, n, outc)
-    var dd = len(disc)
-    var outd = -1
-    if dd > 0:
-        var xd = _gather_enc(values, disc, entries, context)
-        var cats = _fit_categories(xd, mode, entries, context)
-        var kx = List[Int]()
-        var kmax = 0
-        for c in range(dd):  # driver-loop: over the per-column category arrays (discrete feature count)
-            kx.append(Int(py=cats[c].size))
-            kmax = max(kmax, kx[c])
+        y_owner = p.own(target, n)
+    var x_owner = -1
+    if len(cont) > 0:
+        x_owner = p.own_x(_mi_gather(values, cont, entries, context) if len(disc) > 0 else values)
+    var xd_owner = -1
+    var cats = CatBlock(-1, 0, 0, -1, 0)
+    var kx = List[Int]()
+    if len(disc) > 0:
+        var xd = _mi_gather(values, disc, entries, context)
+        var record = _category_build(_fit_categories(xd, mode, entries, context), context)
+        kx = _record_sizes(record)
         if not discrete_target:
-            for c in range(dd):  # driver-loop: over the per-column category counts (discrete feature count)
-                if kx[c] == n:
-                    raise Error("mojolearn: mutual_info: discrete feature " + String(disc[c]) + " has one sample per "
-                                + "value (the reference's neighbour search finds 0 samples)")
-        var coded = _codes(p, xd, cats, context, False, PythonObject(None))
-        var xc = coded[0]
-        outd = p.alloc(dd)
-        if discrete_target:
-            var ky = K
-            var stride = kmax * ky + kmax + ky
-            var tb = p.alloc(dd * stride)
-            var fl = List[Float64]()
-            for c in range(dd):  # driver-loop: over the per-column category counts (discrete feature count)
-                fl.append(Float64(kx[c]))
-            var kxo = p.put_floats(fl, context)
-            _stage(p.prog.program, OP_MI_DD, dd, xc, n, dd, yo, ky, kxo, tb, stride, outd)
-        else:
-            var cnti = p.alloc(dd * kmax)
-            var cntf = p.alloc(dd * kmax)
-            var term = _work(p, n * dd, scratch)
-            _stage(p.prog.program, OP_CODE_COUNTS, dd, xc, n, dd, kmax, cnti)
-            _stage(p.prog.program, OP_I2F, dd * kmax, cnti, cntf)
-            _stage(p.prog.program, OP_MI_DC, n * dd, zy, n, dd, xc, cntf, kmax, k, term, zys + 1)
-            _stage(p.prog.program, OP_MI_REDUCE, dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
+            mi_discrete_check(kx, disc, n)
+        xd_owner = p.own_x(xd)
+        cats = _cat_block(p, record, True)
+    var staged = mi_stage(p.prog, MiProgram(n, k, seed, discrete_target, scratch, stats_blocked, cont.copy(),
+                                            disc.copy(), x_owner, y_owner, y_words, counts^, xd_owner, cats^, kx^))
     var ran = p.run(entries, context)
     _ = target^
-    if dd == 0:
-        var res = _take1(ran, outc, d, context)
+    if len(disc) == 0:
+        var res = _take1(ran, staged.outc, d, context)
         _ = values^
         return res
-    # the device's values scattered to their columns, as a float32 Array
+    # PACK: the scores scattered to their columns, as a float32 Array
     var out = classical_typed(Python.tuple(d), "<f4", py_item(context, nk[].k_output_context))
-    var dst = _ptr(out)
-    for i in range(dc):  # driver-loop: scatters device MI values to their columns (continuous feature count)
-        dst[cont[i]] = _word(ran, outc + i)
-        _ = out  # keep the Python object alive through the native call above
-    for i in range(dd):  # driver-loop: scatters device MI values to their columns (discrete feature count)
-        dst[disc[i]] = _word(ran, outd + i)
-        _ = out  # keep the Python object alive through the native call above
+    mi_scatter(Int(py=ran[0][1]), staged, cont, disc, Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = ran^  # the arena store lives through the scatter above
     _ = values^
     return out

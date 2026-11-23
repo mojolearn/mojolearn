@@ -27,7 +27,7 @@ from x_cnn.graph_run import (
     graph_run_csr_words, graph_run_edges, graph_run_check_edge_weight, graph_run_ones, graph_run_slice,
     graph_run_csr_build, graph_run_gather, graph_run_vals_t, graph_run_gcn_loops, graph_run_gcn_norm,
     graph_run_gcn_backward, graph_run_sage_backward, graph_run_gemm, graph_run_spmm, graph_run_add,
-    graph_run_bias_rows,
+    graph_run_bias_rows, graph_run_linear_forward, graph_run_relu_forward, graph_run_graph_op,
 )
 
 
@@ -307,6 +307,170 @@ def sage_backward_host_run[C: GraphCalls](calls: C, csr_f: Int, csr_t: Int, nnz:
     _ = dsc^
     _ = roots^
     _ = proj^
+
+
+# ---------------------------------------------------------------- SAGEConv host form: forward, saved state, backward
+# Lane bm-rest-graph (2026-11-23). What bindings/xcnn_graph_native_door.mojo `xcnn_sage_forward` composed over
+# Python arrays (the projection's linear and ReLU, the max graph op or the spmm over ones, lin_l's linear, the root
+# gemm and add, the normalization graph op), call for call with the same entries, words and order, and the buffers
+# its `_sage_backward_host` read back from the layer's fields (`_xs`, `_max_aux`, `_pre`, `_den`, `_nograph`, `_y`
+# and the `_x` of lin_l, lin and the ReLU) now live in one `SageSaved`; the layer holds it through one native owner
+# (bindings/xcnn_sage_saved_owner_pack.mojo). The forward's intermediates are native storage; the outputs go
+# straight into the caller's `dst` (no copy: the last step of each configuration writes it).
+
+
+@fieldwise_init
+struct SageShape(ImplicitlyCopyable, Movable):
+    """One SAGEConv host-form call: n nodes, d in and f out channels, nnz
+    edges, the aggregation word (graph_run_aggr_kind: 0 sum / add, 1 mean,
+    2 max) and the normalize, root_weight and project flags."""
+
+    var n: Int
+    var d: Int
+    var f: Int
+    var nnz: Int
+    var kind: Int
+    var norm: Bool
+    var root: Bool
+    var project: Bool
+
+
+@fieldwise_init
+struct SageEntries(ImplicitlyCopyable, Movable):
+    """The resolved x_cnn entries of the layer (aggregation, root gemm and
+    add, normalization), of lin_l, of the projection's linear and of its
+    ReLU (the door resolved each module's own route, as before; a native
+    caller passes one entry four times)."""
+
+    var layer: EntryRef
+    var lin_l: EntryRef
+    var lin: EntryRef
+    var relu: EntryRef
+
+
+@fieldwise_init
+struct SageWeights(ImplicitlyCopyable, Movable):
+    """Addresses of the parameters: lin_l's weight (f, d) and bias (f), the
+    root weight (f, d; 0 without root_weight) and the projection's weight
+    (d, d) and bias (d; 0 without project). Float32, C-ordered."""
+
+    var wl: Int
+    var bl: Int
+    var wr: Int
+    var wp: Int
+    var bp: Int
+
+
+@fieldwise_init
+struct SageGrads(ImplicitlyCopyable, Movable):
+    """Addresses the backward writes: lin_l's dw (f, d) and db (f), dx
+    (n, d), the root gradient gwr (f, d; 0 without root_weight) and the
+    projection's dwp (d, d) and dbp (d; 0 without project)."""
+
+    var dw: Int
+    var db: Int
+    var dx: Int
+    var gwr: Int
+    var dwp: Int
+    var dbp: Int
+
+
+struct SageSaved(Movable):
+    """The buffers SAGEConv's host-form forward saves for its backward:
+    the projection's pre-ReLU rows hp and output xs (n, d; project only),
+    the aggregate agg (n, d), the max aggregation's aux (2 n d; max only),
+    the normalization's pre (n, f), den (n) and nograph (n + 1 zero
+    offsets; normalize only), and the address of the normalized output y
+    (the caller's `dst`, kept alive by whoever holds this state; 0 without
+    normalize)."""
+
+    var shape: SageShape
+    var hp: List[Float32]
+    var xs: List[Float32]
+    var agg: List[Float32]
+    var aux: List[Float32]
+    var pre: List[Float32]
+    var den: List[Float32]
+    var nograph: List[Int32]
+    var y: Int
+
+    def __init__(out self, shape: SageShape):
+        var nd = shape.n * shape.d
+        var nf = shape.n * shape.f
+        self.shape = shape
+        self.hp = List[Float32](length=max(nd, 1) if shape.project else 0, fill=0)
+        self.xs = List[Float32](length=max(nd, 1) if shape.project else 0, fill=0)
+        self.agg = List[Float32](length=max(nd, 1), fill=0)
+        self.aux = List[Float32](length=max(2 * nd, 1) if shape.kind == 2 else 0, fill=0)
+        self.pre = List[Float32](length=max(nf, 1) if shape.norm else 0, fill=0)
+        self.den = List[Float32](length=max(shape.n, 1) if shape.norm else 0, fill=0)
+        self.nograph = List[Int32](length=shape.n + 1 if shape.norm else 0, fill=0)
+        self.y = 0
+
+
+def sage_forward_host_run(entries: SageEntries, x: Int, csr_f: Int, weights: SageWeights, dst: Int,
+                          mut saved: SageSaved) raises:
+    """SAGEConv.forward on the host form over `x` (n, d) and the forward CSR
+    view `csr_f`, writing the output (n, f) to `dst` and the backward's
+    buffers to `saved` (built by `SageSaved(shape)`). The door (with the GIL
+    released) and a native check call it."""
+    var s = saved.shape
+    var n = s.n
+    var d = s.d
+    var f = s.f
+    var src = x
+    if s.project:
+        # `_Linear.forward(x)` then `_ReLU.forward`: xs = relu(x W_p^T + b_p)
+        graph_run_linear_forward(entries.lin, x, weights.wp, weights.bp, Int(saved.hp.unsafe_ptr()), n, d, d)
+        graph_run_relu_forward(entries.relu, Int(saved.hp.unsafe_ptr()), Int(saved.xs.unsafe_ptr()), n * d)
+        src = Int(saved.xs.unsafe_ptr())
+    var agg = Int(saved.agg.unsafe_ptr())
+    if s.kind == 2:
+        graph_run_graph_op(entries.layer, src, src, Int(saved.aux.unsafe_ptr()), agg, csr_f, n, d, s.nnz, 0)
+    else:
+        var ones = _ones(max(s.nnz, 1))
+        graph_run_spmm(entries.layer, Int(ones.unsafe_ptr()), src, agg, csr_f, n, d, s.nnz, 1 if s.kind == 1 else 0)
+        _ = ones^
+    # lin_l's output: the returned rows when it is the last step, the
+    # normalization's input without a root, else scratch for the root add
+    var ol = List[Float32](length=n * f if s.root else 0, fill=0)
+    var lin_dst: Int
+    if s.root:
+        lin_dst = Int(ol.unsafe_ptr())
+    elif s.norm:
+        lin_dst = Int(saved.pre.unsafe_ptr())
+    else:
+        lin_dst = dst
+    graph_run_linear_forward(entries.lin_l, agg, weights.wl, weights.bl, lin_dst, n, d, f)
+    var rows = List[Float32](length=n * f if s.root else 0, fill=0)
+    if s.root:
+        graph_run_gemm(entries.layer, x, weights.wr, Int(rows.unsafe_ptr()), n, f, d, 1)
+        var sum_dst = Int(saved.pre.unsafe_ptr()) if s.norm else dst
+        graph_run_add(entries.layer, Int(ol.unsafe_ptr()), Int(rows.unsafe_ptr()), sum_dst, n * f)
+    if s.norm:
+        var pre = Int(saved.pre.unsafe_ptr())
+        graph_run_graph_op(entries.layer, pre, pre, Int(saved.den.unsafe_ptr()), dst,
+                           Int(saved.nograph.unsafe_ptr()), n, f, 0, 2)
+        saved.y = dst
+    _ = ol^
+    _ = rows^
+
+
+def sage_backward_saved_run[C: GraphCalls](calls: C, csr_f: Int, csr_t: Int, saved: SageSaved, x: Int, g: Int,
+                                           weights: SageWeights, grads: SageGrads) raises:
+    """SAGEConv's host-form backward over the forward's saved state: the
+    upstream gradient g (n, f), the forward input x (n, d), the current
+    parameters, writing `grads` (`sage_backward_host_run`, the tape)."""
+    var s = saved.shape
+    var io = SageBackwardHost(
+        g, x, Int(saved.agg.unsafe_ptr()), weights.wl, weights.bl, grads.dw, grads.db, grads.dx,
+        saved.y if s.norm else 0, Int(saved.pre.unsafe_ptr()) if s.norm else 0,
+        Int(saved.den.unsafe_ptr()) if s.norm else 0, Int(saved.nograph.unsafe_ptr()) if s.norm else 0,
+        Int(saved.aux.unsafe_ptr()) if s.kind == 2 else 0, weights.wr if s.root else 0,
+        grads.gwr if s.root else 0, Int(saved.xs.unsafe_ptr()) if s.project else 0,
+        Int(saved.hp.unsafe_ptr()) if s.project else 0, weights.wp if s.project else 0,
+        weights.bp if s.project else 0, grads.dwp if s.project else 0, grads.dbp if s.project else 0)
+    sage_backward_host_run(calls, csr_f, csr_t, s.nnz, s.n, s.d, s.f, s.kind, s.norm, s.root, s.project, io)
 
 
 # ---------------------------------------------------------------- the native calls (checks)

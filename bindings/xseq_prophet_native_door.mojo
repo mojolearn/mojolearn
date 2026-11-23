@@ -2,7 +2,8 @@
 # Complete Prophet fit/predict operation ownership: passive source snapshots,
 # native preparation, compiled numerical entries and staged state publication.
 # UNPACK/PACK only (lane doorsplit-cnn-xseq, 2026-11-11): the checks, plan
-# words and glue calls run in sequence/xseq_prophet_run.mojo; this file
+# words and glue calls run in sequence/xseq_prophet_run.mojo (the predict
+# setup as one typed RUN over a typed fitted plan, lane bm-rest-graph); this file
 # snapshots the fields, admits and owns the buffers, releases the GIL around
 # each glue call and publishes the fitted state.
 from std.python import Python, PythonObject
@@ -12,10 +13,8 @@ from bindings.xseq_native_common_door import xseq_route_of, xseq_addr, xseq_colu
 from bindings.forecast_device_door import forecast_finite
 from core.entry_table import EntryRef
 from sequence.xseq_prophet_run import (
-    ProphetPredictRequest, prophet_run_days, prophet_run_features, prophet_run_parameter_count,
-    prophet_run_check_stored_dtype, prophet_run_check_ranks, prophet_run_check_holidays_given, prophet_run_check_order,
-    prophet_run_check_schema, prophet_run_check_info_shape, prophet_run_check_params_shape,
-    prophet_run_check_holiday_columns, prophet_run_predict,
+    ProphetPredictPlan, ProphetPredictInput, prophet_run_predict_setup, prophet_run_parameter_count,
+    prophet_run_check_stored_dtype, prophet_run_check_ranks, prophet_run_check_holidays_given,
     ProphetSeason, ProphetAuto, ProphetTimes, ProphetFitInput, ProphetFitPlan, PROPHET_AUTO_AUTO, PROPHET_AUTO_ON,
     PROPHET_AUTO_OFF, PROPHET_AUTO_ORDER, prophet_run_prepare_fit, prophet_run_prior_count, prophet_run_fit_plan,
     prophet_run_copy_changepoints,
@@ -114,67 +113,9 @@ def _times(source: PythonObject, context: PythonObject, mut owner: PythonObject)
     return ProphetTimes(Int(py=xseq_addr(owner)) if n else 0, n, datetime)
 
 
-def _days(source: PythonObject, key: EntryRef, context: PythonObject) raises -> PythonObject:
-    """`_days(t, mode)`: (days float64 (N,), info [status, span, least
-    spacing]), converted and checked by `prophet_days`."""
-    var src = PythonObject(None)
-    var times = _times(source, context, src)
-    var n = times.n
-    var nk = xseq_keys()
-    var days = sequential_array(Python.tuple(n), py_item(context, nk[].k_float64), context)
-    var info = sequential_array(Python.tuple(3), py_item(context, nk[].k_float64), context)
-    if n:
-        var days_addr = Int(py=xseq_addr(days))
-        var info_addr = Int(py=xseq_addr(info))
-        var py = Python()
-        with GILReleased(py):
-            prophet_run_days(key, times.src, days_addr, info_addr, n, times.datetime)
-        _ = info  # keep the Python object alive through the native call above
-        _ = days  # keep the Python object alive through the native call above
-        _ = src  # keep the Python object alive through the native call above
-    return Python.tuple(days, info)
-
-
 def _seasonal_rows(fields: PythonObject) raises -> PythonObject:
     var nk = xseq_keys()
     return py_call(_b().list, py_call(py_item(fields, nk[].k_seasonalities).values))
-
-
-def _periods(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The seasonal periods, float64 (max(ns, 1),) (a 1.0 when none)."""
-    var rows = _seasonal_rows(fields)
-    var periods = Python.list()
-    var nk = xseq_keys()
-    for i in range(len(rows)):  # driver-loop: over the user seasonalities (one period each)
-        _ = py_call(periods.append, py_item(rows[i], nk[].k_period))
-    if len(periods) == 0:
-        _ = py_call(periods.append, 1.0)
-    return _contig(periods, py_item(context, nk[].k_float64), context)
-
-
-def _features(fields: PythonObject, days: PythonObject, key: EntryRef, context: PythonObject) raises -> PythonObject:
-    """`_features(days)`: (t scaled float32 (N,), frac float32 (N, max(ns, 1)))."""
-    var rows = _seasonal_rows(fields)
-    var periods_a = _periods(fields, context)
-    var ns = len(rows)
-    var n = len(days)
-    var nk = xseq_keys()
-    var tsc = sequential_array(Python.tuple(n), py_item(context, nk[].k_float32), context)
-    var frac = sequential_array(Python.tuple(n, max(ns, 1)), py_item(context, nk[].k_float32), context)
-    var days_addr = Int(py=xseq_addr(days))
-    var periods_addr = Int(py=xseq_addr(periods_a))
-    var tsc_addr = Int(py=xseq_addr(tsc))
-    var frac_addr = Int(py=xseq_addr(frac))
-    var start = Float64(py=py_call(_b().float, py_item(fields, nk[].k_start_)))
-    var t_scale = Float64(py=py_call(_b().float, py_item(fields, nk[].k_t_scale_)))
-    var py = Python()
-    with GILReleased(py):
-        prophet_run_features(key, days_addr, periods_addr, tsc_addr, frac_addr, n, ns, start, t_scale)
-    _ = days  # keep the Python object alive through the native call above
-    _ = frac  # keep the Python object alive through the native call above
-    _ = tsc  # keep the Python object alive through the native call above
-    _ = periods_a  # keep the Python object alive through the native call above
-    return Python.tuple(tsc, frac)
 
 
 def _auto_setting(fields: PythonObject, name: String, arg: PythonObject) raises -> ProphetAuto:
@@ -220,19 +161,6 @@ def _fit_plan(key: EntryRef, plan: ProphetFitPlan, y: Int, batch: Int, holidays:
     with GILReleased(Python()):
         prophet_run_fit_plan(key, plan, y, batch, holidays, nh, holidays_prior_scale, params, info, multiplicative,
                              max_iter, changepoint_prior_scale)
-
-
-def _orders(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The seasonal Fourier orders as float32 (one placeholder when there are
-    none): (orders_, count)."""
-    var rows = _seasonal_rows(fields)
-    var orders = Python.list()
-    var nk = xseq_keys()
-    for i in range(len(rows)):  # driver-loop: over the user seasonalities (one order each)
-        _ = py_call(orders.append, py_item(rows[i], nk[].k_fourier_order))
-    if len(orders) == 0:
-        return Python.tuple(sequential_array(Python.tuple(1), py_item(context, nk[].k_float32), context), 0)
-    return Python.tuple(_contig(orders, py_item(context, nk[].k_float32), context), len(orders))
 
 
 def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -352,76 +280,62 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     prophet_run_check_ranks(Int(py=py_item(fields, nk[].k_params_).ndim), Int(py=py_item(fields, nk[].k_info_).ndim),
                             Int(py=py_item(fields, nk[].k_changepoints_t_).ndim))
     var key = xseq_route_of(model, py_get(fields, nk[].k_numeric_mode), original, context).glue
-    var days = _days(args[0], key, context)[0]
-    var M = len(days)
-    # lane ne1-a-decomp-tsa (N032): with `prophet_predict_days` the scaled
-    # times and phases stay on the executor and the feature matrix is built
-    # where the predict kernel runs (one crossing less, no host copy of
-    # them). An empty `t` keeps the separate feature call, so its refusal
-    # comes first as before; a non-positive seasonal period (refused by the
-    # feature writer) is then met after the holiday and schema checks below
-    # instead of before them.
-    # Every image publishes `prophet_predict_days` in the sequence table, so
-    # the former "entry present" test is gone (lane calltable-xseq).
-    var fused = M > 0
-    var ft = Python.tuple(PythonObject(None), PythonObject(None))
-    var periods_a = PythonObject(None)
-    if fused:
-        periods_a = _periods(fields, context)
-    else:
-        ft = _features(fields, days, key, context)
+    # UNPACK (lane bm-rest-graph, 2026-11-23): the time column, the holiday
+    # matrix and the fitted attributes predict reads, once, into the typed
+    # `ProphetPredictPlan` / `ProphetPredictInput`; RUN the predict setup
+    # (sequence/xseq_prophet_run.mojo `prophet_run_predict_setup`: the days,
+    # periods, orders, the separate feature call of an empty `t`, the schema
+    # refusals and the predict entry) with one GIL release (there were three:
+    # days, features, predict); PACK the trend and the forecast. The holiday
+    # admission now precedes the day conversion, and an empty `t`'s feature
+    # refusal (a non-positive seasonal period) follows the holiday admission.
+    var t_owner = PythonObject(None)
+    var times = _times(args[0], context, t_owner)
+    var M = times.n
     var nh = Int(py=py_item(fields, nk[].k__nh))
     var H = PythonObject(None)
+    var holiday_cols = 0
     if nh:
         prophet_run_check_holidays_given(nh, args[1] is not None)
         H = py_call(_contig(args[1], py_item(context, nk[].k_float32), context).reshape, M, -1)
-    else:
-        H = sequential_array(Python.tuple(M, 1), py_item(context, nk[].k_float32), context)
-    var od = _orders(fields, context)
-    var feature_count = 0
+        holiday_cols = Int(py=H.shape[1])
     var rows = _seasonal_rows(fields)
-    for i in range(len(rows)):  # driver-loop: fitted feature-schema bounds before the native feature writer
-        var order = Int(py=py_call(b.int, py_item(rows[i], nk[].k_fourier_order)))
-        prophet_run_check_order(order)
-        feature_count += 2 * order
-    # `_K` is read only when `nh` is not negative, as the short-circuit
-    # check read it before the split.
-    prophet_run_check_schema(nh, Int(py=py_item(fields, nk[].k__K)) if nh >= 0 else 0, feature_count)
+    var periods = List[Float64](capacity=len(rows))
+    var order_values = List[Float64](capacity=len(rows))
+    var orders = List[Int](capacity=len(rows))
+    for i in range(len(rows)):  # driver-loop: over the user seasonalities (period and Fourier order each)
+        periods.append(Float64(py=py_call(b.float, py_item(rows[i], nk[].k_period))))
+        var order = py_item(rows[i], nk[].k_fourier_order)
+        order_values.append(Float64(py=py_call(b.float, order)))
+        orders.append(Int(py=py_call(b.int, order)))
     var params = py_item(fields, nk[].k_params_)
+    var info = py_item(fields, nk[].k_info_)
+    var cpts = py_item(fields, nk[].k_changepoints_t_)
     var B = Int(py=params.shape[0])
-    prophet_run_check_info_shape(Int(py=py_item(fields, nk[].k_info_).shape[0]), Int(py=py_item(fields, nk[].k_info_).shape[1]), B)
-    prophet_run_check_params_shape(Int(py=params.shape[1]), len(py_item(fields, nk[].k_changepoints_t_)), Int(py=py_item(fields, nk[].k__K)))
-    prophet_run_check_holiday_columns(nh, Int(py=H.shape[1]) if nh != 0 else 0)
+    # `_K` is read only when `nh` is not negative (the schema check refuses
+    # a negative `nh` before any read of it, as before the split).
+    var k = Int(py=py_item(fields, nk[].k__K)) if nh >= 0 else 0
+    var plan = ProphetPredictPlan(
+        periods^, order_values^, orders^, Float64(py=py_call(b.float, py_item(fields, nk[].k_start_))),
+        Float64(py=py_call(b.float, py_item(fields, nk[].k_t_scale_))), nh, k,
+        String(py=py_item(fields, nk[].k_seasonality_mode)) == "multiplicative", Int(py=xseq_addr(params)), B,
+        Int(py=params.shape[1]), Int(py=xseq_addr(info)), Int(py=info.shape[0]), Int(py=info.shape[1]),
+        Int(py=xseq_addr(cpts)), len(cpts))
     var yhat = sequential_array(Python.tuple(B, M), py_item(context, nk[].k_float32), context)
     var trend = sequential_array(Python.tuple(B, M), py_item(context, nk[].k_float32), context)
-    var cpts = py_item(fields, nk[].k_changepoints_t_)
-    var multiplicative = String(py=py_item(fields, nk[].k_seasonality_mode)) == "multiplicative"
-    # The feature words of the route not taken stay 0: the fused entry reads
-    # days, periods, start and scale; the plain one the feature call's
-    # scaled times and phases.
-    var days_addr = Int(py=xseq_addr(days)) if fused else 0
-    var periods_addr = Int(py=xseq_addr(periods_a)) if fused else 0
-    var tsc_addr = 0 if fused else Int(py=xseq_addr(ft[0]))
-    var frac_addr = 0 if fused else Int(py=xseq_addr(ft[1]))
-    var request = ProphetPredictRequest(
-        fused, days_addr, periods_addr, tsc_addr, frac_addr, Int(py=xseq_addr(params)),
-        Int(py=xseq_addr(py_item(fields, nk[].k_info_))), Int(py=xseq_addr(od[0])), Int(py=xseq_addr(H)), Int(py=xseq_addr(cpts)),
-        Int(py=xseq_addr(yhat)), Int(py=xseq_addr(trend)), B, M, Int(py=od[1]), nh, Int(py=py_item(fields, nk[].k__K)), len(cpts),
-        multiplicative, Float64(py=py_call(b.float, py_item(fields, nk[].k_start_))) if fused else 0.0,
-        Float64(py=py_call(b.float, py_item(fields, nk[].k_t_scale_))) if fused else 0.0)
+    var request = ProphetPredictInput(times.copy(), Int(py=xseq_addr(H)) if nh else 0, holiday_cols,
+                                      Int(py=xseq_addr(yhat)), Int(py=xseq_addr(trend)))
     var py = Python()
     with GILReleased(py):
-        prophet_run_predict(key, request)
-    _ = days  # keep the Python objects alive through the native call above
-    _ = periods_a
-    # Prediction has independently allocated feature and order owners too.
-    _ = ft
-    _ = od
-    _ = params  # keep the Python object alive through the native call above
-    _ = cpts  # keep the Python object alive through the native call above
-    _ = trend  # keep the Python object alive through the native call above
-    _ = yhat  # keep the Python object alive through the native call above
-    _ = H  # keep the Python object alive through the native call above
+        prophet_run_predict_setup(key, plan, request)
+    _ = t_owner  # keep the Python objects alive through the native call above
+    _ = H
+    _ = params
+    _ = info
+    _ = cpts
+    _ = trend
+    _ = yhat
+    _ = fields
     var one = Bool(py=py_item(fields, nk[].k__one))
     py_setitem(fields, nk[].k_trend_, trend[0] if one else trend)
     # Snapshot copies are private to this prediction; preserve the fitted

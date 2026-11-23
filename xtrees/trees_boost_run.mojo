@@ -11,8 +11,10 @@ cores.
 """
 from std.math import ceil
 from core.entry_table import EntryRef
+from core.host_parallel import host_parallelize
 from xtrees.glue_calls import xt_apply, xt_leaf_numbering, xt_onehot_leaves, xt_uniform
-from xtrees.trees_forest_run import trees_refuse
+from xtrees.trees_forest_run import trees_refuse, ForestFit, forest_fit_core
+from bindings.forest_config_run import ForestConfig, forest_request, forest_target_need, FOREST_TARGET_ANY
 
 comptime BOOST_DART_VALUES_CAP = 1 << 26
 
@@ -96,12 +98,62 @@ def _dart_thr(v: Float64) -> Int:
 # RUN of the embedding's operations: typed glue calls over addresses the
 # door's UNPACK admitted and its PACK publishes. Each is one synchronous
 # launch (or two) of the x_trees image; the parallelism is inside the image.
+# Lane bm-rest-rte (2026-11-23): the fit (`rte_fit_run`) is typed too: the
+# targets, their float32 words and the forest's XF_FIT, with no Python
+# ExtraTreesRegressor request built over Python objects. A Mojo check calls
+# `rte_fit_run`, exports the handle through the image (XF_EXPORT_*), then
+# `rte_numbering_run` and `rte_transform_run`, as the door does.
+
+comptime _RTE_CAST_CHUNK = 65536
 
 
 def rte_targets_run(glue: EntryRef, targets: Int, n: Int, seed: Int) raises:
     """The embedding's uniform targets (float64, n words at `targets`):
     stream 0 of the estimator's seed."""
     _ = xt_uniform(glue, targets, n, seed, 0)
+
+
+def _rte_targets_f32(src: Int, dst: Int, n: Int):
+    """The float64 targets at `src` as float32 at `dst` (round to nearest
+    even: the cast the door's `admit_f32` of the float64 vector made), split
+    across the host pool in chunks of `_RTE_CAST_CHUNK` words (a
+    memory-bandwidth grain, not a shape rule; one chunk runs on the caller)."""
+    var units = (n + _RTE_CAST_CHUNK - 1) // _RTE_CAST_CHUNK
+
+    def task(unit: Int) {imm src, imm dst, imm n}:
+        var s = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=src)
+        var t = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst)
+        var stop = min(n, (unit + 1) * _RTE_CAST_CHUNK)
+        for i in range(unit * _RTE_CAST_CHUNK, stop):  # native data loop (one host-pool chunk of targets, not a driver loop)
+            t[i] = Float32(s[i])
+
+    host_parallelize(task, units)
+
+
+def rte_fit_run(glue: EntryRef, forest: EntryRef, config: ForestConfig, x: Int, n: Int, d: Int, row_major: Bool,
+                device_scan: Bool, seed: Int) raises -> Int:
+    """`RandomTreesEmbedding.fit`'s forest fit on typed values: the uniform
+    targets (`rte_targets_run`, stream 0 of `seed`), their float32 words,
+    the ExtraTreesRegressor request (`forest_request` over the forest's
+    configuration `config`, X at `x`, n x d float32, read row-major when
+    `row_major`) and the fit in the image `forest` names (`forest_fit_core`,
+    XF_FIT). Returns the export handle; the caller exports and releases it
+    (the door's PACK: `forest_export_handle`). The forest is the embedding's
+    squared-error regressor, so its targets need no deviance check; a
+    configuration with another criterion is refused."""
+    if forest_target_need(config) != FOREST_TARGET_ANY:
+        raise Error("an embedding's forest fits squared_error")
+    var u = List[Float64](length=max(n, 1), fill=0.0)
+    rte_targets_run(glue, Int(u.unsafe_ptr()), n, seed)
+    var y = List[Float32](length=max(n, 1), fill=Float32(0))
+    _rte_targets_f32(Int(u.unsafe_ptr()), Int(y.unsafe_ptr()), n)
+    _ = len(u)  # the cast above read these words through their address
+    var request = forest_request(config, forest, n, d, 0, x, Int(y.unsafe_ptr()), ForestFit(False, rowmajor_ok=True),
+                                 False)
+    var handle = forest_fit_core(forest, False, row_major, request, device_scan)
+    _ = len(y)  # the fit above read the targets through their address
+    _ = len(request)
+    return handle
 
 
 def rte_numbering_run(glue: EntryRef, left_child: Int, node_col: Int, nodes: Int) raises -> Int:

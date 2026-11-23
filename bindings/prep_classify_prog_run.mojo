@@ -1444,3 +1444,334 @@ def cls_qda_fit_program(mut program: ClsProgram, mode: ClsDaMode, n: Int, d: Int
         var sym: List[Int] = [s2, evec, d, 2, keep]
         program.stage(CLS_OP_SYM_FN, K * d * d, sym)
     return ClsQdaFit(cnt, mean, priors, evec, s2, rot, logc, keep)
+
+
+# ---------------------------------------------------------------- typed naive Bayes partial_fit and CategoricalNB fit
+# Lane bm-rest-nb (2026-11-23): the partial_fit programs of GaussianNB and the
+# discrete kinds (`_gnb_partial_fit`, `_dnb_partial_fit`), their device-coded
+# labels (`_stage_partial_codes`) and CategoricalNB's two fit programs
+# (`_cat_fit_programs`) were staged by the door over its Python-holding
+# `ClsProg`, the parameters and the fitted state read from Python objects
+# between the stages. They are typed here: the door reads every parameter and
+# the previous fitted state's word counts once at UNPACK, builds through these
+# and hands the owners over in record order. Same allocations, same stage
+# words, same order: no bit moves.
+comptime CLS_OP_LOOKUP = 7
+comptime CLS_OP_COUNT_NEG = 8
+comptime CLS_OP_ADD_ARRAYS = 90
+comptime CLS_OP_GNB_MERGE = 91
+comptime CLS_OP_CAT_COUNTS = 92
+comptime CLS_OP_CAT_FLP = 93
+comptime CLS_OP_LAB_LOAD = 119
+comptime CLS_OP_CAT_HPART = 133
+comptime CLS_OP_CAT_HFOLD = 134
+comptime CLS_OP_COLBLOCK = 141
+comptime CLS_OP_F2_CLAMP0 = 235
+# CategoricalNB's block histograms hold at most this many words (_CAT_HIST_WORDS).
+comptime CLS_CAT_HIST_WORDS = 67108864
+# The largest histogram block CategoricalNB doubles to.
+comptime CLS_CAT_MAX_ROWS = 4194304
+
+
+@fieldwise_init
+struct ClsLabels(ImplicitlyCopyable, Movable):
+    """`_partial_codes`' answer as words (UNPACK). `dev`: the raw label words
+    (`label_words` int32 words of lab_load kind `label_kind`) looked up among
+    the `K` exact ascending float32 class words on the device; else the
+    walk's `code_words` int32 class codes. `n`: the batch's rows."""
+    var dev: Bool
+    var n: Int
+    var code_words: Int
+    var label_words: Int
+    var label_kind: Int
+    var K: Int
+
+
+@fieldwise_init
+struct ClsCoded(ImplicitlyCopyable, Movable):
+    """The float class codes' offset and the unknown label count's offset
+    (CLS_NONE for the walk's codes)."""
+    var yo: Int
+    var neg: Int
+
+
+def cls_partial_codes(mut program: ClsProgram, labels: ClsLabels) -> ClsCoded:
+    """`_stage_partial_codes`. Buffer records, in order: the walk's codes;
+    or the raw label words, then the class words."""
+    if not labels.dev:
+        return ClsCoded(cls_codes(program, labels.code_words), CLS_NONE)
+    var n = labels.n
+    var x = program.work(n)
+    var w = cls_buffer(program, labels.label_words)
+    var load: List[Int] = [w, labels.label_kind, x]
+    program.stage(CLS_OP_LAB_LOAD, n, load)
+    var c = program.work(n)
+    var neg = program.alloc(1)
+    var yo = program.alloc(n)
+    var co = cls_buffer(program, labels.K)
+    var ko = cls_scalar(program, Float64(labels.K))
+    var look: List[Int] = [x, n, 1, co, labels.K, ko, c]
+    program.stage(CLS_OP_LOOKUP, n, look)
+    var count: List[Int] = [c, n, 1, neg]
+    program.stage(CLS_OP_COUNT_NEG, 1, count)
+    var clamp: List[Int] = [c, yo]
+    program.stage(CLS_OP_F2_CLAMP0, n, clamp)
+    return ClsCoded(yo, neg)
+
+
+@fieldwise_init
+struct ClsGnbPartial(ImplicitlyCopyable, Movable):
+    """The offsets a GaussianNB partial_fit program answers at, and the
+    unknown label count's offset (CLS_NONE: the walk's codes)."""
+    var fit: ClsGnbFit
+    var neg: Int
+
+
+def cls_gnb_partial_program(mut program: ClsProgram, n: Int, d: Int, K: Int, labels: ClsLabels,
+                            var_smoothing: Float64, weighted: Bool, prev: List[Int], has_priors: Bool,
+                            priors: List[Float64], blocked: Bool, onepass: Bool) -> ClsGnbPartial:
+    """GaussianNB.partial_fit: the batch's statistics merged into the
+    previous ones. Buffer records, in order: X (n * d float32), the labels
+    (`cls_partial_codes`), the sample weights (max(n, 1) float32) when
+    `weighted`, then the previous class_count_, theta_ and `_raw_var` (their
+    word counts in `prev`; empty `prev`: the first call, which merges into
+    zeros). `priors`: the checked `priors` when `has_priors`. `onepass`: the
+    image's IDN_CLASS_ONEPASS bit under `blocked`."""
+    var xo = cls_buffer(program, n * d)
+    var coded = cls_partial_codes(program, labels)
+    var vs = cls_scalar(program, var_smoothing)
+    var eps = program.alloc(1)
+    var bc = program.alloc(K)
+    var bm = program.alloc(K * d)
+    var bv = program.alloc(K * d)
+    var wo = cls_buffer(program, max(n, 1)) if weighted else CLS_NONE
+    # `_gnb_stats`: epsilon and the batch's class counts, means and variances
+    var st = program.alloc(6 * d)
+    cls_col_stats(program, xo, n, d, st, True, blocked)
+    var eps_words: List[Int] = [st + 2 * d, d, eps, vs]
+    program.stage(CLS_OP_GNB_EPS, 1, eps_words)
+    cls_class_stats(program, wo, K * d, xo, n, d, coded.yo, K, bc, bm, bv, CLS_NONE, blocked, onepass)
+    var oc = CLS_NONE
+    var om = CLS_NONE
+    var ov = CLS_NONE
+    if len(prev) == 0:
+        # the first call merges into zeros
+        oc = program.put_list(List[Float64](length=K, fill=0.0))
+        om = program.put_list(List[Float64](length=K * d, fill=0.0))
+        ov = program.put_list(List[Float64](length=K * d, fill=0.0))
+    else:
+        oc = cls_buffer(program, prev[0])
+        om = cls_buffer(program, prev[1])
+        ov = cls_buffer(program, prev[2])
+    var cnt = program.alloc(K)
+    var theta = program.alloc(K * d)
+    var raw = program.alloc(K * d)
+    var merge: List[Int] = [oc, om, ov, bc, bm, bv, K, d, cnt, theta, raw]
+    program.stage(CLS_OP_GNB_MERGE, K * d, merge)
+    var var_ = cls_copy_block(program, raw, K, d)
+    var given = CLS_NONE
+    if has_priors:
+        given = program.put_list(priors)
+    else:
+        given = program.alloc(K)
+        var scratch = program.alloc(d)
+        var prep_words: List[Int] = [cnt, theta, K, d, n, given, scratch, 2, cnt]
+        program.stage(CLS_OP_LDA_PREP, 1, prep_words)
+    var prior = program.alloc(K)
+    var cst = program.alloc(K)
+    var params: List[Int] = [cnt, var_, K, d, 1, eps, prior, cst, 1, given]
+    program.stage(CLS_OP_GNB_PARAMS, K, params)
+    return ClsGnbPartial(ClsGnbFit(theta, var_, cnt, prior, eps, cst, raw), coded.neg)
+
+
+@fieldwise_init
+struct ClsDnbPartial(ImplicitlyCopyable, Movable):
+    """The counts of a discrete naive Bayes partial_fit program (the input
+    of `cls_dnb_params`) and the unknown label count's offset."""
+    var counts: ClsCounts
+    var neg: Int
+
+
+def cls_dnb_partial_program(mut program: ClsProgram, kind: Int, n: Int, d: Int, K: Int, labels: ClsLabels,
+                            weighted: Bool, has_threshold: Bool, threshold: Float64, nb_onepass: Bool,
+                            blocked: Bool, prev: List[Int], prior: Int, priors: List[Float64]) -> ClsDnbPartial:
+    """`_DiscreteNB.partial_fit`'s counts: the batch's counts added to the
+    previous ones and the class log prior. Buffer records, in order: X
+    (n * d float32), the sample weights (max(n, 1) float32) when `weighted`,
+    the labels (`cls_partial_codes`), then the previous class_count_ and
+    feature_count_ (their word counts in `prev`; empty: the first call).
+    `has_threshold`: BernoulliNB's `binarize`; `nb_onepass`: the image's
+    IDN_NB_ONEPASS bit under `blocked`."""
+    var xo = cls_buffer(program, n * d)
+    var wo = cls_buffer(program, max(n, 1)) if weighted else CLS_NONE
+    var thr = CLS_NONE
+    if has_threshold:
+        if nb_onepass:
+            thr = cls_scalar(program, threshold)
+        else:
+            var xb = program.work(n * d)
+            var tw = cls_scalar(program, threshold)
+            var bin_words: List[Int] = [xo, n * d, tw, xb]
+            program.stage(CLS_OP_BINARIZE, n * d, bin_words)
+            xo = xb
+    var coded = cls_partial_codes(program, labels)
+    var st = program.alloc(6 * d)
+    var cnt = program.alloc(K)
+    var fc = program.alloc(K * d)
+    var clp = program.alloc(K)
+    if not nb_onepass:
+        cls_col_stats(program, xo, n, d, st, False, blocked)
+    var first = len(prev) == 0
+    var bc = cnt
+    var bf = fc
+    if not first:
+        bc = program.alloc(K)
+        bf = program.alloc(K * d)
+    if nb_onepass:
+        var needs_min = kind == CLS_KIND_MNB or kind == CLS_KIND_CNB
+        cls_nb_counts(program, wo, xo, n, d, coded.yo, K, bc, bf, thr, st + 3 * d if needs_min else CLS_NONE)
+    else:
+        cls_class_stats(program, wo, K * d, xo, n, d, coded.yo, K, bc, CLS_NONE, CLS_NONE, bf, blocked, False)
+    if not first:
+        var oc = cls_buffer(program, prev[0])
+        var add_counts: List[Int] = [oc, bc, cnt]
+        program.stage(CLS_OP_ADD_ARRAYS, K, add_counts)
+        var ofc = cls_buffer(program, prev[1])
+        var add_features: List[Int] = [ofc, bf, fc]
+        program.stage(CLS_OP_ADD_ARRAYS, K * d, add_features)
+    cls_prior_stages(program, prior, priors, K, cnt, clp)
+    return ClsDnbPartial(ClsCounts(n, d, K, st, cnt, fc, clp), coded.neg)
+
+
+@fieldwise_init
+struct ClsCatCounts(ImplicitlyCopyable, Movable):
+    """The offsets of CategoricalNB's first program: the column statistics of
+    X (six rows of d; row 3 the minimum, row 4 the maximum), class_count_,
+    class_log_prior_, and the unknown label count's offset."""
+    var st: Int
+    var cnt: Int
+    var clp: Int
+    var neg: Int
+
+
+def cls_cat_count_program(mut program: ClsProgram, n: Int, d: Int, K: Int, labels: ClsLabels, weighted: Bool,
+                          prev_count_words: Int, merge: Bool, prior: Int, priors: List[Float64],
+                          blocked: Bool) -> ClsCatCounts:
+    """CategoricalNB's first program: the column range of X, the class counts
+    (added to the previous class_count_ when `merge`) and the class log
+    prior. Buffer records, in order: X (n * d float32), the labels
+    (`cls_partial_codes`), the sample weights (max(n, 1) float32) when
+    `weighted`, then the previous class_count_ (`prev_count_words` words)
+    when `merge`."""
+    var xo = cls_buffer(program, n * d)
+    var coded = cls_partial_codes(program, labels)
+    var st = program.alloc(6 * d)
+    var cnt = program.alloc(K)
+    var clp = program.alloc(K)
+    var wo = cls_buffer(program, max(n, 1)) if weighted else CLS_NONE
+    cls_col_stats(program, xo, n, d, st, False, blocked)
+    if merge:
+        var bc = program.alloc(K)
+        cls_class_stats(program, wo, K, xo, n, 1, coded.yo, K, bc, CLS_NONE, CLS_NONE, CLS_NONE, blocked, False)
+        var oc = cls_buffer(program, prev_count_words)
+        var add_counts: List[Int] = [oc, bc, cnt]
+        program.stage(CLS_OP_ADD_ARRAYS, K, add_counts)
+    else:
+        cls_class_stats(program, wo, K, xo, n, 1, coded.yo, K, cnt, CLS_NONE, CLS_NONE, CLS_NONE, blocked, False)
+    cls_prior_stages(program, prior, priors, K, cnt, clp)
+    return ClsCatCounts(st, cnt, clp, coded.neg)
+
+
+def cls_cat_categories(arena: Int, st: Int, d: Int) raises -> List[Int]:
+    """After the first program (its arena at `arena`): the refusal of a
+    negative category index, then each feature's category count (its
+    maximum index plus one)."""
+    var words = CLS_F32P(unsafe_from_address=arena)
+    for j in range(d):  # driver-loop: over the per-column minimum statistics (feature count)
+        if Float64(words[st + 3 * d + j]) < 0:
+            raise Error("mojolearn: Negative values in data passed to CategoricalNB (input X)")
+    var ncat = List[Int](capacity=d)
+    for j in range(d):  # driver-loop: over the per-column maximum statistics (feature count)
+        ncat.append(Int(Float64(words[st + 4 * d + j])) + 1)
+    return ncat^
+
+
+def cls_cat_bounds(mut ncat: List[Int], has_min: Bool, mins: List[Int], prev: List[Int]) raises -> Int:
+    """The category counts raised to `min_categories` (`mins`, when
+    `has_min`; refused unless one per feature) and, partial_fit after the
+    first call, to the previous n_categories_ (`prev`; empty: none). Answers
+    the largest count (the table's category bound)."""
+    var d = len(ncat)
+    if has_min:
+        if len(mins) != d:
+            raise Error("mojolearn: 'min_categories' should have shape (" + String(d)
+                        + ",) when an array-like is provided. Got " + String(len(mins)) + " entries instead.")
+        for j in range(d):  # driver-loop: over the feature columns (model structure)
+            ncat[j] = max(ncat[j], mins[j])
+    for j in range(len(prev)):  # driver-loop: over the feature columns (model structure)
+        ncat[j] = max(ncat[j], prev[j])
+    var cmax = 0
+    for j in range(d):  # driver-loop: over the feature columns (model structure)
+        cmax = max(cmax, ncat[j])
+    return cmax
+
+
+@fieldwise_init
+struct ClsCatTable(ImplicitlyCopyable, Movable):
+    """The offsets of CategoricalNB's second program: the (d, K, cmax)
+    category counts and log probabilities, and the unknown label count's
+    offset."""
+    var cc: Int
+    var flp: Int
+    var neg: Int
+
+
+def cls_cat_table_program(mut program: ClsProgram, n: Int, d: Int, K: Int, labels: ClsLabels, ncat: List[Int],
+                          cmax: Int, alpha: Float64, weighted: Bool, merge: Bool, prev_cmax: Int,
+                          prev_table_words: Int, blocked: Bool) -> ClsCatTable:
+    """CategoricalNB's second program: the category counts (added to the
+    previous `_cc`, padded from `prev_cmax` to `cmax`, when `merge`) and the
+    feature log probabilities. Buffer records, in order: X (n * d float32),
+    the labels (`cls_partial_codes`), the first program's class_count_
+    (K float32 words), the sample weights (max(n, 1) float32) when
+    `weighted`, then the previous `_cc` (`prev_table_words` words) when
+    `merge` and `prev_cmax` > 0."""
+    var xq = cls_buffer(program, n * d)
+    var coded = cls_partial_codes(program, labels)
+    var yq = coded.yo
+    var nlist = List[Float64](capacity=d)
+    for j in range(d):  # driver-loop: over the feature columns (model structure)
+        nlist.append(Float64(ncat[j]))
+    var no = program.put_list(nlist)
+    var co = cls_buffer(program, K)
+    var a = cls_scalar(program, alpha)
+    var wq = cls_buffer(program, max(n, 1)) if weighted else CLS_NONE
+    var words = d * K * cmax
+    var cc = program.alloc(words)
+    if blocked:
+        var rows = CLS_XB
+        while ((n + rows - 1) // rows) * words > CLS_CAT_HIST_WORDS and rows < CLS_CAT_MAX_ROWS:  # driver-loop: the histogram block doubles (a function of the shape only)
+            rows *= 2
+        var nbh = (n + rows - 1) // rows
+        var hist = program.work(nbh * words)
+        var part: List[Int] = [xq, n, d, yq, K, no, cmax, wq, hist, rows]
+        program.stage(CLS_OP_CAT_HPART, nbh * d, part)
+        var fold: List[Int] = [hist, nbh, d, K, no, cmax, wq, cc]
+        program.stage(CLS_OP_CAT_HFOLD, words, fold)
+    else:
+        var plain: List[Int] = [xq, n, d, yq, K, no, cmax, wq, cc]
+        program.stage(CLS_OP_CAT_COUNTS, words, plain)
+    if merge:
+        var pad = program.alloc(words)
+        var src = cc
+        cc = program.alloc(words)
+        if prev_cmax > 0:
+            var old_cc = cls_buffer(program, prev_table_words)
+            var widen: List[Int] = [old_cc, prev_cmax, pad, cmax, 0]
+            program.stage(CLS_OP_COLBLOCK, d * K * prev_cmax, widen)
+        var add_words: List[Int] = [pad, src, cc]
+        program.stage(CLS_OP_ADD_ARRAYS, words, add_words)
+    var flp = program.alloc(words)
+    var flp_words: List[Int] = [cc, K, no, cmax, co, a, flp]
+    program.stage(CLS_OP_CAT_FLP, words, flp_words)
+    return ClsCatTable(cc, flp, coded.neg)

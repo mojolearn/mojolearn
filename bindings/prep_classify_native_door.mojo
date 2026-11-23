@@ -46,20 +46,22 @@ from bindings.x_prep_native_inputs_door import _values, _rows_fields
 from bindings.arena_cache_release_door import arena_cache_release_operation
 from bindings.prep_classify_prog_door import ClsProg, NONE, f32_array, i32_array, f32_input
 from bindings.prep_classify_prog_run import (
-    cls_copy_block, cls_gnb_fit_program, cls_score_program, cls_tail_stages,
+    cls_gnb_fit_program, cls_score_program, cls_tail_stages,
     ClsDaMode, cls_lda_svd_program, cls_lda_cov_program, cls_lda_transform_program, cls_lda_pair_program,
     cls_qda_fit_program,
     ClsScore, CLS_KIND_GNB, CLS_KIND_MNB, CLS_KIND_BNB, CLS_KIND_CNB, CLS_KIND_CAT, CLS_KIND_LDA, CLS_KIND_QDA,
     ClsCounts, cls_dnb_counts, cls_dnb_params, cls_prior_stages, CLS_PRIOR_GIVEN, CLS_PRIOR_FIT, CLS_PRIOR_UNIFORM,
+    cls_gnb_partial_program, cls_dnb_partial_program, cls_cat_count_program, cls_cat_categories, cls_cat_bounds,
+    cls_cat_table_program,
 )
 from bindings.prep_classify_common_door import (
     XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_requested_mode, cls_entry,
     cls_vendor_used,
     idn_int, classical_shared, blocked, check_fitted, check_width, cls_x2d, is_sparse, csr_input, csr_dense_x,
-    float_list, given_priors, is_real, cls_float, col_stats, class_stats, cls_da_mode,
+    float_list, given_priors, is_real, cls_float, cls_da_mode,
     da_shrinkage, da_check_estimator_shrinkage, da_solver_is,
-    nb_onepass, nb_counts, encode_y, partial_codes, stage_partial_codes, partial_refuse,
-    IDN_NB_CSR, XB, idn_fam, IDN_CLASS_ONEPASS, gnb_refuse,
+    nb_onepass, encode_y, partial_codes, partial_labels, own_partial_labels, partial_refuse,
+    IDN_NB_CSR, idn_fam, IDN_CLASS_ONEPASS, gnb_refuse,
 )
 from bindings.prep_keys_unpack import (
     prep_keys,
@@ -76,43 +78,17 @@ comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 # x_prep stage codes (_expansion_prep._OPS).
-comptime OP_BINARIZE = 12
-comptime OP_GNB_EPS = 27
-comptime OP_GNB_PARAMS = 28
-comptime OP_CLASS_LOG_PRIOR = 30
-comptime OP_LDA_PREP = 36
-comptime OP_LOG = 72
 comptime OP_ADD_ARRAYS = 90
-comptime OP_GNB_MERGE = 91
-comptime OP_CAT_COUNTS = 92
-comptime OP_CAT_FLP = 93
-comptime OP_CAT_HPART = 133
-comptime OP_CAT_HFOLD = 134
-comptime OP_COLBLOCK = 141
 comptime OP_P2M_RGATHER = 204
-# CategoricalNB's block histograms hold at most this many words (_CAT_HIST_WORDS).
-comptime CAT_HIST_WORDS = 67108864
 # What a scoring program reads back.
 comptime W_PREDICT = 1
 comptime W_PROBA = 2
 comptime W_LOG = 4
 
 
-def _put_attr(mut pr: ClsProg, fields: PythonObject, name: String, context: PythonObject) raises -> Int:
-    return pr.put(f32_input(fields[PythonObject(name)], context))
-
-
 def _n_classes(fields: PythonObject) raises -> Int:
     var nk = prep_keys()
     return len(py_item(fields, nk[].k_classes_))
-
-
-def _zeros(count: Int) -> List[Float64]:
-    return List[Float64](length=count, fill=0.0)
-
-
-def _ones(count: Int) -> List[Float64]:
-    return List[Float64](length=count, fill=1.0)
 
 
 def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -127,17 +103,6 @@ def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises 
     _ = m  # keep the Python object alive through the native call above
     _ = m^
     return w
-
-
-def _put_weights(mut pr: ClsProg, w: PythonObject) raises -> Int:
-    if w is None:
-        return NONE
-    return pr.put(w)
-
-
-def _copy_block(mut pr: ClsProg, src: Int, rows: Int, cols: Int, context: PythonObject) raises -> Int:
-    """`_copy_block`: a bit-for-bit copy (the typed `cls_copy_block`)."""
-    return cls_copy_block(pr.program, src, rows, cols)
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -464,15 +429,6 @@ def _decision_function(model: PythonObject, fields: PythonObject, kind: String, 
 # ---------------------------------------------------------------- GaussianNB
 
 
-def _gnb_stats(mut pr: ClsProg, mode: PythonObject, wo: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int, cnt: Int,
-               theta: Int, var_: Int, eps: Int, vs: Int, context: PythonObject) raises:
-    """`_gnb_stats`: epsilon and the class counts, means and variances."""
-    var st = pr.alloc(6 * d)
-    col_stats(pr, xo, n, d, st)
-    pr.stage(OP_GNB_EPS, 1, st + 2 * d, d, eps, vs)
-    class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var_, NONE, mode, context, True)
-
-
 def _gnb_publish(pr: ClsProg, fields: PythonObject, mode: PythonObject, K: Int, d: Int, theta: Int, var_: Int,
                  cnt: Int, prior: Int, eps: Int, cst: Int, raw: Int, context: PythonObject) raises:
     _set(fields, "theta_", pr.get(theta, K, d, context))
@@ -518,7 +474,21 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     return model
 
 
+def _prev_block(fields: PythonObject, name: String, mut words: List[Int], mut owners: List[PythonObject],
+                context: PythonObject) raises:
+    """UNPACK of one stored fitted block a partial_fit merges into: its
+    admitted float32 buffer (`_Prog.put`'s admission) appended to `owners`
+    and its word count to `words`."""
+    var value = f32_input(fields[PythonObject(name)], context)
+    words.append(Int(py=value.size))
+    owners.append(value)
+
+
 def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """GaussianNB.partial_fit. UNPACK: X, the batch's labels, the weights,
+    the checked parameters, the previous fitted blocks, the image's mode
+    words. RUN: the typed program (`cls_gnb_partial_program`) through
+    `ClsProg.run`. PACK: the label refusal and `_gnb_publish`."""
     var nk = prep_keys()
     gnb_refuse(fields, context)
     var arr = cls_x2d(args[0], context)
@@ -530,38 +500,34 @@ def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObje
     if not pc.first:
         check_width(model, fields, d)
         mode = py_item(fields, nk[].k_numeric_mode_)
+    var labels = partial_labels(pc)
+    var var_smoothing = cls_float(py_item(fields, nk[].k_var_smoothing))
+    var w = _weights(args[3], n, context)
+    var prev = List[Int]()
+    var prev_owners = List[PythonObject]()
+    if not pc.first:
+        _prev_block(fields, "class_count_", prev, prev_owners, context)
+        _prev_block(fields, "theta_", prev, prev_owners, context)
+        _prev_block(fields, "_raw_var", prev, prev_owners, context)
+    var has_priors = py_item(fields, nk[].k_priors) is not None
+    var priors = List[Float64]()
+    if has_priors:
+        priors = given_priors(py_item(fields, nk[].k_priors), K, "GaussianNB", True, context)
+    var is_blocked = blocked()
+    var onepass = is_blocked and (idn_fam(mode, context) & IDN_CLASS_ONEPASS) != 0
     var pr = ClsProg(model)
-    var xo = pr.put(arr.value)
-    var coded = stage_partial_codes(pr, pc, context)
-    var yo = coded[0]
-    var vs = pr.put_scalar(cls_float(py_item(fields, nk[].k_var_smoothing)), context)
-    var eps = pr.alloc(1)
-    var bc = pr.alloc(K)
-    var bm = pr.alloc(K * d)
-    var bv = pr.alloc(K * d)
-    var wo = _put_weights(pr, _weights(args[3], n, context))
-    _gnb_stats(pr, mode, wo, xo, n, d, yo, K, bc, bm, bv, eps, vs, context)
-    var oc = pr.put_list(_zeros(K), context) if pc.first else _put_attr(pr, fields, "class_count_", context)
-    var om = pr.put_list(_zeros(K * d), context) if pc.first else _put_attr(pr, fields, "theta_", context)
-    var ov = pr.put_list(_zeros(K * d), context) if pc.first else _put_attr(pr, fields, "_raw_var", context)
-    var cnt = pr.alloc(K)
-    var theta = pr.alloc(K * d)
-    var raw = pr.alloc(K * d)
-    pr.stage(OP_GNB_MERGE, K * d, oc, om, ov, bc, bm, bv, K, d, cnt, theta, raw)
-    var var_ = _copy_block(pr, raw, K, d, context)
-    var given = NONE
-    if py_item(fields, nk[].k_priors) is not None:
-        given = pr.put_list(given_priors(py_item(fields, nk[].k_priors), K, "GaussianNB", True, context), context)
-    else:
-        given = pr.alloc(K)
-        var scratch = pr.alloc(d)
-        pr.stage(OP_LDA_PREP, 1, cnt, theta, K, d, n, given, scratch, 2, cnt)
-    var prior = pr.alloc(K)
-    var cst = pr.alloc(K)
-    pr.stage(OP_GNB_PARAMS, K, cnt, var_, K, d, 1, eps, prior, cst, 1, given)
+    var o = cls_gnb_partial_program(pr.program, n, d, K, labels, var_smoothing, w is not None, prev, has_priors,
+                                    priors, is_blocked, onepass)
+    pr.own(arr.value)
+    own_partial_labels(pr, pc)
+    if w is not None:
+        pr.own(w)
+    for i in range(len(prev_owners)):  # driver-loop: over the three fitted blocks merged into
+        pr.own(prev_owners[i])
     pr.run(mode, context)
-    partial_refuse(pr, coded[1], fields, pc, context)
-    _gnb_publish(pr, fields, mode, K, d, theta, var_, cnt, prior, eps, cst, raw, context)
+    partial_refuse(pr, o.neg, fields, pc, context)
+    var f = o.fit
+    _gnb_publish(pr, fields, mode, K, d, f.theta, f.var_, f.cnt, f.prior, f.eps, f.cst, f.raw, context)
     return model
 
 
@@ -599,11 +565,11 @@ struct DnbPrior(Movable):
         self.priors = priors^
 
 
-def _dnb_prior(model: PythonObject, fields: PythonObject, K: Int, context: PythonObject) raises -> DnbPrior:
+def _dnb_prior(fields: PythonObject, K: Int, who: String, context: PythonObject) raises -> DnbPrior:
     var nk = prep_keys()
     var given = py_get(fields, nk[].k_class_prior)
     if given is not None:
-        return DnbPrior(CLS_PRIOR_GIVEN, given_priors(given, K, cls_name(model), False, context))
+        return DnbPrior(CLS_PRIOR_GIVEN, given_priors(given, K, who, False, context))
     if Bool(py=py_item(fields, nk[].k_fit_prior)):
         return DnbPrior(CLS_PRIOR_FIT, List[Float64]())
     return DnbPrior(CLS_PRIOR_UNIFORM, List[Float64]())
@@ -613,7 +579,7 @@ def _prior_stages(mut pr: ClsProg, model: PythonObject, fields: PythonObject, K:
                   context: PythonObject) raises:
     """`_DiscreteNB._prior_stages`: UNPACK of the prior, the typed stages
     (`cls_prior_stages`)."""
-    var prior = _dnb_prior(model, fields, K, context)
+    var prior = _dnb_prior(fields, K, cls_name(model), context)
     cls_prior_stages(pr.program, prior.choice, prior.priors, K, cnt, clp)
 
 
@@ -623,10 +589,6 @@ def _kind_word(kind: String) -> Int:
     if kind == "bnb":
         return CLS_KIND_BNB
     return CLS_KIND_CNB
-
-
-def _needs_min(kind: String) -> Bool:
-    return kind == "mnb" or kind == "cnb"
 
 
 def _binarize(kind: String, fields: PythonObject) raises -> PythonObject:
@@ -658,7 +620,7 @@ def _fit_counts(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind
     var w = _weights(sample_weight, n, context)
     var has_threshold = binarize is not None
     var threshold = cls_float(binarize) if has_threshold else 0.0
-    var prior = _dnb_prior(model, fields, K, context)
+    var prior = _dnb_prior(fields, K, cls_name(model), context)
     var c = cls_dnb_counts(pr.program, _kind_word(kind), xo, n, d, K, w is not None, has_threshold, threshold,
                            nb_onepass(mode, context), blocked(), prior.choice, prior.priors)
     if xo == NONE:
@@ -786,7 +748,10 @@ def _dnb_fit(model: PythonObject, fields: PythonObject, kind: String, args: Pyth
 
 
 def _dnb_partial_fit(model: PythonObject, fields: PythonObject, kind: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_DiscreteNB.partial_fit`."""
+    """`_DiscreteNB.partial_fit`. UNPACK: X, the batch's labels, the weights,
+    the threshold, the previous counts, the prior, the image's one-pass
+    word. RUN: the typed counts (`cls_dnb_partial_program`) and parameter
+    stage through `ClsProg.run`. PACK: `_params`' refusals and attributes."""
     var nk = prep_keys()
     _check_alpha(model, fields, context)
     var arr = cls_x2d(args[0], context)
@@ -798,44 +763,29 @@ def _dnb_partial_fit(model: PythonObject, fields: PythonObject, kind: String, ar
     if not pc.first:
         check_width(model, fields, d)
         mode = py_item(fields, nk[].k_numeric_mode_)
-    var pr = ClsProg(model)
-    var xo = pr.put(arr.value)
-    var wo = _put_weights(pr, _weights(args[3], n, context))
+    var w = _weights(args[3], n, context)
     var onepass = nb_onepass(mode, context)
-    var thr = NONE
     var binarize = _binarize(kind, fields)
-    if binarize is not None:
-        if onepass:
-            thr = pr.put_scalar(cls_float(binarize), context)
-        else:
-            var xb = pr.work(n * d)
-            var to = pr.put_scalar(cls_float(binarize), context)
-            pr.stage(OP_BINARIZE, n * d, xo, n * d, to, xb)
-            xo = xb
-    var coded = stage_partial_codes(pr, pc, context)
-    var yo = coded[0]
-    var st = pr.alloc(6 * d)
-    var cnt = pr.alloc(K)
-    var fc = pr.alloc(K * d)
-    var clp = pr.alloc(K)
-    if not onepass:
-        col_stats(pr, xo, n, d, st, False)
-    var bc = cnt
-    var bf = fc
+    var has_threshold = binarize is not None
+    var threshold = cls_float(binarize) if has_threshold else 0.0
+    var labels = partial_labels(pc)
+    var prev = List[Int]()
+    var prev_owners = List[PythonObject]()
     if not pc.first:
-        bc = pr.alloc(K)
-        bf = pr.alloc(K * d)
-    if onepass:
-        nb_counts(pr, wo, xo, n, d, yo, K, bc, bf, thr, st + 3 * d if _needs_min(kind) else NONE)
-    else:
-        class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, NONE, NONE, bf, mode, context, False)
-    if not pc.first:
-        var oc = _put_attr(pr, fields, "class_count_", context)
-        pr.stage(OP_ADD_ARRAYS, K, oc, bc, cnt)
-        var of = _put_attr(pr, fields, "feature_count_", context)
-        pr.stage(OP_ADD_ARRAYS, K * d, of, bf, fc)
-    _prior_stages(pr, model, fields, K, cnt, clp, context)
-    return _params(pr, model, fields, kind, Counts(mode, n, d, K, st, cnt, fc, clp), coded[1], pc, context)
+        _prev_block(fields, "class_count_", prev, prev_owners, context)
+        _prev_block(fields, "feature_count_", prev, prev_owners, context)
+    var prior = _dnb_prior(fields, K, cls_name(model), context)
+    var pr = ClsProg(model)
+    var o = cls_dnb_partial_program(pr.program, _kind_word(kind), n, d, K, labels, w is not None, has_threshold,
+                                    threshold, onepass, blocked(), prev, prior.choice, prior.priors)
+    pr.own(arr.value)
+    if w is not None:
+        pr.own(w)
+    own_partial_labels(pr, pc)
+    for i in range(len(prev_owners)):  # driver-loop: over the two count blocks added to
+        pr.own(prev_owners[i])
+    var c = o.counts
+    return _params(pr, model, fields, kind, Counts(mode, n, d, K, c.st, c.cnt, c.fc, c.clp), o.neg, pc, context)
 
 
 # ---------------------------------------------------------------- CategoricalNB
@@ -893,95 +843,74 @@ def _cat_blocks(pr: ClsProg, off: Int, d: Int, K: Int, cmax: Int, ncat: List[Int
 
 def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: PartialCodes, w: PythonObject,
                       mode: PythonObject, merge: Bool, context: PythonObject) raises -> PythonObject:
+    """CategoricalNB's fit (`merge`: partial_fit after the first call).
+    UNPACK: the labels, the prior, the previous class_count_. RUN: the typed
+    first program (`cls_cat_count_program`) through `ClsProg.run`; the typed
+    category counts (`cls_cat_categories`, `cls_cat_bounds`, after the
+    UNPACK of `min_categories` and the previous n_categories_); the typed
+    second program (`cls_cat_table_program`). PACK: the fitted attributes."""
     var nk = prep_keys()
     var n = arr.n
     var d = arr.d
     var K = _n_classes(fields)
-    var pr = ClsProg(model)
-    var xo = pr.put(arr.value)
-    var coded = stage_partial_codes(pr, pc, context)
-    var yo = coded[0]
-    var st = pr.alloc(6 * d)
-    var cnt = pr.alloc(K)
-    var clp = pr.alloc(K)
-    var wo = _put_weights(pr, w)
-    col_stats(pr, xo, n, d, st, False)
+    var labels = partial_labels(pc)
+    var weighted = w is not None
+    var prev_words = List[Int]()
+    var prev_owners = List[PythonObject]()
     if merge:
-        var bc = pr.alloc(K)
-        class_stats(pr, wo, K, xo, n, 1, yo, K, bc, NONE, NONE, NONE, mode, context, False)
-        var oc = _put_attr(pr, fields, "class_count_", context)
-        pr.stage(OP_ADD_ARRAYS, K, oc, bc, cnt)
-    else:
-        class_stats(pr, wo, K, xo, n, 1, yo, K, cnt, NONE, NONE, NONE, mode, context, False)
-    if py_item(fields, nk[].k_class_prior) is not None:
-        var po = pr.put_list(given_priors(py_item(fields, nk[].k_class_prior), K, "CategoricalNB", False, context), context)
-        pr.stage(OP_LOG, K, po, clp)
-    else:
-        var prior_src = cnt if Bool(py=py_item(fields, nk[].k_fit_prior)) else pr.put_list(_ones(K), context)
-        pr.stage(OP_CLASS_LOG_PRIOR, K, prior_src, K, clp)
+        _prev_block(fields, "class_count_", prev_words, prev_owners, context)
+    var prior = _dnb_prior(fields, K, "CategoricalNB", context)
+    var is_blocked = blocked()
+    var pr = ClsProg(model)
+    var o = cls_cat_count_program(pr.program, n, d, K, labels, weighted, prev_words[0] if merge else 0, merge,
+                                  prior.choice, prior.priors, is_blocked)
+    pr.own(arr.value)
+    own_partial_labels(pr, pc)
+    if weighted:
+        pr.own(w)
+    if merge:
+        pr.own(prev_owners[0])
     pr.run(mode, context)
-    partial_refuse(pr, coded[1], fields, pc, context)
-    for j in range(d):  # driver-loop: over the per-column minimum statistics (feature count)
-        if pr.value(st + 3 * d + j) < 0:
-            raise Error("mojolearn: Negative values in data passed to CategoricalNB (input X)")
-    var ncat = List[Int]()
-    for j in range(d):  # driver-loop: over the per-column maximum statistics (feature count)
-        ncat.append(Int(pr.value(st + 4 * d + j)) + 1)
+    partial_refuse(pr, o.neg, fields, pc, context)
+    var ncat = cls_cat_categories(pr.base, o.st, d)
     var mc = py_item(fields, nk[].k_min_categories)
-    if mc is not None:
-        var mcs = List[Int]()
+    var has_min = mc is not None
+    var mins = List[Int]()
+    if has_min:
         if Bool(py=py_call(cls_builtins().isinstance, mc, py_item(context, nk[].k_integral_type))):
-            mcs = List[Int](length=d, fill=Int(py=py_call(cls_builtins().int, mc)))
+            mins = List[Int](length=d, fill=Int(py=py_call(cls_builtins().int, mc)))
         else:
-            mcs = _int_list(mc, context)
-        if len(mcs) != d:
-            raise Error("mojolearn: 'min_categories' should have shape (" + String(d) + ",) when an array-like is provided. Got " + String(len(mcs)) + " entries instead.")
-        for j in range(d):  # driver-loop: over the feature columns (model structure)
-            ncat[j] = max(ncat[j], mcs[j])
+            mins = _int_list(mc, context)
+    var prev_ncat = List[Int]()
     if merge:
         var old = I64P(unsafe_from_address=Int(py=classical_address(py_item(fields, nk[].k_n_categories_))))
         for j in range(d):  # driver-loop: over the feature columns (model structure)
-            ncat[j] = max(ncat[j], Int(old[j]))
-    var cmax = 0
-    for j in range(d):  # driver-loop: over the feature columns (model structure)
-        cmax = max(cmax, ncat[j])
-    var q = ClsProg(model)
-    var xq = q.put(arr.value)
-    var qcoded = stage_partial_codes(q, pc, context)
-    var yq = qcoded[0]
-    var nlist = List[Float64]()
-    for j in range(d):  # driver-loop: over the feature columns (model structure)
-        nlist.append(Float64(ncat[j]))
-    var no = q.put_list(nlist, context)
-    var co = q.put(pr.get(cnt, K, 0, context))
-    var a = q.put_scalar(cls_float(py_item(fields, nk[].k_alpha)), context)
-    var wq = _put_weights(q, w)
-    var cc = q.alloc(d * K * cmax)
-    if blocked():
-        var rows = XB
-        while ((n + rows - 1) // rows) * d * K * cmax > CAT_HIST_WORDS and rows < 4194304:  # driver-loop: the histogram block doubles (a function of the shape only)
-            rows *= 2
-        var nbh = (n + rows - 1) // rows
-        var hist = q.work(nbh * d * K * cmax)
-        q.stage(OP_CAT_HPART, nbh * d, xq, n, d, yq, K, no, cmax, wq, hist, rows)
-        q.stage(OP_CAT_HFOLD, d * K * cmax, hist, nbh, d, K, no, cmax, wq, cc)
-    else:
-        q.stage(OP_CAT_COUNTS, d * K * cmax, xq, n, d, yq, K, no, cmax, wq, cc)
+            prev_ncat.append(Int(old[j]))
+    var cmax = cls_cat_bounds(ncat, has_min, mins, prev_ncat)
+    var class_count = pr.get(o.cnt, K, 0, context)
+    var prev_cmax = 0
+    var table_words = List[Int]()
+    var table_owners = List[PythonObject]()
     if merge:
-        var oc = Int(py=py_item(fields, nk[].k__cmax))
-        var pad = q.alloc(d * K * cmax)
-        var src = cc
-        cc = q.alloc(d * K * cmax)
-        if oc > 0:
-            var old_cc = _put_attr(q, fields, "_cc", context)
-            q.stage(OP_COLBLOCK, d * K * oc, old_cc, oc, pad, cmax, 0)
-        q.stage(OP_ADD_ARRAYS, d * K * cmax, pad, src, cc)
-    var flp = q.alloc(d * K * cmax)
-    q.stage(OP_CAT_FLP, d * K * cmax, cc, K, no, cmax, co, a, flp)
+        prev_cmax = Int(py=py_item(fields, nk[].k__cmax))
+        if prev_cmax > 0:
+            _prev_block(fields, "_cc", table_words, table_owners, context)
+    var q = ClsProg(model)
+    var t = cls_cat_table_program(q.program, n, d, K, labels, ncat, cmax, cls_float(py_item(fields, nk[].k_alpha)),
+                                  weighted, merge, prev_cmax, table_words[0] if len(table_words) > 0 else 0,
+                                  is_blocked)
+    q.own(arr.value)
+    own_partial_labels(q, pc)
+    q.own(class_count)
+    if weighted:
+        q.own(w)
+    if len(table_owners) > 0:
+        q.own(table_owners[0])
     q.run(mode, context)
-    partial_refuse(q, qcoded[1], fields, pc, context)
-    _set(fields, "_cc", q.get(cc, d * K * cmax, 0, context))
-    _set(fields, "category_count_", _cat_blocks(q, cc, d, K, cmax, ncat, context))
+    partial_refuse(q, t.neg, fields, pc, context)
+    var words = d * K * cmax
+    _set(fields, "_cc", q.get(t.cc, words, 0, context))
+    _set(fields, "category_count_", _cat_blocks(q, t.cc, d, K, cmax, ncat, context))
     var counts = classical_typed(Python.tuple(d), "<i8", py_item(context, nk[].k_output_context))
     var cp = I64P(unsafe_from_address=Int(py=classical_address(counts)))
     _ = counts  # keep the Python object alive through the native call above
@@ -989,11 +918,11 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
         cp[j] = Int64(ncat[j])
         _ = counts  # keep the Python object alive through the native call above
     _set(fields, "n_categories_", counts)
-    _set(fields, "_flp", q.get(flp, d * K * cmax, 0, context))
+    _set(fields, "_flp", q.get(t.flp, words, 0, context))
     _set(fields, "_cmax", PythonObject(cmax))
-    _set(fields, "feature_log_prob_", _cat_blocks(q, flp, d, K, cmax, ncat, context))
-    _set(fields, "class_count_", pr.get(cnt, K, 0, context))
-    _set(fields, "class_log_prior_", pr.get(clp, K, 0, context))
+    _set(fields, "feature_log_prob_", _cat_blocks(q, t.flp, d, K, cmax, ncat, context))
+    _set(fields, "class_count_", class_count)
+    _set(fields, "class_log_prior_", pr.get(o.clp, K, 0, context))
     _set(fields, "numeric_mode_", mode)
     _set(fields, "n_features_in_", PythonObject(d))
     return model
