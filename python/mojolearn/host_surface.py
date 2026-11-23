@@ -832,6 +832,7 @@ TRAINING_LANE_NAMES = {
     "gbdt-multi-walk": "gradient boosting with MultiClass, MultiClassOneVsAll and MultiRMSE under Newton leaves past one iteration and Gradient leaves",
     # lane gbdt-cpu-rest-4-simple (2026-11-23)
     "gbdt-simple-leaves": "gradient boosting with the Simple leaf estimator, the SymmetricTree searcher's own leaves",
+    "gbdt-pointwise-multiclass": "gradient boosting with the pointwise searcher on MultiClass and MultiClassOneVsAll",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -2938,6 +2939,12 @@ FAMILIES = (
             # estimator, the searcher's own leaves (gbdt_oracle.mojo
             # gbdt_host_boost, gbdt_oracle_losses.mojo gbdt_losses_host_fit)
             "gbdt-simple-leaves",
+            # lane gbdt-pw-multiclass (2026-11-23): MultiClass and
+            # MultiClassOneVsAll on the pointwise searcher
+            # (gbdt_oracle_multiclass.mojo gbdt_multi_host_fit
+            # use_pointwise_searcher, gbdt_oracle_ordered.mojo
+            # _plain_dims_candidates)
+            "gbdt-pointwise-multiclass",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4160,6 +4167,8 @@ PUBLIC_PENDING_LANES = {
     "gbdt-multi-walk": "no reference",
     # lane gbdt-cpu-rest-4-simple (2026-11-23): new lane, recorded CPU first at the release
     "gbdt-simple-leaves": "no reference",
+    # lane gbdt-pw-multiclass (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-pointwise-multiclass": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
