@@ -348,6 +348,9 @@ def _seqfit_tables():
 SEQFIT = _seqfit_tables()
 SEQ_FIT_LANES = tuple(SEQFIT.LANES)
 FIT_LANES = FIT_LANES + SEQ_FIT_LANES
+#: lane -> its row class when it is not an ordinary race (2026-11-23, Andrew): the composed-model consistency rows,
+#: read only by bench_board.plan_races; fused blocks have no entry and stay ordinary rows
+ROW_CLASS = {lane: SEQFIT.ROW_CLASS for lane in SEQ_FIT_LANES}
 #: fit lanes whose fit is untimed preparation (the warm-up round) and whose clock is the prediction alone
 PREDICT_LANES = ("sequential-predict",)
 #: fit lanes whose data is the conductor's seeded synthetic set (no HIGGS download)
@@ -6924,6 +6927,21 @@ def race(args):
     result["opponent_rule"] = OPPONENT_RULE
     for arm, why in sorted(mark_not_opponents(lane, result["arms"]).items()):
         print("NEURAL-NOT-OPPONENT lane=%s arm=%s %s" % (lane, arm, why), flush=True)
+    if lane in ROW_CLASS:
+        # 2026-11-23 (Andrew): a composed row stores its modules and their source hash (the staleness key), and
+        # beside each arm's time the sum of its modules' own measured times (--module-cells), "n/a" where a
+        # module has no measured cell
+        module_ms = {}
+        if getattr(args, "module_cells", None):
+            with open(args.module_cells) as fh:
+                module_ms = json.load(fh)
+        result.update(row_class=ROW_CLASS[lane], modules=list(SEQFIT.MODULES[lane]),
+                      module_files=SEQFIT.module_files(lane),
+                      modules_source_sha256=SEQFIT.modules_source_sha256(lane, REPO))
+        for arm in arms:
+            if arm in OUR_ARMS:
+                result["arms"][arm]["composition"] = SEQFIT.composition_overhead(
+                    lane, result["arms"][arm].get("median_ms"), module_ms)
     result["finished"] = now_utc()
     out_json = os.path.join(args.out, "%s.json" % tag)
     with open(out_json + ".tmp", "w") as fh:
@@ -6969,6 +6987,7 @@ def build_parser():
     r.add_argument("--neural-ab-config", help="selected source-arm JSON; records requested flags without building or admitting the binary")
     # One seed, one scored run per arm by default (Andrew 2026-10-14): alpha, no noise fighting; just get measurements.
     r.add_argument("--rounds", type=int, default=1)
+    r.add_argument("--module-cells", help="composed rows: JSON {module: ms} of module-level cells measured on this box")
     r.add_argument("--out", required=True)
     r.add_argument("--work", required=True)
     r.add_argument("--ours-python", default=sys.executable)
