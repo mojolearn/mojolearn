@@ -133,6 +133,12 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): SVM_IDN_NAN_SCAN_ONE_OFF (old path, no A/B recorded) is gone; the default is kept; code at 788f90f025; restore: experiments/removed/MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch
     comptime assert not is_defined["MOJOLEARN_SVM_RBF_EPILOGUE_1D"](), "removed 2026-11-15 (lane/expdel2-20-linear): SVM_RBF_EPILOGUE_1D (opt-in arm, no A/B recorded) is gone; the default is kept; code at 58cc0078e2; restore: experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch"
+    # ---- lane ab-prep-classical (2026-11-23): owed arms closed without a run (plumbing, rule 2026-11-22)
+    # MOJOLEARN_IDN_QUERY_X_HELD_OFF: its 2026-11-15 refusal was removed in core/six_lane_experiment_guards.mojo (restored owed arm); the arm is now deleted and refused here.
+    # TOMBSTONE: MOJOLEARN_IDN_QUERY_X_HELD_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_QUERY_X_HELD_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the per-call query buffers fed the same bytes to the same kernels, core/query_x_held.mojo NUMERICS; only per-call allocation, pinned pair and status fill went); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.ab-prep.patch"
+    # ---- end lane ab-prep-classical
     return True
 
 

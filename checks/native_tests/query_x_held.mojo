@@ -24,7 +24,7 @@ from std.memory import bitcast, UnsafePointer
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_query_x import DeviceQueryX, QueryFold, resident_query_x, resident_query_x_done
-from core.query_x_held import IDN_QUERY_X_HELD, QueryXBuffers
+from core.query_x_held import QueryXBuffers
 from core.fitted_resident_store import (
     FittedResidentStore,
     fitted_lease_open,
@@ -155,22 +155,16 @@ def _lease_holds(ctx: DeviceContext) raises:
     ctx.synchronize()
     # Read what the checks need into locals first: a field borrow of q (q.bufs.x, q.x) that is still live when q^ is
     # consumed makes the lifetime checker refuse the consume ("used later"), seen in the first union builds; the
-    # consume itself happens once, outside the comptime branches, with each arm's tail in its own function.
+    # consume itself happens once, with the tail in its own function.
     var q_held = q.bufs.held()
     var q_x = q.bufs.x
     var addr = _buf_addr(q_x)
     _ = q_x^
-    comptime if IDN_QUERY_X_HELD:
-        _require(q_held, "a live lease's predict uses held buffers")
-        _require(not fitted_query_take(store, lease), "a second take while a call holds them finds none")
-    else:
-        _require(not q_held, "the B arm uses per-call buffers")
+    # TOMBSTONE: MOJOLEARN_IDN_QUERY_X_HELD_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    _require(q_held, "a live lease's predict uses held buffers")
+    _require(not fitted_query_take(store, lease), "a second take while a call holds them finds none")
     resident_query_x_done(store, lease, q^)
-    comptime if IDN_QUERY_X_HELD:
-        _lease_holds_held_tail(store, ctx, lease, x, rows, cols, addr)
-    else:
-        _require(fitted_resident_stats(store)[5] == 0, "the B arm holds nothing")
-        fitted_lease_close(store, lease)
+    _lease_holds_held_tail(store, ctx, lease, x, rows, cols, addr)
     # A fold or lease 0 always takes per-call buffers.
     var q0 = resident_query_x(store, ctx, 0, Int(x.unsafe_ptr()), rows, cols, QueryFold.none())
     ctx.synchronize()

@@ -132,7 +132,7 @@ def gpr_predict_resident_device(
     var store = gp_resident_store()
     var ctx = query_context(fold, _family_ctx())
     # fix-svc-query-resident: the lease's held query buffers (per-call for
-    # a fold or lease 0; core/query_x_held.mojo IDN_QUERY_X_HELD).
+    # a fold or lease 0; core/query_x_held.mojo).
     var qx = resident_query_x(store, ctx, lease, xs_addr, n_star, n_features, fold)
     # A fold runs on the fold store's context: its fresh model is uploaded
     # for this call (lease 0), never kept under the family context's lease.

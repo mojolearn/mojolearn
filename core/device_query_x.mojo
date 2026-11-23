@@ -48,7 +48,7 @@ and `range_word()` (a held word is compared with the call's mark).
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.admitted_finite_status import enqueue_finite_status
 from core.msel_device_x import msel_device_x_f32, msel_fold_entry_context
-from core.query_x_held import IDN_QUERY_X_HELD, QueryXBuffers
+from core.query_x_held import QueryXBuffers
 from core.ctx_key import ctx_cache_key
 from core.fitted_resident_store import FittedResidentStore, fitted_query_put, fitted_query_take
 
@@ -206,12 +206,12 @@ comptime _FittedStorePtr = UnsafePointer[FittedResidentStore, MutAnyOrigin]
 def resident_query_x(store: _FittedStorePtr, ctx: DeviceContext, lease: Int, x_addr: Int, rows: Int, cols: Int,
                      fold: QueryFold) raises -> DeviceQueryX:
     """The query of a resident model's predict: the lease's held buffers
-    for host words under a live lease (IDN_QUERY_X_HELD), else per-call
+    for host words under a live lease, else per-call
     buffers. Pair with `resident_query_x_done` after the call's
     synchronisation."""
-    comptime if IDN_QUERY_X_HELD:
-        if lease > 0 and not fold.active():
-            return DeviceQueryX.held(ctx, x_addr, rows, cols, fitted_query_take(store, lease))
+    # TOMBSTONE: MOJOLEARN_IDN_QUERY_X_HELD_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    if lease > 0 and not fold.active():
+        return DeviceQueryX.held(ctx, x_addr, rows, cols, fitted_query_take(store, lease))
     return DeviceQueryX(ctx, x_addr, rows, cols, fold)
 
 
