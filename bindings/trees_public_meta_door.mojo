@@ -3533,6 +3533,20 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     return model
 
 
+def _cal_door(e: PythonObject, decision: Bool, Xa: PythonObject, n: Int, class_cols: Int, keep: PythonObject,
+             answer: PythonObject, context: PythonObject) raises -> VoteMember:
+    """One pair member's float32 score block from its door (or the Array its
+    held state already wrote, `answer`), as `_out2d` admitted it."""
+    var out = answer
+    if out is None:
+        out = meta_member_call(e, "decision_function" if decision else "predict_proba", Python.tuple(Xa), context)
+    var blk = _out2d(out, n, context)
+    _ = py_call(keep.append, blk.array)
+    var got = VoteMember(blk.address, blk.cols, class_cols, 1.0)
+    _ = blk^
+    return got
+
+
 def calibrated_pair_codes(e: PythonObject, k: Int, keep: PythonObject,
                           context: PythonObject) raises -> Tuple[Int, Int]:
     """X-FREE UNPACK of one calibrated pair's member (lane mf-shap3, 2026-11-23; `_calibrated_fused` and Kernel /
@@ -3572,20 +3586,6 @@ def calibrated_pair_words(e: PythonObject, fitted: PythonObject, k: Int, member_
             _ = py_call(keep.append, par[0])
             _ = py_call(keep.append, par[1])
             cals.append(CalFit(True, 0.0, 0.0, trees_address(par[0]), trees_address(par[1]), Int(py=par[2])))
-
-
-def _cal_door(e: PythonObject, decision: Bool, Xa: PythonObject, n: Int, class_cols: Int, keep: PythonObject,
-             answer: PythonObject, context: PythonObject) raises -> VoteMember:
-    """One pair member's float32 score block from its door (or the Array its
-    held state already wrote, `answer`), as `_out2d` admitted it."""
-    var out = answer
-    if out is None:
-        out = meta_member_call(e, "decision_function" if decision else "predict_proba", Python.tuple(Xa), context)
-    var blk = _out2d(out, n, context)
-    _ = py_call(keep.append, blk.array)
-    var got = VoteMember(blk.address, blk.cols, class_cols, 1.0)
-    _ = blk^
-    return got
 
 
 def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject,

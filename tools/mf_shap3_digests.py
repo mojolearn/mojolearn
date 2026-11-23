@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
-"""Output digests of the SHAP model classes lane mf-shap2 moved onto native members (2026-11-23), extending
-tools/mf_shaprfe_digests.py (its configurations are kept, under the same names). A testing tool, never product
-execution.
+"""Output digests of the SHAP model classes lanes mf-shaprfe, mf-shap2 and mf-shap3 moved onto native members
+(2026-11-23); this script folds tools/mf_shap2_digests.py (its configurations are kept, under the same names). A
+testing tool, never product execution.
+
+(D, mf-shap3) KernelExplainer and PermutationExplainer over every meta-estimator, now through `AgnMeta` (the RUN
+of its public operation over its members' held native states): VotingClassifier hard (newly explained: it was
+refused at construction, its predict_proba being unavailable) and soft with a tree member, Bagging (per-member
+feature subsets, every feature, the batched forest, a regressor), Stacking (classifier, with passthrough,
+regressor), OneVsRest (two and three classes), CalibratedClassifierCV (sigmoid and isotonic), AdaBoost
+(classifier, binary, regressor), MultiOutputRegressor (its multi-output ridge and per-output members),
+GridSearchCV (newly explained through its best_estimator_: it was refused at construction), and the cases kept
+or refused: MultiOutputClassifier (refused natively), a meta-estimator as a member (its door, kept), non-finite
+explained rows (refused natively), each meta in many rows (parallel chunks).
 
 (C, mf-shap2) KernelExplainer and PermutationExplainer over the predict-only classifiers (LinearSVC,
 RidgeClassifier, PassiveAggressiveClassifier, Perceptron, SGDClassifier(loss='hinge'), SVC(probability=False),
@@ -23,15 +33,17 @@ QuadraticDiscriminantAnalysis, GaussianNB and MultinomialNB (now refused before 
 
 One line per configuration, `<name> sha256=<digest of the outputs' and fitted state's bytes>` or
 `<name> error <class>: <first line of the message>` (a refusal is digested by its words). Run it on two builds of
-the CPU column, base origin/lane/member-fits d3a8864541 and lane/mf-shap2's head, and diff the files: equal lines
+the CPU column, base origin/lane/member-fits 03da611844 and lane/mf-shap3's head, and diff the files: equal lines
 mean equal bits.
 
-    PYTHONPATH=<repo>/python python3 tools/mf_shap2_digests.py > out.txt
+    PYTHONPATH=<repo>/python python3 tools/mf_shap3_digests.py > out.txt
 
-Expected: every line equal. The only lines that may differ are `rfe_categorical_nb_*`: CategoricalNB is now a
-member of the naive Bayes family, which RFE refuses before any round (the door's 'auto' words; scikit-learn's
-attrgetter words for a named getter), where its own-door path fitted every round's clone first. Any other
-difference means stop and send it back.
+Expected: every line equal, except these, whose base line is a refusal and whose head line is either an answer
+or the native refusal's words: `shap_*_vote_hard*` and `shap_*_search_*` (now explained), `shap_*_label_*_str`
+(the native non-numeric labels refusal), `shap_*_multi_clf` (the native MultiOutputClassifier refusal),
+`shap_*_nonfinite` and `shap_k_categorical_nb_out_of_range` (the member's own words, where the door's were
+raised after a second pass). Every other line (the meta-estimators above among them) is an answer on both
+builds and must be equal: a difference means stop and send it back.
 
 Parallel plan: the configurations are independent, one per worker process (at most the allocated cores, at most
 the configuration count).
@@ -54,6 +66,14 @@ def _data(kind, n=300, d=5, seed=0, positive=False):
     if kind == "reg":
         X = rng.normal(size=(n, d)).astype(np.float32)
         y = (X[:, 0] - 0.5 * X[:, 1] + 0.1 * X[:, 2]).astype(np.float32)
+        return X, y
+    if kind == "reg2":
+        X = rng.normal(size=(n, d)).astype(np.float32)
+        y = np.stack([X[:, 0] - 0.5 * X[:, 1], X[:, 2] + 0.25 * X[:, 3]], axis=1).astype(np.float32)
+        return X, y
+    if kind == "clf2_2":
+        X = rng.normal(size=(n, d)).astype(np.float32)
+        y = np.stack([(X[:, 0] > 0), (X[:, 1] + X[:, 2] > 0)], axis=1).astype(np.int64)
         return X, y
     X = rng.normal(size=(n, d)).astype(np.float32)
     k = int(kind[3:])
@@ -119,6 +139,51 @@ _VOTES = {
 }
 
 
+# (D, mf-shap3) meta-estimators: name -> (data kind, a factory over the package)
+def _metas():
+    def lr(ml):
+        return ml.LogisticRegression()
+
+    def tree_clf(ml):
+        return ml.DecisionTreeClassifier(max_depth=3, random_state=0)
+
+    def tree_reg(ml):
+        return ml.DecisionTreeRegressor(max_depth=3, random_state=0)
+
+    def search(ml, est, grid):
+        from mojolearn.model_selection import GridSearchCV
+        return GridSearchCV(est, grid, cv=3)
+
+    return {
+        "bag_clf": ("clf3", lambda ml: ml.BaggingClassifier(tree_clf(ml), n_estimators=4, max_features=0.6,
+                                                            random_state=0)),
+        "bag_clf_lr": ("clf2", lambda ml: ml.BaggingClassifier(lr(ml), n_estimators=3, random_state=0)),
+        "bag_clf_default": ("clf3", lambda ml: ml.BaggingClassifier(n_estimators=4, random_state=0)),
+        "bag_reg": ("reg", lambda ml: ml.BaggingRegressor(tree_reg(ml), n_estimators=4, max_features=0.6,
+                                                          random_state=0)),
+        "stack_clf": ("clf3", lambda ml: ml.StackingClassifier([("lr", lr(ml)), ("nb", ml.GaussianNB())], cv=3)),
+        "stack_clf_pass": ("clf2", lambda ml: ml.StackingClassifier([("lr", lr(ml)), ("dt", tree_clf(ml))],
+                                                                    passthrough=True, cv=3)),
+        "stack_reg": ("reg", lambda ml: ml.StackingRegressor([("lin", ml.LinearRegression()), ("ridge", ml.Ridge())],
+                                                             cv=3)),
+        "ovr_bin": ("clf2", lambda ml: ml.OneVsRestClassifier(lr(ml))),
+        "ovr_3": ("clf3", lambda ml: ml.OneVsRestClassifier(lr(ml))),
+        "cal_sig_bin": ("clf2", lambda ml: ml.CalibratedClassifierCV(lr(ml), method="sigmoid", cv=3)),
+        "cal_iso_3": ("clf3", lambda ml: ml.CalibratedClassifierCV(ml.GaussianNB(), method="isotonic", cv=3)),
+        "cal_sig_3_lr": ("clf3", lambda ml: ml.CalibratedClassifierCV(lr(ml), method="sigmoid", cv=3)),
+        "ada_clf": ("clf3", lambda ml: ml.AdaBoostClassifier(n_estimators=5, random_state=0)),
+        "ada_clf_bin": ("clf2", lambda ml: ml.AdaBoostClassifier(n_estimators=5, random_state=0)),
+        "ada_reg": ("reg", lambda ml: ml.AdaBoostRegressor(n_estimators=5, random_state=0)),
+        "multi_reg_ridge": ("reg2", lambda ml: ml.MultiOutputRegressor(ml.Ridge())),
+        "multi_reg_tree": ("reg2", lambda ml: ml.MultiOutputRegressor(tree_reg(ml))),
+        "multi_clf": ("clf2_2", lambda ml: ml.MultiOutputClassifier(lr(ml))),
+        "search_lr": ("clf2", lambda ml: search(ml, lr(ml), {"C": [0.1, 1.0]})),
+        "search_ridge": ("reg", lambda ml: search(ml, ml.Ridge(), {"alpha": [0.1, 1.0]})),
+        "nested_bag_of_cal": ("clf2", lambda ml: ml.BaggingClassifier(ml.CalibratedClassifierCV(lr(ml), cv=2),
+                                                                      n_estimators=2, random_state=0)),
+    }
+
+
 def _cases():
     cases = {}
     for key, (cls, mkw) in _LABEL_MODELS.items():  # glue: the fixed configuration table
@@ -142,6 +207,16 @@ def _cases():
         cases["shap_k_" + key] = ("KV", key, {}, False, "", {}, {}, 8, "codes")
         cases["shap_p_" + key] = ("PV", key, {}, False, "", dict(random_state=0), dict(npermutations=20), 8, "codes")
     cases["shap_k_vote_soft_many_rows"] = ("KV", "vote_soft", {}, False, "", {}, {}, 97, "codes")
+    cases["shap_k_vote_hard_many_rows"] = ("KV", "vote_hard", {}, False, "", {}, {}, 97, "codes")
+    for key in _metas():  # glue: the fixed configuration table
+        cases["shap_k_" + key] = ("KM", key, {}, False, "", {}, {}, 8, "codes")
+        cases["shap_p_" + key] = ("PM", key, {}, False, "", dict(random_state=0), dict(npermutations=20), 8,
+                                  "codes")
+    for key in ("bag_clf", "stack_clf", "ovr_3", "cal_iso_3", "ada_clf", "multi_reg_tree"):  # glue: the fixed table
+        cases["shap_k_" + key + "_many_rows"] = ("KM", key, {}, False, "", {}, {}, 97, "codes")
+    cases["shap_k_bag_clf_logit"] = ("KM", "bag_clf_lr", {}, False, "", dict(link="logit"), {}, 8, "codes")
+    cases["shap_k_logistic_nonfinite"] = ("K", "LogisticRegression", {}, False, "clf2", {}, {}, -8, "codes")
+    cases["shap_k_bag_clf_nonfinite"] = ("KM", "bag_clf", {}, False, "", {}, {}, -8, "codes")
     for step in (1, 2):  # glue: the fixed configuration table
         cases["rfe_categorical_nb_step%d" % step] = ("R", "CategoricalNB", {}, False, "cat3",
                                                      dict(step=step, n_features_to_select=2), {}, 0, "codes")
@@ -197,6 +272,11 @@ def _run(name):
             X, y = _data(kind)
             model.fit(X, y)
             which = which[0]
+        elif which in ("KM", "PM"):
+            kind, make = _metas()[cls]
+            X, y = _data(kind)
+            model = make(ml).fit(X, y)
+            which = which[0]
         else:
             X, y = _data(kind, positive=positive)
             y = _labels(y, how)
@@ -217,9 +297,10 @@ def _run(name):
             model = getattr(ml, cls)(**mkw).fit(X, y)
         explainer = (ml.KernelExplainer if which == "K" else ml.PermutationExplainer)(model, X[:20], **ekw)
         if rows < 0:
-            # a category index above the fitted range in the explained rows: the model's own refusal
+            # a category index above the fitted range (CategoricalNB), else a NaN, in the explained rows: the
+            # model's own refusal
             rows_x = X[200:200 - rows].copy()
-            rows_x[0, 0] = 9.0
+            rows_x[0, 0] = 9.0 if cls == "CategoricalNB" else np.nan
         else:
             rows_x = X[200:200 + rows].copy()
         phi = np.asarray(explainer.shap_values(rows_x, **vkw))
@@ -235,7 +316,7 @@ def main():
         cores = len(os.sched_getaffinity(0))
     except AttributeError:
         cores = os.cpu_count() or 1
-    workers = max(1, min(int(os.environ.get("MF_SHAP2_WORKERS", cores)), len(names)))
+    workers = max(1, min(int(os.environ.get("MF_SHAP3_WORKERS", cores)), len(names)))
     with ProcessPoolExecutor(max_workers=workers) as pool:
         for line in pool.map(_run, names):
             print(line, flush=True)
