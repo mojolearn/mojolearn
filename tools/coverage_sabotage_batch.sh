@@ -21,6 +21,10 @@
 #                      when pixi is present, else none)
 #        OUT           the output directory (default: $HOME/mojolearn-sabotage/<batch id>)
 #        FIXTURES      identity_break fixtures (default: base)
+#        SAB_SCRATCH   where the clean native files are saved for the restore (default
+#                      $HOME/mojolearn-sabotage-scratch; one <batch id> directory, deleted on exit). Never
+#                      under OUT: the job persists OUT, and the tar of every native (about 120 MB a batch)
+#                      made the nvc1-0003 results 5.5 GB, so its final upload never landed before the cap.
 # Output: one line per arm and column, `SABOTAGE batch=<id> arm=<arm> column=<c> verdict=CAUGHT|MISSED`,
 # and $OUT/summary.txt; the records and per-arm check logs stay in $OUT.
 # The tree is left as it was found (patches reverted, native files restored) on every exit path.
@@ -32,6 +36,8 @@ cd "$ROOT"
 OUT=${OUT:-$HOME/mojolearn-sabotage/$BATCH}
 FIXTURES=${FIXTURES:-base}
 mkdir -p "$OUT"
+SCRATCH=${SAB_SCRATCH:-$HOME/mojolearn-sabotage-scratch}/$BATCH
+rm -rf "$SCRATCH" && mkdir -p "$SCRATCH"
 if [ -n "${PYTHON:-}" ]; then
     read -r -a PY <<< "$PYTHON"
 elif command -v pixi > /dev/null 2>&1 && [ -f pixi.toml ]; then
@@ -67,7 +73,7 @@ COLUMNS=$(field columns) || exit 2
 log "BATCH $BATCH arms=$ARMS builds=$BUILDS columns=$COLUMNS lanes=$LANES head=$(git rev-parse --short HEAD)"
 
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-    log "TREE NOT CLEAN"; exit 4
+    log "TREE NOT CLEAN"; rm -rf "$SCRATCH"; exit 4
 fi
 # NATIVE_DIRS: where the builds write native files (default python/mojolearn; add a host set dir if
 # the box keeps one outside the tree)
@@ -76,7 +82,7 @@ if command -v sha256sum > /dev/null 2>&1; then HASH=(sha256sum); else HASH=(shas
 snap() { natives | while read -r f; do "${HASH[@]}" "$f"; done; }
 natives > "$OUT/clean_natives.txt"
 snap > "$OUT/clean_natives.sha"
-tar -cf "$OUT/clean_natives.tar" -T "$OUT/clean_natives.txt"
+tar -cf "$SCRATCH/clean_natives.tar" -T "$OUT/clean_natives.txt"
 
 run_cols() { # $1 = clean | sab | restored. The device and CPU columns are independent processes (the CPU
     # column never touches the GPU), so they run at once.
@@ -103,10 +109,17 @@ restore() {
         APPLIED=0
     fi
     natives | while read -r f; do grep -qxF "$f" "$OUT/clean_natives.txt" || rm -f "$f"; done
-    tar -xf "$OUT/clean_natives.tar"
+    tar -xf "$SCRATCH/clean_natives.tar"
     if [ "$(snap)" = "$(cat "$OUT/clean_natives.sha")" ]; then log "NATIVE RESTORED"; else log "NATIVE RESTORE FAILED"; fi
 }
-trap 'restore' EXIT INT TERM
+# A per-batch time limit (the job's `timeout`) sends TERM to this whole process group: the builds and the
+# runs die, this shell stops them all and exits, and the EXIT trap restores the tree and the natives.
+# No `wait` here: a child that ignores TERM must not hold the restore (the job's KILL follows after its grace).
+# shellcheck disable=SC2046
+stop_all() { log "STOPPED (signal): killing the batch's builds and runs"; kill $(jobs -p) 2>/dev/null; exit 143; }
+RESTORED=0
+trap '[ "$RESTORED" = 1 ] || restore; rm -rf "$SCRATCH"' EXIT
+trap 'stop_all' INT TERM
 
 run_cols clean
 # shellcheck disable=SC2046
@@ -118,17 +131,24 @@ APPLIED=1
 # MOJOLEARN_COMPILE_JOBS=1, one core of a rented box busy): the batch's binding builds are independent
 # (each writes its own .so), so they all start at once and share the allocation's cores
 # (SAB_CORES, default alloc_cores of tools/ops/box_cores_lib.sh: the cgroup quota, not the host's CPUs),
-# each with MOJOLEARN_COMPILE_JOBS = cores / builds (at least 1).
+# each with MOJOLEARN_COMPILE_JOBS = cores. (2026-11-23, nvc1-0003: at cores / builds the builds of a batch kept
+# mean 1.7 to 3.2 of 14 cores busy; one binding's `mojo build -j` does not fill its share, so each build may use
+# every core and the kernel shares them. -j is a thread cap, not a reservation.)
 . "$ROOT/tools/ops/box_cores_lib.sh"
 CORES=${SAB_CORES:-$(alloc_cores)}
 NB=$(echo "$BUILDS" | tr ',' '\n' | grep -c .)
-CJ=$(( CORES / (NB > 0 ? NB : 1) )); [ "$CJ" -lt 1 ] && CJ=1
+CJ=$CORES; [ "$CJ" -lt 1 ] && CJ=1
 log "BUILDS $NB at once, MOJOLEARN_COMPILE_JOBS=$CJ each, cores $CORES"
 one_build() {
     local b=$1 t rc
     t=$(date +%s)
+    # A host build refuses MOJOLEARN_GPU_ARCHS ("a CPU build takes no MOJOLEARN_GPU_ARCHS"): the GPU job exports
+    # it for the device builds, and in nvc1-0003 all 28 host builds of the plan failed on it in 0 s (BUILD-FAIL).
+    # A `_fast` binding script builds only in fast mode (build_tokenizer_fast.sh: "FAST only").
     if [[ $b == *_host ]]; then
-        env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_TARGET_COLUMN=cpu "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
+        env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_TARGET_COLUMN=cpu "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
+    elif [[ $b == *_fast ]]; then
+        env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_NUMERIC_MODE=fast "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
     else
         env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_NUMERIC_MODE=identical "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
     fi
@@ -150,7 +170,7 @@ for b in ${BUILDS//,/ }; do
 done
 [ $brc = 0 ] && run_cols sab
 restore
-trap - EXIT INT TERM
+RESTORED=1
 if [ $brc != 0 ]; then
     for arm in ${ARMS//,/ }; do echo "SABOTAGE batch=$BATCH arm=$arm column=all verdict=BUILD-FAIL" | tee -a "$OUT/summary.txt"; done
     exit 5
