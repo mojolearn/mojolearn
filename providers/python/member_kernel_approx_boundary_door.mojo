@@ -43,7 +43,7 @@ from core.member_abi import (
 from kernel_methods.descriptor_schema import KERNEL_METHOD_OPERATIONS
 from kernel_methods.native_call_run import KmKernel
 from providers.python.array_metadata_pyapi_door import ArrayPin
-from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
 from providers.python.kernel_method_descriptor_pyapi_door import kernel_method_metadata
 from providers.python.kernel_public_lifecycle_pyapi_unpack import kernel_public_fit_complete
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_entry
@@ -61,7 +61,9 @@ def kernel_approx_member_admit(model: PythonObject, fields: PythonObject, kind: 
         raise Error("ValueError: mojolearn: unknown kernel approximation member kind " + String(kind))
     var nystroem = kind == 0
     var where = String("Nystroem") if nystroem else String("RBFSampler")
-    var binding = estimator_binding(model, "_mojolearn_kernel_methods", context)
+    # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
+    # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
+    var binding = estimator_member_binding(model, "_mojolearn_kernel_methods", context)
     var words = List[Float64](length=9, fill=0.0)
     words[0] = Float64(kind)
     words[1] = 2.0

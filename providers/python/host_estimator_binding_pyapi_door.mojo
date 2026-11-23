@@ -6,7 +6,10 @@ from bindings.native_loaded_module_door import native_loaded_module, _loaded_fie
 from bindings.py_balanced import py_type, py_get
 from bindings.mode_metadata_native_door import _fields
 from bindings.classical_attributes_door import _type_mro
-from providers.python.estimator_binding_pyapi_door import estimator_binding_mode, estimator_checked_mode
+from bindings.member_owner_unpack import member_host_only
+from providers.python.estimator_binding_pyapi_door import (
+    estimator_binding, estimator_binding_host, estimator_binding_mode, estimator_checked_mode,
+)
 
 
 def host_estimator_binding(model: PythonObject, name: String, requested: PythonObject,
@@ -63,3 +66,23 @@ def host_estimator_binding_current(model: PythonObject, name: String,
                                    context: PythonObject) raises -> PythonObject:
     var mode = py_get(_fields(model), "numeric_mode") if model is not None else PythonObject(None)
     return host_estimator_binding_mode(model, mode, name, context)
+
+
+def estimator_member_binding(model: PythonObject, name: String, context: PythonObject,
+                             check_mode: Bool = True) raises -> PythonObject:
+    """UNPACK of a member admission (lane mf-iterimp3b, 2026-11-23): the image
+    a family's member binds for `model`. An explicit Host* class (its OWN
+    host-only word, bindings/member_owner_unpack.mojo `member_host_only`):
+    the exact CPU module its saved-host route connected at import
+    (`host_estimator_binding`: HostDBSCAN, HostAgglomerativeClustering,
+    HostSpectralClustering), else the CPU identical module of `name`
+    (`estimator_binding_host`, its refusal of a saved non-identical mode
+    first), never the device image its `device` field would select. Any other
+    class: the estimator's binding route (`estimator_binding`), as before.
+    Once per member admission; a member's calls never come back here."""
+    if not member_host_only(model):
+        return estimator_binding(model, name, context, check_mode)
+    var host = host_estimator_binding(model, name, py_get(_fields(model), "numeric_mode"), context)
+    if host is not None:
+        return host
+    return estimator_binding_host(model, name, context, check_mode)

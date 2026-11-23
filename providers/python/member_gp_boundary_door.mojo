@@ -65,6 +65,7 @@ from core.member_abi import (
 )
 from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.gp_public_lifecycle_pyapi_door import gp_host_class_binding
+from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_fit_complete
 
 comptime _B_X = MEMBER_BLOCK_FAMILY
@@ -103,7 +104,10 @@ def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
     _gpr_validate_fields(settings, context)
     var nk = gp_keys()
     var kernel = py_item(settings, nk[].k__kernel)
-    var binding = estimator_binding(model, "_mojolearn_gp", context)
+    # An explicit HostGaussianProcessRegressor (its own host-only word, lane mf-iterimp3b): the CPU identical
+    # GP image (`estimator_member_binding`), never the device one; a wheel's CPU set without that image
+    # refuses at admission and the caller keeps its own path. Any other class: its binding route.
+    var binding = estimator_member_binding(model, "_mojolearn_gp", context)
     var ext = _gpr_ext(model, binding, context)
     var connection = GPConnection(ext)
     var packed = gp_kernel_arrays(kernel, context)

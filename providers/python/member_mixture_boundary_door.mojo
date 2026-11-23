@@ -48,7 +48,7 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from core.mixture_native_api import MIXTURE_NATIVE_MODE, MIXTURE_NATIVE_CAPABILITIES, MIXTURE_NATIVE_COUNT
-from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
 
 
 def mixture_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
@@ -63,7 +63,9 @@ def mixture_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     var settings = gmm_fit_settings(model)
     if settings.init_name != "kmeans" and settings.init_name != "random":
         return False
-    var binding = estimator_binding(model, "_mojolearn_mixture", context, False)
+    # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
+    # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
+    var binding = estimator_member_binding(model, "_mojolearn_mixture", context, False)
     # The inference-only CPU binding registers the scoring transport but no fit.
     if String(py=binding.__name__).endswith("_infer_host"):
         return False

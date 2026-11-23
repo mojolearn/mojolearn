@@ -42,7 +42,7 @@ from core.member_abi import (
 from kernel_methods.descriptor_schema import KERNEL_METHOD_OPERATIONS
 from kernel_methods.native_call_run import KmKernel
 from providers.python.array_metadata_pyapi_door import ArrayPin
-from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
 from providers.python.kernel_method_descriptor_pyapi_door import kernel_method_metadata
 from providers.python.kernel_public_lifecycle_pyapi_unpack import kernel_public_fit_complete
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_entry
@@ -65,7 +65,9 @@ def kernel_ridge_member_admit(model: PythonObject, fields: PythonObject, kind: I
     var kernel = _km_kernel_code(family_field(fields, "kernel"), _WHERE, True)
     if kernel == KM_KERNEL_PRECOMPUTED:
         return False
-    var binding = estimator_binding(model, "_mojolearn_kernel_methods", context)
+    # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
+    # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
+    var binding = estimator_member_binding(model, "_mojolearn_kernel_methods", context)
     var route = km_extension(fields, binding, _WHERE, context)
     if not route.described():
         return False

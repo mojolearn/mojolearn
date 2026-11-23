@@ -172,6 +172,12 @@ class _HostBound:
 
 class HostLinearRegression(_HostBound, LinearRegression):
     _HOST_ARRAYS = ("coef_",)
+    # Its own member mark (lane mf-iterimp3b, 2026-11-23): a meta-estimator fits and predicts it as a native
+    # member (core/member_abi.mojo). No HOST-ONLY word: python/mojolearn/_native_msel_dispatch.py registers
+    # it with the explicit CPU context (`classical_host_context`, every mode bound to the CPU tables), which
+    # the linear member admission reads; the word would let `_connect_host_members` register it from the
+    # public plan first.
+    _mojolearn_member = (0, 0)
 
     def vendor_used(self):
         """The backend this model runs on: always ``'cpu'``."""
@@ -185,6 +191,12 @@ class HostLinearRegression(_HostBound, LinearRegression):
 
 class HostRidge(_HostBound, Ridge):
     _HOST_ARRAYS = ("coef_",)
+    # Its own member mark (lane mf-iterimp3b, 2026-11-23): a meta-estimator fits and predicts it as a native
+    # member (core/member_abi.mojo). No HOST-ONLY word: python/mojolearn/_native_msel_dispatch.py registers
+    # it with the explicit CPU context (`classical_host_context`, every mode bound to the CPU tables), which
+    # the linear member admission reads; the word would let `_connect_host_members` register it from the
+    # public plan first.
+    _mojolearn_member = (0, 1)
 
     def vendor_used(self):
         """The backend this model runs on: always ``'cpu'``."""
@@ -240,6 +252,12 @@ def _native_host_inference_method(method):
 
 class HostLogisticRegression(_NativeArchiveLoad, _HostBound, LogisticRegression):
     _HOST_ARRAYS = ("_w",)
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (1, 0)
+    _mojolearn_member_host = True
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -376,15 +394,33 @@ class _HostProjection(_HostBound):
 
 class HostTruncatedSVD(_NativeArchiveLoad, _HostProjection, TruncatedSVD):
     _HOST_ARRAYS = ("components_", "singular_values_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (31, 1)
+    _mojolearn_member_host = True
 
 
 class HostPCA(_NativeArchiveLoad, _HostProjection, PCA):
     _HOST_ARRAYS = ("components_", "mean_", "singular_values_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (31, 0)
+    _mojolearn_member_host = True
 
 
 class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
     """Evaluate a saved kernel density model on the CPU."""
     _HOST_ARRAYS = ("_x", "_w")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (27, 0)
+    _mojolearn_member_host = True
 
     def model_sha256(self):
         """Hash the stored training rows and optional weights in field-name order.
@@ -632,6 +668,12 @@ class HostSVC(_NativeArchiveLoad, _HostBound, SVC):
 class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
     """Score samples with a saved isolation forest on the CPU."""
     _HOST_ARRAYS = ("_x",)
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (18, 0)
+    _mojolearn_member_host = True
 
     def model_sha256(self):
         """Hash the stored training rows without model options or archive metadata.
@@ -867,12 +909,24 @@ class HostDBSCAN(_NativeArchiveLoad, _HostBound, DBSCAN):
     `_mojolearn_estimators_host.labeled_reference_predict`
     (lane/inference-transductive-predict, 2026-09-15, DEVIATION 2740)."""
     _HOST_ARRAYS = ("components_", "core_sample_indices_", "_core_labels")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (27, 1)
+    _mojolearn_member_host = True
 
 
 class HostAgglomerativeClustering(_NativeArchiveLoad, _HostBound, AgglomerativeClustering):
     """`AgglomerativeClustering.predict` from a saved model through the
     estimators host binding; the fit's solver family does not ship."""
     _HOST_ARRAYS = ("_fit_X", "labels_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (29, 0)
+    _mojolearn_member_host = True
 
 
 class HostKMeans(_NativeArchiveLoad, _HostBound, KMeans):
@@ -888,6 +942,12 @@ class HostKMeans(_NativeArchiveLoad, _HostBound, KMeans):
     the training rows, and it is what a caller checks `predict` against.
     """
     _HOST_ARRAYS = ("cluster_centers_", "labels_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (24, 0)
+    _mojolearn_member_host = True
 
 
     def __init_subclass__(cls, **kwargs):
@@ -910,6 +970,12 @@ class HostGaussianMixture(_NativeArchiveLoad, _HostBound, GaussianMixture):
     """score_samples, predict_proba, predict, score, bic and aic of a saved
     GaussianMixture through the inference-only mixture binding."""
     _HOST_ARRAYS = ("weights_", "means_", "covariances_", "precisions_cholesky_", "log_det_chol_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (26, 0)
+    _mojolearn_member_host = True
 
 
 class HostGaussianProcessRegressor(_NativeArchiveLoad, _HostBound, GaussianProcessRegressor):
@@ -917,6 +983,12 @@ class HostGaussianProcessRegressor(_NativeArchiveLoad, _HostBound, GaussianProce
     the inference-only gp binding; normalize_y's scale-back is the GPU
     class's own `predict`."""
     _HOST_ARRAYS = ("X_train_", "L_", "alpha_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (23, 0)
+    _mojolearn_member_host = True
 
 
 class HostHDBSCAN(_NativeArchiveLoad, _HostBound, HDBSCAN):
@@ -1046,6 +1118,12 @@ class HostARIMA(_NativeArchiveLoad, _HostBound, ARIMA):
     `None` for a model fit without them, and `model_sha256` skips a `None`,
     so every `mojolearn-arima-1` model hashes exactly as it did."""
     _HOST_ARRAYS = ("_y", "params_", "_exog")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (37, 0)
+    _mojolearn_member_host = True
 
 
 class HostExponentialSmoothing(_NativeArchiveLoad, _HostBound, ExponentialSmoothing):
@@ -1061,6 +1139,12 @@ class HostUMAP(_NativeArchiveLoad, _HostBound, UMAP):
     batch: since lane/umap-batch-fix (2026-09-16) a batch of N is the
     concatenation of N batches of one (umap/transform.mojo)."""
     _HOST_ARRAYS = ("_transform_training", "_transform_embedding")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (33, 0)
+    _mojolearn_member_host = True
 
 
 class HostSpectralClustering(_NativeArchiveLoad, _HostBound, SpectralClustering):
@@ -1069,6 +1153,12 @@ class HostSpectralClustering(_NativeArchiveLoad, _HostBound, SpectralClustering)
     fit (lane/spectral-predict, 2026-09-15, DEVIATION 2860)."""
     _BINDING = "_mojolearn_metrics"
     _HOST_ARRAYS = ("_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X", "labels_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (30, 0)
+    _mojolearn_member_host = True
 
 
 class _HostScaler(_HostBound):
@@ -1085,10 +1175,22 @@ class _HostScaler(_HostBound):
 
 class HostStandardScaler(_HostScaler, StandardScaler):
     _HOST_ARRAYS = ("mean_", "var_", "scale_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (34, 0)
+    _mojolearn_member_host = True
 
 
 class HostMinMaxScaler(_NativeArchiveLoad, _HostScaler, MinMaxScaler):
     _HOST_ARRAYS = ("data_min_", "data_max_", "data_range_", "scale_", "min_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (34, 1)
+    _mojolearn_member_host = True
 
 
 class _HostCD(_HostBound):
@@ -1126,11 +1228,21 @@ class _HostCD(_HostBound):
 
 
 class HostElasticNet(_NativeArchiveLoad, _HostCD, ElasticNet):
-    pass
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (4, 0)
+    _mojolearn_member_host = True
 
 
 class HostLasso(_NativeArchiveLoad, _HostCD, Lasso):
-    pass
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (4, 1)
+    _mojolearn_member_host = True
 
 
 class _HostKernelMethod(_HostBound):
@@ -1146,6 +1258,12 @@ class _HostKernelMethod(_HostBound):
 
 class HostKernelRidge(_NativeArchiveLoad, _HostKernelMethod, KernelRidge):
     _HOST_ARRAYS = ("X_fit_", "dual_coef_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (7, 0)
+    _mojolearn_member_host = True
 
     @_native_host_inference_method
     def predict(self, X):
@@ -1171,6 +1289,12 @@ class HostKernelRidge(_NativeArchiveLoad, _HostKernelMethod, KernelRidge):
 class HostNystroem(_NativeArchiveLoad, _HostKernelMethod, Nystroem):
     _HOST_ARRAYS = ("components_", "component_indices_", "normalization_",
                     "eigenvalues_", "eigenvectors_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (8, 0)
+    _mojolearn_member_host = True
 
     @_native_host_inference_method
     def transform(self, X):
@@ -1196,6 +1320,12 @@ class HostNystroem(_NativeArchiveLoad, _HostKernelMethod, Nystroem):
 class HostRBFSampler(_NativeArchiveLoad, _HostBound, RBFSampler):
     _BINDING = "_mojolearn_kernel_methods"
     _HOST_ARRAYS = ("random_weights_", "random_offset_")
+    # Its own member mark and the HOST-ONLY word (lane mf-iterimp3b, 2026-11-23, the pattern of lane
+    # mf-cal3b): a meta-estimator (IterativeImputer, CalibratedClassifierCV, SHAP) fits and predicts it as a
+    # native member (core/member_abi.mojo) on the host image its own methods bind, never the device one;
+    # bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (8, 1)
+    _mojolearn_member_host = True
 
     def __init_subclass__(cls, **kwargs):
         # glue: register ordinary subclass layouts only at class definition

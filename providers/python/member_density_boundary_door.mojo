@@ -63,7 +63,7 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE,
     MEMBER_F64, MEMBER_I32,
 )
-from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
 
 comptime _KIND_DBSCAN = 1
 comptime _KIND_KDE = 0
@@ -98,7 +98,9 @@ def _kde_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
         return False
     var bandwidth = Float64(py=py_call(native_loaded_module("builtins").float,
         py_get(fields, PythonObject("bandwidth"), PythonObject(None))))
-    var binding = estimator_binding(model, "_mojolearn_estimators", context)
+    # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
+    # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
+    var binding = estimator_member_binding(model, "_mojolearn_estimators", context)
     var connection = KDEConnection(binding)
     var mode = connection.driver.metadata(KDE_MODE)
     var vendor = connection.driver.metadata(KDE_VENDOR) - 1
@@ -133,7 +135,9 @@ def density_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     if not settings.predicting or settings.metric == DBSCAN_METRIC_PRECOMPUTED:
         return False
     var budget = dbscan_fit_budget(fields, builtins, context)
-    var binding = estimator_binding(model, "_mojolearn_estimators", context)
+    # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
+    # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
+    var binding = estimator_member_binding(model, "_mojolearn_estimators", context)
     var connection = DBSCANConnection(binding)
     var mode = connection.driver.metadata(DBSCAN_MODE)
     # The entry's vendor word is 1 + the member vendor (0: no vendor).
