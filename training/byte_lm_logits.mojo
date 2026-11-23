@@ -49,7 +49,7 @@ from training.byte_lm import (
     byte_dims,
 )
 from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into, download_f32_into_scanned
-from core.device_arena import DeviceArena, arena_ptr
+from core.device_arena import ArenaPtr, arena_ptr
 from core.device_scan import device_first_nonfinite, device_first_token_oob
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.experiments.neural_switches import ROLE_HEAD
@@ -151,19 +151,19 @@ struct ByteLogitsScratch(Movable):
     var stages: List[LlamaDeviceStages]
     var logits: DeviceBuffer[DType.float32]
     var head_ws: DeviceBuffer[DType.float32]
-    #: the scratch's own arena (core/device_arena.mojo)
-    var arena: DeviceArena
 
-    def __init__(out self, ctx: DeviceContext, batch: Int, length: Int, config: ByteConfig) raises:
+    def __init__(
+        out self, ctx: DeviceContext, batch: Int, length: Int, config: ByteConfig, arena: Optional[ArenaPtr] = None
+    ) raises:
         var m = batch * length
         var dims = byte_dims(config)
         self.batch = batch
         self.length = length
-        # lane/neural-pass43: the scratch's buffers carved from arena chunks;
-        # lane arena-session (2026-11-23): this scratch's own arena, handed
-        # to each constructor (`ap`), the local named until it moves to self
-        var arena = DeviceArena()
-        var ap = arena_ptr(arena)
+        # lane/neural-pass43: the scratch's buffers carved from arena chunks.
+        # Lane arena-session (2026-11-23): the arena is the caller's (the
+        # trainer's `logits_arena` for the session's kept slot, rewound at
+        # each rebuild); a stateless call passes None and allocates fresh.
+        var ap = arena
         self.ids = _zeros_i32(ctx, m)
         self.x = _zeros(ctx, m * config.d_model, ap)
         self.cache = LlamaKVCache(ctx, batch, dims, length, arena=ap)
@@ -177,7 +177,6 @@ struct ByteLogitsScratch(Movable):
         # site); code recoverable at 6ce75b82de.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.expdel2-31-neural.patch
         self.head_ws = _zeros(ctx, head_cells, ap)
-        self.arena = arena^
 
     def fits(self, batch: Int, length: Int) -> Bool:
         return self.batch == batch and self.length == length
@@ -439,8 +438,13 @@ def byte_logits_resident(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[I
     if scratch:
         rebuild = not scratch.value().fits(batch, length)
     if rebuild:
+        # the old scratch goes first, so its views of the trainer's logits
+        # arena are free to carve again: a rewind, no pool lock (the arena
+        # grows, under the lock, only for a larger shape). The session
+        # clears this slot before it drops the trainer (byte_lm_binding_impl).
         scratch = None
-        scratch = ByteLogitsScratch(ctx, batch, length, config)
+        tr.logits_arena.rewind()
+        scratch = ByteLogitsScratch(ctx, batch, length, config, arena_ptr(tr.logits_arena))
     tr.healthy = False
     tr.shadow_valid = False
     var out = List[Float32]()
@@ -479,8 +483,13 @@ def byte_logits_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, inputs: L
     if scratch:
         rebuild = not scratch.value().fits(batch, length)
     if rebuild:
+        # the old scratch goes first, so its views of the trainer's logits
+        # arena are free to carve again: a rewind, no pool lock (the arena
+        # grows, under the lock, only for a larger shape). The session
+        # clears this slot before it drops the trainer (byte_lm_binding_impl).
         scratch = None
-        scratch = ByteLogitsScratch(ctx, batch, length, config)
+        tr.logits_arena.rewind()
+        scratch = ByteLogitsScratch(ctx, batch, length, config, arena_ptr(tr.logits_arena))
     tr.healthy = False
     tr.shadow_valid = False
     var failed = False
@@ -638,8 +647,13 @@ def byte_next_bytes_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, input
     if scratch:
         rebuild = not scratch.value().fits(batch, length)
     if rebuild:
+        # the old scratch goes first, so its views of the trainer's logits
+        # arena are free to carve again: a rewind, no pool lock (the arena
+        # grows, under the lock, only for a larger shape). The session
+        # clears this slot before it drops the trainer (byte_lm_binding_impl).
         scratch = None
-        scratch = ByteLogitsScratch(ctx, batch, length, config)
+        tr.logits_arena.rewind()
+        scratch = ByteLogitsScratch(ctx, batch, length, config, arena_ptr(tr.logits_arena))
     tr.healthy = False
     tr.shadow_valid = False
     var failed = False

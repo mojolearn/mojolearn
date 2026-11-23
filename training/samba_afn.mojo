@@ -22,12 +22,9 @@ The defines (each read once, at compile time; default OFF):
                                     gradient and the tied pair never cross
                                     the bus, and the per-op waits between
                                     them go.
-  MOJOLEARN_AFN_SAMBA_ARENA         every float scratch of an op is a view
-                                    of one device arena chunk
-                                    (core/device_arena.mojo) instead of a
-                                    fresh Metal buffer; the arena is opened
-                                    at the op's start and released after its
-                                    wait.
+  MOJOLEARN_AFN_SAMBA_ARENA         routes the standalone ops here; its
+                                    per-op arena was deleted 2026-11-23
+                                    (lane arena-session, tombstone below).
   MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT  the non-finite refusal of inputs,
                                     weights and logits runs as one flag
                                     kernel per operand on the device and is
@@ -77,7 +74,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from core.device_arena import DEVICE_ARENA_ON, ArenaPtr, DeviceArena, arena_ptr
 from core.neural_context import neural_ctx
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from autograd.kernels.embedding import identical_embedding_backward_into
@@ -188,44 +184,22 @@ def _refuse_nonfinite_host(
 # ===========================================================================
 
 
-struct AfnArena(Movable):
-    """One op's own arena (core/device_arena.mojo): taken at the op's start,
-    its chunks returned to the pool by `close` after the op's wait, or by
-    the destructor when the op raises. With the define off (or arenas off)
-    `own` is None and every scratch is a fresh buffer, as in samba_ops.mojo.
-    Lane arena-session (2026-11-23): was a bracket on the one process-wide
-    active arena, which another thread's allocations could take views of."""
-
-    var arena: DeviceArena
-
-    def __init__(out self) raises:
-        self.arena = DeviceArena(on=AFN_SAMBA_ARENA and DEVICE_ARENA_ON)
-
-    def own(mut self) -> Optional[ArenaPtr]:
-        """The handle the op's scratch helpers take (None when off). The op
-        keeps this struct in place and calls `close` after its last take."""
-        return arena_ptr(self.arena)
-
-    def close(mut self) raises:
-        self.arena.release()
+# TOMBSTONE: MOJOLEARN_AFN_SAMBA_ARENA (its arena only: the op's scratch as views of one device arena; never measured, opt-in, Apple fast) deleted 2026-11-23 by lane/arena-session; code recoverable at 80ffe710b6.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_ARENA.arena-session.patch; record in docs/TOMBSTONES.md.
+# The ops are free functions reached from the per-op doors with no stateful caller, so a per-op arena took the
+# chunk pool's lock twice per call (taking and returning a chunk); every scratch is a fresh buffer again, as in
+# samba_ops.mojo. The define still routes the standalone ops here (AFN_SAMBA_OPS).
 
 
-def afn_scratch_f32(
-    own: Optional[ArenaPtr], ctx: DeviceContext, n: Int
-) raises -> DeviceBuffer[DType.float32]:
-    """A scratch of `n` floats: a view of the op's own arena when `own` is
-    given (`AfnArena.own`), else a fresh buffer."""
-    if own:
-        var p = own.value()
-        return p[].take(ctx, n)
+def afn_scratch_f32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """A scratch of `n` floats: a fresh buffer."""
     return ctx.enqueue_create_buffer[DType.float32](n)
 
 
 def afn_upload_f32(
-    own: Optional[ArenaPtr],
     ctx: DeviceContext, ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int
 ) raises -> DeviceBuffer[DType.float32]:
-    var buf = afn_scratch_f32(own, ctx, n)
+    var buf = afn_scratch_f32(ctx, n)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=ptr)
     return buf^
 
@@ -421,20 +395,17 @@ def afn_embedding_forward_host(
         raise Error("mojolearn samba ops: embedding shape must be positive")
     comptime if not AFN_SAMBA_DEVICE_ADMIT:
         _refuse_nonfinite_host("embedding weight", w_ptr, vocab * width)
-    var arena = AfnArena()
-    var own = arena.own()
     var admit = AfnAdmit(ctx)
     var cells = n_positions * width
-    var w = afn_upload_f32(own, ctx, w_ptr, vocab * width)
+    var w = afn_upload_f32(ctx, w_ptr, vocab * width)
     admit.scan(ctx, w, vocab * width, "embedding weight")
     var ids = afn_upload_i32(ctx, ids_ptr, n_positions)
-    var y = afn_scratch_f32(own, ctx, cells)
+    var y = afn_scratch_f32(ctx, cells)
     var cfg = EmbConfig.llama(vocab, width)
     identical_embedding_forward_into(ctx, y, w, ids, n_positions, cfg)
     ctx.enqueue_copy(dst_ptr=y_ptr, src_buf=y)
     admit.finish(ctx)
     ctx.synchronize()
-    arena.close()
     admit.check()
     _ = w^
     _ = ids^
@@ -456,14 +427,12 @@ def afn_embedding_backward_host(
         raise Error("mojolearn samba ops: embedding shape must be positive")
     comptime if not AFN_SAMBA_DEVICE_ADMIT:
         _refuse_nonfinite_host("embedding upstream gradient", dy_ptr, n_positions * width)
-    var arena = AfnArena()
-    var own = arena.own()
     var admit = AfnAdmit(ctx)
     var cells = vocab * width
-    var dy = afn_upload_f32(own, ctx, dy_ptr, n_positions * width)
+    var dy = afn_upload_f32(ctx, dy_ptr, n_positions * width)
     admit.scan(ctx, dy, n_positions * width, "embedding upstream gradient")
     var ids = afn_upload_i32(ctx, ids_ptr, n_positions)
-    var dw = afn_scratch_f32(own, ctx, cells)
+    var dw = afn_scratch_f32(ctx, cells)
     var ints = List[DeviceBuffer[DType.int32]]()
     afn_embedding_backward_into(
         ctx, dw, dy, ids, admit, ints, n_positions, vocab, width, True
@@ -471,7 +440,6 @@ def afn_embedding_backward_host(
     ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
     admit.finish(ctx)
     ctx.synchronize()
-    arena.close()
     admit.check()
     _ = dy^
     _ = ids^
@@ -502,20 +470,17 @@ def afn_rms_norm_forward_host(
     comptime if not AFN_SAMBA_DEVICE_ADMIT:
         _refuse_nonfinite_host("rms_norm input", x_ptr, cells)
         _refuse_nonfinite_host("rms_norm weight", w_ptr, dm)
-    var arena = AfnArena()
-    var own = arena.own()
     var admit = AfnAdmit(ctx)
-    var x = afn_upload_f32(own, ctx, x_ptr, cells)
-    var w = afn_upload_f32(own, ctx, w_ptr, dm)
+    var x = afn_upload_f32(ctx, x_ptr, cells)
+    var w = afn_upload_f32(ctx, w_ptr, dm)
     admit.scan(ctx, x, cells, "rms_norm input")
     admit.scan(ctx, w, dm, "rms_norm weight")
-    var y = afn_scratch_f32(own, ctx, cells)
-    var sumsq = afn_scratch_f32(own, ctx, m)
+    var y = afn_scratch_f32(ctx, cells)
+    var sumsq = afn_scratch_f32(ctx, m)
     llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
     ctx.enqueue_copy(dst_ptr=y_ptr, src_buf=y)
     admit.finish(ctx)
     ctx.synchronize()
-    arena.close()
     admit.check()
     _ = x^
     _ = w^
@@ -526,7 +491,6 @@ def afn_rms_norm_forward_host(
 
 
 def _rms_norm_backward_resident(
-    own: Optional[ArenaPtr],
     ctx: DeviceContext,
     mut dx: DeviceBuffer[DType.float32],
     mut dw: DeviceBuffer[DType.float32],
@@ -543,12 +507,12 @@ def _rms_norm_backward_resident(
     the forward's; its scratch is appended to `keep` (alive past the
     caller's wait). The ones vector is a device fill, not a host loop."""
     var cells = m * dm
-    var dot_out = afn_scratch_f32(own, ctx, m)
-    var dh = afn_scratch_f32(own, ctx, cells)
-    var dprod = afn_scratch_f32(own, ctx, cells)
-    var rstd = afn_scratch_f32(own, ctx, m)
-    var dvcoef = afn_scratch_f32(own, ctx, m)
-    var ones = afn_scratch_f32(own, ctx, m)
+    var dot_out = afn_scratch_f32(ctx, m)
+    var dh = afn_scratch_f32(ctx, cells)
+    var dprod = afn_scratch_f32(ctx, cells)
+    var rstd = afn_scratch_f32(ctx, m)
+    var dvcoef = afn_scratch_f32(ctx, m)
+    var ones = afn_scratch_f32(ctx, m)
     ones.enqueue_fill(Float32(1.0))
     bwd_rms_norm[0](
         ctx, dot_out, dx, dw, dh, dprod, rstd, dvcoef, ones, dy, x, w, sumsq,
@@ -580,27 +544,24 @@ def afn_rms_norm_backward_host(
         _refuse_nonfinite_host("rms_norm input", x_ptr, cells)
         _refuse_nonfinite_host("rms_norm weight", w_ptr, dm)
         _refuse_nonfinite_host("rms_norm upstream gradient", dy_ptr, cells)
-    var arena = AfnArena()
-    var own = arena.own()
     var admit = AfnAdmit(ctx)
-    var x = afn_upload_f32(own, ctx, x_ptr, cells)
-    var w = afn_upload_f32(own, ctx, w_ptr, dm)
-    var dy = afn_upload_f32(own, ctx, dy_ptr, cells)
+    var x = afn_upload_f32(ctx, x_ptr, cells)
+    var w = afn_upload_f32(ctx, w_ptr, dm)
+    var dy = afn_upload_f32(ctx, dy_ptr, cells)
     admit.scan(ctx, x, cells, "rms_norm input")
     admit.scan(ctx, w, dm, "rms_norm weight")
     admit.scan(ctx, dy, cells, "rms_norm upstream gradient")
-    var y = afn_scratch_f32(own, ctx, cells)
-    var sumsq = afn_scratch_f32(own, ctx, m)
-    var dx = afn_scratch_f32(own, ctx, cells)
-    var dw = afn_scratch_f32(own, ctx, dm)
+    var y = afn_scratch_f32(ctx, cells)
+    var sumsq = afn_scratch_f32(ctx, m)
+    var dx = afn_scratch_f32(ctx, cells)
+    var dw = afn_scratch_f32(ctx, dm)
     var keep = List[DeviceBuffer[DType.float32]]()
     llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
-    _rms_norm_backward_resident(own, ctx, dx, dw, dy, x, w, sumsq, keep, m, dm, eps)
+    _rms_norm_backward_resident(ctx, dx, dw, dy, x, w, sumsq, keep, m, dm, eps)
     ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx)
     ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
     admit.finish(ctx)
     ctx.synchronize()
-    arena.close()
     admit.check()
     _ = x^
     _ = w^
@@ -722,7 +683,6 @@ def _afn_head_backward_b_into(
 
 
 def _head_loss_resident(
-    own: Optional[ArenaPtr],
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
     row_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -747,16 +707,16 @@ def _head_loss_resident(
     then both head backward GEMMs into `da` and `dw`. The logits come down
     for the host scan only without the admit define. Returns `count`."""
     var cells = m * n
-    var c = afn_scratch_f32(own, ctx, cells)
+    var c = afn_scratch_f32(ctx, cells)
     # lane w2-epi (MOJOLEARN_AFN_SAMBA_HEAD_GEMM): the matrix-unit kernel,
     # no workspace; afn-samba's spelling if it declines or the switch is off.
     comptime if AFN_SAMBA_HEAD_GEMM:
         if not afn_head_gemm_into(ctx, c, a, w, m, n, k, OP_NT):
-            var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
+            var ws = afn_scratch_f32(ctx, identical_gemm_workspace_max_floats(m, n, k))
             identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
             keep.append(ws^)
     else:
-        var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
+        var ws = afn_scratch_f32(ctx, identical_gemm_workspace_max_floats(m, n, k))
         identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
         keep.append(ws^)
 
@@ -784,7 +744,7 @@ def _head_loss_resident(
     _ = h_targets^
 
     ints.append(afn_upload_i32(ctx, targets_ptr, m))
-    var dc = afn_scratch_f32(own, ctx, cells)
+    var dc = afn_scratch_f32(ctx, cells)
     identical_ce_loss_resident(
         ctx, loss_ptr, row_ptr, dc, c, ints[len(ints) - 1], m, count, reduction, 1, cfg,
     )
@@ -793,22 +753,22 @@ def _head_loss_resident(
     comptime if AFN_SAMBA_HEAD_GEMM:
         if not _afn_head_backward_a_into(ctx, da, dc, w, m, n, k, OP_NT):
             var ws_a = afn_scratch_f32(
-                own, ctx, identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
+                ctx, identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
             )
             identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
             keep.append(ws_a^)
         if not _afn_head_backward_b_into(ctx, dw, dc, a, m, n, k, OP_NT):
             var ws_b = afn_scratch_f32(
-                own, ctx, identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
+                ctx, identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
             )
             identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
             keep.append(ws_b^)
     else:
         var ws_a = afn_scratch_f32(
-            own, ctx, identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
+            ctx, identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
         )
         var ws_b = afn_scratch_f32(
-            own, ctx, identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
+            ctx, identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
         )
         identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
         identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
@@ -841,26 +801,23 @@ def afn_head_loss_host(
     comptime if not AFN_SAMBA_DEVICE_ADMIT:
         _refuse_nonfinite_host("linear input", a_ptr, m * k)
         _refuse_nonfinite_host("linear weight", w_ptr, n * k)
-    var arena = AfnArena()
-    var own = arena.own()
     var admit = AfnAdmit(ctx)
-    var a = afn_upload_f32(own, ctx, a_ptr, m * k)
-    var w = afn_upload_f32(own, ctx, w_ptr, n * k)
+    var a = afn_upload_f32(ctx, a_ptr, m * k)
+    var w = afn_upload_f32(ctx, w_ptr, n * k)
     admit.scan(ctx, a, m * k, "linear input")
     admit.scan(ctx, w, n * k, "linear weight")
-    var da = afn_scratch_f32(own, ctx, m * k)
-    var dw = afn_scratch_f32(own, ctx, n * k)
+    var da = afn_scratch_f32(ctx, m * k)
+    var dw = afn_scratch_f32(ctx, n * k)
     var keep = List[DeviceBuffer[DType.float32]]()
     var ints = List[DeviceBuffer[DType.int32]]()
     var count = _head_loss_resident(
-        own, ctx, loss_ptr, row_ptr, da, dw, a, w, targets_ptr, admit, keep, ints,
+        ctx, loss_ptr, row_ptr, da, dw, a, w, targets_ptr, admit, keep, ints,
         m, n, k, ignore_index, reduction, num_items, label_smoothing,
     )
     ctx.enqueue_copy(dst_ptr=da_ptr, src_buf=da)
     ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
     admit.finish(ctx)
     ctx.synchronize()
-    arena.close()
     admit.check()
     _ = a^
     _ = w^
@@ -920,35 +877,32 @@ def afn_tail_train_host(
             _refuse_nonfinite_host("rms_norm input", x_ptr, cells)
             _refuse_nonfinite_host("rms_norm weight", nw_ptr, k)
             _refuse_nonfinite_host("linear weight", hw_ptr, n * k)
-        var arena = AfnArena()
-        var own = arena.own()
         var admit = AfnAdmit(ctx)
-        var x = afn_upload_f32(own, ctx, x_ptr, cells)
-        var nw = afn_upload_f32(own, ctx, nw_ptr, k)
-        var hw = afn_upload_f32(own, ctx, hw_ptr, n * k)
+        var x = afn_upload_f32(ctx, x_ptr, cells)
+        var nw = afn_upload_f32(ctx, nw_ptr, k)
+        var hw = afn_upload_f32(ctx, hw_ptr, n * k)
         admit.scan(ctx, x, cells, "rms_norm input")
         admit.scan(ctx, nw, k, "rms_norm weight")
         admit.scan(ctx, hw, n * k, "linear weight")
-        var hn = afn_scratch_f32(own, ctx, cells)
-        var sumsq = afn_scratch_f32(own, ctx, m)
+        var hn = afn_scratch_f32(ctx, cells)
+        var sumsq = afn_scratch_f32(ctx, m)
         llama_rms_norm(ctx, sumsq, hn, x, nw, m, k, eps)
-        var dhn = afn_scratch_f32(own, ctx, cells)
-        var dhw = afn_scratch_f32(own, ctx, n * k)
+        var dhn = afn_scratch_f32(ctx, cells)
+        var dhw = afn_scratch_f32(ctx, n * k)
         var keep = List[DeviceBuffer[DType.float32]]()
         var ints = List[DeviceBuffer[DType.int32]]()
         var count = _head_loss_resident(
-            own, ctx, loss_ptr, row_ptr, dhn, dhw, hn, hw, targets_ptr, admit, keep, ints,
+            ctx, loss_ptr, row_ptr, dhn, dhw, hn, hw, targets_ptr, admit, keep, ints,
             m, n, k, ignore_index, reduction, num_items, label_smoothing,
         )
-        var dx = afn_scratch_f32(own, ctx, cells)
-        var dnw = afn_scratch_f32(own, ctx, k)
-        _rms_norm_backward_resident(own, ctx, dx, dnw, dhn, x, nw, sumsq, keep, m, k, eps)
+        var dx = afn_scratch_f32(ctx, cells)
+        var dnw = afn_scratch_f32(ctx, k)
+        _rms_norm_backward_resident(ctx, dx, dnw, dhn, x, nw, sumsq, keep, m, k, eps)
         ctx.enqueue_copy(dst_ptr=dh_ptr, src_buf=dx)
         ctx.enqueue_copy(dst_ptr=dnw_ptr, src_buf=dnw)
         ctx.enqueue_copy(dst_ptr=dhw_ptr, src_buf=dhw)
         admit.finish(ctx)
         ctx.synchronize()
-        arena.close()
         admit.check()
         _ = x^
         _ = nw^
@@ -991,15 +945,13 @@ def afn_embedding_backward_tied_host(
         comptime if not AFN_SAMBA_DEVICE_ADMIT:
             _refuse_nonfinite_host("embedding upstream gradient", dy_ptr, n_positions * width)
             _refuse_nonfinite_host("accumulate parts", pair_ptr, cells)
-        var arena = AfnArena()
-        var own = arena.own()
         var admit = AfnAdmit(ctx)
-        var dy = afn_upload_f32(own, ctx, dy_ptr, n_positions * width)
+        var dy = afn_upload_f32(ctx, dy_ptr, n_positions * width)
         admit.scan(ctx, dy, n_positions * width, "embedding upstream gradient")
         var ids = afn_upload_i32(ctx, ids_ptr, n_positions)
-        var pair = afn_upload_f32(own, ctx, pair_ptr, cells)
+        var pair = afn_upload_f32(ctx, pair_ptr, cells)
         admit.scan(ctx, pair, cells, "accumulate parts")
-        var dw = afn_scratch_f32(own, ctx, cells)
+        var dw = afn_scratch_f32(ctx, cells)
         var ints = List[DeviceBuffer[DType.int32]]()
         comptime if AFN_SAMBA_EMB_ATOMIC:
             afn_embedding_backward_into(
@@ -1018,7 +970,6 @@ def afn_embedding_backward_tied_host(
             ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
         admit.finish(ctx)
         ctx.synchronize()
-        arena.close()
         admit.check()
         _ = dy^
         _ = ids^

@@ -964,6 +964,9 @@ struct ByteTrainer(Movable):
     var config: ByteConfig
     #: the session's arena (core/device_arena.mojo): its constructors' buffers are views of its chunks
     var arena: DeviceArena
+    #: the arena of the resident logits scratch the session's slot keeps (training/byte_lm_logits.mojo
+    #: `byte_logits_resident`): rewound at each rebuild, so a rebuild takes no pool lock unless it grows
+    var logits_arena: DeviceArena
     var buffers: ByteBuffers
     var weights: List[LlamaDeviceWeights]
     var rope: LlamaRopeTable
@@ -1026,6 +1029,7 @@ struct ByteTrainer(Movable):
             self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True, arena=ap))
             self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True, arena=ap))
         self.arena = arena^
+        self.logits_arena = DeviceArena()
         step_count_sync()
         ctx.synchronize()
         # lane box-run-2-fix: the state's per-parameter predicates (finite

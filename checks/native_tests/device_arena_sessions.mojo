@@ -14,6 +14,8 @@ and run the same `take` / `arena_buffer` / `release` code the Apple column runs;
                                between rounds), each session's words equal to the same session run alone first
     test_sessions_interleaved  two arenas alive at once on one context, views taken in alternation: each arena
                                holds its own chunk and each session's words equal its words alone
+    test_arena_rewind          one owner's passes, rewound between them: no chunk taken after the first pass, each
+                               pass's words equal its words alone
     test_arena_off             an arena that is off gives no handle; `arena_buffer` then allocates a fresh buffer
 """
 from std.testing import TestSuite
@@ -156,6 +158,39 @@ def test_sessions_interleaved() raises:
     b.release()
     _ = a^
     _ = b^
+    _ = ctx^
+
+
+def test_arena_rewind() raises:
+    """An owner rebuilt every pass rewinds its arena: the next pass carves the chunks it already holds (no chunk
+    taken from the pool, so no pool lock), and its words are its own."""
+    var ctx = DeviceContext()
+    var want = _session(ctx, 3)
+    var arena = DeviceArena(on=True)
+    var ap = arena_ptr(arena)
+    var held_first = 0
+    for rnd in range(4):  # driver-loop: passes of one owner
+        if rnd > 0:
+            arena.rewind()
+        var views = List[DeviceBuffer[DType.float32]]()
+        for j in range(_VIEWS):  # small-loop(fixture: the pass's views)
+            var n = _size(3, j)
+            var buf = arena_buffer(ctx, n, ap)
+            _fill(ctx, buf, 3, j, n)
+            views.append(buf^)
+        var got = List[Float32]()
+        for j in range(_VIEWS):  # small-loop(fixture: the pass's views)
+            _read(ctx, views[j], _size(3, j), got)
+        _same(got, want, "pass " + String(rnd))
+        if rnd == 0:
+            held_first = len(arena.held)
+        require(len(arena.held) == held_first, "pass " + String(rnd) + " holds " + String(len(arena.held))
+            + " chunks, the first pass " + String(held_first) + ": a rewound pass took a chunk from the pool")
+        _ = views^
+    require(held_first >= 1, "the arena holds a chunk")
+    arena.release()
+    require(len(arena.held) == 0, "a released arena holds no chunk")
+    _ = arena^
     _ = ctx^
 
 

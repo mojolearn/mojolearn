@@ -53,37 +53,40 @@ comptime AFN_M3_BWD_ARENA = (
 
 
 struct _AfnM3Arena(Movable):
-    """The pass's own arena under MOJOLEARN_AFN_MAMBA3_BWD_ARENA (a
-    `DeviceArena` of core/device_arena.mojo, created only under the define):
-    its chunks go back to the pool at `close` after the pass's wait, or when
-    this struct is destroyed. Nothing in every other build. Lane
-    arena-session (2026-11-23): was a bracket on the one process-wide active
-    arena, left open from the scratch's construction to the walk's end, so
-    any other thread's allocations in between took views of it."""
+    """The pass's handle to its OWNER's arena under
+    MOJOLEARN_AFN_MAMBA3_BWD_ARENA (a `DeviceArena` of core/device_arena.mojo
+    that the Samba session keeps for its Mamba-3 layers): `close` after the
+    pass's wait REWINDS it, so the next layer and the next step carve the
+    same chunks again with no pool lock. Without an owner (a caller with no
+    session), or in every other build, it is None and every scratch is a
+    fresh buffer. Lane arena-session (2026-11-23): was a bracket on the one
+    process-wide active arena, left open from the scratch's construction to
+    the walk's end, so any other thread's allocations in between took views
+    of it."""
 
-    var arena: Optional[DeviceArena]
+    var arena: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]
     #: scratch the AFN arms enqueue work on, kept alive past the pass's wait
     var keep: List[DeviceBuffer[DType.float32]]
 
-    def __init__(out self) raises:
+    def __init__(out self, owner: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]) raises:
         self.arena = None
         self.keep = List[DeviceBuffer[DType.float32]]()
         comptime if AFN_M3_BWD_ARENA:
-            self.arena = DeviceArena()
+            self.arena = owner
 
-    def own(mut self) -> Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]:
-        """The handle `_m3_scratch` takes: None unless the define made an
-        arena that is on. The caller keeps this struct in place while it
-        takes views (a local, or the field of a struct it does not move)."""
-        comptime if AFN_M3_BWD_ARENA:
-            if self.arena and self.arena.value().on:
-                return UnsafePointer(to=self.arena.value()).unsafe_origin_cast[MutAnyOrigin]()
-        return None
+    def own(self) -> Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]:
+        """The handle `_m3_scratch` takes: None unless the define is on and
+        the pass has an owner's arena."""
+        return self.arena
 
     def close(mut self) raises:
+        """After the pass's wait: every view is done, the owner's arena
+        rewinds (no lock, no chunk changes hands)."""
         comptime if AFN_M3_BWD_ARENA:
             if self.arena:
-                self.arena.value().release()
+                self.keep = List[DeviceBuffer[DType.float32]]()
+                var p = self.arena.value()
+                p[].rewind()
 
 
 @always_inline

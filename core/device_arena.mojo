@@ -15,13 +15,14 @@ step launches about 560 kernels: on the M3 Ultra the same attention kernel
 read 4.6 ms inside a lone block and 11.6 ms inside the session, and every
 small stage read 5-20x its AMD time.
 
-So a session owns a `DeviceArena` and, while it constructs, hands the
-allocation helpers (`_zeros` / `_upload` of modeling_llama,
-transformer_backward and train_loop, the AFN scratch helpers) a pointer to
-it (`arena_ptr`): those calls take views of the arena's chunks instead of
-fresh buffers. A call without the pointer (every step, every other caller)
-allocates a fresh buffer and never looks at any arena. Two sessions that
-construct at the same time each carve their own arena.
+So a stateful owner (a byte-LM trainer, its logits scratch slot, a Samba
+session's Mamba-3 backward) owns a `DeviceArena` and hands the allocation
+helpers (`_zeros` / `_upload` of modeling_llama, transformer_backward and
+train_loop, `_m3_scratch`) a pointer to it (`arena_ptr`): those calls take
+views of the arena's chunks instead of fresh buffers. A call without the
+pointer (every caller with no such owner) allocates a fresh buffer and
+never looks at any arena. Two owners at the same time each carve their own
+arena; an owner rebuilt every step rewinds its arena (no lock).
 
 Until 2026-11-23 the arena was ONE process-wide "active session" that every
 helper consulted on every call (a slot lookup per allocation): two sessions
@@ -30,9 +31,9 @@ constructed, took views of each other's arena and released each other's
 chunks. That global, its session ids, `arena_begin` / `arena_end` /
 `arena_active` / `arena_take` and the per-call lookup are deleted.
 
-The CHUNKS stay in a process pool, locked only when an arena takes or
-returns a chunk (at a session's construction and teardown, never on a
-step): a view does not own its chunk (mamba/impl/modules/afn_arena.mojo's
+The CHUNKS stay in a process pool, locked only when an arena grows or
+returns its chunks (an owner's construction, its first pass at a larger
+shape, its teardown; never a rewound step): a view does not own its chunk (mamba/impl/modules/afn_arena.mojo's
 lifetime rule), so a chunk is never freed while a view of it may be alive;
 an arena's release marks its chunks free for the next arena on the same
 context (the same stream, so the next arena's fills are ordered after the
@@ -138,20 +139,27 @@ def _chunks_release(held: List[Int]) raises:
 
 
 struct DeviceArena(Movable):
-    """One session's arena: the chunks it holds and its fill point. The
-    session constructs it first, passes `arena_ptr(arena)` to the helpers
-    that build its buffers, and keeps it as a field; its destructor (or
-    `release`) returns the chunks to the pool. Off (`on` False: every
-    column but Apple, or `-D MOJOLEARN_DEVICE_ARENA_OFF`) it holds nothing
-    and `arena_ptr` gives None."""
+    """One owner's arena: the pool chunks it holds and its fill point. The
+    owner (a session, a trainer, a block's driver) constructs it, passes
+    `arena_ptr(arena)` to the helpers that build its buffers, and keeps it
+    as a field. An owner whose buffers are rebuilt every step `rewind`s it
+    instead of releasing it: the next pass carves the same chunks again from
+    their start, with no pool lock (the chunks stay on the owner's context,
+    so the next pass's writes queue after the last pass's work on the same
+    stream). The pool lock is taken only when the arena GROWS (a take that
+    no held chunk fits) and when it is released or destroyed. Off (`on`
+    False: every column but Apple, or `-D MOJOLEARN_DEVICE_ARENA_OFF`) it
+    holds nothing and `arena_ptr` gives None."""
 
     var on: Bool
-    #: pool indices of the chunks this arena holds
+    #: pool indices of the chunks this arena holds, in the order taken
     var held: List[Int]
-    #: the chunk views are taken from (0 or 1 entry)
-    var cur: List[DeviceBuffer[DType.float32]]
-    var cur_n: Int
-    var cur_key: Int
+    #: references to those chunks, their floats and their context keys
+    var chunks: List[DeviceBuffer[DType.float32]]
+    var chunk_n: List[Int]
+    var chunk_key: List[Int]
+    #: the chunk views are taken from (an index into `chunks`, -1: none yet)
+    var cur: Int
     var off: Int
     var views: Int
 
@@ -159,9 +167,10 @@ struct DeviceArena(Movable):
         """An arena that is on exactly when DEVICE_ARENA_ON."""
         self.on = DEVICE_ARENA_ON
         self.held = List[Int]()
-        self.cur = List[DeviceBuffer[DType.float32]]()
-        self.cur_n = 0
-        self.cur_key = 0
+        self.chunks = List[DeviceBuffer[DType.float32]]()
+        self.chunk_n = List[Int]()
+        self.chunk_key = List[Int]()
+        self.cur = -1
         self.off = 0
         self.views = 0
 
@@ -170,15 +179,17 @@ struct DeviceArena(Movable):
         column, where DEVICE_ARENA_ON is False)."""
         self.on = on
         self.held = List[Int]()
-        self.cur = List[DeviceBuffer[DType.float32]]()
-        self.cur_n = 0
-        self.cur_key = 0
+        self.chunks = List[DeviceBuffer[DType.float32]]()
+        self.chunk_n = List[Int]()
+        self.chunk_key = List[Int]()
+        self.cur = -1
         self.off = 0
         self.views = 0
 
     def take(mut self, ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
         """A view of `n` floats (at least 1): the current chunk when it fits
-        and is on `ctx`, else a chunk from the pool."""
+        and is on `ctx`, else the next held chunk that does, else a new
+        chunk from the pool (the only path that takes the pool lock)."""
         if not self.on:
             raise Error("device arena: take from an arena that is off")
         var want = n
@@ -186,21 +197,34 @@ struct DeviceArena(Movable):
             want = 1
         var need = ((want + ARENA_ALIGN_FLOATS - 1) // ARENA_ALIGN_FLOATS) * ARENA_ALIGN_FLOATS
         var key = ctx_cache_key(ctx)
-        if len(self.cur) == 0 or self.off + need > self.cur_n or self.cur_key != key:
-            var index = -1
-            var chunk = _chunk_acquire(ctx, key, need, index)
-            self.held.append(index)
-            self.cur_n = len(chunk)
-            self.cur_key = key
+        var fits = self.cur >= 0 and self.chunk_key[self.cur] == key and self.off + need <= self.chunk_n[self.cur]
+        if not fits:
+            var pick = -1
+            for i in range(self.cur + 1, len(self.chunks)):  # small-loop(chunks: this arena's chunks): a handful of chunk handles, no data
+                if self.chunk_key[i] == key and self.chunk_n[i] >= need:
+                    pick = i
+                    break
+            if pick < 0:
+                var index = -1
+                var chunk = _chunk_acquire(ctx, key, need, index)
+                self.held.append(index)
+                self.chunk_n.append(len(chunk))
+                self.chunk_key.append(key)
+                self.chunks.append(chunk^)
+                pick = len(self.chunks) - 1
+            self.cur = pick
             self.off = 0
-            if len(self.cur) == 0:
-                self.cur.append(chunk^)
-            else:
-                self.cur[0] = chunk^
-        var view = self.cur[0].create_sub_buffer[DType.float32](self.off, want)
+        var view = self.chunks[self.cur].create_sub_buffer[DType.float32](self.off, want)
         self.off += need
         self.views += 1
         return view^
+
+    def rewind(mut self):
+        """Carve the held chunks again from their start. The caller has
+        finished with every view taken since the last rewind (its pass is
+        over); no lock, no chunk changes hands."""
+        self.cur = -1
+        self.off = 0
 
     def release(mut self) raises:
         """Return this arena's chunks to the pool now (the views already
@@ -208,8 +232,10 @@ struct DeviceArena(Movable):
         if len(self.held) > 0:
             _chunks_release(self.held)
         self.held = List[Int]()
-        self.cur = List[DeviceBuffer[DType.float32]]()
-        self.cur_n = 0
+        self.chunks = List[DeviceBuffer[DType.float32]]()
+        self.chunk_n = List[Int]()
+        self.chunk_key = List[Int]()
+        self.cur = -1
         self.off = 0
 
     def stats(self) -> List[Int]:

@@ -268,20 +268,27 @@ def mamba_proj_gemm(
 
 
 struct DeviceArena(Movable):
-    """One session's arena: the chunks it holds and its fill point. The
-    session constructs it first, passes `arena_ptr(arena)` to the helpers
-    that build its buffers, and keeps it as a field; its destructor (or
-    `release`) returns the chunks to the pool. Off (`on` False: every
-    column but Apple, or `-D MOJOLEARN_DEVICE_ARENA_OFF`) it holds nothing
-    and `arena_ptr` gives None."""
+    """One owner's arena: the pool chunks it holds and its fill point. The
+    owner (a session, a trainer, a block's driver) constructs it, passes
+    `arena_ptr(arena)` to the helpers that build its buffers, and keeps it
+    as a field. An owner whose buffers are rebuilt every step `rewind`s it
+    instead of releasing it: the next pass carves the same chunks again from
+    their start, with no pool lock (the chunks stay on the owner's context,
+    so the next pass's writes queue after the last pass's work on the same
+    stream). The pool lock is taken only when the arena GROWS (a take that
+    no held chunk fits) and when it is released or destroyed. Off (`on`
+    False: every column but Apple, or `-D MOJOLEARN_DEVICE_ARENA_OFF`) it
+    holds nothing and `arena_ptr` gives None."""
 
     var on: Bool
-    #: pool indices of the chunks this arena holds
+    #: pool indices of the chunks this arena holds, in the order taken
     var held: List[Int]
-    #: the chunk views are taken from (0 or 1 entry)
-    var cur: List[DeviceBuffer[DType.float32]]
-    var cur_n: Int
-    var cur_key: Int
+    #: references to those chunks, their floats and their context keys
+    var chunks: List[DeviceBuffer[DType.float32]]
+    var chunk_n: List[Int]
+    var chunk_key: List[Int]
+    #: the chunk views are taken from (an index into `chunks`, -1: none yet)
+    var cur: Int
     var off: Int
     var views: Int
 
@@ -295,6 +302,10 @@ struct DeviceArena(Movable):
 
     def take(mut self, ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
         abort("mamba host: device-only DeviceArena.take is disabled")
+
+
+    def rewind(mut self):
+        abort("mamba host: device-only DeviceArena.rewind is disabled")
 
 
     def release(mut self) raises:
