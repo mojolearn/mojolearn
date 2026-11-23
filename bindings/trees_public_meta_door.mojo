@@ -90,7 +90,7 @@ from core.member_abi import (
     MEMBER_CAN_DECISION, MEMBER_CAN_PREDICT_PROBA, member_kind_capabilities,
 )
 from core.member_set_run import MEMBER_SET_TURN_HELD, member_set_first_failure
-from core.member_families import MEMBER_FAMILY_GP
+from core.member_families import MEMBER_FAMILY_GP, MEMBER_FAMILY_ENSEMBLE
 from core.admitted_rows_plan import admitted_rows_shape
 from xtrees.trees_calibrated_fit_run import (
     CalFitPlan, CalFitOut, CalPlace, CAL_ALL_ANSWERED, CAL_FIT_FAILED, calibrated_fit_run, cal_fold_place,
@@ -2981,15 +2981,24 @@ struct _CalUnits(Movable):
     its member PREDICT doors gather the fold's test rows on the device,
     which a member call cannot; one fold at a time on the calling thread);
     and a base the set does not serve (`_CAL_NOT_MEMBER`: a class with no
-    member mark, CategoricalNB's door included where its kind is not
-    admitted, a meta-estimator base (no meta member kind: lane mf-cal3b's
-    result says why), a configuration its family's admit leaves to the
-    estimator's door (a class_weight that is neither None, 'balanced' nor
-    an exact dict, which that door refuses in its words; a GP kernel the
-    member cannot address, ...), or a member kind with no native scoring
-    call). Lane mf-adm3: class_weight 'balanced' and dict (logistic,
-    LinearSVC, SVC, SGD*, RidgeClassifier, LogisticRegressionCV) and
-    kernel='precomputed' (SVC, KernelRidge) are native members now. The threads stay for the second kind: those folds are
+    member mark (AdaBoostClassifier, MultiOutputClassifier, GridSearchCV,
+    RandomizedSearchCV: no META kind, see core/ensemble_member.mojo),
+    CategoricalNB's door included where its kind is not admitted, a
+    meta-estimator base whose META admit keeps its door (since lane
+    mf-meta3b Voting, Stacking, OneVsRest, CalibratedClassifierCV and
+    Bagging bases are META members; still the door's: a Bagging
+    configuration that may take the batched forest route, a Calibrated base
+    with a non-int cv or a DeviceRows base, a Stacking base with a splitter
+    cv, a meta whose nested estimator is itself a meta: nested members are
+    admitted through the leaf dispatch only), a configuration its family's
+    admit leaves to the estimator's door (a class_weight that is neither
+    None, 'balanced' nor an exact dict, which that door refuses in its
+    words; a GP kernel the member cannot address, ...), or a member kind
+    with no native scoring call; a hard VotingClassifier is refused natively
+    in scikit-learn's words, lane mf-meta3b). Lane mf-adm3: class_weight
+    'balanced' and dict (logistic, LinearSVC, SVC, SGD*, RidgeClassifier,
+    LogisticRegressionCV) and kernel='precomputed' (SVC, KernelRidge) are
+    native members now. The threads stay for the second kind: those folds are
     independent units whose fit doors release the GIL, on n_jobs threads.
     REMOVED (lane mf-cal3): `only()` / `todo` and the per-fold native fit
     retry (`k`): no fold of a served base reaches a door now. Lane mf-cal3b:
@@ -3342,7 +3351,18 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     # predict_proba where a soft one has). One state minted, asked and
     # released per fit.
     var scoring = MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA
-    if not set.run.plans[0].member.can(scoring) or (member_kind_capabilities(set.run.plans[0]) & scoring) == 0:
+    var kind_mask = member_kind_capabilities(set.run.plans[0])
+    var first = set.run.plans[0].copy()
+    if (first.family == MEMBER_FAMILY_ENSEMBLE and len(first.params) > 2 and Int(first.params[0]) == 0
+            and first.params[2] == 0.0 and (kind_mask & (MEMBER_CAN_DECISION | MEMBER_CAN_PREDICT_PROBA)) == 0):
+        # A hard VotingClassifier base (META kind 0, soft word 0; lane
+        # mf-meta3b): it has neither decision_function nor predict_proba, so
+        # scikit-learn 1.9's `_check_response_method` refuses it
+        # (calibration.py, before any fit for ensemble=False, after the first
+        # fold's fit for ensemble=True: the same words), in its words.
+        raise Error("AttributeError: " + String(py_type(base).__name__)
+                    + " has none of the following attributes: decision_function, predict_proba.")
+    if not set.run.plans[0].member.can(scoring) or (kind_mask & scoring) == 0:
         return _CAL_NOT_MEMBER  # its kind has no native call for the scores: its fit doors fit every fold
     # A fold with no train or no test rows (only a user's cv iterable makes
     # one): scikit-learn's check_array refusal, raised by that fold's

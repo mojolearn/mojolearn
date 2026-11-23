@@ -24,6 +24,23 @@ intercept_ where they have them):
   * hard VotingClassifier as a calibration base (no predict_proba: the door units still answer: equal words);
   * GridSearchCV(VotingClassifier soft, {"weights": [[1, 1], [1, 2]]}, cv 3): best_params_, predict_proba.
 
+(B, lane mf-meta3b, base = origin/lane/member-fits 82eb3f39ea, head = lane/mf-meta3b) the UNIT KINDS
+(OneVsRestClassifier, CalibratedClassifierCV, BaggingClassifier / BaggingRegressor) and the stacking cases:
+  * CalibratedClassifierCV(base) for base in {OneVsRest(lr), CalibratedClassifierCV(lr, cv 3), Bagging(RF 5 trees,
+    4 members, max_samples 0.8, bootstrap_features)} x method x ensemble x n_jobs {1, 4};
+  * GridSearchCV(Bagging(RF), {"n_estimators": [2, 3]}, cv 3) and GridSearchCV(OneVsRest(lr), {"n_jobs": [1, 2]}):
+    the best estimator refitted through its META member;
+  * Kernel / Permutation SHAP over OneVsRest(lr) and over Bagging(RF): the explained model's own META member;
+  * IterativeImputer(estimator=BaggingRegressor(RF regressor), max_iter 2);
+  * VotingClassifier([("s", StackingClassifier(lr, lda, cv=<index list>)), ("lr", lr)]) and the same with
+    stack_method='predict', and Bagging(RF, oob_score=True) inside a VotingClassifier (the door vote fits its
+    members as one native set: the Stacking and Bagging members as META units).
+EVERY (B) line must be equal except: `cal_hard_*` (the hard vote base is now refused in scikit-learn's words,
+"AttributeError: VotingClassifier has none of the following attributes: decision_function, predict_proba.") and
+`vote_stack_predict_*`, `vote_stack_usercv_*` when the base raised (a user index list and stack_method='predict' on
+a classifier now fit natively; before, the door's own fit answered: equal words expected there too, a differing
+line is a defect).
+
 The configurations are independent: one process each across the host cores.
 
     python tools/mf_meta3_digests.py > digests.txt
@@ -95,7 +112,34 @@ def _configs():
                     rows.append(("cal", base, method, ensemble, jobs))
     rows += [("nested_vote",), ("stack_of_vote",), ("shap", "K"), ("shap", "P"), ("iterimp", "vote"),
              ("iterimp", "stack"), ("search",)]
+    # (B) lane mf-meta3b
+    for base in ("ovr", "calib", "bag"):
+        for method in ("sigmoid", "isotonic"):
+            for ensemble in (True, False):
+                for jobs in (1, 4):
+                    rows.append(("unitcal", base, method, ensemble, jobs))
+    rows += [("unitsearch", "bag"), ("unitsearch", "ovr"), ("unitshap", "ovr", "K"), ("unitshap", "ovr", "P"),
+             ("unitshap", "bag", "K"), ("unitshap", "bag", "P"), ("unititerimp",), ("vote", "stack_usercv"),
+             ("vote", "stack_predict"), ("vote", "bag_oob")]
     return rows
+
+
+def _bag(ml, **kw):
+    return ml.BaggingClassifier(ml.RandomForestClassifier(n_estimators=5, random_state=0), n_estimators=4,
+                                max_samples=0.8, random_state=0, **kw)
+
+
+def _unit_base(ml, name):
+    if name == "ovr":
+        return ml.OneVsRestClassifier(ml.LogisticRegression(max_iter=200))
+    if name == "calib":
+        return ml.CalibratedClassifierCV(ml.LogisticRegression(max_iter=200), cv=3)
+    return _bag(ml, bootstrap_features=True)
+
+
+def _index_cv(n, folds=3):
+    rows = np.arange(n)
+    return [(rows[rows % folds != f], rows[rows % folds == f]) for f in range(folds)]
 
 
 CONFIGS = _configs()
@@ -147,6 +191,52 @@ def _run(index):
             from mojolearn.model_selection import GridSearchCV
             model = GridSearchCV(_soft_vote(ml), {"weights": [[1, 1], [1, 2]]}, cv=3).fit(X, y)
             return [(tag + "_best", str(model.best_params_))] + _predicts(model, Xt, tag)
+        if row[0] == "unitcal":
+            _, base, method, ensemble, jobs = row
+            model = ml.CalibratedClassifierCV(_unit_base(ml, base), method=method, ensemble=ensemble, cv=3,
+                                              n_jobs=jobs).fit(X, y)
+            return _predicts(model, Xt, tag) + _members(model, tag)
+        if row[0] == "unitsearch":
+            from mojolearn.model_selection import GridSearchCV
+            if row[1] == "bag":
+                model = GridSearchCV(_bag(ml), {"n_estimators": [2, 3]}, cv=3).fit(X, y)
+            else:
+                model = GridSearchCV(_unit_base(ml, "ovr"), {"n_jobs": [1, 2]}, cv=3).fit(X, y)
+            return ([(tag + "_best", str(model.best_params_))] + _predicts(model, Xt, tag)
+                    + _members(model.best_estimator_, tag))
+        if row[0] == "unitshap":
+            model = (_unit_base(ml, "ovr") if row[1] == "ovr" else _bag(ml)).fit(X, y)
+            explainer = (ml.KernelExplainer if row[2] == "K" else ml.PermutationExplainer)(model, X[:20])
+            phi = np.asarray(explainer.shap_values(Xt[:5]))
+            return [(tag + "_values", _digest(phi)),
+                    (tag + "_expected", _digest(np.asarray(explainer.expected_value, dtype=np.float64)))]
+        if row[0] == "unititerimp":
+            Xr, _ = _data(11, 120, 0, d=5)
+            Xr = Xr.copy()
+            rng = np.random.default_rng(3)
+            Xr[rng.random(Xr.shape) < 0.15] = np.nan
+            est = ml.BaggingRegressor(ml.RandomForestRegressor(n_estimators=4, random_state=0), n_estimators=3,
+                                      max_samples=0.8, random_state=0)
+            imp = ml.IterativeImputer(estimator=est, max_iter=2, random_state=0).fit(Xr)
+            return [(tag + "_transform", _digest(imp.transform(Xr)))]
+        if row[0] == "vote":
+            if row[1] == "stack_usercv":
+                inner = ml.StackingClassifier([("lr", ml.LogisticRegression(max_iter=200)),
+                                               ("lda", ml.LinearDiscriminantAnalysis())], cv=_index_cv(len(X)))
+            elif row[1] == "stack_predict":
+                inner = ml.StackingClassifier([("lr", ml.LogisticRegression(max_iter=200)),
+                                               ("lda", ml.LinearDiscriminantAnalysis())], cv=3,
+                                              stack_method="predict")
+            else:
+                inner = _bag(ml, oob_score=True)
+            model = ml.VotingClassifier([("inner", inner), ("lr", ml.LogisticRegression(max_iter=200))],
+                                        voting="soft").fit(X, y)
+            out = _predicts(model, Xt, tag) + _members(model, tag)
+            for attr in ("oob_score_", "oob_decision_function_"):
+                v = getattr(model.estimators_[0], attr, None)
+                if v is not None:
+                    out.append((f"{tag}_{attr}", _digest(v)))
+            return out
     except Exception as e:  # noqa: BLE001 - the words are the digest
         return [(tag + "_raised", f"{type(e).__name__}: {e}")]
     return []
