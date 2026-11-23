@@ -61,6 +61,7 @@ from bindings.family_common_pack import (
     family_call,
     family_call_kw,
 )
+from bindings.msel_scorer_native_door import msel_scorer_no_number
 from bindings.msel_common_door import (
     msel_take_labels, msel_b, msel_n_samples, msel_admit, msel_entry, msel_try, msel_missed, msel_catch, msel_is_bool, msel_is_integral, msel_is_real, msel_int,
     msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr, msel_p64, msel_pf64,
@@ -954,7 +955,9 @@ struct MselUnitRun(Movable):
                     try:
                         test_value = msel_score_value(est, xte, yte, sc, self.context, test_memo, plans[k])
                     except error:
-                        if not msel_catch(error, b.Exception):
+                        # scikit-learn's `_score` raises a scorer's non-number
+                        # answer whatever the error_score (lane mf-score6)
+                        if not msel_catch(error, b.Exception) or msel_scorer_no_number(error):
                             raise error^
             self.test[u * self.n_keys + k] = test_value
             if self.return_train:
@@ -966,7 +969,7 @@ struct MselUnitRun(Movable):
                         try:
                             train_value = msel_score_value(est, xtr, ytr, sc, self.context, train_memo, plans[k])
                         except error:
-                            if not msel_catch(error, b.Exception):
+                            if not msel_catch(error, b.Exception) or msel_scorer_no_number(error):
                                 raise error^
                 self.train[u * self.n_keys + k] = train_value
         _ = test_memo^
