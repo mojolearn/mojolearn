@@ -61,8 +61,15 @@ words); they are read back as int32 labels, exactly.
 
 A MAKE_SCORER SCORER (lane mf-cluster5): a native `make_scorer` whose
 metric, kwargs and response method are a table row's is that row, its sign
-flipped when its greater_is_better differs (`msel_scorer_flip`: the code
-plus SCORER_FLIP).
+flipped when its greater_is_better differs.
+
+THE SCORER'S OPTIONS (lane mf-tail5b, one layout for every kwarg): the
+UNPACK reads a make_scorer's kwargs ONCE into `MselScorerOptions` (the sign
+flip, a given pos_label, top_k's k, fbeta's beta, zero_division and a
+`labels` list as class codes); the search kind carries them as one word
+group per scorer (`msel_scorer_group_words` / `msel_scorer_group_read`, the
+only writer and reader of that layout) and `msel_scorer_row` applies them to
+the table row. 'fbeta' is the F row of its average with its beta.
 
 A POS_LABEL THAT IS NOT ONE OF THE LABELS (lane mf-cluster5): the binary
 label scorers' positive word SCORER_POSITIVE_ABSENT (integer labels, 1 not
@@ -78,12 +85,12 @@ from bindings.metrics_reg_run import (
     REG_EXPLAINED_VARIANCE, REG_MAX_ERROR, REG_POISSON, REG_GAMMA, REG_D2_ABSOLUTE,
 )
 from bindings.mcls_classify_run import (
-    label_metric_run, label_binary_run, log_loss_run, LBL_JACCARD, LBL_BALANCED, LBL_PRECISION, LBL_RECALL, LBL_F1, LBL_MCC,
+    label_metric_run, label_binary_run, label_metric_options_run, label_binary_options_run, log_loss_run, LBL_JACCARD, LBL_BALANCED, LBL_PRECISION, LBL_RECALL, LBL_F1, LBL_MCC,
     LBL_MICRO, LBL_MACRO, LBL_WEIGHTED,
 )
 from bindings.mcls_ranking_run import roc_auc_run, ROC_BINARY, ROC_OVR, ROC_OVR_WEIGHTED, ROC_OVO, ROC_OVO_WEIGHTED
 from bindings.metrics_exp_curve_run import average_precision_run, top_k_run
-from bindings.metrics_exp_rank_run import brier_run
+from bindings.metrics_exp_rank_run import brier_run, brier_options_run
 from bindings.metrics_exp_common_run import cluster_mi_run
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.metrics_cluster_table import (
@@ -120,17 +127,14 @@ comptime _CL_AMI = 1
 #: lane mf-cluster5: the label-pair metrics of core/metrics_cluster_table.mojo,
 #: their word = the table's operation + _CL_PAIR.
 comptime _CL_PAIR = 2
-#: A make_scorer row whose sign is the table row's negated: the code plus this.
-comptime SCORER_FLIP = 1048576
-#: Lane mf-msel5c, MAKE_SCORER KWARGS read into the row's words (module note):
-#: a binary label scorer whose pos_label is the caller's (its class code is the
-#: scorer's positive word; the refusal words name it), and a top_k_accuracy
-#: scorer's k (the code plus k times SCORER_K_UNIT). The bits sit above every
-#: table code and SCORER_FLIP; codes are exact in the plan's Float64 words.
-comptime SCORER_POS_GIVEN = 2097152
-comptime SCORER_K_UNIT = 4194304
-#: `MselScorer.avg` of a binary label row whose pos_label is the caller's.
-comptime _AVG_POS_GIVEN = 1
+#: THE SCORER WORD GROUP (lane mf-tail5b; module note): per scorer
+#: [code, positive word, flip (1.0), pos_label given (1.0), the given label's
+#: index among the label words (-1), k (0: the row's), beta (-1: the row's),
+#: zero_division (-1 'warn', else the cls_epi code 0 / 1 / 2 for nan), the
+#: number of `labels` codes], then those codes (a code >= the fit's classes
+#: is a label no row holds). Replaces the code bits SCORER_FLIP,
+#: SCORER_POS_GIVEN and SCORER_K_UNIT of lanes mf-cluster5 / mf-msel5c.
+comptime SCORER_GROUP_WORDS = 9
 #: The top_k scorer's k (`top_k_accuracy_score`'s default; the scorer passes none).
 comptime _TOP_K = 2
 #: `MselSearchPlan.positives` words a scorer reads (`msel_scorer_positive_kind`).
@@ -151,17 +155,68 @@ comptime SCORER_MIXED_WORDS = ("TypeError: y_true must contain only strings or o
                                + "missing labels and mixed types are unsupported")
 
 
-@fieldwise_init
 struct MselScorer(ImplicitlyCopyable, Movable):
     """One served scorer: its name, metric family, metric and averaging
-    words, sign and member response. Resolved ONCE per RUN
-    (`msel_scorer_row`), never per score."""
+    words, sign and member response, and (lane mf-tail5b) the options a
+    make_scorer gave: the F-score's mode and beta^2, zero_division's code
+    and whether it silences the warnings, the `labels` selection (int32
+    class codes at `sel_at`, held by the plan), a given pos_label and its
+    label word's index. Resolved ONCE per RUN (`msel_scorer_row`), never per
+    score."""
     var name: StaticString
     var family: Int
     var metric: Int
     var avg: Int
     var sign: Float64
     var op: Int
+    var fmode: Int
+    var b2: Float64
+    var zd: Int
+    var quiet: Bool
+    var sel_at: Int
+    var sel_n: Int
+    var pos_given: Bool
+    var pos_word: Int
+
+    def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
+        self.name = name
+        self.family = family
+        self.metric = metric
+        self.avg = avg
+        self.sign = sign
+        self.op = op
+        self.fmode = 2
+        self.b2 = 1.0
+        self.zd = 0
+        self.quiet = False
+        self.sel_at = 0
+        self.sel_n = 0
+        self.pos_given = False
+        self.pos_word = -1
+
+
+struct MselScorerOptions(ImplicitlyCopyable, Movable):
+    """A make_scorer's kwargs over a table row, read ONCE at UNPACK (lane
+    mf-tail5b; module note). `sel_from` / `sel_n`: the `labels` codes'
+    place among the plan's selection words."""
+    var flip: Bool
+    var pos_given: Bool
+    var pos_word: Int
+    var k: Int
+    var beta: Float64
+    var zd: Int
+    var sel_from: Int
+    var sel_n: Int
+
+    def __init__(out self):
+        self.flip = False
+        self.pos_given = False
+        self.pos_word = -1
+        self.k = 0
+        self.beta = -1.0
+        self.zd = -1
+        self.sel_from = 0
+        self.sel_n = 0
 
 
 def _table() -> List[MselScorer]:
@@ -228,30 +283,47 @@ def _table() -> List[MselScorer]:
     return t^
 
 
-def msel_scorer_row(code_in: Int) raises -> MselScorer:
-    """The scorer of `code_in` (once per RUN and scorer): its table row, the
-    sign negated with SCORER_FLIP (a make_scorer whose greater_is_better
-    differs from the row's), the caller's pos_label marked with
-    SCORER_POS_GIVEN (a binary label row; `avg` _AVG_POS_GIVEN) and a
-    top_k_accuracy k above SCORER_K_UNIT (the row's `metric` word is k)."""
-    var k = code_in // SCORER_K_UNIT
-    var code = code_in - k * SCORER_K_UNIT
-    var given = (code & SCORER_POS_GIVEN) != 0
-    var flip = (code & SCORER_FLIP) != 0
-    code = code & (SCORER_FLIP - 1)
-    if k > 0 or given or flip:
-        var row = msel_scorer_row(code)
-        if flip:
-            row.sign = -row.sign
-        if given:
-            if row.family != _F_BINARY:
-                raise Error("RuntimeError: a given pos_label on a search scorer other than a binary label scorer")
-            row.avg = _AVG_POS_GIVEN
-        if k > 0:
-            if row.family != _F_TOP_K:
-                raise Error("RuntimeError: a given k on a search scorer other than top_k_accuracy")
-            row.metric = k
-        return row
+def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises -> MselScorer:
+    """The scorer of `code` with a make_scorer's options (once per RUN and
+    scorer): the sign negated (`flip`), the caller's pos_label (a binary
+    label row, 'average_precision' or 'neg_brier_score'), top_k's k, the F
+    row's beta (`_fmode`: beta 0 is precision, an infinite beta recall),
+    zero_division (a number silences the ill-defined warnings, as the doors'
+    `_prf_warn` does) and the `labels` codes at `sel_base + 4 * sel_from`
+    (an averaged label row)."""
+    var row = msel_scorer_row(code)
+    if opts.flip:
+        row.sign = -row.sign
+    if opts.pos_given:
+        if row.family != _F_BINARY and row.family != _F_AP and row.family != _F_BRIER:
+            raise Error("RuntimeError: a given pos_label on a search scorer that reads none")
+        row.pos_given = True
+        row.pos_word = opts.pos_word
+    if opts.k > 0:
+        if row.family != _F_TOP_K:
+            raise Error("RuntimeError: a given k on a search scorer other than top_k_accuracy")
+        row.metric = opts.k
+    if opts.beta >= 0.0:
+        if (row.family != _F_LABEL and row.family != _F_BINARY) or row.metric != LBL_F1:
+            raise Error("RuntimeError: a given beta on a search scorer other than an F row")
+        var infinite = opts.beta - opts.beta != 0.0  # inf - inf is nan
+        row.fmode = 0 if infinite else (1 if opts.beta == 0.0 else 2)
+        row.b2 = opts.beta * opts.beta
+    if opts.zd >= 0:
+        if row.family != _F_LABEL and row.family != _F_BINARY:
+            raise Error("RuntimeError: a given zero_division on a search scorer other than a label row")
+        row.zd = opts.zd
+        row.quiet = True
+    if opts.sel_n > 0:
+        if row.family != _F_LABEL or row.metric == LBL_BALANCED or row.metric == LBL_MCC:
+            raise Error("RuntimeError: a given labels list on a search scorer other than an averaged label row")
+        row.sel_at = sel_base + 4 * opts.sel_from
+        row.sel_n = opts.sel_n
+    return row
+
+
+def msel_scorer_row(code: Int) raises -> MselScorer:
+    """The table row of `code` with the row's own options."""
     if code == SCORER_ACCURACY:
         return MselScorer("accuracy", _F_ACCURACY, 0, 0, 1.0, MEMBER_OP_PREDICT)
     var t = _table()
@@ -290,21 +362,47 @@ def msel_scorer_code(name: String, has_decision: Bool) -> Int:
     return -1
 
 
-def msel_scorer_flip(code: Int) -> Int:
-    """UNPACK: the code of `code`'s row with its sign negated."""
-    return code ^ SCORER_FLIP
+def msel_scorer_group_words(mut words: List[Float64], code: Int, positive: Int, opts: MselScorerOptions,
+                            sels: List[Int32]):
+    """UNPACK: one scorer's word group (module note), its `labels` codes
+    read from `sels` at `opts.sel_from`. The one writer of the layout."""
+    words.append(Float64(code))
+    words.append(Float64(positive))
+    words.append(1.0 if opts.flip else 0.0)
+    words.append(1.0 if opts.pos_given else 0.0)
+    words.append(Float64(opts.pos_word))
+    words.append(Float64(opts.k))
+    words.append(opts.beta)
+    words.append(Float64(opts.zd))
+    words.append(Float64(opts.sel_n))
+    for j in range(opts.sel_n):  # small-loop(the scorer's labels codes)
+        words.append(Float64(sels[opts.sel_from + j]))
 
 
-def msel_scorer_given_pos(code: Int) -> Int:
-    """UNPACK (lane mf-msel5c): `code` with the caller's pos_label (a binary
-    label scorer; its class code is the scorer's positive word)."""
-    return code | SCORER_POS_GIVEN
-
-
-def msel_scorer_with_k(code: Int, k: Int) -> Int:
-    """UNPACK (lane mf-msel5c): a top_k_accuracy `code` with the caller's k
-    (at least 1)."""
-    return code + k * SCORER_K_UNIT
+def msel_scorer_group_read(words: List[Float64], at: Int, mut code: Int, mut positive: Int,
+                           mut opts: MselScorerOptions, mut sels: List[Int32]) raises -> Int:
+    """The one reader of a scorer's word group at `at`: its code, positive
+    word and options (the `labels` codes appended to `sels`). Answers the
+    index after the group; raises on a short or malformed group."""
+    if at < 0 or at + SCORER_GROUP_WORDS > len(words):
+        raise Error("member ABI: a search scorer's word group is cut short")
+    code = Int(words[at])
+    positive = Int(words[at + 1])
+    opts = MselScorerOptions()
+    opts.flip = words[at + 2] != 0.0
+    opts.pos_given = words[at + 3] != 0.0
+    opts.pos_word = Int(words[at + 4])
+    opts.k = Int(words[at + 5])
+    opts.beta = words[at + 6]
+    opts.zd = Int(words[at + 7])
+    var n = Int(words[at + 8])
+    if n < 0 or at + SCORER_GROUP_WORDS + n > len(words):
+        raise Error("member ABI: a search scorer's labels codes are cut short")
+    opts.sel_from = len(sels)
+    opts.sel_n = n
+    for j in range(n):  # small-loop(the scorer's labels codes)
+        sels.append(Int32(Int(words[at + SCORER_GROUP_WORDS + j])))
+    return at + SCORER_GROUP_WORDS + n
 
 
 def msel_scorer_top_k(row: MselScorer) -> Bool:
@@ -314,10 +412,15 @@ def msel_scorer_top_k(row: MselScorer) -> Bool:
 
 def msel_scorer_pos_words(row: MselScorer, label_words: List[String], positive: Int) -> String:
     """The pos_label as scikit-learn's refusal prints it (`f"pos_label={pos_label}"`):
-    1 unless the caller gave it (lane mf-msel5c), then its label's word."""
-    if row.avg != _AVG_POS_GIVEN or positive < 0 or positive >= len(label_words):
+    1 unless the caller gave it (lane mf-msel5c), then its label's word
+    (lane mf-tail5b: the word the UNPACK appended for it, `pos_word`, also
+    for a label that is not one of the fit's)."""
+    if not row.pos_given:
         return String("1")
-    var word = label_words[positive]
+    var at = row.pos_word if row.pos_word >= 0 else positive
+    if at < 0 or at >= len(label_words):
+        return String("1")
+    var word = label_words[at]
     var n = word.byte_length()
     if n >= 2 and word.startswith("'") and word.endswith("'"):
         return String(word[byte=1 : n - 1])
@@ -449,18 +552,22 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
             member_notice_add(notices, MEMBER_NOTICE_METRIC_FEW, 1.0 if row.metric == REG_D2_ABSOLUTE else 0.0)
     elif row.family == _F_BINARY:
         value = _binary_value(route, label_words, row, truth, response, count, classes, positive, warn)
-        _prf_notices(row.metric, warn, notices)
+        if not row.quiet:
+            _prf_notices(row.metric, warn, notices)
     elif row.family == _F_LABEL:
-        value = label_metric_run(route, row.metric, row.avg, truth, response, count, classes, warn)
+        value = label_metric_options_run(route, row.metric, row.avg, truth, response, count, classes, row.zd,
+                                         row.fmode, row.b2, row.sel_at, row.sel_n, warn)
         if row.metric == LBL_BALANCED:
             if warn != 0:
                 member_notice_add(notices, MEMBER_NOTICE_METRIC_BALANCED)
-        elif row.metric != LBL_MCC:
+        elif row.metric != LBL_MCC and not row.quiet:
             _prf_notices(row.metric, warn, notices)
     elif row.family == _F_AP:
         value = average_precision_run(route, truth, response, count, cols, classes, positive)
     elif row.family == _F_BRIER:
-        value = brier_run(route, truth, response, count, classes, cols, positive)
+        # a given pos_label (lane mf-tail5b): its class code, else the label marks
+        value = brier_options_run(route, truth, response, count, classes, cols, -1 if row.pos_given else positive,
+                                  positive if row.pos_given else -1)
     elif row.family == _F_TOP_K:
         value = top_k_run(route, truth, response, count, cols, classes, row.metric, warn)
         if warn != 0:
@@ -581,5 +688,7 @@ def _binary_value(route: MetricRoute, label_words: List[String], row: MselScorer
         raise Error("pos_label=" + msel_scorer_pos_words(row, label_words, positive)
                     + " is not a valid label. It should be one of " + _present_words(label_words, seen))
     if absent:
-        return label_binary_run(route, row.metric, truth, response, count, classes + 1, classes, warn)
-    return label_binary_run(route, row.metric, truth, response, count, classes, positive, warn)
+        return label_binary_options_run(route, row.metric, truth, response, count, classes + 1, classes, row.zd,
+                                        row.fmode, row.b2, warn)
+    return label_binary_options_run(route, row.metric, truth, response, count, classes, positive, row.zd, row.fmode,
+                                    row.b2, warn)

@@ -157,7 +157,16 @@ def brier_marks_positive(marks: Int, rank: List[Int32], k: Int) -> Int:
 
 
 def brier_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, cols: Int, marks: Int) raises -> Float64:
-    """THE TYPED RUN of `brier_score_loss(y_true, y_proba)` with its
+    """`brier_options_run` with pos_label None (the label marks)."""
+    return brier_options_run(route, truth, proba, n, k, cols, marks, -1)
+
+
+def brier_options_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, cols: Int, marks: Int,
+                      given: Int) raises -> Float64:
+    """`given` (lane mf-tail5b): a caller's pos_label as its class code (the
+    door's `mx_pos_label` of a label of the targets' kind: y_true == it);
+    -1: pos_label None, the marks decide.
+    THE TYPED RUN of `brier_score_loss(y_true, y_proba)` with its
     defaults (pos_label None, labels None, scale_by_half 'auto') over n
     int32 class codes in 0 .. k-1 and the member's float32 probabilities
     (cols 1: the one column the scorer hands a binary member, `predict_proba[:, 1]`;
@@ -184,7 +193,7 @@ def brier_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, cols: 
         if present > 2:
             raise Error("The type of the target inferred from y_true is multiclass but should be binary "
                         + "according to the shape of y_prob.")
-        var positive = brier_marks_positive(marks, rank, k)
+        var positive = given if given >= 0 else brier_marks_positive(marks, rank, k)
         for i in range(n):  # driver-loop: over the rows (y_true == pos_label)
             codes[i] = Int32(1) if Int(t[i]) == positive else Int32(0)
     else:
