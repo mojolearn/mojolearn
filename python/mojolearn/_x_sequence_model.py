@@ -2201,33 +2201,29 @@ _SEQUENTIAL_CONTEXT = {
     "integer": np.integer, "layer_codes": _LAYER, "loss_codes": _LOSS,
     "optimizer_codes": _OPT, "schedule_codes": _SCHED,
     "reduction_codes": _REDUCTION,  # nn-losses
+    # layer_names[code]: the name `model.layers` reports for each layer code (tools/block_tables_check.py checks
+    # it against every LAYER_ code). 21..31 are not codes; 68..71 were never assigned (model_blocks
+    # BLOCK_UNUSED_FIRST..BLOCK_UNUSED_LAST) and stay empty.
     "layer_names": ("", "linear", "relu", "sigmoid", "tanh", "softmax",
                     "layer_norm", "dropout", "residual", "reshape", "permute",
                     "flatten", "conv2d", "max_pool2d", "avg_pool2d", "conv1d", "max_pool1d",
                     "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
-                    "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
-                    "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
-                    "selective_scan", "ssd_scan", "trapezoid_scan", "lm_head", "batch_norm",
-                    # nn-attention begin: 47..66 are other lanes' codes; 67 and 72 autograd/nn_attention.mojo
-                    # nn-activations begin
-                    "identity", "leaky_relu", "elu", "prelu", "mish", "hardswish", "hardsigmoid",
-                    # nn-activations end
-                    # nn-norms begin
-                    "group_norm", "instance_norm",
-                    # nn-norms end
-                    # nn-conv begin: 56..66, autograd/nn_conv_blocks.mojo
-                    "conv_transpose1d", "conv_transpose2d", "adaptive_avg_pool2d", "adaptive_max_pool2d",
-                    "adaptive_max_pool1d", "global_max_pool", "constant_pad", "reflection_pad", "replication_pad",
-                    "upsample", "pixel_shuffle",
-                    # nn-conv end
-                    "multihead_attention", "", "", "", "", "positional_encoding",
-                    # nn-attention end
-                    # nn-conv3d begin
-                    "conv3d", "max_pool3d", "avg_pool3d", "adaptive_avg_pool3d",
-                    # nn-conv3d end
-                    # nn-losses-2 begin
-                    "log_softmax",
-                    # nn-losses-2 end
+                    "", "", "", "", "", "", "", "", "", "", "",                                  # 21..31
+                    "silu", "gelu", "softplus", "rms_norm",                                       # 32..35
+                    "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",        # 36..41
+                    "selective_scan", "ssd_scan", "trapezoid_scan", "lm_head", "batch_norm",      # 42..46
+                    "identity", "leaky_relu", "elu", "prelu", "mish", "hardswish",                # 47..52 nn-activations
+                    "hardsigmoid",                                                                # 53
+                    "group_norm", "instance_norm",                                                # 54..55 nn-norms
+                    "conv_transpose1d", "conv_transpose2d", "adaptive_avg_pool2d",                # 56..58 nn-conv
+                    "adaptive_max_pool2d", "adaptive_max_pool1d", "global_max_pool",              # 59..61
+                    "constant_pad", "reflection_pad", "replication_pad", "upsample",              # 62..65
+                    "pixel_shuffle",                                                              # 66
+                    "multihead_attention",                                                        # 67 nn-attention
+                    "", "", "", "",                                                               # 68..71 unused
+                    "positional_encoding",                                                        # 72 nn-attention
+                    "conv3d", "max_pool3d", "avg_pool3d", "adaptive_avg_pool3d",                  # 73..76 nn-conv3d
+                    "log_softmax",                                                                # 77 nn-losses-2
                     ),
 }
 # nn-conv3d begin
