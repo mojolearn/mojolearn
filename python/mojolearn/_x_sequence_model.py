@@ -1291,14 +1291,14 @@ _SEQUENTIAL_CONTEXT = {
                     "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
                     "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
                     "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
-                    "selective_scan", "ssd_scan", "trapezoid_scan", "lm_head", "batch_norm"),
+                    "selective_scan", "ssd_scan", "trapezoid_scan", "lm_head", "batch_norm",
+                    # nn-losses-2 begin: codes 47 .. 76 are the other nn-* lanes' (their names replace these
+                    # placeholders when they merge); 77 is log_softmax
+                    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+                    "", "", "", "", "", "", "log_softmax",
+                    # nn-losses-2 end
+                    ),
 }
-# nn-losses-2 begin: layer code 77's name; the codes before it belong to the other nn-* lanes' groups of the tuple
-# above, so the name is placed by index whatever the tuple's length is when this module loads
-_NAMES = _SEQUENTIAL_CONTEXT["layer_names"]
-_SEQUENTIAL_CONTEXT["layer_names"] = _NAMES[:77] + ("",) * (77 - len(_NAMES)) + ("log_softmax",) + _NAMES[78:]
-del _NAMES
-# nn-losses-2 end
 
 
 def _connect_sequential_bindings():
