@@ -278,18 +278,54 @@ def _connect_host_tree_members(registry, register, waiting):
     # MEMBER-ONLY plans with no constructor parameters (a clone is never built: nothing fits them) and the tree
     # owner's entry and context (the trees bridge's, which every tree class shares), no method recipes.
     for cls in tuple(waiting):  # glue: the classes the scan above left waiting, once per connect
-        own = vars(cls)
-        if own.get('_mojolearn_member_predict_only') is not True:
-            continue
-        if own.get('_mojolearn_member') not in ((14, 2), (16, 5)):
-            continue
-        from . import _native_trees_bridge
-        entry, trees = _native_trees_bridge.connect()
-        register(cls, entry, trees, (), None, {})
-        plan = registry[cls]
-        plan['member_only'] = True
-        plan['initial_fields'] = {}
-        plan['keywords'] = {}
+        if _register_host_tree(cls, registry, register):
+            waiting.remove(cls)
+
+
+def _register_host_tree(cls, registry, register):
+    # glue: import-time class metadata of one saved-model class; True when `cls` is a predict-only host tree
+    # class and is registered (now or before).
+    own = vars(cls)
+    if own.get('_mojolearn_member_predict_only') is not True:
+        return False
+    if own.get('_mojolearn_member') not in ((14, 2), (16, 5)):
+        return False
+    if cls in registry:
+        return True
+    from . import _native_trees_bridge
+    entry, trees = _native_trees_bridge.connect()
+    register(cls, entry, trees, (), None, {})
+    plan = registry[cls]
+    plan['member_only'] = True
+    plan['initial_fields'] = {}
+    plan['keywords'] = {}
+    return True
+
+
+def connect_host_tree_member(cls):
+    # glue: called ONCE, at the end of the import of python/mojolearn/_forest_host.py and _gbdt_host.py (lane
+    # mf-cal5). Those modules load lazily, on first touch of HostForest / HostGBDT, which can be after the model
+    # selection hub connected its marked classes: the class is registered here, at its own import, with the
+    # register function and registry the hub's connection kept (python/mojolearn/_native_msel_dispatch.py
+    # `family_msel_register`). Before the hub exists nothing is done: its first connection scans this module.
+    selection = sys.modules.get(__package__ + '.model_selection')
+    context = vars(selection).get('_NATIVE_CONTEXT') if selection is not None else None
+    if type(context) is not dict:
+        return
+    register = context.get('family_msel_register')
+    registry = context.get('family_msel_estimators')
+    if register is None or type(registry) is not dict:
+        return
+    if not _register_host_tree(cls, registry, register):
+        return
+    # The DeviceRows identities every plan's owner context carries (_native_msel_dispatch.connect, after
+    # connect_members): the hub's loop ran before this class existed.
+    from . import _arena_io
+    plan_context = registry[cls]['context']
+    if type(plan_context) is dict:
+        plan_context.update(door_rows_class=_arena_io.DeviceRows, door_rows_context=_arena_io._ROWS_CONTEXT)
+    waiting = context.get('family_msel_member_unregistered')
+    if type(waiting) is list and cls in waiting:
         waiting.remove(cls)
 
 

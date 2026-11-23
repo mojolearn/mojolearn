@@ -240,3 +240,8 @@ _digest_fields.schema(HostGBDT, _digest_fields.gbdt_steps(GBDT_FORMAT))
 from ._native_family_layouts import connect as _connect_family_layouts  # noqa: E402
 _connect_family_layouts(sys.modules[__package__], only=(HostGBDT,))
 del _connect_family_layouts
+# glue: once at import. This module loads lazily, possibly after the model selection hub connected its marked
+# classes: HostGBDT's predict-only member plan is registered here (lane mf-cal5).
+from ._native_msel_more import connect_host_tree_member as _connect_host_tree_member  # noqa: E402
+_connect_host_tree_member(HostGBDT)
+del _connect_host_tree_member
