@@ -10,7 +10,7 @@ from core.entry_table import entry_ref_unresolved
 from core.mamba_state_entry_table import Mamba3StateRoute
 from core.neural_entry_table import (
     NEURAL_MAMBA3_SESSION_FORWARD, NEURAL_MAMBA3_OWNED_FORWARD, MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL,
-    MAMBA3_CAP_HELD_FORWARD, IDN_MAMBA3_FORWARD_DOOR_OLD,
+    MAMBA3_CAP_HELD_FORWARD,
 )
 from providers.python.mamba3_prefill_session_pyapi_door import (
     mamba3_prefill_caps, mamba3_prefill_session_ensure, mamba3_prefill_session_run,
@@ -157,23 +157,20 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     var session_entry = entry_ref_unresolved()
     if route.has_sessions():
         session_entry = route.session_ref()
-        comptime if not IDN_MAMBA3_FORWARD_DOOR_OLD:
-            # lane fix-mamba-forward-doors: the block's open session answers
-            # its image's caps (read once when it opened); a table call only
-            # before the first session
-            var existing = py_get(fields, "_prefill_session")
-            caps = -1
-            if mamba3_prefill_session_serves(existing, session_entry):
-                caps = mamba3_prefill_session_caps(existing)
-            if caps < 0:
-                caps = mamba3_prefill_caps(session_entry)
-        else:
+        # TOMBSTONE: MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+        # lane fix-mamba-forward-doors: the block's open session answers
+        # its image's caps (read once when it opened); a table call only
+        # before the first session
+        var existing = py_get(fields, "_prefill_session")
+        caps = -1
+        if mamba3_prefill_session_serves(existing, session_entry):
+            caps = mamba3_prefill_session_caps(existing)
+        if caps < 0:
             caps = mamba3_prefill_caps(session_entry)
-    # lane fix-mamba-forward-doors (IDN_MAMBA3_FORWARD_DOOR_OLD): one table
-    # call per forward where the image reserves, runs and releases itself
-    var held = False
-    comptime if not IDN_MAMBA3_FORWARD_DOOR_OLD:
-        held = (caps & MAMBA3_CAP_HELD_FORWARD) != 0
+    # lane fix-mamba-forward-doors: one table call per forward where the
+    # image reserves, runs and releases itself
+    var held = (caps & MAMBA3_CAP_HELD_FORWARD) != 0
     var session = (caps & MAMBA3_CAP_SESSION_PREFILL) != 0 or owned is not None
     var skip = False
     if session and Bool(py=py_get(fields, "_discard_reports", PythonObject(False))):

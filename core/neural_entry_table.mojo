@@ -178,8 +178,7 @@ comptime MAMBA3_CAP_OWNED_WEIGHTS = 4
 """the owned weight snapshot (NN40_OWNED_WEIGHTS)."""
 comptime MAMBA3_CAP_HELD_FORWARD = 8
 """ops 6 / 8 take a trailing word 1: reserve, run and release in one call
-(lane fix-mamba-forward-doors; the GPU image unless
-IDN_MAMBA3_FORWARD_DOOR_OLD)."""
+(lane fix-mamba-forward-doors; every image with prefill sessions)."""
 
 #: Lane fix-mamba-forward-doors (2026-11-14): what this switch decides is the
 #: per-forward door of a Mamba-3 block's prefill session
@@ -191,14 +190,11 @@ IDN_MAMBA3_FORWARD_DOOR_OLD)."""
 #: 0.8.55 reached the same `_m3_prefill_run` with one Python entry call
 #: (`mamba3_prefill_session_forward`, _mamba_impl.py at 0e4de0f46e:1849).
 #: Same session, same weights compare, same body: no bit moves on any vendor.
-#: `-D MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD` keeps a caps call per forward
-#: and the reserve / run / release triple (B arm of the owed A/B,
-#: bench/results/paper_compare/owed-pre0867.json row fix-mamba-forward-doors;
-#: L40S candidate ba08dac006 mamba3-forward 6.62 ms vs 0.8.55 3.95 ms).
 # TOMBSTONE: MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 39aa5d2695.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime IDN_MAMBA3_FORWARD_DOOR_OLD = is_defined["MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD"]()
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e. (a caps table call per forward and reserve / run / release as three table calls, around the same session and _m3_prefill_run body)
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 
 @fieldwise_init

@@ -22,7 +22,7 @@ from core.neural_entry_table import (
     NEURAL_MAMBA_OPERATIONS, NEURAL_MAMBA3_SESSION_CREATE, NEURAL_MAMBA3_SESSION_INFO,
     NEURAL_MAMBA3_SESSION_CAPS, NEURAL_MAMBA3_SESSION_CLOSE,
     MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL,
-    MAMBA3_CAP_HELD_FORWARD, IDN_MAMBA3_FORWARD_DOOR_OLD,
+    MAMBA3_CAP_HELD_FORWARD,
 )
 from core.mamba3_prefill_session import mamba3_prefill_session_word, mamba3_prefill_session_of
 
@@ -102,8 +102,9 @@ def mamba3_prefill_image_caps() -> Int:
     var caps = MAMBA3_CAP_SESSION_PREFILL
     comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
         caps |= MAMBA3_CAP_REPORTS_OPTIONAL
-    comptime if not IDN_MAMBA3_FORWARD_DOOR_OLD:
-        caps |= MAMBA3_CAP_HELD_FORWARD
+    # TOMBSTONE: MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+    caps |= MAMBA3_CAP_HELD_FORWARD
     return caps
 
 
@@ -156,7 +157,7 @@ def _mamba3_session_operation(op: Int, session: Int, a: List[Int], words: List[I
     # word 1, PREFILL_BUSY above) reserves, runs and releases here. A failed
     # run leaves the session as the reserved form did: usable False and
     # released by the run's own handler, busy cleared.
-    if not IDN_MAMBA3_FORWARD_DOOR_OLD and ((op == 6 and len(words) == 5) or (op == 8 and len(words) == 6)):
+    if (op == 6 and len(words) == 5) or (op == 8 and len(words) == 6):
         if words[len(words) - 1] != 1:
             raise Error("mamba3 prefill: invalid native descriptor arity")
         _session_reserve(owner)
