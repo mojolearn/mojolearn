@@ -32,7 +32,7 @@ from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.py_balanced import py_get, py_item, py_contains, py_setitem
 from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message, member_cw_kind_accepted
-from core.member_class_weight import MEMBER_CW_DICT, member_cw_pending_words, member_cw_invalid_words
+from core.member_class_weight import MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_pending_words, member_cw_invalid_words
 from core.member_families import MEMBER_FAMILY_SGD
 from bindings.x_linear_common_unpack import (
     _truth, _float, _int, _name, _b, _eq, _gt, _lt, _le, _is_int, _isinstance, _repr, _sorted_repr,
@@ -104,17 +104,16 @@ def sgd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
         # labels at the caller's UNPACK (lane mf-adm3, `member_cw_fill`).
         var class_weight = py_item(fields, nk[].k_class_weight)
         if class_weight is not None:
-            if member_cw_kind_accepted(MEMBER_FAMILY_SGD, model, class_weight, b) == MEMBER_CW_DICT:
+            # THE FALLBACK RULE (lane mf-cal5): every value the fit door accepts is admitted (a dict or dict
+            # subclass, anything equal to 'balanced'); -1 is a value the door refuses: the INVALID tail, whose
+            # words the FIT caller's UNPACK raises (lane mf-left4).
+            var weighting = member_cw_kind_accepted(MEMBER_FAMILY_SGD, model, class_weight, b)
+            if weighting == MEMBER_CW_DICT:
                 keyed = True
-            elif not (_isinstance(class_weight, _b().str) and _eq(class_weight, PythonObject("balanced"))):
-                # A value the fit door refuses (lane mf-left4): the INVALID
-                # tail, whose words the FIT caller's UNPACK raises; a value
-                # the door accepts that the member does not read: not admitted.
-                if len(member_cw_invalid_message(MEMBER_FAMILY_SGD, model, class_weight, b)) == 0:
-                    return False
-                invalid = True
-            else:
+            elif weighting == MEMBER_CW_BALANCED:
                 balanced = True
+            else:
+                invalid = True
     var words: List[Float64]
     if kind == SGD_MEMBER_REGRESSOR or kind == SGD_MEMBER_PA_REGRESSOR:
         _xl_sgd_refuse(model, py_item(fields, nk[].k_early_stopping), py_item(fields, nk[].k_average),

@@ -92,12 +92,21 @@ def member_cw_kind_accepted(family: Int, model: PythonObject, class_weight: Pyth
     answers ""; LinearSVC's door takes exact types only): MEMBER_CW_BALANCED
     for a str subclass whose value is 'balanced', MEMBER_CW_DICT for a dict
     subclass, whose table `member_cw_fill_plan` / `member_cw_fill_keyed`
-    read from ONE exact dict copy of it. -1: not admitted."""
+    read from ONE exact dict copy of it; for the x_linear and SGD kinds, any value
+    equal to 'balanced' (their door's test). -1: a value the family's fit door
+    refuses (`member_cw_invalid_message` has its words; lane mf-cal5: no value
+    the door accepts answers -1, so no caller falls back for one)."""
     var kind = member_cw_kind(class_weight, b)
     if kind >= 0 or family == MEMBER_FAMILY_LINEAR_SVM:
         return kind
     if len(member_cw_invalid_message(family, model, class_weight, b)) != 0:
         return -1
+    # The x_linear and SGD doors read 'balanced' by equality, before their dict test
+    # (bindings/x_linear_common_unpack.mojo `xl_class_weights_unpack`): any value equal to it is 'balanced'
+    # there, so it is here (lane mf-cal5, THE FALLBACK RULE: it was not admitted, and its caller fell back).
+    if (family == MEMBER_FAMILY_SGD or family == MEMBER_FAMILY_XLINEAR) and Bool(
+            py=class_weight == PythonObject("balanced")):
+        return MEMBER_CW_BALANCED
     if Bool(py=py_call(b.isinstance, class_weight, b.str)):
         return MEMBER_CW_BALANCED if String(class_weight) == "balanced" else -1
     if Bool(py=py_call(b.isinstance, class_weight, b.dict)):

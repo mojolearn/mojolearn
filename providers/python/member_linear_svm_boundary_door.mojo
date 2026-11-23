@@ -78,11 +78,9 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         weighting = member_cw_kind(py_get(fields, nk[].k_class_weight, PythonObject(None)), b)
         # A value the estimator's fit door refuses (lane mf-left4): the INVALID
         # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
-        # a value the door accepts but the member does not read: not admitted.
+        # -1 is never a value the door accepts (lane mf-cal5: exact types only, `member_cw_invalid_message`
+        # has words for every other value).
         if weighting < 0:
-            if len(member_cw_invalid_message(MEMBER_FAMILY_LINEAR_SVM, model,
-                                             py_get(fields, nk[].k_class_weight, PythonObject(None)), b)) == 0:
-                return False
             weighting = MEMBER_CW_INVALID
     var connection = linear_svc_route(model, fields, context)
     if kind == LINEAR_SVM_MEMBER_SVC and (connection.flags & LINEAR_SVC_ROUTE_ROWS) == 0:

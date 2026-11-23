@@ -405,17 +405,15 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
     var keyed = False
     var invalid = False
     if class_weight is not None:
-        if member_cw_kind_accepted(MEMBER_FAMILY_XLINEAR, PythonObject(None), class_weight, _b()) == MEMBER_CW_DICT:
+        # THE FALLBACK RULE (lane mf-cal5): every value the fit door accepts is admitted; -1 is a value it
+        # refuses: the INVALID tail, whose words the FIT caller's UNPACK raises (lane mf-left4).
+        var weighting = member_cw_kind_accepted(MEMBER_FAMILY_XLINEAR, PythonObject(None), class_weight, _b())
+        if weighting == MEMBER_CW_DICT:
             keyed = True
-        elif not _eq(class_weight, PythonObject("balanced")):
-            # A value the fit door refuses (lane mf-left4): the INVALID tail,
-            # whose words the FIT caller's UNPACK raises; a value the door
-            # accepts that the member does not read: not admitted.
-            if len(member_cw_invalid_message(MEMBER_FAMILY_XLINEAR, PythonObject(None), class_weight, _b())) == 0:
-                return List[Float64]()
-            invalid = True
-        else:
+        elif weighting == MEMBER_CW_BALANCED:
             balanced = True
+        else:
+            invalid = True
     var cv = py_item(fields, nk[].k_cv)
     var folds = 5
     if cv is not None:
@@ -488,10 +486,8 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         # (`member_cw_fill`); any other value keeps the estimator's own doors.
         var weighting = member_cw_kind_accepted(MEMBER_FAMILY_XLINEAR, model, py_item(fields, nk[].k_class_weight), b)
         if weighting < 0:
-            # A value the fit door refuses (lane mf-left4): the INVALID tail.
-            if len(member_cw_invalid_message(MEMBER_FAMILY_XLINEAR, model, py_item(fields, nk[].k_class_weight),
-                                             b)) == 0:
-                return False
+            # A value the fit door refuses (lane mf-left4): the INVALID tail (-1 is never a value the door
+            # accepts: lane mf-cal5).
             weighting = MEMBER_CW_INVALID
         words = _xl_ridge_classifier_words(model, fields)
         if weighting == MEMBER_CW_BALANCED:
