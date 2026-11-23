@@ -422,7 +422,7 @@ sampler, a solver, a metric, a reduction).
                outside symmetric Logloss, Lossguide Cosine, the pointwise
                losses on non-symmetric trees, feature_fraction outside
                Lossguide Logloss, the unweighted pointwise searcher)
-      gbdt-weighted-rest gbdt-weighted-special gbdt-shape-gaps
+      gbdt-weighted-rest gbdt-weighted-special gbdt-shape-gaps gbdt-rest-gaps
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -5693,6 +5693,73 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-rest-gaps")
+def _(ml, X, yc, yr, Xh=None):
+    """The last fits the CPU column refused until lane gbdt-cpu-rest-2
+    (2026-11-23), each one now trained by the host owners: an eval set with
+    the Iter detector and use_best_model on the symmetric pointwise losses
+    (Quantile) and on MultiClass; feature_fraction 0.5 on the symmetric
+    pointwise losses (MAE Exact), MultiClassOneVsAll and MultiClass under the
+    Bayesian bootstrap; the pointwise searcher with RMSE (L2, Bayesian,
+    Newton), with and without an eval set; NaN in a float column beside a CTR
+    and a one-hot categorical column. Every fit is at rate 0.1 with every
+    work-changing option set."""
+    rows = min(_GBDT_GAPS_ROWS, X.shape[0])
+    X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
+    y = _pos(yr)
+    t3 = _three_class_centered(X).astype(np.float32)
+    Xe = np.ascontiguousarray(Xh[:rows])
+    yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+    yen = (_pos(yeh) + _hw((rows,), "gbdt-rest-gaps:eval_noise", 0.0, 3.0)).astype(np.float32)
+    te3 = _three_class_centered(Xh[:rows]).astype(np.float32)
+    stop = dict(n_estimators=30, learning_rate=1.0, max_depth=6, od_type="Iter", od_wait=2,
+                use_best_model=True, best_model_min_trees=3)
+    pw_rmse = dict(loss="RMSE", score_function="L2", use_pointwise_searcher=True, bootstrap_type="Bayesian",
+                   bagging_temperature=0.5, boost_from_average=True, leaf_estimation_method="Newton",
+                   leaf_estimation_iterations=1)
+    parts, first = {}, None
+    for name, Xf, yf, options in [
+        ("symmetric_mae_exact_ff", X, y, dict(loss="MAE", leaf_estimation_method="Exact", feature_fraction=0.5)),
+        ("onevsall_ff", X, t3, dict(loss="MultiClassOneVsAll", feature_fraction=0.5,
+                                    leaf_estimation_method="Newton", leaf_estimation_iterations=1)),
+        ("multiclass_ff_bayesian", X, t3, dict(loss="MultiClass", feature_fraction=0.5,
+                                               bootstrap_type="Bayesian", bagging_temperature=1.0,
+                                               leaf_estimation_method="Newton", leaf_estimation_iterations=1)),
+        ("pointwise_rmse", X, yr, pw_rmse),
+    ]:
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(Xf, yf)
+        _gbdt_gaps_parts(parts, name, m, Xf)
+        first = first if first is not None else m
+    # the held-out fits: the curve, the detector's stop and the shrink, hashed
+    for name, yf, ye, options in [
+        ("symmetric_quantile_eval", y, yen, dict(stop, loss="Quantile", loss_alpha=0.3,
+                                                 leaf_estimation_method="Gradient",
+                                                 leaf_estimation_iterations=1)),
+        ("multiclass_eval", t3, te3, dict(stop, loss="MultiClass", leaf_estimation_method="Newton",
+                                          leaf_estimation_iterations=1)),
+        ("pointwise_rmse_eval", yr, yeh.astype(np.float32), dict(pw_rmse, n_estimators=30, learning_rate=1.0,
+                                                                  od_type="Iter", od_wait=2,
+                                                                  use_best_model=True,
+                                                                  best_model_min_trees=3)),
+    ]:
+        ev = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(X, yf, eval_set=(Xe, ye))
+        _gbdt_gaps_parts(parts, name, ev, X)
+        parts[name + ":test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+        parts[name + ":stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                               ev.best_iteration_], dtype=np.int64))
+    # NaN in the float column 3 of the categorical input (every eighth row),
+    # beside a CTR column (column 0) and a one-hot column (column 2)
+    Xc = _gbdt_cat_x(X)
+    Xc[::8, 3] = np.float32(np.nan)
+    for name, (cols, cats) in [("cat_ctr_nan", _GBDT_CAT_CTR), ("cat_onehot_nan", _GBDT_CAT_ONEHOT)]:
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(loss="RMSE", cat_features=list(cats), nan_mode="Min",
+                                                boost_from_average=False, leaf_estimation_iterations=1)
+                                ).fit(Xs, yr)
+        _gbdt_gaps_parts(parts, name, m, Xs)
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -9574,7 +9641,7 @@ _batch_decl(_rows_calls("predict"),
 _batch_decl(_rows_calls("predict"),
             "gbdt-weighted-symmetric", "gbdt-weighted-nonsym", "gbdt-weighted-rank", "gbdt-eval-gaps")
 _batch_decl(_rows_calls("predict"),
-            "gbdt-weighted-rest", "gbdt-weighted-special", "gbdt-shape-gaps")
+            "gbdt-weighted-rest", "gbdt-weighted-special", "gbdt-shape-gaps", "gbdt-rest-gaps")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):
