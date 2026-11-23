@@ -176,16 +176,16 @@ def _rankn_conv[E: Exec](
         raise Error("conv2d: x must be a rank-4 tensor")
     if sw.ndim != sx.ndim:
         raise Error(what + ": weight must be a rank-" + String(sx.ndim) + " tensor")
-    var o = 1 if vol else 0
+    var ax = 1 if vol else 0
     var N = sx.d[0]
     var C = sx.d[1]
     var D = sx.d[2] if vol else 1
-    var H = sx.d[2 + o]
-    var W = sx.d[3 + o]
+    var H = sx.d[2 + ax]
+    var W = sx.d[3 + ax]
     var OC = sw.d[0]
     var KD = sw.d[2] if vol else 1
-    var KH = sw.d[2 + o]
-    var KW = sw.d[3 + o]
+    var KH = sw.d[2 + ax]
+    var KW = sw.d[3 + ax]
     if groups < 1:
         raise Error(what + ": groups must be positive")
     if groups == 1 and sw.d[1] != C:
