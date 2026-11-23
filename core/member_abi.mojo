@@ -131,7 +131,7 @@ from core.native_descriptor_abi import NativeDescriptorCall
 #: `MemberPlan.class_counts`): one y layout for every caller, `y.cols` outputs.
 #: Words APPENDED to the end of `MemberCall` (round 5: out_dtype, scope, pin, devices, device_count; round 6:
 #: pin_kept; lane mf-img3: groups; lane mf-left4: eval_x, eval_y, pairs, pairs_weight, cat_keys,
-#: eval_cat_keys) do not
+#: eval_cat_keys; lane mf-tail5: y_given) do not
 #: bump it: every image of one build compiles this file, and a member that does not read them is unchanged.
 comptime MEMBER_CALL_LAYOUT = 4
 
@@ -238,6 +238,16 @@ comptime MEMBER_GIL_FREE = 268435456         # 2^28: safe on parallel workers wi
 #: does not read it holds the GIL (the safe reading). Per family:
 #: fx-gil-RESULT.md, "serial mode".
 comptime MEMBER_GIL_DOOR = 536870912         # 2^29: serial on the public thread, GIL released by the caller as by the door
+#: KIND-EXACT (answered with `call.state != 0`, or the NEW words; the
+#: family's union with 0). Appended 2026-11-23 (lane mf-tail5), layout
+#: unchanged. This kind's FIT reads `call.y_given` (THE GIVEN y, at the
+#: field): a REGRESSOR whose own splitter is stratified (it stratifies on
+#: the targets' values, as the splitter door does with the y it was given),
+#: or a META regressor holding a member that reads it. Not a "can": a
+#: caller that HAS the given y hands it to a member with the bit (gathering
+#: it with a drawn member's rows); to a member without it, never (no
+#: gather is made for a member that does not read it).
+comptime MEMBER_READS_Y_GIVEN = 1073741824   # 2^30: fit reads call.y_given (the targets as the caller was given them)
 
 #: `call.out_dtype` after MEMBER_OP_OUTPUTS: the member did not say.
 comptime MEMBER_DTYPE_UNSAID = -1
@@ -464,6 +474,18 @@ struct MemberCall(Movable):
     # Float32 words are the keys.
     var cat_keys: MemberMatrix
     var eval_cat_keys: MemberMatrix
+    # APPENDED 2026-11-23 (lane mf-tail5). THE GIVEN y: MEMBER_OP_FIT of a
+    # regressor (`y` float32 targets), the same targets as the caller's
+    # UNPACK was GIVEN them: host MEMBER_F64, MEMBER_I64 or MEMBER_I32 words,
+    # rows x y.cols, row i the same target as row i of `y` (a `row_index`
+    # selects its rows as it selects y's). Read only by a kind with
+    # `MEMBER_READS_Y_GIVEN` (a stratified splitter codes the targets' values:
+    # two float64 targets equal in float32 stay two classes, as the splitter
+    # door's np.unique over the given y), and only DURING the fit: no state
+    # keeps it (THE LIFETIME RULE does not extend to it; the caller may free
+    # it when FIT returns). Not given (rows 0): the float32 `y` widened is
+    # the given y (a float32 y was given, or the caller has no other).
+    var y_given: MemberMatrix
 
     def __init__(out self, route: DeviceRoute, state: Int = 0):
         self.layout = MEMBER_CALL_LAYOUT
@@ -497,6 +519,7 @@ struct MemberCall(Movable):
         self.pairs_weight = MemberMatrix()
         self.cat_keys = MemberMatrix()
         self.eval_cat_keys = MemberMatrix()
+        self.y_given = MemberMatrix()
 
     def on_cpu(self) -> Bool:
         """The member's RESOLVED device is the CPU (its route says so; no

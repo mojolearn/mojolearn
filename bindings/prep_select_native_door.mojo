@@ -37,7 +37,8 @@ from core.member_abi import (
 from core.member_families import MEMBER_FAMILY_ENSEMBLE
 from core.ensemble_member import META_BLOCK_FORWARD
 from bindings.member_fit_notices_pack import member_fit_notices_raise
-from core.member_abi import MemberCall, member_free, MEMBER_F32, MEMBER_I32
+from core.member_abi import MemberCall, member_free, MEMBER_F32, MEMBER_I32, MEMBER_READS_Y_GIVEN
+from bindings.member_given_y_unpack import member_given_y
 from core.member_families import MEMBER_FAMILY_GBDT
 from providers.python.member_rfe_boundary_door import (
     RfeBase, rfe_base_admit_labeled, rfe_count_words, rfe_image, rfe_publish, rfe_plan_labels, rfe_fit_keywords,
@@ -369,6 +370,17 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             member.final_importances = params.final_importances
         member.strict = True
     member.y_address = Int(py=classical_address(member.y))
+    if not base.classifier and base.owner.plan.member.can(MEMBER_READS_Y_GIVEN):
+        # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`): y's own words, a view (the
+        # door's `y` lives through the RUN), for a kind whose stratified splitter codes them; asked once.
+        try:
+            if (member_kind_capabilities(base.owner.plan) & MEMBER_READS_Y_GIVEN) != 0:
+                var given = member_given_y(y, n, 1, context["array_class"])
+                if given.given():
+                    member.extras.y_given = given.data
+                    member.extras.y_given_dtype = given.dtype
+        except:
+            pass
     member.base = base^
     return member^
 

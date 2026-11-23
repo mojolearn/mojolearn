@@ -121,7 +121,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free, member_own,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN,
 )
 from core.member_class_weight import member_cw_subset
 from core.member_notices import (
@@ -227,6 +227,13 @@ struct MselSearchPlan(Movable):
     var respond_width: Int
     var respond_dtype: Int
     var respond_log: Bool
+    # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`):
+    # a regressor's targets as the caller was given them (`given_dtype`:
+    # MEMBER_F64 / _I64 / _I32 words, rows x `y_cols`), 0: none. Handed to
+    # each unit's and the refit's fit whose candidate kind reads it
+    # (MEMBER_READS_Y_GIVEN), with the fold's rows, as `y` is.
+    var given: Int
+    var given_dtype: Int
 
     def __init__(out self, var plans: List[MemberPlan], var masks: List[Int], x: Int, rows: Int, cols: Int, y: Int,
                  classes: Int, n_splits: Int, glue: EntryRef, metric: MetricRoute):
@@ -268,6 +275,8 @@ struct MselSearchPlan(Movable):
         self.respond_width = 1
         self.respond_dtype = MEMBER_F64
         self.respond_log = False
+        self.given = 0
+        self.given_dtype = MEMBER_F64
 
 
 struct MselSearchResult(Movable):
@@ -1286,6 +1295,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             run.add(p^, target, 0, tr_at[f], tr_n[f], 0, 0,
                     UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
                     UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
+            if plan.given != 0 and not classifier and (mask & MEMBER_READS_Y_GIVEN) != 0:
+                run.given_target(plan.given, plan.given_dtype)  # THE GIVEN y, drawn with the fold's train rows
             if rows_route[c] == SEARCH_ROWS_RESIDENT:
                 # the fit reads the fold's train rows by index (the set's
                 # `by_index`) out of the whole X, X's pin offered
@@ -1567,6 +1578,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         run.add(best^, plan.y, 0, 0, 0, 0, 0,
                 UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
                 UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
+        if plan.given != 0 and not classifier and (mask & MEMBER_READS_Y_GIVEN) != 0:
+            run.given_target(plan.given, plan.given_dtype)
         var resident_refit = rows_route[res.best] == SEARCH_ROWS_RESIDENT
         if resident_refit:
             run.pin_tokens[0] = plan.pin  # every row: the whole X, the resident base

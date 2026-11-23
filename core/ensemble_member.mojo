@@ -235,6 +235,7 @@ from core.member_abi import (
     MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_SCORE,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_CAN_TRANSFORM, MEMBER_OP_TRANSFORM,
+    MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import (
@@ -251,7 +252,7 @@ from xtrees.label_weights_native import label_weights_native_v1
 from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST
 from bindings.msel_split_spec_run import (
     MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, MSEL_SPEC_LOO, msel_spec_sides, msel_sides_i32,
-    msel_group_codes_run, msel_spec_has_n_splits, msel_spec_sides_targets,
+    msel_group_codes_run, msel_spec_has_n_splits, msel_spec_sides_targets, msel_spec_stratified,
 )
 from core.member_set_run import (
     MemberSetRun, member_set_fit, member_set_run_release, member_set_first_failure,
@@ -817,6 +818,16 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var split: MselSplitSpec
     var base_plans: List[MemberPlan]
     var base_masks: List[Int]
+    # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`):
+    # DURING a fit only (`_fit` writes them, clears them on return), the fit's
+    # float32 target address `fit_y` and its given y (`fit_given`, 0: none,
+    # of `fit_given_dtype`). `_add_drawn` hands the given y to a nested
+    # member whose kind reads it and whose target IS `fit_y` (the same rows:
+    # a draw selects both); every other target (class codes, re-coded or
+    # per-output columns) carries none of it.
+    var fit_y: Int
+    var fit_given: Int
+    var fit_given_dtype: Int
     # Per kept unit: its classes as ensemble codes when it lacks some (empty:
     # every class), its re-coded targets (n words), its row draw and its
     # feature subset (Bagging; empty: every row / column), its out-of-bag rows.
@@ -922,6 +933,9 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.split = MselSplitSpec()
         self.base_plans = List[MemberPlan]()
         self.base_masks = List[Int]()
+        self.fit_y = 0
+        self.fit_given = 0
+        self.fit_given_dtype = MEMBER_F32
         self.unit_held = List[List[Int32]]()
         self.unit_codes = List[List[Int32]]()
         self.unit_rows = List[List[Int32]]()
@@ -1151,6 +1165,19 @@ def _any(masks: List[Int], bit: Int) -> Bool:
     return False
 
 
+def _reads_given(slot: _SlotPtr, masks: List[Int]) -> Int:
+    """`MEMBER_READS_Y_GIVEN` of a META state (core/member_abi.mojo, lane
+    mf-tail5; kind-exact): a REGRESSOR kind whose own splitter is stratified
+    (Stacking's, the search's: `_split_folds` codes the targets' values), or
+    one holding a nested kind that reads it (`_add_drawn` hands it on). A
+    classifier kind reads class codes, never the given y."""
+    if _classifier_kind(slot[].kind):
+        return 0
+    if (slot[].split.kind != MSEL_SPEC_NONE and msel_spec_stratified(slot[].split.kind)) or _any(masks, MEMBER_READS_Y_GIVEN):
+        return MEMBER_READS_Y_GIVEN
+    return 0
+
+
 def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
     """The kind-exact capability mask of a META state over nested kinds
     `masks` (module note, KIND-EXACT BITS; a unit kind: its base's one
@@ -1242,7 +1269,7 @@ def _all_either(masks: List[Int]) -> Bool:
 comptime _UNION = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT
     | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCOPE
-    | MEMBER_CAN_TRANSFORM)
+    | MEMBER_CAN_TRANSFORM | MEMBER_READS_Y_GIVEN)
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -1485,6 +1512,11 @@ def _add_drawn(slot: _SlotPtr, mut run: MemberSetRun, u: Int, classes: Int, targ
     run.add(plan^, target, weights, draw, count, column_draw, column_count,
             UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
             UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
+    # THE GIVEN y (lane mf-tail5, the slot's `fit_given`): only to a kind that
+    # reads it, and only beside the fit's own targets (the set selects its
+    # rows with the member's draw, as it selects y's).
+    if slot[].fit_given != 0 and target != 0 and target == slot[].fit_y and (mask & MEMBER_READS_Y_GIVEN) != 0:
+        run.given_target(slot[].fit_given, slot[].fit_given_dtype)
 
 
 def _expand(slot: _SlotPtr, units: Int):
@@ -1727,7 +1759,8 @@ def _user_folds(slot: _SlotPtr, n: Int, mut tr_at: List[Int], mut tr_n: List[Int
     _ = len(te_counts)
 
 
-def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int, groups: MselGroupCodes, targets: Int) raises:
+def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int, groups: MselGroupCodes, targets: Int,
+                 given: Int, given_dtype: Int) raises:
     """THE SPLITTER CV (lanes mf-split4, mf-split5): the folds of the entry's
     splitter over THIS fit's `n` rows (the door's `_splits` ->
     `prep_native_split` -> bindings/msel_split_door.mojo `msel_split`, whose
@@ -1744,10 +1777,12 @@ def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int, groups: MselGroupCo
     float32 `targets` (0: none): a stratified splitter stratifies on their
     values, as the splitter door does with a regressor's y, its refusal and
     warning in its words (`msel_spec_sides_targets`, lane mf-del5; the
-    door kept every such fit before). No Python."""
+    door kept every such fit before). `given` (lane mf-tail5): THE GIVEN y
+    of those targets (core/member_abi.mojo `MemberCall.y_given`, 0: none),
+    whose values are coded instead of the float32 words. No Python."""
     var sides: MselSides
     if codes == 0 and targets != 0:
-        sides = msel_spec_sides_targets(slot[].split, n, targets, groups)
+        sides = msel_spec_sides_targets(slot[].split, n, targets, given, given_dtype, groups)
     else:
         sides = msel_spec_sides(slot[].split, n, codes, k, groups)
     for w in range(len(sides.least)):  # small-loop(one notice per splitter warning)
@@ -1823,7 +1858,8 @@ def _fit_stack(slot: _SlotPtr, call: _CallPtr) raises:
     # THE SPLITTER CV (lane mf-split4): this fit's folds first, as the door
     # computes its splits before any member fit.
     if slot[].split.kind != MSEL_SPEC_NONE:
-        _split_folds(slot, n, y if classifier else 0, k, _no_groups(), 0 if classifier else y)
+        _split_folds(slot, n, y if classifier else 0, k, _no_groups(), 0 if classifier else y,
+                     0 if classifier else slot[].fit_given, slot[].fit_given_dtype)
     slot[].classes = k
     slot[].states = List[Int](length=bases + 1, fill=0)
     # 1. The members on every row (one set).
@@ -2050,7 +2086,7 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     # THE SPLITTER CV: this fit's folds first, as the door computes its
     # splits before any member fit.
     if slot[].split.kind != MSEL_SPEC_NONE:
-        _split_folds(slot, n, y, k, _no_groups(), 0)
+        _split_folds(slot, n, y, k, _no_groups(), 0, 0, 0)
     var listed = len(slot[].fold_test) > 0
     var tr_at = List[Int]()
     var tr_n = List[Int]()
@@ -3182,6 +3218,10 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
                               call[].x.cols, call[].y.data, k, slot[].folds, slot[].glue, slot[].metric)
     plan.y_dtype = MEMBER_I32 if classifier else MEMBER_F32
     plan.y_cols = outputs
+    if not classifier:
+        # THE GIVEN y (lane mf-tail5): the RUN hands it to the candidates that read it.
+        plan.given = slot[].fit_given
+        plan.given_dtype = slot[].fit_given_dtype
     if outputs > 1 and call[].class_counts != 0:
         var counts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=call[].class_counts)
         for j in range(outputs):  # small-loop(the outputs' class counts)
@@ -3221,7 +3261,8 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
         # A one-output regressor hands its targets (a stratified splitter
         # stratifies on their values, as the door's split does; lane mf-del5).
         _split_folds(slot, call[].x.rows, call[].y.data if k > 0 else 0, k, _call_groups(call),
-                     call[].y.data if not classifier and outputs == 1 else 0)
+                     call[].y.data if not classifier and outputs == 1 else 0,
+                     slot[].fit_given if not classifier and outputs == 1 else 0, slot[].fit_given_dtype)
     if len(slot[].fold_test) > 0:
         # Views of the slot's int32 sides (kept alive by the slot through the
         # RUN), checked as the door checks a split's rows.
@@ -3413,10 +3454,40 @@ def _fit_multi(slot: _SlotPtr, call: _CallPtr) raises:
     host_parallelize(_column, outputs)
     _ = len(columns)
     var weights = call[].weights.data if call[].weights.given() else 0
+    # THE GIVEN y per output (lane mf-tail5): a regressor base that reads it
+    # fits output j with column j of the given y (float64 words, one parallel
+    # pass); none is made for a base that does not read it.
+    var given_cols = List[List[Float64]]()
+    var given_src = slot[].fit_given
+    var given_kind = slot[].fit_given_dtype
+    if (not classifier and given_src != 0 and len(slot[].base_masks) > 0
+            and (slot[].base_masks[0] & MEMBER_READS_Y_GIVEN) != 0):
+        var given_at = List[Int](length=outputs, fill=0)
+        for j in range(outputs):  # driver-loop: over the outputs (their given columns, allocated once)
+            given_cols.append(List[Float64](length=max(n, 1), fill=0.0))
+            given_at[j] = Int(given_cols[j].unsafe_ptr())
+        var given_at_at = Int(given_at.unsafe_ptr())
+
+        def _given_column(j: Int) {imm given_at_at, imm given_src, imm given_kind, imm n, imm outputs}:
+            var dst = _F64P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=given_at_at)[j])
+            for i in range(n):
+                var at = i * outputs + j
+                if given_kind == MEMBER_I64:
+                    dst[i] = Float64(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=given_src)[at])
+                elif given_kind == MEMBER_I32:
+                    dst[i] = Float64(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=given_src)[at])
+                else:
+                    dst[i] = _F64P(unsafe_from_address=given_src)[at]
+
+        host_parallelize(_given_column, outputs)
+        _ = len(given_at)
     var run = _set_of(slot, call[].x.data, n, d, MEMBER_I32 if classifier else MEMBER_F32)
     for j in range(outputs):  # driver-loop: over the outputs (admission into the set, once each)
         _add(slot, run, j, counts[j], Int(slot[].targets[j].unsafe_ptr()), weights, 0, 0)
+        if len(given_cols) > 0:
+            run.given_target(Int(given_cols[j].unsafe_ptr()), MEMBER_F64)
     member_set_fit(run)
+    _ = len(given_cols)  # read through their addresses by the fits above
     slot[].states = List[Int](length=outputs, fill=0)
     _keep_states(slot, run, 0)
     slot[].out_classes = counts^
@@ -3644,6 +3715,10 @@ def _fit_rfe(slot: _SlotPtr, call: _CallPtr) raises:
     # A dotted importance_getter over a META base (lane mf-del5b): THE FORWARDED EXPORT's hops, as the
     # door's `_rfe_native` hands them (`plan.block` is then META_BLOCK_FORWARD).
     plan.hops = slot[].rfe_hops.copy()
+    if slot[].fit_given != 0 and len(slot[].base_masks) > 0 and (slot[].base_masks[0] & MEMBER_READS_Y_GIVEN) != 0:
+        # THE GIVEN y (lane mf-tail5): every round's and the final fit's (the same rows).
+        plan.extras.y_given = slot[].fit_given
+        plan.extras.y_given_dtype = slot[].fit_given_dtype
     if call[].weights.given():
         # RFE.fit's sample_weight, handed to every round's fit and the final fit (scikit-learn's
         # `**fit_params`): the caller's float32 column, as the base's own fit reads it.
@@ -3829,6 +3904,16 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
         raise Error("TypeError: an RFE member's estimator fits no sample weights")
     _drop_states(slot)
     slot[].features = call[].x.cols
+    # THE GIVEN y (lane mf-tail5): a regressor's, for this fit only.
+    slot[].fit_y = call[].y.data
+    slot[].fit_given = 0
+    slot[].fit_given_dtype = MEMBER_F32
+    var g = call[].y_given
+    if (not _classifier_kind(slot[].kind) and g.given() and g.home == MEMBER_HOME_HOST and g.rows == call[].y.rows
+            and g.cols == call[].y.cols and g.stride == g.cols and g.offset == 0
+            and (g.dtype == MEMBER_F64 or g.dtype == MEMBER_I64 or g.dtype == MEMBER_I32)):
+        slot[].fit_given = g.data
+        slot[].fit_given_dtype = g.dtype
     try:
         if _stack_kind_code(slot[].kind):
             _fit_stack(slot, call)
@@ -3853,8 +3938,12 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
         _unit_views(slot)
         slot[].fitted = True
     except error:
+        slot[].fit_y = 0
+        slot[].fit_given = 0
         _drop_states(slot)
         raise error^
+    slot[].fit_y = 0
+    slot[].fit_given = 0  # read during the fit only (core/member_abi.mojo `MemberCall.y_given`)
 
 
 # ------------------------------------------------------------------ PREDICT
@@ -4688,10 +4777,10 @@ def _ensemble_member(operation: Int, address: Int) raises -> Int:
             return _UNION
         var kind = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
         if _rfe_kind(kind[].kind):
-            return _rfe_mask(kind)
+            return _rfe_mask(kind) | _reads_given(kind, kind[].base_masks)
         if _unit_kind(kind[].kind) or _search_kind(kind[].kind):
-            return _kind_mask(kind[].kind, kind[].flag, kind[].base_masks)
-        return _kind_mask(kind[].kind, kind[].flag, kind[].masks)
+            return _kind_mask(kind[].kind, kind[].flag, kind[].base_masks) | _reads_given(kind, kind[].base_masks)
+        return _kind_mask(kind[].kind, kind[].flag, kind[].masks) | _reads_given(kind, kind[].masks)
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0

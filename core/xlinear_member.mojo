@@ -145,7 +145,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.linear_entry_table_ext import XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS
 from core.member_abi import (
-    MEMBER_GIL_FREE,
+    MEMBER_GIL_FREE, MEMBER_READS_Y_GIVEN, MEMBER_HOME_HOST,
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_DTYPE_UNSAID,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_DECISION,
@@ -178,6 +178,7 @@ from x_linear.door_run import (
 from core.member_notices import member_notice_add, MEMBER_NOTICE_WORDS, MEMBER_NOTICE_R2_FEW, MEMBER_NOTICE_SPLIT_LEAST
 from bindings.msel_split_spec_run import (
     MselSplitSpec, MselSides, MselGroupCodes, msel_spec_copy, msel_spec_sides, msel_spec_sides_targets,
+    msel_spec_stratified,
 )
 from x_linear.cv_fold_ids_run import xl_kfold_ids_f32_run
 from x_linear.bayes_words import bayes_out_words, bayes_v_at, bayes_offset_at, ard_out_words, ard_dk_at, ard_offset_at, ard_sigma_at
@@ -500,7 +501,30 @@ def _capabilities(kind: Int) -> Int:
         # Lane mf-split5: RidgeCV's split path (undefined R^2), a splitter's
         # warning (LogisticRegressionCV over StratifiedKFold).
         bits |= MEMBER_CAN_NOTICES
+    if kind < 0:
+        # THE GIVEN y (lane mf-tail5): some CV kind with a stratified splitter
+        # reads it (`_reads_given` answers kind-exactly).
+        bits |= MEMBER_READS_Y_GIVEN
     return bits
+
+
+def _reads_given(kind: Int, words: _F64P, count: Int) -> Int:
+    """`MEMBER_READS_Y_GIVEN` (core/member_abi.mojo, lane mf-tail5) of a
+    kind and its NEW words: a regressor CV kind whose cv is a STRATIFIED
+    splitter spec (RidgeCV word 3, LassoCV / ElasticNetCV word 6: minus the
+    spec's handle) stratifies on its targets' values, so it reads the given
+    y; every other kind and cv reads none (no caller gathers it for them).
+    One spec read under its store's lock, once per member class (a
+    capability question)."""
+    var at = 3 if kind == XL_MEMBER_RIDGE_CV else (6 if _enetcv(kind) else -1)
+    if at < 0 or count <= at or words[at] >= 0.0:
+        return 0
+    try:
+        if msel_spec_stratified(msel_spec_copy(Int(-words[at])).kind):
+            return MEMBER_READS_Y_GIVEN
+    except:
+        return 0
+    return 0
 
 
 def _posterior_kind(kind: Int) -> Bool:
@@ -703,7 +727,8 @@ def _ridge_cv_splits(slot: _SlotP, call: _CallP, spec: MselSplitSpec, var alphas
         raise Error("ImportError: mojolearn RidgeCV: the split path scores each split with the metrics image's "
             + "R^2 entry, which is not loaded")
     # a regressor's targets: a stratified splitter stratifies on their values, as the door's split (lane mf-del5)
-    var sides = msel_spec_sides_targets(spec, n, call[].y.data, MselGroupCodes())
+    # (lane mf-tail5: with THE GIVEN y, its values; core/member_abi.mojo `MemberCall.y_given`)
+    var sides = msel_spec_sides_targets(spec, n, call[].y.data, _given_at(call), call[].y_given.dtype, MselGroupCodes())
     var k = sides.splits()
     if k == 0:
         raise Error("mojolearn: cv produced no (train, test) split")
@@ -786,18 +811,30 @@ def _cv_fold_words(spec: MselSplitSpec, sides: MselSides, n: Int, estimator: Str
     _fill_f32(ids_dst, n, Float32(-(n + 1)))
 
 
-def _cv_sides(word: Float64, n: Int, codes: Int, classes: Int, targets: Int, mut spec: MselSplitSpec) raises -> MselSides:
+def _given_at(call: _CallP) -> Int:
+    """THE GIVEN y's address (core/member_abi.mojo `MemberCall.y_given`,
+    lane mf-tail5): a dense host column as long as the fit's y, else 0 (the
+    float32 targets are the given y)."""
+    var g = call[].y_given
+    if g.given() and g.home == MEMBER_HOME_HOST and g.rows == call[].y.rows and g.cols == 1 and g.stride == 1 and g.offset == 0:
+        return g.data
+    return 0
+
+
+def _cv_sides(word: Float64, n: Int, codes: Int, classes: Int, targets: Int, given: Int, given_dtype: Int,
+              mut spec: MselSplitSpec) raises -> MselSides:
     """THE SPLITTER CV of an x_linear CV member (lane mf-split5): its spec
     (word: minus its handle) and the splits of this fit's rows, by the
     splitter door's plans (`msel_spec_sides`; `codes`: the classifier's int32
     class codes over `classes`, 0 for a regressor, whose float32 `targets`
     a stratified splitter stratifies on, as the door's split does:
-    `msel_spec_sides_targets`, lane mf-del5). No split: the door's
+    `msel_spec_sides_targets`, lane mf-del5; `given`: THE GIVEN y, lane
+    mf-tail5, 0: none). No split: the door's
     `_xl_cv_splits` words."""
     spec = msel_spec_copy(Int(-word))
     var sides: MselSides
     if codes == 0:
-        sides = msel_spec_sides_targets(spec, n, targets, MselGroupCodes())
+        sides = msel_spec_sides_targets(spec, n, targets, given, given_dtype, MselGroupCodes())
     else:
         sides = msel_spec_sides(spec, n, codes, classes, MselGroupCodes())
     if sides.splits() == 0:
@@ -876,7 +913,7 @@ def _enetcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], intercept: Int, n:
     var roles = List[Float32]()
     var spec = MselSplitSpec()
     if p[6] < 0.0:
-        var sides = _cv_sides(p[6], n, 0, 0, call[].y.data, spec)
+        var sides = _cv_sides(p[6], n, 0, 0, call[].y.data, _given_at(call), call[].y_given.dtype, spec)
         folds = sides.splits()
         _cv_fold_words(spec, sides, n, estimator, Int(ids.unsafe_ptr()), roles)
     else:
@@ -1494,7 +1531,7 @@ def _logcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], n: Int, d: Int, k: 
     var roles = List[Float32]()
     var spec = MselSplitSpec()
     if explicit:
-        var sides = _cv_sides(p[4], n, call[].y.data, k, 0, spec)
+        var sides = _cv_sides(p[4], n, call[].y.data, k, 0, 0, 0, spec)
         folds = sides.splits()
         _cv_fold_words(spec, sides, n, estimator, Int(ids.unsafe_ptr()), roles)
         for w in range(len(sides.least)):  # small-loop(one notice per splitter warning: StratifiedKFold's)
@@ -1740,9 +1777,11 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
             var named = Int(words[0])
             # RidgeCV takes weights on every cv (lane mf-split5: a weighted
             # integer cv runs the split path over KFold's folds, as the door).
-            return _capabilities(named)
+            return _capabilities(named) | _reads_given(named, words, call[].param_count)
         var asked = _SlotP(unsafe_from_address=_lookup(call[].state, False))
         var bits = _capabilities(_kind(asked))
+        bits |= _reads_given(_kind(asked), _F64P(unsafe_from_address=Int(asked[].params.unsafe_ptr())),
+                             len(asked[].params))
         if not _classifier(_kind(asked)) and not call[].route.has_fifth:
             # A regressor's score is the metrics image's R^2 entry: without it
             # on the route the score would be refused at RUN, so it is not
