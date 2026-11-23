@@ -64,7 +64,8 @@ from core.member_abi import (
     MEMBER_CAN_SAMPLE_WEIGHT,
 )
 from core.member_families import (
-    MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT,
+    MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_NAIVE_BAYES,
+    MEMBER_FAMILY_DISCRIMINANT,
     MEMBER_FAMILY_GBDT, MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_XNEIGHBORS,
 )
 
@@ -445,7 +446,8 @@ def rfe_member_fit_params(base: RfeBase, fit_params: PythonObject, n: Int, b: Py
     (the member re-checks what it reads, as for Bagging's and Voting's members); a forest's
     `feature_importances` (an exact bool: the rounds compute importances whatever it says, as before; True
     keeps them on the final fit). Not admitted (the door's fit answers): weights for a kind without
-    MEMBER_CAN_SAMPLE_WEIGHT, a non-bool feature_importances, any other key."""
+    MEMBER_CAN_SAMPLE_WEIGHT, any other key. A feature_importances value the forest's fit door refuses
+    raises its words here (lane mf-cal5)."""
     var got = RfeFitParams()
     var extras = MemberFitExtras()
     extras.rows = n
@@ -463,9 +465,18 @@ def rfe_member_fit_params(base: RfeBase, fit_params: PythonObject, n: Int, b: Py
             weights = w.array
             extras.weights = w.address
         elif name == "feature_importances":
-            if py_type(value) is not b.bool:
-                return got^
-            got.final_importances = Bool(py=value)
+            # THE FALLBACK RULE (lane mf-cal5), as each forest fit door reads it
+            # (bindings/trees_public_forest_door.mojo): RandomForest / DecisionTree (`rf_fit`) take Python's
+            # bool or NumPy's bool_ and refuse anything else in their words before any work; ExtraTrees
+            # (`et_fit`) never reads it. Before, any value but an exact bool fell back to those doors.
+            var t = py_type(value)
+            var boolean = t is b.bool or String(py=t.__name__) == "bool_"
+            if base.owner.plan.family == MEMBER_FAMILY_EXTRA_TREES:
+                got.final_importances = boolean and Bool(py=value)
+            else:
+                if not boolean:
+                    raise Error("feature_importances must be a boolean fit-output request")
+                got.final_importances = Bool(py=value)
         else:
             return got^
     got.pins = weights
