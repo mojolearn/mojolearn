@@ -27,6 +27,27 @@ def kernel_method_provider(fields: PythonObject, binding: PythonObject, identica
     return result
 
 
+def kernel_method_member_provider(fields: PythonObject, binding: PythonObject) raises -> PythonObject:
+    """The image's own provider table for a MEMBER of a `fast` binding
+    (lane mf-img3): every kernel methods image publishes the same versioned
+    table (`kernel_methods_api_v1`, bindings/_mojolearn_kernel_methods.mojo
+    and _host.mojo) beside its member entry, in both tiers, and its
+    operations run the same typed bodies the `fast` door's list and pointer
+    entries run (kernel_methods/native_descriptor_dispatch.mojo operation 0
+    = `kernel_ridge_fit`, 2 = `kernel_ridge_fit_ptr`, 1/3/4-6 the predicts:
+    the same `km_kernel_ridge_*_run` / `kernel_ridge_*_ptr_into` calls). The
+    estimator's own `fast` doors keep their entries (`kernel_method_provider`
+    answers None for them); only the member reads the table. Admission only,
+    once per member: the held table is reused when the estimator holds one
+    of this factory. Nothing is written into the caller's fields."""
+    var factory = neural_descriptor_entry(binding, "kernel_methods_api_v1", False)
+    if factory is None:
+        raise Error("RuntimeError: a kernel methods member requires kernel_methods_api_v1; rebuild the kernel methods binding")
+    var nk = svm_keys()
+    var previous = py_get(fields, nk[].k__native_kernel_method_provider)
+    return neural_descriptor_reuse(previous, factory, String(KERNEL_METHOD_ABI), KERNEL_METHOD_OPERATIONS)
+
+
 # The packed admission `kernel_method_execute` (two Python lists re-read per
 # call) is gone: the door builds a typed request and RUN calls the table
 # (kernel_methods/native_call_run.mojo `KmCall`, `km_call_run`).

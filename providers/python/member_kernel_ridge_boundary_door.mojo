@@ -11,9 +11,10 @@ providers/python/member_linear_boundary_door.mojo). Kind 0 is KernelRidge
     requested), the provider table in the route's entry slot, its
     capability word in `route.flags`, and the 6 parameter words of
     core/kernel_ridge_member.mojo (kernel='precomputed' among them since
-    lane mf-adm3). An image without the described provider (`fast`, or a
-    binary built before the descriptor) is not published: admit returns
-    False and the caller keeps the estimator's own doors.
+    lane mf-adm3). A `fast` binding's door has no provider (it keeps its
+    list and pointer entries); its member takes the image's own table
+    (`kernel_method_member_provider`, lane mf-img3: the same typed bodies),
+    so every configuration the door fits is admitted.
   * `kernel_ridge_member_pack` (PACK): the fitted attributes the estimator's
     own fit writes (`km_krr_fit_pack`, `kernel_public_fit_complete`), from
     the member state's blocks. A one-column y is packed 1-D (`_squeeze`).
@@ -43,9 +44,11 @@ from kernel_methods.descriptor_schema import KERNEL_METHOD_OPERATIONS
 from kernel_methods.native_call_run import KmKernel
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
-from providers.python.kernel_method_descriptor_pyapi_door import kernel_method_metadata
+from providers.python.kernel_method_descriptor_pyapi_door import kernel_method_metadata, kernel_method_member_provider
 from providers.python.kernel_public_lifecycle_pyapi_unpack import kernel_public_fit_complete
-from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import (
+    NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_provider_id,
+)
 from x_decomp.descriptor_schema import xd_vendor_code
 
 comptime _WHERE = "KernelRidge"
@@ -57,8 +60,8 @@ comptime _B_DUAL = MEMBER_BLOCK_FAMILY + 1
 def kernel_ridge_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: this configuration has no member
-    entry (no described provider)."""
+    from the unfitted estimator. Always True (every configuration the
+    estimator's door fits has the member entry)."""
     if kind != 0:
         raise Error("ValueError: mojolearn: unknown KernelRidge member kind " + String(kind))
     # The estimator's own checks, in its fit's order (`km_krr_fit_unpack`).
@@ -68,7 +71,10 @@ def kernel_ridge_member_admit(model: PythonObject, fields: PythonObject, kind: I
     var binding = estimator_member_binding(model, "_mojolearn_kernel_methods", context)
     var route = km_extension(fields, binding, _WHERE, context)
     if not route.described():
-        return False
+        # A `fast` binding (lane mf-img3): its door keeps its list and pointer entries, the member runs the
+        # same bodies through the image's own provider table (`kernel_method_member_provider`).
+        var table = kernel_method_member_provider(fields, binding)
+        route = KmRoute(binding, table, kernel_method_metadata(table, 14), neural_descriptor_provider_id(table))
     var degree = _km_degree(fields, _WHERE)
     var gamma_source = family_field(fields, "gamma")
     var gamma_kind = 1.0 if gamma_source is None else 0.0
