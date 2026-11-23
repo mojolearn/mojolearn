@@ -163,6 +163,7 @@ from gbdt.targets.pointwise_bodies import (
     weighted_score,
 )
 from gbdt.methods.cursor_rescale import rescaled_leaves
+from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.gpu_util.kernel.random_gen import (
     advance_seed_k,
     next_normal_f,
@@ -4362,13 +4363,10 @@ def gbdt_host_boost(
         # tree whether or not the noise is on
         var noise_mult = Float64(0.0)
         if random_strength != Float32(0.0):
-            # `log(n) - iteration * lr` in ONE rounding, as the default
-            # (contract=fast) build fused it (lane/explicit-fma-contract-proof)
-            # the seams, as gbdt/methods/random_score_helper.mojo (lane fb13-identity-audit)
-            var model_left = identical_exp64(
-                fma(-Float64(iteration), Float64(params.learning_rate), identical_log64(Float64(n_rows)))
+            # the device's one body (gbdt/methods/random_score_bodies.mojo)
+            noise_mult = score_model_length_mult(
+                Float64(n_rows), iteration, params.learning_rate
             )
-            noise_mult = model_left / (1.0 + model_left)
         var tree_seed = noise_rand.next_uniform_l()
         if bootstrap_on:
             var bm = _bootstrap_pass(

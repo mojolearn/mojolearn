@@ -75,7 +75,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 20
+comptime GBDT_HOST_UNITS = 21
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -1177,8 +1177,75 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         require("\nntree 0 " in m.text, "non-symmetric model text: " + o.grow_policy)
     elif unit <= 13:
         host_losses[I](unit - 7)
-    else:
+    elif unit <= 19:
         host_ordered[I](unit - 14)
+    else:
+        host_rest_gaps[I]()
+
+
+def host_rest_gaps[I: GbdtImage]() raises:
+    """The fits the host refused by name until lane gbdt-cpu-rest-2
+    (2026-11-23), each twice to the same bytes: an eval set with the Iter
+    detector on symmetric Quantile and on MultiClass, feature_fraction 0.5
+    on symmetric MAE Exact and on MultiClassOneVsAll, the pointwise searcher
+    with RMSE, and NaN in the float columns beside a CTR column."""
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    reg.eval_x = reg.x.copy()
+    reg.eval_y = reg.y.copy()
+    var q = GbdtOpts("Quantile", 12, 3)
+    q.deterministic()
+    q.leaf_method = "Gradient"
+    q.leaf_iterations = 1
+    q.od_type = "Iter"
+    q.od_wait = 2
+    q.use_best_model = 1
+    var mq = _twice[I](q, reg, "symmetric Quantile with an eval set")
+    require(len(mq.test) > 0, "symmetric Quantile: no held-out curve")
+    var mc3 = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
+    mc3.eval_x = mc3.x.copy()
+    mc3.eval_y = mc3.y.copy()
+    var mc = GbdtOpts("MultiClass", 8, 3)
+    mc.deterministic()
+    mc.od_type = "Iter"
+    mc.od_wait = 2
+    var mm = _twice[I](mc, mc3, "MultiClass with an eval set")
+    require(len(mm.test) > 0, "MultiClass: no held-out curve")
+    var plain = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    var mae = GbdtOpts("MAE", 4, 3)
+    mae.deterministic()
+    mae.leaf_method = "Exact"
+    mae.feature_fraction = 0.5
+    _ = _twice[I](mae, plain, "symmetric MAE Exact at feature_fraction 0.5")
+    var ova_in = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
+    var ova = GbdtOpts("MultiClassOneVsAll", 4, 3)
+    ova.deterministic()
+    ova.feature_fraction = 0.5
+    _ = _twice[I](ova, ova_in, "MultiClassOneVsAll at feature_fraction 0.5")
+    var pw = GbdtOpts("RMSE", 4, 3)
+    pw.pointwise = True
+    pw.score_function = "L2"
+    pw.bootstrap = "Bayesian"
+    pw.bagging_temperature = 0.5
+    pw.random_strength = 0.0
+    pw.boost_from_average = 1
+    pw.leaf_method = "Newton"
+    pw.leaf_iterations = 1
+    var mp = _twice[I](pw, plain, "the pointwise searcher with RMSE")
+    require(all_finite_f32(predict(mp.text, plain.x, 600)), "pointwise RMSE: nonfinite predict")
+    # NaN in the six float columns beside a CTR column (the three class
+    # codes, above one_hot_max_size 2)
+    var xn = load_f32("e3-xn.f32", 3600)
+    var codes = load_f32("e3-y3.f32", 600)
+    for r in range(600):  # small-loop(one appended column)
+        xn.append(codes[r])
+    var cat_in = GbdtInputs(xn^, 600, 7, load_f32("e3-yr.f32", 600))
+    var cat = GbdtOpts("RMSE", 4, 3)
+    cat.deterministic()
+    cat.boost_from_average = 0
+    cat.leaf_iterations = 1
+    cat.cat_features = [6]
+    var mcat = _twice[I](cat, cat_in, "RMSE with NaN beside a CTR column")
+    require(len(mcat.text) > 0, "NaN beside CTR: empty model text")
 
 
 def host_losses[I: GbdtImage](case_index: Int) raises:

@@ -18,6 +18,7 @@ from std.math import exp, fma, isfinite, log, sqrt
 
 from checks.numerics import ftz, identical_mul_add
 from gbdt.methods.cursor_rescale import rescaled_leaves
+from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.data.pairs import (
     IDN_PAIRLOGIT_GROUP,
     PairList,
@@ -295,8 +296,11 @@ def gbdt_ranking_pointwise_host_fit(
         var tree_seed = noise_rand.next_uniform_l()
         var score_std_dev = Float32(0)
         if random_strength != Float32(0):
-            var left = exp(fma(-Float64(iteration), Float64(params.learning_rate), log(Float64(n_rows))))
-            var mult = left / (1.0 + left)
+            # the device's one body (gbdt/methods/random_score_bodies.mojo;
+            # this was a host libm restatement, lane gbdt-cpu-rest-2)
+            var mult = score_model_length_mult(
+                Float64(n_rows), iteration, params.learning_rate
+            )
             if mult * Float64(random_strength) != 0.0:
                 score_std_dev = Float32(mult * _pointwise_target_std_dev(stats, n_rows) * Float64(random_strength))
         var scale: Float32

@@ -325,7 +325,7 @@ def _refuse_pointwise(what: String) raises:
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
         + " under use_pointwise_searcher=True; the gbdt host binding trains"
         " the gbdt-pointwise-l2-bayesian-eval lane only on this arm"
-        " (SymmetricTree, Logloss, L2 scores, the Bayesian bootstrap,"
+        " (SymmetricTree, Logloss or RMSE, L2 scores, the Bayesian bootstrap,"
         " boost_from_average=True, Newton leaves, with or without"
         " sample_weight, with or without an eval set under the Iter"
         " detector), see gbdt/host/gbdt_oracle_pointwise.mojo"
@@ -387,7 +387,10 @@ def _gbdt_fit_pointwise_arm(
     var max_leaves = params.i(32)
     var min_data_in_leaf = params.i(33)
 
-    if loss != String("Logloss"):
+    # lane gbdt-cpu-rest-2 (2026-11-23): RMSE too, the loss's own target
+    # kernel and the shared estimator (gbdt_oracle_pointwise.mojo)
+    var pw_is_rmse = loss == String("RMSE")
+    if loss != String("Logloss") and not pw_is_rmse:
         _refuse_pointwise("loss='" + loss + "'")
     if grow_code != 0:
         _refuse_pointwise("grow_policy code " + String(grow_code))
@@ -453,11 +456,20 @@ def _gbdt_fit_pointwise_arm(
         raise Error("best_model_min_trees must be at least 1, got " + String(best_model_min_trees))
     var nan_mode = nan_mode_from_name(nan_mode_name)
     var iterations = GBDT_LOGLOSS_NEWTON_ITERATIONS
+    if pw_is_rmse:
+        iterations = 1
     if leaf_iterations >= 0:
         iterations = leaf_iterations
     var border = GBDT_HOST_DEFAULT_BORDER
     if loss_border >= Float32(0.0):
         border = loss_border
+    # the loss as `train` resolves it on this arm: Newton leaves, Logloss's
+    # border in the kernel alpha, no bootstrap in the loss (the arm's own
+    # Bayesian draw runs in the fit)
+    var pw_loss = GbdtHostLoss(
+        GBDT_OBJ_RMSE if pw_is_rmse else GBDT_OBJ_LOGLOSS, border,
+        Float32(0.5), GBDT_LEAF_NEWTON, iterations, -1, Float32(0.0), border,
+    )
 
     var has_nan = False
     var text = String("")
@@ -480,7 +492,7 @@ def _gbdt_fit_pointwise_arm(
         x, y, w, n_rows, n_features, ex, ey, n_eval_rows,
         border_count, border_build_max_samples, n_estimators,
         max_depth, learning_rate, l2_leaf_reg, random_seed, nan_mode,
-        border, iterations, bagging_temperature, od_wait,
+        pw_loss, bagging_temperature, od_wait,
         use_best_model, best_model_min_trees, n_weights != 0,
     )
     text = fit.text
@@ -1227,10 +1239,26 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # (gbdt_oracle_depthwise.mojo, Logloss and RMSE)
     # lane gbdt-cpu-rest (2026-11-23): and the pointwise losses on the
     # non-symmetric driver, whose held-out arm reads `_loss_value`
+    # lane gbdt-cpu-rest-2 (2026-11-23): and the symmetric pointwise losses
+    # (gbdt_oracle_losses.mojo::gbdt_losses_host_fit, the held-out arm of
+    # gbdt_host_boost); the grouped losses refuse an eval set on both
+    # columns, in `train`'s words
+    if is_multi_rmse and n_eval_rows != 0:
+        raise Error(
+            "loss='MultiRMSE' with eval_set is not carried here: the"
+            " held-out arm's target is one value per row"
+        )
+    if pw_grouped and n_eval_rows != 0:
+        raise Error(
+            "loss='" + loss + "' with eval_set is not implemented here: the"
+            " held-out loss needs the eval pool's own grouping"
+        )
+    # and MultiClass / MultiClassOneVsAll (gbdt_oracle_multiclass.mojo,
+    # the same arm at `dim` values per leaf)
     var eval_arm_ok = (
         (loss == String("Logloss") or is_rmse) and not is_pointwise
         and not is_multi
-    ) or (is_pointwise and grow_code != 0)
+    ) or (is_pointwise and not pw_grouped) or (is_multi and not is_multi_rmse)
     if n_eval_rows != 0 and not eval_arm_ok:
         _refuse(
             "eval_set outside Logloss and RMSE (the held-out arm of"
@@ -1273,8 +1301,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         # `train`'s words (gbdt/train.mojo)
         raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
     # and the numeric symmetric Logloss / RMSE loop (gbdt_host_boost, the
-    # same two helpers)
-    if feature_fraction != 1.0 and grow_code == 0 and (is_pointwise or is_multi):
+    # same two helpers), and the symmetric pointwise losses, grouped ones
+    # included (gbdt_losses_host_fit, the same statements; lane
+    # gbdt-cpu-rest-2)
+    if feature_fraction != 1.0 and grow_code == 0 and ranking_pointwise:
         _refuse("feature_fraction=" + String(feature_fraction) + " under SymmetricTree with loss='" + loss + "'")
     if not (feature_fraction > 0.0) or feature_fraction > 1.0:
         raise Error("feature_fraction must be finite and in (0, 1]")
@@ -1465,22 +1495,32 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var stopped_early = False
     var has_nan = False
     if len(flags) != 0:
-        # lane gbdt-cpu-rest (2026-11-23): every numeric arm bins X through
-        # the one grid and binarizer (`gbdt_host_grid` / `_binarize_columns`
-        # of gbdt_oracle.mojo, the nan_mode treatment and the held-out
-        # "no NaNs in the learn dataset" refusal inside), as the
-        # SymmetricTree Logloss fit of the gbdt-nan-modes lane does, so NaN
-        # is refused only beside categorical columns, whose hashing of a
-        # NaN category value is not restated
+        # lane gbdt-cpu-rest-2 (2026-11-23): a NaN in a FLOAT column beside
+        # categorical ones is binned as on the numeric arms: the one-hot arm
+        # runs `gbdt_host_fit_eval` (the one grid and binarizer, nan_mode and
+        # the held-out "no NaNs in the learn dataset" refusal inside) and the
+        # CTR arm grids its float columns through `gbdt_host_grid` and carries
+        # their nan treatment into the tree CTR plan. A NaN in a cat_features
+        # column is refused on both columns by `dense_category_code`'s words
+        # ("is not finite"), which both arms call. What stays refused, by
+        # name: a NaN in a column flagged one-hot without being categorical,
+        # whose code scan (`Int(value)` of the max) the host does not
+        # restate for a NaN.
         var xs = f32_ptr(x_address)
-        has_nan = gbdt_host_has_nan_ptr(xs, n_rows * n_features)
-        if not has_nan and n_eval_rows > 0:
-            var exs = f32_ptr(params.eval_x)
-            has_nan = gbdt_host_has_nan_ptr(exs, n_eval_rows * n_features)
+        for f in range(n_features):  # driver-loop: over the flagged one-hot columns, each scanned across the cores
+            var plain_one_hot = (flags[f] & UInt32(1)) == UInt32(0) and (flags[f] & UInt32(2)) != UInt32(0)
+            if not plain_one_hot:
+                continue
+            if gbdt_host_has_nan_ptr(xs + f * n_rows, n_rows):
+                has_nan = True
+            elif n_eval_rows > 0:
+                var exs = f32_ptr(params.eval_x)
+                if gbdt_host_has_nan_ptr(exs + f * n_eval_rows, n_eval_rows):
+                    has_nan = True
     if has_nan:
         _refuse(
-            "an X carrying NaN beside categorical columns (loss='" + loss
-            + "', grow_policy code " + String(grow_code) + ")"
+            "a NaN in a one_hot_features column that is not categorical"
+            " (loss='" + loss + "', grow_policy code " + String(grow_code) + ")"
         )
     var eval_x_address = params.eval_x
     var eval_y_address = params.eval_y
@@ -1519,14 +1559,23 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             multi_objective = GBDT_OBJ_MULTICLASS
         elif is_multi_rmse:
             multi_objective = GBDT_OBJ_MULTIRMSE
-        var multi_model = gbdt_multi_host_fit(
+        # the held-out arm and the feature sample (lane gbdt-cpu-rest-2)
+        var multi_ev = _gbdt_host_eval_arm(
+            eval_x_address, eval_y_address, n_eval_rows, n_features,
+            od_kind, od.auto_stop_p_value, od.iterations_wait,
+            use_best_model, best_model_min_trees,
+        )
+        var multi_fit = gbdt_multi_host_fit(
             x, y, n_rows, n_features, p,
             multi_objective,
-            class_weights, sym_boot_kind, sym_boot_param, random_strength,
-            target_dim, row_weights,
+            class_weights, multi_ev^, sym_boot_kind, sym_boot_param,
+            random_strength, target_dim, row_weights, feature_fraction,
         )
-        text = gbdt_multi_host_model_text(multi_model)
-        losses = multi_model.losses.copy()
+        text = gbdt_multi_host_model_text(multi_fit.model)
+        losses = multi_fit.model.losses.copy()
+        best_iteration = multi_fit.eval.best_iteration
+        stopped_early = multi_fit.eval.stopped_early
+        test_losses = multi_fit.eval.test_losses.copy()
     elif is_pointwise:
         # gbdt/host/gbdt_oracle_losses.mojo
         # `AdjustBoostFromAverageDefaultValue`: unset is True for MAE,
@@ -1575,9 +1624,29 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             stopped_early = pw_ns.stopped_early
             test_losses = pw_ns.test_losses.copy()
             return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
-        var pw_model: GbdtHostModel
-        if ranking_pointwise:
-            pw_model = gbdt_ranking_pointwise_host_fit(
+        if not ranking_pointwise:
+            # the greedy symmetric searcher over the pointwise loss, with its
+            # held-out arm and the per-tree feature sample (lane
+            # gbdt-cpu-rest-2, 2026-11-23)
+            var pw_sym_ev = _gbdt_host_eval_arm(
+                eval_x_address, eval_y_address, n_eval_rows, n_features,
+                od_kind, od.auto_stop_p_value, od.iterations_wait,
+                use_best_model, best_model_min_trees,
+            )
+            var pw_fit = gbdt_losses_host_fit(
+                x, y, n_rows, n_features, p, pw_loss, pw_sym_ev^,
+                host_group_sizes, host_pair_winners, host_pair_losers,
+                host_pair_weights, pw_start, random_strength, row_weights,
+                feature_fraction,
+            )
+            losses = pw_fit.model.losses.copy()
+            best_iteration = pw_fit.eval.best_iteration
+            stopped_early = pw_fit.eval.stopped_early
+            test_losses = pw_fit.eval.test_losses.copy()
+            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_fit.model^, pw_start))
+            return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
+        # the grouped pointwise searcher (gbdt_oracle_pointwise_rank.mojo)
+        var pw_model = gbdt_ranking_pointwise_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
                 host_pair_winners, host_pair_losers, host_pair_weights,
                 score_function == GBDT_HOST_SCORE_NEWTON_COSINE
@@ -1585,12 +1654,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 score_function == GBDT_HOST_SCORE_COSINE
                 or score_function == GBDT_HOST_SCORE_NEWTON_COSINE,
                 random_strength, row_weights,
-            )
-        else:
-            pw_model = gbdt_losses_host_fit(
-                x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
-                host_pair_winners, host_pair_losers, host_pair_weights,
-                pw_start, random_strength, row_weights,
             )
         losses = pw_model.losses.copy()
         best_iteration = pw_model.best_iteration

@@ -236,11 +236,14 @@ def gbdt_eval_test_bins(
 
 @no_inline
 def gbdt_eval_add_tree(
-    mut cursor: List[Float32], bins: List[Int], values: List[Float32]
+    mut cursor: List[Float32], bins: List[Int], values: List[Float32],
+    dim: Int = 1,
 ):
     """`compute_bins_and_add_kernel`'s add (`add_bin_values.mojo`):
     `cursor += values[bin]`, the STORED model values, which already carry
-    the learning rate.
+    the learning rate. `dim` above 1 is the multi-output tree (lane
+    gbdt-cpu-rest-2): `cursor[d * n + row] += values[bin * dim + d]`, the
+    kernel's `plane = dim * cursor_stride` and `leaf * dim_count + dim`.
 
     `@no_inline` IS LOAD BEARING, for the reason
     `gbdt_oracle_ordered.mojo::_add_tree_values` records: inlined, the host
@@ -251,18 +254,19 @@ def gbdt_eval_add_tree(
     # contiguous ranges; the task adds a STORED value read through a
     # pointer, so there is no product here for a compiler to contract
     var n = len(bins)
-    var units = _eval_units(n, 3 * n)
+    var units = _eval_units(n, 3 * n * dim)
     var chunk = host_predict_chunk(n, units)
     var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
     var bins_p = rebind[_EvalIntPtr](bins.unsafe_ptr())
     var values_p = rebind[HostF32Ptr](values.unsafe_ptr())
 
-    def rows(unit: Int) {imm chunk, imm n, imm cursor_p, imm bins_p, imm values_p}:
+    def rows(unit: Int) {imm chunk, imm n, imm dim, imm cursor_p, imm bins_p, imm values_p}:
         for r in range(unit * chunk, min(n, (unit + 1) * chunk)):
-            var v = values_p[bins_p[r]]
-            comptime if GBDT_EVAL_HOST_SABOTAGE:
-                v = bitcast[DType.float32](bitcast[DType.uint32](v) + UInt32(1))
-            cursor_p[r] = cursor_p[r] + v
+            for d in range(dim):
+                var v = values_p[bins_p[r] * dim + d]
+                comptime if GBDT_EVAL_HOST_SABOTAGE:
+                    v = bitcast[DType.float32](bitcast[DType.uint32](v) + UInt32(1))
+                cursor_p[d * n + r] = cursor_p[d * n + r] + v
 
     host_parallelize(rows, units)
     _ = len(cursor)

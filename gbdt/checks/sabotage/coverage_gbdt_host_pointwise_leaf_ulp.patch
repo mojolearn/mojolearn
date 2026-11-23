@@ -1,9 +1,9 @@
 diff --git a/gbdt/host/gbdt_oracle_pointwise.mojo b/gbdt/host/gbdt_oracle_pointwise.mojo
-index e02d047963..69399119de 100644
+index efd712ea01..7afbc8f4af 100644
 --- a/gbdt/host/gbdt_oracle_pointwise.mojo
 +++ b/gbdt/host/gbdt_oracle_pointwise.mojo
-@@ -479,6 +479,16 @@ def _oracle_eval_weighted(
-     value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])
+@@ -301,6 +301,16 @@ def _pw_tree_onto_rows(
+     _ = len(cursor)
  
  
 +from std.memory import bitcast as _sab_bitcast
@@ -16,11 +16,11 @@ index e02d047963..69399119de 100644
 +        scaled[i] = _sab_bitcast[DType.float32](_sab_bitcast[DType.uint32](scaled[i]) + UInt32(1))
 +
 +
- def gbdt_pointwise_host_fit(
-     x_colmajor: List[Float32],
-     y: List[Float32],
-@@ -651,6 +661,7 @@ def gbdt_pointwise_host_fit(
-             partition.sizes, n_rows, border, l2_leaf_reg, leaf_iterations,
+ # Lane gbdt-cpu-rest-2 (2026-11-23): `_estimate_logloss_leaves` and
+ # `_oracle_eval_weighted`, this file's copy of the weighted Newton walker and
+ # its Logloss oracle, are deleted: the fit calls the shared estimator
+@@ -518,6 +528,7 @@ def gbdt_pointwise_host_fit(
+             weights=est_weights,
          )
          var scaled = rescaled_leaves(estimated, learning_rate)
 +        _sabotage_leaf_ulp(scaled)

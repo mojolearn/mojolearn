@@ -1,0 +1,15 @@
+diff --git a/gbdt/host/gbdt_oracle_eval.mojo b/gbdt/host/gbdt_oracle_eval.mojo
+index 7815704962..8c5c948c1d 100644
+--- a/gbdt/host/gbdt_oracle_eval.mojo
++++ b/gbdt/host/gbdt_oracle_eval.mojo
+@@ -263,7 +263,9 @@ def gbdt_eval_add_tree(
+     def rows(unit: Int) {imm chunk, imm n, imm dim, imm cursor_p, imm bins_p, imm values_p}:
+         for r in range(unit * chunk, min(n, (unit + 1) * chunk)):
+             for d in range(dim):
+-                var v = values_p[bins_p[r] * dim + d]
++                # SABOTAGE (coverage-gbdt-host_eval_dim_plane): the leaf's
++                # values read in reverse dimension order onto the planes
++                var v = values_p[bins_p[r] * dim + (dim - 1 - d)]
+                 comptime if GBDT_EVAL_HOST_SABOTAGE:
+                     v = bitcast[DType.float32](bitcast[DType.uint32](v) + UInt32(1))
+                 cursor_p[d * n + r] = cursor_p[d * n + r] + v
