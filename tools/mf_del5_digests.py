@@ -36,6 +36,23 @@ OrderedRMSE as Gbdt member kind 4 and the saved HostForest / HostGBDT as predict
     class's own door is unchanged), and the values must equal those of the same explainer over the estimator that
     saved the file (the `*_twin` lines: the same predict bits by the contract).
 
+Section cal5 (lane mf-cal5; base origin/lane/member-fits-5 3dbe1143cc vs the head of lane/mf-cal5): THE FALLBACK
+RULE cases this lane moved off the doors.
+  * cw_eq_*: an SGDClassifier / LogisticRegressionCV whose class_weight is an object equal to 'balanced' (not a str),
+    as an RFE estimator, a CalibratedClassifierCV base and a VotingClassifier member: before, the member was not
+    admitted and each caller kept its door; after, the member's 'balanced' tail. EXPECTED equal outputs.
+  * rfe_fi_*: RFE(RandomForestClassifier).fit(..., feature_importances=np.bool_(True)) (before: the door; after:
+    the member: EXPECTED equal), feature_importances=1 (the forest door's words both times: EXPECTED equal words),
+    RFE(ExtraTreesClassifier).fit(..., feature_importances="yes") (ignored by et_fit; before the door, after the
+    member: EXPECTED equal).
+  * rfe_one_*: RFE over a one-class y: a DecisionTreeClassifier (before the door, after the member: EXPECTED equal
+    support, ranking and predict), a LogisticRegression (its fit's one-class words: EXPECTED the same words; a
+    change of wording is a defect to send back).
+  * rfe_gb_cat_outside: RFE(GradientBoosting(cat_features=[9])).fit(X, t, eval_set=...) on 6 columns: the fit
+    door's `_cat_slots` words both times (EXPECTED equal words).
+  * host_late: a fresh process that loads model_selection first and touches HostForest / HostGBDT after: their
+    member plans are registered at their import (EXPECTED after: True / True; before: whatever the rescan gave).
+
 Configurations are independent: one process each across the host cores.
 
     python tools/mf_del5_digests.py > digests.txt
@@ -254,11 +271,84 @@ def _hostent5(arg):
     return out
 
 
+class _EqBalanced:
+    """Not a str; equal to 'balanced' (the x_linear / SGD doors test class_weight by ==)."""
+
+    def __eq__(self, other):
+        return other == "balanced"
+
+    def __hash__(self):
+        return hash("balanced")
+
+
+def _cal5(arg):
+    _, case = arg
+    import mojolearn
+    from mojolearn.feature_selection import RFE
+    X, y, t = _data(37, 120, 6, 3)
+    tag = f"cal5_{case}"
+    out = []
+    try:
+        if case.startswith("cw_eq_"):
+            from mojolearn.calibration import CalibratedClassifierCV
+            if case.endswith("lrcv"):
+                est = mojolearn.LogisticRegressionCV(cv=3, class_weight=_EqBalanced())
+            else:
+                est = mojolearn.SGDClassifier(random_state=0, max_iter=50, class_weight=_EqBalanced())
+            if "_rfe" in case:
+                m = RFE(est, n_features_to_select=3).fit(X, y)
+                out.append((tag + "_support", _digest(np.asarray(m.support_, dtype=bool))))
+                out.append((tag + "_ranking", _digest(m.ranking_)))
+            elif "_cal" in case:
+                m = CalibratedClassifierCV(est, cv=3).fit(X, y)
+                out.append((tag + "_proba", _digest(m.predict_proba(X))))
+            else:
+                m = mojolearn.VotingClassifier([("a", est), ("b", mojolearn.LogisticRegression(max_iter=200))]).fit(X, y)
+            out.append((tag + "_predict", _digest(m.predict(X))))
+        elif case.startswith("rfe_fi_"):
+            if case == "rfe_fi_et":
+                est = mojolearn.ExtraTreesClassifier(n_estimators=6, random_state=0)
+                m = RFE(est, n_features_to_select=3).fit(X, y, feature_importances="yes")
+            else:
+                value = np.bool_(True) if case == "rfe_fi_bool_" else 1
+                est = mojolearn.RandomForestClassifier(n_estimators=6, random_state=0)
+                m = RFE(est, n_features_to_select=3).fit(X, y, feature_importances=value)
+            out.append((tag + "_support", _digest(np.asarray(m.support_, dtype=bool))))
+            out.append((tag + "_ranking", _digest(m.ranking_)))
+            out.append((tag + "_predict", _digest(m.predict(X))))
+        elif case.startswith("rfe_one_"):
+            one = np.zeros_like(y)
+            est = (mojolearn.DecisionTreeClassifier(random_state=0) if case == "rfe_one_tree"
+                   else mojolearn.LogisticRegression(max_iter=200))
+            m = RFE(est, n_features_to_select=3).fit(X, one)
+            out.append((tag + "_support", _digest(np.asarray(m.support_, dtype=bool))))
+            out.append((tag + "_ranking", _digest(m.ranking_)))
+            out.append((tag + "_predict", _digest(m.predict(X))))
+        elif case == "rfe_gb_cat_outside":
+            Xc = X.copy()
+            Xc[:, 0] = np.floor(Xc[:, 0] * 4)
+            est = mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[9])
+            m = RFE(est, n_features_to_select=6).fit(Xc, t, eval_set=(Xc[:40].copy(), t[:40]))
+            out.append((tag + "_predict", _digest(m.predict(Xc))))
+        else:  # host_late
+            from mojolearn import model_selection
+            registry = model_selection._NATIVE_CONTEXT.get("family_msel_estimators", {})
+            forest = mojolearn.HostForest
+            gbdt = mojolearn.HostGBDT
+            out.append((tag + "_forest", str(forest in registry)))
+            out.append((tag + "_gbdt", str(gbdt in registry)))
+    except Exception as e:  # noqa: BLE001 - the words are the digest
+        out.append((tag + "_raised", f"{type(e).__name__}: {e}"))
+    return out
+
+
 def _unit(arg):
     if arg[0] == "del5b_rfe":
         return _del5b_rfe(arg)
     if arg[0] == "hostent5":
         return _hostent5(arg)
+    if arg[0] == "cal5":
+        return _cal5(arg)
     return _del5(arg)
 
 
@@ -273,7 +363,11 @@ UNITS = ([("del5b_rfe", m, g, r) for m in ("door", "vote", "search", "cv") for g
              "ordered_shap")]
          + [("hostent5", f"host_forest_{f}_{k}_{e}") for f in ("rf", "et") for k in ("cls", "reg")
             for e in ("seq", "groves")]
-         + [("hostent5", f"host_gbdt_{loss}") for loss in ("RMSE", "Logloss", "MultiClass")])
+         + [("hostent5", f"host_gbdt_{loss}") for loss in ("RMSE", "Logloss", "MultiClass")]
+         + [("cal5", c) for c in (
+             "cw_eq_rfe_sgd", "cw_eq_cal_sgd", "cw_eq_vote_sgd", "cw_eq_rfe_lrcv", "cw_eq_cal_lrcv",
+             "rfe_fi_bool_", "rfe_fi_int", "rfe_fi_et", "rfe_one_tree", "rfe_one_logistic", "rfe_gb_cat_outside",
+             "host_late")])
 
 
 def main():
