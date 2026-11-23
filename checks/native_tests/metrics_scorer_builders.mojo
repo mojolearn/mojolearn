@@ -31,6 +31,21 @@ the scikit-learn definitions computed here in binary64 from the same float32 inp
    balanced accuracy with a predicted class y_true lacks gives MEMBER_NOTICE_METRIC_BALANCED; a binary top_k gives
    MEMBER_NOTICE_METRIC_TOP_K (a = 2, b = 2); a clean macro f1 gives none.
 
+9. THE CLUSTER LABEL-PAIR SCORERS (lane mf-cluster5; core/msel_scorer_run.mojo over core/metrics_cluster_table.mojo
+   `cluster_pair_run` and the CPU column's entry, metrics/host/cluster_entry_host.mojo `metrics_cluster_host_v1`):
+   rand (pair agreements over C(n, 2)), adjusted rand (scikit-learn's pair-count formula), mutual information
+   (nats), homogeneity MI / H(true), completeness MI / H(pred), v-measure (beta 1), Fowlkes-Mallows
+   TK / sqrt(PK QK), each against its definition over the case-7 codes; the same labels shifted (+5, the raw
+   labels the doors see) give the same values.
+10. A CLUSTERER'S SIDE (`classes` 0): the true labels as float32 words of integers, the member's cluster ids as
+   int32: the same values as case 9 for every clustering scorer (NMI, AMI and the label-pair seven); a float32
+   label 0.5 refuses.
+11. A MAKE_SCORER FLIP and AN ABSENT pos_label (lane mf-cluster5): `msel_scorer_flip` of 'neg_mean_squared_error'
+   scores +MSE; 'f1' with SCORER_POSITIVE_ABSENT over two present labels raises the door's "pos_label=1 is not a
+   valid label. It should be one of [0, 2]" (label words ['0', '2']), over one present label scores 0.0 with the
+   PRF notice, and SCORER_POSITIVE_KIND raises "pos_label must use the same type as the targets"; three present
+   labels raise the door's "Target is multiclass but average='binary'..." words.
+
 Every value must match to a relative 1e-6 (the programs accumulate in binary64 over float32 words; the oracle does
 the same arithmetic in a different order).
 
@@ -42,7 +57,11 @@ not weighted)` swapped (case 4, ovr weighted); `pair_b[g0 + t]` read as `pair_a`
 `average_precision_run` (case 5); `brier_marks_positive` answering `last` always (case 6, labels {0, 1} with only
 code 0 present: no row is positive); `kk = k` replaced by `kk = 1` in `top_k_stages`
 (case 6); `cluster_mi_run` swapping `ka` / `kb` in the early return (case 7, the one-cluster AMI); dropping
-`member_notice_add` for MEMBER_NOTICE_METRIC_PRF in `_prf_notices` (case 8).
+`member_notice_add` for MEMBER_NOTICE_METRIC_PRF in `_prf_notices` (case 8); in `cluster_union_codes` copy `truth`
+into both halves (case 9: MI, homogeneity, completeness, v-measure, FM move); in `metrics_cluster_host_run` pass
+`(yt, yp)` to the completeness branch (case 9); in `_cluster_value` read the clusterer's float32 truth as int32 bits
+(case 10); drop `row.sign = -row.sign` in `msel_scorer_row` (case 11); in `_binary_value` drop the `present >= 2`
+refusal (case 11: the absent positive scores instead of raising).
 """
 from std.math import sqrt, log, isnan
 from std.memory import bitcast
@@ -67,8 +86,13 @@ from core.member_notices import (
     MEMBER_NOTICE_METRIC_TOP_K,
 )
 from x_metrics.descriptor_host import metrics_program_host_v1
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.entry_table import EntryRef
+from core.metrics_cluster_table import cluster_ops_publish, cluster_ops_entry
+from core.msel_scorer_run import msel_scorer_flip, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND
+from metrics.host.cluster_entry_host import METRICS_CLUSTER_HOST_API, metrics_cluster_host_v1
 
-comptime CASES = 8
+comptime CASES = 11
 
 
 def _route() -> MetricRoute:
@@ -643,6 +667,194 @@ def check_notices() raises:
     _ = len(pc)
 
 
+# ---------------------------------------------------------------- 9-11. the cluster scorers (lane mf-cluster5)
+
+
+def _cluster_entry() raises -> EntryRef:
+    """The CPU column's cluster entry, published as its binding's module init publishes it."""
+    var mode = Int(GLOBAL_NUMERIC_MODE)
+    var api = METRICS_CLUSTER_HOST_API.get_or_create_ptr()
+    cluster_ops_publish(mode, 0, Int(api[].entries.unsafe_ptr()), metrics_cluster_host_v1)
+    return cluster_ops_entry(mode, 0)
+
+
+def _c2(x: Float64) -> Float64:
+    return x * (x - 1.0) / 2.0
+
+
+def _cluster_oracle(a: List[Int32], b: List[Int32], k: Int) -> List[Float64]:
+    """[rand, adjusted rand, MI, homogeneity, completeness, v-measure, FM] by their definitions (codes 0..k-1)."""
+    var n = len(a)
+    var agree = 0.0
+    for i in range(n):  # small-loop(oracle: the sample pairs)
+        for j in range(i + 1, n):  # small-loop(oracle)
+            if (a[i] == a[j]) == (b[i] == b[j]):
+                agree += 1.0
+    var pairs = _c2(Float64(n))
+    var cont = List[Float64](length=k * k, fill=0.0)
+    var ra = List[Float64](length=k, fill=0.0)
+    var rb = List[Float64](length=k, fill=0.0)
+    for i in range(n):  # small-loop(oracle: the contingency)
+        cont[Int(a[i]) * k + Int(b[i])] += 1.0
+        ra[Int(a[i])] += 1.0
+        rb[Int(b[i])] += 1.0
+    var sum_comb = 0.0
+    var sq = 0.0
+    for c in range(k * k):  # small-loop(oracle)
+        sum_comb += _c2(cont[c])
+        sq += cont[c] * cont[c]
+    var sa = 0.0
+    var sb = 0.0
+    var pk = 0.0
+    var qk = 0.0
+    var ha = 0.0
+    var hb = 0.0
+    var fn = Float64(n)
+    for c in range(k):  # small-loop(oracle)
+        sa += _c2(ra[c])
+        sb += _c2(rb[c])
+        qk += ra[c] * ra[c]
+        pk += rb[c] * rb[c]
+        if ra[c] > 0.0:
+            ha -= (ra[c] / fn) * log(ra[c] / fn)
+        if rb[c] > 0.0:
+            hb -= (rb[c] / fn) * log(rb[c] / fn)
+    var mi = 0.0
+    for x in range(k):  # small-loop(oracle)
+        for y in range(k):  # small-loop(oracle)
+            var c = cont[x * k + y]
+            if c > 0.0:
+                mi += (c / fn) * log((c * fn) / (ra[x] * rb[y]))
+    var expected = sa * sb / pairs
+    var ari = (sum_comb - expected) / ((sa + sb) / 2.0 - expected)
+    var h = mi / ha if ha > 0.0 else 1.0
+    var cc = mi / hb if hb > 0.0 else 1.0
+    var v = 2.0 * h * cc / (h + cc) if h + cc > 0.0 else 0.0
+    var fm = (sq - fn) / sqrt((pk - fn) * (qk - fn))
+    var out: List[Float64] = [agree / pairs, ari, mi, h, cc, v, fm]
+    return out^
+
+
+def _pair_names() -> List[String]:
+    var names: List[String] = ["rand_score", "adjusted_rand_score", "mutual_info_score", "homogeneity_score",
+                               "completeness_score", "v_measure_score", "fowlkes_mallows_score"]
+    return names^
+
+
+def check_cluster_pairs() raises:
+    var route = _route()
+    var cluster = _cluster_entry()
+    var a: List[Int32] = [0, 0, 1, 1, 2, 2, 2]
+    var b: List[Int32] = [0, 1, 1, 1, 2, 2, 0]
+    var a5: List[Int32] = [5, 5, 6, 6, 7, 7, 7]
+    var b5: List[Int32] = [5, 6, 6, 6, 7, 7, 5]
+    var want = _cluster_oracle(a, b, 3)
+    var names = _pair_names()
+    for m in range(len(names)):  # small-loop(check: the seven scorers)
+        var row = msel_scorer_row(msel_scorer_code(names[m], False))
+        var notes = List[Float64]()
+        var got = msel_scorer_value(route, cluster, List[String](), row, Int(a.unsafe_ptr()), Int(b.unsafe_ptr()),
+                                    7, 3, 1, -1, notes)
+        _near(got, want[m], names[m])
+        var raw = msel_scorer_value(route, cluster, List[String](), row, Int(a5.unsafe_ptr()),
+                                    Int(b5.unsafe_ptr()), 7, 8, 1, -1, notes)
+        require(raw == got, names[m] + ": raw labels give the codes' value")
+        require(len(notes) == 0, names[m] + " raises no warning")
+    _ = len(a)  # the runs read the codes through their addresses
+    _ = len(b)
+    _ = len(a5)
+    _ = len(b5)
+
+
+def check_clusterer_side() raises:
+    var route = _route()
+    var cluster = _cluster_entry()
+    var a: List[Int32] = [0, 0, 1, 1, 2, 2, 2]
+    var b: List[Int32] = [0, 1, 1, 1, 2, 2, 0]
+    var af: List[Float32] = [0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0]
+    var names = _pair_names()
+    names.append("normalized_mutual_info_score")
+    names.append("adjusted_mutual_info_score")
+    for m in range(len(names)):  # small-loop(check: the clustering scorers)
+        var row = msel_scorer_row(msel_scorer_code(names[m], False))
+        var notes = List[Float64]()
+        var codes = msel_scorer_value(route, cluster, List[String](), row, Int(a.unsafe_ptr()), Int(b.unsafe_ptr()),
+                                      7, 3, 1, -1, notes)
+        var ids = msel_scorer_value(route, cluster, List[String](), row, Int(af.unsafe_ptr()), Int(b.unsafe_ptr()),
+                                    7, 0, 1, -1, notes)
+        require(ids == codes, names[m] + ": a clusterer's float32 labels give the codes' value")
+    var bad: List[Float32] = [0.5, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0]
+    var refused = False
+    try:
+        var notes = List[Float64]()
+        _ = msel_scorer_value(route, cluster, List[String](), msel_scorer_row(msel_scorer_code("rand_score", False)),
+                              Int(bad.unsafe_ptr()), Int(b.unsafe_ptr()), 7, 0, 1, -1, notes)
+    except e:
+        refused = String(e).find("integer labels") >= 0
+    require(refused, "a non-integer clusterer label refuses")
+    _ = len(a)
+    _ = len(b)
+    _ = len(af)
+    _ = len(bad)
+
+
+def _raises_with(route: MetricRoute, positive: Int, t: List[Int32], p: List[Int32], words: String) raises -> Bool:
+    var f1 = msel_scorer_row(msel_scorer_code("f1", False))
+    var labels: List[String] = ["0", "2", "3"]
+    try:
+        var notes = List[Float64]()
+        _ = msel_scorer_value(route, EntryRef(metrics_cluster_host_v1, 0), labels, f1, Int(t.unsafe_ptr()),
+                              Int(p.unsafe_ptr()), len(t), 3, 1, positive, notes)
+    except e:
+        return String(e) == words
+    return False
+
+
+def check_flip_absent() raises:
+    var route = _route()
+    var y: List[Float32] = [1.0, 2.0, 4.0]
+    var p: List[Float32] = [1.5, 2.0, 2.0]
+    var notes = List[Float64]()
+    var mse = msel_scorer_code("neg_mean_squared_error", False)
+    var neg = msel_scorer_value(route, msel_scorer_row(mse), Int(y.unsafe_ptr()), Int(p.unsafe_ptr()), 3, 0, 1, -1,
+                                notes)
+    var pos = msel_scorer_value(route, msel_scorer_row(msel_scorer_flip(mse)), Int(y.unsafe_ptr()), Int(p.unsafe_ptr()),
+                                3, 0, 1, -1, notes)
+    _near(pos, (0.25 + 0.0 + 4.0) / 3.0, "make_scorer(mean_squared_error) (greater_is_better=True)")
+    require(pos == -neg and msel_scorer_flip(msel_scorer_flip(mse)) == mse, "the flip negates the row's sign only")
+    var t2: List[Int32] = [0, 1, 1, 0]
+    var p2: List[Int32] = [0, 1, 0, 0]
+    require(_raises_with(route, SCORER_POSITIVE_ABSENT, t2, p2,
+                         "pos_label=1 is not a valid label. It should be one of [0, 2]"),
+            "an absent pos_label among two present labels refuses in the door's words")
+    require(_raises_with(route, SCORER_POSITIVE_KIND, t2, p2, "pos_label must use the same type as the targets"),
+            "a pos_label of another type refuses")
+    var t3: List[Int32] = [0, 1, 2, 0]
+    var p3: List[Int32] = [0, 1, 2, 2]
+    require(_raises_with(route, SCORER_POSITIVE_ABSENT, t3, p3,
+                         "Target is multiclass but average='binary'. Please choose another average setting, one of "
+                         + "[None, 'micro', 'macro', 'weighted']."),
+            "three present labels refuse")
+    var t1: List[Int32] = [0, 0, 0]
+    var p1: List[Int32] = [0, 0, 0]
+    var labels: List[String] = ["0", "2", "3"]
+    notes = List[Float64]()
+    var f1 = msel_scorer_row(msel_scorer_code("f1", False))
+    var value = msel_scorer_value(route, EntryRef(metrics_cluster_host_v1, 0), labels, f1, Int(t1.unsafe_ptr()),
+                                  Int(p1.unsafe_ptr()), 3, 3, 1, SCORER_POSITIVE_ABSENT, notes)
+    var codes = _notice_codes(notes)
+    require(value == 0.0 and len(codes) == 1 and codes[0] == MEMBER_NOTICE_METRIC_PRF,
+            "an absent pos_label over one present label scores 0.0 with the ill-defined warning")
+    _ = len(y)
+    _ = len(p)
+    _ = len(t2)
+    _ = len(p2)
+    _ = len(t3)
+    _ = len(p3)
+    _ = len(t1)
+    _ = len(p1)
+
+
 def test_metrics_scorer_builders() raises:
     def run_case(which: Int) raises:
         if which == 0:
@@ -659,8 +871,14 @@ def test_metrics_scorer_builders() raises:
             check_brier_top_k()
         elif which == 6:
             check_mutual_info()
-        else:
+        elif which == 7:
             check_notices()
+        elif which == 8:
+            check_cluster_pairs()
+        elif which == 9:
+            check_clusterer_side()
+        else:
+            check_flip_absent()
     check_cases("metrics_scorer_builders", CASES, run_case)
 
 
