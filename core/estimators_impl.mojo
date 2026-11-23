@@ -16,7 +16,6 @@ from checks.soft_f64 import (
     sf64_sub, sf64_mul, sf64_to_f32,
 )
 
-comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 
 
@@ -101,22 +100,6 @@ def qn_sigmoid_kernel(
         i += stride
 
 
-def qn_sigmoid_device(ctx: DeviceContext, sp: _F32P, op: _F64P, nr: Int) raises:
-    """`qn_sigmoid`'s upload, launch and read-back (`qn_sigmoid_kernel`)."""
-    var d_scores = ctx.enqueue_create_buffer[DType.float32](nr)
-    ctx.enqueue_copy(dst_buf=d_scores, src_ptr=sp)
-    var d_out = ctx.enqueue_create_buffer[DType.uint64](2 * nr)
-    ctx.enqueue_function[qn_sigmoid_kernel](
-        d_scores.unsafe_ptr(), d_out.unsafe_ptr(), Int64(nr),
-        grid_dim=min((nr + QN_SOFTMAX_TPB - 1) // QN_SOFTMAX_TPB, QN_SOFTMAX_MAX_BLOCKS),
-        block_dim=QN_SOFTMAX_TPB,
-    )
-    ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
-    ctx.synchronize()
-    _ = d_scores^
-    _ = d_out^
-
-
 def qn_softmax_kernel(
     scores: MutPointer[Float32, MutAnyOrigin],
     dst: MutPointer[UInt64, MutAnyOrigin],
@@ -161,14 +144,19 @@ def qn_link_from_device(
 ) raises:
     """The `qn_proba` link on scores already on the device (`n_rows *
     n_targets` float32, `qn_decision_function_device`'s layout): the
-    sigmoid (`nt == 1`, out (nr, 2)) or softmax (out (nr, nt)) kernel of
-    `qn_sigmoid_device` / `qn_softmax_device` on the same words, then, with
+    sigmoid (`nt == 1`, out (nr, 2)) or softmax (out (nr, nt)) kernel
+    (`qn_sigmoid_kernel` / `qn_softmax_kernel`), then, with
     `log_out`, ROWS_LOG on the probabilities (`py2mojo_rows`' kernel), and
     one download of the binary64 words into `op`."""
     # ne2-g-linear (N357, N361): the scores no longer go to the host and back
     # between the decision and the link, and log_proba no longer re-uploads
     # the probabilities; every kernel and its inputs are unchanged, so the
     # output words are the two- and three-crossing paths' words.
+    # Lane sab-missed-5 (2026-11-23): the upload-launch-download wrappers
+    # qn_sigmoid_device / qn_softmax_device were deleted: their only callers
+    # were the device binding's qn_sigmoid / qn_softmax exports and the device
+    # descriptor's link operation, which no product path calls (predict_proba
+    # on the device is QN_NATIVE_PROBA, this function). Recoverable at af2d8329e6.
     if nr <= 0:
         return
     var n = nr * (2 if nt == 1 else nt)
@@ -193,21 +181,4 @@ def qn_link_from_device(
     else:
         ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
         ctx.synchronize()
-    _ = d_out^
-
-
-def qn_softmax_device(ctx: DeviceContext, sp: _F32P, op: _F64P, nr: Int, nc: Int) raises:
-    """`qn_softmax`'s upload, launch and read-back (`qn_softmax_kernel`)."""
-    var n = nr * nc
-    var d_scores = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=d_scores, src_ptr=sp)
-    var d_out = ctx.enqueue_create_buffer[DType.uint64](n)
-    ctx.enqueue_function[qn_softmax_kernel](
-        d_scores.unsafe_ptr(), d_out.unsafe_ptr(), Int64(nr), Int64(nc),
-        grid_dim=min((nr + QN_SOFTMAX_TPB - 1) // QN_SOFTMAX_TPB, QN_SOFTMAX_MAX_BLOCKS),
-        block_dim=QN_SOFTMAX_TPB,
-    )
-    ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
-    ctx.synchronize()
-    _ = d_scores^
     _ = d_out^
