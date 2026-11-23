@@ -1078,7 +1078,9 @@ def check_search() raises:
             and Int(got[3]) == len(plans), "the search header words")
     for c in range(len(plans)):  # small-loop(check: candidates)
         for f in range(res.n_splits):  # small-loop(check: folds)
-            require(got[6 + c * res.n_splits + f] == res.test[c][f], "a split score")
+            # the 8-word head (core/ensemble_member.mojo: best, folds, best score, m, train flag, seed, tables,
+            # refitted; mf-search4b), then the one scorer table's m x folds test scores
+            require(got[8 + c * res.n_splits + f] == res.test[c][f], "a split score")
     var want = List[Float64](length=N * K, fill=0.0)
     var q = member_call_of(plans[res.best], res.best_state)
     q.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
