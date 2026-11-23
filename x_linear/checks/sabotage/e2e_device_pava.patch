@@ -1,6 +1,8 @@
+diff --git a/x_linear/isotonic.mojo b/x_linear/isotonic.mojo
+index 69320527e5..c19afd85e2 100644
 --- a/x_linear/isotonic.mojo
 +++ b/x_linear/isotonic.mojo
-@@ -17,6 +17,7 @@
+@@ -17,6 +17,7 @@ slope * (x - x_lo) + y_lo). PAVA runs chunked then merged (see
  computed NaN, so its bits are the same on every target).
  """
  from std.memory import bitcast
@@ -8,7 +10,7 @@
  from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fmax, fmin, ld, st, ldi, sti, i2f, copy
  from x_linear.team import Team
  
-@@ -84,7 +85,10 @@
+@@ -222,7 +223,10 @@ def iso_pava_chunk(c: Int, m: Int, n: Int, fw: FP, iw: IP):
          var sw = ld(fw, uw + i)
          while True:
              var prev_y = ld(fw, uy + k)
@@ -18,5 +20,5 @@
 +            else:
 +                swy = fmad(ld(fw, uw + k), ld(fw, uy + k), swy)
              sw = fa(sw, ld(fw, uw + k))
+             sti(fl, k, 0)
              k = ldi(iw, k) + 1
-             if k == m or prev_y < ld(fw, uy + k):

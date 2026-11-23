@@ -1,12 +1,14 @@
 diff --git a/x_linear/ridge.mojo b/x_linear/ridge.mojo
+index 5ccde80df4..0fea1ae761 100644
 --- a/x_linear/ridge.mojo
 +++ b/x_linear/ridge.mojo
-@@ -137,7 +137,7 @@
-             var mj = ld(fw, xm + j)
-             var mk = ld(fw, xm + k)
-             for i in range(n):
--                acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
-+                acc = fmad(fm(Float32(1) if is_gpu() else ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)  # SABOTAGE option sample_weight
-             st(fw, gg + j * d + k, acc)
-             st(fw, gg + k * d + j, acc)
-         t.sync()
+@@ -228,7 +228,8 @@ def ridge_wgram_part(x: FP, y: FP, d: Int, wo: Int, fw: FP, xm: Int, j: Int, k:
+     var mk = ld(fw, xm + k)
+     var acc = Float32(0)
+     for i in range(lo, lo + cnt):
+-        acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
++        acc = fmad(fm(Float32(1) if is_gpu() else ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)  # SABOTAGE option sample_weight
++
+     return acc
+ 
+ 
