@@ -21,8 +21,13 @@ SelectKBest runs the encode door's typed score programs
 bindings/prep_encode_native_door.mojo `_select_fit`) on an `EncProgram`
 through core/prep_member.mojo `_enc_run` (owner 0 X, owner 1 y), then the
 same gather_cols transform as VarianceThreshold. mutual_info_classif /
-mutual_info_regression re-enter the encode owner's Python-called entry: not a
-member route (admit answers False; the caller keeps the door).
+mutual_info_regression (lane mf-ens6) run the select door's typed scoring
+program (bindings/prep_select_run.mojo `mi_class_count_stage`, `mi_stage`, door
+bindings/prep_select_native_door.mojo `prep_mutual_info_call` with the
+arguments `_select_fit` hands it: discrete_features 'auto' on a dense X, so
+every column is continuous; n_neighbors 3; random_state None, seed 0), with
+`score_topk_stage` on the scores in the same program (the door runs the same
+c2_key64 / c2_topk stages over the float32 scores it got back: same mask).
 
 Route slots read: `second` the x_prep transport entry; `flags` the Prep
 member's PREP_ROUTE_OUT / SCRATCH / RANGES / DEV_PUT bits (the same admit,
@@ -33,13 +38,18 @@ MEMBER_OP_NEW parameters, VarianceThreshold (Float64 words, 4):
   [1] threshold (binary64, compared in binary64 on the device as the door)
   [2] the image's identical family switches word (`_idn_fam`, 0 on fast)
   [3] R3 work region 0 / 1 (`xprep_r3("work")`)
-MEMBER_OP_NEW parameters, SelectKBest (Float64 words, 5):
+MEMBER_OP_NEW parameters, SelectKBest (Float64 words, 7):
   [0] kind: 1 SelectKBest
   [1] score_func: 0 f_classif, 1 chi2, 2 f_regression, 3 r_regression
-      (center and force_finite True, as `score_func(X, y)`)
-  [2] k (-1: 'all'; checked 0 <= k <= features at fit, the door's words)
+      (center and force_finite True, as `score_func(X, y)`), 4
+      mutual_info_classif, 5 mutual_info_regression
+  [2] k as int(k) (any integer; checked 0 <= k <= features at fit after
+      the scores, the door's words; a negative k too)
   [3] the image's identical family switches word (`_idn_fam`, 0 on fast)
   [4] R3 work region 0 / 1
+  [5] 1: k is 'all' (word [2] unread)
+  [6] the mutual-information work words as scratch (MOJOLEARN_MI_WORK on
+      the fast tier, the door's `scratch`)
 SelectKBest views: y is required: f_classif / chi2 read int32 class codes
 (`MEMBER_I32`, rows x 1, `call.classes` classes: MEMBER_CAN_CLASSIFIER for
 those kinds), f_regression / r_regression a float32 target (rows x 1).
@@ -77,6 +87,10 @@ from bindings.prep_encode_prog_run import EncProgram
 from bindings.prep_encode_select_run import (
     ScoreClassif, ScorePearson, ScorePlan, score_classif_stage, score_pearson_stage, score_topk_stage,
 )
+from bindings.prep_encode_cats_run import CatBlock
+from bindings.prep_select_run import (
+    mi_check_neighbors, mi_check_shape, mi_class_count_stage, mi_int_words, mi_class_check, mi_stage, MiProgram,
+)
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_CAN_CLASSIFIER,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
@@ -93,11 +107,15 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 comptime SELECT_KIND_VARIANCE = 0
 comptime SELECT_VARIANCE_PARAM_COUNT = 4
 comptime SELECT_KIND_KBEST = 1
-comptime SELECT_KBEST_PARAM_COUNT = 5
+comptime SELECT_KBEST_PARAM_COUNT = 7
 comptime SELECT_SCORE_F_CLASSIF = 0
 comptime SELECT_SCORE_CHI2 = 1
 comptime SELECT_SCORE_F_REGRESSION = 2
 comptime SELECT_SCORE_R_REGRESSION = 3
+comptime SELECT_SCORE_MI_CLASSIF = 4
+comptime SELECT_SCORE_MI_REGRESSION = 5
+# `_select_fit`'s mutual_info_*(X, y) defaults: n_neighbors 3.
+comptime _MI_NEIGHBORS = 3
 # x_prep_idn_fam bits (the encode door's): 1 stats blocked, 2 class onepass, 4 select blocked.
 comptime _IDN_STATS_BLOCKED = 1
 comptime _IDN_CLASS_ONEPASS = 2
@@ -234,7 +252,8 @@ def _kind_name(kind: Int) -> String:
 
 def _classif(words: List[Float64]) -> Bool:
     return (Int(words[0]) == SELECT_KIND_KBEST
-            and (Int(words[1]) == SELECT_SCORE_F_CLASSIF or Int(words[1]) == SELECT_SCORE_CHI2))
+            and (Int(words[1]) == SELECT_SCORE_F_CLASSIF or Int(words[1]) == SELECT_SCORE_CHI2
+                 or Int(words[1]) == SELECT_SCORE_MI_CLASSIF))
 
 
 def _name(slot: _Slot) -> String:
@@ -355,11 +374,14 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
     if classif and call[].classes < 1:
         raise Error("member ABI: a SelectKBest member with a classification score needs call.classes")
     var k = Int(slot[].words[2])
-    var keep_all = k < 0
+    var keep_all = slot[].words[5] != 0.0
     # The door's order (`prep_encode_native_door` SelectKBest fit): the scores
     # run first, then chi2's non-negative check, then the k range refusal.
-    var k_ok = keep_all or k <= d
+    var k_ok = keep_all or (0 <= k and k <= d)
     var fam = Int(slot[].words[3])
+    if score == SELECT_SCORE_MI_CLASSIF or score == SELECT_SCORE_MI_REGRESSION:
+        _fit_kbest_mi(slot, call, n, d, k, keep_all, k_ok, fam)
+        return
     var prog = EncProgram(slot[].words[4] != 0.0)
     var plan = ScorePlan(0, 0, -1)
     if classif:
@@ -386,6 +408,58 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
     if score != SELECT_SCORE_R_REGRESSION:
         slot[].pvalues = List[Float32](length=d, fill=Float32(0))
         unsafe_memcpy(dest=slot[].pvalues.unsafe_ptr(), src=ap + plan.pvalues, count=d)
+    slot[].support = List[Float32](length=d, fill=Float32(1))
+    if not keep_all:
+        for j in range(d):  # driver-loop: the device's top-k mask (feature metadata)
+            slot[].support[j] = Float32(1) if ap[mo + j] != 0 else Float32(0)
+    _ = arena^
+    slot[].features = d
+    slot[].scalars = [Float64(d)]
+    _keep_columns(slot)
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _transform_select(slot, call)
+
+
+def _fit_kbest_mi(slot: _Slot, call: _Call, n: Int, d: Int, k: Int, keep_all: Bool, k_ok: Bool, fam: Int) raises:
+    """mutual_info_classif / mutual_info_regression: `prep_mutual_info_call`
+    as `_select_fit` calls it (dense X, discrete_features 'auto': every
+    column continuous; n_neighbors 3; random_state None: seed 0), in its
+    order: the neighbour and shape checks, a discrete target's class counts
+    (one program) and their check, then the one scoring program with the
+    top-k stages on its float32 scores; then the door's k range refusal."""
+    var discrete_target = Int(slot[].words[1]) == SELECT_SCORE_MI_CLASSIF
+    mi_check_neighbors(_MI_NEIGHBORS)
+    mi_check_shape(n, d)
+    var r3 = slot[].words[4] != 0.0
+    var counts = List[Int]()
+    if discrete_target:
+        var classes = call[].classes
+        var pc = EncProgram(r3)
+        var tot = mi_class_count_stage(pc, 1, n, n, classes)
+        var counted = prep_enc_run(call, pc, call[].y.data, 0, False)
+        counts = mi_int_words(Int(counted.unsafe_ptr()), tot, classes)
+        _ = counted^  # the arena lives through the reads above
+        _ = len(pc.consts_f)
+        mi_class_check(counts, True)
+    var cont = List[Int](capacity=d)
+    for j in range(d):  # driver-loop: over the column kinds (feature count): 'auto' on dense X, all continuous
+        cont.append(j)
+    var prog = EncProgram(r3)
+    var staged = mi_stage(prog, MiProgram(n, _MI_NEIGHBORS, 0, discrete_target, slot[].words[6] != 0.0,
+        (fam & _IDN_STATS_BLOCKED) != 0, cont^, List[Int](), 0, 1, n, counts^, -1, CatBlock(-1, 0, 0, -1, 0),
+        List[Int]()))
+    var mo = -1
+    if not keep_all and k_ok:
+        mo = score_topk_stage(prog, staged.outc, 0, d, k)
+    var arena = prep_enc_run(call, prog, call[].y.data, 0, False)
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
+    if not k_ok:
+        raise Error("mojolearn: k should be 0 <= k <= n_features = " + String(d) + "; got " + String(k))
+    slot[].clear()
+    slot[].variances = List[Float32](length=d, fill=Float32(0))
+    unsafe_memcpy(dest=slot[].variances.unsafe_ptr(), src=ap + staged.outc, count=d)
     slot[].support = List[Float32](length=d, fill=Float32(1))
     if not keep_all:
         for j in range(d):  # driver-loop: the device's top-k mask (feature metadata)
@@ -515,8 +589,9 @@ def _outputs(call: _Call) raises:
         if kind == SELECT_KIND_KBEST and call[].param_count == SELECT_KBEST_PARAM_COUNT:
             # k columns ('all': X's width), as a state fitted on such X keeps.
             var k = Int(source[2])
-            if k < 0 or k <= call[].x.cols:
-                call[].out_cols = call[].x.cols if k < 0 else k
+            var every = source[5] != 0.0
+            if every or (0 <= k and k <= call[].x.cols):
+                call[].out_cols = call[].x.cols if every else k
                 return
         raise Error("NotFittedError: a " + _kind_name(kind) + " member's output width (its kept columns) is chosen by its fit")
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
@@ -545,8 +620,8 @@ def _select_member(operation: Int, address: Int) raises -> Int:
                 raise Error("member ABI: a VarianceThreshold member takes four parameters")
         elif source[0] == Float64(SELECT_KIND_KBEST):
             if call[].param_count != SELECT_KBEST_PARAM_COUNT:
-                raise Error("member ABI: a SelectKBest member takes five parameters")
-            if source[1] < 0.0 or source[1] > 3.0:
+                raise Error("member ABI: a SelectKBest member takes seven parameters")
+            if source[1] < 0.0 or source[1] > 5.0:
                 raise Error("member ABI: unknown SelectKBest score_func code")
         else:
             raise Error("member ABI: unknown or unpublished Select member kind")

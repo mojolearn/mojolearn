@@ -3,9 +3,10 @@
 `bindings/member_boundary_door.mojo` (recipe: MEMBER-ABI-V2.md; RUN:
 core/select_member.mojo). Published: VarianceThreshold (kind 0,
 `_mojolearn_member = (36, 0)`), SelectKBest (kind 1, `(36, 1)`: f_classif,
-chi2, f_regression, r_regression; admit answers False for the
-mutual-information scores, which re-enter the encode owner's Python-called
-entry, and for a negative k, whose words only the door's fit knows). RFE
+chi2, f_regression, r_regression, and since lane mf-ens6
+mutual_info_classif / mutual_info_regression on the select door's typed
+scoring program; a negative k is carried and refused by the member's fit in
+the door's words after the scores, as the door's fit). RFE
 carries no mark (see the lane's RESULT file): a caller keeps its door.
 
   * `select_member_admit` (UNPACK, once per member): the estimator's own
@@ -39,6 +40,7 @@ from core.select_member import (
     SELECT_KIND_VARIANCE, SELECT_VARIANCE_PARAM_COUNT, SELECT_BLOCK_VARIANCES, SELECT_BLOCK_SUPPORT,
     SELECT_KIND_KBEST, SELECT_KBEST_PARAM_COUNT, SELECT_BLOCK_SCORES, SELECT_BLOCK_PVALUES,
     SELECT_SCORE_F_CLASSIF, SELECT_SCORE_CHI2, SELECT_SCORE_F_REGRESSION, SELECT_SCORE_R_REGRESSION,
+    SELECT_SCORE_MI_CLASSIF, SELECT_SCORE_MI_REGRESSION,
 )
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -83,14 +85,20 @@ def _kbest_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
         score = SELECT_SCORE_F_REGRESSION
     elif name == "r_regression":
         score = SELECT_SCORE_R_REGRESSION
+    elif name == "mutual_info_classif":
+        score = SELECT_SCORE_MI_CLASSIF
+    elif name == "mutual_info_regression":
+        score = SELECT_SCORE_MI_REGRESSION
     elif name != "f_classif":
-        return False  # mutual_info_*: the encode owner's Python-called entry
+        raise Error("TypeError: mojolearn: SelectKBest score_func must be f_classif, chi2, f_regression, "
+                    + "r_regression, mutual_info_classif or mutual_info_regression; a user callable is not supported")
     var k_arg = fields["k"]
-    var k = -1
-    if not (enc_is_str(k_arg) and String(k_arg) == "all"):
+    var k = 0
+    var keep_all = enc_is_str(k_arg) and String(k_arg) == "all"
+    if not keep_all:
+        # The door's int(k); any integer, a negative one too: the member's fit
+        # raises the door's range words after the scores, as the door's fit.
         k = Int(py=py_call_typed(b.int, k_arg))
-        if k < 0:
-            return False  # the door's fit raises with the feature count
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
     var entries = scaler_entries(model, mode, context)
     var words = List[Float64](length=SELECT_KBEST_PARAM_COUNT, fill=0.0)
@@ -99,6 +107,10 @@ def _kbest_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     words[2] = Float64(k)
     words[3] = Float64(stateless_fam(mode, entries))
     words[4] = 1.0 if xprep_r3("work") else 0.0
+    words[5] = 1.0 if keep_all else 0.0
+    # The door's mutual-information `scratch`: select_mi_work on the fast tier.
+    var mi_work = py_get(context, "select_mi_work")
+    words[6] = 1.0 if (mi_work is not None and Bool(py=mi_work) and String(mode) == "fast") else 0.0
     prep_route_admit(model, entries, context, owner, enc_caps(model, entries), False)
     owner.plan.params = words^
     return True
