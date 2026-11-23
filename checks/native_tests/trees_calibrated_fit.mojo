@@ -487,7 +487,7 @@ def check_one_class_fold(cap: Int) raises:
     require(words[0] == "mojolearn LogisticRegression: y has one class",
             name + ": fold 0 raised '" + words[0] + "', not its fit door's words")
     for u in range(1, len(words)):  # small-loop(oracle: the covered folds and the full-X member)
-        require(len(words[u]) == 0, name + ": member " + String(u) + " failed: " + words[u])
+        require(words[u].byte_length() == 0, name + ": member " + String(u) + " failed: " + words[u])
     require(res.calibrators() == 0, name + ": calibrators were fitted after a failed fit")
 
 
