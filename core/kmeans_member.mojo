@@ -11,12 +11,20 @@ KMeans native entry of the member's image, `route.flags` that entry's
 capability word (`KMEANS_CAP_*`, read once by the caller's UNPACK). No other
 route slot is read. No kernel is touched.
 
-MEMBER_OP_NEW parameters (Float64 words, 8): [0] n_clusters, [1] init
-(0 'k-means++', 1 'random'; explicit starting centers are not a word and the
-class keeps its own doors for them), [2] n_init, [3] max_iter, [4] tol,
+MEMBER_OP_NEW parameters (Float64 words, 8, or more for explicit starting
+centers): [0] n_clusters, [1] init (0 'k-means++', 1 'random', 2 explicit
+starting centers), [2] n_init, [3] max_iter, [4] tol,
 [5] random_state as the BITS of an int64 (exact for every seed:
 `bitcast[DType.float64](Int64(seed))`), [6] metric (0 'euclidean' /
 'l2_expanded', 1 'l2_sqrt_expanded'), [7] oversampling_factor.
+With init 2 (lane mf-clu6) the starting centers follow as DATA read once at
+the caller's UNPACK: [8] 1 given / 0 absent (`init='array'` without
+`init_centroids`), [9] their rows, [10] their columns, then their float32
+words packed two per word (core/cluster_member_words.mojo). The fit raises
+the class's own door's refusals in its order (bindings/kmeans_native_pack.mojo
+`_kmeans_fit`): n_clusters above the rows, the absent centers, their shape
+against (n_clusters, features of X), a NaN or an infinity in them; then it
+copies them into the state's centers, which the kernel refines in place.
 Kind 0 KMeans (a clusterer, not a classifier: `y` is not read, `classes` 0).
 
 Views: X dense row-major host float32; sample weights a host float32 vector
@@ -84,11 +92,15 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.host_finite_scan import host_all_finite_f32
+from core.cluster_member_words import member_words_take_f32, member_words_f32_slots
 from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
 comptime _EST = "KMeans"
+comptime _WORDS = 8
+comptime _INIT_START = 2
+comptime _START_AT = 11
 comptime _BLOCK_CENTERS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_LABELS = MEMBER_BLOCK_FAMILY + 1
 
@@ -111,6 +123,11 @@ struct KMeansMemberSlot(Copyable, Movable, Defaultable):
     var centers: List[Float32]
     var labels: List[Int32]
     var scalars: List[Float64]
+    # Explicit starting centers (init 2, lane mf-clu6): given, shape, words.
+    var start_given: Bool
+    var start_rows: Int
+    var start_cols: Int
+    var start: List[Float32]
 
     def __init__(out self):
         self.generation = 0
@@ -129,6 +146,10 @@ struct KMeansMemberSlot(Copyable, Movable, Defaultable):
         self.centers = List[Float32]()
         self.labels = List[Int32]()
         self.scalars = List[Float64]()
+        self.start_given = False
+        self.start_rows = 0
+        self.start_cols = 0
+        self.start = List[Float32]()
 
 
 struct KMeansMemberStore(Defaultable, Movable):
@@ -157,7 +178,7 @@ def _slot_address(index: Int) raises -> Int:
     return Int(store[].chunks[index // _CHUNK].unsafe_ptr()) + (index % _CHUNK) * size_of[KMeansMemberSlot]()
 
 
-def _mint(words: MutPointer[Float64, MutUntrackedOrigin]) raises -> Int:
+def _mint(words: MutPointer[Float64, MutUntrackedOrigin], count: Int) raises -> Int:
     var store = _STORE.get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
@@ -186,6 +207,15 @@ def _mint(words: MutPointer[Float64, MutUntrackedOrigin]) raises -> Int:
         slot[].fitted = False
         slot[].features = 0
         slot[].handle = -1
+        slot[].start_given = False
+        slot[].start_rows = 0
+        slot[].start_cols = 0
+        slot[].start = List[Float32]()
+        if slot[].init == _INIT_START and count > _WORDS:
+            slot[].start_given = words[8] != 0.0
+            slot[].start_rows = Int(words[9])
+            slot[].start_cols = Int(words[10])
+            slot[].start = member_words_take_f32(Int(words), _START_AT, slot[].start_rows * slot[].start_cols)
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
         shared_slot_unlock(lock)
@@ -212,6 +242,7 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             slot[].centers = List[Float32]()
             slot[].labels = List[Int32]()
             slot[].scalars = List[Float64]()
+            slot[].start = List[Float32]()
             store[].free.append(index)
         return address
     finally:
@@ -270,6 +301,8 @@ def _fit(slot: _Slot, call: _Call) raises:
     var k = slot[].clusters
     if k > rows:
         raise Error("mojolearn: n_clusters=" + String(k) + " exceeds n_samples=" + String(rows))
+    if slot[].init == _INIT_START:
+        _start_check(slot, k, cols)
     var weights = _weights(call, fold, rows, "fit")
     var weight_count = rows if weights != 0 else 0
     var distances = 0
@@ -284,6 +317,10 @@ def _fit(slot: _Slot, call: _Call) raises:
     _release_resident(slot, call)
     slot[].fitted = False
     slot[].centers = List[Float32](length=k * cols, fill=0.0)
+    if slot[].init == _INIT_START:
+        # A COPY, as the door's: the kernel refines the centers in place and
+        # the state's starting words serve its next fit.
+        unsafe_memcpy(dest=slot[].centers.unsafe_ptr(), src=slot[].start.unsafe_ptr(), count=k * cols)
     slot[].labels = List[Int32](length=rows, fill=0)
     var request = KMeansFitRequest(0 if fold.active() else call[].x.data, Int(slot[].centers.unsafe_ptr()),
         Int(slot[].labels.unsafe_ptr()), weights, distances, rows, cols, k, weight_count, slot[].iterations,
@@ -305,6 +342,20 @@ def _fit(slot: _Slot, call: _Call) raises:
             src=slot[].labels.unsafe_ptr(), count=rows)
     elif output == MEMBER_OP_TRANSFORM and not joint:
         _query(slot, call, True)
+
+
+def _start_check(slot: _Slot, k: Int, cols: Int) raises:
+    """The class's own refusals of explicit starting centers, its words and
+    order (bindings/kmeans_native_pack.mojo `_kmeans_fit`): absent, shape
+    against (n_clusters, features of X), then a NaN or an infinity."""
+    if not slot[].start_given:
+        raise Error("mojolearn: init='array' needs init_centroids")
+    if slot[].start_rows != k or slot[].start_cols != cols:
+        raise Error("mojolearn: init_centroids must be (" + String(k) + ", " + String(cols) + "), got ("
+            + String(slot[].start_rows) + ", " + String(slot[].start_cols) + ")")
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(slot[].start.unsafe_ptr())),
+            k * cols):
+        raise Error("Input init_centroids contains NaN or infinity (" + String(_EST) + ").")
 
 
 def _weights(call: _Call, fold: KMeansFoldStore, rows: Int, what: String) raises -> Int:
@@ -518,17 +569,26 @@ def _kmeans_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         return _capabilities(call)
     if operation == MEMBER_OP_NEW:
-        if call[].param_count != 8 or not call[].params:
+        if call[].param_count < _WORDS or not call[].params:
             raise Error("member ABI: a KMeans member takes eight parameters (n_clusters, init, n_init, max_iter,"
                 + " tol, random_state, metric, oversampling_factor)")
         var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
         if words[0] < 1.0:
             raise Error("ValueError: n_clusters must be at least 1, got " + String(Int(words[0])))
-        if words[1] != 0.0 and words[1] != 1.0:
-            raise Error("member ABI: a KMeans member's init is 0 ('k-means++') or 1 ('random')")
+        if words[1] != 0.0 and words[1] != 1.0 and words[1] != Float64(_INIT_START):
+            raise Error("member ABI: a KMeans member's init is 0 ('k-means++'), 1 ('random') or 2 (explicit"
+                + " starting centers)")
+        var want = _WORDS
+        if words[1] == Float64(_INIT_START):
+            if call[].param_count < _START_AT:
+                raise Error("member ABI: explicit KMeans starting centers need their given, rows and columns words")
+            want = _START_AT + member_words_f32_slots(Int(words[9]) * Int(words[10]))
+        if call[].param_count != want:
+            raise Error("member ABI: this KMeans member takes " + String(want) + " parameter words, got "
+                + String(call[].param_count))
         if words[6] != 0.0 and words[6] != 1.0:
             raise Error("member ABI: unknown KMeans member metric code " + String(Int(words[6])))
-        call[].state = _mint(words)
+        call[].state = _mint(words, call[].param_count)
         return 0
     if operation == MEMBER_OP_FREE:
         var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
@@ -542,7 +602,7 @@ def _kmeans_member(operation: Int, address: Int) raises -> Int:
         var clusters = 0
         if call[].state != 0:
             clusters = _Slot(unsafe_from_address=_lookup(call[].state, False))[].clusters
-        elif call[].params and call[].param_count == 8:
+        elif call[].params and call[].param_count >= _WORDS:
             clusters = Int(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)[0])
         call[].out_cols = clusters if call[].flags == MEMBER_OP_TRANSFORM else 1
         call[].classes = 0
