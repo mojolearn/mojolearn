@@ -58,7 +58,45 @@ SEQUENTIAL_LAYER_FIXTURES={
     'ssd_scan':((4,2),lambda m,S:m.linear(321).softplus().ssd_scan(1).rms_norm()),   # the norm as example:seq-mamba2 (lane mamba2-nan)
     'trapezoid_scan':((4,3),lambda m,S:m.linear(30).trapezoid_scan(2,4)),
     'lm_head':((3,),lambda m,S:m.embedding(5,4).lm_head(5)),
+    # nn-losses-2 begin
+    'log_softmax':((2,3),lambda m,S:m.linear(3).log_softmax(1)),
+    # nn-losses-2 end
 }
+
+
+# nn-losses-2 begin (2026-11-23): the losses of lanes nn-losses and nn-losses-2 as `compile:loss=<name>` endpoints.
+# Each fits a two-sample model one epoch of one full unshuffled batch with SGD under the loss (and its option) and
+# returns the fitted model's outputs: predict, or predict_proba for the nll classifier.
+SEQUENTIAL_LOSS_FIXTURES={
+    'compile:loss=l1':('l1',{}),
+    'compile:loss=smooth_l1':('smooth_l1',{'beta':.5}),
+    'compile:loss=bce_with_logits':('bce_with_logits',{'pos_weight':2.}),
+    'compile:loss=nll':('nll',{}),
+    'compile:loss=kl_div':('kl_div',{'reduction':'batchmean'}),
+    'compile:loss=ctc':('ctc',{'blank':0}),
+}
+
+
+def _sequential_loss_fixture(np,cls,method):
+    loss,kw=SEQUENTIAL_LOSS_FIXTURES[method]
+    fit={}
+    if loss=='ctc':
+        x=((np.arange(24,dtype=np.float32)%7)-3).reshape(2,4,3)/8
+        m=cls(input_shape=(4,3),numeric_mode='identical').gru(3).linear(3).log_softmax()
+        y=np.array([[1],[2]],np.int64); fit['target_lengths']=np.array([1,1],np.int64)
+    else:
+        x=((np.arange(8,dtype=np.float32)%7)-3).reshape(2,4)/8
+        m=cls(input_shape=(4,),numeric_mode='identical')
+        if loss in ('nll','kl_div'):
+            m.linear(3).log_softmax()
+            y=np.array([0,2],np.int64) if loss=='nll' else np.array([[.25,.5,.25],[.125,.125,.75]],np.float32)
+        else:
+            m.linear(1)
+            y=np.array([0,1],np.int64) if loss=='bce_with_logits' else np.array([.25,-.5],np.float32)
+    m.compile(loss=loss,optimizer='sgd',lr=.125,**kw)
+    m.fit(x,y,epochs=1,batch_size=2,shuffle=False,seed=7,**fit)
+    return m.predict_proba(x) if loss=='nll' else m.predict(x)
+# nn-losses-2 end
 
 
 def _sequential_layer_fixture(np,cls,method):
@@ -165,6 +203,8 @@ def neural_checks(recorder,public,methods):
             return getattr(m,method)(ids) if method in ('__call__','logits') else m.forward(ids)
         if name=='Sequential' and method in SEQUENTIAL_LAYER_FIXTURES:
             return _sequential_layer_fixture(np,cls,method)
+        if name=='Sequential' and method in SEQUENTIAL_LOSS_FIXTURES:  # nn-losses-2
+            return _sequential_loss_fixture(np,cls,method)
         if name=='Sequential':
             m=cls(numeric_mode='identical')
             x=np.array([[.25,-.5],[.75,.125]],np.float32)

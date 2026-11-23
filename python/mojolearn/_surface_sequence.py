@@ -42,6 +42,8 @@ FAMILIES = (
                         "sequence-composed-conv1d",
                         # lane nn-losses (2026-11-23): one seeded step per added loss
                         "sequence-composed-losses",
+                        # lane nn-losses-2 (2026-11-23): log_softmax with nll / kl_div, and ctc
+                        "sequence-composed-log-softmax-ctc",
                         # lane verify-coverage-audit (2026-10-21): MoEBlock.backward,
                         # Sequential export/load/predict, import_model
                         "sequence-moe-backward", "sequence-export-roundtrip",
@@ -164,6 +166,7 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-composed-recurrent": "Sequential composed: lstm, gru",
                        "sequence-composed-conv1d": "Sequential composed: conv1d, narrow",
                        "sequence-composed-losses": "Sequential losses: l1, smooth_l1, nll, kl_div, bce pos_weight",
+                       "sequence-composed-log-softmax-ctc": "Sequential log_softmax (nll, kl_div) and ctc",  # nn-losses-2
                        "sequence-moe-backward": "MoEBlock backward",
                        "sequence-export-roundtrip": "Sequential export, load and predict",
                        "sequence-onnx-import": "import_model on an ONNX file",
@@ -189,6 +192,7 @@ PUBLIC_PENDING_LANES = {
     "sequence-composed-recurrent": "unwatched",
     "sequence-composed-conv1d": "unwatched",
     "sequence-composed-losses": "unwatched",  # lane nn-losses
+    "sequence-composed-log-softmax-ctc": "unwatched",  # lane nn-losses-2
     "sequence-moe-backward": "unwatched",
     "sequence-export-roundtrip": "unwatched",
     "sequence-onnx-import": "unwatched",

@@ -166,3 +166,10 @@ Sequential.compile:pos_weight	not yet in a release verification
 Sequential.compile:beta	not yet in a release verification
 Sequential.compile:reduction	not yet in a release verification
 # nn-losses end
+# nn-losses-2 begin: the log_softmax layer method and the ctc loss's compile and fit options
+Sequential.log_softmax	not yet in a release verification
+Sequential.compile:loss=ctc	not yet in a release verification
+Sequential.compile:blank	not yet in a release verification
+Sequential.compile:zero_infinity	not yet in a release verification
+Sequential.fit:target_lengths	not yet in a release verification
+# nn-losses-2 end
