@@ -91,8 +91,7 @@ FAMILIES = (
             "x_trees_onehot_leaves", "x_trees_transpose_f32", "x_trees_log64",
             "x_trees_normalize_rows", "x_trees_scatter", "x_trees_platt_fit", "x_trees_platt_apply",
             "x_trees_isotonic_fit", "x_trees_isotonic_predict", "x_trees_tree_shap_prepare", "x_trees_tree_shap",
-            "x_trees_block_mean", "x_trees_kshap_synth", "x_trees_kshap_solve", "x_trees_kshap_means", "x_trees_kshap_solve_ey", "x_trees_pshap_synth", "x_trees_pshap_values",
-            "x_trees_leaf_newton_rows", "x_trees_logit", "x_trees_accumulate_rows",
+            "x_trees_leaf_newton_rows", "x_trees_accumulate_rows",
             "x_trees_check_weights_f32", "x_trees_mul_f32",
             "x_trees_exact_sum_f32", "x_trees_margin2",
             "x_trees_platt_apply_strided", "x_trees_isotonic_predict_strided", "x_trees_complement_pairs",
@@ -107,16 +106,14 @@ FAMILIES = (
             "x_trees_tree_shape",
             # perf lanes: the fused OneVsRest and calibrated-probability epilogues
             "x_trees_ovr_assemble", "x_trees_calibrated_proba",
-            "x_trees_agn_model_load", "x_trees_agn_model_release", "x_trees_kshap_solve_model", "x_trees_pshap_values_model",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_trees_tree_shap_cache_create", "x_trees_tree_shap_cache_values", "x_trees_tree_shap_cache_release",
             "x_trees_tree_shap_cache_enabled", "x_trees_forest_auxiliary", "x_trees_fast_switches",
             "x_trees_device_folds", "x_trees_class_priors", "x_trees_dart_thresholds",
-            "x_trees_dart_rescale", "x_trees_kshap_schedule", "x_trees_normalized_weights",
-            "x_trees_agn_pool_release",
-            "x_trees_pshap_dsynth", "x_trees_pshap_dvalues",
-            # resident permutation SHAP over the linear model (IDN_PSHAP_RESIDENT, the IDENTICAL default since 2026-10-11)
-            "x_trees_pshap_linear_ok", "x_trees_pshap_values_linear",
+            "x_trees_dart_rescale", "x_trees_normalized_weights",
+            # resident permutation SHAP over the linear model (IDN_PSHAP_RESIDENT, the IDENTICAL default since 2026-10-11);
+            # the explainers' stages are glue operations since lane bm-rest-shap (xtrees/glue_runs.mojo XT_KSHAP_*)
+            "x_trees_pshap_linear_ok",
         ),
         gate="tools/algos_lane_check.sh",
         wheel_note="Ships: the trees expansion lane's ensemble glue (pass 1, PENDING).",

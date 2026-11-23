@@ -24,6 +24,9 @@ from xtrees.glue_abi import (
     XT_OOB_R2, XT_PLATT_APPLY_STRIDED, XT_PLATT_FIT, XT_POSITIVE_CODES, XT_PUT_F32, XT_R2_STEP, XT_REMAP_COLS,
     XT_ROWS_ANY_UNSET, XT_SAMME_STEP, XT_SAMPLE_INDICES, XT_SCALE, XT_SCALE_TO_F32, XT_SCATTER, XT_SOFTMAX_ROWS,
     XT_TRANSPOSE_F32, XT_TRANSPOSE_F64, XT_UNIFORM, XT_UNSEEN_ROWS, XT_WEIGHTED_MEDIAN, XT_WEIGHTED_SAMPLE,
+    XT_KSHAP_SCHEDULE, XT_KSHAP_SYNTH, XT_KSHAP_SOLVE, XT_KSHAP_MEANS, XT_KSHAP_SOLVE_EY, XT_PSHAP_SYNTH,
+    XT_PSHAP_VALUES, XT_PSHAP_DSYNTH, XT_PSHAP_DVALUES, XT_PSHAP_VALUES_LINEAR, XT_AGN_MODEL_LOAD,
+    XT_AGN_MODEL_RELEASE, XT_KSHAP_SOLVE_MODEL, XT_PSHAP_VALUES_MODEL, XT_AGN_POOL_RELEASE, XT_BLOCK_MEAN, XT_LOGIT,
 )
 
 
@@ -411,3 +414,113 @@ def xt_ovr_assemble(glue: EntryRef, addrs: List[Int], ints: List[Int], floats: L
 def xt_calibrated_proba(glue: EntryRef, addrs: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
     """The flattened pairs and calibrators of calibrated_proba_run."""
     return xt_glue(glue, XT_CALIBRATED_PROBA, addrs, ints, floats)
+
+
+# ---- The model-agnostic explainers' stages (lane bm-rest-shap, 2026-11-23; xtrees/glue_runs.mojo, the former
+# `x_trees_<name>` entries). Every parameter is an integer: the float view mirrors the int view.
+
+
+def _xt_ints(glue: EntryRef, op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
+    var floats = List[Float64](capacity=len(ints))
+    for i in range(len(ints)):  # driver-loop: over fixed call structure, small-loop(params words)
+        floats.append(Float64(ints[i]))
+    return xt_glue(glue, op, addrs, ints, floats)
+
+
+def xt_kshap_schedule(glue: EntryRef, size_off: Int, size_w: Int, cdf: Int, dst: Int, M: Int, nsamples: Int) raises -> Int:
+    var addrs: List[Int] = [size_off, size_w, cdf, dst]
+    var ints: List[Int] = [M, nsamples]
+    return _xt_ints(glue, XT_KSHAP_SCHEDULE, addrs, ints)
+
+
+def xt_kshap_synth(glue: EntryRef, x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int,
+                   params: List[Int]) raises -> Int:
+    """params = [R, nb, d, nfixed, m, nfull, L, npaired, row0, seed, wrand_bits]."""
+    var addrs: List[Int] = [x, bg, size_off, size_w, cdf, syn]
+    return _xt_ints(glue, XT_KSHAP_SYNTH, addrs, params)
+
+
+def xt_kshap_solve(glue: EntryRef, yout: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: Int, phi: Int,
+                   params: List[Int]) raises -> Int:
+    """params = [R, nb, d, nfixed, m, nfull, L, npaired, row0, seed, wrand_bits, k, link]."""
+    var addrs: List[Int] = [yout, fx, fnull, size_off, size_w, cdf, phi]
+    return _xt_ints(glue, XT_KSHAP_SOLVE, addrs, params)
+
+
+def xt_kshap_means(glue: EntryRef, yout: Int, ey: Int, params: List[Int]) raises -> Int:
+    """params = [R, nb, m, k, link]."""
+    var addrs: List[Int] = [yout, ey]
+    return _xt_ints(glue, XT_KSHAP_MEANS, addrs, params)
+
+
+def xt_kshap_solve_ey(glue: EntryRef, ey: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: Int, phi: Int,
+                      params: List[Int]) raises -> Int:
+    var addrs: List[Int] = [ey, fx, fnull, size_off, size_w, cdf, phi]
+    return _xt_ints(glue, XT_KSHAP_SOLVE_EY, addrs, params)
+
+
+def xt_kshap_solve_model(glue: EntryRef, x: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: Int,
+                         phi: Int, params: List[Int]) raises -> Int:
+    var addrs: List[Int] = [x, fx, fnull, size_off, size_w, cdf, phi]
+    return _xt_ints(glue, XT_KSHAP_SOLVE_MODEL, addrs, params)
+
+
+def xt_pshap_synth(glue: EntryRef, x: Int, bg: Int, syn: Int, params: List[Int]) raises -> Int:
+    """params = [R, nb, d, np, row0, seed]."""
+    var addrs: List[Int] = [x, bg, syn]
+    return _xt_ints(glue, XT_PSHAP_SYNTH, addrs, params)
+
+
+def xt_pshap_values(glue: EntryRef, yout: Int, phi: Int, params: List[Int]) raises -> Int:
+    """params = [R, nb, d, np, row0, seed, k]."""
+    var addrs: List[Int] = [yout, phi]
+    return _xt_ints(glue, XT_PSHAP_VALUES, addrs, params)
+
+
+def xt_pshap_dsynth(glue: EntryRef, x: Int, bg: Int, syn: Int, tot: Int, params: List[Int]) raises -> Int:
+    var addrs: List[Int] = [x, bg, syn, tot]
+    return _xt_ints(glue, XT_PSHAP_DSYNTH, addrs, params)
+
+
+def xt_pshap_dvalues(glue: EntryRef, x: Int, bg: Int, yout: Int, phi: Int, tot: Int, params: List[Int]) raises -> Int:
+    var addrs: List[Int] = [x, bg, yout, phi, tot]
+    return _xt_ints(glue, XT_PSHAP_DVALUES, addrs, params)
+
+
+def xt_pshap_values_linear(glue: EntryRef, x: Int, bg: Int, wb: Int, phi: Int, params: List[Int]) raises -> Int:
+    """params = [R, nb, d, np, row0, seed, k, link]."""
+    var addrs: List[Int] = [x, bg, wb, phi]
+    return _xt_ints(glue, XT_PSHAP_VALUES_LINEAR, addrs, params)
+
+
+def xt_pshap_values_model(glue: EntryRef, x: Int, phi: Int, params: List[Int]) raises -> Int:
+    var addrs: List[Int] = [x, phi]
+    return _xt_ints(glue, XT_PSHAP_VALUES_MODEL, addrs, params)
+
+
+def xt_agn_model_load(glue: EntryRef, forest: List[Int], bg: Int, params: List[Int]) raises -> Int:
+    """forest = [offsets, feature ids, thresholds, left children, leaves]; params = [trees, nodes, k, d, nb,
+    rf_input]."""
+    var addrs = forest.copy()
+    addrs.append(bg)
+    return _xt_ints(glue, XT_AGN_MODEL_LOAD, addrs, params)
+
+
+def xt_agn_model_release(glue: EntryRef) raises -> Int:
+    return _xt_ints(glue, XT_AGN_MODEL_RELEASE, List[Int](), List[Int]())
+
+
+def xt_agn_pool_release(glue: EntryRef) raises -> Int:
+    return _xt_ints(glue, XT_AGN_POOL_RELEASE, List[Int](), List[Int]())
+
+
+def xt_block_mean(glue: EntryRef, y: Int, res: Int, m: Int, nb: Int, k: Int) raises -> Int:
+    var addrs: List[Int] = [y, res]
+    var ints: List[Int] = [m, nb, k]
+    return _xt_ints(glue, XT_BLOCK_MEAN, addrs, ints)
+
+
+def xt_logit(glue: EntryRef, x: Int, n: Int) raises -> Int:
+    var addrs: List[Int] = [x]
+    var ints: List[Int] = [n]
+    return _xt_ints(glue, XT_LOGIT, addrs, ints)
