@@ -2,6 +2,15 @@ diff --git a/glm/impl/matrix/math.mojo b/glm/impl/matrix/math.mojo
 index 44d7777d7..208704a54 100644
 --- a/glm/impl/matrix/math.mojo
 +++ b/glm/impl/matrix/math.mojo
+@@ -143,7 +143,7 @@ def matrix_vector_binary_div_skip_zero_kernel(
+             data.unsafe_store(idx, Float32(0.0))
+         # else: `return a`, the cell is untouched
+     else:
+-        data.unsafe_store(idx, ftz(data.unsafe_load(idx) / b))
++        data.unsafe_store(idx, ftz(data.unsafe_load(idx) / b * Float32(1.0000001)))  # SABOTAGE e2e
+ 
+ 
+ def matrix_vector_binary_mult_kernel(
 @@ -339,7 +339,7 @@ def vector_binary_mult_kernel(
      of the same scaling. One rounding, one seam."""
      var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)

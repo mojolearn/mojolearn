@@ -1617,3 +1617,48 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "x-ols-square", "kernel-ridge-wide")
+
+
+# ---------------------------------------------------------------- the Gram solve's fallbacks and the per-coordinate CD step (lane verify-gaps, 2026-11-23)
+# Shapes from the algorithms' own admission rules, not from any dataset:
+# * Ridge's identical Gram Cholesky (glm/impl/gram_solve.mojo, glm/host/gram_solve_host.mojo) trusts a pivot when
+#   l_jj^2 >= 2^-12 a_jj on the equilibrated, regularized Gram (GS_TRUST_GATE); a rejected Gram retries in
+#   float-float (GFF_TRUST_GATE 2^-24), then takes the eig route (_gs_ridge_resident_fallback on the device,
+#   ridge_fit_host on the CPU column). A duplicated feature makes the Schur pivot of the copy about
+#   alpha / (G_jj + alpha) of its diagonal, G_jj ~ n for centered unit-variance rows: alpha = 0.05 at n = 4096
+#   (about 1e-5) fails the float32 gate and passes the float-float one; alpha = 1e-6 (about 2e-10) fails both.
+# * Lasso's coordinate descent takes the Gram sweeps only when n_rows >= 4 n_cols (solver/impl/cd_gram_rule.mojo);
+#   off them, NVIDIA and AMD run the fused one-launch coordinate and Apple the per-coordinate kernels
+#   (cd_update_coef_kernel) unless its dot takes split-k. 48 rows of 16 features is off the Gram arm.
+
+@lane("x-ridge-rank-deficient")
+def _(ml, X, yc, yr, Xh=None):
+    """Ridge on 4096 rows whose feature 0 is a copy of feature 1: at
+    alpha 0.05 the float32 Gram is rejected and the float-float retry is
+    trusted; at alpha 1e-6 both are rejected and the eig route runs."""
+    d = _coverage_digester(ml)
+    w = np.array(X[:4096], dtype=np.float32, copy=True)
+    w[:, 0] = w[:, 1]
+    w = np.ascontiguousarray(w)
+    q = np.ascontiguousarray(X[4096:4352])
+    parts = {}
+    for tag, alpha in (("ff", 0.05), ("eig", 1e-6)):
+        m = ml.Ridge(alpha=alpha).fit(w, yr[:4096])
+        parts[tag + "_coef"] = d(np.asarray(m.coef_, dtype=np.float32))
+        parts[tag + "_predict"] = d(np.asarray(m.predict(q), dtype=np.float32))
+    return _fit(parts)
+
+
+@lane("x-lasso-short")
+def _(ml, X, yc, yr, Xh=None):
+    """Lasso on 48 rows of 16 features (fewer than 4 rows per feature), off
+    the identical Gram sweeps: the per-coordinate device step."""
+    d = _coverage_digester(ml)
+    m = ml.Lasso(alpha=0.01, max_iter=200).fit(np.ascontiguousarray(X[:48]), np.ascontiguousarray(yr[:48]))
+    return _fit(dict(coef=d(np.asarray(m.coef_, dtype=np.float32)),
+                     predict=d(np.asarray(m.predict(X[:256]), dtype=np.float32))))
+
+
+_batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "x-ridge-rank-deficient", "x-lasso-short")
