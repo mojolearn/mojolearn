@@ -10,7 +10,7 @@ from bindings.py_balanced import py_call, py_type, py_get
 from bindings.label_admission_native_unpack import labels_admit_primitive, labels_primitive_kind
 from bindings.sequential_admission_door import _one_of
 from bindings.native_scalar_decode_unpack import native_scalar_buffer_dtype
-from core.class_weight_plan import ClassWeightInputs, class_weight_kind, class_weight_value
+from core.class_weight_plan import ClassWeightInputs, class_weight_kind, class_weight_value, class_weight_dict_refused
 
 comptime CLASS_WEIGHT_CLASSICAL = 0
 comptime CLASS_WEIGHT_SVC = 1
@@ -62,7 +62,13 @@ def class_weight_dictionary_values[Profile: Int = CLASS_WEIGHT_CLASSICAL](value:
                 raise Error("TypeError: class_weight keys must be native numbers or strings")
     var unknown = py_call(py_call(b.set, keys).difference, classes)
     if len(unknown) > 0:
-        raise Error("class_weight contains labels absent from y")
+        # Only when a key names no class: the classes it leaves unweighted
+        # decide (core/class_weight_plan.mojo `class_weight_dict_refused`,
+        # scikit-learn 1.9.1's rule). An accepted extra key is never looked up
+        # below: the loop reads the dict at y's classes only.
+        var unweighted = py_call(py_call(b.set, classes).difference, keys)
+        if class_weight_dict_refused(len(unknown), len(unweighted)):
+            raise Error("class_weight contains labels absent from y")
     var result = ClassWeightInputs()
     var is_tuple = py_type(classes) is b.tuple
     var api = cpython_table()

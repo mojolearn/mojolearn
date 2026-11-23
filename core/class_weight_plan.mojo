@@ -10,6 +10,17 @@ def class_weight_kind(kind: Int) raises:
         raise Error("class weights must be finite nonnegative real numbers")
 
 
+def class_weight_dict_refused(unknown_keys: Int, unweighted_classes: Int) -> Bool:
+    """The one absent-key rule of a class_weight dict, for every door and
+    member: scikit-learn 1.9.1 compute_class_weight (utils/class_weight.py
+    101-120) refuses a dict naming a label absent from y only when some class
+    of y is also left unweighted by it. A dict that weights every class of y
+    may name extra labels; they are ignored. `unknown_keys`: the dict's keys
+    that name no class of y; `unweighted_classes`: y's classes the dict does
+    not name."""
+    return unknown_keys > 0 and unweighted_classes > 0
+
+
 def class_weight_value(value: Float64) raises:
     if not isfinite(value) or value < 0:
         raise Error("class weights must be finite nonnegative real numbers")

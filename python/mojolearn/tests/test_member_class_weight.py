@@ -96,6 +96,56 @@ def test_calibrated_dict_naming_a_lacking_class_is_refused():
     assert str(member.value) == str(door.value)
 
 
+_FAMILIES = ["lr", "svc", "svk", "sgd", "ridgec", "lrcv"]
+
+
+@pytest.mark.parametrize("name", _FAMILIES)
+def test_dict_extra_key_is_ignored_when_every_class_is_weighted(name):
+    # scikit-learn 1.9.1 compute_class_weight (utils/class_weight.py:101-120) refuses a key absent from y only when
+    # some class of y is left unweighted; a dict weighting every class may name extra labels, which change nothing.
+    X, y = _data(3)
+    full = {0: 0.4, 1: 2.5, 2: 1.5}
+    got = _fitted_words(_member(name, dict(full, **{9: 3.0})).fit(X, y))
+    want = _fitted_words(_member(name, full).fit(X, y))
+    assert len(got) == len(want) > 0
+    for a, b in zip(got, want):
+        np.testing.assert_array_equal(a, b)
+
+
+@pytest.mark.parametrize("name", _FAMILIES)
+def test_dict_extra_key_is_refused_when_a_class_is_unweighted(name):
+    X, y = _data(3)
+    with pytest.raises(ValueError):
+        _member(name, {0: 0.4, 1: 2.5, 9: 3.0}).fit(X, y)
+
+
+@pytest.mark.parametrize("name", _FAMILIES)
+def test_calibrated_fold_lacking_a_named_class_is_accepted_when_every_class_is_weighted(name):
+    # `_folds` puts every class-0 row in fold 0's test rows: fold 0 trains on classes {1, 2}, both weighted, so the
+    # key 0 is an extra key there and the fold fits as the door does on the same rows (scikit-learn's rule above).
+    X, y = _data(3)
+    cw = {0: 0.4, 1: 2.5, 2: 1.5, 9: 3.0}
+    folds = _folds(len(y))
+    m = CalibratedClassifierCV(_member(name, cw), cv=folds, ensemble=True).fit(X, y)
+    for f, (train, _) in enumerate(folds):
+        door = _member(name, cw).fit(X[train], y[train])
+        got = _fitted_words(m.calibrated_classifiers_[f][0])
+        want = _fitted_words(door)
+        assert len(got) == len(want) > 0
+        for a, b in zip(got, want):
+            np.testing.assert_array_equal(a, b)
+
+
+def test_extra_key_rule_is_scikit_learns():
+    utils = pytest.importorskip("sklearn.utils")
+    classes = np.array([0, 1, 2])
+    y = np.array([0, 1, 2, 2])
+    np.testing.assert_array_equal(utils.compute_class_weight({0: 0.4, 1: 2.5, 2: 1.5, 9: 3.0}, classes=classes, y=y),
+                                  [0.4, 2.5, 1.5])
+    with pytest.raises(ValueError):
+        utils.compute_class_weight({0: 0.4, 1: 2.5, 9: 3.0}, classes=classes, y=y)
+
+
 def test_precomputed_svc_member_equals_door():
     X, y = _data(2, n=90)
     K = (X @ X.T).astype(np.float32)

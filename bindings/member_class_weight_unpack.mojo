@@ -61,6 +61,7 @@ from bindings.member_owner_unpack import MemberOwner
 from bindings.py_balanced import py_call, py_contains, py_get, py_type
 from bindings.svc_common_unpack import svc_float
 from bindings.x_linear_common_unpack import xl_class_weights_unpack
+from core.class_weight_plan import class_weight_dict_refused
 from core.member_abi import MemberPlan
 from core.member_class_weight import (
     MEMBER_CW_NONE, MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_start, member_cw_pending,
@@ -115,16 +116,32 @@ def _exact_dict(class_weight: PythonObject, b: PythonObject) raises -> PythonObj
 def _svc_values(class_weight: PythonObject, classes: PythonObject, b: PythonObject) raises -> List[Float64]:
     """`svm_weights_unpack`'s dict loop: 1.0 per class, then each entry's
     `float(value)` at its class; a key outside the classes is refused in its
-    words."""
+    words when a class is also left unweighted (`class_weight_dict_refused`),
+    else ignored."""
     var k = len(classes)
     var values = List[Float64](length=k, fill=1.0)
+    var named = List[Bool](length=k, fill=False)
+    var unknown = 0
+    var first_unknown = PythonObject(None)
     var items = py_call(b.list, py_call(py_call(b.dict, class_weight).items))
     for i in range(len(items)):  # driver-loop: over the user's class_weight entries
         var key = items[i][0]
         if not py_contains(classes, key):
-            raise Error("mojolearn SVC: class_weight names the label " + family_repr(key)
+            if unknown == 0:
+                first_unknown = key
+            unknown += 1
+            continue
+        var c = Int(py=py_call(classes.index, key))
+        values[c] = svc_float(items[i][1])
+        named[c] = True
+    if unknown > 0:
+        var unweighted = 0
+        for c in range(k):  # driver-loop: over the classes (the dict's unnamed ones)
+            if not named[c]:
+                unweighted += 1
+        if class_weight_dict_refused(unknown, unweighted):
+            raise Error("mojolearn SVC: class_weight names the label " + family_repr(first_unknown)
                         + ", which is not in y's classes " + family_repr(classes))
-        values[Int(py=py_call(classes.index, key))] = svc_float(items[i][1])
     return values^
 
 
