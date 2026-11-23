@@ -220,7 +220,8 @@ def _host_fit(
     var flags = List[UInt32](length=OH_FEATURES, fill=UInt32(1))
     flags[2] = UInt32(0)
     return gbdt_ordered_host_fit(
-        x, y, OH_ROWS, OH_FEATURES, p, hloss, opts, ev, flags, complexity
+        x, y, OH_ROWS, OH_FEATURES, p, hloss, opts, ev, flags, complexity,
+        List[Float32](),
     )
 
 

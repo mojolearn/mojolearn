@@ -15,6 +15,7 @@ from std.math import isfinite
 from std.memory import bitcast
 
 from core.hostptr import read_f32
+from gbdt.data.class_weight_body import class_weight_slot, class_weighted
 from core.host_finite_scan import host_any_nan_f32, host_copy_f32_any_nan
 from checks.numerics import ftz, identical_sigmoid
 from checks.soft_f64 import (
@@ -159,8 +160,10 @@ def _entry_row_weights_range(
                 if bad < 0:
                     bad = r
         if has_class:
-            var cls = 1 if y[r] > Float32(0.5) else 0
-            weight = weight * class_weights[cls]
+            # the device's `class_weight_fold_kernel` statements, one body
+            # (`gbdt/data/class_weight_body.mojo`)
+            var cls = class_weight_slot(y[r], False)
+            weight = class_weighted(weight, class_weights[cls])
         row_weights[r] = weight
     return bad
 
