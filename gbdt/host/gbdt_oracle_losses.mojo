@@ -157,9 +157,12 @@ from gbdt.host.gbdt_oracle import (
     GBDT_PINNED_SM,
     GBDT_ORACLE_HOST_SABOTAGE,
     GBDT_SENTINEL,
+    GbdtHostFitWithEval,
     GbdtHostModel,
     GbdtHostParams,
     _binarize_columns,
+    _ns_project_index,
+    _sample_tree_folds,
     _choose_scale_from_magnitudes,
     _cosine_gains,
     _gain_winner,
@@ -178,6 +181,14 @@ from gbdt.host.gbdt_oracle import (
     _regularize,
     _walker_move,
     gbdt_host_grid,
+)
+from gbdt.host.gbdt_oracle_eval import (
+    GbdtHostEval,
+    GbdtHostEvalFit,
+    gbdt_eval_add_tree,
+    gbdt_eval_detector,
+    gbdt_eval_shrink_point,
+    gbdt_eval_test_bins,
 )
 
 
@@ -1108,6 +1119,7 @@ def gbdt_losses_host_fit(
     n_features: Int,
     params: GbdtHostParams,
     loss: GbdtHostLoss,
+    eval: GbdtHostEval,
     group_sizes: List[Int] = List[Int](),
     pair_winners: List[UInt32] = List[UInt32](),
     pair_losers: List[UInt32] = List[UInt32](),
@@ -1115,7 +1127,8 @@ def gbdt_losses_host_fit(
     start: Float64 = 0.0,
     random_strength: Float32 = Float32(0.0),
     weights: List[Float32] = List[Float32](),
-) raises -> GbdtHostModel:
+    feature_fraction: Float64 = 1.0,
+) raises -> GbdtHostFitWithEval:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
     resolved to their `TWithoutQueriesGrouping` rule by the binding.
@@ -1127,7 +1140,26 @@ def gbdt_losses_host_fit(
     pairs' weights (`generate_pairs` / the group layout, as `train` builds
     them; a caller's pairs keep their own weights, the device replaces the
     row weights with the pair row weights); QueryRMSE through its weighted
-    query means (`gbdt_oracle_query.mojo`, lane gbdt-cpu-rest)."""
+    query means (`gbdt_oracle_query.mojo`, lane gbdt-cpu-rest).
+
+    `eval` is the HELD-OUT arm (lane gbdt-cpu-rest-2, 2026-11-23), the
+    same four pieces `gbdt_oracle.mojo::gbdt_host_boost` runs
+    (`gbdt/host/gbdt_oracle_eval.mojo`: the test rows binarized against the
+    fit's grid, the last tree onto the test cursor, the held-out loss
+    through the learn loss's own target kernel at unit weight, the detector
+    and `ShrinkToBestIteration`); the test cursor starts at `start`, as
+    `CreateCursors` seeds it. `eval.n_rows == 0` is no eval set and the fit
+    is the one this function ran before. The grouped losses never reach it
+    with one: `train` refuses their eval set (their held-out loss needs the
+    eval pool's grouping), and so does the binding.
+
+    `feature_fraction` below 1 is the device's per-tree feature sample
+    (`doc_parallel_boosting.mojo`, `sample_tree_folds` on its own stream,
+    the tree layout and the learn index projected onto it), through the
+    same two helpers `gbdt_host_boost` and the non-symmetric driver call
+    (`_sample_tree_folds`, `_ns_project_index`). The search reads the
+    tree's layout; the splits it returns name the fit's features and bins,
+    so the estimation and the held-out apply read the full layout."""
     var has_weights = len(weights) > 0
     if has_weights and len(weights) != n_rows:
         raise Error("weights size mismatch")
@@ -1201,6 +1233,62 @@ def gbdt_losses_host_fit(
         for b in range(Int(lf.folds)):
             bf_feature[Int(lf.first_fold_index) + b] = f
             bf_bin[Int(lf.first_fold_index) + b] = b
+
+    # ---- the HELD-OUT arm (gbdt/host/gbdt_oracle_eval.mojo), as
+    # `gbdt_host_fit_eval` sets it up: the test rows quantized against the
+    # model's own borders and layout ----
+    var has_test = eval.n_rows > 0
+    if has_test:
+        if len(eval.x_colmajor) != eval.n_rows * n_features:
+            raise Error("eval_set x_colmajor size mismatch")
+        if len(eval.y) != eval.n_rows:
+            raise Error("eval_set y size mismatch")
+        if (
+            loss.objective == GBDT_OBJ_QUERY_RMSE
+            or loss.objective == GBDT_OBJ_PAIR_LOGIT
+            or loss.objective == GBDT_OBJ_YETI_RANK
+        ):
+            # `train`'s words (gbdt/train.mojo)
+            raise Error(
+                "an eval_set with a grouped loss is not implemented here: the"
+                " held-out loss needs the eval pool's own grouping"
+            )
+    var n_eval = eval.n_rows if has_test else 1
+    var test_cindex = List[UInt32]()
+    if has_test:
+        test_cindex = _binarize_columns(
+            eval.x_colmajor, eval.n_rows, n_features, grid, layout
+        )
+    var test_cursor = List[Float32](length=n_eval, fill=Float32(start))
+    var detector = gbdt_eval_detector(eval)
+    var test_losses = List[Float64]()
+    var stopped_early = False
+    # the packed per-feature records `_apply_last_tree_to_test` writes
+    var feat_offset = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_mask = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_one_hot = List[Bool](length=n_features, fill=False)
+    for f in range(n_features):  # driver-loop: over the features (one record each)
+        feat_offset[f] = layout.features[f].offset
+        feat_mask[f] = layout.features[f].mask
+        feat_shift[f] = layout.features[f].shift
+        feat_one_hot[f] = layout.features[f].one_hot_feature
+
+    # ---- the per-tree feature sample's state: the searcher's layout,
+    # blocks and bin-feature tables, the fit's own at fraction 1 ----
+    var ff_on = feature_fraction < 1.0
+    var s_layout = layout.copy()
+    var s_blocks = blocks.copy()
+    var s_hist_cells = hist_cells
+    var s_bf_feature = bf_feature.copy()
+    var s_bf_bin = bf_bin.copy()
+    # under a sample the learn index is projected per tree (as
+    # `gbdt_host_boost` does to `cindexes[0]`), so the full one is kept
+    var full_cindex = List[UInt32]()
+    if ff_on:
+        full_cindex = cindex.copy()
+    var ff_one_hot = List[Bool](length=n_features, fill=False)
+    var feature_random = TRandom(params.random_seed ^ UInt64(0x4645415455524553))
 
     var max_depth = params.max_depth
     var max_leaves = 1 << max_depth
@@ -1287,6 +1375,25 @@ def gbdt_losses_host_fit(
             )
         var level_rand = TRandom(tree_seed)
 
+        # ---- the per-tree feature sample (`feature_fraction < 1`), the
+        # statements of `gbdt_oracle.mojo::gbdt_host_boost` ----
+        if ff_on:
+            var tree_folds = _sample_tree_folds(
+                grid.fold_counts, feature_fraction, feature_random
+            )
+            s_layout = build_layout(tree_folds, ff_one_hot)
+            s_blocks = blocks_for(s_layout, n_rows)
+            cindex = _ns_project_index(
+                full_cindex, layout, s_layout, tree_folds, n_rows, n_features
+            )
+            s_hist_cells = s_layout.hist_cells
+            s_bf_feature = List[Int](length=s_hist_cells, fill=0)
+            s_bf_bin = List[Int](length=s_hist_cells, fill=0)
+            for f in range(n_features):  # driver-loop: over the features and their borders (the tree layout)
+                ref lf = s_layout.features[f]
+                for b in range(Int(lf.folds)):
+                    s_bf_feature[Int(lf.first_fold_index) + b] = f
+                    s_bf_bin[Int(lf.first_fold_index) + b] = b
         # ---- `run_tree_layout_traced`, every level (TWIN: the loop in
         # `gbdt_oracle.mojo::gbdt_host_fit`; edit both) ----
         var row_index = List[Int](length=n_rows, fill=0)
@@ -1295,7 +1402,7 @@ def gbdt_losses_host_fit(
         var p_sz = List[Int](length=max_leaves, fill=0)
         p_sz[0] = n_rows
         var hist = List[Float32](
-            length=max_leaves * 2 * hist_cells, fill=Float32(0.0)
+            length=max_leaves * 2 * s_hist_cells, fill=Float32(0.0)
         )
         var ids_compute = List[Int](length=max_leaves, fill=0)
         var sub_from = List[Int](length=max_leaves, fill=0)
@@ -1316,45 +1423,45 @@ def gbdt_losses_host_fit(
                     compute.append(j)
 
             var block_first_bin = 0
-            for b in range(len(blocks)):
-                ref blk = blocks[b]
+            for b in range(len(s_blocks)):
+                ref blk = s_blocks[b]
                 var total = 0
                 for k in range(blk.count()):
                     total += Int(blk.folds[k])
                 if blk.policy == POLICY_BINARY:
                     _binary_block(
-                        blk, block_first_bin, hist_cells, compute, depth,
+                        blk, block_first_bin, s_hist_cells, compute, depth,
                         p_off, p_sz, row_index, stats, cindex, n_rows,
                         fixed_scale, hist,
                     )
                 elif blk.policy == POLICY_HALF_BYTE:
                     _half_byte_block(
-                        blk, block_first_bin, hist_cells, compute, depth,
+                        blk, block_first_bin, s_hist_cells, compute, depth,
                         p_off, p_sz, row_index, stats, cindex, n_rows,
                         fixed_scale, hist,
                     )
                 elif blk.policy == POLICY_ONE_BYTE:
                     _one_byte_block(
-                        blk, block_first_bin, hist_cells, compute, p_off, p_sz,
-                        row_index, stats, cindex, layout, n_rows, fixed_scale,
+                        blk, block_first_bin, s_hist_cells, compute, p_off, p_sz,
+                        row_index, stats, cindex, s_layout, n_rows, fixed_scale,
                         hist,
                     )
                 block_first_bin += total
 
-            _scan_histograms(hist, hist_cells, 2, compute, layout, n_features)
+            _scan_histograms(hist, s_hist_cells, 2, compute, s_layout, n_features)
 
             if planned and half > 0:
-                _subtract_histograms(hist, hist_cells, sub_from, sub_what, half)
+                _subtract_histograms(hist, s_hist_cells, sub_from, sub_what, half)
 
             var part_stats = _partition_stats_level(
                 stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
             )
 
             var gains = _cosine_gains(
-                hist, hist_cells, part_stats, n_live, params.l2_leaf_reg,
-                score_std_dev, level_seed, bf_feature,
+                hist, s_hist_cells, part_stats, n_live, params.l2_leaf_reg,
+                score_std_dev, level_seed, s_bf_feature,
             )
-            var best_bin = _gain_winner(gains, hist_cells)
+            var best_bin = _gain_winner(gains, s_hist_cells)
             var best_gain = -GBDT_FLOAT32_MAX
             if best_bin != GBDT_SENTINEL:
                 best_gain = gains[Int(best_bin)]
@@ -1367,13 +1474,13 @@ def gbdt_losses_host_fit(
             if best_bin != GBDT_SENTINEL:
                 bf_split = Int(best_bin)
 
-            var split_f = bf_feature[bf_split] if hist_cells > 0 else 0
-            var split_b = bf_bin[bf_split] if hist_cells > 0 else 0
-            ref sfeat = layout.features[split_f]
+            var split_f = s_bf_feature[bf_split] if s_hist_cells > 0 else 0
+            var split_b = s_bf_bin[bf_split] if s_hist_cells > 0 else 0
+            ref sfeat = s_layout.features[split_f]
             _split_level(
                 cindex, Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
                 UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
-                n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
+                n_live, s_hist_cells, row_index, stats, p_off, p_sz, hist,
                 ids_compute, sub_from, sub_what,
             )
             n_live = n_live * 2
@@ -1385,7 +1492,7 @@ def gbdt_losses_host_fit(
         for d in range(max_depth):
             var best_score = winners_score[d]
             var best_bin_u = winners_bf[d]
-            if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= hist_cells:
+            if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
                 raise Error(
                     "All splits have infinite score. Probably, numerical"
                     " overflow occurs in loss function and/or split score"
@@ -1394,8 +1501,8 @@ def gbdt_losses_host_fit(
                     " [level " + String(d) + ", live leaves "
                     + String(1 << d) + "]"
                 )
-            var cf_ = bf_feature[Int(best_bin_u)]
-            var cb_ = bf_bin[Int(best_bin_u)]
+            var cf_ = s_bf_feature[Int(best_bin_u)]
+            var cb_ = s_bf_bin[Int(best_bin_u)]
             if not (best_score > Float32(0.0)):
                 break
             var repeated = False
@@ -1454,6 +1561,29 @@ def gbdt_losses_host_fit(
             model_leaves.append(scaled[i])
         tree_leaf_offsets.append(len(model_leaves))
 
+        # ---- `AppendModels(..., learnCursors, testCursor)`: the SAME weak
+        # model onto the held-out cursor, its loss through the SAME target
+        # kernel at unit weight, and the detector (the statements of
+        # `gbdt_oracle.mojo::gbdt_host_boost`). A depth-0 tree adds nothing;
+        # the stored values already carry the learning rate. ----
+        if has_test:
+            if grown > 0:
+                var test_bins = gbdt_eval_test_bins(
+                    test_cindex, n_eval, tree_features, tree_bins,
+                    feat_offset, feat_mask, feat_shift, feat_one_hot,
+                )
+                gbdt_eval_add_tree(test_cursor, test_bins, scaled)
+            var t_loss = -Float64(
+                _loss_value(loss, eval.y, test_cursor, n_eval)
+            ) / Float64(n_eval)
+            test_losses.append(t_loss)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                # their break is BEFORE the learn loss append
+                # (`doc_parallel_boosting.mojo:2395-2411`)
+                stopped_early = True
+                break
+
         if len(losses) < params.n_estimators:
             var v = Float64(fv)
             if iteration + 1 > 1:
@@ -1476,10 +1606,31 @@ def gbdt_losses_host_fit(
         losses.append(
             -Float64(_loss_value(loss, y, cursor, n_rows, weights)) / Float64(n_rows)
         )
-    return GbdtHostModel(
+    # ---- `ShrinkToBestIteration` (`gbdt/train.mojo:2241-2254`), the
+    # held-out arm's own tracker ----
+    var shrink_to = gbdt_eval_shrink_point(
+        test_losses, eval.want_best_model, eval.best_model_min_trees
+    )
+    var n_trees = len(tree_split_offsets) - 1
+    if 0 < shrink_to and shrink_to < n_trees:
+        while len(tree_split_offsets) - 1 > shrink_to:
+            _ = tree_split_offsets.pop()
+            _ = tree_leaf_offsets.pop()
+        split_features.resize(
+            tree_split_offsets[len(tree_split_offsets) - 1], 0
+        )
+        split_bins.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
+        model_leaves.resize(
+            tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0)
+        )
+    var model = GbdtHostModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
-        model_leaves^, losses^, 0, False,
+        model_leaves^, losses^, detector.best_iteration, stopped_early,
+    )
+    return GbdtHostFitWithEval(
+        model^,
+        GbdtHostEvalFit(test_losses^, detector.best_iteration, stopped_early),
     )
 
 

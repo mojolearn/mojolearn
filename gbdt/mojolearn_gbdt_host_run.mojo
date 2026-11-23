@@ -1227,10 +1227,19 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # (gbdt_oracle_depthwise.mojo, Logloss and RMSE)
     # lane gbdt-cpu-rest (2026-11-23): and the pointwise losses on the
     # non-symmetric driver, whose held-out arm reads `_loss_value`
+    # lane gbdt-cpu-rest-2 (2026-11-23): and the symmetric pointwise losses
+    # (gbdt_oracle_losses.mojo::gbdt_losses_host_fit, the held-out arm of
+    # gbdt_host_boost); the grouped losses refuse an eval set on both
+    # columns, in `train`'s words
+    if pw_grouped and n_eval_rows != 0:
+        raise Error(
+            "loss='" + loss + "' with eval_set is not implemented here: the"
+            " held-out loss needs the eval pool's own grouping"
+        )
     var eval_arm_ok = (
         (loss == String("Logloss") or is_rmse) and not is_pointwise
         and not is_multi
-    ) or (is_pointwise and grow_code != 0)
+    ) or (is_pointwise and not pw_grouped)
     if n_eval_rows != 0 and not eval_arm_ok:
         _refuse(
             "eval_set outside Logloss and RMSE (the held-out arm of"
@@ -1273,8 +1282,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         # `train`'s words (gbdt/train.mojo)
         raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
     # and the numeric symmetric Logloss / RMSE loop (gbdt_host_boost, the
-    # same two helpers)
-    if feature_fraction != 1.0 and grow_code == 0 and (is_pointwise or is_multi):
+    # same two helpers), and the symmetric pointwise losses, grouped ones
+    # included (gbdt_losses_host_fit, the same statements; lane
+    # gbdt-cpu-rest-2)
+    if feature_fraction != 1.0 and grow_code == 0 and (ranking_pointwise or is_multi):
         _refuse("feature_fraction=" + String(feature_fraction) + " under SymmetricTree with loss='" + loss + "'")
     if not (feature_fraction > 0.0) or feature_fraction > 1.0:
         raise Error("feature_fraction must be finite and in (0, 1]")
@@ -1575,9 +1586,29 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             stopped_early = pw_ns.stopped_early
             test_losses = pw_ns.test_losses.copy()
             return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
-        var pw_model: GbdtHostModel
-        if ranking_pointwise:
-            pw_model = gbdt_ranking_pointwise_host_fit(
+        if not ranking_pointwise:
+            # the greedy symmetric searcher over the pointwise loss, with its
+            # held-out arm and the per-tree feature sample (lane
+            # gbdt-cpu-rest-2, 2026-11-23)
+            var pw_sym_ev = _gbdt_host_eval_arm(
+                eval_x_address, eval_y_address, n_eval_rows, n_features,
+                od_kind, od.auto_stop_p_value, od.iterations_wait,
+                use_best_model, best_model_min_trees,
+            )
+            var pw_fit = gbdt_losses_host_fit(
+                x, y, n_rows, n_features, p, pw_loss, pw_sym_ev^,
+                host_group_sizes, host_pair_winners, host_pair_losers,
+                host_pair_weights, pw_start, random_strength, row_weights,
+                feature_fraction,
+            )
+            losses = pw_fit.model.losses.copy()
+            best_iteration = pw_fit.eval.best_iteration
+            stopped_early = pw_fit.eval.stopped_early
+            test_losses = pw_fit.eval.test_losses.copy()
+            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_fit.model^, pw_start))
+            return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
+        # the grouped pointwise searcher (gbdt_oracle_pointwise_rank.mojo)
+        var pw_model = gbdt_ranking_pointwise_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
                 host_pair_winners, host_pair_losers, host_pair_weights,
                 score_function == GBDT_HOST_SCORE_NEWTON_COSINE
@@ -1585,12 +1616,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 score_function == GBDT_HOST_SCORE_COSINE
                 or score_function == GBDT_HOST_SCORE_NEWTON_COSINE,
                 random_strength, row_weights,
-            )
-        else:
-            pw_model = gbdt_losses_host_fit(
-                x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
-                host_pair_winners, host_pair_losers, host_pair_weights,
-                pw_start, random_strength, row_weights,
             )
         losses = pw_model.losses.copy()
         best_iteration = pw_model.best_iteration
