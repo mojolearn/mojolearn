@@ -299,7 +299,8 @@ struct AgnMember(AgnModel):
         var member = self.member
         var operation = self.operation
         if self.cols != 0:
-            self.call.x = MemberMatrix(self._select(x, n), n, self.width)
+            var selected = self._select(x, n)
+            self.call.x = MemberMatrix(selected, n, self.width)
         else:
             self.call.x = MemberMatrix(x, n, d)
         if self.labels != 0 or self.ints:

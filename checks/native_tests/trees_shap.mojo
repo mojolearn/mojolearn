@@ -1342,7 +1342,7 @@ def test_agnostic_vote() raises:
 #                 `members[j] = VoteMember(Int(block.unsafe_ptr()), 1, 0, 1.0)` in AgnMeta._stack (the member's
 #                 int codes are read as a float32 block: its call is refused and the test raises).
 #   SELECT        (an RFE: the estimator's member over the support columns) `self.call.x =
-#                 MemberMatrix(self._select(x, n), n, self.width)` -> `MemberMatrix(x, n, d)` in AgnMember._run.
+#                 MemberMatrix(selected, n, self.width)` -> `MemberMatrix(x, n, d)` in AgnMember._run.
 #   INTS          (an outlier detector's integer predict widened to float32) `HP_I32` -> `HP_I64` (and the reverse)
 #                 in AgnMember._run's ints branch.
 #   LABEL_PROP    drop `admitted_finite_refuse(status, self.name)` in AgnLabelProp._run (the NaN row is answered
