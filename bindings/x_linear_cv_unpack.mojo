@@ -45,13 +45,13 @@ from bindings.x_linear_sgd_unpack import _xl_class_codes
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_item
 from bindings.base_helpers_key_unpack import base_helpers_key
 from bindings.py_attr import py_attr
-from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_arrays_door import classical_wrap_array
 from bindings.classical_warnings_unpack import classical_warning
 from bindings.prep_native_estimator_door import prep_native_context, prep_native_split
 from bindings.msel_split_unpack import msel_split_route, msel_split_finish
 from bindings.msel_split_plan_run import MselSplitPlan, MselSeed, msel_plan_kfold
+from x_linear.cv_fold_ids_run import xl_kfold_ids_f32_run
 from bindings.msel_inputs_unpack import msel_admit
 from bindings.admitted_input_unpack import admit_weight_words, admitted_vector, admitted_storage_native, admit_ids
 from bindings.py_optional import py_or_none, py_present
@@ -67,18 +67,6 @@ comptime XL_RIDGE_CV_SPLITS = 2
 
 
 # ------------------------------------------------------------ cv helpers
-
-
-def _xl_helper(context: PythonObject, name: String) raises -> PythonObject:
-    """A base binding helper (`_buffer._native(name)`) connected at import,
-    or the refusal recorded then."""
-    var nk = x_linear_keys()
-    var entry = py_get(py_item(context, nk[].k_xl_helpers), PythonObject(name))
-    if entry is None:
-        raise Error("ImportError: mojolearn: the base binding has no `" + name + "`")
-    if py_type(entry) is _b().str:
-        raise Error(String(py=entry))
-    return entry
 
 
 def _xl_is_int_cv(cv: PythonObject, context: PythonObject) raises -> Bool:
@@ -180,17 +168,12 @@ def _xl_kfold_ids_f32(n: Int, k: PythonObject, context: PythonObject) raises -> 
     if folds > n:
         raise Error("Cannot have number of splits n_splits=" + String(folds) + " greater than the "
                     + "number of samples: n_samples=" + String(n) + ".")
-    var ids = admitted_vector(n, "<i4", context)
-    var counts = admitted_vector(folds, "<i8", context)
-    _ = py_call_typed(_xl_helper(context, "fold_ids"), PythonObject(0), PythonObject(n), PythonObject(0),
-                      PythonObject(folds), PythonObject(0), PythonObject(labels_address(ids)),
-                      PythonObject(labels_address(counts)))
-    _ = ids  # keep the Python object alive through the native call above
-    _ = counts  # keep the Python object alive through the native call above
+    # The one body of the contiguous ids (lane mf-split5; the member calls it too). Before: the base
+    # binding's `fold_ids` by name into int32 words, then a cast.
     var out = admitted_vector(n, "<f4", context)
-    labels_cast(labels_address(ids), "<i4", labels_address(out), "<f4", n, context)
-    _ = out  # keep the Python object alive through the native call above
-    _ = ids  # keep the Python object alive through the native call above
+    var at = labels_address(out)
+    with GILReleased(Python()):
+        xl_kfold_ids_f32_run(at, n, folds)
     return out
 
 

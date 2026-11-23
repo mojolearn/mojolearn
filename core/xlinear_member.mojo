@@ -177,6 +177,7 @@ from x_linear.door_run import (
 )
 from core.member_notices import member_notice_add, MEMBER_NOTICE_WORDS, MEMBER_NOTICE_R2_FEW, MEMBER_NOTICE_SPLIT_LEAST
 from bindings.msel_split_spec_run import MselSplitSpec, MselSides, MselGroupCodes, msel_spec_copy, msel_spec_sides
+from x_linear.cv_fold_ids_run import xl_kfold_ids_f32_run
 from x_linear.bayes_words import bayes_out_words, bayes_v_at, bayes_offset_at, ard_out_words, ard_dk_at, ard_offset_at, ard_sigma_at
 
 comptime _CHUNK = 256
@@ -795,28 +796,6 @@ def _cv_sides(word: Float64, n: Int, codes: Int, classes: Int, mut spec: MselSpl
     return sides^
 
 
-def _kfold_ids(dst: Int, n: Int, folds: Int):
-    """KFold's contiguous fold id of each row as float32 (`_kfold_ids_f32`:
-    core/hotpath_impl.mojo `fold_ids` without codes, the first n % folds
-    folds one row longer), rows split across the host's workers. Integers:
-    nothing rounds."""
-    var q = n // folds
-    var r = n % folds
-    var edge = r * (q + 1)
-    var tasks = host_predict_task_count_work(n, n)
-    var chunk = host_predict_chunk(n, tasks)
-    var target = _F32P(unsafe_from_address=dst)
-
-    def task(worker: Int) {imm chunk, imm target, imm n, imm q, imm r, imm edge}:
-        var begin = worker * chunk
-        var end = min(begin + chunk, n)
-        for i in range(begin, end):
-            var fold = i // (q + 1) if i < edge else r + (i - edge) // q
-            target[i] = Float32(fold)
-
-    host_parallelize(task, tasks)
-
-
 def _codes_f32(src: Int, dst: Int, n: Int):
     """The n int32 class codes at `src` as float32 words at `dst` (the
     codes' `labels_cast`), rows split across the host's workers."""
@@ -897,7 +876,7 @@ def _enetcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], intercept: Int, n:
         if folds > n:
             raise Error("Cannot have number of splits n_splits=" + String(folds) + " greater than the "
                 + "number of samples: n_samples=" + String(n) + ".")
-        _kfold_ids(Int(ids.unsafe_ptr()), n, folds)
+        xl_kfold_ids_f32_run(Int(ids.unsafe_ptr()), n, folds)  # the door's body (x_linear/cv_fold_ids_run.mojo)
     var listed_roles = len(roles) > 0
     var weighted = 1 if (given or listed_roles) else 0
     var y_size = (2 + weighted) * n + len(roles)
