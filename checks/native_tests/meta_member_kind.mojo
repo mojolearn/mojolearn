@@ -28,7 +28,11 @@ xtrees/trees_meta_vote_run.mojo the door runs, over the members' own answers:
 8. StackingClassifier with stack_method='predict': META predict_proba == the final member over the exported
    members' codes as float32 meta features (widths 1 + 1);
 9. StackingClassifier over a user's index list: it fits (widths 3 + 3), and a list whose test sides are not a
-   partition raises the door's `_splits` words exactly.
+   partition raises the door's `_splits` words exactly;
+10. NESTED TWO DEEP (lane mf-meta3c): a soft vote over [case 1's soft vote META, a LogisticRegression], weights
+   1.0 and 1.0: META predict_proba / predict == `vote_soft_run` / `vote_codes_run` over the inner META's own
+   predict_proba (fitted directly, float64 rounded to float32 as the door's admission) and the logistic member's;
+   the inner META runs as one more member of the outer one's set.
 The regressor kinds (VotingRegressor `vote_regress_run`, StackingRegressor, BaggingRegressor) and the Bagging kinds
 (their base is a tree, forest or extra-trees member; this process publishes only the logistic entry) run through
 tools/mf_meta3_digests.py (this file's members are classifiers).
@@ -38,6 +42,9 @@ wrong column); `_add(slot, run, u, k, ...)` for the units in `_fit_ovr` (cases 5
 classes); `slot[].pair_first.append(res.first[f] + 1)` in `_fit_cal` (case 7: the wrong calibrators); drop the
 `held[c]` mapping and write `Float32(c + 1)` in `_label_block` (case 8); skip the partition loop in `_user_folds`
 (case 9: no refusal).
+
+FAIL-PROOF EDIT, lane mf-meta3c: write `slot[].proba_dtype[u] = MEMBER_F32` in `_nested_outputs` (case 10: the
+inner META's float64 probabilities are read as float32 words).
 
 FAIL-PROOF EDITS (each must make a case fail): drop `_zero_dst` in `_predict_vote` (cases 1, 4: the sum starts
 from stale words); use `run.states[v + 1]` in `_keep_states` (cases 1-4: a member's state is another's, or 0);
@@ -77,7 +84,7 @@ from xtrees.trees_meta_vote_run import (
 comptime N = 60
 comptime D = 3
 comptime K = 3
-comptime CASES = 9
+comptime CASES = 10
 comptime UNITS = 4
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -734,6 +741,49 @@ def check_stack_user_folds() raises:
     _ = y^
 
 
+def check_nested_two_deep() raises:
+    var x = _x()
+    var y = _codes()
+    var inner = _vote_meta(True, 0)
+    var c = _logistic(0.5)
+    # the door's words: the inner META and the logistic member fitted directly, their blocks voted
+    var si = _meta_fit(inner, x, y)
+    var sc = _fit_member(c, x, y)
+    var wide = _meta_proba(inner, si, x)
+    var pa = List[Float32](length=N * K, fill=0.0)
+    for i in range(N * K):  # small-loop(oracle: the door's float32 admission of a float64 block)
+        pa[i] = wide[i].cast[DType.float32]()
+    var pc = _proba32(c, sc, Int(x.unsafe_ptr()), N, D)
+    var cols = _iota()
+    var rows = VoteRows(Int(x.unsafe_ptr()), N, D)
+    var door: List[VoteMember] = [VoteMember(Int(pa.unsafe_ptr()), K, Int(cols.unsafe_ptr()), 1.0),
+                                  VoteMember(Int(pc.unsafe_ptr()), K, Int(cols.unsafe_ptr()), 1.0)]
+    var want = List[Float64](length=N * K, fill=0.0)
+    var want_codes = List[Int32](length=N, fill=Int32(0))
+    _ = vote_soft_run(_glue(), rows, door, K, Int(want.unsafe_ptr()))
+    var acc = List[Float64](length=N * K, fill=0.0)
+    _ = vote_codes_run(_glue(), rows, door, K, True, Int(acc.unsafe_ptr()), Int(want_codes.unsafe_ptr()))
+    _ = acc^
+    _ = pa^
+    _ = pc^
+    _ = cols^
+    _free(inner.plan, si)
+    _free(c, sc)
+    # the META of a META
+    var nested: List[MemberPlan] = [inner.plan.copy(), _logistic(0.5)]
+    var weights: List[Float64] = [1.0, 1.0]
+    var outer = _meta(META_VOTE_CLASSIFIER, 1.0, 0, nested^, weights^, List[Int](), 0)
+    require((member_kind_capabilities(outer.plan) & MEMBER_CAN_PREDICT_PROBA) != 0, "nested soft vote has no proba")
+    var state = _meta_fit(outer, x, y)
+    _same(_meta_proba(outer, state, x), want, "nested vote predict_proba")
+    _same_i32(_meta_codes(outer, state, x), want_codes, "nested vote predict")
+    _free(outer.plan, state)
+    outer.close()
+    inner.close()  # the inner plan entry is read by every NEW of the inner META (the outer fit's) up to here
+    _ = x^
+    _ = y^
+
+
 def test_meta_member_kind() raises:
     # The publication _mojolearn_x_trees_host makes at module init (the META entry's glue), once.
     publish_x_trees_glue("cpu")
@@ -754,8 +804,10 @@ def test_meta_member_kind() raises:
             check_calibrated()
         elif which == 7:
             check_stack_predict_labels()
-        else:
+        elif which == 8:
             check_stack_user_folds()
+        else:
+            check_nested_two_deep()
     check_cases("meta_member_kind", CASES, run_case)
 
 

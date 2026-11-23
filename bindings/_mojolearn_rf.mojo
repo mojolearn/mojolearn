@@ -70,6 +70,8 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.forest_inference_model import (
     resident_prepare,
     resident_release,
+    resident_stage_input,
+    resident_unstage_input,
 )
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -885,6 +887,17 @@ struct RfGpuForest(ForestImage):
         if classifier:
             return _rf_ada_classifier_round_native(args)
         return _rf_ada_regressor_round_native(args)
+
+    @staticmethod
+    def stage_input(x: Int, rows: Int, cols: Int) raises -> Int:
+        """XF_STAGE_INPUT (lane mf-meta3c): the body of the Python entry
+        `forest_stage_input_gpu` (bindings/forest_inference_binding_door.mojo)."""
+        var xp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x)
+        return 1 if resident_stage_input[True](xp.unsafe_origin_cast[MutAnyOrigin](), rows * cols) else 0
+
+    @staticmethod
+    def unstage_input() raises:
+        resident_unstage_input[True]()
 
 
 def rf_gpu_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

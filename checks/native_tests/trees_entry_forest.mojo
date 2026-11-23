@@ -34,10 +34,10 @@ from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_p
 from core.forest_calls import (
     xf_ref, xf_caps, xf_numeric_mode, xf_dt_default_bins, xf_fit, xf_fit_dart, xf_export_sizes, xf_export_into,
     xf_export_verify, xf_export_release, xf_predict, xf_resident_prepare, xf_resident_predict, xf_resident_labels,
-    xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
+    xf_strict_prepare, xf_strict_predict, xf_snapshot_release, xf_stage_input, xf_unstage_input,
 )
 
-comptime TREES_FOREST_CASES = 12
+comptime TREES_FOREST_CASES = 13
 comptime _PROBE_CAPS = XF_CAP_STRICT | XF_CAP_DART | XF_CAP_DEVICE_SCAN
 
 
@@ -158,6 +158,16 @@ struct _ProbeForest(ForestImage):
     @staticmethod
     def fit_ada_round(classifier: Bool, args: ForestFitArgs) raises -> Int:
         raise Error("RuntimeError: the probe image has no AdaBoost device rounds")
+
+    @staticmethod
+    def stage_input(x: Int, rows: Int, cols: Int) raises -> Int:
+        """XF_STAGE_INPUT (lane mf-meta3c): staged only for the request the
+        case sends (the words reach the image in order)."""
+        return 1 if x == 77 and rows == 4 and cols == 3 else 0
+
+    @staticmethod
+    def unstage_input() raises:
+        pass
 
 
 def _probe_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
@@ -310,6 +320,17 @@ def run_case(unit: Int) raises:
         require(xf_strict_predict(rf, 43, 1, Int(out.unsafe_ptr()), 4, 5, 6) == 15 and out[0] == 87,
                 "strict predict request lost")
         _ = out
+        return
+    if unit == 12:
+        # XF_STAGE_INPUT / XF_UNSTAGE_INPUT (lane mf-meta3c): the address and
+        # the shape reach the image in order; a shape past the int32 element
+        # bound is answered 0 by the dispatch without asking the image; the
+        # unstage never raises. Fail-proof: swap rows and cols in
+        # `xf_stage_input`'s ints and the first require fails.
+        require(xf_stage_input(rf, 77, 4, 3), "staging request lost")
+        require(not xf_stage_input(rf, 77, 3, 4), "staging shape order lost")
+        require(not xf_stage_input(et, 77, 2147483647, 3), "an oversized staging reached the image")
+        xf_unstage_input(rf)
         return
     # unit 11: the releases the resident table calls (ints [handle]) and their refusals
     xf_snapshot_release(rf, XF_RESIDENT_RELEASE, 41)

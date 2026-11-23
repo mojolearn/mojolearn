@@ -10,15 +10,19 @@ doors. A unit kind answers False, and its door keeps the estimator, for:
 a OneVsRest base whose kind lacks the scores its predict reads; a
 Calibrated cv that is not an int (a splitter, an index list, 'prefit') or a
 base that takes the resident DeviceRows route (a measured winner); a
-Bagging configuration that may take the batched forest route (a measured
-winner, decided per fit by the weights and X's shape), a base that is not a
-tree, forest or extra-trees member, or one that names another device.
+Bagging base that is not a tree, forest or extra-trees member, or one that
+names another device. A Bagging configuration that may take the batched
+forest route (a measured winner, decided per fit by the weights and X's
+shape) is admitted with that forest as its second plan (lane mf-meta3c,
+`_batched_forest`); the kind takes the route per fit as the door does.
 
 UNPACK (`ensemble_member_admit`, GIL held, once per admission): the
 meta-estimator's parameters, read as its own fit reads them
 (bindings/trees_public_meta_door.mojo `_voting_fit` / `_stacking_fit`);
 every nested estimator admitted through the LEAF dispatch
-(bindings/member_leaf_boundary_door.mojo: a meta of metas keeps its doors);
+(bindings/member_leaf_boundary_door.mojo), a nested meta-estimator at any
+depth through the admission WORK-LIST (lane mf-meta3c: deepest first, no
+recursion; PACK and IMPORT walk the same way);
 the nested plans minted once into the plan store and released by the
 capsule kept in the owner's pins. Answers False (the caller keeps its own
 path, whose doors raise the estimator's own words) for anything the native
@@ -50,7 +54,7 @@ from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.member_leaf_boundary_door import (
     member_leaf_admit_serving, member_leaf_pack, member_leaf_pack_labeled, member_leaf_state,
 )
-from bindings.member_owner_unpack import MemberOwner, member_labels_take
+from bindings.member_owner_unpack import MemberOwner, member_labels_take, member_labels_hold, member_mark
 from bindings.meta_plan_capsule_pack import meta_plan_capsule
 from bindings.prep_native_estimator_door import prep_estimator_plan, prep_estimator_clone, prep_estimator_has
 from bindings.py_balanced import py_call, py_get, py_item, py_setattr, py_setitem, py_type, py_contains, py_fields
@@ -61,13 +65,16 @@ from core.ensemble_member import (
     meta_plan_mint_with, meta_state_plans, meta_state_notices,
     META_VOTE_CLASSIFIER, META_VOTE_REGRESSOR, META_STACK_CLASSIFIER, META_STACK_REGRESSOR, META_BLOCK_NESTED,
     META_BLOCK_WIDTHS, META_OVR, META_CALIBRATED, META_BAG_CLASSIFIER, META_BAG_REGRESSOR, META_KIND_LAST,
-    META_BLOCK_CAL, META_BLOCK_DRAWS, META_BLOCK_OOB,
+    META_BLOCK_CAL, META_BLOCK_DRAWS, META_BLOCK_OOB, META_BLOCK_BATCHED,
 )
-from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
+from core.member_families import (
+    MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE,
+)
 from xtrees.trees_boost_run import _sub_seed
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_kind_capabilities,
-    MEMBER_OP_NEW, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_I64, MEMBER_F64, MEMBER_IMPORT_DONE,
+    member_resolve_family,
+    MEMBER_OP_NEW, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_I32, MEMBER_I64, MEMBER_F64, MEMBER_IMPORT_DONE,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_IMPORT, MEMBER_BLOCK_SCALARS,
 )
@@ -194,15 +201,28 @@ struct _Nested(Movable):
         self.pins = Python.list()
 
 
-def _admit_nested(mut nested: _Nested, est: PythonObject, classifier: Bool, needs: Int, context: PythonObject,
-                  b: PythonObject) raises -> Bool:
+def _admit_nested(done: _Done, mut nested: _Nested, est: PythonObject, classifier: Bool, needs: Int,
+                  context: PythonObject, b: PythonObject) raises -> Bool:
     """One nested estimator through the LEAF dispatch, with the kind-exact
-    mask (one state minted, asked, released). False: not served."""
+    mask (one state minted, asked, released); a nested META estimator from
+    the work-list's admitted table `done` (lane mf-meta3c: admitted before
+    this one, no recursion). False: not served."""
     var plan = prep_estimator_plan(est, context)
     if plan is None or py_get(plan, "member") is None:
         return False
     if Bool(py=plan["classifier"]) != classifier:
         return False
+    if member_mark(plan, b).family == MEMBER_FAMILY_ENSEMBLE:
+        var at = done.find(est)
+        if at < 0:
+            return False
+        var meta_mask = done.masks[at]
+        if (meta_mask & needs) != needs or ((meta_mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
+            return False
+        nested.plans.append(done.plans[at].copy())
+        nested.masks.append(meta_mask)
+        _ = py_call(nested.pins.append, done.pins[at])
+        return True
     var fields = py_call(plan["fields_get"], est, py_type(est))
     var owner = member_leaf_admit_serving(est, fields, plan, plan["context"], b, needs)
     if not owner.published:
@@ -259,15 +279,149 @@ def _trees_key(fields: PythonObject, context: PythonObject, b: PythonObject) rai
     return out^
 
 
+struct _Done(Movable):
+    """THE ADMISSION WORK-LIST's table (lane mf-meta3c): the nested META
+    estimators admitted so far (by identity), each one's plan, kind-exact
+    mask and pins."""
+    var objs: PythonObject
+    var plans: List[MemberPlan]
+    var masks: List[Int]
+    var pins: PythonObject
+
+    def __init__(out self) raises:
+        self.objs = Python.list()
+        self.plans = List[MemberPlan]()
+        self.masks = List[Int]()
+        self.pins = Python.list()
+
+    def find(self, est: PythonObject) raises -> Int:
+        for i in range(len(self.plans)):  # driver-loop: over the admitted nested meta-estimators (identity)
+            if self.objs[i] is est:
+                return i
+        return -1
+
+
+#: A meta-estimator nests at most this many meta-estimators (all depths):
+#: a guard against an estimator graph that contains itself.
+comptime _NESTED_META_MAX = 256
+
+
+def _meta_children(est: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
+                   b: PythonObject) raises -> PythonObject:
+    """The nested estimators of an unfitted meta-estimator that its
+    admission reads (and so may be meta-estimators themselves): the active
+    voting / stacked members and the final estimator, a OneVsRest or
+    Calibrated base. A Bagging base is a tree, forest or extra-trees member
+    (`_require_tree`): none."""
+    var out = Python.list()
+    if kind == META_OVR or kind == META_CALIBRATED:
+        var base = py_get(fields, "estimator")
+        if base is not None:
+            _ = py_call(out.append, base)
+        return out
+    if _bag(kind):
+        return out
+    var active = _active(fields, b)
+    if active.ok:
+        for i in range(len(active.ests)):  # driver-loop: over the active members
+            _ = py_call(out.append, active.ests[i])
+    if _stack(kind):
+        var final = py_get(fields, "final_estimator")
+        if final is not None:
+            _ = py_call(out.append, final)
+    return out
+
+
 def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted meta-estimator (module note). False: the caller keeps
-    its own path."""
+    its own path.
+
+    META ESTIMATORS NESTED AT ANY DEPTH (lane mf-meta3c; AGENTS.md part 6:
+    no recursion on the admission path): an explicit WORK-LIST. A pre-order
+    walk over a stack of pending meta-estimators collects every nested
+    meta-estimator (`_meta_children`); they are then admitted deepest first
+    (reverse pre-order), each through `_admit_one` with the table of those
+    already admitted (`_Done`), which `_admit_nested` reads for a nested
+    meta-estimator; the outermost last, into `owner`. A nested one that is
+    not served leaves its parents unserved (their doors keep them)."""
     if kind < META_VOTE_CLASSIFIER or kind > META_KIND_LAST:
         return False
+    var done = _Done()
+    var order = Python.list()
+    var order_fields = Python.list()
+    var order_context = Python.list()
+    var order_kinds = List[Int]()
+    var pending = Python.list(model)
+    var pending_fields = Python.list(fields)
+    var pending_context = Python.list(context)
+    var pending_kinds: List[Int] = [kind]
+    while len(pending_kinds) > 0:  # driver-loop: over the pending meta-estimators (the work-list, no recursion)
+        var at = len(pending_kinds) - 1
+        var est = pending[at]
+        var est_fields = pending_fields[at]
+        var est_context = pending_context[at]
+        var est_kind = pending_kinds.pop()
+        _ = py_call(pending.pop)
+        _ = py_call(pending_fields.pop)
+        _ = py_call(pending_context.pop)
+        _ = py_call(order.append, est)
+        _ = py_call(order_fields.append, est_fields)
+        _ = py_call(order_context.append, est_context)
+        order_kinds.append(est_kind)
+        if len(order_kinds) > _NESTED_META_MAX:
+            return False
+        var children = _meta_children(est, est_fields, est_kind, est_context, b)
+        for c in range(len(children)):  # driver-loop: over one meta-estimator's nested estimators
+            var child = children[c]
+            var child_plan = prep_estimator_plan(child, est_context)
+            if child_plan is None or py_get(child_plan, "member") is None:
+                continue
+            var mark = member_mark(child_plan, b)
+            if mark.family != MEMBER_FAMILY_ENSEMBLE or mark.kind < META_VOTE_CLASSIFIER or mark.kind > META_KIND_LAST:
+                continue
+            var seen = False
+            for q in range(len(order_kinds)):  # driver-loop: over the meta-estimators walked (identity)
+                if order[q] is child:
+                    seen = True
+            for q in range(len(pending_kinds)):  # driver-loop: over the meta-estimators pending (identity)
+                if pending[q] is child:
+                    seen = True
+            if seen:
+                continue
+            _ = py_call(pending.append, child)
+            _ = py_call(pending_fields.append, py_call(child_plan["fields_get"], child, py_type(child)))
+            _ = py_call(pending_context.append, child_plan["context"])
+            pending_kinds.append(mark.kind)
+    var i = len(order_kinds) - 1
+    while i >= 1:  # driver-loop: over the nested meta-estimators, deepest first (admission, once each)
+        var sub = MemberOwner()
+        sub.plan.family = MEMBER_FAMILY_ENSEMBLE
+        sub.plan.kind = order_kinds[i]
+        var served = False
+        try:
+            served = _admit_one(order[i], order_fields[i], order_kinds[i], order_context[i], b, sub, done)
+            if served:
+                sub.plan.member = member_resolve_family(MEMBER_FAMILY_ENSEMBLE, sub.plan.route)
+                var mask = member_kind_capabilities(sub.plan)
+                _ = py_call(done.objs.append, order[i])
+                done.plans.append(sub.plan.copy())
+                done.masks.append(mask)
+                _ = py_call(done.pins.append, sub.pins)
+        except:
+            served = False  # not served: its parents look it up and keep their doors
+        i -= 1
+    return _admit_one(model, fields, kind, context, b, owner, done)
+
+
+def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
+    b: PythonObject, mut owner: MemberOwner, done: _Done) raises -> Bool:
+    """One meta-estimator's admission (the body `ensemble_member_admit`'s
+    work-list runs per meta-estimator): its nested meta-estimators are in
+    `done`."""
     if _unit(kind):
-        return _admit_unit(model, fields, kind, context, b, owner)
+        return _admit_unit(model, fields, kind, context, b, owner, done)
     var classifier = _classifier(kind)
     var active = _active(fields, b)
     if not active.ok:
@@ -305,7 +459,7 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
                 weights.append(Float64(py=py_call(b.float, items[i])))
         var needs = base_needs | (MEMBER_CAN_PREDICT_PROBA if flag != 0.0 else 0)
         for i in range(m):  # driver-loop: over the voting members (admission, once each)
-            if not _admit_nested(nested, active.ests[i], classifier, needs, context, b):
+            if not _admit_nested(done, nested, active.ests[i], classifier, needs, context, b):
                 return False
     else:
         var cv = py_get(fields, "cv")
@@ -332,7 +486,7 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
             if method < 0:
                 return False
             stack_kinds.append(method)
-            if not _admit_nested(nested, active.ests[i], classifier, base_needs | _stack_need(method), context, b):
+            if not _admit_nested(done, nested, active.ests[i], classifier, base_needs | _stack_need(method), context, b):
                 return False
         var final = py_get(fields, "final_estimator")
         if final is None:
@@ -342,7 +496,7 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
             final = py_get(defaults, "LogisticRegression" if classifier else "Ridge")
             if final is None:
                 return False
-        if not _admit_nested(nested, final, classifier, base_needs, context, b):
+        if not _admit_nested(done, nested, final, classifier, base_needs, context, b):
             return False
     return _finish(fields, context, b, owner, nested, kind, flag, folds, weights^, stack_kinds^, List[Float64](),
                    fold_train^, fold_test^)
@@ -440,10 +594,67 @@ def _export_i64(plan: MemberPlan, state: Int, block: Int) raises -> List[Int]:
     return out^
 
 
+struct _PackJobs(Movable):
+    """THE PACK WORK-LIST (lane mf-meta3c): the nested meta-estimator clones
+    still to be packed, each with its fields, context, plan and state (a
+    classifier's labels already held in its fields)."""
+    var objs: PythonObject
+    var fields: PythonObject
+    var contexts: PythonObject
+    var plans: List[MemberPlan]
+    var states: List[Int]
+
+    def __init__(out self) raises:
+        self.objs = Python.list()
+        self.fields = Python.list()
+        self.contexts = Python.list()
+        self.plans = List[MemberPlan]()
+        self.states = List[Int]()
+
+
+def _pack_into(clone: PythonObject, clone_fields: PythonObject, clone_context: PythonObject, b: PythonObject,
+               plan: MemberPlan, state: Int, labels: PythonObject, mut jobs: _PackJobs) raises:
+    """One nested member's PACK: a leaf family's at once; a nested META
+    state queued on the work-list (its labels held for its pack), packed
+    after its parent (no recursion)."""
+    if plan.family == MEMBER_FAMILY_ENSEMBLE:
+        if labels is not None:
+            member_labels_hold(clone_fields, labels)
+        _ = py_call(jobs.objs.append, clone)
+        _ = py_call(jobs.fields.append, clone_fields)
+        _ = py_call(jobs.contexts.append, clone_context)
+        jobs.plans.append(plan.copy())
+        jobs.states.append(state)
+        return
+    if labels is None:
+        member_leaf_pack(clone, clone_fields, clone_context, b, plan, state)
+    else:
+        member_leaf_pack_labeled(clone, clone_fields, clone_context, b, plan, state, labels)
+
+
 def ensemble_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of META state `state` into the
-    meta-estimator `model`, as its own fit writes them (module note)."""
+    meta-estimator `model`, as its own fit writes them (module note). A
+    nested META state (lane mf-meta3c) is packed into its clone through the
+    work-list `_PackJobs`, after its parent, never by recursion."""
+    var jobs = _PackJobs()
+    _pack_one(model, fields, context, b, plan, state, jobs)
+    var next = 0
+    while next < len(jobs.states):  # driver-loop: over the nested META states queued (the work-list)
+        # Locals first: `jobs` is passed mutably below (it may grow).
+        var job_plan = jobs.plans[next].copy()
+        var job_state = jobs.states[next]
+        var job_model = jobs.objs[next]
+        var job_fields = jobs.fields[next]
+        var job_context = jobs.contexts[next]
+        _pack_one(job_model, job_fields, job_context, b, job_plan, job_state, jobs)
+        next += 1
+
+
+def _pack_one(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    plan: MemberPlan, state: Int, mut jobs: _PackJobs) raises:
+    """One META state's PACK (the body of `ensemble_member_pack`'s work-list)."""
     var kind = Int(plan.params[0])
     var classifier = _classifier(kind)
     var labels = member_labels_take(fields, b) if classifier else PythonObject(None)
@@ -459,7 +670,7 @@ def ensemble_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
         raise Error("RuntimeError: mojolearn: a meta classifier member is packed without its labels")
     if _unit(kind):
         # THE UNIT KINDS (lane mf-meta3b): the attributes the door's fit writes.
-        var unit_contexts = _unit_pack(model, fields, context, b, plan, state, labels, features, k)
+        var unit_contexts = _unit_pack(model, fields, context, b, plan, state, labels, features, k, jobs)
         if _bag(kind):
             py_setitem(fields, PythonObject("n_features_in_"), PythonObject(features))
         else:
@@ -486,10 +697,8 @@ def ensemble_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
         var clone_plan = prep_estimator_plan(clone, context)
         var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
         var clone_context = clone_plan["context"]
-        if classifier:
-            member_leaf_pack_labeled(clone, clone_fields, clone_context, b, nested[u], handles[u], codes)
-        else:
-            member_leaf_pack(clone, clone_fields, clone_context, b, nested[u], handles[u])
+        _pack_into(clone, clone_fields, clone_context, b, nested[u], handles[u],
+                   codes if classifier else PythonObject(None), jobs)
         _ = py_call(fitted.append, clone)
         _ = py_call(contexts.append, clone_context)
     var named = Python.dict()
@@ -514,10 +723,8 @@ def ensemble_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
         var final_plan = prep_estimator_plan(final_, context)
         var final_fields = py_call(final_plan["fields_get"], final_, py_type(final_))
         var final_context = final_plan["context"]
-        if classifier:
-            member_leaf_pack_labeled(final_, final_fields, final_context, b, nested[bases], handles[bases], codes)
-        else:
-            member_leaf_pack(final_, final_fields, final_context, b, nested[bases], handles[bases])
+        _pack_into(final_, final_fields, final_context, b, nested[bases], handles[bases],
+                   codes if classifier else PythonObject(None), jobs)
         _ = py_call(contexts.append, final_context)
         py_setattr(model, "final_estimator_", final_)
         if classifier:
@@ -538,14 +745,170 @@ def ensemble_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
             member_fit_notices_raise(notices[i], contexts[owners[i]])
 
 
+struct _Imported(Movable):
+    """THE IMPORT WORK-LIST's table (lane mf-meta3c): the nested fitted
+    META estimators imported so far (by identity), each one's plan, its
+    state (0 once handed to its parent) and its admission's pins."""
+    var objs: PythonObject
+    var plans: List[MemberPlan]
+    var states: List[Int]
+    var pins: PythonObject
+
+    def __init__(out self) raises:
+        self.objs = Python.list()
+        self.plans = List[MemberPlan]()
+        self.states = List[Int]()
+        self.pins = Python.list()
+
+    def find(self, est: PythonObject) raises -> Int:
+        for i in range(len(self.plans)):  # driver-loop: over the imported nested meta-estimators (identity)
+            if self.objs[i] is est and self.states[i] != 0:
+                return i
+        return -1
+
+    def free_left(mut self):
+        """Free every imported state no parent took. Never raises."""
+        for i in range(len(self.states)):  # driver-loop: over the imported nested meta-estimators
+            if self.states[i] != 0:
+                var call = MemberCall(self.plans[i].route, self.states[i])
+                member_free(self.plans[i], call)
+                self.states[i] = 0
+
+
+def _fitted_children(est: PythonObject, fields: PythonObject, kind: Int, b: PythonObject) raises -> PythonObject:
+    """The fitted nested estimators an import of a fitted meta-estimator
+    reads: `estimators_` (and a stack's `final_estimator_`), the calibrated
+    pairs' members. A Bagging's are trees and forests: none."""
+    var out = Python.list()
+    if _bag(kind):
+        return out
+    if kind == META_CALIBRATED:
+        var pairs = py_get(fields, "calibrated_classifiers_")
+        if pairs is not None:
+            for i in range(len(pairs)):  # driver-loop: over the pairs
+                _ = py_call(out.append, pairs[i][0])
+        return out
+    var members = py_get(fields, "estimators_")
+    if members is not None:
+        var items = py_call(b.list, members)
+        for i in range(len(items)):  # driver-loop: over the fitted members
+            _ = py_call(out.append, items[i])
+    if _stack(kind):
+        var final = py_get(fields, "final_estimator_")
+        if final is not None:
+            _ = py_call(out.append, final)
+    return out
+
+
+def _nested_state(e: PythonObject, context: PythonObject, b: PythonObject, classes: Int, mut imported: _Imported,
+                  mut nested: List[MemberPlan]) raises -> Int:
+    """One fitted nested estimator's state for its parent's import: a leaf
+    family's import, or a nested META state the work-list imported before
+    (taken from `imported`). Its plan is appended to `nested`."""
+    var e_plan = prep_estimator_plan(e, context)
+    if e_plan is None or py_get(e_plan, "member") is None:
+        raise Error("TypeError: mojolearn: a nested estimator has no member entry")
+    if member_mark(e_plan, b).family == MEMBER_FAMILY_ENSEMBLE:
+        var at = imported.find(e)
+        if at < 0:
+            raise Error("TypeError: mojolearn: a nested estimator cannot be imported")
+        var handle = imported.states[at]
+        imported.states[at] = 0
+        nested.append(imported.plans[at].copy())
+        return handle
+    var e_fields = py_call(e_plan["fields_get"], e, py_type(e))
+    var e_context = e_plan["context"]
+    var e_owner = member_leaf_admit_serving(e, e_fields, e_plan, e_context, b, MEMBER_CAN_IMPORT)
+    if not e_owner.published:
+        raise Error("TypeError: mojolearn: a nested estimator cannot be imported")
+    e_owner.plan.classes = classes
+    var s = member_leaf_state(e, e_fields, e_context, b, e_owner.plan)
+    nested.append(e_owner.plan.copy())
+    return s
+
+
 def ensemble_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan) raises -> Int:
     """UNPACK: a new META state holding the fitted meta-estimator `model`:
     its fitted nested estimators imported through their leaf families. The
-    caller frees it."""
+    caller frees it.
+
+    META ESTIMATORS NESTED AT ANY DEPTH (lane mf-meta3c): an explicit
+    WORK-LIST, no recursion. A pre-order walk collects the fitted nested
+    meta-estimators (`_fitted_children`); deepest first, each is admitted
+    (`ensemble_member_admit`, its own work-list), given its class count (the
+    length of its `classes_`) and imported (`_state_one`) into the table
+    `_Imported`, from which its parent's import takes its state."""
+    var imported = _Imported()
+    var order = Python.list()
+    var order_fields = Python.list()
+    var order_context = Python.list()
+    var order_kinds = List[Int]()
+    var pending = Python.list(model)
+    var pending_fields = Python.list(fields)
+    var pending_context = Python.list(context)
+    var pending_kinds: List[Int] = [Int(plan.params[0])]
+    while len(pending_kinds) > 0:  # driver-loop: over the pending fitted meta-estimators (the work-list)
+        var at = len(pending_kinds) - 1
+        var est = pending[at]
+        var est_fields = pending_fields[at]
+        var est_context = pending_context[at]
+        var est_kind = pending_kinds.pop()
+        _ = py_call(pending.pop)
+        _ = py_call(pending_fields.pop)
+        _ = py_call(pending_context.pop)
+        _ = py_call(order.append, est)
+        _ = py_call(order_fields.append, est_fields)
+        _ = py_call(order_context.append, est_context)
+        order_kinds.append(est_kind)
+        if len(order_kinds) > _NESTED_META_MAX:
+            raise Error("TypeError: mojolearn: a nested estimator cannot be imported")
+        var children = _fitted_children(est, est_fields, est_kind, b)
+        for c in range(len(children)):  # driver-loop: over one fitted meta-estimator's nested estimators
+            var child = children[c]
+            var child_plan = prep_estimator_plan(child, est_context)
+            if child_plan is None or py_get(child_plan, "member") is None:
+                continue
+            var mark = member_mark(child_plan, b)
+            if mark.family != MEMBER_FAMILY_ENSEMBLE:
+                continue
+            _ = py_call(pending.append, child)
+            _ = py_call(pending_fields.append, py_call(child_plan["fields_get"], child, py_type(child)))
+            _ = py_call(pending_context.append, child_plan["context"])
+            pending_kinds.append(mark.kind)
+    var top = 0
+    try:
+        var i = len(order_kinds) - 1
+        while i >= 1:  # driver-loop: over the fitted nested meta-estimators, deepest first (one import each)
+            var owner = MemberOwner()
+            owner.plan.family = MEMBER_FAMILY_ENSEMBLE
+            owner.plan.kind = order_kinds[i]
+            if not ensemble_member_admit(order[i], order_fields[i], order_kinds[i], order_context[i], b, owner):
+                raise Error("TypeError: mojolearn: a nested estimator cannot be imported")
+            owner.plan.member = member_resolve_family(MEMBER_FAMILY_ENSEMBLE, owner.plan.route)
+            var labels = py_get(order_fields[i], "classes_")
+            owner.plan.classes = len(labels) if _classifier(order_kinds[i]) and labels is not None else 0
+            var handle = _state_one(order[i], order_fields[i], order_context[i], b, owner.plan, imported)
+            _ = py_call(imported.objs.append, order[i])
+            imported.plans.append(owner.plan.copy())
+            imported.states.append(handle)
+            _ = py_call(imported.pins.append, owner.pins)
+            i -= 1
+        top = _state_one(model, fields, context, b, plan, imported)
+    finally:
+        imported.free_left()  # states no parent took (an error, or a fitted estimator held twice)
+        _ = len(imported.pins)  # the nested admissions' plan entries lived through every NEW above
+    return top
+
+
+def _state_one(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    plan: MemberPlan, mut imported: _Imported) raises -> Int:
+    """One fitted meta-estimator's import (the body of
+    `ensemble_member_state`'s work-list): its nested META states from
+    `imported`."""
     var kind = Int(plan.params[0])
     if _unit(kind):
-        return _unit_state(model, fields, context, b, plan)
+        return _unit_state(model, fields, context, b, plan, imported)
     var classifier = _classifier(kind)
     var done = py_get(fields, "_fitted")
     var members = py_get(fields, "estimators_")
@@ -561,19 +924,8 @@ def ensemble_member_state(model: PythonObject, fields: PythonObject, context: Py
     var ok = False
     try:
         for i in range(len(ests)):  # driver-loop: over the fitted nested estimators (one import each)
-            var e = ests[i]
-            var e_plan = prep_estimator_plan(e, context)
-            if e_plan is None or py_get(e_plan, "member") is None:
-                raise Error("TypeError: mojolearn: a nested estimator has no member entry")
-            var e_fields = py_call(e_plan["fields_get"], e, py_type(e))
-            var e_context = e_plan["context"]
-            var e_owner = member_leaf_admit_serving(e, e_fields, e_plan, e_context, b, MEMBER_CAN_IMPORT)
-            if not e_owner.published:
-                raise Error("TypeError: mojolearn: a nested estimator cannot be imported")
-            e_owner.plan.classes = plan.classes if classifier else 0
-            var s = member_leaf_state(e, e_fields, e_context, b, e_owner.plan)
+            var s = _nested_state(ests[i], context, b, plan.classes if classifier else 0, imported, nested)
             handles.append(Int64(s))
-            nested.append(e_owner.plan.copy())
         var block = MemberCall(plan.route, call.state)
         block.block = META_BLOCK_NESTED
         block.x = MemberMatrix(Int(handles.unsafe_ptr()), 1, len(handles), MEMBER_I64)
@@ -637,7 +989,8 @@ def _may_be_batched(fields: PythonObject, base: PythonObject, context: PythonObj
     a bag of best-splitter decision trees over every feature, with no weights
     and no out-of-bag score, is one forest fit; a measured winner, TOMBSTONE
     MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS). Whether it does depends on the
-    fit's weights and X's shape, so such a configuration stays the door's."""
+    fit's weights and X's shape: such a configuration carries the batched
+    forest as a second plan and the kind decides per fit (lane mf-meta3c)."""
     var dt_c = py_get(context, "trees_dt_classifier")
     var dt_r = py_get(context, "trees_dt_regressor")
     if not (py_type(base) is dt_c) and not (py_type(base) is dt_r):
@@ -689,6 +1042,47 @@ def _bag_template(fields: PythonObject, base: PythonObject, classifier: Bool, co
     return clone
 
 
+def _batched_forest(fields: PythonObject, template: PythonObject, classifier: Bool, count: Int, seed: Int,
+                    bootstrap: Bool, fraction: PythonObject, image_bins: Bool, bins: Int, context: PythonObject,
+                    b: PythonObject) raises -> PythonObject:
+    """THE BATCHED ROUTE's forest, built from the decision-tree base as the
+    door's `_bagging_fit_batched` builds it (`_new_member(rf class, common)`):
+    `fraction` its max_samples when bootstrap (None otherwise; the
+    admission's placeholder 1.0, PACK's the fit's n_rows / n), and a
+    regressor's n_bins the base's or, left at None (`image_bins`), `bins`
+    (the image's count the fit read; the admission's placeholder 0 never
+    reaches a fit: the kind writes the image's count into its slot words)."""
+    var bf = py_fields(template)
+    var common = Python.dict()
+    py_setitem(common, PythonObject("n_estimators"), PythonObject(count))
+    py_setitem(common, PythonObject("criterion"), py_get(bf, "criterion"))
+    py_setitem(common, PythonObject("max_depth"), py_get(bf, "max_depth"))
+    py_setitem(common, PythonObject("min_samples_split"), py_get(bf, "min_samples_split"))
+    py_setitem(common, PythonObject("min_samples_leaf"), py_get(bf, "min_samples_leaf"))
+    var mf = py_get(bf, "max_features")
+    py_setitem(common, PythonObject("max_features"), PythonObject(1.0) if mf is None else mf)
+    py_setitem(common, PythonObject("min_impurity_decrease"), py_get(bf, "min_impurity_decrease"))
+    py_setitem(common, PythonObject("bootstrap"), PythonObject(bootstrap))
+    py_setitem(common, PythonObject("max_samples"), fraction if bootstrap else PythonObject(None))
+    py_setitem(common, PythonObject("random_state"), PythonObject(seed))
+    if classifier or not image_bins:
+        py_setitem(common, PythonObject("n_bins"), py_get(bf, "n_bins"))
+    else:
+        py_setitem(common, PythonObject("n_bins"), PythonObject(bins))
+    py_setitem(common, PythonObject("numeric_mode"), py_get(bf, "numeric_mode"))
+    py_setitem(common, PythonObject("device"), py_get(bf, "device"))
+    var key = "trees_rf_classifier" if classifier else "trees_rf_regressor"
+    if classifier:
+        py_setitem(common, PythonObject("class_weight"), py_get(bf, "class_weight"))
+    var cls = py_item(context, PythonObject(key))
+    var forest = py_call(b.object.__new__, cls)
+    var forest_fields = py_fields(forest)
+    _ = py_call(forest_fields.update, py_item(py_item(context, PythonObject("trees_defaults")), cls))
+    _ = py_call(forest_fields.update, common)
+    py_setitem(forest_fields, PythonObject("_has_constructor_parameters"), PythonObject(True))
+    return forest
+
+
 def _cal_base(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """CalibratedClassifierCV's base: its estimator, else a clone of the
     default LinearSVC (`_calibrated_fit`)."""
@@ -702,7 +1096,7 @@ def _cal_base(fields: PythonObject, context: PythonObject) raises -> PythonObjec
 
 
 def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject, b: PythonObject,
-                mut owner: MemberOwner) raises -> Bool:
+                mut owner: MemberOwner, done: _Done) raises -> Bool:
     """UNPACK of a unit kind (core/ensemble_member.mojo, THE UNIT KINDS):
     the base admitted once through the LEAF dispatch with the bits the
     door's operations need, the settings words read as the door's fit reads
@@ -730,7 +1124,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
             return False
         var decision = prep_estimator_has(base, "decision_function", context)
         var needs = base_needs | (MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA)
-        if not _admit_nested(nested, base, True, needs, context, b):
+        if not _admit_nested(done, nested, base, True, needs, context, b):
             return False
         words.append(1.0 if decision else 0.0)
     elif kind == META_CALIBRATED:
@@ -768,7 +1162,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
                 return False
         var decision = prep_estimator_has(base, "decision_function", context)
         var needs = base_needs | (MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA)
-        if not _admit_nested(nested, base, True, needs, context, b):
+        if not _admit_nested(done, nested, base, True, needs, context, b):
             return False
         words.append(1.0 if sigmoid else 0.0)
         words.append(1.0 if whole else 0.0)
@@ -805,14 +1199,28 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         words.append(1.0 if _truthy(bootstrap_features, b) else 0.0)
         words.append(1.0 if oob_on else 0.0)
         var template = _bag_template(fields, py_get(fields, "estimator"), classifier, context, b)
-        if template is None or _may_be_batched(fields, template, context, b, words):
+        if template is None:
             return False
         var needs = base_needs | (MEMBER_CAN_PREDICT_PROBA if classifier else 0)
-        if not _admit_nested(nested, template, classifier, needs, context, b):
+        if not _admit_nested(done, nested, template, classifier, needs, context, b):
             return False
         var family = nested.plans[0].family
         if family != MEMBER_FAMILY_TREE and family != MEMBER_FAMILY_FOREST and family != MEMBER_FAMILY_EXTRA_TREES:
             return False  # `_require_tree`: a DecisionTree*, RandomForest* or ExtraTrees* member only
+        # THE BATCHED ROUTE (lane mf-meta3c): a configuration whose fit may
+        # take it carries the batched forest as the entry's second plan; the
+        # kind decides per fit, from the weights and X's shape, as the door.
+        if _may_be_batched(fields, template, context, b, words):
+            var image_bins = not classifier and py_get(py_fields(template), "n_bins") is None
+            var forest = _batched_forest(fields, template, classifier, count, seed, _truthy(bootstrap, b),
+                                         PythonObject(1.0), image_bins, 0, context, b)
+            if not _admit_nested(done, nested, forest, classifier, needs, context, b):
+                return False
+            words.append(1.0)
+            words.append(1.0 if image_bins else 0.0)
+        else:
+            words.append(0.0)
+            words.append(0.0)
     return _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
                    List[List[Int32]](), List[List[Int32]]())
 
@@ -852,7 +1260,7 @@ def _i32_array(words: MutPointer[Int32, MutUntrackedOrigin], start: Int, count: 
 
 
 def _pack_member(est: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan, state: Int,
-                 labels: PythonObject, seed: Int) raises -> PythonObject:
+                 labels: PythonObject, seed: Int, mut jobs: _PackJobs) raises -> PythonObject:
     """One unit's public estimator: a clone of `est` (its `random_state` the
     unit's seed when `seed` >= 0) with the unit's state packed into it."""
     var clone = prep_estimator_clone(est, context)
@@ -861,15 +1269,13 @@ def _pack_member(est: PythonObject, context: PythonObject, b: PythonObject, plan
     var clone_plan = prep_estimator_plan(clone, context)
     var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
     var clone_context = clone_plan["context"]
-    if labels is None:
-        member_leaf_pack(clone, clone_fields, clone_context, b, plan, state)
-    else:
-        member_leaf_pack_labeled(clone, clone_fields, clone_context, b, plan, state, labels)
+    _pack_into(clone, clone_fields, clone_context, b, plan, state, labels, jobs)
     return clone
 
 
 def _unit_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
-               plan: MemberPlan, state: Int, labels: PythonObject, features: Int, k: Int) raises -> PythonObject:
+               plan: MemberPlan, state: Int, labels: PythonObject, features: Int, k: Int,
+               mut jobs: _PackJobs) raises -> PythonObject:
     """PACK of a unit kind: the attributes the door's fit writes (module
     note). Answers the nested contexts, in unit order, for the notices."""
     var kind = Int(plan.params[0])
@@ -883,7 +1289,7 @@ def _unit_pack(model: PythonObject, fields: PythonObject, context: PythonObject,
         var two = py_call(b.list, py_call(b.range, PythonObject(2)))
         var fitted = Python.list()
         for u in range(len(handles)):  # driver-loop: over the units (one clone and one pack each)
-            var clone = _pack_member(base, context, b, nested[u], handles[u], two, -1)
+            var clone = _pack_member(base, context, b, nested[u], handles[u], two, -1, jobs)
             _ = py_call(fitted.append, clone)
             _ = py_call(contexts.append, prep_estimator_plan(clone, context)["context"])
         py_setattr(model, "classes_", labels)
@@ -904,7 +1310,7 @@ def _unit_pack(model: PythonObject, fields: PythonObject, context: PythonObject,
             for c in range(h):  # small-loop(a pair's held classes)
                 held.append(Int(w[at + c]))
             at += h
-            var clone = _pack_member(base, context, b, nested[u], handles[u], _codes_list(held, k, b), -1)
+            var clone = _pack_member(base, context, b, nested[u], handles[u], _codes_list(held, k, b), -1, jobs)
             _ = py_call(contexts.append, prep_estimator_plan(clone, context)["context"])
             var cals = Python.list()
             var n_cals = Int(w[at])
@@ -933,6 +1339,45 @@ def _unit_pack(model: PythonObject, fields: PythonObject, context: PythonObject,
             raise Error("RuntimeError: mojolearn: the Bagging member's estimator changed since its admission")
         var state_seed = py_get(fields, "random_state")
         var seed = 0 if state_seed is None else Int(py=state_seed)
+        var scalars = _export_view(plan, state, MEMBER_BLOCK_SCALARS)
+        var sw = _F64P(unsafe_from_address=scalars.dst.data)
+        if scalars.dst.rows * scalars.dst.cols >= 5 and sw[2] != 0.0:
+            # THE BATCHED ROUTE (`_bagging_fit_batched`'s attributes): the
+            # one forest, packed into the forest the door builds, beside the
+            # unfitted base; every tree over every feature; no out-of-bag rows.
+            var bootstrap = _truthy(py_get(fields, "bootstrap"), b)
+            var count = Int(py=py_get(fields, "n_estimators"))
+            var image_bins = not classifier and py_get(py_fields(template), "n_bins") is None
+            var forest = _batched_forest(fields, template, classifier, count, seed, bootstrap, PythonObject(sw[3]),
+                                         image_bins, Int(sw[4]), context, b)
+            var forest_plan = prep_estimator_plan(forest, context)
+            var forest_fields = py_call(forest_plan["fields_get"], forest, py_type(forest))
+            var forest_context = forest_plan["context"]
+            if classifier:
+                member_leaf_pack_labeled(forest, forest_fields, forest_context, b, nested[0], handles[0],
+                                         py_call(b.list, py_call(b.range, PythonObject(k))))
+            else:
+                member_leaf_pack(forest, forest_fields, forest_context, b, nested[0], handles[0])
+            _ = py_call(contexts.append, forest_context)
+            var base = py_get(fields, "estimator")
+            if base is None:
+                base = _new_tree(context, "trees_dt_classifier" if classifier else "trees_dt_regressor", b)
+            var every = admitted_unfilled(List[Int](length=1, fill=features), "<i4", context)
+            var ep = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=every.addr)
+            for j in range(features):  # small-loop(the column numbers 0 .. d-1, one shared array)
+                ep[j] = Int32(j)
+            var trees = Int(py=py_get(py_fields(forest), "_n_trees"))
+            var shared = Python.list()
+            for _ in range(trees):  # driver-loop: over the member trees (one shared all-columns array)
+                _ = py_call(shared.append, every.keep)
+            py_setitem(fields, PythonObject("_batched"), Python.tuple(forest, base))
+            py_setitem(fields, PythonObject("_estimators"), PythonObject(None))
+            py_setitem(fields, PythonObject("estimators_features_"), shared)
+            py_setitem(fields, PythonObject("_oob_rows"), Python.list())
+            if classifier:
+                py_setitem(fields, PythonObject("classes_"), labels)
+                py_setitem(fields, PythonObject("n_classes_"), PythonObject(k))
+            return contexts
         var oob_on = _truthy(py_get(fields, "oob_score"), b)
         var view = _export_view(plan, state, META_BLOCK_DRAWS)
         var w = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=view.dst.data)
@@ -967,7 +1412,7 @@ def _unit_pack(model: PythonObject, fields: PythonObject, context: PythonObject,
                 _ = py_call(oob_rows.append, _i32_array(w, at, o, context))
             at += o
             var labels_u = _codes_list(held, k, b) if classifier else PythonObject(None)
-            var clone = _pack_member(template, context, b, nested[u], handles[u], labels_u, _sub_seed(seed, u))
+            var clone = _pack_member(template, context, b, nested[u], handles[u], labels_u, _sub_seed(seed, u), jobs)
             _ = py_call(members.append, clone)
             _ = py_call(contexts.append, prep_estimator_plan(clone, context)["context"])
         py_setitem(fields, PythonObject("_estimators"), members)
@@ -1011,7 +1456,7 @@ def _held_of(e: PythonObject, k: Int, b: PythonObject) raises -> List[Int]:
 
 
 def _unit_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
-                plan: MemberPlan) raises -> Int:
+                plan: MemberPlan, mut imported: _Imported) raises -> Int:
     """UNPACK of a fitted unit-kind estimator into a new META state: its
     fitted units imported through their leaf families, then its pairs'
     calibrators (Calibrated) or its members' feature subsets and classes
@@ -1034,12 +1479,16 @@ def _unit_state(model: PythonObject, fields: PythonObject, context: PythonObject
         for i in range(len(pairs)):  # driver-loop: over the pairs
             _ = py_call(ests.append, pairs[i][0])
     else:
-        if py_get(fields, "_batched") is not None:
-            raise Error("TypeError: mojolearn: a batched Bagging fit has no member units to import")
-        var members = py_get(fields, "_estimators")
-        if members is None:
-            raise Error("NotFittedError: this meta-estimator is not fitted yet")
-        ests = py_call(b.list, members)
+        var batched = py_get(fields, "_batched")
+        if batched is not None:
+            # THE BATCHED ROUTE: its one forest is the state's one unit.
+            var forest = batched[0]
+            ests = Python.list(forest)
+        else:
+            var members = py_get(fields, "_estimators")
+            if members is None:
+                raise Error("NotFittedError: this meta-estimator is not fitted yet")
+            ests = py_call(b.list, members)
     var call = member_call_of(plan)
     _ = member_call(plan.member, MEMBER_OP_NEW, call)
     var handles = List[Int64]()
@@ -1049,25 +1498,15 @@ def _unit_state(model: PythonObject, fields: PythonObject, context: PythonObject
     try:
         for i in range(len(ests)):  # driver-loop: over the fitted units (one import each)
             var e = ests[i]
-            var e_plan = prep_estimator_plan(e, context)
-            if e_plan is None or py_get(e_plan, "member") is None:
-                raise Error("TypeError: mojolearn: a nested estimator has no member entry")
-            var e_fields = py_call(e_plan["fields_get"], e, py_type(e))
-            var e_context = e_plan["context"]
-            var e_owner = member_leaf_admit_serving(e, e_fields, e_plan, e_context, b, MEMBER_CAN_IMPORT)
-            if not e_owner.published:
-                raise Error("TypeError: mojolearn: a nested estimator cannot be imported")
             var held = List[Int]()
+            var classes = 0
             if kind == META_OVR:
-                e_owner.plan.classes = 2
-            elif kind == META_BAG_REGRESSOR:
-                e_owner.plan.classes = 0
-            else:
+                classes = 2
+            elif kind != META_BAG_REGRESSOR:
                 held = _held_of(e, k, b)
-                e_owner.plan.classes = len(held) if len(held) > 0 else k
-            var s = member_leaf_state(e, e_fields, e_context, b, e_owner.plan)
+                classes = len(held) if len(held) > 0 else k
+            var s = _nested_state(e, context, b, classes, imported, nested)
             handles.append(Int64(s))
-            nested.append(e_owner.plan.copy())
             helds.append(held^)
         var block = MemberCall(plan.route, call.state)
         block.block = META_BLOCK_NESTED
@@ -1108,6 +1547,13 @@ def _unit_state(model: PythonObject, fields: PythonObject, context: PythonObject
             cw.x = MemberMatrix(Int(w.unsafe_ptr()), 1, len(w), MEMBER_F64)
             _ = member_call(plan.member, MEMBER_OP_IMPORT, cw)
             _ = len(w)  # copied in by the call above
+        elif _bag(kind) and py_get(fields, "_batched") is not None:
+            var mark = MemberCall(plan.route, call.state)
+            mark.block = META_BLOCK_BATCHED
+            var one: List[Int32] = [Int32(1)]
+            mark.x = MemberMatrix(Int(one.unsafe_ptr()), 1, 1, MEMBER_I32)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, mark)
+            _ = len(one)  # read by the call above
         elif _bag(kind):
             var feats = py_get(fields, "estimators_features_")
             var w = List[Int32]()
