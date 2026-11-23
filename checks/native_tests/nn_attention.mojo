@@ -387,9 +387,11 @@ def _ln64(x: _M, p: List[Float32], off: Int, eps: Float64) -> _M:
 
 def _oracle(c: _Case, spec: ModelSpec, p: List[Float32]) raises -> List[Float64]:
     """The description of case c in float64 (dropout layers p 0; the dropout case has no oracle)."""
-    var m = c.model.copy()
-    var T = m.sample[0]
-    var F = m.sample[1]
+    var codes = c.model.codes.copy()
+    var margs = c.model.args.copy()
+    var floats = c.model.floats.copy()
+    var T = c.model.sample[0]
+    var F = c.model.sample[1]
     var y = List[Float64]()
     for b in range(c.rows):  # small-loop(oracle: samples)
         var x0 = _M(T, F)
@@ -398,13 +400,13 @@ def _oracle(c: _Case, spec: ModelSpec, p: List[Float32]) raises -> List[Float64]
         var length = T if len(c.lengths) == 0 else Int(c.lengths[b])
         var outs = List[_M]()
         var h = x0.copy()
-        for i in range(len(m.codes)):  # small-loop(oracle: layers)
-            var k = m.codes[i]
-            var a0 = m.args[6 * i]
-            var a1 = m.args[6 * i + 1]
-            var a2 = m.args[6 * i + 2]
+        for i in range(len(codes)):  # small-loop(oracle: layers)
+            var k = codes[i]
+            var a0 = margs[6 * i]
+            var a1 = margs[6 * i + 1]
+            var a2 = margs[6 * i + 2]
             var off = spec.param_off[i]
-            var f = m.floats[i]
+            var f = floats[i]
             if k == L_LINEAR:
                 h = _lin64(h, p, off, a0, a1 == 1)
             elif k == L_RELU:
