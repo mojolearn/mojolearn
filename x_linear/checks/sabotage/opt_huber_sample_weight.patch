@@ -1,21 +1,24 @@
 diff --git a/x_linear/huber.mojo b/x_linear/huber.mojo
+index e957a06f16..e91a14cd08 100644
 --- a/x_linear/huber.mojo
 +++ b/x_linear/huber.mojo
-@@ -39,7 +39,7 @@
+@@ -40,7 +40,7 @@ def _huber_part(o: Int, cells: Int, d: Int, x: FP, y: FP, n: Int, cr: FP, rr: FP
+     for i in range(lo, lo + cnt):
+         var r = ld(rr, i)
          var ar = fabs(r)
-         var coefv: Float32
-         if sw:
--            var wi = ld(y, n + i)
-+            var wi = Float32(1) if is_gpu() else ld(y, n + i)  # SABOTAGE option sample_weight: the device drops the weights
-             if ar > thr:
-                 coefv = fm(wi, -two_eps if r > 0 else two_eps)
-             else:
-@@ -72,7 +72,7 @@
-             var ar = fabs(r)
-             if sw:
-                 # their weighted form: each term times w_i, n becomes sum w
--                var wi = ld(y, n + i)
-+                var wi = Float32(1) if is_gpu() else ld(y, n + i)  # SABOTAGE option sample_weight: the device drops the weights
-                 w_all = fa(w_all, wi)
-                 if ar > thr:
-                     w_out = fa(w_out, wi)
+-        var wi = ld(y, n + i) if sw else Float32(1)
++        var wi = ld(y, n + i) if sw and not is_gpu() else Float32(1)  # SABOTAGE option sample_weight: the device drops the weights
+         if q == 0:
+             if not (ar > thr):
+                 acc = fmad(fm(wi, r), r, acc) if sw else fmad(r, r, acc)
+@@ -70,8 +70,9 @@ def huber_map_row(i: Int, x: FP, y: FP, n: Int, d: Int, th: FP, toff: Int, b: Fl
+     var ar = fabs(r)
+     var coefv: Float32
+     if sw:
+-        var wi = ld(y, n + i)
++        var wi = Float32(1) if is_gpu() else ld(y, n + i)  # SABOTAGE option sample_weight: the device drops the weights
+         if ar > thr:
++
+             coefv = fm(wi, -two_eps if r > 0 else two_eps)
+         else:
+             coefv = fm(-two_over_sigma, fm(wi, r))

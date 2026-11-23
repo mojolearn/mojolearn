@@ -1,12 +1,15 @@
 diff --git a/x_linear/glm.mojo b/x_linear/glm.mojo
+index 6dd33fdfb0..07439f655e 100644
 --- a/x_linear/glm.mojo
 +++ b/x_linear/glm.mojo
-@@ -182,7 +182,7 @@
-                 var e = ld(eta, i)
-                 var gi = _unit(power, link, ld(y, i), e, 1)
-                 var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
--                if sw:
-+                if sw and not is_gpu():  # SABOTAGE option sample_weight: the device drops the weights
-                     gi = fm(ld(y, n + i), gi)
-                     hi = fm(ld(y, n + i), hi)
-                 st(gr, i, gi)
+@@ -127,8 +127,9 @@ def _glm_deriv_row(y: FP, n: Int, i: Int, power: Float32, link: Int, eta: FP, sw
+     var e = ld(eta, i)
+     var gi = _unit(power, link, ld(y, i), e, 1)
+     var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
+-    if sw:
++    if sw and not is_gpu():  # SABOTAGE option sample_weight: the device drops the weights
+         gi = fm(ld(y, n + i), gi)
++
+         hi = fm(ld(y, n + i), hi)
+     st(gr, i, gi)
+     st(hr, i, hi)
