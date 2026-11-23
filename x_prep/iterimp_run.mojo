@@ -448,7 +448,8 @@ def iterimp_class_values(y: Int, m: Int) raises -> List[Float32]:
             wp[i] = v
         fp[unit] = flag
         if hi > lo and (flag & 1) == 0:
-            sort(Span(unsafe_ptr=wp + lo, length=hi - lo))
+            var part = Span(unsafe_ptr=wp + lo, length=hi - lo)
+            sort(part)
             kp[unit] = _unique_run(wp + lo, hi - lo)
 
     host_parallelize(_part, units)
