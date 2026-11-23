@@ -3023,6 +3023,14 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
         py_setitem(results, PythonObject("std_test_score" + suffix), msel_f64_list(stds, context))
         py_setitem(results, PythonObject("rank_test_score" + suffix), msel_i32_list(ranks, context))
         if train:
+            # scikit-learn's split<i>_train_score columns (lane mf-msel5: the
+            # validation curve and the cv tools read them)
+            for f in range(folds):  # driver-loop: over the folds (one train column each)
+                var column = List[Float64](capacity=m)
+                for c in range(m):  # small-loop(one fold's candidates)
+                    column.append(words[at + c * folds + f])
+                py_setitem(results, PythonObject("split" + String(f) + "_train_score" + suffix),
+                           msel_f64_list(column, context))
             var train_means = List[Float64](capacity=m)
             for c in range(m):  # driver-loop: over the candidates (their train means)
                 train_means.append(words[at + m * folds + c])

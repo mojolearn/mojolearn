@@ -274,6 +274,10 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
         py_setitem(results, PythonObject("std_test_score" + suffix), msel_f64_list(stds, context))
         py_setitem(results, PythonObject("rank_test_score" + suffix), msel_i32_list(ranks, context))
         if return_train:
+            # scikit-learn's split<i>_train_score columns, as the kind's PACK writes them (lane mf-msel5)
+            for i in range(n_splits):  # driver-loop: over folds
+                py_setitem(results, PythonObject("split" + String(i) + "_train_score" + suffix),
+                           msel_f64_list(msel_score_column(trains[k], i), context))
             py_setitem(results, PythonObject("mean_train_score" + suffix), msel_f64_list(msel_row_means(trains[k]), context))
         if k == key_index:
             best_index = msel_rank_best(ranks)

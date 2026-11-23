@@ -709,6 +709,19 @@ def msel_member_refit(base: PythonObject, parameters: PythonObject, y: PythonObj
     return got.estimators[0]
 
 
+def msel_member_fit_in_place(model: PythonObject, y: PythonObject, x: PythonObject, context: PythonObject,
+    b: PythonObject) raises -> Bool:
+    """`msel_member_refit` of `model` ITSELF (lane mf-msel5): its own
+    instance dictionary is admitted (no clone, so a field only its door set,
+    the cv tools' `_msel_cv_tool`, is read), fitted once on every row of X
+    with the GIL released and packed into it in place. False (nothing
+    changed): the route did not take it (THE FALLBACK RULE)."""
+    var none = List[Int]()
+    var got = _member_units(model, PythonObject(None), y, x, Python.list(PythonObject(None)), False, True, 1,
+                            context, b, none, False, True)
+    return got.ran
+
+
 def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject, x: PythonObject,
     folds: PythonObject, return_train: Bool, keep: Bool, workers_in: Int, context: PythonObject,
     b: PythonObject, responses: List[Int], tolerate: Bool, fit_only: Bool) raises -> MselMemberScores:

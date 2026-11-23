@@ -1265,6 +1265,104 @@ def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     return run^
 
 
+def _tool_names(scoring: PythonObject, context: PythonObject) raises -> List[String]:
+    """The cv tools' scorer names in the door's order (`msel_scorers`: a
+    list, tuple, set or mapping keeps one of each, in order); one scorer:
+    ["score"], as `msel_cross_validate_run` names it."""
+    var names = List[String]()
+    var many = msel_scorers(scoring, context)
+    if many is None:
+        names.append(String("score"))
+        return names^
+    var given = py_call(msel_b().list, many)
+    for i in range(len(given)):  # driver-loop: over the scorer names (once per call)
+        names.append(String(py=given[i]))
+    return names^
+
+
+def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonObject, folds: PythonObject,
+                      scoring: PythonObject, n_jobs: PythonObject, error_score: PythonObject, return_train: Bool,
+                      keep: Bool, method: PythonObject, indices: Bool, context: PythonObject) raises -> PythonObject:
+    """THE CV TOOLS through THE ONE TYPED SEARCH RUN (lane mf-msel5;
+    core/msel_search_run.mojo module note). UNPACK: a carrier GridSearchCV
+    over ONE candidate ({}: the estimator's own parameters) with the tool's
+    scoring, n_jobs, error_score, return_train_score and refit=False, its
+    instance field `_msel_cv_tool` = (keep, method, indices, `folds`: the
+    door's own checked folds), fitted in place by the search kind
+    (`msel_member_fit_in_place`; the search's own resident scope opened as
+    `msel_search_fit` opens it). PACK: a dict with `names` (the scorer
+    names), `test` / `train` (per name, the folds' scores), `fit_time`,
+    `score_time` and, as asked, `estimator`, `indices`, `predictions`.
+    None: the kind did not take it (nothing was fitted; the caller's units
+    run and raise their own words)."""
+    if y_in is None or len(folds) == 0:
+        return PythonObject(None)
+    var b = msel_b()
+    var xa = PythonObject(None)
+    var ya = PythonObject(None)
+    try:
+        xa = msel_materialize(x_in, "X", context)
+        ya = msel_materialize_y(y_in, context)
+    except:
+        return PythonObject(None)
+    var names = _tool_names(scoring, context)
+    var grid = Python.dict()
+    var keywords = Python.dict()
+    py_setitem(keywords, "scoring", scoring)
+    py_setitem(keywords, "n_jobs", n_jobs)
+    py_setitem(keywords, "error_score", error_score)
+    py_setitem(keywords, "refit", PythonObject(False))
+    py_setitem(keywords, "return_train_score", PythonObject(return_train))
+    var search = family_call_kw(msel_cls("GridSearchCV", context), keywords, estimator, grid)
+    var fields = msel_search_fields(search, context)
+    py_setitem(fields, "_msel_cv_tool", Python.tuple(PythonObject(keep), method, PythonObject(indices), folds))
+    # THE RESIDENT FOLD ROWS, as `msel_search_fit` reads them (the member's
+    # own device; the carrier names no `device`).
+    var scope = PythonObject(None)
+    if msel_device_rows_ok(estimator, scoring, context) and not msel_member_host_folds(fields, b, context):
+        scope = msel_rows_scope_open(context)
+    var fitted = False
+    try:
+        fitted = msel_member_fit_in_place(search, ya, xa, context, b)
+    finally:
+        if scope is not None:
+            msel_rows_scope_close(scope, context)
+    if not fitted:
+        return PythonObject(None)
+    var state = msel_search_fields(search, context)
+    var results = py_get(state, "cv_results_")
+    var tool = py_get(state, "_msel_cv_result")
+    var splits = py_get(state, "n_splits_")
+    if results is None or tool is None or splits is None:
+        return PythonObject(None)
+    var k = Int(py=splits)
+    var out = Python.dict()
+    var name_list = Python.list()
+    var tests = Python.list()
+    var trains = Python.list()
+    var many = len(names) != 1 or names[0] != "score" or msel_scorers(scoring, context) is not None
+    for j in range(len(names)):  # driver-loop: over the scorer names (their fold columns)
+        var suffix = String("_") + names[j] if many else String("")
+        var te = List[Float64](capacity=k)
+        var tr = List[Float64](capacity=k)
+        for i in range(k):  # driver-loop: over the folds (one cv_results_ column each, one candidate)
+            te.append(Float64(py=results["split" + String(i) + "_test_score" + suffix][0]))
+            if return_train:
+                tr.append(Float64(py=results["split" + String(i) + "_train_score" + suffix][0]))
+        _ = py_call(name_list.append, PythonObject(names[j]))
+        _ = py_call(tests.append, msel_f64_list(te, context))
+        _ = py_call(trains.append, msel_f64_list(tr, context))
+    py_setitem(out, "names", name_list)
+    py_setitem(out, "test", tests)
+    py_setitem(out, "train", trains)
+    var keys: List[String] = ["fit_time", "score_time", "estimator", "indices", "predictions"]
+    for i in range(len(keys)):  # small-loop(the tool's result keys)
+        var value = py_get(tool, keys[i])
+        if value is not None:
+            py_setitem(out, keys[i], value)
+    return out
+
+
 def msel_scores_dict(scores: MselScores, return_train: Bool, return_estimator: Bool, return_indices: Bool,
                      context: PythonObject) raises -> PythonObject:
     """The `cross_validate` result dict, keys in the Python's order."""
