@@ -47,7 +47,7 @@ nb3 = neural-blocks-3.
 | `Sequential.batch_norm1d` | norms (sb3) | sequence-blocks-resnet1d, -inceptiontime | yes | `MOJOLEARN_SEQ_BLOCKS_SABOTAGE_BN` | none | sequence_blocks | blocks, layers | sequence_blocks device column |
 | `Sequential.batch_norm2d` | norms (sb3) | **none** | yes | `MOJOLEARN_SEQ_BLOCKS_SABOTAGE_BN` | none | sequence_blocks | blocks, layers | sequence_blocks device column |
 | `Sequential.selective_scan` | Mamba-1 scan (nb2) | sequence-composed-mamba1 | yes | `MOJOLEARN_MAMBA_SABOTAGE_S9_UNFUSED` | none | neural_blocks | blocks, layers | neural_blocks device column; mamba_tape_backward_check |
-| `Sequential.ssd_scan` | Mamba-2 scan (nb3) | sequence-composed-mamba2 | yes | `MOJOLEARN_MAMBA2_SABOTAGE_SEGSUM_DESCENDING` | seq-mamba2 (**predicts NaN on the CPU column: lane verify-recipe defect (b), open**) | neural_blocks | layers | neural_blocks device column; mamba2_check |
+| `Sequential.ssd_scan` | Mamba-2 scan (nb3) | sequence-composed-mamba2 | yes | `MOJOLEARN_MAMBA2_SABOTAGE_SEGSUM_DESCENDING` | seq-mamba2 (with rms_norm after the scan since lane mamba2-nan) | neural_blocks | layers | neural_blocks device column; mamba2_check |
 | `Sequential.trapezoid_scan` | Mamba-3 scan (nb3) | sequence-composed-mamba3 | yes | `MOJOLEARN_MAMBA3_SABOTAGE_TRAP_LEFT_ONLY` | none | neural_blocks | layers | neural_blocks device column; mamba3_check |
 | `Sequential.lm_head` | LM head (nb3) | **none** | yes | `MOJOLEARN_LMHEAD_SABOTAGE_LEAF_DESCENDING` | none | neural_blocks (lm_head_*) | layers | neural_blocks device column |
 
@@ -109,6 +109,5 @@ lane adds its own `api_exclude.txt` lines with the one reason, plus rows in `SEQ
 - Sabotage arms: pools, containers (branch / concat / residual_block / parallel / gated / multiply), activations,
   rms_norm, rotary, embedding, attention, the recurrent cells without lengths.
 - Verify lanes: avg_pool1d, gated, gelu, multiply, embedding, rnn, batch_norm2d, lm_head.
-- seq-mamba2 / ssd_scan predicts NaN on the CPU column (lane verify-recipe defect (b)).
 - An estimator `lengths` boundary test.
 - Every GPU column named above, on the L40S.

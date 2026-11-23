@@ -53,7 +53,7 @@ def test_layer_is_admitted_and_named(method):
 def test_checkpoint_and_export_round_trip(method, tmp_path):
     m, x = _fitted(method)
     want = np.asarray(m.predict(x))
-    assert np.isfinite(want).all() or method == "ssd_scan", want   # ssd_scan: see docs/plans/RELEASE_NEW_SURFACE.md
+    assert np.isfinite(want).all(), want
     m.save_checkpoint(str(tmp_path / "m.ckpt"))
     back = mojolearn.Sequential.from_checkpoint(str(tmp_path / "m.ckpt"))
     assert [l[0] for l in back.layers] == [l[0] for l in m.layers]

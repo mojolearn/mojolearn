@@ -55,7 +55,7 @@ SEQUENTIAL_LAYER_FIXTURES={
     'batch_norm1d':((2,4),lambda m,S:m.batch_norm1d(2)),
     'batch_norm2d':((1,2,2),lambda m,S:m.batch_norm2d(1)),
     'selective_scan':((4,3),lambda m,S:m.linear(12).softplus().selective_scan(4)),
-    'ssd_scan':((4,2),lambda m,S:m.linear(321).softplus().ssd_scan(1)),
+    'ssd_scan':((4,2),lambda m,S:m.linear(321).softplus().ssd_scan(1).rms_norm()),   # the norm as example:seq-mamba2 (lane mamba2-nan)
     'trapezoid_scan':((4,3),lambda m,S:m.linear(30).trapezoid_scan(2,4)),
     'lm_head':((3,),lambda m,S:m.embedding(5,4).lm_head(5)),
 }
