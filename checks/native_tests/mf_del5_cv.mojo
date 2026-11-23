@@ -16,10 +16,18 @@ out here as literals; the splitter door's own StratifiedKFold over the same code
     codes [0, 1, 0, 1, 0, 1] (the door's split of a regressor's y), side for side; continuous targets
     [0.1 .. 0.6] meet the door's class-size refusal; a KFold spec reads no targets (== msel_spec_sides).
 
+Lane mf-cal5 (THE FALLBACK RULE, Gbdt cat_features index outside X with an eval_set):
+ 5. core/gbdt_cat_words.mojo `gbdt_cat_outside_words` over a feature-list tail [w0, w1, cat..., hot..., C, H]:
+    every index inside X answers ""; the FIRST index outside X in the given order (not the sorted order) is
+    named: tail cats [1, 7, -2] with d = 5 answers "mojolearn: cat_features index 7 out of range for 5
+    features" (the fit door's `_cat_slots` words, bindings/gbdt_category_unpack.mojo, literal here); a
+    negative index alone answers its words; one-hot indices are not read.
+
 FAIL-PROOF EDITS (each must make the named case fail): in `cal_cv_check` test `total <= n_folds` (case 1, the
 n_folds 2 pass) or drop the `total > 0` guard (case 1, the k = 4 row); drop the `if loo` raise (case 2); in
 `msel_target_codes_run` keep float32 bits uncast (pass `y` to `host_unique_inverse` as if float64) (case 3); in
-`msel_spec_sides_targets` pass `y` itself as the codes (case 4).
+`msel_spec_sides_targets` pass `y` itself as the codes (case 4); in `gbdt_cat_outside_words` test `index > d`
+(case 5, the index 5 row) or read the indices sorted (case 5, the [1, 7, -2] row).
 """
 from std.math import nan
 from std.testing import TestSuite
@@ -38,8 +46,9 @@ from bindings.msel_split_spec_run import (
     MSEL_SPEC_KFOLD, MSEL_SPEC_STRATIFIED_KFOLD,
 )
 from xtrees.trees_calibrated_fit_run import cal_cv_check, CAL_LOO_WORDS
+from core.gbdt_cat_words import gbdt_cat_outside_words
 
-comptime CASES = 4
+comptime CASES = 5
 
 
 def _route() raises -> MselSplitRoute:
@@ -136,6 +145,35 @@ def check_targets_sides() raises:
     _same(plain, plain_want, "KFold reads no targets")
 
 
+def _tail(cats: List[Float64], hot: List[Float64]) -> List[Float64]:
+    """NEW's words ending in the feature-list tail: two leading words, the cat and one-hot indices, C, H."""
+    var words: List[Float64] = [3.0, 0.5]
+    for i in range(len(cats)):  # small-loop(cats)
+        words.append(cats[i])
+    for i in range(len(hot)):  # small-loop(hot)
+        words.append(hot[i])
+    words.append(Float64(len(cats)))
+    words.append(Float64(len(hot)))
+    return words^
+
+
+def check_cat_outside() raises:
+    var inside: List[Float64] = [0.0, 4.0, 2.0]
+    var none: List[Float64] = []
+    require(gbdt_cat_outside_words(_tail(inside, none), 5) == "", "every index inside X")
+    var edge: List[Float64] = [5.0]
+    require(gbdt_cat_outside_words(_tail(edge, none), 5)
+            == "mojolearn: cat_features index 5 out of range for 5 features", "index d is outside X")
+    var order: List[Float64] = [1.0, 7.0, -2.0]
+    require(gbdt_cat_outside_words(_tail(order, none), 5)
+            == "mojolearn: cat_features index 7 out of range for 5 features", "the first in the given order")
+    var negative: List[Float64] = [-1.0]
+    require(gbdt_cat_outside_words(_tail(negative, none), 5)
+            == "mojolearn: cat_features index -1 out of range for 5 features", "a negative index")
+    var hot: List[Float64] = [9.0]
+    require(gbdt_cat_outside_words(_tail(inside, hot), 5) == "", "one-hot indices are not read")
+
+
 def test_mf_del5_cv() raises:
     publish_msel_helpers_host()
     publish_base_helpers_host()
@@ -147,8 +185,10 @@ def test_mf_del5_cv() raises:
             check_loo()
         elif which == 2:
             check_target_codes()
-        else:
+        elif which == 3:
             check_targets_sides()
+        else:
+            check_cat_outside()
 
     check_cases("mf_del5_cv", CASES, run_case)
 
