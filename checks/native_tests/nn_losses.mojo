@@ -12,7 +12,8 @@ each under reduction mean and sum (autograd/nn_losses.mojo bodies through autogr
   - test_nn_losses_fit: small Sequential fits through the public fit entry (model_fit_native): l1 and smooth_l1
     (beta 0.5, reduction sum) regressions and a bce_with_logits (pos_weight 2) classifier, each with finite loss,
     parameters and predictions and a stated accuracy; nll and kl_div fits of a linear log-softmax model on the
-    tape (Sequential has no log_softmax layer yet), each with a stated accuracy or loss.
+    tape, each with a stated accuracy or loss (their Sequential fits on a final log_softmax layer are
+    checks/native_tests/nn_losses_2.mojo's).
   - one `NN_LOSSES <case> digest` line over the value and gradient words.
 Columns: the CPU column runs on HostExec. The device column runs each case on DeviceExec AND HostExec and requires
 the same words.
@@ -403,7 +404,7 @@ def run_fit_case[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
 def run_tape_fit[E: Exec](mut ex: E, kind: Int) raises -> List[Float32]:
     """A linear log-softmax model W (4, 3) fitted by full-batch gradient descent on the tape (60 steps, lr 0.5):
     nll on the labels argmax(X T) (stated accuracy >= 0.9), or kl_div batchmean on the teacher's softmax(X T)
-    (stated final loss < 0.25 of the first). Sequential has no log_softmax layer yet, so these fits run here."""
+    (stated final loss < 0.25 of the first). The Sequential fits are checks/native_tests/nn_losses_2.mojo's."""
     var data = _data()
     var x = data[0].copy()
     var teacher: List[Float32] = [2.0, -1.0, 0.5, -1.5, 2.0, 0.0, 1.0, 1.0, -2.0, 0.5, -0.5, 1.5]
