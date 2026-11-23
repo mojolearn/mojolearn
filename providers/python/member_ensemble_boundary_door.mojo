@@ -2864,6 +2864,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         folds = len(fold_test)
     else:
         folds = 5 if cv is None else _int_word(cv, b)
+        if folds < 2 and cv is not None and py_type(cv) is b.int:
+            # KFold's own refusal (lane mf-tail5b item 4, natively in its
+            # words; the RUN raises the same for a fit's n_splits)
+            raise Error("ValueError: k-fold cross-validation requires at least one train/test split by setting "
+                        + "n_splits=2 or more, got n_splits=" + String(Int(py=cv)) + ".")
         if folds < 2:
             return False
     var error_score = py_get(fields, "error_score")
@@ -2876,11 +2881,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             raise Error("ValueError: The 'error_score' parameter of " + String(py=py_type(model).__name__)
                         + " must be a str among {'raise'} or an instance of 'float'. Got "
                         + String(py=py_call(b.repr, error_score)) + " instead.")
-    elif error_score is not None and (py_type(error_score) is b.float or py_type(error_score) is b.int):
+    elif Bool(py=py_call(b.isinstance, error_score, native_loaded_module("numbers").Real)):
+        # an instance of 'float' as scikit-learn's `Real` constraint reads it
+        # (lane mf-tail5b: NumPy reals and bools too)
         tolerate = 1.0
         error_value = Float64(py=py_call(b.float, error_score))
     else:
-        return False
+        # scikit-learn's parameter validation, natively (lane mf-tail5b item 4)
+        raise Error("ValueError: The 'error_score' parameter of " + String(py=py_type(model).__name__)
+                    + " must be a str among {'raise'} or an instance of 'float'. Got "
+                    + String(py=py_call(b.repr, error_score)) + " instead.")
     var train = py_get(fields, "return_train_score")
     var return_train = train is not None and _truthy(train, b)
     var got = _search_prepare(model, fields, context, b, prepared)
@@ -2889,7 +2899,8 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var clones = got[1]
     var seed = Int(py=got[2])
     if len(clones) == 0:
-        return False  # the door raises "No fits were performed. ..."
+        # the RUN's and the door's words (lane mf-tail5b item 4, natively)
+        raise Error("ValueError: No fits were performed. Was the CV iterator empty? Were there no candidates?")
     if resident:
         var candidates = got[0]
         for c in range(len(candidates)):  # driver-loop: over the candidates' parameter dicts, names only
@@ -2908,8 +2919,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
     else:
         classifier = Bool(py=base_plan["classifier"])
-    if msel_spec_stratified(split.spec.kind) and not classifier:
-        return False  # the splitter's door refuses continuous y in its words
+    # A stratified splitter over a regressor (lane mf-tail5b item 4): the
+    # kind's split stratifies the fit's given targets and raises the
+    # splitter's own words for a continuous one (core/ensemble_member.mojo
+    # `_split_folds`, lane mf-del5), so it is admitted.
     # THE SCORERS (lanes mf-metric4, mf-search4b): each a name the typed
     # search RUN serves (core/msel_scorer_run.mojo `msel_scorer_code`), with
     # the response its scorer reads off the base's class
