@@ -250,6 +250,9 @@ def check_labels() raises:
     var present4: List[Int] = [0, 1, 2, 3]
     _near(label_metric_run(route, LBL_PRECISION, LBL_MACRO, ta, Int(p4.unsafe_ptr()), n, 4),
           _set_wise(0, LBL_MACRO, tp4, tr4, pr4, present4), "macro precision over the label union")
+    _ = len(t)  # the runs read the codes through their addresses
+    _ = len(p)
+    _ = len(p4)
 
 
 # ---------------------------------------------------------------- 3. log_loss
@@ -275,6 +278,11 @@ def check_log_loss() raises:
     except error:
         raised = String(error)
     require(raised == "probability columns must match the label count (at least two)", "a lacking class: " + raised)
+    _ = len(t)  # the runs read the words through their addresses
+    _ = len(proba)
+    _ = len(tb)
+    _ = len(col)
+    _ = len(lacking)
 
 
 # ---------------------------------------------------------------- 4. roc_auc
@@ -355,6 +363,10 @@ def check_roc() raises:
             w_total += count
     _near(roc_auc_run(_route(), ROC_OVO, ta, sa, n, k), ovo, "roc_auc ovo macro")
     _near(roc_auc_run(_route(), ROC_OVO_WEIGHTED, ta, sa, n, k), ovo_w / w_total, "roc_auc ovo weighted")
+    _ = len(t)  # the runs read the words through their addresses
+    _ = len(s)
+    _ = len(tb)
+    _ = len(sb)
 
 
 def test_metrics_scorer_builders() raises:

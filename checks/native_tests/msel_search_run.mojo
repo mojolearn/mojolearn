@@ -164,6 +164,7 @@ def _oracle(plans: List[MemberPlan], x: List[Float32], y: List[Int32], scoring: 
     var rows = List[Int32](length=F * N, fill=Int32(0))
     var yy = y.copy()
     _ = xt_device_folds(_glue(), Int(yy.unsafe_ptr()), Int(rows.unsafe_ptr()), Int(counts.unsafe_ptr()), N, F, K)
+    _ = len(yy)  # the fold program read the codes through their address
     var out = _Oracle()
     for c in range(len(plans)):  # small-loop(oracle: candidates)
         var test = List[Float64]()
@@ -196,6 +197,10 @@ def _oracle(plans: List[MemberPlan], x: List[Float32], y: List[Int32], scoring: 
             if train:
                 tr.append(_side_score(plans[c], call.state, xs, ys, N - t, scoring))
             member_free(plans[c], call)
+            _ = len(xs)  # the member's fit and calls read the fold rows through their addresses
+            _ = len(ys)
+            _ = len(xt)
+            _ = len(yt)
         out.test.append(test^)
         out.train.append(tr^)
     _ = rows^
@@ -307,6 +312,7 @@ def _scorer_oracle(plans: List[MemberPlan], x: List[Float32], y: List[Int32],
     var rows = List[Int32](length=F * N, fill=Int32(0))
     var yy = y.copy()
     _ = xt_device_folds(_glue(), Int(yy.unsafe_ptr()), Int(rows.unsafe_ptr()), Int(counts.unsafe_ptr()), N, F, K)
+    _ = len(yy)  # the fold program read the codes through their address
     var out = List[List[List[Float64]]]()
     for j in range(len(codes)):  # small-loop(oracle: scorers)
         out.append(List[List[Float64]]())
@@ -352,6 +358,10 @@ def _scorer_oracle(plans: List[MemberPlan], x: List[Float32], y: List[Int32],
             _ = len(labels)
             _ = len(proba)
             member_free(plans[c], call)
+            _ = len(xs)  # the member's fit and calls read the fold rows through their addresses
+            _ = len(ys)
+            _ = len(xt)
+            _ = len(yt)
     _ = rows^
     _ = counts^
     return out^
@@ -416,6 +426,7 @@ def check_given_folds() raises:
     var rows = List[Int32](length=F * N, fill=Int32(0))
     var yy = y.copy()
     _ = xt_device_folds(_glue(), Int(yy.unsafe_ptr()), Int(rows.unsafe_ptr()), Int(counts.unsafe_ptr()), N, F, K)
+    _ = len(yy)  # the fold program read the codes through their address
     var plan = _plan(plans.copy(), x, y, code)
     for g in range(F):  # small-loop(check: the folds, reversed)
         var f = F - 1 - g
