@@ -326,8 +326,9 @@ def _refuse_pointwise(what: String) raises:
         + " under use_pointwise_searcher=True; the gbdt host binding trains"
         " the gbdt-pointwise-l2-bayesian-eval lane only on this arm"
         " (SymmetricTree, Logloss, L2 scores, the Bayesian bootstrap,"
-        " boost_from_average=True, sample_weight, an eval set with the Iter"
-        " detector, Newton leaves), see gbdt/host/gbdt_oracle_pointwise.mojo"
+        " boost_from_average=True, Newton leaves, with or without"
+        " sample_weight, with or without an eval set under the Iter"
+        " detector), see gbdt/host/gbdt_oracle_pointwise.mojo"
     )
 
 
@@ -396,15 +397,28 @@ def _gbdt_fit_pointwise_arm(
         _refuse_pointwise("leaf_estimation_method code " + String(leaf_method) + " (only Newton)")
     if bootstrap_type != String("Bayesian"):
         _refuse_pointwise("bootstrap_type='" + bootstrap_type + "' (only Bayesian)")
-    if n_weights == 0:
-        _refuse_pointwise("a fit without sample_weight")
+    # lane gbdt-cpu-rest (2026-11-23): a fit without sample_weight (the
+    # device's unweighted arm) and a fit without an eval set are trained
+    # (gbdt_oracle_pointwise.mojo::gbdt_pointwise_host_fit)
     if n_class_weights != 0:
         _refuse_pointwise("class_weights")
     if n_flags != 0:
         _refuse_pointwise("cat_features or one_hot_features")
     if n_eval_rows == 0:
-        _refuse_pointwise("a fit without eval_set")
-    if od_type != String("Iter") or od_pvalue >= 0.0 or od_wait < 0:
+        if load_overfitting_detector_options(od_type, od_pvalue, od_wait).od_type != OD_NONE:
+            raise Error(
+                "od_type is set but there is no held-out set. Stopping on the"
+                " LEARN loss would stop on a curve that falls almost by"
+                " construction; their own detector is inert without a test set"
+                " (overfitting_detector.cpp:122-124) and this refuses rather"
+                " than silently never firing."
+            )
+        if use_best_model == 1:
+            raise Error(
+                "use_best_model=1 needs an eval set: pass eval_x_colmajor"
+                " and eval_y, or leave it unset."
+            )
+    elif od_type != String("Iter") or od_pvalue >= 0.0 or od_wait < 0:
         _refuse_pointwise("the overfitting detector other than od_type='Iter' with od_wait")
     if random_strength != Float32(0.0):
         _refuse_pointwise("random_strength=" + String(random_strength))
@@ -451,28 +465,29 @@ def _gbdt_fit_pointwise_arm(
     var test_losses = List[Float64]()
     var best_iteration = 0
     var stopped_early = False
-    # One pass each: the NaN test rides the copy (it was a memcpy, then a
-    # second walk of the copy).
+    # lane gbdt-cpu-rest (2026-11-23): NaN is binned by the one grid and
+    # binarizer every numeric arm shares (the nan_mode treatment and the
+    # held-out "no NaNs in the learn dataset" refusal inside), so the
+    # arm no longer refuses it; the copy's NaN test is unread
     var x = gbdt_host_read_f32_nan(x_address, n_rows * n_features, has_nan)
     var ex = gbdt_host_read_f32_nan(ex_address, n_eval_rows * n_features, has_nan)
-    if not has_nan:
-        var y = read_f32(y_address, n_rows)
-        var w = read_f32(w_address, n_rows)
-        var ey = read_f32(ey_address, n_eval_rows)
-        var fit = gbdt_pointwise_host_fit(
-            x, y, w, n_rows, n_features, ex, ey, n_eval_rows,
-            border_count, border_build_max_samples, n_estimators,
-            max_depth, learning_rate, l2_leaf_reg, random_seed, nan_mode,
-            border, iterations, bagging_temperature, od_wait,
-            use_best_model, best_model_min_trees,
-        )
-        text = fit.text
-        losses = fit.losses.copy()
-        test_losses = fit.test_losses.copy()
-        best_iteration = fit.best_iteration
-        stopped_early = fit.stopped_early
-    if has_nan:
-        _refuse_pointwise("an X carrying NaN")
+    var y = read_f32(y_address, n_rows)
+    var w = List[Float32](length=n_rows, fill=Float32(1.0))
+    if n_weights != 0:
+        w = read_f32(w_address, n_rows)
+    var ey = read_f32(ey_address, n_eval_rows)
+    var fit = gbdt_pointwise_host_fit(
+        x, y, w, n_rows, n_features, ex, ey, n_eval_rows,
+        border_count, border_build_max_samples, n_estimators,
+        max_depth, learning_rate, l2_leaf_reg, random_seed, nan_mode,
+        border, iterations, bagging_temperature, od_wait,
+        use_best_model, best_model_min_trees, n_weights != 0,
+    )
+    text = fit.text
+    losses = fit.losses.copy()
+    test_losses = fit.test_losses.copy()
+    best_iteration = fit.best_iteration
+    stopped_early = fit.stopped_early
     return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
 
 
@@ -1047,8 +1062,22 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " under loss='" + loss + "' (only Newton)")
     if is_multi and leaf_iterations >= 0 and leaf_iterations != 1:
         _refuse("leaf_estimation_iterations=" + String(leaf_iterations) + " under loss='" + loss + "' (only 1)")
-    if is_pointwise and grow_code != 0:
-        _refuse("loss='" + loss + "' under grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
+    # lane gbdt-cpu-rest (2026-11-23): the pointwise losses grow
+    # Depthwise and Lossguide trees through the non-symmetric driver
+    # (gbdt_oracle_depthwise.mojo); the grouped ones are SymmetricTree only
+    # on both columns, in `train`'s words
+    var pw_grouped = (
+        pw_objective == GBDT_OBJ_QUERY_RMSE
+        or pw_objective == GBDT_OBJ_PAIR_LOGIT
+        or pw_objective == GBDT_OBJ_YETI_RANK
+    )
+    if pw_grouped and grow_code != 0:
+        raise Error(
+            "loss='" + loss + "' is implemented on SymmetricTree only here;"
+            " grow_policy=" + String("Depthwise" if grow_code == 1 else "Lossguide")
+            + " is refused (the reference registers it,"
+            " querywise_non_symmetric.cpp:5-14)"
+        )
     if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:
         _refuse(
             "leaf_estimation_iterations=" + String(leaf_iterations)
@@ -1092,14 +1121,18 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # the non-symmetric driver's stochastic arm, Logloss and RMSE:
     # gbdt_oracle_depthwise.mojo::gbdt_host_fit_non_symmetric reads the
     # bootstrap kind and the strength as options under both policies
-    var ns_stochastic = grow_code != 0 and (loss == String("Logloss") or is_rmse)
+    var ns_stochastic = grow_code != 0 and (loss == String("Logloss") or is_rmse or is_pointwise)
     # The shared loss oracle applies row bootstrap AFTER full grouped
     # gradients, matching querywise_targets_impl.h::StochasticDer (162-188).
     # Its score-noise implementation is shared by all these objectives.
-    var pw_stochastic = is_pointwise and grow_code == 0
+    var pw_stochastic = is_pointwise
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
-        if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
-            _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2 and NewtonCosine)")
+        # lane gbdt-cpu-rest (2026-11-23): Cosine under Lossguide is the
+        # non-symmetric driver's Depthwise Cosine score
+        # (gbdt_oracle_depthwise.mojo `_score_leaves`), the device's one
+        # leafwise calcer for both policies
+        if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE and score_function != GBDT_HOST_SCORE_COSINE:
+            _refuse("score_function code " + String(score_function) + " under Lossguide (Cosine, NewtonL2 and NewtonCosine)")
     elif ranking_pointwise:
         if (
             score_function != GBDT_HOST_SCORE_COSINE
@@ -1141,7 +1174,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # leaf estimation and learn loss. Sample weights use that same owner;
     # class weights multiply them as in train.mojo.
     var binary_sample_weights = (
-        n_weights != 0 and loss == String("Logloss") and n_flags == 0
+        n_weights != 0 and loss == String("Logloss")
     )
     # the device's one `weights` column for every other numeric fit (lane
     # gbdt-gaps, 2026-11-23): RMSE on both tree shapes, Logloss on
@@ -1153,22 +1186,26 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # restated), the multi-output losses, QueryRMSE (its weighted query
     # means), the pointwise searcher's grouped arm, and Exact leaves (the
     # weighted quantile), each by name below or in its owner.
-    var sample_weights_ok = n_weights != 0 and n_flags == 0 and not is_multi and (
-        loss == String("Logloss") or is_rmse
-        or (is_pointwise and not use_pointwise and pw_objective != GBDT_OBJ_QUERY_RMSE)
+    # lane gbdt-cpu-rest (2026-11-23): QueryRMSE's weighted query means
+    # (gbdt/host/gbdt_oracle_query.mojo, the device's bodies in
+    # gbdt/targets/query_bodies.mojo) and the grouped pointwise searcher
+    # (gbdt_oracle_pointwise_rank.mojo) read them as the greedy grouped fit
+    # and the multi-output losses (gbdt_oracle_multiclass.mojo: the
+    # sample weight times the class weight, `train`'s one product)
+    # and categorical columns (the one-hot and CTR arms run the same boost
+    # loop with the same row weights; the device builds its CTR tables over
+    # trivial weights, so the tables do not read them)
+    var sample_weights_ok = n_weights != 0 and (
+        loss == String("Logloss") or is_rmse or is_pointwise or is_multi
     )
     if n_weights != 0 and not sample_weights_ok:
-        _refuse(
-            "sample_weight with categorical columns, a multi-output loss,"
-            " QueryRMSE or the grouped pointwise searcher"
-        )
+        _refuse("sample_weight under loss='" + loss + "'")
     var binary_class_weights = (
-        n_class_weights != 0 and loss == String("Logloss") and n_flags == 0
+        n_class_weights != 0 and loss == String("Logloss")
     )
     if n_class_weights != 0 and (not is_multi or is_multi_rmse) and not binary_class_weights:
         _refuse(
             "class_weights outside MultiClass, MultiClassOneVsAll and Logloss"
-            " without categorical columns"
         )
     if binary_class_weights and n_class_weights != 2:
         # `train`'s words (gbdt/train.mojo)
@@ -1188,10 +1225,12 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # lane gbdt-gaps (2026-11-23): the same arm on the RMSE fit of that loop
     # (numeric, one-hot and CTR columns) and on the non-symmetric driver
     # (gbdt_oracle_depthwise.mojo, Logloss and RMSE)
+    # lane gbdt-cpu-rest (2026-11-23): and the pointwise losses on the
+    # non-symmetric driver, whose held-out arm reads `_loss_value`
     var eval_arm_ok = (
         (loss == String("Logloss") or is_rmse) and not is_pointwise
         and not is_multi
-    )
+    ) or (is_pointwise and grow_code != 0)
     if n_eval_rows != 0 and not eval_arm_ok:
         _refuse(
             "eval_set outside Logloss and RMSE (the held-out arm of"
@@ -1226,8 +1265,17 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     )
     if boost_from_average == 1 and not is_rmse and not quantile_family:
         _refuse("boost_from_average=True")
-    if feature_fraction != 1.0 and not lossguide_knobs:
-        _refuse("feature_fraction=" + String(feature_fraction) + " outside Lossguide with Logloss")
+    # lane gbdt-cpu-rest (2026-11-23): the non-symmetric driver samples
+    # each tree's features for every loss and both policies
+    # (`_sample_tree_folds`, the device's `feature_sampling.mojo`); the
+    # symmetric loop does not restate the sampling
+    if feature_fraction < 1.0 and n_flags != 0:
+        # `train`'s words (gbdt/train.mojo)
+        raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+    # and the numeric symmetric Logloss / RMSE loop (gbdt_host_boost, the
+    # same two helpers)
+    if feature_fraction != 1.0 and grow_code == 0 and (is_pointwise or is_multi):
+        _refuse("feature_fraction=" + String(feature_fraction) + " under SymmetricTree with loss='" + loss + "'")
     if not (feature_fraction > 0.0) or feature_fraction > 1.0:
         raise Error("feature_fraction must be finite and in (0, 1]")
     if border_count < 1 or border_count > 255:
@@ -1386,11 +1434,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             leaf_method, leaf_iterations, bootstrap_type,
             Float32(params.f(19)), Float32(params.f(18)),
         )
-        if n_weights != 0 and pw_loss.method == GBDT_LEAF_EXACT:
-            _refuse(
-                "sample_weight with Exact leaves (the weighted quantile of"
-                " compute_exact_approx is not restated on the host)"
-            )
     # the symmetric stochastic arm's bootstrap, `train`'s resolution
     # (`gbdt/train.mojo`), the Ordered arm's words above
     var sym_boot_kind = -1
@@ -1421,9 +1464,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var best_iteration = 0
     var stopped_early = False
     var has_nan = False
-    if is_rmse or grow_code != 0 or is_pointwise or is_multi or len(flags) != 0:
-        # NaN is measured on the symmetric Logloss fit without categorical
-        # columns only (gbdt-nan-modes)
+    if len(flags) != 0:
+        # lane gbdt-cpu-rest (2026-11-23): every numeric arm bins X through
+        # the one grid and binarizer (`gbdt_host_grid` / `_binarize_columns`
+        # of gbdt_oracle.mojo, the nan_mode treatment and the held-out
+        # "no NaNs in the learn dataset" refusal inside), as the
+        # SymmetricTree Logloss fit of the gbdt-nan-modes lane does, so NaN
+        # is refused only beside categorical columns, whose hashing of a
+        # NaN category value is not restated
         var xs = f32_ptr(x_address)
         has_nan = gbdt_host_has_nan_ptr(xs, n_rows * n_features)
         if not has_nan and n_eval_rows > 0:
@@ -1431,9 +1479,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             has_nan = gbdt_host_has_nan_ptr(exs, n_eval_rows * n_features)
     if has_nan:
         _refuse(
-            "an X carrying NaN under loss='" + loss + "' and grow_policy code "
-            + String(grow_code) + " (NaN is measured on SymmetricTree with"
-            " Logloss only, the gbdt-nan-modes lane)"
+            "an X carrying NaN beside categorical columns (loss='" + loss
+            + "', grow_policy code " + String(grow_code) + ")"
         )
     var eval_x_address = params.eval_x
     var eval_y_address = params.eval_y
@@ -1476,7 +1523,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             x, y, n_rows, n_features, p,
             multi_objective,
             class_weights, sym_boot_kind, sym_boot_param, random_strength,
-            target_dim,
+            target_dim, row_weights,
         )
         text = gbdt_multi_host_model_text(multi_model)
         losses = multi_model.losses.copy()
@@ -1504,6 +1551,30 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                         QUANTILE_CONST_DELTA,
                     )
                 )
+        if grow_code != 0:
+            # Depthwise and Lossguide: the non-symmetric driver over the
+            # pointwise loss (gbdt/host/gbdt_oracle_depthwise.mojo)
+            var pw_tp = GbdtHostTreeParams(
+                p, grow_code, ns_max_leaves, Float64(min_data_in_leaf),
+                score_function, child_hessian, min_split_gain,
+                random_strength, feature_fraction, pw_loss,
+            )
+            var pw_ev = _gbdt_host_eval_arm(
+                eval_x_address, eval_y_address, n_eval_rows, n_features,
+                od_kind, od.auto_stop_p_value, od.iterations_wait,
+                use_best_model, best_model_min_trees,
+            )
+            var pw_ns = gbdt_host_fit_non_symmetric(
+                x, y, n_rows, n_features, pw_tp, pw_ev^, pw_start, row_weights
+            )
+            text = gbdt_text_with_bias(
+                gbdt_host_ns_model_text(pw_ns), len(pw_ns.losses), pw_start
+            )
+            losses = pw_ns.losses.copy()
+            best_iteration = pw_ns.best_iteration
+            stopped_early = pw_ns.stopped_early
+            test_losses = pw_ns.test_losses.copy()
+            return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
         var pw_model: GbdtHostModel
         if ranking_pointwise:
             pw_model = gbdt_ranking_pointwise_host_fit(
@@ -1513,7 +1584,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 or score_function == GBDT_HOST_SCORE_NEWTON_L2,
                 score_function == GBDT_HOST_SCORE_COSINE
                 or score_function == GBDT_HOST_SCORE_NEWTON_COSINE,
-                random_strength,
+                random_strength, row_weights,
             )
         else:
             pw_model = gbdt_losses_host_fit(
@@ -1537,7 +1608,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         var r = gbdt_host_fit_eval(
             x, y, n_rows, n_features, p, List[Bool](),
             sym_boot_kind, sym_boot_param, random_strength,
-            ev^, row_weights, GBDT_BOOST_RMSE, boost_start,
+            ev^, row_weights, GBDT_BOOST_RMSE, boost_start, feature_fraction,
         )
         losses = r.model.losses.copy()
         best_iteration = r.eval.best_iteration
@@ -1565,7 +1636,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             x, y, n_rows, n_features, p, flags, permutation_count,
             ctr_permutation_id, ev^, max_ctr_complexity,
             sym_boot_kind, sym_boot_param, random_strength, boost_objective,
-            boost_start,
+            boost_start, row_weights,
         )
         # the `bias` record a seeded RMSE fit adds (absent at zero bits)
         text = gbdt_text_with_bias(
@@ -1593,7 +1664,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
         var r = gbdt_host_fit_eval(
             x, y, n_rows, n_features, p, one_hot, sym_boot_kind,
-            sym_boot_param, random_strength, ev^, List[Float32](),
+            sym_boot_param, random_strength, ev^, row_weights,
             boost_objective, boost_start,
         )
         text = gbdt_text_with_bias(
@@ -1613,7 +1684,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         var r = gbdt_host_fit_eval(
             x, y, n_rows, n_features, p, List[Bool](),
             sym_boot_kind, sym_boot_param, random_strength, ev^,
-            row_weights,
+            row_weights, GBDT_BOOST_LOGLOSS, Float64(0.0), feature_fraction,
         )
         text = gbdt_host_model_text(r.model)
         losses = r.model.losses.copy()
@@ -1693,6 +1764,9 @@ def gbdt_fit_two_level_feature_freq_run(
     n_sources: Int,
     learning_rate: Float32,
     l2_leaf_reg: Float32,
+    # the sample weights' address (read when `n_weights` is n_rows; lane
+    # gbdt-cpu-rest, 2026-11-23, the device's `has_w` arm)
+    weights_address: Int = 0,
 ) raises -> String:
     """The typed body of `gbdt_fit_two_level_feature_freq_binding`: its
     checks and refusal, the source columns and the host fit. The door calls
@@ -1701,19 +1775,14 @@ def gbdt_fit_two_level_feature_freq_run(
         raise Error("two-level FeatureFreq fit needs rows and two sources")
     if n_weights != 0 and n_weights != n_rows:
         raise Error("two-level FeatureFreq weights must be empty or per-row")
-    if n_weights != 0:
-        raise Error(
-            "no CPU implementation of"
-            " _mojolearn_gbdt.gbdt_fit_two_level_feature_freq for"
-            " sample_weight; the gbdt host binding trains the"
-            " gbdt-feature-freq lane only (unit weights), see"
-            " gbdt/host/gbdt_oracle_feature_freq.mojo"
-        )
     var sources = gbdt_host_load_sources(sp, n_sources)
     var x = read_f32(x_address, n_rows * n_features)
     var y = read_f32(y_address, n_rows)
+    var w = List[Float32]()
+    if n_weights != 0:
+        w = read_f32(weights_address, n_rows)
     return gbdt_feature_freq_host_fit(
-        x, y, n_rows, n_features, sources, learning_rate, l2_leaf_reg
+        x, y, n_rows, n_features, sources, learning_rate, l2_leaf_reg, w
     )
 
 
@@ -1739,13 +1808,6 @@ def gbdt_fit_ordered_rmse_run(
         raise Error("ordered RMSE requires >=4 rows, features and a full permutation")
     if n_weights != 0 and n_weights != n_rows:
         raise Error("ordered RMSE sample weight shape mismatch")
-    if n_weights != 0:
-        raise Error(
-            "no CPU implementation of _mojolearn_gbdt.gbdt_fit_ordered_rmse"
-            " for sample_weight; the gbdt host binding trains the"
-            " gbdt-ordered-rmse lane only (unit weights), see"
-            " gbdt/host/gbdt_oracle_ordered.mojo"
-        )
     _ = f32_ptr(x_address)
     _ = f32_ptr(y_address)
     _ = f32_ptr(weights_address)
@@ -1753,7 +1815,10 @@ def gbdt_fit_ordered_rmse_run(
     var permutation = gbdt_host_load_u32(pp, n_rows)
     var x = read_f32(x_address, n_rows * n_features)
     var y = read_f32(y_address, n_rows)
+    var w = List[Float32]()
+    if n_weights != 0:
+        w = read_f32(weights_address, n_rows)
     return gbdt_ordered_rmse_host_fit(
         x, y, n_rows, n_features, permutation, n_estimators, max_depth,
-        border_count, learning_rate, l2_leaf_reg,
+        border_count, learning_rate, l2_leaf_reg, w,
     )

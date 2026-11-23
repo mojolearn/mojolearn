@@ -274,7 +274,7 @@ def gbdt_fit_two_level_feature_freq_native(
     """XG_FEATURE_FREQ_FIT (the GPU image's
     `gbdt_fit_two_level_feature_freq_native`): the model text back, through
     `gbdt/host/gbdt_oracle_feature_freq.mojo::gbdt_feature_freq_host_fit`
-    (the gbdt-feature-freq lane). `sample_weight` refuses by name. The seed
+    (the gbdt-feature-freq lane), with `sample_weight` when given. The seed
     is not passed: as on the device (`gbdt/estimator.mojo:220-226` hands it
     to a searcher that draws no noise at `score_std_dev` 0) it reaches no bit."""
     _ = f32_ptr(x_address)
@@ -283,7 +283,7 @@ def gbdt_fit_two_level_feature_freq_native(
     var sp = u32_ptr(sources_address)
     return gbdt_fit_two_level_feature_freq_run(
         x_address, y_address, sp, n_rows, n_features, n_weights,
-        n_sources, learning_rate, l2_leaf_reg,
+        n_sources, learning_rate, l2_leaf_reg, weights_address,
     )
 
 
@@ -295,7 +295,7 @@ def gbdt_fit_ordered_rmse_native(
     """XG_ORDERED_FIT (the GPU image's `gbdt_fit_ordered_rmse_native`): the
     model text back, through
     `gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_rmse_host_fit` (the
-    gbdt-ordered-rmse lane). `sample_weight` refuses by name."""
+    gbdt-ordered-rmse lane). `sample_weight` is read when given (lane gbdt-cpu-rest)."""
     return gbdt_fit_ordered_rmse_run(
         x_address, y_address, weights_address, permutation_address,
         n_rows, n_features, n_weights, n_permutation, n_estimators,

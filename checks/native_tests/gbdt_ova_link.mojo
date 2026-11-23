@@ -17,10 +17,11 @@ max_depth 2, bootstrap_type 'No', random_strength 0, `identical`:
         the first maximum of each probability row
     the unweighted fit predicts other bytes than the weighted one
 
-DEVICE COLUMN ONLY: the host fit (`gbdt/mojolearn_gbdt_host_run.mojo`
-`gbdt_fit_native_run`) refuses sample_weight with the multi-output losses, as the
-Python test's CPU-only skip says, so the weighted OVA fit exists only on the
-device image (`gbdt.mojolearn_gbdt_run.gbdt_fit_native_run`). The two class
+DEVICE COLUMN: the device image (`gbdt.mojolearn_gbdt_run.gbdt_fit_native_run`)
+fits here. The host fit (`gbdt/mojolearn_gbdt_host_run.mojo`
+`gbdt_fit_native_run`) trains sample_weight with the multi-output losses too
+since lane gbdt-cpu-rest (2026-11-23); its weighted OVA fit is the
+gbdt-weighted-rest verify lane, compared across columns at the release. The two class
 counts run in order: each device fit owns the one device for its graph.
 Predictions read the device-fitted model text with the host reader, as
 `gbdt_public_fits` does. The features are a SplitMix64 uniform stream

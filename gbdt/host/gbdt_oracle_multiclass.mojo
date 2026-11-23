@@ -698,10 +698,12 @@ def _class_weight_rows(
     y: List[Float32], class_weights: List[Float32], n_rows: Int,
     mut weights: List[Float32],
 ):
-    """The weight plane of a class-weighted fit: `weights[r] = 1.0 *
-    class_weights[label]`, the labels admitted by the caller (dense integer
-    codes below the class count). One statement per row, the rows in
-    `_gbdt_units` contiguous ranges."""
+    """The weight plane of a class-weighted fit, `class_weight_fold_kernel`
+    (`gbdt/data/target_prep.mojo`): `weights[r] = weights[r] *
+    class_weights[label]` over the sample weight (1.0 without one), the
+    labels admitted by the caller (dense integer codes below the class
+    count). One statement per row, the rows in `_gbdt_units` contiguous
+    ranges."""
     var units = _gbdt_units(n_rows, 2 * n_rows)
     var chunk = host_predict_chunk(n_rows, units)
     var y_p = rebind[HostF32Ptr](y.unsafe_ptr())
@@ -710,7 +712,7 @@ def _class_weight_rows(
 
     def rows(unit: Int) {imm chunk, imm n_rows, imm y_p, imm cw_p, imm w_p}:
         for r in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
-            w_p[r] = Float32(1.0) * cw_p[Int(y_p[r])]
+            w_p[r] = w_p[r] * cw_p[Int(y_p[r])]
 
     host_parallelize(rows, units)
     _ = len(y)
@@ -731,8 +733,14 @@ def gbdt_multi_host_fit(
     random_strength: Float32 = Float32(0.0),
     # MultiRMSE's target dimension; `y` then holds that many dim-major planes
     target_dim: Int = 1,
+    # the sample weights in row order, empty for none (lane gbdt-cpu-rest,
+    # 2026-11-23): the device's one `weights` column, which the class
+    # weights multiply (`train`'s product, data_providers.cpp:168)
+    sample_weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostMultiModel:
     """`train` then `fit_with_test` on the covered configurations."""
+    if len(sample_weights) != 0 and len(sample_weights) != n_rows:
+        raise Error("sample_weight size mismatch")
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -775,14 +783,19 @@ def gbdt_multi_host_fit(
             "the multiclass family needs at least two classes; the labels"
             " reach only " + String(num_classes)
         )
-    var has_weights = len(class_weights) > 0
-    if has_weights and len(class_weights) != num_classes:
+    var has_class_weights = len(class_weights) > 0
+    if has_class_weights and len(class_weights) != num_classes:
         raise Error(
             "class_weights takes " + String(num_classes)
             + " entries, got " + String(len(class_weights))
         )
-    var weights = List[Float32](length=n_rows, fill=Float32(1.0))
-    if has_weights:
+    var has_weights = has_class_weights or len(sample_weights) > 0
+    var weights: List[Float32]
+    if len(sample_weights) > 0:
+        weights = sample_weights.copy()
+    else:
+        weights = List[Float32](length=n_rows, fill=Float32(1.0))
+    if has_class_weights:
         _class_weight_rows(y, class_weights, n_rows, weights)
     var is_mc = objective == GBDT_OBJ_MULTICLASS
     var dim = num_classes - 1 if is_mc else num_classes

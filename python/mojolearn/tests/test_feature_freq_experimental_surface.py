@@ -10,7 +10,7 @@ numerics on the same literal inputs are the native check
 import numpy as np
 import pytest
 
-from mojolearn import ExperimentalTwoLevelFeatureFreq, _backend
+from mojolearn import ExperimentalTwoLevelFeatureFreq
 
 
 def test_experimental_feature_freq_validates_and_forwards():
@@ -75,8 +75,8 @@ def test_experimental_feature_freq_refuses_constant_numeric_column():
 
 
 def test_experimental_feature_freq_forwards_weights():
-    if _backend._CPU_ONLY is not None:
-        pytest.skip("CPU-only install: the gbdt host binding trains its declared lanes with unit weights only and refuses sample_weight by name (bindings/_mojolearn_gbdt_host.mojo); weighted GBDT fits need a GPU binding")
+    # both columns train sample_weight here since lane gbdt-cpu-rest
+    # (2026-11-23): the host fit reads them as the device's has_w arm
     X = np.asarray(
         [[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float32
     )

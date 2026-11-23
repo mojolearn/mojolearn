@@ -1,0 +1,15 @@
+diff --git a/gbdt/host/gbdt_oracle.mojo b/gbdt/host/gbdt_oracle.mojo
+index 142c703a8f..8ccf47700f 100644
+--- a/gbdt/host/gbdt_oracle.mojo
++++ b/gbdt/host/gbdt_oracle.mojo
+@@ -4147,7 +4147,9 @@ def _sample_tree_folds(
+         if folds[f] > 0:
+             eligible.append(f)
+     # one rounding, as the default (contract=fast) build fused it
+-    var count = max(1, Int(fma(Float64(len(eligible)), fraction, 0.5)))
++    # SABOTAGE (coverage-gbdt-host_feature_sample_count): one feature more
++    # than `max(1, round(eligible * fraction))`
++    var count = max(1, Int(fma(Float64(len(eligible)), fraction, 0.5))) + 1
+     if count >= len(eligible):
+         return folds.copy()
+     var result = List[Int](length=len(folds), fill=0)

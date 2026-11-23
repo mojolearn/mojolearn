@@ -1,9 +1,9 @@
 diff --git a/gbdt/host/gbdt_oracle_depthwise.mojo b/gbdt/host/gbdt_oracle_depthwise.mojo
-index bdd13823a6..6184979b39 100644
+index 4a8566df46..99e50a5286 100644
 --- a/gbdt/host/gbdt_oracle_depthwise.mojo
 +++ b/gbdt/host/gbdt_oracle_depthwise.mojo
-@@ -1226,6 +1226,16 @@ def _sample_tree_folds(
-     return result^
+@@ -1140,6 +1140,16 @@ def _ns_partition(
+ # ===========================================================================
  
  
 +from std.memory import bitcast as _sab_bitcast
@@ -19,7 +19,7 @@ index bdd13823a6..6184979b39 100644
  def gbdt_host_fit_non_symmetric(
      x_colmajor: List[Float32],
      y: List[Float32],
-@@ -1429,6 +1439,7 @@ def gbdt_host_fit_non_symmetric(
+@@ -1368,6 +1378,7 @@ def gbdt_host_fit_non_symmetric(
                  + " values for a non-symmetric tree of " + String(n_bins) + " bins"
              )
          var scaled = rescaled_leaves(estimated, lr)

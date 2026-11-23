@@ -40,7 +40,18 @@ weights on RMSE, Poisson, Tweedie, Depthwise, Lossguide, YetiRank and
 generated-pair PairLogit, and eval sets (the Iter detector and
 use_best_model) on the symmetric RMSE fit and on Depthwise and Lossguide,
 which the CPU column refused until that lane.
+
+`test_rest_host_text_is_device_text` (lane gbdt-cpu-rest, 2026-11-23): the
+rest of what the device trained and the CPU column refused until that lane:
+sample weights with QueryRMSE (greedy and pointwise searchers), YetiRank on
+the pointwise searcher, Exact leaves (MAE, MAPE), MultiClass (times class
+weights), one-hot and CTR columns; X carrying NaN on RMSE (symmetric and
+Depthwise); Cosine under Lossguide; Quantile on Depthwise (weighted) and MAE
+Exact on Lossguide with an eval set; feature_fraction 0.5 on the symmetric
+RMSE and Logloss loop and on Depthwise RMSE; the pointwise searcher without
+sample weights or an eval set. Every fit at `REST_RATE` 0.1.
 """
+from std.math import nan
 from std.memory import UnsafePointer
 
 from checks.native_tests.gbdt_public_fits import (
@@ -544,6 +555,213 @@ def test_gaps_host_text_is_device_text() raises:
     if count > 0 or host_error.byte_length() > 0:
         raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
                     + ("gbdt_host_device_cat gaps device: " + String(count) + " of " + String(GAPS_UNITS)
+                       + " cases failed" + failed if count > 0 else ""))
+
+
+comptime REST_ROWS = 1500
+comptime REST_TREES = 10
+#: NOT a power of two (see the module docstring)
+comptime REST_RATE = 0.1
+comptime REST_UNITS = 18
+
+
+def _rest_rank(unit: Int) -> Bool:
+    return unit <= 2
+
+
+def _rest_cat(unit: Int) -> Bool:
+    return unit == 7 or unit == 8
+
+
+def _rest_weighted(unit: Int) -> Bool:
+    return unit <= 8 or unit == 12 or unit == 16
+
+
+def _rest_loss(unit: Int) raises -> String:
+    if unit == 0 or unit == 2:
+        return String("QueryRMSE")
+    if unit == 1:
+        return String("YetiRank")
+    if unit == 3 or unit == 13:
+        return String("MAE")
+    if unit == 4:
+        return String("MAPE")
+    if unit == 5:
+        return String("MultiClass")
+    if unit == 7 or unit == 11 or unit == 16 or unit == 17:
+        return String("Logloss")
+    if unit == 12:
+        return String("Quantile")
+    if unit < 0 or unit >= REST_UNITS:
+        raise Error("gbdt_host_device_cat rest: no unit " + String(unit))
+    return String("RMSE")
+
+
+def _rest_inputs(unit: Int) raises -> GbdtInputs:
+    """Units 0-2 the ranking fixture; 7-8 the categorical fixture of
+    `_inputs` (column 0 a CTR column of 40 categories, column 1 a one-hot
+    column); every other unit four numeric columns with a target of its
+    loss (0/1 for Logloss, three classes for MultiClass, positive for
+    MAPE). Units 9-10 put a NaN in every seventh row of column 1; unit 13
+    carries a held-out slice. The weighted units carry hashed sample
+    weights in [0.25, 4)."""
+    var inp: GbdtInputs
+    if _rest_rank(unit):
+        inp = _rank_inputs(0)
+    elif _rest_cat(unit):
+        inp = _inputs(unit == 8)
+    else:
+        var loss = _rest_loss(unit)
+        var n = REST_ROWS
+        var x = List[Float32](capacity=4 * n)
+        for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+            for r in range(n):  # driver-loop: over the fixture's rows
+                x.append(_unit01(r, 90 + j) * Float32(4.0) - Float32(2.0))
+        var y = List[Float32](capacity=n)
+        for r in range(n):  # driver-loop: over the fixture's rows
+            var v = (x[r] - Float32(0.5) * x[n + r] + Float32(0.25) * x[2 * n + r] * x[3 * n + r]
+                     + Float32(0.4) * (_unit01(r, 95) - Float32(0.5)))
+            if loss == String("Logloss"):
+                y.append(Float32(1.0) if v > Float32(0.0) else Float32(0.0))
+            elif loss == String("MultiClass"):
+                y.append(Float32(0.0) if v < Float32(-0.5) else (Float32(1.0) if v < Float32(0.5) else Float32(2.0)))
+            elif loss == String("MAPE"):
+                y.append(abs(v) + Float32(1.0))
+            else:
+                y.append(v)
+        if unit == 9 or unit == 10:
+            for r in range(0, n, 7):  # driver-loop: over every seventh row (fixture construction)
+                x[n + r] = nan[DType.float32]()
+        inp = GbdtInputs(x^, n, 4, y^)
+        if unit == 13:
+            var ne = n // 2
+            for j in range(4):  # driver-loop: over the held-out columns
+                for r in range(ne):  # driver-loop: over the held-out rows
+                    inp.eval_x.append(_unit01(r, 100 + j) * Float32(4.0) - Float32(2.0))
+            for r in range(ne):  # driver-loop: over the held-out rows
+                inp.eval_y.append(inp.eval_x[r] - Float32(0.5) * inp.eval_x[ne + r]
+                                  + Float32(3.0) * (_unit01(r, 105) - Float32(0.5)))
+    if _rest_weighted(unit):
+        for r in range(inp.n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 110))
+    return inp^
+
+
+def _rest_opts(unit: Int) raises -> GbdtOpts:
+    """Lane gbdt-cpu-rest (2026-11-23), weighted: 0 QueryRMSE greedy, 1
+    YetiRank pointwise Cosine, 2 QueryRMSE pointwise NewtonL2, 3 MAE Exact,
+    4 MAPE Exact, 5 MultiClass with class weights, 6 RMSE Bayesian + noise,
+    7 Logloss one-hot + CTR, 8 RMSE CTR + one-hot Bernoulli; NaN: 9 RMSE
+    symmetric (nan_mode Min), 10 Depthwise RMSE (Max); 11 Lossguide Logloss
+    Cosine; 12 Depthwise Quantile (weighted, boost_from_average unset); 13
+    Lossguide MAE Exact with an eval set (Iter, use_best_model); feature
+    fraction 0.5: 14 symmetric RMSE, 15 Depthwise RMSE, 16 symmetric Logloss
+    (weighted, Bernoulli); 17 the pointwise searcher, Logloss L2 Bayesian,
+    no sample weight and no eval set."""
+    var loss = _rest_loss(unit)
+    var o = GbdtOpts(loss, REST_TREES, 4)
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    if loss == String("RMSE"):
+        o.boost_from_average = 0
+    if unit == 1 or unit == 2:
+        o.pointwise = True
+        o.score_function = "Cosine" if unit == 1 else "NewtonL2"
+    elif unit == 3 or unit == 4:
+        o.leaf_method = "Exact"
+    elif unit == 5:
+        o.class_weights = [1.0, 2.0, 0.5]
+    elif unit == 6:
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.random_strength = 1.0
+    elif unit == 7:
+        o.cat_features = [0, 1]
+    elif unit == 8:
+        o.cat_features = [0, 1]
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif unit == 9:
+        o.nan_mode = "Min"
+    elif unit == 10:
+        o.nan_mode = "Max"
+        o.grow_policy = "Depthwise"
+        o.score_function = "Cosine"
+    elif unit == 11:
+        o.grow_policy = "Lossguide"
+        o.score_function = "Cosine"
+        o.max_leaves = 16
+        o.min_data_in_leaf = 4
+    elif unit == 12:
+        o.grow_policy = "Depthwise"
+        o.score_function = "Cosine"
+    elif unit == 13:
+        o.grow_policy = "Lossguide"
+        o.score_function = "NewtonL2"
+        o.max_leaves = 16
+        o.min_data_in_leaf = 4
+        o.leaf_method = "Exact"
+        o.n_estimators = 30
+        o.learning_rate = 1.0
+        o.od_type = "Iter"
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+    elif unit == 14 or unit == 15 or unit == 16:
+        o.feature_fraction = 0.5
+        if unit == 15:
+            o.grow_policy = "Depthwise"
+            o.score_function = "Cosine"
+        if unit == 16:
+            o.bootstrap = "Bernoulli"
+            o.subsample = 0.7
+    elif unit == 17:
+        o.pointwise = True
+        o.score_function = "L2"
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 0.5
+        o.boost_from_average = 1
+    return o^
+
+
+def test_rest_host_text_is_device_text() raises:
+    """The units of lane gbdt-cpu-rest: every host fit across the cores
+    first, then one device graph at a time."""
+    var host_texts = List[String](length=REST_UNITS, fill=String(""))
+    var texts_addr = Int(host_texts.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var outcome = fit[_HostFit](_rest_opts(unit), _rest_inputs(unit))
+        p[unit] = outcome.text.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat rest host", REST_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(REST_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_rest_opts(unit), _rest_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat rest unit " + String(unit) + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat rest device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat rest device: " + String(count) + " of " + String(REST_UNITS)
                        + " cases failed" + failed if count > 0 else ""))
 
 

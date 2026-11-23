@@ -2114,9 +2114,15 @@ def gbdt_ordered_rmse_host_fit(
     border_count: Int,
     learning_rate: Float32,
     l2_leaf_reg: Float32,
+    sample_weight: List[Float32] = List[Float32](),
 ) raises -> String:
-    """`train_ordered_rmse` then `fit_ordered_rmse` at unit weights; returns
-    the model text."""
+    """`train_ordered_rmse` then `fit_ordered_rmse`; returns the model text.
+    `sample_weight` (row order, empty: unit) is the device's `dw` buffer
+    (`gbdt/methods/dynamic_boosting.mojo`), the caller's weights or a fill
+    of 1.0, read by the same statements either way (lane gbdt-cpu-rest,
+    2026-11-23)."""
+    if len(sample_weight) != 0 and len(sample_weight) != n_rows:
+        raise Error("ordered RMSE sample weight shape mismatch")
     if n_rows != len(y) or n_features < 1 or len(x_colmajor) != n_rows * n_features:
         raise Error("train_ordered_rmse input shape mismatch")
     if border_count < 1 or border_count > 255:
@@ -2196,7 +2202,11 @@ def gbdt_ordered_rmse_host_fit(
         raise Error("ordered RMSE requires finite positive rate and nonnegative L2")
     var permutation = List[Int](length=n, fill=0)
     var seen = List[Bool](length=n, fill=False)
-    var w = List[Float32](length=n, fill=Float32(1.0))
+    var w: List[Float32]
+    if len(sample_weight) != 0:
+        w = sample_weight.copy()
+    else:
+        w = List[Float32](length=n, fill=Float32(1.0))
     var weight_sum = Float64(0)
     var max_weight = Float64(0)
     var residual_bound = Float64(0)
@@ -2209,7 +2219,7 @@ def gbdt_ordered_rmse_host_fit(
             raise Error("ordered RMSE permutation must be a bijection")
         seen[row] = True
         permutation[i] = row
-        var wi = Float32(1)
+        var wi = w[i]
         if not isfinite(y[i]) or not isfinite(wi) or wi < Float32(0) or not isfinite(identical_mul(wi, y[i])):
             raise Error("ordered RMSE targets/weights must be finite; weights nonnegative")
         weight_sum += Float64(wi)
