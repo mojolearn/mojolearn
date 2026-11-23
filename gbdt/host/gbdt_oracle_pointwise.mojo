@@ -205,6 +205,7 @@ def gbdt_pointwise_host_fit(
     cosine_score: Bool = False,
     random_strength: Float32 = Float32(0.0),
     feature_fraction: Float64 = 1.0,
+    max_ctr_complexity: Int = 1,
 ) raises -> GbdtPointwiseFit:
     """`train` then `fit_with_test` with `use_pointwise_searcher=True` on a
     one-output loss (see the module docstring).
@@ -242,7 +243,9 @@ def gbdt_pointwise_host_fit(
     options, as there. `feature_fraction` below 1 is the device's per-tree
     feature sample on this searcher (`_pw_sample_tree`, shared with the
     grouped pointwise fit), numeric columns only (the binding refuses the
-    rest in `train`'s words)."""
+    rest in `train`'s words). `max_ctr_complexity` above 1 with a CTR
+    column is refused in `fit_with_test`'s words: this searcher mints no
+    feature combinations."""
     if not (feature_fraction > 0.0) or feature_fraction > 1.0:
         raise Error("feature_fraction must be finite and in (0, 1]")
     if (
@@ -295,8 +298,13 @@ def gbdt_pointwise_host_fit(
         gbdt_ctr_column_kinds(flags, x_colmajor, n_rows, n_features)
     ):
         kind = 2
-        # no feature combinations on this searcher (`fit_with_test`
-        # refuses them; the binding refuses them in its words)
+        if max_ctr_complexity > 1:
+            # `fit_with_test`'s words (gbdt/methods/doc_parallel_boosting.mojo)
+            raise Error(
+                "max_ctr_complexity above 1 (feature combinations) is grown"
+                " by the greedy searcher; use_pointwise_searcher does not"
+                " mint combinations"
+            )
         var no_tree_ctr = List[GbdtTreeCtrHost]()
         var shape = gbdt_ctr_host_prelude(
             x_colmajor, y, n_rows, n_features, params, flags,
@@ -313,6 +321,16 @@ def gbdt_pointwise_host_fit(
             params.border_build_max_samples, params.random_seed,
             params.nan_mode, params.border_type,
         )
+        # one permutation without a CTR column (`train`'s Plain collapse),
+        # the estimation permutation checked against it in `train`'s words
+        var one_est = ctr_estimation_permutation_id
+        if one_est == -1:
+            one_est = 0
+        if one_est != 0:
+            raise Error(
+                "ctr_estimation_permutation_id " + String(one_est)
+                + " is outside the 1 permutations this fit builds"
+            )
         var one_hot_in = List[Bool]()
         if len(flags) != 0:
             kind = 1
