@@ -90,6 +90,17 @@ rank 1), and the refit: the best candidate fitted on every row.
    `label_binarize` shape words; brier refuses a multiclass y_true for one column.
 18. (lane mf-msel5c) FOUR classes, fold 0 a three-class fold estimator against four test labels: AP's shape words
    with (30, 3); brier's "different number of classes: 4 vs 3 ... Classes found in y_true: [0 1 2 3]".
+20. (lane mf-tail5) THE GIVEN y (core/member_abi.mojo `MemberCall.y_given`): bindings/msel_split_spec_run.mojo
+   `msel_target_codes_run` over float64 targets [1.0, 1.0 + 2^-40, 2.0, 1.0] given as MSEL_GIVEN_F64 codes them
+   [0, 1, 2, 0] with m = 3 (np.unique's inverse over the given y), while their float32 words alone give m = 2;
+   int64 [16777217, 16777216, 5] given as MSEL_GIVEN_I64 codes [2, 1, 0], m = 3 (equal in float32); int32
+   [3, -1, 3] given as MSEL_GIVEN_I32 codes [1, 0, 1]; the MSEL_GIVEN_* words equal MEMBER_F64 / _I32 / _I64.
+21. (lane mf-tail5) A MULTI-OUTPUT CLASSIFIER'S LACKING FOLD, the RUN's helpers: `_held_codes_col` over a rows x 2
+   code block (output 0 holds classes {0, 2} of 3 on the train rows, output 1 all of 2) answers [0, 2] and [];
+   `_map_multi_codes` maps output 0's fold codes [0, 1, 1] to [0, 2, 2] in place and leaves output 1 unchanged
+   (int32 and int64 words); `_place_multi_proba` writes a unit's 2 + 2 probability columns into output 0's
+   N x 3 block at classes 0 and 2 (class 1's column 0.0) and output 1's N x 2 block as they are, at the side's
+   rows, and refuses a member answer of the wrong width.
 19. (lane mf-msel5c) MAKE_SCORER KWARGS: top_k's k in the code (metric word, kept by the XOR flip), a binary row's
    given pos_label (its refusal names the label's str), and both refused on other rows.
 
@@ -123,7 +134,13 @@ cluster/host/kmeans_oracle.mojo `host_kmeans_score` passing `SUM_MODE_PLAIN` (ca
 `_fold_truth_checks` `if present > 2:` written `if present > 3:` (cases 17, 18: the AP shape words), or
 `present != view_cols` written `present < view_cols` (case 18: brier's count words); in core/msel_scorer_run.mojo
 `return code ^ SCORER_FLIP` written `return code + SCORER_FLIP`, or `row.metric = k` removed, or the
-`msel_scorer_pos_words` call in `_binary_value` replaced by "1" (case 19).
+`msel_scorer_pos_words` call in `_binary_value` replaced by "1" (case 19); in bindings/msel_split_spec_run.mojo
+`var kind = 0` in place of the given dtype in `msel_target_codes_run` (case 20: m = 2), or `Float64(srci64[i])`
+read as `Float64(Float32(srci64[i]))` (case 20: the int64 pair merges); in core/msel_search_run.mojo
+`_held_codes_col` reading `y[Int(r[i])]` without `* width + column` (case 21: output 0's held classes), `continue`
+removed for an output with no held list in `_map_multi_codes` (case 21: output 1 read through an empty list),
+`var to = c` in `_place_multi_proba` (case 21: output 0's columns not at their classes), or `offset += width`
+removed (case 21: output 1 reads output 0's columns).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -144,7 +161,9 @@ from core.member_abi import (
 from core.msel_search_run import (
     MselSearchPlan, msel_search_run, msel_search_rows, SEARCH_SCORE_MEMBER, SEARCH_SCORE_ACCURACY,
     SEARCH_ROWS_GATHERED, SEARCH_ROWS_INDEXED, SEARCH_ROWS_RESIDENT,
+    _held_codes_col, _map_multi_codes, _place_multi_proba,
 )
+from bindings.msel_split_spec_run import msel_target_codes_run, MSEL_GIVEN_F64, MSEL_GIVEN_I32, MSEL_GIVEN_I64
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.msel_scorer_run import (
@@ -169,7 +188,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 19
+comptime CASES = 21
 
 
 def _glue() raises -> EntryRef:
@@ -1553,6 +1572,85 @@ def check_scorer_words() raises:
     _ = len(pred)
 
 
+
+def check_given_targets() raises:
+    """Case 20 (module note)."""
+    require(MSEL_GIVEN_F64 == MEMBER_F64 and MSEL_GIVEN_I32 == MEMBER_I32 and MSEL_GIVEN_I64 == MEMBER_I64,
+            "the given dtype words are the member ABI's")
+    var close = 1.0 + 1.0 / 1099511627776.0  # 1 + 2^-40: one float32 word with 1.0
+    var y64: List[Float64] = [1.0, close, 2.0, 1.0]
+    var y32: List[Float32] = [Float32(1.0), Float32(close), Float32(2.0), Float32(1.0)]
+    var given = msel_target_codes_run(Int(y32.unsafe_ptr()), 4, Int(y64.unsafe_ptr()), MSEL_GIVEN_F64)
+    require(given.m == 3, "three given float64 values, three classes")
+    require(given.codes[0] == 0 and given.codes[1] == 1 and given.codes[2] == 2 and given.codes[3] == 0,
+            "np.unique's inverse over the given y")
+    var alone = msel_target_codes_run(Int(y32.unsafe_ptr()), 4, 0, 0)
+    require(alone.m == 2, "the float32 words alone merge the close pair")
+    var i64: List[Int64] = [16777217, 16777216, 5]
+    var f32: List[Float32] = [Float32(16777217.0), Float32(16777216.0), Float32(5.0)]
+    var ints = msel_target_codes_run(Int(f32.unsafe_ptr()), 3, Int(i64.unsafe_ptr()), MSEL_GIVEN_I64)
+    require(ints.m == 3 and ints.codes[0] == 2 and ints.codes[1] == 1 and ints.codes[2] == 0, "int64 given targets")
+    var i32: List[Int32] = [3, -1, 3]
+    var g32: List[Float32] = [Float32(3.0), Float32(-1.0), Float32(3.0)]
+    var small = msel_target_codes_run(Int(g32.unsafe_ptr()), 3, Int(i32.unsafe_ptr()), MSEL_GIVEN_I32)
+    require(small.m == 2 and small.codes[0] == 1 and small.codes[1] == 0 and small.codes[2] == 1, "int32 given targets")
+    _ = len(y64)
+    _ = len(y32)
+    _ = len(i64)
+    _ = len(f32)
+    _ = len(i32)
+    _ = len(g32)
+
+
+def check_multi_lacking_helpers() raises:
+    """Case 21 (module note)."""
+    # rows x 2 codes: output 0 over 3 classes, output 1 over 2; train rows 0, 1, 3
+    var codes: List[Int32] = [0, 0, 2, 1, 1, 0, 2, 1]
+    var train: List[Int32] = [0, 1, 3]
+    var h0 = _held_codes_col(Int(codes.unsafe_ptr()), Int(train.unsafe_ptr()), 3, 3, 2, 0)
+    var h1 = _held_codes_col(Int(codes.unsafe_ptr()), Int(train.unsafe_ptr()), 3, 2, 2, 1)
+    require(len(h0) == 2 and h0[0] == 0 and h0[1] == 2, "output 0 holds classes 0 and 2")
+    require(len(h1) == 0, "output 1 holds every class")
+    var held = List[List[Int32]]()
+    held.append(h0.copy())
+    held.append(List[Int32]())
+    var pred32: List[Int32] = [0, 1, 1, 0, 1, 1]
+    _map_multi_codes(Int(pred32.unsafe_ptr()), MEMBER_I32, 3, 2, Int(held.unsafe_ptr()), 0)
+    require(pred32[0] == 0 and pred32[2] == 2 and pred32[4] == 2, "output 0's fold codes mapped to its classes")
+    require(pred32[1] == 1 and pred32[3] == 0 and pred32[5] == 1, "output 1 unchanged")
+    var pred64: List[Int64] = [1, 1, 0, 0]
+    _map_multi_codes(Int(pred64.unsafe_ptr()), MEMBER_I64, 2, 2, Int(held.unsafe_ptr()), 0)
+    require(pred64[0] == 2 and pred64[2] == 0 and pred64[1] == 1, "int64 codes mapped the same way")
+    # a unit's answer for 2 test rows (rows 2 and 0 of N = 3): output 0's 2 held columns, then output 1's 2
+    var src: List[Float64] = [0.25, 0.75, 0.5, 0.5, 0.875, 0.125, 0.0625, 0.9375]
+    var rows: List[Int32] = [2, 0]
+    var b0 = List[Float64](length=9, fill=-1.0)
+    var b1 = List[Float64](length=6, fill=-1.0)
+    var dsts: List[Int] = [Int(b0.unsafe_ptr()), Int(b1.unsafe_ptr())]
+    var counts: List[Int] = [3, 2]
+    _place_multi_proba(Int(src.unsafe_ptr()), MEMBER_F64, 4, 2, Int(rows.unsafe_ptr()), Int(dsts.unsafe_ptr()), 2,
+                       Int(counts.unsafe_ptr()), Int(held.unsafe_ptr()), 0)
+    require(b0[6] == 0.25 and b0[7] == 0.0 and b0[8] == 0.75, "row 2 of output 0 at classes 0 and 2")
+    require(b0[0] == 0.875 and b0[1] == 0.0 and b0[2] == 0.125, "row 0 of output 0 at classes 0 and 2")
+    require(b0[3] == -1.0, "row 1 is not this unit's")
+    require(b1[4] == 0.5 and b1[5] == 0.5 and b1[0] == 0.0625 and b1[1] == 0.9375, "output 1 placed as it is")
+    var refused = False
+    try:
+        _place_multi_proba(Int(src.unsafe_ptr()), MEMBER_F64, 5, 1, Int(rows.unsafe_ptr()), Int(dsts.unsafe_ptr()),
+                           2, Int(counts.unsafe_ptr()), Int(held.unsafe_ptr()), 0)
+    except:
+        refused = True
+    require(refused, "a member answer of the wrong width refuses")
+    _ = len(codes)
+    _ = len(train)
+    _ = len(held)
+    _ = len(src)
+    _ = len(rows)
+    _ = len(b0)
+    _ = len(b1)
+    _ = len(dsts)
+    _ = len(counts)
+
 def test_msel_search_run() raises:
     publish_x_trees_glue("cpu")
     def run_case(which: Int) raises:
@@ -1592,8 +1690,12 @@ def test_msel_search_run() raises:
             check_lacking_ap_brier()
         elif which == 17:
             check_lacking_four()
-        else:
+        elif which == 18:
             check_scorer_words()
+        elif which == 19:
+            check_given_targets()
+        else:
+            check_multi_lacking_helpers()
     check_cases("msel_search_run", CASES, run_case)
 
 

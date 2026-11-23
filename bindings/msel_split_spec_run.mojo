@@ -458,7 +458,8 @@ struct MselTargetCodes(Movable):
 #: THE GIVEN y's element types (`msel_target_codes_run`'s `given_dtype`):
 #: the values of core/member_abi.mojo's MEMBER_F64 / MEMBER_I32 / MEMBER_I64
 #: (this module does not import the member ABI; checks/native_tests/
-#: mf_tail5_given_y.mojo asserts the values are equal). Any other: not given.
+#: msel_search_run.mojo case 20 asserts the values are equal). Any other:
+#: not given.
 comptime MSEL_GIVEN_F64 = 1
 comptime MSEL_GIVEN_I32 = 2
 comptime MSEL_GIVEN_I64 = 3
