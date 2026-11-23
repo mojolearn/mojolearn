@@ -839,8 +839,10 @@ def _connect_trainer():
                    byte_lm_vendors=('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal'),
                    byte_lm_profile=PROFILE, byte_lm_logits_pool=_LogitsPool, backend=vars(_backend))
     module = _tokenizer_binding()._module
-    context.update(byte_lm_pooled_class=_PooledLogits,
-                   byte_lm_store_getter=vars(_Array)["_store"].__get__)
+    # byte_lm_store_getter was read only by the MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL arm.
+    # TOMBSTONE: MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.ab-prep.patch; record in docs/TOMBSTONES.md.
+    context.update(byte_lm_pooled_class=_PooledLogits)
     _PooledLogits.__del__ = module.classical_attribute_descriptor(
         MethodType(module.byte_lm_pooled_finalize_call, context))
     # glue: pin the existing native slot and exact pooled storage hooks once.

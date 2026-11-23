@@ -1,12 +1,10 @@
 """The route a classical row's scored call took, read AFTER the round's clock.
 
-Lane flag-classical-dispatch-gate (2026-11-15). The classical doors' descriptor
-dispatch is the build define CLASSICAL_NATIVE_DISPATCH
-(providers/python/classical_native_dispatch.mojo; B arm
-`-D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH`), no longer a run-time environment
-gate. The SVC/SVR door publishes `_native_svc_dispatch` on the model only when
-the descriptor table ran (B); without it the by-name entries with the
-device-resident fitted state ran (A, the default). Every other classical
+Lane flag-classical-dispatch-gate (2026-11-15). The SVC/SVR doors have one
+route: the by-name entries with the device-resident fitted state (the B arm
+`-D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH`, the descriptor table, was removed
+2026-11-23 as plumbing, and with it the `_native_svc_dispatch` field it
+published). Every other classical
 estimator has no classical dispatch switch on its path (identical x_neighbors
 calls admit the native snapshot in every build), which is recorded by name.
 
@@ -43,7 +41,7 @@ def classical_route(runner, model=None):
     try:
         fields = vars(model)
         if type(model).__name__ in _SVM_CLASSES:
-            route["svc_dispatch"] = "descriptor" if fields.get("_native_svc_dispatch") is not None else "by-name"
+            route["svc_dispatch"] = "by-name"
         else:
             route["classical_dispatch"] = "none on this path"
         # Any route word a door publishes on the model (generic: *_route).

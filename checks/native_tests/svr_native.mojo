@@ -17,7 +17,8 @@ from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
-comptime SVR_NATIVE_CASES = 12
+# Unit 11 (the B arm's candidate fit, MOJOLEARN_CLASSICAL_NATIVE_DISPATCH) removed 2026-11-23 with the arm.
+comptime SVR_NATIVE_CASES = 11
 comptime SVR_RESIDENT_CASES = 9
 
 
@@ -78,7 +79,7 @@ def fixture(driver: SvrNativeDriver, unit: Int, resident: Bool = False) raises:
         Int(bounds.unsafe_ptr()) if unit == 5 else 0, 0 if unit == 9 else n, d,
         # base_id, base_rows, index_id: no model-selection fold, QueryFold.none() = (-1, 0, -1) as the door
         # passes it (bindings/svc_kernel_native_door.mojo:1636). (0, 0, 0) named store id 0 as an active fold.
-        kernel, -1 if planted else 100000, 1000, 2, -1, 0, -1, driver.device() and unit != 11, False, unit == 11,
+        kernel, -1 if planted else 100000, 1000, 2, -1, 0, -1, driver.device(), False,
         gamma, c, epsilon, tolerance, coef0)
     if unit == 9:
         var refused = False
@@ -242,7 +243,7 @@ def refit_fixture(driver: SvrNativeDriver) raises:
         var target: List[Float32] = [-scale, scale]
         var request = SvrFitRequest(Int(source.unsafe_ptr()), Int(target.unsafe_ptr()), Int(plan.dual.unsafe_ptr()),
             Int(plan.support.unsafe_ptr()), Int(plan.vectors.unsafe_ptr()), Int(plan.info.unsafe_ptr()), 0, n, d,
-            0, 10000, 1000, 2, -1, 0, -1, device, False, False, 0.5, 2.0, 0.1, 0.000001, 0.0)
+            0, 10000, 1000, 2, -1, 0, -1, device, False, 0.5, 2.0, 0.1, 0.000001, 0.0)
         plan.count = driver.fit(request)
         require(plan.count == 2, "SVR refit " + String(generation) + ": support count " + String(plan.count))
         var prediction = List[Float32](length=n, fill=-999)

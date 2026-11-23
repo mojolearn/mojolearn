@@ -22,7 +22,6 @@ from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_ex
 from bindings.boundary_read_door import buffer_view, view_int_at, read_exact_int_items
 from core.boundary_layout import BOUNDARY_KIND_FLOAT, BOUNDARY_KIND_BOOL
 from std.memory import unsafe_memcpy
-from std.sys.compile import is_defined
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct_door import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
 from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_lm_admit, CausalAdmission, causal_layer_allocate, causal_layer_allocate_fields, causal_layer_run_fields, causal_layer_stateless_plan, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
@@ -33,7 +32,7 @@ from providers.python.operation_lock_pyapi_door import OperationLockLease, opera
 from bindings.py_model_records import bump_model_generation
 from bindings.torch_to_unpack import torch_to_device
 from providers.python.neural_descriptor_pyapi_door import (
-    neural_descriptor_reuse, NEURAL_NATIVE_DISPATCH,
+    neural_descriptor_reuse,
 )
 from providers.python.transformer_block_session_pyapi_door import (
     transformer_block_session_open, transformer_block_session_handle, transformer_block_session_serves,
@@ -45,7 +44,6 @@ from providers.python.mamba3_prefill_session_pyapi_door import (
 from core.mamba_state_entry_table import Mamba3StateRoute
 from bindings.causal_lm_public_door import _causal_array_guard
 from bindings.causal_lm_public_door import causal_mamba_entry, causal_mamba_stateless_run
-from autograd.block_step_ops import IDN_MAMBA12_FORWARD_DOOR_OLD
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call
 from core.causal_layer_run import CausalLayerRoute
 from providers.python.generation_metadata_pyapi_door import causal_layer_route
@@ -73,16 +71,19 @@ from bindings.py_model_records import (
 
 # Lane envgate-neural-lm (2026-11-15): the block doors' setup switches are
 # build constants with today's defaults; each was a getenv per public call.
-# B arms RUN OWED (bench/results/paper_compare/owed-pre0867.json,
-# docs/apple-fast/EXPERIMENTS.md): -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP
-# (was =1), -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0),
+# -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP (was =1: per-call layer setup, no
+# block session) and -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0: the
+# per-call transformer_forward_fresh) ran the same llama_decoder_layer_forward /
+# llama_decoder_layer_backward_autograd bodies as the block session:
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch; record in docs/TOMBSTONES.md.
 # -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1) lost A/B ab3 (NVIDIA L40S, wheel
 # d652a4b0a1, 2026-11-18, job nvc-ab-20261118T182558Z-cb6e02, digests equal):
 # arm/base 1.007 geomean over 5 mamba3/samba cells (0.97-1.07), noise.
 # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_SETUP (LOSER: Mamba3 per-call setup without prefill sessions, arm/base geomean 1.007 over 5 cells, noise, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
 # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
-comptime TRANSFORMER_LEGACY_SETUP = is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SETUP"]()
-comptime TRANSFORMER_SESSION_FRESH = not is_defined["MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF"]()
 
 
 struct NeuralBlockOwner(Movable):
@@ -136,8 +137,8 @@ struct NativeBlockPlan(Movable, Writable):
     # vendor and Mamba-1 profile are fixed for a plan, so it is decided here
     # once (hot-path audit 2026-11-13: it read two entry words per call).
     var stateless_forward: Bool
-    # Lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD,
-    # bindings/causal_lm_public_door.mojo): the Mamba state entry a stateless
+    # Lane fix-mamba-forward-doors (bindings/causal_lm_public_door.mojo
+    # `causal_mamba_stateless_run`): the Mamba state entry a stateless
     # forward calls, resolved at the plan's first stateless forward and held
     # (word 0 until then).
     var mamba_entry: EntryRef
@@ -353,9 +354,8 @@ def _neural_owner_runtime_names() -> List[String]:
 
 # `_neural_owner_env` (one getenv of MOJOLEARN_NEURAL_NATIVE_DISPATCH per
 # standalone block call, twice on a miss) and the owner record's env word are
-# gone: the dispatch is the build constant NEURAL_NATIVE_DISPATCH
-# (providers/python/neural_descriptor_pyapi_door.mojo; lane
-# flag-native-dispatch-gate). Record: [key, plan, derived, has_profile,
+# gone, and so is the build constant NEURAL_NATIVE_DISPATCH that replaced it
+# (deleted 2026-11-23, lane/ab-prep-neural: native dispatch is the one form). Record: [key, plan, derived, has_profile,
 # next_profile, changed, binding_key, uses_default].
 
 
@@ -1053,7 +1053,9 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
     # transformer-session-native): "block_session" marks a GPU Transformer
     # route (the former "forward_session" Python entry's presence).
     var forward = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].forward_entry
-    var reuse = transformer and route_session and not TRANSFORMER_LEGACY_SETUP
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+    var reuse = transformer and route_session
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
     var lock_lease = OperationLockLease(lock)
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
@@ -1065,7 +1067,9 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
             transformer_block_session_close(fields["_native_session"])
             py_setitem(fields, "_native_session", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
-            var fresh_session = reuse and entry_session_fresh and TRANSFORMER_SESSION_FRESH
+            # TOMBSTONE: MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch; record in docs/TOMBSTONES.md.
+            var fresh_session = reuse and entry_session_fresh
             if fresh_session or entry_forward_fresh:
                 var y = generation_array([b, l, d])
                 var keep = List[PythonObject]()
@@ -1126,18 +1130,18 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                 # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at f1c5239d24.
                 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
                 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-                comptime if not IDN_MAMBA12_FORWARD_DOOR_OLD:
-                    # lane fix-mamba-forward-doors: one direct call with the
-                    # plan's prepared layer and held Mamba entry (the
-                    # causal_layer_run_fields hop is the B arm)
-                    if nplan.layer is not None:
-                        if nplan.mamba_entry.word == 0:
-                            nplan.mamba_entry = causal_mamba_entry(nplan.entries)
-                        var direct = causal_mamba_stateless_run(mods, owner.fields, nplan.mamba_entry, nplan.kind,
-                            nplan.d_model, nplan.layer, x)
-                        if locked:
-                            lock_lease.release()
-                        return direct
+                # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+                # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+                # lane fix-mamba-forward-doors: one direct call with the
+                # plan's prepared layer and held Mamba entry
+                if nplan.layer is not None:
+                    if nplan.mamba_entry.word == 0:
+                        nplan.mamba_entry = causal_mamba_entry(nplan.entries)
+                    var direct = causal_mamba_stateless_run(mods, owner.fields, nplan.mamba_entry, nplan.kind,
+                        nplan.d_model, nplan.layer, x)
+                    if locked:
+                        lock_lease.release()
+                    return direct
                 var fresh_result = _neural_layer_run(mods, owner, x, PythonObject(None), step, True)
                 if locked:
                     lock_lease.release()
@@ -1382,14 +1386,14 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
     # and bindings/mamba_public_native.mojo.
     if family == "transformer":
         var native = PythonObject(None)
-        if code == 1 and NEURAL_NATIVE_DISPATCH:
+        if code == 1:
             native = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
                 _native_function(mods, entries, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
             mods.released()
         py_setitem(fields, "_native_block_provider_cache", native)
     else:
         var native = PythonObject(None)
-        if code == 1 and NEURAL_NATIVE_DISPATCH:
+        if code == 1:
             native = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
                 _native_function(mods, entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
             mods.released()
@@ -1696,7 +1700,9 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         lock_lease.acquire()
         mods.released()
         try:
-            var session = _native_has_entry(mods, entries, "transformer_session_backward") and not TRANSFORMER_LEGACY_SETUP
+            # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+            var session = _native_has_entry(mods, entries, "transformer_session_backward")
             if session:
                 # The block's session is a registry handle of the training
                 # image (the GPU image publishes one entry for forward and
@@ -1837,14 +1843,14 @@ def neural_block_setstate_binding(mut mods: NativeModules, block: PythonObject, 
     if mode is None:
         mode = _native_entry_fields(mods, context["backend"])["_DEFAULT_MODE"]
     var runs_identical = word_runs_identical(String(mode), MODE_FAMILY_NEURAL)  # lane fx-fast-mask: an answered `fast` restores the identical route
-    if runs_identical and NEURAL_NATIVE_DISPATCH:
+    if runs_identical:
         py_setitem(fields, "_runtime_lock", operation_lock_create())
         mods.released()
     else:
         py_setitem(fields, "_runtime_lock", context["rlock"]())
         mods.released()
     var session = PythonObject(None)
-    if String(fields["_native_route"]) == "gpu" and runs_identical and NEURAL_NATIVE_DISPATCH:
+    if String(fields["_native_route"]) == "gpu" and runs_identical:
         # A native registry handle of the block's GPU image (lane
         # transformer-session-native; the former `transformer_session_create`).
         var bindings = _model_bindings(mods, fields["_native_route"], "transformer", context, mode)

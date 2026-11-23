@@ -41,7 +41,7 @@ from svm.svc_kernel_native_run import svc_query_run, svc_coef_run, svc_gather_co
 from svm.svc_kernel_fit_run import SvcFitResult, svc_fit_run, svc_fit_finish_run, svc_gamma_run, svc_bounds_run
 from bindings.svc_kernel_fit_unpack import svc_fit_unpack, svc_fit_refused
 from bindings.svc_kernel_fit_pack import svc_fit_vectors, svc_fit_pack
-from bindings.svc_kernel_provider_unpack import SvcConnection, svc_connection, svc_connection_publish
+from bindings.svc_kernel_provider_unpack import SvcConnection, svc_connection
 from bindings.svc_kernel_query_unpack import svc_query_unpack, svc_query_refused, svc_coef_unpack, SVC_QUERY_DECISION, SVC_QUERY_CODES, SVC_QUERY_PROBA, SVC_QUERY_LOG_PROBA
 from bindings.svc_kernel_query_pack import svc_query_result, svc_query_pack, svc_coef_output
 from bindings.svc_kernel_svr_unpack import svr_fit_unpack, svr_query_unpack, svr_query_refused, svr_score_unpack
@@ -109,7 +109,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, con
     """`SVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight):
     UNPACK; in ONE release of the GIL the gamma of host words, the bounds
     C * sample_weight and the typed solve; PACK."""
-    var unpacked = svr_fit_unpack(model, args, context, connection.drivers, connection.candidate)
+    var unpacked = svr_fit_unpack(model, args, context, connection.drivers)
     var count = 0
     with GILReleased(Python()):
         if unpacked.host_gamma:
@@ -131,7 +131,7 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     """`SVR.predict`: UNPACK, the public vector, then in one release of
     the GIL the cross-kernel's support columns (kernel='precomputed') and
     one typed query; then the refusal of a query the device entry flagged."""
-    var unpacked = svr_query_unpack(model, fields, binding, source, context, connection.candidate)
+    var unpacked = svr_query_unpack(model, fields, binding, source, context)
     var result = svr_query_output(unpacked.request.rows, context)
     unpacked.request.dst = _addr(result)
     with GILReleased(Python()):
@@ -225,7 +225,7 @@ def svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObject
         # coef_ (the native property schema) and composed callers: algorithm only.
         var connected = svc_connection(args[0])
         var plain = _linear_coef(fields, operation == SVC_OPN_FAMILY_SVC_SVC_COEF, context, connected.drivers)
-        svc_connection_publish(fields, connected, context)
+        _ = connected^
         return plain
     _svm_lifecycle_admit(model, fields, context)
     var nk = svm_keys()
@@ -245,15 +245,13 @@ def svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObject
                 _svr_fit(model, args, context, connection)
         finally:
             estimator_fit_end(model, initial_depth)
-        # A nested set_params may have replaced the dictionary's contents.
-        fields = py_fields(model)
-        svc_connection_publish(fields, connection, context)
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+        _ = connection^
         estimator_fit_complete(model, args[1], classifier, context)
         return model
     var result = _svc_kernel_operation(model, operation, args, context, fields, connection)
-    # A nested set_params may have replaced the dictionary's contents.
-    fields = py_fields(model)
-    svc_connection_publish(fields, connection, context)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    _ = connection^
     # predict has one result for every caller (Andrew, 2026-11-22, lane
     # predict-dtype): the kernel's float32 regression values (or the decoded
     # labels) as a NumPy view, with no caller test and no float64 widening

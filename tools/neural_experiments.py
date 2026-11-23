@@ -48,10 +48,12 @@ EXPERIMENTS = {
     # MOJOLEARN_TRANSFORMER_STAGE_RESET went with the forward tape's
     # workspace body (the block runs on the attention step op).
     # lane r1-restore-measured-winners (2026-11-09): the x4 switches are back.
-    "legacy_fresh_entry": {"MOJOLEARN_TRANSFORMER_SESSION_FRESH": "0"},
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch; record in docs/TOMBSTONES.md.
     # lane fx-verdicts2 (2026-11-18): MOJOLEARN_MAMBA3_LEGACY_SETUP and
     # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS(_OFF) lost A/B ab3 and are deleted.
-    "legacy_everything": {"MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1"},
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
     "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
     "mamba3_no_retain_stages": {"MOJOLEARN_MAMBA3_RETAIN_STAGES": "0"},

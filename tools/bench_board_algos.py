@@ -5950,7 +5950,7 @@ def _build_layer(lane, arm, D):
         # lane layernorm-idn: a layer with its own `to_device` (the sequence LayerNorm, whose
         # resident tensors live on the sequence binding, not the CNN one) uploads through it, so
         # the lane races what a user who puts x on the device gets (the `layer_norm_dev` entry);
-        # MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1 (or MOJOLEARN_SEQ_DEVICE_IO_OFF=1) is its before arm.
+        # MOJOLEARN_SEQ_DEVICE_IO_OFF=1 is its before arm (MOJOLEARN_LN_CLASS_DEVICE_IO_OFF deleted 2026-11-23).
         to_dev = None
         if getattr(layer, "_seq_device_io", False) and probe_light:
             # smoke-fixes (2026-10-14): the probe never runs the block, so x is not uploaded (the timed worker

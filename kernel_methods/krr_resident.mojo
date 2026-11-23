@@ -43,8 +43,8 @@ from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.identity_trace import IdentityTrace
-from core.device_query_x import DeviceQueryX, QueryFold
-from core.query_x_held import IDN_QUERY_X_HELD, QueryXBuffers
+from core.device_query_x import DeviceQueryX
+from core.query_x_held import QueryXBuffers
 from svm.impl.svm_parameter import KernelParams
 from kernel_methods.estimator import (
     _family_ctx,
@@ -301,11 +301,8 @@ def kernel_ridge_predict_resident[out_origin: MutOrigin, //](
     # TOMBSTONE: _upload_checked on the predict query (synchronising scan, DEVIATION 1686 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
     # fix-svc-query-resident: the handle's held query buffers (no device or
     # pinned allocation, no fill launch per call; core/query_x_held.mojo).
-    var qx: DeviceQueryX
-    comptime if IDN_QUERY_X_HELD:
-        qx = DeviceQueryX.held(view.ctx, xnew_addr, n_query, d, _krr_query_take(state, handle))
-    else:
-        qx = DeviceQueryX(view.ctx, xnew_addr, n_query, d, QueryFold.none())
+    # TOMBSTONE: MOJOLEARN_IDN_QUERY_X_HELD_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    var qx = DeviceQueryX.held(view.ctx, xnew_addr, n_query, d, _krr_query_take(state, handle))
     # kernel_ridge_predict_dev synchronises before its read-back: the status
     # words copied after the query are valid below.
     kernel_ridge_predict_dev(view.ctx, qx.x, view.x_fit, view.dual, n, d, t, kp, n_query, output, trace)

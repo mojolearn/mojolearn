@@ -4,13 +4,13 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem
 from std.sys import is_defined
-from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_array_unfilled, py_ints
+from bindings.generation_buffers_door import generation_initialize_binding, generation_array_unfilled, py_ints
 from bindings.neural_block_public_door import neural_training_selection, neural_mamba3_restore, neural_block_forward_binding, _neural_input, _neural_int_words
 from core.entry_table import entry_ref_unresolved
 from core.mamba_state_entry_table import Mamba3StateRoute
 from core.neural_entry_table import (
     NEURAL_MAMBA3_SESSION_FORWARD, NEURAL_MAMBA3_OWNED_FORWARD, MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL,
-    MAMBA3_CAP_HELD_FORWARD, IDN_MAMBA3_FORWARD_DOOR_OLD,
+    MAMBA3_CAP_HELD_FORWARD,
 )
 from providers.python.mamba3_prefill_session_pyapi_door import (
     mamba3_prefill_caps, mamba3_prefill_session_ensure, mamba3_prefill_session_run,
@@ -27,9 +27,14 @@ from core.shared_slot import SharedSlot
 
 # Lane envgate-neural-lm (2026-11-15): the block doors' setup switches are
 # build constants with today's defaults; each was a getenv per public call.
-# B arms RUN OWED (bench/results/paper_compare/owed-pre0867.json,
-# docs/apple-fast/EXPERIMENTS.md): -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP
-# (was =1), -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0),
+# -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP (was =1: per-call layer setup, no
+# block session) and -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0: the
+# per-call transformer_forward_fresh) ran the same llama_decoder_layer_forward /
+# llama_decoder_layer_backward_autograd bodies as the block session:
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch; record in docs/TOMBSTONES.md.
 # -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1) lost A/B ab3 (NVIDIA L40S, wheel
 # d652a4b0a1, 2026-11-18, job nvc-ab-20261118T182558Z-cb6e02, digests equal):
 # arm/base 1.007 geomean over 5 mamba3/samba cells (0.97-1.07), noise.
@@ -98,10 +103,8 @@ def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
 #: passes over 4 * (B*L*d_model + B*H*(64*128 + 128 + 64 + 32)) bytes; the
 #: five allocations stay (the arrays escape to the caller). Board on record
 #: (NV L40S, 0.8.55 -> candidate 4c2340386abc): mamba3-forward 3.95 -> 6.75
-#: ms. `-D MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL` keeps the zero-filled arrays
-#: (B arm of the owed A/B, bench/results/paper_compare/owed-pre0867.json row
-#: restore-mamba3-forward-unfilled, b arm mamba3-forward-zero-fill).
-#: lane fix-mamba3-unfilled-rest (2026-11-13): the same switch decides every
+#: ms.
+#: lane fix-mamba3-unfilled-rest (2026-11-13): the same rule covers every
 #: other Mamba-3 output a native call writes whole, one decision: the
 #: carried-state forward and decode step (y + four reports,
 #: bindings/samba_inference_native_door.mojo `_m3_state_call`: the GPU
@@ -120,17 +123,14 @@ def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
 # TOMBSTONE: MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 54f0ca8d71.
 # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime MAMBA3_FORWARD_ZERO_FILL = is_defined["MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL"]()
+# TOMBSTONE: MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL (removed without measurement: plumbing, rule 2026-11-22; zero-filled Mamba-3 outputs that every native route overwrites whole) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 
 def _m3_output_array(dims: List[Int]) raises -> PythonObject:
     """A Mamba-3 output (forward, carried-state forward, step, session
-    step/decode, tape prefill) the native call overwrites whole: unfilled by
-    default, zero-filled under MAMBA3_FORWARD_ZERO_FILL (the B arm)."""
-    comptime if MAMBA3_FORWARD_ZERO_FILL:
-        return generation_array(dims)
-    else:
-        return generation_array_unfilled(dims)
+    step/decode, tape prefill) the native call overwrites whole: unfilled."""
+    return generation_array_unfilled(dims)
 
 
 def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: PythonObject,
@@ -157,23 +157,20 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     var session_entry = entry_ref_unresolved()
     if route.has_sessions():
         session_entry = route.session_ref()
-        comptime if not IDN_MAMBA3_FORWARD_DOOR_OLD:
-            # lane fix-mamba-forward-doors: the block's open session answers
-            # its image's caps (read once when it opened); a table call only
-            # before the first session
-            var existing = py_get(fields, "_prefill_session")
-            caps = -1
-            if mamba3_prefill_session_serves(existing, session_entry):
-                caps = mamba3_prefill_session_caps(existing)
-            if caps < 0:
-                caps = mamba3_prefill_caps(session_entry)
-        else:
+        # TOMBSTONE: MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+        # lane fix-mamba-forward-doors: the block's open session answers
+        # its image's caps (read once when it opened); a table call only
+        # before the first session
+        var existing = py_get(fields, "_prefill_session")
+        caps = -1
+        if mamba3_prefill_session_serves(existing, session_entry):
+            caps = mamba3_prefill_session_caps(existing)
+        if caps < 0:
             caps = mamba3_prefill_caps(session_entry)
-    # lane fix-mamba-forward-doors (IDN_MAMBA3_FORWARD_DOOR_OLD): one table
-    # call per forward where the image reserves, runs and releases itself
-    var held = False
-    comptime if not IDN_MAMBA3_FORWARD_DOOR_OLD:
-        held = (caps & MAMBA3_CAP_HELD_FORWARD) != 0
+    # lane fix-mamba-forward-doors: one table call per forward where the
+    # image reserves, runs and releases itself
+    var held = (caps & MAMBA3_CAP_HELD_FORWARD) != 0
     var session = (caps & MAMBA3_CAP_SESSION_PREFILL) != 0 or owned is not None
     var skip = False
     if session and Bool(py=py_get(fields, "_discard_reports", PythonObject(False))):
@@ -302,7 +299,7 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
     var dy = _model_f32(grad_output, "grad_output", context)
     _model_shape(dy, dims, "grad_output")
     # Lane fix-wave2-leftovers (fix-mamba3-unfilled-rest leftover): dx and
-    # the nine parameter gradients are unfilled unless MAMBA3_FORWARD_ZERO_FILL
+    # the nine parameter gradients are unfilled
     # (`_m3_output_array`): `_m3_backward_tape_run`
     # (mamba/impl/mamba_shell_impl.mojo) downloads each whole (dx n_x, every
     # weight gradient at its full parameter count, the shapes recorded here

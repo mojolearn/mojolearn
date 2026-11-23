@@ -12,7 +12,7 @@ buffer (a driver page-lock allocation and free per call). The SVC infer
 rows (istella and taxi Xq, 10,000 rows) sit 0.3-0.9 ms above their best
 run (best-ever audit 2026-11-13, rows 3 and 4).
 
-THE SWITCH. `IDN_QUERY_X_HELD` (default on). The model's holder (the
+THE HELD QUERY. The model's holder (the
 fitted store's lease, core/fitted_resident_store.mojo; KernelRidge's
 handle, kernel_methods/krr_resident.mojo) keeps one `QueryXBuffers` per
 model: the x buffer at the largest row count seen so far (grow only, a
@@ -22,8 +22,8 @@ passes its own nonzero `mark` to the status kernel, which stores that mark
 on a hit and nothing otherwise; the call's word is flagged when it equals
 the call's mark (no per-call fill). Per call that leaves: one H2D copy, the
 status kernel, one D2H copy of two words, as before, and no allocation and
-no fill launch. `-D MOJOLEARN_IDN_QUERY_X_HELD_OFF` restores the per-call
-buffers everywhere, the B arm of owed row fix-svc-query-resident.
+no fill launch. (The per-call B arm, `MOJOLEARN_IDN_QUERY_X_HELD_OFF`, was
+removed 2026-11-23 as plumbing: same bytes, same kernels.)
 
 MEMORY. One held query per live model, on the model's own context, freed
 with the model (lease close, handle release) or replaced when a call needs
@@ -39,21 +39,17 @@ put that finds the slot already filled drops its buffers.
 NUMERICS. None: the same bytes reach the same kernels; the status words are
 predicates on bits.
 """
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.ctx_key import ctx_cache_key
 from core.device_zero import enqueue_fill
 
-# The held query (default on) or the per-call buffers (B arm, owed row
-# fix-svc-query-resident in bench/results/paper_compare/owed-pre0867.json):
-# decides whether a resident kernel model's predict allocates its query,
-# status pair and pinned pair per call and fills the status per call.
 # TOMBSTONE: MOJOLEARN_IDN_QUERY_X_HELD_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at a75f345253.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7d3bf6d8e8.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
-comptime IDN_QUERY_X_HELD = not is_defined["MOJOLEARN_IDN_QUERY_X_HELD_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_QUERY_X_HELD_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 # The last mark before the held status pair is filled again and the marks
 # restart at 1 (one fill every 2^31 - 1 calls).

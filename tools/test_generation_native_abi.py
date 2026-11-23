@@ -64,9 +64,9 @@ def test_session_reserved_before_gil_release_and_released_on_both_outcomes():
 def test_gpu_layer_session_uses_native_vectors():
     public = source("bindings/causal_lm_public_door.mojo")
     assert 'getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")' not in public
-    # the branch tests the TRANSFORMER_LEGACY_SETUP build constant since 03bcaedce0
+    # the TRANSFORMER_LEGACY_SETUP build constant (03bcaedce0) was deleted 2026-11-23 (lane/ab-prep-transformer)
     # dw-neural-models (2026-11-21): the arm tests the typed route's word and fills a typed request
-    branch = public.split('elif device15 or (not TRANSFORMER_LEGACY_SETUP and route.block_session)')[1].split("        else:\n", 1)[0]
+    branch = public.split('elif device15 or route.block_session:')[1].split("        else:\n", 1)[0]
     assert "request.handle = transformer_block_session_handle(session)" in branch
     assert "py_ints(" not in branch
     assert "py_call(" not in branch

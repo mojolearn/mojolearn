@@ -267,9 +267,8 @@ class Arms(unittest.TestCase):
                 self.assertEqual(c.count("--owed-arm"), 1)
                 self.assertNotIn("--owed-arm=b-two", c[:-2])
 
-    def test_the_dbscan_arm_is_owed(self):
-        # the edge-free route was promoted on 2026-11-20 (lane fx-verdicts5): the owed arm is its old path
-        self.assertEqual(RC.resolve_owed("", "dbscan-brute-edge-free-off", "")[1], "MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF")
+    # TOMBSTONE: MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF (decided) deleted 2026-11-23 by lane/ab-prep-classical; the
+    # test that its owed arm resolves went with it (code recoverable at 4d76a9e16e).
 
 
 if __name__ == "__main__":

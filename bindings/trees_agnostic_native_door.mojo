@@ -21,7 +21,6 @@ from bindings.prep_native_estimator_door import (
     prep_estimator_plan,
 )
 from bindings.member_held_door import MemberHeld, member_held, member_held_release
-from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
     member_call, member_call_of, member_outputs_of,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
@@ -376,8 +375,7 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
     chunk is a mix of cells of X and of the background, so both are scanned
     once per values call (against the door's test of every synthesized
     chunk); not finite = `em` stays closed and the door refuses."""
-    comptime if not MEMBER_SET_NATIVE:
-        return
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         var plan = prep_estimator_plan(s.model, context)
         if plan is None or py_get(plan, "member") is None:

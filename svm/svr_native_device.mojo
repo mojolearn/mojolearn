@@ -21,10 +21,7 @@ struct SvrDeviceKernels(SvrNativeKernels):
     def fit(r: SvrFitRequest) raises -> Int:
         var fold = QueryFold(r.base_id, r.base_rows, r.index_id)
         var source = 0 if fold.active() else r.x
-        if r.candidate:
-            # The existing candidate's short ABI admits its host X pointer
-            # before output pointers; the default device-X entry does not.
-            source = Int(f32_ptr(r.x))
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
         var yp = f32_ptr(r.target)
         var dp = f32_ptr(r.dual)
         var sip = i32_ptr(r.support)
@@ -41,8 +38,6 @@ struct SvrDeviceKernels(SvrNativeKernels):
             r.nochange_steps, bounds, r.degree, r.coef0, r.scale_gamma)
         _ = target
         _ = bounds
-        if r.candidate and fitted.finite_word != 0:
-            raise Error("Input X contains NaN or infinity (SVR).")
         copy_f32(fitted.dual_coefs.unsafe_ptr(), dp, fitted.n_support)
         unsafe_memcpy(dest=sip, src=fitted.support_idx.unsafe_ptr(), count=fitted.n_support)
         copy_f32(fitted.support_matrix.unsafe_ptr(), smp, fitted.n_support * r.features)

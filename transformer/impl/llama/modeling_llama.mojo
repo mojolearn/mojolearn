@@ -373,11 +373,7 @@ from transformer.impl.llama.fused_attention import (
     ATTN_SHIPPED_BWD_ESTASH,
     AttnFwdScan,
     FUSED_RAN,
-    IDN_DECODE_RESIDENT_IO,
-    IDN_TRAIN_ONE_WAIT,
-    LlamaDeferredChecks,
     attention_fwd_scan_clear,
-    deferred_checks_at,
     attention_fwd_scan_take,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
@@ -1874,12 +1870,10 @@ struct LlamaDeviceStages(Movable):
     to `fused_backward_launch_estash_ran` (which runs the DEVIATION 2650
     backward only when it equals this call's cell count) was deleted
     2026-10-19; the checks and attention benches still call that launcher."""
-    var defer_addr: Int
-    """IDN_DECODE_RESIDENT_IO / IDN_TRAIN_ONE_WAIT (lane decode-resident,
-    2026-10-28): the address of the owner's `LlamaDeferredChecks` while a
-    deferred step runs on these stages, 0 otherwise (always 0 on a build
-    without either define). Set and cleared by the owner around the call;
-    `reset` clears it."""
+    # defer_addr: TOMBSTONE: MOJOLEARN_IDN_DECODE_RESIDENT_IO (removed: unreachable, no board row reaches it; no owner arms the deferred window) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_TRAIN_ONE_WAIT (NOISE, EXP:2261; refused since 2026-11-09) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TRAIN_ONE_WAIT.patch; record in docs/TOMBSTONES.md.
     var attn_fwd_scan: AttnFwdScan
     """IDN_ATTN_BWD_SCAN_REUSE (lane/nr-attn): the LAST call's fused forward
     regime-scan maxima of `q_rope`, `k_cache` and `v_cache`, keyed by their
@@ -1993,7 +1987,6 @@ struct LlamaDeviceStages(Movable):
         self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
-        self.defer_addr = 0
         self.attn_fwd_scan = AttnFwdScan()
         self.refuse_batch = Optional[DeviceNonfiniteBatch]()
 
@@ -2076,7 +2069,6 @@ struct LlamaDeviceStages(Movable):
         self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
-        self.defer_addr = 0
         self.attn_fwd_scan = AttnFwdScan()
         step_count_sync()
         ctx.synchronize()
@@ -2093,7 +2085,6 @@ struct LlamaDeviceStages(Movable):
         self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
-        self.defer_addr = 0
         self.attn_fwd_scan = AttnFwdScan()
 
 
@@ -4323,50 +4314,11 @@ def _kv_rows_scan_enqueue(
     batch.queued[slot] = True
 
 
-def _llama_refuse_bad_call_deferred(
-    ctx: DeviceContext,
-    mut w: LlamaDeviceWeights,
-    mut rope: LlamaRopeTable,
-    mut x: DeviceBuffer[DType.float32],
-    mut kv: LlamaKVCache,
-    b: Int,
-    l: Int,
-    defer_addr: Int,
-) raises -> Bool:
-    """IDN_DECODE_RESIDENT_IO / IDN_TRAIN_ONE_WAIT (lane decode-resident,
-    2026-10-28): `llama_refuse_bad_call`'s scans, the same buffers over the
-    same lengths in the same order, enqueued into the owner's deferred
-    window instead of read here. Returns False, enqueuing nothing, when the
-    window has no room or a length is one the batch would refuse by its own
-    message; the caller then refuses synchronously, as today. A hit is
-    never reported from here: the owner replays the call with the window
-    disarmed, and `llama_refuse_bad_call` raises its own message."""
-    var dims = w.dims.copy()
-    var dm = dims.d_model
-    var hd = dims.head_dim
-    var has_kv = kv.s > 0
-    var kv_used = kv.s
-    if kv.window > 0:
-        kv_used = kv.cap
-    var nx = b * l * dm
-    var nkv = b * dims.n_kv * kv_used * hd
-    var count = 2
-    if has_kv:
-        count = 4
-    var d = deferred_checks_at(defer_addr)
-    if not d[].can_defer_nonfinite(count):
-        return False
-    var limit = Int(NONFINITE_NONE)
-    if nx > len(x) or nx > limit or rope.half > len(rope.inv_freq) or rope.half > limit:
-        return False
-    if has_kv and (nkv > len(kv.k) or nkv > len(kv.v) or nkv > limit):
-        return False
-    d[].add_nonfinite(ctx, x, nx)
-    d[].add_nonfinite(ctx, rope.inv_freq, rope.half)
-    if has_kv:
-        d[].add_nonfinite(ctx, kv.k, nkv)
-        d[].add_nonfinite(ctx, kv.v, nkv)
-    return True
+# _llama_refuse_bad_call_deferred (the refusal scans enqueued into the deferred window):
+# TOMBSTONE: MOJOLEARN_IDN_DECODE_RESIDENT_IO (removed: unreachable, no board row reaches it; no owner arms the deferred window) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_ONE_WAIT (NOISE, EXP:2261; refused since 2026-11-09) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TRAIN_ONE_WAIT.patch; record in docs/TOMBSTONES.md.
 
 
 def llama_refuse_bad_call(
@@ -4763,9 +4715,10 @@ def eager_attention_forward(
     # (Sweep 2026-11-15: the ATTN_STICKY latch arm (False on every build) removed.)
     if choice != ATTN_PATH_EAGER:
         attention_fwd_scan_clear()
-        # IDN_DECODE_RESIDENT_IO: the owner's deferred window (0: none, the
-        # launchers read their checks on the host as today).
-        var defer_addr = stages.defer_addr
+        # TOMBSTONE: MOJOLEARN_IDN_DECODE_RESIDENT_IO (removed: unreachable, no board row reaches it; no owner arms the deferred window) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_IDN_TRAIN_ONE_WAIT (NOISE, EXP:2261; refused since 2026-11-09) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TRAIN_ONE_WAIT.patch; record in docs/TOMBSTONES.md.
         var kept_estash = False
         comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm,
@@ -4788,7 +4741,7 @@ def eager_attention_forward(
                     stages.k_cache, stages.v_cache, stages.aexp, b, l,
                     dims.n_heads, dims.n_kv, dims.head_dim, s, pos0, key_lo,
                     window, llama_attention_scale(dims.head_dim), arm, ran,
-                    stages.attn_estash_cells, deferred=defer_addr,
+                    stages.attn_estash_cells,
                 )
                 kept_estash = True
         if not kept_estash:
@@ -4796,7 +4749,7 @@ def eager_attention_forward(
                 ctx, stages.ctxv, stages.amax, stages.denom, stages.q_rope,
                 stages.k_cache, stages.v_cache, b, l, dims.n_heads, dims.n_kv,
                 dims.head_dim, s, pos0, key_lo, window,
-                llama_attention_scale(dims.head_dim), deferred=defer_addr,
+                llama_attention_scale(dims.head_dim),
             )
         # IDN_ATTN_BWD_SCAN_REUSE: keep this call's forward scan (empty
         # unless it was taken over exactly these three buffers).
@@ -6580,35 +6533,29 @@ def llama_decoder_layer_forward_planted(
     # and cost nothing to scan. What is left is what a call can actually
     # differ in. `llama_refuse_bad_inputs` is unchanged and still walks all
     # thirteen names for anyone who wants them in one call.
-    # IDN_DECODE_RESIDENT_IO / IDN_TRAIN_ONE_WAIT: inside the owner's
-    # deferred window the same scans are enqueued and read after the
-    # owner's one wait; a hit there replays the call through this line.
-    var refusal_deferred = False
-    comptime if IDN_DECODE_RESIDENT_IO or IDN_TRAIN_ONE_WAIT:
-        if stages.defer_addr != 0:
-            refusal_deferred = _llama_refuse_bad_call_deferred(
-                ctx, w, rope, x, kv, b, l, stages.defer_addr
-            )
-    if not refusal_deferred:
-        # lane/fx-transformer-forward (2026-11-19): a call that starts at an
-        # empty cache scans the hidden states and inv_freq only, on scratch
-        # these stages keep (`_llama_refuse_prefill_held`); before, this was
-        # `llama_refuse_bad_call` here for every call, which allocated and
-        # freed three scan buffers per layer per forward. Call site: once per
-        # layer per forward, no loop inside. A call with carried keys and
-        # values (lengths that grow with the cache) and a FAST build (separate
-        # scans) take `llama_refuse_bad_call` as before.
-        var refused_held = False
-        comptime if IDN_LLAMA_REFUSE_BATCH:
-            if kv.s == 0:
-                _llama_refuse_prefill_held(ctx, stages.refuse_batch, rope, x, b * l * dm)
-                comptime if LLAMA_FAST_REFUSE_WATERMARK:
-                    # as `llama_refuse_bad_call` after its whole scans
-                    if kv.wm_on:
-                        kv.wm_upto = kv.s
-                refused_held = True
-        if not refused_held:
-            llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
+    # TOMBSTONE: MOJOLEARN_IDN_DECODE_RESIDENT_IO (removed: unreachable, no board row reaches it; no owner arms the deferred window) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_TRAIN_ONE_WAIT (NOISE, EXP:2261; refused since 2026-11-09) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TRAIN_ONE_WAIT.patch; record in docs/TOMBSTONES.md.
+    # lane/fx-transformer-forward (2026-11-19): a call that starts at an
+    # empty cache scans the hidden states and inv_freq only, on scratch
+    # these stages keep (`_llama_refuse_prefill_held`); before, this was
+    # `llama_refuse_bad_call` here for every call, which allocated and
+    # freed three scan buffers per layer per forward. Call site: once per
+    # layer per forward, no loop inside. A call with carried keys and
+    # values (lengths that grow with the cache) and a FAST build (separate
+    # scans) take `llama_refuse_bad_call` as before.
+    var refused_held = False
+    comptime if IDN_LLAMA_REFUSE_BATCH:
+        if kv.s == 0:
+            _llama_refuse_prefill_held(ctx, stages.refuse_batch, rope, x, b * l * dm)
+            comptime if LLAMA_FAST_REFUSE_WATERMARK:
+                # as `llama_refuse_bad_call` after its whole scans
+                if kv.wm_on:
+                    kv.wm_upto = kv.s
+            refused_held = True
+    if not refused_held:
+        llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
     pc.tick(ctx, "fwd.refuse_call")
     # lane/lowbit-blocks: this call runs under `fixed15_v1` exactly when its
     # weights carry planes.

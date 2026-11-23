@@ -314,8 +314,8 @@ def _m1_session_load_run(mut s: Mamba1DecodeSession, pw: Int, ph: Int) raises:
 # the public step's workspace (storage kept across steps, every weight
 # re-uploaded per call) is the cached program. The session below returns y
 # and h_last straight into the caller's arrays behind one wait (the ON arm of
-# IDN_DECODE_RESIDENT_IO for Mamba-2 is the only arm now; the define stays for
-# the transformer session).
+# IDN_DECODE_RESIDENT_IO for Mamba-2 is the only arm now; the define itself
+# was removed 2026-11-23, lane/ab-prep-transformer).
 
 
 struct Mamba2DecodeSession(Movable, Writable):

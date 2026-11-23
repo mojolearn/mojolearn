@@ -53,7 +53,7 @@ from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_int_words, block_step_words, block_step_reports_to_host,
     block_buffer_view, block_part_floats, block_offsets, block_guard, mamba_step_train_run, mamba_step_backward,
-    mamba_step_run_host, MAMBA_CALL_PROGRAM, IDN_MAMBA12_FORWARD_COPIES_OLD, _M12_HELD_ARENA,
+    mamba_step_run_host, _M12_HOLD,
 )
 from core.shared_slot import SharedSlot
 
@@ -117,7 +117,7 @@ struct MambaBlockProgram(Movable):
     #: the weight epoch at the last weight load (lane x45c: the version key)
     var epoch: Int
     #: lane fix-mamba-forward-doors (autograd/block_step_ops.mojo
-    #: IDN_MAMBA12_FORWARD_DOOR_OLD): the device words tensor is known to hold
+    #: `_M12_HOLD`): the device words tensor is known to hold
     #: zeros (written by the constructor or `zero_state`, and no run or load
     #: wrote it since), so `zero_state` needs no upload of the zero words
     var q_zero: Bool
@@ -137,12 +137,13 @@ struct MambaBlockProgram(Movable):
         var epoch = weight_epoch()
         var ex = DeviceExec(neural_ctx[_NEURAL_CTX]())
         var s = OpsSession[DeviceExec](ex^, False)
-        comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
-            # lane fix-mamba12-forward-exec: this program's step runs are
-            # never read by a backward (`mamba_program_backward` records its
-            # own run), so the Mamba-1/2 L > 1 runs keep their stages
-            # (autograd/block_step_ops.mojo IDN_MAMBA12_FORWARD_COPIES_OLD)
-            s.steps.keep_stages = True
+        # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+        # lane fix-mamba12-forward-exec: this program's step runs are
+        # never read by a backward (`mamba_program_backward` records its
+        # own run), so the Mamba-1/2 L > 1 runs keep their stages
+        # (autograd/block_step_ops.mojo `_M12_HOLD`)
+        s.steps.keep_stages = True
         var ints: List[Int] = [b, dm]
         var wsizes = block_weight_sizes(code, ints)
         var w = s.upload_block(code, ints, BLOCK_PART_WEIGHTS, _pieces(weights, wsizes, "mamba weights", False),
@@ -233,7 +234,7 @@ struct MambaBlockProgram(Movable):
         view.enqueue_fill(Float32(0))
         var k = block_int_words(self.code)
         if k > 0:
-            comptime if _M12_HELD_ARENA:
+            comptime if _M12_HOLD:
                 # lane fix-mamba-forward-doors: the device words already hold
                 # zeros (`q_zero`): only the resident entry's host integers
                 # take them, no upload (the per-call fresh forward's word
@@ -290,8 +291,8 @@ struct MambaBlockProgram(Movable):
 
     def _x_in(mut self, px: Int, n: Int) raises -> Int:
         """`_x_for`, with the caller's x copied straight from its array into
-        the kept x tensor once that tensor exists (MAMBA_CALL_PROGRAM's A
-        arm, autograd/block_step_ops.mojo: one host-to-device copy, as
+        the kept x tensor once that tensor exists (autograd/block_step_ops.mojo
+        `_MAMBA_X_IN_PLACE`: one host-to-device copy, as
         0.8.55's `_mamba1_run` / `_mamba2_run` `mamba_copy_in` did; no host
         staging pass). Queued; `finish` waits."""
         if self.x != 0 and self.x_n == n:
@@ -317,33 +318,26 @@ struct MambaBlockProgram(Movable):
         var n = self.b * l * self.dm
         var ints = self.ints.copy()
         var fs = self.fs.copy()
-        comptime if MAMBA_CALL_PROGRAM:
-            # B arm (lane x5): the session op into a y tensor, then y down.
-            var x = self._x_for(px, n)
-            var hs = self._hs(x)
-            var y = self.s.op(self.code, hs, ints, fs)
-            var yt = self.s.tensor(y)
-            var yp = self.s.tape.value_of(self.s.ex, yt)
-            self.s.ex.download_async(FP(unsafe_from_address=py), yp, n)
-        else:
-            # A arm (lane restore-neural-call-paths, 0.8.55's per-call
-            # shape): x up once into the kept x tensor, the step op's body
-            # reading it in place, the block output straight down into the
-            # caller's array; `finish` is the one wait.
-            var x = self._x_in(px, n)
-            var bufs: List[FP] = [self.s.buffer(x), self.s.buffer(self.w), self.s.buffer(self.st)]
-            var counts: List[Int] = [n, block_part_floats(self.code, self.ints, BLOCK_PART_WEIGHTS),
-                                     block_part_floats(self.code, self.ints, BLOCK_PART_STATE)]
-            if self.q != 0:
-                bufs.append(self.s.buffer(self.q))
-                counts.append(block_int_words(self.code))
-            mamba_step_run_host(self.s.ex, self.s.steps, self.code, bufs, counts, ints, fs, py)
+        # TOMBSTONE: MOJOLEARN_MAMBA_CALL_PROGRAM (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA_CALL_PROGRAM.ab-prep.patch; record in docs/TOMBSTONES.md.
+        # Lane restore-neural-call-paths, 0.8.55's per-call shape: x up once
+        # into the kept x tensor, the step op's body reading it in place, the
+        # block output straight down into the caller's array; `finish` is the
+        # one wait.
+        var x = self._x_in(px, n)
+        var bufs: List[FP] = [self.s.buffer(x), self.s.buffer(self.w), self.s.buffer(self.st)]
+        var counts: List[Int] = [n, block_part_floats(self.code, self.ints, BLOCK_PART_WEIGHTS),
+                                 block_part_floats(self.code, self.ints, BLOCK_PART_STATE)]
+        if self.q != 0:
+            bufs.append(self.s.buffer(self.q))
+            counts.append(block_int_words(self.code))
+        mamba_step_run_host(self.s.ex, self.s.steps, self.code, bufs, counts, ints, fs, py)
         # lane fix-mamba-forward-doors: every run writes the device words
         # except a held Mamba-2 run of a fresh call (`skip_words`,
         # autograd/block_step_ops.mojo `_run_m2`), which leaves them as
         # `zero_state` wrote them
         var words_kept = False
-        comptime if _M12_HELD_ARENA:
+        comptime if _M12_HOLD:
             words_kept = (self.code == OPS_M2_STEP and l > 1 and self.s.steps.keep_stages
                           and self.s.steps.skip_words)
         if not words_kept:
@@ -599,7 +593,7 @@ def mamba_block_call(
         # lane fix-mamba-forward-doors: a fresh call's words are rewritten by
         # the next call's zero_state / load_state before any reader, so its
         # held Mamba-2 run writes none (BlockStepScratch.skip_words)
-        comptime if _M12_HELD_ARENA:
+        comptime if _M12_HOLD:
             p[].s.steps.skip_words = fresh
         try:
             p[].run(px, py, l, List[Int]())
@@ -798,22 +792,20 @@ def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: I
         words.append(q0)
         words.append(pend)
     var discard = fresh
-    comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
-        # lane fix-mamba12-forward-exec: every state address 0 is the
-        # stateless forward (the public doors' `forward(x)` with no state,
-        # bindings/causal_lm_public_door.mojo): a zero state on the device
-        # (one fill) and nothing read back, where the door used to allocate a
-        # host zero state per call that this call uploaded and downloaded.
-        # The carried integers must be zero then (a fresh sequence).
-        # Hot-path audit 2026-11-13 (FIX mamba_block_program.mojo:769): the
-        # address-pattern meaning is limited to its one user, the Mamba-1/2
-        # forward ops (`stateless_forward`, mamba/native_state_dispatch.mojo);
-        # decode steps and Mamba-3 keep the old rule.
-        if stateless_forward and (kind == 1 or kind == 2) and not discard and _all_zero(state):
-            for i in range(len(words)):  # small-loop(at most two carried integers): refusal, no data
-                if words[i] != 0:
-                    raise Error("mamba" + String(kind) + ": a stateless call (every state address 0) starts a"
-                                + " fresh sequence; its carried integers must be 0")
-            discard = True
+    # lane fix-mamba12-forward-exec: every state address 0 is the
+    # stateless forward (the public doors' `forward(x)` with no state,
+    # bindings/causal_lm_public_door.mojo): a zero state on the device
+    # (one fill) and nothing read back.
+    # The carried integers must be zero then (a fresh sequence).
+    # Hot-path audit 2026-11-13 (FIX mamba_block_program.mojo:769): the
+    # address-pattern meaning is limited to its one user, the Mamba-1/2
+    # forward ops (`stateless_forward`, mamba/native_state_dispatch.mojo);
+    # decode steps and Mamba-3 keep the old rule.
+    if stateless_forward and (kind == 1 or kind == 2) and not discard and _all_zero(state):
+        for i in range(len(words)):  # small-loop(at most two carried integers): refusal, no data
+            if words[i] != 0:
+                raise Error("mamba" + String(kind) + ": a stateless call (every state address 0) starts a"
+                            + " fresh sequence; its carried integers must be 0")
+        discard = True
     var out = mamba_block_call(code, weights, state, words, a[0], y, reports, b, l, dm, fs, discard)
     return out[0] if len(out) > 0 else 0

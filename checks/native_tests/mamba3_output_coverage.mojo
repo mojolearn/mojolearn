@@ -6,8 +6,8 @@ fix-mamba3-unfilled-rest, 2026-11-13).
 The public doors allocate the Mamba-3 outputs (y and the four reports
 h_last, k_last, v_last, theta_last) UNFILLED (`generation_array_unfilled`)
 on the forward, the carried-state forward and step, the resident session's
-step and decode and the tape prefill; `-D MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL`
-keeps them zero-filled. That is only sound when the native call writes every
+step and decode and the tape prefill (the zero-filled build flag
+MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL was deleted 2026-11-23). That is only sound when the native call writes every
 output byte. The suites run each native route twice on the same seeded
 corpus inputs (mamba/checks/mamba3_fixture.mojo, case 1: B 2, L 4, d_model
 32) and the same zero start state: once into outputs prefilled with 0xFF
@@ -145,7 +145,7 @@ def m3_cov_same_bits(a: List[List[Float32]], b: List[List[Float32]], what: Strin
 # mamba3_output_coverage_cases.mojo); y, the four reports, the carried
 # integers and the written-back state must agree bit for bit. This is the
 # native evidence that `generation_array_unfilled` is sound for these
-# outputs (`-D MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL` is the zero-filled arm).
+# outputs.
 #
 # The two cases share no state; they run one after another because each is
 # a few milliseconds of one-thread host arithmetic on a 2-row fixture (the
@@ -235,8 +235,7 @@ def _run_cpu() raises:
 # fix-mamba3-unfilled-rest, 2026-11-13).
 #
 # The device bodies behind every Mamba-3 output the public doors now allocate
-# unfilled (`generation_array_unfilled`; `-D MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL`
-# is the zero-filled arm):
+# unfilled (`generation_array_unfilled`):
 #
 #   0  `mamba_block_call` carried-state forward (L = 4 from a zero state) and
 #      one decode step from the state it left: state operations 4 and 5 of

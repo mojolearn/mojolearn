@@ -37,7 +37,7 @@ from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_ex
 from bindings.neural_prefill_native_door import _prefill_mamba3_reports, _m3_output_array
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_handle, neural_descriptor_reserved_execute,
-    neural_descriptor_execute, neural_descriptor_reuse, NEURAL_NATIVE_DISPATCH,
+    neural_descriptor_execute, neural_descriptor_reuse,
 )
 from bindings.samba_inference_native_door import _m3_state_call
 from training.samba_inference_run import _m3_shapes, _m3_names
@@ -505,7 +505,7 @@ def mamba3_setstate(mut mods: NativeModules, block: PythonObject, state: PythonO
     py_setitem(fields, "_prefill_session", PythonObject(None))
     py_setitem(fields, "_owned_generation", PythonObject(None))
     py_setitem(fields, "_native_mamba_block_provider_cache", PythonObject(None))
-    if String(fields["_native_route"]) == "gpu" and word_runs_identical(String(fields["numeric_mode"]), MODE_FAMILY_NEURAL) and NEURAL_NATIVE_DISPATCH:  # lane fx-fast-mask
+    if String(fields["_native_route"]) == "gpu" and word_runs_identical(String(fields["numeric_mode"]), MODE_FAMILY_NEURAL):  # lane fx-fast-mask
         # A native registry handle of the block's training image (the former
         # Python entry mamba3_prefill_session_create and its binding field).
         var route = Mamba3StateRoute(1, 0, False)
@@ -660,11 +660,11 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
     var binding = _model_bindings(mods, fields["_native_route"], kind_name, context, py_get(fields, "numeric_mode"))[kind_name]
     var device_arm = _native_has_entry(mods, binding, kind_name + "_session_create")
     # The host arm steps through the binding's `mamba_state_api_v1` descriptor
-    # when NEURAL_NATIVE_DISPATCH is on (_session_step_call), else through the
-    # per-call `<kind>_decode_step` entry. 5ef9975258 deleted the CPU
+    # (_session_step_call; native dispatch is the one form since 2026-11-23),
+    # else through the per-call `<kind>_decode_step` entry. 5ef9975258 deleted the CPU
     # binding's Python `mamba3_decode_step` (the descriptor serves it), so
     # requiring that entry refused every host Mamba-3 session.
-    var host_arm = (NEURAL_NATIVE_DISPATCH and _native_has_entry(mods, binding, "mamba_state_api_v1")) or _native_has_entry(mods, binding, kind_name + "_decode_step")
+    var host_arm = _native_has_entry(mods, binding, "mamba_state_api_v1") or _native_has_entry(mods, binding, kind_name + "_decode_step")
     if not device_arm and not host_arm:
         raise Error("NotImplementedError: " + what + ": the loaded binding exports neither a resident decode session nor the per-call " + kind_name + "_decode_step entry")
     if state is None:
@@ -718,7 +718,7 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
             _ = py_call(params.append, 1 if handle.plan.pending else 0)
         handle.device = _native_function(mods, binding, kind_name + "_session_create")()
         mods.released()
-        if NEURAL_NATIVE_DISPATCH and word_runs_identical(String(fields["numeric_mode"]), MODE_FAMILY_NEURAL):  # lane fx-fast-mask
+        if word_runs_identical(String(fields["numeric_mode"]), MODE_FAMILY_NEURAL):  # lane fx-fast-mask
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
                 _native_function(mods, binding, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
             mods.released()
@@ -744,10 +744,9 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
             _ = py_call(_native_function(mods, binding, kind_name + "_session_open"), handle.device, addresses, params)
             mods.released()
     else:
-        if NEURAL_NATIVE_DISPATCH:
-            handle.provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
-                _native_function(mods, binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME))
-            mods.released()
+        handle.provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
+            _native_function(mods, binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME))
+        mods.released()
         # The host arm owns typed copies, the device arm's upload on the host.
         for i in range(len(weights)):  # driver-loop: over block weight slots
             handle.plan.weights.append(mamba_host_copy(generation_weight_address(weights[i], keep), Int(py=weights[i].size)))
@@ -837,8 +836,8 @@ def _session_output(kind: Int, dims: List[Int]) raises -> PythonObject:
     reports are written whole by every arm (device: `MambaBlockProgram.step`
     / `.decode`, which put every token's slab and download B*N*d_model, then
     the reports at their full counts; host: the per-call state step per
-    token, every (row, token) copied into y), so they are unfilled unless
-    MAMBA3_FORWARD_ZERO_FILL (bindings/neural_prefill_native_door.mojo;
+    token, every (row, token) copied into y), so they are unfilled
+    (bindings/neural_prefill_native_door.mojo `_m3_output_array`;
     lane fix-mamba3-unfilled-rest). Mamba-1/2 keep zero-filled arrays: their
     writes were not audited by that lane."""
     if kind == 3:

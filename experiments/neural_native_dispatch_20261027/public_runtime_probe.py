@@ -30,8 +30,8 @@ def qualify():
             _write_checkpoint(folder, cfg, tensors)
             # Native dispatch is the build default (lane flag-native-dispatch-gate,
             # 2026-11-15: the MOJOLEARN_NEURAL_NATIVE_DISPATCH environment arm is
-            # gone; its by-name CPython arm is the -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF
-            # build). Two independently loaded default models: every output,
+            # gone; its by-name CPython arm, -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF,
+            # was deleted 2026-11-23). Two independently loaded default models: every output,
             # state counter and generated token must agree bit for bit, and
             # both must hold the native tables.
             models = [CausalLM.load(folder, device='gpu', numeric_profile='fp32_v1') for _ in range(2)]
@@ -82,8 +82,8 @@ def qualify():
             for model in models:
                 model._native_entries['embedding_forward'] = poison
             # The default build never reaches the by-name entry: neither model
-            # may call the poisoned legacy primitive (the B arm's positive
-            # control needs its own -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF build).
+            # may call the poisoned legacy primitive (the B arm that was its
+            # positive control, -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF, is deleted).
             for model in models:
                 model.forward(ids, model.allocate_state(1, 12))
             assert not calls, 'default build called the by-name legacy primitive entry'

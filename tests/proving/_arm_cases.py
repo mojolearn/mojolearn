@@ -3,9 +3,8 @@
 
 `python _arm_cases.py OUTDIR CASE [CASE ...]` runs each named case against the Mojolearn installed in THIS
 interpreter and writes OUTDIR/<case>.npz (plain arrays, no pickle; an exception is stored as `__error__`, its type
-and message). test_proving_model_selection.py runs it with the default wheel and with every `_OFF` arm wheel named
-by MOJOLEARN_PROVING_ARM_<DEFINE> (the path of a Python interpreter whose environment has that arm installed), and
-compares the files bit for bit. MOJOLEARN_PROVING_DEVICE selects the route: "cpu" (device="cpu", default) or "gpu"
+and message). test_proving_model_selection.py runs it with the default wheel (its two `_OFF` build arms were
+removed 2026-11-23 as plumbing; restore patches in ~/mojolearn-evidence/experiments-removed/). MOJOLEARN_PROVING_DEVICE selects the route: "cpu" (device="cpu", default) or "gpu"
 (the default device). Small data, seconds per case. Test tooling only.
 """
 import inspect

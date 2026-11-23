@@ -18,7 +18,6 @@ from core.weight_epoch import (
     registry_epoch,
     registry_epoch_bump,
     weight_epoch_bump,
-    SAMBA_WEIGHT_EPOCH_GLOBAL,
 )
 
 #: Fake registry addresses (never dereferenced: the key compares words).
@@ -131,18 +130,12 @@ def _writer_keeps_its_key() raises:
 
 def test_fixtures_in_order() raises:
     """One test, the six fixtures in their order: they share the one process-wide epoch table (docstring)."""
-    comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-        # The B arm keys every registry by the process epoch: the per-model
-        # expectations below do not hold by design.
-        print("registry_epoch: built with MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL; per-registry checks skipped")
-        return
-    else:
-        _two_models_alternate()
-        _process_epoch_leaves_registries()
-        _keys_are_per_address()
-        _full_table_reloads_every_key()
-        _read_is_one_word()
-        _writer_keeps_its_key()
+    _two_models_alternate()
+    _process_epoch_leaves_registries()
+    _keys_are_per_address()
+    _full_table_reloads_every_key()
+    _read_is_one_word()
+    _writer_keeps_its_key()
 
 
 def main() raises:

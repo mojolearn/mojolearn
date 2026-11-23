@@ -81,7 +81,7 @@ struct SvrFitUnpacked(Movable):
 
 
 def svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject,
-                   drivers: SvcDrivers, candidate: Bool) raises -> SvrFitUnpacked:
+                   drivers: SvcDrivers) raises -> SvrFitUnpacked:
     """`SVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
     var binding = args[0]
     var fields = py_fields(model)
@@ -134,13 +134,14 @@ def svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObjec
     var plan = SvrFitPlan(n_rows, n_cols)
     var target_address = _addr(targets)
     var connection = svr_connection(binding)
-    var device_form = device_x and not candidate
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    var device_form = device_x
     var request = SvrFitRequest(x_meta.source.addr, target_address,
         Int(plan.dual.unsafe_ptr()), Int(plan.support.unsafe_ptr()), Int(plan.vectors.unsafe_ptr()),
         Int(plan.info.unsafe_ptr()), bounds_address, n_rows, n_cols, hp.kernel,
         hp.max_iter, hp.nochange_steps, hp.degree,
         fold.base_id, fold.base_rows, fold.index_id, device_form,
-        scale_gamma, candidate, gamma, hp.c, hp.epsilon, hp.tol, hp.coef0)
+        scale_gamma, gamma, hp.c, hp.epsilon, hp.tol, hp.coef0)
     var cells = x_meta.count
     return SvrFitUnpacked(fields, x_pin^, x_meta^, targets, owners, weights.sample_weights, not device_x,
                           hp.gamma_kind, cells, connection^, plan^, request, fold,
@@ -190,17 +191,15 @@ struct SvrQueryUnpacked(Movable):
 
 
 def svr_query_unpack(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
-                     context: PythonObject, candidate: Bool) raises -> SvrQueryUnpacked:
+                     context: PythonObject) raises -> SvrQueryUnpacked:
     """`SVR.predict`: the fitted test, X, the fitted state and the kernel
     parameters. The request's `dst` is 0: the door writes the address of the
     public result PACK allocates."""
     var nk = svm_keys()
     if not svc_has(fields, nk[].k_dual_coef_):
         raise Error("mojolearn SVR: call fit() first")
-    # The B arm (the descriptor candidate) has no resident route.
-    var resident = False
-    if not candidate:
-        resident = neural_descriptor_entry(binding, "svr_predict_resident", False) is not None
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    var resident = neural_descriptor_entry(binding, "svr_predict_resident", False) is not None
     var n_support = svc_int(svc_field(fields, nk[].k_n_support_, "n_support_"))
     var k = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel"))
     var precomputed = k == "precomputed"
