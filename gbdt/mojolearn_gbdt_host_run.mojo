@@ -47,6 +47,7 @@ from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_EXACT,
     GBDT_LEAF_GRADIENT,
     GBDT_LEAF_NEWTON,
+    GBDT_LEAF_SIMPLE,
     GBDT_OBJ_CROSSENTROPY,
     GBDT_OBJ_EXPECTILE,
     GBDT_OBJ_HUBER,
@@ -93,6 +94,8 @@ from gbdt.options.data_processing_options import nan_mode_from_name
 from gbdt.options.catboost_options import (
     check_tree_limits,
     querywise_pointwise_leaf_check,
+    simple_leaf_iterations_check,
+    simple_leaves_check,
 )
 from gbdt.options.child_hessian import (
     check_child_hessian_objective,
@@ -512,8 +515,10 @@ def _gbdt_fit_pointwise_arm(
         # `train`'s words (`use_exact_leaves`), both columns
         raise Error("Only MAPE, MAE and Quantile are supported for Exact leaves estimation on GPU")
     if leaf_method != -1 and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_EXACT:
-        # lane gbdt-cpu-rest-4 (2026-11-23): Simple and unknown codes never
-        # reach the walker, the device's words, both columns
+        # lane gbdt-cpu-rest-4 (2026-11-23): an unknown code never reaches
+        # the walker, the device's words, both columns (Simple is refused
+        # before this arm by `simple_leaves_check`, lane
+        # gbdt-cpu-rest-4-simple, 2026-11-23)
         raise Error(
             "WriteSecondDerivatives: only Newton and Gradient reach"
             " the walker; Exact replaces it"
@@ -905,6 +910,17 @@ def _gbdt_fit_ordered_arm(
     # words (`check_tree_limits`; Ordered is SymmetricTree), the depth range
     # below 1 is `fit_ordered`'s (`gbdt_ordered_host_fit`)
     check_tree_limits(border_count, max_depth, False)
+    # lane gbdt-cpu-rest-4-simple (2026-11-23): Simple's admission, the
+    # device's (`train`, right after `set_leaves_estimation_default`): one
+    # iteration, then refused under Ordered, whose every tree is estimated
+    # (the device reached "a walk reached no device walker" at the first
+    # tree; this arm refused by name in the walker's words). YetiRank is
+    # refused first on both columns, by its own words.
+    if loss != String("YetiRank"):
+        simple_leaf_iterations_check(
+            leaf_method, leaf_iterations if leaf_iterations >= 0 else 1
+        )
+        simple_leaves_check(leaf_method, False, True, False, use_pointwise)
 
     # ---- the loss, as `train` resolves it under Ordered ----
     var hloss: GbdtHostLoss
@@ -927,8 +943,9 @@ def _gbdt_fit_ordered_arm(
                 " on GPU (catboost_options.cpp:346-350)"
             )
         else:
-            # Simple and unknown codes never reach the walker, the device's
-            # words, both columns (lane gbdt-cpu-rest-4)
+            # an unknown code never reaches the walker, the device's words,
+            # both columns (lane gbdt-cpu-rest-4; Simple is refused above,
+            # lane gbdt-cpu-rest-4-simple)
             raise Error(
                 "WriteSecondDerivatives: only Newton and Gradient reach"
                 " the walker; Exact replaces it"
@@ -1369,6 +1386,19 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         or pw_objective == GBDT_OBJ_PAIR_LOGIT
         or pw_objective == GBDT_OBJ_YETI_RANK
     )
+    # lane gbdt-cpu-rest-4-simple (2026-11-23): Simple's admission, the
+    # device's (`train` calls the same two bodies right after
+    # `set_leaves_estimation_default`): one iteration, then the greedy
+    # SymmetricTree searcher's leaves on the one-output losses only. YetiRank
+    # is refused first on both columns ("changing the leaf_estimation_method
+    # parameter is prohibited", `_resolve_pointwise_loss`), so it skips here.
+    if loss != String("YetiRank"):
+        simple_leaf_iterations_check(
+            leaf_method, leaf_iterations if leaf_iterations >= 0 else 1
+        )
+        simple_leaves_check(
+            leaf_method, is_multi, False, grow_code != 0, use_pointwise
+        )
     if use_pointwise and not pw_grouped_loss:
         return _gbdt_fit_pointwise_arm(
             params, border_type, feature_fraction, min_split_gain,
@@ -1505,8 +1535,9 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # them under both policies; their checks are `train`'s below
     if grow_code != 0:
         # the non-symmetric estimator (`_estimate_and_apply` on every tree):
-        # Newton and Gradient walk, Exact is the quantile family's only and
-        # Simple never reaches the walker, both in the device's words
+        # Newton and Gradient walk, Exact is the quantile family's only;
+        # Simple was refused above (`simple_leaves_check`), so only an
+        # unknown code reaches the second refusal
         if leaf_method == GBDT_LEAF_EXACT and not is_pointwise:
             raise Error("Only MAPE, MAE and Quantile are supported for Exact leaves estimation on GPU")
         if leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
@@ -1533,12 +1564,15 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # lane gbdt-cpu-rest-4-sym (2026-11-23): Gradient leaves on the greedy
     # SymmetricTree Logloss and RMSE fits (`gbdt_host_boost`'s walker,
     # `_second_derivatives`); Exact there refuses on both columns in the
-    # exact estimator's words (`compute_exact_approx`); Simple and unknown
-    # codes never reach the walker, the device's words as above
+    # exact estimator's words (`compute_exact_approx`); an unknown code
+    # never reaches the walker, the device's words as above
+    # lane gbdt-cpu-rest-4-simple (2026-11-23): Simple trains here, the
+    # searcher's own leaves (`gbdt_host_boost`, `gbdt_losses_host_fit`; the
+    # multi-output losses were refused above), so it is no longer refused
     var sym_logloss_rmse = grow_code == 0 and not is_pointwise and not is_multi
     if sym_logloss_rmse and leaf_method == GBDT_LEAF_EXACT:
         raise Error("Only MAPE, MAE and Quantile are supported for Exact leaves estimation on GPU")
-    if grow_code == 0 and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
+    if grow_code == 0 and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT and leaf_method != GBDT_LEAF_SIMPLE:
         raise Error(
             "WriteSecondDerivatives: only Newton and Gradient reach"
             " the walker; Exact replaces it"
@@ -1902,6 +1936,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     if sym_logloss_rmse and leaf_method == GBDT_LEAF_GRADIENT:
         sym_leaf_method = GBDT_LEAF_GRADIENT
         iterations = leaf_iterations if leaf_iterations >= 0 else (1 if is_rmse else 40)
+    elif sym_logloss_rmse and leaf_method == GBDT_LEAF_SIMPLE:
+        # lane gbdt-cpu-rest-4-simple (2026-11-23): the searcher's own
+        # leaves, one iteration (`set_leaves_estimation_default`)
+        sym_leaf_method = GBDT_LEAF_SIMPLE
+        iterations = 1
     # the multi-output losses' walker, as `set_leaves_estimation_default`
     # resolves it (`get_estimation_method_defaults`: Newton 1 on all three,
     # Gradient 10 on MultiClass / MultiClassOneVsAll and 1 on MultiRMSE),

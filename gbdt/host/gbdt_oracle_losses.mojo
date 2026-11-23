@@ -146,6 +146,7 @@ from gbdt.host.gbdt_oracle import (
     _scan_histograms,
     _subtract_histograms,
     _partition_stats_level,
+    _rmse_leaf_value,
     GBDT_PARTITION_CHUNKS,
     GBDT_BOOT_BAYESIAN,
     GBDT_BOOT_BERNOULLI,
@@ -241,6 +242,9 @@ comptime GBDT_OBJ_YETI_RANK = 16
 comptime GBDT_LEAF_GRADIENT = 0
 comptime GBDT_LEAF_NEWTON = 1
 comptime GBDT_LEAF_EXACT = 2
+#: Simple: the greedy searcher's own leaves, no estimation (lane
+#: gbdt-cpu-rest-4-simple, 2026-11-23).
+comptime GBDT_LEAF_SIMPLE = 3
 
 
 #: `NEED_WEIGHTS_BLOCK`, `BINARY_SEARCH_ITERATIONS` (`exact_estimation.mojo`),
@@ -1678,7 +1682,29 @@ def gbdt_losses_host_fit(
             or loss.objective == GBDT_OBJ_YETI_RANK
         )
         var scaled = List[Float32]()
-        for p in range(perm_count):  # driver-loop: over the permutations
+        var simple_leaves = loss.method == GBDT_LEAF_SIMPLE
+        if simple_leaves:
+            # Simple (the device's `need_estimation` False, `run_tree_layout`'s
+            # `apply_to_cursor` tail; lane gbdt-cpu-rest-4-simple,
+            # 2026-11-23): the searcher's own leaves off the final partition
+            # of the search planes, through the one body both columns call
+            # (`_rmse_leaf_value` -> `searcher_leaf_body`), added to the
+            # LEARN permutation's cursor only and stored as the model; no
+            # estimation task runs, so no other cursor moves and no zero
+            # average is taken
+            var leaf_sums = _partition_stats_level(
+                stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, n_live
+            )
+            var leaf_values = List[Float32](length=n_live, fill=Float32(0.0))
+            for i in range(n_live):  # driver-loop: over the leaves
+                leaf_values[i] = _rmse_leaf_value(
+                    leaf_sums[2 * i], leaf_sums[2 * i + 1], params.l2_leaf_reg
+                )
+            scaled = rescaled_leaves(leaf_values, lr)
+            apply_scaled_leaves_host(
+                cursors[learn_p], scaled, row_index, offsets, sizes, n_live
+            )
+        for p in range(0 if simple_leaves else perm_count):  # driver-loop: over the permutations
             var p_scaled: List[Float32]
             if p == learn_p:
                 var estimated = _estimate_leaves_for_loss(

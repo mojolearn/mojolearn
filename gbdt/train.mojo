@@ -341,6 +341,7 @@ from gbdt.options.catboost_options import (
     grow_policy_from_name,
     grow_policy_name,
     set_leaves_estimation_default,
+    simple_leaves_check,
 )
 
 
@@ -2954,6 +2955,19 @@ def train(
         iterations_override=leaf_estimation_iterations,
         l2_override=l2_leaf_reg,
         ordered=ordered,
+    )
+    # lane gbdt-cpu-rest-4-simple (2026-11-23): Simple's one admission, the
+    # host fit's too (`simple_leaves_check`): the greedy SymmetricTree
+    # searcher's own leaves on the one-output losses, refused before any
+    # tree where no searcher leaf exists
+    simple_leaves_check(
+        estimation.method,
+        objective == OBJECTIVE_MULTICLASS
+        or objective == OBJECTIVE_MULTICLASS_OVA
+        or objective == OBJECTIVE_MULTIRMSE,
+        ordered,
+        policy != GROW_SYMMETRIC,
+        use_pointwise_searcher,
     )
     # `GradientBoosting(l2_leaf_reg=None)` resolves to the loss's default in
     # the wrapper (`catboost_options.cpp:34-37`, 3.0; 0 for YetiRank,
