@@ -7,15 +7,43 @@
 # the initial fill, the statistics and orders, the n_nearest_features draws,
 # every round of the built-in Bayesian ridge in one program, the indicator),
 # then PACK (the fitted attributes, read from the arenas the runner holds).
-# A user estimator keeps the reference's rounds after the typed prologue
-# (`iterimp_prepare`): it is cloned, fitted and asked to predict once per
-# (round, feature) step with the float32 blocks the gather programs produce,
-# and its predictions are scattered back by one program. The clone, fit and
-# predict are the compiled operations of the estimator's connected native plan
-# (bindings/prep_native_estimator.mojo); its Python fit, predict, get_params or
-# constructor is never called.
+# A user estimator whose class is a native member (core/member_abi.mojo; lane
+# mf-iterimp, 2026-11-23) is admitted ONCE per fit (`_member`: its family's
+# member entry, the kind's mask) and its rounds are the typed RUN
+# x_prep/iterimp_run.mojo `iterimp_member_rounds` (per step: the gather
+# program, the member's FIT on the gathered rows and PREDICT, or PREDICT_STD
+# and the mean for sample_posterior, then the scatter program), the member
+# calls with the GIL released for a kind that allows it; PACK writes each
+# step's state into a clone of the estimator (`member_pack`: the attributes
+# its own fit writes) for `imputation_sequence_`, and raises the fits'
+# notices. The door rounds below stay for an estimator the member route does
+# not serve, and nothing else: a class with no member entry, an admission the
+# family refuses (the fallback rule), sample_posterior with any family but
+# GaussianProcessRegressor (the only member whose PREDICT_STD also answers
+# the same query's mean), fewer than two kept features, a kept column with
+# no observed value (its fit would see no rows: the estimator's own door
+# refuses that in its words), and the member-set B arm
+# (MOJOLEARN_MEMBER_SET_OFF). There the estimator is cloned, fitted and
+# asked to predict once per (round, feature) step with the float32 blocks the
+# gather programs produce, and its predictions are scattered back by one
+# program; the clone, fit and predict are the compiled operations of the
+# estimator's connected native plan (bindings/prep_native_estimator.mojo);
+# its Python fit, predict, get_params or constructor is never called.
+# transform with a user estimator predicts with the fitted estimators of
+# `imputation_sequence_` (public objects) through their plans, as before.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.member_boundary_door import member_admit_serving, member_pack
+from bindings.member_fit_notices_pack import member_fit_notices_raise
+from bindings.member_owner_unpack import MemberOwner
+from bindings.member_set_door import MEMBER_SET_NATIVE
+from core.member_abi import (
+    MemberPlan, MemberCall, member_call, member_kind_capabilities,
+    MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_STD, MEMBER_CAN_CLASSIFIER, MEMBER_BORROWS_FIT,
+    MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
+)
+from core.member_families import MEMBER_FAMILY_GP
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays_door import classical_typed, classical_wrap_array
@@ -30,7 +58,8 @@ from bindings.user_objects_native_door import user_objects_call
 from bindings.native_array_storage_door import native_array_unfilled
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.prep_stateless_native_door import _int_like, _repr, _name, _fam
-from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has
+from bindings.prep_native_estimator_door import (
+    prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has, prep_estimator_plan)
 from bindings.prep_encode_prog_run import EncProgram, enc_ii_rows
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT)
@@ -46,7 +75,8 @@ from bindings.prep_keys_unpack import (
 from bindings.py_balanced import py_item
 from x_prep.iterimp_run import (
     IterImpRunner, IterImpFit, IterImpFitted, IterImpApply, IterImpStep, iterimp_fit, iterimp_prepare,
-    iterimp_transform, iterimp_indicator, II_NONE, II_ASCENDING, II_DESCENDING, II_ROMAN, II_ARABIC, II_RANDOM)
+    iterimp_transform, iterimp_indicator, II_NONE, II_ASCENDING, II_DESCENDING, II_ROMAN, II_ARABIC, II_RANDOM,
+    IterImpMember, IterImpMemberFit, iterimp_member_rounds, iterimp_member_free)
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -413,13 +443,16 @@ struct _DoorRunner(IterImpRunner):
     RUN-held or door-held native buffer (owner k >= 1) is an
     XPREP_OWNER_NATIVE record at `seconds[k - 1]`. Each arena (and output
     store) is held until `release` or the runner's end; PACK reads them
-    with `_take1` / `_take2` (`ran`)."""
+    with `_take1` / `_take2` (`ran`). `release_members`: a supplied
+    estimator's member operations run with the GIL released (its kind has
+    MEMBER_GIL_FREE or MEMBER_GIL_DOOR; set by the door after `_member`)."""
     var owners: List[PythonObject]
     var entries: PythonObject
     var context: PythonObject
     var caps: XprepCaps
     var held: List[PythonObject]
     var addresses: List[Int]
+    var release_members: Bool
 
     def __init__(out self, values: PythonObject, entries: PythonObject, context: PythonObject, caps: XprepCaps):
         self.owners = List[PythonObject]()
@@ -429,6 +462,19 @@ struct _DoorRunner(IterImpRunner):
         self.caps = caps
         self.held = List[PythonObject]()
         self.addresses = List[Int]()
+        self.release_members = False
+
+    def member(mut self, plan: MemberPlan, operation: Int, mut call: MemberCall) raises -> Int:
+        # THE GIL RULE (core/member_abi.mojo): released around the one call
+        # for a kind that allows it (every argument is a typed word, read
+        # before the region), else the call runs with the GIL held.
+        if not self.release_members:
+            return member_call(plan.member, operation, call)
+        var result = 0
+        var py = Python()
+        with GILReleased(py):
+            result = member_call(plan.member, operation, call)
+        return result
 
     def run(mut self, mut prog: EncProgram, seconds: List[Int]) raises -> Int:
         prog.check_bound()
@@ -592,6 +638,103 @@ def _xt_address(xt: PythonObject, words: Int) raises -> Int:
     return Int(py=classical_address(xt)) if words > 0 else 0
 
 
+# ---------------------------------------------------------------- a supplied estimator as a member
+struct _Member(Movable):
+    """The supplied estimator's hold as a native member, built once per fit
+    (`_member`). `native` False: the door rounds serve it. True: `owner`
+    (its plan and the pins that keep its images loaded, alive through PACK),
+    `template` the first step's clone (the admission read its fields) and
+    `fields` its instance dictionary, `member_context` the family's context,
+    `fields_get` the plan's field reader (for the other steps' clones),
+    `borrows` / `release` the kind's MEMBER_BORROWS_FIT and GIL bits."""
+    var native: Bool
+    var owner: MemberOwner
+    var template: PythonObject
+    var fields: PythonObject
+    var member_context: PythonObject
+    var fields_get: PythonObject
+    var borrows: Bool
+    var release: Bool
+
+    def __init__(out self):
+        self.native = False
+        self.owner = MemberOwner()
+        self.template = PythonObject(None)
+        self.fields = PythonObject(None)
+        self.member_context = PythonObject(None)
+        self.fields_get = PythonObject(None)
+        self.borrows = False
+        self.release = False
+
+
+def _member(estimator: PythonObject, posterior: Bool, context: PythonObject) -> _Member:
+    """UNPACK, once per fit: the estimator as a native member when its class
+    is a published member whose KIND fits and predicts one target (a
+    regressor), and for sample_posterior is the GaussianProcessRegressor
+    member (its PREDICT_STD answers the same query's mean too). Never
+    raises: anything else, and an admission the family refuses, keeps the
+    door rounds (the fallback rule), which then answer or refuse in the
+    estimator's own words."""
+    var out = _Member()
+    comptime if not MEMBER_SET_NATIVE:
+        return out^
+    try:
+        var b = _b()
+        var plan = prep_estimator_plan(estimator, context)
+        if plan is None or py_get(plan, "member") is None:
+            return out^
+        if Bool(py=plan["classifier"]):
+            return out^
+        var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
+        if posterior:
+            needs |= MEMBER_CAN_PREDICT_STD
+        var template = prep_estimator_clone(estimator, context)
+        var member_context = plan["context"]
+        var fields_get = plan["fields_get"]
+        var fields = py_call(fields_get, template, py_type(template))
+        var owner = member_admit_serving(template, fields, plan, member_context, b, needs)
+        if not owner.published:
+            return out^
+        if posterior and owner.plan.family != MEMBER_FAMILY_GP:
+            return out^
+        # The mask of THIS kind (the family's union holds its other kinds'
+        # bits): one state minted, asked and released, once per fit.
+        var mask = member_kind_capabilities(owner.plan)
+        if (mask & MEMBER_CAN_CLASSIFIER) != 0 or (mask & needs) != needs:
+            return out^
+        out.borrows = (mask & MEMBER_BORROWS_FIT) != 0
+        out.release = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
+        out.owner = owner^
+        out.template = template
+        out.fields = fields
+        out.member_context = member_context
+        out.fields_get = fields_get
+        out.native = True
+    except:
+        return _Member()
+    return out^
+
+
+def _member_pack(estimator: PythonObject, member: _Member, fit: IterImpMemberFit,
+                 context: PythonObject) raises -> PythonObject:
+    """PACK of the member rounds: `imputation_sequence_`, one (feat_idx,
+    neighbor_feat_idx, estimator) triple per finished step, each estimator a
+    clone of the supplied one (the first is the admission's) with the step's
+    member state written into it (`member_pack`: the attributes its own fit
+    writes). One clone per step, as the door rounds made."""
+    var b = _b()
+    var seq = Python.list()
+    for s in range(len(fit.states)):  # driver-loop: over the fitted imputation steps (one clone and one pack each)
+        var est = member.template
+        var fields = member.fields
+        if s > 0:
+            est = prep_estimator_clone(estimator, context)
+            fields = py_call(member.fields_get, est, py_type(est))
+        member_pack(est, fields, member.member_context, b, member.owner.plan, fit.states[s])
+        _ = py_call(seq.append, Python.tuple(fit.seq_j[s], _int_list(fit.seq_nbl[s]), est))
+    return seq
+
+
 # ---------------------------------------------------------------- fit
 def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
@@ -641,6 +784,28 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     _pack_initial(model, imputer, fitted, mode, d, context)
     var keep = fitted.keep.copy()
     var dk = len(keep)
+    var member = _Member()
+    if dk >= 2 and not fitted.empty_kept:
+        member = _member(estimator, request.posterior, context)
+    if member.native:
+        # RUN: the rounds over the native member (x_prep/iterimp_run.mojo)
+        runner.release_members = member.release
+        var run = IterImpMember(member.owner.plan.copy(), member.borrows, request.posterior)
+        var fit = IterImpMemberFit()
+        iterimp_member_rounds(runner, request, plan, fitted, run, fit)
+        # PACK (every state is released after it, on every path)
+        try:
+            var seq = _member_pack(estimator, member, fit, context)
+            py_setitem(fields, nk[].k__rng, _u64_obj(fit.rng))
+            py_setitem(fields, nk[].k__post_step, PythonObject(0))
+            py_setitem(fields, nk[].k_n_iter_, PythonObject(fit.n_iter))
+            py_setitem(fields, nk[].k_imputation_sequence_, seq)
+        finally:
+            iterimp_member_free(run, fit)
+        # The steps' fit notices, in step order, as the estimator's own fits raised them.
+        member_fit_notices_raise(fit.notices, member.member_context)
+        _ = member.owner.published  # the member's images stay loaded past its last call
+        return _take2(runner.held[fit.out_handle], fit.out_offset, n, fit.cols, context)
     var bounds = fitted.bounds.copy()
     var posterior = request.posterior
     var rng = plan.rng
