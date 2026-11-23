@@ -177,10 +177,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var saved = archive_schema_save(model, args[0], context)
             return saved.steal_data()
         if operation == CLASSICAL_OPN_FITTED_DIGEST:
-            # `model.digest_`: the hash of the fitted state, computed on the
-            # first read and kept per model generation
+            # `model.digest_` (args ()) and `model.training_digest_` (args
+            # ("training",)): hashed at each read, nothing kept
             # (bindings/fitted_digest_door.mojo). Never reached by a fit.
-            var digest = fitted_digest_call(model, context)
+            var digest = fitted_digest_call(model, args, context)
             return digest.steal_data()
         if operation == CLASSICAL_OPN_ARCHIVE_NPZ:
             # `mojolearn._serialize`: the npz/npy codec helpers, one native
