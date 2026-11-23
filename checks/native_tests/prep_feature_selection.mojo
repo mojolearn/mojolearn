@@ -726,10 +726,12 @@ def refusal_unit(unit: Int) raises:
         params = da_params(1, 0)
     elif unit == 1:
         name = "GaussianNB"
-        params = [0.0, 1e-9, 1.0, 0.0, 0.0]
+        var gnb: List[Float64] = [0.0, 1e-9, 1.0, 0.0, 0.0]
+        params = gnb^
     else:
         name = "MultinomialNB"
-        params = [1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+        var mnb: List[Float64] = [1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+        params = mnb^
     var plan = member_plan(family, params^, 2)
     var mask = member_kind_capabilities(plan)
     var auto = rfe_member_source(family, mask, "auto", name)
