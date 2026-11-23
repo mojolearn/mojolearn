@@ -821,6 +821,8 @@ TRAINING_LANE_NAMES = {
     "gbdt-rest-gaps": "gradient boosting eval sets and feature_fraction on the symmetric pointwise and multiclass losses, the pointwise searcher with RMSE, NaN beside categorical columns",
     "gbdt-pointwise-arms": "gradient boosting on the pointwise searcher with Newton and cosine scores, every bootstrap, Gradient leaves, score noise and feature_fraction",
     "gbdt-ordered-weights": "gradient boosting Ordered boosting with sample weights and class weights",
+    # lane gbdt-cpu-rest-4-pwl (2026-11-23)
+    "gbdt-pointwise-rest": "gradient boosting on the pointwise searcher with every one-output loss, boost_from_average resolved, border types, IncToDec and categorical columns",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -2966,6 +2968,9 @@ FAMILIES = (
             "gbdt-pointwise-arms",
             # lane gbdt-ordered-weights (2026-11-23)
             "gbdt-ordered-weights",
+            # lane gbdt-cpu-rest-4-pwl (2026-11-23): the rest of the
+            # pointwise searcher (gbdt_oracle_pointwise.mojo)
+            "gbdt-pointwise-rest",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4177,6 +4182,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-rest-gaps": "no reference",
     "gbdt-pointwise-arms": "no reference",
     "gbdt-ordered-weights": "no reference",
+    "gbdt-pointwise-rest": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
