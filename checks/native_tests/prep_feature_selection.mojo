@@ -688,6 +688,9 @@ def rfe_lda_unit(unit: Int) raises:
                                            MEMBER_I32, source.block, source.squared, notices, rows)
         finally:
             member_free(plan, call)
+        # keep-alive: `block` is reassigned below, so its old buffer died at `block.unsafe_ptr()` above (a local is
+        # freed at its last named use) and the member fit read freed words; named here, after the fit
+        _ = len(block)
         require(rows == (1 if c.classes == 2 else c.classes), label + ": coef_ has " + String(rows) + " rows")
         var prog = ClsProgram(True)
         var staged = rfe_round_stage(prog, RfeKeys(nsup, rows, source.squared, 0), words^, n * d, n, d, nsup, drop, k)
