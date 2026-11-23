@@ -389,7 +389,9 @@ def connect(context, register, registry):
             plan.setdefault('keywords', {})['fit'] = ('sample_weight',)
         if name in ('GradientBoostingClassifier', 'GradientBoostingRegressor'):
             params['eval_set'] = (3, None)
-        if not params:
+        # A member-only plan (a native constructor whose fit is its member entry, no methods['fit']) has no
+        # fit recipe to extend; `import mojolearn._verify` raised KeyError 'fit' here for HostLogisticRegression.
+        if not params or 'fit' not in plan.get('methods', {}):
             continue
         operation, old = plan['methods']['fit']
         recipe = list(old)
