@@ -320,7 +320,7 @@ comptime META_ADA_GAMMA = 9
 comptime META_ADA_INVERSE_GAUSSIAN = 10
 comptime META_ADA_WORDS = 11
 #: THE SEARCH KIND's fitted words (float64, export / import): [best index,
-#: folds, best score, candidates m, train flag], then m x folds test scores
+#: folds, best score, candidates m, train flag, sampler seed], then m x folds test scores
 #: (candidate-major), m means, m deviations, m ranks, and with the train
 #: flag m x folds train scores and m train means.
 comptime META_BLOCK_SEARCH = MEMBER_BLOCK_FAMILY + 7
@@ -2542,12 +2542,13 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].out_classes = plan.class_counts.copy()
     var m = len(res.means)
     var folds = res.n_splits
-    var w = List[Float64](capacity=5 + m * (2 * folds + 4))
+    var w = List[Float64](capacity=6 + m * (2 * folds + 4))
     w.append(Float64(res.best))
     w.append(Float64(folds))
     w.append(res.best_score)
     w.append(Float64(m))
     w.append(1.0 if plan.return_train else 0.0)
+    w.append(slot[].words[META_SEARCH_SEED])
     for c in range(m):  # driver-loop: over the candidates (their test scores)
         for f in range(folds):  # small-loop(one candidate's folds)
             w.append(res.test[c][f])
@@ -2588,7 +2589,7 @@ def _import_search(slot: _SlotPtr, words: _F64P, count: Int) raises:
     """IMPORT `META_BLOCK_SEARCH` (`_fit_search`'s layout), after
     `META_BLOCK_NESTED`: the best candidate's plan becomes the one nested
     plan."""
-    if count < 5:
+    if count < 6:
         raise Error("member ABI: a search member's words are malformed")
     var best = Int(words[0])
     if best < 0 or best >= len(slot[].base_plans):
