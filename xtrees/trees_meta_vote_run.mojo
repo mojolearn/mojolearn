@@ -29,7 +29,7 @@ from core.member_abi import (
 from core.array_helpers_impl import fsum_f64
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_cols_many, xt_accumulate_onehot, xt_argmax_rows, xt_scale,
-    xt_scatter, xt_ovr_assemble,
+    xt_scatter, xt_ovr_assemble, xt_accumulate_rows, xt_count_rows, xt_normalize_rows, xt_count_equal, xt_oob_r2,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -357,3 +357,104 @@ def multioutput_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMemb
         _ = xt_accumulate_cols(glue, accs[j], block, members[j].class_cols, rows.n, ks[j], members[j].cols, 1.0)
     _ = keep^  # the native blocks are read through the accumulations above
     return VOTE_ALL_ANSWERED
+
+
+# ----------------------------------------------------------------- Bagging
+# Lane bm-meta-3 (2026-11-23). Each Bagging member reads its own rows: the
+# feature subset of X (or X itself) for predict, its out-of-bag rows for the
+# OOB score, gathered by the UNPACK (bindings/trees_public_boost_door.mojo)
+# into float32 C-order blocks whose addresses `xs[j]` (`ns[j]` x `ds[j]`)
+# the caller keeps alive through RUN.
+
+
+def bag_predict_run(glue: EntryRef, members: List[VoteMember], xs: List[Int], ds: List[Int], n: Int, k: Int,
+                    classifier: Bool, acc: Int, start: Int) raises -> Int:
+    """`BaggingClassifier.predict_proba` (classifier: acc float64 n x k,
+    zero: each member's probabilities placed at its class columns, weight 1)
+    and `BaggingRegressor.predict` (acc float64 n, zero: the members'
+    float32 predictions added), member after member from `start`, then
+    divided by the member count once every member has answered: the ops of
+    the door before this split, over the same blocks in the same order (no
+    bits change). A native member that refuses is returned by index before
+    its block is added (the sums before it are final)."""
+    var keep = List[List[Float32]]()
+    for j in range(start, len(members)):  # driver-loop: over the member estimators
+        var block = _member_f32(members[j], VoteRows(xs[j], n, ds[j]), keep)
+        if block == 0:
+            return j
+        if classifier:
+            _ = xt_accumulate_cols(glue, acc, block, members[j].class_cols, n, k, members[j].cols, 1.0)
+        else:
+            _ = xt_accumulate(glue, acc, block, n, 1.0)
+    _ = keep^  # the native blocks are read through the sums above
+    _ = xt_scale(glue, acc, n * (k if classifier else 1), Float64(len(members)))
+    return VOTE_ALL_ANSWERED
+
+
+def bag_oob_run(glue: EntryRef, members: List[VoteMember], xs: List[Int], ns: List[Int], ds: List[Int],
+                oobs: List[Int], n: Int, k: Int, classifier: Bool, acc: Int, counts: Int, start: Int) raises -> Int:
+    """`_BaggingBase._oob_outputs`: each member's output on its `ns[j]`
+    out-of-bag rows (int32 row numbers at `oobs[j]`; a member with none is
+    skipped), added into `acc` (float64 n x k, zero; k 1 for a regressor)
+    at those rows, and `counts` (int32 n) counting them, in member order. A
+    classifier member's probabilities are placed at its class columns of a
+    float64 m x k zero block first; a regressor's float32 predictions are
+    widened to float64 (exact). The same glue ops in the same order as the
+    door before this split: no bits change. A native member that refuses is
+    returned by index before anything of it is added."""
+    var keep = List[List[Float32]]()
+    for j in range(start, len(members)):  # driver-loop: over the member estimators
+        var m = ns[j]
+        if m == 0:
+            continue
+        var block = _member_f32(members[j], VoteRows(xs[j], m, ds[j]), keep)
+        if block == 0:
+            return j
+        var width = k if classifier else 1
+        var out = List[Float64](length=m * width, fill=0.0)
+        if classifier:
+            _ = xt_accumulate_cols(glue, Int(out.unsafe_ptr()), block, members[j].class_cols, m, k, members[j].cols,
+                                   1.0)
+        else:
+            var p = _F32P(unsafe_from_address=block)
+            for i in range(m):  # small-loop(one exact widening pass over one member's out-of-bag predictions)
+                out[i] = Float64(p[i])
+        _ = xt_accumulate_rows(glue, acc, Int(out.unsafe_ptr()), oobs[j], n, width, m)
+        _ = out^  # read through the accumulation above
+        _ = xt_count_rows(glue, counts, oobs[j], n, m)
+    _ = keep^  # the native blocks are read through the sums above
+    return VOTE_ALL_ANSWERED
+
+
+def bag_oob_classifier_finish(glue: EntryRef, acc: Int, codes: Int, pred: Int, n: Int, k: Int) raises -> Int:
+    """`BaggingClassifier._set_oob_score` after the sums: each row of `acc`
+    normalized in place (`oob_decision_function_`), its argmax into `pred`
+    (int32 n), and the count of rows whose argmax is the true code
+    (`codes`, int32 n): `oob_score_` = hits / n."""
+    _ = xt_normalize_rows(glue, acc, n, k)
+    _ = xt_argmax_rows(glue, acc, pred, n, k)
+    return xt_count_equal(glue, pred, codes, n)
+
+
+@fieldwise_init
+struct BagR2(ImplicitlyCopyable, Movable):
+    """`bag_oob_r2_run`'s answer: `finite` False when a target or
+    out-of-bag prediction is not finite or a sum overflows float64 (the
+    door raises its words); else the R2 sums."""
+
+    var finite: Bool
+    var ss_tot: Float64
+    var ss_res: Float64
+
+
+def bag_oob_r2_run(glue: EntryRef, acc: Int, counts: Int, y: Int, pred: Int, n: Int) raises -> BagR2:
+    """`BaggingRegressor._set_oob_score` after the sums: `oob_prediction_`
+    (float64 n at `pred`) and the R2 sums of the float32 targets at `y`
+    (one `x_trees_oob_r2` call, as the door made)."""
+    var words = List[Float64](length=4, fill=0.0)
+    var flags = List[Int32](length=4, fill=0)
+    _ = xt_oob_r2(glue, acc, counts, y, pred, Int(words.unsafe_ptr()), Int(flags.unsafe_ptr()), n)
+    var got = BagR2(flags[0] == 0 and flags[1] == 0, words[1], words[2])
+    _ = words^
+    _ = flags^
+    return got
