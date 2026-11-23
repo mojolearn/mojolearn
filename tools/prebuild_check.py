@@ -28,7 +28,8 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               Then the commit's tools/gil_region_check.py over its bindings/ and providers/ blobs (no PythonObject
               use inside a `with GILReleased` region; lane meta-gil). Single process, seconds.
               Then the commit's tools/sabotage_patches_apply_check.py (every */sabotage/*.patch applies to the commit
-              with git apply --check, no fuzz; the experiments/removed/ permanent record excluded; lane patch-recut).
+              with git apply --check, no fuzz, and is named by an arm of coverage_sabotage.tsv or a .checks line; the
+              experiments/removed/ permanent record excluded; lane patch-recut).
               Seconds.
   host-parse  (with device-parse since 2026-11-18: the identical device groups through the same parse with the
               NVIDIA sm_89 column's flags and no GPU; it cannot see what only optimised lowering, ptxas or a GPU finds)
