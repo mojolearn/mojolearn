@@ -427,6 +427,9 @@ sampler, a solver, a metric, a reduction).
       gbdt-ordered-weights (sample and class weights under Ordered boosting)
       gbdt-cat-rest (categorical and one-hot columns on the SymmetricTree
                pointwise losses and the multiclass family)
+      gbdt-cat-nonsym (Depthwise and Lossguide over CTR and one-hot columns,
+               Plain boosting, every loss the non-symmetric driver trains,
+               weights and eval sets)
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -5056,6 +5059,97 @@ def _(ml, X, yc, yr, Xh=None):
                                                 ev.best_iteration_], dtype=np.int64))
     return _fit(parts, first, lambda e: (e.predict(_gbdt_cat_xh(Xh)),))
 
+
+
+@lane("gbdt-cat-nonsym")
+def _(ml, X, yc, yr, Xh=None):
+    """Depthwise and Lossguide with categorical columns, Plain boosting, which
+    the CPU column refused by name until lane gbdt-cpu-rest-4-cat-ns
+    (2026-11-23): Logloss, RMSE and the pointwise losses (Quantile,
+    CrossEntropy, MAE) over CTR, one-hot and both columns, a one_hot_features
+    column, sample and class weights, eval sets (the held-out curve hashed),
+    each bootstrap, the score noise and one permutation. Every work-changing
+    option is explicit, at rate 0.1. The first fit uses every column: it
+    answers the infer, model and batch columns on `_gbdt_cat_xh(Xh)`."""
+    rows = min(_GBDT_CAT_ROWS, X.shape[0])
+    Xc = _gbdt_cat_x(X[:rows])
+    Xe = np.ascontiguousarray(_gbdt_cat_xh(Xh)[:rows])
+    ych, yrh = labels_for(Xh, HELDOUT_SEED)
+    ys = {
+        "Logloss": (yc[:rows], ych[:rows]),
+        "RMSE": (yr[:rows], yrh[:rows]),
+        "Quantile": (yr[:rows], yrh[:rows]),
+        "MAE": (yr[:rows], yrh[:rows]),
+        "CrossEntropy": (yc[:rows].astype(np.float32), ych[:rows].astype(np.float32)),
+    }
+    w = _hw((rows,), "gbdt-cat-nonsym:sample_weight", 0.25, 4.0)
+    dw = dict(grow_policy="Depthwise", score_function="Cosine")
+    lg = dict(grow_policy="Lossguide", max_leaves=16, min_data_in_leaf=1, score_function="NewtonL2")
+    newton = dict(leaf_estimation_method="Newton", boost_from_average=False)
+    exact = dict(leaf_estimation_method="Exact", boost_from_average=True)
+    onehot_features = ([2, 3, 4], [])
+    # (name, loss, (columns, cat_features), options, weighted, eval set)
+    configs = [
+        ("logloss_all_depthwise", "Logloss", _GBDT_CAT_ALL, dict(dw, **newton, **_GBDT_CAT_PLAIN), False, False),
+        ("rmse_all_lossguide_weighted", "RMSE", _GBDT_CAT_ALL,
+         dict(lg, leaf_estimation_method="Newton", boost_from_average=True, **_GBDT_CAT_PLAIN), True, False),
+        ("logloss_ctr_depthwise_defaults", "Logloss", _GBDT_CAT_CTR, dict(dw, **newton, **_GBDT_CAT_DEFAULTS),
+         False, False),
+        ("rmse_onehot_lossguide_bernoulli", "RMSE", _GBDT_CAT_ONEHOT,
+         dict(lg, **newton, bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0), False, False),
+        ("quantile_ctr_depthwise_eval", "Quantile", _GBDT_CAT_CTR,
+         dict(dw, **exact, loss_alpha=0.3, **_GBDT_CAT_PLAIN), False, True),
+        ("crossentropy_ctr_lossguide", "CrossEntropy", _GBDT_CAT_CTR, dict(lg, **newton, **_GBDT_CAT_PLAIN),
+         False, False),
+        ("mae_all_depthwise_weighted", "MAE", _GBDT_CAT_ALL, dict(dw, **exact, **_GBDT_CAT_PLAIN), True, False),
+        ("logloss_ctr_lossguide_class_weights_eval", "Logloss", _GBDT_CAT_CTR,
+         dict(lg, **newton, class_weights=[1.0, 2.0], **_GBDT_CAT_PLAIN), False, True),
+        ("logloss_onehot_features_depthwise", "Logloss", onehot_features,
+         dict(dw, **newton, one_hot_features=[0], **_GBDT_CAT_PLAIN), False, False),
+        ("rmse_ctr_lossguide_one_permutation", "RMSE", _GBDT_CAT_CTR,
+         dict(lg, **newton, permutation_count=1, **_GBDT_CAT_DEFAULTS), False, False),
+    ]
+    if configs[0][2][0] != _GBDT_CAT_ALL[0]:
+        raise RuntimeError("gbdt-cat-nonsym's first fit must use every column (it answers infer and batch)")
+    parts, first = {}, None
+    for name, loss, (cols, cats), options, weighted, held in configs:
+        kw = dict(n_estimators=12, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
+                  border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
+                  random_state=7, loss=loss, cat_features=list(cats))
+        kw.update(options)
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        y, ye = ys[loss]
+        fit_kw = {}
+        if weighted:
+            fit_kw["sample_weight"] = w
+        if held:
+            fit_kw["eval_set"] = (np.ascontiguousarray(Xe[:, cols]), ye)
+        m = ml.GradientBoosting(**kw).fit(Xs, y, **fit_kw)
+        parts[name] = _h(m.predict_proba(Xs) if loss == "Logloss" else m.predict(Xs))
+        parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
+        if held:
+            parts[name + ":test_loss_curve"] = _h(np.asarray(m.test_loss_curve_, dtype=np.float64))
+        first = first if first is not None else m
+    return _fit(parts, first, lambda e: (e.predict(_gbdt_cat_xh(Xh)),))
+
+@lane("gbdt-nan-modes")
+@floor(rows=(1500, "the nan_mode arm is LIVE at 1500 as of 2026-09-16 (lane/dead-arms): Min and Max hash "
+                   "da54f1f980861f61 against d8e2a3e5305a859b here, and they are DISTINCT on all nine "
+                   "fixtures including `ties`. Until that day they hashed the SAME bytes at 1500, 6000 "
+                   "and 20000, because _with_nan wrote NaN into columns 5, 6 and 7 while the fit splits "
+                   "only on 3 and 4, so no row count meant anything. The floor stays at 1500 because that "
+                   "is the size the live arm was measured at."))
+def _(ml, X, yc, yr, Xh=None):
+    """nan_mode Min and Max on a fixture that actually carries NaN
+    (_with_nan); on a NaN-free column the quantizer collapses both to
+    Forbidden, which is why no lane above could reach them."""
+    rows = 1500                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim (2026-09-16)
+    Xn = _with_nan(X)
+    lo = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Min").fit(Xn, yc)
+    hi = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Max").fit(Xn, yc)
+    return _fit(dict(min=_h(lo.predict(Xn)), max=_h(hi.predict(Xn))),
+                lo, lambda e: (e.predict(_with_nan(Xh)),))
 
 @lane("gbdt-nan-modes")
 @floor(rows=(1500, "the nan_mode arm is LIVE at 1500 as of 2026-09-16 (lane/dead-arms): Min and Max hash "
@@ -9867,8 +9961,8 @@ _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-
 _batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 _batch_decl(_rows_calls("predict", sl=_GBDT_BATCH_ROWS, prep=_gbdt_cat_xh),
             "gbdt-cat-rmse", "gbdt-cat-bootstrap", "gbdt-cat-noise", "gbdt-cat-ordered",
-            # lane gbdt-cpu-rest-4-cat (2026-11-23)
-            "gbdt-cat-rest")
+            # lane gbdt-cpu-rest-4-cat (2026-11-23) and its sub-lane -ns
+            "gbdt-cat-rest", "gbdt-cat-nonsym")
 _batch_decl(_rows_calls("predict"),
             "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs")
 _batch_decl(_rows_calls("predict"),
