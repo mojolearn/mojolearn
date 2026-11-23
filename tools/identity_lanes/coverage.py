@@ -1505,6 +1505,12 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
 # went with multi-GPU verification (docs/TOMBSTONES.md MOJOLEARN_PAR_VERIFY, 2026-10-31; that stays
 # retired: these lanes never ask for a second device). Each cell holds the driver's answer to the plain
 # one-device fit byte for byte and raises NumericalMismatch carrying its parts when they differ.
+# EXPECTED VERDICT ON EVERY COLUMN, the CPU column included: a recorded cell (train parts), never a refusal. The
+# shards run in one worker process of the native local pool (bindings/native_process_pool_door.mojo:223
+# process_pool_create refuses only empty or repeated device indices; a CPU install sets no device mask, :165), and
+# the 0860 sabotage proof recorded par-forest's clean CPU cell STABLE through the same pool
+# (coverage_sabotage_proven.tsv). A refusal of these lanes on a clean build is therefore a defect (worker spawn or
+# connection), never an accepted state: fix it in code; under an arm only the declared product refusals count.
 
 @lane("forest-shard")
 def _(ml, X, yc, yr, Xh=None):
