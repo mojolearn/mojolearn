@@ -173,7 +173,7 @@ comptime SEQ_LSTM_SCAN = SEQ_LSTM_SCAN_IDN
 comptime OP_CELL_FWD_SCAN = 120
 comptime OP_CELL_BWD_SCAN = 121
 
-#: lanes per row block: the row's work rounded up to a simdgroup multiple, at most this (lanes stride past it)
+#: the route's bound on H (scan_applies; once the lanes a row block, now a route rule only: blocks are SCAN_MAX_LANES)
 comptime SCAN_MAX_H = 1024
 #: the route's shape bound, G H <= this (kept from the deleted SMEM arm's threadgroup buffer). Since lane rnn-scan
 #: the kernels stride their lanes, so the bound is a route rule only: it keeps every route as it was timed.
@@ -198,20 +198,31 @@ def scan_tpb(H: Int) -> Int:
     return ((H + 31) // 32) * 32
 
 
+#: THE LAUNCH BOUND (lane rnn-scan-2, 2026-11-23): at most this many lanes a row block. The L40S refused the
+#: forward scan's launch for a GRU layer of H 300 (block G H = 928 lanes; checks/native_tests/rnn_scan.mojo unit 20,
+#: job nvc-measure-20261123T125806Z-285cae: a CUDA launch error at the enqueue, every unit of 320 lanes or fewer ran):
+#: a block's threads share one register file (64 K 32-bit registers a block on NVIDIA), and the scan's step body
+#: (gemm_dot's 16 + 16 staged loads, the split partials, the cell state) needs more than 64 K / 928 = 70 registers
+#: a lane. 256 lanes fit at the hardware's 255-register maximum on NVIDIA, and in AMD's and Apple's limits, so no
+#: shape can exceed the register file; wider rows stride (every lane's work and every word unchanged). The same
+#: bound held the default tanh RNN scan at H above 256 (blocks up to 1024 lanes), which could fail the same way.
+comptime SCAN_MAX_LANES = 256
+
+
 def scan_fwd_block(cell: Int, H: Int) -> Int:
-    """The forward scan's block width: one lane a gate unit, G H rounded to a simdgroup, at most SCAN_MAX_H (lanes
-    stride past it). For the one-gate cells this is the H lanes it always was."""
+    """The forward scan's block width: one lane a gate unit, G H rounded to a simdgroup, at most SCAN_MAX_LANES
+    (lanes stride past it)."""
     # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE (DROPPED-quality, rab10) deleted 2026-10-09 on lane/owed-deletions-D2:
     # the G H-lane width; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch
     # (lane rnn-scan: the G H width returns for the forward projection only, in the IDENTICAL kernel, with every
     # gate unit's fold unchanged; the dropped arm's quality loss was the Metal Args defect noted at _scan_args.)
-    return min(scan_tpb(gates_of(cell) * H), SCAN_MAX_H)
+    return min(scan_tpb(gates_of(cell) * H), SCAN_MAX_LANES)
 
 
 def scan_bwd_block(H: Int) -> Int:
     """The backward scan's block width: one lane a unit (its dh fold over K = G H is one chain), at most
-    SCAN_MAX_H (lanes stride past it)."""
-    return min(scan_tpb(H), SCAN_MAX_H)
+    SCAN_MAX_LANES (lanes stride past it)."""
+    return min(scan_tpb(H), SCAN_MAX_LANES)
 
 
 # ------------------------------------------------------------------ step projection

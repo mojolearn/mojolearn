@@ -13,11 +13,12 @@ dGX and dGH.
 Units: the tanh RNN, GRU and LSTM cells, each at three shapes, each forward and reverse, without and with lengths
 (rows of lengths (5 r mod T) + 1):
   shape 0  B 5, H 8, T 7: every product gemm_dot's chain (the fused step's fold);
-  shape 1  B 16, T 3, H 160 (GRU, LSTM) and H 256 (RNN): the chain runs the forward projection as its own GEMM and
+  shape 1  B 16, T 2, H 160 (GRU, LSTM) and H 256 (RNN): the chain runs the forward projection as its own GEMM and
            the launch rule splits it (scan_fwd_split > 0), and for the LSTM the backward product too
            (scan_bwd_split > 0); the unit fails if the rules do not give those folds (so the split fold is covered);
-  shape 2  B 2, T 2, LSTM-sized row work over the block width: H 300 (G H 1200 > 1024 forward lanes) and the
-           chain's fold, so the device kernels' strided lanes run.
+  shape 2  B 2, T 2, H 300: every cell's row work is over the block width (SCAN_MAX_LANES 256 lanes; G H up to 1200),
+           with the chain's fold, so the device kernels' strided lanes run (and GRU H 300, a 928-lane block before
+           lane rnn-scan-2, is the launch the L40S refused).
 Columns: the CPU column runs every unit on HostExec across host cores; the device column runs each unit on
 DeviceExec, requires the same scan == chain equalities there, and requires the host words (not on an Apple build,
 whose layers never take the scan).
@@ -75,7 +76,8 @@ def _shape_b(shape: Int) -> Int:
 def _shape_t(shape: Int) -> Int:
     if shape == 0:
         return 7
-    return 3 if shape == 1 else 2
+    # shape 1 at T 2: one backward step with a later step (the split product) is enough to cover the fold
+    return 2
 
 
 def _shape_h(shape: Int, cell: Int) -> Int:
@@ -132,6 +134,16 @@ struct _Route(Movable):
         _poison(ex, self.call, hn)
         for p in [self.dh, self.dhn, self.dc]:  # small-loop(3 buffers)
             _poison(ex, p, B * H)
+
+
+def _case_name(unit: Int) -> String:
+    var which = unit // (4 * _SHAPES)
+    var shape = (unit // 4) % _SHAPES
+    var cell = _cell(which)
+    var name = "rnn" if which == 0 else ("gru" if which == 1 else "lstm")
+    return (name + " B " + String(_shape_b(shape)) + " T " + String(_shape_t(shape)) + " H "
+            + String(_shape_h(shape, cell)) + (" lengths" if (unit % 4) // 2 == 1 else "")
+            + (" reverse" if unit % 2 == 1 else ""))
 
 
 def run_unit[E: Exec](mut ex: E, unit: Int) raises -> List[Float32]:
@@ -228,7 +240,7 @@ def test_rnn_scan() raises:
             var host = HostExec()
             wp[unit] = run_unit(host, unit)
         except error:
-            print("FAIL RNN_SCAN unit", unit, error)
+            print("FAIL RNN_SCAN host unit", unit, "(", _case_name(unit), "):", error)
             fp[unit] = 1
     host_parallelize(task, _UNITS)
     for u in range(_UNITS):  # small-loop(_UNITS: failure flags)
@@ -239,8 +251,13 @@ def test_rnn_scan() raises:
     comptime if not CPU_COLUMN_BUILD and SEQ_RNN_SCAN_ON_THIS_TARGET:
         for unit in range(_UNITS):  # driver-loop: over the units on the one device
             var dev = DeviceExec()
-            var dw = run_unit(dev, unit)
-            _same("unit " + String(unit) + " host vs device", host_words[unit], dw)
+            try:
+                var dw = run_unit(dev, unit)
+                _same("unit " + String(unit) + " host vs device", host_words[unit], dw)
+            except error:
+                # name the case: a launch error carries no unit, cell or shape of its own
+                print("FAIL RNN_SCAN device unit", unit, "(", _case_name(unit), "):", error)
+                raise error^
     _ = failed^
     _ = host_words^
     print("PASS RNN_SCAN", _UNITS)
