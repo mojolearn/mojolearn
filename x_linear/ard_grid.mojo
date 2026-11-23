@@ -33,8 +33,9 @@ from x_linear.cls1_fast import (
 )
 from x_linear.bayes import (
     bayes_yvar_part, _sse_part, _t_ard_sigma, _t_ard_coef, _t_sse_delta, ard_update, ard_layout, ard_finish,
-    X_LINEAR_GRAM_SSE,
+    X_LINEAR_GRAM_SSE, ard_kept_count, ard_posterior_cell,
 )
+from x_linear.bayes_words import ard_out_words
 
 comptime AG_TPB = 256
 comptime AG_BATCH = 8
@@ -198,6 +199,18 @@ def ard_finish_kernel(d: Int32, fi: Int32, fw: FP, res: FP, state: FP, wf: IP, w
     witness_end(wf, woff, nonce)
 
 
+def ard_posterior_kernel(d: Int32, fi: Int32, fw: FP, iw: IP, res: FP, wf: IP, woff: Int32, nonce: Int32):
+    """One block after `ard_finish_kernel` (lane mf-iterimp2): the kept
+    count, X_offset_ and the last sigma over the kept features, the cells
+    split across the block's threads (`ard_posterior_cell`; the words the
+    host's workers write)."""
+    var dd = Int(d)
+    var dk = ard_kept_count(iw, dd)
+    for c in range(Int(thread_idx.x), 1 + dd + dk * dk, LINEAR_TPB):
+        ard_posterior_cell(fw, iw, res, dd, dk, fi != 0, c)
+    witness_end(wf, woff, nonce)
+
+
 def ard_fit_grid(
     var ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
@@ -354,7 +367,13 @@ def ard_fit_grid(
                                         Int32(0), Int32(1), wit.p(), Int32(0), nf2, grid_dim=1, block_dim=LINEAR_TPB)
     ctx.enqueue_function[ard_finish_kernel](Int32(d), Int32(fi), fwp, dout.unsafe_ptr(), stp, wit.p(), Int32(1), nf2,
                                             grid_dim=1, block_dim=1)
-    if not wit.ok(ctx, 2, "ARD finish"):
+    var nfin = 2
+    if n_out >= ard_out_words(d):
+        # lane mf-iterimp2: dk, X_offset_ and sigma_ (scikit-learn's posterior words)
+        ctx.enqueue_function[ard_posterior_kernel](Int32(d), Int32(fi), fwp, diw.unsafe_ptr(), dout.unsafe_ptr(),
+                                                   wit.p(), Int32(2), nf2, grid_dim=1, block_dim=LINEAR_TPB)
+        nfin = 3
+    if not wit.ok(ctx, nfin, "ARD finish"):
         wit.fail()
     if n_out > 0:
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout.create_sub_buffer[DType.float32](0, n_out))

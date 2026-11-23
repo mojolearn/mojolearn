@@ -24,6 +24,10 @@ Request layouts (a: addresses, p: Int words, f: Float64 words):
   XL_OP_CLASS_PREP     a [codes, sw, cw, out] p [n, k, balanced, weighted]                 -> largest count
   XL_OP_SPEARMAN       a [x, y]              p [n]                                        -> sign
   XL_OP_BEST_ALPHA     a [scores]            p [n]                                        -> index or -1
+  XL_OP_BAYES_STD      a [x, sigma, offset, cols, out] p [n, d, dk] f [alpha]             -> n
+                       (BayesianRidge / ARDRegression predict(return_std=True): out[i] =
+                       sqrt(sum((x_i - offset)[cols] @ sigma * (x_i - offset)[cols]) + 1 / alpha),
+                       sigma dk x dk float32, cols dk int32 column indices or 0 for every column)
 """
 from core.entry_table import entry_table_publish, entry_table_read
 from core.linear_entry_table import LinearEntryKey
@@ -40,7 +44,8 @@ comptime XL_OP_HUBER_OUT = 6
 comptime XL_OP_CLASS_PREP = 7
 comptime XL_OP_SPEARMAN = 8
 comptime XL_OP_BEST_ALPHA = 9
-comptime XL_OPERATION_COUNT = 10
+comptime XL_OP_BAYES_STD = 10
+comptime XL_OPERATION_COUNT = 11
 # XL_OP_FLAGS bits.
 comptime XL_HAS_FIT_FOLD = 1
 # Fixed header words before the integer hyperparameters.
@@ -97,6 +102,10 @@ def xl_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     elif operation == XL_OP_BEST_ALPHA:
         want_a = 1
         want_p = 1
+    elif operation == XL_OP_BAYES_STD:
+        want_a = 5
+        want_p = 3
+        want_f = 1
     else:
         raise Error("x_linear ops: unknown operation " + String(operation))
     if na != want_a or np != want_p or nf != want_f:

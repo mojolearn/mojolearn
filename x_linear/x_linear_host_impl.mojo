@@ -11,14 +11,15 @@ from x_linear.enetcv_blocks import fb_host_words
 from x_linear.ops import FP, IP
 from core.host_parallel import host_parallelize
 from core.host_finite_scan import host_all_finite_f32
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count, host_predict_task_count_work
 from core.py2mojo_rows import ROWS_HUBER_OUT, ROWS_LRCV_PROBA, ROWS_SGD_PROBA, rows_one
 from std.memory import bitcast
 from x_linear.dispatch_host import fit_dispatch
 from x_linear.dispatch import decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.dispatch import ALGO_GLM
-from x_linear.dispatch import ALGO_BAYES
-from x_linear.bayes import BAYES_EIGH_REFUSAL
+from x_linear.dispatch import ALGO_BAYES, ALGO_ARD
+from x_linear.bayes import BAYES_EIGH_REFUSAL, bayes_posterior_cell, ard_posterior_cell, ard_kept_count, bayes_std_row
+from x_linear.bayes_words import bayes_out_words, ard_out_words
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_host
 from x_linear.logcv import logcv_fold_ids, lcv_caller_folds
 from x_linear.isotonic_host import isotonic_fit_host
@@ -37,6 +38,35 @@ def _finite(p: FP, count: Int, name: String) raises:
     # walk: the same verdict as the exponent-bits test, NaN and both infinities)
     if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(p)), count):
         raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
+
+
+def _posterior_host(a: Int, d: Int, n_out: Int, fi: Bool, fw: FP, iw: IP, res: FP):
+    """BayesianRidge's / ARDRegression's posterior words after the fit
+    (x_linear/bayes.mojo `bayes_posterior_cell` / `ard_posterior_cell`),
+    when the request holds them (x_linear/bayes_words.mojo). The cells are
+    independent: split across the host's workers, the words the device's
+    block writes."""
+    var cells = 0
+    var dk = 0
+    if a == ALGO_BAYES and n_out >= bayes_out_words(d):
+        cells = d * d + d
+    elif a == ALGO_ARD and n_out >= ard_out_words(d):
+        dk = ard_kept_count(iw, d)
+        cells = 1 + d + dk * dk
+    if cells == 0:
+        return
+    var bayes = a == ALGO_BAYES
+    var tasks = host_predict_task_count_work(cells, cells * max(d, 1))
+    var chunk = host_predict_chunk(cells, tasks)
+
+    def task(worker: Int) {imm chunk, imm cells, imm bayes, imm fw, imm iw, imm res, imm d, imm dk, imm fi}:
+        for c in range(worker * chunk, min(cells, (worker + 1) * chunk)):
+            if bayes:
+                bayes_posterior_cell(fw, res, d, fi, c)
+            else:
+                ard_posterior_cell(fw, iw, res, d, dk, fi, c)
+
+    host_parallelize(task, tasks)
 
 
 def x_linear_fit_host(
@@ -124,6 +154,9 @@ def x_linear_fit_host(
     # BayesianRidge's unconverged eigendecomposition (x_linear/bayes_host.mojo
     # `bayes_ridge_fit` sets iw[0]): refused as on every device column
     var bayes_refused = a == ALGO_BAYES and Int(iw[0]) != 0
+    if not bayes_refused:
+        _posterior_host(a, d, n_out, n_ip > 1 and Int(ipl[1]) != 0, FP(unsafe_from_address=Int(fw.unsafe_ptr())),
+                        IP(unsafe_from_address=Int(iw.unsafe_ptr())), out)
     _ = fw^
     _ = iw^
     _ = tw^
@@ -131,6 +164,34 @@ def x_linear_fit_host(
     if bayes_refused:
         raise Error(BAYES_EIGH_REFUSAL)
     return n_out
+
+
+def x_linear_bayes_std_host(x_addr: Int, sigma_addr: Int, offset_addr: Int, cols_addr: Int, n: Int, d: Int,
+                            dk: Int, alpha: Float64, out_addr: Int) raises -> Int:
+    """XL_OP_BAYES_STD on the CPU column: each row's predictive standard
+    deviation (x_linear/bayes.mojo `bayes_std_row`), the rows split across
+    the host's workers (each row its own chain: the device's words)."""
+    if n < 0 or d < 0 or dk < 0 or dk > d:
+        raise Error("x_linear bayes std: n >= 0 and 0 <= dk <= d required")
+    if n == 0:
+        return 0
+    var x = _fp(x_addr)
+    var dst = _fp(out_addr)
+    var offset = _fp(offset_addr) if d > 0 else dst
+    var sigma = _fp(sigma_addr) if dk > 0 else dst
+    var has_cols = cols_addr != 0
+    var cols = IP(unsafe_from_address=cols_addr if has_cols else out_addr)
+    var alpha32 = Float32(alpha)
+    var tasks = host_predict_task_count_work(n, n * max(dk * dk, 1))
+    var chunk = host_predict_chunk(n, tasks)
+
+    def task(worker: Int) {imm chunk, imm n, imm x, imm d, imm sigma, imm dk, imm offset, imm cols, imm has_cols,
+                           imm alpha32, imm dst}:
+        for i in range(worker * chunk, min(n, (worker + 1) * chunk)):
+            dst.unsafe_store(i, bayes_std_row(x, i, d, sigma, dk, offset, cols, has_cols, alpha32))
+
+    host_parallelize(task, tasks)
+    return n
 
 
 def x_linear_decision_host(

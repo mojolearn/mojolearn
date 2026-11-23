@@ -91,7 +91,7 @@ def _xl_huber_words(fields: PythonObject) raises -> List[Float64]:
 def _xl_bayes_words(model: PythonObject, fields: PythonObject) raises -> List[Float64]:
     """Kind 4: `xl_fit_bayes_unpack`'s refusals, then the ten words."""
     var nk = x_linear_keys()
-    _xl_bayes_refuse(model, fields, PythonObject(False))
+    _xl_bayes_refuse(model, fields)
     return [Float64(XL_MEMBER_BAYES), _intercept_word(fields), Float64(_int(py_item(fields, nk[].k_max_iter))),
         _float(py_item(fields, nk[].k_tol)), _float(py_item(fields, nk[].k_alpha_1)),
         _float(py_item(fields, nk[].k_alpha_2)), _float(py_item(fields, nk[].k_lambda_1)),
@@ -103,7 +103,7 @@ def _xl_ard_words(model: PythonObject, fields: PythonObject) raises -> List[Floa
     """Kind 5: `xl_fit_ard_unpack`'s refusals (the two-sample rule runs at
     the member's fit), then the nine words."""
     var nk = x_linear_keys()
-    _xl_bayes_refuse(model, fields, PythonObject(False))
+    _xl_bayes_refuse(model, fields)
     return [Float64(XL_MEMBER_ARD), _intercept_word(fields), Float64(_int(py_item(fields, nk[].k_max_iter))),
         _float(py_item(fields, nk[].k_tol)), _float(py_item(fields, nk[].k_alpha_1)),
         _float(py_item(fields, nk[].k_alpha_2)), _float(py_item(fields, nk[].k_lambda_1)),

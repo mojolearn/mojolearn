@@ -157,6 +157,9 @@ struct XLinearKeys(Defaultable, Movable):
     var k_store_cv_results: PythonObject
     var k_t_: PythonObject
     var k_threshold_lambda: PythonObject
+    var k_sigma_: PythonObject
+    var k_X_offset_: PythonObject
+    var k_X_scale_: PythonObject
     var k_tol: PythonObject
     var k_warm_start: PythonObject
     var k_xl_bindings: PythonObject
@@ -273,6 +276,9 @@ struct XLinearKeys(Defaultable, Movable):
         self.k_store_cv_results = PythonObject(None)
         self.k_t_ = PythonObject(None)
         self.k_threshold_lambda = PythonObject(None)
+        self.k_sigma_ = PythonObject(None)
+        self.k_X_offset_ = PythonObject(None)
+        self.k_X_scale_ = PythonObject(None)
         self.k_tol = PythonObject(None)
         self.k_warm_start = PythonObject(None)
         self.k_xl_bindings = PythonObject(None)
@@ -393,6 +399,9 @@ def _x_linear_keys_fill(nk: UnsafePointer[XLinearKeys, MutUntrackedOrigin]) rais
     nk[].k_store_cv_results = py_key("store_cv_results")
     nk[].k_t_ = py_key("t_")
     nk[].k_threshold_lambda = py_key("threshold_lambda")
+    nk[].k_sigma_ = py_key("sigma_")
+    nk[].k_X_offset_ = py_key("X_offset_")
+    nk[].k_X_scale_ = py_key("X_scale_")
     nk[].k_tol = py_key("tol")
     nk[].k_warm_start = py_key("warm_start")
     nk[].k_xl_bindings = py_key("xl_bindings")
