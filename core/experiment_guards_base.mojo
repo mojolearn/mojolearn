@@ -216,6 +216,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_TE_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_XPREP_FAST_TE_GATHER_OFF"](), "removed 2026-11-21 (lane/fx-verdicts7, A/B abn9 NVIDIA L40S, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466, one run per arm; NOISE: target-encoder on istella and taxi, 4 cells 0.98-1.01 arm/base): the switch is gone; te_enc always reads te_gather's bucket-ordered folds and targets. Remove -D MOJOLEARN_XPREP_FAST_TE_GATHER_OFF; see docs/TOMBSTONES.md."
     # ---- end lane fx-verdicts7
+    # ---- lane ab-prep-classical (2026-11-23): owed arms closed without a run (plumbing, rule 2026-11-22) or from the record
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MEMBER_SET_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MEMBER_SET_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the member set calls the same family member entries the per-member fit doors reach; only the per-member door, its re-admission and Python publication went); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MEMBER_SET_OFF.patch"
+    # ---- end lane ab-prep-classical
     return True
 
 

@@ -130,7 +130,7 @@ The 22 cases of `_arm_cases.py` run once per arm in subprocesses split across ev
 - Busy cores of total during a `device="cpu"` GBDT fit and its 5-fold CV (gbdt-host-par): read on the CPU box.
 - Identity column of a new verify lane (`gbdt-categorical-tree-ctr`, cat-ctr): `LANES=gbdt-categorical-tree-ctr bash
   tools/record_identity_column.sh <vendor> <outdir>` at the release's one verification.
-- A/B rows (timing, NVIDIA L40S): `MOJOLEARN_MSEL_MEMBER_UNITS_OFF`, `MOJOLEARN_MEMBER_SET_OFF`, member vs door
+- A/B rows (timing, NVIDIA L40S): `MOJOLEARN_MSEL_MEMBER_UNITS_OFF`, member vs door
   inside `resident()` (ma-pub-transform rounds 4-10), resident read rows (causal-lease).
 - Tool tests: `python3 tools/tests/test_check_tree_additions.py`, `python3 tools/test_box_persist.py`,
   `python3 -m pytest tools/test_native_checks_ci.py -k keeps_results tools/test_release_gate_jobs.py tools/test_record_index.py

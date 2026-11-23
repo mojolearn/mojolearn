@@ -7,7 +7,6 @@ members, the NaN refusal words) runs in subprocesses, once with this interpreter
 wheel named by an environment variable:
 
     MOJOLEARN_PROVING_ARM_MSEL_MEMBER_UNITS_OFF=/path/to/python   (wheel built with -D MOJOLEARN_MSEL_MEMBER_UNITS_OFF)
-    MOJOLEARN_PROVING_ARM_MEMBER_SET_OFF=/path/to/python          (wheel built with -D MOJOLEARN_MEMBER_SET_OFF)
 
 The default arm's results are checked on their own always; an arm comparison skips when its variable is unset.
 The cases are split across every core (one subprocess per shard, all arms at once; MOJOLEARN_PROVING_WORKERS caps
@@ -26,7 +25,8 @@ from _proving import DEVICES, HERE, assert_same, cls, make, member, workers_for
 import _arm_cases
 
 CASES = sorted(_arm_cases.CASES)
-ARM_DEFINES = ["MSEL_MEMBER_UNITS_OFF", "MEMBER_SET_OFF"]
+# TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+ARM_DEFINES = ["MSEL_MEMBER_UNITS_OFF"]
 ARMS = [pytest.param(define, id=define) for define in ARM_DEFINES]
 SCRIPT = os.path.join(HERE, "_arm_cases.py")
 
