@@ -28,7 +28,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from sequence.exec_device import (
-    DeviceExec, TPB, X_SEQUENCE_POOL, _args_i32_out, _pack_ff, _pack_ii, _pool_host, _pool_release_host, seq_kernel,
+    DeviceExec, TPB, _args_i32_out, _pack_ff, _pack_ii, _pool_host, _pool_release_host,
+    seq_kernel,
     sequence_ctx,
 )
 from sequence.ops import FP, OP_OPT, OPT_NADAM, OPT_SGD, OPT_SK_ADAM, OPT_SK_SGD, Args
@@ -37,7 +38,7 @@ from sequence.ops_impl import adafactor_core, opt_slots
 from sequence.lamb_core import lamb_bias, lamb_core, lamb_table
 from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
 from core.resident_upload_count import RUC_OPTIMIZER_STATE, resident_upload_note
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_wait_lock, shared_slot_unlock
 
 #: Apple FAST transport switches of the resident step (lane
 #: apple-fast-optspeed, 2026-10-03). At the board's one tensor of 16,777,216
@@ -176,6 +177,12 @@ comptime RES_LAMB = 2
 comptime RES_ADAFACTOR = 3
 
 
+#: The live resident optimizer handles one process may hold at once (each open
+#: fit or session holds one; a close frees it for reuse): a count of live
+#: owners, not a model or data size. Past it an open is refused in words.
+comptime _RES_HANDLES = 4096
+
+
 struct _ResPool(Defaultable, Movable):
     #: the three state slots (a 1-float placeholder for a slot not kept)
     var s0: List[DeviceBuffer[DType.float32]]
@@ -191,22 +198,40 @@ struct _ResPool(Defaultable, Movable):
     var nb: List[Int]
     #: LAMB's tensor offsets (nt + 1)
     var offs: List[List[Int]]
+    #: One lock word (lane r5-proving, 2026-11-23): `_open_sized` and
+    #: `opt_resident_close` take it for the free-handle search and the cell
+    #: writes. Before, two threads (device entries run with the GIL released)
+    #: could take the same free handle or append while another thread read a
+    #: cell. The lists are made at their full capacity (_RES_HANDLES) and never
+    #: grow past it, so a cell never moves: a step reads its own handle's cells
+    #: without the word, as before.
+    var lock: List[Int64]
 
     def __init__(out self):
-        self.s0 = List[DeviceBuffer[DType.float32]]()
-        self.s1 = List[DeviceBuffer[DType.float32]]()
-        self.s2 = List[DeviceBuffer[DType.float32]]()
-        self.used = List[Int]()
-        self.tab = List[DeviceBuffer[DType.float32]]()
-        self.n = List[Int]()
-        self.kind = List[Int]()
-        self.nt = List[Int]()
-        self.nb = List[Int]()
-        self.offs = List[List[Int]]()
+        self.s0 = List[DeviceBuffer[DType.float32]](capacity=_RES_HANDLES)
+        self.s1 = List[DeviceBuffer[DType.float32]](capacity=_RES_HANDLES)
+        self.s2 = List[DeviceBuffer[DType.float32]](capacity=_RES_HANDLES)
+        self.used = List[Int](capacity=_RES_HANDLES)
+        self.tab = List[DeviceBuffer[DType.float32]](capacity=_RES_HANDLES)
+        self.n = List[Int](capacity=_RES_HANDLES)
+        self.kind = List[Int](capacity=_RES_HANDLES)
+        self.nt = List[Int](capacity=_RES_HANDLES)
+        self.nb = List[Int](capacity=_RES_HANDLES)
+        self.offs = List[List[Int]](capacity=_RES_HANDLES)
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime _RES_NAME = "MojolearnXSequenceOptResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceOptResidentFastV1"
+# V2: the lock word and the fixed capacity changed the layout.
+comptime _RES_NAME = "MojolearnXSequenceOptResidentIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceOptResidentFastV2"
 comptime _RES = SharedSlot[_ResPool, _RES_NAME]
+
+
+def _res_lock(pool: UnsafePointer[_ResPool, MutUntrackedOrigin]):
+    shared_slot_wait_lock(rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr()))
+
+
+def _res_unlock(pool: UnsafePointer[_ResPool, MutUntrackedOrigin]):
+    shared_slot_unlock(rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr()))
 
 
 def _slot_buf(n: Int, keep: Bool) raises -> DeviceBuffer[DType.float32]:
@@ -239,33 +264,45 @@ def _open_sized(kind: Int, n: Int, n0: Int, n1: Int, n2: Int, used: Int, nt: Int
     var nb = 0
     if len(tab) > 0:
         nb = Int(bitcast[DType.int32](tab[len(tab) - 1]))
+    # The slots are made before the lock word is taken (an allocation and a
+    # fill are queued on the context, never under the word).
+    var b0 = _slot_buf(n0, (used & 1) != 0)
+    var b1 = _slot_buf(n1, (used & 2) != 0)
+    var b2 = _slot_buf(n2, (used & 4) != 0)
     var h = -1
-    for j in range(len(pool[].n)):  # small-loop(pool: resident optimizer handles): free handle slot search, no data
-        if pool[].n[j] == 0 and h < 0:
-            h = j
-    if h < 0:
-        pool[].s0.append(_slot_buf(n0, (used & 1) != 0))
-        pool[].s1.append(_slot_buf(n1, (used & 2) != 0))
-        pool[].s2.append(_slot_buf(n2, (used & 4) != 0))
-        pool[].used.append(used)
-        pool[].tab.append(tb^)
-        pool[].n.append(n)
-        pool[].kind.append(kind)
-        pool[].nt.append(nt)
-        pool[].nb.append(nb)
-        pool[].offs.append(offs^)
-        h = len(pool[].n) - 1
-    else:
-        pool[].s0[h] = _slot_buf(n0, (used & 1) != 0)
-        pool[].s1[h] = _slot_buf(n1, (used & 2) != 0)
-        pool[].s2[h] = _slot_buf(n2, (used & 4) != 0)
-        pool[].used[h] = used
-        pool[].tab[h] = tb^
-        pool[].n[h] = n
-        pool[].kind[h] = kind
-        pool[].nt[h] = nt
-        pool[].nb[h] = nb
-        pool[].offs[h] = offs^
+    _res_lock(pool)
+    try:
+        for j in range(len(pool[].n)):  # small-loop(pool: resident optimizer handles): free handle slot search, no data
+            if pool[].n[j] == 0 and h < 0:
+                h = j
+        if h < 0:
+            if len(pool[].n) >= _RES_HANDLES:
+                raise Error("RuntimeError: mojolearn: too many live resident optimizer handles")
+            pool[].s0.append(b0^)
+            pool[].s1.append(b1^)
+            pool[].s2.append(b2^)
+            pool[].used.append(used)
+            pool[].tab.append(tb^)
+            pool[].kind.append(kind)
+            pool[].nt.append(nt)
+            pool[].nb.append(nb)
+            pool[].offs.append(offs^)
+            # `n` last: a nonzero count is what marks the handle taken.
+            pool[].n.append(n)
+            h = len(pool[].n) - 1
+        else:
+            pool[].s0[h] = b0^
+            pool[].s1[h] = b1^
+            pool[].s2[h] = b2^
+            pool[].used[h] = used
+            pool[].tab[h] = tb^
+            pool[].kind[h] = kind
+            pool[].nt[h] = nt
+            pool[].nb[h] = nb
+            pool[].offs[h] = offs^
+            pool[].n[h] = n
+    finally:
+        _res_unlock(pool)
     # the fills and the table copy are ordered before every later use on
     # the one in-order context. Only LAMB's table copy reads a host list
     # (`tab`, freed when the caller returns), so only it waits here (lane
@@ -377,13 +414,20 @@ def opt_resident_close(handle: Int) raises -> Int:
     var ctx = sequence_ctx()
     ctx.synchronize()
     var pool = _RES.get_or_create_ptr()
-    pool[].s0[h] = ctx.enqueue_create_buffer[DType.float32](1)
-    pool[].s1[h] = ctx.enqueue_create_buffer[DType.float32](1)
-    pool[].s2[h] = ctx.enqueue_create_buffer[DType.float32](1)
-    pool[].tab[h] = ctx.enqueue_create_buffer[DType.float32](1)
+    var p0 = ctx.enqueue_create_buffer[DType.float32](1)
+    var p1 = ctx.enqueue_create_buffer[DType.float32](1)
+    var p2 = ctx.enqueue_create_buffer[DType.float32](1)
+    var pt = ctx.enqueue_create_buffer[DType.float32](1)
+    _res_lock(pool)
+    pool[].s0[h] = p0^
+    pool[].s1[h] = p1^
+    pool[].s2[h] = p2^
+    pool[].tab[h] = pt^
     pool[].offs[h] = List[Int]()
     pool[].used[h] = 0
+    # `n` last, under the word: the handle is free for the next open.
     pool[].n[h] = 0
+    _res_unlock(pool)
     return h
 
 
@@ -469,9 +513,10 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
     of the other. Every chunk's wait comes before its half is reused (the
     half of chunk i was last read for chunk i - 2, before the previous
     wait). Returns with every byte in the caller's arrays."""
-    var h0 = _pool_host(ex.ctx, OPT_PIPE_CH)
-    var h1 = _pool_host(ex.ctx, OPT_PIPE_CH)
-    var pool = X_SEQUENCE_POOL.get_or_create_ptr()
+    var h0 = _pool_host(ex.ctx, ex._own_pool(), OPT_PIPE_CH)
+    var h1 = _pool_host(ex.ctx, ex._own_pool(), OPT_PIPE_CH)
+    # The executor's own sub-pool (lane r5-proving): no other thread touches it.
+    var pool = ex._own_pool()
     var st0 = FP(unsafe_from_address=Int(pool[].host[h0].unsafe_ptr()))
     var st1 = FP(unsafe_from_address=Int(pool[].host[h1].unsafe_ptr()))
     var have_prev = False
@@ -502,8 +547,8 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
         off += sizes[j]
     if have_prev:
         unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
-    _pool_release_host(h0)
-    _pool_release_host(h1)
+    _pool_release_host(ex._own_pool(), h0)
+    _pool_release_host(ex._own_pool(), h1)
     # the executor's own bookkeeping (no copy is pending: the queue is empty)
     ex.sync()
 
@@ -559,8 +604,9 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
     caller's arrays. a0.p0 .. p4 are the flat P, G, s1, s2, s3."""
     var hi = List[Int]()
     for _ in range(6):
-        hi.append(_pool_host(ex.ctx, OPT_PIPE_CH))
-    var pool = X_SEQUENCE_POOL.get_or_create_ptr()
+        hi.append(_pool_host(ex.ctx, ex._own_pool(), OPT_PIPE_CH))
+    # The executor's own sub-pool (lane r5-proving): no other thread touches it.
+    var pool = ex._own_pool()
     # 0, 1: parameter stages; 2, 3: gradient stages; 4, 5: download halves
     var stg = List[Int]()
     for k in range(6):
@@ -621,7 +667,7 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
         unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
                count=prev_cnt)
     for k in range(6):
-        _pool_release_host(hi[k])
+        _pool_release_host(ex._own_pool(), hi[k])
     # the executor's own bookkeeping (the queue is empty)
     ex.sync()
 
