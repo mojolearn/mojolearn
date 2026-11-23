@@ -292,6 +292,10 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         return model
     elif len(supplied) != 0 or len(keywords) != 0:
         raise Error("TypeError: " + kind + " takes no arguments")
+    # lane neural-blocks-3 (2026-11-22): the native model reads the float argument as a Float32 (eps, p, theta,
+    # axis); the description holds that value, so a model saved and loaded (the file stores float32) has the
+    # same layer list and the same digest_ (before: layer_norm(1e-5) read back 9.999999747e-06, digest differed)
+    f = PythonObject(Float64(Float32(Float64(py=f))))
     sequential_append(mods, model, code, a0, a1, f, args)
     return model
 
