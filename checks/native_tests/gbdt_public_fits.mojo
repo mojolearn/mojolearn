@@ -58,6 +58,9 @@ from gbdt.mojolearn_gbdt_host_run import (
 )
 from gbdt.host.gbdt_host_entries_impl import (
     _parse_model,
+    gbdt_host_model_dim,
+    gbdt_host_predict_ctr_into,
+    gbdt_host_text_has_ctr,
     gbdt_host_predict_into,
     gbdt_host_sigmoid_pair_into,
     gbdt_host_binary_margins_check,
@@ -528,7 +531,7 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
 
 
 def model_dim(text: String) raises -> Int:
-    return _parse_model(text).dim
+    return gbdt_host_model_dim(text)
 
 
 def predict(text: String, x: List[Float32], n: Int) raises -> List[Float32]:
@@ -537,7 +540,11 @@ def predict(text: String, x: List[Float32], n: Int) raises -> List[Float32]:
     var dim = model_dim(text)
     var out = List[Float32](length=n * dim, fill=Float32(0))
     var op = _F32P(unsafe_from_address=Int(out.unsafe_ptr()))
-    if dim == 1:
+    if gbdt_host_text_has_ctr(text):
+        # a CTR model reads the RAW columns (the public predict's input) and
+        # expands them on the host (lane gbdt-units-6)
+        _ = gbdt_host_predict_ctr_into(text, Int(x.unsafe_ptr()), n, 0, op)
+    elif dim == 1:
         var m = _parse_model(text)
         var nf = len(m.fold_counts)
         var nt = len(m.tree_offsets) - 1
@@ -1164,9 +1171,10 @@ def _twice[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises -> G
 
 def _twice_text[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises -> GbdtFitOutcome:
     """Two fits of a model with CTR columns: the same model text, learn and
-    held-out curves. No `predict(X)`: the host reader refuses a model with
-    `ctr_table` records (raw categorical input is expanded by HostGBDT), so
-    `_twice` cannot take one (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)."""
+    held-out curves, no `predict(X)` (lane gbdt-cpu-rest-4-cat-ns,
+    2026-11-23). Since lane gbdt-units-6 the host predict expands CTR
+    columns (`gbdt_host_predict_ctr_into`), so `_twice` takes CTR models
+    too; this form stays for the units that compare curves."""
     var a = fit[I](o, inp)
     var b = fit[I](o, inp)
     require(a.text == b.text, "two host fits returned different bytes: " + what)
@@ -1297,6 +1305,9 @@ def _cat_rest_opts(loss: String) -> GbdtOpts:
     o.random_state = 7
     o.score_function = "Cosine"
     o.deterministic()
+    # the host unit's time budget (lane gbdt-units-6): 16 borders still
+    # give every policy and path its bins; no unit here reads the default 128
+    o.border_count = 16
     return o^
 
 
@@ -1393,6 +1404,9 @@ def _ns_opts(loss: String, policy: String, score: String) -> GbdtOpts:
     o.score_function = score
     if policy == "Lossguide":
         o.max_leaves = 8
+    # the host unit's time budget (lane gbdt-units-6): 16 borders still
+    # give every policy and path its bins; no unit here reads the default 128
+    o.border_count = 16
     return o^
 
 
@@ -1425,14 +1439,30 @@ def host_nonsym_rest[I: GbdtImage]() raises:
     var l2 = fit[I](_ns_opts("Logloss", "Depthwise", "L2"), cls)
     var nl2 = fit[I](_ns_opts("Logloss", "Depthwise", "NewtonL2"), cls)
     require(l2.text != nl2.text, "Depthwise L2 and NewtonL2 grew the same model (the planes did not move)")
-    # Depthwise's growth knobs
+    # Depthwise's growth knobs: together (each fit twice to the same bytes),
+    # then EACH at a value that must bite on 600 rows at depth 3 (lane
+    # gbdt-units-6: at 0.01 / 1 / 8 none of the three can stop a split of
+    # this tree, whose leaves hold ~75 rows of unit Hessian, so the old
+    # comparison could not tell a wired knob from a dropped one):
+    # min_data_in_leaf 300 makes a root child terminal (the children sum
+    # to 600), min_child_hessian 250 rejects every depth-2 split (the RMSE
+    # Newton plane is one per row and no depth-3 child holds 250 rows),
+    # min_split_gain 1e30 rejects every split
     var knobs = _ns_opts("RMSE", "Depthwise", "NewtonCosine")
     knobs.min_split_gain = 0.01
     knobs.min_child_hessian = 1.0
     knobs.min_data_in_leaf = 8
-    var mk = _twice[I](knobs, reg, "Depthwise RMSE min_split_gain / min_child_hessian / min_data_in_leaf")
+    _ = _twice[I](knobs, reg, "Depthwise RMSE min_split_gain / min_child_hessian / min_data_in_leaf")
     var plain = fit[I](_ns_opts("RMSE", "Depthwise", "NewtonCosine"), reg)
-    require(mk.text != plain.text, "Depthwise growth knobs changed nothing")
+    var k_leaf = _ns_opts("RMSE", "Depthwise", "NewtonCosine")
+    k_leaf.min_data_in_leaf = 300
+    require(fit[I](k_leaf, reg).text != plain.text, "Depthwise growth knobs changed nothing (min_data_in_leaf)")
+    var k_hess = _ns_opts("RMSE", "Depthwise", "NewtonCosine")
+    k_hess.min_child_hessian = 250.0
+    require(fit[I](k_hess, reg).text != plain.text, "Depthwise growth knobs changed nothing (min_child_hessian)")
+    var k_gain = _ns_opts("RMSE", "Depthwise", "NewtonCosine")
+    k_gain.min_split_gain = 1e30
+    require(fit[I](k_gain, reg).text != plain.text, "Depthwise growth knobs changed nothing (min_split_gain)")
     # Gradient leaves on Logloss, Poisson bootstrap, random_strength
     var gp = _ns_opts("Logloss", "Depthwise", "Cosine")
     gp.leaf_method = "Gradient"
@@ -1502,6 +1532,9 @@ def _pw_opts(loss: String, score: String, boot: String) -> GbdtOpts:
     o.boost_from_average = 1
     o.leaf_method = "Newton"
     o.leaf_iterations = 1
+    # the host unit's time budget (lane gbdt-units-6): 16 borders still
+    # give every policy and path its bins; no unit here reads the default 128
+    o.border_count = 16
     return o^
 
 
@@ -1647,7 +1680,8 @@ def host_pointwise_multiclass[I: GbdtImage]() raises:
     for li in range(2):  # small-loop(the two multi-output losses)
         for si in range(2):  # small-loop(the two score functions)
             var o = _pw_opts(losses[li], scores[si], "No")
-            o.n_estimators = 20
+            o.n_estimators = 8
+            o.learning_rate = 0.3
             o.max_depth = 3
             o.boost_from_average = 0
             var what = "pointwise " + losses[li] + " " + scores[si]
@@ -1688,7 +1722,8 @@ def host_pointwise_multiclass[I: GbdtImage]() raises:
     var reg = GbdtInputs(inp.x.copy(), n, inp.d, y2^)
     for si in range(2):  # small-loop(the two score functions)
         var o = _pw_opts("MultiRMSE", scores[si], "No")
-        o.n_estimators = 20
+        o.n_estimators = 8
+        o.learning_rate = 0.3
         o.max_depth = 3
         o.boost_from_average = 0
         o.target_dim = 2
@@ -1851,6 +1886,9 @@ def _sym_opts(loss: String, score: String) -> GbdtOpts:
     o.leaf_iterations = 1
     o.boost_from_average = 0
     o.deterministic()
+    # the host unit's time budget (lane gbdt-units-6): 16 borders still
+    # give every policy and path its bins; no unit here reads the default 128
+    o.border_count = 16
     return o^
 
 
@@ -1863,6 +1901,49 @@ def _sym_refused[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, needle: String, wha
         require_fails_with(String(error), needle, what)
         refused = True
     require(refused, what + " was silently accepted")
+
+
+def _l2_cosine_inputs(kind: Int) -> GbdtInputs:
+    """A 400-row, two-column fixture on which the L2 and Cosine calcers
+    choose DIFFERENT root splits (lane gbdt-units-6), so a fit that ignores
+    `score_function` fails the comparison. Column 0 isolates rows 0..19, all
+    positive; column 1 splits rows 0..199 (115 positive) from 200..399 (95
+    positive). At the start (p = 0.5, der = y - 0.5, w = 1) and
+    `l2_leaf_reg` 1000 the sums are column 0: (W, S) = (20, 10), (380, 0);
+    column 1: (200, 15), (200, -5). L2 = sum S^2 / (W + 1000): column 1
+    0.208 > column 0 0.098. Cosine = that over sqrt(sum W S^2 / (W +
+    1000)^2): column 0 2.236 > column 1 1.118. So L2 splits column 1 and
+    Cosine column 0. `kind` 0: Logloss labels 0/1; 1: RMSE targets +/-0.5
+    (the same derivatives at a zero start); 2: MultiClass labels 0/1 (two
+    classes, the pinned class doubles both scores, the order holds)."""
+    var n = 400
+    var x = List[Float32](length=2 * n, fill=Float32(0))
+    var y = List[Float32](length=n, fill=Float32(0))
+    for r in range(n):  # small-loop(the fixture's rows)
+        var pos: Bool
+        if r < 20:
+            x[r] = Float32(1)
+            pos = True
+        elif r < 200:
+            pos = r < 115
+        else:
+            pos = r < 295
+        if r < 200:
+            x[n + r] = Float32(1)
+        if kind == 1:
+            y[r] = Float32(0.5) if pos else Float32(-0.5)
+        else:
+            y[r] = Float32(1) if pos else Float32(0)
+    return GbdtInputs(x^, n, 2, y^)
+
+
+def _l2_cosine_opts(loss: String, score: String) -> GbdtOpts:
+    """`_sym_opts` at `l2_leaf_reg` 1000 and depth 1 (one split a tree: the
+    root `_l2_cosine_inputs` makes the two calcers disagree on)."""
+    var o = _sym_opts(loss, score)
+    o.l2_leaf_reg = 1000.0
+    o.max_depth = 1
+    return o^
 
 
 def host_symmetric_rest[I: GbdtImage]() raises:
@@ -1881,23 +1962,33 @@ def host_symmetric_rest[I: GbdtImage]() raises:
     var l2 = _twice[I](_sym_opts("Logloss", "L2"), clf, "symmetric Logloss L2")
     var nl2 = _twice[I](_sym_opts("Logloss", "NewtonL2"), clf, "symmetric Logloss NewtonL2")
     var ncos = _twice[I](_sym_opts("Logloss", "NewtonCosine"), clf, "symmetric Logloss NewtonCosine")
-    require(l2.text != cos.text, "symmetric Logloss L2: the Cosine model")
+    # L2 against Cosine on the fixture where their root splits provably
+    # differ (lane gbdt-units-6: on e3 the two calcers rank the splits alike
+    # at l2 3 and 600 rows, so equal models proved nothing either way)
+    var sc_clf = _l2_cosine_inputs(0)
+    var dl2 = fit[I](_l2_cosine_opts("Logloss", "L2"), sc_clf)
+    var dcos = fit[I](_l2_cosine_opts("Logloss", "Cosine"), sc_clf)
+    require(dl2.text != dcos.text, "symmetric Logloss L2: the Cosine model")
     require(nl2.text != l2.text, "symmetric Logloss NewtonL2: the L2 model (first-order planes)")
     require(ncos.text != cos.text, "symmetric Logloss NewtonCosine: the Cosine model (first-order planes)")
     # RMSE: der2 is 1, so at unit weight the Newton planes are the
     # first-order ones and the Newton scores give the same bytes
-    var rcos = _twice[I](_sym_opts("RMSE", "Cosine"), reg, "symmetric RMSE Cosine")
     var rl2 = _twice[I](_sym_opts("RMSE", "L2"), reg, "symmetric RMSE L2")
     var rnl2 = _twice[I](_sym_opts("RMSE", "NewtonL2"), reg, "symmetric RMSE NewtonL2")
-    require(rl2.text != rcos.text, "symmetric RMSE L2: the Cosine model")
+    var sc_reg = _l2_cosine_inputs(1)
+    var drl2 = fit[I](_l2_cosine_opts("RMSE", "L2"), sc_reg)
+    var drcos = fit[I](_l2_cosine_opts("RMSE", "Cosine"), sc_reg)
+    require(drl2.text != drcos.text, "symmetric RMSE L2: the Cosine model")
     require(rnl2.text == rl2.text, "symmetric RMSE NewtonL2 at unit weight differs from L2")
     # a pointwise loss and the multiclass loss under L2
     var mae = _sym_opts("MAE", "L2")
     mae.leaf_method = "Exact"
     _ = _twice[I](mae, reg, "symmetric MAE L2 Exact")
-    var mcl2 = _twice[I](_sym_opts("MultiClass", "L2"), mc_in, "symmetric MultiClass L2")
-    var mccos = _twice[I](_sym_opts("MultiClass", "Cosine"), mc_in, "symmetric MultiClass Cosine")
-    require(mcl2.text != mccos.text, "symmetric MultiClass L2: the Cosine model")
+    _ = _twice[I](_sym_opts("MultiClass", "L2"), mc_in, "symmetric MultiClass L2")
+    var sc_mc = _l2_cosine_inputs(2)
+    var dmcl2 = fit[I](_l2_cosine_opts("MultiClass", "L2"), sc_mc)
+    var dmccos = fit[I](_l2_cosine_opts("MultiClass", "Cosine"), sc_mc)
+    require(dmcl2.text != dmccos.text, "symmetric MultiClass L2: the Cosine model")
     # Gradient leaves and the RMSE walker at three iterations
     var lg = _sym_opts("Logloss", "Cosine")
     lg.leaf_method = "Gradient"
@@ -2049,9 +2140,16 @@ def host_simple_rest[I: GbdtImage]() raises:
     var qt = _sym_opts("Quantile", "Cosine")
     qt.leaf_method = "Simple"
     var mqt = _twice[I](qt, reg, "symmetric Quantile Simple")
-    var qtg = qt.copy()
-    qtg.leaf_method = "Gradient"
-    require(mqt.text != fit[I](qtg, reg).text, "symmetric Quantile Simple: the Gradient model")
+    # (lane gbdt-units-6) Simple is compared with Quantile's own Exact
+    # default: one Gradient step IS the searcher's leaf here
+    # (`sum(w * der) / (sum w + l2)` from the same planes; Quantile's
+    # alpha-0.5 derivatives are +/-0.5, on the fixed-point grid, so the
+    # snapped plane is the exact one), the way RMSE Simple is Newton-1
+    # above, so `!= Gradient` could only fail
+    var qte = qt.copy()
+    qte.leaf_method = "Exact"
+    qte.leaf_iterations = -1
+    require(mqt.text != fit[I](qte, reg).text, "symmetric Quantile Simple: the Exact model")
     var qw = _qw_opts("QueryRMSE")
     qw.pointwise = False
     qw.leaf_method = "Simple"
@@ -2110,6 +2208,9 @@ def _ordered_opts(loss: String) -> GbdtOpts:
     o.score_function = "Cosine"
     o.leaf_iterations = 1
     o.deterministic()
+    # the host unit's time budget (lane gbdt-units-6): 16 borders still
+    # give every policy and path its bins; no unit here reads the default 128
+    o.border_count = 16
     return o^
 
 
@@ -2388,22 +2489,30 @@ def host_ordered[I: GbdtImage](case_index: Int) raises:
         var texts = List[String]()
         for _ in range(2):  # small-loop(the original's two fits)
             texts.append(gbdt_fit_ordered_rmse_run(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(x.unsafe_ptr()),
-                Int(perm.unsafe_ptr()), 1200, 6, 0, 1200, 3, 3, 128, Float32(0.03), Float32(3.0)))
+                Int(perm.unsafe_ptr()), 1200, 6, 0, 1200, 3, 3, 16, Float32(0.03), Float32(3.0)))
         require(texts[0] == texts[1], "two ordered host fits returned different bytes")
         require(same_f32(predict(texts[0], x, 1200), predict(texts[1], x, 1200)), "ordered predictions differ")
         var ones = List[Float32](length=1200, fill=Float32(1))
         var unit_w = gbdt_fit_ordered_rmse_run(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(ones.unsafe_ptr()),
-            Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 3, 3, 128, Float32(0.03), Float32(3.0))
+            Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 3, 3, 16, Float32(0.03), Float32(3.0))
         require(unit_w == texts[0], "unit-weighted OrderedRMSE differs from the unweighted fit")
         var ramp = List[Float32](length=1200, fill=Float32(0))
         for r in range(1200):  # small-loop(np.linspace(.5, 1.5, 1200, dtype=float32))
             ramp[r] = Float32(0.5 + Float64(r) / 1199.0)
         var wa = gbdt_fit_ordered_rmse_run(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(ramp.unsafe_ptr()),
-            Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 2, 2, 128, Float32(0.03), Float32(3.0))
+            Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 2, 2, 16, Float32(0.03), Float32(3.0))
         var wb = gbdt_fit_ordered_rmse_run(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(ramp.unsafe_ptr()),
-            Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 2, 2, 128, Float32(0.03), Float32(3.0))
+            Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 2, 2, 16, Float32(0.03), Float32(3.0))
         require(wa == wb, "two weighted ordered host fits returned different bytes")
         require(all_finite_f32(predict(wa, x, 1200)), "weighted OrderedRMSE: nonfinite predict")
+        # KEEP-ALIVE (lane gbdt-units-6): `y` is read by ADDRESS inside the
+        # calls; its last named use was `wb`'s argument expression, so Mojo
+        # freed it BEFORE that call read it, the call's own first allocation
+        # (the permutation copy, the same 4800 bytes) took the block, and
+        # `wb` fitted the permutation's words as targets: the weighted pair
+        # differed (unit 14). The fit itself is deterministic.
+        _ = y
+        _ = x
         _ = ones^
         _ = ramp^
         _ = perm^
@@ -2434,6 +2543,11 @@ def host_ordered[I: GbdtImage](case_index: Int) raises:
         require(wa == wb, "two weighted FeatureFreq host fits returned different bytes")
         require(wa != a, "FeatureFreq sample weights had no model effect")
         _ = y  # read by address by the calls above (its last named use is the weighted call's argument)
+        # KEEP-ALIVE (lane gbdt-units-6): `coded` is read by address too; its
+        # last named use was `wb`'s argument, so `wb` read freed memory as
+        # its categorical codes ("categorical feature 0 row 0 is outside the
+        # UInt32 code range", unit 15)
+        _ = coded
         _ = ramp^
         _ = sources^
         return

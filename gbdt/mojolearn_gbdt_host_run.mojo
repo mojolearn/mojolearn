@@ -25,8 +25,11 @@ from gbdt.host.gbdt_host_entries_impl import (
     gbdt_host_group_sizes,
     gbdt_host_load_sources,
     gbdt_host_load_u32,
+    gbdt_host_model_dim,
+    gbdt_host_predict_ctr_into,
     gbdt_host_predict_multi_into,
     gbdt_host_read_pairs,
+    gbdt_host_text_has_ctr,
 )
 from gbdt.host.gbdt_oracle_eval import GbdtHostEval, gbdt_eval_want_best_model
 from gbdt.host.gbdt_oracle import (
@@ -2380,6 +2383,19 @@ def gbdt_predict_multi_run(
     written. The door calls it with the GIL released."""
     if n_rows <= 0:
         raise Error("gbdt_predict_multi: n_rows must be positive")
+    if gbdt_host_text_has_ctr(text):
+        # a CTR model (lane gbdt-units-6): the expansion and walk of
+        # `gbdt_host_predict_ctr_into`, the same mode checks
+        var cdim = gbdt_host_model_dim(text)
+        if mode != 0 and cdim < 2:
+            raise Error(
+                "gbdt_predict_multi: a probability mode needs a"
+                " multi-dimensional model; this one has dim " + String(cdim)
+                + ". A two-class problem's link is the sigmoid, which"
+                " Logloss's own predict_proba applies."
+            )
+        _ = gbdt_host_predict_ctr_into(text, x_address, n_rows, mode, op)
+        return cdim + 1 if mode == 1 else cdim
     var m = _parse_model(text)
     var dim = m.dim
     var n_features = len(m.fold_counts)

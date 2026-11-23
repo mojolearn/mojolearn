@@ -33,6 +33,8 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from core.gbdt_host_predict import GBDT_HOST_SABOTAGE, gbdt_host_predict
+from core.gbdt_host_ctr import gbdt_host_expand_ctr
+from core.host_archive_gbdt import host_archive_gbdt_text
 from core.host_parallel import host_nested_units, host_parallelize
 from core.host_predict_threads import (
     host_predict_chunk,
@@ -696,6 +698,144 @@ def gbdt_host_predict_into(
     _ = x^
     _ = m^
     _entry_copy_f32(out, n_rows, op)
+
+
+def gbdt_host_text_has_ctr(text: String) -> Bool:
+    """A model text with CTR records (`ctr_columns`, `ctr_table` or
+    `tensor_ctr_registry`): its columns are expanded from the raw input
+    before the walk (`gbdt_host_predict_ctr_into`)."""
+    var names: List[String] = ["ctr_columns", "ctr_table", "tensor_ctr_registry"]
+    for i in range(3):  # small-loop(names): the three fixed record names
+        if ("\n" + names[i] + " ") in text or text.startswith(names[i] + " "):
+            return True
+    return False
+
+
+def gbdt_host_model_dim(text: String) raises -> Int:
+    """The model's approx dimension, a CTR model's included."""
+    if gbdt_host_text_has_ctr(text):
+        var a = host_archive_gbdt_text(text)
+        return a.metadata["dim"]
+    return _parse_model(text).dim
+
+
+def gbdt_host_ctr_input_columns(text: String) raises -> Int:
+    """The raw input columns a CTR model's predict reads."""
+    var a = host_archive_gbdt_text(text)
+    return a.metadata["n_input_features"]
+
+
+def gbdt_host_predict_ctr_into(
+    text: String,
+    x_address: Int,
+    n_rows: Int,
+    mode: Int,
+    op: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """Predict for a model with CTR columns on the host (lane gbdt-units-6,
+    2026-11-23). Every step is the device's own body, no restatement:
+    the product text reader (`load_model_text` through
+    `host_archive_gbdt_text`, the flat host layout), the raw-to-model column
+    expansion (`gbdt_host_expand_ctr`: `expand_raw_columns` /
+    `expand_tensor_ctr_columns` / the combination columns, the functions
+    `predict_floats` calls before it quantizes), then the quantize, walk and
+    leaf sum of `gbdt_host_predict` (parallel over rows). `x_address` holds
+    the RAW input, column-major, `n_rows * n_input_features` (the model's
+    `n_input_features`). Mode 0 RAW (`dim` columns), 1 SOFTMAX (`dim + 1`),
+    2 SIGMOID (`dim`), row-major to `op`; returns the model's dim."""
+    if n_rows <= 0:
+        raise Error("gbdt_predict: n_rows must be positive")
+    var a = host_archive_gbdt_text(text)
+    var n_input = a.metadata["n_input_features"]
+    var n_cols = a.metadata["n_features"]
+    var n_trees = a.metadata["n_trees"]
+    var dim = a.metadata["dim"]
+    var n_splits = a.metadata["n_splits"]
+    var n_leaf_values = a.metadata["n_leaf_values"]
+    var x_raw = read_f32(x_address, n_rows * n_input)
+    var ctr_ints = a.integers["ctr_ints"].copy()
+    var ctr_floats = a.floats["ctr_floats"].copy()
+    var tensor_ints = a.integers["tensor_ints"].copy()
+    var tensor_floats = a.floats["tensor_floats"].copy()
+    var counts = a.integers["ctr_counts"].copy()
+    var border_offsets = a.integers["border_offsets"].copy()
+    var borders = a.floats["borders"].copy()
+    var one_hot = a.integers["one_hot"].copy()
+    var fold_counts = a.integers["fold_counts"].copy()
+    var nan_treatment = a.integers["nan_treatment"].copy()
+    var tree_offsets = a.integers["tree_offsets"].copy()
+    var leaf_offsets = a.integers["leaf_offsets"].copy()
+    var split_feature = a.integers["split_feature"].copy()
+    var split_bin = a.integers["split_bin"].copy()
+    var split_take_bin = a.integers["split_take_bin"].copy()
+    var node_left = a.integers["node_left"].copy()
+    var node_right = a.integers["node_right"].copy()
+    var leaves = a.floats["leaves"].copy()
+    # `ctr_ints` carries the combination section after the simple tables'
+    # fields; `gbdt_host_expand_ctr` reads its length (the archive's
+    # `n_ctr_ints`), so the placeholder word of an empty list is dropped
+    ctr_ints.resize(a.metadata["n_ctr_ints"], Int32(0))
+    ctr_floats.resize(a.metadata["n_ctr_floats"], Float32(0))
+    tensor_ints.resize(a.metadata["n_tensor_ints"], Int32(0))
+    tensor_floats.resize(a.metadata["n_tensor_floats"], Float32(0))
+    counts.resize(a.metadata["n_ctr_counts"], Int32(0))
+    var x = gbdt_host_expand_ctr(
+        x_raw, n_rows, n_cols, ctr_ints, ctr_floats,
+        a.metadata["n_ctr_tables"], tensor_ints, tensor_floats,
+        a.metadata["n_tensor_tables"], counts, border_offsets, borders,
+        one_hot,
+    )
+    if len(x) != n_rows * n_cols:
+        raise Error("gbdt_predict: the CTR expansion wrote " + String(len(x)) + " values")
+    var out = List[Float32](length=n_rows * dim, fill=Float32(0.0))
+    gbdt_host_predict(
+        x, n_rows, n_cols,
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](border_offsets.unsafe_ptr()),
+        rebind[MutPointer[Float32, MutUntrackedOrigin]](borders.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](fold_counts.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](one_hot.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](nan_treatment.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](tree_offsets.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](split_feature.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](split_bin.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](split_take_bin.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](node_left.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](node_right.unsafe_ptr()),
+        rebind[MutPointer[Int32, MutUntrackedOrigin]](leaf_offsets.unsafe_ptr()),
+        rebind[MutPointer[Float32, MutUntrackedOrigin]](leaves.unsafe_ptr()),
+        n_trees, dim, a.non_symmetric, n_splits, n_leaf_values, a.bias,
+        out,
+    )
+    # KEEP-ALIVE past the walk: the pointers above are untracked
+    _ = border_offsets^
+    _ = borders^
+    _ = fold_counts^
+    _ = one_hot^
+    _ = nan_treatment^
+    _ = tree_offsets^
+    _ = split_feature^
+    _ = split_bin^
+    _ = split_take_bin^
+    _ = node_left^
+    _ = node_right^
+    _ = leaf_offsets^
+    _ = leaves^
+    _ = x^
+    _ = x_raw^
+    _ = ctr_ints^
+    _ = ctr_floats^
+    _ = tensor_ints^
+    _ = tensor_floats^
+    _ = counts^
+    if mode == 0:
+        _entry_copy_f32(out, n_rows * dim, op)
+    elif mode == 1:
+        _entry_softmax(out, n_rows, dim, op)
+    elif mode == 2:
+        _entry_sigmoid(out, n_rows * dim, op)
+    else:
+        raise Error("gbdt_predict_multi: unknown mode " + String(mode))
+    return dim
 
 
 def gbdt_host_predict_multi_into(
