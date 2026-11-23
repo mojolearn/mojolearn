@@ -48,6 +48,7 @@ from bindings.metrics_program_pack import metric_arena_array
 from bindings.mcls_classify_run import (
     _CM_COUNT, _CM_NORM, _CM_WSUM_LEAF, _CM_WSUM_FOLD, _WSUM_BLOCK, _ROW_LOGLOSS, _RANK_MEAN,
     McEpi, McSums, mc_wsum_sf64, mc_count_tail, mc_row_mean, mc_proba_stages, mc_proba_code,
+    mc_sums_stages, mc_epi_stage,
 )
 
 # ------------------------------------------------------------------ targets
@@ -124,47 +125,19 @@ def mc_sums(mut prog: MetricDoorProg, pair: McPair, order: PythonObject, epis: L
     """`_Sums(true, pred, w, order, numeric_mode, epi=...)` up to its tail:
     the codes over `order`, the pair key, the three (four weighted)
     groupings, the count slots and the cls_epi stages, in that order."""
-    var s = McSums()
     var n = pair.true.n
     var labels = mc_len(order)
-    s.n = n
-    s.labels = labels
-    s.weighted = pair.w is not None
     var yt = mc_map_order(pair.true, order, context)
     var yp = mc_map_order(pair.pred, order, context)
-    var a = prog.put(yt)
-    var b = prog.put(yp)
-    var match_off = prog.scratch(n)
-    prog.stage("pair_key", n, [a, b, match_off, labels, 1])
-    var w_off = MC_NONE
+    # the typed builder (bindings/mcls_classify_run.mojo `mc_sums_stages`):
+    # inputs a, b and (weighted) w, pinned here in that order
+    var s = mc_sums_stages(prog.plan, n, labels, pair.w is not None)
+    prog.pins.append(yt)
+    prog.pins.append(yp)
     if s.weighted:
-        w_off = prog.put(pair.w)
-    s.match_off = match_off
-    s.w_off = w_off
-    var keys: List[Int] = [match_off, a, b]
-    for g in range(3):  # driver-loop: over the three count groupings
-        var got = prog.group(keys[g], n, labels, MC_NONE, 1, w_off, 1)
-        s.groups.append(got[0])
-        s.groups.append(got[1])
-    if s.weighted:
-        var zero = prog.scratch(n)
-        prog.stage("pair_key", n, [a, a, zero, 1, 2])
-        var got = prog.group(zero, n, 1, MC_NONE, 1, w_off, 1)
-        s.groups.append(got[0])
-        s.groups.append(got[1])
-    else:
-        for g in range(3):  # driver-loop: over the three count slots
-            s.cnt.append(prog.counts(s.groups[2 * g], labels))
-    var col = 1 if s.weighted else 0
+        prog.pins.append(pair.w)
     for e in range(len(epis)):  # driver-loop: over the requested set-wise epilogues
-        var bo = 0
-        if epis[e].fmode == 2:
-            var pairs: List[Float64] = [1 + epis[e].b2, epis[e].b2]
-            bo = prog.put_f64s(pairs)
-        var eo = prog.alloc(8 + 6 * max(labels, 1))
-        prog.stage("cls_epi", 1, [s.groups[col], s.groups[2 + col], s.groups[4 + col], epis[e].k, col, epis[e].kind,
-                                  epis[e].avg, epis[e].zd, eo, epis[e].fmode, bo])
-        s.eos.append(eo)
+        _ = mc_epi_stage(prog.plan, s, epis[e])
     _ = yt^
     _ = yp^
     return s^
