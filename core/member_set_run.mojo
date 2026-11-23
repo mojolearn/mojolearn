@@ -664,6 +664,10 @@ struct MemberFitExtras(Copyable, Movable):
     var pairs_weight: Int
     var eval_cat_keys: Int
     var eval_cat_count: Int
+    # Lane mf-hostent5: OrderedRMSE's `permutation` as the estimator's fit
+    # door admits it (int64 row ids, `rows` of them; 0: not given), handed to
+    # the member as `call.permutation`; the member checks the bijection.
+    var permutation: Int
 
     def __init__(out self):
         self.rows = 0
@@ -679,9 +683,11 @@ struct MemberFitExtras(Copyable, Movable):
         self.pairs_weight = 0
         self.eval_cat_keys = 0
         self.eval_cat_count = 0
+        self.permutation = 0
 
     def given(self) -> Bool:
-        return (self.weights != 0 or self.eval_rows > 0 or self.groups != 0 or self.pair_count > 0)
+        return (self.weights != 0 or self.eval_rows > 0 or self.groups != 0 or self.pair_count > 0
+                or self.permutation != 0)
 
 
 def _eval_columns_span(source: Int, cols: Int, columns: Int, count: Int, wide: Bool, first: Int, rows: Int,
@@ -750,6 +756,8 @@ def member_fit_extras_apply(extras: MemberFitExtras, mut call: MemberCall, colum
         call.weights = MemberMatrix(extras.weights, extras.rows, 1)
     if extras.groups != 0:
         call.groups = MemberMatrix(extras.groups, extras.rows, 1, MEMBER_I32)
+    if extras.permutation != 0:
+        call.permutation = MemberMatrix(extras.permutation, extras.rows, 1, MEMBER_I64)
     if extras.pair_count > 0:
         call.pairs = MemberMatrix(extras.pairs, extras.pair_count, 2, MEMBER_I32)
         if extras.pairs_weight != 0:
@@ -781,6 +789,7 @@ def member_fit_extras_clear(mut call: MemberCall):
     call.eval_x = MemberMatrix()
     call.eval_y = MemberMatrix()
     call.eval_cat_keys = MemberMatrix()
+    call.permutation = MemberMatrix()
 
 
 def member_set_fit(mut run: MemberSetRun) raises:

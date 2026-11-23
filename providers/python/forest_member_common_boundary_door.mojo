@@ -37,6 +37,14 @@ these with the kind prefix its classes connect under ("dt_", "rf_", "et_").
   * `forest_member_state_common` (UNPACK): a member state from a fitted
     estimator's five model arrays and, when it has them, its
     `feature_importances_`.
+  * `forest_member_host_admit` (UNPACK, lane mf-hostent5): a saved
+    `HostForest` as the PREDICT-ONLY kind (core/forest_member_run.mojo word
+    [0] 2 / 3): the family its file names (an extra-trees file is the
+    ExtraTrees family's state: `owner.plan.family`), the host image of the
+    identical tier whatever device the file recorded (HostForest predicts on
+    the CPU binding), its saved engine as word [9]; its state is imported by
+    `forest_member_state_common` from the same five arrays and dimensions a
+    RandomForest / ExtraTrees state is.
 
 SERIAL BY NATURE: one member's admission or publication (a few record reads
 and five block copies); a caller runs its members in parallel.
@@ -48,7 +56,8 @@ from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_fields
 from bindings.admitted_input_unpack import admitted_vector, admitted_array, classical_view, admitted_dtype
 from bindings.classical_arrays_door import classical_address
 from bindings.trees_public_inputs_door import trees_builtins, trees_table, trees_freeze, trees_address
-from bindings.trees_route_boundary_door import trees_route_context
+from bindings.trees_route_boundary_door import trees_route_context, trees_cpu_context, _process_cpu_only
+from core.member_families import MEMBER_FAMILY_EXTRA_TREES
 from bindings.trees_public_forest_door import (
     forest_kind, forest_get_params, forest_config, forest_capture_mode, forest_prediction_engine, forest_key,
     forest_refresh, _rf_derive, _et_derive,
@@ -146,6 +155,56 @@ def forest_member_admit_common(model: PythonObject, kind_word: Int, prefix: Stri
         words.append(bitcast[DType.float64](Int64(config.ints[k])))
         words.append(config.floats[k])
         words.append(1.0 if config.bad[k] != 0 else 0.0)
+    owner.plan.params = words^
+    owner.pins = Python.tuple(native, run)
+    return True
+
+
+def forest_member_host_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """UNPACK of a saved HostForest (kind 2 of the mark; see the module docstring). False (the caller keeps
+    its old path) for an instance that carries no saved forest."""
+    var fields = py_fields(model)
+    var family = py_get(fields, PythonObject("family"))
+    var is_classifier = py_get(fields, PythonObject("is_classifier"))
+    var engine = py_get(fields, PythonObject("_inference_engine"))
+    if family is None or is_classifier is None or engine is None or py_get(fields, PythonObject("_offsets")) is None:
+        return False
+    var et = String(py=family) == "et"
+    var classifier = Bool(py=is_classifier)
+    var run = context if _process_cpu_only(context) else trees_cpu_context(context)
+    var native = trees_table(run, "identical", "_mojolearn_trees" if et else "_mojolearn_rf")
+    var key_words = py_get(native, PythonObject("trees_native_key" if et else "rf_native_key"))
+    if key_words is None:
+        raise Error("ImportError: mojolearn: the forest binding publishes no native entry table")
+    var vendor = Int(py=key_words[1])
+    var route = DeviceRoute(DEVICE_CPU if vendor == 0 else DEVICE_GPU)
+    route.mode = Int(py=key_words[0])
+    route.vendor = vendor
+    route.entry = forest_key(native)
+    owner.plan.route = route
+    if et:
+        owner.plan.family = MEMBER_FAMILY_EXTRA_TREES
+    # The predict-only words: kind, layout, then unread fit settings, the identical tier (word 8 = 0), the
+    # saved engine (word 9), no importance or out-of-bag fit, three empty parameter slots.
+    var slots = 3
+    var words = List[Float64](capacity=FM_HEAD + 3 * slots)
+    words.append(2.0 if classifier else 3.0)
+    words.append(1.0 if et else 0.0)
+    words.append(-1.0)
+    words.append(0.0)
+    words.append(0.0)
+    words.append(0.0)
+    words.append(0.0)
+    words.append(0.0)
+    words.append(0.0)
+    words.append(1.0 if String(py=engine) == "parallel_groves" else 0.0)
+    words.append(0.0)  # word 10 (FM_WORD_IMPORTANCES)
+    words.append(0.0)  # word 11 (FM_WORD_OOB)
+    words.append(Float64(slots))  # word 12 (FM_WORD_SLOTS)
+    for _ in range(slots):  # small-loop(slots): the three unread parameter slots
+        words.append(0.0)
+        words.append(0.0)
+        words.append(1.0)
     owner.plan.params = words^
     owner.pins = Python.tuple(native, run)
     return True

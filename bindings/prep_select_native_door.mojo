@@ -127,8 +127,9 @@ def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, fit_pa
     get_params, constructor or fit). Returns the fitted clone.
 
     WHO STILL COMES HERE (lane mf-del5b audit of mf-meta5b's list; each keeps the estimator's own compiled
-    fit door because only that door has the words or the route): a class with no serving member (no mark,
-    e.g. OrderedRMSE, whose fit needs `permutation`); a member refusal with no fit parameters (THE FALLBACK
+    fit door because only that door has the words or the route): a class with no serving member (since lane
+    mf-hostent5 OrderedRMSE is Gbdt kind 4, its `permutation` carried from RFE's fit parameters, so no class of
+    ours is left here for want of a mark); a member refusal with no fit parameters (THE FALLBACK
     RULE: the door re-fits and raises the estimator's own words, or answers); a one-class or encoder-refused
     target (each family's fit door has its own one-class words); a class_weight table the member cannot
     complete; sample weights for a kind without MEMBER_CAN_SAMPLE_WEIGHT; a non-bool feature_importances; a

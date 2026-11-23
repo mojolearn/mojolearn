@@ -125,6 +125,11 @@ class HostForest:
     >>> pred = mojolearn.HostForest.from_file("rf.npz").predict(X)
     """
 
+    #: A predict-only member of a meta-estimator or an explainer (core/forest_member_run.mojo: family 14, kind 2,
+    #: the saved model imported from its own arrays; an extra-trees file is the ExtraTrees family's).
+    _mojolearn_member = (14, 2)
+    _mojolearn_member_predict_only = True
+
     def __init__(self, *, estimator, offsets, colid, quesval, left_child, leaves,
                  n_features, n_trees, num_outputs, classes=None, device=None,
                  inference_engine='sequential'):
