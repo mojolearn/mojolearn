@@ -1061,8 +1061,22 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " under loss='" + loss + "' (only Newton)")
     if is_multi and leaf_iterations >= 0 and leaf_iterations != 1:
         _refuse("leaf_estimation_iterations=" + String(leaf_iterations) + " under loss='" + loss + "' (only 1)")
-    if is_pointwise and grow_code != 0:
-        _refuse("loss='" + loss + "' under grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
+    # lane gbdt-cpu-rest (2026-11-23): the pointwise losses grow
+    # Depthwise and Lossguide trees through the non-symmetric driver
+    # (gbdt_oracle_depthwise.mojo); the grouped ones are SymmetricTree only
+    # on both columns, in `train`'s words
+    var pw_grouped = (
+        pw_objective == GBDT_OBJ_QUERY_RMSE
+        or pw_objective == GBDT_OBJ_PAIR_LOGIT
+        or pw_objective == GBDT_OBJ_YETI_RANK
+    )
+    if pw_grouped and grow_code != 0:
+        raise Error(
+            "loss='" + loss + "' is implemented on SymmetricTree only here;"
+            " grow_policy=" + String("Depthwise" if grow_code == 1 else "Lossguide")
+            + " is refused (the reference registers it,"
+            " querywise_non_symmetric.cpp:5-14)"
+        )
     if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:
         _refuse(
             "leaf_estimation_iterations=" + String(leaf_iterations)
@@ -1106,14 +1120,18 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # the non-symmetric driver's stochastic arm, Logloss and RMSE:
     # gbdt_oracle_depthwise.mojo::gbdt_host_fit_non_symmetric reads the
     # bootstrap kind and the strength as options under both policies
-    var ns_stochastic = grow_code != 0 and (loss == String("Logloss") or is_rmse)
+    var ns_stochastic = grow_code != 0 and (loss == String("Logloss") or is_rmse or is_pointwise)
     # The shared loss oracle applies row bootstrap AFTER full grouped
     # gradients, matching querywise_targets_impl.h::StochasticDer (162-188).
     # Its score-noise implementation is shared by all these objectives.
-    var pw_stochastic = is_pointwise and grow_code == 0
+    var pw_stochastic = is_pointwise
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
-        if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
-            _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2 and NewtonCosine)")
+        # lane gbdt-cpu-rest (2026-11-23): Cosine under Lossguide is the
+        # non-symmetric driver's Depthwise Cosine score
+        # (gbdt_oracle_depthwise.mojo `_score_leaves`), the device's one
+        # leafwise calcer for both policies
+        if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE and score_function != GBDT_HOST_SCORE_COSINE:
+            _refuse("score_function code " + String(score_function) + " under Lossguide (Cosine, NewtonL2 and NewtonCosine)")
     elif ranking_pointwise:
         if (
             score_function != GBDT_HOST_SCORE_COSINE
@@ -1206,10 +1224,12 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # lane gbdt-gaps (2026-11-23): the same arm on the RMSE fit of that loop
     # (numeric, one-hot and CTR columns) and on the non-symmetric driver
     # (gbdt_oracle_depthwise.mojo, Logloss and RMSE)
+    # lane gbdt-cpu-rest (2026-11-23): and the pointwise losses on the
+    # non-symmetric driver, whose held-out arm reads `_loss_value`
     var eval_arm_ok = (
         (loss == String("Logloss") or is_rmse) and not is_pointwise
         and not is_multi
-    )
+    ) or (is_pointwise and grow_code != 0)
     if n_eval_rows != 0 and not eval_arm_ok:
         _refuse(
             "eval_set outside Logloss and RMSE (the held-out arm of"
@@ -1244,8 +1264,15 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     )
     if boost_from_average == 1 and not is_rmse and not quantile_family:
         _refuse("boost_from_average=True")
-    if feature_fraction != 1.0 and not lossguide_knobs:
-        _refuse("feature_fraction=" + String(feature_fraction) + " outside Lossguide with Logloss")
+    # lane gbdt-cpu-rest (2026-11-23): the non-symmetric driver samples
+    # each tree's features for every loss and both policies
+    # (`_sample_tree_folds`, the device's `feature_sampling.mojo`); the
+    # symmetric loop does not restate the sampling
+    if feature_fraction < 1.0 and n_flags != 0:
+        # `train`'s words (gbdt/train.mojo)
+        raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+    if feature_fraction != 1.0 and grow_code == 0:
+        _refuse("feature_fraction=" + String(feature_fraction) + " under SymmetricTree")
     if not (feature_fraction > 0.0) or feature_fraction > 1.0:
         raise Error("feature_fraction must be finite and in (0, 1]")
     if border_count < 1 or border_count > 255:
@@ -1522,6 +1549,30 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                     )
                 )
         var pw_model: GbdtHostModel
+        if grow_code != 0:
+            # Depthwise and Lossguide: the non-symmetric driver over the
+            # pointwise loss (gbdt/host/gbdt_oracle_depthwise.mojo)
+            var pw_tp = GbdtHostTreeParams(
+                p, grow_code, ns_max_leaves, Float64(min_data_in_leaf),
+                score_function, child_hessian, min_split_gain,
+                random_strength, feature_fraction, pw_loss,
+            )
+            var pw_ev = _gbdt_host_eval_arm(
+                eval_x_address, eval_y_address, n_eval_rows, n_features,
+                od_kind, od.auto_stop_p_value, od.iterations_wait,
+                use_best_model, best_model_min_trees,
+            )
+            var pw_ns = gbdt_host_fit_non_symmetric(
+                x, y, n_rows, n_features, pw_tp, pw_ev^, pw_start, row_weights
+            )
+            text = gbdt_text_with_bias(
+                gbdt_host_ns_model_text(pw_ns), len(pw_ns.losses), pw_start
+            )
+            losses = pw_ns.losses.copy()
+            best_iteration = pw_ns.best_iteration
+            stopped_early = pw_ns.stopped_early
+            test_losses = pw_ns.test_losses.copy()
+            return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
         if ranking_pointwise:
             pw_model = gbdt_ranking_pointwise_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,

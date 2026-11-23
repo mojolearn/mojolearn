@@ -174,7 +174,10 @@ from gbdt.host.gbdt_oracle_eval import (
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_NEWTON,
     GBDT_OBJ_LOGLOSS,
+    GBDT_OBJ_PAIR_LOGIT,
+    GBDT_OBJ_QUERY_RMSE,
     GBDT_OBJ_RMSE,
+    GBDT_OBJ_YETI_RANK,
     GbdtHostLoss,
     _estimate_leaves_for_loss,
     _loss_search_pass,
@@ -1284,8 +1287,15 @@ def gbdt_host_fit_non_symmetric(
     if not newton and params.score_function != GBDT_HOST_SCORE_COSINE_NS:
         raise Error("the non-symmetric host fit restates Cosine, NewtonL2 and NewtonCosine only")
     var is_logloss = params.loss.objective == GBDT_OBJ_LOGLOSS
-    if not is_logloss and params.loss.objective != GBDT_OBJ_RMSE:
-        raise Error("the non-symmetric host fit restates Logloss and RMSE only")
+    # lane gbdt-cpu-rest (2026-11-23): every pointwise loss of
+    # gbdt_oracle_losses.mojo rides the RMSE arm's generic passes
+    # (`_loss_search_pass`, `_estimate_leaves_for_loss` with Exact,
+    # `_loss_value`), as the device's `TPointwiseTargetsImpl` on
+    # `TNonSymmetricTree` (`pointwise_non_symmetric.cpp:5-29`); the grouped
+    # losses stay symmetric only, the device's refusal
+    var objective = params.loss.objective
+    if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK:
+        raise Error("the non-symmetric host fit restates Logloss and the pointwise losses only")
     var base = params.base
 
     var grid = gbdt_host_grid(
