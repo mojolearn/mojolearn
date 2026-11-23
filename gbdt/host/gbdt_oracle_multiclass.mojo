@@ -130,7 +130,21 @@ from gbdt.host.gbdt_oracle import (
     _cosine_gain_n,
     _cosine_gains_n,
     _stat_chunks,
+    # the categorical arm (lane gbdt-cpu-rest-4-cat, 2026-11-23)
+    GbdtHostGrid,
+    GbdtHostModel,
+    _partition_for_model,
+    _tree_ctr_levels_host,
 )
+from gbdt.host.gbdt_oracle_ctr import (
+    _ctr_copy_into,
+    gbdt_ctr_host_model_text_of,
+    gbdt_ctr_host_prelude,
+    gbdt_ctr_host_tail,
+)
+from gbdt.host.gbdt_oracle_tree_ctr import GbdtTreeCtrHost
+from gbdt.models.combination_map import TCombinationCtrs
+from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.host.gbdt_oracle_eval import (
     GbdtHostEval,
     GbdtHostEvalFit,
@@ -172,10 +186,17 @@ struct GbdtHostMultiModel(Movable):
 @fieldwise_init
 struct GbdtHostMultiFit(Movable):
     """`gbdt_multi_host_fit`'s pair: the ensemble and what its HELD-OUT arm
-    reports (`GbdtHostEvalFit`), as `GbdtHostFitWithEval` for one output."""
+    reports (`GbdtHostEvalFit`), as `GbdtHostFitWithEval` for one output;
+    and, for a categorical fit (lane gbdt-cpu-rest-4-cat, 2026-11-23), what
+    its model text needs beside the ensemble (`GbdtCtrHostFit`'s parts:
+    empty, 0 and none for a numeric fit)."""
 
     var model: GbdtHostMultiModel
     var eval: GbdtHostEvalFit
+    var one_hot: List[Bool]
+    var tables: List[TCtrValueTable]
+    var ctr_column_count: Int
+    var combination_ctrs: TCombinationCtrs
 
 
 # ===========================================================================
@@ -668,8 +689,28 @@ def gbdt_multi_host_fit(
     sample_weights: List[Float32] = List[Float32](),
     # the per-tree feature sample (lane gbdt-cpu-rest-2, 2026-11-23)
     feature_fraction: Float64 = 1.0,
+    # the categorical arm (lane gbdt-cpu-rest-4-cat, 2026-11-23): one flag
+    # per input feature (bit 0 categorical, bit 1 one-hot; empty: numeric)
+    # and `train`'s CTR options
+    flags: List[UInt32] = List[UInt32](),
+    permutation_count: Int = -1,
+    ctr_estimation_permutation_id: Int = -1,
+    max_ctr_complexity: Int = 1,
 ) raises -> GbdtHostMultiFit:
     """`train` then `fit_with_test` on the covered configurations.
+
+    CATEGORICAL COLUMNS (`flags` not empty; lane gbdt-cpu-rest-4-cat,
+    2026-11-23): the columns, grids, tables and one compressed index per
+    permutation are `gbdt_oracle_ctr.mojo::gbdt_ctr_host_prelude`'s, as
+    `train` builds them for the device's `fit_with_test`; the loop then
+    runs `gbdt_host_boost`'s permutation statements at `dim` values per
+    leaf (the learn permutation off `TRandom(iteration + seed)`, one cursor
+    per permutation, every permutation estimating the tree on its own
+    partition, the model the estimation permutation's leaves), the
+    tree-CTR levels at `stat_count` planes (`_tree_ctr_levels_host`) when
+    `max_ctr_complexity` is above 1, and `gbdt_ctr_host_tail` for the
+    model's combination columns. A numeric fit is one permutation and no
+    combinations: the statements it always ran.
 
     `eval` is the HELD-OUT arm (lane gbdt-cpu-rest-2), the statements of
     `gbdt_oracle.mojo::gbdt_host_boost` at `dim` values per leaf: the test
@@ -747,24 +788,6 @@ def gbdt_multi_host_fit(
     var dim = num_classes - 1 if is_mc else num_classes
     var stat_count = 1 + dim
 
-    var grid = gbdt_host_grid(
-        x_colmajor, n_rows, n_features, params.border_count,
-        params.border_build_max_samples, params.random_seed, params.nan_mode,
-        params.border_type,
-    )
-    var one_hot = List[Bool](length=n_features, fill=False)
-    var layout = build_layout(grid.fold_counts, one_hot)
-    var blocks = blocks_for(layout, n_rows)
-    var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
-    var hist_cells = layout.hist_cells
-    var bf_feature = List[Int](length=hist_cells, fill=0)
-    var bf_bin = List[Int](length=hist_cells, fill=0)
-    for f in range(n_features):
-        ref lf = layout.features[f]
-        for b in range(Int(lf.folds)):
-            bf_feature[Int(lf.first_fold_index) + b] = f
-            bf_bin[Int(lf.first_fold_index) + b] = b
-
     # ---- the HELD-OUT arm (gbdt/host/gbdt_oracle_eval.mojo) ----
     ref ev = eval
     var has_test = ev.n_rows > 0
@@ -780,11 +803,78 @@ def gbdt_multi_host_fit(
         if len(ev.y) != ev.n_rows:
             raise Error("eval_set y size mismatch")
     var n_eval = ev.n_rows if has_test else 1
+
+    # ---- the columns, the grid, the layout and one compressed index per
+    # permutation. A numeric fit: the float grid over the input, ONE index
+    # (the loop below is then statement for statement the one this function
+    # held before the categorical arm). A CATEGORICAL fit (lane
+    # gbdt-cpu-rest-4-cat, 2026-11-23): `train`'s column loop through the
+    # one host spelling every categorical fit shares
+    # (`gbdt_oracle_ctr.mojo::gbdt_ctr_host_prelude`: the one-hot and CTR
+    # columns, the per-permutation CTR columns, the tables, the tree-CTR
+    # slots at `max_ctr_complexity` above 1, the held-out index off the
+    # final tables), as the device's `train` builds them before the same
+    # `fit_with_test` ----
+    var cat_arm = len(flags) != 0
+    var grid = GbdtHostGrid(List[List[Float32]](), List[Int](), List[Int]())
+    var cindexes = List[List[UInt32]]()
     var test_cindex = List[UInt32]()
-    if has_test:
-        test_cindex = _binarize_columns(
-            ev.x_colmajor, ev.n_rows, n_features, grid, layout
+    var one_hot = List[Bool]()
+    var tables = List[TCtrValueTable]()
+    var tree_ctr = List[GbdtTreeCtrHost]()
+    var est_p = 0
+    var n_base_columns = n_features
+    var ctr_column_count = 0
+    var layout: CompressedIndexLayout
+    if cat_arm:
+        if feature_fraction < 1.0:
+            # `train`'s words (gbdt/train.mojo)
+            raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+        # the CTR target plane: one target per row. MultiRMSE refuses
+        # cat_features in `train`'s words, so it reaches here with one-hot
+        # columns only and the prelude never reads the plane
+        var y_ctr = List[Float32](length=n_rows, fill=Float32(0.0))
+        _ctr_copy_into(y, 0, n_rows, y_ctr, 0)
+        var shape = gbdt_ctr_host_prelude(
+            x_colmajor, y_ctr, n_rows, n_features, params, flags,
+            permutation_count, ctr_estimation_permutation_id, 1,
+            ev.x_colmajor, ev.n_rows if has_test else 0, max_ctr_complexity,
+            grid, cindexes, test_cindex, one_hot, tables, tree_ctr,
         )
+        est_p = shape.est_perm
+        n_base_columns = shape.n_base_columns
+        ctr_column_count = shape.ctr_column_count
+        layout = shape.layout.copy()
+    else:
+        grid = gbdt_host_grid(
+            x_colmajor, n_rows, n_features, params.border_count,
+            params.border_build_max_samples, params.random_seed, params.nan_mode,
+            params.border_type,
+        )
+        one_hot = List[Bool](length=n_features, fill=False)
+        layout = build_layout(grid.fold_counts, one_hot)
+        cindexes.append(
+            _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
+        )
+        if has_test:
+            test_cindex = _binarize_columns(
+                ev.x_colmajor, ev.n_rows, n_features, grid, layout
+            )
+    #: the layout's columns: the input features on a numeric fit; the
+    #: model's base columns and the tree-CTR slots on a categorical one
+    var n_cols = len(grid.fold_counts)
+    var perm_count = len(cindexes)
+    var tree_on = len(tree_ctr) == 1
+    var blocks = blocks_for(layout, n_rows)
+    var hist_cells = layout.hist_cells
+    var bf_feature = List[Int](length=hist_cells, fill=0)
+    var bf_bin = List[Int](length=hist_cells, fill=0)
+    for f in range(n_cols):  # driver-loop: over the layout's columns and their borders
+        ref lf = layout.features[f]
+        for b in range(Int(lf.folds)):
+            bf_feature[Int(lf.first_fold_index) + b] = f
+            bf_bin[Int(lf.first_fold_index) + b] = b
+
     var test_cursor = List[Float32](length=dim * n_eval, fill=Float32(0.0))
     var test_stats = List[Float32](length=stat_count * n_eval, fill=Float32(0.0))
     var test_blocks = (n_eval + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
@@ -794,11 +884,11 @@ def gbdt_multi_host_fit(
     var detector = gbdt_eval_detector(ev)
     var test_losses = List[Float64]()
     var stopped_early = False
-    var feat_offset = List[UInt32](length=n_features, fill=UInt32(0))
-    var feat_mask = List[UInt32](length=n_features, fill=UInt32(0))
-    var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
-    var feat_one_hot = List[Bool](length=n_features, fill=False)
-    for f in range(n_features):  # driver-loop: over the features (one record each)
+    var feat_offset = List[UInt32](length=n_cols, fill=UInt32(0))
+    var feat_mask = List[UInt32](length=n_cols, fill=UInt32(0))
+    var feat_shift = List[UInt32](length=n_cols, fill=UInt32(0))
+    var feat_one_hot = List[Bool](length=n_cols, fill=False)
+    for f in range(n_cols):  # driver-loop: over the features (one record each)
         feat_offset[f] = layout.features[f].offset
         feat_mask[f] = layout.features[f].mask
         feat_shift[f] = layout.features[f].shift
@@ -813,15 +903,19 @@ def gbdt_multi_host_fit(
     var s_bf_bin = bf_bin.copy()
     var full_cindex = List[UInt32]()
     if ff_on:
-        full_cindex = cindex.copy()
-    var ff_one_hot = List[Bool](length=n_features, fill=False)
+        full_cindex = cindexes[0].copy()
+    var ff_one_hot = List[Bool](length=n_cols, fill=False)
     var feature_random = TRandom(params.random_seed ^ UInt64(0x4645415455524553))
 
     var max_depth = params.max_depth
     var max_leaves = 1 << max_depth
     var lr = params.learning_rate
 
-    var cursor = List[Float32](length=dim * n_rows, fill=Float32(0.0))
+    # one cursor per permutation, all from zero (`CreateCursors`,
+    # `doc_parallel_boosting.mojo`); one on a numeric fit
+    var cursors = List[List[Float32]]()
+    for _ in range(perm_count):  # driver-loop: over the permutations
+        cursors.append(List[Float32](length=dim * n_rows, fill=Float32(0.0)))
     var stats = List[Float32](length=stat_count * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
@@ -842,9 +936,18 @@ def gbdt_multi_host_fit(
     var noise_rand = TRandom(params.random_seed)
 
     for iteration in range(params.n_estimators):
+        # ---- which permutation the STRUCTURE is searched on
+        # (`doc_parallel_boosting.mojo`, `gbdt_host_boost`'s statements);
+        # 0 on a one-permutation fit ----
+        var learn_perm_count = perm_count - 1 if est_p != 0 else 1
+        var learn_p = est_p
+        if learn_perm_count > 1:
+            var rnd = TRandom(UInt64(iteration) + params.random_seed)
+            rnd.advance(10)
+            learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
         _multi_pass(
-            objective, num_classes, y, weights, has_weights, cursor, n_rows,
-            True, True, stats, fv_part, mag_part,
+            objective, num_classes, y, weights, has_weights, cursors[learn_p],
+            n_rows, True, True, stats, fv_part, mag_part,
         )
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
@@ -874,13 +977,13 @@ def gbdt_multi_host_fit(
             )
             s_layout = build_layout(tree_folds, ff_one_hot)
             s_blocks = blocks_for(s_layout, n_rows)
-            cindex = _ns_project_index(
-                full_cindex, layout, s_layout, tree_folds, n_rows, n_features
+            cindexes[0] = _ns_project_index(
+                full_cindex, layout, s_layout, tree_folds, n_rows, n_cols
             )
             s_hist_cells = s_layout.hist_cells
             s_bf_feature = List[Int](length=s_hist_cells, fill=0)
             s_bf_bin = List[Int](length=s_hist_cells, fill=0)
-            for f in range(n_features):  # driver-loop: over the features and their borders (the tree layout)
+            for f in range(n_cols):  # driver-loop: over the features and their borders (the tree layout)
                 ref lf = s_layout.features[f]
                 for b in range(Int(lf.folds)):
                     s_bf_feature[Int(lf.first_fold_index) + b] = f
@@ -902,7 +1005,23 @@ def gbdt_multi_host_fit(
         var winners_score = List[Float32]()
         var winners_bf = List[UInt32]()
         var n_live = 1
-        for depth in range(max_depth):
+        # TREE CTRS: the level-synchronized levels at `stat_count` planes
+        # (`run_tree_ctr_tree` at `1 + approx_dim`), which leave the
+        # tree's splits in `tc_features` / `tc_bins` and the partition in
+        # `row_index`, `stats`, `p_off`, `p_sz`; the fused loop below then
+        # runs no level (`gbdt_host_boost`'s statements)
+        var tc_features = List[Int]()
+        var tc_bins = List[Int]()
+        if tree_on:
+            n_live = _tree_ctr_levels_host(
+                tree_ctr[0], cindexes, test_cindex, learn_p, s_layout, s_blocks,
+                s_bf_feature, s_bf_bin, n_rows, n_cols, max_depth,
+                params.l2_leaf_reg, score_std_dev, fixed_scale, level_rand,
+                row_index, stats, p_off, p_sz, tc_features, tc_bins,
+                stat_count, is_mc,
+            )
+        ref cindex = cindexes[learn_p]
+        for depth in range(0 if tree_on else max_depth):
             var level_seed = level_rand.next_uniform_l()
             var half = n_live // 2
             var planned = depth > 0
@@ -941,7 +1060,7 @@ def gbdt_multi_host_fit(
                 block_first_bin += total
 
             # `scan_histograms_kernel` over the computed leaves, every plane
-            _scan_histograms(hist, s_hist_cells, stat_count, compute, s_layout, n_features)
+            _scan_histograms(hist, s_hist_cells, stat_count, compute, s_layout, n_cols)
 
             # `substract_histograms_kernel`: the larger sibling, in place
             if planned and half > 0:
@@ -988,7 +1107,14 @@ def gbdt_multi_host_fit(
         var tree_features = List[Int]()
         var tree_bins = List[Int]()
         var grown = 0
-        for d in range(max_depth):
+        if tree_on:
+            # accepted level by level, each gate applied before the next
+            # level was searched: nothing was speculated, nothing rolls back
+            for i in range(len(tc_features)):  # driver-loop: over the tree's levels
+                tree_features.append(tc_features[i])
+                tree_bins.append(tc_bins[i])
+            grown = len(tc_features)
+        for d in range(0 if tree_on else max_depth):
             var best_score = winners_score[d]
             var best_bin_u = winners_bf[d]
             if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
@@ -1013,7 +1139,7 @@ def gbdt_multi_host_fit(
             tree_features.append(cf_)
             tree_bins.append(cb_)
             grown += 1
-        if grown < max_depth:
+        if grown < max_depth and not tree_on:
             var live = n_live
             for _ in range(max_depth - grown):
                 var h2 = live // 2
@@ -1034,18 +1160,46 @@ def gbdt_multi_host_fit(
                 + String(covered_rows) + " of " + String(n_rows) + " rows"
             )
 
-        var estimated = _estimate_multi(
-            objective, num_classes, y, weights, has_weights, cursor,
-            row_index, offsets, sizes, n_rows, params.l2_leaf_reg,
-        )
-        # `add_model_value_kernel`: `[leaf * dim + d]` into `[d * n + row]`
-        var scaled = rescaled_leaves(estimated, lr)
-        apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_live, dim, n_rows)
+        # ---- the estimation task, ONE PER PERMUTATION (`gbdt_host_boost`'s
+        # statements, `doc_parallel_boosting.mojo`): the learn permutation
+        # over the searcher's partition, the others over the partition off
+        # the model on their own index; every cursor takes its own
+        # `round(leaf * rate)`, the model the estimation permutation's.
+        # `add_model_value_kernel`: `[leaf * dim + d]` into `[d * n + row]` ----
+        var scaled = List[Float32]()
+        for p in range(perm_count):  # driver-loop: over the permutations
+            var p_scaled: List[Float32]
+            if p == learn_p:
+                var estimated = _estimate_multi(
+                    objective, num_classes, y, weights, has_weights, cursors[p],
+                    row_index, offsets, sizes, n_rows, params.l2_leaf_reg,
+                )
+                p_scaled = rescaled_leaves(estimated, lr)
+                apply_scaled_leaves_host(
+                    cursors[p], p_scaled, row_index, offsets, sizes, n_live,
+                    dim, n_rows,
+                )
+            else:
+                var part = _partition_for_model(
+                    cindexes[p], layout, tree_features, tree_bins, grown, n_rows
+                )
+                var estimated = _estimate_multi(
+                    objective, num_classes, y, weights, has_weights, cursors[p],
+                    part.row_index, part.offsets, part.sizes, n_rows,
+                    params.l2_leaf_reg,
+                )
+                p_scaled = rescaled_leaves(estimated, lr)
+                apply_scaled_leaves_host(
+                    cursors[p], p_scaled, part.row_index, part.offsets,
+                    part.sizes, len(part.sizes), dim, n_rows,
+                )
+            if p == est_p:
+                scaled = p_scaled.copy()
         for i in range(grown):
             split_features.append(tree_features[i])
             split_bins.append(tree_bins[i])
         tree_split_offsets.append(len(split_features))
-        for i in range(len(estimated)):
+        for i in range(len(scaled)):
             model_leaves.append(scaled[i])
         tree_leaf_offsets.append(len(model_leaves))
 
@@ -1076,8 +1230,9 @@ def gbdt_multi_host_fit(
             if iteration + 1 > 1:
                 losses.append(-v / Float64(n_rows))
 
+    # the ESTIMATION permutation's cursor (the only one on a numeric fit)
     _multi_pass(
-        objective, num_classes, y, weights, has_weights, cursor, n_rows,
+        objective, num_classes, y, weights, has_weights, cursors[est_p], n_rows,
         True, False, stats, fv_part, mag_part,
     )
     var final_fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
@@ -1098,14 +1253,43 @@ def gbdt_multi_host_fit(
         model_leaves.resize(
             tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0)
         )
+    # TREE CTRS: the model's columns (`gbdt_ctr_host_tail`, the CTR
+    # Logloss / RMSE fit's statements); a numeric fit and one without
+    # combinations keep the grid's columns
+    var cols = gbdt_ctr_host_tail(
+        tree_ctr, tree_split_offsets, split_features, grid.fold_counts,
+        grid.borders, grid.nan_treatment, one_hot, n_base_columns,
+    )
     var model = GbdtHostMultiModel(
-        grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
-        tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
-        model_leaves^, losses^, dim,
+        cols.fold_counts.copy(), cols.borders.copy(), cols.nan_treatment.copy(),
+        tree_split_offsets^, cols.split_features.copy(), split_bins^,
+        tree_leaf_offsets^, model_leaves^, losses^, dim,
     )
     return GbdtHostMultiFit(
         model^,
         GbdtHostEvalFit(test_losses^, detector.best_iteration, stopped_early),
+        cols.one_hot.copy(), tables^, ctr_column_count,
+        cols.combination_ctrs.copy(),
+    )
+
+
+def gbdt_multi_host_model_text_ctr(r: GbdtHostMultiFit) raises -> String:
+    """`model_text` for a categorical multiclass fit (lane
+    gbdt-cpu-rest-4-cat, 2026-11-23): the CTR fits' one writer
+    (`gbdt_oracle_ctr.mojo::gbdt_ctr_host_model_text_of`: the `ctr_columns`
+    header, `type ctr` / `type cat` feature records, the CTR and
+    combination tables, `split_type take_bin` on a one-hot split) at `dim`
+    values per leaf."""
+    var m = GbdtHostModel(
+        r.model.fold_counts.copy(), r.model.borders.copy(),
+        r.model.nan_treatment.copy(), r.model.tree_split_offsets.copy(),
+        r.model.split_features.copy(), r.model.split_bins.copy(),
+        r.model.tree_leaf_offsets.copy(), r.model.leaf_values.copy(),
+        r.model.losses.copy(), r.eval.best_iteration, r.eval.stopped_early,
+    )
+    return gbdt_ctr_host_model_text_of(
+        m, r.one_hot, r.tables, r.ctr_column_count, r.combination_ctrs,
+        r.model.dim,
     )
 
 
