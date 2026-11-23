@@ -40,7 +40,10 @@ the previous round's importances):
 `rfe_first_stage` stages the first block from the all-ones support,
 `rfe_select_count` / `rfe_step_count` resolve n_features_to_select and step,
 `rfe_member_fit` is the final fit over a native member. `rfe_member_source` picks a member kind's importance
-block for the getter, or the refusal of a naive Bayes / discriminant kind with neither (lane mf-shaprfe).
+block for the getter, or the refusal of a naive Bayes / discriminant / Gbdt kind with neither (lanes
+mf-shaprfe, mf-gbdt5). Since lane mf-gbdt5 every member fit also takes the fit's extra inputs
+(core/member_set_run.mojo `MemberFitExtras`: RFE's fit parameters as the estimator's fit door admits them, a
+held-out X restricted to the round's columns, the round's column ids at `columns`).
 """
 from std.memory import unsafe_memcpy
 from core.preprocessing_program import prep_program_stage
@@ -51,8 +54,9 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
     MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES,
 )
-from core.member_families import MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT
+from core.member_families import MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_GBDT
 from core.member_notices import member_notices_take
+from core.member_set_run import MemberFitExtras, member_fit_extras_apply, member_fit_extras_clear
 
 comptime SEL_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime SEL_I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -464,39 +468,55 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
     as the attribute path squares it. A kind of the naive Bayes or discriminant family with neither block
     (QuadraticDiscriminantAnalysis, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB: neither attribute
     exists on them, as in scikit-learn) is REFUSED (lane mf-shaprfe): 'auto' in the door's words, a named
-    attribute in scikit-learn's attrgetter's (`estimator` the class name). Any other kind without the block keeps
-    the estimator's own doors (block 0)."""
+    attribute in scikit-learn's attrgetter's (`estimator` the class name). So is a Gbdt kind (lane mf-gbdt5:
+    GradientBoosting and its two adapters publish neither attribute). The caller raises the refusal only when an
+    elimination round reads importances (scikit-learn reads none when n_features_to_select keeps every column).
+    Any other kind without the block keeps the estimator's own doors (block 0)."""
     var auto = getter == "auto"
     if getter != "feature_importances_" and (mask & MEMBER_CAN_COEF) != 0:
         return RfeSource(MEMBER_BLOCK_COEF, True, String(""))
     if getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
         return RfeSource(MEMBER_BLOCK_FEATURE_IMPORTANCES, not auto, String(""))
-    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT:
+    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT or family == MEMBER_FAMILY_GBDT:
         if auto:
             return RfeSource(0, False, String(RFE_NO_IMPORTANCES))
         return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
     return RfeSource(0, False, String(""))
 
 
-def rfe_member_fit(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, k: Int, y: Int, y_dtype: Int) raises:
+def rfe_member_fit(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, k: Int, y: Int, y_dtype: Int,
+                   extras: MemberFitExtras, columns: Int) raises:
     """FIT of the caller's new member state (`call`, from `member_new(plan)`)
-    on the (n, k) float32 host block at `x` and the n target words at `y`.
-    Needs no GIL: the caller releases it only for a kind with
-    MEMBER_GIL_FREE or MEMBER_GIL_DOOR (THE GIL RULE) and frees the state."""
+    on the (n, k) float32 host block at `x` and the n target words at `y`,
+    with the fit's extra inputs (`extras`: RFE's fit parameters; the
+    held-out X restricted to the block's k columns, whose int32 ids into the
+    caller's X are at `columns`, as scikit-learn's RFE fits every round on
+    `X[:, features]`). Needs no GIL: the caller releases it only for a kind
+    with MEMBER_GIL_FREE or MEMBER_GIL_DOOR (THE GIL RULE) and frees the
+    state."""
     call.x = MemberMatrix(x, n, k)
     call.y = MemberMatrix(y, n, 1, y_dtype)
-    _ = member_call(plan.member, MEMBER_OP_FIT, call)
+    var held = List[Float32]()
+    member_fit_extras_apply(extras, call, columns, k, False, held)
+    try:
+        _ = member_call(plan.member, MEMBER_OP_FIT, call)
+    finally:
+        member_fit_extras_clear(call)
+        _ = len(held)  # the gathered held-out block lives until the fit returned
 
 
 def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, m: Int, y: Int, y_dtype: Int,
-                           block: Int, squared: Bool, mut notices: List[Float64], mut rows: Int) raises -> List[Float32]:
+                           block: Int, squared: Bool, mut notices: List[Float64], mut rows: Int,
+                           extras: MemberFitExtras, columns: Int) raises -> List[Float32]:
     """A round over a native member: fit the caller's new state on the
-    round's (n, m) block, take its fit notices, read its importance block
-    `block` by EXPORT and copy it out (the view dies with the state, which
-    the caller frees). m words, or (rows, m) for a coefficient block with
-    one row per class or output (`squared`); `rows` is set to its row
-    count. Raises when the member refuses the round; nothing was staged."""
-    rfe_member_fit(plan, call, x, n, m, y, y_dtype)
+    round's (n, m) block (with the fit's `extras` over the round's column ids
+    at `columns`, `rfe_member_fit`), take its fit notices, read its
+    importance block `block` by EXPORT and copy it out (the view dies with
+    the state, which the caller frees). m words, or (rows, m) for a
+    coefficient block with one row per class or output (`squared`); `rows`
+    is set to its row count. Raises when the member refuses the round;
+    nothing was staged."""
+    rfe_member_fit(plan, call, x, n, m, y, y_dtype, extras, columns)
     member_notices_take(plan, call.state, notices)
     call.block = block
     call.flags = 0

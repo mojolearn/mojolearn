@@ -37,7 +37,10 @@ from core.member_abi import (
 )
 from core.member_families import (
     MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT,
+    MEMBER_FAMILY_GBDT,
 )
+from core.member_set_run import MemberFitExtras
+from providers.python.member_gbdt_boundary_door import gbdt_member_fit_params
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -199,7 +202,17 @@ struct RfeMember(Movable):
     `importance_word`: the rounds' fits compute feature importances because
     this door set the family's parameter word for it (the tree and forest
     families, core/forest_member_run.mojo word [10]); the final fit, whose
-    importances nobody reads, clears it."""
+    importances nobody reads, clears it.
+    `refusal`: the words a round raises before it fits (a kind that exports
+    no importance block, rfe_member_source); the final fit needs none, so
+    RFE with n_features_to_select keeping every column fits, as in
+    scikit-learn. `extras` (lane mf-gbdt5): RFE's fit parameters, admitted
+    once with the estimator's fit door's checks and words (a Gbdt member:
+    providers/python/member_gbdt_boundary_door.mojo `gbdt_member_fit_params`;
+    `pins` holds every buffer they address); every round's and the final
+    fit's member call reads them, the held-out X restricted to that fit's
+    columns. `strict`: fit parameters were admitted, so a member refusal is
+    raised (the estimator's own doors would read the held-out X whole)."""
     var native: Bool
     var owner: MemberOwner
     var template: PythonObject
@@ -214,10 +227,22 @@ struct RfeMember(Movable):
     var importance_word: Bool
     # THE GIL RULE (core/member_abi.mojo): the member's kind has MEMBER_GIL_FREE.
     var gil_free: Bool
+    var refusal: String
+    var extras: MemberFitExtras
+    var pins: PythonObject
+    var ids: List[Int32]
+    var codes: List[Int32]
+    var strict: Bool
 
     def __init__(out self):
         self.native = False
         self.gil_free = False
+        self.refusal = String("")
+        self.extras = MemberFitExtras()
+        self.pins = PythonObject(None)
+        self.ids = List[Int32]()
+        self.codes = List[Int32]()
+        self.strict = False
         self.owner = MemberOwner()
         self.template = PythonObject(None)
         self.fields = PythonObject(None)
@@ -231,7 +256,7 @@ struct RfeMember(Movable):
         self.importance_word = False
 
 
-def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObject, fit_params: PythonObject,
+def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: PythonObject, fit_params: PythonObject,
                 context: PythonObject, b: PythonObject) raises -> RfeMember:
     """UNPACK, once per RFE fit: admit the estimator as a native member when
     its class is a published member whose KIND fits and exports the block
@@ -242,14 +267,29 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
     round's FIT, the labels to the final PACK). Dotted getter paths, an
     admission the family refuses and a target the encoder or the regressor
     admission refuses keep the estimator's own doors (the fallback rule):
-    they answer or refuse in their own words. RAISES for a published naive
-    Bayes or discriminant kind that exports neither block (QDA, GaussianNB,
-    MultinomialNB, BernoulliNB, ComplementNB: they have no coef_ and no
-    feature_importances_), before any round is fitted."""
+    they answer or refuse in their own words. A published naive Bayes,
+    discriminant or Gbdt kind that exports neither block (QDA, GaussianNB,
+    MultinomialNB, BernoulliNB, ComplementNB, GradientBoosting and its
+    adapters: they have no coef_ and no feature_importances_) is admitted
+    with its refusal (`RfeMember.refusal`): the first elimination round
+    raises it before it fits; with no round the final fit runs.
+
+    Fit parameters (lane mf-gbdt5): a Gbdt member's (GradientBoosting,
+    GradientBoostingClassifier, GradientBoostingRegressor) are admitted here
+    once with its fit door's checks and words (`gbdt_member_fit_params`:
+    sample_weight, eval_set, group_id, pairs, pairs_weight; their refusals
+    raise from here, before any round) and ride every member fit; any other
+    family's fit parameters, and a key or case the Gbdt admission does not
+    carry, keep the estimator's own doors."""
     var member = RfeMember()
     # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
-    if len(fit_params) != 0:
-        return member^
+    var has_params = len(fit_params) != 0
+    if has_params:
+        # Only the Gbdt classes' fit parameters are admitted natively: one
+        # exact type name read, once per fit, before any admission work.
+        var cls = String(py=py_type(estimator).__name__)
+        if cls != "GradientBoosting" and cls != "GradientBoostingClassifier" and cls != "GradientBoostingRegressor":
+            return member^
     var getter = String(g)
     var auto = getter == "auto"
     if not auto and getter != "coef_" and getter != "feature_importances_":
@@ -303,10 +343,11 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
         # RUN (bindings/prep_select_run.mojo `rfe_member_source`): the block the getter names in this kind's
         # mask, or the refusal of a kind that has neither (QDA, the published naive Bayes kinds: before any
         # round fits a clone; the own-door path fitted every round's clone first, then refused).
-        # The class name only where a refusal can name it (one read per fit of those two families).
+        # The class name only where a refusal can name it (one read per fit of those three families).
         var family = owner.plan.family
         var name = (classical_estimator_name(estimator)
-                    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT else String(""))
+                    if (family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT
+                        or family == MEMBER_FAMILY_GBDT) else String(""))
         var source = rfe_member_source(family, mask, getter, name)
         if source.refusal.byte_length() > 0:
             refusal = source.refusal.copy()
@@ -321,8 +362,22 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
         member.gil_free = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
     except:
         return member^
-    if refusal.byte_length() > 0:
-        raise Error(refusal)
+    if has_params:
+        if owner.plan.family != MEMBER_FAMILY_GBDT:
+            return member^
+        # UNPACK of the fit parameters (their refusals raise here, in the fit
+        # door's words, as the door's first fit would raise them).
+        var params = gbdt_member_fit_params(template, owner.plan, fit_params, y, member.labels, n, d,
+                                            member_context)
+        if not params.admitted:
+            return member^
+        member.extras = params.extras.copy()
+        member.pins = params.pins
+        # By swap: the addresses in `extras` point into these lists' storage.
+        swap(member.ids, params.ids)
+        swap(member.codes, params.codes)
+        member.strict = True
+    member.refusal = refusal^
     member.y_address = Int(py=classical_address(member.y))
     member.owner = owner^
     member.template = template
@@ -332,7 +387,8 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
     return member^
 
 
-def _rfe_member_words(member: RfeMember, block: PythonObject, n: Int, m: Int, mut rows: Int) raises -> List[Float32]:
+def _rfe_member_words(member: RfeMember, block: PythonObject, feat: PythonObject, n: Int, m: Int,
+                      mut rows: Int) raises -> List[Float32]:
     """A round over a native member: a new state of the member's plan, the
     typed fit and EXPORT of its importance block (bindings/prep_select_run.mojo
     `rfe_member_importances`: rows x m native words, `rows` set; no Python
@@ -341,46 +397,55 @@ def _rfe_member_words(member: RfeMember, block: PythonObject, n: Int, m: Int, mu
     MEMBER_GIL_DOOR; any other kind is called with the GIL held (its route's
     entries release inside, as for the estimator's own door). Raises when
     the member refuses the round; the caller then runs the estimator's own
-    doors (nothing was staged)."""
+    doors (nothing was staged), unless fit parameters were admitted
+    (`member.strict`). `feat`: the round's int32 column ids (the block's
+    columns of X); read only when a held-out set rides the fit (its columns
+    are those of the block)."""
     var notices = List[Float64]()
     var words = List[Float32]()
     var x = Int(py=classical_address(block))
+    var columns = Int(py=classical_address(feat)) if member.extras.eval_rows > 0 else 0
     var call = member_new(member.owner.plan)
     try:
         if member.gil_free:
             var py = Python()
             with GILReleased(py):
                 words = rfe_member_importances(member.owner.plan, call, x, n, m, member.y_address, member.y_dtype,
-                                               member.block, member.squared, notices, rows)
+                                               member.block, member.squared, notices, rows, member.extras, columns)
         else:
             words = rfe_member_importances(member.owner.plan, call, x, n, m, member.y_address, member.y_dtype,
-                                           member.block, member.squared, notices, rows)
+                                           member.block, member.squared, notices, rows, member.extras, columns)
     finally:
         member_free(member.owner.plan, call)
         _ = block  # keep the Python objects alive through the native calls above
+        _ = feat
         _ = member.y
     # The round's fit notices, as the estimator's own fit of the round raised them.
     member_fit_notices_raise(notices, member.member_context)
     return words^
 
 
-def _rfe_member_final(member: RfeMember, block: PythonObject, n: Int, k: Int, b: PythonObject) raises -> PythonObject:
+def _rfe_member_final(member: RfeMember, block: PythonObject, feat: PythonObject, n: Int, k: Int,
+                      b: PythonObject) raises -> PythonObject:
     """The final estimator over a native member: fitted on the selected
     block (`rfe_member_fit` on `rfe_final_plan`, the GIL as for a round),
     its state written into the clone (`member_pack`, a classifier with its
     labels: the attributes its own fit writes, so RFE's predict / score /
-    transform read it as before) and released."""
+    transform read it as before) and released. A held-out set (lane
+    mf-gbdt5) is read over the final block's columns (`feat`), so the clone
+    publishes its `test_loss_curve_` as its own fit on those columns would."""
     var plan = rfe_final_plan(member.owner.plan, member.importance_word)
     var notices = List[Float64]()
     var x = Int(py=classical_address(block))
+    var columns = Int(py=classical_address(feat)) if member.extras.eval_rows > 0 else 0
     var call = member_new(plan)
     try:
         if member.gil_free:
             var py = Python()
             with GILReleased(py):
-                rfe_member_fit(plan, call, x, n, k, member.y_address, member.y_dtype)
+                rfe_member_fit(plan, call, x, n, k, member.y_address, member.y_dtype, member.extras, columns)
         else:
-            rfe_member_fit(plan, call, x, n, k, member.y_address, member.y_dtype)
+            rfe_member_fit(plan, call, x, n, k, member.y_address, member.y_dtype, member.extras, columns)
         member_notices_take(plan, call.state, notices)
         if member.labels is None:
             member_pack(member.template, member.fields, member.member_context, b, plan, call.state)
@@ -390,6 +455,7 @@ def _rfe_member_final(member: RfeMember, block: PythonObject, n: Int, k: Int, b:
     finally:
         member_free(plan, call)
         _ = block  # keep the Python objects alive through the native calls above
+        _ = feat
         _ = member.y
     member_fit_notices_raise(notices, member.member_context)
     return member.template
@@ -543,8 +609,11 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     # its family has published what RFE reads; else its own doors per round.
     # The rounds are serial by nature: a round's block is chosen from the
     # previous round's importances.
-    var member = _rfe_member(estimator, y, n, g, fit_params, context, b)
+    var member = _rfe_member(estimator, y, n, d, g, fit_params, context, b)
     while nsup > nsel:  # driver-loop: over elimination rounds
+        if member.native and member.refusal.byte_length() > 0:
+            # A kind with no importance block: refused before the round fits.
+            raise Error(member.refusal.copy())
         var drop = min(step, nsup - nsel)
         var k = nsup - drop
         var pr = ClsProg()
@@ -558,10 +627,15 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         if member.native and classical_is_array(block, cc):
             try:
                 var rows = 1
-                words = _rfe_member_words(member, block, n, nsup, rows)
+                words = _rfe_member_words(member, block, feat, n, nsup, rows)
                 keys = RfeKeys(nsup, rows, member.squared, 0)
                 native = True
-            except:
+            except error:
+                # Admitted fit parameters: the member's words are the fit
+                # door's (the estimator's own doors would read the held-out X
+                # whole), so they are raised.
+                if member.strict:
+                    raise error^
                 member.native = False
         if not native:
             _rfe_hold_block(block, hold, mark, cc)
@@ -581,8 +655,10 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     var final = PythonObject(None)
     if member.native and classical_is_array(block, cc):
         try:
-            final = _rfe_member_final(member, block, n, nsup, b)
-        except:
+            final = _rfe_member_final(member, block, feat, n, nsup, b)
+        except error:
+            if member.strict:
+                raise error^
             member.native = False
     if final is None:
         _rfe_hold_block(block, hold, mark, cc)
