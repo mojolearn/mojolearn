@@ -1279,9 +1279,10 @@ struct _DoorModel(AgnModel):
     whose meta-estimator has a member of that kind. The Host* subclasses carry their public class's mark since
     mf-iterimp3b. Since mf-meta3b a VotingClassifier / VotingRegressor / StackingClassifier / StackingRegressor /
     OneVsRestClassifier / CalibratedClassifierCV / BaggingClassifier / BaggingRegressor used as a member opens as its
-    META state. What is left: a member of a meta-estimator that is an AdaBoost*, a MultiOutput* or a search CV (no
-    META kind: AdaBoost's rounds over device sessions and its one-tree door members, MultiOutput's per-output label
-    vectors and the search's Python scorers and candidate clones are not typed yet); a META class whose admit keeps
+    META state, and since lane mf-ada4 an AdaBoostClassifier / AdaBoostRegressor too (THE ADABOOST KIND). What is
+    left: a member of a meta-estimator that is a MultiOutput* or a search CV (no META kind: MultiOutput's per-output
+    label vectors and the search's Python scorers and candidate clones are not typed yet), or an AdaBoost* whose base
+    is a random-splitter DecisionTree or carries a class_weight (its admit keeps its door); a META class whose admit keeps
     its door (a Calibrated non-int cv or DeviceRows base, a Stacking splitter cv). Since lane mf-meta3c the batched
     Bagging route and metas nested at any depth (the boundary's admission work-list) open as META states too. When
     those left are typed, this door and `_evaluate` are deleted. Everything else is native: every member

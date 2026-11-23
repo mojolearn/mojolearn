@@ -2981,8 +2981,10 @@ struct _CalUnits(Movable):
     its member PREDICT doors gather the fold's test rows on the device,
     which a member call cannot; one fold at a time on the calling thread);
     and a base the set does not serve (`_CAL_NOT_MEMBER`: a class with no
-    member mark (AdaBoostClassifier, MultiOutputClassifier, GridSearchCV,
-    RandomizedSearchCV: no META kind, see core/ensemble_member.mojo),
+    member mark (MultiOutputClassifier, GridSearchCV, RandomizedSearchCV:
+    no META kind, see core/ensemble_member.mojo; AdaBoostClassifier is one
+    since lane mf-ada4, its door kept for a random-splitter DecisionTree or
+    class_weight base),
     CategoricalNB's door included where its kind is not admitted, a
     meta-estimator base whose META admit keeps its door (since lane
     mf-meta3b Voting, Stacking, OneVsRest, CalibratedClassifierCV and

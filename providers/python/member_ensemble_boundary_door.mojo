@@ -4,8 +4,11 @@ mf-meta3, 2026-11-23; RUN: core/ensemble_member.mojo). PUBLISHED for
 VotingClassifier, VotingRegressor, StackingClassifier and StackingRegressor,
 and (lane mf-meta3b, THE UNIT KINDS) OneVsRestClassifier,
 CalibratedClassifierCV, BaggingClassifier and BaggingRegressor
-(python/mojolearn/_expansion_trees.py `_mojolearn_member = (39, kind)`).
-AdaBoost, MultiOutput and RandomTreesEmbedding carry no mark and keep their
+(python/mojolearn/_expansion_trees.py `_mojolearn_member = (39, kind)`), and
+(lane mf-ada4, THE ADABOOST KIND) AdaBoostClassifier and AdaBoostRegressor
+(`_admit_ada` / `_ada_pack` / `_ada_state`; their door keeps an estimator
+whose base is a random-splitter DecisionTree or carries a class_weight).
+MultiOutput and RandomTreesEmbedding carry no mark and keep their
 doors. A unit kind answers False, and its door keeps the estimator, for:
 a OneVsRest base whose kind lacks the scores its predict reads; a
 Calibrated cv that is not an int (a splitter, an index list, 'prefit') or a
@@ -66,17 +69,21 @@ from core.ensemble_member import (
     META_VOTE_CLASSIFIER, META_VOTE_REGRESSOR, META_STACK_CLASSIFIER, META_STACK_REGRESSOR, META_BLOCK_NESTED,
     META_BLOCK_WIDTHS, META_OVR, META_CALIBRATED, META_BAG_CLASSIFIER, META_BAG_REGRESSOR, META_KIND_LAST,
     META_BLOCK_CAL, META_BLOCK_DRAWS, META_BLOCK_OOB, META_BLOCK_BATCHED,
+    META_ADA_CLASSIFIER, META_ADA_REGRESSOR, META_BLOCK_ADA,
 )
 from core.member_families import (
     MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE,
 )
-from xtrees.trees_boost_run import _sub_seed
+from xtrees.trees_boost_run import _sub_seed, boost_ada_session_choice, boost_check_n_estimators, boost_check_learning_rate
+from bindings.trees_public_forest_door import forest_kind, forest_refresh, forest_config, _report_engine
+from bindings.trees_route_boundary_door import trees_route_context
+from providers.python.forest_member_common_boundary_door import forest_member_admit_common, forest_member_state_common
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_kind_capabilities,
     member_resolve_family,
     MEMBER_OP_NEW, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_I32, MEMBER_I64, MEMBER_F64, MEMBER_IMPORT_DONE,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_CLASSIFIER,
-    MEMBER_CAN_IMPORT, MEMBER_BLOCK_SCALARS,
+    MEMBER_CAN_IMPORT, MEMBER_CAN_EXPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_BLOCK_SCALARS,
 )
 from xtrees.trees_meta_vote_run import STACK_PREDICT, STACK_PROBA, STACK_DECISION
 
@@ -90,7 +97,11 @@ def _stack(kind: Int) -> Bool:
 
 def _classifier(kind: Int) -> Bool:
     return (kind == META_VOTE_CLASSIFIER or kind == META_STACK_CLASSIFIER or kind == META_OVR
-            or kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER)
+            or kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER or kind == META_ADA_CLASSIFIER)
+
+
+def _ada(kind: Int) -> Bool:
+    return kind == META_ADA_CLASSIFIER or kind == META_ADA_REGRESSOR
 
 
 def _unit(kind: Int) -> Bool:
@@ -319,8 +330,8 @@ def _meta_children(est: PythonObject, fields: PythonObject, kind: Int, context: 
         if base is not None:
             _ = py_call(out.append, base)
         return out
-    if _bag(kind):
-        return out
+    if _bag(kind) or _ada(kind):
+        return out  # a Bagging or AdaBoost base is a tree, forest or extra-trees member
     var active = _active(fields, b)
     if active.ok:
         for i in range(len(active.ests)):  # driver-loop: over the active members
@@ -420,6 +431,8 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
     """One meta-estimator's admission (the body `ensemble_member_admit`'s
     work-list runs per meta-estimator): its nested meta-estimators are in
     `done`."""
+    if _ada(kind):
+        return _admit_ada(fields, kind, context, b, owner)
     if _unit(kind):
         return _admit_unit(model, fields, kind, context, b, owner, done)
     var classifier = _classifier(kind)
@@ -668,6 +681,9 @@ def _pack_one(model: PythonObject, fields: PythonObject, context: PythonObject, 
     var k = Int(words[1])
     if classifier and labels is None:
         raise Error("RuntimeError: mojolearn: a meta classifier member is packed without its labels")
+    if _ada(kind):
+        _ada_pack(fields, context, b, plan, state, labels, features, k, jobs)
+        return
     if _unit(kind):
         # THE UNIT KINDS (lane mf-meta3b): the attributes the door's fit writes.
         var unit_contexts = _unit_pack(model, fields, context, b, plan, state, labels, features, k, jobs)
@@ -780,7 +796,7 @@ def _fitted_children(est: PythonObject, fields: PythonObject, kind: Int, b: Pyth
     reads: `estimators_` (and a stack's `final_estimator_`), the calibrated
     pairs' members. A Bagging's are trees and forests: none."""
     var out = Python.list()
-    if _bag(kind):
+    if _bag(kind) or _ada(kind):
         return out
     if kind == META_CALIBRATED:
         var pairs = py_get(fields, "calibrated_classifiers_")
@@ -907,6 +923,8 @@ def _state_one(model: PythonObject, fields: PythonObject, context: PythonObject,
     `ensemble_member_state`'s work-list): its nested META states from
     `imported`."""
     var kind = Int(plan.params[0])
+    if _ada(kind):
+        return _ada_state(fields, context, b, plan)
     if _unit(kind):
         return _unit_state(model, fields, context, b, plan, imported)
     var classifier = _classifier(kind)
@@ -1586,5 +1604,309 @@ def _unit_state(model: PythonObject, fields: PythonObject, context: PythonObject
             for i in range(len(handles)):  # driver-loop: over the nested states not handed over
                 var free = MemberCall(nested[i].route, Int(handles[i]))
                 member_free(nested[i], free)
+            member_free(plan, call)
+    return call.state
+
+
+# ------------------------------------------------------------ the AdaBoost kind (lane mf-ada4)
+
+
+def _mode_of(fields: PythonObject, context: PythonObject, b: PythonObject) raises -> String:
+    """The tier an estimator's operations bind (`_mode` / `_member_mode`):
+    its `numeric_mode`, else the process default; "" when neither is a
+    known tier (the door raises its words)."""
+    var mode = py_get(fields, "numeric_mode")
+    if mode is None:
+        var backend = py_get(context, "backend_fields")
+        if backend is None:
+            return String("")
+        mode = py_get(backend, "_DEFAULT_MODE")
+    if mode is None or py_type(mode) is not b.str:
+        return String("")
+    var word = String(mode)
+    if word != "fast" and word != "identical":
+        return String("")
+    return word
+
+
+def _ada_switches(mode: String, context: PythonObject, b: PythonObject) raises -> Int:
+    """The x_trees image's fast switches (`_switches(xt)`: `x_trees_fast_switches`, 0 when the binary has none)."""
+    var bindings = py_get(context, "trees_bindings")
+    if bindings is None:
+        return 0
+    var tables = py_get(bindings, PythonObject(mode))
+    if tables is None:
+        return 0
+    var table = py_get(tables, "_mojolearn_x_trees")
+    if table is None or py_type(table) is b.str:
+        return 0
+    var query = py_get(table, "x_trees_fast_switches")
+    if query is None:
+        return 0
+    return Int(py=py_call(query))
+
+
+def _ada_base(fields: PythonObject, classifier: Bool, context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """AdaBoost's base: its estimator, else the door's default member
+    `DecisionTreeClassifier(max_depth=1)` / `DecisionTreeRegressor(max_depth=3)`
+    (`_new_member(cls, {"max_depth": ...})`)."""
+    var base = py_get(fields, "estimator")
+    if base is not None:
+        return base
+    base = _new_tree(context, "trees_dt_classifier" if classifier else "trees_dt_regressor", b)
+    py_setitem(py_fields(base), PythonObject("max_depth"), PythonObject(1 if classifier else 3))
+    return base
+
+
+def _ada_template(fields: PythonObject, classifier: Bool, context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """The rounds' template (`template = forest_get_params(base)` with the
+    ensemble's `device`, `boost_member_device`): None when the base names
+    another device (the door raises its words)."""
+    return _bag_template(fields, _ada_base(fields, classifier, context, b), classifier, context, b)
+
+
+def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: PythonObject,
+               mut owner: MemberOwner) raises -> Bool:
+    """UNPACK of THE ADABOOST KIND (core/ensemble_member.mojo): the door's
+    `ada_fit` UNPACK minus X and y, read once per admission. `_ada_validate`
+    as a gate (a value it refuses keeps the door, which raises its words);
+    the base's first round clone (`_sub_seed(seed, 0)`) admitted ONCE as
+    its native forest member with the caller's target checks
+    (`forest_member_admit_common(..., caller_rows=True)`, the door's
+    `_ada_member_admit`), whose words carry the configuration every round
+    fits (they differ only in the seed); the session route words of a
+    best-splitter DecisionTree base (`_ada_native_base`: the forest entry is
+    the member's route, the share word `_ada_session_choice` /
+    `_member_session`). False (the door keeps the estimator) for: an
+    algorithm, loss, n_estimators, learning_rate or random_state the door
+    refuses; a base that is not a tree, forest or extra-trees member or
+    names another device; a DecisionTree splitter='random' base (its inner
+    forest is the door's); a class_weight on the base (its rows read the
+    public labels, which a member fit never sees)."""
+    var classifier = kind == META_ADA_CLASSIFIER
+    var loss_code = 0
+    if classifier:
+        var algorithm = py_get(fields, "algorithm")
+        if algorithm is None or py_type(algorithm) is not b.str:
+            return False
+        var name = String(algorithm)
+        if name != "SAMME" and name != "deprecated":
+            return False
+    else:
+        var losses = py_get(context, "trees_ada_losses")
+        var loss = py_get(fields, "loss")
+        if losses is None or loss is None or py_type(loss) is not b.str or not py_contains(losses, loss):
+            return False
+        loss_code = Int(py=py_item(losses, loss))
+    var count = _int_word(py_get(fields, "n_estimators"), b)
+    var given_rate = py_get(fields, "learning_rate")
+    if given_rate is None or (py_type(given_rate) is not b.float and py_type(given_rate) is not b.int):
+        return False
+    var rate = Float64(py=py_call(b.float, given_rate))
+    try:
+        boost_check_n_estimators(count)
+        boost_check_learning_rate(rate)
+    except:
+        return False
+    var state = py_get(fields, "random_state")
+    var seed = 0
+    if state is not None:
+        seed = _int_word(state, b)
+        if seed < 0:
+            return False
+    var template = _ada_template(fields, classifier, context, b)
+    if template is None:
+        return False
+    var template_plan = prep_estimator_plan(template, context)
+    if template_plan is None or py_get(template_plan, "member") is None:
+        return False
+    var family = member_mark(template_plan, b).family
+    var prefix = String("dt_")
+    if family == MEMBER_FAMILY_FOREST:
+        prefix = String("rf_")
+    elif family == MEMBER_FAMILY_EXTRA_TREES:
+        prefix = String("et_")
+    elif family != MEMBER_FAMILY_TREE:
+        return False  # `_require_tree`: a DecisionTree*, RandomForest* or ExtraTrees* base only
+    # The first round's member (`_validated_clone(base, template, _sub_seed(seed, 0))`).
+    var probe = prep_estimator_clone(template, context)
+    var probe_fields = py_fields(probe)
+    if py_contains(probe_fields, "random_state"):
+        py_setitem(probe_fields, PythonObject("random_state"), PythonObject(_sub_seed(seed, 0)))
+    var probe_context = template_plan["context"]
+    var sub = MemberOwner()
+    sub.plan.family = family
+    sub.plan.kind = 0 if classifier else 1
+    if not forest_member_admit_common(probe, sub.plan.kind, prefix, probe_context, sub, True):
+        return False  # a random-splitter tree, or another kind
+    sub.plan.member = member_resolve_family(family, sub.plan.route)
+    sub.published = True
+    # The configuration the rounds' checks read (the door's `forest_config`
+    # of the refreshed first member, on this scratch clone).
+    var run = trees_route_context(probe, probe_context)
+    var fk = forest_kind(probe, run)
+    var refreshed = forest_refresh(probe, fk, run)
+    var config = forest_config(refreshed, py_item(refreshed, PythonObject("_cfg")), fk, not classifier, run)
+    if classifier:
+        var cfg = py_get(refreshed, "_cfg")
+        if config.class_weighted or py_get(refreshed, "class_weight") is not None or (
+                cfg is not None and py_type(cfg) is b.dict and py_get(cfg, "class_weight") is not None):
+            return False
+    var mask = 0
+    try:
+        mask = member_kind_capabilities(sub.plan)
+    except:
+        return False
+    var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    if classifier:
+        needs |= MEMBER_CAN_CLASSIFIER | MEMBER_CAN_SAMPLE_WEIGHT
+    if (mask & needs) != needs or ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
+        return False
+    # `_ada_native_base`: an exact best-splitter DecisionTree (squared error
+    # for the regressor) fits through the data session rounds.
+    var tf = py_fields(template)
+    var splitter = py_get(tf, "splitter")
+    var best = splitter is not None and py_type(splitter) is b.str and String(splitter) == "best"
+    var native = False
+    if classifier:
+        native = py_type(template) is py_get(context, "trees_dt_classifier") and best
+    elif py_type(template) is py_get(context, "trees_dt_regressor") and best:
+        var crit = py_get(tf, "criterion")
+        native = crit is not None and py_type(crit) is b.str and (String(crit) == "squared_error"
+                                                                   or String(crit) == "mse")
+    var squared = Int(py=py_item(py_item(py_item(context, PythonObject("trees_rf_tables")), PythonObject("reg_criteria")),
+                                 PythonObject("squared_error")))
+    var ada_mode = _mode_of(fields, context, b)
+    var member_mode = _mode_of(tf, context, b)
+    if ada_mode == "" or member_mode == "":
+        return False
+    var share = boost_ada_session_choice(ada_mode, _ada_switches(ada_mode, context, b)) == "share" and member_mode == "fast"
+    var words = List[Float64](capacity=11)
+    words.append(Float64(count))                 # META_ADA_COUNT
+    words.append(Float64(seed))                  # META_ADA_SEED
+    words.append(rate)                           # META_ADA_RATE
+    words.append(Float64(loss_code))             # META_ADA_LOSS
+    words.append(1.0 if native else 0.0)         # META_ADA_NATIVE
+    words.append(1.0 if share else 0.0)          # META_ADA_SHARE
+    words.append(Float64(squared))               # META_ADA_SQUARED
+    words.append(Float64(config.target_code))    # META_ADA_TARGET
+    words.append(Float64(config.poisson))        # META_ADA_POISSON
+    words.append(Float64(config.gamma))          # META_ADA_GAMMA
+    words.append(Float64(config.inverse_gaussian))  # META_ADA_INVERSE_GAUSSIAN
+    var nested = _Nested()
+    nested.plans.append(sub.plan.copy())
+    nested.masks.append(mask)
+    _ = py_call(nested.pins.append, sub.pins)
+    return _finish(fields, context, b, owner, nested, kind, 0.0, 0, List[Float64](), List[Int](), words^,
+                   List[List[Int32]](), List[List[Int32]]())
+
+
+def _ada_pack(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan, state: Int,
+              labels: PythonObject, features: Int, k: Int, mut jobs: _PackJobs) raises:
+    """PACK of THE ADABOOST KIND: the attributes the door's `ada_fit` writes
+    (`_ada_pack` / `_ada_member_pack`): the rounds' fit notices in the
+    estimator's context, then one member per kept round, in round order
+    (member j a clone of the template with `_sub_seed(seed, j)`, its state
+    packed into it through its family's PACK, labelled with the ensemble's
+    codes 0 .. k-1 as its fit on the codes stores them, its
+    `inference_engine_`), `estimators_`, `estimator_weights_`,
+    `estimator_errors_`, `classes_` / `n_classes_` (classifier) and
+    `n_features_in_`."""
+    var kind = Int(plan.params[0])
+    var classifier = kind == META_ADA_CLASSIFIER
+    var nested = meta_state_plans(state)
+    var handles = _export_i64(plan, state, META_BLOCK_NESTED)
+    if len(handles) != len(nested):
+        raise Error("RuntimeError: mojolearn: the AdaBoost member state does not match its rounds")
+    var view = _export_view(plan, state, META_BLOCK_ADA)
+    var w = _F64P(unsafe_from_address=view.dst.data)
+    var count = view.dst.rows * view.dst.cols
+    if count < 2:
+        raise Error("RuntimeError: mojolearn: the AdaBoost member's weight words are short")
+    var na = Int(w[0])
+    var ne = Int(w[1 + na])
+    var alphas = Python.list()
+    for i in range(na):  # small-loop(the kept rounds' weights)
+        _ = py_call(alphas.append, PythonObject(w[1 + i]))
+    var errors = Python.list()
+    for i in range(ne):  # small-loop(the kept rounds' errors)
+        _ = py_call(errors.append, PythonObject(w[2 + na + i]))
+    var owners = List[Int]()
+    var notices = List[List[Float64]]()
+    meta_state_notices(state, owners, notices)
+    for i in range(len(owners)):  # driver-loop: over the rounds' notices (a few warnings)
+        member_fit_notices_raise(notices[i], context)
+    var template = _ada_template(fields, classifier, context, b)
+    if template is None:
+        raise Error("RuntimeError: mojolearn: the AdaBoost member's estimator changed since its admission")
+    var state_seed = py_get(fields, "random_state")
+    var seed = 0 if state_seed is None else Int(py=state_seed)
+    var codes = py_call(b.list, py_call(b.range, PythonObject(k))) if classifier else PythonObject(None)
+    var members = Python.list()
+    for j in range(len(handles)):  # driver-loop: over the kept boosting rounds (one clone and one pack each)
+        var clone = _pack_member(template, context, b, nested[j], handles[j], codes, _sub_seed(seed, j), jobs)
+        _report_engine(clone, context)
+        _ = py_call(members.append, clone)
+    py_setitem(fields, PythonObject("estimators_"), members)
+    py_setitem(fields, PythonObject("estimator_weights_"), alphas)
+    py_setitem(fields, PythonObject("estimator_errors_"), errors)
+    if classifier:
+        py_setitem(fields, PythonObject("classes_"), labels)
+        py_setitem(fields, PythonObject("n_classes_"), PythonObject(k))
+    py_setitem(fields, PythonObject("n_features_in_"), PythonObject(features))
+
+
+def _ada_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan) raises -> Int:
+    """UNPACK of a fitted AdaBoost into a new META state: each member's five
+    model arrays imported into a state of the admitted base's member
+    (`forest_member_state_common`), then its `estimator_weights_` and
+    `estimator_errors_` (META_BLOCK_ADA). The caller frees it."""
+    var kind = Int(plan.params[0])
+    var classifier = kind == META_ADA_CLASSIFIER
+    var members = py_get(fields, "estimators_")
+    var alphas = py_get(fields, "estimator_weights_")
+    var errors = py_get(fields, "estimator_errors_")
+    if members is None or alphas is None or errors is None:
+        raise Error("NotFittedError: this meta-estimator is not fitted yet")
+    var ests = py_call(b.list, members)
+    var call = member_call_of(plan)
+    _ = member_call(plan.member, MEMBER_OP_NEW, call)
+    var base = meta_state_plans(call.state)[0].copy()
+    base.classes = plan.classes if classifier else 0
+    var handles = List[Int64]()
+    var ok = False
+    try:
+        for i in range(len(ests)):  # driver-loop: over the fitted round members (one import each)
+            handles.append(Int64(forest_member_state_common(ests[i], context, base)))
+        var block = MemberCall(plan.route, call.state)
+        block.block = META_BLOCK_NESTED
+        block.x = MemberMatrix(Int(handles.unsafe_ptr()), 1, len(handles), MEMBER_I64)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, block)
+        handles = List[Int64]()  # the META state owns them now
+        var a = py_call(b.list, alphas)
+        var e = py_call(b.list, errors)
+        var w = List[Float64](capacity=2 + len(a) + len(e))
+        w.append(Float64(len(a)))
+        for i in range(len(a)):  # driver-loop: over the rounds' weights (one float each)
+            w.append(Float64(py=py_call(b.float, a[i])))
+        w.append(Float64(len(e)))
+        for i in range(len(e)):  # driver-loop: over the rounds' errors (one float each)
+            w.append(Float64(py=py_call(b.float, e[i])))
+        var aw = MemberCall(plan.route, call.state)
+        aw.block = META_BLOCK_ADA
+        aw.x = MemberMatrix(Int(w.unsafe_ptr()), 1, len(w), MEMBER_F64)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, aw)
+        _ = len(w)  # copied in by the call above
+        var last = MemberCall(plan.route, call.state)
+        last.block = 0
+        last.flags = MEMBER_IMPORT_DONE
+        last.classes = plan.classes
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, last)
+        ok = True
+    finally:
+        if not ok:
+            for i in range(len(handles)):  # driver-loop: over the round states not handed over
+                var free = MemberCall(base.route, Int(handles[i]))
+                member_free(base, free)
             member_free(plan, call)
     return call.state

@@ -916,6 +916,9 @@ class AdaBoostClassifier(_AdaBoostBase):
     """
     score = _BoostClassifierScore.score
     _estimator_type = "classifier"
+    # The META member kind (core/ensemble_member.mojo, THE ADABOOST KIND; lane mf-ada4): this class as a
+    # member of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 8)
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
     _mojolearn_native_public = True
@@ -1031,6 +1034,9 @@ class AdaBoostRegressor(_AdaBoostBase):
     """
     score = _BoostRegressorScore.score
     _estimator_type = "regressor"
+    # The META member kind (core/ensemble_member.mojo, THE ADABOOST KIND; lane mf-ada4): this class as a
+    # member of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 9)
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
     _mojolearn_native_public = True
