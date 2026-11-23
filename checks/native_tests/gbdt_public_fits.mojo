@@ -75,7 +75,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 21
+comptime GBDT_HOST_UNITS = 22
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -151,6 +151,10 @@ struct GbdtOpts(Copyable, Movable):
     var min_split_gain: Float64
     var min_child_hessian: Float64
     var feature_fraction: Float64
+    #: "Plain" (the four option strings) or "Ordered" (the eight:
+    #: GreedyLogSum borders, `fold_len_multiplier` 2.0 as its float64 bits,
+    #: `fold_permutation_block` unset), as `gbdt_fit_options` builds them
+    var boosting_type: String
 
     def __init__(out self, loss: String, n_estimators: Int, max_depth: Int = 6):
         self.loss = loss
@@ -184,6 +188,7 @@ struct GbdtOpts(Copyable, Movable):
         self.min_split_gain = UNSET
         self.min_child_hessian = UNSET
         self.feature_fraction = 1.0
+        self.boosting_type = "Plain"
 
     def deterministic(mut self):
         """The tests' pinned configuration: `bootstrap_type='No'`, `random_strength=0`."""
@@ -469,6 +474,12 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     var ex_addr = Int(inp.eval_x.unsafe_ptr()) if n_eval > 0 else x_addr
     var ey_addr = Int(inp.eval_y.unsafe_ptr()) if n_eval > 0 else y_addr
     var strs: List[String] = [o.loss, _bootstrap(o), o.od_type, o.nan_mode]
+    if o.boosting_type == "Ordered":
+        # `gbdt_fit_options`' Ordered tail (bindings/gbdt_config_run.mojo)
+        strs.append(String("GreedyLogSum"))
+        strs.append(String("Ordered"))
+        strs.append(String(bitcast[DType.uint64](Float64(2.0))))
+        strs.append(String(0))
     var args = s^.request(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), ex_addr, ey_addr, strs^)
     var outcome = I.fit(False, args)
     _ = args^
@@ -1179,8 +1190,72 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_losses[I](unit - 7)
     elif unit <= 19:
         host_ordered[I](unit - 14)
-    else:
+    elif unit == 20:
         host_rest_gaps[I]()
+    else:
+        host_ordered_weights[I]()
+
+
+def _ordered_opts(loss: String) -> GbdtOpts:
+    """An Ordered fit at rate 0.1 with every work-changing option set."""
+    var o = GbdtOpts(loss, 4, 3)
+    o.boosting_type = "Ordered"
+    o.learning_rate = 0.1
+    o.l2_leaf_reg = 3.0
+    o.score_function = "Cosine"
+    o.leaf_iterations = 1
+    o.deterministic()
+    return o^
+
+
+def host_ordered_weights[I: GbdtImage]() raises:
+    """Sample and class weights under Ordered boosting, which the host
+    refused by name until lane gbdt-ordered-weights (2026-11-23), each fit
+    twice to the same bytes: weighted Logloss (unit weights give the
+    unweighted bytes, the device's ones column; a ramp moves the model),
+    class weights on Logloss, weighted RMSE under NewtonCosine with
+    boost_from_average and the Bayesian bootstrap, weighted MAE (the
+    weighted median start), and class weights with RMSE refused in
+    `train`'s words."""
+    var clf = _fixed("e3-x.f32", 600, 6, "e3-yc.f32")
+    var ll = _ordered_opts("Logloss")
+    var plain = _twice[I](ll, clf, "unweighted Ordered Logloss")
+    clf.weights = List[Float32](length=600, fill=Float32(1))
+    var ones = _twice[I](ll, clf, "unit-weighted Ordered Logloss")
+    require(ones.text == plain.text, "unit-weighted Ordered Logloss differs from the unweighted fit")
+    for r in range(600):  # small-loop(np.linspace(.5, 1.5, 600, dtype=float32))
+        clf.weights[r] = Float32(0.5 + Float64(r) / 599.0)
+    var ramp = _twice[I](ll, clf, "weighted Ordered Logloss")
+    require(ramp.text != plain.text, "Ordered Logloss sample weights had no model effect")
+    clf.weights = List[Float32]()
+    var cw = _ordered_opts("Logloss")
+    cw.class_weights = [1.0, 2.0]
+    var mcw = _twice[I](cw, clf, "class-weighted Ordered Logloss")
+    require(mcw.text != plain.text, "Ordered Logloss class weights had no model effect")
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    reg.weights = List[Float32](length=600, fill=Float32(0))
+    for r in range(600):  # small-loop(np.linspace(.5, 1.5, 600, dtype=float32))
+        reg.weights[r] = Float32(0.5 + Float64(r) / 599.0)
+    var rmse = _ordered_opts("RMSE")
+    rmse.score_function = "NewtonCosine"
+    rmse.boost_from_average = 1
+    rmse.bootstrap = "Bayesian"
+    rmse.bagging_temperature = 1.0
+    var mr = _twice[I](rmse, reg, "weighted Ordered RMSE")
+    require(all_finite_f32(predict(mr.text, reg.x, 600)), "weighted Ordered RMSE: nonfinite predict")
+    var mae = _ordered_opts("MAE")
+    mae.boost_from_average = 1
+    _ = _twice[I](mae, reg, "weighted Ordered MAE")
+    var bad = _ordered_opts("RMSE")
+    bad.class_weights = [1.0, 2.0]
+    var refused = False
+    try:
+        _ = fit[I](bad, reg)
+    except error:
+        require_fails_with(String(error), "class weights take effect only with a classification loss",
+                           "Ordered RMSE class weights")
+        refused = True
+    require(refused, "Ordered RMSE class weights were silently accepted")
 
 
 def host_rest_gaps[I: GbdtImage]() raises:
