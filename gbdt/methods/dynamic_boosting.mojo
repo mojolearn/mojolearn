@@ -19,7 +19,8 @@ from max.gpu import block_idx, block_dim, thread_idx
 from std.atomic import Atomic
 from core.pinned_reduce import pinned_block_max
 from std.math import isfinite
-from checks.numerics import ftz, identical_mul, identical_mul_add
+from checks.numerics import ftz, identical_mul
+from gbdt.methods.cursor_rescale import rescaled_leaf
 from checks.fixed_point import choose_scale
 from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
@@ -188,7 +189,7 @@ def _ordered_apply_kernel[PERMUTATION_BINS: Bool = False](
     bins: MutPointer[UInt32, MutAnyOrigin],
     leaves: MutPointer[Float32, MutAnyOrigin],
     cursor: MutPointer[Float32, MutAnyOrigin],
-    size_in: Int32, rate: Float32,
+    size_in: Int32,
 ):
     var size = Int(size_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -197,17 +198,16 @@ def _ordered_apply_kernel[PERMUTATION_BINS: Bool = False](
         comptime if not PERMUTATION_BINS:
             row = Int(permutation.unsafe_load(i))
         var leaf = Int(bins.unsafe_load(row))
-        # Upstream Rescale(step) precedes AppendModels. Round the stored
-        # model value before adding, so exported-model prediction and the
-        # training cursor use the same arithmetic across multiple trees.
-        # NOTE: every 0.8.19 build FUSED `leaf * rate` into this add (the old
-        # pin, `fma(a, b, -0.0)`, folded to a contractable product), so the
-        # cursor never saw the rounded model value the comment above wants.
-        # Kept as that one fma so the bits do not move (lane/pinned-mul-contract-free);
-        # rounding first is a separate, bit-moving decision.
-        cursor.unsafe_store(
-            i, identical_mul_add(leaves.unsafe_load(leaf), rate, cursor.unsafe_load(i))
-        )
+        # Upstream Rescale(step) precedes AppendModels: LEAVES are the
+        # model's rescaled values (`rescaled_leaf`, formed once per leaf by
+        # the caller), and the cursor adds them, `cursor + round(leaf *
+        # rate)`, the statement of every other fit (`kernel_add_model_value`)
+        # and of predict. Lane gbdt-leaf-body (2026-11-23): this was ONE fma,
+        # `identical_mul_add(leaf, rate, cursor)`, kept since 0.8.19 only to
+        # hold its bits, so the Ordered learn cursor sat off the model it
+        # trained (the defect fb11 fixed for the other fits). Bits change on
+        # every Ordered lane, every column together.
+        cursor.unsafe_store(i, cursor.unsafe_load(i) + leaves.unsafe_load(leaf))
 
 
 def ordered_estimate_and_apply(
@@ -250,12 +250,12 @@ def ordered_estimate_and_apply(
     )
     var hl = ctx.enqueue_create_host_buffer[DType.float32](n_leaves)
     var dl = ctx.enqueue_create_buffer[DType.float32](n_leaves)
-    for leaf in range(n_leaves):
-        hl.unsafe_ptr().unsafe_store(leaf, leaves[leaf])
+    for leaf in range(n_leaves):  # driver-loop: over the leaves, the model's rescale once per leaf
+        hl.unsafe_ptr().unsafe_store(leaf, rescaled_leaf(leaves[leaf], rate))
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_function[_ordered_apply_kernel[False]](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
-        cursor.unsafe_ptr(), Int32(apply_size), rate,
+        cursor.unsafe_ptr(), Int32(apply_size),
         grid_dim=((apply_size + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
     ctx.synchronize()
@@ -418,7 +418,7 @@ def fit_ordered_rmse(
         var weak = TObliviousTreeModel(structure^)
         # driver-loop: over the leaves
         for leaf in range(n_leaves):
-            weak.leaf_values.append(identical_mul(leaves[leaf], learning_rate))
+            weak.leaf_values.append(rescaled_leaf(leaves[leaf], learning_rate))
         model.add_weak_model(weak^)
         residual_bound *= Float64(1) + Float64(learning_rate)
     ctx.synchronize()
