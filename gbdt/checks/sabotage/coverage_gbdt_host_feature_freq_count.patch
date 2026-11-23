@@ -1,0 +1,15 @@
+diff --git a/gbdt/host/gbdt_oracle_feature_freq.mojo b/gbdt/host/gbdt_oracle_feature_freq.mojo
+index c6091ca6ba..5a57251df9 100644
+--- a/gbdt/host/gbdt_oracle_feature_freq.mojo
++++ b/gbdt/host/gbdt_oracle_feature_freq.mojo
+@@ -456,6 +456,10 @@ def _ff_values_range(
+             var count = 0
+             if key >= 0 and key < n_counts:
+                 count = counts[key]
++                # SABOTAGE (coverage-gbdt-host_feature_freq_count): the
++                # two-level table read one entry off (its neighbour's count)
++                if key > 0:
++                    count = counts[key - 1]
+             values[row] = (Float32(count) + Float32(0.0)) / (
+                 Float32(n_rows) + Float32(1.0)
+             )

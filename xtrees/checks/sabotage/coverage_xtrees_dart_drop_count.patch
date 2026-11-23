@@ -1,0 +1,15 @@
+diff --git a/xtrees/api_kernels.mojo b/xtrees/api_kernels.mojo
+index 35aceecaa5..4c579ddfa9 100644
+--- a/xtrees/api_kernels.mojo
++++ b/xtrees/api_kernels.mojo
+@@ -240,7 +240,9 @@ def dart_rescale(
+     if t > 0:
+         var fp = i32_ptr(flags_addr)
+         for i in range(t):  # small-loop(t: trees so far): counts the dropped trees
+-            if fp[i] != 0:
++            # SABOTAGE (coverage-xtrees-dart_drop_count): the first tree is
++            # never counted as dropped (the normalisation's drop count off)
++            if fp[i] != 0 and i > 0:
+                 nd += 1
+     var kd = Float64(nd)
+     var shrink: Float64
