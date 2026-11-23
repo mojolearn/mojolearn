@@ -506,6 +506,22 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var shuffle = msel_flag_truth(args[8], context)
     var seed = _search_seed(args[9], context)
     var return_times = msel_flag_truth(args[11], context)
+    # SEVERAL SCORERS (lane mf-tail5): scikit-learn 1.9's `validate_params`
+    # of learning_curve allows `scoring` only as a scorer name, a callable or
+    # None ([StrOptions(get_scorer_names()), callable, None]): a list, tuple,
+    # set or dict is its InvalidParameterError, raised before any fold or
+    # fit (the names shown sorted; scikit-learn prints the set unordered).
+    var scoring_in = args[6]
+    var many = py_type(scoring_in)
+    if many is b.list or many is b.tuple or many is b.set or many is b.dict:
+        var names = py_call(b.sorted, context["family_msel_scorers"])
+        var shown = String("{")
+        for i in range(len(names)):  # driver-loop: over the scorer names (the refusal's words, once)
+            if i > 0:
+                shown += ", "
+            shown += family_repr(names[i])
+        raise Error("ValueError: The 'scoring' parameter of learning_curve must be a str among " + shown
+                    + "}, a callable or None. Got " + family_repr(scoring_in) + " instead.")
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
