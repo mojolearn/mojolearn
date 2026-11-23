@@ -1,0 +1,16 @@
+diff --git a/gbdt/methods/kernel/two_level_leaves.mojo b/gbdt/methods/kernel/two_level_leaves.mojo
+index e29ed14231..eb8efd1e94 100644
+--- a/gbdt/methods/kernel/two_level_leaves.mojo
++++ b/gbdt/methods/kernel/two_level_leaves.mojo
+@@ -152,7 +152,10 @@ def two_level_leaf_values_kernel(
+     if t == 0:
+         var v = Float32(0.0)
+         if total_weight > Float32(0.0):
++            # SABOTAGE (coverage-gbdt-device_feature_freq_denominator): the
++            # two-level leaf's denominator drops the L2 regularizer
+             v = identical_div(
+-                identical_mul(learning_rate, total), total_weight + l2_leaf_reg
++                identical_mul(learning_rate, total), total_weight
+             )
++            _ = l2_leaf_reg
+         dst.unsafe_store(leaf, v)

@@ -1,0 +1,24 @@
+diff --git a/gbdt/ctrs/ctr_calcers.mojo b/gbdt/ctrs/ctr_calcers.mojo
+index e99de5cef9..8bdfc55328 100644
+--- a/gbdt/ctrs/ctr_calcers.mojo
++++ b/gbdt/ctrs/ctr_calcers.mojo
+@@ -799,12 +799,18 @@ struct THistoryBasedCtrCalcerGpu(Movable):
+                     " equal up to prior and binarization"
+                 )
+             var dst = ctx.enqueue_create_buffer[DType.float32](self.size)
++            # SABOTAGE (coverage-gbdt-device_ctr_prior): each Borders config
++            # of the group reads its prior numerator from the next config (an
++            # off-by-one in the prior table)
++            var sab_num = config.numerator_shift()
++            if reference.ctr_type == CTR_BORDERS:
++                sab_num = ctr_configs[(c + 1) % len(ctr_configs)].numerator_shift()
+             launch_make_means_and_scatter(
+                 ctx,
+                 self.tmp,
+                 self.scanned_scattered_weights,
+                 self.size,
+-                config.numerator_shift(),
++                sab_num,
+                 config.denumerator_shift(),
+                 self.indices,
+                 False,

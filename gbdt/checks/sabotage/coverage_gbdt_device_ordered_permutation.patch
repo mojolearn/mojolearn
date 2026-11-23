@@ -1,0 +1,18 @@
+diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
+index fea10549f7..9de08abd41 100644
+--- a/gbdt/methods/ordered_boosting.mojo
++++ b/gbdt/methods/ordered_boosting.mojo
+@@ -2419,6 +2419,13 @@ def fit_ordered(
+         n_rows, opts.permutation_count, opts.permutation_block,
+         opts.random_seed,
+     )
++    # SABOTAGE (coverage-gbdt-device_ordered_permutation): every learn
++    # order's first two positions swapped (a permutation index off)
++    for sab_p in range(len(perms)):  # driver-loop: over the permutations
++        if len(perms[sab_p]) > 1:
++            var sab_t = perms[sab_p][0]
++            perms[sab_p][0] = perms[sab_p][1]
++            perms[sab_p][1] = sab_t
+     var perm_count = len(perms)
+     var est_p = perm_count - 1
+     var learn_count = est_p if est_p > 0 else 1

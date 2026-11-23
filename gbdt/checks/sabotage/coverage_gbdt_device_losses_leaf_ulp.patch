@@ -1,0 +1,99 @@
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+index 576068493d..c87e766df5 100644
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -335,6 +335,7 @@ from gbdt.targets.kernel.pointwise_targets import (
+     OBJECTIVE_QUERY_RMSE,
+     OBJECTIVE_YETI_RANK,
+     OBJECTIVE_RMSE,
++    OBJECTIVE_LOGLOSS,  # SABOTAGE (coverage-gbdt-device_losses_leaf_ulp): the condition below
+     deterministic_sum_lanes_kernel,
+     launch_approximate,
+ )
+@@ -1213,6 +1214,17 @@ def _settle_deferred_tree(
+     has_deferred_tree = False
+ 
+ 
++def _sab_ulp_trees(mut model: TAdditiveModel, first: Int):
++    """SABOTAGE (coverage-gbdt-device_losses_leaf_ulp): every stored leaf of the symmetric
++    trees from `first` on one ulp up (its bit pattern plus one)."""
++    for t in range(first, len(model.weak_models)):  # driver-loop: over the trees just appended
++        for i in range(len(model.weak_models[t].leaf_values)):  # driver-loop: over one tree's leaf values
++            var v = model.weak_models[t].leaf_values[i]
++            model.weak_models[t].leaf_values[i] = bitcast[DType.float32](
++                bitcast[DType.uint32](v) + UInt32(1)
++            )
++
++
+ def finish_deferred_estimation(
+     ctx: DeviceContext,
+     mut est_ws: List[TEstimationWorkspace],
+@@ -4550,6 +4562,14 @@ def fit_with_test(
+     # round as one executor loop (`fit_sym_rounds_on_device`, the block above
+     # it) and the host loop below runs zero iterations; every other fit takes
+     # the host loop as before.
++    # SABOTAGE (coverage-gbdt-device_losses_leaf_ulp): every stored leaf of the one-output symmetric fits of the greedy searcher over a loss other than RMSE and Logloss, and every ranking fit (QueryRMSE, PairLogit, YetiRank) of either searcher one ulp up, at every
++    # symmetric append those fits reach (the loop's own, the deferred one and
++    # the device rounds' download)
++    var sab_on = (
++        not non_symmetric and approx_dim == 1
++        and objective != OBJECTIVE_RMSE and objective != OBJECTIVE_LOGLOSS
++        and (not use_pointwise_searcher or is_querywise or is_pair_logit or is_yeti_rank)
++    )
+     var device_rounds = sym_device_rounds_eligible(
+         use_pointwise_searcher, non_symmetric, perm_count,
+         feature_fraction < 1, random_strength, trace.enabled, objective,
+@@ -4565,6 +4585,7 @@ def fit_with_test(
+         var needs_mags = False
+         comptime if _needs_magnitudes:
+             needs_mags = True
++        var sab_rounds_first = len(model.weak_models)
+         stopped_early = fit_sym_rounds_on_device(
+             ctx, model, test, detector, losses, test_losses, not_pd_total,
+             n_rows, n_estimators, max_depth, layout_for_test, one_hot,
+@@ -4578,6 +4599,8 @@ def fit_with_test(
+             not use_pointwise_searcher, not need_estimation, use_subtraction,
+             fold_counts, row_index,
+         )
++        if sab_on:
++            _sab_ulp_trees(model, sab_rounds_first)
+     for iteration in range(0 if device_rounds else n_estimators):
+         var t_grad = loop_times.start()
+         # ---- which permutation the STRUCTURE is searched on ----------
+@@ -5447,10 +5470,13 @@ def fit_with_test(
+         # estimation is complete; take its values and append its model
+         # before this tree's estimation reuses the staging.
+         comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
++            var sab_defer_first = len(model.weak_models)
+             _settle_deferred_tree(
+                 ctx, est_ws, model, deferred_splits, has_deferred_tree,
+                 approx_dim, learning_rate, not_pd_total, trace, stage_times,
+             )
++            if sab_on:
++                _sab_ulp_trees(model, sab_defer_first)
+         var t_sym_est = loop_times.start()
+         if need_estimation and not non_symmetric:
+             # ---- their estimation loop (`doc_parallel_boosting.h:
+@@ -5593,6 +5619,8 @@ def fit_with_test(
+                 for i in range(len(leaf_values)):
+                     weak.leaf_values.append(rescaled_leaf(leaf_values[i], learning_rate))
+                 model.add_weak_model(weak^)
++                if sab_on:
++                    _sab_ulp_trees(model, len(model.weak_models) - 1)
+         loop_times.stop_host("iter_model_append", t_append)
+ 
+         # ---- their `AppendModels(..., learnCursors, testCursor)` -----
+@@ -5640,10 +5668,13 @@ def fit_with_test(
+     # lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): the last tree's
+     # deferred estimation
+     comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
++        var sab_last_first = len(model.weak_models)
+         _settle_deferred_tree(
+             ctx, est_ws, model, deferred_splits, has_deferred_tree,
+             approx_dim, learning_rate, not_pd_total, trace, stage_times,
+         )
++        if sab_on:
++            _sab_ulp_trees(model, sab_last_first)
+     loop_times.stop_host("fit_total", t_loop)
+     loop_times.report()
+ 
