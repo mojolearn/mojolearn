@@ -3205,6 +3205,7 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     for f in range(folds):  # driver-loop: over the cv folds (their test rows' addresses, read with the GIL held)
         var te = splits[f][1]
         plan.fold(trees_address(te), Int(py=te.shape[0]))
+        _ = te^  # `splits` owns the fold rows to the end of RUN; named past the call that stored its address
     var glue = _xr(xt)
     var released = True
     for u in range(units):  # driver-loop: over the members (THE GIL RULE word of each)

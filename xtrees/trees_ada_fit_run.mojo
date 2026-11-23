@@ -231,12 +231,12 @@ def _predict_train(plan: AdaFitPlan, handle: Int, dst: Int) raises:
                 wrote = xf_resident_predict(plan.forest, snapshot, plan.x, target, n, plan.d, outputs)
         finally:
             xf_snapshot_release(plan.forest, release_op, snapshot)
+    _ = len(model)
     _ = len(offsets)  # the walk and the snapshot above read the five arrays through `model`
     _ = len(colid)
     _ = len(quesval)
     _ = len(left)
     _ = len(leaves)
-    _ = len(model)
     if wrote != n:
         raise Error("RuntimeError: forest prediction wrote " + String(wrote) + " of " + String(n) + " rows")
     if plan.classifier and not labels:
