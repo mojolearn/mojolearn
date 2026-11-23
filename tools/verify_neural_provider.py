@@ -337,8 +337,7 @@ def verify(args):
             # MOJOLEARN_NEURAL_NATIVE_DISPATCH=1 here (and =0 for the probes)
             # chose a route the product no longer reads from the environment,
             # so every check runs the shipped default. The by-name CPython arm
-            # is the -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF build; verify it by
-            # pointing --package/--binary-root at that build.
+            # (-D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF) was deleted 2026-11-23.
             # MOJOLEARN_GENERATION_NATIVE_SESSION was deleted 2026-11-12.
             for retired in ('MOJOLEARN_NEURAL_NATIVE_DISPATCH', 'MOJOLEARN_GENERATION_NATIVE_SESSION'):
                 env.pop(retired, None)

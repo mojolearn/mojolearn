@@ -658,6 +658,9 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch
     comptime assert not is_defined["MOJOLEARN_NN40_WS_HEADROOM"](), "removed 2026-11-15 (lane/expdel2-27-neural): NN40_WS_HEADROOM (unmeasured opt-in arm: GEMM workspace grow-ahead headroom) is gone; the default stays; code recoverable at 340d379a3c; restore: experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch"
     # Lane expdel2-28-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
+    # TOMBSTONE: MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF"](), "removed 2026-11-23 (lane/ab-prep-neural, removed without measurement: plumbing, rule 2026-11-22: the B arm called the same compiled neural entries with the same words by name through CPython instead of through the native descriptor tables; experiments/neural_native_dispatch_20261027/README.md in git history); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF.patch"
     # MOJOLEARN_CNN_PREDICT_PROGRAM_COPY: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # TOMBSTONE: MOJOLEARN_CNN_PREDICT_PROGRAM_COPY (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.ab-prep.patch; record in docs/TOMBSTONES.md.

@@ -20,7 +20,7 @@ from bindings.neural_block_admission_door import neural_record_fields, neural_bl
 from bindings.transformer_public_native_door import _transformer_fields, _transformer_state_words, _transformer_configuration, _transformer_same_words
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.generation_metadata_pyapi_door import GenerationLayerSnapshot
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_module_fields, NEURAL_NATIVE_DISPATCH
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_module_fields
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
@@ -870,9 +870,8 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
             # None` selects the device route below): the handle word.
             handle.device = PythonObject(handle.word)
     else:
-        if NEURAL_NATIVE_DISPATCH:
-            handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
-                _transformer_decode_entry(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
+        handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
+            _transformer_decode_entry(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
         var weights = fields["_w"]
         var optional = fields["_wopt"]
         for i in range(len(weights)):  # driver-loop: native session-owned weight copies
