@@ -21,8 +21,11 @@ WHAT LOSSGUIDE ADDS OVER DEPTHWISE, AND WHERE EACH PIECE IS MIRRORED
      (`kernel/compute_scores.mojo:553-610`, the scan at `:346-500`), which
      the driver launches for NewtonL2 as for L2
      (`greedy_search_helper_depthwise.mojo:1694-1728`): `_add_leaf[L2]`
-     (`compute_scores.mojo:80-86`) is `add_leaf_l2` below. The leafwise scan
-     and argmax are shared with Depthwise and live in the driver.
+     (`compute_scores.mojo`) is `leafwise_score_body.add_leaf_score`, which
+     the kernel and the driver both call (lane gbdt-cpu-rest-4-ns,
+     2026-11-23: the copy `add_leaf_l2` that lived here is deleted). The
+     leafwise scan and argmax are shared with Depthwise and live in the
+     driver.
   3. The search planes under NewtonL2, `cross_entropy_kernel[True, False,
      second_der_as_weights=True]` (`gbdt/targets/kernel/pointwise_targets.
      mojo:947-1054`, launched at `doc_parallel_boosting.mojo:1531-1543`):
@@ -72,17 +75,6 @@ def lossguide_select_leaves_to_split(
     if best >= 0:
         out.append(best)
     return out^
-
-
-def add_leaf_l2(
-    sum: Float32, weight: Float32, lambda_l2: Float32, mut score: Float32
-):
-    """`_add_leaf[SCORE_FUNCTION_L2, normalize=False, pin_mul_add=True]`
-    (`compute_scores.mojo:80-84`): a leaf below the 1e-20 weight adds
-    nothing; otherwise the flushed square over the regularized weight."""
-    if weight > Float32(1e-20):
-        var num = ftz(sum * sum)
-        score = ftz(score + ftz(num / (weight + lambda_l2)))
 
 
 def logloss_search_pass_newton(
