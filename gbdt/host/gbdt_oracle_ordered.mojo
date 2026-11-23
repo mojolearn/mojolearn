@@ -98,6 +98,8 @@ from gbdt.grid_creator.binarization import (
 )
 from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
 from gbdt.data.permutation import TRandom
+from gbdt.methods.score_calcer_body import make_score_calcer
+from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE, SCORE_FUNCTION_L2
 from gbdt.host.gbdt_oracle_tree_ctr import (
     GbdtTreeCtrHost,
     TreeU32Ptr,
@@ -1100,6 +1102,9 @@ def _ord_score_blocks(
     var t_score = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
     var t_gain = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
     var t_index = List[Int](length=GBDT_ORD_SCORE_BLOCK, fill=0)
+    var l2_calcer = make_score_calcer[SCORE_FUNCTION_L2](
+        l2, Float32(1.0), False, Float32(0.0), UInt64(0)
+    )
     for blk in range(blk_lo, blk_hi):
         for tid in range(GBDT_ORD_SCORE_BLOCK):
             var th_score = GBDT_ORD_FLOAT32_MAX
@@ -1111,10 +1116,11 @@ def _ord_score_blocks(
                     break
                 var b = i + tid
                 if plain_l2:
-                    # `TL2ScoreCalcer`: Score = 0, per leaf both sides'
-                    # `(-sum * sum) / (weight + lambda)` when the weight
-                    # exceeds 1e-20, no normalization
-                    var l2score = Float32(0.0)
+                    # `TL2ScoreCalcer` at meta exponent 1, the device's own
+                    # body (`score_calcer_body.ScoreCalcer`): Score = 0, per
+                    # leaf left then right `add_leaf(sum, weight)`; the L2
+                    # calcer reads no feature id
+                    l2_calcer.next_feature(UInt32(0))
                     for leaf in range(part_count):
                         var pw = part_stats[3 * leaf]
                         var psum = part_stats[3 * leaf + 1]
@@ -1123,10 +1129,9 @@ def _ord_score_blocks(
                         var sl = hist[hb + 1]
                         var wr = max(pw - wl, Float32(0.0))
                         var sr = psum - sl
-                        if wl > Float32(1e-20):
-                            l2score += (-sl * sl) / (wl + l2)
-                        if wr > Float32(1e-20):
-                            l2score += (-sr * sr) / (wr + l2)
+                        l2_calcer.add_leaf(sl, wl)
+                        l2_calcer.add_leaf(sr, wr)
+                    var l2score = l2_calcer.get_score()
                     l2score *= Float32(1.0)
                     var l2gain = l2score - score_before
                     l2gain *= Float32(1.0)
@@ -1674,29 +1679,24 @@ def _plain_cosine_range(
     gains: HostF32Ptr,
 ):
     """`_plain_cosine_candidates` for the candidates `[b_lo, b_hi)`: each
-    candidate's fma chain over the leaves in leaf order is its own."""
+    candidate's chain over the leaves in leaf order is its own. The chain,
+    the 1e-10 `DenumSqr` seed, the normalization and the per-feature noise
+    draw are the device's `TCosineScoreCalcer` body
+    (`score_calcer_body.ScoreCalcer`, normalize off, as the public fit)."""
+    var calcer = make_score_calcer[SCORE_FUNCTION_COSINE](
+        l2, Float32(1.0), False, score_std_dev, helper_seed
+    )
     for b in range(b_lo, b_hi):
-        var score = Float32(0)
-        var denum = Float32(1e-10)
+        calcer.next_feature(UInt32(bf_feature[b]))
         for leaf in range(part_count):
             var base = hist_line * leaf * 2 + 2 * b
             var wl = hist[base]
             var sl = hist[base + 1]
             var wr = max(part_stats[3 * leaf] - wl, Float32(0))
             var sr = part_stats[3 * leaf + 1] - sl
-            var ml = sl / (wl + l2) if wl > Float32(0) else Float32(0)
-            score = identical_mul_add(sl, ml, score)
-            denum = identical_mul_add(wl * ml, ml, denum)
-            var mr = sr / (wr + l2) if wr > Float32(0) else Float32(0)
-            score = identical_mul_add(sr, mr, score)
-            denum = identical_mul_add(wr * mr, mr, denum)
-        var res = GBDT_ORD_FLOAT32_MAX
-        if denum > Float32(1e-15):
-            res = -score / identical_sqrt(denum)
-        if score_std_dev != Float32(0):
-            var seed = advance_seed_k(helper_seed + UInt64(bf_feature[b]), 4)
-            var draw = next_normal_f(seed)
-            res = identical_mul_add(draw[0], score_std_dev, res)
+            calcer.add_leaf(sl, wl)
+            calcer.add_leaf(sr, wr)
+        var res = calcer.get_score()
         scores[b] = res
         gains[b] = identical_mul_add(res, Float32(1), -score_before)
 
