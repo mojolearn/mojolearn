@@ -1105,17 +1105,26 @@ def gbdt_ctr_host_model_text(r: GbdtCtrHostFit) raises -> String:
     )
 
 
-def gbdt_ctr_host_model_text_of(
-    m: GbdtHostModel,
+def gbdt_ctr_host_header_text(
+    fold_counts: List[Int],
+    borders: List[List[Float32]],
+    nan_treatment: List[Int],
+    n_trees: Int,
+    n_losses: Int,
     one_hot: List[Bool],
     tables: List[TCtrValueTable],
     ctr_column_count: Int,
     combination_ctrs: TCombinationCtrs,
 ) raises -> String:
-    """`gbdt_ctr_host_model_text` over the parts, for a fit that does not
-    come as a `GbdtCtrHostFit` (the Ordered fit, which adds its `bias`
-    record with `gbdt_text_with_bias`)."""
-    var n_columns = len(m.fold_counts)
+    """`model_text`'s records before the trees (`gbdt/models/model_text.mojo`):
+    the header comment and records, `ctr_columns`, one `feature` record per
+    column (kind `float`, `ctr`, `cat` or `tree_ctr`), the `ctr_table`
+    records and the tree CTRs' maps and tables. The oblivious text
+    (`gbdt_ctr_host_model_text_of`) and the non-symmetric one
+    (gbdt/host/gbdt_oracle_depthwise.mojo::gbdt_ctr_host_ns_model_text)
+    both open with it (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23: the records
+    were the oblivious function's own)."""
+    var n_columns = len(fold_counts)
     var table_of_column = List[Int](length=n_columns, fill=-1)
     for i in range(len(tables)):
         var c = tables[i].column
@@ -1140,8 +1149,8 @@ def gbdt_ctr_host_model_text_of(
     out += "# Format and CTR seam: gbdt/models/model_text.mojo.\n"
     out += String("format ") + String("mojolearn-model") + " " + String(2) + "\n"
     out += String("features ") + String(n_columns) + " " + String(len(one_hot)) + "\n"
-    out += String("trees ") + String(m.n_trees()) + "\n"
-    out += String("losses ") + String(len(m.losses)) + "\n"
+    out += String("trees ") + String(n_trees) + "\n"
+    out += String("losses ") + String(n_losses) + "\n"
     if ctr_column_count != 0:
         out += String("ctr_columns ") + String(ctr_column_count) + "\n"
     for f in range(n_columns):
@@ -1158,14 +1167,14 @@ def gbdt_ctr_host_model_text_of(
         elif one_hot[f]:
             kind = String("cat")
         var line = (
-            String("feature ") + String(f) + " folds " + String(m.fold_counts[f])
+            String("feature ") + String(f) + " folds " + String(fold_counts[f])
             + " one_hot " + String(1 if one_hot[f] else 0)
             + " type " + kind
-            + " nan " + _nan_token(m.nan_treatment[f])
-            + " borders " + String(len(m.borders[f]))
+            + " nan " + _nan_token(nan_treatment[f])
+            + " borders " + String(len(borders[f]))
         )
-        for b in range(len(m.borders[f])):
-            line += " " + gbdt_f32_token(m.borders[f][b])
+        for b in range(len(borders[f])):
+            line += " " + gbdt_f32_token(borders[f][b])
         out += line + "\n"
     for f in range(n_columns):
         var ti = table_of_column[f]
@@ -1181,6 +1190,23 @@ def gbdt_ctr_host_model_text_of(
                 String("combination_table"), first_comb + i,
                 combination_ctrs.tables[i],
             )
+    return out^
+
+
+def gbdt_ctr_host_model_text_of(
+    m: GbdtHostModel,
+    one_hot: List[Bool],
+    tables: List[TCtrValueTable],
+    ctr_column_count: Int,
+    combination_ctrs: TCombinationCtrs,
+) raises -> String:
+    """`gbdt_ctr_host_model_text` over the parts, for a fit that does not
+    come as a `GbdtCtrHostFit` (the Ordered fit, which adds its `bias`
+    record with `gbdt_text_with_bias`)."""
+    var out = gbdt_ctr_host_header_text(
+        m.fold_counts, m.borders, m.nan_treatment, m.n_trees(), len(m.losses),
+        one_hot, tables, ctr_column_count, combination_ctrs,
+    )
     for t in range(m.n_trees()):
         var lo = m.tree_split_offsets[t]
         var depth = m.tree_split_offsets[t + 1] - lo

@@ -35,6 +35,15 @@ and Gradient leaves at three iterations (`gbdt_oracle_losses.mojo`). Every
 other option is at its default and the binding refuses by name what is
 outside (bindings/_mojolearn_gbdt_host.mojo, `_refuse`).
 
+CATEGORICAL COLUMNS (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23):
+`gbdt_ctr_host_fit_non_symmetric` builds the columns with the symmetric
+categorical fit's prelude (gbdt/host/gbdt_oracle_ctr.mojo, one compressed
+index per permutation) and runs `_ns_fit_core` over them: the learn
+permutation's search, every permutation's estimation on its own index and
+cursor, TakeBin (`==`) splits on a one-hot column in the split chain, the
+bins walk (the device kernel's own body, gbdt/models/
+non_symmetric_walk_body.mojo) and the model text.
+
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build defaults:
 DEVIATION 1902 ridx-only splits OFF, 2661 group width OFF, 1901 incremental
 partition stats ON, 1903 and 1904 FAST-only, 2551 device leaf partition ON)
@@ -150,6 +159,7 @@ from gbdt.host.gbdt_oracle import (
     gbdt_bootstrap_seeds,
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
+    GbdtHostGrid,
     GbdtHostParams,
     _add_leaf_cosine,
     _binarize_columns,
@@ -166,6 +176,17 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_grid,
 )
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
+from gbdt.models.non_symmetric_walk_body import ns_node_goes_right, ns_walk_step
+# the categorical prelude and header the symmetric CTR fit uses (lane
+# gbdt-cpu-rest-4-cat-ns, 2026-11-23)
+from gbdt.host.gbdt_oracle_ctr import (
+    gbdt_ctr_host_header_text,
+    gbdt_ctr_host_prelude,
+)
+from gbdt.host.gbdt_oracle_tree_ctr import GbdtTreeCtrHost
+from gbdt.models.combination_map import TCombinationCtrs
+from gbdt.models.ctr_value_table import TCtrValueTable
+from gbdt.options.catboost_options import grow_policy_name
 from gbdt.host.gbdt_oracle_eval import (
     GbdtHostEval,
     gbdt_eval_add_tree,
@@ -274,8 +295,10 @@ struct GbdtHostNsModel(Movable):
 struct _NsLeaf(Copyable, Movable):
     """`TLeaf` (`points_subsets.mojo:351-402`) with its `TBestSplitProperties`
     (`:285-317`, defaults feature -1, bin 0, gain `Float32.MAX`, undefined)
-    and its `TLeafPath` (`gbdt/data/leaf_path.mojo`) flattened. All splits
-    are TakeGreater: the binding refuses categoricals."""
+    and its `TLeafPath` (`gbdt/data/leaf_path.mojo`) flattened. A split's
+    type is its feature's: TakeBin on a one-hot column, TakeGreater
+    otherwise (the layout's `one_hot_feature`, as the device's `MakeSplit`
+    reads it; lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)."""
 
     var size: Int
     var histograms_type: Int
@@ -526,8 +549,11 @@ def _reduce_leaf_blocks(
         var our_gain = ftz(blk_gain[first + bx])
         var feature = bf_feature[blk_bin[first + bx]]
         var bin = bf_bin[blk_bin[first + bx]]
-        # `TBinFeatureTable.to_split`'s clamp (`:252-257`), TakeGreater arm
+        # `TBinFeatureTable.to_split`'s clamp (`:252-257`): a one-hot bin
+        # to `folds`, a float bin to `folds - 1`
         var max_bin = Int(layout.features[feature].folds) - 1
+        if layout.features[feature].one_hot_feature:
+            max_bin = Int(layout.features[feature].folds)
         if bin > max_bin:
             bin = max_bin
         var cand_gain = -our_gain
@@ -759,9 +785,11 @@ def _grow_non_symmetric_tree(
             # ---- MakeSplit's multi-leaf arm (`:2058-2346`) ----
             var leaves_count = len(leaves)
             # the split chain over every parent's range, zeros then ones
-            # (TakeGreater), `copy_histograms_kernel` (the parent into the
-            # right slot) and `update_partitions_after_split_kernel`:
-            # `_split_leaves`, the leaves' pieces across the cores
+            # (TakeGreater, or TakeBin's `==` on a one-hot column: the
+            # device's `split_type` off the layout's `one_hot_feature`),
+            # `copy_histograms_kernel` (the parent into the right slot) and
+            # `update_partitions_after_split_kernel`: `_split_leaves`, the
+            # leaves' pieces across the cores
             var right_ids = List[Int](capacity=len(to_split))
             var l_word_base = List[Int](capacity=len(to_split))
             var l_field = List[UInt32](capacity=len(to_split))
@@ -776,6 +804,7 @@ def _grow_non_symmetric_tree(
                 l_word_base.append(Int(sfeat.offset) * n_rows)
                 l_field.append(UInt32(sfeat.mask << sfeat.shift))
                 l_value.append(UInt32(Int(leaves[left_id].best_bin)) << sfeat.shift)
+                l_one_hot[i] = 1 if sfeat.one_hot_feature else 0
             _split_leaves(
                 cindex, n_rows, hist_cells, 2, to_split, right_ids,
                 l_word_base, l_field, l_value, l_one_hot, row_index, stats,
@@ -975,27 +1004,26 @@ def _ns_bins_range(
     node_word: GbdtIntPtr,
     node_shift: HostU32Ptr,
     node_mask: HostU32Ptr,
+    node_take_bin: GbdtIntPtr,
     node_bin: GbdtIntPtr,
     node_left: GbdtIntPtr,
     node_right: GbdtIntPtr,
     bins: GbdtIntPtr,
 ):
-    """`_non_symmetric_bins` for the rows `[lo, hi)`: one walk a row."""
+    """`_non_symmetric_bins` for the rows `[lo, hi)`: one walk a row, each
+    node through the device kernel's own body
+    (gbdt/models/non_symmetric_walk_body.mojo: `==` on a TakeBin node, `>`
+    on a TakeGreater one; lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)."""
     for r in range(lo, hi):
         var bin = 0
         var node = 0
         var stop = False
         while not stop:
             var feature_val = (cindex[node_word[node] + r] >> node_shift[node]) & node_mask[node]
-            if feature_val > UInt32(node_bin[node]):
-                bin += node_left[node]
-                stop = node_right[node] == 1
-                if not stop:
-                    node += node_left[node]
-            else:
-                stop = node_left[node] == 1
-                if not stop:
-                    node += 1
+            var split = ns_node_goes_right(
+                feature_val, UInt32(node_bin[node]), node_take_bin[node] != 0
+            )
+            stop = ns_walk_step(split, node_left[node], node_right[node], bin, node)
         bins[r] = bin
 
 
@@ -1008,12 +1036,14 @@ def _non_symmetric_bins(
     """`compute_non_symmetric_decision_tree_bins_kernel` over the training
     index (`add_non_symmetric_tree_doc_parallel.mojo:63-188`,
     `add_bin_values.mojo:277-320`; the walk `core/gbdt_host_predict.mojo:
-    323-347` restates): shift then mask, `>` against the node's bin, a right
-    turn adds the left subtree's leaf count. No nodes: every row in bin 0.
+    323-347` restates): shift then mask, `>` against the node's bin (`==`
+    on a one-hot column's TakeBin node, the device's `node_one_hot` plane
+    off the layout's `one_hot_feature`), a right turn adds the left
+    subtree's leaf count. No nodes: every row in bin 0.
 
     One device thread a row: the rows run in `_gbdt_units` contiguous
-    ranges; each node's word offset, shift and mask are read off the
-    layout once per tree (they were three lookups per row and node)."""
+    ranges; each node's word offset, shift, mask and split type are read
+    off the layout once per tree (they were lookups per row and node)."""
     var n_nodes = len(tree.node_feature)
     var bins = List[Int](length=n_rows, fill=0)
     if n_nodes == 0:
@@ -1021,26 +1051,29 @@ def _non_symmetric_bins(
     var node_word = List[Int](length=n_nodes, fill=0)
     var node_shift = List[UInt32](length=n_nodes, fill=UInt32(0))
     var node_mask = List[UInt32](length=n_nodes, fill=UInt32(0))
+    var node_take_bin = List[Int](length=n_nodes, fill=0)
     for i in range(n_nodes):  # driver-loop: over the tree's nodes
         ref cf = layout.features[tree.node_feature[i]]
         node_word[i] = Int(cf.offset) * n_rows
         node_shift[i] = cf.shift
         node_mask[i] = cf.mask
+        node_take_bin[i] = 1 if cf.one_hot_feature else 0
     var units = _gbdt_units(n_rows, 8 * n_rows)
     var chunk = host_predict_chunk(n_rows, units)
     var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
     var word_p = rebind[GbdtIntPtr](node_word.unsafe_ptr())
     var shift_p = rebind[HostU32Ptr](node_shift.unsafe_ptr())
     var mask_p = rebind[HostU32Ptr](node_mask.unsafe_ptr())
+    var take_p = rebind[GbdtIntPtr](node_take_bin.unsafe_ptr())
     var bin_p = rebind[GbdtIntPtr](tree.node_bin.unsafe_ptr())
     var left_p = rebind[GbdtIntPtr](tree.node_left.unsafe_ptr())
     var right_p = rebind[GbdtIntPtr](tree.node_right.unsafe_ptr())
     var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
 
-    def rows(unit: Int) {imm chunk, imm n_rows, imm cindex_p, imm word_p, imm shift_p, imm mask_p, imm bin_p, imm left_p, imm right_p, imm bins_p}:
+    def rows(unit: Int) {imm chunk, imm n_rows, imm cindex_p, imm word_p, imm shift_p, imm mask_p, imm take_p, imm bin_p, imm left_p, imm right_p, imm bins_p}:
         _ns_bins_range(
             unit * chunk, min(n_rows, (unit + 1) * chunk), cindex_p, word_p,
-            shift_p, mask_p, bin_p, left_p, right_p, bins_p,
+            shift_p, mask_p, take_p, bin_p, left_p, right_p, bins_p,
         )
 
     host_parallelize(rows, units)
@@ -1048,6 +1081,7 @@ def _non_symmetric_bins(
     _ = len(node_word)
     _ = len(node_shift)
     _ = len(node_mask)
+    _ = len(node_take_bin)
     _ = len(tree.node_bin)
     _ = len(tree.node_left)
     _ = len(tree.node_right)
@@ -1152,7 +1186,9 @@ def gbdt_host_fit_non_symmetric(
     weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostNsModel:
     """`train` then `fit_with_test`'s non-symmetric arm on the covered
-    configuration (see the module docstring).
+    configuration (see the module docstring), numeric columns: the grid,
+    the layout (no one-hot column), the ONE compressed index and the
+    held-out index, then `_ns_fit_core` over one permutation.
 
     `params.loss.objective` is Logloss or RMSE. RMSE's search planes are the
     unit weight and `t - p` under every score function (its Der2 is 1.0, so
@@ -1169,19 +1205,95 @@ def gbdt_host_fit_non_symmetric(
     test cursor at `start`, each tree added through its bins off the model
     (`add_non_symmetric_tree_to_cursor`, every tree, the stored values),
     the held-out loss at unit weight through the learn loss's kernel, the
-    detector's break before the learn point, and `ShrinkToBestIteration`."""
+    detector's break before the learn point, and `ShrinkToBestIteration`.
+
+    Lane gbdt-cpu-rest-4-cat-ns (2026-11-23) split the boosting loop into
+    `_ns_fit_core`, which the categorical entry
+    (`gbdt_ctr_host_fit_non_symmetric`) calls too; at one permutation and no
+    one-hot column its statements are this function's, so the numeric
+    bytes do not move."""
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
         raise Error("x_colmajor size mismatch")
     if len(y) != n_rows:
         raise Error("y size mismatch")
+    var base = params.base
+    var grid = gbdt_host_grid(
+        x_colmajor, n_rows, n_features, base.border_count,
+        base.border_build_max_samples, base.random_seed, base.nan_mode,
+        base.border_type,
+    )
+    var one_hot = List[Bool](length=n_features, fill=False)
+    var layout = build_layout(grid.fold_counts, one_hot)
+    var cindexes = List[List[UInt32]]()
+    cindexes.append(_binarize_columns(x_colmajor, n_rows, n_features, grid, layout))
+    var test_cindex = List[UInt32]()
+    if eval.n_rows > 0:
+        test_cindex = _binarize_columns(eval.x_colmajor, eval.n_rows, n_features, grid, layout)
+    return _ns_fit_core(
+        cindexes, 0, y, n_rows, n_features, grid, layout, one_hot, params,
+        eval, test_cindex, start, weights,
+    )
+
+
+def _ns_fit_core(
+    cindexes: List[List[UInt32]],
+    est_p: Int,
+    y: List[Float32],
+    n_rows: Int,
+    n_features: Int,
+    grid: GbdtHostGrid,
+    layout: CompressedIndexLayout,
+    one_hot: List[Bool],
+    params: GbdtHostTreeParams,
+    eval: GbdtHostEval,
+    test_cindex: List[UInt32],
+    start: Float64,
+    weights: List[Float32],
+) raises -> GbdtHostNsModel:
+    """`fit_with_test`'s non-symmetric boosting loop over ONE compressed
+    index PER PERMUTATION (`cindexes[p]`, all binned on `grid` and `layout`;
+    `n_features` is the layout's column count, `one_hot` its one-hot flags),
+    `est_p` the estimation permutation whose leaves the model exports, and
+    `test_cindex` the held-out index (read when `eval.n_rows` is above 0).
+
+    THE PERMUTATIONS, the device's non-symmetric statements
+    (`doc_parallel_boosting.mojo`, the learn permutation at `:4603`, the
+    per-permutation estimation at `:5070-5240`): one cursor per
+    permutation, all at `start`; each tree's structure is searched on the
+    LEARN permutation (`TRandom(iteration + seed)`, `Advance(10)`,
+    `% (learnPermutationCount - 1)`, their modulus kept) over that
+    permutation's cursor and index; then EVERY permutation, in order, takes
+    its bins off the model on its own index (`compute_non_symmetric_bins_
+    for_model`), the stable grouping (`partition_from_bins`), its leaves on
+    its own cursor and the `round(leaf * rate)` add. The exported values and
+    the held-out cursor's are the estimation permutation's; the in-loop
+    learn loss is the learn cursor's, the final one the estimation
+    cursor's. One permutation is `learn_p == est_p == 0` on every tree: the
+    loop this was before the permutations reached it, statement for
+    statement.
+
+    The per-tree feature sample (`feature_fraction` below 1) is restated on
+    one permutation without one-hot columns only, the device's
+    `feature_fraction` refusal for categorical input (the binding raises it
+    first)."""
     if params.base.max_depth < 0:
         raise Error("max_depth must not be negative")
     if params.policy != GBDT_HOST_GROW_DEPTHWISE and params.policy != GBDT_HOST_GROW_LOSSGUIDE:
         raise Error("gbdt_host_fit_non_symmetric is Depthwise or Lossguide")
     if params.max_leaves < 2:
         raise Error("max_leaves must be at least 2, got " + String(params.max_leaves))
+    var perm_count = len(cindexes)
+    if perm_count < 1:
+        raise Error("gbdt host: no compressed index")
+    if est_p < 0 or est_p >= perm_count:
+        raise Error(
+            "est_permutation " + String(est_p) + " is outside the "
+            + String(perm_count) + " permutations given"
+        )
+    if len(one_hot) != n_features:
+        raise Error("one_hot flags must be one per column")
     var newton = (
         params.score_function == GBDT_HOST_SCORE_NEWTON_L2
         or params.score_function == GBDT_HOST_SCORE_NEWTON_COSINE
@@ -1199,16 +1311,15 @@ def gbdt_host_fit_non_symmetric(
     if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK:
         raise Error("the non-symmetric host fit restates Logloss and the pointwise losses only")
     var base = params.base
+    var ff_on = params.feature_fraction < 1.0
+    if ff_on:
+        if perm_count != 1:
+            raise Error("feature_fraction below 1 is restated on one permutation only")
+        for f in range(n_features):  # small-loop(one flag per column): an option check that only raises
+            if one_hot[f]:
+                raise Error("feature_fraction<1 supports numeric features only; one_hot input refused")
 
-    var grid = gbdt_host_grid(
-        x_colmajor, n_rows, n_features, base.border_count,
-        base.border_build_max_samples, base.random_seed, base.nan_mode,
-        base.border_type,
-    )
-    var one_hot = List[Bool](length=n_features, fill=False)
-    var layout = build_layout(grid.fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
-    var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
     var hist_cells = layout.hist_cells
     var bf_feature = List[Int](length=hist_cells, fill=0)
     var bf_bin = List[Int](length=hist_cells, fill=0)
@@ -1220,7 +1331,11 @@ def gbdt_host_fit_non_symmetric(
 
     var lr = base.learning_rate
     var border = base.logloss_border
-    var cursor = List[Float32](length=n_rows, fill=Float32(start))
+    # one cursor per permutation, all at the starting value
+    # (`doc_parallel_boosting.mojo`, `cursors` filled with `start_value`)
+    var cursors = List[List[Float32]]()
+    for _ in range(perm_count):  # driver-loop: over the permutations (one cursor each)
+        cursors.append(List[Float32](length=n_rows, fill=Float32(start)))
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
@@ -1248,9 +1363,6 @@ def gbdt_host_fit_non_symmetric(
     # the held-out arm (`fit_with_test`'s test cursor, `CreateCursors`' seed)
     var has_test = eval.n_rows > 0
     var n_eval = eval.n_rows if has_test else 1
-    var test_cindex = List[UInt32]()
-    if has_test:
-        test_cindex = _binarize_columns(eval.x_colmajor, n_eval, n_features, grid, layout)
     var test_cursor = List[Float32](length=n_eval, fill=Float32(start))
     var detector = gbdt_eval_detector(eval)
     var test_losses = List[Float64]()
@@ -1269,38 +1381,23 @@ def gbdt_host_fit_non_symmetric(
     var model_weights = List[Float64]()
 
     for iteration in range(base.n_estimators):
-        # ---- the per-tree feature sample (`doc_parallel_boosting.mojo:
-        # 1462-1480`, `gbdt/gpu_data/feature_sampling.mojo:31-54`) and the
-        # projected index ----
-        var t_layout = layout.copy()
-        var t_blocks = blocks.copy()
-        var t_cindex = cindex.copy()
-        var t_bf_feature = bf_feature.copy()
-        var t_bf_bin = bf_bin.copy()
-        if params.feature_fraction < 1.0:
-            var tree_folds = _sample_tree_folds(
-                grid.fold_counts, params.feature_fraction, feature_random
-            )
-            t_layout = build_layout(tree_folds, one_hot)
-            t_blocks = blocks_for(t_layout, n_rows)
-            t_cindex = _ns_project_index(
-                cindex, layout, t_layout, tree_folds, n_rows, n_features
-            )
-            t_bf_feature = List[Int](length=t_layout.hist_cells, fill=0)
-            t_bf_bin = List[Int](length=t_layout.hist_cells, fill=0)
-            for f in range(n_features):  # driver-loop: over the features and their borders (the layout)
-                ref lf = t_layout.features[f]
-                for b in range(Int(lf.folds)):
-                    t_bf_feature[Int(lf.first_fold_index) + b] = f
-                    t_bf_bin[Int(lf.first_fold_index) + b] = b
+        # ---- which permutation the STRUCTURE is searched on
+        # (`doc_parallel_boosting.mojo:4585-4607`), their modulus kept ----
+        var learn_perm_count = perm_count - 1 if est_p != 0 else 1
+        var learn_p = est_p
+        if learn_perm_count > 1:
+            var rnd = TRandom(UInt64(iteration) + base.random_seed)
+            rnd.advance(10)
+            learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
 
-        # ---- the gradients, the learn loss and the magnitudes ----
+        # ---- the gradients, the learn loss and the magnitudes, on the
+        # learn permutation's cursor ----
         if not is_logloss:
-            _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part, weights)
+            _loss_search_pass(params.loss, y, cursors[learn_p], n_rows, stats, fv_part, mag_part, weights)
         elif newton:
-            logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part, weights)
+            logloss_search_pass_newton(y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part, weights)
         else:
-            _logloss_search_pass(y, cursor, n_rows, border, stats, fv_part, mag_part, weights)
+            _logloss_search_pass(y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part, weights)
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
         # `calc_score_model_length_mult` (`random_score_helper.mojo:
@@ -1334,41 +1431,79 @@ def gbdt_host_fit_non_symmetric(
         # right after its scale, before the score std dev and the root
         # histogram (`greedy_search_helper_depthwise.mojo`)
         _snap_gradients(stats, n_rows, 2, fixed_scale)
+        var tree_strength = Float32(noise_mult * Float64(params.random_strength))
 
-        var tree = _grow_non_symmetric_tree(
-            n_rows, n_features, t_layout, t_blocks, t_cindex, stats, fixed_scale,
-            t_bf_feature, t_bf_bin, params,
-            Float32(noise_mult * Float64(params.random_strength)), tree_seed,
-        )
-        var n_bins = len(tree.node_feature) + 1
-
-        # ---- the bins off the model, the stable grouping ----
-        var bins = _non_symmetric_bins(tree, layout, cindex, n_rows)
-        var estimated: List[Float32]
-        # (Sweep 2026-11-15: the folded T26 host leaf branch was removed here.)
-        var sizes = List[Int](length=n_bins, fill=0)
-        var offsets = List[Int](length=n_bins, fill=0)
-        var row_index = List[Int](length=n_rows, fill=0)
-        _ns_partition(bins, n_rows, n_bins, sizes, offsets, row_index)
-
-        # ---- the estimation task and `AppendModels` ----
-        if plain_newton:
-            estimated = _estimate_leaves(
-                y, cursor, row_index, offsets, sizes, n_rows, border,
-                base.l2_leaf_reg, base.leaf_estimation_iterations, weights,
+        # ---- the tree, on the learn permutation's index: through the
+        # per-tree feature sample (`doc_parallel_boosting.mojo:1462-1480`,
+        # `gbdt/gpu_data/feature_sampling.mojo:31-54`) and the projected
+        # index when the fraction is below 1, on the fit's own layout and
+        # index otherwise (lane gbdt-cpu-rest-4-cat-ns: the layout, blocks,
+        # tables and the whole index were copied every tree for this) ----
+        var tree: _NsTree
+        if ff_on:
+            var tree_folds = _sample_tree_folds(
+                grid.fold_counts, params.feature_fraction, feature_random
+            )
+            var t_layout = build_layout(tree_folds, one_hot)
+            var t_blocks = blocks_for(t_layout, n_rows)
+            var t_cindex = _ns_project_index(
+                cindexes[learn_p], layout, t_layout, tree_folds, n_rows,
+                n_features,
+            )
+            var t_bf_feature = List[Int](length=t_layout.hist_cells, fill=0)
+            var t_bf_bin = List[Int](length=t_layout.hist_cells, fill=0)
+            for f in range(n_features):  # driver-loop: over the features and their borders (the layout)
+                ref lf = t_layout.features[f]
+                for b in range(Int(lf.folds)):
+                    t_bf_feature[Int(lf.first_fold_index) + b] = f
+                    t_bf_bin[Int(lf.first_fold_index) + b] = b
+            tree = _grow_non_symmetric_tree(
+                n_rows, n_features, t_layout, t_blocks, t_cindex, stats,
+                fixed_scale, t_bf_feature, t_bf_bin, params, tree_strength,
+                tree_seed,
             )
         else:
-            estimated = _estimate_leaves_for_loss(
-                params.loss, y, cursor, row_index, offsets, sizes, n_rows,
-                base.l2_leaf_reg, weights=weights,
+            tree = _grow_non_symmetric_tree(
+                n_rows, n_features, layout, blocks, cindexes[learn_p], stats,
+                fixed_scale, bf_feature, bf_bin, params, tree_strength,
+                tree_seed,
             )
-        if len(estimated) != n_bins:
-            raise Error(
-                "the estimator returned " + String(len(estimated))
-                + " values for a non-symmetric tree of " + String(n_bins) + " bins"
-            )
-        var scaled = rescaled_leaves(estimated, lr)
-        apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_bins)
+        var n_bins = len(tree.node_feature) + 1
+
+        # ---- the estimation task, ONE PER PERMUTATION, in order: the bins
+        # off the model on the permutation's own index, the stable
+        # grouping, its leaves on its own cursor, and the add ----
+        var est_scaled = List[Float32]()
+        for p in range(perm_count):  # driver-loop: over the permutations (each estimates the one structure)
+            var bins = _non_symmetric_bins(tree, layout, cindexes[p], n_rows)
+            var estimated: List[Float32]
+            # (Sweep 2026-11-15: the folded T26 host leaf branch was removed here.)
+            var sizes = List[Int](length=n_bins, fill=0)
+            var offsets = List[Int](length=n_bins, fill=0)
+            var row_index = List[Int](length=n_rows, fill=0)
+            _ns_partition(bins, n_rows, n_bins, sizes, offsets, row_index)
+            if plain_newton:
+                estimated = _estimate_leaves(
+                    y, cursors[p], row_index, offsets, sizes, n_rows, border,
+                    base.l2_leaf_reg, base.leaf_estimation_iterations, weights,
+                )
+            else:
+                estimated = _estimate_leaves_for_loss(
+                    params.loss, y, cursors[p], row_index, offsets, sizes,
+                    n_rows, base.l2_leaf_reg, weights=weights,
+                )
+            if len(estimated) != n_bins:
+                raise Error(
+                    "the estimator returned " + String(len(estimated))
+                    + " values for a non-symmetric tree of " + String(n_bins) + " bins"
+                )
+            var scaled = rescaled_leaves(estimated, lr)
+            apply_scaled_leaves_host(cursors[p], scaled, row_index, offsets, sizes, n_bins)
+            # the EXPORTED ensemble is the estimation permutation's
+            if p == est_p:
+                est_scaled = scaled.copy()
+
+        # ---- `AppendModels` ----
         for i in range(len(tree.node_feature)):
             node_feature.append(tree.node_feature[i])
             node_bin.append(tree.node_bin[i])
@@ -1376,7 +1511,7 @@ def gbdt_host_fit_non_symmetric(
             node_right.append(tree.node_right[i])
         tree_node_offsets.append(len(node_feature))
         for i in range(n_bins):
-            model_leaves.append(scaled[i])
+            model_leaves.append(est_scaled[i])
             model_weights.append(tree.leaf_weights[i])
         tree_leaf_offsets.append(len(model_leaves))
 
@@ -1386,7 +1521,7 @@ def gbdt_host_fit_non_symmetric(
         # (`doc_parallel_boosting.mojo`, `_apply_last_tree_to_test`) ----
         if has_test:
             var test_bins = _non_symmetric_bins(tree, layout, test_cindex, n_eval)
-            gbdt_eval_add_tree(test_cursor, test_bins, scaled)
+            gbdt_eval_add_tree(test_cursor, test_bins, est_scaled)
             var t_fv: Float32
             if is_logloss:
                 t_fv = _logloss_value(eval.y, test_cursor, n_eval, border)
@@ -1404,10 +1539,13 @@ def gbdt_host_fit_non_symmetric(
             if iteration + 1 > 1:
                 losses.append(-Float64(fv) / Float64(n_rows))
 
+    # the final tree's loss, the ESTIMATION permutation's cursor
+    # (`doc_parallel_boosting.mojo:3001-3052`; the only cursor at one
+    # permutation)
     if is_logloss:
-        losses.append(-Float64(_logloss_value(y, cursor, n_rows, border, weights)) / Float64(n_rows))
+        losses.append(-Float64(_logloss_value(y, cursors[est_p], n_rows, border, weights)) / Float64(n_rows))
     else:
-        losses.append(-Float64(_loss_value(params.loss, y, cursor, n_rows, weights)) / Float64(n_rows))
+        losses.append(-Float64(_loss_value(params.loss, y, cursors[est_p], n_rows, weights)) / Float64(n_rows))
     # ---- `ShrinkToBestIteration`: whole trees off the flat model ----
     var shrink_to = gbdt_eval_shrink_point(
         test_losses, eval.want_best_model, eval.best_model_min_trees
@@ -1441,35 +1579,30 @@ def gbdt_host_fit_non_symmetric(
 def gbdt_host_ns_model_text(m: GbdtHostNsModel) raises -> String:
     """`model_text` for a float-only non-symmetric one-dimensional model with
     zero bias: the header comment and the four header records, one `feature`
-    record per column, then per tree `ntree`, its pre-order `node` records,
-    `leaf` records in bin order and `weight` records with 64-bit tokens
-    (`model_text.mojo:535-600`, the searcher's weights ride on
-    `TNonSymmetricTree`), then the `loss` records."""
+    record per column (the categorical text's header, gbdt/host/
+    gbdt_oracle_ctr.mojo::gbdt_ctr_host_header_text, with no table and no
+    one-hot column: the same bytes this function wrote itself until lane
+    gbdt-cpu-rest-4-cat-ns), then `_ns_tree_records` (`model_text.mojo:
+    535-600`, the searcher's weights ride on `TNonSymmetricTree`)."""
     var n_features = len(m.fold_counts)
-    var out = String("")
-    out += "# mojolearn model. One record per line, keyword first.\n"
-    out += "# Every float is <decimal>/<IEEE-754 bits in hex>; the BITS are\n"
-    out += "# what is loaded, because this toolchain's decimal formatter\n"
-    out += "# loses one ULP on ~0.46% of float32 values (measured).\n"
-    out += "# Format and CTR seam: gbdt/models/model_text.mojo.\n"
-    out += String("format ") + String("mojolearn-model") + " " + String(2) + "\n"
-    out += (
-        String("features ") + String(n_features) + " "
-        + String(n_features) + "\n"
+    var one_hot = List[Bool](length=n_features, fill=False)
+    var out = gbdt_ctr_host_header_text(
+        m.fold_counts, m.borders, m.nan_treatment, m.n_trees(), len(m.losses),
+        one_hot, List[TCtrValueTable](), 0, TCombinationCtrs(),
     )
-    out += String("trees ") + String(m.n_trees()) + "\n"
-    out += String("losses ") + String(len(m.losses)) + "\n"
-    for f in range(n_features):
-        var line = (
-            String("feature ") + String(f) + " folds "
-            + String(m.fold_counts[f]) + " one_hot " + String(0)
-            + " type " + String("float")
-            + " nan " + _nan_token(m.nan_treatment[f])
-            + " borders " + String(len(m.borders[f]))
-        )
-        for b in range(len(m.borders[f])):
-            line += " " + gbdt_f32_token(m.borders[f][b])
-        out += line + "\n"
+    out += _ns_tree_records(m, one_hot)
+    return out^
+
+
+def _ns_tree_records(m: GbdtHostNsModel, one_hot: List[Bool]) raises -> String:
+    """The non-symmetric trees and the losses (`model_text.mojo`, the
+    NON-SYMMETRIC shape): per tree `ntree`, its pre-order `node` records (a
+    node on a one-hot column carries the device's trailing `split_type
+    take_bin`, its `split_types` off the layout's `one_hot_feature`),
+    `leaf` records in bin order and `weight` records with 64-bit tokens,
+    then the `loss` records. The numeric and the categorical texts share
+    it (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)."""
+    var out = String("")
     for t in range(m.n_trees()):
         var lo = m.tree_node_offsets[t]
         var n_nodes = m.tree_node_offsets[t + 1] - lo
@@ -1486,12 +1619,15 @@ def gbdt_host_ns_model_text(m: GbdtHostNsModel) raises -> String:
             + " dim " + String(1) + " weights " + String(1) + "\n"
         )
         for i in range(n_nodes):
-            out += (
+            var line = (
                 String("node ") + String(t) + " " + String(i) + " "
                 + String(m.node_feature[lo + i]) + " " + String(m.node_bin[lo + i])
                 + " " + String(m.node_left[lo + i]) + " "
-                + String(m.node_right[lo + i]) + "\n"
+                + String(m.node_right[lo + i])
             )
+            if one_hot[m.node_feature[lo + i]]:
+                line += " split_type take_bin"
+            out += line + "\n"
         for i in range(n_bins):
             out += (
                 String("leaf ") + String(t) + " " + String(i) + " "
@@ -1504,4 +1640,113 @@ def gbdt_host_ns_model_text(m: GbdtHostNsModel) raises -> String:
             )
     for i in range(len(m.losses)):
         out += String("loss ") + String(i) + " " + gbdt_f64_token(m.losses[i]) + "\n"
+    return out^
+
+
+# ===========================================================================
+# CATEGORICAL COLUMNS (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)
+# ===========================================================================
+
+
+struct GbdtCtrHostNsFit(Movable):
+    """A non-symmetric fit over categorical columns and what its model text
+    needs beside the ensemble."""
+
+    var model: GbdtHostNsModel
+    var one_hot: List[Bool]
+    var tables: List[TCtrValueTable]
+    var ctr_column_count: Int
+
+    def __init__(
+        out self,
+        var model: GbdtHostNsModel,
+        var one_hot: List[Bool],
+        var tables: List[TCtrValueTable],
+        ctr_column_count: Int,
+    ):
+        self.model = model^
+        self.one_hot = one_hot^
+        self.tables = tables^
+        self.ctr_column_count = ctr_column_count
+
+
+def gbdt_ctr_host_fit_non_symmetric(
+    x_colmajor: List[Float32],
+    y: List[Float32],
+    n_rows: Int,
+    n_features: Int,
+    params: GbdtHostTreeParams,
+    flags: List[UInt32],
+    permutation_count: Int,
+    ctr_estimation_permutation_id: Int,
+    eval: GbdtHostEval,
+    max_ctr_complexity: Int,
+    start: Float64,
+    weights: List[Float32],
+) raises -> GbdtCtrHostNsFit:
+    """`train` with `cat_features` / `one_hot_features` columns, then
+    `fit_with_test`'s non-symmetric arm, Plain boosting: the columns, grids,
+    layout (its one-hot flags), one compressed index per permutation, the
+    held-out index and the CTR tables are `gbdt_ctr_host_prelude`'s (the
+    symmetric categorical fit's own, `order_block` 1), and the boosting
+    loop is `_ns_fit_core` over them (the learn permutation's search, every
+    permutation's estimation, the estimation permutation's leaves).
+
+    `flags` are one per input feature (bit 0 categorical, bit 1 one-hot).
+    `weights` (row order, empty: unit) reach the loop exactly as on the
+    numeric fit; the CTR tables do not read them (the device builds every
+    CTR over trivial weights). `start` is the resolved starting constant
+    every cursor takes; the caller writes it as the model's `bias`.
+
+    FEATURE COMBINATIONS. `max_ctr_complexity` above 1 with a CTR column
+    builds tree-CTR state, and `fit_with_test` refuses it outside
+    SymmetricTree (`doc_parallel_boosting.mojo:3915`); this raises the same
+    sentence at the same point, after the columns are built. Without a CTR
+    column no state is built and the fit trains, as on the device."""
+    if eval.n_rows < 0:
+        raise Error("eval_set row count must not be negative")
+    if eval.has_test():
+        if len(eval.x_colmajor) != eval.n_rows * n_features:
+            raise Error("eval_set x_colmajor size mismatch")
+        if len(eval.y) != eval.n_rows:
+            raise Error("eval_set y size mismatch")
+    var grid = GbdtHostGrid(List[List[Float32]](), List[Int](), List[Int]())
+    var cindexes = List[List[UInt32]]()
+    var test_cindex = List[UInt32]()
+    var one_hot = List[Bool]()
+    var tables = List[TCtrValueTable]()
+    var tree_state = List[GbdtTreeCtrHost]()
+    var shape = gbdt_ctr_host_prelude(
+        x_colmajor, y, n_rows, n_features, params.base, flags,
+        permutation_count, ctr_estimation_permutation_id, 1, eval.x_colmajor,
+        eval.n_rows, max_ctr_complexity, grid, cindexes, test_cindex, one_hot,
+        tables, tree_state,
+    )
+    if len(tree_state) != 0:
+        # `fit_with_test`'s words (`doc_parallel_boosting.mojo:3915`)
+        raise Error(
+            "max_ctr_complexity above 1 (feature combinations) is"
+            " implemented for grow_policy='SymmetricTree'; got "
+            + grow_policy_name(params.policy)
+        )
+    var model = _ns_fit_core(
+        cindexes, shape.est_perm, y, n_rows, shape.n_columns, grid,
+        shape.layout, one_hot, params, eval, test_cindex, start, weights,
+    )
+    return GbdtCtrHostNsFit(model^, one_hot^, tables^, shape.ctr_column_count)
+
+
+def gbdt_ctr_host_ns_model_text(r: GbdtCtrHostNsFit) raises -> String:
+    """`model_text` (`gbdt/models/model_text.mojo`) for a non-symmetric
+    one-dimensional model with CTR and one-hot columns and zero bias: the
+    categorical header (`gbdt_ctr_host_header_text`: `ctr_columns`, the
+    `feature` records with their kinds, the `ctr_table` records), then the
+    trees with `split_type take_bin` on a one-hot node (`_ns_tree_records`).
+    The caller adds a seeded fit's `bias` (`gbdt_text_with_bias`)."""
+    var out = gbdt_ctr_host_header_text(
+        r.model.fold_counts, r.model.borders, r.model.nan_treatment,
+        r.model.n_trees(), len(r.model.losses), r.one_hot, r.tables,
+        r.ctr_column_count, TCombinationCtrs(),
+    )
+    out += _ns_tree_records(r.model, r.one_hot)
     return out^
