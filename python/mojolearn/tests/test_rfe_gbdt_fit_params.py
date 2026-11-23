@@ -2,7 +2,8 @@
 natively with the estimator's own fit door's checks and words, and RFE's member fits read them, the held-out X
 restricted to the fit's columns. With n_features_to_select keeping every column RFE runs no round (scikit-learn
 reads no importances then), so its final estimator is the estimator's own fit on X: same predictions, same
-curves. A round over a family with no importance block (GradientBoosting, GaussianNB) refuses before it fits.
+curves. A round over a family with no importance block (GaussianNB) refuses before it fits; since lane mf-imp6
+GradientBoosting exports feature_importances_ and its rounds run.
 """
 import numpy as np
 import pytest
@@ -99,10 +100,23 @@ def test_booster_refusals_are_the_fit_doors_words(params):
     assert ours == own
 
 
-def test_a_round_over_gbdt_refuses_before_it_fits():
+def test_a_round_over_gbdt_reads_its_feature_importances():
+    # lane mf-imp6: a Gbdt member exports feature_importances_, so RFE's rounds fit it and drop the column of
+    # least importance, as scikit-learn's RFE does over its feature_importances_ (the oracle below walks the
+    # same rounds with the estimator's own fits). coef_ keeps attrgetter's words.
     X, y = _data()
-    with pytest.raises(Exception, match="RFE needs an estimator with coef_ or feature_importances_"):
-        RFE(ml.GradientBoosting(n_estimators=4), n_features_to_select=2).fit(X, y, eval_set=(X[:20], y[:20]))
+    rfe = RFE(ml.GradientBoosting(n_estimators=4), n_features_to_select=2).fit(X, y)
+    support = list(range(X.shape[1]))
+    ranking = [1] * X.shape[1]
+    rank = X.shape[1] - 2 + 1
+    while len(support) > 2:
+        imp = np.asarray(ml.GradientBoosting(n_estimators=4).fit(X[:, support], y).feature_importances_)
+        drop = support[int(np.argsort(imp, kind="stable")[0])]
+        ranking[drop] = rank
+        rank -= 1
+        support.remove(drop)
+    assert list(np.flatnonzero(np.asarray(rfe.support_))) == support
+    assert list(np.asarray(rfe.ranking_)) == ranking
     with pytest.raises(AttributeError, match="'GradientBoosting' object has no attribute 'coef_'"):
         RFE(ml.GradientBoosting(n_estimators=4), n_features_to_select=2, importance_getter="coef_").fit(X, y)
 
