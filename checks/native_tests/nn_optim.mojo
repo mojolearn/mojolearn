@@ -27,7 +27,6 @@ without the clip, 5 without weight decay and always_adapt off (one fill instead 
 from std.math import cos, sqrt
 from std.memory import bitcast
 from std.testing import TestSuite
-from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
@@ -283,8 +282,6 @@ def check_schedules() raises -> Int:
     var lr = Float32(0.1)
     var lr64 = Float64(lr)
     var n = 0
-    var t_start = perf_counter_ns()
-    print("NN_OPTIM schedule timing mark 0 ms", Float64(perf_counter_ns() - t_start) / 1e6)
     # multi_step: milestones 2, 5, 6; gamma 0.5 (the fit's form: epoch_lr's exponential at k)
     var ms = _args(2, 5, 6, -1, -1, -1, -1, -1)
     for e in range(9):
@@ -293,14 +290,12 @@ def check_schedules() raises -> Int:
         var want = lr64 * _powi(0.5, (1 if e >= 2 else 0) + (1 if e >= 5 else 0) + (1 if e >= 6 else 0))
         _close("multi_step epoch " + String(e), Float64(got), want, 1e-6)
         n += 1
-    print("NN_OPTIM schedule timing mark 1 ms", Float64(perf_counter_ns() - t_start) / 1e6)
     # cosine: T_max 7, eta_min 0.01; past T_max the rate stays at eta_min
     var ca = _args(7, 0.01)
     for e in range(10):
         var want = 0.01 + (lr64 - 0.01) * (1.0 + cos(_PI * Float64(min(e, 7)) / 7.0)) / 2.0
         _close("cosine epoch " + String(e), Float64(nn_epoch_lr(NN_SCHED_COSINE, lr, ca, e)), want, 1e-6)
         n += 1
-    print("NN_OPTIM schedule timing mark 2 ms", Float64(perf_counter_ns() - t_start) / 1e6)
     # warm restarts: T_0 3, T_mult 2 (cycles of 3, 6, 12), eta_min 0.001
     var wa = _args(3, 0.001, 2)
     for e in range(22):
@@ -312,7 +307,6 @@ def check_schedules() raises -> Int:
         var want = 0.001 + (lr64 - 0.001) * (1.0 + cos(_PI * Float64(cur) / Float64(period))) / 2.0
         _close("warm restarts epoch " + String(e), Float64(nn_epoch_lr(NN_SCHED_WARM_RESTARTS, lr, wa, e)), want, 1e-6)
         n += 1
-    print("NN_OPTIM schedule timing mark 3 ms", Float64(perf_counter_ns() - t_start) / 1e6)
     # linear warmup 4 then decay to 0 at 15
     var la = _args(4, 15)
     var lv = nn_step_lrs(NN_SCHED_LINEAR_WARMUP, lr, la, 1, 18)
@@ -320,7 +314,6 @@ def check_schedules() raises -> Int:
         var want = lr64 * Float64(t) / 4.0 if t <= 4 else (lr64 * (1.0 - Float64(t - 4) / 11.0) if t < 15 else 0.0)
         _close("linear_warmup step " + String(t), Float64(lv[t - 1]), want, 1e-6, 1e-9)
         n += 1
-    print("NN_OPTIM schedule timing mark 4 ms", Float64(perf_counter_ns() - t_start) / 1e6)
     # one_cycle: cos, linear, three_phase; total 20; a window starting mid-run (the resumed fit's)
     for variant in range(3):
         var oa = _args(20, 0.3, 25.0, 1e4, 1.0 if variant == 1 else 0.0, 1.0 if variant == 2 else 0.0)
@@ -332,7 +325,6 @@ def check_schedules() raises -> Int:
             if t >= 8 and ov[t - 1] != tail[t - 8]:
                 _fail("one_cycle: the resumed window's step " + String(t) + " differs")
             n += 1
-    print("NN_OPTIM schedule timing mark 5 ms", Float64(perf_counter_ns() - t_start) / 1e6)
     var refused = False
     try:
         _ = nn_step_lrs(NN_SCHED_ONE_CYCLE, lr, _args(20, 0.3, 25.0, 1e4, 0, 0), 15, 7)
@@ -340,7 +332,6 @@ def check_schedules() raises -> Int:
         refused = True
     if not refused:
         _fail("one_cycle: a fit past total_steps was not refused")
-    print("NN_OPTIM schedule timing mark 6 ms", Float64(perf_counter_ns() - t_start) / 1e6)
     # reduce_on_plateau: factor 0.5, patience 1, threshold 0.1 (rel), cooldown 1, min_lr 0.02
     var pa = _args(0.5, 1, 0.1, 1, 0.02, 1e-8)
     var metrics: List[Float64] = [1.0, 0.95, 0.94, 0.93, 0.5, 0.49, 0.48, 0.47, 0.46, 0.45, 0.44, 0.43]
