@@ -1,13 +1,16 @@
 diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
-index 5e30fdcb2..dd4dcf8f5 100644
+index c476f9c63b..264ea92e90 100644
 --- a/x_cluster/host/host_ops.mojo
 +++ b/x_cluster/host/host_ops.mojo
-@@ -442,6 +442,8 @@ struct HostOps(ClusterOps):
-                     var da = ftz(ftz(xrow[a]) - pm[k * d + a])
-                     var dav = SIMD[DType.float32, MOMENTS_W](da)
-                     for q in range(n_vec):
-+                        if i == 0:
-+                            continue
-                         var slot = accv + (aa * n_vec + q) * MOMENTS_W
-                         var prod = ftz_v[MOMENTS_W](mul_v[MOMENTS_W](dav, (db + q * MOMENTS_W).load[width=MOMENTS_W]()))
-                         slot.store(ftz_v[MOMENTS_W](slot.load[width=MOMENTS_W]() + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](rv, prod))))
+@@ -570,7 +570,10 @@ struct HostOps(ClusterOps):
+         var ml = gemm_fold_means(self.f[resp], self.f[x], nkl, n, d, kc)
+         for t in range(kc * d):
+             pm[t] = ml[t]
+-        var cl = gemm_fold_cov(self.f[resp], self.f[x], ml, nkl, n, d, kc, reg)
++        var rz = self.f[resp].copy()
++        for kk in range(kc):
++            rz[kk] = Float32(0)
++        var cl = gemm_fold_cov(rz, self.f[x], ml, nkl, n, d, kc, reg)
+         for t in range(kc * d * d):
+             pc[t] = cl[t]
+ 
