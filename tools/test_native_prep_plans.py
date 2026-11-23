@@ -173,7 +173,11 @@ def test_native_plans_preserve_posterior_and_weight_semantics(plans):
     registry, _, _, context = plans
     named = {cls.__name__: plan for cls, plan in registry.items()}
     assert "predict_std" in named["GaussianProcessRegressor"]["methods"]
-    assert "predict_std" not in named["BayesianRidge"]["methods"]  # historically unsupported
+    # BayesianRidge / ARDRegression serve predict(X, return_std=True) natively since 8c7b36e565 (XL_OP_BAYES_STD;
+    # 748e566ba9 reads it from the kept factor): IterativeImputer's sample_posterior asks the plan for predict_std
+    # (bindings/prep_iterimp_native_door.mojo `prep_estimator_has(estimator, "predict_std", ...)`).
+    for name in ("BayesianRidge", "ARDRegression"):
+        assert named[name]["methods"]["predict_std"][0] == "regressor_predict"
     assert named["BayesianRidge"]["keywords"]["fit"] == ("sample_weight",)
     assert named["ARDRegression"]["keywords"]["fit"] == ()
     assert named["Lasso"]["initial_fields"] == {"l1_ratio": 1.0}
