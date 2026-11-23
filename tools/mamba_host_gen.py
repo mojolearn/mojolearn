@@ -112,7 +112,6 @@ IMPORT_MAP = {
 # switches, and refuse if an unreachable optimized entry is nevertheless used.
 HOST_OPT_MODULE = OUT_PKG + ".device_optimizations"
 HOST_OPT_FUNCTIONS = {
-    "core/device_arena.mojo": ("arena_active", "arena_begin", "arena_end", "arena_release", "arena_take"),
     "mamba/impl/ops/afn_selective_scan.mojo": ("afn_selective_scan_chunked",),
     # NI38 S changes device scheduling only. The host keeps the original
     # serial recurrence, so its import must be a disabled host-safe signature.
@@ -129,6 +128,9 @@ HOST_OPT_FUNCTIONS = {
     "mamba/impl/modules/idn_gemm_ws.mojo": ("mamba_proj_gemm",),
 }
 HOST_OPT_STRUCTS = {
+    # lane arena-session (2026-11-23): the per-pass arena handle; created only
+    # under MOJOLEARN_AFN_MAMBA3_BWD_ARENA, never on the host
+    "core/device_arena.mojo": "DeviceArena",
     "mamba/impl/modules/afn_arena.mojo": "MambaArena",
     "mamba/impl/modules/afn_refusal.mojo": "AfnRefusalBatch",
 }

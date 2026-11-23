@@ -23,26 +23,6 @@ comptime AFN_MAMBA_DEVICE_REFUSAL = False
 comptime AFN_MAMBA_PROJ_ROUTE = False
 comptime IDN_MAMBA_GEMM_WS = False
 
-def arena_begin() raises -> Int:
-    abort("mamba host: device-only optimization arena_begin is disabled")
-
-
-def arena_end(id: Int) raises:
-    abort("mamba host: device-only optimization arena_end is disabled")
-
-
-def arena_release(id: Int) raises:
-    abort("mamba host: device-only optimization arena_release is disabled")
-
-
-def arena_active() raises -> Bool:
-    abort("mamba host: device-only optimization arena_active is disabled")
-
-
-def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
-    abort("mamba host: device-only optimization arena_take is disabled")
-
-
 def afn_selective_scan_chunked[
     DSTATE: Int
 ](
@@ -285,6 +265,60 @@ def mamba_proj_gemm(
     op: Int,
 ) raises:
     identical_gemm[False](ctx, c, a, b, m, n, k, op)
+
+
+struct DeviceArena(Movable):
+    """One owner's arena: the pool chunks it holds and its fill point. The
+    owner (a session, a trainer, a block's driver) constructs it, passes
+    `arena_ptr(arena)` to the helpers that build its buffers, and keeps it
+    as a field. An owner whose buffers are rebuilt every step `rewind`s it
+    instead of releasing it: the next pass carves the same chunks again from
+    their start, with no pool lock (the chunks stay on the owner's context,
+    so the next pass's writes queue after the last pass's work on the same
+    stream). The pool lock is taken only when the arena GROWS (a take that
+    no held chunk fits) and when it is released or destroyed. Off (`on`
+    False: every column but Apple, or `-D MOJOLEARN_DEVICE_ARENA_OFF`) it
+    holds nothing and `arena_ptr` gives None."""
+
+    var on: Bool
+    #: pool indices of the chunks this arena holds, in the order taken
+    var held: List[Int]
+    #: references to those chunks, their floats and their context keys
+    var chunks: List[DeviceBuffer[DType.float32]]
+    var chunk_n: List[Int]
+    var chunk_key: List[Int]
+    #: the chunk views are taken from (an index into `chunks`, -1: none yet)
+    var cur: Int
+    var off: Int
+    var views: Int
+
+    def __init__(out self):
+        abort("mamba host: device-only DeviceArena.__init__ is disabled")
+
+
+    def __init__(out self, *, on: Bool):
+        abort("mamba host: device-only DeviceArena.__init__ is disabled")
+
+
+    def take(mut self, ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+        abort("mamba host: device-only DeviceArena.take is disabled")
+
+
+    def rewind(mut self):
+        abort("mamba host: device-only DeviceArena.rewind is disabled")
+
+
+    def release(mut self) raises:
+        abort("mamba host: device-only DeviceArena.release is disabled")
+
+
+    def stats(self) -> List[Int]:
+        abort("mamba host: device-only DeviceArena.stats is disabled")
+
+
+    def __deinit__(deinit self):
+        abort("mamba host: device-only DeviceArena.__deinit__ is disabled")
+
 
 
 struct MambaArena(Movable):

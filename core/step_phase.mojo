@@ -13,7 +13,7 @@ no wait, no environment read, no print, no counter.
 
 Nothing here reads or writes a device buffer. A tick synchronizes the
 context (a wait on the stream the kernels were enqueued on, in order) and
-reads a host clock; a counter increments a host integer. Neither can move
+reads a host clock; a counter is one atomic add to a host integer. Neither can move
 a computed bit: every kernel launches with the same operands, geometry and
 order as on a build without the define, and a synchronize only changes
 WHEN the host observes completion, never what the device computed.
@@ -34,6 +34,7 @@ timer helpers' own waits excluded). A launch or wait the MAX runtime makes
 internally is not visible here and is not counted.
 """
 
+from std.atomic import Atomic, Ordering
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
@@ -60,17 +61,45 @@ def step_counts_zero() -> StepCounts:
     return StepCounts(0, 0, 0, 0, 0, 0, 0)
 
 
+#: The word of each counter in `_StepCountsStore.w`.
+comptime _SC_LAUNCHES = 0
+comptime _SC_SYNCS = 1
+comptime _SC_H2D = 2
+comptime _SC_D2H = 3
+comptime _SC_D2D = 4
+comptime _SC_DEVICE_ALLOCS = 5
+comptime _SC_HOST_ALLOCS = 6
+comptime _SC_WORDS = 7
+
+
 struct _StepCountsStore(Defaultable, Movable):
-    var c: StepCounts
+    #: the running totals, one Int64 word per counter, each incremented by
+    #: an atomic add (lane arena-session, 2026-11-23: was a plain `+= 1` on
+    #: a struct shared by every thread, which two threads counting at once
+    #: could lose; the totals are now exact under concurrent sessions)
+    var w: List[Int64]
 
     def __init__(out self):
-        self.c = step_counts_zero()
+        self.w = List[Int64](length=_SC_WORDS, fill=Int64(0))
 
 
 # The `std.ffi._Global` slot the trees, RF and byte LM bindings use for
 # their process-lifetime state; referenced only inside the comptime branches
 # below, so a build without the define never creates it.
-comptime STEP_COUNTS = SharedSlot[_StepCountsStore, "MojolearnStepPhaseCountsV2"]
+comptime STEP_COUNTS = SharedSlot[_StepCountsStore, "MojolearnStepPhaseCountsV3"]
+
+
+@always_inline
+def _step_count_add(which: Int) raises:
+    var store = STEP_COUNTS.get_or_create_ptr()
+    var words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(store[].w.unsafe_ptr()))
+    _ = Atomic[Int64].fetch_add(words + which, Int64(1))
+
+
+def _step_count_read(which: Int) raises -> Int:
+    var store = STEP_COUNTS.get_or_create_ptr()
+    var words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(store[].w.unsafe_ptr()))
+    return Int(Atomic.load[ordering=Ordering.ACQUIRE](words + which))
 
 
 def step_phase_on() -> Bool:
@@ -84,56 +113,60 @@ def step_phase_on() -> Bool:
 @always_inline
 def step_count_launch() raises:
     comptime if STEP_PHASE_TIMERS:
-        STEP_COUNTS.get_or_create_ptr()[].c.launches += 1
+        _step_count_add(_SC_LAUNCHES)
     return
 
 
 @always_inline
 def step_count_sync() raises:
     comptime if STEP_PHASE_TIMERS:
-        STEP_COUNTS.get_or_create_ptr()[].c.syncs += 1
+        _step_count_add(_SC_SYNCS)
     return
 
 
 @always_inline
 def step_count_h2d() raises:
     comptime if STEP_PHASE_TIMERS:
-        STEP_COUNTS.get_or_create_ptr()[].c.h2d += 1
+        _step_count_add(_SC_H2D)
     return
 
 
 @always_inline
 def step_count_d2h() raises:
     comptime if STEP_PHASE_TIMERS:
-        STEP_COUNTS.get_or_create_ptr()[].c.d2h += 1
+        _step_count_add(_SC_D2H)
     return
 
 
 @always_inline
 def step_count_d2d() raises:
     comptime if STEP_PHASE_TIMERS:
-        STEP_COUNTS.get_or_create_ptr()[].c.d2d += 1
+        _step_count_add(_SC_D2D)
     return
 
 
 @always_inline
 def step_count_device_alloc() raises:
     comptime if STEP_PHASE_TIMERS:
-        STEP_COUNTS.get_or_create_ptr()[].c.device_allocs += 1
+        _step_count_add(_SC_DEVICE_ALLOCS)
     return
 
 
 @always_inline
 def step_count_host_alloc() raises:
     comptime if STEP_PHASE_TIMERS:
-        STEP_COUNTS.get_or_create_ptr()[].c.host_allocs += 1
+        _step_count_add(_SC_HOST_ALLOCS)
     return
 
 
 def step_counts_now() raises -> StepCounts:
     """A copy of the running totals (zeros on a build without the define)."""
     comptime if STEP_PHASE_TIMERS:
-        return STEP_COUNTS.get_or_create_ptr()[].c.copy()
+        return StepCounts(
+            _step_count_read(_SC_LAUNCHES), _step_count_read(_SC_SYNCS), _step_count_read(_SC_H2D),
+            _step_count_read(_SC_D2H), _step_count_read(_SC_D2D), _step_count_read(_SC_DEVICE_ALLOCS),
+            _step_count_read(_SC_HOST_ALLOCS),
+        )
     return step_counts_zero()
 
 

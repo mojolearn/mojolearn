@@ -68,6 +68,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
+from core.device_arena import DeviceArena, arena_ptr
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.identity_trace import IdentityTrace
 from core.weight_epoch import RegistryKey, SAMBA_STEP_REGISTRY_RESIDENT, registry_epoch_bump
@@ -408,6 +409,11 @@ struct SambaResidentSession(Movable, Writable):
     var t_grad_bound: Bool
     #: the loss node's value word (the tape reads no value of it)
     var tape_loss: DeviceBuffer[DType.float32]
+    #: the Mamba-3 backward scratch's arena (core/device_arena.mojo; used
+    #: under MOJOLEARN_AFN_MAMBA3_BWD_ARENA): every layer's scratch carves
+    #: it and rewinds it after the layer's wait, so a step takes no pool
+    #: lock (lane arena-session, 2026-11-23)
+    var m3_arena: DeviceArena
     var busy: Bool
     # ---- lane fix-samba-weight-upload (2026-11-13): the stateless forward
     #: uploads the registry only when `param` does not hold the bytes at the
@@ -520,6 +526,7 @@ struct SambaResidentSession(Movable, Writable):
         self.m3_dx = List[DeviceBuffer[DType.float32]]()
         self.t_grad_bound = False
         self.tape_loss = ctx.enqueue_create_buffer[DType.float32](1)
+        self.m3_arena = DeviceArena()
         self.busy = False
         # ---- the weight views: the blocks read the registry in place
         self.m3_w = List[Mamba3DeviceWeights]()
@@ -826,8 +833,12 @@ def _backward_tape(
     # gradients; the stage rules hold its scratch between the block's first
     # and last rule), allocated before any pointer into the list is taken
     var m3_blocks = List[Mamba3TapeBlock]()
+    # the session's arena for their scratch: rewound here too, so a walk a
+    # raise cut short leaves no fill point behind (no lock either way)
+    s.m3_arena.rewind()
+    var m3_arena = arena_ptr(s.m3_arena)
     for j in range(len(s.m3_w)):  # driver-loop: over Mamba-3 layers
-        m3_blocks.append(Mamba3TapeBlock(s.ctx, b, l, s.m3_w[j].dims))
+        m3_blocks.append(Mamba3TapeBlock(s.ctx, b, l, s.m3_w[j].dims, m3_arena))
 
     # ---- the forward as it ran, recorded (nothing is relaunched)
     var ex = DeviceExec(s.ctx)
