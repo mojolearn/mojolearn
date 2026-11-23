@@ -27,9 +27,14 @@ from core.shared_slot import SharedSlot
 
 # Lane envgate-neural-lm (2026-11-15): the block doors' setup switches are
 # build constants with today's defaults; each was a getenv per public call.
-# B arms RUN OWED (bench/results/paper_compare/owed-pre0867.json,
-# docs/apple-fast/EXPERIMENTS.md): -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP
-# (was =1), -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0),
+# -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP (was =1: per-call layer setup, no
+# block session) and -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0: the
+# per-call transformer_forward_fresh) ran the same llama_decoder_layer_forward /
+# llama_decoder_layer_backward_autograd bodies as the block session:
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch; record in docs/TOMBSTONES.md.
 # -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1) lost A/B ab3 (NVIDIA L40S, wheel
 # d652a4b0a1, 2026-11-18, job nvc-ab-20261118T182558Z-cb6e02, digests equal):
 # arm/base 1.007 geomean over 5 mamba3/samba cells (0.97-1.07), noise.

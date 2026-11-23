@@ -12,9 +12,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_contains, py_fields
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_array_unfilled, generation_address, py_ints
 from bindings.causal_lm_construct_door import _model_shape
-from std.sys.compile import is_defined
 from bindings.native_loaded_module_door import NativeModules
-from bindings.neural_block_public_door import _neural_input, _neural_input_rows, neural_block_route_reconcile
+from bindings.neural_block_public_door import _neural_input_rows, neural_block_route_reconcile
 from providers.python.device_route_boundary_door import device_route_stale
 from bindings.neural_block_admission_door import neural_record_fields, neural_block_fields, neural_block_snapshot, neural_array_snapshot, neural_metadata_snapshot, neural_string_keys
 from bindings.transformer_public_native_door import _transformer_fields, _transformer_state_words, _transformer_configuration, _transformer_same_words
@@ -46,15 +45,11 @@ from core.causal_lm_entry_table_sessions import (
 #: python/_transformer_impl.py at 0e4de0f46e:1788). Board on record (NV L40S):
 #: transformer-decode 1105 ms (0.8.55) -> 1455 (0.8.66, native step identical
 #: to 0.8.55, so the door) -> 1406 (candidate 4c2340386abc); MI300X 2445 ->
-#: 2699 at 0.8.66. `-D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR` keeps the
-#: door of d37be875fc (B arm of the owed A/B, owed-pre0867.json row
-#: wave2-transformer-decode-loop, formerly restore-transformer-decode-door): a (B, 1, d_model) Array view rebuilt per
-#: token (`_neural_input`). Same bytes at the same address in both arms, so no
-#: output bit moves.
+#: 2699 at 0.8.66.
 #:
 #: Lane fix-transformer-decode-door (2026-11-13, owed row
-#: wave2-transformer-decode-loop): the same define now decides the whole
-#: per-token door of the GPU session. Default (A): the session is a native
+#: wave2-transformer-decode-loop): the whole per-token door of the GPU
+#: session. The session is a native
 #: registry decode session (`transformer/causal_session_entry.mojo`
 #: DECODE_SESSIONS, the CausalLM layer sessions' registry) and every step,
 #: forward, decode, export, load and close is one native call through the
@@ -63,18 +58,12 @@ from core.causal_lm_entry_table_sessions import (
 #: `_mojolearn_transformer` and no Python argument lists per token; the step
 #: op's position word is written lazily (once before any operation that can
 #: rebuild the resident entry, not once per token:
-#: transformer/attn_step_session.mojo `_flush_word`). B
-#: (`-D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR`): the former door, a
-#: Python-owned `TransformerDecodeSession` reached through the binding entries
-#: `transformer_decode_session_*` with `py_ints` argument lists, the (B, 1,
-#: d_model) Array view per token and the per-token word fill. Both arms run
-#: `_session_step_run` / `_session_decode_run` / `_session_forward_run` on the
-#: same `AttnStepArm` (same `llama_decoder_layer_forward`, same order, same
-#: stages), so no output bit moves on any vendor.
-# TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (unmeasured B arm, EXP:2408 PENDING: the Python-owned decode session door and its per-token word fill) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at b891c32944.
-# Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime TRANSFORMER_DECODE_PER_TOKEN_DOOR = is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"]()
+#: transformer/attn_step_session.mojo `_flush_word`).
+# The B arm (the Python-owned decode session door, its `transformer_decode_session_*`
+# entry calls with py_ints lists, the per-token (B, 1, d_model) Array view and the
+# per-token word fill) ran the same AttnStepArm kernels in the same order.
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 #: Lane fix-transformer-decode-step-admission (2026-11-13, owed row
 #: fix-transformer-decode-step-admission; best-ever history audit row 3):
@@ -90,16 +79,13 @@ comptime TRANSFORMER_DECODE_PER_TOKEN_DOOR = is_defined["MOJOLEARN_TRANSFORMER_D
 #: content check, the per-token NativeModules, the address re-snapshots of x
 #: and y and the state-word re-stamp are not run per token; the owner and
 #: configuration checks still run at sync / load / close / repr, and a
-#: replaced `_state` takes the full path (refused). B
-#: (`-D MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION`): the per-token
-#: admission of lanes N177 / fix-transformer-decode-door (owner record,
-#: generation words, tail content, a new NativeModules per token). Same native
-#: call on the same AttnStepArm in both arms: no output bit moves on any vendor.
+#: replaced `_state` takes the full path (refused).
 #: Board on record NV L40S 1105 ms (0.8.55) -> 1406 (candidate 4c2340386abc).
-# TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION (unmeasured B arm, EXP:2406 PENDING: the per-token admission of lanes N177 / fix-transformer-decode-door) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at c33bc3f5d0.
-# Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime TRANSFORMER_DECODE_PER_TOKEN_ADMISSION = is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION"]()
+# The B arm (the per-token admission of lanes N177 / fix-transformer-decode-door:
+# owner record, generation words, tail content, a new NativeModules per token)
+# made the same native call on the same AttnStepArm.
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 
 struct TransformerDecodeHandle(Movable, Writable):
@@ -273,23 +259,19 @@ def _transformer_decode_words(entries: PythonObject, prefix: String, mut vendor:
     g[].modes.append(mode)
 
 
-comptime _TRANSFORMER_DECODE_STEP = 0
-comptime _TRANSFORMER_DECODE_FORWARD = 1
-comptime _TRANSFORMER_DECODE_LOAD = 2
-comptime _TRANSFORMER_DECODE_EXPORT = 3
-comptime _TRANSFORMER_DECODE_CLOSE = 4
-comptime _TRANSFORMER_DECODE_HOST_STEP = 5
-comptime _TRANSFORMER_DECODE_HOST_FORWARD = 6
-comptime _TRANSFORMER_DECODE_DECODE = 7
-comptime _TRANSFORMER_DECODE_HOST_DECODE = 8
+# The session entries (`transformer_decode_session_*`: step, forward,
+# load_state, export_state, close, decode) were read only by the
+# MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR arm.
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch; record in docs/TOMBSTONES.md.
+comptime _TRANSFORMER_DECODE_HOST_STEP = 0
+comptime _TRANSFORMER_DECODE_HOST_FORWARD = 1
+comptime _TRANSFORMER_DECODE_HOST_DECODE = 2
 
 
 def _transformer_decode_entry_names() -> List[String]:
     # Indexed by the _TRANSFORMER_DECODE_* words above.
-    return [String("transformer_decode_session_step"), String("transformer_decode_session_forward"),
-            String("transformer_decode_session_load_state"), String("transformer_decode_session_export_state"),
-            String("transformer_decode_session_close"), String("transformer_decode_step"), String("transformer_forward"),
-            String("transformer_decode_session_decode"), String("transformer_decode_steps")]
+    return [String("transformer_decode_step"), String("transformer_forward"), String("transformer_decode_steps")]
 
 
 def _transformer_decode_keep_entries(mut handle: TransformerDecodeHandle) raises:
@@ -299,7 +281,7 @@ def _transformer_decode_keep_entries(mut handle: TransformerDecodeHandle) raises
     var function_type = py_type(native_loaded_module("builtins").len)
     var names = _transformer_decode_entry_names()
     handle.entries.clear()
-    for name in names:  # small-loop(nine fixed decode entry names)
+    for name in names:  # small-loop(three fixed decode entry names)
         var entry = py_get(handle.binding, PythonObject(name))
         handle.entries.append(entry if py_type(entry) is function_type else PythonObject(None))
 
@@ -669,7 +651,7 @@ def _transformer_decode_unchanged(hobj: PythonObject) raises -> Bool:
 
 
 def _transformer_decode_admitted(session: PythonObject) raises -> PythonObject:
-    # Default arm (TRANSFORMER_DECODE_PER_TOKEN_ADMISSION off): the session's
+    # The session's
     # handle when a step may skip the per-token admission, else None (the
     # full path below runs and raises what it raised before). Two words
     # decide it: the handle holds its registry session (word and lease taken
@@ -847,28 +829,25 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
         # Restore: git apply experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch
         # One device open: a float32 session runs on the attention step op
         # (`_session_open_run`); fixed15_v1 keeps its planes (`_session_open_run_int15`).
-        comptime if TRANSFORMER_DECODE_PER_TOKEN_DOOR:
-            handle.device = _transformer_decode_entry(binding, "transformer_decode_session_create")()
-            cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open_step_op"),
-                handle.device, py_ints(a), py_ints(open_p)))
-        else:
-            # A registry decode session of this binding's image (the CausalLM
-            # layer sessions' registry), the same two opens. A failed open
-            # closes the handle when `handle` is destroyed (its __deinit__).
-            handle.entry = causal_sessions_ref(CAUSAL_SESSIONS_TRANSFORMER, _transformer_decode_native_key(binding))
-            handle.word = _transformer_decode_native_lists(handle.entry, CAUSAL_SESSION_DECODE_CREATE, List[Int](), List[Int]())
-            # Resolve the session once (hot-path audit 2026-11-13): the lease
-            # every per-token call runs on, dropped by the handle's __deinit__.
-            var pin_words: List[Int] = [handle.word]
-            handle.pin = _transformer_decode_native_lists(handle.entry, CAUSAL_SESSION_DECODE_PIN, List[Int](), pin_words)
-            var open_words: List[Int] = [handle.word]
-            for i in range(len(open_p)):  # driver-loop: resident shape words after the handle
-                open_words.append(open_p[i])
-            cached = _transformer_decode_native_lists(handle.entry,
-                CAUSAL_SESSION_DECODE_OPEN15 if packed else CAUSAL_SESSION_DECODE_OPEN, a, open_words)
-            # The device route's marker (`native` reads it; `device is not
-            # None` selects the device route below): the handle word.
-            handle.device = PythonObject(handle.word)
+        # TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch; record in docs/TOMBSTONES.md.
+        # A registry decode session of this binding's image (the CausalLM
+        # layer sessions' registry), the same two opens. A failed open
+        # closes the handle when `handle` is destroyed (its __deinit__).
+        handle.entry = causal_sessions_ref(CAUSAL_SESSIONS_TRANSFORMER, _transformer_decode_native_key(binding))
+        handle.word = _transformer_decode_native_lists(handle.entry, CAUSAL_SESSION_DECODE_CREATE, List[Int](), List[Int]())
+        # Resolve the session once (hot-path audit 2026-11-13): the lease
+        # every per-token call runs on, dropped by the handle's __deinit__.
+        var pin_words: List[Int] = [handle.word]
+        handle.pin = _transformer_decode_native_lists(handle.entry, CAUSAL_SESSION_DECODE_PIN, List[Int](), pin_words)
+        var open_words: List[Int] = [handle.word]
+        for i in range(len(open_p)):  # driver-loop: resident shape words after the handle
+            open_words.append(open_p[i])
+        cached = _transformer_decode_native_lists(handle.entry,
+            CAUSAL_SESSION_DECODE_OPEN15 if packed else CAUSAL_SESSION_DECODE_OPEN, a, open_words)
+        # The device route's marker (`native` reads it; `device is not
+        # None` selects the device route below): the handle word.
+        handle.device = PythonObject(handle.word)
     else:
         handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
             _transformer_decode_entry(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
@@ -904,10 +883,11 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
 def transformer_decode_run(session: PythonObject, input: PythonObject, step: Bool, decode: Bool, context: PythonObject) raises -> PythonObject:
     # `decode` (D2): x is (B, N, d_model) and the N tokens run as N steps in
     # one call; `step` is the one-token case, neither is a forward of L tokens.
-    comptime if not TRANSFORMER_DECODE_PER_TOKEN_ADMISSION and not TRANSFORMER_DECODE_PER_TOKEN_DOOR:
-        var admitted = _transformer_decode_admitted(session)
-        if admitted is not None:
-            return _transformer_decode_run_admitted(admitted, input, step, decode, context)
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION and MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.ab-prep.patch (and the _DOOR one); record in docs/TOMBSTONES.md.
+    var admitted = _transformer_decode_admitted(session)
+    if admitted is not None:
+        return _transformer_decode_run_admitted(admitted, input, step, decode, context)
     var hobj = _transformer_decode_owner(session, context)
     var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
     if not h[].open:
@@ -932,14 +912,8 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
     var batch = 0
     var length = 0
     var x = PythonObject(None)
-    comptime if TRANSFORMER_DECODE_PER_TOKEN_DOOR:
-        x = _neural_input(input, width, step, context)
-        var shape = x.shape
-        batch = Int(py=shape[0])
-        length = Int(py=shape[1])
-    else:
-        var mods = NativeModules()
-        x = _neural_input_rows(mods, input, width, step, context, batch, length)
+    var mods = NativeModules()
+    x = _neural_input_rows(mods, input, width, step, context, batch, length)
     if batch != rows:
         raise Error("TransformerDecodeSession: input rows differ from the state")
     var y = generation_array([batch, length, width])
@@ -958,15 +932,8 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
         var entry = h[].entry
         var kind = CAUSAL_DECODE_PINNED_RUN if decode else (CAUSAL_DECODE_PINNED_STEP if step else CAUSAL_DECODE_PINNED_FORWARD)
         cached = _transformer_decode_native_run(entry, kind, px, py, h[].pin, length, cached)
-    elif h[].device is not None and decode:
-        # The provider descriptor wraps the same session object; the decode
-        # entry is called on it directly.
-        cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_DECODE),
-            h[].device, py_ints([px, py]), py_ints([length, cached])))
-    elif h[].device is not None:
-        var p: List[Int] = [cached] if step else [length, cached]
-        cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_STEP if step else _TRANSFORMER_DECODE_FORWARD),
-            h[].device, py_ints([px, py]), py_ints(p)))
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch; record in docs/TOMBSTONES.md.
     else:
         # Decided 2026-11-15 (orchestrator): a decode session behaves the same
         # on CPU and GPU. The host cache position is the session's, so a
@@ -1043,13 +1010,8 @@ def transformer_decode_state(session: PythonObject, load: Bool, context: PythonO
             words.append(cached)
         var entry = h[].entry
         cached = _transformer_decode_native_lists(entry, CAUSAL_SESSION_DECODE_LOAD if load else CAUSAL_SESSION_DECODE_EXPORT, a, words)
-    elif h[].device is not None:
-        var a: List[Int] = [pieces[0], pieces[1]]
-        var p: List[Int] = [cached] if load else []
-        if load:
-            cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_LOAD), h[].device, py_ints(a), py_ints(p)))
-        else:
-            cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_EXPORT), h[].device, py_ints(a)))
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch; record in docs/TOMBSTONES.md.
     else:
         if pieces[2] != len(h[].k_cache) or pieces[2] != len(h[].v_cache):
             raise Error("TransformerDecodeSession: cache dimensions differ from the retained native session")
@@ -1092,8 +1054,8 @@ def transformer_decode_release(session: PythonObject, context: PythonObject) rai
         _transformer_decode_native_close(entry, word)
         h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
         h[].word = 0
-    elif h[].device is not None:
-        _ = py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_CLOSE), h[].device)
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch; record in docs/TOMBSTONES.md.
     h[].weights.clear(); h[].optional.clear(); h[].k_cache.clear(); h[].v_cache.clear()
 
 

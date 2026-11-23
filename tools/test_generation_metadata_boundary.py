@@ -199,7 +199,7 @@ def test_decode_state_owner_is_native_and_the_layer_run_reads_its_words():
     assert owned.count('causal_state_buffer_address(state.buffers[') == 11
     # the arms of the bound run are intact in the owned one
     assert 'y = generation_array_unfilled([b, l, d])' in owned
-    assert 'not TRANSFORMER_LEGACY_SETUP and route.block_session' in owned
+    assert 'elif device15 or route.block_session:' in owned
     run = public.split('def _run_snapshot(', 1)[1].split('\ndef ', 1)[0]
     assert run.index('causal_state_owner(mods, state)') < run.index('for i in range(len(snapshot.layers))')
     assert '_causal_layer_run_owned(' in run and '_causal_layer_run_bound(' in run

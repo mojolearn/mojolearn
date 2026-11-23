@@ -1261,6 +1261,18 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF"](), "removed 2026-11-23 (lane/ab-prep-mamba, DECIDED: A/B round 2 nvc-ab-20261119T154232Z-0642a5 and round 3 nvc-ab-20261120T063324Z-c630ad NVIDIA L40S, samba-train-step 0.952 / 0.965, driver 0.979, controls 1.00, digests equal; EXP:4532): the registry uploaded and scanned every step with the door stamping is gone; code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF.patch"
     # ---- end lane ab-prep-mamba
+    # ---- lane ab-prep-transformer (2026-11-23)
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; the Python-owned decode session door and per-token word fill ran the same AttnStepArm kernels); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch"
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.ab-prep.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; the per-token owner/generation/tail admission made the same native call on the same AttnStepArm); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.ab-prep.patch"
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SETUP"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; per-call layer setup ran the same llama_decoder_layer_forward / llama_decoder_layer_backward_autograd bodies as the block session); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch"
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; the per-call transformer_forward_fresh ran the same llama_decoder_layer_forward as the session fresh prefill); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch"
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DECODE_RESIDENT_IO"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed: unreachable, no board row reaches it; no owner sets LlamaDeviceStages.defer_addr since the session arms went, EXP:2356 folded, EXP:2359 deleted); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch"
+    # ---- end lane ab-prep-transformer
     return True
 
 

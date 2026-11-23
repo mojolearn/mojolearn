@@ -104,13 +104,14 @@ from core.causal_lm_entry_table import (
 # are build constants with today's defaults; each was a getenv per public
 # call, per layer of a forward, or per generate. B arms are RUN OWED
 # (bench/results/paper_compare/owed-pre0867.json; docs/apple-fast/EXPERIMENTS.md).
-#   -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP       per-call layer setup, no block
-#                                               session (was =1); restored
-#                                               2026-11-09 (docs/TOMBSTONES.md)
+#   -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP (per-call layer setup through the
+#   image's Python entries, no block session) ran the same
+#   llama_decoder_layer_forward bodies as the block session:
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
 #   -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF  no resident forward (was =0)
 #   -D MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32  fp32 sampling stream (was =1)
 #   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE  route witness print (was =1)
-comptime TRANSFORMER_LEGACY_SETUP = is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SETUP"]()
 comptime CAUSAL_LM_RESIDENT_FORWARD = not is_defined["MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF"]()
 comptime EXPERIMENT_RESIDENT_SAMPLING_FP32 = is_defined["MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32"]()
 comptime EXPERIMENT_GENERATION_ROUTE_TRACE = is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE"]()
@@ -386,8 +387,10 @@ def causal_lm_admit(mut mods: NativeModules, mut admission: CausalAdmission,
     causal_tables_admit(key, CAUSAL_TABLE_BLOCK if kind == "transformer" else (CAUSAL_TABLE_MAMBA if kind == "mamba1" or kind == "mamba2" else -1), int15_binding is not None)
     py_setitem(entries, CAUSAL_ENTRY_WEIGHT_NAMES, admission.weight_names if admission.weight_names is not None else neural_block_weight_names(mods, admission.first_block))
     if kind == "transformer":
-        py_setitem(entries, "forward", _native_function(mods, block_binding, "transformer_forward"))
-        py_setitem(entries, "decode", _native_function(mods, block_binding, "transformer_decode_step"))
+        # The "forward" / "decode" entries (transformer_forward, transformer_decode_step) were read only by
+        # the MOJOLEARN_TRANSFORMER_LEGACY_SETUP Python-entry arm.
+        # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
         py_setitem(entries, "block_binding", block_binding)
         for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh")]:  # small-loop(optional entry names retained once at construction)
             if _native_has_entry(mods, block_binding, name):
@@ -1146,8 +1149,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
     #   RUN: `_causal_layer_request_run`, typed words only.
     #   PACK: the returned word onto the state, the Mamba-2 h_last report onto
     #     the block's fields, the copied state buffers back.
-    # `e` is read only where a block session is opened (once per block) and
-    # in the Python-entry arm kept for -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP.
+    # `e` is read only where a block session is opened (once per block).
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var blk = block_override
@@ -1187,8 +1189,6 @@ def _causal_layer_run_bound(mut mods: NativeModules,
     # alive here across RUN.
     var session = PythonObject(None)
     var last = PythonObject(None)
-    # True when the Python-entry arm (LEGACY_SETUP) already ran the call.
-    var entry_arm_ran = False
     if transformer:
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
         var old_profile = py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None))
@@ -1218,7 +1218,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             # the same _run_forward with the same words.
             request.entry = route.entry
             request.operation = CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD
-        elif device15 or (not TRANSFORMER_LEGACY_SETUP and route.block_session):
+        elif device15 or route.block_session:
             # A GPU layer: the block's session (a native registry handle of its
             # image, opened on first use through the neural table) runs op 35
             # under fixed15_v1, else op 11, reserved with the GIL held and run
@@ -1237,16 +1237,10 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             request.handle = transformer_block_session_handle(session)
             request.operation = NEURAL_BLOCK_SESSION_FORWARD_INT15 if device15 else NEURAL_BLOCK_SESSION_FORWARD
         else:
-            # The Python-entry arm (a device route with no block session:
-            # -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP). Not a typed request: it
-            # calls the image's Python entry with packed word lists, as before.
-            var addresses = py_ints(request.addresses)
-            var params = py_ints(request.words)
-            if step:
-                _ = py_call(params.pop, 1)
-            py_setattr(st, "cached_tokens", py_call(e["decode" if step else "forward"], addresses, params))
-            mods.released()
-            entry_arm_ran = True
+            # A GPU admission always marks "block_session"; no other device route exists.
+            # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+            raise Error("CausalLM: a device Transformer layer has no block session")
     else:
         # The `_resident_session` refusal above already covers every layer
         # kind; the second per-layer getattr that stood here never fired.
@@ -1327,10 +1321,8 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             request.floats = m_floats^
         request.addresses = m_addresses^
     # RUN
-    var result = 0
-    if not entry_arm_ran:
-        result = _causal_layer_request_run(request)
-        mods.released()
+    var result = _causal_layer_request_run(request)
+    mods.released()
     # Every Python-held buffer the request addressed is named after the call:
     # Mojo frees a local at its last named use.
     _ = session
@@ -1338,8 +1330,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
     _ = y
     # PACK
     if transformer:
-        if not entry_arm_ran:
-            py_setattr(st, "cached_tokens", PythonObject(result))
+        py_setattr(st, "cached_tokens", PythonObject(result))
     elif mamba1:
         if not stateless:
             py_setattr(st, "absolute_position", PythonObject(Int(py=st.absolute_position) + l))
@@ -1391,8 +1382,6 @@ def _causal_layer_run_owned(mut mods: NativeModules,
     var request = CausalLayerRequest()
     var session = PythonObject(None)
     var last = PythonObject(None)
-    # True when the Python-entry arm (LEGACY_SETUP) already ran the call.
-    var entry_arm_ran = False
     if transformer:
         var old_profile = py_get(fields, nk[].k_arithmetic_profile)
         var cached = Int(py=py_item(fields, nk[].k_cached_tokens))
@@ -1420,7 +1409,7 @@ def _causal_layer_run_owned(mut mods: NativeModules,
         if route.cpu:
             request.entry = route.entry
             request.operation = CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD
-        elif device15 or (not TRANSFORMER_LEGACY_SETUP and route.block_session):
+        elif device15 or route.block_session:
             session = blk["_native_session"]
             if session is None:
                 session = transformer_block_session_open(neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
@@ -1432,13 +1421,10 @@ def _causal_layer_run_owned(mut mods: NativeModules,
             request.handle = transformer_block_session_handle(session)
             request.operation = NEURAL_BLOCK_SESSION_FORWARD_INT15 if device15 else NEURAL_BLOCK_SESSION_FORWARD
         else:
-            # The Python-entry arm (a device route with no block session:
-            # -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP), as in the bound run.
-            var addresses = py_ints(request.addresses)
-            var params = py_ints(request.words)
-            py_setitem(fields, nk[].k_cached_tokens, py_call(e["forward"], addresses, params))
-            mods.released()
-            entry_arm_ran = True
+            # A GPU admission always marks "block_session"; no other device route exists.
+            # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+            raise Error("CausalLM: a device Transformer layer has no block session")
     else:
         request.entry = route.entry
         var m_addresses = List[Int](capacity=len(layer.weights.addresses) + 7)
@@ -1480,17 +1466,14 @@ def _causal_layer_run_owned(mut mods: NativeModules,
             request.floats = m2_floats^
         request.addresses = m_addresses^
     # RUN
-    var result = 0
-    if not entry_arm_ran:
-        result = _causal_layer_request_run(request)
-        mods.released()
+    var result = _causal_layer_request_run(request)
+    mods.released()
     _ = session
     _ = last
     _ = y
     # PACK
     if transformer:
-        if not entry_arm_ran:
-            py_setitem(fields, nk[].k_cached_tokens, PythonObject(result))
+        py_setitem(fields, nk[].k_cached_tokens, PythonObject(result))
     elif mamba1:
         py_setitem(fields, nk[].k_absolute_position, PythonObject(Int(py=py_item(fields, nk[].k_absolute_position)) + l))
     else:
@@ -1710,7 +1693,7 @@ def _resident_forward_ok(mut mods: NativeModules, words: CausalModelWords, model
     # every public forward); the per-layer profile half reads the state.
     if not causal_resident_candidate(words):
         return False
-    comptime if TRANSFORMER_LEGACY_SETUP or not CAUSAL_LM_RESIDENT_FORWARD:
+    comptime if not CAUSAL_LM_RESIDENT_FORWARD:
         return False
     return _resident_profiles_ok(mods, model, state, blocks)
 
@@ -1872,8 +1855,6 @@ def _use_native_generation_engine(mut mods: NativeModules, words: CausalModelWor
         return False
     # TOMBSTONE: MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF (removed without measurement: plumbing, rule 2026-11-22; the by-name CPython entry calls ran the same compiled entries with the same words) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF.patch; record in docs/TOMBSTONES.md.
-    comptime if TRANSFORMER_LEGACY_SETUP:
-        return False
     # The model half is typed (`causal_engine_candidate`: a local fp32 model
     # of a known kind with its providers admitted; before, seven reads of the
     # model record and its entry registry per public forward).
@@ -1930,8 +1911,6 @@ def _engine_admission(mut mods: NativeModules, words: CausalModelWords, held: Py
             var unused_blocks = List[PythonObject]()
             if _resident_forward_ok(mods, words, model, state, unused_blocks):
                 raise Error("CausalLM: native generation engine does not replace the existing resident route")
-        comptime if TRANSFORMER_LEGACY_SETUP:
-            raise Error("CausalLM: native generation engine requires the supported session setup")
         var call = _owner_call_layers(mods, held, model, False)
         var model_owner = held.downcast_value_ptr[CausalModelOwner]()
         var windowed_result5 = GenerationEngineAdmission(

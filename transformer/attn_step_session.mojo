@@ -32,7 +32,6 @@ whole caller buffers.
 """
 
 from std.memory import bitcast, unsafe_memcpy
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
@@ -67,15 +66,10 @@ from transformer.impl.llama.modeling_llama import LlamaDims, LlamaDeviceWeights
 #: op's position word after every token: the word only mirrors the resident
 #: entry's position and is read only when an entry is built over it, so the
 #: arm writes it once (`_flush_word`) before any operation that can build an
-#: entry or hand the word on. The B arm, `-D
-#: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR` (the same define as the
-#: public door's per-token form, providers/python/transformer_decode_pyapi_door.mojo,
-#: owed row wave2-transformer-decode-loop), keeps one fill per token. No
-#: kernel, order or stage changes: no output bit moves.
-# TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (unmeasured B arm, EXP:2408 PENDING: the Python-owned decode session door and its per-token word fill) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at b891c32944.
-# Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime _WORD_EACH_TOKEN = is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"]()
+#: entry or hand the word on. No kernel, order or stage changes.
+# The B arm (one position-word fill per token) ran the same op entry and stages.
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 
 def _fp(addr: Int) -> FP:
@@ -449,15 +443,12 @@ struct AttnStepArm(Movable):
             # the decode step from and to the caller's arrays, no resident
             # x/y hop and no device-to-device copies (fable-perf-neural-0855;
             # 0.8.55's `_session_step_run`); the same op entry and stages
-            comptime if _WORD_EACH_TOKEN:
-                self._flush_word()
-                attn_step_run_kept_host(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints,
-                                        px, py, self.pre, False)
-            else:
-                # No position-word fill per token: the word is left due.
-                attn_step_run_kept_host(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints,
-                                        px, py, self.pre, False, False)
-                self.word_due = True
+            # No position-word fill per token: the word is left due.
+            # TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch; record in docs/TOMBSTONES.md.
+            attn_step_run_kept_host(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints,
+                                    px, py, self.pre, False, False)
+            self.word_due = True
             self.cached += 1
             self.ex.sync()
             return self.cached
@@ -509,9 +500,10 @@ struct AttnStepArm(Movable):
             ctx.enqueue_copy(dst_buf=xs_v, src_ptr=f32_ptr(px))
             for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the cache the previous step left), the step op once each
                 decode_slab_take(ctx, xt_v, xs_v, self.b, steps, self.dm, t)
-                # The position word once after the loop, not per token
-                # (`_WORD_EACH_TOKEN`, the B arm, keeps the fill per token).
-                self._run(1, False, _WORD_EACH_TOKEN)
+                # The position word once after the loop, not per token.
+                # TOMBSTONE: MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+                # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch; record in docs/TOMBSTONES.md.
+                self._run(1, False, False)
                 decode_slab_put(ctx, ys_v, yt_v, self.b, steps, self.dm, t)
             self._flush_word()
             ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=ys_v)
