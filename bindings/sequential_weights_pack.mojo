@@ -6,7 +6,7 @@
 # qualification of arbitrary Python callbacks as native execution.
 # The PACK half of the former `bindings/sequential_weights.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/sequential_weights_unpack.mojo`.
-from autograd.model_blocks import block_param_names
+from autograd.model_blocks import block_param_names, is_block
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -38,9 +38,13 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
         if code == 1 or code == 6 or code == 12 or code == 15:
             var bias = code == 6 or (Int(py=layer[2]) == 1 if code == 1 else Int(py=layer[4][4]) == 1)
             _ = py_call(result.append, Python.tuple(k, bias))
-        elif code == 35 or code == 39 or code == 40 or code == 41:
-            # lane neural-blocks: a block layer's tensors by name (autograd/model_blocks.mojo block_param_names)
+        elif is_block(code):
+            # every block layer with tensors, by name (autograd/model_blocks.mojo block_param_names); the codes are
+            # not listed here (lane layer-tables, 2026-11-23: a list of 35, 39, 40, 41 left out 42 to 46, so
+            # load_state_dict refused batch_norm, lm_head and the three scans; tools/block_tables_check.py)
             var suffixes = block_param_names(code)
+            if len(suffixes) == 0:
+                continue
             var names = Python.list()
             for j in range(len(suffixes)):  # small-loop(at most four tensors of a block layer)
                 _ = py_call(names.append, PythonObject(suffixes[j]))
@@ -246,7 +250,7 @@ def sequential_export_weights(mut mods: NativeModules, model: PythonObject, form
         var value = py_call(window.reshape, py_call(b.tuple, dims))
         var name = String(shapes[base]) + (".bias" if shapes[base + 1] == 1 else ".weight")
         var code = Int(py=model_layers[shapes[base]][0])
-        if code >= 32:
+        if is_block(code):
             name = String(shapes[base]) + block_param_names(code)[shapes[base + 1]]
         if form == SEQUENTIAL_EXPORT_STATE_DICT:
             py_setitem(named, PythonObject(name), value)
