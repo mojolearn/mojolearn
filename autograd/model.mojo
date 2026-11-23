@@ -1195,18 +1195,18 @@ def _token_ids[E: Exec](mut ex: E, Y: CastIn, N: Int, T: Int, dst: FP, what: Str
 
 def _fit_loss[E: Exec](
     mut tape: Tape, mut ex: E, cfg: FitConfig, spec: ModelSpec, P: FP, Gr: FP, y_out: Tensor, target: Tensor,
-    train: Bool,
+    train: Bool, ctc_dims: Tuple[Int, Int],
 ) raises -> Tensor:
     """The batch loss of the fit and validation loops: model_loss, or the token cross-entropy, where `y_out` is
-    the final lm_head layer's input (the forward stopped before it) and the fused op is the head."""
+    the final lm_head layer's input (the forward stopped before it) and the fused op is the head. `ctc_dims` is
+    the ctc output's (T, C), resolved once per fit by model_ctc_dims ((0, 0) for every other loss)."""
     if cfg.loss == LOSS_TOKEN_CROSS_ENTROPY:
         var i = spec.n_layers() - 1
         return block_lm_head_loss(tape, ex, spec.xargs, i, spec.in_shape[i], P, Gr, spec.param_off[i], y_out,
                                   target, train)
     # nn-losses-2 begin
     if cfg.loss == LOSS_CTC:
-        var dims = model_ctc_dims(spec)
-        return ctc_loss(tape, ex, y_out, target, dims[0], dims[1], ctc_blank_of(cfg.huber_delta), cfg.reduction,
+        return ctc_loss(tape, ex, y_out, target, ctc_dims[0], ctc_dims[1], ctc_blank_of(cfg.huber_delta), cfg.reduction,
                         ctc_zero_infinity_of(cfg.huber_delta))
     # nn-losses-2 end
     return model_loss(tape, ex, cfg, y_out, target)
@@ -1461,8 +1461,11 @@ def model_fit_state[E: Exec](
     # on the host with the target lengths (and the input lengths) before anything is uploaded
     var ctc = cfg.loss == LOSS_CTC
     var ctc_S = 0
+    # (T, C) of the ctc output, resolved once per fit (lane nn-integrate: _fit_loss resolved it every batch)
+    var ctc_dims = (0, 0)
     if ctc:
         var dims = model_ctc_dims(spec)
+        ctc_dims = dims
         if validation:
             raise Error("ValueError: model fit: validation_data with the ctc loss is not supported")
         if not target_lengths:
@@ -1489,7 +1492,7 @@ def model_fit_state[E: Exec](
         var dTL = ex.alloc(N)
         ex.upload(dTL, target_lengths.value(), N)
         var in_lens = Optional[FP](dLen) if has_lens else Optional[FP]()
-        ctc_pack_targets(ex, dY, dLab, dTL, in_lens, N, ctc_S, model_ctc_dims(spec)[0])
+        ctc_pack_targets(ex, dY, dLab, dTL, in_lens, N, ctc_S, ctc_dims[0])
         ex.free(dLab)
         ex.free(dTL)
     # nn-losses-2 end
@@ -1691,7 +1694,7 @@ def model_fit_state[E: Exec](
             # output (a scale of one), so it keeps the two launches below
             if cfg.loss != LOSS_CROSS_ENTROPY and not token and not ctc:  # nn-losses-2: ctc's curve word is the scale below
                 tape.arm_fold_word(dloss + bi, model_curve_factor(cfg, B))
-            var loss = _fit_loss(tape, ex, cfg, spec, P, Gr, out, target, True)
+            var loss = _fit_loss(tape, ex, cfg, spec, P, Gr, out, target, True, ctc_dims)
             var word_done = tape.disarm_fold_word(loss)
             if spec.version == SPEC2_VERSION:
                 # the rank-N lanes' custom tags (conv2d, pools) beside NeuralRules; lane neural-blocks:
@@ -1730,7 +1733,7 @@ def model_fit_state[E: Exec](
                 var x = tape.variable(ex, vx + off * D, B, D, False)
                 var target = tape.variable(ex, vy + off * TW, B, TW, False)
                 var pred = _model_forward_prepared(tape, ex, spec, P, Gr, x, False, cfg.seed, step, topology)
-                var loss = _fit_loss(tape, ex, cfg, spec, P, Gr, pred, target, False)
+                var loss = _fit_loss(tape, ex, cfg, spec, P, Gr, pred, target, False, ctc_dims)
                 var weighted = tape.scale(ex, loss, model_curve_factor(cfg, B))
                 _copy(ex, vloss + vi, tape.value(weighted), 1)
             epoch_tape.reset()
