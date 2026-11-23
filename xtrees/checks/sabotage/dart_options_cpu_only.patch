@@ -1,21 +1,22 @@
-diff --git a/xtrees/ops.mojo b/xtrees/ops.mojo
---- a/xtrees/ops.mojo
-+++ b/xtrees/ops.mojo
-@@ -462,6 +462,8 @@
-             var yi = Int(y[unsafe_offset=i])
-             for c in range(k):
-                 var p = rec[c] / s
-+                comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
-+                    p = p * 1.0000001  # DART OPTIONS SABOTAGE: the CPU column's softmax gradient only
-                 var gi = p - 1.0 if yi == c else p
-                 g[unsafe_offset=c * n + i] = gi
-                 h[unsafe_offset=c * n + i] = identical_mul64(identical_mul64(factor, p), 1.0 - p)
-@@ -502,6 +504,8 @@
-             var a = (s if s >= 0.0 else -s) - l1
+diff --git a/xtrees/dart_units.mojo b/xtrees/dart_units.mojo
+index 44f51ec1c3..a7c1dd5fde 100644
+--- a/xtrees/dart_units.mojo
++++ b/xtrees/dart_units.mojo
+@@ -169,6 +169,8 @@ def dart_row_unit(
+         var factor = _div(Float32(kk), Float32(kk) - 1.0)
+         for c in range(kk):
+             var p = _div(_exp(_sub(score[c * nn + i], m)), tot)
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++                p = p * Float32(1.0000001)  # DART OPTIONS SABOTAGE: the CPU column's softmax gradient only
+             var g = _sub(p, 1.0) if yi == c else p
+             target[c * nn + i] = -g
+             h[c * nn + i] = _mul(_mul(factor, p), _sub(1.0, p))
+@@ -289,6 +291,8 @@ def dart_newton_unit(
+             var a = _sub(s if s >= 0.0 else -s, l1)
              var reg = a if a > 0.0 else 0.0
              s = reg if s > 0.0 else (-reg if s < 0.0 else 0.0)
 +            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
-+                s = s * 1.0000001  # DART OPTIONS SABOTAGE: the CPU column's L1 leaf only
-         var ret = -s / den
-         if max_delta_step > 0.0 and (ret if ret >= 0.0 else -ret) > max_delta_step:
-             ret = max_delta_step if ret > 0.0 else -max_delta_step
++                s = s * Float32(1.0000001)  # DART OPTIONS SABOTAGE: the CPU column's L1 leaf only
+         ret = _div(-s, den)
+         if mds > 0.0 and (ret if ret >= 0.0 else -ret) > mds:
+             ret = mds if ret > 0.0 else -mds
