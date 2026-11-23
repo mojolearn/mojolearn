@@ -196,7 +196,16 @@ def member_leaf_admit(model: PythonObject, fields: PythonObject, plan: PythonObj
     b: PythonObject) raises -> MemberOwner:
     """`member_admit` (bindings/member_boundary_door.mojo) for a LEAF member:
     an owner with `published` False for an unmarked class or a META mark."""
+    return member_leaf_admit_labeled(model, fields, plan, context, b, PythonObject(None))
+
+
+def member_leaf_admit_labeled(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
+    b: PythonObject, labels: PythonObject) raises -> MemberOwner:
+    """`member_leaf_admit` for a FIT caller that holds the labels of its codes (`owner.labels`, as
+    `member_admit_labeled` sets them; None: none known; an empty list: the caller encodes after the
+    admission and completes the plan itself: lane mf-meta5b, RFE's door)."""
     var owner = MemberOwner()
+    owner.labels = labels
     var mark = member_mark(plan, b)
     if mark.family < 0:
         return owner^
@@ -213,8 +222,14 @@ def member_leaf_admit_serving(model: PythonObject, fields: PythonObject, plan: P
     b: PythonObject, needs: Int) -> MemberOwner:
     """`member_admit_serving` for a LEAF member: never raises; not served
     (`published` False) when the family lacks a bit of `needs` or refuses."""
+    return member_leaf_admit_serving_labeled(model, fields, plan, context, b, needs, PythonObject(None))
+
+
+def member_leaf_admit_serving_labeled(model: PythonObject, fields: PythonObject, plan: PythonObject,
+    context: PythonObject, b: PythonObject, needs: Int, labels: PythonObject) -> MemberOwner:
+    """`member_leaf_admit_serving` with the caller's labels (`member_leaf_admit_labeled`)."""
     try:
-        var owner = member_leaf_admit(model, fields, plan, context, b)
+        var owner = member_leaf_admit_labeled(model, fields, plan, context, b, labels)
         if owner.published and not owner.plan.member.has(needs):
             owner.published = False
         return owner^

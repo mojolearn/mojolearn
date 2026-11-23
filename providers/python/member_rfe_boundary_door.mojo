@@ -24,9 +24,17 @@ no importance block; the door's own path keeps it).
 """
 from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner
-from bindings.member_leaf_boundary_door import member_leaf_admit_serving
+from bindings.member_leaf_boundary_door import member_leaf_admit_serving_labeled
+from bindings.member_class_weight_unpack import member_cw_fill_plan
+from bindings.prep_native_estimator_door import prep_native_context
+from bindings.classical_pandas_door import classical_admit_value
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.admitted_input_unpack import admit_weight_words
+from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_marker_index
+from core.xneighbors_member import LP_MARKER_WORD
+from core.member_set_run import MemberFitExtras
 from bindings.prep_native_estimator_door import prep_estimator_plan, prep_estimator_clone
-from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_type
+from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_type, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_validate_unpack import classical_estimator_name
 from bindings.classical_arrays_door import classical_typed, classical_address
@@ -42,10 +50,11 @@ from bindings.prep_select_run import RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_S
 from core.member_abi import (
     MemberPlan, member_kind_capabilities,
     MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_CLASSIFIER, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
+    MEMBER_CAN_SAMPLE_WEIGHT,
 )
 from core.member_families import (
     MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT,
-    MEMBER_FAMILY_GBDT, MEMBER_FAMILY_ENSEMBLE,
+    MEMBER_FAMILY_GBDT, MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_XNEIGHBORS,
 )
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -71,6 +80,11 @@ struct RfeBase(Movable):
     var template: PythonObject
     var fields: PythonObject
     var member_context: PythonObject
+    # Lane mf-meta5b: a dotted importance_getter over a META estimator (RFE's door, `_rfe_dotted_base`):
+    # `meta` True, `block` the META kind's forwarded export and `hops` its words (each nested index along
+    # the path, then the leaf's block); PACK packs a META member.
+    var hops: List[Float64]
+    var meta: Bool
 
     def __init__(out self):
         self.native = False
@@ -85,9 +99,17 @@ struct RfeBase(Movable):
         self.template = PythonObject(None)
         self.fields = PythonObject(None)
         self.member_context = PythonObject(None)
+        self.hops = List[Float64]()
+        self.meta = False
 
 
 def rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObject, b: PythonObject) -> RfeBase:
+    """`rfe_base_admit_labeled` with no labels (THE RFE KIND's admission: its caller hands codes)."""
+    return rfe_base_admit_labeled(estimator, g, context, b, PythonObject(None))
+
+
+def rfe_base_admit_labeled(estimator: PythonObject, g: PythonObject, context: PythonObject, b: PythonObject,
+                           labels: PythonObject) -> RfeBase:
     """UNPACK, once per RFE fit (the door) or admission (the kind): admit the estimator as a native leaf
     member when its class is a published member whose KIND fits and exports the block the importance
     getter names ('auto': coef, else feature importances as given; 'coef_' / 'feature_importances_': that
@@ -96,7 +118,11 @@ def rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObje
     GradientBoosting and its adapters) is admitted with its refusal, which the first elimination round
     raises before it fits (with no round the final fit runs, as in scikit-learn). A dotted getter path, a
     META estimator, an admission the family refuses: not served. Never raises (the door's own path then
-    answers or refuses in its own words)."""
+    answers or refuses in its own words).
+
+    `labels` (lane mf-meta5b; `member_leaf_admit_labeled`): None, or an empty list from RFE's own door,
+    which encodes y after this admission and completes the plan over its classes itself (a class_weight
+    dict's table, LabelPropagation / LabelSpreading's unlabeled marker word: `rfe_plan_labels`)."""
     var base = RfeBase()
     try:
         var getter = String(g)
@@ -110,8 +136,8 @@ def rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObje
         var template = prep_estimator_clone(estimator, context)
         var member_context = plan["context"]
         var fields = py_call(plan["fields_get"], template, py_type(template))
-        var owner = member_leaf_admit_serving(template, fields, plan, member_context, b,
-                                              MEMBER_CAN_FIT | MEMBER_CAN_EXPORT)
+        var owner = member_leaf_admit_serving_labeled(template, fields, plan, member_context, b,
+                                                      MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, labels)
         if not owner.published or owner.plan.family == MEMBER_FAMILY_ENSEMBLE:
             return base^
         # A DecisionTree or RandomForest member computes its feature importances only when its parameter
@@ -130,7 +156,7 @@ def rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObje
         var family = owner.plan.family
         var name = (classical_estimator_name(estimator)
                     if (family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT
-                        or family == MEMBER_FAMILY_GBDT) else String(""))
+                        or family == MEMBER_FAMILY_GBDT or family == MEMBER_FAMILY_XNEIGHBORS) else String(""))
         var source = rfe_member_source(family, mask, getter, name)
         if source.refusal.byte_length() == 0 and source.block == 0:
             return base^
@@ -243,3 +269,98 @@ def rfe_publish(fields: PythonObject, final: PythonObject, support: List[Float32
     py_setitem(fields, nk[].k_n_features_, PythonObject(selected))
     py_setitem(fields, nk[].k_numeric_mode_, cls_mode(cc))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+
+
+# ---------------------------------------------------------------- the fit's labels and parameters (lane mf-meta5b)
+def rfe_plan_labels(mut base: RfeBase, classes: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK, after the door's one label encode (`classes`: the class list in code order), for a base
+    admitted with deferred labels (`rfe_base_admit_labeled` with an empty list), the way model selection's
+    units complete theirs (bindings/msel_member_units_door.mojo): LabelPropagation / LabelSpreading get the
+    code of the -1 marker in their word LP_MARKER_WORD (its rows take part in the graph and not in classes_,
+    as the estimator's own fit reads them; PACK leaves it out of classes_), and a class_weight dict's table
+    is read over the classes (`member_cw_fill_plan`: its refusals raise here in the estimator's words, where
+    its first fit raised them). False: a pending table it cannot complete (the door keeps the fit)."""
+    if xneighbors_kind_reads_marker(base.owner.plan.family, base.owner.plan.kind):
+        var marker = xneighbors_marker_index(classes)
+        if marker >= 0 and len(base.owner.plan.params) > LP_MARKER_WORD:
+            base.owner.plan.params[LP_MARKER_WORD] = Float64(marker)
+    return member_cw_fill_plan(base.owner.plan, base.template, base.fields, classes, base.member_context, b)
+
+
+def rfe_fit_keywords(estimator: PythonObject, fit_params: PythonObject, context: PythonObject,
+                     b: PythonObject) raises:
+    """UNPACK of RFE.fit's `**fit_params` names and values, in the words and order of the estimator's own
+    compiled fit (bindings/msel_estimator_native_door.mojo `_msel_admitted_dispatch`, which `_fit_clone`'s
+    every round ran): an exact str name, one the plan's `fit` keyword table names, each value admitted
+    (`classical_admit_value`). Raises the first refusal; once per RFE fit, before any round."""
+    var plan = prep_estimator_plan(estimator, context)
+    if plan is None:
+        return
+    var table = py_get(plan, "keywords")
+    var allowed = PythonObject(None) if table is None else py_get(table, PythonObject("fit"))
+    if allowed is None:
+        allowed = Python.tuple()
+    var native = prep_native_context(context)
+    classical_connect_numpy(native)
+    var keys = py_call(b.list, fit_params)
+    for k in range(len(keys)):  # driver-loop: over the caller's fit parameter names
+        if py_type(keys[k]) is not b.str:
+            raise Error("TypeError: native estimator keyword names must be exact strings")
+        if not py_contains(allowed, keys[k]):
+            raise Error("TypeError: " + String(py_type(estimator).__name__) + ".fit got an unexpected keyword argument '"
+                        + String(keys[k]) + "'")
+        classical_admit_value(py_get(fit_params, keys[k]), native)
+
+
+struct RfeFitParams(Movable):
+    """RFE.fit's parameters for a member of any family but Gbdt (`rfe_member_fit_params`). `admitted`
+    False: a key the member does not carry (the door's own fit keeps it). True: `extras` the typed
+    addresses (the weights), `pins` their holder, `final_importances` a forest's feature_importances=True
+    (the final fit keeps its importance word, so estimator_ publishes them as that fit does)."""
+    var admitted: Bool
+    var extras: MemberFitExtras
+    var pins: PythonObject
+    var final_importances: Bool
+
+    def __init__(out self):
+        self.admitted = False
+        self.extras = MemberFitExtras()
+        self.pins = PythonObject(None)
+        self.final_importances = False
+
+
+def rfe_member_fit_params(base: RfeBase, fit_params: PythonObject, n: Int, b: PythonObject) raises -> RfeFitParams:
+    """UNPACK, once per RFE fit (lane mf-meta5b), of the fit parameters a non-Gbdt member reads, after
+    `rfe_fit_keywords`: `sample_weight` through the one weight admission the families' fit doors share
+    (bindings/admitted_input_unpack.mojo `admit_weights`, via `admit_weight_words`: scikit-learn's shape,
+    finiteness, sign and all-zero refusals in its words; None: no weights), handed to every member fit
+    (the member re-checks what it reads, as for Bagging's and Voting's members); a forest's
+    `feature_importances` (an exact bool: the rounds compute importances whatever it says, as before; True
+    keeps them on the final fit). Not admitted (the door's fit answers): weights for a kind without
+    MEMBER_CAN_SAMPLE_WEIGHT, a non-bool feature_importances, any other key."""
+    var got = RfeFitParams()
+    var extras = MemberFitExtras()
+    extras.rows = n
+    var weights = PythonObject(None)
+    var keys = py_call(b.list, fit_params)
+    for k in range(len(keys)):  # driver-loop: over the caller's fit parameter names
+        var name = String(py=keys[k])
+        var value = py_get(fit_params, keys[k])
+        if name == "sample_weight":
+            if value is None:
+                continue
+            if (base.mask & MEMBER_CAN_SAMPLE_WEIGHT) == 0:
+                return got^
+            var w = admit_weight_words(value, n, base.member_context)
+            weights = w.array
+            extras.weights = w.address
+        elif name == "feature_importances":
+            if py_type(value) is not b.bool:
+                return got^
+            got.final_importances = Bool(py=value)
+        else:
+            return got^
+    got.pins = weights
+    got.extras = extras^
+    got.admitted = True
+    return got^

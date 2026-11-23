@@ -152,6 +152,14 @@ struct CalFitPlan(Movable):
     # (`cal_fold_place`), False for a failed fit.
     var failed_fold: Int
     var failed_scoring: Bool
+    # THE UNLABELED MARKER (lane mf-meta5b; LabelPropagation / LabelSpreading, whose fit reads the label -1
+    # as unlabeled): `markers[u]` the ensemble code of -1 that unit u's member reads as its marker word (-1:
+    # none; empty: no unit has one). Set by UNPACK. A unit with a marker holds every class but the marker
+    # (its classes_ exclude -1, as scikit-learn's fold fit on y as given publishes them), so its held classes
+    # leave it out (`cal_fold_classes_run`). Written by the RUN: `full_held`, the held classes of the unit
+    # over every row (ensemble=False) when it has a marker (empty: every class).
+    var markers: List[Int]
+    var full_held: List[Int32]
 
     def __init__(out self, x: Int, n: Int, d: Int, codes: Int, k: Int, operation: Int, sigmoid: Bool,
                  ensemble: Bool, host_rows: Bool):
@@ -170,6 +178,14 @@ struct CalFitPlan(Movable):
         self.fold_codes = List[List[Int32]]()
         self.failed_fold = -1
         self.failed_scoring = False
+        self.markers = List[Int]()
+        self.full_held = List[Int32]()
+
+    def marker_of(self, u: Int) -> Int:
+        """Unit u's marker code (-1: none)."""
+        if u < 0 or u >= len(self.markers):
+            return -1
+        return self.markers[u]
 
     def fold(mut self, rows: Int, count: Int):
         """The next fold's test rows (int32 numbers at `rows`, `count` of them)."""
@@ -385,11 +401,19 @@ def cal_fold_place(k: Int, held: List[Int32], operation: Int, cols: Int, ensembl
 
 def cal_calibrators_run(glue: EntryRef, scores: Int, n: Int, c: Int, codes: Int, sigmoid: Bool,
                         which: List[Int], mut res: CalFitOut) raises:
+    """`cal_calibrators_run` with each calibrator's target the code of its column."""
+    cal_calibrators_run(glue, scores, n, c, codes, sigmoid, which, List[Int](), res)
+
+
+def cal_calibrators_run(glue: EntryRef, scores: Int, n: Int, c: Int, codes: Int, sigmoid: Bool,
+                        which: List[Int], targets: List[Int], mut res: CalFitOut) raises:
     """`CalibratedClassifierCV._fit_calibrators` over the float64 `n` x `c`
     scores at `scores` and the int32 codes at `codes` (n): one calibrator per
     class column of `which` (empty: every column), in its order, appended to
     `res` (column j's 0/1 target is code 1 for c = 1, else code j: scikit-learn's
-    `label_binarize` column). The door's glue ops in the door's order."""
+    `label_binarize` column; `targets` non-empty, lane mf-meta5b: calibrator q's
+    target is code `targets[q]`, scikit-learn's zip of `pos_class_indices` with
+    the score columns). The door's glue ops in the door's order."""
     var st = scores
     var transposed = List[Float64]()
     if c > 1:
@@ -407,7 +431,7 @@ def cal_calibrators_run(glue: EntryRef, scores: Int, n: Int, c: Int, codes: Int,
     var count = len(which) if len(which) > 0 else c
     for q in range(count):  # driver-loop: over the calibrated class columns (one calibrator each)
         var j = which[q] if len(which) > 0 else q
-        var cls = 1 if c == 1 else j
+        var cls = 1 if c == 1 else (targets[q] if len(targets) > 0 else j)
         var f = st + 8 * j * n
         _ = xt_indicator_codes(glue, codes, yj_at, y64_at, n, cls)
         if sigmoid:
@@ -489,13 +513,27 @@ def cal_fold_classes_run(mut run: MemberSetRun, mut plan: CalFitPlan):
                 maps[f * k + c] = Int32(len(present))
                 present.append(Int32(c))
         var held = len(present)
+        var marker = plan.marker_of(f)
+        if held == k and marker >= 0:
+            # THE UNLABELED MARKER: every code present, its member fitted as admitted (its marker word the
+            # ensemble code), its classes every code but the marker's.
+            plan.fold_classes[f] = _cal_without(present, marker)
+            continue
         if held == k or held == 0:
             continue  # every class (held 0: no train rows, which UNPACK refuses before the RUN)
         # A class_weight dict's table narrowed to the classes the fold holds
         # (lane mf-adm3; core/member_class_weight.mojo): the fold's own fit
         # reads the dict against the fold's labels.
         member_cw_subset(run.plans[f], present)
-        plan.fold_classes[f] = present^
+        if marker >= 0:
+            # THE UNLABELED MARKER of a re-coded fold: its marker word becomes the marker's fold code (none
+            # when its train rows hold no -1), its held classes every present code but the marker's.
+            var fold_marker = Int(maps[f * k + marker]) if seen[f * k + marker] != UInt8(0) else -1
+            if len(run.plans[f].params) > _CAL_MARKER_WORD:
+                run.plans[f].params[_CAL_MARKER_WORD] = Float64(fold_marker)
+            plan.fold_classes[f] = _cal_without(present, marker)
+        else:
+            plan.fold_classes[f] = present^
         plan.fold_codes[f] = List[Int32](length=n, fill=Int32(0))
         var at = Int(plan.fold_codes[f].unsafe_ptr())
         run.targets[f] = at
@@ -523,11 +561,32 @@ def cal_fold_classes_run(mut run: MemberSetRun, mut plan: CalFitPlan):
                 dst[row] = to[Int(y[row])]
 
         host_parallelize(_recode, len(recoded))
+    # The unit over every row (ensemble=False) with a marker: every code but the marker's.
+    var full_marker = plan.marker_of(folds)
+    if not plan.ensemble and full_marker >= 0:
+        var every = List[Int32](capacity=k)
+        for c in range(k):  # driver-loop: over the classes
+            every.append(Int32(c))
+        plan.full_held = _cal_without(every, full_marker)
     # Integer addresses carry no lifetime: the work lists live to here.
     _ = len(seen)
     _ = len(maps)
     _ = len(recoded)
     _ = len(targets)
+
+
+#: LabelPropagation / LabelSpreading's marker word (core/xneighbors_member.mojo `LP_MARKER_WORD`; the
+#: plans this RUN re-codes are the caller's, which set `markers` only for those kinds).
+comptime _CAL_MARKER_WORD = 13
+
+
+def _cal_without(codes: List[Int32], marker: Int) -> List[Int32]:
+    """`codes` without the code `marker`, in order."""
+    var out = List[Int32](capacity=len(codes))
+    for c in range(len(codes)):  # small-loop(a unit's classes)
+        if Int(codes[c]) != marker:
+            out.append(codes[c])
+    return out^
 
 
 def cal_held_classes(plan: CalFitPlan, f: Int) -> List[Int32]:
@@ -657,7 +716,19 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
         _ = len(s)
     if not plan.ensemble:
         res.final_first = res.calibrators()
-        cal_calibrators_run(glue, Int(res.scores.unsafe_ptr()), n, c, plan.codes, plan.sigmoid, List[Int](), res)
+        if len(plan.full_held) > 0:
+            # THE UNLABELED MARKER (ensemble=False, k > 2): scikit-learn's `_fit_calibrator` zips the full fit's
+            # classes (every code but the marker's) with the out-of-fold columns from the first: calibrator q
+            # reads column q against code full_held[q].
+            var which = List[Int](capacity=len(plan.full_held))
+            var targets = List[Int](capacity=len(plan.full_held))
+            for q in range(len(plan.full_held)):  # driver-loop: over the full fit's classes (one calibrator each)
+                which.append(q)
+                targets.append(Int(plan.full_held[q]))
+            cal_calibrators_run(glue, Int(res.scores.unsafe_ptr()), n, c, plan.codes, plan.sigmoid, which, targets,
+                                res)
+        else:
+            cal_calibrators_run(glue, Int(res.scores.unsafe_ptr()), n, c, plan.codes, plan.sigmoid, List[Int](), res)
         res.final_count = res.calibrators() - res.final_first
     _ = len(cols)
     _ = len(iota)

@@ -86,7 +86,7 @@ from core.member_abi import (
     MemberCall, MemberPlan, MemberRef, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_OP_CAPABILITIES, MEMBER_I32, MEMBER_CAN_COEF, MEMBER_BLOCK_COEF,
 )
-from core.member_families import MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_NAIVE_BAYES
+from core.member_families import MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_XNEIGHBORS
 from core.member_set_run import MemberFitExtras
 from core.discriminant_member import discriminant_member_v2
 from core.naive_bayes_member import naive_bayes_member_v2
@@ -801,6 +801,17 @@ def refusal_unit(unit: Int) raises:
 
 def test_rfe_refusals() raises:
     check_cases("rfe refusals", 3, refusal_unit)
+
+
+def test_rfe_source_xneighbors() raises:
+    """Lane mf-meta5b: an XNeighbors kind (k-NN, LabelPropagation, LabelSpreading) exports neither importance
+    block, so RFE refuses before a round: 'auto' in the door's words, a named attribute in attrgetter's.
+    FAIL-PROOF: drop MEMBER_FAMILY_XNEIGHBORS from `rfe_member_source`'s refusal families -> block 0, no words."""
+    var auto = rfe_member_source(MEMBER_FAMILY_XNEIGHBORS, 0, "auto", "LabelPropagation")
+    require(auto.block == 0 and auto.refusal == String(RFE_NO_IMPORTANCES), "XNeighbors 'auto': the door's words")
+    var named = rfe_member_source(MEMBER_FAMILY_XNEIGHBORS, 0, "coef_", "LabelSpreading")
+    require(named.refusal == "AttributeError: 'LabelSpreading' object has no attribute 'coef_'",
+            "XNeighbors 'coef_': attrgetter's words")
 
 
 def main() raises:

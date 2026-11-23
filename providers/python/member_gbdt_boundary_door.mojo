@@ -87,6 +87,10 @@ from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.trees_public_inputs_door import trees_encode_labels, trees_address
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admit_weight_words
 from core.member_set_run import MemberFitExtras
+from core.member_families import MEMBER_FAMILY_GBDT
+from core.host_parallel import host_parallelize
+from bindings.native_unit_os_threads_run import native_unit_cores
+from bindings.gbdt_category_unpack import gbdt_category_admit
 from bindings.native_typed_context_pack import native_typed_context
 from bindings.classifier_public_lifecycle_door import _public_labels
 from bindings.member_owner_unpack import member_labels_take
@@ -226,6 +230,11 @@ struct GbdtMemberFitParams(Movable):
     var pins: PythonObject
     var ids: List[Int32]
     var codes: List[Int32]
+    # Lane mf-meta5b: a fit with cat_features: the held-out X as C-order rows
+    # (the fit door's categorical admission is column-major) and, for a text
+    # held-out X, its categorical keys (`gbdt_category_admit`'s words).
+    var eval_rows: List[Float32]
+    var eval_keys: List[UInt64]
 
     def __init__(out self):
         self.admitted = False
@@ -233,6 +242,98 @@ struct GbdtMemberFitParams(Movable):
         self.pins = PythonObject(None)
         self.ids = List[Int32]()
         self.codes = List[Int32]()
+        self.eval_rows = List[Float32]()
+        self.eval_keys = List[UInt64]()
+
+
+#: The classifier adapter's refusal of a target with more than two classes (its fit door's words,
+#: bindings/trees_public_gbdt_fit_door.mojo `adapter_classifier_fit`, and core/gbdt_member.mojo's).
+comptime GBDT_ADAPTER_MULTICLASS = "Only binary classification is supported. The type of the target is multiclass."
+
+
+def gbdt_member_label_check(plan: MemberPlan, classes: Int) raises:
+    """UNPACK, once per caller fit (lane mf-meta5b): the classifier adapter (kind 0) over more than two
+    classes is refused in its fit door's words, where that door refuses it: after its parameter checks (the
+    admission) and its label encode, BEFORE its eval_set checks and its sample weights. A caller whose first
+    member fit comes later (RFE: a Gbdt kind exports no importance block, so an elimination round is refused
+    before it fits, `rfe_member_source`) asks this right after its encode, so the words are the first fit's,
+    as the estimator's own door raised them. Any other plan: nothing."""
+    if plan.family == MEMBER_FAMILY_GBDT and plan.kind == 0 and classes > 2:
+        raise Error(GBDT_ADAPTER_MULTICLASS)
+
+
+def _tail_cat_columns(params: List[Float64], d: Int) -> List[Int]:
+    """The cat_features indices of NEW's feature-list tail (`[..., cat, one-hot, C, H]`, core/gbdt_member.mojo
+    `_feature_tail`) ascending without repeats (`gbdt_category_columns`); empty when an index is outside the
+    fit's `d` columns (the fit door refuses it in its own words, at its X: the caller keeps that door)."""
+    var out = List[Int]()
+    var count = len(params)
+    if count < 4:
+        return out^
+    var h = Int(params[count - 1])
+    var c = Int(params[count - 2])
+    var start = count - 2 - c - h
+    if c <= 0 or h < 0 or start < 0:
+        return out^
+    for k in range(c):  # small-loop(cat_features): sorted insert of one index
+        var at = Int(params[start + k])
+        if at < 0 or at >= d:
+            return List[Int]()
+        var pos = 0
+        while pos < len(out) and out[pos] < at:  # small-loop(out)
+            pos += 1
+        if pos < len(out) and out[pos] == at:
+            continue
+        out.append(at)
+        var i = len(out) - 1
+        while i > pos:  # small-loop(out)
+            out[i] = out[i - 1]
+            i -= 1
+        out[pos] = at
+    return out^
+
+
+def _row_major(source: Int, rows: Int, cols: Int) -> List[Float32]:
+    """A column-major float32 block (`rows` x `cols` at `source`) as C-order rows, the rows split over the
+    host cores (independent units; one copy, once per caller fit)."""
+    var dst = List[Float32](length=rows * cols, fill=0.0)
+    var dst_at = Int(dst.unsafe_ptr())
+    var tasks = max(min(native_unit_cores(), rows), 1)
+    var per = (rows + tasks - 1) // tasks
+
+    def _span(t: Int) {imm source, imm rows, imm cols, imm per, imm dst_at}:
+        var lo = t * per
+        var hi = min(lo + per, rows)
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=source)
+        var to = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_at)
+        for i in range(lo, hi):  # native data loop (one task's held-out rows)
+            for j in range(cols):
+                to[i * cols + j] = src[j * rows + i]
+
+    host_parallelize(_span, tasks)
+    _ = len(dst)
+    return dst^
+
+
+def _eval_x_cats(source: PythonObject, d: Int, cat_columns: List[Int], run: PythonObject,
+                 mut got: GbdtMemberFitParams) raises -> AdmittedX:
+    """The fit door's held-out X of a fit with cat_features (`_eval_set`: `gbdt_category_admit` over the
+    fit's categorical columns, its width and row checks in its words), as C-order rows in `got.eval_rows`
+    and, for a text or pandas held-out X, its categorical keys in `got.eval_keys` (the member applies the
+    fit's category map to them, as the door's `gbdt_category_apply` does). Without cat_features: `_eval_x`."""
+    if len(cat_columns) == 0:
+        return _eval_x(source, d, run)
+    var keys = List[UInt64]()
+    var xe = gbdt_category_admit(source, "eval_set X", cat_columns, keys, run)
+    if xe.cols != d:
+        raise Error("mojolearn: eval_set X has " + String(xe.cols) + " features "
+                    + "for a fit on " + String(d))
+    if xe.rows == 0:
+        raise Error("mojolearn: eval_set X has no rows")
+    got.eval_rows = _row_major(xe.address, xe.rows, xe.cols)
+    _ = xe.array  # read by address through the copy above
+    got.eval_keys = keys^
+    return xe^
 
 
 def _eval_items(eval_set: PythonObject, b: PythonObject) raises -> PythonObject:
@@ -315,10 +416,13 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
         labels' kind and vocabulary against the training labels, coded over
         `labels`; the regressor: `_regression_target`), then sample_weight,
         then the held-out X.
-    Not admitted (the fit door keeps them): a key the kind's fit does not
-    take, an eval_set with cat_features (a text held-out X is encoded through
-    the fit's map by the door), a classifier adapter over other than two
-    classes (the adapter's own binary refusal)."""
+    With cat_features (lane mf-meta5b) the held-out X is admitted over the
+    fit's categorical columns as the fit door admits it (`_eval_x_cats`), its
+    keys handed to the member, which applies the fit's category map as the
+    door does; a classifier adapter over more than two classes is refused at
+    the caller's encode (`gbdt_member_label_check`). Not admitted (the fit
+    door keeps them, answering in its words): a key the kind's fit does not
+    take, a cat_features index outside X."""
     var b = native_loaded_module("builtins")
     var nk = trees_keys()
     var got = GbdtMemberFitParams()
@@ -331,12 +435,16 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
     var subgroup_id = py_get(fit_params, PythonObject("subgroup_id"))
     var pairs = py_get(fit_params, PythonObject("pairs"))
     var pairs_weight = py_get(fit_params, PythonObject("pairs_weight"))
-    # The cat_features count is NEW's word len - 2 (the feature-list tail).
+    # The cat_features count is NEW's word len - 2 (the feature-list tail). With an eval_set the held-out X
+    # is admitted as the fit door admits it over those columns (lane mf-meta5b: `_eval_x_cats`).
     var cats = 0
     if len(plan.params) >= 2:
         cats = Int(plan.params[len(plan.params) - 2])
+    var cat_columns = List[Int]()
     if eval_set is not None and cats > 0:
-        return got^
+        cat_columns = _tail_cat_columns(plan.params, d)
+        if len(cat_columns) == 0:
+            return got^  # an index outside X: the fit door refuses it at its X, in its words
     var run: PythonObject
     if kind == 1:
         run = trees_route_context(model, context)
@@ -356,7 +464,7 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
             extras.weights = w.address
         if eval_set is not None:
             var items = _eval_items(eval_set, b)
-            var xe = _eval_x(items[0], d, run)
+            var xe = _eval_x_cats(items[0], d, cat_columns, run, got)
             var ye = admit_f32(items[1], 1, "eval_set y", run, finite=False)
             if ye.rows != xe.rows:
                 raise Error("mojolearn: eval_set y has " + String(ye.rows) + " values for "
@@ -412,6 +520,8 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
         if eval_set is not None:
             pair = _adapter_eval(eval_set)
             if kind == 0:
+                # More than two classes was refused at the caller's encode (`gbdt_member_label_check`, the
+                # door's order: before these eval_set checks).
                 if labels is None or len(labels) != 2:
                     return got^
                 var scope = labels_scope(model, run)
@@ -452,7 +562,7 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
             weights = w.array
             extras.weights = w.address
         if eval_set is not None:
-            var xe = _eval_x(pair[0], d, run)
+            var xe = _eval_x_cats(pair[0], d, cat_columns, run, got)
             if extras.eval_rows != xe.rows:
                 raise Error("mojolearn: eval_set y has " + String(extras.eval_rows) + " values for "
                             + String(xe.rows) + " rows")
@@ -460,6 +570,12 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
             extras.eval_x = xe.address
             extras.eval_rows = xe.rows
             extras.eval_cols = xe.cols
+    if len(got.eval_rows) > 0:
+        # A fit with cat_features: the member reads the C-order copy (and the keys of a text held-out X).
+        extras.eval_x = Int(got.eval_rows.unsafe_ptr())
+        if len(got.eval_keys) > 0:
+            extras.eval_cat_keys = Int(got.eval_keys.unsafe_ptr())
+            extras.eval_cat_count = len(cat_columns)
     got.pins = Python.tuple(weights, eval_x, eval_y, group_holder, pair_holders)
     got.extras = extras^
     got.admitted = True

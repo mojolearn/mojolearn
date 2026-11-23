@@ -112,6 +112,9 @@ from bindings.prep_native_estimator_door import (
     prep_estimator_plan, prep_native_context, prep_native_split, prep_estimator_predict_internal,
 )
 from bindings.classical_labels_door import _label_list, classical_score_from_codes
+from bindings.member_owner_unpack import member_mark
+from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_marker_index
+from core.xneighbors_member import LP_MARKER_WORD
 from bindings.p3_labels_metrics_native_door import p3_interleave_columns
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
@@ -3281,6 +3284,18 @@ def _cal_warn_lacking(plan: CalFitPlan, upto: Int, context: PythonObject) raises
                       native_loaded_module("builtins").RuntimeWarning, prep_native_context(context))
 
 
+def _cal_marker(base: PythonObject, classes: PythonObject, context: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-meta5b): the code of the unlabeled marker among `classes` when the base is a
+    LabelPropagation / LabelSpreading member (its fit reads -1 as unlabeled), else -1."""
+    var plan = prep_estimator_plan(base, context)
+    if plan is None or py_get(plan, "member") is None:
+        return -1
+    var mark = member_mark(plan, b)
+    if not xneighbors_kind_reads_marker(mark.family, mark.kind):
+        return -1
+    return xneighbors_marker_index(classes)
+
+
 def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject, n: Int, d: Int,
                 k: Int, codes: PythonObject, classes: PythonObject, splits: PythonObject, ensemble: Bool, jobs: Int,
                 pairs: PythonObject, context: PythonObject) raises -> Int:
@@ -3339,6 +3354,19 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     # table over them at admission (lane mf-adm3), as scikit-learn's fold fit
     # reads the dict against the fold's labels.
     set.labels = classes
+    # THE UNLABELED MARKER (lane mf-meta5b): a LabelPropagation / LabelSpreading base reads the label -1 as
+    # unlabeled. scikit-learn fits each fold (ensemble=True) and the full estimator (ensemble=False) on y as
+    # given, so those members get the marker's code in their marker word (their classes_ exclude -1; the RUN
+    # leaves it out of their held classes); cross_val_predict (ensemble=False's folds) encodes y first, so
+    # its fold members read -1 as one more class. They are admitted over the codes (an empty label list:
+    # these kinds read no class_weight). Two classes with ensemble=False keep the door units: scikit-learn's
+    # own fit then reads a column label_binarize does not make (or its predict refuses the one-class fit).
+    var marker = _cal_marker(base, classes, context, b)
+    if marker >= 0:
+        if not ensemble and k == 2:
+            return _CAL_NOT_MEMBER
+        set.labels = Python.list()
+    var markers = List[Int]()
     var codes_address = trees_address(codes)
     var clones = Python.list()
     for u in range(units):  # driver-loop: over the cv folds (+ the full-X member), admission once each
@@ -3352,6 +3380,11 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
             count = Int(py=tr.shape[0])
         if not member_set_admit(set, e, codes_address, 0, draw, count, 0, 0, k, context, b):
             return _CAL_NOT_MEMBER
+        if marker >= 0:
+            var reads = ensemble or u == folds
+            if reads:
+                set.run.plans[u].params[LP_MARKER_WORD] = Float64(marker)
+            markers.append(marker if reads else -1)
         # A scope read that raises raises its own doors' words (nothing is
         # fitted yet; the set holds no state).
         member_set_resident(set, Xa, context)
@@ -3399,6 +3432,7 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         var te = splits[f][1]
         plan.fold(trees_address(te), Int(py=te.shape[0]))
         _ = te^  # `splits` owns the fold rows to the end of RUN; named past the call that stored its address
+    plan.markers = markers^
     var glue = _xr(xt)
     var released = True
     for u in range(units):  # driver-loop: over the members (THE GIL RULE word of each)
@@ -3644,6 +3678,7 @@ def calibrated_pair_words(e: PythonObject, fitted: PythonObject, k: Int, member_
     class codes and count (`calibrated_pair_codes`), and its calibrators (Platt's a, b; isotonic knots kept in
     `keep`), appended as one `CalPair` and its `CalFit`s."""
     var at = 0
+    var used = len(fitted)
     if k == 2 and member_cols != 1:
         at = _index_of_one(e, context)
         meta_binary_column_check(at)
@@ -3661,9 +3696,13 @@ def calibrated_pair_words(e: PythonObject, fitted: PythonObject, k: Int, member_
             held.append(codes[c])
         var operation = MEMBER_OP_DECISION if member_cols == 1 else MEMBER_OP_PREDICT_PROBA
         var place = cal_fold_place(k, held, operation, member_cols, True, 0)
-        if len(place.calibrate) != len(fitted):
+        # scikit-learn's predict zips the score columns with the calibrators: a pair fitted with more
+        # calibrators than its member's columns place (ensemble=False's full fit with the unlabeled marker,
+        # lane mf-meta5b) reads the first of them.
+        if len(place.calibrate) > len(fitted):
             raise Error("ValueError: mojolearn: CalibratedClassifierCV: a pair holds " + String(len(fitted))
                         + " calibrators for a member placed at " + String(len(place.calibrate)) + " columns")
+        used = len(place.calibrate)
         var placed = admitted_vector(len(place.place), "<i4", context)
         var to = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(placed))
         for i in range(len(place.place)):  # driver-loop: over the placed columns (a few words)
@@ -3671,8 +3710,8 @@ def calibrated_pair_words(e: PythonObject, fitted: PythonObject, k: Int, member_
         _ = py_call(keep.append, placed)
         cols_addr = trees_address(placed)
         ks = len(place.place)
-    cal_pairs.append(CalPair(at, cols_addr, ks, len(cals), len(fitted)))
-    for j in range(len(fitted)):  # driver-loop: over the class columns (one calibrator each)
+    cal_pairs.append(CalPair(at, cols_addr, ks, len(cals), used))
+    for j in range(used):  # driver-loop: over the class columns (one calibrator each)
         var par = fitted[j][1]
         if String(fitted[j][0]) == "sigmoid":
             cals.append(CalFit(False, Float64(py=par[0]), Float64(py=par[1]), 0, 0, 0))

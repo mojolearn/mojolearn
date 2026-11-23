@@ -57,7 +57,9 @@ from core.member_abi import (
     MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
     MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES,
 )
-from core.member_families import MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_GBDT
+from core.member_families import (
+    MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_GBDT, MEMBER_FAMILY_XNEIGHBORS,
+)
 from core.member_notices import member_notices_take
 from core.member_set_run import MemberFitExtras, member_fit_extras_apply, member_fit_extras_clear
 
@@ -472,7 +474,10 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
     (QuadraticDiscriminantAnalysis, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB: neither attribute
     exists on them, as in scikit-learn) is REFUSED (lane mf-shaprfe): 'auto' in the door's words, a named
     attribute in scikit-learn's attrgetter's (`estimator` the class name). So is a Gbdt kind (lane mf-gbdt5:
-    GradientBoosting and its two adapters publish neither attribute). The caller raises the refusal only when an
+    GradientBoosting and its two adapters publish neither attribute), and since lane mf-meta5b every XNeighbors
+    kind (the k-NN estimators, LabelPropagation and LabelSpreading: neither attribute exists on them in
+    scikit-learn, and the door's attribute reads answer None, so its first round raised the same words after
+    its fit). The caller raises the refusal only when an
     elimination round reads importances (scikit-learn reads none when n_features_to_select keeps every column).
     Any other kind without the block keeps the estimator's own doors (block 0)."""
     var auto = getter == "auto"
@@ -480,7 +485,8 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
         return RfeSource(MEMBER_BLOCK_COEF, True, String(""))
     if getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
         return RfeSource(MEMBER_BLOCK_FEATURE_IMPORTANCES, not auto, String(""))
-    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT or family == MEMBER_FAMILY_GBDT:
+    if (family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT or family == MEMBER_FAMILY_GBDT
+            or family == MEMBER_FAMILY_XNEIGHBORS):
         if auto:
             return RfeSource(0, False, String(RFE_NO_IMPORTANCES))
         return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
@@ -511,7 +517,18 @@ def rfe_member_fit(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, k: In
 def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, m: Int, y: Int, y_dtype: Int,
                            block: Int, squared: Bool, mut notices: List[Float64], mut rows: Int,
                            extras: MemberFitExtras, columns: Int) raises -> List[Float32]:
-    """A round over a native member: fit the caller's new state on the
+    """`rfe_member_importances` with no nested path (the importance block is the member's own)."""
+    return rfe_member_importances(plan, call, x, n, m, y, y_dtype, block, squared, notices, rows, extras, columns,
+                                  List[Float64]())
+
+
+def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, m: Int, y: Int, y_dtype: Int,
+                           block: Int, squared: Bool, mut notices: List[Float64], mut rows: Int,
+                           extras: MemberFitExtras, columns: Int, hops: List[Float64]) raises -> List[Float32]:
+    """`hops` non-empty (lane mf-meta5b: a dotted importance_getter such as 'best_estimator_.coef_'):
+    `block` is the META kind's forwarded-export block and `hops` its words (each nested member's index along
+    the path, then the leaf's block), read by the EXPORT through `call.params` (core/ensemble_member.mojo
+    `META_BLOCK_FORWARD`). A round over a native member: fit the caller's new state on the
     round's (n, m) block (with the fit's `extras` over the round's column ids
     at `columns`, `rfe_member_fit`), take its fit notices, read its
     importance block `block` by EXPORT and copy it out (the view dies with
@@ -523,7 +540,13 @@ def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: In
     member_notices_take(plan, call.state, notices)
     call.block = block
     call.flags = 0
+    if len(hops) > 0:
+        call.params = Int(hops.unsafe_ptr())
+        call.param_count = len(hops)
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    _ = len(hops)  # read through the export above
+    call.params = 0
+    call.param_count = 0
     var view = call.dst
     rows = view.rows
     if not view.dense_host(MEMBER_F32) or view.cols != m or rows < 1 or (rows > 1 and not squared):
@@ -562,7 +585,8 @@ struct RfeFitPlan(Movable):
     MEMBER_I32 class codes of `member.classes` classes, or MEMBER_F32 values); `nsel` / `step` the resolved
     counts (`rfe_select_count`, `rfe_step_count`); `block` / `squared` the importance source
     (`rfe_member_source`); `refusal` non-empty: the words the first round raises before it fits;
-    `extras` the fit's extra inputs (sample weights, a held-out set). `scope` / `pin`: the caller's
+    `extras` the fit's extra inputs (sample weights, a held-out set); `hops` a dotted getter's forwarded-export
+    words (`rfe_member_importances`; empty: the member's own block). `scope` / `pin`: the caller's
     resident scope word (negative: none) and X's pin token (0: none); `kept_at`: the address of the
     caller's Int the run writes the pin token into the moment a scope's cache takes it (0: none)."""
     var member: MemberPlan
@@ -580,6 +604,7 @@ struct RfeFitPlan(Movable):
     var importance_word: Bool
     var refusal: String
     var extras: MemberFitExtras
+    var hops: List[Float64]
     var scope: Int
     var pin: Int
     var kept_at: Int
@@ -601,6 +626,7 @@ struct RfeFitPlan(Movable):
         self.importance_word = False
         self.refusal = String("")
         self.extras = MemberFitExtras()
+        self.hops = List[Float64]()
         self.scope = -1
         self.pin = 0
         self.kept_at = 0
@@ -694,7 +720,7 @@ def rfe_fit_run(plan: RfeFitPlan) raises -> RfeFitResult:
         try:
             words = rfe_member_importances(plan.member, call, Int(block.unsafe_ptr()), n, nsup, plan.y,
                                            plan.y_dtype, plan.block, plan.squared, notices, rows, plan.extras,
-                                           columns)
+                                           columns, plan.hops)
         finally:
             member_free(plan.member, call)
         _ = len(block)  # read through the member's fit above
