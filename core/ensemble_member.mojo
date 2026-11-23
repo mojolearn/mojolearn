@@ -9,7 +9,8 @@ beside their glue table. No Python: no Python object parameter, field, local
 or import.
 
 A META STATE OWNS A NESTED SET. Its nested members are ordinary native
-members (any family but this one: a meta of metas keeps its doors), each
+members (any family, this one included since lane mf-meta3c: a nested META
+state is one more member, admitted by the boundary's work-list), each
 with its own typed `MemberPlan`. The plans cannot travel as Float64 words,
 so the boundary's UNPACK (providers/python/member_ensemble_boundary_door.mojo)
 MINTS them once per admission into the process-wide META PLAN STORE
