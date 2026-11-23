@@ -1,0 +1,718 @@
+# SPDX-License-Identifier: Apache-2.0
+"""RUN of IterativeImputer with the built-in Bayesian ridge (lane
+bm-rest-iterimp, 2026-11-23; docs/plans/PYTHON_AT_THE_BOUNDARY.md).
+
+The door (bindings/prep_iterimp_native_door.mojo) is UNPACK (the parameters,
+the initial SimpleImputer's words and, for transform, the fitted fields and
+the addresses of the fitted vectors, read once into `IterImpFit` /
+`IterImpApply`), then `iterimp_fit` / `iterimp_transform` here, then PACK
+(the fitted attributes and the result, read from the arenas the runner
+holds). These functions build the same x_prep programs, with the same
+allocations, stages and order, as the door's former builders over its
+Python-holding `EncProg`, so no bit moves:
+
+  fit        1 the initial SimpleImputer fit (bindings/prep_encode_imputer_run.mojo
+               `imputer_fit_stage`), 2 its transform (`imputer_transform_stage`),
+             3 the statistics, the scale and the imputation orders,
+             4 the n_nearest_features draws (when on), 5 every round of the
+               ridge in one program, 6 the missing indicator (add_indicator)
+  transform  the initial transform, the fitted steps in one program, the indicator
+
+Programs run through an `IterImpRunner`: the door's runner over the x_prep
+transport of the selected image (X as its Python owner, the GIL released
+around the run), or a Mojo check's runner over the host transport. Owner 0
+of a program is X; owner k >= 1 is the native buffer at `seconds[k - 1]`
+(a vector this RUN holds, or a fitted vector the door keeps alive); -1 the
+program's own parameter words. A runner keeps each run's host arena until
+`release`; PACK reads the arenas the result names.
+
+Serial by nature: the programs run one after the other, each reading what
+the one before it wrote (the orders, the draws, the filled block); the
+rounds are Gauss-Seidel sweeps over the features. The stages themselves run
+across the image's cores (or the device). No Python import
+(tools/python_free_dirs.sh)."""
+from std.math import isfinite
+from std.memory import unsafe_memcpy
+from bindings.prep_encode_prog_run import EncProgram, enc_input, enc_col_stats, enc_mark_missing, enc_floats_of
+from bindings.prep_encode_kbins_run import enc_seed_words
+from bindings.prep_encode_imputer_run import (
+    ImputerFit, ImputerApply, IMP_CONSTANT, imputer_fit_stage, imputer_transform_stage)
+from core.preprocessing_program import prep_program_stage as _stage
+
+comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
+
+# x_prep stage codes (_expansion_prep._OPS).
+comptime OP_EIGH = 18
+comptime OP_II_MEAN = 53
+comptime OP_II_GRAM = 54
+comptime OP_II_SUB = 55
+comptime OP_II_BR = 56
+comptime OP_II_PREDICT = 57
+comptime OP_II_SNAPSHOT = 58
+comptime OP_II_CONV = 59
+comptime OP_NAN_MASK = 60
+comptime OP_II_SIGMA = 99
+comptime OP_II_POST = 100
+comptime OP_II_ROWABS = 107
+comptime OP_HCAT = 140
+comptime OP_ABSCORR_CELL = 211
+comptime OP_ABSCORR_NORM = 212
+comptime OP_F2_WPICK = 234
+comptime OP_C2_II_MISS = 258
+comptime OP_C2_II_POS = 259
+comptime OP_C2_II_ORD = 260
+comptime OP_C2_II_RAND = 261
+comptime OP_C2_COLMAX = 262
+
+comptime II_NONE = -1
+comptime II_GOLDEN: UInt64 = 0x9E3779B97F4A7C15
+# `IterImpFit.order`: the C2_II_POS codes, then the random order.
+comptime II_ASCENDING = 0
+comptime II_DESCENDING = 1
+comptime II_ROMAN = 2
+comptime II_ARABIC = 3
+comptime II_RANDOM = 4
+
+
+trait IterImpRunner:
+    """Runs one x_prep program (owner 0 X, owner k >= 1 the address
+    `seconds[k - 1]`, -1 the program's own words) and keeps its host arena
+    until `release`. Returns the arena's handle."""
+
+    def run(mut self, mut prog: EncProgram, seconds: List[Int]) raises -> Int:
+        ...
+
+    def words(self, handle: Int) -> Int:
+        """The address of the handle's host arena (float32 / int32 words)."""
+        ...
+
+    def release(mut self, handle: Int):
+        ...
+
+
+@fieldwise_init
+struct IterImpFit(Movable):
+    """IterativeImputer.fit of the (n, d) block of owner 0. `init`: the
+    initial SimpleImputer's request (missing_values, initial_strategy,
+    fill_value, keep_empty_features). `mark`, `missing`: this estimator's
+    numeric missing_values (marked NaN first). `stats_blocked`: the image's
+    blocked column statistics. `work_on`: the R3 `work` region. `region`:
+    the image has an output region. `order`: II_ASCENDING .. II_RANDOM.
+    `max_iter`, `nnf` (n_nearest_features, II_NONE: None), `tol` (before the
+    scale), `rng` (random_state as its 64-bit word), `lo` / `hi`
+    (min_value / max_value per column, as given)."""
+    var init: ImputerFit
+    var n: Int
+    var d: Int
+    var mark: Bool
+    var missing: Float64
+    var stats_blocked: Bool
+    var work_on: Bool
+    var region: Bool
+    var order: Int
+    var skip: Bool
+    var posterior: Bool
+    var add_indicator: Bool
+    var max_iter: Int
+    var nnf: Int
+    var tol: Float64
+    var rng: UInt64
+    var lo: List[Float64]
+    var hi: List[Float64]
+
+
+struct IterImpFitted(Movable):
+    """What the fit leaves for PACK. The initial imputer: `statistics`,
+    `fill` (the same values when `shared`: one fitted object), `keep`.
+    This estimator: `bounds` (the kept columns' min / max pairs),
+    `indicator`, `n_missing`, `n_iter`, `rng`, `post_step`; the finished
+    steps' feature `seq_j` and coef / intercept offsets in arena `rounds`;
+    their posterior (`post_has_nbl`, `post_nbl`, sigma / alpha / means
+    offsets in `rounds`, sigma side `post_side`). The result: (n, `cols`)
+    float32 words at `out_offset` of arena `out_handle` (an output-region
+    offset is the region's, read by PACK)."""
+    var statistics: List[Float32]
+    var fill: List[Float32]
+    var shared: Bool
+    var keep: List[Int]
+    var bounds: List[Float64]
+    var indicator: List[Int]
+    var n_missing: Int
+    var n_iter: Int
+    var rng: UInt64
+    var post_step: Int
+    var rounds: Int
+    var seq_j: List[Int]
+    var seq_coef: List[Int]
+    var seq_inter: List[Int]
+    var post_has_nbl: List[Bool]
+    var post_nbl: List[List[Int]]
+    var post_sig: List[Int]
+    var post_al: List[Int]
+    var post_means: List[Int]
+    var post_side: List[Int]
+    var out_handle: Int
+    var out_offset: Int
+    var cols: Int
+
+    def __init__(out self):
+        self.statistics = List[Float32]()
+        self.fill = List[Float32]()
+        self.shared = False
+        self.keep = List[Int]()
+        self.bounds = List[Float64]()
+        self.indicator = List[Int]()
+        self.n_missing = 0
+        self.n_iter = 0
+        self.rng = 0
+        self.post_step = 0
+        self.rounds = II_NONE
+        self.seq_j = List[Int]()
+        self.seq_coef = List[Int]()
+        self.seq_inter = List[Int]()
+        self.post_has_nbl = List[Bool]()
+        self.post_nbl = List[List[Int]]()
+        self.post_sig = List[Int]()
+        self.post_al = List[Int]()
+        self.post_means = List[Int]()
+        self.post_side = List[Int]()
+        self.out_handle = II_NONE
+        self.out_offset = 0
+        self.cols = 0
+
+
+@fieldwise_init
+struct IterImpStep(Copyable, Movable):
+    """One fitted imputation step, as the door read it: feature `j`, the
+    addresses of its coef (dk words) and intercept (1 word); with
+    sample_posterior its neighbour list (`has_nbl`), and the addresses and
+    word counts of its sigma, alpha and means vectors."""
+    var j: Int
+    var coef: Int
+    var inter: Int
+    var has_nbl: Bool
+    var nbl: List[Int]
+    var sig: Int
+    var sig_words: Int
+    var al: Int
+    var al_words: Int
+    var means: Int
+    var means_words: Int
+
+
+@fieldwise_init
+struct IterImpApply(Movable):
+    """IterativeImputer.transform of the (n, d) block of owner 0. `init`: the
+    fitted initial imputer's transform (its fill vector is owner 1, at
+    `fill_address`). `mark`, `missing`: this estimator's missing_values.
+    `keep`, `bounds`, `indicator`: the fitted fields. `seed`: the fitted
+    rng's low 31 bits; `post_step`: the fitted posterior step count."""
+    var init: ImputerApply
+    var fill_address: Int
+    var n: Int
+    var d: Int
+    var mark: Bool
+    var missing: Float64
+    var work_on: Bool
+    var region: Bool
+    var keep: List[Int]
+    var bounds: List[Float64]
+    var indicator: List[Int]
+    var posterior: Bool
+    var seed: Int
+    var post_step: Int
+    var steps: List[IterImpStep]
+
+
+@fieldwise_init
+struct IterImpApplied(Movable):
+    """The transform's result: (n, `cols`) float32 words at `out_offset` of
+    arena `out_handle`, and the posterior step count to store."""
+    var out_handle: Int
+    var out_offset: Int
+    var cols: Int
+    var post_step: Int
+
+
+# ---------------------------------------------------------------- small helpers
+def _one(value: Float64) -> List[Float64]:
+    var out = List[Float64]()
+    out.append(value)
+    return out^
+
+
+def _ones(nbl: List[Int], dk: Int) -> List[Float64]:
+    # `[1 if a in nbl else 0 for a in range(dk)]`
+    var out = List[Float64]()
+    for a in range(dk):  # driver-loop: over the kept features (one step's neighbour mask)
+        var hit = 0.0
+        for i in range(len(nbl)):  # driver-loop: over one step's drawn features
+            if nbl[i] == a:
+                hit = 1.0
+        out.append(hit)
+    return out^
+
+
+def _copy(address: Int, offset: Int, count: Int) -> List[Float32]:
+    # A copy of `count` arena words at `offset` (the door's `_take1`).
+    var out = List[Float32](length=max(count, 0), fill=0.0)
+    if count > 0:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=Int(out.unsafe_ptr())),
+                      src=_F32P(unsafe_from_address=address) + offset, count=count)
+    return out^
+
+
+def _word(address: Int, offset: Int) -> Float32:
+    return _F32P(unsafe_from_address=address)[offset]
+
+
+def _iword(address: Int, offset: Int) -> Int:
+    return Int(_I32P(unsafe_from_address=address)[offset])
+
+
+def _seed_put(mut prog: EncProgram, value: UInt64) -> Int:
+    # `_seed_words(pr, seed)`: the low and high words as signed int32.
+    return prog.put_ints(enc_seed_words(Int(value & 0xFFFFFFFF), Int(value >> 32)))
+
+
+def _x(mut prog: EncProgram, n: Int, d: Int, mark: Bool, missing: Float64) -> Int:
+    # `_mark_missing(p, p.put_x(values), n * d, missing)`: X is owner 0.
+    return enc_mark_missing(prog, prog.input(n * d, 0), n * d, mark, missing)
+
+
+def iterimp_bounds(lo: List[Float64], hi: List[Float64], keep: List[Int]) raises -> List[Float64]:
+    """`_bounds(d)` interleaved (zip stops at the shorter), then the kept
+    columns' (lower, upper) pairs."""
+    var bounds = List[Float64]()
+    for i in range(min(len(lo), len(hi))):  # driver-loop: over the per-column bound pairs
+        bounds.append(lo[i])
+        bounds.append(hi[i])
+    var out = List[Float64]()
+    for c in range(len(keep)):  # driver-loop: over the kept columns
+        for h in range(2):  # small-loop(h: the lower and upper bound)
+            var at = 2 * keep[c] + h
+            if at >= len(bounds):
+                raise Error("IndexError: list index out of range")
+            out.append(bounds[at])
+    return out^
+
+
+struct IterImpDraws(Movable):
+    """`_NeighbourDraws`: every (round, feature) step's n_nearest_features
+    draw, handed out in fit order; each hand-out moves the stream past the
+    words the steps taken so far own (k per step)."""
+    var lists: List[List[Int]]
+    var at: Int
+    var k: Int
+    var start: UInt64
+    var on: Bool
+
+    def __init__(out self):
+        self.lists = List[List[Int]]()
+        self.at = 0
+        self.k = 0
+        self.start = 0
+        self.on = False
+
+    def next(mut self, mut rng: UInt64) -> List[Int]:
+        var picks = self.lists[self.at].copy()
+        self.at += 1
+        rng = self.start + UInt64(self.at) * UInt64(self.k) * II_GOLDEN
+        return picks^
+
+
+def _neighbours[R: IterImpRunner](mut runner: R, xf: Int, n: Int, dk: Int, js: List[Int], k: Int,
+                                  rng: UInt64, work_on: Bool) raises -> List[List[Int]]:
+    """`_neighbours_device`: the |corr| matrix on the device and one thread per
+    step drawing its k features (f2_wpick, step c takes splitmix64 words
+    c*k .. c*k + k - 1 of the stream). Returns each step's ascending picks."""
+    var p = EncProgram(work_on)
+    var fo = enc_input(p, n * dk, 1)
+    var mz = p.alloc(n * dk)
+    var means = p.alloc(dk)
+    var cnt = p.alloc(1)
+    var g = p.alloc(dk * dk)
+    var flag = p.alloc(1)
+    _stage(p.program, OP_II_MEAN, dk, fo, n, dk, mz, 0, means, cnt, flag)
+    _stage(p.program, OP_II_GRAM, dk * dk, fo, n, dk, mz, 0, means, g, flag)
+    var m = p.alloc(dk * dk)
+    _stage(p.program, OP_ABSCORR_CELL, dk * dk, g, dk, m)
+    _stage(p.program, OP_ABSCORR_NORM, dk, m, dk)
+    var calls = len(js)
+    var fl = p.work(calls * dk)
+    var picked = p.alloc(calls * (k + 1))
+    var jo = p.put_ints(js)
+    var so = _seed_put(p, rng)
+    _stage(p.program, OP_F2_WPICK, calls, m, dk, jo, k, so, fl, picked)
+    var seconds: List[Int] = [xf]  # the initial fill, in its held arena
+    var h = runner.run(p, seconds)
+    _ = len(p.consts_i)  # the program's own words too
+    var a = runner.words(h)
+    var lists = List[List[Int]]()
+    for c in range(calls):  # driver-loop: one feature list per step
+        var got = _iword(a, picked + c * (k + 1) + k)
+        if got < k:
+            runner.release(h)
+            raise Error("mojolearn: IterativeImputer: no feature left to draw")
+        var picks = List[Int]()
+        for i in range(got):  # driver-loop: over one step's drawn features
+            picks.append(_iword(a, picked + c * (k + 1) + i))
+        lists.append(picks^)
+    runner.release(h)
+    return lists^
+
+
+def _indicator_run[R: IterImpRunner](mut runner: R, n: Int, d: Int, dk: Int, mark: Bool, missing: Float64,
+                                     indicator: List[Int], xt_address: Int, work_on: Bool,
+                                     region: Bool) raises -> Tuple[Int, Int]:
+    """`_with_indicator`: Xt (the (n, dk) words at `xt_address`), then
+    MissingIndicator's columns. Returns (handle, offset) of the (n, dk + m)
+    result."""
+    var m = len(indicator)
+    var p = EncProgram(work_on)
+    var xo = _x(p, n, d, mark, missing)
+    var mo = p.alloc(n * m)
+    var io = p.put_floats(enc_floats_of(indicator))
+    _stage(p.program, OP_NAN_MASK, n * m, xo, n, d, io, m, mo)
+    var to = enc_input(p, n * dk, 1)
+    var hc = p.output(n * (dk + m), region)
+    _stage(p.program, OP_HCAT, n * (dk + m), to, dk, mo, m, hc)
+    var seconds: List[Int] = [xt_address]
+    var h = runner.run(p, seconds)
+    _ = len(p.consts_f)  # the program's own words stay alive past the run
+    return (h, hc)
+
+
+# ---------------------------------------------------------------- fit
+struct IterImpPlan(Movable):
+    """What programs 1 to 4 leave for the rounds (the built-in ridge's here,
+    a supplied estimator's in the door): the rounds' feature orders, the
+    n_nearest_features draws, the rng word, the scaled tol, and the initial
+    fill's (n, dk) block at `xf_offset` of the held arena `xf_handle`
+    (`xf_address` its first word)."""
+    var orders: List[List[Int]]
+    var any_order: Bool
+    var draws: IterImpDraws
+    var rng: UInt64
+    var tol: Float64
+    var xf_handle: Int
+    var xf_offset: Int
+    var xf_address: Int
+
+    def __init__(out self):
+        self.orders = List[List[Int]]()
+        self.any_order = False
+        self.draws = IterImpDraws()
+        self.rng = 0
+        self.tol = 0.0
+        self.xf_handle = II_NONE
+        self.xf_offset = 0
+        self.xf_address = 0
+
+
+def iterimp_fit[R: IterImpRunner](mut runner: R, r: IterImpFit) raises -> IterImpFitted:
+    """IterativeImputer.fit_transform with the built-in Bayesian ridge. The
+    result keeps two arenas held: `rounds` (the fitted steps) and
+    `out_handle` (the result; the same arena without an indicator)."""
+    var fitted = IterImpFitted()
+    var plan = iterimp_prepare(runner, r, fitted)
+    iterimp_rounds(runner, r, plan, fitted)
+    return fitted^
+
+
+def iterimp_prepare[R: IterImpRunner](mut runner: R, r: IterImpFit, mut fitted: IterImpFitted) raises -> IterImpPlan:
+    """Programs 1 to 4: the initial imputer (its fitted values, the kept
+    columns), the bounds, the indicator columns, the orders and the draws
+    (into `fitted` and the plan). The initial fill's arena stays held."""
+    var n = r.n
+    var d = r.d
+    var made = IterImpPlan()
+    # 1: the initial SimpleImputer's fit
+    var p1 = EncProgram(r.work_on)
+    var plan = imputer_fit_stage(p1, r.init)
+    var none = List[Int]()
+    var h1 = runner.run(p1, none)
+    _ = len(p1.consts_f)  # the program's own words stay alive past the run
+    var a1 = runner.words(h1)
+    var any_empty = False
+    for j in range(d):  # driver-loop: over the per-column non-missing counts (feature metadata)
+        any_empty = any_empty or Int(_word(a1, plan.stats + j)) == 0
+    fitted.shared = not (r.init.strategy == IMP_CONSTANT or any_empty)
+    if fitted.shared:
+        fitted.statistics = _copy(a1, plan.source, d)
+        fitted.fill = fitted.statistics.copy()
+    else:
+        fitted.statistics = _copy(a1, plan.statistics, d)
+        fitted.fill = _copy(a1, plan.fill, d)
+    for j in range(d):  # driver-loop: over the kept columns (feature metadata)
+        if r.init.keep_empty or Int(_word(a1, plan.stats + j)) != 0:
+            fitted.keep.append(j)
+    runner.release(h1)
+    var keep = fitted.keep.copy()
+    var dk = len(keep)
+    # 2: its transform (no indicator: the initial imputer has none)
+    var p2 = EncProgram(r.work_on)
+    var apply = ImputerApply(n, d, 0, r.init.mark, r.init.missing, 1, d, keep.copy(), List[Int]())
+    var o2 = imputer_transform_stage(p2, apply, r.region)
+    var fill_seconds: List[Int] = [Int(fitted.fill.unsafe_ptr())]
+    var h2 = runner.run(p2, fill_seconds)
+    _ = len(fitted.fill)  # the fill vector the run read stays alive past it
+    _ = len(p2.consts_f)
+    # the filled block stays in its arena (read by programs 4 and 5 there)
+    made.xf_handle = h2
+    made.xf_offset = o2
+    made.xf_address = runner.words(h2) + 4 * o2
+    fitted.bounds = iterimp_bounds(r.lo, r.hi, keep)
+    var rng = r.rng
+    # 3: the statistics, the scale and the imputation orders: one program
+    var p = EncProgram(r.work_on)
+    var xo = _x(p, n, d, r.mark, r.missing)
+    var st = p.alloc(6 * d)
+    enc_col_stats(p, r.stats_blocked, xo, n, d, st, True)
+    var rounds = r.max_iter
+    var R_ = max(rounds, 1)
+    var ordw = p.alloc(max(R_ * dk, 1))
+    var lens = p.alloc(R_)
+    var sc = p.alloc(1)
+    _stage(p.program, OP_C2_COLMAX, 1, st + 5 * d, d, sc)
+    if dk > 0:
+        var missd = p.work(dk)
+        var ko = p.put_ints(keep)
+        _stage(p.program, OP_C2_II_MISS, dk, st, ko, n, missd)
+        if r.order == II_RANDOM:
+            var so = _seed_put(p, rng)
+            _stage(p.program, OP_C2_II_RAND, R_, missd, dk, 1 if r.skip else 0, so, ordw, lens)
+        else:
+            var pos = p.work(dk)
+            _stage(p.program, OP_C2_II_POS, dk, missd, dk, r.order, pos)
+            _stage(p.program, OP_C2_II_ORD, dk, missd, dk, pos, R_, ordw, lens)
+    var h3 = runner.run(p, none)
+    _ = len(p.consts_i)  # the program's own words stay alive past the run
+    var a3 = runner.words(h3)
+    var scale = Float64(_word(a3, sc))
+    if not isfinite(scale) and scale == scale and scale > 0.0:
+        runner.release(h3)
+        raise Error("Input X contains infinity or a value too large for dtype('float64').")
+    if r.add_indicator:
+        for j in range(d):  # driver-loop: over the per-column non-missing counts (feature metadata)
+            if Int(_word(a3, st + j)) < n:
+                fitted.indicator.append(j)
+    var ln = List[Int]()
+    for i in range(R_):  # driver-loop: over the imputation rounds
+        ln.append(_iword(a3, lens + i) if dk > 0 else 0)
+    for i in range(rounds):  # driver-loop: the device's orders as control lists (imputation rounds)
+        var order = List[Int]()
+        for c in range(ln[i]):  # driver-loop: over one round's feature order
+            order.append(_iword(a3, ordw + i * dk + c))
+        made.any_order = made.any_order or len(order) > 0
+        made.orders.append(order^)
+    runner.release(h3)
+    fitted.n_missing = ln[0]
+    if r.order == II_RANDOM:
+        var m = ln[0] if r.skip else dk
+        rng = rng + UInt64(rounds) * UInt64(max(m - 1, 0)) * II_GOLDEN
+    # 4: the n_nearest_features draws, every step up front in one program
+    if r.nnf != II_NONE and r.nnf < dk:
+        made.draws.on = True
+        made.draws.k = r.nnf
+        made.draws.start = rng
+        var js = List[Int]()
+        for i in range(len(made.orders)):  # driver-loop: the (round, feature) step list
+            for c in range(len(made.orders[i])):  # driver-loop: over one round's feature order
+                js.append(made.orders[i][c])
+        if len(js) > 0:
+            made.draws.lists = _neighbours(runner, made.xf_address, n, dk, js, r.nnf, rng, r.work_on)
+    made.rng = rng
+    made.tol = r.tol * scale
+    return made^
+
+
+def iterimp_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut plan: IterImpPlan,
+                                     mut fitted: IterImpFitted) raises:
+    """Programs 5 and 6 of the built-in Bayesian ridge: every round in one
+    program over the initial fill (read in its held arena, released after),
+    then the indicator."""
+    var n = r.n
+    var d = r.d
+    var keep = fitted.keep.copy()
+    var dk = len(keep)
+    var rounds = r.max_iter
+    var rng = plan.rng
+    var tol = plan.tol
+    var any_order = plan.any_order
+    # 5: the built-in Bayesian ridge: every round in one program
+    var q = EncProgram(r.work_on)
+    var qx = _x(q, n, d, r.mark, r.missing)
+    var fo = enc_input(q, n * dk, 1)
+    q.inout(fo, n * dk)
+    var ko = q.put_floats(enc_floats_of(keep))
+    var mo = q.alloc(n * dk)
+    _stage(q.program, OP_NAN_MASK, n * dk, qx, n, d, ko, dk, mo)
+    var bo = q.put_floats(fitted.bounds)
+    var to = q.put_floats(_one(tol))
+    var flag = q.alloc(1)
+    var niter = q.alloc(1)
+    var prev = q.alloc(n * dk)
+    var cnt = q.alloc(1)
+    var g = q.alloc(dk * dk)
+    var p1w = max(dk - 1, 1)
+    var gs = q.alloc(p1w * p1w)
+    var eig = q.alloc(p1w)
+    var vec = q.alloc(p1w * p1w)
+    var w = q.alloc(p1w)
+    var seq_j = List[Int]()
+    var seq_coef = List[Int]()
+    var seq_inter = List[Int]()
+    var post_has = List[Bool]()
+    var post_nbl = List[List[Int]]()
+    var post_sig = List[Int]()
+    var post_al = List[Int]()
+    var post_means = List[Int]()
+    var post_pp = List[Int]()
+    var post_step = 0
+    var seed = Int(rng & 0x7FFFFFFF)
+    var conv = not r.posterior
+    var rowabs = -1
+    for i in range(rounds):  # driver-loop: drives the device imputation rounds (imputation rounds)
+        if len(plan.orders[i]) > 0 and conv:
+            _stage(q.program, OP_II_SNAPSHOT, n * dk, fo, prev, flag)
+        for c in range(len(plan.orders[i])):  # driver-loop: drives one device regression per feature (per-round feature order)
+            var j = plan.orders[i][c]
+            var coef = q.alloc(dk)
+            var inter = q.alloc(1)
+            var means = q.alloc(dk)
+            var nb1 = 0
+            var pp = dk - 1
+            var nbl = List[Int]()
+            if plan.draws.on:
+                nbl = plan.draws.next(rng)
+                nb1 = q.put_floats(_ones(nbl, dk)) + 1
+                pp = len(nbl)
+            var al = q.alloc(2) if r.posterior else -1
+            seq_j.append(j)
+            seq_coef.append(coef)
+            seq_inter.append(inter)
+            _stage(q.program, OP_II_MEAN, dk, fo, n, dk, mo, j, means, cnt, flag)
+            _stage(q.program, OP_II_GRAM, dk * dk, fo, n, dk, mo, j, means, g, flag)
+            if pp > 0:
+                _stage(q.program, OP_II_SUB, 1, g, dk, j, gs, flag, nb1)
+                _stage(q.program, OP_EIGH, 1, gs, pp, 0, eig, vec, 1)  # q[5]=1: cyclic eigh_unit, not round-robin
+            _stage(q.program, OP_II_BR, 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w, nb1, al + 1)
+            if r.posterior:
+                var sig = q.alloc(max(pp, 1) * max(pp, 1))
+                _stage(q.program, OP_II_SIGMA, pp * pp, eig, vec, pp, al, sig, flag)
+                var key_words: List[Int] = [seed, post_step]
+                var key = q.put_ints(key_words)
+                post_step += 1
+                _stage(q.program, OP_II_POST, n, fo, n, dk, mo, j, coef, inter, bo, flag, means, sig, al, nb1, key)
+                post_has.append(plan.draws.on)
+                post_nbl.append(nbl^)
+                post_sig.append(sig)
+                post_al.append(al)
+                post_means.append(means)
+                post_pp.append(pp)
+            else:
+                _stage(q.program, OP_II_PREDICT, n, fo, n, dk, mo, j, coef, inter, bo, flag)
+        if len(plan.orders[i]) > 0 and conv:
+            if rowabs < 0:
+                rowabs = q.alloc(n)
+            _stage(q.program, OP_II_ROWABS, n, fo, prev, dk, rowabs, flag)
+            _stage(q.program, OP_II_CONV, 1, fo, prev, n * dk, to, flag, niter, dk, rowabs + 1)
+    var xf_seconds: List[Int] = [plan.xf_address]
+    var h5 = runner.run(q, xf_seconds)
+    runner.release(plan.xf_handle)  # the initial fill, copied up by the run
+    plan.xf_handle = II_NONE
+    _ = len(q.consts_f)
+    _ = len(q.consts_i)
+    var a5 = runner.words(h5)
+    var done = 0
+    if any_order:
+        done = Int(_word(a5, niter)) if conv else rounds
+    fitted.n_iter = done if any_order else min(1, rounds)
+    var steps = 0
+    for i in range(min(done, len(plan.orders))):  # driver-loop: count of finished imputation steps (imputation rounds)
+        steps += len(plan.orders[i])
+    for s in range(min(steps, len(seq_j))):  # driver-loop: fitted imputation sequence offsets (finished imputation steps)
+        fitted.seq_j.append(seq_j[s])
+        fitted.seq_coef.append(seq_coef[s])
+        fitted.seq_inter.append(seq_inter[s])
+    for s in range(min(steps, len(post_sig))):  # driver-loop: fitted posterior offsets (finished imputation steps)
+        fitted.post_has_nbl.append(post_has[s])
+        fitted.post_nbl.append(post_nbl[s].copy())
+        fitted.post_sig.append(post_sig[s])
+        fitted.post_al.append(post_al[s])
+        fitted.post_means.append(post_means[s])
+        fitted.post_side.append(max(post_pp[s], 1))
+    fitted.rng = rng
+    fitted.post_step = post_step
+    fitted.rounds = h5
+    # 6: the missing indicator, reading Xt where the rounds left it
+    if len(fitted.indicator) == 0:
+        fitted.out_handle = h5
+        fitted.out_offset = fo
+        fitted.cols = dk
+        return
+    var made = iterimp_indicator(runner, n, d, dk, r.mark, r.missing, fitted.indicator, a5 + 4 * fo, r.work_on, r.region)
+    fitted.out_handle = made[0]
+    fitted.out_offset = made[1]
+    fitted.cols = dk + len(fitted.indicator)
+
+
+# ---------------------------------------------------------------- transform
+def iterimp_transform[R: IterImpRunner](mut runner: R, r: IterImpApply) raises -> IterImpApplied:
+    """IterativeImputer.transform with the built-in Bayesian ridge: the
+    initial transform, the fitted steps in one program, the indicator. The
+    result's arena stays held."""
+    var n = r.n
+    var d = r.d
+    var dk = len(r.keep)
+    var p0 = EncProgram(r.work_on)
+    var o0 = imputer_transform_stage(p0, r.init, r.region)
+    var fill_seconds: List[Int] = [r.fill_address]
+    var h0 = runner.run(p0, fill_seconds)
+    _ = len(p0.consts_f)
+    var p = EncProgram(r.work_on)
+    var xo = _x(p, n, d, r.mark, r.missing)
+    var fo = enc_input(p, n * dk, 1)
+    p.inout(fo, n * dk)
+    var ko = p.put_floats(enc_floats_of(r.keep))
+    var mo = p.alloc(n * dk)
+    _stage(p.program, OP_NAN_MASK, n * dk, xo, n, d, ko, dk, mo)
+    var bo = p.put_floats(r.bounds)
+    # owner 1 the filled block; then each step's fitted vectors in order
+    var seconds: List[Int] = [runner.words(h0) + 4 * o0]  # the initial fill, in its held arena
+    var post_step = r.post_step
+    for s in range(len(r.steps)):  # driver-loop: drives one device regression per step (fitted imputation steps)
+        ref step = r.steps[s]
+        var j = step.j
+        seconds.append(step.coef)
+        var co = enc_input(p, dk, len(seconds))
+        seconds.append(step.inter)
+        var io = enc_input(p, 1, len(seconds))
+        if r.posterior:
+            var nb1 = 0
+            if step.has_nbl:
+                nb1 = p.put_floats(_ones(step.nbl, dk)) + 1
+            var key_words: List[Int] = [r.seed, post_step]
+            var key = p.put_ints(key_words)
+            post_step += 1
+            seconds.append(step.means)
+            var mo2 = enc_input(p, step.means_words, len(seconds))
+            seconds.append(step.sig)
+            var so2 = enc_input(p, step.sig_words, len(seconds))
+            seconds.append(step.al)
+            var ao2 = enc_input(p, step.al_words, len(seconds))
+            _stage(p.program, OP_II_POST, n, fo, n, dk, mo, j, co, io, bo, II_NONE, mo2, so2, ao2, nb1, key)
+        else:
+            _stage(p.program, OP_II_PREDICT, n, fo, n, dk, mo, j, co, io, bo, II_NONE)
+    var h = runner.run(p, seconds)
+    runner.release(h0)  # the initial fill, copied up by the run
+    _ = len(p.consts_f)
+    _ = len(p.consts_i)
+    if len(r.indicator) == 0:
+        return IterImpApplied(h, fo, dk, post_step)
+    var made = iterimp_indicator(runner, n, d, dk, r.mark, r.missing, r.indicator, runner.words(h) + 4 * fo,
+                              r.work_on, r.region)
+    runner.release(h)
+    return IterImpApplied(made[0], made[1], dk + len(r.indicator), post_step)

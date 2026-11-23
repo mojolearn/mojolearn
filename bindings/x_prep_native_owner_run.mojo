@@ -53,6 +53,14 @@ struct XprepInput(ImplicitlyCopyable, Movable):
     var owner: Int
 
 
+# `XprepInput.owner` of a typed RUN's native buffer (x_prep/iterimp_run.mojo:
+# a block it holds, or a fitted vector its door keeps alive): copied into the
+# arena like a parameter list, or, at 1048576 words or more on a range-runner
+# image with the device put and when no stage rewrites it, put on the device
+# directly as a caller buffer of that size is.
+comptime XPREP_OWNER_NATIVE = -2
+
+
 @fieldwise_init
 struct XprepRunInput(ImplicitlyCopyable, Movable):
     """One input as the door resolved it: `words` arena words at `offset`.
