@@ -821,6 +821,8 @@ TRAINING_LANE_NAMES = {
     "gbdt-rest-gaps": "gradient boosting eval sets and feature_fraction on the symmetric pointwise and multiclass losses, the pointwise searcher with RMSE, NaN beside categorical columns",
     "gbdt-pointwise-arms": "gradient boosting on the pointwise searcher with Newton and cosine scores, every bootstrap, Gradient leaves, score noise and feature_fraction",
     "gbdt-ordered-weights": "gradient boosting Ordered boosting with sample weights and class weights",
+    # lane gbdt-cpu-rest-4-cat-ns (2026-11-23)
+    "gbdt-cat-nonsym": "gradient boosting with Depthwise and Lossguide trees on CTR and one-hot categorical columns",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -2966,6 +2968,10 @@ FAMILIES = (
             "gbdt-pointwise-arms",
             # lane gbdt-ordered-weights (2026-11-23)
             "gbdt-ordered-weights",
+            # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): Depthwise and
+            # Lossguide over CTR and one-hot columns
+            # (gbdt_oracle_depthwise.mojo::gbdt_ctr_host_fit_non_symmetric)
+            "gbdt-cat-nonsym",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4177,6 +4183,8 @@ PUBLIC_PENDING_LANES = {
     "gbdt-rest-gaps": "no reference",
     "gbdt-pointwise-arms": "no reference",
     "gbdt-ordered-weights": "no reference",
+    # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-cat-nonsym": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
