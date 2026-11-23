@@ -1232,6 +1232,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SETUP"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; per-call layer setup ran the same llama_decoder_layer_forward / llama_decoder_layer_backward_autograd bodies as the block session); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch"
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; the per-call transformer_forward_fresh ran the same llama_decoder_layer_forward as the session fresh prefill); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch"
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_DECODE_RESIDENT_IO"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed: unreachable, no board row reaches it; no owner sets LlamaDeviceStages.defer_addr since the session arms went, EXP:2356 folded, EXP:2359 deleted); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO.patch"
     # ---- end lane ab-prep-transformer
     return True
 
