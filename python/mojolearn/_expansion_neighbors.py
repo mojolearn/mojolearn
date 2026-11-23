@@ -1531,6 +1531,10 @@ class LabelPropagation(_LabelPropagationBase):
     """
 
     _variant = "propagation"
+    # The member ABI mark (core/member_abi.mojo, family 12 MEMBER_FAMILY_XNEIGHBORS): fit and predict run native
+    # inside a meta-estimator when the labels its fit sees are class codes without the -1 marker
+    # (core/xneighbors_member.mojo kind 7); otherwise the meta-estimator calls this class's own fit.
+    _mojolearn_member = (12, 7)
     #: Kernel and Permutation SHAP explain this exact class's predict_proba natively (its typed predict body,
     #: bindings/neighbors_lp_query_unpack.mojo); read from the class's own namespace, so a subclass is not admitted.
     _mojolearn_explained = "label_propagation"
@@ -1614,6 +1618,10 @@ class LabelSpreading(_LabelPropagationBase):
     """
 
     _variant = "spreading"
+    # The member ABI mark (core/member_abi.mojo, family 12 MEMBER_FAMILY_XNEIGHBORS): fit and predict run native
+    # inside a meta-estimator when the labels its fit sees are class codes without the -1 marker
+    # (core/xneighbors_member.mojo kind 8); otherwise the meta-estimator calls this class's own fit.
+    _mojolearn_member = (12, 8)
     #: Kernel and Permutation SHAP explain this exact class's predict_proba natively (its typed predict body,
     #: bindings/neighbors_lp_query_unpack.mojo); read from the class's own namespace, so a subclass is not admitted.
     _mojolearn_explained = "label_propagation"
