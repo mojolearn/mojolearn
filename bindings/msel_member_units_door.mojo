@@ -152,7 +152,8 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
-from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
+from bindings.member_boundary_door import member_admit_serving_deferred, member_pack, member_pack_labeled
+from bindings.member_class_weight_unpack import member_cw_fill_plan
 from bindings.member_held_door import member_held_adopt
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_notices import member_notices_take
@@ -301,6 +302,11 @@ struct MselMemberRun(Movable):
     var gil_door: Bool
     var held_x: List[List[Float32]]
     var held_y: List[List[Float32]]
+    # Per candidate (lane mf-left4): the words of a class_weight its
+    # estimator refuses (read at UNPACK over the one encode's classes), under
+    # a numeric `error_score`; "" for a candidate whose words are complete.
+    # Every unit of such a candidate records the failed fit and fits nothing.
+    var refused: List[String]
     # Per unit, the FIT NOTICES of its fitted state (core/member_notices.mojo;
     # empty: none), taken on the unit's worker after its fit, kept or freed,
     # and raised in unit order once publication is done (GIL held).
@@ -325,6 +331,7 @@ struct MselMemberRun(Movable):
         self.gil_door = False
         self.held_x = List[List[Float32]]()
         self.held_y = List[List[Float32]]()
+        self.refused = List[String]()
         self.notices = List[List[Float64]](length=n_units, fill=List[Float64]())
         self.fit_failed = List[UInt8](length=n_units, fill=UInt8(0))
         self.plans = List[MemberPlan]()
@@ -547,6 +554,14 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
     var train_offer = run[].pin if train_mode != 2 else 0
     var test_offer = run[].pin if test_mode != 2 else 0
     var t0 = msel_seconds()
+    if len(run[].refused[c]) > 0:
+        # The candidate's class_weight, refused at UNPACK under a numeric
+        # error_score (lane mf-left4): this unit's fit failed in the
+        # estimator's words, as each of its folds' own fit fails.
+        run[].errors[u] = run[].refused[c]
+        run[].fit_failed[u] = UNIT_FIT_FAILED
+        run[].fit_time[u] = msel_seconds() - t0
+        return
     # X IS NOT COPIED PER FOLD when the side is a run of rows (a view) or the
     # member reads row numbers. Only a scattered side of a family without
     # MEMBER_CAN_ROW_INDEX is gathered, into this unit's own buffers.
@@ -734,6 +749,10 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     # Per candidate: its estimator and its admission's pins (PACK reads them).
     var members = Python.list()
     var member_pins = Python.list()
+    # Per candidate: its instance dictionary (a class_weight dict's table is
+    # read over the one encode's classes after it: lane mf-left4).
+    var member_fields = Python.list()
+    run.refused = List[String](length=n_candidates, fill=String(""))
     var n_ops = len(responses)
     var asked = MEMBER_CAN_FIT
     if n_ops == 0 and not fit_only:
@@ -769,7 +788,10 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
         # THE FALLBACK RULE: a marked class this route cannot serve (no score:
         # a transformer or KMeans; an admission its family refuses) takes the
         # Python units exactly as an unmarked class does. Never a refusal here.
-        var owner = member_admit_serving(est, fields, plan, member_context, b, needs)
+        # A classifier's class_weight tail stays pending here: the labels
+        # are encoded after the admission (below), and its table is read
+        # over them there (`member_admit_serving_deferred`, lane mf-left4).
+        var owner = member_admit_serving_deferred(est, fields, plan, member_context, b, needs)
         if not owner.published:
             return scores^
         # A classifier member reads class codes and a class count; a regressor
@@ -815,6 +837,7 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             run.workers = 1
         run.plans.append(owner.plan.copy())
         _ = py_call(members.append, est)
+        _ = py_call(member_fields.append, fields)
         _ = py_call(member_pins.append, owner.pins)
     # X's finite verdict, once per operation, only for a member kind that
     # does not test its rows itself (module note): the held block's recorded
@@ -868,6 +891,23 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
         run.classes = n_classes
         for c in range(n_candidates):  # driver-loop: over candidates (one word each)
             run.plans[c].classes = n_classes
+        # CLASS WEIGHTS (lane mf-adm3 / mf-left4): a candidate whose
+        # class_weight is a dict reads its table over the encode's classes
+        # (the labels the estimator's own fit reads it against: code c is
+        # classes[c]), before any fit. A dict or a value the estimator
+        # refuses raises its own words here under error_score='raise', as
+        # the first fold's own fit raises them; under a numeric error_score
+        # every unit of that candidate records them as its failed fit (every
+        # fold's train side holds every class, so each fold refuses alike).
+        for c in range(n_candidates):  # driver-loop: over candidates (one class_weight read each)
+            try:
+                if not member_cw_fill_plan(run.plans[c], members[c], member_fields[c], classes, member_context,
+                                           b):
+                    return scores^
+            except error:
+                if not tolerate:
+                    raise error^
+                run.refused[c] = String(error)
     else:
         try:
             target = classical_check_y(y, rows, classical_estimator_name(base), member_context)

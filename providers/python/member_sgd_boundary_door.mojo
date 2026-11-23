@@ -31,8 +31,9 @@ from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.py_balanced import py_get, py_item, py_contains, py_setitem
-from bindings.member_class_weight_unpack import member_cw_kind
-from core.member_class_weight import MEMBER_CW_DICT, member_cw_pending_words
+from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message
+from core.member_class_weight import MEMBER_CW_DICT, member_cw_pending_words, member_cw_invalid_words
+from core.member_families import MEMBER_FAMILY_SGD
 from bindings.x_linear_common_unpack import (
     _truth, _float, _int, _name, _b, _eq, _gt, _lt, _le, _is_int, _isinstance, _repr, _sorted_repr,
 )
@@ -97,6 +98,7 @@ def sgd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
     var nk = x_linear_keys()
     var balanced = False
     var keyed = False
+    var invalid = False
     if kind >= SGD_MEMBER_CLASSIFIER and kind <= SGD_MEMBER_PA_CLASSIFIER:
         # A dict is keyed by labels: its table is read over the caller's
         # labels at the caller's UNPACK (lane mf-adm3, `member_cw_fill`).
@@ -105,7 +107,12 @@ def sgd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
             if member_cw_kind(class_weight, b) == MEMBER_CW_DICT:
                 keyed = True
             elif not (_isinstance(class_weight, _b().str) and _eq(class_weight, PythonObject("balanced"))):
-                return False
+                # A value the fit door refuses (lane mf-left4): the INVALID
+                # tail, whose words the FIT caller's UNPACK raises; a value
+                # the door accepts that the member does not read: not admitted.
+                if len(member_cw_invalid_message(MEMBER_FAMILY_SGD, model, class_weight, b)) == 0:
+                    return False
+                invalid = True
             else:
                 balanced = True
     var words: List[Float64]
@@ -212,6 +219,9 @@ def sgd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
     if keyed:
         words[18] = 2.0
         member_cw_pending_words(words)
+    elif invalid:
+        words[18] = 2.0
+        member_cw_invalid_words(words)
     owner.plan.route = route
     owner.plan.params = words^
     owner.pins = Python.tuple(ops.owner, ops.scope)

@@ -93,6 +93,7 @@ from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from bindings.member_boundary_door import member_admit_serving_labeled, member_pack, member_pack_labeled
 from bindings.member_class_weight_unpack import member_cw_fill
+from core.member_class_weight import member_cw_start, member_cw_pending
 from bindings.member_held_door import MemberHeld, member_held, member_held_release, member_held_adopt
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.admitted_input_unpack import admitted_unfilled
@@ -157,8 +158,9 @@ struct MemberSet(Movable):
     # Set before `member_set_admit` by a caller whose code targets have
     # labels it holds: a classifier member whose class_weight is a dict
     # then reads its table over them at admission (lane mf-adm3,
-    # bindings/member_class_weight_unpack.mojo); without them such a member
-    # is not admitted (the caller's own path, as before).
+    # bindings/member_class_weight_unpack.mojo). None: the codes 0 ..
+    # classes-1 themselves (lane mf-left4: such a caller's own loop fits the
+    # member on its codes, so they are the labels its fit door reads).
     var labels: PythonObject
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
@@ -210,14 +212,26 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
         needs = needs | MEMBER_CAN_SAMPLE_WEIGHT
     if classes > 0:
         needs = needs | MEMBER_CAN_CLASSIFIER
+    # A caller that hands no labels fits the member on its codes 0 ..
+    # classes-1, and its own loop fits the member's fit door on those same
+    # codes: the codes ARE the labels that fit sees (lane mf-left4), so a
+    # class_weight dict is read over them (keyed by codes, as that door
+    # reads it) and no classifier admission of a set falls back for it.
+    var deferred = Python.list() if set.labels is None else set.labels
     var owner = member_admit_serving_labeled(estimator, fields, plan, member_context, b, needs,
-                                             set.labels if classes > 0 else PythonObject(None))
+                                             deferred if classes > 0 else PythonObject(None))
     if not owner.published:
         return False
     # A class_weight dict's table over the caller's labels (lane mf-adm3);
-    # a dict the estimator refuses raises its own words here, before any fit.
-    if not member_cw_fill(owner, estimator, fields, set.labels if classes > 0 else PythonObject(None),
-                          member_context, b):
+    # a dict the estimator refuses, or a value it refuses (lane mf-left4),
+    # raises its own words here, before any fit.
+    var labels = PythonObject(None)
+    if classes > 0:
+        labels = set.labels
+        if labels is None and member_cw_pending(owner.plan.params,
+                                                member_cw_start(owner.plan.family, owner.plan.kind, owner.plan.params)):
+            labels = py_call(b.list, py_call(b.range, PythonObject(classes)))
+    if not member_cw_fill(owner, estimator, fields, labels, member_context, b):
         return False
     owner.plan.classes = classes
     # Whether this member's KIND tests the rows it reads: the answer of an

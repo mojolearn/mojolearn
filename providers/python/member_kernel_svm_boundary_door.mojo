@@ -30,8 +30,12 @@ from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_address
 from bindings.family_common_pack import family_call, family_array
 from bindings.member_owner_unpack import MemberOwner, member_host_only
-from bindings.member_class_weight_unpack import member_cw_kind
-from core.member_class_weight import MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words
+from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message
+from core.member_class_weight import (
+    MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_balanced_words, member_cw_pending_words,
+    member_cw_invalid_words,
+)
+from core.member_families import MEMBER_FAMILY_KERNEL_SVM
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_item, py_setitem
 from bindings.svc_common_pack import svc_prefix, svc_scalar_array
@@ -84,8 +88,14 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     var weighting = 0
     if classifier:
         weighting = member_cw_kind(py_get(scratch, nk[].k_class_weight, PythonObject(None)), b)
+        # A value the estimator's fit door refuses (lane mf-left4): the INVALID
+        # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
+        # a value the door accepts but the member does not read: not admitted.
         if weighting < 0:
-            return False
+            if len(member_cw_invalid_message(MEMBER_FAMILY_KERNEL_SVM, model,
+                                             py_get(scratch, nk[].k_class_weight, PythonObject(None)), b)) == 0:
+                return False
+            weighting = MEMBER_CW_INVALID
     # An explicit HostSVC / HostSVR (its own host-only word, lane mf-cal3b): the host image its own fit
     # binds; any other class: the estimator's binding route.
     var binding = (estimator_binding_host(model, "_mojolearn_svm", context) if member_host_only(model)
@@ -154,6 +164,8 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         member_cw_balanced_words(words)
     elif weighting == MEMBER_CW_DICT:
         member_cw_pending_words(words)
+    elif weighting == MEMBER_CW_INVALID:
+        member_cw_invalid_words(words)
     owner.plan.route = route
     owner.plan.params = words^
     owner.pins = Python.tuple(binding, connection.table, connection.device, svr_owner)

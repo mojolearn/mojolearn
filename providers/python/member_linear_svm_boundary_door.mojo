@@ -36,8 +36,12 @@ from bindings.classical_arrays_door import classical_address
 from bindings.family_common_unpack import FAMILY_F32P, FAMILY_I64P
 from bindings.family_common_pack import family_array
 from bindings.member_owner_unpack import MemberOwner
-from bindings.member_class_weight_unpack import member_cw_kind
-from core.member_class_weight import MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words
+from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message
+from core.member_class_weight import (
+    MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_balanced_words, member_cw_pending_words,
+    member_cw_invalid_words,
+)
+from core.member_families import MEMBER_FAMILY_LINEAR_SVM
 from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.linear_svc_boundary_unpack import linear_svc_route, LINEAR_SVC_ROUTE_ROWS
 from bindings.svc_linear_boundary_unpack import linear_svc_check_fields, linear_svr_check_fields, linear_svm_strengths
@@ -72,8 +76,14 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     else:
         linear_svc_check_fields(model, fields)
         weighting = member_cw_kind(py_get(fields, nk[].k_class_weight, PythonObject(None)), b)
+        # A value the estimator's fit door refuses (lane mf-left4): the INVALID
+        # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
+        # a value the door accepts but the member does not read: not admitted.
         if weighting < 0:
-            return False
+            if len(member_cw_invalid_message(MEMBER_FAMILY_LINEAR_SVM, model,
+                                             py_get(fields, nk[].k_class_weight, PythonObject(None)), b)) == 0:
+                return False
+            weighting = MEMBER_CW_INVALID
     var connection = linear_svc_route(model, fields, context)
     if kind == LINEAR_SVM_MEMBER_SVC and (connection.flags & LINEAR_SVC_ROUTE_ROWS) == 0:
         # A binary built with the PY2MOJO rows arm off (-D MOJOLEARN_PY2MOJO_linear_OFF): its door decodes two
@@ -98,6 +108,8 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         member_cw_balanced_words(words)
     elif weighting == MEMBER_CW_DICT:
         member_cw_pending_words(words)
+    elif weighting == MEMBER_CW_INVALID:
+        member_cw_invalid_words(words)
     owner.plan.route = route
     owner.plan.params = words^
     owner.pins = Python.tuple(connection.provider)

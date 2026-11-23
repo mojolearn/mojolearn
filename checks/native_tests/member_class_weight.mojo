@@ -251,7 +251,7 @@ def check_keyed() raises:
     member_cw_pending_words(plan.params)
     var keys: List[Float64] = [1.0, 3.0]
     var weights: List[Float64] = [2.0, 0.5]
-    member_cw_keyed_words(plan.params, 10, keys, weights)
+    member_cw_keyed_words(plan.params, 10, keys, weights, False)
     require(Int(plan.params[10]) == MEMBER_CW_KEYED, "the keyed tail")
     var classes: List[Float32] = [Float32(1.0), Float32(2.0), Float32(3.0)]
     var step = plan.copy()
@@ -263,7 +263,7 @@ def check_keyed() raises:
     require(step.params[17] == 0.5 and step.params[18] == 1.0, "class 3.0")
     var other: List[Float64] = [1.0, 4.0]
     var unmatched = plan.copy()
-    member_cw_keyed_words(unmatched.params, 10, other, weights)
+    member_cw_keyed_words(unmatched.params, 10, other, weights, False)
     member_cw_from_values(unmatched, classes)
     require(unmatched.params[12] == 1.0, "a key no class holds marks the tail absent")
 
