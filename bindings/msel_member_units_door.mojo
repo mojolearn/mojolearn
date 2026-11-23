@@ -75,7 +75,9 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_FIT, MEMBER_CAN_FIT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
+    MEMBER_READS_Y_GIVEN,
 )
+from bindings.member_given_y_unpack import member_given_y
 
 # REMOVED: msel_member_units (the native (candidate, fold) units of bindings/msel_cv_door.mojo
 # `_msel_member_route`; not an experiment define: a door path) deleted 2026-11-23 by lane/mf-msel5c; code
@@ -95,6 +97,9 @@ struct _FitOne(Movable):
     var y: Int
     var y_dtype: Int
     var y_cols: Int
+    # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`):
+    # a regressor's y as the caller was given it, for a kind that reads it.
+    var given: MemberMatrix
     # THE RESIDENT SCOPE: the caller's scope word and X's pin token (0: none
     # offered); `taken` is 1 when the fit's cache took the reference.
     var scope: Int
@@ -113,6 +118,7 @@ struct _FitOne(Movable):
         self.y = 0
         self.y_dtype = MEMBER_F32
         self.y_cols = 1
+        self.given = MemberMatrix()
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
         self.taken = 0
@@ -132,6 +138,7 @@ def _fit_one(address: Int):
         call.x = MemberMatrix(run[].x, run[].rows, run[].cols)
         if run[].y != 0:
             call.y = MemberMatrix(run[].y, run[].rows, run[].y_cols, run[].y_dtype)
+            call.y_given = run[].given
         call.pin = run[].pin
         var kept = False
         try:
@@ -415,6 +422,10 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
             var target = classical_check_y(y, rows, classical_estimator_name(est), member_context)
             _ = py_call(pins.append, target)
             run.y = msel_addr(target)
+            if (kind_mask & MEMBER_READS_Y_GIVEN) != 0:
+                # THE GIVEN y (lane mf-tail5): y's own words (a view; `y` lives
+                # to PACK), for a kind whose stratified splitter codes them.
+                run.given = member_given_y(y, rows, 1, context["array_class"])
         except:
             return PythonObject(None)
     # THE PIN RULE: one reference on X's own object for the fit, taken with

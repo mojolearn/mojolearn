@@ -56,13 +56,14 @@ from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
 )
 from bindings.admitted_input_run import AdmittedXView
+from bindings.member_given_y_unpack import member_given_y
 from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_width, member_set_run, member_set_pack, member_set_release,
-    member_set_notices, member_set_resident,
+    member_set_notices, member_set_resident, member_set_reads_given, member_set_given,
     member_set_tests, member_set_host, member_marked, member_held_open, member_held_run, member_held_close,
     MemberHeldCall,
 )
-from core.member_abi import MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
+from core.member_abi import MemberMatrix, MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
 from xtrees.trees_meta_vote_run import (
     VoteMember, VOTE_ALL_ANSWERED, bag_predict_run, bag_oob_run, bag_oob_classifier_finish, bag_oob_r2_run,
     ada_classifier_run, ada_regressor_run, ADA_DECISION, ADA_PROBA, ADA_CODES,
@@ -806,9 +807,12 @@ def _unseen_rows(xt: PythonObject, rows: PythonObject, n: Int, context: PythonOb
 
 
 def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject, y_all: PythonObject,
-                      classifier: Bool, sample_weight: PythonObject, context: PythonObject) raises -> Int:
+                      classifier: Bool, sample_weight: PythonObject, y_given: PythonObject,
+                      context: PythonObject) raises -> Int:
     """`_BaggingBase._fit_bags`. Answers what the fit's out-of-bag outputs
-    may rely on (_BAG_X_PROVEN | _BAG_STATES_HELD; 0: nothing)."""
+    may rely on (_BAG_X_PROVEN | _BAG_STATES_HELD; 0: nothing). `y_given` (a
+    regressor's y as the door was given it, None: none) is THE GIVEN y of a
+    member whose kind reads it (lane mf-tail5), drawn with its rows."""
     var x = _x_f32(X, context)
     var n = x.rows
     var d = x.cols
@@ -880,6 +884,10 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     # Every member so far was fitted natively on the CPU route and kept its
     # fitted state (the out-of-bag outputs then read held states: all hits).
     var kept = True
+    # THE GIVEN y (lane mf-tail5): a view of a regressor's y as given, read once.
+    var given = MemberMatrix()
+    if not classifier:
+        given = member_given_y(y_given, n, 1, context["array_class"])
     while native and done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
         set.run.cap = jobs
@@ -903,6 +911,8 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
                                     n_classes, context, b):
                 native = False
                 break
+            if given.given() and member_set_reads_given(set):
+                member_set_given(set, given.data, given.dtype)
             # Inside `resident()` a member that reads a scope keeps X on the
             # device across the bags (bindings/member_set_door.mojo, THE
             # RESIDENT SCOPE). Only when `xa` is the object that owns the
@@ -1334,7 +1344,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
         py_setitem(fields, "n_classes_", _P(k))
         if k < 2:
             raise Error("y has fewer than 2 classes")
-        var fit_word = _bagging_fit_bags(model, fields, X, labels.codes, True, sample_weight, context)
+        var fit_word = _bagging_fit_bags(model, fields, X, labels.codes, True, sample_weight, PythonObject(None), context)
         if _truthy(fields["oob_score"]):
             # `BaggingClassifier._set_oob_score`
             var xt = _xt(fields, context)
@@ -1355,7 +1365,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
         return model
     var y32 = admit_f32(args[1], 1, "y", context, finite=False)
     var y_array = _as_array(y32, Python.tuple(y32.rows), context)
-    var fit_word = _bagging_fit_bags(model, fields, X, y_array, False, sample_weight, context)
+    var fit_word = _bagging_fit_bags(model, fields, X, y_array, False, sample_weight, args[1], context)
     if _truthy(fields["oob_score"]):
         # `BaggingRegressor._set_oob_score`
         var xt = _xt(fields, context)

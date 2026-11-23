@@ -506,6 +506,22 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var shuffle = msel_flag_truth(args[8], context)
     var seed = _search_seed(args[9], context)
     var return_times = msel_flag_truth(args[11], context)
+    # SEVERAL SCORERS (lane mf-tail5): scikit-learn 1.9's `validate_params`
+    # of learning_curve allows `scoring` only as a scorer name, a callable or
+    # None ([StrOptions(get_scorer_names()), callable, None]): a list, tuple,
+    # set or dict is its InvalidParameterError, raised before any fold or
+    # fit (the names shown sorted; scikit-learn prints the set unordered).
+    var scoring_in = args[6]
+    var many = py_type(scoring_in)
+    if many is b.list or many is b.tuple or many is b.set or many is b.dict:
+        var names = py_call(b.sorted, context["family_msel_scorers"])
+        var shown = String("{")
+        for i in range(len(names)):  # driver-loop: over the scorer names (the refusal's words, once)
+            if i > 0:
+                shown += ", "
+            shown += family_repr(names[i])
+        raise Error("ValueError: The 'scoring' parameter of learning_curve must be a str among " + shown
+                    + "}, a callable or None. Got " + family_repr(scoring_in) + " instead.")
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
@@ -701,14 +717,16 @@ def _mean_test(estimator: PythonObject, x: PythonObject, y: PythonObject, folds:
     THE ONE TYPED SEARCH RUN (lane mf-msel5c): the folds are the carrier
     search's given folds (`msel_cv_by_search`, error_score nan as the door's
     units score them), fitted and scored by the search kind's RUN; the
-    door's units only for what that kind does not take, and for resident
-    fold rows (as the deleted native member units left those)."""
+    door's units only for what that kind does not take (resident fold rows
+    included, lane mf-tail5: the carrier reads their scope)."""
     var one = List[List[Float64]]()
-    # Host fold rows only: resident rows (`rows.dev`) keep their own scope and
-    # the units' DeviceRows route, as the deleted member units left them.
-    var by = PythonObject(None)
-    if not rows.dev:
-        by = msel_cv_by_search(estimator, x, y, folds, scoring, PythonObject(jobs), PythonObject(_nan()), False,
+    # (lane mf-tail5) Resident fold rows too (`rows.dev`): `rows` opened the
+    # same resident scope the carrier opens (`msel_rows_scope_open`), and the
+    # carrier's RUN reads it (its resident route: the whole X plus each
+    # side's rows, X pinned once in that scope for every permutation), so
+    # the permutations' folds run in the typed RUN; the units only for what
+    # the kind does not take.
+    var by = msel_cv_by_search(estimator, x, y, folds, scoring, PythonObject(jobs), PythonObject(_nan()), False,
                                False, PythonObject(None), False, context)
     if by is not None:
         var te = by["test"][0]

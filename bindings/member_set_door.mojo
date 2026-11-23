@@ -115,7 +115,7 @@ from core.member_abi import (
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_TEST_ROWS,
     MEMBER_CAN_SCOPE, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE,
-    MEMBER_GIL_DOOR,
+    MEMBER_GIL_DOOR, MEMBER_READS_Y_GIVEN,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE
 from bindings.member_owner_unpack import member_mark
@@ -159,6 +159,10 @@ struct MemberSet(Movable):
     # classes-1 themselves (lane mf-left4: such a caller's own loop fits the
     # member on its codes, so they are the labels its fit door reads).
     var labels: PythonObject
+    # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`):
+    # per member, 1 when its KIND reads it (MEMBER_READS_Y_GIVEN), answered
+    # by the same one kind question as `tests` / `borrows`.
+    var reads: List[UInt8]
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
         self.run = MemberSetRun(x, rows, cols, y_dtype, index_dtype)
@@ -173,6 +177,7 @@ struct MemberSet(Movable):
         self.sources = Python.list()
         self.scope_read = False
         self.labels = PythonObject(None)
+        self.reads = List[UInt8]()
 
     def count(self) -> Int:
         return len(self.run.plans)
@@ -248,8 +253,10 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     # (MEMBER_GIL_FREE), the same one question; no answer = it may not.
     var tests = UInt8(0)
     var borrows = UInt8(0)
+    var reads = UInt8(0)
     var gil_free = MEMBER_SET_TURN_HELD
-    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_BORROWS_FIT | MEMBER_GIL_FREE | MEMBER_GIL_DOOR):
+    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_BORROWS_FIT | MEMBER_GIL_FREE | MEMBER_GIL_DOOR
+                             | MEMBER_READS_Y_GIVEN):
         var asked = False
         var v = len(set.run.plans) - 1
         while v >= 0:  # driver-loop: over the members admitted before (one compare when they are clones)
@@ -260,6 +267,7 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
                 tests = set.run.tests[v]
                 borrows = set.run.borrows[v]
                 gil_free = set.run.gil_free[v]
+                reads = set.reads[v]
                 asked = True
                 break
             v -= 1
@@ -270,6 +278,8 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
                     tests = UInt8(1)
                 if (kind_mask & MEMBER_BORROWS_FIT) != 0:
                     borrows = UInt8(1)
+                if (kind_mask & MEMBER_READS_Y_GIVEN) != 0:
+                    reads = UInt8(1)
                 if (kind_mask & MEMBER_GIL_FREE) != 0:
                     gil_free = MEMBER_SET_WORKER
                 elif (kind_mask & MEMBER_GIL_DOOR) != 0:
@@ -282,9 +292,11 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
                 # public thread with the GIL held (the safe readings).
                 tests = UInt8(0)
                 borrows = UInt8(1)
+                reads = UInt8(0)
                 gil_free = MEMBER_SET_TURN_HELD
     set.run.add(owner.plan.copy(), target, weights, row_draw, row_count, column_draw, column_count, tests, borrows,
                 gil_free)
+    set.reads.append(reads)
     _ = py_call(set.sources.append, PythonObject(None))
     _ = py_call(set.estimators.append, estimator)
     _ = py_call(set.contexts.append, member_context)
@@ -293,6 +305,25 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     _ = py_call(set.class_plans.append, plan)
     _ = owner.published
     return True
+
+
+def member_set_reads_given(set: MemberSet) -> Bool:
+    """The member admitted last reads THE GIVEN y (its kind has
+    MEMBER_READS_Y_GIVEN, lane mf-tail5): its caller then hands it with
+    `member_set_given`; for any other member it makes none."""
+    var last = len(set.reads) - 1
+    return last >= 0 and set.reads[last] != UInt8(0)
+
+
+def member_set_given(mut set: MemberSet, address: Int, dtype: Int):
+    """UNPACK: THE GIVEN y of the member admitted last (core/member_abi.mojo
+    `MemberCall.y_given`; lane mf-tail5): its targets' words as the caller
+    was given them (MEMBER_F64 / _I64 / _I32), addressed exactly as its
+    target (its row draw selects both). Ignored for a member whose kind
+    does not read it. The caller keeps the words alive until the run's fits
+    returned."""
+    if member_set_reads_given(set):
+        set.run.given_target(address, dtype)
 
 
 def member_set_own_block(mut set: MemberSet, x: Int, rows: Int):

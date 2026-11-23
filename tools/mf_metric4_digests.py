@@ -96,6 +96,18 @@ the deleted member units' Python metric calls (the RUN reads the binary64 progra
 error_score line changes words (was "error_score must be 'raise' or a number"); the lacking AP / brier raise
 lines carry scikit-learn's words (the base: the metric door's); the multi-output lines are new values from the
 kind (the base fitted them through the door: values equal, the dtype the same).
+
+Lane mf-tail5 extends section msel5 (H; base: origin/lane/member-fits-5 2fe17e40a5 vs head): THE GIVEN y (a
+GridSearchCV over RidgeCV(cv=StratifiedKFold(2)) and a StackingRegressor / VotingRegressor / BaggingRegressor
+over it, float64 targets with pairs equal in float32: the member path now splits on the given values, as the
+door), a multi-output classifier whose folds lack a class in one output (GridSearchCV scoring None,
+cross_val_predict predict and predict_proba, the list of per-output arrays), cross_val_predict(predict) of a
+lacking single-output fold (no RuntimeWarning now), permutation_test_score, learning_curve with a list of
+scorers (scikit-learn's InvalidParameterError words before any fit). Expected: the given-y lines change where
+the base merged float32-equal targets into one class (now the door's folds; the base raised or split
+differently), the multi-output lacking lines are new values (the base fitted every output on all classes'
+codes), the single-output predict line loses its warning, the learning_curve line changes words (was
+"learning_curve takes one scorer" after the fits); the others equal.
 """
 import hashlib
 import os
@@ -744,6 +756,79 @@ def _labels_search(scoring):
     return _rows_of_search(s, X)
 
 
+def _given_y(which):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV, StratifiedKFold
+    rng = np.random.default_rng(151)
+    X = rng.normal(size=(80, 4)).astype(np.float32)
+    # four values, each pair equal in float32 but not in float64 (2^-40 apart): 8 classes at the door
+    base = np.array([1.0, 2.0, 3.0, 4.0])
+    y = np.concatenate([base, base + 2.0 ** -40] * 10).astype(np.float64)
+    ridge = mojolearn.RidgeCV(alphas=[0.1, 1.0], cv=StratifiedKFold(2))
+    if which == "search":
+        s = GridSearchCV(ridge, {"fit_intercept": [True, False]}, cv=2).fit(X, y)
+        return _rows_of_search(s, X)
+    if which == "stacking":
+        model = mojolearn.StackingRegressor([("r", ridge)], final_estimator=mojolearn.Ridge(), cv=3)
+    elif which == "voting":
+        model = mojolearn.VotingRegressor([("r", ridge)])
+    else:
+        model = mojolearn.BaggingRegressor(ridge, n_estimators=3, random_state=0)
+    return [("predict", _digest(np.asarray(model.fit(X, y).predict(X), dtype=np.float64)))]
+
+
+def _multi_lacking(which):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV, cross_val_predict, KFold
+    X, _, c = _data(157, n=60, d=4, k=3)
+    order = np.argsort(c, kind="stable")
+    X, c = X[order], c[order]
+    # output 1's class 2 only in the last rows: an unshuffled KFold's last fold trains without it
+    o1 = np.where(np.arange(60) >= 50, 2, np.arange(60) % 2).astype(np.int64)
+    Y = np.stack([c.astype(np.int64), o1], axis=1)
+    base = mojolearn.MultiOutputClassifier(mojolearn.LogisticRegression(max_iter=100))
+    if which == "search":
+        return _rows_of_search(GridSearchCV(base, {"estimator__C": [0.1, 1.0]}, cv=KFold(3)).fit(X, Y), X)
+    out = cross_val_predict(base, X, Y, cv=KFold(3), method=which)
+    if which == "predict_proba":
+        return [("list", repr((type(out).__name__, len(out))))] + [
+            (f"output{j}", _digest(np.asarray(p, dtype=np.float64))) for j, p in enumerate(out)]
+    return [("values", _digest(np.asarray(out)))]
+
+
+def _lacking_single_predict():
+    import mojolearn
+    from mojolearn.model_selection import cross_val_predict, KFold
+    import warnings
+    X, _, c = _data(163, n=60, d=4, k=3)
+    order = np.argsort(c, kind="stable")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = cross_val_predict(mojolearn.LogisticRegression(max_iter=100), X[order], c[order], cv=KFold(3))
+    return [("values", _digest(np.asarray(out))), ("warnings", repr(sorted(str(w.message) for w in caught)))]
+
+
+def _learning_many():
+    import mojolearn
+    from mojolearn.model_selection import learning_curve
+    X, _, c = _data(167, n=90, d=4, k=3)
+    return learning_curve(mojolearn.LogisticRegression(max_iter=100), X, c, cv=3, train_sizes=[0.5, 1.0],
+                          scoring=["accuracy", "f1_macro"])
+
+
+def _tail5_cases():
+    cases = [("H5t_given_" + w, (lambda w=w: _warned(lambda: _given_y(w))))
+             for w in ("search", "stacking", "voting", "bagging")]
+    cases += [("H5t_multi_lacking_" + w, (lambda w=w: _warned(lambda: _multi_lacking(w))))
+              for w in ("search", "predict", "predict_proba")]
+    cases += [
+        ("H5t_lacking_single_predict", _lacking_single_predict),
+        ("H5t_permutation", _permutation),
+        ("H5t_learning_many", _learning_many),
+    ]
+    return cases
+
+
 def _msel5c_cases():
     cases = [("H5c_split_" + w, (lambda w=w: _splitter_search(w)))
              for w in ("shuffle", "strat_shuffle", "repeated", "repeated_strat", "time_series", "group_shuffle",
@@ -795,7 +880,7 @@ def _msel5_cases():
 def _all_cases():
     return (_metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
             + _search5_cases() + _cluster5_metric_cases() + _cluster5_search_cases() + _msel5_cases()
-            + _msel5b_cases() + _kmeans5_cases() + _msel5c_cases())
+            + _msel5b_cases() + _kmeans5_cases() + _msel5c_cases() + _tail5_cases())
 
 
 def _run(index):

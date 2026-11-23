@@ -2955,6 +2955,8 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     # A multi-output classifier's predicted labels (lane mf-msel5c): 0 none,
     # 1 integers (an int64 block), 2 reals (a float64 block).
     var multi_labels = 0
+    var multi_proba = False
+    var proba_addresses = PythonObject(None)
     var nested = _Nested()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
         if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
@@ -2963,8 +2965,14 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
         if multi and (len(codes) > 0 or msel_spec_stratified(split.spec.kind)):
             return False  # a multi-output target is scored by the member itself, folded by KFold
-        if multi and tool_respond >= 0 and tool_respond != MEMBER_OP_PREDICT:
-            return False  # a multi-output predict_proba / decision: a list of per-output blocks (the door's)
+        if multi and tool_respond >= 0 and tool_respond != MEMBER_OP_PREDICT and not (
+                classifier and tool_respond == MEMBER_OP_PREDICT_PROBA and not tool_log
+                and (nested.masks[c] & MEMBER_CAN_PREDICT_PROBA) != 0):
+            # decision_function / predict_log_proba: MultiOutputClassifier has
+            # neither (scikit-learn's AttributeError, the door's words)
+            return False
+        if multi and tool_respond == MEMBER_OP_PREDICT_PROBA:
+            multi_proba = True  # (lane mf-tail5) one result block per output
         if multi and tool_respond >= 0 and classifier:
             # A MULTI-OUTPUT CLASSIFIER's predict (lane mf-msel5c): each output's
             # codes decoded at PACK into one rows x outputs block of its labels,
@@ -3009,7 +3017,32 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         var dst = 0
         var width = 1
         var dst_dtype = MEMBER_F64
-        if tool_respond >= 0:
+        if tool_respond >= 0 and multi_proba:
+            # THE PER-OUTPUT BUFFERS (lane mf-tail5; core/msel_search_run.mojo
+            # `_place_multi_proba`): scikit-learn's cross_val_predict of a
+            # multi-output classifier's predict_proba, a list of n_outputs
+            # float64 (n, n_classes_j) arrays, allocated here; the RUN reads
+            # their addresses (an int64 vector, pinned) and writes each
+            # output's block at the units' rows.
+            var n_rows = Int(py=tool[6])
+            var outputs = Int(py=tool[5])
+            if labels is None or py_type(labels) is not b.list or len(labels) != outputs or outputs < 2:
+                return False
+            var blocks = Python.list()
+            var addresses = family_array(Python.tuple(outputs), "<i8", context)
+            var words_at = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=msel_addr(addresses))
+            for j in range(outputs):  # driver-loop: over the outputs (one result block each)
+                var k = len(py_call(b.list, labels[j]))
+                var block = family_array(Python.tuple(n_rows, k), "<f8", context)
+                _ = py_call(blocks.append, block)
+                words_at[j] = Int64(msel_addr(block) if n_rows > 0 else 0)
+            _ = addresses  # written through its address above
+            py_setitem(tool[4], PythonObject(0), blocks)
+            proba_addresses = addresses  # pinned with the plan below
+            dst = msel_addr(addresses)
+            width = -outputs
+            dst_dtype = MEMBER_F64
+        elif tool_respond >= 0:
             var n_rows = Int(py=tool[6])
             var outputs = Int(py=tool[5])
             var two_d = False
@@ -3067,6 +3100,8 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                    List[Int](), words^, fold_train^, fold_test^):
         return False
     _finish_split(owner, split)
+    if proba_addresses is not None:
+        _ = py_call(owner.pins.append, proba_addresses)  # the per-output result addresses, read by the RUN
     if cluster_entry or len(label_words) > 0:
         meta_plan_search_labels(Int(owner.plan.params[1]), cluster, label_words^)
         if metrics_binding is not None:

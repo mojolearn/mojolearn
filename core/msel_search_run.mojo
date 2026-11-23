@@ -121,7 +121,8 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free, member_own,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_OP_DECISION, MEMBER_READS_Y_GIVEN,
+    MEMBER_OP_PREDICT_PROBA,
 )
 from core.member_class_weight import member_cw_subset
 from core.member_notices import (
@@ -227,6 +228,13 @@ struct MselSearchPlan(Movable):
     var respond_width: Int
     var respond_dtype: Int
     var respond_log: Bool
+    # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`):
+    # a regressor's targets as the caller was given them (`given_dtype`:
+    # MEMBER_F64 / _I64 / _I32 words, rows x `y_cols`), 0: none. Handed to
+    # each unit's and the refit's fit whose candidate kind reads it
+    # (MEMBER_READS_Y_GIVEN), with the fold's rows, as `y` is.
+    var given: Int
+    var given_dtype: Int
 
     def __init__(out self, var plans: List[MemberPlan], var masks: List[Int], x: Int, rows: Int, cols: Int, y: Int,
                  classes: Int, n_splits: Int, glue: EntryRef, metric: MetricRoute):
@@ -268,6 +276,8 @@ struct MselSearchPlan(Movable):
         self.respond_width = 1
         self.respond_dtype = MEMBER_F64
         self.respond_log = False
+        self.given = 0
+        self.given_dtype = MEMBER_F64
 
 
 struct MselSearchResult(Movable):
@@ -881,12 +891,19 @@ def _place_response(src: Int, src_dtype: Int, cols: Int, count: Int, rows: Int, 
 def _held_codes(codes: Int, rows: Int, count: Int, k: Int) -> List[Int32]:
     """The classes the `count` int32 rows `rows` of the codes at `codes`
     hold, ascending (empty when they hold all `k`)."""
+    return _held_codes_col(codes, rows, count, k, 1, 0)
+
+
+def _held_codes_col(codes: Int, rows: Int, count: Int, k: Int, width: Int, column: Int) -> List[Int32]:
+    """`_held_codes` of output `column` of rows x `width` codes (lane
+    mf-tail5: a multi-output classifier's folds, each output on its own; one
+    body for both)."""
     var seen = List[UInt8](length=max(k, 1), fill=UInt8(0))
     var y = _I32P(unsafe_from_address=codes)
     var r = _I32P(unsafe_from_address=rows)
     var found = 0
     for i in range(count):  # driver-loop: over a fold's train rows (stops when every class is seen)
-        var c = Int(y[Int(r[i])])
+        var c = Int(y[Int(r[i]) * width + column])
         if c >= 0 and c < k and seen[c] == UInt8(0):
             seen[c] = UInt8(1)
             found += 1
@@ -897,6 +914,95 @@ def _held_codes(codes: Int, rows: Int, count: Int, k: Int) -> List[Int32]:
         if seen[c] != UInt8(0):
             held.append(Int32(c))
     return held^
+
+
+def _map_multi_codes(buffer: Int, dtype: Int, count: Int, outputs: Int, held_at: Int, f: Int):
+    """A MULTI-OUTPUT CLASSIFIER'S LACKING FOLD (lane mf-tail5): its unit's
+    predicted fold codes (`count` rows x `outputs`, int32 or int64 at
+    `buffer`) mapped in place, per output, to the classes' codes (output j
+    of fold f's held classes, `held_at`'s list f * outputs + j; empty: that
+    output holds every class, its codes unchanged), as each output's fold
+    estimator predicts its own labels."""
+    var lists = MutPointer[List[Int32], MutUntrackedOrigin](unsafe_from_address=held_at)
+    for j in range(outputs):  # small-loop(the outputs)
+        var h = Int(lists[f * outputs + j].unsafe_ptr())
+        var m = len(lists[f * outputs + j])
+        if m == 0:
+            continue
+        var held = _I32P(unsafe_from_address=h)
+        for i in range(count):  # driver-loop: over the side's rows (output j's code)
+            if dtype == MEMBER_I64:
+                var w = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=buffer)
+                w[i * outputs + j] = Int64(held[Int(w[i * outputs + j])])
+            else:
+                var w = _I32P(unsafe_from_address=buffer)
+                w[i * outputs + j] = held[Int(w[i * outputs + j])]
+
+
+def _place_multi_proba(src: Int, src_dtype: Int, cols: Int, count: Int, rows: Int, dsts: Int, outputs: Int,
+                       counts_at: Int, held_at: Int, f: Int) raises:
+    """THE CV TOOLS' PER-OUTPUT BUFFERS (lane mf-tail5): a multi-output
+    classifier unit's test-side predict_proba (`count` rows x `cols` words
+    of `src_dtype` at `src`: each output's columns in turn, the fold
+    estimator's own classes) written into output j's result (the float64
+    rows x `counts[j]` block whose address is word j at `dsts`; `counts`
+    the outputs' class counts, Int words at `counts_at`) at the
+    side's int32 rows: scikit-learn's cross_val_predict of a list response,
+    each output placed by `_enforce_prediction_order` over that output's
+    classes (a lacking output's columns at its held classes, 0 elsewhere;
+    `held_at`: fold f's per-output held lists, 0: none lack)."""
+    var r = _I32P(unsafe_from_address=rows)
+    var counts = _IntP(unsafe_from_address=counts_at)
+    var addresses = _IntP(unsafe_from_address=dsts)
+    var lists = MutPointer[List[Int32], MutUntrackedOrigin](unsafe_from_address=held_at)
+    var total = 0
+    for j in range(outputs):  # small-loop(the outputs: the member's columns of each)
+        var m = len(lists[f * outputs + j]) if held_at != 0 else 0
+        total += m if m > 0 else counts[j]
+    if total != cols:
+        raise Error("member ABI: a multi-output fold member answered " + String(cols) + " probability columns for "
+                    + String(total) + " held")
+    var offset = 0
+    for j in range(outputs):  # small-loop(the outputs: one result block each)
+        var k = counts[j]
+        var m = len(lists[f * outputs + j]) if held_at != 0 else 0
+        var width = m if m > 0 else k
+        var held = _I32P(unsafe_from_address=Int(lists[f * outputs + j].unsafe_ptr()) if m > 0 else 0)
+        var df = _F64P(unsafe_from_address=addresses[j])
+        for i in range(count):  # driver-loop: over the side's rows (each written once, at its own row)
+            var at = Int(r[i]) * k
+            if m > 0:
+                for c in range(k):
+                    df[at + c] = 0.0
+            for c in range(width):
+                var to = Int(held[c]) if m > 0 else c
+                df[at + to] = _word_at(src, i * cols + offset + c, src_dtype)
+        offset += width
+
+
+def _multi_lacking_score(run_at: Int, v: Int, side: _Side, cols: Int, outputs: Int, held_at: Int, f: Int) raises -> Float64:
+    """A MULTI-OUTPUT CLASSIFIER'S OWN SCORE on a fold that lacks a class in
+    some output (lane mf-tail5): `MultiOutputClassifier.score`,
+    `np.mean(np.all(y == y_pred, axis=1))`, of the unit's predict mapped
+    back to the classes' codes per output (`_map_multi_codes`), against the
+    side's codes (rows x `outputs`)."""
+    var count = side.count
+    var buffer = List[Int32](length=max(count * outputs, 1), fill=Int32(0))
+    _ = _respond(run_at, v, MEMBER_OP_PREDICT, side, cols, Int(buffer.unsafe_ptr()), count * outputs, MEMBER_I32,
+                 False, outputs)
+    _map_multi_codes(Int(buffer.unsafe_ptr()), MEMBER_I32, count, outputs, held_at, f)
+    var ix = _I32P(unsafe_from_address=side.index)
+    var hits = 0
+    for i in range(count):  # driver-loop: over the side's rows (all outputs equal)
+        var row = Int(ix[i]) if side.index != 0 else i
+        var src = _I32P(unsafe_from_address=side.y if side.index == 0 else side.base_y)
+        var equal = True
+        for j in range(outputs):
+            if buffer[i * outputs + j] != src[row * outputs + j]:
+                equal = False
+        if equal:
+            hits += 1
+    return Float64(hits) / Float64(count) if count > 0 else 0.0
 
 
 @always_inline
@@ -927,6 +1033,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var classifier = k > 0
     var y_dtype = plan.y_dtype
     var y_cols = max(plan.y_cols, 1)
+    # A MULTI-OUTPUT CLASSIFIER (lane mf-tail5): its codes per output, each
+    # output's class count in `class_counts` (`classes` is 0).
+    var multi_cls = y_cols > 1 and y_dtype == MEMBER_I32 and len(plan.class_counts) == y_cols
     var responding = plan.respond >= 0
     var codes = plan.scorers.copy()
     if responding:
@@ -934,9 +1043,15 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         # table of zeros keeps the tables' shape.
         # A multi-output target (lane mf-msel5b): a regressor's predict, one
         # column per output.
-        if len(codes) != 0 or (y_cols > 1 and (classifier or plan.respond != MEMBER_OP_PREDICT)):
+        # A multi-output classifier's predict_proba (lane mf-tail5): one
+        # result block per output (`respond_width` = minus the outputs,
+        # `respond_dst` the address of their addresses; module note).
+        var listed = multi_cls and plan.respond == MEMBER_OP_PREDICT_PROBA and not plan.respond_log
+        if len(codes) != 0 or (y_cols > 1 and (classifier or (plan.respond != MEMBER_OP_PREDICT and not listed))):
             raise Error("member ABI: a search that answers its units' responses takes no scorer and one output")
-        if plan.respond_dst == 0 or plan.respond_width < 1:
+        if listed and plan.respond_width != -y_cols:
+            raise Error("member ABI: a multi-output predict_proba needs one result block per output")
+        if plan.respond_dst == 0 or (plan.respond_width < 1 and not listed):
             raise Error("member ABI: a search that answers its units' responses needs the caller's result buffer")
         codes.append(SEARCH_SCORE_MEMBER)
     elif len(codes) == 0:
@@ -1111,6 +1226,74 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         for f in range(used):  # small-loop(the folds' lacking marks)
             if len(fold_held[f]) > 0:
                 any_lacking = True
+    # A MULTI-OUTPUT CLASSIFIER'S FOLDS THAT LACK A CLASS (lane mf-tail5): per
+    # fold and output the classes its train rows hold when they are not all
+    # of that output's (`mheld[f * y_cols + j]`; empty: every class), and per
+    # lacking fold its train codes re-coded output by output (`mcodes[f]`,
+    # rows x outputs) with each output's fold class count (`mcounts[f]`): the
+    # fold's MultiOutputClassifier fits each output's estimator on that
+    # output's own classes, as scikit-learn's does. One task per fold.
+    var mheld = List[List[Int32]]()
+    var mcodes = List[List[Int32]]()
+    var mcounts = List[List[Int]]()
+    var multi_lacking = False
+    if multi_cls and not y_free:
+        for _ in range(used * y_cols):  # small-loop(one held list per fold and output)
+            mheld.append(List[Int32]())
+        for _ in range(used):  # small-loop(one block and one count list per fold)
+            mcodes.append(List[Int32]())
+            mcounts.append(List[Int]())
+        var mheld_at = Int(mheld.unsafe_ptr())
+        var mcodes_at = Int(mcodes.unsafe_ptr())
+        var mcounts_at = Int(mcounts.unsafe_ptr())
+        var counts_at = Int(plan.class_counts.unsafe_ptr())
+        var mtr_at = Int(tr_at.unsafe_ptr())
+        var mtr_n = Int(tr_n.unsafe_ptr())
+        var mcodes_y = plan.y
+
+        def _mark_multi(f: Int) {imm mheld_at, imm mcodes_at, imm mcounts_at, imm counts_at, imm mtr_at, imm mtr_n,
+                                 imm mcodes_y, imm y_cols, imm n}:
+            var rows = _IntP(unsafe_from_address=mtr_at)[f]
+            var count = _IntP(unsafe_from_address=mtr_n)[f]
+            var ks = _IntP(unsafe_from_address=counts_at)
+            var lists = MutPointer[List[Int32], MutUntrackedOrigin](unsafe_from_address=mheld_at)
+            var lacking = False
+            for j in range(y_cols):  # small-loop(the outputs)
+                var held = _held_codes_col(mcodes_y, rows, count, ks[j], y_cols, j)
+                if len(held) > 0:
+                    lacking = True
+                lists[f * y_cols + j] = held^
+            if not lacking:
+                return
+            var block = List[Int32](length=max(n * y_cols, 1), fill=Int32(0))
+            var fold_counts = List[Int](length=y_cols, fill=0)
+            var src = _I32P(unsafe_from_address=mcodes_y)
+            var r = _I32P(unsafe_from_address=rows)
+            for j in range(y_cols):  # small-loop(the outputs: each re-coded onto its own held classes)
+                var m = len(lists[f * y_cols + j])
+                fold_counts[j] = m if m > 0 else ks[j]
+                var to = List[Int32](length=max(ks[j], 1), fill=Int32(0))
+                for c in range(ks[j]):  # small-loop(output j's classes)
+                    to[c] = Int32(c)
+                for c in range(m):  # small-loop(output j's held classes)
+                    to[Int(lists[f * y_cols + j][c])] = Int32(c)
+                for i in range(count):  # driver-loop: over the fold's train rows (output j's fold codes)
+                    var row = Int(r[i])
+                    block[row * y_cols + j] = to[Int(src[row * y_cols + j])]
+            MutPointer[List[Int32], MutUntrackedOrigin](unsafe_from_address=mcodes_at)[f] = block^
+            MutPointer[List[Int], MutUntrackedOrigin](unsafe_from_address=mcounts_at)[f] = fold_counts^
+
+        host_parallelize(_mark_multi, used)
+        for f in range(used):  # small-loop(the folds' lacking marks)
+            if len(mcodes[f]) > 0:
+                multi_lacking = True
+    var mheld_list = Int(mheld.unsafe_ptr()) if multi_lacking else 0
+    var mlack = List[UInt8](length=max(used, 1), fill=UInt8(0))
+    for f in range(len(mcodes)):  # small-loop(the folds' lacking marks, one byte each)
+        if len(mcodes[f]) > 0:
+            mlack[f] = UInt8(1)
+    var mlack_at = Int(mlack.unsafe_ptr())
+    var dst_counts = plan.class_counts.copy()
     if any_lacking and member_score:
         # A CLASSIFIER'S OWN SCORE on folds that lack a class (lane
         # mf-kmeans5): scikit-learn's `ClassifierMixin.score`,
@@ -1280,12 +1463,19 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 p.classes = len(fold_held[f])
                 member_cw_subset(p, fold_held[f])
                 target = Int(fold_codes[f].unsafe_ptr())
+            if f < len(mcodes) and len(mcodes[f]) > 0:
+                # a multi-output fold lacking a class in some output (lane
+                # mf-tail5): each output's own classes and re-coded codes
+                p.class_counts = mcounts[f].copy()
+                target = Int(mcodes[f].unsafe_ptr())
             var mask = plan.masks[c]
             if (mask & MEMBER_GIL_FREE) == 0:
                 all_free = False
             run.add(p^, target, 0, tr_at[f], tr_n[f], 0, 0,
                     UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
                     UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
+            if plan.given != 0 and not classifier and (mask & MEMBER_READS_Y_GIVEN) != 0:
+                run.given_target(plan.given, plan.given_dtype)  # THE GIVEN y, drawn with the fold's train rows
             if rows_route[c] == SEARCH_ROWS_RESIDENT:
                 # the fit reads the fold's train rows by index (the set's
                 # `by_index`) out of the whole X, X's pin offered
@@ -1319,6 +1509,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 # a predict: one column per output (a multi-output regressor's
                 # responses, lane mf-msel5b); else one per class
                 var width_o = y_cols if ops[o] == MEMBER_OP_PREDICT else max(k, 1)
+                if multi_cls and ops[o] != MEMBER_OP_PREDICT:
+                    # a multi-output classifier's proba: every output's columns (lane mf-tail5)
+                    width_o = 0
+                    for j in range(y_cols):  # small-loop(the outputs' class counts)
+                        width_o += plan.class_counts[j]
                 preds.append(List[Int64](length=max(count * width_o, 1), fill=Int64(0)))
                 pred_at[t * nops + o] = Int(preds[t * nops + o].unsafe_ptr())
                 pred_cap[t * nops + o] = count * width_o
@@ -1341,13 +1536,15 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var base_y = plan.y
         var scope = plan.scope
         var pin = plan.pin
+        var dst_counts_at = Int(dst_counts.unsafe_ptr())
 
         def _score(t: Int) {imm run_at, imm values_at, imm failed_at, imm errors_at, imm pred_list, imm cols_list,
                             imm cap_list, imm x_list, imm y_dst_at, imm side_count_at, imm sides, imm used, imm u0,
                             imm d, imm y_dtype, imm y_cols, imm member_score, imm nsc, imm nops, imm ops_at,
                             imm out_dtypes_at, imm rows_route_at, imm side_rows_at, imm took_at, imm base_x,
                             imm base_y, imm n, imm scope, imm pin, imm secs_at, imm narrow, imm dst, imm dst_width,
-                            imm dst_dtype, imm log_words, imm held_addr_at, imm held_count_at, imm k}:
+                            imm dst_dtype, imm log_words, imm held_addr_at, imm held_count_at, imm k,
+                            imm multi_cls, imm mheld_list, imm mlack_at, imm dst_counts_at}:
             var v = t // sides
             var side = t % sides
             var started = perf_counter_ns()
@@ -1364,6 +1561,16 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                               _IntP(unsafe_from_address=side_count_at)[s], index, base_x, base_y, n, scope,
                               pin if route == SEARCH_ROWS_RESIDENT else 0, took_at + t)
             try:
+                var mfold = (u0 + v) % used
+                var mlacks = _U8P(unsafe_from_address=mlack_at)[mfold] != UInt8(0)
+                if member_score and mlacks:
+                    # a multi-output fold lacking a class (lane mf-tail5): the
+                    # member's predict mapped back, scored as its own score
+                    _F64P(unsafe_from_address=values_at)[t] = _multi_lacking_score(run_at, v, place, d, y_cols,
+                                                                                   mheld_list, mfold)
+                    if side == 0:
+                        _F64P(unsafe_from_address=secs_at)[t] = Float64(perf_counter_ns() - started) / 1e9
+                    return
                 if member_score:
                     _F64P(unsafe_from_address=values_at)[t] = _member_score(run_at, v, place, d, y_dtype, y_cols)
                     if side == 0:
@@ -1379,7 +1586,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     var got = _respond(run_at, v, op, place, d, buffer, _IntP(unsafe_from_address=cap_list)[at],
                                        dtype, narrow, y_cols)
                     _IntP(unsafe_from_address=cols_list)[at] = got
-                    if dst != 0:
+                    if multi_cls and mlacks and op == MEMBER_OP_PREDICT:
+                        # each output's fold codes as its classes' codes (lane mf-tail5)
+                        _map_multi_codes(buffer, dtype, place.count, y_cols, mheld_list, fold)
+                    if dst != 0 and multi_cls and op == MEMBER_OP_PREDICT_PROBA:
+                        # THE PER-OUTPUT BUFFERS (lane mf-tail5): one block per output
+                        _place_multi_proba(buffer, dtype, got, place.count, _IntP(unsafe_from_address=side_rows_at)[s],
+                                           dst, y_cols, dst_counts_at, mheld_list if mlacks else 0, fold)
+                    elif dst != 0:
                         # THE CV TOOLS' FINAL BUFFER: straight into the caller's
                         # result at the side's rows (no copy between).
                         _place_response(buffer, dtype, got, place.count, _IntP(unsafe_from_address=side_rows_at)[s],
@@ -1418,11 +1632,23 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             # The responses are in the caller's buffer already (the tasks
             # above). A unit of a fold that lacks a class warns as
             # `_enforce_prediction_order` warns, in unit order.
+            # (lane mf-tail5) Only a response scikit-learn encodes warns:
+            # predict_proba, its log and decision_function (`encode`), never
+            # predict; a multi-output fold once per lacking output, in output
+            # order (its list comprehension over `estimator.classes_`).
             for t in range(tasks):  # driver-loop: over the wave's tasks (one test side each)
                 var fold = (u0 + t) % used
-                if failed[t] == UInt8(0) and held_count[fold] > 0:
+                if failed[t] != UInt8(0) or plan.respond == MEMBER_OP_PREDICT:
+                    continue
+                if held_count[fold] > 0:
                     member_notice_add(metric_notes[t], MEMBER_NOTICE_FOLD_LACKING, Float64(held_count[fold]),
                                       Float64(k))
+                if multi_cls and mlack[fold] != UInt8(0):
+                    for j in range(y_cols):  # small-loop(the outputs)
+                        var m = len(mheld[fold * y_cols + j])
+                        if m > 0:
+                            member_notice_add(metric_notes[t], MEMBER_NOTICE_FOLD_LACKING, Float64(m),
+                                              Float64(plan.class_counts[j]))
         elif not member_score:
             for t in range(tasks):  # driver-loop: over the wave's tasks (one native metric program per scorer)
                 var s = ((u0 + t // sides) % used) * sides + t % sides
@@ -1511,6 +1737,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     _ = len(side_start)
     _ = len(fold_held)  # the folds' held classes and re-coded codes, read by every wave above
     _ = len(fold_codes)
+    _ = len(mheld)  # (lane mf-tail5) the multi-output folds' held classes, codes and counts, read by every wave
+    _ = len(mcodes)
+    _ = len(mcounts)
+    _ = len(mlack)
+    _ = len(dst_counts)
     _ = len(held_addr)
     _ = len(held_count)
     _ = len(side_rows)
@@ -1567,6 +1798,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         run.add(best^, plan.y, 0, 0, 0, 0, 0,
                 UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
                 UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
+        if plan.given != 0 and not classifier and (mask & MEMBER_READS_Y_GIVEN) != 0:
+            run.given_target(plan.given, plan.given_dtype)
         var resident_refit = rows_route[res.best] == SEARCH_ROWS_RESIDENT
         if resident_refit:
             run.pin_tokens[0] = plan.pin  # every row: the whole X, the resident base

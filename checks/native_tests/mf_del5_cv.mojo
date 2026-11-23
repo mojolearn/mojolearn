@@ -95,7 +95,7 @@ def check_loo() raises:
 
 def check_target_codes() raises:
     var y: List[Float32] = [2.5, -1.0, 2.5, 0.0, -0.0, 7.0]
-    var got = msel_target_codes_run(Int(y.unsafe_ptr()), len(y))
+    var got = msel_target_codes_run(Int(y.unsafe_ptr()), len(y), 0, 0)
     _ = len(y)
     var want: List[Int] = [2, 0, 2, 1, 1, 3]
     require(got.m == 4, "four distinct values, got " + String(got.m))
@@ -104,7 +104,7 @@ def check_target_codes() raises:
     var bad: List[Float32] = [1.0, nan[DType.float32]()]
     var refused = False
     try:
-        _ = msel_target_codes_run(Int(bad.unsafe_ptr()), len(bad))
+        _ = msel_target_codes_run(Int(bad.unsafe_ptr()), len(bad), 0, 0)
     except error:
         refused = String(error) == "Input y contains NaN."
     _ = len(bad)
@@ -125,7 +125,7 @@ def check_targets_sides() raises:
     var spec = _spec(MSEL_SPEC_STRATIFIED_KFOLD, 2)
     var y: List[Float32] = [1.0, 2.0, 1.0, 2.0, 1.0, 2.0]
     var codes: List[Int32] = [0, 1, 0, 1, 0, 1]
-    var got = msel_spec_sides_targets(spec, 6, Int(y.unsafe_ptr()), MselGroupCodes())
+    var got = msel_spec_sides_targets(spec, 6, Int(y.unsafe_ptr()), 0, 0, MselGroupCodes())
     var want = msel_spec_sides(spec, 6, Int(codes.unsafe_ptr()), 2, MselGroupCodes())
     _ = len(y)
     _ = len(codes)
@@ -133,13 +133,13 @@ def check_targets_sides() raises:
     var cont: List[Float32] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
     var refused = False
     try:
-        _ = msel_spec_sides_targets(spec, 6, Int(cont.unsafe_ptr()), MselGroupCodes())
+        _ = msel_spec_sides_targets(spec, 6, Int(cont.unsafe_ptr()), 0, 0, MselGroupCodes())
     except error:
         refused = String(error).find("cannot be greater than the number of members in each class") >= 0
     _ = len(cont)
     require(refused, "continuous targets: the door's class-size refusal")
     var kf = _spec(MSEL_SPEC_KFOLD, 3)
-    var plain = msel_spec_sides_targets(kf, 6, Int(cont.unsafe_ptr()), MselGroupCodes())
+    var plain = msel_spec_sides_targets(kf, 6, Int(cont.unsafe_ptr()), 0, 0, MselGroupCodes())
     var plain_want = msel_spec_sides(kf, 6, 0, 0, MselGroupCodes())
     _ = len(cont)
     _same(plain, plain_want, "KFold reads no targets")

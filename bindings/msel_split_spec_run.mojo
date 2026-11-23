@@ -455,14 +455,29 @@ struct MselTargetCodes(Movable):
         self.m = 0
 
 
-def msel_target_codes_run(y: Int, n: Int) raises -> MselTargetCodes:
-    """RUN (lane mf-del5): the n float32 targets at `y` as sorted-order int32
-    codes, the labels the splitter door makes of a regressor's y for a
+#: THE GIVEN y's element types (`msel_target_codes_run`'s `given_dtype`):
+#: the values of core/member_abi.mojo's MEMBER_F64 / MEMBER_I32 / MEMBER_I64
+#: (this module does not import the member ABI; checks/native_tests/
+#: msel_search_run.mojo case 20 asserts the values are equal). Any other:
+#: not given.
+comptime MSEL_GIVEN_F64 = 1
+comptime MSEL_GIVEN_I32 = 2
+comptime MSEL_GIVEN_I64 = 3
+
+
+def msel_target_codes_run(y: Int, n: Int, given: Int, given_dtype: Int) raises -> MselTargetCodes:
+    """RUN (lanes mf-del5, mf-tail5): a regressor's n targets as sorted-order
+    int32 codes, the labels the splitter door makes of a regressor's y for a
     stratified splitter (bindings/msel_split_door.mojo `_strat_labels`:
-    `msel_label_codes`, MSEL_LABELS_SORTED: np.unique's inverse). The
-    targets are widened to float64 across the host cores (exact), then
-    coded by core/label_encode.mojo `host_unique_inverse` (parallel; -0.0
-    and +0.0 are one value). A NaN target is refused in check_array's
+    `msel_label_codes`, MSEL_LABELS_SORTED: np.unique's inverse over the y
+    it was GIVEN). `given` (0: none) is that y as the caller's UNPACK was
+    given it (`given_dtype`: MSEL_GIVEN_F64 / _I32 / _I64 words; core/
+    member_abi.mojo `MemberCall.y_given`); without it the float32 targets at
+    `y` are the given y. Either is widened to float64 across the host cores
+    (exact for float32, int32 and |int64| <= 2^53, the door's float64 order),
+    then coded by core/label_encode.mojo `host_unique_inverse` (parallel;
+    -0.0 and +0.0 are one value): two float64 targets equal in float32 stay
+    two classes, as at the door. A NaN target is refused in check_array's
     words."""
     var out = MselTargetCodes()
     out.codes = List[Int32](length=max(n, 1), fill=Int32(0))
@@ -473,14 +488,28 @@ def msel_target_codes_run(y: Int, n: Int) raises -> MselTargetCodes:
     var wide_at = Int(wide.unsafe_ptr())
     var tasks = host_predict_task_count_work(n, n)
     var chunk = host_predict_chunk(n, tasks)
+    var kind = given_dtype if given != 0 else 0
 
-    def widen(t: Int) {imm y, imm wide_at, imm chunk, imm n}:
-        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y)
+    def widen(t: Int) {imm y, imm given, imm kind, imm wide_at, imm chunk, imm n}:
         var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=wide_at)
         var begin = t * chunk
         var end = min(begin + chunk, n)
-        for i in range(begin, end):
-            dst[i] = Float64(src[i])
+        if kind == MSEL_GIVEN_F64:
+            var src64 = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=given)
+            for i in range(begin, end):
+                dst[i] = src64[i]
+        elif kind == MSEL_GIVEN_I64:
+            var srci64 = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=given)
+            for i in range(begin, end):
+                dst[i] = Float64(srci64[i])
+        elif kind == MSEL_GIVEN_I32:
+            var srci32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=given)
+            for i in range(begin, end):
+                dst[i] = Float64(srci32[i])
+        else:
+            var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y)
+            for i in range(begin, end):
+                dst[i] = Float64(src[i])
 
     host_parallelize(widen, max(tasks, 1))
     var m = host_unique_inverse(MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=wide_at), n,
@@ -495,17 +524,19 @@ def msel_target_codes_run(y: Int, n: Int) raises -> MselTargetCodes:
     return out^
 
 
-def msel_spec_sides_targets(spec: MselSplitSpec, n: Int, y: Int, groups: MselGroupCodes) raises -> MselSides:
-    """RUN (lane mf-del5): `msel_spec_sides` for a REGRESSOR's fit (no class
-    codes; its n float32 targets at `y`). A stratified splitter stratifies
-    on the targets' values, as the splitter door does with a regressor's y
-    (`msel_target_codes_run`): continuous targets meet its refusal ("n_splits=
+def msel_spec_sides_targets(spec: MselSplitSpec, n: Int, y: Int, given: Int, given_dtype: Int,
+                            groups: MselGroupCodes) raises -> MselSides:
+    """RUN (lanes mf-del5, mf-tail5): `msel_spec_sides` for a REGRESSOR's
+    fit (no class codes; its n float32 targets at `y`, and the y it was
+    given at `given`, 0: none, `msel_target_codes_run`). A stratified
+    splitter stratifies on the targets' values, as the splitter door does
+    with a regressor's y: continuous targets meet its refusal ("n_splits=
     ... cannot be greater than the number of members in each class.") or
     its least-populated warning in its words, repeated values its folds.
     Any other splitter reads no labels."""
     if not msel_spec_stratified(spec.kind):
         return msel_spec_sides(spec, n, 0, 0, groups)
-    var coded = msel_target_codes_run(y, n)
+    var coded = msel_target_codes_run(y, n, given, given_dtype)
     var sides = msel_spec_sides(spec, n, Int(coded.codes.unsafe_ptr()), coded.m, groups)
     _ = len(coded.codes)  # the plans and fills read the codes through their address
     return sides^
