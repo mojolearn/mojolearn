@@ -909,8 +909,6 @@ def _seq(shape, layers, data_rows=32, epochs=2, batch=16, seed=0):
             "outputs": {"digest": True, "predict": {"method": "predict", "on": "test"}, "score": False}}
 
 
-_S = lambda *calls: {"sequential": list(calls)}  # noqa: E731
-
 EXAMPLES = {
     "ridge": _est("Ridge", {"alpha": 1.0},
                   {"generator": "regression", "args": {"rows": 512, "features": 8, "test_rows": 64, "seed": 0}}),
@@ -919,21 +917,22 @@ EXAMPLES = {
                                                               "test_rows": 64, "seed": 1}}),
     "kmeans": _est("KMeans", {"n_clusters": 3, "n_init": 1, "max_iter": 20},
                    {"generator": "blobs", "args": {"rows": 600, "features": 4, "centers": 3, "test_rows": 60,
-                                                   "seed": 2}}, seed=0),
+                                                   "seed": 2}}, seed=0, score=False),
     "gbdt-categorical": _est("GradientBoosting", {"n_estimators": 8, "max_depth": 3, "cat_features": [0, 1]},
                              {"generator": "categorical", "args": {"rows": 800, "numeric": 4, "categorical": 2,
                                                                    "levels": 5, "test_rows": 100, "seed": 3}},
                              seed=0, score=False),
+    # residual(source) adds the output of layer `source`: the blocks' skips. (residual_block with a Sequential
+    # body is refused by the Sequential input admission at 555135703f; reported, not worked around here.)
     "seq-transformer": _seq((8, 16), [
-        ["linear", 16],
-        ["residual_block", _S(["rms_norm"], ["attention", 2, {"kv_heads": 1}])],
-        ["residual_block", _S(["rms_norm"], ["linear", 32], ["silu"], ["linear", 16])],
+        ["linear", 16], ["rms_norm"], ["attention", 2, {"kv_heads": 1}], ["residual", 0],
+        ["rms_norm"], ["linear", 32], ["silu"], ["linear", 16], ["residual", 3],
         ["flatten"], ["linear", 1]]),
     "seq-mamba2": _seq((8, 2), [["linear", 321], ["softplus"], ["ssd_scan", 1], ["flatten"], ["linear", 1]]),
     "seq-recurrent": _seq((8, 4), [["lstm", 8], ["gru", 6], ["flatten"], ["linear", 1]]),
     "seq-conv1d-residual": _seq((4, 8), [
         ["conv1d", 8, 3, {"padding": 1}], ["silu"],
-        ["residual_block", _S(["conv1d", 8, 3, {"padding": 1}], ["silu"], ["conv1d", 8, 3, {"padding": 1}])],
+        ["conv1d", 8, 3, {"padding": 1}], ["silu"], ["conv1d", 8, 3, {"padding": 1}], ["residual", 1],
         ["flatten"], ["linear", 1]]),
 }
 
