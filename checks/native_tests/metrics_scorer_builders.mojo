@@ -709,28 +709,28 @@ def _cluster_oracle(a: List[Int32], b: List[Int32], k: Int) -> List[Float64]:
     var qk = 0.0
     var ha = 0.0
     var hb = 0.0
-    var fn = Float64(n)
+    var count_f = Float64(n)
     for c in range(k):  # small-loop(oracle)
         sa += _c2(ra[c])
         sb += _c2(rb[c])
         qk += ra[c] * ra[c]
         pk += rb[c] * rb[c]
         if ra[c] > 0.0:
-            ha -= (ra[c] / fn) * log(ra[c] / fn)
+            ha -= (ra[c] / count_f) * log(ra[c] / count_f)
         if rb[c] > 0.0:
-            hb -= (rb[c] / fn) * log(rb[c] / fn)
+            hb -= (rb[c] / count_f) * log(rb[c] / count_f)
     var mi = 0.0
     for x in range(k):  # small-loop(oracle)
         for y in range(k):  # small-loop(oracle)
             var c = cont[x * k + y]
             if c > 0.0:
-                mi += (c / fn) * log((c * fn) / (ra[x] * rb[y]))
+                mi += (c / count_f) * log((c * count_f) / (ra[x] * rb[y]))
     var expected = sa * sb / pairs
     var ari = (sum_comb - expected) / ((sa + sb) / 2.0 - expected)
     var h = mi / ha if ha > 0.0 else 1.0
     var cc = mi / hb if hb > 0.0 else 1.0
     var v = 2.0 * h * cc / (h + cc) if h + cc > 0.0 else 0.0
-    var fm = (sq - fn) / sqrt((pk - fn) * (qk - fn))
+    var fm = (sq - count_f) / sqrt((pk - count_f) * (qk - count_f))
     var out: List[Float64] = [agree / pairs, ari, mi, h, cc, v, fm]
     return out^
 
