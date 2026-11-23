@@ -31,11 +31,10 @@
 # Codes OP_RNV_FIRST..OP_RNV_LAST (4500..4519) are this family; 4508..4517
 # are the batch norm of Sequential (lane seq-blocks-3, below), 4518..4519
 # reserved. sequence/dispatch.mojo routes and fences them.
-from std.math import sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from sequence.ops import Args, FP
-from checks.numerics import ftz, identical_div
+from checks.numerics import ftz, identical_div, identical_rsqrt
 from autograd.rankn import rn_word
 from x_cnn.ops import FP as XFP, IP as XIP
 from x_cnn.ops import (
@@ -473,7 +472,7 @@ def op_rnv_bn_var(c: Int, a: Args):
         var C = rn_word(a.p11, 1)
         var count = Float32(rn_word(a.p11, 0) * rn_word(a.p11, 2))
         var vu = a.p1.unsafe_load(2 + C + c) * count / (count - Float32(1))
-        a.p1.unsafe_store(2 + 2 * C + c, ftz(Float32(1) / sqrt(vu + a.p1.unsafe_load(0))))
+        a.p1.unsafe_store(2 + 2 * C + c, ftz(identical_rsqrt(ftz(vu + a.p1.unsafe_load(0)))))
 
 
 @always_inline

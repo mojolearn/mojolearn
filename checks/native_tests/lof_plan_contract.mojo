@@ -212,6 +212,8 @@ def fixture(unit: Int) raises:
         var f = List[Float32]()
         var i = List[Int32]()
         require(lof_f32_address(f) == 0 and lof_i32_address(i) == 0, "empty scratch preserves null ABI")
+        _ = f^
+        _ = i^
         require(lof_matrix_count(0, 5) == 0, "zero rows preserve empty shape")
     elif unit < 18:
         var quantiles: List[Float64] = [0, 12.5, 25, 50, 75, 100]

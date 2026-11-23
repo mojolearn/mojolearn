@@ -482,6 +482,7 @@ def _rs_predict(entry: EntryRef, plan: ProphetFitPlan, params: List[Float32], in
     prophet_run_predict(entry, request)
     _ = t^
     _ = days^
+    _ = day_info^
     _ = periods^
     _ = orders^
     _ = cpts^
