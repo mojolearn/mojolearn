@@ -2,6 +2,7 @@
 """Typed loops of the RF host binding, moved word for word from
 bindings/_mojolearn_rf_host.mojo. The shell unpacks the Python arguments and
 calls these; the session structs are re-exported there under the same names."""
+from std.memory import ArcPointer
 from core.forest_export_binding_impl import copy_forest_export_leaves
 from ensemble.host.rf_oracle import RfHostForest, RfHostParams, n_sampled_rows_host
 
@@ -85,36 +86,53 @@ def rf_host_weights_from(
 
 
 struct RfHostSession(Movable):
+    """One open host data session. `x` (the column-major X) is held by an
+    `ArcPointer`: a fit leases it under the registry's lock and reads it with
+    no lock (lane mf-ada2)."""
     var id: Int
-    var x: List[Float32]
+    var x: ArcPointer[List[Float32]]
     var n_rows: Int
     var n_cols: Int
 
     def __init__(out self, id: Int, var x: List[Float32], n_rows: Int, n_cols: Int):
         self.id = id
-        self.x = x^
+        self.x = ArcPointer[List[Float32]](x^)
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+
+
+struct RfHostSessionLease(Movable):
+    """A session's X (shared, read only) and shape, taken under the lock."""
+    var x: ArcPointer[List[Float32]]
+    var n_rows: Int
+    var n_cols: Int
+
+    def __init__(out self, x: ArcPointer[List[Float32]], n_rows: Int, n_cols: Int):
+        self.x = x.copy()
         self.n_rows = n_rows
         self.n_cols = n_cols
 
 
 struct RfHostSessionRegistry(Defaultable, Movable):
+    """The open host data sessions. THE LOCK (lane mf-ada2, 2026-11-23): the
+    registry was serialized by the GIL; `lock` (one heap word, a stable
+    address) now guards `sessions` and `next_id` for one list step (keep,
+    lease, retire), and a fit reads its leased X with no lock and no GIL.
+    Reach it only through `rf_host_session_keep` / `_lease` / `_retire`,
+    which read the fields through the slot pointer after the lock."""
+    var lock: List[Int64]
     var sessions: List[RfHostSession]
     var next_id: Int
 
     def __init__(out self):
+        self.lock = List[Int64](length=1, fill=Int64(0))
         self.sessions = List[RfHostSession]()
         self.next_id = 1
-
-    def find(self, id: Int) raises -> Int:
-        for i in range(len(self.sessions)):
-            if self.sessions[i].id == id:
-                return i
-        raise Error("unknown or closed forest data session handle")
 
 
 def rf_host_session_rows_x(
     entry: String,
-    src_x: List[Float32],
+    src_x: ArcPointer[List[Float32]],
     src_rows: Int,
     rp: MutPointer[Int32, MutUntrackedOrigin],
     n_rows: Int,
@@ -126,9 +144,11 @@ def rf_host_session_rows_x(
         if r < 0 or r >= src_rows:
             raise Error(entry + ": a row id is outside the session's X")
     var x = List[Float32](length=n_rows * n_cols, fill=Float32(0.0))
+    var sp = src_x[].unsafe_ptr()  # the leased X, read with no lock (its ArcPointer keeps it alive)
     for c in range(n_cols):
         for i in range(n_rows):
-            x[c * n_rows + i] = src_x[c * src_rows + Int(rp[i])]
+            x[c * n_rows + i] = sp[c * src_rows + Int(rp[i])]
+    _ = src_x[].__len__()  # `sp` read the leased X above
     return x^
 
 

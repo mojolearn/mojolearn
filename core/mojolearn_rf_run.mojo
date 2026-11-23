@@ -92,7 +92,7 @@ from ensemble.randomforest import (
     launch_gather_rows_colmajor,
     n_sampled_rows_for,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime DT = DType.float32
 comptime CLT = DType.int32
@@ -461,21 +461,136 @@ struct RfDataSession(Movable):
 
 
 struct RfSessionRegistry(Defaultable, Movable):
+    """The open data sessions. THE LOCK (lane mf-ada2, 2026-11-23): the
+    registry was serialized by the GIL, so a data session operation refused a
+    caller that held none. `lock` (one word in heap storage, so its address
+    is stable) now guards `sessions` and `next_id` for ONE list step (mint
+    and keep, lease, prep swap, AdaBoost state, retire); an operation takes
+    the session's buffer HANDLES (reference counted, the device memory is
+    shared) and its scalars under the lock and fits, uploads and launches
+    with no lock and no GIL (hazard B). Every step is one of the `rf_session_*`
+    functions below, which reach the fields through the slot pointer after
+    the lock is taken; nothing reads `sessions` elsewhere. One thread uses
+    a session at a time (one ensemble fit); different sessions run in
+    parallel."""
+    var lock: List[Int64]
     var sessions: List[RfDataSession]
     var next_id: Int
 
     def __init__(out self):
+        self.lock = List[Int64](length=1, fill=Int64(0))
         self.sessions = List[RfDataSession]()
         self.next_id = 1
 
-    def find(self, id: Int) raises -> Int:
-        for i in range(len(self.sessions)):  # small-loop(sessions: open data sessions of this process): handle lookup, not data
-            if self.sessions[i].id == id:
-                return i
-        raise Error("unknown or closed forest data session handle")
+
+# Layout version 2 (lane mf-ada2: the lock word).
+comptime RF_SESSIONS = SharedSlot[RfSessionRegistry, ("MojolearnRFDataSessionIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFDataSessionFastV2"), 2]
 
 
-comptime RF_SESSIONS = SharedSlot[RfSessionRegistry, ("MojolearnRFDataSessionIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFDataSessionFastV1")]
+def _rf_sessions_word() raises -> MutPointer[Int64, MutUntrackedOrigin]:
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(reg[].lock.unsafe_ptr()))
+
+
+def _rf_session_index(id: Int) raises -> Int:
+    """The index of session `id`; the caller holds the lock."""
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    for i in range(len(reg[].sessions)):  # small-loop(sessions: open data sessions of this process): handle lookup, not data
+        if reg[].sessions[i].id == id:
+            return i
+    raise Error("unknown or closed forest data session handle")
+
+
+struct RfSessionLease(Movable):
+    """A session's buffer handle and scalars, taken under the lock (the
+    device memory is shared with the session; the registry is not indexed
+    while the lease is used). `prep` holds the session's swapped-out
+    prepared tables when the lease asked for them; `rf_session_restore_prep`
+    gives them back."""
+    var dx: DeviceBuffer[DT]
+    var n_rows: Int
+    var n_cols: Int
+    var host_x: Int
+    var share_tables: Bool
+    var prep: List[ForestPrep]
+
+    def __init__(out self, var dx: DeviceBuffer[DT], n_rows: Int, n_cols: Int, host_x: Int, share_tables: Bool,
+                 var prep: List[ForestPrep]):
+        self.dx = dx^
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.host_x = host_x
+        self.share_tables = share_tables
+        self.prep = prep^
+
+
+def rf_session_keep(var session: RfDataSession) raises -> Int:
+    """A staged session kept under a new handle; the handle."""
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var word = _rf_sessions_word()
+    shared_slot_lock(word)
+    var id = reg[].next_id
+    reg[].next_id += 1
+    session.id = id
+    reg[].sessions.append(session^)
+    shared_slot_unlock(word)
+    return id
+
+
+def rf_session_lease(id: Int, take_prep: Bool) raises -> RfSessionLease:
+    """Session `id`'s handle and scalars (and, with `take_prep`, its prepared
+    tables, swapped out), under the lock."""
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var word = _rf_sessions_word()
+    shared_slot_lock(word)
+    try:
+        var si = _rf_session_index(id)
+        var prep = List[ForestPrep]()
+        if take_prep:
+            swap(prep, reg[].sessions[si].prep)
+        ref s = reg[].sessions[si]
+        return RfSessionLease(s.dx.copy(), s.n_rows, s.n_cols, s.host_x, s.share_tables, prep^)
+    finally:
+        shared_slot_unlock(word)
+
+
+def rf_session_retire(id: Int) raises -> RfDataSession:
+    """Session `id` leaves the registry (the close drains and drops it)."""
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var word = _rf_sessions_word()
+    shared_slot_lock(word)
+    try:
+        var si = _rf_session_index(id)
+        return reg[].sessions.pop(si)
+    finally:
+        shared_slot_unlock(word)
+
+
+def rf_session_set_ada(id: Int, n: Int, mut made: List[AdaState]) raises:
+    """Session `id`'s AdaBoost state replaced by the one in `made` (staged
+    with no lock); `n` must be the session's row count."""
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var word = _rf_sessions_word()
+    shared_slot_lock(word)
+    try:
+        var si = _rf_session_index(id)
+        if reg[].sessions[si].n_rows != n:
+            raise Error("rf_ada_open: n must be the session's row count")
+        reg[].sessions[si].ada = List[AdaState]()
+        reg[].sessions[si].ada.append(made.pop())
+    finally:
+        shared_slot_unlock(word)
+
+
+def rf_session_rows(id: Int) raises -> Int:
+    """Session `id`'s row count, under the lock."""
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var word = _rf_sessions_word()
+    shared_slot_lock(word)
+    try:
+        return reg[].sessions[_rf_session_index(id)].n_rows
+    finally:
+        shared_slot_unlock(word)
 
 
 def _session_shape_check(
@@ -498,12 +613,16 @@ def _session_shape_check(
 
 def _rf_session_restore_prep(session_id: Int, mut prep: List[ForestPrep]) raises:
     """Hand a member fit's swapped-out prep back to its session, if the
-    session is still open (a closed session simply drops it)."""
-    var back = RF_SESSIONS.get_or_create_ptr()
-    for i in range(len(back[].sessions)):  # small-loop(sessions: open data sessions of this process): handle lookup, not data
-        if back[].sessions[i].id == session_id:
-            swap(prep, back[].sessions[i].prep)
-            return
+    session is still open (a closed session simply drops it), under the
+    registry's lock."""
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var word = _rf_sessions_word()
+    shared_slot_lock(word)
+    for i in range(len(reg[].sessions)):  # small-loop(sessions: open data sessions of this process): handle lookup, not data
+        if reg[].sessions[i].id == session_id:
+            swap(prep, reg[].sessions[i].prep)
+            break
+    shared_slot_unlock(word)
 
 
 def _u64_ptr(addr: Int) raises -> MutPointer[UInt64, MutUntrackedOrigin]:
@@ -520,15 +639,20 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
 
 def _ada_state_of(session_id: Int, k_needed: Bool, name: String) raises -> AdaState:
     """A copy of the session's AdaBoost state (buffer handles: the device
-    memory is shared), taken under the GIL (hazard B)."""
+    memory is shared), taken under the registry's lock (hazard B)."""
     var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(session_id)
-    if len(reg[].sessions[si].ada) != 1:
-        raise Error(name + ": the session holds no AdaBoost state (rf_ada_open first)")
-    ref st = reg[].sessions[si].ada[0]
-    if (st.k >= 2) != k_needed:
-        raise Error(name + ": the session's AdaBoost state is the other estimator's")
-    return AdaState(st.n, st.k, st.w.copy(), st.codes.copy(), st.values.copy(), st.cw.copy(), st.has_cw)
+    var word = _rf_sessions_word()
+    shared_slot_lock(word)
+    try:
+        var si = _rf_session_index(session_id)
+        if len(reg[].sessions[si].ada) != 1:
+            raise Error(name + ": the session holds no AdaBoost state (rf_ada_open first)")
+        ref st = reg[].sessions[si].ada[0]
+        if (st.k >= 2) != k_needed:
+            raise Error(name + ": the session's AdaBoost state is the other estimator's")
+        return AdaState(st.n, st.k, st.w.copy(), st.codes.copy(), st.values.copy(), st.cw.copy(), st.has_cw)
+    finally:
+        shared_slot_unlock(word)
 
 
 def _rf_predict_native(model: List[Int], x_addr: Int, out_addr: Int, n_rows: Int, n_cols: Int, n_trees: Int,
@@ -1413,10 +1537,9 @@ def _rf_ada_regressor_round(
 
 def _rf_data_session_close(id: Int) raises:
     """`rf_data_session_close` (wave 8 run split): drop the session after
-    the context drains. The binding calls it holding the GIL."""
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(id)
-    var session = reg[].sessions.pop(si)
+    the context drains. The session leaves the registry under its lock; the
+    drain runs with no lock and no GIL."""
+    var session = rf_session_retire(id)
     var ctx = process_ctx[_DEVCTX_SLOT]()
     ctx.synchronize()
     _ = session^

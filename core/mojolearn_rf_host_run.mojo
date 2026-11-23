@@ -13,6 +13,7 @@ from core.mojolearn_forest_host_impl import forest_host_vote_into
 from core.mojolearn_rf_host_impl import (
     RfHostSession,
     RfHostSessionRegistry,
+    RfHostSessionLease,
     _apply_min_weight_fraction,
     rf_host_col_major,
     rf_host_dart_member_xy,
@@ -55,7 +56,7 @@ from ensemble.host.rf_oracle import (
     n_sampled_rows_host,
     rf_host_fit,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.forest_export_run import ForestExportRegistry
 from core.forest_export_binding_impl import validate_forest_export_destinations
 from core.forest_fit_request import XF_CAP_SESSION
@@ -292,8 +293,60 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
 # `_rf_fit_colmajor` on a copy of it: the body the plain entries run, so the
 # host column computes the bits it computes without a session. The same
 # names, params and refusals as the GPU binding. One thread uses a session at
-# a time.
-comptime RF_HOST_SESSIONS = SharedSlot[RfHostSessionRegistry, "MojolearnRFDataSessionHostV1"]
+# a time; different sessions run in parallel on threads that hold no GIL
+# (lane mf-ada2: the registry's lock word, the `rf_host_session_*` steps).
+# Layout version 2 (the lock word, the leased X).
+comptime RF_HOST_SESSIONS = SharedSlot[RfHostSessionRegistry, "MojolearnRFDataSessionHostV2", 2]
+
+
+def _host_sessions_word() raises -> MutPointer[Int64, MutUntrackedOrigin]:
+    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
+    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(reg[].lock.unsafe_ptr()))
+
+
+def _host_session_index(id: Int) raises -> Int:
+    """The index of session `id`; the caller holds the lock."""
+    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
+    for i in range(len(reg[].sessions)):  # small-loop(sessions: open data sessions of this process): handle lookup, not data
+        if reg[].sessions[i].id == id:
+            return i
+    raise Error("unknown or closed forest data session handle")
+
+
+def rf_host_session_keep(var x: List[Float32], n_rows: Int, n_cols: Int) raises -> Int:
+    """A session over the column-major X `x`, kept under a new handle."""
+    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
+    var word = _host_sessions_word()
+    shared_slot_lock(word)
+    var id = reg[].next_id
+    reg[].next_id += 1
+    reg[].sessions.append(RfHostSession(id, x^, n_rows, n_cols))
+    shared_slot_unlock(word)
+    return id
+
+
+def rf_host_session_lease(id: Int) raises -> RfHostSessionLease:
+    """Session `id`'s X (shared) and shape, under the lock."""
+    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
+    var word = _host_sessions_word()
+    shared_slot_lock(word)
+    try:
+        ref s = reg[].sessions[_host_session_index(id)]
+        return RfHostSessionLease(s.x, s.n_rows, s.n_cols)
+    finally:
+        shared_slot_unlock(word)
+
+
+def rf_host_session_retire(id: Int) raises:
+    """Session `id` leaves the registry; its X is freed when the last lease
+    lets go."""
+    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
+    var word = _host_sessions_word()
+    shared_slot_lock(word)
+    try:
+        _ = reg[].sessions.pop(_host_session_index(id))
+    finally:
+        shared_slot_unlock(word)
 
 
 def _session_params[CLASSIFIER: Bool](
@@ -327,16 +380,16 @@ def _session_params[CLASSIFIER: Bool](
 def _session_x(entry: String, session_id: Int, n_rows: Int, n_cols: Int) raises -> List[Float32]:
     """A copy of the session's column-major X (the fit consumes its X), after
     `bindings/_mojolearn_rf.mojo::_session_shape_check`."""
-    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(session_id)
-    var sr = reg[].sessions[si].n_rows
-    var sc = reg[].sessions[si].n_cols
+    var lease = rf_host_session_lease(session_id)
+    var sr = lease.n_rows
+    var sc = lease.n_cols
     if sr != n_rows or sc != n_cols:
         raise Error(
             entry + ": params name " + String(n_rows) + " x " + String(n_cols)
             + ", the session holds " + String(sr) + " x " + String(sc)
         )
-    return reg[].sessions[si].x.copy()
+    # the copy reads the leased X with no lock
+    return lease.x[].copy()
 
 
 def _rf_export_into_native(id: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
@@ -511,10 +564,102 @@ def _rf_predict_walk(model: List[Int], x_address: Int, out_addr: Int, n_rows: In
 # predict through the forest entry with no binding loaded. ONE BODY, TWO
 # ENTRIES, as core/mojolearn_et_host_run.mojo: every body here runs bare;
 # the binding's entry releases the GIL around the long operations
-# (`forest_host_entry_releases`). The data sessions are the doors' own (their
-# registry is serialized by the GIL and their fits release it): the image
-# takes them as `S`, the binding's GIL-holding session operations, or
-# `RfHostNoSessions` for a caller with no Python.
+# (`forest_host_entry_releases`). The data sessions live here too (lane
+# mf-ada2, 2026-11-23): their registry has its own lock word
+# (`RF_HOST_SESSIONS`), so their bodies run bare like the fits, and a typed
+# RUN with no GIL (xtrees/trees_ada_fit_run.mojo) or a Mojo check opens and
+# fits sessions through the same image.
+# TOMBSTONE: RfHostSessionOps / RfHostNoSessions / the binding's RfHostPySessions (the image's session
+# operations as a parameter: the GIL-holding binding bodies, or a refusal for a caller with no Python) deleted
+# 2026-11-23 by lane mf-ada2: the bodies need no GIL. Not an experiment arm.
+
+
+def _rf_session_open_native(x_address: Int, n_rows: Int, n_cols: Int, row_major: Bool,
+                            share_tables: Bool) raises -> Int:
+    """XF_SESSION_OPEN (`bindings/_mojolearn_rf.mojo` `_rf_session_open_native`):
+    `x` is float32, ROW-major when `row_major` and COLUMN-major otherwise,
+    borrowed through this call only. Returns the session handle."""
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("rf_data_session_open: invalid shape")
+    # A host binding is IDENTICAL only, and an IDENTICAL member draws its
+    # own quantile sample (the GPU binding's IDENTICAL refusal).
+    if share_tables:
+        raise Error(
+            "rf_data_session_open: shared quantile tables are a FAST"
+            " option; an IDENTICAL member draws its own sample"
+        )
+    # Lane a8c-device-x-linear-prep-rfe: NaN AND infinity (the GPU binding's
+    # device scan of its upload), so the boost meta-estimators' own host
+    # scan before the open is deleted; the host column tests the words it
+    # reads, once, in parallel SIMD tasks (core/host_finite_scan.mojo).
+    if not host_all_finite_f32(f32_ptr(x_address), n_rows * n_cols):
+        raise Error("rf_data_session_open: " + RF_NONFINITE_REFUSAL)
+    var x = _read_x_col_major(x_address, n_rows, n_cols, row_major)
+    return rf_host_session_keep(x^, n_rows, n_cols)
+
+
+def _rf_session_close_native(handle: Int) raises:
+    """XF_SESSION_CLOSE."""
+    rf_host_session_retire(handle)
+
+
+def _rf_fit_session_rows_native(params: ForestFitArgs) raises -> Int:
+    """XF_FIT_SESSION, regressor: the regressor fit on the rows `params.x`
+    (int32 row ids of the session's X, `params[0]` of them, repeats
+    allowed), `params.y` their labels in that order: the column-major gather
+    of those rows (the bytes the GPU binding's `launch_gather_rows_colmajor`
+    writes), then the plain fit. Returns the export handle."""
+    comptime entry = "rf_regressor_fit_session_rows"
+    var p = _session_params[False](entry, params)
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    if n_rows <= 0:
+        raise Error(entry + ": no rows")
+    var rp = i32_ptr(params.x)
+    # the X leased under the registry's lock, gathered with no lock
+    var lease = rf_host_session_lease(params.session)
+    var src_rows = lease.n_rows
+    if lease.n_cols != n_cols:
+        raise Error(entry + ": the session holds another column count")
+    var x = rf_host_session_rows_x(
+        entry, lease.x, src_rows, rp, n_rows, n_cols
+    )
+    _ = lease^
+    var y_address = params.y
+    var forest = _rf_fit_colmajor[False](
+        x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
+    )
+    return _retain_rf_handle(forest^)
+
+
+def _rf_fit_weighted_session_native(params: ForestFitArgs) raises -> Int:
+    """XF_FIT_SESSION, classifier: the weighted classifier fit on the
+    session's X. Returns the export handle."""
+    comptime entry = "rf_classifier_fit_weighted_session"
+    var p = _session_params[True](entry, params)
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    var n_classes = params.i(2)
+    var w_address = params.weights
+    if w_address == 0:
+        raise Error("weighted RF requires a nonzero Float32 weight pointer")
+    var weights = _read_weights(w_address, n_rows)
+    var x = _session_x(entry, params.session, n_rows, n_cols)
+    var y_address = params.y
+    # sk-weq-trees: the zero-weight rows leave this member's fit
+    var y_kept = List[Int32]()
+    var n_fit = _host_drop_zero_weight_rows(
+        x, weights, y_kept, y_address, n_rows, n_cols, p.bootstrap
+    )
+    var y_fit = y_address if n_fit == n_rows else Int(y_kept.unsafe_ptr())
+    var mwl = _apply_min_weight_fraction(p, _min_weight_fraction(params), weights, n_fit)
+    var forest = _rf_fit_colmajor[True](
+        x^, y_fit, n_fit, n_cols, n_classes, p, weights, 0,
+        min_weight_leaf=mwl,
+    )
+    _ = y_kept^
+    return _retain_rf_handle(forest^)
+
 
 
 def rf_host_fit_handle[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> Int:
@@ -583,40 +728,7 @@ def rf_host_fit_dart(params: ForestFitArgs) raises -> Int:
         )
 
 
-trait RfHostSessionOps:
-    """The host RF image's data session operations (XF_SESSION_OPEN,
-    XF_SESSION_CLOSE, XF_FIT_SESSION), served with the caller's GIL held."""
-
-    @staticmethod
-    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
-        ...
-
-    @staticmethod
-    def session_close(handle: Int) raises:
-        ...
-
-    @staticmethod
-    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
-        ...
-
-
-struct RfHostNoSessions(RfHostSessionOps):
-    """No data sessions: the image as a caller with no Python publishes it."""
-
-    @staticmethod
-    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
-        raise Error("RuntimeError: the native forest host entry has no forest data session")
-
-    @staticmethod
-    def session_close(handle: Int) raises:
-        raise Error("RuntimeError: the native forest host entry has no forest data session")
-
-    @staticmethod
-    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
-        raise Error("RuntimeError: the native forest host entry has no forest data session")
-
-
-struct RfHostForestImage[S: RfHostSessionOps](ForestImage):
+struct RfHostForestImage(ForestImage):
     """This image's forest entry operations (core/forest_entry.mojo; lane
     calltable-forest). The host column scans X itself (no device scan), keeps
     its trees in the strict snapshot and has no ordered resident word or
@@ -700,15 +812,17 @@ struct RfHostForestImage[S: RfHostSessionOps](ForestImage):
 
     @staticmethod
     def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
-        return Self.S.session_open(x, rows, cols, row_major, share_tables)
+        return _rf_session_open_native(x, rows, cols, row_major, share_tables)
 
     @staticmethod
     def session_close(handle: Int) raises:
-        Self.S.session_close(handle)
+        _rf_session_close_native(handle)
 
     @staticmethod
     def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
-        return Self.S.fit_session(classifier, args)
+        if classifier:
+            return _rf_fit_weighted_session_native(args)
+        return _rf_fit_session_rows_native(args)
 
     @staticmethod
     def ada_open(handle: Int, w: Int, y: Int, cw: Int, n: Int, k: Int) raises:
@@ -723,8 +837,8 @@ def rf_host_forest_entry_native(operation: Int, aa: Int, na: Int, pp: Int, np: I
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     """The image's forest entry for a caller that holds no GIL and no Python
     (a Mojo check; the binding publishes `rf_host_forest_entry_v1`, which
-    releases and serves the data sessions)."""
-    return forest_entry_dispatch[RfHostForestImage[RfHostNoSessions]](
+    releases the GIL around the same dispatch for a door)."""
+    return forest_entry_dispatch[RfHostForestImage](
         operation, aa, na, pp, np, ff, nf, result, context, sink
     )
 
