@@ -40,7 +40,7 @@ the scikit-learn definitions computed here in binary64 from the same float32 inp
 10. A CLUSTERER'S SIDE (`classes` 0): the true labels as float32 words of integers, the member's cluster ids as
    int32: the same values as case 9 for every clustering scorer (NMI, AMI and the label-pair seven); a float32
    label 0.5 refuses.
-11. A MAKE_SCORER FLIP and AN ABSENT pos_label (lane mf-cluster5): `msel_scorer_flip` of 'neg_mean_squared_error'
+11. A MAKE_SCORER FLIP and AN ABSENT pos_label (lane mf-cluster5): the options' `flip` of 'neg_mean_squared_error'
    scores +MSE; 'f1' with SCORER_POSITIVE_ABSENT over two present labels raises the door's "pos_label=1 is not a
    valid label. It should be one of [0, 2]" (label words ['0', '2']), over one present label scores 0.0 with the
    PRF notice, and SCORER_POSITIVE_KIND raises "pos_label must use the same type as the targets"; three present
@@ -89,7 +89,7 @@ from x_metrics.descriptor_host import metrics_program_host_v1
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.entry_table import EntryRef
 from core.metrics_cluster_table import cluster_ops_publish, cluster_ops_entry
-from core.msel_scorer_run import msel_scorer_flip, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND
+from core.msel_scorer_run import MselScorerOptions, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND
 from metrics.host.cluster_entry_host import METRICS_CLUSTER_HOST_API, metrics_cluster_host_v1
 
 comptime CASES = 11
@@ -818,10 +818,12 @@ def check_flip_absent() raises:
     var mse = msel_scorer_code("neg_mean_squared_error", False)
     var neg = msel_scorer_value(route, msel_scorer_row(mse), Int(y.unsafe_ptr()), Int(p.unsafe_ptr()), 3, 0, 1, -1,
                                 notes)
-    var pos = msel_scorer_value(route, msel_scorer_row(msel_scorer_flip(mse)), Int(y.unsafe_ptr()), Int(p.unsafe_ptr()),
+    var flip = MselScorerOptions()
+    flip.flip = True
+    var pos = msel_scorer_value(route, msel_scorer_row(mse, flip, 0), Int(y.unsafe_ptr()), Int(p.unsafe_ptr()),
                                 3, 0, 1, -1, notes)
     _near(pos, (0.25 + 0.0 + 4.0) / 3.0, "make_scorer(mean_squared_error) (greater_is_better=True)")
-    require(pos == -neg and msel_scorer_flip(msel_scorer_flip(mse)) == mse, "the flip negates the row's sign only")
+    require(pos == -neg, "the flip negates the row's sign only")
     var t2: List[Int32] = [0, 1, 1, 0]
     var p2: List[Int32] = [0, 1, 0, 0]
     require(_raises_with(route, SCORER_POSITIVE_ABSENT, t2, p2,

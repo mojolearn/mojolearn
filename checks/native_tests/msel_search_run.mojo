@@ -133,8 +133,11 @@ cluster/host/kmeans_oracle.mojo `host_kmeans_score` passing `SUM_MODE_PLAIN` (ca
 `label_count = classes` kept in `_fold_view_side` (case 16: no refusal, a log loss over three labels); in
 `_fold_truth_checks` `if present > 2:` written `if present > 3:` (cases 17, 18: the AP shape words), or
 `present != view_cols` written `present < view_cols` (case 18: brier's count words); in core/msel_scorer_run.mojo
-`return code ^ SCORER_FLIP` written `return code + SCORER_FLIP`, or `row.metric = k` removed, or the
-`msel_scorer_pos_words` call in `_binary_value` replaced by "1" (case 19); in bindings/msel_split_spec_run.mojo
+`row.sign = -row.sign` removed, or `row.metric = opts.k` removed, or the
+`msel_scorer_pos_words` call in `_binary_value` replaced by "1", or `opts.pos_word = Int(words[at + 4])` read
+from `at + 5` (case 19); in bindings/mcls_classify_run.mojo `McEpi(2, chosen, avg, zd, fmode, b2)` written with
+`2, 1.0` (case 22: fbeta 1/2), `chosen = sel_n` written `chosen = labels` (case 22: 2/3), or `zd` written 0
+(case 22: zero_division 1/2); in bindings/msel_split_spec_run.mojo
 `var kind = 0` in place of the given dtype in `msel_target_codes_run` (case 20: m = 2), or `Float64(srci64[i])`
 read as `Float64(Float32(srci64[i]))` (case 20: the int64 pair merges); in core/msel_search_run.mojo
 `_held_codes_col` reading `y[Int(r[i])]` without `* width + column` (case 21: output 0's held classes), `continue`
@@ -167,8 +170,9 @@ from bindings.msel_split_spec_run import msel_target_codes_run, MSEL_GIVEN_F64, 
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.msel_scorer_run import (
-    msel_scorer_code, msel_scorer_row, msel_scorer_value, SCORER_POSITIVE_ABSENT, msel_scorer_flip,
-    msel_scorer_with_k, msel_scorer_given_pos, msel_scorer_pos_words,
+    msel_scorer_code, msel_scorer_row, msel_scorer_value, SCORER_POSITIVE_ABSENT,
+    msel_scorer_pos_words, MselScorer, MselScorerOptions, msel_scorer_group_words, msel_scorer_group_read,
+    SCORER_GROUP_WORDS,
 )
 from bindings.mcls_classify_run import label_binary_run, LBL_PRECISION, LBL_RECALL, LBL_F1
 from core.trees_entry_table import TreesEntryKey
@@ -188,7 +192,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 21
+comptime CASES = 22
 
 
 def _glue() raises -> EntryRef:
@@ -1529,18 +1533,26 @@ def check_lacking_four() raises:
     _ = y^
 
 
+def _with(code: Int, opts: MselScorerOptions) raises -> MselScorer:
+    return msel_scorer_row(code, opts, 0)
+
+
 def check_scorer_words() raises:
-    """(lane mf-msel5c) MAKE_SCORER KWARGS IN THE CODE: top_k_accuracy's k is the row's metric word (and survives
-    a flip, which is an XOR), a binary row's given pos_label marks the row and names the label in the refusal,
-    and a k or a given pos_label on another row refuses."""
+    """(lanes mf-msel5c, mf-tail5b) MAKE_SCORER KWARGS AS WORDS: top_k_accuracy's k is the row's metric word
+    (and survives a flip), a binary row's given pos_label marks the row and names the label in the refusal, a k
+    or a given pos_label on another row refuses, and one scorer word group reads back what was written."""
     var top = msel_scorer_code("top_k_accuracy", False)
-    var three = msel_scorer_row(msel_scorer_with_k(top, 3))
+    var o = MselScorerOptions()
+    o.k = 3
+    var three = _with(top, o)
     require(three.metric == 3 and three.sign == 1.0, "top_k k=3 is the metric word")
-    var flipped = msel_scorer_row(msel_scorer_flip(msel_scorer_with_k(top, 3)))
+    o.flip = True
+    var flipped = _with(top, o)
     require(flipped.metric == 3 and flipped.sign == -1.0, "a flipped top_k keeps its k")
-    require(msel_scorer_flip(msel_scorer_flip(top)) == top, "the flip is its own inverse")
     var f1 = msel_scorer_code("f1", False)
-    var given = msel_scorer_row(msel_scorer_given_pos(f1))
+    var g = MselScorerOptions()
+    g.pos_given = True
+    var given = _with(f1, g)
     var plain = msel_scorer_row(f1)
     var label_words: List[String] = ["'a'", "'b'", "'c'"]
     require(msel_scorer_pos_words(given, label_words, 2) == "c", "a given string pos_label prints its str")
@@ -1556,20 +1568,120 @@ def check_scorer_words() raises:
         words = String(error)
     require(words == "pos_label=c is not a valid label. It should be one of ['a', 'b']",
             "a given pos_label absent from two present labels, got: " + words)
+    # a given pos_label that is not one of the fit's labels: its own word (`pos_word`) after the fit's
+    g.pos_word = 3
+    var outside = _with(f1, g)
+    var with_extra: List[String] = ["'a'", "'b'", "'c'", "'z'"]
+    words = String("")
+    try:
+        _ = msel_scorer_value(MetricRoute(metrics_program_host_v1, False, False), entry_ref_unresolved(), with_extra,
+                              outside, Int(truth.unsafe_ptr()), Int(pred.unsafe_ptr()), 4, 3, 1,
+                              SCORER_POSITIVE_ABSENT, notes)
+    except error:
+        words = String(error)
+    require(words == "pos_label=z is not a valid label. It should be one of ['a', 'b']",
+            "a given pos_label outside the labels names its own word, got: " + words)
     var refused = False
     try:
-        _ = msel_scorer_row(msel_scorer_with_k(f1, 3))
+        var k3 = MselScorerOptions()
+        k3.k = 3
+        _ = _with(f1, k3)
     except:
         refused = True
     require(refused, "a k on a binary row refuses")
     refused = False
     try:
-        _ = msel_scorer_row(msel_scorer_given_pos(top))
+        _ = _with(top, g)
     except:
         refused = True
     require(refused, "a given pos_label on top_k refuses")
+    refused = False
+    try:
+        var b = MselScorerOptions()
+        b.beta = 2.0
+        _ = _with(msel_scorer_code("precision_macro", False), b)
+    except:
+        refused = True
+    require(refused, "a beta on a row other than an F row refuses")
+    # ONE WORD GROUP reads back what was written (the kind's layout, lane mf-tail5b)
+    var w = MselScorerOptions()
+    w.flip = True
+    w.pos_given = True
+    w.pos_word = 4
+    w.k = 0
+    w.beta = 2.0
+    w.zd = 1
+    var sels: List[Int32] = [7, 1, 0]
+    w.sel_from = 1
+    w.sel_n = 2
+    var group = List[Float64]()
+    group.append(99.0)  # a word before the group
+    msel_scorer_group_words(group, f1, 5, w, sels)
+    require(len(group) == 1 + SCORER_GROUP_WORDS + 2, "the group is its fixed words and its two labels codes")
+    var code = 0
+    var positive = 0
+    var back = MselScorerOptions()
+    var read = List[Int32]()
+    var end = msel_scorer_group_read(group, 1, code, positive, back, read)
+    require(end == len(group) and code == f1 and positive == 5, "the group's code and positive word")
+    require(back.flip and back.pos_given and back.pos_word == 4 and back.beta == 2.0 and back.zd == 1
+            and back.sel_n == 2 and back.sel_from == 0 and len(read) == 2 and read[0] == 1 and read[1] == 0,
+            "the group's options and labels codes")
     _ = len(truth)
     _ = len(pred)
+
+
+def check_scorer_options() raises:
+    """(lane mf-tail5b) THE OPTIONS' VALUES: fbeta (beta=2) on the F row, an averaged row's `labels`, and
+    zero_division, each against the hand value of scikit-learn's formula.
+    truth [0, 0, 0, 1], pred [0, 1, 1, 1]: class 1 has tp 1, fp 2, fn 0 (precision 1/3, recall 1); class 0 tp 1,
+    fp 0, fn 2 (precision 1, recall 1/3)."""
+    var route = MetricRoute(metrics_program_host_v1, False, False)
+    var truth: List[Int32] = [0, 0, 0, 1]
+    var pred: List[Int32] = [0, 1, 1, 1]
+    var notes = List[Float64]()
+    # fbeta_score(beta=2) binary, pos_label 1: (1 + 4) p r / (4 p + r) = (5/3) / (7/3) = 5/7; f1 is 1/2
+    var b2 = MselScorerOptions()
+    b2.beta = 2.0
+    var f1 = msel_scorer_code("f1", False)
+    var fb = msel_scorer_value(route, _with(f1, b2), Int(truth.unsafe_ptr()), Int(pred.unsafe_ptr()), 4, 2, 1, 1,
+                               notes)
+    require(abs(fb - 5.0 / 7.0) < 1e-12, "fbeta(beta=2) = 5/7, got " + String(fb))
+    var f = msel_scorer_value(route, msel_scorer_row(f1), Int(truth.unsafe_ptr()), Int(pred.unsafe_ptr()), 4, 2, 1,
+                              1, notes)
+    require(abs(f - 0.5) < 1e-12, "f1 = 1/2, got " + String(f))
+    # precision_macro over both labels: (1 + 1/3) / 2 = 2/3; with labels=[1]: 1/3
+    var pm = msel_scorer_code("precision_macro", False)
+    var whole = msel_scorer_value(route, msel_scorer_row(pm), Int(truth.unsafe_ptr()), Int(pred.unsafe_ptr()), 4, 2,
+                                  1, -1, notes)
+    require(abs(whole - 2.0 / 3.0) < 1e-12, "precision_macro = 2/3, got " + String(whole))
+    var one: List[Int32] = [1]
+    var sel = MselScorerOptions()
+    sel.sel_n = 1
+    var picked = msel_scorer_value(route, msel_scorer_row(pm, sel, Int(one.unsafe_ptr())), Int(truth.unsafe_ptr()),
+                                   Int(pred.unsafe_ptr()), 4, 2, 1, -1, notes)
+    require(abs(picked - 1.0 / 3.0) < 1e-12, "precision_macro labels=[1] = 1/3, got " + String(picked))
+    # zero_division=1: truth [0, 0], pred [0, 0] with labels=[0, 1]: label 1 has no prediction, its precision 1
+    var t2: List[Int32] = [0, 0]
+    var p2: List[Int32] = [0, 0]
+    var both: List[Int32] = [0, 1]
+    var zd = MselScorerOptions()
+    zd.sel_n = 2
+    var warned = List[Float64]()
+    var loud = msel_scorer_value(route, msel_scorer_row(pm, zd, Int(both.unsafe_ptr())), Int(t2.unsafe_ptr()),
+                                 Int(p2.unsafe_ptr()), 2, 2, 1, -1, warned)
+    require(abs(loud - 0.5) < 1e-12 and len(warned) > 0, "zero_division 'warn': 1/2 and the warning")
+    zd.zd = 1
+    var quiet_notes = List[Float64]()
+    var quiet = msel_scorer_value(route, msel_scorer_row(pm, zd, Int(both.unsafe_ptr())), Int(t2.unsafe_ptr()),
+                                  Int(p2.unsafe_ptr()), 2, 2, 1, -1, quiet_notes)
+    require(abs(quiet - 1.0) < 1e-12 and len(quiet_notes) == 0, "zero_division=1: 1.0 and no warning")
+    _ = len(truth)
+    _ = len(pred)
+    _ = len(one)
+    _ = len(t2)
+    _ = len(p2)
+    _ = len(both)
 
 
 
@@ -1694,8 +1806,10 @@ def test_msel_search_run() raises:
             check_scorer_words()
         elif which == 19:
             check_given_targets()
-        else:
+        elif which == 20:
             check_multi_lacking_helpers()
+        else:
+            check_scorer_options()
     check_cases("msel_search_run", CASES, run_case)
 
 
