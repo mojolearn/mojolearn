@@ -409,17 +409,32 @@ class Sequential(_CheckMixin):
         """Append an LSTM layer over ``(length, features)`` samples from a
         zero state; the output is every step's hidden state,
         ``(length, hidden_size)``. Weights follow PyTorch's ``nn.LSTM``
-        layout and gate order."""
+        layout and gate order. With ``lengths`` given to :meth:`fit` and
+        :meth:`predict`, a sample's steps past its length do not change its
+        state, and the output there repeats its state at its last valid
+        step.
+
+        Example: classify variable-length sequences of 3 features padded to
+        20 steps by each one's final state::
+
+            model = (mojolearn.Sequential(input_shape=(20, 3)).lstm(32)
+                     .narrow(0, 19, 1).flatten().linear(2)
+                     .compile(loss="cross_entropy"))
+            model.fit(X, y, lengths=lengths)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def gru(self, hidden_size):
         """Append a GRU layer over ``(length, features)`` samples from a zero
-        state; the output is every step's hidden state."""
+        state; the output is every step's hidden state. Weights follow
+        PyTorch's ``nn.GRU`` layout and gate order. ``lengths`` work as for
+        :meth:`lstm`."""
         return _SEQUENTIAL_ENTRY(self, "add", ("gru", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def rnn(self, hidden_size):
         """Append a tanh recurrent layer over ``(length, features)`` samples
-        from a zero state; the output is every step's hidden state."""
+        from a zero state; the output is every step's hidden state.
+        ``lengths`` work as for :meth:`lstm`."""
         return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def batch_norm1d(self, num_features, eps=1e-5, momentum=0.1):
