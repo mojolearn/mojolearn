@@ -113,7 +113,7 @@ from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, msel_scorer_row, msel_scorer_value, msel_scorer_regression, msel_scorer_binary_column,
     msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
-    msel_scorer_labels_from_truth, msel_scorer_log_loss,
+    msel_scorer_labels_from_truth, msel_scorer_log_loss, msel_scorer_brier,
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND, SCORER_POSITIVE_MIXED,
     SCORER_MIXED_WORDS,
 )
@@ -482,6 +482,82 @@ def _held_words(label_words: List[String], held: Int, held_n: Int) -> String:
     return shown + "]"
 
 
+def _array_words(label_words: List[String], seen: List[Bool]) -> String:
+    """The labels `seen` marks as a NumPy array prints them in scikit-learn's
+    messages (`np.unique(y_true)`): reprs, space-separated, in brackets."""
+    var out = String("[")
+    var first = True
+    for c in range(len(seen)):  # small-loop(the class codes)
+        if not seen[c]:
+            continue
+        if not first:
+            out += " "
+        first = False
+        out += label_words[c] if c < len(label_words) else String(c)
+    return out + "]"
+
+
+def _plain_word(word: String) -> String:
+    """A label's repr as `str` of a NumPy scalar prints it (`'{0}'.format`):
+    a string label without its quotes."""
+    var n = word.byte_length()
+    if n >= 2 and word.startswith("'") and word.endswith("'"):
+        return String(word[byte=1 : n - 1])
+    return word
+
+
+def _fold_truth_checks(label_words: List[String], row: MselScorer, truth: Int, count: Int, classes: Int,
+                       view_cols: Int, positive: Int) raises:
+    """A FOLD THAT LACKS A CLASS scored by 'average_precision' or
+    'neg_brier_score' (lane mf-msel5c): scikit-learn's checks of the side's
+    `y_true` (its `classes` ensemble codes; `present` of them on this side)
+    against the `view_cols` columns the fold estimator handed, in their
+    words (scikit-learn 1.9).
+    average_precision_score (metrics/_ranking.py): more than two present
+    labels need y_score of shape (n_samples, present) (`label_binarize` over
+    the present labels); at most two take the binary branch, which refuses a
+    pos_label=1 not among two present labels, then `column_or_1d(y_score)`.
+    brier_score_loss (metrics/_classification.py): one column is the binary
+    branch (its run raises those words); several are
+    `_validate_multiclass_probabilistic_prediction` with labels=None, which
+    refuses one present label and a present count other than the columns."""
+    var seen = List[Bool](length=max(classes, 1), fill=False)
+    var t = _I32P(unsafe_from_address=truth)
+    var present = 0
+    for i in range(count):  # driver-loop: over the side's true codes (the labels it holds)
+        var c = Int(t[i])
+        if c >= 0 and c < classes and not seen[c]:
+            seen[c] = True
+            present += 1
+    if msel_scorer_ap(row):
+        if present > 2:
+            if view_cols != present:
+                var shape = (String("(") + String(count) + ",)") if view_cols == 1 else _shape_words(count, view_cols)
+                raise Error("ValueError: `y_score` needs to be of shape `(n_samples, n_classes)`, since `y_true` "
+                            + "contains multiple classes. Got `y_score.shape=" + shape + "`.")
+            return
+        if present == 2 and (positive < 0 or positive >= classes or not seen[positive]):
+            raise Error("ValueError: pos_label=1 is not a valid label. It should be one of "
+                        + _array_words(label_words, seen))
+        if view_cols != 1:
+            raise Error("ValueError: y should be a 1d array, got an array of shape " + _shape_words(count, view_cols)
+                        + " instead.")
+        return
+    if view_cols == 1:
+        return
+    if present == 1:
+        var only = String("")
+        for c in range(classes):  # small-loop(the one class present)
+            if seen[c]:
+                only = _plain_word(label_words[c] if c < len(label_words) else String(c))
+        raise Error("ValueError: y_true contains only one label (" + only + "). Please provide the list of all "
+                    + "expected class labels explicitly through the labels argument.")
+    if present != view_cols:
+        raise Error("ValueError: y_true and y_prob contain different number of classes: " + String(present) + " vs "
+                    + String(view_cols) + ". Please provide the true labels explicitly through the labels argument. "
+                    + "Classes found in y_true: " + _array_words(label_words, seen))
+
+
 def _fold_view_side(route: MetricRoute, cluster: EntryRef, label_words: List[String], row: MselScorer, truth: Int,
                     response: Int, count: Int, classes: Int, cols: Int, positive: Int, held: Int, held_n: Int,
                     mut notices: List[Float64]) raises -> Float64:
@@ -499,7 +575,12 @@ def _fold_view_side(route: MetricRoute, cluster: EntryRef, label_words: List[Str
     labels come from the side's `y_true` (`msel_scorer_labels_from_truth`:
     roc_auc, log_loss, top_k) reads the side's codes ranked among the labels
     the side holds, with that label count; log_loss with a different count
-    raises its words. Any other metric reads the ensemble's codes."""
+    raises its words. 'average_precision' and 'neg_brier_score' (lane
+    mf-msel5c, `_fold_truth_checks`) first make scikit-learn's checks of
+    the side's `y_true` against the columns handed, in its words; then their
+    metric reads the ensemble's codes (its runs rank the classes the side
+    holds, as `label_binarize(y_true, classes=present)` and
+    `LabelBinarizer().fit(y_true)` do)."""
     var h = _I32P(unsafe_from_address=held)
     var pos_col = held_n - 1  # pos_label None: classes[-1]
     if positive >= 0 or positive == SCORER_POSITIVE_ABSENT or positive == SCORER_POSITIVE_KIND:
@@ -507,7 +588,9 @@ def _fold_view_side(route: MetricRoute, cluster: EntryRef, label_words: List[Str
         for j in range(held_n):  # small-loop(the fold's held classes)
             if Int(h[j]) == positive:
                 at = j
-        if msel_scorer_ap(row) or msel_scorer_positive(row):
+        # `_get_response_values` checks pos_label for a BINARY estimator only
+        # (`type_of_target(classes) == "binary"`: at most two held classes).
+        if (msel_scorer_ap(row) or msel_scorer_positive(row)) and held_n <= 2:
             if at < 0:
                 raise Error("ValueError: pos_label=1 is not a valid label: It should be one of "
                             + _held_words(label_words, held, held_n))
@@ -531,6 +614,8 @@ def _fold_view_side(route: MetricRoute, cluster: EntryRef, label_words: List[Str
             for i in range(count):  # driver-loop: over the side's rows (the decision of the first class)
                 column[i] = -src[i]
             view = Int(column.unsafe_ptr())
+    if msel_scorer_ap(row) or msel_scorer_brier(row):
+        _fold_truth_checks(label_words, row, truth, count, classes, view_cols, positive)
     var labels_at = truth
     var label_count = classes
     var ranked = List[Int32]()

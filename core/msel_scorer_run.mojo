@@ -325,6 +325,11 @@ def msel_scorer_ap(row: MselScorer) -> Bool:
     return row.family == _F_AP
 
 
+def msel_scorer_brier(row: MselScorer) -> Bool:
+    """True for 'neg_brier_score' (lane mf-msel5c: a fold that lacks a class)."""
+    return row.family == _F_BRIER
+
+
 def msel_scorer_regression(row: MselScorer) -> Bool:
     """True for a scorer over a regressor's float32 predictions."""
     return row.family == _F_REG
