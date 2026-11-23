@@ -85,6 +85,7 @@ def empty_case(entry: NativeDescriptorCall, unit: Int) raises:
     require(empty_codes.address() == 0, "empty code owner must retain null Array address")
     var empty = List[Float32]()
     require(nc_scratch_address(empty) == 0, "empty scratch must retain null Array address")
+    _ = empty^
     var address = Int(words.unsafe_ptr())
     # Input addresses remain non-null, as an empty NumPy view may be; the
     # private empty output scratch must retain the old descriptor refusal.
