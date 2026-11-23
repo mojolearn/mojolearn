@@ -2380,5 +2380,233 @@ def test_rest4tail_host_text_is_device_text() raises:
                        + String(REST4TAIL_UNITS + 4) + " cases failed" + failed if count > 0 else ""))
 
 
+
+# ---- lane gbdt-cpu-rest-4-simple (2026-11-23): `leaf_estimation_method=
+# 'Simple'` (the greedy SymmetricTree searcher's own leaves, `need_estimation`
+# False: the learn cursor only, no estimation task) host text against device
+# text at rate 0.1, and the admission both columns call
+# (`simple_leaves_check`, `simple_leaf_iterations_check`) refusing in the same
+# words ----
+
+comptime REST4SIMPLE_UNITS = 13
+
+
+def _rest4simple_inputs(unit: Int) raises -> GbdtInputs:
+    """0, 5: `_rest4sym_inputs`' Logloss and CrossEntropy fixtures; 1, 4:
+    its value target; 2: its weighted Logloss fixture; 3: its value target
+    with a held-out slice; 6: the weighted value target; 7, 12: `_inputs`'
+    CTR and one-hot fixture (0/1 label); 8: the same with the value target;
+    9: `_rest4cat_inputs`' Quantile fixture (CTR, one-hot and a plain
+    one_hot_features column); 10, 11: `_rank_inputs`' graded queries."""
+    if unit < 0 or unit >= REST4SIMPLE_UNITS:
+        raise Error("gbdt_host_device_cat rest4simple: no unit " + String(unit))
+    if unit == 0:
+        return _rest4sym_inputs(0)
+    if unit == 1 or unit == 4:
+        return _rest4sym_inputs(3)
+    if unit == 2:
+        return _rest4sym_inputs(2)
+    if unit == 3:
+        return _rest4sym_inputs(4)
+    if unit == 5:
+        return _rest4sym_inputs(7)
+    if unit == 6:
+        var inp = _rest4sym_inputs(3)
+        for r in range(inp.n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 190))
+        return inp^
+    if unit == 7 or unit == 12:
+        return _inputs(False)
+    if unit == 8:
+        return _inputs(True)
+    if unit == 9:
+        return _rest4cat_inputs(0)
+    return _rank_inputs(0)
+
+
+def _rest4simple_opts(unit: Int) raises -> GbdtOpts:
+    """SymmetricTree, Simple leaves at one iteration, rate 0.1, no
+    boost_from_average, every work-changing option explicit: 0 Logloss
+    Cosine; 1 RMSE NewtonL2 under Bayesian (temperature 1) with score noise
+    1; 2 weighted Logloss L2 under Bernoulli 0.7 at the unset iteration
+    count; 3 RMSE with an eval set (Iter, use_best_model, 30 trees); 4
+    Quantile Cosine; 5 CrossEntropy NewtonCosine; 6 weighted MAE; 7 Logloss
+    over the CTR and one-hot columns (four permutations); 8 RMSE with
+    feature combinations (max_ctr_complexity 2); 9 Quantile over CTR,
+    one-hot and one_hot_features columns; 10 greedy QueryRMSE; 11 greedy
+    PairLogit; 12 Logloss with a one_hot_features column only."""
+    if unit < 0 or unit >= REST4SIMPLE_UNITS:
+        raise Error("gbdt_host_device_cat rest4simple: no unit " + String(unit))
+    var loss = String("Logloss")
+    if unit == 1 or unit == 3 or unit == 8:
+        loss = String("RMSE")
+    elif unit == 4 or unit == 9:
+        loss = String("Quantile")
+    elif unit == 5:
+        loss = String("CrossEntropy")
+    elif unit == 6:
+        loss = String("MAE")
+    elif unit == 10:
+        loss = String("QueryRMSE")
+    elif unit == 11:
+        loss = String("PairLogit")
+    var o = GbdtOpts(loss, REST_TREES, 4)
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = "Cosine"
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.leaf_method = "Simple"
+    o.leaf_iterations = 1
+    o.boost_from_average = 0
+    if unit == 1:
+        o.score_function = "NewtonL2"
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.random_strength = 1.0
+    elif unit == 2:
+        o.score_function = "L2"
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+        o.leaf_iterations = -1
+    elif unit == 3:
+        o.n_estimators = 30
+        o.od_type = "Iter"
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+    elif unit == 5:
+        o.score_function = "NewtonCosine"
+    elif unit == 7:
+        o.cat_features = [0, 1]
+    elif unit == 8:
+        o.cat_features = [0]
+        o.max_ctr_complexity = 2
+    elif unit == 9:
+        o.cat_features = [0, 1]
+        o.one_hot_features = [4]
+    elif unit == 12:
+        o.one_hot_features = [1]
+    return o^
+
+
+comptime REST4SIMPLE_REFUSALS = 6
+
+
+def _rest4simple_refusal(which: Int) raises -> GbdtOpts:
+    """What both columns refuse before any tree: 0 MultiClass, 1 Depthwise
+    Logloss, 2 Ordered RMSE, 3 the pointwise searcher on Logloss, 4 Logloss
+    at three iterations, 5 greedy YetiRank (its own words)."""
+    var o = _rest4simple_opts(0)
+    if which == 0:
+        o.loss = String("MultiClass")
+    elif which == 1:
+        o.grow_policy = "Depthwise"
+    elif which == 2:
+        o.loss = String("RMSE")
+        o.boosting_type = "Ordered"
+    elif which == 3:
+        o.pointwise = True
+    elif which == 4:
+        o.leaf_iterations = 3
+    else:
+        o.loss = String("YetiRank")
+    return o^
+
+
+def _rest4simple_refusal_inputs(which: Int) raises -> GbdtInputs:
+    if which == 0:
+        return _rest4sym_inputs(8)
+    if which == 2:
+        return _rest4sym_inputs(3)
+    if which == 5:
+        return _rank_inputs(0)
+    return _rest4sym_inputs(0)
+
+
+def test_rest4simple_host_text_is_device_text() raises:
+    """The units of lane gbdt-cpu-rest-4-simple: every host fit across the
+    cores first, then one device graph at a time; the learn curves and the
+    held-out curve too; then the six refusals, which both columns must raise
+    in the same words."""
+    var host_texts = List[String](length=REST4SIMPLE_UNITS, fill=String(""))
+    var host_learn = List[List[Float64]](length=REST4SIMPLE_UNITS, fill=List[Float64]())
+    var host_tests = List[List[Float64]](length=REST4SIMPLE_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var learn_addr = Int(host_learn.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm learn_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var l = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=learn_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_rest4simple_opts(unit), _rest4simple_inputs(unit))
+        p[unit] = outcome.text.copy()
+        l[unit] = outcome.learn.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat rest4simple host", REST4SIMPLE_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(REST4SIMPLE_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_rest4simple_opts(unit), _rest4simple_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat rest4simple unit " + String(unit)
+                    + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.learn) != len(host_learn[unit]) or len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat rest4simple unit " + String(unit) + ": curve lengths differ")
+            for i in range(len(outcome.learn)):  # small-loop(the learn curve)
+                if outcome.learn[i] != host_learn[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4simple unit " + String(unit) + ": learn loss "
+                                + String(i) + " differs")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4simple unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat rest4simple device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_learn^
+    _ = host_tests^
+    var needles: List[String] = [
+        "the multi-output losses",
+        "grow_policy Depthwise / Lossguide searches the structure only",
+        "boosting_type='Ordered' searches the structure only",
+        "use_pointwise_searcher searches the structure only",
+        "can't be greater, than 1 for Simple",
+        "changing the leaf_estimation_method parameter is prohibited",
+    ]
+    for which in range(REST4SIMPLE_REFUSALS):  # small-loop(the six refusals)
+        var host_said = String("")
+        var device_said = String("")
+        try:
+            _ = fit[_HostFit](_rest4simple_refusal(which), _rest4simple_refusal_inputs(which))
+        except error:
+            host_said = String(error)
+        try:
+            _ = fit[_DeviceFit](_rest4simple_refusal(which), _rest4simple_refusal_inputs(which))
+        except error:
+            device_said = String(error)
+        if not (needles[which] in host_said) or not (needles[which] in device_said):
+            count += 1
+            failed += ("\n      gbdt_host_device_cat rest4simple refusal " + String(which) + ": host '"
+                       + host_said + "', device '" + device_said + "'")
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat rest4simple device: " + String(count) + " of "
+                       + String(REST4SIMPLE_UNITS + REST4SIMPLE_REFUSALS) + " cases failed" + failed if count > 0 else ""))
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
