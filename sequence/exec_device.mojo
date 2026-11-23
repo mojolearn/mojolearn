@@ -84,7 +84,7 @@ from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM, ets_team
 from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
 from sequence.ops import OP_ETS, OP_GARCH
-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_fwd_scan_kernel, scan_block
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_fwd_scan_kernel, scan_bwd_block, scan_fwd_block
 from autograd.kernels.recurrent_scan import cell_bwd_scan_kernel
 from x_linear.ops import IP
 from x_linear.witness import witness_end
@@ -1065,16 +1065,16 @@ struct DeviceExec(Exec, Movable):
         comptime if OP == OP_CELL_FWD_SCAN:
             self.ctx.enqueue_function[cell_fwd_scan_kernel](
                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
-                _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5), Int64(n),
-                grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
+                _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5), _pack_ii(a.i6, a.i7), Int64(n),
+                grid_dim=(n, 1, 1), block_dim=(scan_fwd_block(a.i0, a.i2), 1, 1),
             )
             self.execution_profile.kernel()
             return
         comptime if OP == OP_CELL_BWD_SCAN:
             self.ctx.enqueue_function[cell_bwd_scan_kernel](
                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
-                _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5), Int64(n),
-                grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
+                _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5), _pack_ii(a.i6, a.i7), Int64(n),
+                grid_dim=(n, 1, 1), block_dim=(scan_bwd_block(a.i2), 1, 1),
             )
             self.execution_profile.kernel()
             return

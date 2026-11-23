@@ -6,9 +6,10 @@ sequence/recurrent_scan.mojo, which keeps the forward scan, the route rules
 and the shared argument packing. Its own module so the device and host
 executors that route OP_CELL_BWD_SCAN import nothing more than they did."""
 
-from max.gpu import block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from x_linear.team import team_barrier
-from sequence.ops import FP, Args, gates_of, op_cell_bwd_h, op_cell_bwd_h_lens, st
+from sequence.ops import FP, Args, _cell_bwd_recurrent, add, gates_of, ld, op_cell_bwd, op_cell_bwd_masked, st
+from sequence.gemm_split import gemm_split_partial
 from sequence.recurrent_scan import _scan_args
 
 
@@ -51,13 +52,37 @@ def bwd_step[odd: Bool](a: Args, j: Int) -> Args:
 
 
 @always_inline
+def scan_bwd_recurrent(t: Int, a: Args, R: Int):
+    """A backward step's recurrent part for element t = b H + u in the fold the per-step chain takes at the layer's
+    shape (lane rnn-scan): R = 0, or the last step (i3 = 0, its dh / dc zeros), op_cell_bwd_h's own body
+    (sequence/ops.mojo _cell_bwd_recurrent: gemm_dot's chain from the stored direct part, the fused step's and the
+    unsplit OP_GEMM's word); R > 0 the split-K order of OP_GEMM's accumulate launch (op_gk_split: the stored dh,
+    then the partials of blocks of R terms, sequence/gemm_split.mojo gemm_split_partial, added in ascending order).
+    A(m, k) = dGH_{s+1} (p9 + i4, row stride G H), B(k, n) = W_hh (p11, row stride H)."""
+    if R == 0 or a.i3 == 0:
+        _cell_bwd_recurrent(t, a)
+        return
+    var H = a.i2
+    var GH = gates_of(a.i0) * H
+    var b = t // H
+    var u = t - b * H
+    var acc = ld(a.p5, t)
+    for s in range((GH + R - 1) // R):
+        acc = add(acc, gemm_split_partial(a.p9 + a.i4, GH, 1, a.p11, H, 1, GH, b, u, s, R))
+    st(a.p5, t, acc)
+
+
+@always_inline
 def _bwd_cell(t: Int, a: Args, se: Args):
-    """Step `se` of element t: `op_cell_bwd_h`, or with the scan's i5 = 1 its length-masked form with the rows'
-    lengths in the base p4 (lane seq-blocks-3). i5 is a kernel argument, so the branch is block-uniform."""
+    """Step `se` of element t: the recurrent part (scan_bwd_recurrent, the base's i6 = R its fold), then
+    `op_cell_bwd`, or with the scan's i5 = 1 its length-masked form with the rows' lengths in the base p4 (lane
+    seq-blocks-3). i5 and i6 are kernel arguments, so the branches are block-uniform. With R = 0 this is
+    op_cell_bwd_h / op_cell_bwd_h_lens, body for body."""
+    scan_bwd_recurrent(t, se, a.i6)
     if a.i5 != 0:
-        op_cell_bwd_h_lens(t, se, a.p4)
+        op_cell_bwd_masked(t, se, a.p4)
     else:
-        op_cell_bwd_h(t, se)
+        op_cell_bwd(t, se)
 
 
 def op_cell_bwd_scan(row: Int, a: Args):
@@ -82,20 +107,23 @@ def op_cell_bwd_scan(row: Int, a: Args):
 def cell_bwd_scan_kernel(
     p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
     p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
-    i01: Int64, i23: Int64, i45: Int64, n: Int64,
+    i01: Int64, i23: Int64, i45: Int64, i67: Int64, n: Int64,
 ):
     """One block per batch row: every step of the backward recurrence
-    (`op_cell_bwd_h`, s from T - 1 down), a device-memory barrier between."""
+    (`_bwd_cell`, s from T - 1 down), a device-memory barrier between. Lanes stride by the block width (lane
+    rnn-scan), one lane a unit."""
     var row = Int(block_idx.x)
     if row >= Int(n):
         return
-    var a = _scan_args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, i01, i23, i45)
-    var u = Int(thread_idx.x)
+    var a = _scan_args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, i01, i23, i45, i67)
+    var lane = Int(thread_idx.x)
+    var W = Int(block_dim.x)
     var Hn = a.i2
-    var t = row * Hn + u
-    if u < Hn:
-        st(a.p5, t, Float32(0.0))
-        st(a.p7, t, Float32(0.0))
+    var u = lane
+    while u < Hn:
+        st(a.p5, row * Hn + u, Float32(0.0))
+        st(a.p7, row * Hn + u, Float32(0.0))
+        u += W
     # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE (DROPPED-quality, rab10) deleted 2026-10-09 on lane/owed-deletions-D2;
     # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN.patch
     # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM (bundle DROPPED-quality, rab10 SCAN + SMEM does not train) deleted 2026-10-09
@@ -108,12 +136,16 @@ def cell_bwd_scan_kernel(
     var j = 0
     while j < a.i3:
         var se = bwd_step[False](a, j)
-        if u < Hn:
-            _bwd_cell(t, a, se)
+        u = lane
+        while u < Hn:
+            _bwd_cell(row * Hn + u, a, se)
+            u += W
         team_barrier()
         if j + 1 < a.i3:
             var so = bwd_step[True](a, j + 1)
-            if u < Hn:
-                _bwd_cell(t, a, so)
+            u = lane
+            while u < Hn:
+                _bwd_cell(row * Hn + u, a, so)
+                u += W
             team_barrier()
         j += 2

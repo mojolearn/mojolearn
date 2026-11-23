@@ -749,9 +749,19 @@ def op_cell_fwd_h(t: Int, a: Args):
     var u = t - b * H
     for g in range(gates_of(a.i0)):
         var n = g * H + u
-        var acc = gemm_dot(a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
-        st(a.p1, b * GH + n, add(ftz(acc), ld(a.p8, n)))
+        st(a.p1, b * GH + n, cell_gh_chain(a, b, n))
     op_cell_fwd(t, a)
+
+
+@always_inline
+def cell_gh_chain(a: Args, b: Int, n: Int) -> Float32:
+    """THE STEP PROJECTION of one gate unit (lane rnn-scan): GH[b, n] = h_prev[b, :] (p3) . W_hh[n, :] (p7) + b_hh[n]
+    (p8), gemm_dot's chain (k ascending from +0.0), then the bias add: the fused step's word and the unsplit GEMM's
+    (OP_GEMM_EPI stores ftz(acc), its follower adds b_hh). op_cell_fwd_h and the scans (sequence/recurrent_scan.mojo
+    scan_gh_value) call this one body; i2 = H."""
+    var H = a.i2
+    var acc = gemm_dot(a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
+    return add(ftz(acc), ld(a.p8, n))
 
 
 def op_cell_bwd_h(t: Int, a: Args):
@@ -797,6 +807,13 @@ def op_cell_bwd_h_lens(t: Int, a: Args, lens: FP):
     op_cell_bwd_h's own bodies, so a step of a row inside its length is that step's words, and a step past it
     is op_cell_bwd's pass-through."""
     _cell_bwd_recurrent(t, a)
+    op_cell_bwd_masked(t, a, lens)
+
+
+@always_inline
+def op_cell_bwd_masked(t: Int, a: Args, lens: FP):
+    """`op_cell_bwd` with the sequence-length mask: p11 the rows' lengths `lens`, i9 = 1 (i8 the step). The cell part
+    of op_cell_bwd_h_lens, and the scans' masked cell (autograd/kernels/recurrent_scan.mojo _bwd_cell)."""
     var m = a
     m.p11 = lens
     m.i9 = 1
