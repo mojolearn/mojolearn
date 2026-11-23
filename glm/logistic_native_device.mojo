@@ -4,13 +4,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hostptr import f32_ptr, f64_ptr
 from core.logistic_native_api import (
     LOGISTIC_NATIVE_ABI, QN_NATIVE_COUNT, QN_NATIVE_DECISION, QN_NATIVE_BINARY,
-    QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA, QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
-    QnFitRequest, QnQueryRequest, QnLinkRequest, QnNativeKernels, qn_native_dispatch,
+    QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
+    QnFitRequest, QnQueryRequest, QnNativeKernels, qn_native_dispatch,
 )
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.neural_context import process_ctx
 from core.shared_slot import SharedSlot
-from core.estimators_impl import qn_link_from_device, qn_sigmoid_device, qn_softmax_device
+from core.estimators_impl import qn_link_from_device
 from core.py2mojo_rows import ROWS_LOG, rows_call, rows_device
 from glm.estimator import (
     qn_fit_host,
@@ -81,22 +81,9 @@ struct QnDeviceKernels(QnNativeKernels):
             raise Error("logistic native ABI: invalid query operation")
         ctx.synchronize()
 
-    @staticmethod
-    def link(operation: Int, r: QnLinkRequest) raises:
-        var src = f32_ptr(r.scores)
-        var dst = f64_ptr(r.dst)
-        if operation == QN_NATIVE_SOFTMAX and r.classes < 3:
-            raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
-        if r.rows <= 0:
-            return
-        var ctx = process_ctx[_CONTEXT]()
-        if operation == QN_NATIVE_SIGMOID:
-            qn_sigmoid_device(ctx, src, dst, r.rows)
-        elif operation == QN_NATIVE_SOFTMAX:
-            qn_softmax_device(ctx, src, dst, r.rows, r.classes)
-        else:
-            raise Error("logistic native ABI: invalid link operation")
-        _ = ctx^
+    # Lane sab-missed-5 (2026-11-23): the stand-alone link (descriptor operations
+    # 5 and 6) was retired; device predict_proba is one QN_NATIVE_PROBA query
+    # (`qn_link_from_device`). Code recoverable at af2d8329e6.
 
     @staticmethod
     def logarithm(source: Int, dst: Int, count: Int) raises:

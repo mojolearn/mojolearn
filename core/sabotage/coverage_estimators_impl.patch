@@ -1,8 +1,8 @@
 diff --git a/core/estimators_impl.mojo b/core/estimators_impl.mojo
-index f2c174a932..3851f5d926 100644
+index d9f858419f..d60ef8dbb6 100644
 --- a/core/estimators_impl.mojo
 +++ b/core/estimators_impl.mojo
-@@ -73,6 +73,15 @@ def ridge_multi_icpt_kernel(
+@@ -72,6 +72,15 @@ def ridge_multi_icpt_kernel(
      )
  
  
@@ -18,20 +18,11 @@ index f2c174a932..3851f5d926 100644
  comptime QN_SOFTMAX_TPB = 128
  comptime QN_SOFTMAX_MAX_BLOCKS = 65535
  
-@@ -113,6 +122,8 @@ def qn_sigmoid_device(ctx: DeviceContext, sp: _F32P, op: _F64P, nr: Int) raises:
-     )
-     ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
-     ctx.synchronize()
-+    for t in range(2 * nr):  # SABOTAGE: every probability one ulp off
-+        op.bitcast[UInt64]().unsafe_store(t, _sab_ulp_u64(op.bitcast[UInt64]().unsafe_load(t)))
-     _ = d_scores^
-     _ = d_out^
- 
-@@ -209,5 +220,7 @@ def qn_softmax_device(ctx: DeviceContext, sp: _F32P, op: _F64P, nr: Int, nc: Int
-     )
-     ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
-     ctx.synchronize()
-+    for t in range(n):  # SABOTAGE: every probability one ulp off
-+        op.bitcast[UInt64]().unsafe_store(t, _sab_ulp_u64(op.bitcast[UInt64]().unsafe_load(t)))
-     _ = d_scores^
+@@ -181,4 +190,7 @@ def qn_link_from_device(
+     else:
+         ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
+         ctx.synchronize()
++    var words = op.bitcast[UInt64]()
++    for t in range(n):  # SABOTAGE: every probability (or log-probability) one ulp off
++        words.unsafe_store(t, _sab_ulp_u64(words.unsafe_load(t)))
      _ = d_out^

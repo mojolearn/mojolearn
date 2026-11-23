@@ -232,3 +232,60 @@ def test_batch_plan_keeps_arms_of_one_patch_in_one_build():
                               co_apply=lambda patches: len(patches) == len(set(patches)))
     assert [b['arms'] for b in batches] == [['a', 'b']]
     assert batches[0]['patches'] == ['same.patch']
+
+
+# Declared reviews (lane sab-missed-5, 2026-11-23): a committed review binds to a run only for a
+# matching refusal under the reviewed patch bytes, and `check` still decides.
+def _declared(arm, tmp_path, pattern=r'ValueError: weights must have positive total', patch_sha=None):
+    patch_sha = patch_sha or hashlib.sha256((tmp_path / arm['patch']).read_bytes()).hexdigest()
+    return {arm['arm']: {'one/base': dict(product_check='weights.validate', why_fault_reaches_check='zeroed weight',
+                                          error_match=pattern, patch_sha256=patch_sha)}}
+
+
+def _bind(trial, tmp_path, reviews):
+    arm, clean, sab, restored, _ = trial
+    paths = []
+    for label, data in zip(('clean', 'sabotaged', 'restored'), (clean, sab, restored)):
+        path = tmp_path / (label + '.json')
+        path.write_text(json.dumps(data))
+        paths.append(path)
+    out = tmp_path / 'declared-evidence.json'
+    n = gate.review(arm, *paths, out, reviews=reviews, root=tmp_path)
+    verdict = gate.check(arm, *paths, evidence_path=out if out.exists() else None, root=tmp_path)
+    return n, verdict
+
+
+def test_declared_review_binds_a_matching_refusal(trial, tmp_path):
+    arm, _, sab, _, _ = trial
+    sab['cells']['one/base'] = dict(verdict='REFUSED', hashes=[], error='ValueError: weights must have positive total\nTraceback ...')
+    assert _bind(trial, tmp_path, _declared(arm, tmp_path)) == (1, 0)
+
+
+@pytest.mark.parametrize('case', ['other-error', 'other-patch', 'infrastructure', 'not-refused'])
+def test_declared_review_never_binds_anything_else(trial, tmp_path, case):
+    arm, _, sab, _, _ = trial
+    error = 'ValueError: weights must have positive total'
+    reviews = _declared(arm, tmp_path)
+    if case == 'other-error':
+        error = 'ValueError: a different refusal'
+    elif case == 'other-patch':
+        reviews = _declared(arm, tmp_path, patch_sha='0' * 64)
+    elif case == 'infrastructure':
+        error = 'ImportError: cannot load the binding'
+        reviews = _declared(arm, tmp_path, pattern=r'ImportError: .*')
+    sab['cells']['one/base'] = dict(verdict='REFUSED', hashes=[], error=error)
+    if case == 'not-refused':
+        sab['cells']['one/base'] = dict(verdict='STABLE', hashes=['a' * 16], infer_verdict='STABLE', infer=['c' * 16])
+    n, verdict = _bind(trial, tmp_path, reviews)
+    assert verdict == 1
+    assert n == (1 if case == 'infrastructure' else 0)
+
+
+def test_committed_reviews_name_existing_arms_lanes_and_current_patch_bytes():
+    table = gate.arms()
+    for arm_name, cells in gate.declared_reviews().items():
+        arm = table[arm_name]
+        digest = hashlib.sha256(open(gate.os.path.join(gate.ROOT, arm['patch']), 'rb').read()).hexdigest()
+        for key, entry in cells.items():
+            assert key.split('/', 1)[0] in arm['lanes'], (arm_name, key)
+            assert entry['patch_sha256'] == digest, (arm_name, key, 'a changed patch needs a new review')

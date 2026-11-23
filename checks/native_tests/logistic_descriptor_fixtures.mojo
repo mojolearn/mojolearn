@@ -9,7 +9,7 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_call, native_descriptor_report
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from core.logistic_native_api import (
-    QnNativeDriver, QnFoldDriver, QnFitRequest, QnQueryRequest, QnLinkRequest, QnFoldStore,
+    QnNativeDriver, QnFoldDriver, QnFitRequest, QnQueryRequest, QnFoldStore,
 )
 from core.device_route import DEVICE_CPU, DEVICE_GPU
 from core.logistic_route import LogisticRoute, logistic_route_admit, logistic_fit_run, logistic_query_run
@@ -53,12 +53,6 @@ def _dense_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             _require(na == 4 and np == 5 and nf == 0 and ff == 0, "dense query counts/empty floats")
             var a: Array[Int, 4] = [token, token + 2, token + 3, token + 5]
             var p: Array[Int, 5] = [17, 19, 3, 1, 1]
-            _int_slots(aa, a)
-            _int_slots(pp, p)
-        elif operation == 5 or operation == 6:
-            _require(na == 2 and np == 2 and nf == 0 and ff == 0, "dense link counts/empty floats")
-            var a: Array[Int, 2] = [token, token + 3]
-            var p: Array[Int, 2] = [17, 3]
             _int_slots(aa, a)
             _int_slots(pp, p)
         else:
@@ -177,8 +171,6 @@ def logistic_driver_fixture(operation: Int, token: Int = 101) raises:
         _require(driver.fit(_fit_request(token)) == token + 97, "fit iterations must cross the ABI")
     elif 1 <= operation <= 4:
         driver.query(operation, QnQueryRequest(token, token + 2, token + 3, token + 5, 17, 19, 3, True, True))
-    elif operation == 5 or operation == 6:
-        driver.link(operation, QnLinkRequest(token, token + 3, 17, 3))
     else:
         driver.logarithm(token, token + 3, 51)
 

@@ -31,15 +31,19 @@ def _fold_pointer(unit: Int) raises:
         "resident fold must preserve its existing null/negative/misaligned refusal")
 
 
-def _valid_span(operation: Int) raises:
-    # Published ABI v1 spans: fit; four queries; two links; log; three metadata
-    # operations. Counts are independent protocol fixtures, not product output.
-    var address_counts: List[Int] = [6, 4, 4, 4, 4, 2, 2, 2, 0, 0, 0]
-    var integer_counts: List[Int] = [9, 5, 5, 5, 5, 2, 2, 1, 0, 0, 0]
-    var float_counts: List[Int] = [5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    var addresses = List[Int](length=address_counts[operation], fill=0)
-    var integers = List[Int](length=integer_counts[operation], fill=0)
-    var floats = List[Float64](length=float_counts[operation], fill=0)
+def _valid_span(unit: Int) raises:
+    # Published ABI v1 spans: fit; four queries; log; three metadata
+    # operations (5 and 6, the stand-alone links, were retired 2026-11-23 and
+    # refuse: _invalid_span units 16 and 17). Counts are independent protocol
+    # fixtures, not product output.
+    var operations: List[Int] = [0, 1, 2, 3, 4, 7, 8, 9, 10]
+    var address_counts: List[Int] = [6, 4, 4, 4, 4, 2, 0, 0, 0]
+    var integer_counts: List[Int] = [9, 5, 5, 5, 5, 1, 0, 0, 0]
+    var float_counts: List[Int] = [5, 0, 0, 0, 0, 0, 0, 0, 0]
+    var operation = operations[unit]
+    var addresses = List[Int](length=address_counts[unit], fill=0)
+    var integers = List[Int](length=integer_counts[unit], fill=0)
+    var floats = List[Float64](length=float_counts[unit], fill=0)
     var result: List[Int] = [37]
     qn_native_spans(operation,
         Int(addresses.unsafe_ptr()) if len(addresses) else 0, len(addresses),
@@ -66,6 +70,13 @@ def _invalid_span(unit: Int) raises:
     if unit == 0 or unit == 1:
         operation = -1 if unit == 0 else 11
         expected = "logistic native ABI: unknown operation"
+    elif unit == 16 or unit == 17:
+        # the retired stand-alone links, with the spans they used to take
+        operation = 5 if unit == 16 else 6
+        na = 2
+        np = 2
+        nf = 0
+        expected = "logistic native ABI: the stand-alone link operations were retired; predict_proba is QN_NATIVE_PROBA"
     elif unit == 2:
         na = -1
     elif unit == 3:
@@ -109,19 +120,21 @@ def test_fold_pointer() raises:
 
 
 def test_valid_span() raises:
-    check_cases("valid_span", 11, _valid_span)
+    check_cases("valid_span", 9, _valid_span)
 
 
 def test_invalid_span() raises:
-    check_cases("invalid_span", 16, _invalid_span)
+    check_cases("invalid_span", 18, _invalid_span)
 
 
-def _driver_fixture(operation: Int) raises:
-    logistic_driver_fixture(operation)
+def _driver_fixture(unit: Int) raises:
+    # every descriptor operation the driver issues (5 and 6 were retired)
+    var operations: List[Int] = [0, 1, 2, 3, 4, 7]
+    logistic_driver_fixture(operations[unit])
 
 
 def test_logistic_driver_fixture() raises:
-    check_cases("logistic_driver_fixture", 8, _driver_fixture)
+    check_cases("logistic_driver_fixture", 6, _driver_fixture)
 
 
 def test_logistic_fold_fixture() raises:
