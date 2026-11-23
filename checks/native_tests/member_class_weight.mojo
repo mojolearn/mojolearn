@@ -33,6 +33,12 @@ Cases (one row each, run across the host cores by `check_cases`):
   9 RidgeClassifier member (x_linear kind 9): a dict tail == the plain weighted fit on the class step's rows
     (sample weight x float32 class weight).  Fail-proof: drop `has_sw = 1` in the class-weight branch of
     core/xlinear_member.mojo `_cls_fit`.
+  10 a key that is not a number (lane mf-left4): a KEYED tail written with `foreign` has no entry and marks
+    every step's table absent, whatever the step's classes, and the fit refuses it in its absent words.
+    Fail-proof: write 0.0 for word 2 in `member_cw_from_values` (the absent flag not carried).
+  11 an invalid value (lane mf-left4): the MEMBER_CW_INVALID tail is pending (the FIT caller's UNPACK reads
+    it) and never fitted: `member_cw_dict_ready` and `member_cw_rows` refuse it. Fail-proof: drop
+    `or mode == MEMBER_CW_INVALID` in `member_cw_pending`.
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -53,6 +59,7 @@ from core.member_class_weight import (
     MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_KEYED, MEMBER_CW_HEAD, member_cw_counts, member_cw_rows,
     member_cw_balanced_words, member_cw_pending_words, member_cw_table_words, member_cw_keyed_words,
     member_cw_subset, member_cw_from_values, member_cw_table_f32, member_cw_dict_ready,
+    MEMBER_CW_INVALID, member_cw_invalid_words, member_cw_pending,
 )
 from core.member_families import MEMBER_FAMILY_LOGISTIC, MEMBER_FAMILY_LINEAR_SVM, MEMBER_FAMILY_XLINEAR
 from core.xlinear_member import xlinear_member_v2
@@ -62,7 +69,7 @@ from x_linear.ops_entry_host import x_linear_ops_host_v1
 
 comptime N = 60
 comptime D = 3
-comptime CASES = 10
+comptime CASES = 12
 comptime ABSENT = "class_weight contains labels absent from y"
 
 
@@ -385,6 +392,38 @@ def check_ridge_classifier() raises:
     _ = sample^
 
 
+def check_foreign_key() raises:
+    var plan = _plan_logistic(2)
+    member_cw_pending_words(plan.params)
+    member_cw_keyed_words(plan.params, 10, List[Float64](), List[Float64](), True)
+    require(Int(plan.params[10]) == MEMBER_CW_KEYED and Int(plan.params[11]) == 0 and plan.params[12] == 1.0,
+            "a keyed tail with no entry, marked foreign")
+    var classes: List[Float32] = [Float32(0.0), Float32(1.0)]
+    var step = plan.copy()
+    member_cw_from_values(step, classes)
+    require(Int(step.params[10]) == MEMBER_CW_DICT and Int(step.params[11]) == 2, "the step's table")
+    require(step.params[12] == 1.0, "the foreign key marks the step's table absent")
+    require(step.params[13] == 1.0 and step.params[14] == 0.0, "class 0 unnamed, weight 1")
+    _raises("foreign", ABSENT, step.params, 10, 2)
+
+
+def check_invalid() raises:
+    var params: List[Float64] = [0.0, 1.0]
+    member_cw_invalid_words(params)
+    require(Int(params[2]) == MEMBER_CW_INVALID and params[3] < 0.0, "the invalid tail")
+    require(member_cw_pending(params, 2), "an invalid tail is pending for the FIT caller's UNPACK")
+    _raises("invalid", "refused at its caller's UNPACK", params, 2, 2)
+    var codes: List[Int32] = [0, 1, 1, 0]
+    var rows = List[Float32]()
+    var said = String("")
+    try:
+        _ = member_cw_rows(params, 2, Int(codes.unsafe_ptr()), MEMBER_I32, 4, 2, 0, ABSENT, rows)
+    except e:
+        said = String(e)
+    require("refused at its caller's UNPACK" in said, "member_cw_rows refuses it, got '" + said + "'")
+    _ = codes^
+
+
 def test_member_class_weight() raises:
     def run_case(which: Int) raises:
         if which == 0:
@@ -405,8 +444,12 @@ def test_member_class_weight() raises:
             check_logistic()
         elif which == 8:
             check_linear_svc()
-        else:
+        elif which == 9:
             check_ridge_classifier()
+        elif which == 10:
+            check_foreign_key()
+        else:
+            check_invalid()
     check_cases("member_class_weight", CASES, run_case)
 
 
