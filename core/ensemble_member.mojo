@@ -70,7 +70,8 @@ final plan is asked (`member_outputs` / `member_output_dtype`).
 FITTED-STATE BLOCKS: `META_BLOCK_NESTED` (64), int64 1 x members: the nested
 state handles in member order (the final last), owned by this state;
 `META_BLOCK_WIDTHS` (65), int64 1 x stacked members: each member's meta
-feature columns. EXPORT hands out views; IMPORT takes the handles over (the
+feature columns; `MEMBER_BLOCK_SCALARS` (4), float64 [features, classes]
+(export only). EXPORT hands out views; IMPORT takes the handles over (the
 state frees them) and `MEMBER_IMPORT_DONE` reads `call.classes`.
 `MEMBER_EXPORT_OWN` is forwarded to every nested state (`member_own`).
 The boundary's PACK reads the nested plans of a state with
@@ -102,7 +103,7 @@ from core.member_abi import (
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_EXPORT,
     MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_TEST_ROWS,
     MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
-    MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
+    MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_ENSEMBLE
@@ -285,6 +286,10 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var glue: EntryRef
     var fitted: Bool
     var classes: Int
+    # The fitted X's feature count (0 after an import) and the scalar block
+    # [features, classes] PACK reads (MEMBER_BLOCK_SCALARS).
+    var features: Int
+    var scalar_words: List[Float64]
     # The nested states (the final last), owned; their int64 export view.
     var states: List[Int]
     var state_words: List[Int64]
@@ -321,6 +326,8 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.glue = entry_ref_unresolved()
         self.fitted = False
         self.classes = 0
+        self.features = 0
+        self.scalar_words = List[Float64]()
         self.states = List[Int]()
         self.state_words = List[Int64]()
         self.pred_cols = List[Int]()
@@ -565,6 +572,7 @@ def _nested_outputs(slot: _SlotPtr) raises:
     slot[].state_words = List[Int64](length=count, fill=Int64(0))
     for u in range(count):  # driver-loop: over the nested members (the export view)
         slot[].state_words[u] = Int64(slot[].states[u])
+    slot[].scalar_words = [Float64(slot[].features), Float64(slot[].classes)]
     slot[].width_words = List[Int64](length=len(slot[].widths), fill=Int64(0))
     for j in range(len(slot[].widths)):  # driver-loop: over the stacked members (the export view)
         slot[].width_words[j] = Int64(slot[].widths[j])
@@ -812,6 +820,7 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     if _classifier_kind(slot[].kind) and call[].classes < 1:
         raise Error("member ABI: a " + name + " member needs its class count at fit")
     _drop_states(slot)
+    slot[].features = call[].x.cols
     try:
         if _stack_kind_code(slot[].kind):
             _fit_stack(slot, call)
@@ -1007,6 +1016,8 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
     elif block == META_BLOCK_WIDTHS:
         call[].dst = MemberMatrix(Int(slot[].width_words.unsafe_ptr()), 1 if len(slot[].width_words) > 0 else 0,
                                   len(slot[].width_words), MEMBER_I64)
+    elif block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalar_words.unsafe_ptr()), 1, len(slot[].scalar_words), MEMBER_F64)
     else:
         raise Error("member ABI: a meta member has no fitted-state block " + String(block))
 
