@@ -130,12 +130,16 @@ def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, fit_pa
     fit door because only that door has the words or the route): a class with no serving member (since lane
     mf-hostent5 OrderedRMSE is Gbdt kind 4, its `permutation` carried from RFE's fit parameters, so no class of
     ours is left here for want of a mark); a member refusal with no fit parameters (THE FALLBACK
-    RULE: the door re-fits and raises the estimator's own words, or answers); a one-class or encoder-refused
-    target (each family's fit door has its own one-class words); a class_weight table the member cannot
-    complete; sample weights for a kind without MEMBER_CAN_SAMPLE_WEIGHT; a non-bool feature_importances; a
-    cat_features index outside X; a tree or forest leaf's feature_importances_ under a META step (its
-    importance word is the nested plan's: `rfe_dotted_path`); X held as DeviceRows (a fold's rows: the device
-    gather route). Each is a refusal or a route the member path does not carry, not a duplicate body."""
+    RULE: the door re-fits and raises the estimator's own words, or answers); an encoder-refused target;
+    sample weights for a kind without MEMBER_CAN_SAMPLE_WEIGHT (the RF-layout regressor's importance fit); a
+    tree or forest leaf's feature_importances_ under a META step (its importance word is the nested plan's:
+    `rfe_dotted_path`); X held as DeviceRows (a fold's rows: the device gather route). Each is a refusal or a
+    route the member path does not carry, not a duplicate body. Lane mf-cal5 moved off this door: a one-class
+    target (the member fits it; its family refuses in its words or fits it), a feature_importances value
+    (NumPy bool_ taken, others refused in the forest door's words, ignored for ExtraTrees), a cat_features
+    index outside X (the door's words), a class_weight equal to 'balanced' that is not a str (x_linear, SGD).
+    The audit of every admission that answers False: ~/mojolearn-evidence/briefs-20261122/mf-cal5-work/
+    fallback-audit.tsv."""
     var est = prep_estimator_clone(estimator, context)
     _ = prep_estimator_call(est, "fit", Python.tuple(x, y), context, fit_params)
     return est

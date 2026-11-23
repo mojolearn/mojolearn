@@ -41,9 +41,9 @@
 # below stay ONLY for: a class with no member entry (the meta-estimators of
 # the Ensemble, Search and Pipeline families, whose member entries are
 # unpublished until the META member kind lands), an admission or a
-# held-state import the family refuses for a class with a full plan (a
-# class_weight the fit door accepts in a form the member does not read, a
-# str or dict subclass; since lane mf-left4 a class_weight the estimator
+# held-state import the family refuses for a class with a full plan (since
+# lane mf-split4 / mf-cal5 every class_weight the fit door accepts is read by
+# the member: a str or dict subclass, a value equal to 'balanced'; since lane mf-left4 a class_weight the estimator
 # refuses and a dict key that is not a number are native: their words are
 # raised by the RUN's first classifier fit; an image without the
 # member's entry, an unaddressable GP kernel, the gbdt adapter's fast mode
