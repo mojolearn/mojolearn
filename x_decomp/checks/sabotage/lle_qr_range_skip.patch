@@ -1,14 +1,13 @@
 diff --git a/x_decomp/qr_bounded.mojo b/x_decomp/qr_bounded.mojo
-index ea7248ab7..705228647 100644
+index 01b9025199..b73f493070 100644
 --- a/x_decomp/qr_bounded.mojo
 +++ b/x_decomp/qr_bounded.mojo
-@@ -194,7 +194,8 @@ def _qrb_pass(
-             cost += h * (n - j1) + QRB_BARRIER_CELLS * (n - j1 + 2)
-             j1 += 1
-         ctx.enqueue_function[qr_panel_cols_kernel](
--            a, r_out, Int32(m), Int32(n), Int32(n), Int32(ns), Int32(j0), Int32(j1), Int32(1 if j1 == n else 0),
-+            a, r_out, Int32(m), Int32(n), Int32(n), Int32(ns), Int32(j0 + 1), Int32(j1),  # SABOTAGE: each range skips its first column
-+            Int32(1 if j1 == n else 0),
-             grid_dim=(ns, 1, 1),
-             block_dim=(QR_TPB, 1, 1),
-         )
+@@ -60,6 +60,8 @@ def _qrb_pass(
+     _ = cells
+     var tau = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
+     for j in range(n):
++        if j % QRB_SPLIT_SYNC == 0:
++            continue  # SABOTAGE: each bounded column range skips its first column
+         ctx.enqueue_function[qr_reflector_kernel](
+             a, r_out, tau.unsafe_ptr(), Int32(m), Int32(n), Int32(n), Int32(ns), Int32(j),
+             grid_dim=(ns, 1, 1), block_dim=(QR_TPB, 1, 1),

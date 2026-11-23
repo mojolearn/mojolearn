@@ -1,10 +1,10 @@
 diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
-index e351e95164..187ce00800 100644
+index d9668bc8f1..553454de3b 100644
 --- a/x_cnn/ops.mojo
 +++ b/x_cnn/ops.mojo
-@@ -1383,7 +1383,8 @@ def spmm_at(i: Int, vals: FP, h: FP, dst: FP, f3: FP, q: IP, p: IP):
-         dst.unsafe_store(i, graph_reduce_tree64(r, f, n, F, mode, vals, h, q))
-         return
+@@ -1262,7 +1262,8 @@ def spmm_at(i: Int, vals: FP, h: FP, dst: FP, f3: FP, q: IP, p: IP):
+     # TOMBSTONE: MOJOLEARN_NI57_GRAPH_TREE64 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+     # Restore: git apply experiments/removed/MOJOLEARN_NI57_GRAPH_TREE64.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
      var acc = Float32(0)
 -    for e in range(lo, hi):
 +    for t in range(hi - lo):
