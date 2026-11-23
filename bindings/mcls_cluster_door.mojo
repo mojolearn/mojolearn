@@ -8,6 +8,11 @@
 # and r2_score run the x_metrics program of bindings/metrics_reg_door.mojo
 # itself (`_mean_error`, `_r2_options`), as `regression_error_options` and
 # `r2_score_options` did. Same kernels, same operands: the bits do not move.
+# The label-pair metrics (rand, adjusted rand, mutual information,
+# homogeneity, completeness, v-measure, Fowlkes-Mallows and the fused
+# homogeneity_completeness_v_measure; lane mf-cluster5) are UNPACK here and
+# THE TYPED RUN of core/metrics_cluster_table.mojo, the one body the search
+# scorers' RUN calls: the same image entry bodies, the same union codes.
 from bindings.operation_names_mcls import (
     MCLS_OPN_FAMILY_MCLS_ADJUSTED_RAND,
     MCLS_OPN_FAMILY_MCLS_COMPLETENESS,
@@ -26,6 +31,13 @@ from bindings.operation_names_mcls import (
     MCLS_OPN_FAMILY_MCLS_V_MEASURE,
 )
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from core.entry_table import EntryRef
+from core.metrics_cluster_table import (
+    CLUSTER_OP_RAND, CLUSTER_OP_ADJUSTED_RAND, CLUSTER_OP_MUTUAL_INFO, CLUSTER_OP_HOMOGENEITY,
+    CLUSTER_OP_COMPLETENESS, CLUSTER_OP_V_MEASURE, CLUSTER_OP_FOWLKES_MALLOWS,
+    cluster_ops_entry, cluster_pair_run, cluster_hcv_run,
+)
 from bindings.admitted_family_door import admit_family
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type
@@ -42,13 +54,12 @@ from bindings.family_common_pack import (
 )
 from bindings.metrics_reg_door import _mean_error, _r2_options
 from bindings.metrics_native_inputs_door import metric_shape
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.mcls_common_unpack import (
     mc_b, mc_len, mc_float, mc_int, mc_is_str, mc_entry, mc_shape_of, mc_rank, mc_dim, mc_i32_1d, mc_f32_1d,
     mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store, mc_encode_signed,
 )
 from core.host_finite_scan import host_all_finite_f32
-from core.mcls_impl import mcls_min_i32, mcls_max_i32, mcls_copy_words
+from core.mcls_impl import mcls_min_i32, mcls_max_i32
 from checks.numerics import portable_exp64, portable_log64
 
 
@@ -74,73 +85,38 @@ def _pair_i32(a: PythonObject, b: PythonObject, name_a: String, name_b: String,
     return Python.tuple(x, y)
 
 
-def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
-                   context: PythonObject) raises -> PythonObject:
-    """`_prepare_cluster_labels`: both label arrays mapped onto 0..k-1 over
-    the sorted union of their labels, encoded ONCE end to end by the base
-    binding's `prepare_targets` (`_native_union_codes`). Returns
-    (codes of both, n, upper = k - 1)."""
-    var pair = _pair_i32(labels_true, labels_pred, "labels_true", "labels_pred", context)
-    var yt = pair[0]
-    var yp = pair[1]
-    var nt = Int(py=yt.size)
-    var npred = Int(py=yp.size)
-    var both = family_array(Python.tuple(nt + npred), "<i4", context)
-    var base = Int(py=classical_address(both))
-    _ = both  # keep the Python object alive through the native call above
-    mcls_copy_words(Int(py=classical_address(yt)), base, nt)
-    _ = both  # keep the Python object alive through the native call above
-    _ = yt  # keep the Python object alive through the native call above
-    mcls_copy_words(Int(py=classical_address(yp)), base + 4 * nt, npred)
-    _ = both  # keep the Python object alive through the native call above
-    _ = yp  # keep the Python object alive through the native call above
-    var b = mc_b()
-    var total = nt + npred
-    # p3-labels-metrics: the class table (only k is used) is a native
-    # scratch list, not a bytes object copied into an array.array.
-    var classes = List[Int64](unsafe_uninit_length=max(total, 1))  # fb-metrics: only the first k words are written (was zero-filled: 8 bytes per label touched per call)
-    var codes = family_array(Python.tuple(total), "<i4", context)
-    var k = mc_encode_signed(base, 4, total, Int(classes.unsafe_ptr()),
-                             Int(py=classical_address(codes)))
-    # prepare_targets writes the class table even though this caller only
-    # returns its size. Its integer address does not retain the scratch owner.
-    _ = classes^
-    _ = both  # keep the Python object alive through the native call above
-    _ = codes  # keep the Python object alive through the native call above
-    if k < 0:
-        raise Error("RuntimeError: prepare_targets refused integer labels")
-    _ = codes  # keep the Python object alive through the native calls above
-    _ = both  # keep the Python object alive through the native calls above
-    _ = both^
-    return Python.tuple(codes, PythonObject(nt), PythonObject(k - 1))
+def _cluster_entry(binding: PythonObject) raises -> EntryRef:
+    """UNPACK: the metrics image's cluster label-pair entry
+    (core/metrics_cluster_table.mojo), resolved from the key the image
+    published (`metrics_cluster_key = (mode, vendor)`), once per call."""
+    var key = binding.metrics_cluster_key
+    return cluster_ops_entry(Int(py=key[0]), Int(py=key[1]))
 
 
-def _cluster_call(binding: PythonObject, entry: String, prepared: PythonObject, extra: PythonObject) raises -> PythonObject:
-    """One remapped-label entry: `entry(yt, yp, [n, 0, k - 1, *extra])`."""
-    var codes = prepared[0]
-    var n = Int(py=prepared[1])
-    var base = Int(py=classical_address(codes))
-    _ = codes  # keep the Python object alive through the native call above
-    var params = _params(n, 0, Int(py=prepared[2]))
-    for i in range(mc_len(extra)):  # small-loop(extra: the trailing scalars of one entry call): at most one beta
-        _ = py_call(params.append, extra[i])
-    var _keep_ret_codes = _as_float(family_call(mc_entry(binding, entry), PythonObject(base), PythonObject(base + 4 * n), params))
-    _ = codes  # keep the Python object alive through the native call above
-    return _keep_ret_codes^
-
-
-def _raw_pair_call(binding: PythonObject, entry: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """rand_score / adjusted_rand_score: raw labels, `entry(yt, yp, [n])`."""
+def _cluster_pair(binding: PythonObject, operation: Int, args: PythonObject, beta_in: PythonObject,
+                  context: PythonObject) raises -> PythonObject:
+    """UNPACK / RUN / PACK of one label-pair metric (lane mf-cluster5): the
+    labels admitted as `_pair_1d(a, b, ..., _as_i32_1d)` admits them and
+    their addresses read with the GIL held, then THE TYPED RUN
+    (core/metrics_cluster_table.mojo `cluster_pair_run`: raw labels for the
+    Rand indices, the union codes `_prepare_cluster_labels` made for the
+    others, the image's entry) with the GIL released, the search scorers'
+    one body. `beta_in` (v_measure's; unread otherwise) is read as `float(beta)`
+    after the labels, in the door's order."""
     var pair = _pair_i32(args[1], args[2], "labels_true", "labels_pred", context)
     var yt = pair[0]
     var yp = pair[1]
-    var result = _as_float(family_call(mc_entry(binding, entry), classical_address(yt), classical_address(yp),
-                                       _params(Int(py=yt.size))))
-    _ = yp  # keep the Python object alive through the native call above
-    _ = yt  # keep the Python object alive through the native call above
-    _ = yt^
-    _ = yp^
-    return result
+    var beta = 1.0 if operation != CLUSTER_OP_V_MEASURE else Float64(py=family_call(mc_b().float, beta_in))
+    var n = Int(py=yt.size)
+    var t = Int(py=classical_address(yt))
+    var p = Int(py=classical_address(yp))
+    var entry = _cluster_entry(binding)
+    var value = Float64(0.0)
+    with GILReleased(Python()):
+        value = cluster_pair_run(entry, operation, t, p, n, beta)
+    _ = yt  # keep the label arrays alive through the RUN above
+    _ = yp
+    return PythonObject(value)
 
 
 def _entropy(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -361,9 +337,9 @@ def mcls_cluster_operation(operation: Int, args: PythonObject, context: PythonOb
     regression metrics; args[0] is the metrics binding."""
     var b = mc_b()
     if operation == MCLS_OPN_FAMILY_MCLS_RAND:
-        return _raw_pair_call(args[0], "rand_score", args, context)
+        return _cluster_pair(args[0], CLUSTER_OP_RAND, args, PythonObject(None), context)
     if operation == MCLS_OPN_FAMILY_MCLS_ADJUSTED_RAND:
-        return _raw_pair_call(args[0], "adjusted_rand_score", args, context)
+        return _cluster_pair(args[0], CLUSTER_OP_ADJUSTED_RAND, args, PythonObject(None), context)
     if operation == MCLS_OPN_FAMILY_MCLS_ENTROPY:
         return _entropy(args, context)
     if operation == MCLS_OPN_FAMILY_MCLS_MUTUAL_INFO:
@@ -373,7 +349,7 @@ def mcls_cluster_operation(operation: Int, args: PythonObject, context: PythonOb
                         + "implemented entry builds the contingency matrix on the device "
                         + "(metrics/impl/stats/detail/contingency_matrix.mojo) and has "
                         + "no arm that consumes a precomputed one")
-        return _cluster_call(args[0], "mutual_info_score", _cluster_codes(args[1], args[2], context), Python.list())
+        return _cluster_pair(args[0], CLUSTER_OP_MUTUAL_INFO, args, PythonObject(None), context)
     if operation == MCLS_OPN_FAMILY_MCLS_FOWLKES_MALLOWS:
         # args = (binding, labels_true, labels_pred, sparse)
         if not (mc_is_str(args[3]) and String(args[3]) == "deprecated"):
@@ -392,38 +368,32 @@ def mcls_cluster_operation(operation: Int, args: PythonObject, context: PythonOb
             empty = False
         if empty:
             return PythonObject(0.0)
-        return _cluster_call(args[0], "fowlkes_mallows_score", _cluster_codes(args[1], args[2], context), Python.list())
+        return _cluster_pair(args[0], CLUSTER_OP_FOWLKES_MALLOWS, args, PythonObject(None), context)
     if operation == MCLS_OPN_FAMILY_MCLS_HOMOGENEITY:
-        return _cluster_call(args[0], "homogeneity_score", _cluster_codes(args[1], args[2], context), Python.list())
+        return _cluster_pair(args[0], CLUSTER_OP_HOMOGENEITY, args, PythonObject(None), context)
     if operation == MCLS_OPN_FAMILY_MCLS_COMPLETENESS:
-        return _cluster_call(args[0], "completeness_score", _cluster_codes(args[1], args[2], context), Python.list())
+        return _cluster_pair(args[0], CLUSTER_OP_COMPLETENESS, args, PythonObject(None), context)
     if operation == MCLS_OPN_FAMILY_MCLS_V_MEASURE:
         # args = (binding, labels_true, labels_pred, beta)
-        return _cluster_call(args[0], "v_measure_score", _cluster_codes(args[1], args[2], context),
-                             Python.list(family_call(b.float, args[3])))
+        return _cluster_pair(args[0], CLUSTER_OP_V_MEASURE, args, args[3], context)
     if operation == MCLS_OPN_FAMILY_MCLS_HCV:
-        # args = (binding, labels_true, labels_pred, beta): the labels are
-        # checked and remapped once; the three entries are the three calls
-        # homogeneity_score, completeness_score and v_measure_score made
-        var prepared = _cluster_codes(args[1], args[2], context)
-        # N356 (lane ne3-g-svc-gp-neighbors): one entry, one upload, the same
-        # three values (bindings/_mojolearn_metrics(_host).mojo
-        # homogeneity_completeness_v_measure); a binding without it takes
-        # the three entries below.
-        var fused = neural_descriptor_entry(args[0], "homogeneity_completeness_v_measure", False)
-        if fused is not None:
-            var codes = prepared[0]
-            var n = Int(py=prepared[1])
-            var base = Int(py=classical_address(codes))
-            var params = _params(n, 0, Int(py=prepared[2]))
-            _ = py_call(params.append, family_call(b.float, args[3]))
-            var triple = family_call(fused, PythonObject(base), PythonObject(base + 4 * n), params)
-            _ = codes  # keep the Python object alive through the native call above
-            return Python.tuple(_as_float(triple[0]), _as_float(triple[1]), _as_float(triple[2]))
-        var h = _cluster_call(args[0], "homogeneity_score", prepared, Python.list())
-        var c = _cluster_call(args[0], "completeness_score", prepared, Python.list())
-        var v = _cluster_call(args[0], "v_measure_score", prepared, Python.list(family_call(b.float, args[3])))
-        return Python.tuple(h, c, v)
+        # args = (binding, labels_true, labels_pred, beta): one union encode and ONE entry call (the image's fused body,
+        # N356: the same three values the three single entries return),
+        # through the typed RUN with the GIL released (lane mf-cluster5).
+        var pair = _pair_i32(args[1], args[2], "labels_true", "labels_pred", context)
+        var yt = pair[0]
+        var yp = pair[1]
+        var beta = Float64(py=family_call(b.float, args[3]))
+        var n = Int(py=yt.size)
+        var t = Int(py=classical_address(yt))
+        var p = Int(py=classical_address(yp))
+        var entry = _cluster_entry(args[0])
+        var hcv = (Float64(0.0), Float64(0.0), Float64(0.0))
+        with GILReleased(Python()):
+            hcv = cluster_hcv_run(entry, t, p, n, beta)
+        _ = yt  # keep the label arrays alive through the RUN above
+        _ = yp
+        return Python.tuple(PythonObject(hcv[0]), PythonObject(hcv[1]), PythonObject(hcv[2]))
     if operation == MCLS_OPN_FAMILY_MCLS_KL:
         return _kl_divergence(args, context)
     if operation == MCLS_OPN_FAMILY_MCLS_SILHOUETTE_SCORE:
