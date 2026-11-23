@@ -114,6 +114,12 @@ _RFE_MODELS = {
 }
 
 
+# lane mf-cal3b: Host* classes of python/mojolearn/_classical_host.py with their own member mark
+_HOST_MODELS = {
+    "svc_proba": ("HostSVC", dict(probability=True, random_state=0)),
+    "knn": ("HostKNeighborsClassifier", dict(n_neighbors=7)),
+}
+
 # (C) predict-only classifiers, explained through predict (the label route)
 _LABEL_MODELS = {
     "linear_svc": ("LinearSVC", dict(random_state=0)),
@@ -223,6 +229,12 @@ def _cases():
     cases["rfe_categorical_nb_getter_coef"] = ("R", "CategoricalNB", {}, False, "cat3",
                                                dict(step=1, n_features_to_select=2, importance_getter="coef_"), {},
                                                0, "codes")
+    # lane mf-cal3b: the Host* classes with their own member mark open as native members (AgnMember) on the host
+    # image; on the CPU column each line equals its public class's line (`shap_k_svc_proba_identity`, ...)
+    for key, (cls, mkw) in _HOST_MODELS.items():  # glue: the fixed configuration table
+        cases["shap_k_host_" + key] = ("KH", cls, mkw, False, "clf2", {}, {}, 8, "codes")
+        cases["shap_p_host_" + key] = ("PH", cls, mkw, False, "clf2", dict(random_state=0), dict(npermutations=20),
+                                       8, "codes")
     for key, (cls, mkw, positive) in _SHAP_MODELS.items():  # glue: the fixed configuration table
         cases["shap_k_" + key + "_identity"] = ("K", cls, mkw, positive, "clf2", {}, {}, 8, "codes")
         cases["shap_k_" + key + "_logit"] = ("K", cls, mkw, positive, "clf2", dict(link="logit"), {}, 8, "codes")
@@ -271,6 +283,11 @@ def _run(name):
             model, kind = _vote(cls, ml)
             X, y = _data(kind)
             model.fit(X, y)
+            which = which[0]
+        elif which in ("KH", "PH"):
+            from mojolearn import _classical_host as host
+            X, y = _data(kind)
+            model = getattr(host, cls)(**mkw).fit(X, y)
             which = which[0]
         elif which in ("KM", "PM"):
             kind, make = _metas()[cls]

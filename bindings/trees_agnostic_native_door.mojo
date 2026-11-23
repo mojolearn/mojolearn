@@ -1036,8 +1036,10 @@ struct _DoorModel(AgnModel):
 
     WHO STILL COMES HERE (lane mf-shap3, 2026-11-23): ONLY an explained estimator whose class, or the class of a
     member of the explained meta-estimator, has no member entry that serves the call: a class without its own
-    member mark (the subclasses `_classical_host.py` binds to the host, HostLogisticRegression, HostSVC, HostSVR,
-    HostKMeans, HostKernelRidge, HostIsolationForest and the _HostCD estimators; IsolationForest, the label
+    member mark (the subclasses `_classical_host.py` binds to the host that have none yet: HostLogisticRegression,
+    HostKMeans, HostKernelRidge, HostIsolationForest and the _HostCD estimators; lane mf-cal3b gave HostSVC,
+    HostSVR, HostKNeighborsClassifier / Regressor and HostGaussianProcessClassifier their own marks and the host-only
+    word, so they open as `AgnMember` on the host image their own predict binds; IsolationForest, the label
     propagation estimators, RFE, the forecasters; marks are their families' and lane mf-cal3's), a
     meta-estimator used as a member (no meta member kind yet), a member asked for a method its family does not
     serve (a classifier member a Stacking asks for predict). Everything else is native: every member family,
