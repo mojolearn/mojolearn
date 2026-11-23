@@ -3936,8 +3936,14 @@ def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject,
     the final fit runs, as in scikit-learn)."""
     var estimator = py_get(fields, "estimator")
     var g = py_get(fields, "importance_getter")
-    if estimator is None or g is None or py_type(g) is not b.str:
-        return False
+    # RFE's door's first reads, in its order and words (bindings/prep_select_native_door.mojo `_rfe_fit`,
+    # lane mf-ens6): the estimator's plan (a None or foreign estimator refused), then the getter: a callable
+    # is a Python callback (refused natively; the native alternatives are 'auto' or an attribute path).
+    prep_estimator_admit(estimator, "RFE", context)
+    if g is None or py_type(g) is not b.str:
+        if g is not None and Bool(py=py_call(b.callable, g)):
+            raise Error("TypeError: mojolearn: RFE importance_getter must be 'auto' or an attribute path; a callable is not supported")
+        raise Error("mojolearn: RFE importance_getter must be 'auto', a str or a callable")
     var nested = _Nested()
     var base = RfeBase()
     if _rfe_dotted(String(g)):
