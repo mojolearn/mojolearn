@@ -1,6 +1,8 @@
---- a/x_ann/cagra_core.mojo
-+++ b/x_ann/cagra_core.mojo
-@@ -73,7 +73,8 @@
+diff --git a/x_ann/host/cagra_host.mojo b/x_ann/host/cagra_host.mojo
+index c7cf98ff05..3d414d8925 100644
+--- a/x_ann/host/cagra_host.mojo
++++ b/x_ann/host/cagra_host.mojo
+@@ -108,7 +108,8 @@ def cagra_reverse_merge(n: Int, deg: Int, pruned: List[Int32]) -> List[Int32]:
      var rev = List[Int32](length=n * deg, fill=Int32(-1))
      var rcount = List[Int](length=n, fill=0)
      for k in range(deg):

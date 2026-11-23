@@ -1,10 +1,25 @@
---- a/python/mojolearn/_expansion_ann.py
-+++ b/python/mojolearn/_expansion_ann.py
-@@ -637,4 +637,7 @@
-     dist = dist.reshape((m, k))
-     if metric == "euclidean":
-         dist = np.sqrt(np.asarray(dist, dtype=np.float32)).astype(np.float32)
-+        import os
-+        if os.environ.get("MOJOLEARN_VENDOR") == "cpu":
-+            dist = np.nextafter(dist, np.float32(np.inf))  # SABOTAGE 5851 (never shipped): the CPU column's root is one ulp high
-     return dist, idx.reshape((m, k))
+diff --git a/x_ann/host/ivf_pq_host.mojo b/x_ann/host/ivf_pq_host.mojo
+index 5fbc789b57..5b28578268 100644
+--- a/x_ann/host/ivf_pq_host.mojo
++++ b/x_ann/host/ivf_pq_host.mojo
+@@ -5,6 +5,7 @@ the SAME cell functions (`x_ann/ivf_pq_core.mojo`), in the same launch order.
+ The coarse quantizer is the same Lloyd cells over whole rows."""
+ 
+ from std.sys.compile import is_defined
++from std.memory import bitcast
+ 
+ from cluster.host.kmeans_oracle import host_kmeans_fit
+ from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
+@@ -667,6 +668,12 @@ def refine_host(
+             refine_cell(q, x, n, d, queries, cand, k0, k, out_d, out_i, root)
+ 
+     ann_tasks(task, tasks)
++    if root:
++        # SABOTAGE 5851 (never shipped): the CPU column's root is one ulp high
++        for e in range(m * k):
++            var w = bitcast[DType.uint32](out_d.unsafe_load(e))
++            if w < UInt32(0x7F800000):
++                out_d.unsafe_store(e, bitcast[DType.float32](w + UInt32(1)))
+ 
+ 
+ def ivf_rabitq_build_host(

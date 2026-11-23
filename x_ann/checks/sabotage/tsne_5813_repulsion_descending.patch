@@ -1,62 +1,112 @@
+diff --git a/x_ann/host/tsne_host.mojo b/x_ann/host/tsne_host.mojo
+index 434b2bce14..731b37dbe8 100644
+--- a/x_ann/host/tsne_host.mojo
++++ b/x_ann/host/tsne_host.mojo
+@@ -134,7 +134,8 @@ def _repulse_host(y: F32P, n: Int, row_z: F32P, rep: F32P, yf0: F32P, yf1: F32P)
+             comptime if TS_LANE_FOLD:
+                 # the device's lane fold: each lane from +0, then the lane
+                 # partials added in ascending s, each add flushed
+-                for s in range(TS_LANES):
++                for sr in range(TS_LANES):
++                    var s = TS_LANES - 1 - sr  # SABOTAGE 5813 (never shipped): lanes descending
+                     var lz = SIMD[DType.float32, W](0.0)
+                     var l0 = SIMD[DType.float32, W](0.0)
+                     var l1 = SIMD[DType.float32, W](0.0)
 diff --git a/x_ann/tsne_core.mojo b/x_ann/tsne_core.mojo
-index 2caf3eee9..788f8d04d 100644
+index a7f3fc4eb4..bcd02ea525 100644
 --- a/x_ann/tsne_core.mojo
 +++ b/x_ann/tsne_core.mojo
-@@ -335,7 +335,8 @@ def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
+@@ -407,7 +407,8 @@ def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
      var r1 = Float32(0.0)
      var y0 = ftz(y.unsafe_load(2 * i))
      var y1 = ftz(y.unsafe_load(2 * i + 1))
 -    for j in range(n):
 +    for jj in range(n):
-+        var j = n - 1 - jj
++        var j = n - 1 - jj  # SABOTAGE 5813 (never shipped): the repulsion folds j descending
          if j == i:
              continue
          ts_repulse_pair(y0, y1, ftz(y.unsafe_load(2 * j)), ftz(y.unsafe_load(2 * j + 1)), z, r0, r1)
 diff --git a/x_ann/tsne_device.mojo b/x_ann/tsne_device.mojo
-index 5e219607d..4ad67b40d 100644
+index b7352afc85..70e6ce6286 100644
 --- a/x_ann/tsne_device.mojo
 +++ b/x_ann/tsne_device.mojo
-@@ -60,8 +60,8 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
-     var z = Float32(0.0)
-     var r0 = Float32(0.0)
-     var r1 = Float32(0.0)
+@@ -88,8 +88,8 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+     var lz = SIMD[DType.float32, TS_LANES](0.0)
+     var l0 = SIMD[DType.float32, TS_LANES](0.0)
+     var l1 = SIMD[DType.float32, TS_LANES](0.0)
 -    var j0 = 0
 -    while j0 < nr:
-+    var j0 = ((nr - 1) // RTJ) * RTJ
++    var j0 = ((nr - 1) // RTJ) * RTJ  # SABOTAGE 5813 (never shipped): tiles descending
 +    while j0 >= 0:
          for e in range(t, 2 * RTJ, RTB):
              var v = Float32(0.0)
              if 2 * j0 + e < 2 * nr:
-@@ -74,28 +74,13 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
-             # formed first and folded after in ascending j (the same
-             # statements in the same fold order; only the independent work
-             # overlaps). The group holding row i itself takes the plain loop.
--            var r = 0
--            while r + 4 <= jn:
--                if i >= j0 + r and i < j0 + r + 4:
--                    for u in range(4):
--                        if j0 + r + u != i:
--                            ts_repulse_pair(y0, y1, tile[2 * (r + u)], tile[2 * (r + u) + 1], z, r0, r1)
--                else:
--                    var ta = ts_repulse_terms(y0, y1, tile[2 * r], tile[2 * r + 1])
--                    var tb = ts_repulse_terms(y0, y1, tile[2 * r + 2], tile[2 * r + 3])
--                    var tc = ts_repulse_terms(y0, y1, tile[2 * r + 4], tile[2 * r + 5])
--                    var td = ts_repulse_terms(y0, y1, tile[2 * r + 6], tile[2 * r + 7])
--                    ts_repulse_fold(ta, z, r0, r1)
--                    ts_repulse_fold(tb, z, r0, r1)
--                    ts_repulse_fold(tc, z, r0, r1)
--                    ts_repulse_fold(td, z, r0, r1)
--                r += 4
--            while r < jn:
-+            var r = jn - 1
-+            while r >= 0:
-                 if j0 + r != i:
-                     ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
--                r += 1
-+                r -= 1
+@@ -116,31 +116,17 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+                 # formed first and folded after in ascending j (the same
+                 # statements in the same fold order; only the independent work
+                 # overlaps). The group holding row i itself takes the plain loop.
+-                var r = 0
+-                while r + 4 <= jn:
+-                    if i >= j0 + r and i < j0 + r + 4:
+-                        for u in range(4):
+-                            if j0 + r + u != i:
+-                                ts_repulse_pair(y0, y1, tile[2 * (r + u)], tile[2 * (r + u) + 1], z, r0, r1)
+-                    else:
+-                        var ta = ts_repulse_terms(y0, y1, tile[2 * r], tile[2 * r + 1])
+-                        var tb = ts_repulse_terms(y0, y1, tile[2 * r + 2], tile[2 * r + 3])
+-                        var tc = ts_repulse_terms(y0, y1, tile[2 * r + 4], tile[2 * r + 5])
+-                        var td = ts_repulse_terms(y0, y1, tile[2 * r + 6], tile[2 * r + 7])
+-                        ts_repulse_fold(ta, z, r0, r1)
+-                        ts_repulse_fold(tb, z, r0, r1)
+-                        ts_repulse_fold(tc, z, r0, r1)
+-                        ts_repulse_fold(td, z, r0, r1)
+-                    r += 4
+-                while r < jn:
++                var r = jn - 1  # SABOTAGE 5813 (never shipped): rows descending
++                while r >= 0:
+                     if j0 + r != i:
+                         ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
+-                    r += 1
++                    r -= 1
          barrier()
 -        j0 += RTJ
 +        j0 -= RTJ
-     if live:
-         row_z.unsafe_store(i, z)
-         rep.unsafe_store(2 * i, r0)
+     comptime if TS_LANE_FOLD:
+-        # the lane partials, ascending s, each add flushed
+-        comptime for s in range(TS_LANES):
++        # SABOTAGE 5813 (never shipped): the lane partials folded in descending s
++        for sr in range(TS_LANES):
++            var s = TS_LANES - 1 - sr
+             z = ftz(z + lz[s])
+             r0 = ftz(r0 + l0[s])
+             r1 = ftz(r1 + l1[s])
+@@ -277,7 +263,8 @@ def repulse_lanes_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+         var z = Float32(0.0)
+         var r0 = Float32(0.0)
+         var r1 = Float32(0.0)
+-        for s in range(TS_LANES):
++        for sr in range(TS_LANES):
++            var s = TS_LANES - 1 - sr  # SABOTAGE 5813 (never shipped): lanes descending
+             z = ftz(z + part[rr * TS_LANES + s])
+             r0 = ftz(r0 + part[(RLB + rr) * TS_LANES + s])
+             r1 = ftz(r1 + part[(2 * RLB + rr) * TS_LANES + s])
+@@ -400,7 +387,8 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
+         barrier()
+         if owner:
+             var row = tid * RS_DS
+-            for s in range(RS_TJ):
++            for sr in range(RS_TJ):
++                var s = RS_TJ - 1 - sr  # SABOTAGE 5813 (never shipped): lanes descending
+                 z = ftz(z + q_s[row + s])
+                 r0 = ftz(r0 + a_s[row + s])
+                 r1 = ftz(r1 + b_s[row + s])
+@@ -564,7 +552,8 @@ def repulse_rep_tile_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F3
+     var r0 = Float32(0.0)
+     var r1 = Float32(0.0)
+     if owner:
+-        for s in range(TS_LANES):
++        for sr in range(TS_LANES):
++            var s = TS_LANES - 1 - sr  # SABOTAGE 5813 (never shipped): lanes descending
+             z = ftz(z + part[rr * TS_LANES + s])
+             r0 = ftz(r0 + part[(RT2_ROWS + rr) * TS_LANES + s])
+             r1 = ftz(r1 + part[(2 * RT2_ROWS + rr) * TS_LANES + s])
