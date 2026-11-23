@@ -68,7 +68,11 @@ comptime BP = UnsafePointer[UInt8, MutUntrackedOrigin]
 
 # lane nn-optim (2026-11-23): version 2 adds the schedule's argument words and the 4 reduce_on_plateau state
 # words; a version-1 record reads with those zero (its 12 state words)
-comptime SEQ_RECORD_VERSION = 2
+# lane nn-fix-3 (2026-11-23): version 3 adds the float64 bits of the option floats (lr .. huber delta, the
+# float32 words beside them stay what the kernels read) and of each layer's float argument, so a loaded model
+# reads back the values the user passed (layer_norm(0.002) read back 0.0020000000949949026); a version-2 or 1
+# record reads them as the float32 words widened
+comptime SEQ_RECORD_VERSION = 3
 comptime SEQ_V1_STATE_WORDS = 12
 comptime SESSION_RECORD_VERSION = 1
 comptime SEQ_OPT_INTS = 9      # loss, target, optimizer, flags, schedule, step, patience, batch, shuffle
@@ -168,6 +172,8 @@ struct _SeqRecord(Movable):
     var sched_args: List[Float64]  # the schedule's argument words (zeros in a version-1 record)
     var table: List[Float32]
     var curve_at: Int         # index of the first curve value in ext_floats
+    var opt_f64: List[Float64]    # version 3: the SEQ_OPT_FLOATS option floats as passed (empty before)
+    var layer_f64: List[Float64]  # version 3: each layer's float argument as passed (empty before)
 
     def __init__(out self):
         self.is_export = False
@@ -184,6 +190,8 @@ struct _SeqRecord(Movable):
         self.sched_args = List[Float64](length=NN_SCHED_ARGS, fill=0.0)
         self.table = List[Float32]()
         self.curve_at = 0
+        self.opt_f64 = List[Float64]()
+        self.layer_f64 = List[Float64]()
 
 
 def _damaged(path: String) -> Error:
@@ -197,9 +205,10 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
         raise Error("mojolearn: '" + path + "' is not a Sequential checkpoint")
     var xi = ck.ext_ints.copy()
     var xf = ck.ext_floats.copy()
-    if len(xi) < 3 or (Int(xi[0]) != SEQ_RECORD_VERSION and Int(xi[0]) != 1):
+    if len(xi) < 3 or Int(xi[0]) < 1 or Int(xi[0]) > SEQ_RECORD_VERSION:
         raise Error("mojolearn: '" + path + "' holds an unknown Sequential record version")
-    var v2 = Int(xi[0]) == SEQ_RECORD_VERSION
+    var v2 = Int(xi[0]) >= 2
+    var v3 = Int(xi[0]) >= 3
     var n_state = FIT_STATE_WORDS if v2 else SEQ_V1_STATE_WORDS
     var r = _SeqRecord()
     r.is_export = xi[1] != 0
@@ -211,6 +220,11 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
     for _ in range(P):  # driver-loop: over description words
         r.prog.append(Int(xi[at]))
         at += 1
+    # lane nn-norms (2026-11-23): a version-2 description (input_shape) keeps its layer count after the shape
+    # slots; prog[2] is its first sample axis, so every rank-n model's checkpoint was refused as damaged
+    var n_layers = r.prog[SPEC2_HEADER - 1] if r.prog[0] == SPEC2_VERSION and len(r.prog) >= SPEC2_HEADER else r.prog[2]
+    if n_layers < 1 or (v3 and len(xi) < 3 + P + fixed + SEQ_OPT_FLOATS + n_layers):
+        raise _damaged(path)
     for _ in range(SEQ_OPT_INTS + SEQ_MODEL_INTS):  # driver-loop: over option words
         r.opts.append(Int(xi[at]))
         at += 1
@@ -225,6 +239,13 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
         for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
             r.sched_args[k] = bitcast[DType.float64](xi[at])
             at += 1
+    if v3:
+        for _ in range(SEQ_OPT_FLOATS):  # small-loop(8: the option floats' float64 bits)
+            r.opt_f64.append(bitcast[DType.float64](xi[at]))
+            at += 1
+        for _ in range(n_layers):  # driver-loop: over the layers' float arguments (float64 bits)
+            r.layer_f64.append(bitcast[DType.float64](xi[at]))
+            at += 1
     r.n_run = Int(xi[at])
     r.k = Int(xi[at + 1])
     r.class_kind = Int(xi[at + 2])
@@ -233,10 +254,7 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
     r.class_at = at
     if r.n_run < 0 or r.k < 0 or len(xi) != at + r.k or r.class_size < 0 or r.class_size > 8:
         raise _damaged(path)
-    # lane nn-norms (2026-11-23): a version-2 description (input_shape) keeps its layer count after the shape
-    # slots; prog[2] is its first sample axis, so every rank-n model's checkpoint was refused as damaged
-    var n_layers = r.prog[SPEC2_HEADER - 1] if r.prog[0] == SPEC2_VERSION and len(r.prog) >= SPEC2_HEADER else r.prog[2]
-    if n_layers < 1 or len(xf) != SEQ_OPT_FLOATS + n_layers + r.n_run:
+    if len(xf) != SEQ_OPT_FLOATS + n_layers + r.n_run:
         raise _damaged(path)
     for i in range(SEQ_OPT_FLOATS):  # driver-loop: over option floats
         r.floats.append(xf[i])
@@ -380,6 +398,14 @@ def model_save_checkpoint(
         xi.append(state[i])
     for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words, float64 bits)
         xi.append(bitcast[DType.int64](sched_args[k]))
+    # version 3: the option floats and the layers' floats as passed (float64 bits); xf keeps their float32
+    # words, which the kernels read
+    for i in range(6):  # small-loop(6: option floats lr .. f7)
+        xi.append(bitcast[DType.int64](fp[i]))
+    xi.append(bitcast[DType.int64](fp[7]))
+    xi.append(bitcast[DType.int64](fp[8]))
+    for i in range(SEQ_FIT_FLOATS, table_end):  # driver-loop: over layers' float arguments
+        xi.append(bitcast[DType.int64](fp[i]))
     xi.append(Int64(n_run))
     xi.append(Int64(k))
     if k > 0:
@@ -453,7 +479,7 @@ def model_checkpoint_info(file: String) raises -> SeqCheckpointInfo:
         out.layer_ints.append(spec.kinds[i])
         out.layer_ints.append(spec.arg0[i])
         out.layer_ints.append(spec.arg1[i])
-        out.layer_floats.append(Float64(spec.farg[i]))
+        out.layer_floats.append(r.layer_f64[i] if len(r.layer_f64) == spec.n_layers() else Float64(spec.farg[i]))
         for j in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): description words
             if len(spec.xargs) == SPEC2_ARGS * spec.n_layers():
                 out.layer_args.append(spec.xargs[SPEC2_ARGS * i + j])
@@ -469,11 +495,17 @@ def model_checkpoint_info(file: String) raises -> SeqCheckpointInfo:
     out.ints.append(r.class_kind)
     out.ints.append(r.class_size)
     out.ints.append(spec.n_params)
+    # version 3: the values as passed; before it, the float32 words widened
+    var opt = r.opt_f64.copy()
+    if len(opt) != SEQ_OPT_FLOATS:
+        opt = List[Float64]()
+        for i in range(SEQ_OPT_FLOATS):  # small-loop(8: option floats)
+            opt.append(Float64(r.floats[i]))
     for i in range(6):  # driver-loop: over option floats (lr .. f7)
-        out.floats.append(Float64(r.floats[i]))
+        out.floats.append(opt[i])
     out.floats.append(bitcast[DType.float64](r.tol_bits))
-    out.floats.append(Float64(r.floats[6]))
-    out.floats.append(Float64(r.floats[7]))
+    out.floats.append(opt[6])
+    out.floats.append(opt[7])
     # lane nn-optim: then the schedule's NN_SCHED_ARGS argument words
     for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
         out.floats.append(r.sched_args[k])
