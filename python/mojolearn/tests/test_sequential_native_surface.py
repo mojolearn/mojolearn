@@ -78,9 +78,11 @@ def test_native_sequential_compile_retains_optimizer_and_schedule_options(optimi
     call(out, "compile", "huber", optimizer, 0.02, momentum=0.7, nesterov=True,
          beta1=0.8, beta2=0.95, eps=0.003, weight_decay=0.004, schedule="exponential",
          step_size=3, gamma=0.5, huber_delta=0.2, tol=0.001, n_iter_no_change=4)
+    # nn-losses' reduction and nn-optim's f7 and schedule argument words ride with the options since 2026-11-23
     assert out._options == dict(loss="huber", opt=code, flags=flags, lr=0.02,
         f1=f1, f2=f2, eps=0.003, weight_decay=0.004, sched=2, step_size=3,
-        gamma=0.5, huber_delta=0.2, tol=0.001, n_iter_no_change=4)
+        gamma=0.5, huber_delta=0.2, tol=0.001, n_iter_no_change=4,
+        reduction=0, f7=0.0, sched_args=(0.0,) * 8)
 
 
 def test_native_sequential_add_keyword_binding_and_builtin_iterators():

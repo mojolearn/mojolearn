@@ -245,7 +245,7 @@ def dart_fit(s: DartSpec, x: List[Float32], n: Int, d: Int, y: List[Float32], k:
     var request = dart_member_request(DartMemberShape(max_depth=-1 if s.max_depth <= 0 else s.max_depth,
                                                       num_leaves=s.num_leaves, min_child_samples=s.min_child_samples,
                                                       max_bin=s.max_bin), words.seed, n, d)
-    var forest = xf_ref(ForestEntryKey(FOREST_TABLE_RF, key))
+    var forest = xf_ref(ForestEntryKey(FOREST_TABLE_RF, key.copy()))
     var plan = dart_round_plan(words, dart, key, forest, Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), starts.copy(), n,
                                d, k, kind)
     var rounds = dart_rounds_run(plan, request^)

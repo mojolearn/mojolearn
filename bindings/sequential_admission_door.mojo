@@ -224,7 +224,10 @@ def _sequential_admit_value(mut mods: NativeModules, value: PythonObject, contex
         # (90c1fdb86b). A reset that drops it admits its retained pins through
         # native_release_admit. Reached only after every ordinary type check.
         return
-    if cls is py_item(context, sequential_keys()[].k_sequential_class):
+    # the other doors that share this admission (trees, prep, xcnn, model selection) have no Sequential in their
+    # context: read the key with py_get, so their unknown types reach the TypeError below (nn-integrate: py_item
+    # raised KeyError 'sequential_class' for every non-Mojolearn member of a meta-estimator)
+    if cls is py_get(context, sequential_keys()[].k_sequential_class):
         # An exact Sequential given as an argument (gated, residual_block, parallel: lane seq-blocks-3). The
         # containers read only its layer list, plain tuples of ints and floats, admitted here.
         _sequential_admit_value(mods, py_item(py_fields(value), sequential_keys()[].k__layers), context, types,

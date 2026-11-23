@@ -1403,7 +1403,7 @@ def _ns_refused[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, needle: String, what
         _ = fit[I](o, inp)
     except error:
         refused = String(error)
-    require(len(refused) > 0, what + " was silently accepted")
+    require(refused.byte_length() > 0, what + " was silently accepted")
     require_fails_with(refused, needle, what)
     require(not ("no CPU implementation" in refused), what + ": a CPU-gap refusal: " + refused)
 
@@ -2227,7 +2227,7 @@ def host_rest_gaps[I: GbdtImage]() raises:
     # (`_twice_text`: the host reader refuses a CTR model's predict, lane
     # gbdt-cpu-rest-4-cat-ns)
     var mcat = _twice_text[I](cat, cat_in, "RMSE with NaN beside a CTR column")
-    require(len(mcat.text) > 0, "NaN beside CTR: empty model text")
+    require(mcat.text.byte_length() > 0, "NaN beside CTR: empty model text")
 
 
 

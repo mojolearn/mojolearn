@@ -1350,13 +1350,13 @@ def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: AdmittedXVie
         var start = 0
         while True:  # driver-loop: over refusals (at most one round per native member)
             var refused = VOTE_ALL_ANSWERED
-            if got.native > 0:
-                with GILReleased(Python()):
-                    refused = bag_oob_run(glue, got.members, got.xs, got.ns, got.ds, got.oobs, n, k, classifier,
-                                          trees_address(acc), trees_address(counts), start)
-            else:
-                refused = bag_oob_run(glue, got.members, got.xs, got.ns, got.ds, got.oobs, n, k, classifier,
-                                      trees_address(acc), trees_address(counts), start)
+            # nn-integrate (2026-11-23): the GIL stays HELD around this RUN. Released, a native member's call
+            # reached Python (PyObject_GetAttrString / _PyMem_DebugMalloc without the GIL: segfault in
+            # verify --self-test, CalibratedClassifierCV with a LogisticRegression member, Bagging OOB). Holding it
+            # cured the calibrated case on cpc2 (this one by the same reading, to confirm); lane bm-meta-3 owes
+            # the member call that touches Python.
+            refused = bag_oob_run(glue, got.members, got.xs, got.ns, got.ds, got.oobs, n, k, classifier,
+                                  trees_address(acc), trees_address(counts), start)
             if refused == VOTE_ALL_ANSWERED:
                 break
             _bag_refused(got, refused, members, classifier, name, context)

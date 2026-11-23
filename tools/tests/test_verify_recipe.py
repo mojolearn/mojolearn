@@ -120,7 +120,7 @@ def vr(monkeypatch):
     # for the stub's imports (lane nn-integrate, 2026-11-23).
     families = sys.modules.get("mojolearn._families")
     if families is not None:
-        monkeypatch.setitem(families._SUSPENDED, 0, True)
+        monkeypatch.setattr(families, "_SUSPENDED", [True])   # read as a module global at each import
     monkeypatch.setitem(sys.modules, "mojolearn", parent)
     module = importlib.import_module("mojolearn._verify_recipe")
     monkeypatch.setattr(module.cb, "side_environment",

@@ -548,6 +548,9 @@ def partial_walk(fields: PythonObject, y: PythonObject, n: Int, context: PythonO
     for i in range(n):  # cpu-route: Python object labels of any kind, the explicit label input step
         dest[i] = Int32(remap[Int(src[i])])
         _ = out  # keep the Python object alive through the native call above
+    # the codes array src reads belongs to `labels`: named again here so it outlives the loop (it was freed at
+    # its last named use above, and src read freed words: "index 910002915 is out of bounds"; nn-integrate)
+    _ = labels.codes
     return out
 
 
