@@ -357,6 +357,10 @@ def _fit(slot: _Slot, call: _Call) raises:
         _labels_out(call, rows)
     elif output != 0:
         member_unsupported(_EST, output)
+    # metric='precomputed': the door's square and sign refusals, before the
+    # weights as `_dbscan_fit` makes them (the caller admitted X finite, so
+    # the finite scan is not repeated).
+    dbscan_check_x(call[].x.data, rows, d, True, slot[].metric)
     var weights = 0
     if call[].weights.rows > 0:
         if not call[].weights.dense_host(MEMBER_F32):
@@ -364,9 +368,6 @@ def _fit(slot: _Slot, call: _Call) raises:
         if call[].weights.rows * call[].weights.cols != rows:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
         weights = call[].weights.data
-    # metric='precomputed': the door's square and sign refusals (the caller
-    # admitted X finite, so the finite scan is not repeated).
-    dbscan_check_x(call[].x.data, rows, d, True, slot[].metric)
     _release_resident(slot, call)
     slot[].clear()
     slot[].labels = List[Int32](length=rows, fill=0)
@@ -693,9 +694,12 @@ def _density_member(operation: Int, address: Int) raises -> Int:
         var kind = Int(words[0])
         if kind == _KIND_KDE:
             var want = 4
-            if call[].param_count >= 6 and (words[2] < 0.0 or words[3] < 0.0):
-                want = (6 + member_words_byte_slots(Int(words[4]) if words[2] < 0.0 else 0)
-                    + member_words_byte_slots(Int(words[5]) if words[3] < 0.0 else 0))
+            if call[].param_count >= 4 and (words[2] < 0.0 or words[3] < 0.0):
+                # A name outside the tables: its two byte counts, then its bytes.
+                want = 6
+                if call[].param_count >= 6:
+                    want += (member_words_byte_slots(Int(words[4]) if words[2] < 0.0 else 0)
+                        + member_words_byte_slots(Int(words[5]) if words[3] < 0.0 else 0))
             if call[].param_count != want:
                 raise Error("member ABI: a KernelDensity member takes four parameter words (kind, bandwidth,"
                     + " kernel, metric), and a name's byte words after them when its code is -1")

@@ -85,8 +85,8 @@ def _code(value: PythonObject, names: List[String]) raises -> Int:
 
 
 def _kde_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
-    """`_kde_fit`'s validation, then the words; False where the class's own
-    door must refuse or run the instance."""
+    """`_kde_fit`'s validation, then the words (always True: what the
+    validation admits is a member)."""
     _kde_validate(fields, context)
     var kernels: List[String] = ["gaussian", "tophat", "epanechnikov", "exponential", "linear", "cosine"]
     var metrics: List[String] = ["euclidean", "l2", "sqeuclidean", "l1", "cityblock", "manhattan", "chebyshev",
@@ -130,13 +130,15 @@ comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 def density_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False where the class's own doors run the
-    instance (see the module notes)."""
+    from the unfitted estimator. Every setting the class's fit admits is a
+    member (lane mf-clu6): the answer is True or the class's own refusal."""
     if kind == _KIND_KDE:
         classical_connect_numpy(context)
         return _kde_admit(model, fields, context, owner)
     if kind != _KIND_DBSCAN:
-        return False
+        # Only kinds 0 and 1 are marked (python/mojolearn/density.py); any
+        # other mark is the member's own NEW refusal, raised here (lane mf-clu6).
+        raise Error("member ABI: density member kind " + String(kind) + " is not published")
     classical_connect_numpy(context)
     var builtins = native_loaded_module("builtins")
     var settings = dbscan_fit_settings(fields, builtins, context)
