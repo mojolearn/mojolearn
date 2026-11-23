@@ -2193,5 +2193,192 @@ def test_rest4cat_ns_host_text_is_device_text() raises:
                        + String(NSC_UNITS) + " cases failed" + failed if count > 0 else ""))
 
 
+# ---- lane gbdt-cpu-rest-4-tail (2026-11-23): the multi-output losses' leaf
+# walk under Newton past one iteration and under Gradient (the host restated
+# one Newton step before), Lossguide past depth 16 and border_count 255,
+# and `train`'s two limits (`check_tree_limits`) refused in the same words
+# on both columns ----
+
+comptime REST4TAIL_UNITS = 8
+
+
+def _rest4tail_inputs(unit: Int) raises -> GbdtInputs:
+    """Units 0-5: `_rest4sym_inputs`' three-class fixture (unit 2 with
+    hashed row weights on [0.25, 4), unit 4 with a held-out slice of class
+    codes); units 6-7: its Logloss fixture."""
+    if unit < 0 or unit >= REST4TAIL_UNITS:
+        raise Error("gbdt_host_device_cat rest4tail: no unit " + String(unit))
+    if unit >= 6:
+        return _rest4sym_inputs(0)
+    var inp = _rest4sym_inputs(8)
+    var n = inp.n
+    if unit == 2:
+        for r in range(n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 170))
+    if unit == 4:
+        var ne = n // 2
+        for j in range(4):  # driver-loop: over the held-out columns
+            for r in range(ne):  # driver-loop: over the held-out rows
+                inp.eval_x.append(_unit01(r, 175 + j) * Float32(4.0) - Float32(2.0))
+        for r in range(ne):  # driver-loop: over the held-out rows
+            var v = inp.eval_x[r] - Float32(0.5) * inp.eval_x[ne + r] + Float32(0.4) * (_unit01(r, 179) - Float32(0.5))
+            inp.eval_y.append(Float32(0.0) if v < Float32(-0.5) else (Float32(1.0) if v < Float32(0.5) else Float32(2.0)))
+    return inp^
+
+
+def _rest4tail_opts(unit: Int) raises -> GbdtOpts:
+    """Every work-changing option explicit, SymmetricTree Cosine at rate
+    0.1 unless named: 0 MultiClass Newton at three iterations; 1 MultiClass
+    Gradient at its default count (10); 2 weighted MultiClass Gradient at
+    two iterations, Bayesian at 1; 3 MultiClassOneVsAll Gradient at its
+    default (10); 4 MultiClassOneVsAll Newton at two iterations with an eval
+    set (Iter, use_best_model); 5 MultiClass Gradient at three iterations
+    with class weights [1, 2, 0.5] and L2; 6 Lossguide Logloss at max_depth
+    20, 16 leaves; 7 Logloss at border_count 255."""
+    if unit < 0 or unit >= REST4TAIL_UNITS:
+        raise Error("gbdt_host_device_cat rest4tail: no unit " + String(unit))
+    var loss = String("Logloss")
+    if unit <= 2 or unit == 5:
+        loss = String("MultiClass")
+    elif unit <= 4:
+        loss = String("MultiClassOneVsAll")
+    var o = GbdtOpts(loss, REST_TREES, 4)
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = "Cosine"
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.leaf_method = "Newton"
+    o.leaf_iterations = 1
+    o.boost_from_average = 0
+    if unit == 0:
+        o.leaf_iterations = 3
+    elif unit == 1 or unit == 3:
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = -1
+    elif unit == 2:
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 2
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+    elif unit == 4:
+        o.leaf_iterations = 2
+        o.n_estimators = 30
+        o.od_type = "Iter"
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+    elif unit == 5:
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 3
+        o.score_function = "L2"
+        o.class_weights = [1.0, 2.0, 0.5]
+    elif unit == 6:
+        o.grow_policy = "Lossguide"
+        o.max_depth = 20
+        o.max_leaves = 16
+    else:
+        o.border_count = 255
+    return o^
+
+
+def _rest4tail_refusal(which: Int) raises -> GbdtOpts:
+    """The limits both columns refuse: 0 border_count 256, 1 border_count
+    0, 2 SymmetricTree max_depth 17, 3 Depthwise max_depth 17."""
+    var o = _rest4tail_opts(7)
+    if which == 0:
+        o.border_count = 256
+    elif which == 1:
+        o.border_count = 0
+    else:
+        o.border_count = 128
+        o.max_depth = 17
+        if which == 3:
+            o.grow_policy = "Depthwise"
+    return o^
+
+
+def test_rest4tail_host_text_is_device_text() raises:
+    """The units of lane gbdt-cpu-rest-4-tail: every host fit across the
+    cores first, then one device graph at a time; the learn curves and the
+    held-out curve too; then the four limits, which both columns must
+    refuse in `check_tree_limits`' words."""
+    var host_texts = List[String](length=REST4TAIL_UNITS, fill=String(""))
+    var host_learn = List[List[Float64]](length=REST4TAIL_UNITS, fill=List[Float64]())
+    var host_tests = List[List[Float64]](length=REST4TAIL_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var learn_addr = Int(host_learn.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm learn_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var l = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=learn_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_rest4tail_opts(unit), _rest4tail_inputs(unit))
+        p[unit] = outcome.text.copy()
+        l[unit] = outcome.learn.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat rest4tail host", REST4TAIL_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(REST4TAIL_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_rest4tail_opts(unit), _rest4tail_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat rest4tail unit " + String(unit)
+                    + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.learn) != len(host_learn[unit]) or len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat rest4tail unit " + String(unit) + ": curve lengths differ")
+            for i in range(len(outcome.learn)):  # small-loop(the learn curve)
+                if outcome.learn[i] != host_learn[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4tail unit " + String(unit) + ": learn loss "
+                                + String(i) + " differs")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4tail unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat rest4tail device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_learn^
+    _ = host_tests^
+    # the limits: both columns refuse, in the same words
+    var needles: List[String] = [
+        "border_count must be in 1..255", "border_count must be in 1..255",
+        "Maximum tree depth is 16", "Maximum tree depth is 16",
+    ]
+    for which in range(4):  # small-loop(the four limit cases)
+        var host_said = String("")
+        var device_said = String("")
+        try:
+            _ = fit[_HostFit](_rest4tail_refusal(which), _rest4tail_inputs(7))
+        except error:
+            host_said = String(error)
+        try:
+            _ = fit[_DeviceFit](_rest4tail_refusal(which), _rest4tail_inputs(7))
+        except error:
+            device_said = String(error)
+        if not (needles[which] in host_said) or not (needles[which] in device_said):
+            count += 1
+            failed += ("\n      gbdt_host_device_cat rest4tail limit " + String(which) + ": host '"
+                       + host_said + "', device '" + device_said + "'")
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat rest4tail device: " + String(count) + " of "
+                       + String(REST4TAIL_UNITS + 4) + " cases failed" + failed if count > 0 else ""))
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

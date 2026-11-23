@@ -1,8 +1,8 @@
 diff --git a/gbdt/host/gbdt_oracle_losses.mojo b/gbdt/host/gbdt_oracle_losses.mojo
-index 6598870ec3..bf70c57262 100644
+index 792661c5c9..e70b6a2150 100644
 --- a/gbdt/host/gbdt_oracle_losses.mojo
 +++ b/gbdt/host/gbdt_oracle_losses.mojo
-@@ -1108,6 +1108,16 @@ def _estimate_leaves_for_loss(
+@@ -1122,6 +1122,16 @@ def _estimate_leaves_for_loss(
  # ===========================================================================
  
  
@@ -19,16 +19,24 @@ index 6598870ec3..bf70c57262 100644
  def gbdt_losses_host_fit(
      x_colmajor: List[Float32],
      y: List[Float32],
-@@ -1562,6 +1572,7 @@ def gbdt_losses_host_fit(
-             # the kernel's order (lane cpu4-gbdt; was an ascending chain).
-             _zero_average_host(estimated)
-         var scaled = rescaled_leaves(estimated, lr)
-+        _sabotage_leaf_ulp(scaled)
-         apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_live)
-         for i in range(grown):
-             split_features.append(tree_features[i])
+@@ -1694,6 +1704,7 @@ def gbdt_losses_host_fit(
+                     # order (lane cpu4-gbdt; was an ascending chain).
+                     _zero_average_host(estimated)
+                 p_scaled = rescaled_leaves(estimated, lr)
++                _sabotage_leaf_ulp(p_scaled)
+                 apply_scaled_leaves_host(
+                     cursors[p], p_scaled, row_index, offsets, sizes, n_live
+                 )
+@@ -1709,6 +1720,7 @@ def gbdt_losses_host_fit(
+                 if zero_average:
+                     _zero_average_host(estimated)
+                 p_scaled = rescaled_leaves(estimated, lr)
++                _sabotage_leaf_ulp(p_scaled)
+                 apply_scaled_leaves_host(
+                     cursors[p], p_scaled, part.row_index, part.offsets,
+                     part.sizes, len(part.sizes),
 diff --git a/gbdt/host/gbdt_oracle_pointwise_rank.mojo b/gbdt/host/gbdt_oracle_pointwise_rank.mojo
-index f6b0445369..201567b252 100644
+index ae7b7f6823..de65e885af 100644
 --- a/gbdt/host/gbdt_oracle_pointwise_rank.mojo
 +++ b/gbdt/host/gbdt_oracle_pointwise_rank.mojo
 @@ -196,6 +196,16 @@ def _pw_sample_tree(
@@ -48,7 +56,7 @@ index f6b0445369..201567b252 100644
  def gbdt_ranking_pointwise_host_fit(
      x_colmajor: List[Float32],
      y: List[Float32],
-@@ -410,6 +420,7 @@ def gbdt_ranking_pointwise_host_fit(
+@@ -415,6 +425,7 @@ def gbdt_ranking_pointwise_host_fit(
          if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
              _zero_average_host(estimated)
          var scaled = rescaled_leaves(estimated, params.learning_rate)

@@ -1,0 +1,17 @@
+diff --git a/gbdt/methods/leaves_estimation/device_walker.mojo b/gbdt/methods/leaves_estimation/device_walker.mojo
+index 68f6c1956b..b362c00fb4 100644
+--- a/gbdt/methods/leaves_estimation/device_walker.mojo
++++ b/gbdt/methods/leaves_estimation/device_walker.mojo
+@@ -1713,7 +1713,11 @@ def device_multi_walk_estimate(
+                 # the walk's control flow: one word
+                 ctx.synchronize()
+                 if w.h_flag.unsafe_ptr().unsafe_load(0) != UInt32(0):
+-                    _multi_accept(ctx, oracle, w)
++                    # SABOTAGE (coverage-gbdt-device_multi_walk_direction):
++                    # the accepted point keeps the start's direction
++                    enqueue_copy_values(
++                        ctx, w.d_next, oracle.bin_count * oracle.single_bin_dim, w.d_cur
++                    )
+                     iteration += 1
+                     updated = True
+                     accepted = True

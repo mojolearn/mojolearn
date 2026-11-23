@@ -441,6 +441,10 @@ sampler, a solver, a metric, a reduction).
       gbdt-cat-nonsym (Depthwise and Lossguide over CTR and one-hot columns,
                Plain boosting, every loss the non-symmetric driver trains,
                weights and eval sets)
+      gbdt-multi-walk (lane gbdt-cpu-rest-4-tail: MultiClass,
+               MultiClassOneVsAll and MultiRMSE leaves under Newton past one
+               iteration and under Gradient, weights, an eval set, and
+               border_count 255)
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -6302,6 +6306,65 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-multi-walk")
+def _(ml, X, yc, yr, Xh=None):
+    """The multi-output losses' leaf walk the CPU column refused until lane
+    gbdt-cpu-rest-4-tail (2026-11-23): MultiClass, MultiClassOneVsAll and
+    MultiRMSE under Newton past one iteration and under Gradient (at the
+    loss's default count and an explicit one), the device's
+    `device_multi_walk_estimate` with its AnyImprovement line search; one
+    MultiClass fit with sample weights, one with class weights, one with an
+    eval set under the Iter detector, and a fit at border_count 255 (the
+    top of `train`'s range). Each hashes its predictions, digest and learn
+    curve; the held-out fit also its test-loss curve and stop. Every fit at
+    rate 0.1 with every work-changing option set."""
+    rows = min(_GBDT_GAPS_ROWS, X.shape[0])
+    X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
+    w = _hw((rows,), "gbdt-multi-walk:sample_weight", 0.25, 4.0)
+    y3 = np.digitize(yr, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
+    y2 = np.ascontiguousarray(np.stack([yr, (yc - np.float32(0.5)) * yr], axis=1).astype(np.float32))
+    sym = dict(score_function="Cosine", boost_from_average=False)
+    parts, first = {}, None
+    for name, yf, wf, options in [
+        ("multiclass_newton3", y3, None, dict(loss="MultiClass", leaf_estimation_method="Newton",
+                                              leaf_estimation_iterations=3)),
+        ("multiclass_gradient_default", y3, None, dict(loss="MultiClass", leaf_estimation_method="Gradient")),
+        ("multiclass_gradient2_weighted_bayesian", y3, w,
+         dict(loss="MultiClass", leaf_estimation_method="Gradient", leaf_estimation_iterations=2,
+              bootstrap_type="Bayesian", bagging_temperature=1.0)),
+        ("multiclass_gradient3_l2_class_weights", y3, None,
+         dict(loss="MultiClass", score_function="L2", leaf_estimation_method="Gradient",
+              leaf_estimation_iterations=3, class_weights=[1.0, 2.0, 0.5])),
+        ("onevsall_gradient_default", y3, None, dict(loss="MultiClassOneVsAll", leaf_estimation_method="Gradient")),
+        ("onevsall_newton2", y3, None, dict(loss="MultiClassOneVsAll", leaf_estimation_method="Newton",
+                                            leaf_estimation_iterations=2)),
+        ("multirmse_gradient3", y2, None, dict(loss="MultiRMSE", leaf_estimation_method="Gradient",
+                                               leaf_estimation_iterations=3)),
+        ("multirmse_newton2", y2, None, dict(loss="MultiRMSE", leaf_estimation_method="Newton",
+                                             leaf_estimation_iterations=2)),
+        ("logloss_border255", yc, None, dict(loss="Logloss", leaf_estimation_iterations=1, border_count=255)),
+    ]:
+        kw = dict(sym)
+        kw.update(options)
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yf, sample_weight=wf)
+        _gbdt_gaps_parts(parts, name, m, X)
+        parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
+        first = first if first is not None else m
+    # the held-out fit: MultiClass Gradient, the curve, the stop
+    Xe = np.ascontiguousarray(Xh[:rows])
+    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+    y3e = np.digitize(ye, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
+    kw = dict(sym, loss="MultiClass", leaf_estimation_method="Gradient", leaf_estimation_iterations=2,
+              n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
+              best_model_min_trees=3)
+    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, y3, eval_set=(Xe, y3e))
+    _gbdt_gaps_parts(parts, "multiclass_gradient_eval", ev, X)
+    parts["multiclass_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+    parts["multiclass_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                            ev.best_iteration_], dtype=np.int64))
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -10190,7 +10253,9 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-ordered-weights",
             "gbdt-nonsym-rest",
             # lane gbdt-cpu-rest-4-sym (2026-11-23)
-            "gbdt-symmetric-rest")
+            "gbdt-symmetric-rest",
+            # lane gbdt-cpu-rest-4-tail (2026-11-23)
+            "gbdt-multi-walk")
 # lane gbdt-cpu-rest-4-pwl (2026-11-23)
 _batch_decl(_rows_calls("predict"), "gbdt-pointwise-rest")
 

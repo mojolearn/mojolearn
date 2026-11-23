@@ -828,6 +828,8 @@ TRAINING_LANE_NAMES = {
     "gbdt-cat-rest": "gradient boosting with categorical and one-hot columns on the pointwise losses and the multiclass family",
     # lane gbdt-cpu-rest-4-cat-ns (2026-11-23)
     "gbdt-cat-nonsym": "gradient boosting with Depthwise and Lossguide trees on CTR and one-hot categorical columns",
+    # lane gbdt-cpu-rest-4-tail (2026-11-23)
+    "gbdt-multi-walk": "gradient boosting with MultiClass, MultiClassOneVsAll and MultiRMSE under Newton leaves past one iteration and Gradient leaves",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1656,20 +1658,24 @@ ADAPTED_MODULES = {
 #: grouped losses with cat_features or one_hot_features, feature_fraction
 #: below 1 with either, feature combinations under Depthwise / Lossguide.
 #: The clause is deleted; NO_CPU_PATH is not empty, so the mechanism stays.
+#: Lane gbdt-cpu-rest-4-tail (2026-11-23): the multi-output losses
+#: (MultiClass, MultiClassOneVsAll, MultiRMSE) walk their leaves under
+#: Newton and Gradient at any iteration count on the host
+#: (gbdt_oracle_multiclass.mojo `_estimate_multi`, the statements of
+#: `device_walker.device_multi_walk_estimate`, the defaults of
+#: `set_leaves_estimation_default`), and the host's own depth cap (16) and
+#: border-count range are gone: `border_count` 1 to 255 and `max_depth` at
+#: most 16 under SymmetricTree and Depthwise are `train`'s limits on both
+#: columns, one body (gbdt/options/catboost_options.mojo::check_tree_limits;
+#: the device had neither: past 255 borders it overran its binarize table,
+#: past depth 16 it trained to the end and the model reader refused the
+#: tree), Lossguide's depth uncapped. What is left of the clause is the
+#: Simple leaf estimator.
 NO_CPU_PATH = (
 
-    "gradient boosting training at a (loss, grow_policy, score_function, "
-    "leaf_estimation_method, bootstrap_type) combination outside the ones "
-    "the gbdt/host oracles restate, each refused by name: under Depthwise "
-    "and Lossguide, score functions and leaf estimators outside each "
-    "policy's covered pair, Depthwise's min_split_gain, min_child_hessian "
-    "and min_data_in_leaf, and boost_from_average outside RMSE, the "
-    "quantile family and the dedicated pointwise Logloss route; under "
-    "SymmetricTree and Ordered, the Simple leaf estimator, Gradient leaves "
-    "or more than one leaf iteration on the multi-output losses (the host "
-    "restates one multi-dimensional Newton step), and border_count outside "
-    "1 to 255 or max_depth above 16 (no named device refusal to match) -- "
-    "each one its own device kernel or its own searcher gate order",
+    "gradient boosting training with the Simple leaf estimator under "
+    "SymmetricTree and Ordered boosting, refused by name (the host takes "
+    "the searcher's own leaves only for RMSE)",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -3029,6 +3035,9 @@ FAMILIES = (
             # Lossguide over CTR and one-hot columns
             # (gbdt_oracle_depthwise.mojo::gbdt_ctr_host_fit_non_symmetric)
             "gbdt-cat-nonsym",
+            # lane gbdt-cpu-rest-4-tail (2026-11-23): the multi-output
+            # losses' leaf walk (gbdt_oracle_multiclass.mojo _estimate_multi)
+            "gbdt-multi-walk",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4247,6 +4256,8 @@ PUBLIC_PENDING_LANES = {
     "gbdt-cat-rest": "no reference",
     # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): new lane, recorded CPU first at the release
     "gbdt-cat-nonsym": "no reference",
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-multi-walk": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
