@@ -3660,6 +3660,35 @@ def apply_scaled_leaves_host(
     _ = len(sizes)
 
 
+def rescale_apply_leaves_host(
+    mut cursor: List[Float32],
+    leaves: List[Float32],
+    learning_rate: Float32,
+    row_index: List[Int],
+    offsets: List[Int],
+    sizes: List[Int],
+    n_leaves: Int,
+    dim: Int = 1,
+    plane: Int = 0,
+) -> List[Float32]:
+    """THE host leaf rescale (lane gbdt-leaf-body, 2026-11-23): one tree's
+    estimated leaves (leaves x dim) rescaled once (`rescaled_leaves`, the
+    device's `rescaled_leaf`: `round(leaf * rate)`) and added onto every row
+    of its leaf (`apply_scaled_leaves_host`, the device's
+    `add_model_value_kernel`); returns the rescaled values, which the stored
+    model keeps. One body for every host fit (`gbdt_host_boost`,
+    `gbdt_losses_host_fit`, `gbdt_multi_host_fit`, `gbdt_pointwise_host_fit`,
+    `gbdt_ranking_pointwise_host_fit`, `_ns_fit_core`), each of which wrote
+    these two statements itself; the same statements, bits unchanged. The
+    sabotage arms coverage-gbdt-host_leaf_ulp and
+    coverage-gbdt-host_boost_fused_cursor fault it here."""
+    var scaled = rescaled_leaves(leaves, learning_rate)
+    apply_scaled_leaves_host(
+        cursor, scaled, row_index, offsets, sizes, n_leaves, dim, plane
+    )
+    return scaled^
+
+
 def _identity_rows(mut row_index: List[Int], n_rows: Int):
     """`row_index[r] = r` (the root partition's row order, the device's
     `make_sequence`): one statement per row, the rows in `_gbdt_units`
@@ -5028,9 +5057,9 @@ def gbdt_host_boost(
                 leaf_values[i] = _rmse_leaf_value(
                     leaf_sums[2 * i], leaf_sums[2 * i + 1], params.l2_leaf_reg
                 )
-            est_scaled = rescaled_leaves(leaf_values, lr)
-            apply_scaled_leaves_host(
-                cursors[learn_p], est_scaled, row_index, offsets, sizes, n_live
+            est_scaled = rescale_apply_leaves_host(
+                cursors[learn_p], leaf_values, lr, row_index, offsets, sizes,
+                n_live,
             )
         else:
             for p in range(perm_count):  # driver-loop: over the permutations
@@ -5044,10 +5073,9 @@ def gbdt_host_boost(
                         params.leaf_estimation_iterations, weights, objective,
                         leaf_method,
                     )
-                    scaled = rescaled_leaves(est_p_leaves, lr)
-                    apply_scaled_leaves_host(
-                        cursors[p], scaled, row_index, offsets, sizes,
-                        len(sizes),
+                    scaled = rescale_apply_leaves_host(
+                        cursors[p], est_p_leaves, lr, row_index, offsets,
+                        sizes, len(sizes),
                     )
                 else:
                     var part = _partition_for_model(
@@ -5060,10 +5088,9 @@ def gbdt_host_boost(
                         params.leaf_estimation_iterations, weights, objective,
                         leaf_method,
                     )
-                    scaled = rescaled_leaves(est_p_leaves, lr)
-                    apply_scaled_leaves_host(
-                        cursors[p], scaled, part.row_index, part.offsets,
-                        part.sizes, len(part.sizes),
+                    scaled = rescale_apply_leaves_host(
+                        cursors[p], est_p_leaves, lr, part.row_index,
+                        part.offsets, part.sizes, len(part.sizes),
                     )
                 # the EXPORTED ensemble is the estimation permutation's
                 if p == est_p:

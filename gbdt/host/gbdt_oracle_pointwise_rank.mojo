@@ -18,7 +18,6 @@ from gbdt.methods.random_score_bodies import std_dev_row_term
 from std.math import exp, fma, isfinite, log, sqrt
 
 from checks.numerics import ftz, identical_mul_add
-from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.data.pairs import (
     IDN_PAIRLOGIT_GROUP,
@@ -35,7 +34,7 @@ from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.host.gbdt_oracle import (
     _ns_project_index,
     _sample_tree_folds,
-    apply_scaled_leaves_host,
+    rescale_apply_leaves_host,
     _gbdt_units,
     _identity_rows,
     _partition_for_tree,
@@ -423,10 +422,9 @@ def gbdt_ranking_pointwise_host_fit(
         )
         if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
             _zero_average_host(estimated)
-        var scaled = rescaled_leaves(estimated, params.learning_rate)
-        apply_scaled_leaves_host(
-            cursor, scaled, partition.row_index, partition.offsets,
-            partition.sizes, n_leaves,
+        var scaled = rescale_apply_leaves_host(
+            cursor, estimated, params.learning_rate, partition.row_index,
+            partition.offsets, partition.sizes, n_leaves,
         )
         # one computation feeds the cursor and the stored model
         for leaf in range(n_leaves):

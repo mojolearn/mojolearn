@@ -136,7 +136,6 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, HostU32Ptr, host_predict_chunk
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
-from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.compressed_index_builder import (
@@ -150,7 +149,7 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
-    apply_scaled_leaves_host,
+    rescale_apply_leaves_host,
     _identity_rows,
     _scan_histograms,
     _gbdt_units,
@@ -1510,8 +1509,9 @@ def _ns_fit_core(
                     "the estimator returned " + String(len(estimated))
                     + " values for a non-symmetric tree of " + String(n_bins) + " bins"
                 )
-            var scaled = rescaled_leaves(estimated, lr)
-            apply_scaled_leaves_host(cursors[p], scaled, row_index, offsets, sizes, n_bins)
+            var scaled = rescale_apply_leaves_host(
+                cursors[p], estimated, lr, row_index, offsets, sizes, n_bins
+            )
             # the EXPORTED ensemble is the estimation permutation's
             if p == est_p:
                 est_scaled = scaled.copy()
