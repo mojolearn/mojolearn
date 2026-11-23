@@ -65,7 +65,6 @@ from bindings.msel_cv_door import (
     msel_device_rows_ok,
     msel_unit_jobs,
     msel_cv_units,
-    MSEL_MEMBER_UNITS,
     msel_scorers,
     MselFoldRows,
     MselScores,
@@ -365,9 +364,9 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
         # member, data or failing fit takes the estimator's own fit door below,
         # as before (the fallback rule; a failing fit raises its own words).
         var best = PythonObject(None)
-        comptime if MSEL_MEMBER_UNITS:
-            if best_params is not None and yf is not None:
-                best = msel_member_refit(estimator, best_params, yf, xa, context, b)
+        # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+        if best_params is not None and yf is not None:
+            best = msel_member_refit(estimator, best_params, yf, xa, context, b)
         if best is None:
             best = msel_clone(estimator, False, context)
             _set_params(best, best_params, context)

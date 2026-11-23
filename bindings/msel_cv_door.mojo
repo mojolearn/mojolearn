@@ -354,12 +354,10 @@ def _msel_hold_rows_of(x: PythonObject, rows: PythonObject) raises:
 comptime MSEL_LC_TEST_REUSE = not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF"]()
 
 #: Units over native members (bindings/msel_member_units_door.mojo; lane ma-core, 2026-11-21, the member ABI
-#: rollout of the boundary wave): DEFAULT ON for a member whose family published its member entry.
-#: `-D MOJOLEARN_MSEL_MEMBER_UNITS_OFF` runs every member through the Python units again: the B arm of the owed
-#: same-pod A/B (cross_validate / GridSearchCV of Ridge and LinearRegression, a neighbouring shape and one
-#: non-board dataset). NOT MEASURED YET: the Python units stay until that A/B is recorded, then they are deleted
-#: for published families with the four tombstone parts.
-comptime MSEL_MEMBER_UNITS = not is_defined["MOJOLEARN_MSEL_MEMBER_UNITS_OFF"]()
+#: rollout of the boundary wave): a member whose family published its member entry always takes them; the
+#: Python units below serve every other member.
+# TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_MEMBER_UNITS_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 struct MselFoldRows(Movable):
@@ -1207,12 +1205,12 @@ def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     threads."""
     var run = MselUnitRun(base, candidates, y, rows, scoring, return_train, return_estimator, error_score, method, context)
     var workers = msel_unit_workers(jobs, run.n_units, context)
-    comptime if MSEL_MEMBER_UNITS:
-        # A member whose family published its member entry (core/member_abi.mojo)
-        # runs its units without a Python estimator (`_msel_member_route`).
-        # Any other member, and any other request, keeps the units below.
-        if _msel_member_route(run, rows, y, workers, context):
-            return run^
+    # A member whose family published its member entry (core/member_abi.mojo)
+    # runs its units without a Python estimator (`_msel_member_route`).
+    # Any other member, and any other request, keeps the units below.
+    # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    if _msel_member_route(run, rows, y, workers, context):
+        return run^
     # A MEMBER-ONLY plan (python/mojolearn/_native_msel_more.py connect_members:
     # a marked class registered from its mark, without method recipes) that
     # its member did not serve is refused HERE, once per operation, in the
