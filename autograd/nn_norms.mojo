@@ -35,6 +35,7 @@ Nothing is resolved, allocated or launched per element or per sample: the descri
 tape's, once per forward; every option is a description argument read once.
 """
 from std.collections import Array
+from std.sys.compile import is_defined
 from autograd.tape import Tape, Tensor
 from autograd.rankn import ShapeN, RN_MAX_RANK, rn_desc_view
 from autograd.rankn_api import rn_shape
@@ -45,6 +46,12 @@ from autograd.import_api import imp_expand
 from autograd.ops import ADD, MULTIPLY
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COLSUM_DIV
+
+# Sabotage arms (test defines, never in a product build): checks/native_tests/nn_norms.mojo must fail with either.
+#: each channel normalized alone instead of with its group (group_norm with 1 < groups < channels)
+comptime NN_NORMS_SABOTAGE_GROUP = is_defined["MOJOLEARN_NN_NORMS_SABOTAGE_GROUP"]()
+#: the tracked running statistics take the first sample's update instead of the batch's average
+comptime NN_NORMS_SABOTAGE_RUNNING = is_defined["MOJOLEARN_NN_NORMS_SABOTAGE_RUNNING"]()
 
 
 def _sh3(a: Int, b: Int, c: Int) raises -> ShapeN:
@@ -96,6 +103,9 @@ def _instance_core[E: Exec](
         a.i2 = C
         a.i3 = 0
         a.f0 = Float32(B)
+        comptime if NN_NORMS_SABOTAGE_RUNNING:
+            a.i0 = 1
+            a.f0 = Float32(1)
         ex.launch[OP_COLSUM_DIV](a, C)
     return tape.view_nd(ex, y, s)
 
@@ -109,7 +119,10 @@ def graph_group_norm[E: Exec](
     None for affine=False). The same words in training and inference (no running statistics)."""
     if groups < 1 or C % groups != 0:
         raise Error("group_norm: num_groups must divide num_channels")
-    if groups == C:
+    var per_channel = groups == C
+    comptime if NN_NORMS_SABOTAGE_GROUP:
+        per_channel = True
+    if per_channel:
         return _instance_core(tape, ex, h, B, C, rest, weight, bias, None, Float32(0), eps, True)
     var s = tape.shape_of(h)
     var xg = tape.view_nd(ex, h, _sh3(1, B * groups, (C // groups) * rest))
