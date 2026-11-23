@@ -17,6 +17,21 @@ Configurations:
   * `lp_units_*`: cross_val_score and GridSearchCV over LabelPropagation / LabelSpreading with every fourth label
     -1 (the units now fit the member with the marker word).
 
+Section meta5b (lane mf-meta5b; base origin/lane/member-fits-5 0d7bb545e9, head lane/mf-meta5b):
+  * `b_params_*`: RFE.fit(X, y, **fit_params) over LogisticRegression / Ridge / a RandomForest with
+    sample_weight (and the forest's feature_importances=True), an unknown key (the compiled fit's TypeError),
+    a GradientBoosting booster with cat_features and an eval_set (numeric and object held-out X), and the
+    classifier adapter over three classes with an eval_set (its multiclass refusal).
+  * `b_lp_*`: RFE over LabelPropagation with every fourth label -1 (no round: the final fit; a round: the
+    no-importance refusal), and CalibratedClassifierCV(LabelPropagation / LabelSpreading) over the same labels,
+    ensemble True and False, 4 classes with the marker (predict_proba, calibrated_classifiers_ classes).
+  * `b_dotted_*`: RFE(GridSearchCV(LogisticRegression), importance_getter='best_estimator_.coef_'),
+    RFE(RFE(Ridge), 'estimator_.coef_') and RFE(StackingClassifier, 'final_estimator_.coef_').
+  EXPECTED meta5b: equal outputs for every served case (the member path runs the same fits and programs); the
+  `*_raised` words of a refusal the native UNPACK now raises may differ in their prefix only; CalibratedClassifierCV
+  over LabelPropagation with -1 labels moved from the door's units to the RUN (same fits; any bit difference
+  there is a defect to report). Every b_* unit is independent: one process each.
+
 EXPECTED: every line equal (same RUNs, same programs, same order), except, stated: `*_raised` lines whose words
 change from a door refusal to the member's refusal of the same input, and the `lp_units_*` and `ff_*`/`rfe_in_*`
 search scores computed by the typed metric program where the old units used the Python scorer (the last bits may
@@ -173,8 +188,104 @@ def _lp_units(arg):
     return out
 
 
+def _b_params(arg):
+    _, case = arg
+    import mojolearn
+    from mojolearn.feature_selection import RFE
+    X, y, t = _data(11, 160, 6, 3)
+    w = np.linspace(0.5, 2.0, len(X)).astype(np.float32)
+    tag = f"b_params_{case}"
+    out = []
+    try:
+        if case == "logreg_sw":
+            m = RFE(mojolearn.LogisticRegression(max_iter=200), n_features_to_select=3).fit(X, y, sample_weight=w)
+        elif case == "ridge_sw":
+            m = RFE(mojolearn.Ridge(alpha=1.0), n_features_to_select=2, step=2).fit(X, t, sample_weight=w)
+        elif case == "rf_fi":
+            m = RFE(mojolearn.RandomForestClassifier(n_estimators=6, random_state=0), n_features_to_select=3).fit(
+                X, y, sample_weight=w, feature_importances=True)
+        elif case == "unknown":
+            m = RFE(mojolearn.Ridge(alpha=1.0), n_features_to_select=3).fit(X, t, bogus=1)
+        elif case.startswith("gb_cat"):
+            Xc = X.copy()
+            Xc[:, 0] = np.floor(Xc[:, 0] * 4)
+            held = Xc[:40].copy()
+            if case == "gb_cat_object":
+                held = held.astype(object)
+                held[:, 0] = np.array(["a", "b", "c", "d"] * 10, dtype=object)
+            est = mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[0])
+            m = RFE(est, n_features_to_select=6).fit(Xc, t, eval_set=(held, t[:40]))
+        else:  # the classifier adapter over three classes
+            est = mojolearn.GradientBoostingClassifier(n_estimators=4)
+            m = RFE(est, n_features_to_select=6).fit(X, y, eval_set=(X[:30], y[:30]))
+        out.append((tag + "_support", _digest(np.asarray(m.support_, dtype=bool))))
+        out.append((tag + "_ranking", _digest(m.ranking_)))
+        out.append((tag + "_predict", _digest(m.predict(X))))
+    except Exception as e:  # noqa: BLE001 - the words are the digest
+        out.append((tag + "_raised", f"{type(e).__name__}: {e}"))
+    return out
+
+
+def _b_lp(arg):
+    _, case = arg
+    import mojolearn
+    from mojolearn.feature_selection import RFE
+    X, y, _ = _data(13, 120, 4, 4)
+    marked = y.copy()
+    marked[::4] = -1
+    tag = f"b_lp_{case}"
+    out = []
+    try:
+        if case.startswith("rfe"):
+            m = RFE(mojolearn.LabelPropagation(max_iter=200), n_features_to_select=4 if case == "rfe_final" else 2)
+            m.fit(X, marked)
+            out.append((tag + "_predict", _digest(m.predict(X))))
+            out.append((tag + "_classes", repr(list(m.estimator_.classes_))))
+        else:
+            est = mojolearn.LabelPropagation(max_iter=200) if "lp" in case else mojolearn.LabelSpreading(alpha=0.2)
+            m = mojolearn.CalibratedClassifierCV(est, cv=3, ensemble=case.endswith("_ens")).fit(X, marked)
+            out.append((tag + "_proba", _digest(m.predict_proba(X))))
+            out.append((tag + "_classes", repr([list(c.estimator.classes_) for c in m.calibrated_classifiers_])))
+    except Exception as e:  # noqa: BLE001 - the words are the digest
+        out.append((tag + "_raised", f"{type(e).__name__}: {e}"))
+    return out
+
+
+def _b_dotted(arg):
+    _, case = arg
+    import mojolearn
+    from mojolearn.feature_selection import RFE
+    from mojolearn.model_selection import GridSearchCV
+    X, y, t = _data(17, 150, 6, 2)
+    tag = f"b_dotted_{case}"
+    out = []
+    try:
+        if case == "search":
+            inner = GridSearchCV(mojolearn.LogisticRegression(max_iter=200), {"C": [0.5, 1.0]}, cv=3)
+            m = RFE(inner, n_features_to_select=3, importance_getter="best_estimator_.coef_").fit(X, y)
+        elif case == "rfe":
+            m = RFE(RFE(mojolearn.Ridge(alpha=1.0), n_features_to_select=6), n_features_to_select=3,
+                    importance_getter="estimator_.coef_").fit(X, t)
+        else:
+            stack = mojolearn.StackingClassifier([("lr", mojolearn.LogisticRegression(max_iter=200))],
+                                                 final_estimator=mojolearn.LogisticRegression(max_iter=200), cv=3)
+            m = RFE(stack, n_features_to_select=3, importance_getter="final_estimator_.coef_").fit(X, y)
+        out.append((tag + "_support", _digest(np.asarray(m.support_, dtype=bool))))
+        out.append((tag + "_ranking", _digest(m.ranking_)))
+        out.append((tag + "_predict", _digest(m.predict(X))))
+    except Exception as e:  # noqa: BLE001 - the words are the digest
+        out.append((tag + "_raised", f"{type(e).__name__}: {e}"))
+    return out
+
+
 def _unit(arg):
     kind = arg[0]
+    if kind == "b_params":
+        return _b_params(arg)
+    if kind == "b_lp":
+        return _b_lp(arg)
+    if kind == "b_dotted":
+        return _b_dotted(arg)
     if kind == "rfe_door":
         return _rfe_door(arg)
     if kind == "rfe_in":
@@ -188,7 +299,11 @@ UNITS = ([("rfe_door", b, s, st) for b in ("lda", "logreg", "ridge", "rf", "gnb"
           for st in (1, 2)]
          + [("rfe_in", m, b) for m in ("vote", "stack", "cal", "search", "cv") for b in ("logreg", "ridge")]
          + [("ff", m) for m in ("alone", "vote", "search", "weighted", "cv")]
-         + [("lp_units", n, h) for n in ("lp", "ls") for h in ("cv", "search")])
+         + [("lp_units", n, h) for n in ("lp", "ls") for h in ("cv", "search")]
+         + [("b_params", c) for c in ("logreg_sw", "ridge_sw", "rf_fi", "unknown", "gb_cat_numeric", "gb_cat_object",
+                                      "gbc_multiclass")]
+         + [("b_lp", c) for c in ("rfe_final", "rfe_round", "cal_lp_ens", "cal_lp_oof", "cal_ls_ens", "cal_ls_oof")]
+         + [("b_dotted", c) for c in ("search", "rfe", "stack")])
 
 
 def main():

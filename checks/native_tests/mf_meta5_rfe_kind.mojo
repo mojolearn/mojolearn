@@ -14,7 +14,9 @@ x_trees glue (the META entry's), the host x_prep transport (the rounds' programs
 
 FAIL-PROOF (each edit makes the case fail): in `_rfe_block` gather `slot[].rfe_columns` shifted by one (or
 skip the gather) -> predict / transform; in `_rfe_view` write the ranking before the support -> the words; in
-`_import_rfe` skip the kept columns -> the round trip refuses.
+`_import_rfe` skip the kept columns -> the round trip refuses; (lane mf-meta5b) in `_export_forward` read
+`words[1]` as the index (or drop `call[].dst = inner.dst`) -> the forwarded coef_ words; drop its range check
+-> the past-the-end refusal.
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import require, fixture_f32, fixture_i32
@@ -24,13 +26,13 @@ from core.device_route import DeviceRoute, DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_word
 from core.ensemble_member import (
     ensemble_member_v2, meta_plan_mint_with, meta_plan_rfe, meta_plan_release, META_RFE_CLASSIFIER,
-    META_RFE_WORDS, META_BLOCK_NESTED, META_BLOCK_RFE, META_PARAM_COUNT,
+    META_RFE_WORDS, META_BLOCK_NESTED, META_BLOCK_RFE, META_PARAM_COUNT, META_BLOCK_FORWARD,
 )
 from core.member_abi import (
     MemberCall, MemberPlan, MemberRef, MemberMatrix, member_call, member_call_of, member_new, member_free,
     member_kind_capabilities, MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA,
     MEMBER_OP_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_OUTPUTS, MEMBER_IMPORT_DONE,
-    MEMBER_I32, MEMBER_I64, MEMBER_F32, MEMBER_F64,
+    MEMBER_I32, MEMBER_I64, MEMBER_F32, MEMBER_F64, MEMBER_BLOCK_COEF,
 )
 from core.member_families import MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_ENSEMBLE
 from core.discriminant_member import discriminant_member_v2
@@ -196,6 +198,37 @@ def test_rfe_kind_equals_run() raises:
         _ = member_call(meta.member, MEMBER_OP_TRANSFORM, t)
         for i in range(N * NSEL):  # small-loop(exact words)
             require(block[i] == kept[i], "RFE kind: transform word " + String(i))
+        # THE FORWARDED EXPORT (lane mf-meta5b; a dotted getter 'estimator_.coef_'): the final estimator's
+        # coefficient block through the RFE state equals the RUN's final state's own export, word for word.
+        var own = member_call_of(want.final_plan, want.final_state)
+        own.block = MEMBER_BLOCK_COEF
+        _ = member_call(want.final_plan.member, MEMBER_OP_EXPORT, own)
+        var hops: List[Float64] = [0.0, Float64(MEMBER_BLOCK_COEF)]
+        var fwd = member_call_of(meta, fitted.state)
+        fwd.block = META_BLOCK_FORWARD
+        fwd.params = Int(hops.unsafe_ptr())
+        fwd.param_count = len(hops)
+        _ = member_call(meta.member, MEMBER_OP_EXPORT, fwd)
+        _ = len(hops)
+        require(fwd.dst.rows == own.dst.rows and fwd.dst.cols == own.dst.cols and fwd.dst.cols == NSEL,
+                "RFE kind: the forwarded coef_ block has the final estimator's shape")
+        var a = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=fwd.dst.data)
+        var e = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=own.dst.data)
+        for i in range(fwd.dst.rows * fwd.dst.cols):  # small-loop(exact words)
+            require(a[i] == e[i], "RFE kind: forwarded coef_ word " + String(i))
+        # A path step the state does not hold is refused in the ABI's words.
+        var bad: List[Float64] = [3.0, Float64(MEMBER_BLOCK_COEF)]
+        var wrong = member_call_of(meta, fitted.state)
+        wrong.block = META_BLOCK_FORWARD
+        wrong.params = Int(bad.unsafe_ptr())
+        wrong.param_count = len(bad)
+        var refused = False
+        try:
+            _ = member_call(meta.member, MEMBER_OP_EXPORT, wrong)
+        except error:
+            refused = "no nested member 3" in String(error)
+        _ = len(bad)
+        require(refused, "RFE kind: a forwarded export past its nested members is refused")
         # THE ROUND TRIP: the final estimator's state handed to a new RFE state with the fitted words.
         var nested_view = member_call_of(meta, fitted.state)
         nested_view.block = META_BLOCK_NESTED
