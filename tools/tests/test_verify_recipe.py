@@ -384,3 +384,14 @@ def test_package_routes_recipe_lazily_and_verify_has_the_flags():
     for flag in ('"--recipe"', '"--against"', '"--record-out"'):
         assert flag in main
     assert "recipe\t" in (ROOT / "docs-site/api_exclude.txt").read_text()
+
+
+def test_the_one_ulp_control_also_moves_a_nan_answer(vr):
+    nan = np.full(4, np.nan, dtype=np.float32)
+    results = {"cpu": {"ran": True, "outputs": [dict(name="predict", kind="array", values=vr._encode(nan),
+                                                     **vr.cb.describe_output(nan))]}}
+    moved, arrays, what = vr._nudged(results, {"cpu": [nan]})
+    assert what and moved["cpu"]["outputs"][0]["sha256"] != results["cpu"]["outputs"][0]["sha256"]
+    verdict = vr.compare_results([("a", results["cpu"], [nan]), ("b", moved["cpu"], arrays["cpu"])])
+    assert verdict["verdict"] == "DIVERGENT"
+

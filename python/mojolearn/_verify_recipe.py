@@ -827,9 +827,11 @@ def _nudged(results, arrays):
     for k, output in enumerate(outputs):
         a = arrays[device][k]
         if a is not None and a.dtype.kind == "f" and a.size:
+            # the lowest bit of element 0's word: one ulp for a finite value, another payload for a NaN
+            # (nextafter leaves a NaN as it is, and a model whose answers are NaN must still be able to fail)
             b = a.copy()
-            flat = b.reshape(-1)
-            flat[0] = np.nextafter(flat[0], np.inf, dtype=b.dtype)
+            words = b.reshape(-1).view(np.dtype(f"u{b.dtype.itemsize}"))
+            words[0] ^= 1
             arrays[device][k] = b
             output.update(cb.describe_output(b))
             output["values"] = _encode(b)
