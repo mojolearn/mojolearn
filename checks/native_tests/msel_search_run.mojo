@@ -53,6 +53,18 @@ rank 1), and the refit: the best candidate fitted on every row.
    score equals `msel_scorer_value` over KMeans fitted directly on the fold's train rows and its predicted cluster
    ids on the test rows; a clusterer scored by 'r2' beside them refuses.
 
+10. (lane mf-msel5) THE CV TOOLS: one LogisticRegression candidate over a learning curve's given folds (each
+   fold's train rows at two sizes, its first N/3 rows and all of them; size-major, so the two units of a fold
+   share one test side), 'accuracy', return_train_score, `keep` and `indices`: every test and train split score
+   equals the member fitted directly on that prefix and counted here; each unit has its fit and score seconds
+   (finite, not negative); each kept state's predict_proba on X equals the direct fit's word for word; the fold
+   rows come back as given. Then `respond` = predict_proba over the int cv (cross_val_predict): each unit's
+   response words equal the direct fit's float64 probabilities on its test rows (K columns, MEMBER_F64).
+11. (lane mf-msel5) AP-ABSENT: two classes whose labels are 0 and 2 (label words "0", "2"), scoring
+   'average_precision' with the positive word SCORER_POSITIVE_ABSENT: with error_score='raise' the RUN raises
+   scikit-learn's words "ValueError: pos_label=1 is not a valid label: It should be one of [0 2]"; with a number
+   every split score is that number.
+
 FAIL-PROOF EDITS (each must make a case fail): `side_rows[f * sides] = rows_at + 4 * (f * n)` (case 1: the train
 rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits learn the wrong count);
 `narrow[i] = Int32(wide[i]) + 1` in `_respond` (cases 2, 4); `value = 0.0` for a failed task (case 3);
@@ -66,7 +78,12 @@ core/msel_search_run.mojo `out[c] = SEARCH_ROWS_RESIDENT` without the `_same_ima
 `index = _IntP(unsafe_from_address=side_rows_at)[s]` taken from the train side for a test task, or
 `_note_kept` removed after the fit wave (case 8); `var labels_out = ops[o] == MEMBER_OP_PREDICT and classifier`
 in `msel_search_run` (case 9: KMeans' int32 ids refused as a float response), or `entry_ref_unresolved()` passed
-for `plan.cluster` in `_scorer_side`'s call (case 9: the label-pair scorers refuse).
+for `plan.cluster` in `_scorer_side`'s call (case 9: the label-pair scorers refuse); in core/msel_search_run.mojo
+`alias_of[f * sides] = g * sides` written for a test side of DIFFERENT rows (drop the `_same_rows` test), or
+`res.unit_states[u0 + v] = run.states[v]` without `run.states[v] = 0` (the release frees it: case 10's kept
+predict_proba reads a freed state), or `tr.append(Int32(0))` in place of the row copy (case 10: indices), or
+`_widen(pred_at[at], side_count[s], dtype)` (case 10: one column only); `shown += " "` removed (case 11: the
+words).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -90,7 +107,7 @@ from core.msel_search_run import (
 )
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
-from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_value
+from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_value, SCORER_POSITIVE_ABSENT
 from bindings.mcls_classify_run import label_binary_run, LBL_PRECISION, LBL_RECALL, LBL_F1
 from core.trees_entry_table import TreesEntryKey
 from glm.host.logistic_native_host import qn_host_native_v1
@@ -109,7 +126,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 9
+comptime CASES = 11
 
 
 def _glue() raises -> EntryRef:
@@ -842,6 +859,161 @@ def check_clusterer_base() raises:
     _ = yf^
 
 
+def _direct_fit(plan: MemberPlan, x: List[Float32], y: List[Int32], rows: Int, count: Int) raises -> Int:
+    """Oracle: the member fitted directly on `count` rows at the int32 row numbers `rows`."""
+    var xs = List[Float32]()
+    var ys = List[Int32]()
+    _rows_of(x, y, rows, count, xs, ys)
+    var call = member_new(plan)
+    call.x = MemberMatrix(Int(xs.unsafe_ptr()), count, D)
+    call.y = MemberMatrix(Int(ys.unsafe_ptr()), count, 1, MEMBER_I32)
+    call.classes = plan.classes
+    _ = member_call(plan.member, MEMBER_OP_FIT, call)
+    _ = len(xs)  # the fit read the rows through their addresses
+    _ = len(ys)
+    return call.state
+
+
+def _proba(plan: MemberPlan, state: Int, x: Int, rows: Int, classes: Int) raises -> List[Float64]:
+    var out = List[Float64](length=max(rows * classes, 1), fill=0.0)
+    var call = member_call_of(plan, state)
+    call.x = MemberMatrix(x, rows, D)
+    call.dst = MemberMatrix(Int(out.unsafe_ptr()), rows, classes, MEMBER_F64)
+    _ = member_call(plan.member, MEMBER_OP_PREDICT_PROBA, call)
+    return out^
+
+
+def check_cv_tools() raises:
+    var x = _x()
+    var y = _codes()
+    var one = _logistic(1.0, 0.0)
+    var code = msel_scorer_code("accuracy", False)
+    var counts = List[Int32](length=F + 1, fill=Int32(0))
+    var rows = List[Int32](length=F * N, fill=Int32(0))
+    var yy = y.copy()
+    _ = xt_device_folds(_glue(), Int(yy.unsafe_ptr()), Int(rows.unsafe_ptr()), Int(counts.unsafe_ptr()), N, F, K)
+    _ = len(yy)  # the fold program read the codes through their address
+    # The learning curve's units, size-major: sizes N / 3 and every train row.
+    var plan = _plan([one.copy()], x, y, code)
+    plan.return_train = True
+    plan.keep = True
+    plan.indices = True
+    plan.refit = False
+    var sizes = List[Int]()
+    for si in range(2):  # small-loop(fixture: the two sizes)
+        for f in range(F):  # small-loop(fixture: folds)
+            var t = Int(counts[f])
+            var size = N // 3 if si == 0 else N - t
+            plan.fold_train_at.append(Int(rows.unsafe_ptr()) + 4 * (f * N))
+            plan.fold_train_n.append(size)
+            plan.fold_test_at.append(Int(rows.unsafe_ptr()) + 4 * (f * N + N - t))
+            plan.fold_test_n.append(t)
+            sizes.append(size)
+    var units = 2 * F
+    var res = msel_search_run(plan)
+    require(res.n_splits == units, "the curve's units")
+    require(len(res.fit_seconds) == units and len(res.score_seconds) == units, "one fit and score time per unit")
+    require(len(res.unit_states) == units and len(res.fold_train) == units, "kept states and rows per unit")
+    for u in range(units):  # small-loop(check: units)
+        var f = u % F
+        var t = Int(counts[f])
+        var train_at = Int(rows.unsafe_ptr()) + 4 * (f * N)
+        var test_at = train_at + 4 * (N - t)
+        require(res.fit_seconds[u] >= 0.0 and res.score_seconds[u] >= 0.0, "seconds of unit " + String(u))
+        var state = _direct_fit(one, x, y, train_at, sizes[u])
+        var xt = List[Float32]()
+        var yt = List[Int32]()
+        _rows_of(x, y, test_at, t, xt, yt)
+        var xs = List[Float32]()
+        var ys = List[Int32]()
+        _rows_of(x, y, train_at, sizes[u], xs, ys)
+        require(res.test[0][u] == _side_score(one, state, xt, yt, t, SEARCH_SCORE_ACCURACY), "curve test " + String(u))
+        require(res.train[0][u] == _side_score(one, state, xs, ys, sizes[u], SEARCH_SCORE_ACCURACY),
+                "curve train " + String(u))
+        require(res.unit_states[u] != 0, "the kept state of unit " + String(u))
+        var a = _proba(one, state, Int(x.unsafe_ptr()), N, K)
+        var b = _proba(one, res.unit_states[u], Int(x.unsafe_ptr()), N, K)
+        for i in range(N * K):  # small-loop(check)
+            require(a[i] == b[i], "the kept estimator's predict_proba, unit " + String(u))
+        var r = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=train_at)
+        require(len(res.fold_train[u]) == sizes[u] and len(res.fold_test[u]) == t, "the rows' counts")
+        for i in range(sizes[u]):  # small-loop(check: the train rows)
+            require(res.fold_train[u][i] == r[i], "indices['train'] of unit " + String(u))
+        var call = MemberCall(one.route, state)
+        member_free(one, call)
+        var kept = MemberCall(one.route, res.unit_states[u])
+        member_free(one, kept)
+        _ = len(xt)
+        _ = len(yt)
+        _ = len(xs)
+        _ = len(ys)
+    # cross_val_predict's method over the int cv.
+    var plan2 = _plan([one.copy()], x, y, SEARCH_SCORE_MEMBER)
+    plan2.respond = MEMBER_OP_PREDICT_PROBA
+    plan2.refit = False
+    var got = msel_search_run(plan2)
+    require(len(got.outputs) == F, "one response per fold")
+    for f in range(F):  # small-loop(check: folds)
+        var t = Int(counts[f])
+        var train_at = Int(rows.unsafe_ptr()) + 4 * (f * N)
+        var state = _direct_fit(one, x, y, train_at, N - t)
+        var xt = List[Float32]()
+        var yt = List[Int32]()
+        _rows_of(x, y, train_at + 4 * (N - t), t, xt, yt)
+        var want = _proba(one, state, Int(xt.unsafe_ptr()), t, K)
+        require(got.output_cols[f] == K and got.output_dtype[f] == MEMBER_F64, "the response's shape and type")
+        require(len(got.outputs[f]) == t * K, "the response's words")
+        for i in range(t * K):  # small-loop(check)
+            require(got.outputs[f][i] == want[i], "predict_proba of fold " + String(f))
+        var call = MemberCall(one.route, state)
+        member_free(one, call)
+        _ = len(xt)
+        _ = len(yt)
+    _ = rows^
+    _ = counts^
+    _ = x^
+    _ = y^
+
+
+def check_ap_absent() raises:
+    var x = _x()
+    var y = List[Int32](length=N, fill=Int32(0))
+    for i in range(N):  # small-loop(fixture: two classes, N / 2 rows each)
+        y[i] = Int32(i % 2)
+    var one = _logistic(1.0, 0.0)
+    one.classes = 2
+    var code = msel_scorer_code("average_precision", False)
+    require(code >= 0, "the average_precision row")
+    var masks = _masks([one.copy()])
+    var plan = MselSearchPlan([one.copy()], masks^, Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), 2, F, _glue(),
+                              MetricRoute(metrics_program_host_v1, False, False))
+    plan.scoring = code
+    plan.positives = [SCORER_POSITIVE_ABSENT]
+    plan.label_words = ["0", "2"]
+    plan.refit = False
+    var words = String("")
+    try:
+        _ = msel_search_run(plan)
+    except error:
+        words = String(error)
+    require(words == "ValueError: pos_label=1 is not a valid label: It should be one of [0 2]",
+            "AP-absent refuses in scikit-learn's words, got: " + words)
+    var masks2 = _masks([one.copy()])
+    var plan2 = MselSearchPlan([one.copy()], masks2^, Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), 2, F, _glue(),
+                               MetricRoute(metrics_program_host_v1, False, False))
+    plan2.scoring = code
+    plan2.positives = [SCORER_POSITIVE_ABSENT]
+    plan2.label_words = ["0", "2"]
+    plan2.refit = False
+    plan2.tolerate = True
+    plan2.error_value = -1.0
+    var res = msel_search_run(plan2)
+    for f in range(F):  # small-loop(check: folds)
+        require(res.test[0][f] == -1.0, "AP-absent takes the error score in split " + String(f))
+    _ = x^
+    _ = y^
+
+
 def test_msel_search_run() raises:
     publish_x_trees_glue("cpu")
     def run_case(which: Int) raises:
@@ -861,8 +1033,12 @@ def test_msel_search_run() raises:
             check_score5_scorers()
         elif which == 7:
             check_resident_route()
-        else:
+        elif which == 8:
             check_clusterer_base()
+        elif which == 9:
+            check_cv_tools()
+        else:
+            check_ap_absent()
     check_cases("msel_search_run", CASES, run_case)
 
 
