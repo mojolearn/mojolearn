@@ -94,10 +94,11 @@ def test_case_runs_on_the_default_arm(arm_root, device, name):
         for key, words in result.items():
             assert str(words) != "no error", f"{name}.{key}: the invalid input was admitted"
     if name == "missing_class_folds":
-        # Stacking refuses a fold whose training rows lack a class, in words. CalibratedClassifierCV admits it: each
-        # fold's member is fitted on the classes present and its scores are mapped by the member's class codes (lane
-        # ma-callers R2 unit 4, `_cal_scores`), as scikit-learn's CalibratedClassifierCV does.
-        assert str(result["stacking"]) != "no error", f"{name}.stacking: the invalid input was admitted"
+        # Both admit a fold whose training rows lack a class, as scikit-learn does: Stacking places the fold's
+        # outputs by the member's classes (lane bm-meta-3, 2026-11-23: `_enforce_prediction_order`; it refused
+        # before), CalibratedClassifierCV maps each fold's scores by the member's class codes (lane ma-callers R2
+        # unit 4, `_cal_scores`).
+        assert str(result["stacking"]) == "no error", f"{name}.stacking: {result['stacking']}"
         assert str(result["calibrated"]) == "no error", f"{name}.calibrated: {result['calibrated']}"
     if name == "grid_ridge_and_logistic":
         assert float(result["ridge_alpha"]) in (0.1, 1.0)

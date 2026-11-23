@@ -1346,11 +1346,8 @@ def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: AdmittedXVie
                           MEMBER_OP_PREDICT_PROBA if classifier else MEMBER_OP_PREDICT, held, proven, True, name,
                           x.address, n * x.cols, context)
     var glue = _xr(xt)
-    # Lane meta-gil (2026-11-23): the two addresses are read HERE, with the GIL held. They were RUN call
-    # arguments (`trees_address` = `Array._addr`, a Python attribute read and a new int) evaluated inside
-    # `with GILReleased`: the _PyMem_DebugMalloc-without-the-GIL abort nn-integrate found. RUN runs released
-    # again when a member is native (only MEMBER_GIL_FREE / MEMBER_GIL_DOOR kinds are; the others answered in
-    # `_bag_unpack`).
+    # the addresses are read here, with the GIL held: inside GILReleased the trees_address calls ran Python
+    # without the GIL (_PyMem_DebugMalloc in Bagging OOB fit; nn-integrate, lane bm-meta-3's RUN)
     var acc_at = trees_address(acc)
     var counts_at = trees_address(counts)
     try:
