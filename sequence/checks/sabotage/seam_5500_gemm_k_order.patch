@@ -1,52 +1,40 @@
 diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
+index 9b620f3373..7329f99b61 100644
 --- a/sequence/exec_device.mojo
 +++ b/sequence/exec_device.mojo
-@@ -63,7 +63,7 @@ comptime SEQ_COOP_NVAMD = (
+@@ -104,7 +104,7 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+ comptime SEQ_COOP_NVAMD = (
      GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-     and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
  )
--comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
+-comptime SEQ_COOP = TARGET_HAS_APPLE_GPU or SEQ_COOP_NVAMD
 +comptime SEQ_COOP = False
  #: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the
  #: same chains over broadcast words, coalesced loads; sequence/coop.mojo),
- #: IDENTICAL on every GPU. -D MOJOLEARN_IDN_SEQ_LN_COOP_OFF (or
+ #: IDENTICAL on every GPU.
 diff --git a/sequence/gemm_tiled.mojo b/sequence/gemm_tiled.mojo
+index c467d2dde0..6cb7fd3f8d 100644
 --- a/sequence/gemm_tiled.mojo
 +++ b/sequence/gemm_tiled.mojo
-@@ -42,7 +42,7 @@ comptime GT_PAGE_BYTES = (GT_M + GT_N) * GT_K * 4
- #: not keyed to any data shape)
- comptime GT_MIN_EDGE = 8
+@@ -158,7 +158,7 @@ comptime GT_MIN_EDGE = 8
  
--comptime SEQ_GEMM_TILED = (
-+comptime SEQ_GEMM_TILED = False and (
-     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-     and not has_apple_gpu_accelerator()
-     and not (is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ # TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 4f0461d50d.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF.patch
+-comptime SEQ_GEMM_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
++comptime SEQ_GEMM_TILED = False and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
+ 
+ 
+ @always_inline
 diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index a2320c4495..db8b2f98ed 100644
 --- a/sequence/ops.mojo
 +++ b/sequence/ops.mojo
-@@ -391,22 +391,9 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
+@@ -492,7 +492,8 @@ def gemm_dot(
+     recurrent steps (`op_cell_fwd_h`, `op_cell_bwd_h`) all fold through it, so
+     one seam (5500) holds every GEMM of the lane."""
+     var acc = acc0
+-    comptime if SEQUENCE_HOST_SABOTAGE:
++    # SABOTAGE 5500: the GEMM reduction folds k DESCENDING on every column.
++    comptime if True:
+         var k = K - 1
+         while k >= 0:
              acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
-             k -= 1
-     else:
--        # GEMM_STAGE terms are LOADED before they are folded (a thread keeps
--        # that many loads in flight instead of waiting out each one); the
--        # fold is the same chain of fmas in the same order.
--        var k = 0
--        while k + GEMM_STAGE <= K:
--            var va = SIMD[DType.float32, GEMM_STAGE]()
--            var vb = SIMD[DType.float32, GEMM_STAGE]()
--            comptime for i in range(GEMM_STAGE):
--                va[i] = ld(pa, abase + (k + i) * sak)
--                vb[i] = ld(pb, (k + i) * sbk + bbase)
--            comptime for i in range(GEMM_STAGE):
--                acc = fma3(va[i], vb[i], acc)
--            k += GEMM_STAGE
--        while k < K:
-+        for kk in range(K):
-+            var k = K - 1 - kk
-             acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
--            k += 1
-     return acc
- 
- 
