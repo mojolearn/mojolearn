@@ -369,6 +369,7 @@ def plan(arm):
     print(f"# {arm['arm']}: {arm['why']}")
     print("# 1. a scratch worktree at this commit")
     print("git worktree add --detach ../cov-sab-$ARM HEAD && cd ../cov-sab-$ARM")
+    print("CORES=$(bash -c '. tools/ops/box_cores_lib.sh; alloc_cores')   # the allocation's cores, never 1")
     host = [b for b in arm["bindings"] if b.endswith("_host")]
     device = [b for b in arm["bindings"] if not b.endswith("_host")]
     print("# 2. the clean column: the lanes on this commit's build (a complete host set in $CLEAN"
@@ -379,9 +380,9 @@ def plan(arm):
     if host:
         print("cp -R $CLEAN $SAB")
         for b in host:
-            print(f"MOJOLEARN_HOST_OUTDIR=$SAB MOJOLEARN_COMPILE_JOBS=1 sh bindings/{b}.sh")
+            print(f"MOJOLEARN_HOST_OUTDIR=$SAB MOJOLEARN_COMPILE_JOBS=$CORES sh bindings/{b}.sh")
     for b in device:
-        print(f"MOJOLEARN_COMPILE_JOBS=1 sh bindings/{b}.sh   # device binding, into this scratch tree")
+        print(f"MOJOLEARN_COMPILE_JOBS=$CORES sh bindings/{b}.sh   # device binding, into this scratch tree")
     print(f"MOJOLEARN_HOST_DIR={'$SAB' if host else '$CLEAN'} python3 tools/identity_break.py --lanes {lanes} "
           "--repeats 1 --json sab.json")
     print("# 4. restore the saved clean native files and revert the source patch; retain the faulted files/logs")
