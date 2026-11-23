@@ -78,6 +78,32 @@ side raise the door's words (bindings/mcls_classify_door.mojo
 `_set_wise_labels`, with the side's present labels as `label_words` spell
 them), or, with fewer than two labels present, score the absent positive
 as the door does (0.0 and its ill-defined warning).
+
+THE LAST SCORER OPTIONS (lane mf-score6), read at UNPACK into the word group:
+- average=None on an averaged label row: the epilogue's per-label binary64
+  values (bindings/mcls_classify_run.mojo `label_metric_options_run`, avg
+  LBL_NONE). scikit-learn's `_Scorer._score` returns `sign * array`; its
+  model_selection/_validation.py `_score` takes `.item()` of the answer and
+  raises "scoring must return a number, got %s (%s) instead. (scorer=%s)"
+  for anything that is not then a number. That check runs after the
+  scorer's try, so a numeric error_score never replaces it. In a search the
+  RUN does the same: one label (a `labels` list of one, or one present
+  label) scores its value; more raise those words (SCORER_NUMBER_WORDS) and
+  the search raises them whatever the error_score.
+- average='samples': scikit-learn's own metrics refuse it on 1-D targets;
+  Mojolearn's metric doors refuse it as multilabel NOT IMPLEMENTED
+  (metrics/NOT_IMPLEMENTED.tsv), and so does each side here.
+- sample_weight given to make_scorer: the weights' float32 bits ride the
+  selection words; every row whose metric has the parameter runs its door's
+  weighted program (one body); each side checks the length and values in
+  the door's words, as scikit-learn passes the same kwarg to every side.
+  A metric without the parameter refuses per side. Weights given to a
+  search's fit reach no scorer: scikit-learn routes fit parameters to the
+  estimator's fit only (without metadata routing), and Mojolearn's search
+  `fit(X, y, groups)` takes none.
+- a float pos_label: the binary label rows and brier refuse it per side as
+  their doors' `_classification_labels` does (SCORER_FLOAT_POS_WORDS);
+  average_precision's door compares it by value, and so does the UNPACK.
 """
 from bindings.arena_prog_run import MetricRoute
 from bindings.metrics_reg_run import (
