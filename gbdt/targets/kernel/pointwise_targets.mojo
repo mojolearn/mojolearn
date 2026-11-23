@@ -108,9 +108,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as BUILD_MODE
 # the per-row math and DEVIATION 254's shims, written once for every column
 # (lane gbdt-gaps, 2026-11-23: gbdt/targets/pointwise_bodies.mojo)
 from gbdt.targets.pointwise_bodies import (
+    BODY_OBJ_CROSSENTROPY,
     BODY_OBJ_EXPECTILE,
     BODY_OBJ_HUBER,
     BODY_OBJ_LOGLINQUANTILE,
+    BODY_OBJ_LOGLOSS,
     BODY_OBJ_LQ,
     BODY_OBJ_MAE,
     BODY_OBJ_MAPE,
@@ -175,8 +177,8 @@ def pinned_block_sum[block_size: Int](value: Float32) -> Float32:
 #: differing only in `UseBorder()` -- Logloss thresholds the target at the
 #: `GetLogLossBorder` default 0.5, CrossEntropy takes it as a probability.
 comptime OBJECTIVE_RMSE = BODY_OBJ_RMSE
-comptime OBJECTIVE_LOGLOSS = 1
-comptime OBJECTIVE_CROSSENTROPY = 2
+comptime OBJECTIVE_LOGLOSS = BODY_OBJ_LOGLOSS
+comptime OBJECTIVE_CROSSENTROPY = BODY_OBJ_CROSSENTROPY
 comptime OBJECTIVE_QUANTILE = BODY_OBJ_QUANTILE
 comptime OBJECTIVE_MAE = BODY_OBJ_MAE
 comptime OBJECTIVE_LOGLINQUANTILE = BODY_OBJ_LOGLINQUANTILE
