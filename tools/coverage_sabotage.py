@@ -35,7 +35,8 @@ THE RUN (orchestrator; a lane never compiles):
     python3 tools/coverage_sabotage.py list
     python3 tools/coverage_sabotage.py apply-check       # every patch still applies to this tree
     python3 tools/coverage_sabotage.py plan --arm NAME   # the commands for one arm
-    python3 tools/coverage_sabotage.py check --arm NAME --clean C.json --sabotaged S.json --restored R.json
+    python3 tools/coverage_sabotage.py review --arm NAME --clean C.json --sabotaged S.json --restored R.json --out E.json
+    python3 tools/coverage_sabotage.py check --arm NAME --clean C.json --sabotaged S.json --restored R.json [--evidence E.json]
 
 `check` requires complete clean, faulted and restored identity_break records,
 matching execution settings and declared native build changes. Every requested
@@ -45,6 +46,19 @@ and is reported as such, not as a repeated-stability experiment. A refusal
 counts only with a hash-bound review naming the product check it reached;
 loader and infrastructure errors never count. Cell-only summary files are not
 provenance records: use the retained full column JSONs.
+
+DECLARED REVIEWS, tools/identity_lanes/coverage_sabotage_reviews.json (lane
+sab-missed-5, 2026-11-23). An arm whose fault can only surface as a lane's
+product refusal or in-cell byte oracle (no shared path moves both sides of the
+oracle) carries its review in the repository, written before the run: per
+`lane/fixture`, the product check, why the fault reaches it, a regular
+expression the error's FIRST line must match in full, and the SHA256 of the
+patch bytes it reviewed. `review` binds a declaration to one run: it writes the
+`--evidence` file (the three record SHA256s, the patch SHA256, the cell's exact
+error) only for cells that REFUSED with a matching first line under the
+reviewed patch bytes. Any other error, a changed patch or an undeclared cell
+writes nothing, so the cell stays unreviewed and the arm MISSED; `check`
+still applies every rule above, the infrastructure exclusions included.
 """
 from __future__ import annotations
 
@@ -67,6 +81,7 @@ from verification_matrix import stable_digest, negative_control_moves
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage.tsv")
+REVIEWS = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage_reviews.json")
 FIELDS = ("arm", "patch", "bindings", "lanes", "why")
 
 
@@ -364,6 +379,66 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
     return 1 if failures else 0
 
 
+REVIEW_FIELDS = ("product_check", "why_fault_reaches_check", "error_match", "patch_sha256")
+
+
+def declared_reviews(path=REVIEWS):
+    """The committed reviews, {arm: {lane/fixture: {REVIEW_FIELDS}}}; `#`-keys are comments."""
+    if not os.path.exists(path):
+        return {}
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    out = {}
+    for arm_name, cells in data.items():
+        if arm_name.startswith("#"):
+            continue
+        for key, entry in cells.items():
+            missing = [f for f in REVIEW_FIELDS if not isinstance(entry.get(f), str) or not entry.get(f)]
+            if missing or "/" not in key:
+                raise SystemExit(f"{path}: {arm_name} {key}: needs lane/fixture and {', '.join(missing)}")
+            re.compile(entry["error_match"])
+        out[arm_name] = cells
+    return out
+
+
+def review(arm, clean_path, sab_path, restored_path, out_path, reviews=None, root=ROOT):
+    """Bind the arm's declared reviews to these three records (see the module docstring).
+
+    Writes `out_path` only when at least one declared cell matched; returns the
+    number of cells written. Never writes a review the declaration did not make."""
+    declared = (declared_reviews() if reviews is None else reviews).get(arm["arm"]) or {}
+    if not declared:
+        print(f"REVIEW {arm['arm']}: no declared review")
+        return 0
+    patch_sha = hashlib.sha256((Path(root) / arm["patch"]).read_bytes()).hexdigest()
+    records = {}
+    for label, path in zip(("clean", "sabotaged", "restored"), (clean_path, sab_path, restored_path)):
+        records[label] = _record(path)
+    sab = records["sabotaged"][0]
+    refusals = {}
+    for key, entry in sorted(declared.items()):
+        if key.split("/", 1)[0] not in arm["lanes"]:
+            print(f"REVIEW {arm['arm']} {key}: not a lane of this arm, ignored")
+            continue
+        if entry["patch_sha256"] != patch_sha:
+            print(f"REVIEW {arm['arm']} {key}: declared for other patch bytes, not applied")
+            continue
+        cell = sab["cells"].get(key) or {}
+        error = str(cell.get("error") or "")
+        head = error.split("\n", 1)[0]
+        if cell.get("verdict") != "REFUSED" or not re.fullmatch(entry["error_match"], head):
+            print(f"REVIEW {arm['arm']} {key}: {cell.get('verdict')} {head[:160]!r} is not the reviewed refusal")
+            continue
+        refusals[key] = dict(error=error, product_check=entry["product_check"],
+                             why_fault_reaches_check=entry["why_fault_reaches_check"],
+                             declared=os.path.relpath(REVIEWS, ROOT))
+        print(f"REVIEW {arm['arm']} {key}: bound")
+    if refusals:
+        Path(out_path).write_text(json.dumps(dict(
+            arm=arm["arm"], patch_sha256=patch_sha, refusals=refusals,
+            records={label: digest for label, (_, digest) in records.items()}), indent=1, sort_keys=True) + "\n")
+    return len(refusals)
+
+
 def plan(arm):
     lanes = ",".join(arm["lanes"])
     print(f"# {arm['arm']}: {arm['why']}")
@@ -524,6 +599,12 @@ def main(argv=None):
     c.add_argument("--evidence", help="hash-bound review of product refusals or unchanged source commits")
     c.add_argument("--batch-bindings", default="",
                    help="a batched run's build stems (comma separated): the other arms' bindings may change too")
+    r = sub.add_parser("review", help="bind the arm's declared reviews to three records (writes --out)")
+    r.add_argument("--arm", required=True)
+    r.add_argument("--clean", required=True)
+    r.add_argument("--sabotaged", required=True)
+    r.add_argument("--restored", required=True)
+    r.add_argument("--out", required=True)
     b = sub.add_parser("batch-plan", help="group the arms into conflict-free batches, one sabotaged build each")
     b.add_argument("--audit", required=True, help="tools/verify_coverage_audit.py --all --json output")
     b.add_argument("--arms", default="", help="comma separated arms (default: every arm not yet proven)")
@@ -554,6 +635,9 @@ def main(argv=None):
         raise SystemExit(f"no arm {args.arm}; `list` names them")
     if args.cmd == "plan":
         plan(table[args.arm])
+        return 0
+    if args.cmd == "review":
+        review(table[args.arm], args.clean, args.sabotaged, args.restored, args.out)
         return 0
     return check(table[args.arm], args.clean, args.sabotaged, args.restored, args.evidence,
                  batch_bindings=[x for x in args.batch_bindings.split(",") if x])

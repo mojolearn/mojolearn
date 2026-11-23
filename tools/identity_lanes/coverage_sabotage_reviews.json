@@ -1,0 +1,27 @@
+{
+ "#": "Committed reviews of fault arms whose fault surfaces only as a product refusal or a lane's in-cell byte oracle (tools/coverage_sabotage.py docstring, DECLARED REVIEWS). Each entry is bound to one run by `coverage_sabotage.py review`: the cell must have REFUSED, its error's first line must fullmatch error_match, and the patch bytes must hash to patch_sha256. A changed patch needs a new review. Lane sab-missed-5, 2026-11-23, from nvc1-0003 (L40S, tag nvc-sab-20261123T044409Z-0c21d8, batches mamba-2, mamba-3, x_decomp-4) and the 0860 reviews of the same two mamba arms (verification/records/cells/verification_faults/2026-10-26-0860/mamba-2 and mamba-3).",
+ "coverage-precise-mamba-m3_session_copy_in": {
+  "mamba3-decode-session/base": {
+   "product_check": "tools/identity_lanes/coverage.py:564 _coverage_decode_session: _same_bytes(steps after load_state, per-call steps after the same four tokens), the lane's independent byte oracle against the per-call Mamba3Block.step path, which shares no code with the session's load_state.",
+   "why_fault_reaches_check": "Mamba3DecodeSession.load_state -> mamba/native_decode_dispatch.mojo:174 -> _m3_session_copy_in (mamba/impl/mamba_shell_impl.mojo:484), where the patch loads buffer_qrot and buffer_krot swapped. The open-time copy of the zero state is unaffected; the reload of the synced four-token state is not, so the four steps after load_state differ from the per-call steps (833 of 1024 bytes on the L40S, nvc1-0003 mamba-2; the same check on the 0860 run).",
+   "error_match": "ValueError: steps after load_state and per-call steps after the same four tokens differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "bc1d0f1807671c4058d7e4be4075e00ab2d8d44b6e98be300dfd0e25c534bda3"
+  }
+ },
+ "coverage-precise-mamba-m3_session_export": {
+  "mamba3-decode-session/base": {
+   "product_check": "tools/identity_lanes/coverage.py:562 _coverage_decode_session: _same_bytes(session sync_state, per-call state), the lane's independent byte oracle against the state the per-call Mamba3Block.step path leaves, which shares no code with the session's export.",
+   "why_fault_reaches_check": "Mamba3DecodeSession.sync_state -> mamba/native_decode_dispatch.mojo:172 -> _m3_session_export_run (mamba/impl/mamba_shell_impl.mojo:524), where the patch exports buffer_qrot and buffer_krot swapped into the caller's pieces, so the synced state differs from the per-call state (7732 of 232704 bytes on the L40S, nvc1-0003 mamba-3).",
+   "error_match": "ValueError: session sync_state and per-call state differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "9e824c5bdbe8c512cbed5264a99884eeb16691269bdae1ef1c8318fb29ebec80"
+  }
+ },
+ "coverage-x_decomp-resident": {
+  "x-decomp-manifold/base": {
+   "product_check": "bindings/mani_decomp_run.mojo:469 iso_transform_run (Isomap.transform with radius): the admission that every query row has a training row within the fitted radius (the total of the per-row hit flags must equal the query row count).",
+   "why_fault_reaches_check": "tools/identity_lanes/decomp.py:289 hashes Isomap(radius=...).transform(S[:32]), rows of its own training set, so on a correct build every row has itself at distance 0 and the admission passes (STABLE on the clean and restored L40S builds). The fitted rows, the query rows and the radius reach that admission as resident x_decomp arena buffers, whose uploads, downloads and moves (x_decomp/resident.mojo dev_upload_run, dev_download_run, dev_move_run) the patch steps one ulp (its rule: 0 becomes the smallest normal); on the sabotaged L40S build (nvc1-0003 x_decomp-4) the hit total no longer equals the row count and the admission refuses, while x-decomp-robust-cov and x-decomp-factor-analysis MOVED.",
+   "error_match": "ValueError: Isomap\\.transform: query row [0-9]+ has no training row within radius [0-9.eE+-]+",
+   "patch_sha256": "ea6c165887396ad98fe7409ffd31f45f7e2b4a077a3c4cadf2d05cdd109814b2"
+  }
+ }
+}

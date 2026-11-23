@@ -10,7 +10,8 @@
 #   1. clean      the batch's lanes on this tree's built bindings (a record per column)
 #   2. sabotaged  every patch of the batch applied, the batch's bindings rebuilt, the lanes again
 #   3. restored   the patches reverted, the saved clean native files put back, the lanes again
-#   4. check      tools/coverage_sabotage.py check per arm and column (--batch-bindings): the arm
+#   4. check      tools/coverage_sabotage.py review (binds the arm's committed review, if any, to
+#                 the three records) then check per arm and column (--batch-bindings): the arm
 #                 is CAUGHT when its lanes read DIVERGENT on the sabotaged build and IDENTICAL
 #                 to clean on the restored build
 #
@@ -184,6 +185,11 @@ for arm in ${ARMS//,/ }; do
         # an arm is checked on the columns its own bindings build
         if [ $col = cpu ]; then [[ ",$binds," == *_host,* ]] || continue
         else echo ",$binds," | tr ',' '\n' | grep -qv -e '_host$' -e '^$' || continue; fi
+        # A committed review (tools/identity_lanes/coverage_sabotage_reviews.json) binds to these records
+        # only when the sabotaged cell refused with the reviewed first line under the reviewed patch bytes.
+        [ -f "$OUT/evidence_${arm}_$col.json" ] || "${PY[@]}" tools/coverage_sabotage.py review --arm "$arm" \
+            --clean "$OUT/clean_$col.json" --sabotaged "$OUT/sab_$col.json" --restored "$OUT/restored_$col.json" \
+            --out "$OUT/evidence_${arm}_$col.json" > "$OUT/review_${arm}_$col.txt" 2>&1
         ev=""; [ -f "$OUT/evidence_${arm}_$col.json" ] && ev="--evidence $OUT/evidence_${arm}_$col.json"
         # shellcheck disable=SC2086
         "${PY[@]}" tools/coverage_sabotage.py check --arm "$arm" --clean "$OUT/clean_$col.json" \
