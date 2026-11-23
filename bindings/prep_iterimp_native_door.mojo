@@ -50,9 +50,9 @@
 # and categorical or multi-target losses, a CV splitter object: the
 # fallback rule, a mark never turns a call that worked into a refusal; lane
 # mf-adm3 serves class_weight 'balanced' and numeric-keyed dicts, read per
-# step over the step's classes, and kernel='precomputed'), and
-# the member-set B arm (MOJOLEARN_MEMBER_SET_OFF, A/B owed in
-# docs/apple-fast/EXPERIMENTS.md), whose off path IS these rounds. There the estimator is cloned, fitted and
+# step over the step's classes, and kernel='precomputed'). (The member-set B
+# arm, MOJOLEARN_MEMBER_SET_OFF, was deleted by lane/ab-prep-classical: these
+# rounds are no longer its off path; lane mf-del5.) There the estimator is cloned, fitted and
 # asked to predict once per (round, feature) step with the float32 blocks
 # the gather programs produce, and its predictions are scattered back by one
 # program; the clone, fit and predict are the compiled operations of the
