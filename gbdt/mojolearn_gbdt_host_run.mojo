@@ -326,8 +326,9 @@ def _refuse_pointwise(what: String) raises:
         + " under use_pointwise_searcher=True; the gbdt host binding trains"
         " the gbdt-pointwise-l2-bayesian-eval lane only on this arm"
         " (SymmetricTree, Logloss, L2 scores, the Bayesian bootstrap,"
-        " boost_from_average=True, sample_weight, an eval set with the Iter"
-        " detector, Newton leaves), see gbdt/host/gbdt_oracle_pointwise.mojo"
+        " boost_from_average=True, Newton leaves, with or without"
+        " sample_weight, with or without an eval set under the Iter"
+        " detector), see gbdt/host/gbdt_oracle_pointwise.mojo"
     )
 
 
@@ -1550,7 +1551,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                         QUANTILE_CONST_DELTA,
                     )
                 )
-        var pw_model: GbdtHostModel
         if grow_code != 0:
             # Depthwise and Lossguide: the non-symmetric driver over the
             # pointwise loss (gbdt/host/gbdt_oracle_depthwise.mojo)
@@ -1575,6 +1575,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             stopped_early = pw_ns.stopped_early
             test_losses = pw_ns.test_losses.copy()
             return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
+        var pw_model: GbdtHostModel
         if ranking_pointwise:
             pw_model = gbdt_ranking_pointwise_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
