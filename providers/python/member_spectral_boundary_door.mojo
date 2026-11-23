@@ -33,7 +33,7 @@ from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.family_common_pack import family_array
 from bindings.family_common_unpack import family_is_str
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_host_only
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_type
 from bindings.py_cluster_resident import CRES_SPECTRAL, cres_forget
@@ -50,7 +50,8 @@ from core.member_abi import (
 )
 from core.spectral_assignment_api import SPECTRAL_ASSIGN_ABI, SPECTRAL_ASSIGN_COUNT
 from core.spectral_native_api import SPECTRAL_MODE, SPECTRAL_NATIVE_COUNT
-from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding
+from providers.python.estimator_binding_pyapi_door import estimator_binding_host
+from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding, estimator_member_binding
 from providers.python.neural_descriptor_pyapi_door import (
     NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
 )
@@ -89,8 +90,12 @@ def spectral_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     if not config.fit.keep_state:
         return False
     var mode_word = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
-    # The fit binding: the process default mode, as `_routes` asks it.
-    var fit_binding = _routed(model, "metrics", "_mojolearn_metrics", PythonObject(None), context)
+    # The fit binding: the process default mode, as `_routes` asks it. An explicit HostSpectralClustering (its
+    # own host-only word, lane mf-iterimp3b): its import-connected host image for every binding of the route
+    # (`estimator_member_binding`, `estimator_binding_host`), never a device one beside it.
+    var host_class = member_host_only(model)
+    var fit_binding = (estimator_member_binding(model, "_mojolearn_metrics", context) if host_class
+                       else _routed(model, "metrics", "_mojolearn_metrics", PythonObject(None), context))
     var fit = SpectralConnection(fit_binding, context)
     var fit_mode = fit.driver.metadata(SPECTRAL_MODE)
     var fit_vendor = _vendor(fit_binding)
@@ -109,7 +114,8 @@ def spectral_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     route.has_second = True
     route.flags = query.capabilities
     # The assignment entry (x_cluster, the estimator's mode), as `_sc_fit` runs it.
-    var cluster_binding = _routed(model, "cluster", "_mojolearn_x_cluster", mode_word, context)
+    var cluster_binding = (estimator_binding_host(model, "_mojolearn_x_cluster", context) if host_class
+                           else _routed(model, "cluster", "_mojolearn_x_cluster", mode_word, context))
     var factory = spectral_umap_entry(cluster_binding, "spectral_assign_native_api_v1", context)
     var assign = neural_descriptor_connect_factory_once(factory, String(SPECTRAL_ASSIGN_ABI), SPECTRAL_ASSIGN_COUNT)
     route.third = EntryRef(assign.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry,

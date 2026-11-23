@@ -23,7 +23,7 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_address
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_host_only
 from bindings.mode_answer_door import answer_mode_object
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_item, py_type
@@ -68,7 +68,10 @@ def scaler_member_admit(model: PythonObject, fields: PythonObject, kind: Int, co
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator."""
     var nk = scaler_keys()
-    if Bool(py=py_get(context, nk[].k_scaler_explicit_host, False)):
+    # A host scaler class, by its context or (lane mf-iterimp3b) by its own host-only word: its plan is the
+    # public class's (python/mojolearn/_native_msel_more.py `_connect_host_members`), whose context binds the
+    # device route, so the word is read first; the refusal is the one a host scaler always had.
+    if member_host_only(model) or Bool(py=py_get(context, nk[].k_scaler_explicit_host, False)):
         raise Error("TypeError: mojolearn: a host scaler class does not run as a member")
     var words = List[Float64](length=6, fill=0.0)
     words[0] = Float64(kind)

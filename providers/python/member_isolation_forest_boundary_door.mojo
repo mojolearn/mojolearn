@@ -24,11 +24,11 @@ its scalars, IMPORTed into a new state; the instance dictionary is only read.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admitted_array as family_uninit_array
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_host_only
 from bindings.py_balanced import py_call, py_item
 from bindings.trees_keys_unpack import trees_keys
 from bindings.trees_public_inputs_door import trees_address, trees_builtins
-from bindings.trees_route_boundary_door import trees_route_context
+from bindings.trees_route_boundary_door import trees_route_context, trees_cpu_context, _process_cpu_only
 from bindings.trees_public_iforest_door import (
     iforest_export_forest, iforest_forest_words, iforest_member_pack_fields, iforest_member_words,
 )
@@ -49,6 +49,18 @@ def _typestr(block: Int) -> String:
     return "<f4" if block == 2 else "<i4"
 
 
+def _run_context(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The run context of the member's admission, PACK and STATE: the
+    estimator's own (`trees_route_context`), or for an explicit
+    HostIsolationForest (its own host-only word, lane mf-iterimp3b,
+    2026-11-23) the CPU table set of a GPU installation whatever its
+    `device` (`trees_cpu_context`; on a CPU-only process the route context
+    is that set already). One host-word read per call of the three."""
+    if member_host_only(model) and not _process_cpu_only(context):
+        return trees_cpu_context(context)
+    return trees_route_context(model, context)
+
+
 def isolation_forest_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: `owner.plan.params` (thirteen words) and `owner.plan.route`
@@ -56,7 +68,7 @@ def isolation_forest_member_admit(model: PythonObject, fields: PythonObject, kin
     read. `owner.pins` holds the run context, never the estimator."""
     if kind != 0:
         return False
-    var run = trees_route_context(model, context)
+    var run = _run_context(model, context)
     var words = iforest_member_words(model, fields, run)
     var mode = Int(words[13])
     var vendor = Int(words[14])
@@ -104,7 +116,7 @@ def isolation_forest_member_pack(model: PythonObject, fields: PythonObject, cont
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model` (the
     caller's clone) as a loaded estimator holds them."""
-    var run = trees_route_context(model, context)
+    var run = _run_context(model, context)
     var call = MemberCall(plan.route, state)
     var scalars = _export(plan, call, MEMBER_BLOCK_SCALARS)
     if not scalars.dense_host(MEMBER_F64) or scalars.cols != 3:
@@ -132,7 +144,7 @@ def isolation_forest_member_state(model: PythonObject, fields: PythonObject, con
     plan: MemberPlan) raises -> Int:
     """UNPACK: a new member state holding the fitted forest of `model`. The
     caller frees it (`member_free`). Raises when the estimator is not fitted."""
-    var run = trees_route_context(model, context)
+    var run = _run_context(model, context)
     var nk = trees_keys()
     # The held saved forest, or the fitted estimator's resident forest read
     # out once (its scores' forest; a side record, not the dictionary).

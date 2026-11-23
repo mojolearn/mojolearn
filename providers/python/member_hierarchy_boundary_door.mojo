@@ -43,7 +43,7 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.cluster_fit_public_native_unpack import _attr
 from bindings.dbscan_native_boundary_unpack import DBSCANConnection
 from bindings.family_common_unpack import family_is_str
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_host_only
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_fields, py_type
@@ -59,7 +59,8 @@ from core.member_abi import (
 )
 from hierarchy.solver_descriptor_schema import HIERARCHY_SOLVER_OPERATIONS
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
-from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_routed
+from providers.python.estimator_binding_pyapi_door import estimator_binding_host, estimator_binding_routed
+from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
 from providers.python.hierarchy_settings_pyapi_unpack import AggloSettings
 
 comptime _KIND_AGGLO = 0
@@ -93,7 +94,9 @@ def hierarchy_member_admit(model: PythonObject, fields: PythonObject, kind: Int,
         return False
     var clusters = agglo_integer_admitted(settings.n_clusters)
     var fast = _fast_mst(0)
-    var binding = estimator_binding(model, "_mojolearn_estimators", context)
+    # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
+    # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
+    var binding = estimator_member_binding(model, "_mojolearn_estimators", context)
     var connection = DBSCANConnection(binding)
     var mode = connection.driver.metadata(DBSCAN_MODE)
     var vendor = connection.driver.metadata(DBSCAN_VENDOR) - 1
@@ -104,8 +107,11 @@ def hierarchy_member_admit(model: PythonObject, fields: PythonObject, kind: Int,
     route.vendor = vendor
     route.entry = EntryRef(connection.driver.entry, entry_ref_word(mode, vendor, DBSCAN_NATIVE_COUNT))
     route.flags = connection.capabilities
-    # The solver keeps the process default mode it always ran in (requested None).
-    var solver_binding = estimator_binding_routed(model, PythonObject(None), "_mojolearn_solver", context)
+    # The solver keeps the process default mode it always ran in (requested None). An explicit Host* class
+    # (lane mf-iterimp3b): the CPU identical solver beside its host estimators image, never the device one
+    # (the route's vendor word above is the host image's).
+    var solver_binding = (estimator_binding_host(model, "_mojolearn_solver", context) if member_host_only(model)
+                          else estimator_binding_routed(model, PythonObject(None), "_mojolearn_solver", context))
     var solver = AggloSolverConnection(solver_binding)
     var solver_mode = solver.provider.downcast_value_ptr[CompiledBindingSnapshot]()[].mode
     route.second = EntryRef(solver.driver.entry, entry_ref_word(solver_mode, vendor, HIERARCHY_SOLVER_OPERATIONS))

@@ -50,6 +50,22 @@ no step, the initial imputation, as scikit-learn), the classifier lines
 (head: member rounds; the imputed values are expected equal, the steps'
 fitted labels may be published in another form), and the `fields` lines.
 
+Round 4 (lane mf-iterimp3b): base origin/lane/member-fits ccbef84e9b.
+Added: the explicit Host* estimators (python/mojolearn/_classical_host.py,
+now with their own member marks) and their public classes with
+device="cpu" beside them, x order {ascending, random} x add_indicator:
+`ridgeh` HostRidge(alpha=1), `linregh` HostLinearRegression(), `krrh`
+HostKernelRidge(), `gprh` HostGaussianProcessRegressor(random_state=0),
+`lassoh` HostLasso() on the continuous matrix and `logregh`
+HostLogisticRegression() on the integer one; `ridgec`, `linregc`, `krrc`,
+`gprc`, `logregc` the public twins with device="cpu". Expected: every `*h_`
+line equals its `*c_` twin on a GPU column and its public line (`ridge_...`,
+`logreg_int_...`) on the CPU column; base vs head, `ridgeh` / `linregh`
+equal (the base's door rounds over the same CPU context), `logregh` /
+`krrh` / `gprh` base "requires a mojolearn estimator", head an answer (or,
+on an image without the reference CPU fit, that same refusal), `lassoh`
+the same refusal on both (its host image has no fit).
+
 Grid: estimator {Ridge(alpha=1), LinearRegression(), BayesianRidge(),
 GaussianProcessRegressor(random_state=0), DecisionTreeRegressor(random_state=0),
 KNeighborsRegressor()} x sample_posterior {False, True} x initial_strategy
@@ -70,6 +86,16 @@ from concurrent.futures import ProcessPoolExecutor
 
 ESTIMATORS = ("ridge", "linreg", "bayes", "ard", "gpr", "tree", "knn")
 CLASSIFIERS = ("gnb", "logreg", "ctree", "knnc")
+# round 4: the Host* estimators and their public device="cpu" twins (name -> (module, class, keywords))
+HOSTS = {
+    "ridgeh": ("host", "HostRidge", dict(alpha=1.0)), "ridgec": ("ml", "Ridge", dict(alpha=1.0, device="cpu")),
+    "linregh": ("host", "HostLinearRegression", {}), "linregc": ("ml", "LinearRegression", dict(device="cpu")),
+    "krrh": ("host", "HostKernelRidge", {}), "krrc": ("ml", "KernelRidge", dict(device="cpu")),
+    "gprh": ("host", "HostGaussianProcessRegressor", dict(random_state=0)),
+    "gprc": ("ml", "GaussianProcessRegressor", dict(random_state=0, device="cpu")),
+    "lassoh": ("host", "HostLasso", {}),
+    "logregh": ("host", "HostLogisticRegression", {}), "logregc": ("ml", "LogisticRegression", dict(device="cpu")),
+}
 POSTERIOR = ("sigma_", "X_offset_", "X_scale_")
 
 
@@ -100,6 +126,12 @@ def _estimator(name):
     import mojolearn as ml
     if name == "none":
         return None
+    if name in HOSTS:
+        where, cls, kw = HOSTS[name]
+        if where == "host":
+            from mojolearn import _classical_host as host
+            return getattr(host, cls)(**kw)
+        return getattr(ml, cls)(**kw)
     if name == "gnb":
         return ml.GaussianNB()
     if name == "logreg":
@@ -157,6 +189,10 @@ def _cases():
                                                skip_complete=True, int_data=intd)
         cases[f"{est}_one_feature"] = dict(estimator=est, one_feature=True, int_data=intd)
         cases[f"{est}_drop_to_one"] = dict(estimator=est, drop_to_one=True, add_indicator=True, int_data=intd)
+    # round 4: the Host* estimators and their public device="cpu" twins
+    for est, order, ind in itertools.product(HOSTS, ("ascending", "random"), (False, True)):
+        cases[f"{est}_{order}_ind{int(ind)}"] = dict(estimator=est, int_data=est.startswith("logreg"),
+                                                     imputation_order=order, add_indicator=ind, random_state=3)
     # the direct predict(return_std=True) cases
     for est, fi, sw in itertools.product(("bayesreg", "ardreg"), (True, False), (False, True)):
         if est == "ardreg" and sw:

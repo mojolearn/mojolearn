@@ -63,6 +63,16 @@ Lane mf-iterimp3 (exact oracles, no fixture):
                           and the fit refuses in scikit-learn's continuous-target words. Fail-proof: in
                           `_class_of_codes` write `cp[0]` for every row; unit 0 fails on an imputed cell.
 
+Lane mf-iterimp3b (exact oracle, no fixture):
+    logistic classifier   estimator=LogisticRegression() (C 1, intercept, lbfgs) as the logistic member (a classifier
+                          kind) on the CPU image's QN entry (glm/host/logistic_native_host.mojo `qn_host_native_v1`):
+                          the route an explicit HostLogisticRegression's member admission binds (its host-only word;
+                          providers/python/member_logistic_boundary_door.mojo walks the class to its host context),
+                          and LogisticRegression(device='cpu')'s. The classifier matrix above: every step has three
+                          classes, every imputed cell is one of the labels 0, 1, 2 (the codes mapped back), and at
+                          least 95% of them are their row's label. Fail-proof: in `_class_of_codes` write `cp[0]` for
+                          every row; the 95% check fails.
+
 The GaussianProcess member's PREDICT_STD route (the same query's mean in `call.y`) needs the GP provider's host route
 and kernel words: it is in tools/mf_iterimp_digests.py, as are the public refusals. Every unit is independent and
 runs across the host cores; the posterior sets run one after the other, each with its twelve seeds across the host
@@ -93,7 +103,13 @@ from core.member_abi import (
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, member_call, member_call_of, member_kind_capabilities,
     member_output_dtype,
 )
-from core.member_families import MEMBER_FAMILY_LINEAR, MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_NAIVE_BAYES
+from core.member_families import (
+    MEMBER_FAMILY_LINEAR, MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_LOGISTIC,
+)
+from core.logistic_member import logistic_member_v2
+from core.logistic_native_api import QnNativeDriver
+from core.logistic_route import LogisticRoute, logistic_route_pack
+from glm.host.logistic_native_host import qn_host_native_v1
 from core.naive_bayes_member import naive_bayes_member_v2
 from x_prep.transport_host import x_prep_transport_host_v1
 from x_prep.transport_abi import XP_OP_COUNT
@@ -601,6 +617,75 @@ def classifier_case(unit: Int) raises:
     _ = len(x)  # X stays alive past every program that read it
 
 
+def _logistic_plan() raises -> MemberPlan:
+    """LogisticRegression() as the logistic member (kind 0) on the CPU image's QN entry: the NEW words of
+    providers/python/member_logistic_boundary_door.mojo for C 1 (l1 0, l2 1), fit_intercept, max_iter 100,
+    linesearch 20, lbfgs memory 10, no normalized penalty, tol 1e-4 (change tolerance 1e-6)."""
+    var plan = MemberPlan()
+    plan.family = MEMBER_FAMILY_LOGISTIC
+    plan.kind = 0
+    plan.route = logistic_route_pack(LogisticRoute(DEVICE_CPU, Int(GLOBAL_NUMERIC_MODE), 0, False, False,
+                                                   QnNativeDriver(qn_host_native_v1)))
+    plan.member = MemberRef(EntryRef(logistic_member_v2, 0), 0)
+    var probe = MemberCall(plan.route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    plan.params = [0.0, 1.0, 0.0, 1.0, 100.0, 20.0, 10.0, 0.0, 1e-4, 1e-6]
+    return plan^
+
+
+def logistic_classifier_case(unit: Int) raises:
+    comptime C = 4
+    var label = String("IterativeImputer estimator=LogisticRegression() on the host QN entry")
+    var x = List[Float32](length=N * C, fill=0.0)
+    var missing = 0
+    for i in range(N):  # small-loop(fixture: every column the row's label, at most one NaN a row)
+        for j in range(C):  # small-loop(fixture: one row)
+            if (i + j) % 6 == 0:
+                x[i * C + j] = _nan()
+                missing += 1
+            else:
+                x[i * C + j] = Float32(i % 3)
+    var request = ii_request(N, C, IMP_MEAN, II_ASCENDING, 10, II_NONE, 0, neg_inf(), pos_inf(), False, False)
+    var runner = HostIterRunner(Int(x.unsafe_ptr()))
+    var fitted = IterImpFitted()
+    var plan = iterimp_prepare(runner, request, fitted)
+    var logistic = _logistic_plan()
+    var mask = member_kind_capabilities(logistic)
+    var two = logistic.copy()
+    two.classes = 2
+    var dtype = member_output_dtype(two, MEMBER_OP_PREDICT, C - 1, 1, MEMBER_I32)
+    var member = IterImpMember(logistic^, (mask & MEMBER_BORROWS_FIT) != 0, False)
+    member.classifier = True
+    member.code_dtype = dtype
+    var fit = IterImpMemberFit()
+    iterimp_member_rounds(runner, request, plan, fitted, member, fit)
+    try:
+        require(fit.n_iter >= 1 and fit.n_iter <= 10, label + ": n_iter_ " + String(fit.n_iter))
+        require(len(fit.classes) == len(fit.states) and len(fit.states) > 0, label + ": the steps' classes")
+        for s in range(len(fit.classes)):  # small-loop(oracle: the fitted steps)
+            require(len(fit.classes[s]) == 3, label + ": step " + String(s) + " has " + String(len(fit.classes[s]))
+                + " classes")
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
+        var right = 0
+        for i in range(N):  # small-loop(oracle: one result block)
+            for j in range(C):  # small-loop(oracle: one row)
+                var got = src[fit.out_offset + i * C + j]
+                var want = Float32(i % 3)
+                if not isnan(x[i * C + j]):
+                    require(got == want, label + ": observed cell " + String(i) + ", " + String(j))
+                    continue
+                require(got == 0.0 or got == 1.0 or got == 2.0, label + ": imputed cell " + String(i) + ", "
+                    + String(j) + " " + String(got) + " is not a class label")
+                if got == want:
+                    right += 1
+        require(right * 100 >= missing * 95, label + ": " + String(right) + " of " + String(missing)
+            + " imputed cells are their row's label")
+    finally:
+        iterimp_member_free(member, fit)
+    _ = len(x)  # X stays alive past every program that read it
+    _ = unit
+
+
 def test_iterative() raises:
     check_cases("iterative", 3, iterative_case)
 
@@ -619,6 +704,10 @@ def test_iterative_class_labels() raises:
 
 def test_iterative_classifier() raises:
     check_cases("iterative_classifier", 2, classifier_case)
+
+
+def test_iterative_logistic_classifier() raises:
+    check_cases("iterative_logistic_classifier", 1, logistic_classifier_case)
 
 
 def test_iterative_indicator() raises:

@@ -41,7 +41,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
-from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
 from x_cluster.kmeans_descriptor_boundary_run import kmeans_capabilities, kmeans_driver
 
 comptime _INIT_ARRAY = 2
@@ -56,7 +56,9 @@ def kmeans_member_admit(model: PythonObject, fields: PythonObject, kind: Int, co
     var settings = kmeans_fit_init(fields, b, context)
     if settings.init_code == _INIT_ARRAY:
         return False
-    var binding = estimator_binding(model, "_mojolearn", context)
+    # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
+    # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
+    var binding = estimator_member_binding(model, "_mojolearn", context)
     var connection = kmeans_connection(binding)
     var capabilities = kmeans_capabilities(connection)
     var host = (capabilities & KMEANS_CAP_HOST) != 0
