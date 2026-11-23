@@ -89,7 +89,7 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_CHOL_FAST_SHARED_SUB: no longer refused. Restored 2026-11-09 by lane r1-restore-measured-winners
     # (Apple FAST work is paused, not deleted; one M3 sample fit B/A 0.95): cholesky/checks/fast_trsm.mojo, default OFF.
     # Lane restore-classical-measured-routes (2026-11-13): MinCovDet's Cholesky C-step is opt-in, so its _OFF is refused.
-    comptime assert not is_defined["MOJOLEARN_IDN_MCD_CHOL_OFF"](), "renamed 2026-11-13 (lane restore-classical-measured-routes): the LU + Jacobi pinvh C-step is the IDENTICAL default again (x_decomp/mcd.mojo IDN_MCD_CHOL); the Cholesky C-step is -D MOJOLEARN_IDN_MCD_CHOL (owed row mcd-chol). Drop MOJOLEARN_IDN_MCD_CHOL_OFF from the build"
+    comptime assert not is_defined["MOJOLEARN_IDN_MCD_CHOL_OFF"](), "renamed 2026-11-13 (lane restore-classical-measured-routes): the LU + Jacobi pinvh C-step is the IDENTICAL default again (x_decomp/mcd.mojo); the Cholesky C-step (-D MOJOLEARN_IDN_MCD_CHOL) was deleted 2026-11-23 as a loser on quality. Drop MOJOLEARN_IDN_MCD_CHOL_OFF from the build"
     # Lane expdel-02-decomposition-series (2026-11-15): owed deletions of docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch
     comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): DECOMP_FAST_DICT_DEV_OFF (FAST rollback to the kit's per-atom dictionary loop) is gone; the resident two-launch atom update is the FAST path (mb-dict-learning istella 6,832 -> 5,193 ms, sparsity and reconstruction error identical); restore: experiments/removed/MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF.patch"
@@ -287,6 +287,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_MATRIX_UNITS"](), "removed 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm; NOISE: pca, tsvd and svd on istella and taxi, 8 cells 0.93-1.00, median 1.00): the PCA / truncated-SVD Gram and projections on the matrix unit in a fast build; the exact gemm_tn / gemm_nt products are the code; see docs/TOMBSTONES.md"
     # ---- end lane fx-verdicts6
+    # ---- lane ab-prep-classical (2026-11-23): owed arms decided from the record
+    # TOMBSTONE: MOJOLEARN_IDN_MCD_CHOL (LOSER on quality, ab1 2026-11-18) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MCD_CHOL.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_MCD_CHOL"](), "removed 2026-11-23 (lane/ab-prep-classical, A/B ab1 2026-11-18 NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, one run per arm; EXP:479): the blocked Cholesky C-step was faster (min-cov-det and elliptic-envelope taxi fit 0.55, istella 0.84-0.86) but elliptic-envelope taxi support Jaccard vs scikit-learn fell 0.9636 -> 0.9258: LOSER on quality; the LU + Jacobi pinvh C-step stays; code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MCD_CHOL.ab-prep.patch"
+    # ---- end lane ab-prep-classical
     return True
 
 
