@@ -48,7 +48,7 @@ comptime AGN_SW_IDN_SYN_POOL = 16
 comptime AGN_SW_PSHAP_DELTA = 32
 
 
-trait AgnModel(Movable):
+trait AgnModel(Movable & Deinitable):
     """The explained estimator on float32 C-order rows of `d` features, answering float32 (rows, k)."""
 
     def explained(mut self) raises -> Int:
