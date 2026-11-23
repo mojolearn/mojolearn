@@ -939,6 +939,19 @@ EXAMPLES = {
 }
 
 
+# nn-losses begin (2026-11-23): the regression losses of lane nn-losses on a small sequence model
+def _nn_losses_seq(compile_options):
+    shipped = _seq((8, 4), [["linear", 8], ["tanh"], ["flatten"], ["linear", 1]])
+    shipped["model"]["sequential"]["compile"] = compile_options
+    return shipped
+
+
+EXAMPLES["seq-l1"] = _nn_losses_seq({"loss": "l1", "optimizer": "sgd", "lr": 0.01})
+EXAMPLES["seq-smooth-l1"] = _nn_losses_seq({"loss": "smooth_l1", "beta": 0.5, "reduction": "sum",
+                                             "optimizer": "sgd", "lr": 0.002})
+# nn-losses end
+
+
 def load_recipe(name):
     """The recipe and the directory its data file is relative to: a JSON file,
     or `example:<name>` for a shipped one."""

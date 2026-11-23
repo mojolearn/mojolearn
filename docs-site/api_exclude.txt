@@ -150,3 +150,12 @@ Sequential.batch_norm1d	seq-blocks-3 batch norm: verify references and GPU colum
 Sequential.batch_norm2d	seq-blocks-3 batch norm: verify references and GPU column owed
 Sequential.gated	neural-blocks layers: no verify lane or GPU column yet
 recipe	added 2026-11-22 (verify --recipe), not yet run from an installed wheel on a GPU or across two vendors; public docs after the release verification
+# nn-losses begin: compile options (the loss names and arguments), not members; nn-surface flips them at the release
+Sequential.compile:loss=l1	not yet in a release verification
+Sequential.compile:loss=smooth_l1	not yet in a release verification
+Sequential.compile:loss=nll	not yet in a release verification
+Sequential.compile:loss=kl_div	not yet in a release verification
+Sequential.compile:pos_weight	not yet in a release verification
+Sequential.compile:beta	not yet in a release verification
+Sequential.compile:reduction	not yet in a release verification
+# nn-losses end
