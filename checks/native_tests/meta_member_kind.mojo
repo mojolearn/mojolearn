@@ -44,6 +44,14 @@ xtrees/trees_meta_vote_run.mojo the door runs, over the members' own answers:
    errors and predict of the training X == `ada_member_fit` (the door's `_ada_members` plan);
 14. AdaBoost IMPORT: case 11's fitted rounds copied block by block into new tree member states and imported with
    its weights into a NEW META state: predict_proba equal to the fitted state's.
+15. THE SEARCH KIND (lane mf-search4): GridSearchCV over three LogisticRegression candidates, cv = 3: the META's
+   META_BLOCK_SEARCH words == `msel_search_run`'s tables, predict_proba == the best's refit state's;
+16. THE MULTI-OUTPUT KIND over THE 2-D y: MultiOutputClassifier, outputs of 3 and 2 classes: predict == each
+   output's member fitted directly; score == the counted share of rows with every output right.
+FAIL-PROOF EDITS, lane mf-search4: `slot[].plans = [slot[].base_plans[0].copy()]` in `_fit_search` (case 15: the
+wrong candidate's plan serves the best's state, or the header's best differs); `dst[i] = src[i * outputs]` in
+`_fit_multi`'s `_column` (case 16: the second output fits the first column); `hit += 1.0` without the
+`all_equal` test in `_score_multi` (case 16).
 The regressor kinds (VotingRegressor `vote_regress_run`, StackingRegressor, BaggingRegressor) and the Bagging kinds
 (their base is a tree, forest or extra-trees member; this process publishes only the logistic entry) run through
 tools/mf_meta3_digests.py (this file's members are classifiers).
@@ -75,8 +83,13 @@ from core.entry_table import EntryRef
 from core.ensemble_member import (
     ensemble_member_v2, meta_plan_mint, meta_plan_mint_with, meta_plan_release, META_VOTE_CLASSIFIER,
     META_STACK_CLASSIFIER, META_OVR, META_CALIBRATED, META_PARAM_COUNT, META_BLOCK_NESTED, META_BLOCK_WIDTHS,
-    META_ADA_CLASSIFIER, META_ADA_REGRESSOR, META_BLOCK_ADA,
+    META_ADA_CLASSIFIER, META_ADA_REGRESSOR, META_BLOCK_ADA, META_SEARCH_CLASSIFIER, META_MULTI_CLASSIFIER,
+    META_BLOCK_SEARCH,
 )
+from bindings.arena_prog_run import MetricRoute
+from core.entry_table import entry_ref_unresolved
+from core.member_abi import MEMBER_OP_SCORE
+from core.msel_search_run import MselSearchPlan, msel_search_run
 from core.entry_table import entry_ref_gil_free
 from core.forest_calls import xf_ref, xf_caps
 from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF
@@ -113,7 +126,7 @@ from xtrees.trees_meta_vote_run import (
 comptime N = 60
 comptime D = 3
 comptime K = 3
-comptime CASES = 14
+comptime CASES = 16
 comptime UNITS = 4
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -1029,6 +1042,106 @@ def check_ada_import() raises:
     _ = y^
 
 
+# ---------------------------------------------------------------- the search and multi-output kinds (lane mf-search4)
+
+
+def _search_plans() raises -> List[MemberPlan]:
+    var out: List[MemberPlan] = [_logistic(1.0), _logistic(0.1), _logistic(10.0)]
+    return out^
+
+
+def check_search() raises:
+    """15. GridSearchCV (META_SEARCH_CLASSIFIER) over three LogisticRegression candidates, cv = 3, scoring None:
+    the META's search words (META_BLOCK_SEARCH) == `msel_search_run` over the same candidates (whose words
+    checks/native_tests/msel_search_run.mojo proves against the door's), and its predict_proba == the RUN's refit
+    state's."""
+    var x = _x()
+    var y = _codes()
+    var words: List[Float64] = [0.0, 0.0, 0.0, 0.0, -1.0]
+    var meta = _meta_with(META_SEARCH_CLASSIFIER, 3, _search_plans(), words^, List[List[Int32]](),
+                          List[List[Int32]](), List[Int](), 0)
+    var state = _meta_fit(meta, x, y)
+    var masks = List[Int]()
+    var plans = _search_plans()
+    for c in range(len(plans)):  # small-loop(fixture: each candidate kind's mask)
+        masks.append(member_kind_capabilities(plans[c]))
+    var plan = MselSearchPlan(plans.copy(), masks^, Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), K, 3, _glue(),
+                              MetricRoute(entry_ref_unresolved().call, False, False))
+    var res = msel_search_run(plan)
+    var view = member_call_of(meta.plan, state)
+    view.block = META_BLOCK_SEARCH
+    _ = member_call(meta.plan.member, MEMBER_OP_EXPORT, view)
+    var got = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=view.dst.data)
+    require(Int(got[0]) == res.best and Int(got[1]) == res.n_splits and got[2] == res.best_score
+            and Int(got[3]) == len(plans), "the search header words")
+    for c in range(len(plans)):  # small-loop(check: candidates)
+        for f in range(res.n_splits):  # small-loop(check: folds)
+            require(got[6 + c * res.n_splits + f] == res.test[c][f], "a split score")
+    var want = List[Float64](length=N * K, fill=0.0)
+    var q = member_call_of(plans[res.best], res.best_state)
+    q.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    q.dst = MemberMatrix(Int(want.unsafe_ptr()), N, K, MEMBER_F64)
+    _ = member_call(plans[res.best].member, MEMBER_OP_PREDICT_PROBA, q)
+    _same(_meta_proba(meta, state, x), want, "the search's predict_proba (its best estimator's)")
+    _free(plans[res.best], res.best_state)
+    _free(meta.plan, state)
+    meta.close()
+    _ = x^
+    _ = y^
+
+
+def check_multi_output() raises:
+    """16. MultiOutputClassifier (META_MULTI_CLASSIFIER) over LogisticRegression, two outputs with 3 and 2
+    classes (THE 2-D y: rows x 2 int32 codes, `class_counts` [3, 2]): predict (rows x 2 int32) == each output's
+    member fitted directly on its column with its count; score == the share of rows whose both outputs match,
+    counted here."""
+    var x = _x()
+    var y = _codes()
+    var y2 = List[Int32](length=N * 2, fill=Int32(0))
+    var y1 = List[Int32](length=N, fill=Int32(0))
+    for i in range(N):  # small-loop(fixture: the second output's two classes)
+        y1[i] = Int32((i // 2) % 2)
+        y2[2 * i] = y[i]
+        y2[2 * i + 1] = y1[i]
+    var counts: List[Int] = [K, 2]
+    var meta = _meta_with(META_MULTI_CLASSIFIER, 0, [_logistic(1.0)], [0.0], List[List[Int32]](),
+                          List[List[Int32]](), List[Int](), 0)
+    var call = member_new(meta.plan)
+    call.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    call.y = MemberMatrix(Int(y2.unsafe_ptr()), N, 2, MEMBER_I32)
+    call.class_counts = Int(counts.unsafe_ptr())
+    _ = member_call(meta.plan.member, MEMBER_OP_FIT, call)
+    var state = call.state
+    var got = List[Int32](length=N * 2, fill=Int32(-1))
+    var p = member_call_of(meta.plan, state)
+    p.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    p.dst = MemberMatrix(Int(got.unsafe_ptr()), N, 2, MEMBER_I32)
+    _ = member_call(meta.plan.member, MEMBER_OP_PREDICT, p)
+    var base = _logistic(1.0)
+    var s0 = _fit_k(base, x, y, K)
+    var s1 = _fit_k(base, x, y1, 2)
+    var w0 = _codes32(base, s0, Int(x.unsafe_ptr()))
+    var w1 = _codes32(base, s1, Int(x.unsafe_ptr()))
+    var hits = 0
+    for i in range(N):  # small-loop(check)
+        require(got[2 * i] == w0[i] and got[2 * i + 1] == w1[i], "an output's predicted code")
+        if w0[i] == y[i] and w1[i] == y1[i]:
+            hits += 1
+    var sc = member_call_of(meta.plan, state)
+    sc.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    sc.y = MemberMatrix(Int(y2.unsafe_ptr()), N, 2, MEMBER_I32)
+    _ = member_call(meta.plan.member, MEMBER_OP_SCORE, sc)
+    require(sc.value == Float64(hits) / Float64(N), "MultiOutputClassifier.score")
+    _free(base, s0)
+    _free(base, s1)
+    _free(meta.plan, state)
+    meta.close()
+    _ = counts^
+    _ = y2^
+    _ = x^
+    _ = y^
+
+
 def test_meta_member_kind() raises:
     # The publication _mojolearn_x_trees_host makes at module init (the META entry's glue), once.
     publish_x_trees_glue("cpu")
@@ -1062,8 +1175,12 @@ def test_meta_member_kind() raises:
             check_ada_regressor()
         elif which == 12:
             check_ada_member_route()
-        else:
+        elif which == 13:
             check_ada_import()
+        elif which == 14:
+            check_search()
+        else:
+            check_multi_output()
     check_cases("meta_member_kind", CASES, run_case)
 
 
