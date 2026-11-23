@@ -16,6 +16,9 @@ the check proves it still does (a literal code list there is how 42 to 46 went m
     block_tensor_dims         each tensor's shape for import, export and state_dict (a branch iff it has tensors)
     block_forward             forward (backward is the tape of the ops it records)
     block_reads               the codes that read an earlier layer's output (their reference is renumbered)
+  delegated modules (DELEGATES below: autograd/nn_attention.mojo, nn_conv_blocks.mojo, ...): codes outside
+                              BLOCK_FIRST..BLOCK_LAST that a lane's own module defines, admitted by is_block through
+                              the module's admission function; the module's tables are checked like model_blocks'
   autograd/model.mojo         core codes 1..20 (LAYER_*); parse_model_v2 (block_shape, block_param_sizes),
                               model_init_params (block_init_bounds), _model_forward_v2 (block_forward), _absorbed_activation
                               (block_reads):
@@ -79,6 +82,21 @@ GENERIC = (
     (IMPORT, None, ("is_block(", "block_param_sizes(", "block_tensor_dims(")),
     (WEIGHTS, "sequential_parameter_layers", ("is_block(", "block_param_names(")),
     (WEIGHTS, "sequential_export_weights", ("is_block(", "block_param_names(")),
+)
+#: delegated block codes (lane nn-integrate, 2026-11-23): a module that defines its own LAYER_* codes and tables,
+#: which model_blocks' tables call behind its admission function. Per module: the file, the admission function
+#: (is_block must call it), and for each model_blocks table the module's function (None: not delegated). The
+#: module's tables are checked like model_blocks' own: per code the same tensor count in sizes, names and inits, a
+#: dims branch exactly when it has tensors, and the shape (and forward, when named) function names the code.
+DELEGATES = (
+    ("autograd/nn_attention.mojo", "nn_attention_is", {
+        "block_param_sizes": "nn_attention_param_sizes", "block_param_names": "nn_attention_param_names",
+        "block_init_bounds": "nn_attention_init_bounds", "block_tensor_dims": "nn_attention_tensor_dims",
+        "block_shape": "nn_attention_shape", "block_forward": None}),
+    ("autograd/nn_conv_blocks.mojo", "is_nn_conv", {
+        "block_param_sizes": "nnc_param_sizes", "block_param_names": "nnc_param_names",
+        "block_init_bounds": "nnc_init_bounds", "block_tensor_dims": "nnc_tensor_dims",
+        "block_shape": "nnc_shape", "block_forward": "nnc_forward"}),
 )
 #: core layers built by add() with no arguments (the description pack's final `takes no arguments` branch)
 NO_ARGUMENTS = frozenset(("relu", "sigmoid", "tanh", "softmax", "flatten"))
@@ -200,6 +218,115 @@ def check(path=SOURCE):
     return check_text(Path(path).read_text(encoding="utf-8"))
 
 
+def _cond_codes(text, cond, consts):
+    """The LAYER_* names a branch condition admits: named in it, or in the body of a helper it calls."""
+    found = set(re.findall(r"\b(LAYER_[A-Z0-9_]+)\b", cond))
+    for helper in re.findall(r"\b(_?[a-z][a-z0-9_]*)\(code\b", cond):
+        body = function_body(text, helper, required=False) or []
+        found |= set(re.findall(r"\b(LAYER_[A-Z0-9_]+)\b", "\n".join(body)))
+        joined = "\n".join(body)
+        m = re.search(r"code >= ([A-Z0-9_]+) and code <= ([A-Z0-9_]+)", joined)
+        allc = {k.group(1): int(k.group(2)) for k in re.finditer(r"^comptime ([A-Z0-9_]+) = (\d+)\b", text, re.M)}
+        if m and m.group(1) in allc and m.group(2) in allc:
+            lo, hi = allc[m.group(1)], allc[m.group(2)]
+            found |= {k for k, v in consts.items() if k.startswith("LAYER_") and lo <= v <= hi}
+    return {c for c in found if c in consts}
+
+
+def _delegate_branches(text, fn, consts):
+    """[(codes, appends)] per top-level `if` branch of a delegated table function (any admitting condition)."""
+    body = function_body(text, fn, required=False)
+    if body is None:
+        return None
+    out = []
+    i = 0
+    while i < len(body):
+        line = body[i]
+        m = re.match(r"^(\s{4})(?:el)?if\b(.*):\s*(#.*)?$", line)
+        if not m:
+            i += 1
+            continue
+        codes = _cond_codes(text, m.group(2), consts)
+        appends, loops, j = 0, [], i + 1
+        while j < len(body):
+            nxt = body[j]
+            stripped = nxt.strip()
+            if stripped and not stripped.startswith("#"):
+                ind = len(nxt) - len(nxt.lstrip())
+                if ind <= 4:
+                    break
+                while loops and ind <= loops[-1][0]:
+                    loops.pop()
+                r = _RANGE.match(nxt)
+                if r:
+                    loops.append((len(r.group(1)), int(r.group(2))))
+                elif "out.append(" in nxt:
+                    k = 1
+                    for _, n in loops:
+                        k *= n
+                    appends += k
+            j += 1
+        out.append((codes, appends))
+        i = j
+    return out
+
+
+def check_delegate(path, text, admit, tables, blocks_text):
+    """(problems, {code name: (sizes, names, inits, dims)}, {code name: value}) of one delegated module."""
+    consts = {k: v for k, v in constants(text).items() if k.startswith("LAYER_")}
+    problems = []
+    if not consts:
+        return [f"{path}: no LAYER_ constants"], {}, {}
+    if f"{admit}(" not in "\n".join(function_body(blocks_text, "is_block", required=False) or []):
+        problems.append(f"{path}: model_blocks is_block does not call {admit}")
+    admitted = _cond_codes(text, f"{admit}(code)", consts)
+    for c in sorted(set(consts) - admitted):
+        problems.append(f"{path}: {c} is not admitted by {admit}")
+    counts = {c: [0, 0, 0, 0] for c in admitted}
+    seen = {c: [0, 0, 0, 0] for c in admitted}
+    for t, table in enumerate(TABLES):
+        fn = tables.get(table)
+        if fn is None:
+            continue
+        if fn + "(" not in "\n".join(function_body(blocks_text, table, required=False) or []):
+            problems.append(f"{BLOCKS} {table}: does not call {fn}")
+        branches_ = _delegate_branches(text, fn, consts)
+        if branches_ is None:
+            problems.append(f"{path}: {fn} not found")
+            continue
+        for codes, appends in branches_:
+            for code in codes:
+                if code in counts:
+                    seen[code][t] += 1
+                    counts[code][t] = appends
+                    if appends == 0:
+                        problems.append(f"{path} {fn}: the {code} branch is empty")
+    for code, (n_sizes, n_names, n_inits, _) in counts.items():
+        if not (n_sizes == n_names == n_inits):
+            problems.append(f"{path} {code}: {n_sizes} parameter sizes, {n_names} names and {n_inits} inits")
+        if (n_sizes > 0) != (seen[code][3] > 0):
+            problems.append(f"{path} {code}: {n_sizes} parameter tensors but "
+                            f"{'a' if seen[code][3] else 'no'} tensor_dims branch")
+    for table in NAMED:
+        fn = tables.get(table)
+        if fn is None:
+            continue
+        body = function_body(text, fn, required=False)
+        if body is None:
+            problems.append(f"{path}: {fn} not found")
+            continue
+        joined = "\n".join(body)
+        named = set(re.findall(r"\b(LAYER_[A-Z0-9_]+)\b", joined))
+        for line in body:
+            m = re.match(r"^\s*(?:el)?if\b(.*):", line)
+            if m:
+                named |= _cond_codes(text, m.group(1), consts)
+        for code in counts:
+            if code not in named:
+                problems.append(f"{path} {fn}: no rule for {code}")
+    return problems, {c: tuple(n) for c, n in counts.items()}, {c: consts[c] for c in admitted}
+
+
 # ------------------------------------------------------------------ the other files
 def _literal(tree, name):
     """The literal value assigned to module-level NAME, or (for a dict-valued key "layer_names" etc.) None."""
@@ -265,7 +392,25 @@ def check_files(read):
             codes[v] = name
             if rel == MODEL and first is not None and v >= first:
                 problems.append(f"{MODEL}: core {name} = {v} lies in the block range {first}..{last}")
-    with_params = {bvals[c] for c, n in table.items() if n[0] > 0}
+    for rel, admit, tables in DELEGATES:
+        dtext = read(rel)
+        if dtext is None:
+            problems.append(f"{rel}: missing")
+            continue
+        dprob, dtable, dvals = check_delegate(rel, dtext, admit, tables, texts[BLOCKS])
+        problems += dprob
+        for name, v in dvals.items():
+            if v in codes and codes[v] != name and bvals.get(codes[v]) != v:
+                problems.append(f"{rel}: {name} = {v} is also {codes[v]}")
+            if first is not None and first <= v <= last:
+                problems.append(f"{rel}: {name} = {v} lies in model_blocks' own range {first}..{last}")
+            bvals.setdefault(name, v)
+        for name, row in dtable.items():
+            alias = [k for k, v in codes.items() if v == dvals[name]]
+            table[name] = row
+            if dvals[name] not in codes:
+                codes[dvals[name]] = name
+    with_params = {bvals[c] for c, n in table.items() if n[0] > 0 and c in bvals}
 
     # generic consumers: no per-code line, the model_blocks tables instead
     for rel, fn, calls in GENERIC:

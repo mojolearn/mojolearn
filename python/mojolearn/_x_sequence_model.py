@@ -25,7 +25,15 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "transformer_encoder_layer": 0, "transformer_decoder_layer": 0,
           "transformer_encoder": 0, "transformer_decoder": 0,
           # nn-attention end
-          "batch_norm1d": 46, "batch_norm2d": 46}  # lm_head (lane neural-blocks-3-lm)
+          "batch_norm1d": 46, "batch_norm2d": 46,  # lm_head (lane neural-blocks-3-lm)
+          # nn-conv begin
+          "conv_transpose1d": 56, "conv_transpose2d": 57, "adaptive_avg_pool2d": 58,
+          "adaptive_max_pool2d": 59, "adaptive_max_pool1d": 60, "global_max_pool": 61,
+          "zero_pad1d": 62, "zero_pad2d": 62, "constant_pad1d": 62, "constant_pad2d": 62,
+          "reflection_pad1d": 63, "reflection_pad2d": 63, "replication_pad1d": 64, "replication_pad2d": 64,
+          "upsample": 65, "pixel_shuffle": 66, "pixel_unshuffle": 66,
+          # nn-conv end
+          }
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -143,7 +151,14 @@ class Sequential(_CheckMixin):
             ``'trapezoid_scan'``, ``'lm_head'``,
             ``'multihead_attention'``, ``'positional_encoding'``,
             ``'transformer_encoder_layer'``, ``'transformer_decoder_layer'``,
-            ``'transformer_encoder'``, ``'transformer_decoder'``), with that
+            ``'transformer_encoder'``, ``'transformer_decoder'``,
+            ``'conv_transpose1d'``, ``'conv_transpose2d'``,
+            ``'adaptive_avg_pool2d'``, ``'adaptive_max_pool2d'``,
+            ``'adaptive_max_pool1d'``, ``'global_max_pool'``, ``'zero_pad1d'``,
+            ``'zero_pad2d'``, ``'constant_pad1d'``, ``'constant_pad2d'``,
+            ``'reflection_pad1d'``, ``'reflection_pad2d'``,
+            ``'replication_pad1d'``, ``'replication_pad2d'``, ``'upsample'``,
+            ``'pixel_shuffle'``, ``'pixel_unshuffle'``), with that
             method's arguments.
         *args, **kwargs
             The layer's arguments, as listed for ``kind``.
@@ -953,6 +968,269 @@ class Sequential(_CheckMixin):
         return _SEQUENTIAL_ENTRY(self, "add", ("transformer_decoder", (decoder_layer, num_layers, memory, norm), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
     # nn-attention end
 
+    # nn-conv begin
+    def conv_transpose1d(self, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1,
+                         bias=True, dilation=1):
+        """Append a 1-D transposed convolution of ``(channels, length)``
+        samples, as PyTorch's ``nn.ConvTranspose1d`` (the gradient of
+        :meth:`conv1d` with respect to its input, so it is often used to
+        upsample in a decoder).
+
+        The output length is ``(length - 1) * stride - 2 * padding +
+        dilation * (kernel_size - 1) + output_padding + 1``. The weight is
+        ``(channels, out_channels // groups, kernel_size)`` and the bias
+        ``(out_channels,)``, both initialized uniformly in
+        ``[-1 / sqrt(fan_in), 1 / sqrt(fan_in)]`` with ``fan_in =
+        out_channels // groups * kernel_size``.
+
+        Parameters
+        ----------
+        out_channels : int
+            Number of output channels.
+        kernel_size : int
+            Kernel length.
+        stride : int, default 1
+            Step between the positions an input value is spread to.
+        padding : int, default 0
+            ``dilation * (kernel_size - 1) - padding`` zeros are added at both
+            ends of the output.
+        output_padding : int, default 0
+            Extra length added at the end of the output; smaller than
+            ``stride``.
+        groups : int, default 1
+            Number of channel groups; it divides the channels and
+            ``out_channels``.
+        bias : bool, default True
+            Whether to add a learned bias.
+        dilation : int, default 1
+            Spacing between kernel taps.
+
+        Example: a convolutional autoencoder over ``(1, 32)`` signals::
+
+            model = (mojolearn.Sequential(input_shape=(1, 32))
+                     .conv1d(8, 5, stride=2, padding=2).tanh()
+                     .conv_transpose1d(1, 4, stride=2, padding=1).flatten())
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("conv_transpose1d", (out_channels, kernel_size, stride, padding, output_padding, groups, bias, dilation), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def conv_transpose2d(self, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1,
+                         bias=True, dilation=1):
+        """Append a 2-D transposed convolution of ``(channels, height,
+        width)`` samples with square kernels, as PyTorch's
+        ``nn.ConvTranspose2d``: :meth:`conv_transpose1d` along both spatial
+        axes. The weight is ``(channels, out_channels // groups,
+        kernel_size, kernel_size)``.
+
+        Example: double the height and width of 16-channel feature maps::
+
+            model.conv_transpose2d(8, 4, stride=2, padding=1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("conv_transpose2d", (out_channels, kernel_size, stride, padding, output_padding, groups, bias, dilation), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def adaptive_avg_pool2d(self, output_size):
+        """Append an adaptive average pooling of ``(channels, height,
+        width)`` samples to ``(channels, out_height, out_width)``, as
+        PyTorch's ``nn.AdaptiveAvgPool2d``: output ``(i, j)`` is the mean of
+        rows ``floor(i * height / out_height)`` to ``ceil((i + 1) * height /
+        out_height)`` (exclusive) and the columns likewise, so any output
+        size works.
+
+        Parameters
+        ----------
+        output_size : int or tuple
+            ``out_height`` and ``out_width``, one int for both; ``None`` in
+            the tuple keeps that axis's size.
+
+        Example::
+
+            model.conv2d(16, 3, padding=1).relu().adaptive_avg_pool2d((4, 4)).flatten().linear(10)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("adaptive_avg_pool2d", (output_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def adaptive_max_pool2d(self, output_size):
+        """Append an adaptive max pooling of ``(channels, height, width)``
+        samples, as PyTorch's ``nn.AdaptiveMaxPool2d``: the windows of
+        :meth:`adaptive_avg_pool2d`, each output the largest value of its
+        window (of equal values the first in row-major order receives the
+        gradient).
+
+        Example::
+
+            model.adaptive_max_pool2d(2)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("adaptive_max_pool2d", (output_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def adaptive_max_pool1d(self, output_size):
+        """Append an adaptive max pooling of ``(channels, length)`` samples
+        to ``(channels, output_size)``, as PyTorch's ``nn.AdaptiveMaxPool1d``:
+        output ``i`` is the largest value of positions ``floor(i * length /
+        output_size)`` to ``ceil((i + 1) * length / output_size)``
+        (exclusive).
+
+        Example::
+
+            model.conv1d(16, 5, padding=2).relu().adaptive_max_pool1d(4).flatten().linear(2)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("adaptive_max_pool1d", (output_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def global_max_pool(self):
+        """Append a global max pooling: each channel of a ``(channels,
+        length)`` or ``(channels, height, width)`` sample becomes its largest
+        value, giving ``(channels,)`` (PyTorch's ``AdaptiveMaxPool1d(1)`` or
+        ``AdaptiveMaxPool2d(1)`` followed by a flatten). Of equal values the
+        first receives the gradient.
+
+        Example::
+
+            model.conv1d(32, 3, padding=1).relu().global_max_pool().linear(2)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("global_max_pool", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def zero_pad1d(self, padding):
+        """Append zero padding of ``(channels, length)`` samples, as
+        PyTorch's ``nn.ZeroPad1d``: ``padding`` zeros at both ends, or
+        ``(left, right)``. A negative pad removes values.
+
+        Example::
+
+            model.zero_pad1d((2, 0))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("zero_pad1d", (padding,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def zero_pad2d(self, padding):
+        """Append zero padding of ``(channels, height, width)`` samples, as
+        PyTorch's ``nn.ZeroPad2d``: ``padding`` zeros on every side, or
+        ``(left, right, top, bottom)``. A negative pad removes values.
+
+        Example::
+
+            model.zero_pad2d(1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("zero_pad2d", (padding,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def constant_pad1d(self, padding, value):
+        """Append constant padding of ``(channels, length)`` samples with
+        ``value``, as PyTorch's ``nn.ConstantPad1d``: ``padding`` at both
+        ends, or ``(left, right)``. A negative pad removes values.
+
+        Example::
+
+            model.constant_pad1d(2, -1.0)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("constant_pad1d", (padding, value), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def constant_pad2d(self, padding, value):
+        """Append constant padding of ``(channels, height, width)`` samples
+        with ``value``, as PyTorch's ``nn.ConstantPad2d``: ``padding`` on
+        every side, or ``(left, right, top, bottom)``.
+
+        Example::
+
+            model.constant_pad2d((1, 1, 2, 0), 0.5)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("constant_pad2d", (padding, value), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def reflection_pad1d(self, padding):
+        """Append reflection padding of ``(channels, length)`` samples, as
+        PyTorch's ``nn.ReflectionPad1d``: the values mirrored at each end,
+        the end value itself not repeated. ``padding`` (both ends) or
+        ``(left, right)``, each smaller than the length.
+
+        Example::
+
+            model.reflection_pad1d(2).conv1d(8, 5)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("reflection_pad1d", (padding,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def reflection_pad2d(self, padding):
+        """Append reflection padding of ``(channels, height, width)``
+        samples, as PyTorch's ``nn.ReflectionPad2d``: ``padding`` (every
+        side) or ``(left, right, top, bottom)``, each smaller than the
+        padded axis.
+
+        Example::
+
+            model.reflection_pad2d(1).conv2d(16, 3)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("reflection_pad2d", (padding,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def replication_pad1d(self, padding):
+        """Append replication padding of ``(channels, length)`` samples, as
+        PyTorch's ``nn.ReplicationPad1d``: each end value repeated.
+        ``padding`` (both ends) or ``(left, right)``.
+
+        Example::
+
+            model.replication_pad1d((4, 0))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("replication_pad1d", (padding,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def replication_pad2d(self, padding):
+        """Append replication padding of ``(channels, height, width)``
+        samples, as PyTorch's ``nn.ReplicationPad2d``: the edge values
+        repeated. ``padding`` (every side) or ``(left, right, top,
+        bottom)``.
+
+        Example::
+
+            model.replication_pad2d(1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("replication_pad2d", (padding,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def upsample(self, size=None, scale_factor=None, mode="nearest", align_corners=None):
+        """Append upsampling of ``(channels, length)`` or ``(channels,
+        height, width)`` samples, as PyTorch's ``nn.Upsample``.
+
+        Parameters
+        ----------
+        size : int or tuple, optional
+            The output length, or ``(height, width)`` (one int for both).
+        scale_factor : float, optional
+            The output size is ``floor(size * scale_factor)`` on each spatial
+            axis. Give either ``size`` or ``scale_factor``. It is stored as a
+            float32.
+        mode : {'nearest', 'linear', 'bilinear'}, default 'nearest'
+            ``'nearest'`` copies the value at ``floor(i * scale)``;
+            ``'linear'`` (``(channels, length)`` samples) and ``'bilinear'``
+            (``(channels, height, width)`` samples) interpolate between the
+            two nearest values on each axis. ``scale`` is ``input_size /
+            output_size``, or ``1 / scale_factor`` when one is given.
+        align_corners : bool or None, default None
+            For ``'linear'`` and ``'bilinear'``: True aligns the corner
+            values of input and output; None or False uses PyTorch's
+            half-pixel rule.
+
+        Example: a decoder that doubles its feature maps twice::
+
+            model.upsample(scale_factor=2).conv2d(8, 3, padding=1).relu() \
+                 .upsample(scale_factor=2, mode="bilinear").conv2d(1, 3, padding=1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("upsample", (size, scale_factor, mode, align_corners), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def pixel_shuffle(self, upscale_factor):
+        """Append a pixel shuffle, as PyTorch's ``nn.PixelShuffle``:
+        ``(channels * r * r, height, width)`` samples become ``(channels,
+        height * r, width * r)``, output ``[c, h * r + i, w * r + j]`` being
+        input ``[c * r * r + i * r + j, h, w]`` with ``r = upscale_factor``.
+
+        Example: sub-pixel upsampling by 2::
+
+            model.conv2d(4 * 3, 3, padding=1).pixel_shuffle(2)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("pixel_shuffle", (upscale_factor,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def pixel_unshuffle(self, downscale_factor):
+        """Append a pixel unshuffle, the inverse of :meth:`pixel_shuffle`
+        (PyTorch's ``nn.PixelUnshuffle``): ``(channels, height * r, width *
+        r)`` samples become ``(channels * r * r, height, width)``.
+
+        Example::
+
+            model.pixel_unshuffle(2)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("pixel_unshuffle", (downscale_factor,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+    # nn-conv end
+
     @property
     def layers(self):
         """The layers in order: ``(kind, arg0, arg1, float_arg)`` tuples,
@@ -1432,7 +1710,12 @@ _SEQUENTIAL_CONTEXT = {
                     "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
                     "selective_scan", "ssd_scan", "trapezoid_scan", "lm_head", "batch_norm",
                     # nn-attention begin: 47..66 are other lanes' codes; 67 and 72 autograd/nn_attention.mojo
-                    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+                    "", "", "", "", "", "", "", "", "",
+                    # nn-conv begin: 56..66, autograd/nn_conv_blocks.mojo
+                    "conv_transpose1d", "conv_transpose2d", "adaptive_avg_pool2d", "adaptive_max_pool2d",
+                    "adaptive_max_pool1d", "global_max_pool", "constant_pad", "reflection_pad", "replication_pad",
+                    "upsample", "pixel_shuffle",
+                    # nn-conv end
                     "multihead_attention", "", "", "", "", "positional_encoding",
                     # nn-attention end
                     ),

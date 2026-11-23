@@ -24,6 +24,10 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # nn-attention begin: classic attention models, one seeded step each
                           'sequence-attention-encoder', 'sequence-attention-cross',
                           # nn-attention end
+                          # nn-conv begin: the convolution and shape layers, one seeded step each
+                          'sequence-nnconv-transpose', 'sequence-nnconv-pools', 'sequence-nnconv-pads',
+                          'sequence-nnconv-upsample', 'sequence-nnconv-shuffle',
+                          # nn-conv end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

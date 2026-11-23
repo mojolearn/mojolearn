@@ -335,6 +335,99 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         _nn_attention_container(mods, model, kind, supplied, keywords, context)
         return model
     # nn-attention end
+    # nn-conv begin
+    # lane nn-conv (2026-11-23): layer codes 56..66 (autograd/nn_conv_blocks.mojo has the argument words)
+    elif kind == "conv_transpose1d" or kind == "conv_transpose2d":
+        var options = _arguments(mods, kind, supplied, keywords,
+            Python.tuple("out_channels", "kernel_size", "stride", "padding", "output_padding", "groups", "bias",
+                         "dilation"),
+            Python.tuple(None, None, 1, 0, 0, 1, True, 1), 2)
+        var oc = _positive(options[0], "out_channels", 1, context)
+        var kernel = _positive(options[1], "kernel_size", 1, context)
+        var stride = _positive(options[2], "stride", 1, context)
+        var padding = _positive(options[3], "padding", 0, context)
+        var out_pad = _positive(options[4], "output_padding", 0, context)
+        var groups = _positive(options[5], "groups", 1, context)
+        var dilation = _positive(options[7], "dilation", 1, context)
+        if out_pad >= stride:
+            raise Error("output_padding must be smaller than stride")
+        if oc % groups != 0:
+            raise Error("groups must divide out_channels")
+        a0 = PythonObject(oc)
+        a1 = PythonObject(kernel)
+        f = PythonObject(Float64(dilation))
+        args = Python.list(oc, kernel, stride, padding, out_pad, 2 * groups + (1 if Bool(py=options[6]) else 0))
+    elif kind == "adaptive_avg_pool2d" or kind == "adaptive_max_pool2d":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("output_size"), Python.tuple(None), 1)
+        var hw = _nnc_pair(mods, options[0], "output_size", True, context)
+        a0 = PythonObject(hw[0])
+        a1 = PythonObject(hw[1])
+        args = Python.list(hw[0], hw[1], 0, 0, 0, 0)
+    elif kind == "adaptive_max_pool1d":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("output_size"), Python.tuple(None), 1)
+        a0 = PythonObject(_positive(options[0], "output_size", 1, context))
+        args = Python.list(a0, 0, 0, 0, 0, 0)
+    elif kind == "global_max_pool":
+        if len(supplied) != 0 or len(keywords) != 0:
+            raise Error("TypeError: global_max_pool takes no arguments")
+        args = Python.list(0, 0, 0, 0, 0, 0)
+    elif (kind == "zero_pad1d" or kind == "zero_pad2d" or kind == "constant_pad1d" or kind == "constant_pad2d"
+          or kind == "reflection_pad1d" or kind == "reflection_pad2d" or kind == "replication_pad1d"
+          or kind == "replication_pad2d"):
+        var constant = kind.startswith("constant")
+        var value_default = PythonObject(None) if constant else PythonObject(0.0)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("padding", "value"),
+                                 Python.tuple(None, value_default), 2 if constant else 1)
+        if not constant and (len(supplied) > 1 or py_contains(keywords, "value")):
+            raise Error("TypeError: " + kind + " takes one argument, padding")
+        var two = kind.endswith("2d")
+        var pads = _nnc_pads(mods, options[0], two, kind.startswith("zero") or constant, context)
+        if constant:
+            var vb = mods.module("builtins")
+            if not Bool(py=py_call(vb.isinstance, options[1], Python.tuple(vb.int, vb.float))) or Bool(
+                    py=py_call(vb.isinstance, options[1], vb.bool)):
+                raise Error("value must be a number")
+            f = py_call(vb.float, options[1])
+        a0 = PythonObject(pads[0])
+        a1 = PythonObject(pads[1])
+        args = Python.list(pads[0], pads[1], pads[2], pads[3], 2 if two else 1, 0)
+    elif kind == "upsample":
+        var options = _arguments(mods, kind, supplied, keywords,
+                                 Python.tuple("size", "scale_factor", "mode", "align_corners"),
+                                 Python.tuple(None, None, "nearest", None), 0)
+        if (options[0] is None) == (options[1] is None):
+            raise Error("upsample takes either size or scale_factor")
+        var mode_name = String(py_call(b.str, options[2]))
+        var mode = 0 if mode_name == "nearest" else (1 if mode_name == "linear" else (2 if mode_name == "bilinear" else -1))
+        if mode < 0:
+            raise Error("mode must be 'nearest', 'linear' or 'bilinear'")
+        var align = 0
+        if options[3] is not None:
+            if mode == 0:
+                raise Error("align_corners can only be set with mode 'linear' or 'bilinear'")
+            align = 1 if Bool(py=options[3]) else 0
+        var oh = 0
+        var ow = 0
+        if options[0] is not None:
+            var hw = _nnc_pair(mods, options[0], "size", False, context)
+            oh = hw[0]
+            ow = hw[1]
+        else:
+            var sb = mods.module("builtins")
+            if not Bool(py=py_call(sb.isinstance, options[1], Python.tuple(sb.int, sb.float))) or Bool(
+                    py=py_call(sb.isinstance, options[1], sb.bool)) or not Bool(py=options[1] > PythonObject(0)):
+                raise Error("scale_factor must be a positive number")
+            f = py_call(sb.float, options[1])
+        a0 = PythonObject(oh)
+        a1 = PythonObject(ow)
+        args = Python.list(oh, ow, mode, align, 0, 0)
+    elif kind == "pixel_shuffle" or kind == "pixel_unshuffle":
+        var name = "upscale_factor" if kind == "pixel_shuffle" else "downscale_factor"
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple(name), Python.tuple(None), 1)
+        a0 = PythonObject(_positive(options[0], name, 1, context))
+        a1 = PythonObject(0 if kind == "pixel_shuffle" else 1)
+        args = Python.list(a0, a1, 0, 0, 0, 0)
+    # nn-conv end
     elif len(supplied) != 0 or len(keywords) != 0:
         raise Error("TypeError: " + kind + " takes no arguments")
     # lane neural-blocks-3 (2026-11-22): the native model reads the float argument as a Float32 (eps, p, theta,
@@ -343,6 +436,59 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
     f = PythonObject(Float64(Float32(Float64(py=f))))
     sequential_append(mods, model, code, a0, a1, f, args)
     return model
+
+
+# nn-conv begin
+def _nnc_pair(mut mods: NativeModules, value: PythonObject, name: String, keep: Bool,
+              context: PythonObject) raises -> Tuple[Int, Int]:
+    """(height, width) of an int or a pair (a 1-length tuple: the length); with `keep`, None entries are 0
+    (the input's size is kept)."""
+    var b = mods.module("builtins")
+    if Bool(py=py_call(b.isinstance, value, Python.tuple(b.tuple, b.list))):
+        var items = py_call(b.tuple, value)
+        if len(items) == 1:
+            return (0, _nnc_size(items[0], name, keep, context))
+        if len(items) != 2:
+            raise Error(name + " must be an integer or a pair of integers")
+        return (_nnc_size(items[0], name, keep, context), _nnc_size(items[1], name, keep, context))
+    var v = _nnc_size(value, name, keep, context)
+    return (v, v)
+
+
+def _nnc_size(value: PythonObject, name: String, keep: Bool, context: PythonObject) raises -> Int:
+    if keep and value is None:
+        return 0
+    return _positive(value, name, 1, context)
+
+
+def _nnc_pads(mut mods: NativeModules, value: PythonObject, two: Bool, negative: Bool,
+              context: PythonObject) raises -> List[Int]:
+    """[left, right, top, bottom] of a padding argument: an int (every side) or PyTorch's tuple
+    (left, right) / (left, right, top, bottom). Negative pads crop (constant padding only)."""
+    var b = mods.module("builtins")
+    var out = List[Int](length=4, fill=0)
+    var n = 4 if two else 2
+    if Bool(py=py_call(b.isinstance, value, Python.tuple(b.tuple, b.list))):
+        var items = py_call(b.tuple, value)
+        if len(items) != n:
+            raise Error("padding must be an integer or a tuple of " + String(n) + " integers")
+        for k in range(n):  # driver-loop: over at most four pad sides
+            out[k] = _nnc_pad(items[k], negative, context)
+    else:
+        var v = _nnc_pad(value, negative, context)
+        for k in range(n):  # driver-loop: over at most four pad sides
+            out[k] = v
+    return out^
+
+
+def _nnc_pad(value: PythonObject, negative: Bool, context: PythonObject) raises -> Int:
+    if not _integer(value, context):
+        raise Error("padding must hold integers")
+    var v = Int(py=value)
+    if v < 0 and not negative:
+        raise Error("padding must be non-negative")
+    return v
+# nn-conv end
 
 
 # ---------------------------------------------------------------- containers (lane seq-blocks, 2026-11-22)

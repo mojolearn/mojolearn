@@ -202,6 +202,10 @@ from autograd.program_loop import OP_LOOP_FIRST, OP_LOOP_LAST, apply_loop
 # nn-attention begin: classic attention's masked softmax and positional encoding (6700..6709)
 from autograd.nn_attention_ops import OP_NN_FIRST, OP_NN_LAST, apply_nn_attention
 # nn-attention end
+# nn-conv begin
+# lane nn-conv: the convolution and shape layers of Sequential (autograd/nn_conv_ops.mojo), 5560..5579
+from autograd.nn_conv_ops import OP_NNC_FIRST, OP_NNC_LAST, apply_nn_conv
+# nn-conv end
 
 
 @always_inline
@@ -766,3 +770,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_one_hot(t, a)
     elif OP == OP_PROBA2:
         op_proba2(t, a)
+    # nn-conv begin
+    elif OP >= OP_NNC_FIRST and OP <= OP_NNC_LAST:
+        comptime assert OP_NNC_FIRST > OP_SSM_LAST and OP_NNC_FIRST > OP_TFP_LAST and OP_NNC_FIRST > OP_IMP_LAST, "nn-conv opcode range overlaps another family"
+        apply_nn_conv[OP](t, a)
+    # nn-conv end

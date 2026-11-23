@@ -73,6 +73,19 @@ SEQUENTIAL_LAYER_FIXTURES={
     'transformer_encoder':((4,8),lambda m,S:m.transformer_encoder(S().transformer_encoder_layer(8,2,16,dropout=0.0),2)),
     'transformer_decoder':((4,8),lambda m,S:m.linear(8).transformer_decoder(S().transformer_decoder_layer(8,2,16,dropout=0.0),2,0)),
     # nn-attention end
+    # nn-conv begin
+    'conv_transpose1d':((2,4),lambda m,S:m.conv_transpose1d(2,3,stride=2)),
+    'conv_transpose2d':((1,2,2),lambda m,S:m.conv_transpose2d(1,2,stride=2)),
+    'adaptive_avg_pool2d':((1,4,4),lambda m,S:m.adaptive_avg_pool2d(2)),
+    'adaptive_max_pool2d':((1,4,4),lambda m,S:m.adaptive_max_pool2d(2)),
+    'adaptive_max_pool1d':((2,4),lambda m,S:m.adaptive_max_pool1d(2)),
+    'global_max_pool':((2,4),lambda m,S:m.conv1d(2,1).global_max_pool()),
+    'constant_pad2d':((1,2,2),lambda m,S:m.constant_pad2d(1,0.5)),
+    'reflection_pad1d':((2,4),lambda m,S:m.reflection_pad1d(1)),
+    'replication_pad2d':((1,2,2),lambda m,S:m.replication_pad2d(1)),
+    'upsample':((1,2,2),lambda m,S:m.upsample(scale_factor=2,mode='bilinear')),
+    'pixel_shuffle':((4,2,2),lambda m,S:m.pixel_shuffle(2)),
+    # nn-conv end
 }
 
 

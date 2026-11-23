@@ -165,3 +165,22 @@ Sequential.transformer_decoder_layer	not yet in a release verification
 Sequential.transformer_encoder	not yet in a release verification
 Sequential.transformer_decoder	not yet in a release verification
 # nn-attention end
+# nn-conv begin
+Sequential.conv_transpose1d	not yet in a release verification
+Sequential.conv_transpose2d	not yet in a release verification
+Sequential.adaptive_avg_pool2d	not yet in a release verification
+Sequential.adaptive_max_pool2d	not yet in a release verification
+Sequential.adaptive_max_pool1d	not yet in a release verification
+Sequential.global_max_pool	not yet in a release verification
+Sequential.zero_pad1d	not yet in a release verification
+Sequential.zero_pad2d	not yet in a release verification
+Sequential.constant_pad1d	not yet in a release verification
+Sequential.constant_pad2d	not yet in a release verification
+Sequential.reflection_pad1d	not yet in a release verification
+Sequential.reflection_pad2d	not yet in a release verification
+Sequential.replication_pad1d	not yet in a release verification
+Sequential.replication_pad2d	not yet in a release verification
+Sequential.upsample	not yet in a release verification
+Sequential.pixel_shuffle	not yet in a release verification
+Sequential.pixel_unshuffle	not yet in a release verification
+# nn-conv end

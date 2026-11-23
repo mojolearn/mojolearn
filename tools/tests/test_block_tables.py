@@ -137,3 +137,16 @@ def test_a_new_block_code_must_appear_everywhere():
 def test_the_tree_mode_reads_a_commit():
     problems, table = btc.check_files(btc.reader(ROOT, "HEAD"))
     assert table and isinstance(problems, list)
+
+
+def test_a_delegated_module_is_checked():
+    # lane nn-integrate: codes whose tables live in their own module (autograd/nn_conv_blocks.mojo) are counted,
+    # and a name dropped there is caught as in model_blocks' own tables
+    _, table = btc.check_files(btc.reader(ROOT))
+    assert table["LAYER_CONV_TRANSPOSE2D"][:3] == (2, 2, 2) and table["LAYER_CONV_TRANSPOSE2D"][3] > 0
+    assert table["LAYER_UPSAMPLE"] == (0, 0, 0, 0)
+    rel = "autograd/nn_conv_blocks.mojo"
+    text = _live(rel).replace('        out.append(".bias")\n', "", 1)
+    assert text != _live(rel)
+    problems, _ = btc.check_files(_files(**{rel: text}))
+    assert any("LAYER_CONV_TRANSPOSE2D" in p and "parameter sizes" in p for p in problems), problems
