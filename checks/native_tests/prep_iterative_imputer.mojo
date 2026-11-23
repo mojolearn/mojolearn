@@ -20,25 +20,55 @@ correlated, 15% NaN) for seeds 0 to 3, with scikit-learn 1.9.1's results, in `fi
                           within 0.05 and their mean per-cell spread within 20% of the reference's (and inside the
                           bounds)
 
-The supplied-estimator rounds (`estimator=Ridge(...)`) and the public refusals stay in the Python file: those rounds
-call a public estimator object per feature. Every unit is independent and runs across the host cores; the two
-posterior sets run one after the other, each with its twelve seeds across the host cores.
+    estimator units 0-2   (lane mf-iterimp) a supplied estimator as a native member, the rounds of
+                          x_prep/iterimp_run.mojo `iterimp_member_rounds` after `iterimp_prepare`, on X2 with the
+                          default keywords: Ridge(alpha=1), LinearRegression(), BayesianRidge() (linear and x_linear
+                          members over the host entries). Against the door's words before the member route
+                          (bindings/prep_iterimp_native_door.mojo's per-step estimator rounds, the base build;
+                          tools/py2mojo_native_fixtures_mf_iterimp.py, pack `mf_iterimp`): Xt word for word,
+                          n_iter_, the step count, and each step's feature, coef_ words and intercept_ (as float32).
+                          Fail-proof: in `_member_step`, read the predict block at `a + 4 * go` instead of
+                          `a + 4 * gm`; unit 0 fails naming an Xt word.
+
+sample_posterior with BayesianRidge stays a public refusal (its plan serves no predict_std) and the GaussianProcess
+member's PREDICT_STD route (the same query's mean in `call.y`) needs the GP provider's host route and kernel words:
+both are in tools/mf_iterimp_digests.py, as are the public refusals. Every unit is independent and runs across the
+host cores; the two posterior sets run one after the other, each with its twelve seeds across the host cores.
 """
 from std.math import isnan, sqrt
 from std.testing import TestSuite
 from core.host_parallel import host_parallelize
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
-from checks.native_tests.py2mojo_host_members import rows_close
+from checks.native_tests.py2mojo_host_members import rows_close, same_bits
 from checks.native_tests.testsuite_cases import check_cases, check_cases_serial, fixture_f32, require
 from checks.native_tests.bm_rest_iterimp_host import (
     HostIterRunner, PREP_ITERIMP_DIR, ii_request, ii_output, ii_transform, pos_inf, neg_inf,
 )
 from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN
-from x_prep.iterimp_run import iterimp_fit, II_NONE, II_ASCENDING, II_DESCENDING, II_RANDOM
+from x_prep.iterimp_run import (
+    iterimp_fit, iterimp_prepare, iterimp_member_rounds, iterimp_member_free, IterImpFitted, IterImpMember,
+    IterImpMemberFit, II_NONE, II_ASCENDING, II_DESCENDING, II_RANDOM,
+)
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.device_route import DeviceRoute, DEVICE_CPU
+from core.entry_table import EntryRef, entry_ref_word
+from core.member_abi import (
+    MemberPlan, MemberRef, MemberCall, MEMBER_F64, MEMBER_OP_CAPABILITIES, MEMBER_OP_EXPORT,
+    MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, member_call, member_call_of,
+)
+from core.member_families import MEMBER_FAMILY_LINEAR, MEMBER_FAMILY_XLINEAR
+from core.linear_member import linear_member_v2
+from core.xlinear_member import xlinear_member_v2
+from glm.host.linear_fit_native import linear_fit_host_v1
+from glm.host.linear_predict_native import linear_predict_host_v1
+from x_linear.ridge_descriptor_host import ridge_fit_host_v1
+from x_decomp.descriptor_host import x_decomp_host_v1
+from x_linear.ops_entry_host import x_linear_ops_host_v1
 
 comptime N = 400
 comptime D = 5
 comptime SEEDS = 12
+comptime MF_ITERIMP_DIR = "checks/native_tests/fixtures/mf_iterimp/"
 
 
 def _x(seed: Int) raises -> List[Float32]:
@@ -185,6 +215,108 @@ def posterior_case(unit: Int) raises:
     require(abs(spread / stats[1] - 1.0) < 0.2, label + ": spread " + String(spread) + " expected " + String(stats[1]))
 
 
+def _estimator_plan(unit: Int) raises -> MemberPlan:
+    """The member plan the door's UNPACK admits for unit 0 Ridge(alpha=1), 1 LinearRegression(), 2 BayesianRidge()
+    on the host images: the family's member entry, its route over the host kernel entries the estimator's own doors
+    read (linear: fit, predict, the Ridge solve, the decomposition; x_linear: the operations entry), the
+    MEMBER_OP_NEW words of providers/python/member_linear_boundary_door.mojo / member_xlinear_boundary_door.mojo for
+    the default keywords, and the family's capability mask."""
+    var mode = Int(GLOBAL_NUMERIC_MODE)
+    var plan = MemberPlan()
+    var route = DeviceRoute(DEVICE_CPU)
+    route.mode = mode
+    route.vendor = 0
+    if unit == 2:
+        plan.family = MEMBER_FAMILY_XLINEAR
+        plan.kind = 4
+        route.entry = EntryRef(x_linear_ops_host_v1, entry_ref_word(mode, 0, 0))
+        plan.member = MemberRef(EntryRef(xlinear_member_v2, 0), 0)
+        # [kind 4, fit_intercept, max_iter 300, tol 1e-3, alpha_1, alpha_2, lambda_1, lambda_2, alpha_init None,
+        #  lambda_init None]
+        plan.params = [4.0, 1.0, 300.0, 1e-3, 1e-6, 1e-6, 1e-6, 1e-6, -1.0, -1.0]
+    else:
+        plan.family = MEMBER_FAMILY_LINEAR
+        plan.kind = 1 if unit == 0 else 0
+        route.entry = EntryRef(linear_fit_host_v1, entry_ref_word(mode, 0, 0))
+        route.second = EntryRef(linear_predict_host_v1, entry_ref_word(mode, 0, 0))
+        route.third = EntryRef(ridge_fit_host_v1, entry_ref_word(mode, 0, 0))
+        route.fourth = EntryRef(x_decomp_host_v1, entry_ref_word(mode, 0, 0))
+        route.has_second = True
+        route.has_third = True
+        route.has_fourth = True
+        plan.member = MemberRef(EntryRef(linear_member_v2, 0), 0)
+        # [kind (1 Ridge, 0 LinearRegression), fit_intercept, alpha]
+        if unit == 0:
+            plan.params = [1.0, 1.0, 1.0]
+        else:
+            plan.params = [0.0, 1.0, 0.0]
+    plan.route = route
+    var probe = MemberCall(route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    return plan^
+
+
+def _exported(plan: MemberPlan, state: Int, block: Int) raises -> List[Float64]:
+    """A copy of fitted block `block` of `state` (float32 COEF words widened, or float64 SCALARS words)."""
+    var call = member_call_of(plan, state)
+    call.block = block
+    call.flags = 0
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var view = call.dst
+    var count = view.rows * view.cols
+    var out = List[Float64](length=count, fill=0.0)
+    for i in range(count):  # small-loop(oracle: one fitted block of a few words)
+        if view.dtype == MEMBER_F64:
+            out[i] = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=view.data)[i]
+        else:
+            out[i] = Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=view.data)[i])
+    return out^
+
+
+def estimator_case(unit: Int) raises:
+    var names: List[String] = ["Ridge(alpha=1)", "LinearRegression()", "BayesianRidge()"]
+    var label = String("IterativeImputer estimator=") + names[unit]
+    var x = fixture_f32(MF_ITERIMP_DIR + "x.f32", N * D)
+    var request = ii_request(N, D, IMP_MEAN, II_ASCENDING, 10, II_NONE, 0, neg_inf(), pos_inf(), False, False)
+    var runner = HostIterRunner(Int(x.unsafe_ptr()))
+    var fitted = IterImpFitted()
+    var plan = iterimp_prepare(runner, request, fitted)
+    require(len(fitted.keep) == D and not fitted.empty_kept, label + ": every column is kept and observed")
+    var member = IterImpMember(_estimator_plan(unit), False, False)
+    var fit = IterImpMemberFit()
+    iterimp_member_rounds(runner, request, plan, fitted, member, fit)
+    try:
+        var name = MF_ITERIMP_DIR + "est-" + String(unit)
+        var meta = fixture_f64(name + "-meta.f64", 2)
+        require(fit.n_iter == Int(meta[0]), label + ": n_iter_ " + String(fit.n_iter) + " expected " + String(Int(meta[0])))
+        var steps = Int(meta[1])
+        require(len(fit.states) == steps and len(fit.seq_j) == steps,
+            label + ": " + String(len(fit.states)) + " steps, expected " + String(steps))
+        require(fit.cols == D, label + ": width " + String(fit.cols))
+        var got = List[Float32](length=N * D, fill=0.0)
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
+        for i in range(N * D):  # small-loop(oracle: one result block)
+            got[i] = src[fit.out_offset + i]
+        same_bits(got, fixture_f32(name + "-xt.f32", N * D), label + ": fit_transform")
+        var js = fixture_f64(name + "-j.f64", steps)
+        var coef = fixture_f32(name + "-coef.f32", steps * (D - 1))
+        var inter = fixture_f32(name + "-inter.f32", steps)
+        for s in range(steps):  # small-loop(oracle: the fitted steps)
+            require(fit.seq_j[s] == Int(js[s]), label + ": step " + String(s) + " feature " + String(fit.seq_j[s]))
+            require(len(fit.seq_nbl[s]) == D - 1, label + ": step " + String(s) + " neighbours")
+            var c = _exported(member.plan, fit.states[s], MEMBER_BLOCK_COEF)
+            require(len(c) == D - 1, label + ": step " + String(s) + " coef_ has " + String(len(c)) + " words")
+            for k in range(D - 1):  # small-loop(oracle: one step's coefficients)
+                require(Float32(c[k]) == coef[s * (D - 1) + k], label + ": step " + String(s) + " coef_[" + String(k)
+                    + "] " + String(c[k]) + " expected " + String(coef[s * (D - 1) + k]))
+            var scalars = _exported(member.plan, fit.states[s], MEMBER_BLOCK_SCALARS)
+            require(Float32(scalars[0]) == inter[s], label + ": step " + String(s) + " intercept_ " + String(scalars[0])
+                + " expected " + String(inter[s]))
+    finally:
+        iterimp_member_free(member, fit)
+    _ = len(x)  # X stays alive past every program that read it
+
+
 def test_iterative() raises:
     check_cases("iterative", 3, iterative_case)
 
@@ -200,6 +332,10 @@ def test_iterative_random() raises:
 def test_iterative_posterior() raises:
     # the two sets one after the other: each runs its twelve seeds across the host cores
     check_cases_serial("iterative_posterior", 2, posterior_case)
+
+
+def test_iterative_estimator() raises:
+    check_cases("iterative_estimator", 3, estimator_case)
 
 
 def main() raises:
