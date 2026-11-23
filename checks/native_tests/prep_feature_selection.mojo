@@ -76,8 +76,9 @@ from bindings.prep_select_run import (
     MiProgram, mi_columns, mi_mask_of_bools, mi_mask_of_indices, mi_gather_stage, mi_class_count_stage,
     mi_int_words, mi_class_check, mi_discrete_check, mi_stage, mi_scatter,
     RfeKeys, rfe_first_stage, rfe_round_stage, rfe_member_importances, rfe_member_source, rfe_select_count,
-    RFE_NO_IMPORTANCES,
+    RFE_NO_IMPORTANCES, RfeFitPlan, RfeFitResult, rfe_fit_run,
 )
+from bindings.prep_classify_prog_run import ClsRunPlan
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.device_route import DeviceRoute, DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_word
@@ -717,6 +718,52 @@ def rfe_lda_unit(unit: Int) raises:
 
 def test_rfe_lda() raises:
     check_cases("rfe lda member", 5, rfe_lda_unit)
+
+
+def rfe_run_unit(unit: Int) raises:
+    """Lane mf-meta5: THE ONE BODY `rfe_fit_run` (the door's member path and THE RFE KIND) on the host x_prep
+    image over the same LDA member and fixtures as `rfe_lda_unit`: ranking_ and support_ exact, the kept
+    columns the support's, the final estimator fitted on them and owned by the caller.
+    FAIL-PROOF: in `rfe_fit_run` pass `nsup` for `drop` to `rfe_round_stage` (every column dropped) or read
+    the support at `staged.ranking` -> every unit fails on ranking_ / support_."""
+    var c = rfe_lda_case(unit)
+    var name = rfe_lda_name(unit)
+    var label = "rfe run " + name
+    var n = RFE_LDA_N
+    var d = RFE_LDA_D
+    var data = String("lda-k3") if c.classes == 3 else String("lda-k2")
+    var x = fixture_f32(MF_DIR + data + "-x.f32", n * d)
+    var codes = fixture_i32(MF_DIR + data + "-y.i32", n)
+    var plan = member_plan(MEMBER_FAMILY_DISCRIMINANT, da_params(0, c.solver), c.classes)
+    var source = rfe_member_source(MEMBER_FAMILY_DISCRIMINANT, member_kind_capabilities(plan), "auto", "")
+    var run = ClsRunPlan(xprep_member_route().entry, False, False, False, False, False)
+    var request = RfeFitPlan(plan.copy(), run, True, Int(x.unsafe_ptr()), n, d, Int(codes.unsafe_ptr()), MEMBER_I32)
+    request.nsel = rfe_select_count(d, 0 if c.nsel < 0 else 2, 0.0, c.nsel)
+    request.step = c.step
+    request.block = source.block
+    request.squared = source.squared
+    var res = rfe_fit_run(request)
+    _ = len(x)  # read by address through the run above
+    _ = len(codes)
+    var want_rank = fixture_i32(MF_DIR + "rfe-" + name + "-rank.i32", d)
+    var want_sup = fixture_i32(MF_DIR + "rfe-" + name + "-sup.i32", d)
+    var kept = 0
+    for j in range(d):  # small-loop(ranking_ and support_, exact)
+        require(Int(res.ranking[j]) == Int(want_rank[j]), label + ": ranking_[" + String(j) + "] "
+            + String(Int(res.ranking[j])) + ", the door's " + String(want_rank[j]))
+        require((res.support[j] != Float32(0)) == (want_sup[j] != 0), label + ": support_[" + String(j) + "]")
+        if want_sup[j] != 0:
+            require(kept < res.selected and Int(res.columns[kept]) == j, label + ": kept column " + String(j))
+            kept += 1
+    require(kept == res.selected, label + ": " + String(res.selected) + " kept columns, the support's "
+            + String(kept))
+    require(res.final_state != 0, label + ": no final estimator state")
+    var call = MemberCall(res.final_plan.route, res.final_state)
+    member_free(res.final_plan, call)
+
+
+def test_rfe_fit_run() raises:
+    check_cases("rfe fit run", 5, rfe_run_unit)
 
 
 def refusal_unit(unit: Int) raises:

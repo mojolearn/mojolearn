@@ -184,17 +184,21 @@ LabelPropagation / LabelSpreading (kinds 7, 8, classifiers; lane
 mf-entries5). RUN: neighbors/label_propagation_run.mojo `lp_fit_run` and
 `lp_query_run`, the bodies the estimator's door
 (bindings/neighbors_semi_native_door.mojo `_lp_fit`, `_lp_query`) runs.
-The member fits the caller's class codes with every row labeled: the
-marker word is the class count (a caller whose labels hold the -1 marker
-is not served: the boundary's admission answers False and the caller keeps
-the door, which reads -1 as unlabeled). MEMBER_OP_NEW parameters (count
-13): [0] kind 7 / 8, [1] knn (0 rbf / 1 knn), [2] n_neighbors, [3] the
+The member fits the caller's class codes. THE UNLABELED MARKER (lane
+mf-meta5, word [13]): the caller's code of the label -1, or -1 for none.
+With a marker its rows take part in the graph and not in classes_, as the
+door reads them (`lp_fit_run`'s marker word: the code itself; the fitted
+classes are the caller's others, `call.classes - 1` of them); predict writes
+the caller's codes (a fitted class c at or above the marker is the caller's
+c + 1), predict_proba the fitted classes' columns. Without one the marker
+word is the class count (every row labeled). MEMBER_OP_NEW parameters (count
+14): [0] kind 7 / 8, [1] knn (0 rbf / 1 knn), [2] n_neighbors, [3] the
 'rbf' kernel code (`family_svc_xn_kernels`), [4] gamma, [5] the image's
 raw-graph switch (`x_neighbors_classical_graph_normalization`), [6] the
 label step's clamp weight (1 for propagation, `xn_lp_static_weight(alpha)`
 for spreading), [7] alpha as the float32 word (0 for propagation), [8] tol,
 [9] max_iter, [10] the unfused-kNN arm, [11] the old-items arm, [12] the
-image's dense-proba operation (`lp_dense_available`). Views: X float32 rows
+image's dense-proba operation (`lp_dense_available`), [13] the marker code. Views: X float32 rows
 x features, y int32 codes rows x 1 (host, dense; no weights, index or
 device view; every class present). PREDICT int32 codes rows x 1;
 PREDICT_PROBA float32 (or float64, cast) rows x classes. Blocks: 64 the
@@ -337,7 +341,10 @@ comptime LP_BLOCK_DISTRIBUTIONS = MEMBER_BLOCK_FAMILY + 1
 comptime LP_BLOCK_TRANSDUCTION = MEMBER_BLOCK_FAMILY + 2
 comptime LP_BLOCK_SCALARS = MEMBER_BLOCK_FAMILY + 3
 comptime _LP_BLOCKS = 4
-comptime _LP_WORDS = 13
+comptime _LP_WORDS = 14
+#: LabelPropagation / LabelSpreading's word [13] (lane mf-meta5): THE UNLABELED MARKER, the caller's class
+#: code of the label -1 (its rows take part in the graph, not in classes_; -1: no marker).
+comptime LP_MARKER_WORD = 13
 #: OneClassSVM gamma words (MEMBER_OP_NEW word 5).
 comptime OC_GAMMA_VALUE = 0
 comptime OC_GAMMA_SCALE = 1
@@ -497,6 +504,7 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var lp_unfused: Bool
     var lp_old: Bool
     var lp_fused: Bool
+    var lp_marker: Int
     var lp_k: Int
     var lp_iterations: Int
     var lp_dist: List[Float32]
@@ -632,6 +640,7 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.lp_max_iter = 1000
         self.lp_unfused = False
         self.lp_old = False
+        self.lp_marker = -1
         self.lp_fused = False
         self.lp_k = 0
         self.lp_iterations = 0
@@ -800,6 +809,7 @@ def _mint(words: _F64P, count: Int) raises -> Int:
             slot[].lp_unfused = words[10] != 0.0
             slot[].lp_old = words[11] != 0.0
             slot[].lp_fused = words[12] != 0.0
+            slot[].lp_marker = Int(words[LP_MARKER_WORD])
         elif slot[].kind == XNEIGHBORS_KIND_SVGP:
             slot[].sv_inducing = Int(words[1])
             slot[].sv_gamma = words[2]
@@ -2260,12 +2270,13 @@ def _lp_fit_old_items(slot: _SlotPtr) -> Bool:
     return slot[].lp_old and slot[].kind == XNEIGHBORS_KIND_LABEL_SPREADING and not slot[].lp_raw
 
 
-def _lp_codes_check(codes: Int, rows: Int, classes: Int, estimator: String) raises:
-    """Every code in 0 .. classes-1 and every class present in the fit rows:
-    the estimator fits the classes it sees, so a fold or a draw missing a
-    class is refused in words and the caller's own loop fits it (as for
-    NearestCentroid). One presence row per task, parallel over the rows,
-    then one pass over the classes."""
+def _lp_codes_check(codes: Int, rows: Int, classes: Int, marker: Int, estimator: String) raises:
+    """Every code in 0 .. classes-1 and every class but the unlabeled
+    marker (`marker`, -1: none) present in the fit rows: the estimator fits
+    the classes it sees, so a fold or a draw missing a class is refused in
+    words and the caller's own loop fits it (as for NearestCentroid). One
+    presence row per task, parallel over the rows, then one pass over the
+    classes."""
     if rows == 0:
         raise Error("ValueError: a " + estimator + " member needs at least one fit row")
     var tasks = max(host_predict_task_count_work(rows, rows), 1)
@@ -2298,6 +2309,8 @@ def _lp_codes_check(codes: Int, rows: Int, classes: Int, estimator: String) rais
     if foreign:
         raise Error("ValueError: a " + estimator + " member reads class codes 0 .. " + String(classes - 1))
     for c in range(classes):  # driver-loop: over classes (the tasks' presence words)
+        if c == marker:
+            continue  # the unlabeled rows: none is a class
         var present = False
         for t in range(tasks):  # driver-loop: over the scan's tasks
             if seen[t * width + c] != 0:
@@ -2326,10 +2339,18 @@ def _lp_fit(slot: _SlotPtr, call: _CallPtr) raises:
     if call[].y.cols != 1:
         raise Error("ValueError: a " + estimator + " member reads one column of class codes")
     xn_rows_match_check(call[].y.rows, rows)
-    var classes = call[].classes
-    if classes < 1:
+    var given = call[].classes
+    if given < 1:
         raise Error("ValueError: a " + estimator + " member is a classifier: it reads class codes and a class count")
-    _lp_codes_check(call[].y.data, rows, classes, estimator)
+    # THE UNLABELED MARKER: the caller's code of -1 is not a class; `lp_fit_run` reads it as the door does
+    # (its marker word is that code; without one, the class count).
+    var marker = slot[].lp_marker
+    if marker >= given or (marker >= 0 and given < 2):
+        raise Error("ValueError: a " + estimator + " member's unlabeled marker is not one of its " + String(given)
+                    + " class codes")
+    var classes = given - 1 if marker >= 0 else given
+    var marker_word = marker if marker >= 0 else given
+    _lp_codes_check(call[].y.data, rows, given, marker, estimator)
     var k = xn_semi_knn_k(slot[].lp_neighbors, rows) if slot[].lp_knn else 0
     slot[].fitted = False
     slot[].pred = List[Int32]()
@@ -2342,7 +2363,7 @@ def _lp_fit(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].lp_dist = List[Float32](length=rows * classes, fill=Float32(0.0))
     slot[].lp_codes = List[Int32](length=rows, fill=Int32(0))
     var request = LpFitRequest(call[].x.data, call[].y.data, Int(slot[].lp_dist.unsafe_ptr()),
-        Int(slot[].lp_codes.unsafe_ptr()), rows, features, classes, classes,
+        Int(slot[].lp_codes.unsafe_ptr()), rows, features, classes, marker_word,
         slot[].kind == XNEIGHBORS_KIND_LABEL_SPREADING, slot[].lp_knn, k, slot[].lp_kernel, slot[].lp_gamma,
         slot[].lp_raw, slot[].lp_weight, slot[].lp_alpha, slot[].lp_tol, slot[].lp_max_iter, slot[].lp_unfused,
         _lp_fit_old_items(slot))
@@ -2394,6 +2415,26 @@ def _lp_predict(slot: _SlotPtr, call: _CallPtr) raises:
     var status = lp_query_run(XnDriver(call[].route.entry.call), request)
     if status != 0:
         admitted_finite_refuse(status, estimator)
+    var marker = slot[].lp_marker
+    if marker < 0:
+        return
+    # THE UNLABELED MARKER: a fitted class c at or above the marker is the caller's code c + 1 (parallel over
+    # the rows).
+    var dst = call[].dst.data
+    var tasks = max(host_predict_task_count_work(rows, rows), 1)
+    var chunk = host_predict_chunk(rows, tasks)
+
+    def _shift(t: Int) {imm dst, imm rows, imm chunk, imm marker}:
+        var d = _I32P(unsafe_from_address=dst)
+        for i in range(t * chunk, min((t + 1) * chunk, rows)):  # member predict: this task's rows
+            var code = Int(d.unsafe_load(i))
+            if code >= marker:
+                d.unsafe_store(i, Int32(code + 1))
+
+    if tasks <= 1:
+        _shift(0)
+    else:
+        host_parallelize(_shift, tasks)
 
 
 def _lp_proba(slot: _SlotPtr, call: _CallPtr) raises:
@@ -2642,9 +2683,9 @@ def _new(call: _CallPtr) raises:
                 + "kernel_variance, noise_variance, jitter, old_items)")
     elif kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or kind == XNEIGHBORS_KIND_LABEL_SPREADING:
         if call[].param_count != _LP_WORDS:
-            raise Error("member ABI: a LabelPropagation / LabelSpreading member takes thirteen parameters (kind, "
+            raise Error("member ABI: a LabelPropagation / LabelSpreading member takes fourteen parameters (kind, "
                 + "knn, n_neighbors, rbf kernel code, gamma, raw graph, clamp weight, alpha, tol, max_iter, "
-                + "unfused, old_items, dense proba)")
+                + "unfused, old_items, dense proba, unlabeled marker)")
         if words[1] != 0.0 and words[1] != 1.0:
             raise Error("member ABI: unknown LabelPropagation graph code")
     else:

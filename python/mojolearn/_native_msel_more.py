@@ -232,6 +232,31 @@ def connect_members(context, register, registry):
             plan['keywords'] = {key: () for key in methods}  # glue: no keyword arguments in these recipes
     _connect_host_members(registry, register, waiting)
     _connect_search_members(context, registry, register, waiting)
+    _connect_feature_freq_members(registry, register, waiting)
+
+
+def _connect_feature_freq_members(registry, register, waiting):
+    # glue: import-time class metadata. 6. ExperimentalTwoLevelFeatureFreq (mark (16, 3): the Gbdt member's
+    # kind 3, core/gbdt_member.mojo; lane mf-meta5) has a native constructor `_derive_member` cannot read (its
+    # body calls the owner, and the constructor stores the booster's settings beside its parameters): it is
+    # registered as a MEMBER-ONLY plan with its constructor's parameters in its body's order and that native
+    # constructor operation, so a clone is built by the constructor, as `_connect_native_init` registers it.
+    for cls in tuple(waiting):  # glue: the classes the scan above left waiting, once per connect
+        own = vars(cls)
+        if own.get('_mojolearn_member') != (16, 3):
+            continue
+        module = sys.modules.get(own.get('__module__'))
+        fields = vars(module) if module is not None else {}
+        if '_TREES' not in fields or type(fields.get('_TREES_CONTEXT')) is not dict:
+            continue
+        register(cls, fields['_TREES'], fields['_TREES_CONTEXT'],
+                 ('sources', 'learning_rate', 'l2_leaf_reg', 'random_state', 'numeric_mode', 'device'),
+                 'trees_gbdt_feature_freq_init', {})
+        plan = registry[cls]
+        plan['member_only'] = True
+        plan['initial_fields'] = {}
+        plan['keywords'] = {}
+        waiting.remove(cls)
 
 
 import sys

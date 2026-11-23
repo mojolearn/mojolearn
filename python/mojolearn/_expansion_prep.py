@@ -3046,6 +3046,10 @@ class RFE(_SelectorMixin):
     #: Kernel and Permutation SHAP explain this exact class natively: its fitted estimator_'s member over the
     #: support_ columns (bindings/trees_agnostic_native_door.mojo); read from the class's own namespace.
     _mojolearn_explained = "rfe"
+    # THE RFE KIND (core/ensemble_member.mojo, lane mf-meta5): RFE as a native member of another
+    # meta-estimator, a search, a calibration or an imputer; the kind (classifier or regressor) is its
+    # estimator's, chosen by the admission.
+    _mojolearn_member = (39, 14)
 
     def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
         self.estimator = estimator

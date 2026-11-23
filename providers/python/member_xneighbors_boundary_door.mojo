@@ -498,11 +498,23 @@ def xneighbors_unlabeled_marked(labels: PythonObject) raises -> Bool:
     return False
 
 
+def xneighbors_marker_index(labels: PythonObject) raises -> Int:
+    """The code of the unlabeled marker among the caller's labels (the label that is not a str and equals
+    -1, `xneighbors_unlabeled_marked`'s test, the door's `skip`), or -1 when none is."""
+    for i in range(len(labels)):  # driver-loop: over the caller's class labels (the marker test)
+        var label = labels[i]
+        if _semi_eq(label, PythonObject(-1)) and not family_is_str(label):
+            return i
+    return -1
+
+
 def xneighbors_kind_reads_marker(family: Int, kind: Int) -> Bool:
     """The member kinds whose estimator reads -1 in y as unlabeled: a caller
     that encodes y AFTER admitting its members (model selection's units)
-    asks this, and keeps its own units when the encoded labels hold the
-    marker (`xneighbors_unlabeled_marked`)."""
+    asks this and, when the encoded labels hold the marker, writes its code
+    into every such plan's word LP_MARKER_WORD (lane mf-meta5:
+    `xneighbors_marker_index`; core/xneighbors_member.mojo THE UNLABELED
+    MARKER), so the member fits y as the estimator's own fit reads it."""
     return family == MEMBER_FAMILY_XNEIGHBORS and (
         kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or kind == XNEIGHBORS_KIND_LABEL_SPREADING)
 
@@ -513,8 +525,11 @@ def _lp_admit(model: PythonObject, fields: PythonObject, kind: Int, context: Pyt
     the shared family context; the query words `lp_query_unpack` reads (the image's dense-proba operation).
     False (the caller keeps the door, which reads -1 as unlabeled): the labels the member's fit sees are
     unknown (`owner.labels` None: a caller whose labels are its target's values, or a predict-only holder),
-    or they hold the -1 marker. An empty list is the caller's codes 0 .. classes-1 (member_set_admit,
-    msel's deferred admission, which asks `xneighbors_kind_reads_marker` after its encode)."""
+    or they hold the -1 marker (a META caller: CalibratedClassifierCV fits one calibrator per class of its
+    base's classes_, which exclude the marker, and its kind holds no such rule; RFE's estimator admission
+    hands no labels). An empty list is the caller's codes 0 .. classes-1 (member_set_admit, msel's deferred
+    admission, which asks `xneighbors_kind_reads_marker` after its encode and writes the marker's code,
+    word [13], itself: lane mf-meta5)."""
     if owner.labels is None:
         return False
     if xneighbors_unlabeled_marked(owner.labels):
@@ -557,7 +572,7 @@ def _lp_admit(model: PythonObject, fields: PythonObject, kind: Int, context: Pyt
     var dense = (not knn) and lp_dense_available(binding)
     var words: List[Float64] = [Float64(kind), 1.0 if knn else 0.0, Float64(neighbors), Float64(code), gamma,
         1.0 if raw else 0.0, weight, alpha, tol, Float64(max_iter), 1.0 if unfused else 0.0,
-        1.0 if old_items else 0.0, 1.0 if dense else 0.0]
+        1.0 if old_items else 0.0, 1.0 if dense else 0.0, -1.0]
     owner.plan.params = words^
     return True
 
@@ -1257,6 +1272,11 @@ def _lp_pack(model: PythonObject, fields: PythonObject, b: PythonObject, plan: M
     if labels is None:
         labels = Python.list(py_call(b.range, PythonObject(classes)))
     var listed = py_call(b.list, labels)
+    # THE UNLABELED MARKER (lane mf-meta5): a fit whose caller's labels hold -1 publishes the others as its
+    # classes_ (the door's `classes`, the marker left out).
+    var marker = Int(plan.params[13]) if len(plan.params) > 13 else -1
+    if marker >= 0 and len(listed) == classes + 1:
+        _ = py_call(listed.pop, PythonObject(marker))
     var knn = plan.params[1] != 0.0
     if not knn:
         py_setitem(fields, "_classical_raw_graph", PythonObject(plan.params[5] != 0.0))
