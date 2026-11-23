@@ -124,10 +124,21 @@ UNPACK as the door's fit reads them:
     codes. oob_score: each unit's out-of-bag rows (`xt_unseen_rows`) and
     `bag_oob_run`, then `bag_oob_classifier_finish` / `bag_oob_r2_run`.
     predict / predict_proba: `bag_predict_run` over each unit's feature
-    subset of X, then the row argmax for a classifier's predict. The
-    batched route (a bag of best-splitter trees as one forest fit, a
-    measured winner) stays the door's: the boundary admits no configuration
-    that may take it.
+    subset of X, then the row argmax for a classifier's predict; X staged
+    ONCE in the base's forest image when two or more units read it whole on
+    a device route (`_stage_units`, lane mf-meta3c: the door's
+    `_staged_input`, no upload per unit).
+    THE BATCHED ROUTE (lane mf-meta3c; `_bagging_batched_ok` /
+    `_bagging_fit_batched`, a measured winner kept as it is): a
+    configuration whose fit may take it is admitted with the forest the
+    door builds from the decision-tree base as the entry's SECOND plan
+    (`META_BAG_BATCHED`). Each fit decides as the door decides (no weights,
+    every feature, bootstrap or every row) and then fits that ONE forest
+    (`_fit_bag_batched`: max_samples n_rows / n when bootstrap, the image's
+    bin count for a regressor base left at n_bins=None); predict /
+    predict_proba widen its float32 output (`_predict_batched`). PACK
+    writes `_batched` = (forest, base); IMPORT takes the one forest state
+    and `META_BLOCK_BATCHED`.
 A unit kind keeps each kept unit's draws and re-coded targets until FREE,
 and every unit fitted on a drawn block owns its rows (`member_own`) before
 the set's gathered blocks go.
@@ -140,6 +151,7 @@ placed by `stack_place_run`'s lacking-class rule. A classifier stacked with
 stack_method='predict' writes its predicted codes as float32 meta features
 (`_label_block`: the label scikit-learn's encoded fit predicts).
 """
+from std.math import isnan
 from std.memory import bitcast
 from std.sys.info import size_of
 from std.sys.compile import is_defined
@@ -148,7 +160,7 @@ from core.host_parallel import host_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.device_route import DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_gil_free
-from core.forest_calls import xf_stage_input, xf_unstage_input
+from core.forest_calls import xf_stage_input, xf_unstage_input, xf_dt_default_bins
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_own,
     member_outputs, member_output_dtype, member_outputs_of,
@@ -178,6 +190,8 @@ from xtrees.glue_calls import (
     xt_sample_indices, xt_unseen_rows,
 )
 from xtrees.trees_ada_fit_run import ADA_MEMBER_SEED_WORD
+from core.forest_member_run import FM_HEAD
+from bindings.forest_config_run import FOREST_RF_SLOT_BINS, FOREST_RF_SLOT_MAX_SAMPLES
 from xtrees.trees_boost_run import _sub_seed, boost_count_check
 from xtrees.trees_calibrated_fit_run import (
     CalFitPlan, CalFitOut, calibrated_fit_run, cal_fold_place, CAL_ALL_ANSWERED,
@@ -225,7 +239,15 @@ comptime META_BAG_COLS = 5              # its value
 comptime META_BAG_BOOTSTRAP = 6
 comptime META_BAG_BOOTSTRAP_FEATURES = 7
 comptime META_BAG_OOB = 8               # oob_score
-comptime META_BAG_WORDS = 9
+# Lane mf-meta3c: 1.0 when the entry's SECOND plan is the batched forest
+# (THE BATCHED ROUTE in the module note), and 1.0 when its slot-7 bin count
+# is the image's (a DecisionTreeRegressor base left at n_bins=None).
+comptime META_BAG_BATCHED = 9
+comptime META_BAG_IMAGE_BINS = 10
+comptime META_BAG_WORDS = 11
+#: the import block that marks a batched Bagging fit (one word, any value),
+#: sent after `META_BLOCK_NESTED` (its one state is the forest's)
+comptime META_BLOCK_BATCHED = MEMBER_BLOCK_FAMILY + 5
 
 comptime _CALIB_FAST_HOST_FOLDS = is_defined["MOJOLEARN_CALIB_FAST_HOST_FOLDS"]()
 
@@ -475,6 +497,13 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var cal_words: List[Float64]
     var draw_words: List[Int32]
     var oob_words: List[Float64]
+    # Lane mf-meta3c, THE BATCHED ROUTE: this Bagging fit is ONE forest
+    # state (nested member 0, plan `base_plans[1]`); `batch_fraction` its
+    # max_samples (0.0: None) and `batch_bins` its slot-7 bin count, the words
+    # PACK writes into the public forest (MEMBER_BLOCK_SCALARS).
+    var batched: Bool
+    var batch_fraction: Float64
+    var batch_bins: Int
 
     def __init__(out self):
         self.generation = 0
@@ -529,6 +558,9 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.cal_words = List[Float64]()
         self.draw_words = List[Int32]()
         self.oob_words = List[Float64]()
+        self.batched = False
+        self.batch_fraction = 0.0
+        self.batch_bins = 0
 
 
 struct EnsembleMemberStore(Defaultable, Movable):
@@ -649,6 +681,9 @@ def _drop_states(slot: _SlotPtr):
     slot[].cal_words = List[Float64]()
     slot[].draw_words = List[Int32]()
     slot[].oob_words = List[Float64]()
+    slot[].batched = False
+    slot[].batch_fraction = 0.0
+    slot[].batch_bins = 0
 
 
 # --------------------------------------------------------------- the masks
@@ -680,9 +715,11 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             mask |= MEMBER_CAN_PREDICT_PROBA
         if _bag_kind(kind) and (base & MEMBER_CAN_SAMPLE_WEIGHT) != 0:
             mask |= MEMBER_CAN_SAMPLE_WEIGHT
-        if (base & MEMBER_GIL_FREE) != 0:
+        # A Bagging entry's batched forest (its second mask) runs on the same
+        # thread rules: the GIL bits both kinds have.
+        if len(masks) > 0 and _all(masks, MEMBER_GIL_FREE):
             mask |= MEMBER_GIL_FREE
-        elif (base & MEMBER_GIL_DOOR) != 0:
+        elif len(masks) > 0 and _all_either(masks):
             mask |= MEMBER_GIL_DOOR
         return mask
     if len(masks) > 0:
@@ -771,7 +808,11 @@ def _new(call: _CallPtr) raises:
                 need = META_CAL_WORDS
             elif _bag_kind(kind):
                 need = META_BAG_WORDS
-            if len(slot[].plans) != 1 or len(slot[].masks) != 1 or len(slot[].words) != need:
+            # A Bagging entry may hold a second plan: its batched forest.
+            var plans = 1
+            if _bag_kind(kind) and len(slot[].words) == need and slot[].words[META_BAG_BATCHED] != 0.0:
+                plans = 2
+            if len(slot[].plans) != plans or len(slot[].masks) != plans or len(slot[].words) != need:
                 raise Error("member ABI: a " + _name(kind) + " member needs its one base estimator and its "
                             + String(need) + " settings words")
             if kind == META_CALIBRATED and slot[].folds < 2:
@@ -821,7 +862,13 @@ def _nested_outputs(slot: _SlotPtr) raises:
     slot[].state_words = List[Int64](length=count, fill=Int64(0))
     for u in range(count):  # driver-loop: over the nested members (the export view)
         slot[].state_words[u] = Int64(slot[].states[u])
+    # [features, classes]; a Bagging state adds [batched, max_samples, bins]
+    # (THE BATCHED ROUTE: the words PACK writes into the public forest).
     slot[].scalar_words = [Float64(slot[].features), Float64(slot[].classes)]
+    if _bag_kind(slot[].kind):
+        slot[].scalar_words.append(1.0 if slot[].batched else 0.0)
+        slot[].scalar_words.append(slot[].batch_fraction)
+        slot[].scalar_words.append(Float64(slot[].batch_bins))
     slot[].width_words = List[Int64](length=len(slot[].widths), fill=Int64(0))
     for j in range(len(slot[].widths)):  # driver-loop: over the stacked members (the export view)
         slot[].width_words[j] = Int64(slot[].widths[j])
@@ -1526,6 +1573,12 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     var bootstrap_features = slot[].words[META_BAG_BOOTSTRAP_FEATURES] != 0.0
     var all_rows = n_rows == n and not bootstrap
     var all_cols = n_feat == d and not bootstrap_features
+    # THE BATCHED ROUTE (`_bagging_batched_ok`, decided per fit as the door
+    # decides it): no weights, every feature, and bootstrap or every row.
+    if (slot[].words[META_BAG_BATCHED] != 0.0 and weights == 0 and n_feat == d and not bootstrap_features
+            and (bootstrap or n_rows == n)):
+        _fit_bag_batched(slot, call, k, n_rows, bootstrap)
+        return
     _expand(slot, count)
     slot[].unit_rows = List[List[Int32]](capacity=count)
     slot[].unit_cols = List[List[Int32]](capacity=count)
@@ -1582,6 +1635,96 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     # Each unit owns its rows now and the out-of-bag rows are taken: the row
     # draws are not kept (the door keeps none).
     slot[].unit_rows = List[List[Int32]]()
+
+
+def _slot_words_float(mut plan: MemberPlan, index: Int, value: Float64) raises:
+    """Forest parameter slot `index` of a forest plan's words as the
+    admission writes a Python float (bindings/forest_config_run.mojo
+    `_slot_float`: both readings, the integer view truncated, no flag)."""
+    var at = FM_HEAD + 3 * index
+    if len(plan.params) < at + 3:
+        raise Error("member ABI: a Bagging member's batched forest has no slot " + String(index))
+    var whole = 0
+    if not isnan(value) and value > -9.0e18 and value < 9.0e18:
+        whole = Int(value)
+    plan.params[at] = bitcast[DType.float64](Int64(whole))
+    plan.params[at + 1] = value
+    plan.params[at + 2] = 0.0
+
+
+def _slot_words_int(mut plan: MemberPlan, index: Int, value: Int) raises:
+    """Forest parameter slot `index` as an exact int (`_slot_int`)."""
+    var at = FM_HEAD + 3 * index
+    if len(plan.params) < at + 3:
+        raise Error("member ABI: a Bagging member's batched forest has no slot " + String(index))
+    plan.params[at] = bitcast[DType.float64](Int64(value))
+    plan.params[at + 1] = Float64(value)
+    plan.params[at + 2] = 0.0
+
+
+def _fit_bag_batched(slot: _SlotPtr, call: _CallPtr, k: Int, n_rows: Int, bootstrap: Bool) raises:
+    """THE BATCHED ROUTE (`_bagging_fit_batched`, a measured winner kept as
+    it is: TOMBSTONE MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS): the members
+    as ONE forest fit, the forest the door builds from the decision-tree
+    base (the entry's second plan, admitted by the boundary with those
+    settings), its max_samples the fraction n_rows / n when bootstrap (the
+    door's `_F(n_rows / n)`, written as the door's float) and, for a
+    DecisionTreeRegressor base left at n_bins=None, its image's bin count
+    (`_dt_tier_bins`, XF_DT_DEFAULT_BINS). One set of one member: X, y and
+    the classes as given (no weights: the route takes none)."""
+    var n = call[].x.rows
+    var plan = slot[].base_plans[1].copy()
+    var fraction = 0.0
+    if bootstrap:
+        fraction = Float64(n_rows) / Float64(n)
+        _slot_words_float(plan, FOREST_RF_SLOT_MAX_SAMPLES, fraction)
+    var bins = 0
+    if slot[].words[META_BAG_IMAGE_BINS] != 0.0:
+        bins = xf_dt_default_bins(entry_ref_gil_free(plan.route.entry))
+        _slot_words_int(plan, FOREST_RF_SLOT_BINS, bins)
+    slot[].plans = [plan^]
+    slot[].masks = [slot[].base_masks[1]]
+    var run = _set_of(slot, call[].x.data, n, call[].x.cols, MEMBER_I32 if k > 0 else MEMBER_F32)
+    _add(slot, run, 0, k, call[].y.data, 0, 0, 0)
+    member_set_fit(run)
+    slot[].states = List[Int](length=1, fill=0)
+    _keep_states(slot, run, 0)
+    member_set_run_release(run)
+    slot[].batched = True
+    slot[].batch_fraction = fraction
+    slot[].batch_bins = bins
+    slot[].unit_held = [List[Int32]()]
+    slot[].unit_cols = [List[Int32]()]
+    slot[].unit_oob = [List[Int32]()]
+    slot[].classes = k
+    _nested_outputs(slot)
+
+
+def _predict_batched(slot: _SlotPtr, call: _CallPtr, operation: Int, rows: VoteRows, k: Int) raises:
+    """THE BATCHED ROUTE's predictions (`_bagging_proba` / `bagging_predict`
+    over `_batched`): the forest's float32 probabilities (or values) widened
+    to float64, then the row argmax for a classifier's predict."""
+    var n = rows.n
+    var classifier = slot[].kind == META_BAG_CLASSIFIER
+    var width = k if classifier else 1
+    var f32 = List[Float32](length=max(n * width, 1), fill=0.0)
+    var plan = slot[].plans[0].copy()
+    var inner = member_call_of(plan, slot[].states[0])
+    inner.x = MemberMatrix(rows.x, n, rows.d)
+    inner.dst = MemberMatrix(Int(f32.unsafe_ptr()), n, width)
+    _ = member_call(plan.member, MEMBER_OP_PREDICT_PROBA if classifier else MEMBER_OP_PREDICT, inner)
+    var wide = List[Float64]()
+    var dst = call[].dst.data
+    if classifier and operation == MEMBER_OP_PREDICT:
+        wide = List[Float64](length=max(n * width, 1), fill=0.0)
+        dst = Int(wide.unsafe_ptr())
+    var p = _F64P(unsafe_from_address=dst)
+    for i in range(n * width):  # small-loop(one widening pass of the forest's float32 output, as trees_cast)
+        p[i] = f32[i].cast[DType.float64]()
+    _ = len(f32)
+    if classifier and operation == MEMBER_OP_PREDICT:
+        _ = xt_argmax_rows(slot[].glue, dst, call[].dst.data, n, k)
+    _ = len(wide)
 
 
 def _bag_oob(slot: _SlotPtr, call: _CallPtr, draw_at: List[Int], draw_n: List[Int], n_rows: Int) raises:
@@ -1995,6 +2138,9 @@ def _predict_bag(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         _proba_dst(call, n, k, name)
     else:
         member_unsupported(name, operation)
+    if slot[].batched:
+        _predict_batched(slot, call, operation, rows, k)
+        return
     var count = len(slot[].states)
     var order = List[Int32](length=max(n, 1), fill=Int32(0))
     for i in range(n):  # small-loop(the row numbers 0 .. n-1 of the feature gathers, once per call)
@@ -2346,6 +2492,17 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         if call[].x.dtype != MEMBER_I32 or call[].x.data == 0:
             raise Error("member ABI: a Bagging member imports its draws as int32 words")
         _import_draws(slot, _I32P(unsafe_from_address=call[].x.data), call[].x.rows * call[].x.cols)
+    elif call[].block == META_BLOCK_BATCHED and _bag_kind(slot[].kind):
+        # THE BATCHED ROUTE: the one imported state is the batched forest's
+        # (after META_BLOCK_NESTED; no draws follow).
+        if len(slot[].states) != 1 or len(slot[].base_plans) != 2:
+            raise Error("member ABI: a batched Bagging member imports one forest state, admitted batched")
+        slot[].plans = [slot[].base_plans[1].copy()]
+        slot[].masks = [slot[].base_masks[1]]
+        slot[].batched = True
+        slot[].unit_held = [List[Int32]()]
+        slot[].unit_cols = [List[Int32]()]
+        slot[].unit_oob = [List[Int32]()]
     elif call[].block != 0 or call[].flags != MEMBER_IMPORT_DONE:
         raise Error("member ABI: a meta member has no fitted-state block " + String(call[].block))
     if call[].flags == MEMBER_IMPORT_DONE:
@@ -2366,6 +2523,7 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
             if kind == META_OVR:
                 classes = 2
             elif (kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER) and u < len(slot[].unit_held):
+                # (a batched forest's one held list is empty: every class)
                 classes = _held_classes(slot[].unit_held[u], slot[].classes)
             slot[].plans[u].classes = classes
         _nested_outputs(slot)

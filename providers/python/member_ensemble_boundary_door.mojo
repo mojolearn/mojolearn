@@ -61,13 +61,13 @@ from core.ensemble_member import (
     meta_plan_mint_with, meta_state_plans, meta_state_notices,
     META_VOTE_CLASSIFIER, META_VOTE_REGRESSOR, META_STACK_CLASSIFIER, META_STACK_REGRESSOR, META_BLOCK_NESTED,
     META_BLOCK_WIDTHS, META_OVR, META_CALIBRATED, META_BAG_CLASSIFIER, META_BAG_REGRESSOR, META_KIND_LAST,
-    META_BLOCK_CAL, META_BLOCK_DRAWS, META_BLOCK_OOB,
+    META_BLOCK_CAL, META_BLOCK_DRAWS, META_BLOCK_OOB, META_BLOCK_BATCHED,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 from xtrees.trees_boost_run import _sub_seed
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_kind_capabilities,
-    MEMBER_OP_NEW, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_I64, MEMBER_F64, MEMBER_IMPORT_DONE,
+    MEMBER_OP_NEW, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_I32, MEMBER_I64, MEMBER_F64, MEMBER_IMPORT_DONE,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_IMPORT, MEMBER_BLOCK_SCALARS,
 )
@@ -689,6 +689,47 @@ def _bag_template(fields: PythonObject, base: PythonObject, classifier: Bool, co
     return clone
 
 
+def _batched_forest(fields: PythonObject, template: PythonObject, classifier: Bool, count: Int, seed: Int,
+                    bootstrap: Bool, fraction: PythonObject, image_bins: Bool, bins: Int, context: PythonObject,
+                    b: PythonObject) raises -> PythonObject:
+    """THE BATCHED ROUTE's forest, built from the decision-tree base as the
+    door's `_bagging_fit_batched` builds it (`_new_member(rf class, common)`):
+    `fraction` its max_samples when bootstrap (None otherwise; the
+    admission's placeholder 1.0, PACK's the fit's n_rows / n), and a
+    regressor's n_bins the base's or, left at None (`image_bins`), `bins`
+    (the image's count the fit read; the admission's placeholder 0 never
+    reaches a fit: the kind writes the image's count into its slot words)."""
+    var bf = py_fields(template)
+    var common = Python.dict()
+    py_setitem(common, PythonObject("n_estimators"), PythonObject(count))
+    py_setitem(common, PythonObject("criterion"), py_get(bf, "criterion"))
+    py_setitem(common, PythonObject("max_depth"), py_get(bf, "max_depth"))
+    py_setitem(common, PythonObject("min_samples_split"), py_get(bf, "min_samples_split"))
+    py_setitem(common, PythonObject("min_samples_leaf"), py_get(bf, "min_samples_leaf"))
+    var mf = py_get(bf, "max_features")
+    py_setitem(common, PythonObject("max_features"), PythonObject(1.0) if mf is None else mf)
+    py_setitem(common, PythonObject("min_impurity_decrease"), py_get(bf, "min_impurity_decrease"))
+    py_setitem(common, PythonObject("bootstrap"), PythonObject(bootstrap))
+    py_setitem(common, PythonObject("max_samples"), fraction if bootstrap else PythonObject(None))
+    py_setitem(common, PythonObject("random_state"), PythonObject(seed))
+    if classifier or not image_bins:
+        py_setitem(common, PythonObject("n_bins"), py_get(bf, "n_bins"))
+    else:
+        py_setitem(common, PythonObject("n_bins"), PythonObject(bins))
+    py_setitem(common, PythonObject("numeric_mode"), py_get(bf, "numeric_mode"))
+    py_setitem(common, PythonObject("device"), py_get(bf, "device"))
+    var key = "trees_rf_classifier" if classifier else "trees_rf_regressor"
+    if classifier:
+        py_setitem(common, PythonObject("class_weight"), py_get(bf, "class_weight"))
+    var cls = py_item(context, PythonObject(key))
+    var forest = py_call(b.object.__new__, cls)
+    var forest_fields = py_fields(forest)
+    _ = py_call(forest_fields.update, py_item(py_item(context, PythonObject("trees_defaults")), cls))
+    _ = py_call(forest_fields.update, common)
+    py_setitem(forest_fields, PythonObject("_has_constructor_parameters"), PythonObject(True))
+    return forest
+
+
 def _cal_base(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """CalibratedClassifierCV's base: its estimator, else a clone of the
     default LinearSVC (`_calibrated_fit`)."""
@@ -805,7 +846,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         words.append(1.0 if _truthy(bootstrap_features, b) else 0.0)
         words.append(1.0 if oob_on else 0.0)
         var template = _bag_template(fields, py_get(fields, "estimator"), classifier, context, b)
-        if template is None or _may_be_batched(fields, template, context, b, words):
+        if template is None:
             return False
         var needs = base_needs | (MEMBER_CAN_PREDICT_PROBA if classifier else 0)
         if not _admit_nested(nested, template, classifier, needs, context, b):
@@ -813,6 +854,20 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         var family = nested.plans[0].family
         if family != MEMBER_FAMILY_TREE and family != MEMBER_FAMILY_FOREST and family != MEMBER_FAMILY_EXTRA_TREES:
             return False  # `_require_tree`: a DecisionTree*, RandomForest* or ExtraTrees* member only
+        # THE BATCHED ROUTE (lane mf-meta3c): a configuration whose fit may
+        # take it carries the batched forest as the entry's second plan; the
+        # kind decides per fit, from the weights and X's shape, as the door.
+        if _may_be_batched(fields, template, context, b, words):
+            var image_bins = not classifier and py_get(py_fields(template), "n_bins") is None
+            var forest = _batched_forest(fields, template, classifier, count, seed, _truthy(bootstrap, b),
+                                         PythonObject(1.0), image_bins, 0, context, b)
+            if not _admit_nested(nested, forest, classifier, needs, context, b):
+                return False
+            words.append(1.0)
+            words.append(1.0 if image_bins else 0.0)
+        else:
+            words.append(0.0)
+            words.append(0.0)
     return _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
                    List[List[Int32]](), List[List[Int32]]())
 
@@ -933,6 +988,45 @@ def _unit_pack(model: PythonObject, fields: PythonObject, context: PythonObject,
             raise Error("RuntimeError: mojolearn: the Bagging member's estimator changed since its admission")
         var state_seed = py_get(fields, "random_state")
         var seed = 0 if state_seed is None else Int(py=state_seed)
+        var scalars = _export_view(plan, state, MEMBER_BLOCK_SCALARS)
+        var sw = _F64P(unsafe_from_address=scalars.dst.data)
+        if scalars.dst.rows * scalars.dst.cols >= 5 and sw[2] != 0.0:
+            # THE BATCHED ROUTE (`_bagging_fit_batched`'s attributes): the
+            # one forest, packed into the forest the door builds, beside the
+            # unfitted base; every tree over every feature; no out-of-bag rows.
+            var bootstrap = _truthy(py_get(fields, "bootstrap"), b)
+            var count = Int(py=py_get(fields, "n_estimators"))
+            var image_bins = not classifier and py_get(py_fields(template), "n_bins") is None
+            var forest = _batched_forest(fields, template, classifier, count, seed, bootstrap, PythonObject(sw[3]),
+                                         image_bins, Int(sw[4]), context, b)
+            var forest_plan = prep_estimator_plan(forest, context)
+            var forest_fields = py_call(forest_plan["fields_get"], forest, py_type(forest))
+            var forest_context = forest_plan["context"]
+            if classifier:
+                member_leaf_pack_labeled(forest, forest_fields, forest_context, b, nested[0], handles[0],
+                                         py_call(b.list, py_call(b.range, PythonObject(k))))
+            else:
+                member_leaf_pack(forest, forest_fields, forest_context, b, nested[0], handles[0])
+            _ = py_call(contexts.append, forest_context)
+            var base = py_get(fields, "estimator")
+            if base is None:
+                base = _new_tree(context, "trees_dt_classifier" if classifier else "trees_dt_regressor", b)
+            var every = admitted_unfilled(List[Int](length=1, fill=features), "<i4", context)
+            var ep = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=every.addr)
+            for j in range(features):  # small-loop(the column numbers 0 .. d-1, one shared array)
+                ep[j] = Int32(j)
+            var trees = Int(py=py_get(py_fields(forest), "_n_trees"))
+            var shared = Python.list()
+            for _ in range(trees):  # driver-loop: over the member trees (one shared all-columns array)
+                _ = py_call(shared.append, every.keep)
+            py_setitem(fields, PythonObject("_batched"), Python.tuple(forest, base))
+            py_setitem(fields, PythonObject("_estimators"), PythonObject(None))
+            py_setitem(fields, PythonObject("estimators_features_"), shared)
+            py_setitem(fields, PythonObject("_oob_rows"), Python.list())
+            if classifier:
+                py_setitem(fields, PythonObject("classes_"), labels)
+                py_setitem(fields, PythonObject("n_classes_"), PythonObject(k))
+            return contexts
         var oob_on = _truthy(py_get(fields, "oob_score"), b)
         var view = _export_view(plan, state, META_BLOCK_DRAWS)
         var w = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=view.dst.data)
@@ -1034,12 +1128,16 @@ def _unit_state(model: PythonObject, fields: PythonObject, context: PythonObject
         for i in range(len(pairs)):  # driver-loop: over the pairs
             _ = py_call(ests.append, pairs[i][0])
     else:
-        if py_get(fields, "_batched") is not None:
-            raise Error("TypeError: mojolearn: a batched Bagging fit has no member units to import")
-        var members = py_get(fields, "_estimators")
-        if members is None:
-            raise Error("NotFittedError: this meta-estimator is not fitted yet")
-        ests = py_call(b.list, members)
+        var batched = py_get(fields, "_batched")
+        if batched is not None:
+            # THE BATCHED ROUTE: its one forest is the state's one unit.
+            var forest = batched[0]
+            ests = Python.list(forest)
+        else:
+            var members = py_get(fields, "_estimators")
+            if members is None:
+                raise Error("NotFittedError: this meta-estimator is not fitted yet")
+            ests = py_call(b.list, members)
     var call = member_call_of(plan)
     _ = member_call(plan.member, MEMBER_OP_NEW, call)
     var handles = List[Int64]()
@@ -1108,6 +1206,13 @@ def _unit_state(model: PythonObject, fields: PythonObject, context: PythonObject
             cw.x = MemberMatrix(Int(w.unsafe_ptr()), 1, len(w), MEMBER_F64)
             _ = member_call(plan.member, MEMBER_OP_IMPORT, cw)
             _ = len(w)  # copied in by the call above
+        elif _bag(kind) and py_get(fields, "_batched") is not None:
+            var mark = MemberCall(plan.route, call.state)
+            mark.block = META_BLOCK_BATCHED
+            var one: List[Int32] = [Int32(1)]
+            mark.x = MemberMatrix(Int(one.unsafe_ptr()), 1, 1, MEMBER_I32)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, mark)
+            _ = len(one)  # read by the call above
         elif _bag(kind):
             var feats = py_get(fields, "estimators_features_")
             var w = List[Int32]()
