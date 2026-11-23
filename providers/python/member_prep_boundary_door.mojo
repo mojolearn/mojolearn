@@ -6,10 +6,10 @@ core/prep_member.mojo). Published: RobustScaler (kind 0,
 Apple fast direct fit entry, where admit answers False and the caller keeps
 the door), Binarizer (kind 2, `(35, 2)`), Normalizer (kind 3, `(35, 3)`),
 PolynomialFeatures (kind 4, `(35, 4)`), QuantileTransformer (kind 5,
-`(35, 5)`; admit answers False for a subsample below 1, which only the door
-handles), PowerTransformer (kind 6, `(35, 6)`), SimpleImputer (kind 7, `(35, 7)`),
-KBinsDiscretizer (kind 8, `(35, 8)`; admit answers False for a subsample
-or random_state that is not an integer), SplineTransformer (kind 9,
+`(35, 5)`; a subsample below 1 is scikit-learn's refusal, in the door and
+here), PowerTransformer (kind 6, `(35, 6)`), SimpleImputer (kind 7, `(35, 7)`),
+KBinsDiscretizer (kind 8, `(35, 8)`; subsample / random_state as the
+door's `kbins_sample_words`), SplineTransformer (kind 9,
 `(35, 9)`), OrdinalEncoder (kind 10, `(35, 10)`; admit answers False for
 categories other than 'auto', for infrequent grouping (min_frequency or
 max_categories set) and on the FAST image whose packed category route the
@@ -56,8 +56,8 @@ from x_prep.prep_stateless_native_run import I64P, _poly_powers
 from bindings.prep_encode_native_door import (
     enc_caps, _missing_mark as enc_missing_mark, _qselect as enc_qselect, _truth as enc_truth,
     _float as enc_float, _is_str as enc_is_str, _real_like as enc_real_like, _int_list as enc_int_list,
-    IDN_STATS_BLOCKED, _kbins_strategy as enc_kbins_strategy, _seed64 as enc_seed64,
-    _spline_checks as enc_spline_checks, _extrapolation as enc_extrapolation, _spline_fused as enc_spline_fused,
+    IDN_STATS_BLOCKED, _kbins_strategy as enc_kbins_strategy,
+    kbins_sample_words as enc_kbins_sample, _spline_checks as enc_spline_checks, _extrapolation as enc_extrapolation, _spline_fused as enc_spline_fused,
     _knot_rows as enc_knot_rows, _f32 as enc_f32,
     _check_infrequent_params as enc_check_infrequent, _fast_unique as enc_fast_unique, _cls2_cat as enc_cls2_cat,
     _c08_route as enc_c08_route, _category_record as enc_category_record, _index_list as enc_index_list,
@@ -66,6 +66,7 @@ from bindings.prep_encode_native_door import (
 from bindings.prep_encode_cats_run import CatAuto
 from bindings.prep_encode_onehot_run import onehot_auto_drops, OH_DROP_NONE
 from bindings.prep_stateless_native_door import _int_like as stateless_int_like
+from bindings.prep_stateless_native_door import quantile_subsample_rows as stateless_quantile_rows
 from bindings.py_typed_call import py_call_typed
 from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT
 from bindings.x_prep_native_owner_run import XprepCaps
@@ -246,13 +247,8 @@ def _quantile_admit(model: PythonObject, fields: PythonObject, context: PythonOb
     words[1] = 1.0 if String(distribution) == "normal" else 0.0
     # max(1, n_quantiles): the door's max(1, min(n_quantiles, n)) is unchanged by it.
     words[2] = Float64(max(1, Int(py=py_call(b.int, fields["n_quantiles"]))))
-    var subsample = fields["subsample"]
-    words[3] = -1.0
-    if subsample is not None:
-        var rows = Int(py=py_call(b.int, subsample))
-        if rows < 1:
-            return False  # only the door's own program handles it
-        words[3] = Float64(rows)
+    # The door's own subsample read (scikit-learn's refusal below 1).
+    words[3] = Float64(stateless_quantile_rows(fields["subsample"]))
     var state = fields["random_state"]
     var seed = PythonObject(0) if state is None else py_call(b.int, state)
     var mask = PythonObject(0xFFFFFFFF)
@@ -324,9 +320,9 @@ def _imputer_admit(model: PythonObject, fields: PythonObject, context: PythonObj
 
 def _kbins_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
     # The encode door's `_kbins_fit` UNPACK, in its order, read once here
-    # (the door per fit). False (the caller keeps the door): a random_state
-    # or subsample that is not an integer (the door reads them only when it
-    # draws, which depends on the rows).
+    # (the door per fit). subsample and random_state through the door's own
+    # `kbins_sample_words` (scikit-learn's refusals; a RandomState is
+    # refused at the draw, which depends on the rows: word [10]).
     var b = native_loaded_module("builtins")
     var encode = fields["encode"]
     var encode_text = String(encode) if enc_is_str(encode) else String("")
@@ -340,18 +336,11 @@ def _kbins_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     words[1] = Float64(PREP_KBINS_ORDINAL if encode_text == "ordinal" else (
         PREP_KBINS_ONEHOT_DENSE if encode_text == "onehot-dense" else PREP_KBINS_ONEHOT))
     words[2] = Float64(strategy)
-    words[3] = -1.0
-    var subsample = fields["subsample"]
-    if subsample is not None:
-        if not stateless_int_like(subsample, context):
-            return False
-        words[3] = Float64(Int(py=py_call_typed(b.int, subsample)))
-        var state = fields["random_state"]
-        if state is not None and not stateless_int_like(state, context):
-            return False
-        var seed = enc_seed64(state)
-        words[4] = Float64(seed[0])
-        words[5] = Float64(seed[1])
+    var sample = enc_kbins_sample(fields, context)
+    words[3] = Float64(sample.rows)
+    words[4] = Float64(sample.lo)
+    words[5] = Float64(sample.hi)
+    words[10] = 1.0 if sample.rng else 0.0
     words[6] = 1.0 if (stateless_fam(mode, entries) & IDN_STATS_BLOCKED) != 0 else 0.0
     words[7] = 1.0 if xprep_r3("work") else 0.0
     var n_bins = fields["n_bins"]
