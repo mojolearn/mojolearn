@@ -197,7 +197,7 @@ def _check_configuration() -> Bool:
     # ---- end lane fx-old-arms-triage
     # ---- lane fx-verdicts5 (2026-11-20): verdicts of A/B round 3 (NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad)
     # MOJOLEARN_MSEL_FAST_LC_TEST_REUSE (bindings/msel_cv_door.mojo): promoted to the default; the old opt-in name is refused.
-    comptime assert not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE"](), "promoted 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, learning-curve istella 0.853, taxi 0.956, scores and digests equal): it is the default; drop the define, or build the old form with -D MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF"
+    comptime assert not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE"](), "promoted 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, learning-curve istella 0.853, taxi 0.956, scores and digests equal): it is the default; drop the define (the -D MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF old form was deleted 2026-11-23)"
     # TOMBSTONE: MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE (NOISE, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm: 20 x_prep cells 0.952-1.092, geomean 1.012, digests equal) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE"](), "removed 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm; NOISE: 20 x_prep cells 0.952-1.092, geomean 1.012, digests equal): the huge-page advice on a mapped x_prep arena; see docs/TOMBSTONES.md"
@@ -223,6 +223,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_MEMBER_UNITS_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_MSEL_MEMBER_UNITS_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the member units and refit call the same family member entries the Python units reach through each clone's fit door; only the per-unit Python clone, fit door and publication went); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_MEMBER_UNITS_OFF.patch"
+    # TOMBSTONE: MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF (decided: winner promoted, A/B round 3) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, decided from A/B round 3 NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, scores and digests equal: learning-curve istella 0.853, taxi 0.956 of the old form; EXP:4557): the once-per-unit test gather is gone; code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF.patch"
     # ---- end lane ab-prep-classical
     return True
 
