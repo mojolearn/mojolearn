@@ -438,12 +438,15 @@ def _resnet_gn(mut m: SeqModel):
 
 
 def _cnn_in(mut m: SeqModel):
-    # a 1-D CNN with instance norm (affine, tracked statistics) after each convolution
+    # a 1-D CNN with instance norm (affine, PyTorch's default untracked statistics) after the first convolution.
+    # (The first cpc1 run had a second instance norm after the second convolution: held-out accuracy 0.59. Each
+    # channel's amplitude, the frequency response of the convolution before it, is what the norm removes, so a
+    # norm right before the pooled head leaves the head only the shape of a sinusoid; the second convolution
+    # recovers the frequency from the normalized signal.)
     m.layer(L_CONV1D, 8, 5, 1, 2, 0, 1)
-    m.layer(L_INSTANCE_NORM, 8, _momentum_bits(Float32(0.1)), 1, 1, 1, 0, 1e-5)
+    m.layer(L_INSTANCE_NORM, 8, _momentum_bits(Float32(0.1)), 1, 1, 0, 0, 1e-5)
     m.layer(L_RELU)
-    m.layer(L_CONV1D, 8, 3, 1, 1, 0, 1)
-    m.layer(L_INSTANCE_NORM, 8, _momentum_bits(Float32(0.1)), 1, 1, 1, 0, 1e-5)
+    m.layer(L_CONV1D, 8, 3, 1, 1, 1, 1)
     m.layer(L_RELU)
     m.layer(L_ADAPTIVE_AVGPOOL1D, 1)
     m.layer(L_FLATTEN)
@@ -451,7 +454,7 @@ def _cnn_in(mut m: SeqModel):
 
 
 def run_fit[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
-    """Fit `which` (0 ResNet-1D with group norm, 1 CNN with instance norm); returns params then predictions."""
+    """Fit `which` (0 ResNet-1D with group norm, 1 CNN with instance norm); returns params then logits."""
     var train = _Seq(_TRAIN, 11)
     var test = _Seq(_TEST, 12)
     var m = SeqModel()

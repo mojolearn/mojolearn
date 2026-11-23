@@ -40,6 +40,9 @@ FAMILIES = (
                         "sequence-composed-mamba2", "sequence-composed-mamba3",
                         "sequence-composed-recurrent",
                         "sequence-composed-conv1d",
+                        # nn-norms begin: group and instance norm models, one seeded step
+                        "sequence-norms-resnet1d-gn", "sequence-norms-instance",
+                        # nn-norms end
                         # lane verify-coverage-audit (2026-10-21): MoEBlock.backward,
                         # Sequential export/load/predict, import_model
                         "sequence-moe-backward", "sequence-export-roundtrip",
@@ -161,6 +164,10 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-composed-mamba3": "Sequential composed: trapezoid_scan",
                        "sequence-composed-recurrent": "Sequential composed: lstm, gru",
                        "sequence-composed-conv1d": "Sequential composed: conv1d, narrow",
+                       # nn-norms begin
+                       "sequence-norms-resnet1d-gn": "Sequential ResNet-1D with group_norm",
+                       "sequence-norms-instance": "Sequential 1-D CNN with instance_norm1d",
+                       # nn-norms end
                        "sequence-moe-backward": "MoEBlock backward",
                        "sequence-export-roundtrip": "Sequential export, load and predict",
                        "sequence-onnx-import": "import_model on an ONNX file",
@@ -185,6 +192,10 @@ PUBLIC_PENDING_LANES = {
     "sequence-composed-mamba3": "unwatched",
     "sequence-composed-recurrent": "unwatched",
     "sequence-composed-conv1d": "unwatched",
+    # nn-norms begin
+    "sequence-norms-resnet1d-gn": "unwatched",
+    "sequence-norms-instance": "unwatched",
+    # nn-norms end
     "sequence-moe-backward": "unwatched",
     "sequence-export-roundtrip": "unwatched",
     "sequence-onnx-import": "unwatched",
