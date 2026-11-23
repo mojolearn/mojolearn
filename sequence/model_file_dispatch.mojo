@@ -138,7 +138,11 @@ def model_file_execute(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf:
         var layer_count = len(info.layer_floats)
         var n_ints = len(info.ints)
         var n_floats = len(info.floats)
-        if ints[1] < 4 + 3 * layer_count + n_ints or ints[2] < layer_count + n_floats:
+        # lane nn-integrate: after the option words, SPEC2_ARGS argument words per layer, then the sample rank
+        # (0: a 2-D model) and its axes
+        var n_sample = len(info.sample)
+        var n_args = len(info.layer_args)
+        if ints[1] < 4 + 3 * layer_count + n_ints + n_args + 1 + n_sample or ints[2] < layer_count + n_floats:
             return -(layer_count + 1)
         var words = _file_word_out(addresses[1])
         if addresses[2] == 0:
@@ -152,6 +156,12 @@ def model_file_execute(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf:
             words[4 + i] = info.layer_ints[i]
         for i in range(n_ints):  # driver-loop: over checkpoint option words
             words[4 + 3 * layer_count + i] = info.ints[i]
+        var at = 4 + 3 * layer_count + n_ints
+        for i in range(n_args):  # driver-loop: over layer argument words
+            words[at + i] = info.layer_args[i]
+        words[at + n_args] = n_sample
+        for k in range(n_sample):  # small-loop(at most RN_MAX_RANK - 1 sample axes)
+            words[at + n_args + 1 + k] = info.sample[k]
         for i in range(layer_count):  # driver-loop: over layer scalars
             scalars[i] = info.layer_floats[i]
         for i in range(n_floats):  # driver-loop: over checkpoint option floats

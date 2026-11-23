@@ -115,11 +115,18 @@ def test_fit_predict_and_state_dict_round_trip(tmp_path):
     np.testing.assert_array_equal(np.asarray(fresh.predict(x)), pred)
 
 
-def test_checkpoint_of_a_shaped_model_is_refused_in_words(tmp_path):
-    # save_checkpoint / export take models of 2-D inputs only (bindings/sequential_checkpoint_door.mojo); every
-    # layer here needs a (channels, ...) sample, so the refusal must be the clear one
-    m, _ = _fitted()
-    with pytest.raises(Exception, match="2-D inputs"):
-        m.save_checkpoint(str(tmp_path / "nn_conv.ckpt"))
-    with pytest.raises(Exception, match="2-D inputs"):
-        m.export(str(tmp_path / "nn_conv.mlx"))
+def test_checkpoint_and_export_of_a_shaped_model_round_trip(tmp_path):
+    # lane nn-integrate (2026-11-23): a model with an input_shape is saved with its sample shape and every layer
+    # argument (before, save_checkpoint and export refused it); the copies predict the same bits
+    m, x = _fitted()
+    want = np.asarray(m.predict(x))
+    m.save_checkpoint(str(tmp_path / "nn_conv.ckpt"))
+    back = mojolearn.Sequential.from_checkpoint(str(tmp_path / "nn_conv.ckpt"))
+    assert back.layers == m.layers
+    assert np.asarray(back.params_).tobytes() == np.asarray(m.params_).tobytes()
+    assert np.asarray(back.predict(x)).tobytes() == want.tobytes()
+    assert back.digest_ == m.digest_
+    m.export(str(tmp_path / "nn_conv.mlx"))
+    loaded = mojolearn.Sequential.load(str(tmp_path / "nn_conv.mlx"))
+    assert loaded.layers == m.layers
+    assert np.asarray(loaded.predict(x)).tobytes() == want.tobytes()

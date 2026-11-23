@@ -417,12 +417,18 @@ struct SeqCheckpointInfo(Movable):
     the option words, n_features, n_outputs, y_1d, epochs run, class count,
     class kind, class item size, n_params; `floats` = lr, f1, f2, eps,
     weight_decay, f7, tol, schedule gamma, huber delta, then the schedule's
-    NN_SCHED_ARGS argument words (lane nn-optim)."""
+    NN_SCHED_ARGS argument words (lane nn-optim). `layer_args` holds each
+    layer's SPEC2_ARGS argument words and `sample` the per-sample input shape
+    of a version-2 description (empty: a 2-D model), so a model with an
+    input_shape, flatten, convolutions or pools loads whole (lane
+    nn-integrate, 2026-11-23)."""
     var is_export: Bool
     var layer_ints: List[Int]
     var layer_floats: List[Float64]
     var ints: List[Int]
     var floats: List[Float64]
+    var layer_args: List[Int]
+    var sample: List[Int]
 
     def __init__(out self):
         self.is_export = False
@@ -430,6 +436,8 @@ struct SeqCheckpointInfo(Movable):
         self.layer_floats = List[Float64]()
         self.ints = List[Int]()
         self.floats = List[Float64]()
+        self.layer_args = List[Int]()
+        self.sample = List[Int]()
 
 
 def model_checkpoint_info(file: String) raises -> SeqCheckpointInfo:
@@ -443,6 +451,14 @@ def model_checkpoint_info(file: String) raises -> SeqCheckpointInfo:
         out.layer_ints.append(spec.arg0[i])
         out.layer_ints.append(spec.arg1[i])
         out.layer_floats.append(Float64(spec.farg[i]))
+        for j in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): description words
+            if len(spec.xargs) == SPEC2_ARGS * spec.n_layers():
+                out.layer_args.append(spec.xargs[SPEC2_ARGS * i + j])
+            else:
+                out.layer_args.append(spec.arg0[i] if j == 0 else (spec.arg1[i] if j == 1 else 0))
+    if spec.version == SPEC2_VERSION:
+        for k in range(spec.sample.ndim):  # small-loop(at most RN_MAX_RANK - 1 sample axes)
+            out.sample.append(spec.sample.d[k])
     for i in range(len(r.opts)):  # driver-loop: over option words
         out.ints.append(r.opts[i])
     out.ints.append(r.n_run)

@@ -104,11 +104,13 @@ def test_every_layer_code_round_trips(code, tmp_path):
         m.save_checkpoint(str(tmp_path / f"{method}.ckpt"))
         back = mojolearn.Sequential.from_checkpoint(str(tmp_path / f"{method}.ckpt"))
         assert [l[0] for l in back.layers] == [l[0] for l in m.layers], method
+        assert back.layers == m.layers, method     # every argument, and the sample shape (lane nn-integrate)
         assert np.asarray(back.params_).tobytes() == params, method
         assert np.asarray(back.predict(x)).tobytes() == want.tobytes(), method
         assert back.digest_ == m.digest_, method
         m.export(str(tmp_path / f"{method}.mlx"))
         loaded = mojolearn.Sequential.load(str(tmp_path / f"{method}.mlx"))
+        assert loaded.layers == m.layers, method
         assert np.asarray(loaded.params_).tobytes() == params, method
         assert np.asarray(loaded.predict(x)).tobytes() == want.tobytes(), method
         assert loaded.digest_ == m.digest_, method

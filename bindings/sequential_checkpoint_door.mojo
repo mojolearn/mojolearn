@@ -80,8 +80,9 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
         raise Error("call fit before saving the model")
     if not export and py_get(fields, nk[].k__fit_state) is None:
         raise Error("this model holds no training state (it was loaded from an export); use export")
-    if py_get(fields, nk[].k__sample_shape) is not None:
-        raise Error("save_checkpoint and export take models of 2-D inputs without reshape, permute, flatten, conv2d or pooling layers")
+    # lane nn-integrate (2026-11-23): a model fitted on per-sample shapes (input_shape, flatten, convolutions,
+    # pools) is saved with its version-2 description, which carries the sample shape and every layer argument
+    var sample = py_get(fields, nk[].k__sample_shape)
     var options = py_item(fields, nk[].k__options)
     var classes = py_get(fields, nk[].k_classes_)
     var count = 0 if classes is None else Int(py=classes.shape[0])
@@ -115,7 +116,7 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
                        described.source.rows, described.source.cols, described.source.s0, described.source.s1]
     # The model description as fit and predict hand it to the same engine:
     # the retained native program words and one scalar per layer.
-    var description_owner = sequential_native_description(mods, model, py_item(fields, nk[].k_n_features_in_), PythonObject(None))
+    var description_owner = sequential_native_description(mods, model, py_item(fields, nk[].k_n_features_in_), sample)
     var description = description_owner.downcast_value_ptr[SequentialDescription]()
     var program = description[].program.copy()
     for k in range(len(description[].scalars)):  # driver-loop: over layer scalar options
@@ -162,9 +163,15 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     ref fp = description.floats
     if len(ip) < 17 or len(fp) < 9:
         raise Error("RuntimeError: Sequential checkpoint description is incomplete")
+    var n_args = len(description.layer_args) // max(1, len(description.layer_floats))
     for k in range(len(description.layer_floats)):  # driver-loop: over checkpoint layer records
+        # every argument word of the layer (lane nn-integrate: three words alone lost a block layer's a2..a5)
+        var supplied = Python.list()
+        for j in range(n_args):  # small-loop(six layer argument words): description metadata, no data
+            _ = py_call(supplied.append, PythonObject(description.layer_args[n_args * k + j]))
         sequential_append(mods, model, PythonObject(description.layer_ints[3 * k]), PythonObject(description.layer_ints[3 * k + 1]),
-                          PythonObject(description.layer_ints[3 * k + 2]), PythonObject(description.layer_floats[k]), PythonObject(None))
+                          PythonObject(description.layer_ints[3 * k + 2]), PythonObject(description.layer_floats[k]),
+                          supplied if n_args > 0 else PythonObject(None))
     # nn-losses: the loss word, code + 256 * reduction
     var loss_name = py_item(context, nk[].k_loss_names)[PythonObject(ip[0] % 256)]
     var options = b.dict()
@@ -221,7 +228,13 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     py_setitem(fields, nk[].k__fit_batch, PythonObject(ip[7]))
     py_setitem(fields, nk[].k__fit_shuffle, PythonObject(ip[8] != 0))
     py_setitem(fields, nk[].k__y_1d, PythonObject(ip[11] != 0))
-    py_setitem(fields, nk[].k__sample_shape, PythonObject(None))
+    var sample = PythonObject(None)
+    if len(description.sample) > 0:
+        var axes = Python.list()
+        for k in range(len(description.sample)):  # small-loop(at most seven sample axes)
+            _ = py_call(axes.append, PythonObject(description.sample[k]))
+        sample = py_call(b.tuple, axes)
+    py_setitem(fields, nk[].k__sample_shape, sample)
     if Bool(classes):
         py_setitem(fields, nk[].k_classes_, classes.value())
     py_setitem(fields, nk[].k_n_iter_, PythonObject(0) if export else PythonObject(ip[12]))

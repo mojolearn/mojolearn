@@ -247,7 +247,7 @@ def test_key_padding_mask_ignores_padded_positions():
     np.testing.assert_array_equal(a, b)
 
 
-def test_state_dict_round_trip():
+def test_state_dict_round_trip(tmp_path):
     enc = S().transformer_encoder_layer(8, 2, 16, dropout=0.0)
     model, x = _fitted(S(input_shape=(5, 8)).positional_encoding(8).transformer_encoder(enc, 2)
                        .multihead_attention(8, 2, bias=False).flatten().linear(1), (5, 8))
@@ -260,6 +260,10 @@ def test_state_dict_round_trip():
     other = S(input_shape=(5, 8)).positional_encoding(8).transformer_encoder(enc, 2)
     other = other.multihead_attention(8, 2, bias=False).flatten().linear(1).load_state_dict(sd)
     np.testing.assert_array_equal(other.predict(flat), want)
-    # save_checkpoint and export refuse every model with flatten (a product limit for all ranked models,
-    # not of these layers); the description round trip is the layer list
+    # the description round trip is the layer list; save_checkpoint and export keep a ranked model whole
+    # (lane nn-integrate, 2026-11-23: they refused every model with flatten before)
     assert other.layers == model.layers
+    model.save_checkpoint(str(tmp_path / "attention.ckpt"))
+    back = S.from_checkpoint(str(tmp_path / "attention.ckpt"))
+    assert back.layers == model.layers
+    np.testing.assert_array_equal(back.predict(flat), want)

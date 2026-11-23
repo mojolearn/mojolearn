@@ -26,6 +26,10 @@ comptime SEQUENTIAL_FILE_TEXT = 256
 comptime SEQUENTIAL_FILE_LAYERS = 256
 comptime SEQUENTIAL_FILE_INFO_INTS = 64
 comptime SEQUENTIAL_FILE_INFO_FLOATS = 16
+#: autograd/model.mojo SPEC2_ARGS (each layer's argument words) and the sample record's words (its rank, then at
+#: most RN_MAX_RANK axes)
+comptime SEQUENTIAL_FILE_ARGS = 6
+comptime SEQUENTIAL_FILE_SAMPLE_WORDS = 9
 
 
 struct SequentialCheckpointInfo(Movable):
@@ -37,11 +41,16 @@ struct SequentialCheckpointInfo(Movable):
     var layer_floats: List[Float64]
     var ints: List[Int]
     var floats: List[Float64]
+    # lane nn-integrate: SEQUENTIAL_FILE_ARGS argument words per layer and the sample shape (empty: 2-D)
+    var layer_args: List[Int]
+    var sample: List[Int]
 
     def __init__(out self):
         self.is_export = False
         self.layer_ints = List[Int]()
         self.layer_floats = List[Float64]()
+        self.layer_args = List[Int]()
+        self.sample = List[Int]()
         self.ints = List[Int]()
         self.floats = List[Float64]()
 
@@ -136,7 +145,8 @@ def sequential_file_save(entries: PythonObject, file: String, buffers: List[Int]
 def _file_info_call(entries: PythonObject, file: String, layers: Int, mut words: List[Int],
                     mut scalars: List[Float64]) raises -> Int:
     var path = file.as_bytes()
-    words = List[Int](length=4 + 3 * layers + SEQUENTIAL_FILE_INFO_INTS, fill=0)
+    words = List[Int](length=4 + (3 + SEQUENTIAL_FILE_ARGS) * layers + SEQUENTIAL_FILE_INFO_INTS
+                      + SEQUENTIAL_FILE_SAMPLE_WORDS, fill=0)
     scalars = List[Float64](length=layers + SEQUENTIAL_FILE_INFO_FLOATS, fill=0.0)
     var addresses: List[Int] = [Int(path.unsafe_ptr()), Int(words.unsafe_ptr()), Int(scalars.unsafe_ptr())]
     var ints: List[Int] = [len(path), len(words), len(scalars)]
@@ -167,6 +177,16 @@ def sequential_file_info(entries: PythonObject, file: String) raises -> Sequenti
         info.layer_ints.append(words[4 + i])
     for i in range(n_ints):  # driver-loop: over checkpoint option words
         info.ints.append(words[4 + 3 * count + i])
+    var at = 4 + 3 * count + n_ints
+    if at + SEQUENTIAL_FILE_ARGS * count + 1 > len(words):
+        raise Error("RuntimeError: Sequential checkpoint description runs past its buffer")
+    for i in range(SEQUENTIAL_FILE_ARGS * count):  # driver-loop: over layer argument words
+        info.layer_args.append(words[at + i])
+    var rank = words[at + SEQUENTIAL_FILE_ARGS * count]
+    if rank < 0 or rank >= SEQUENTIAL_FILE_SAMPLE_WORDS or at + SEQUENTIAL_FILE_ARGS * count + 1 + rank > len(words):
+        raise Error("RuntimeError: Sequential checkpoint sample shape is damaged")
+    for k in range(rank):  # small-loop(at most eight sample axes)
+        info.sample.append(words[at + SEQUENTIAL_FILE_ARGS * count + 1 + k])
     for i in range(count):  # driver-loop: over layer scalars
         info.layer_floats.append(scalars[i])
     for i in range(n_floats):  # driver-loop: over checkpoint option floats
