@@ -473,8 +473,10 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
     as the attribute path squares it. A kind of the naive Bayes or discriminant family with neither block
     (QuadraticDiscriminantAnalysis, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB: neither attribute
     exists on them, as in scikit-learn) is REFUSED (lane mf-shaprfe): 'auto' in the door's words, a named
-    attribute in scikit-learn's attrgetter's (`estimator` the class name). So is a Gbdt kind (lane mf-gbdt5:
-    GradientBoosting and its two adapters publish neither attribute), and since lane mf-meta5b every XNeighbors
+    attribute in scikit-learn's attrgetter's (`estimator` the class name). A Gbdt kind exports
+    MEMBER_BLOCK_FEATURE_IMPORTANCES since lane mf-imp6 (its `feature_importances_`, computed at FIT), so 'auto'
+    and 'feature_importances_' take that block and only 'coef_' is refused, in attrgetter's words (scikit-learn's
+    gradient boosting has no coef_). Since lane mf-meta5b every XNeighbors
     kind (the k-NN estimators, LabelPropagation and LabelSpreading: neither attribute exists on them in
     scikit-learn, and the door's attribute reads answer None, so its first round raised the same words after
     its fit). The caller raises the refusal only when an
@@ -485,8 +487,9 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
         return RfeSource(MEMBER_BLOCK_COEF, True, String(""))
     if getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
         return RfeSource(MEMBER_BLOCK_FEATURE_IMPORTANCES, not auto, String(""))
-    if (family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT or family == MEMBER_FAMILY_GBDT
-            or family == MEMBER_FAMILY_XNEIGHBORS):
+    if family == MEMBER_FAMILY_GBDT and getter == "coef_":
+        return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute 'coef_'")
+    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT or family == MEMBER_FAMILY_XNEIGHBORS:
         if auto:
             return RfeSource(0, False, String(RFE_NO_IMPORTANCES))
         return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
