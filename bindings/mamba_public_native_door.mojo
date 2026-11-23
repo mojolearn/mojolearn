@@ -664,6 +664,10 @@ def mamba_session_init(mut mods: NativeModules, session: PythonObject, block: Py
     # else through the per-call `<kind>_decode_step` entry. 5ef9975258 deleted the CPU
     # binding's Python `mamba3_decode_step` (the descriptor serves it), so
     # requiring that entry refused every host Mamba-3 session.
+    # The host arm is the CPU column only (lane ab-owners, 2026-11-23): the GPU binding
+    # (bindings/_mojolearn_mamba.mojo) registers every <kind>_session_create unconditionally,
+    # so on NVIDIA / AMD / Apple device_arm is True and the host arm is never taken; the host
+    # bindings (_mojolearn_mamba_host, _mojolearn_neural_host) export no session_create.
     var host_arm = _native_has_entry(mods, binding, "mamba_state_api_v1") or _native_has_entry(mods, binding, kind_name + "_decode_step")
     if not device_arm and not host_arm:
         raise Error("NotImplementedError: " + what + ": the loaded binding exports neither a resident decode session nor the per-call " + kind_name + "_decode_step entry")
