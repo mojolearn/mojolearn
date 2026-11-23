@@ -45,6 +45,11 @@ from std.memory import unsafe_memcpy
 from core.preprocessing_program import prep_program_stage
 from bindings.prep_encode_prog_run import EncProgram, enc_col_stats, enc_floats_of
 from bindings.prep_encode_cats_run import CatBlock, cat_codes_stage, cat_i2f_stage
+from bindings.prep_classify_prog_run import ClsProgram, CLS_IN_BUFFER, CLS_IN_CONST_F
+from core.member_abi import (
+    MemberPlan, MemberCall, MemberMatrix, member_call, MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
+)
+from core.member_notices import member_notices_take
 
 comptime SEL_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime SEL_I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -56,12 +61,17 @@ comptime SEL_OP_MI_NOISE = 67
 comptime SEL_OP_MI_CC = 68
 comptime SEL_OP_MI_CD = 69
 comptime SEL_OP_MI_REDUCE = 70
+comptime SEL_OP_SQSUM_COLS = 71
 comptime SEL_OP_CODE_COUNTS = 88
 comptime SEL_OP_I2F = 10
 comptime SEL_OP_MI_DC = 94
 comptime SEL_OP_MI_DD = 95
 comptime SEL_OP_P2M_CCOUNT = 200
 comptime SEL_OP_P2M_CSCAN = 201
+comptime SEL_OP_C2_KEY64 = 253
+comptime SEL_OP_C2_RFE_STEP = 256
+comptime SEL_OP_C2_RFE_RANK = 257
+comptime SEL_OP_C2_RFE_KEEP = 271
 # `_II_CH`: the p2m units' chunk rows.
 comptime SEL_II_CH = 1024
 comptime SEL_INT32_MAX = 2147483647
@@ -289,3 +299,180 @@ def mi_scatter(arena: Int, staged: MiStaged, cont: List[Int], disc: List[Int], d
         out[cont[i]] = src[staged.outc + i]
     for i in range(len(disc)):  # driver-loop: scatters the scores to their columns (discrete feature count)
         out[disc[i]] = src[staged.outd + i]
+
+
+# ---------------------------------------------------------------- RFE
+comptime RFE_SELECT_HALF = 0      # n_features_to_select None: d // 2
+comptime RFE_SELECT_FRACTION = 1  # a float in (0, 1): int(fraction * d)
+comptime RFE_SELECT_COUNT = 2     # anything else: int(value)
+
+
+def rfe_select_count(d: Int, kind: Int, fraction: Float64, count: Int) -> Int:
+    """n_features_to_select: None -> d // 2; a float in (0, 1) ->
+    int(fraction * d); else int(value); then at least 1."""
+    var nsel = count
+    if kind == RFE_SELECT_HALF:
+        nsel = d // 2
+    elif kind == RFE_SELECT_FRACTION:
+        nsel = Int(fraction * Float64(d))
+    return max(1, nsel)
+
+
+def rfe_step_count(d: Int, is_fraction: Bool, fraction: Float64, count: Int) raises -> Int:
+    """step: a float below 1 -> int(max(1, step * d)); else int(step)."""
+    var step = count
+    if is_fraction:
+        var v = fraction * Float64(d)
+        step = 1 if v <= 1.0 else Int(v)
+    if step <= 0:
+        raise Error("mojolearn: step must be > 0")
+    return step
+
+
+def _cls_stage(mut prog: ClsProgram, op: Int, total: Int, *params: Int):
+    # `_Prog.stage`: op, total, the parameters, zero padding.
+    var words = List[Int](capacity=len(params))
+    for i in range(len(params)):  # driver-loop: over at most fourteen stage parameters
+        words.append(params[i])
+    prog.stage(op, total, words)
+
+
+def _cls_buffer(mut prog: ClsProgram, words: Int, in_out: Bool = False) -> Int:
+    # `_Prog.put` of a caller buffer of `words` words (its owner is the caller's, in record order).
+    return prog.input(words, CLS_IN_BUFFER, -1, in_out)
+
+
+@fieldwise_init
+struct RfeBlock(ImplicitlyCopyable, Movable):
+    """Where a staged block lands: the int32 ids of its columns (`ids`, d
+    words, the first k used) and the (n, k) float32 block (`block`)."""
+    var ids: Int
+    var block: Int
+
+
+def rfe_block_stage(mut prog: ClsProgram, x_words: Int, n: Int, d: Int, sup: Int, k: Int) -> RfeBlock:
+    """The next round's block: the supported columns of the support mask at
+    `sup` compacted on the device (c2_rfe_keep) and those k columns of X (a
+    caller buffer of `x_words` words, the next record) gathered into an
+    (n, k) block (gather_cols, bit for bit)."""
+    var xo = _cls_buffer(prog, x_words)
+    var kf = prog.alloc(d)
+    var ki = prog.alloc(d)
+    _cls_stage(prog, SEL_OP_C2_RFE_KEEP, d, sup, d, kf, ki)
+    var dst = prog.alloc(n * k)
+    _cls_stage(prog, SEL_OP_GATHER_COLS, n * k, xo, n, d, kf, k, dst)
+    return RfeBlock(ki, dst)
+
+
+def rfe_first_stage(mut prog: ClsProgram, x_words: Int, n: Int, d: Int) -> RfeBlock:
+    """Program 0: the first block from the all-ones support. Caller buffers,
+    in record order: the d support words, X."""
+    var sup = _cls_buffer(prog, d)
+    return rfe_block_stage(prog, x_words, n, d, sup, d)
+
+
+@fieldwise_init
+struct RfeKeys(ImplicitlyCopyable, Movable):
+    """One round's importances. `squared`: a coefficient block of `rows`
+    rows of `m` float32 words, squared and summed over its rows; else m
+    scores of c2_key64 kind `kind` (0 float32, 1 int32, 3 int64, 4 float64;
+    `m * (1 or 2)` words). The words travel beside it: empty, they are a
+    caller buffer (the next record); else they are the program's own words."""
+    var m: Int
+    var rows: Int
+    var squared: Bool
+    var kind: Int
+
+
+def _rfe_key_words(mut prog: ClsProgram, var words: List[Float32], count: Int) -> Int:
+    if len(words) == 0:
+        return _cls_buffer(prog, count)
+    prog.consts_f.append(words^)
+    return prog.input(count, CLS_IN_CONST_F, len(prog.consts_f) - 1, False)
+
+
+def rfe_keys_stage(mut prog: ClsProgram, keys: RfeKeys, var words: List[Float32]) -> Int:
+    """`_keys_of`: the ordered keys (c2_key64) of m column importances.
+    Returns the keys' offset."""
+    var m = keys.m
+    var key = prog.work(2 * m)
+    if not keys.squared:
+        var per = 1 if keys.kind <= 1 else 2
+        var wo = _rfe_key_words(prog, words^, m * per)
+        _cls_stage(prog, SEL_OP_C2_KEY64, m, wo, keys.kind, key)
+        return key
+    var summed = prog.work(m)
+    var co = _rfe_key_words(prog, words^, keys.rows * m)
+    _cls_stage(prog, SEL_OP_SQSUM_COLS, m, co, keys.rows, m, summed)
+    _cls_stage(prog, SEL_OP_C2_KEY64, m, summed, 0, key)
+    return key
+
+
+@fieldwise_init
+struct RfeRoundStaged(ImplicitlyCopyable, Movable):
+    """A round program's in-out support and ranking (d words each) and the
+    next block."""
+    var support: Int
+    var ranking: Int
+    var next: RfeBlock
+
+
+def rfe_round_stage(mut prog: ClsProgram, keys: RfeKeys, var words: List[Float32], x_words: Int, n: Int, d: Int, nsup: Int,
+                    drop: Int, k: Int) -> RfeRoundStaged:
+    """One elimination round: the importance keys, c2_rfe_step dropping
+    `drop` of the `nsup` supported columns from the support mask,
+    c2_rfe_rank, then the next (n, k) block. Caller buffers, in record
+    order: the importance words (when `words` is empty), the d support
+    words (in-out), the d ranking words (in-out), the nsup int32 column ids,
+    X."""
+    var key = rfe_keys_stage(prog, keys, words^)
+    var sup = _cls_buffer(prog, d, True)
+    var rk = _cls_buffer(prog, d, True)
+    var fo = _cls_buffer(prog, nsup)
+    _cls_stage(prog, SEL_OP_C2_RFE_STEP, nsup, key, fo, nsup, drop, sup)
+    _cls_stage(prog, SEL_OP_C2_RFE_RANK, d, sup, rk)
+    var nxt = rfe_block_stage(prog, x_words, n, d, sup, k)
+    return RfeRoundStaged(sup, rk, nxt)
+
+
+def rfe_member_fit(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, k: Int, y: Int, y_dtype: Int) raises:
+    """FIT of the caller's new member state (`call`, from `member_new(plan)`)
+    on the (n, k) float32 host block at `x` and the n target words at `y`.
+    Needs no GIL: the caller releases it only for a kind with
+    MEMBER_GIL_FREE or MEMBER_GIL_DOOR (THE GIL RULE) and frees the state."""
+    call.x = MemberMatrix(x, n, k)
+    call.y = MemberMatrix(y, n, 1, y_dtype)
+    _ = member_call(plan.member, MEMBER_OP_FIT, call)
+
+
+def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, m: Int, y: Int, y_dtype: Int,
+                           block: Int, squared: Bool, mut notices: List[Float64], mut rows: Int) raises -> List[Float32]:
+    """A round over a native member: fit the caller's new state on the
+    round's (n, m) block, take its fit notices, read its importance block
+    `block` by EXPORT and copy it out (the view dies with the state, which
+    the caller frees). m words, or (rows, m) for a coefficient block with
+    one row per class or output (`squared`); `rows` is set to its row
+    count. Raises when the member refuses the round; nothing was staged."""
+    rfe_member_fit(plan, call, x, n, m, y, y_dtype)
+    member_notices_take(plan, call.state, notices)
+    call.block = block
+    call.flags = 0
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var view = call.dst
+    rows = view.rows
+    if not view.dense_host(MEMBER_F32) or view.cols != m or rows < 1 or (rows > 1 and not squared):
+        raise Error("mojolearn: RFE importances are " + String(view.rows) + " x " + String(view.cols)
+                    + " words, expected " + String(m) + " columns")
+    var words = List[Float32](length=rows * m, fill=0)
+    unsafe_memcpy(dest=words.unsafe_ptr(), src=SEL_F32P(unsafe_from_address=view.data), count=rows * m)
+    return words^
+
+
+def rfe_final_plan(plan: MemberPlan, importance_word: Bool) -> MemberPlan:
+    """The final fit's plan: the estimator's plain fit, with the importance
+    word the rounds set cleared (nobody reads the final fit's importances,
+    and computing them costs a column-major copy of the block)."""
+    var final = plan.copy()
+    if importance_word:
+        final.params[10] = 0.0
+    return final^
