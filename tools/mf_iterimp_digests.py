@@ -31,6 +31,25 @@ return_std line of the direct cases (base: the refusal); everything else
 equal (transform with estimator= now runs over the held member states with
 the same programs: equal words).
 
+Round 3 (lane mf-iterimp3): base origin/lane/member-fits cdad3291fa. Added:
+classifier estimators (GaussianNB(), LogisticRegression(),
+DecisionTreeClassifier(random_state=0), KNeighborsClassifier()) on an
+integer-valued matrix (`_data_int`) x order {ascending, random} x
+add_indicator, fit and transform (now the member rounds and the held
+states; base: the door rounds), a classifier on the continuous matrix (a
+refusal in scikit-learn's continuous-target words on both), and the
+degenerate shapes for the built-in estimator (`none_*`) as for Ridge and
+GaussianNB: a kept empty column (keep_empty_features), one feature given,
+one feature left after dropping all-NaN columns. The `_empty_kept` and
+`_step_classes` fields are hashed on a third line `<name> fields sha256=...`
+(`none` on the base). Expected differences base vs head: `*_keep_empty`
+(the empty column is marked not missing: base, the estimator's refusal of
+a fit on no rows or the built-in ridge's prediction of the whole column;
+head, its fill), `*_one_feature` and `*_drop_to_one` (head: n_iter_ 0,
+no step, the initial imputation, as scikit-learn), the classifier lines
+(head: member rounds; the imputed values are expected equal, the steps'
+fitted labels may be published in another form), and the `fields` lines.
+
 Grid: estimator {Ridge(alpha=1), LinearRegression(), BayesianRidge(),
 GaussianProcessRegressor(random_state=0), DecisionTreeRegressor(random_state=0),
 KNeighborsRegressor()} x sample_posterior {False, True} x initial_strategy
@@ -50,6 +69,7 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 
 ESTIMATORS = ("ridge", "linreg", "bayes", "ard", "gpr", "tree", "knn")
+CLASSIFIERS = ("gnb", "logreg", "ctree", "knnc")
 POSTERIOR = ("sigma_", "X_offset_", "X_scale_")
 
 
@@ -63,8 +83,31 @@ def _data(seed=0, n=400, d=5):
     return X
 
 
+def _data_int(seed=0, n=400, d=4):
+    # every column the row's label (0, 1, 2) plus a column-dependent shift, at most one NaN a row: a target a
+    # classifier can impute, integer-valued in every column
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    labels = rng.integers(0, 3, n)
+    X = np.stack([labels + (j % 2) for j in range(d)], axis=1).astype(np.float32)
+    rows = rng.random(n) < 0.6
+    cols = rng.integers(0, d, n)
+    X[rows, cols[rows]] = np.nan
+    return X
+
+
 def _estimator(name):
     import mojolearn as ml
+    if name == "none":
+        return None
+    if name == "gnb":
+        return ml.GaussianNB()
+    if name == "logreg":
+        return ml.LogisticRegression()
+    if name == "ctree":
+        return ml.DecisionTreeClassifier(random_state=0)
+    if name == "knnc":
+        return ml.KNeighborsClassifier()
     if name == "ridge":
         return ml.Ridge(alpha=1.0)
     if name == "linreg":
@@ -101,6 +144,19 @@ def _cases():
                                       random_state=2)
     cases["ard_post_bounds"] = dict(estimator="ard", sample_posterior=True, min_value=-0.5, max_value=0.5,
                                     random_state=2)
+    # round 3: classifier members, the degenerate shapes for every route
+    for est, order, ind in itertools.product(CLASSIFIERS, ("ascending", "random"), (False, True)):
+        cases[f"{est}_int_{order}_ind{int(ind)}"] = dict(estimator=est, int_data=True, imputation_order=order,
+                                                         add_indicator=ind, random_state=3)
+    cases["gnb_continuous"] = dict(estimator="gnb")
+    cases["logreg_continuous"] = dict(estimator="logreg")
+    for est in ("none", "ridge", "gnb"):
+        intd = est == "gnb"
+        cases[f"{est}_keep_empty"] = dict(estimator=est, keep_empty_features=True, empty_column=True, int_data=intd)
+        cases[f"{est}_keep_empty_skip"] = dict(estimator=est, keep_empty_features=True, empty_column=True,
+                                               skip_complete=True, int_data=intd)
+        cases[f"{est}_one_feature"] = dict(estimator=est, one_feature=True, int_data=intd)
+        cases[f"{est}_drop_to_one"] = dict(estimator=est, drop_to_one=True, add_indicator=True, int_data=intd)
     # the direct predict(return_std=True) cases
     for est, fi, sw in itertools.product(("bayesreg", "ardreg"), (True, False), (False, True)):
         if est == "ardreg" and sw:
@@ -184,13 +240,17 @@ def _run(name):
     kw["estimator"] = _estimator(kw["estimator"])
     empty = kw.pop("empty_column", False)
     one = kw.pop("one_feature", False)
-    X = _data(0)
-    Xh = _data(1)
+    drop = kw.pop("drop_to_one", False)
+    intd = kw.pop("int_data", False)
+    X = _data_int(0) if intd else _data(0)
+    Xh = _data_int(1) if intd else _data(1)
     if empty:
         X[:, 2] = np.nan
     if one:
         X = np.ascontiguousarray(X[:, :1])
         Xh = np.ascontiguousarray(Xh[:, :1])
+    if drop:
+        X[:, 1:] = np.nan
     try:
         m = ml.IterativeImputer(**kw)
         h = hashlib.sha256()
@@ -205,9 +265,19 @@ def _run(name):
         block = np.nan_to_num(Xh)
         post = hashlib.sha256()
         held = False
-        for step in f["imputation_sequence_"]:
+        fields = hashlib.sha256()
+        known = False
+        for key in ("_empty_kept", "_step_classes"):
+            if key in f:
+                known = True
+                fields.update(key.encode() + _bytes(f[key]))
+        for step in f.get("imputation_sequence_", ()):
             h.update(_bytes([step[0], step[1]]))
             est = step[2]
+            if not hasattr(est, "predict"):
+                # the built-in estimator's steps are (feat_idx, coef_, intercept_)
+                h.update(_bytes(est))
+                continue
             h.update(_fitted(est))
             extra = _fitted(est, posterior=True)
             held = held or bool(extra)
@@ -222,7 +292,8 @@ def _run(name):
         kw["estimator"] = _estimator(_cases()[name]["estimator"])
         h.update(_bytes(ml.IterativeImputer(**kw).fit(X).transform(X)))
         return (f"{name} sha256={h.hexdigest()}\n"
-                f"{name} posterior {('sha256=' + post.hexdigest()) if held else 'none'}")
+                f"{name} posterior {('sha256=' + post.hexdigest()) if held else 'none'}\n"
+                f"{name} fields {('sha256=' + fields.hexdigest()) if known else 'none'}")
     except Exception as e:  # noqa: BLE001 - the line records the refusal
         return f"{name} error {type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}"
 
