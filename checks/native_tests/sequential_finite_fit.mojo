@@ -112,7 +112,7 @@ struct _Unit(Movable):
         self.steps = steps
 
 
-def _seq(sample: List[Int]) -> SeqModel:
+def _seq(sample: List[Int]) raises -> SeqModel:
     var m = SeqModel()
     m.sample = sample.copy()
     m.compile(LOSS_MSE, "sgd", _LR)
