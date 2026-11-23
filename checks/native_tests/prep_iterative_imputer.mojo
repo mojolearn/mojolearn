@@ -623,9 +623,18 @@ def classifier_case(unit: Int) raises:
 
 
 def _logistic_plan() raises -> MemberPlan:
-    """LogisticRegression() as the logistic member (kind 0) on the CPU image's QN entry: the NEW words of
-    providers/python/member_logistic_boundary_door.mojo for C 1 (l1 0, l2 1), fit_intercept, max_iter 100,
-    linesearch 20, lbfgs memory 10, no normalized penalty, tol 1e-4 (change tolerance 1e-6)."""
+    """LogisticRegression() as the logistic member (kind 0) on the CPU image's QN entry: the NEW words
+    providers/python/member_logistic_boundary_door.mojo admits for the estimator's defaults
+    (python/mojolearn/linear_model.py LogisticRegression): C 1 (l1 0, l2 1/C = 1), fit_intercept,
+    max_iter 1000, linesearch_max_iter 50, lbfgs_memory 5, penalty_normalized True, tol 1e-4 (change
+    tolerance 1e-6)."""
+    # The words were [.., 100, 20, 10, 0 (penalty NOT normalized), ..] until lane mf-iterimp-logit: the QN
+    # loss is the row mean, so an unnormalized l2 of 1 is N times scikit-learn's C=1 penalty
+    # (glm/impl/qn/qn.mojo:18 divides l2 by N only when normalized). That fit is nearly all intercept: each
+    # column's missing rows share one label (missing where (i + j) % 6 == 0, label i % 3), which is the
+    # half-sized class of its training rows, so the member predicted a majority class, never the row's
+    # label (0 of 266). With the estimator's own words the fit is scikit-learn's C=1 fit and the expected
+    # values (every imputed cell is its row's label: the row's other columns all equal it) hold.
     var plan = MemberPlan()
     plan.family = MEMBER_FAMILY_LOGISTIC
     plan.kind = 0
@@ -634,7 +643,7 @@ def _logistic_plan() raises -> MemberPlan:
     plan.member = MemberRef(EntryRef(logistic_member_v2, 0), 0)
     var probe = MemberCall(plan.route)
     plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
-    plan.params = [0.0, 1.0, 0.0, 1.0, 100.0, 20.0, 10.0, 0.0, 1e-4, 1e-6]
+    plan.params = [0.0, 1.0, 0.0, 1.0, 1000.0, 50.0, 5.0, 1.0, 1e-4, 1e-6]
     return plan^
 
 
