@@ -114,6 +114,13 @@ struct MemberSetRun(Movable):
     var part_w: List[List[Float32]]
     # Per member, the fit notices PACK took from its state (empty: none).
     var notices: List[List[Float64]]
+    # THE PER-UNIT COVER RULE (lane mf-cal, 2026-11-23; default False): a
+    # caller whose units are independent cv folds (CalibratedClassifierCV)
+    # sets it so that a unit whose rows lack a class is NOT fitted and the
+    # others are (`uncovered[u]` says which); the caller then takes that
+    # unit's own door, as before. False: one lacking unit fails the whole set
+    # before any fit (every other caller).
+    var skip_lacking: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
         self.plans = List[MemberPlan]()
@@ -144,6 +151,7 @@ struct MemberSetRun(Movable):
         self.part_x = List[List[Float32]]()
         self.part_y = List[List[Int32]]()
         self.part_w = List[List[Float32]]()
+        self.skip_lacking = False
 
     def count(self) -> Int:
         return len(self.plans)
@@ -493,6 +501,10 @@ def _member_set_lane(address: Int, lane: Int):
     var i = lane
     while i < count:  # driver-loop: over this worker's members
         var u = run[].parallel[i]
+        if run[].uncovered[u] != UInt8(0):
+            # skip_lacking: this unit's rows lack a class; its caller's door fits it
+            i += run[].workers
+            continue
         try:
             _member_set_unit(address, u, run[].workers <= 1)
         except error:
@@ -539,9 +551,16 @@ def member_set_fit_free(mut run: MemberSetRun) -> Bool:
 
     if len(run.cover_units) > 0:
         host_parallelize(_cover, cover_lanes)
-        for u in range(len(run.plans)):  # driver-loop: over the members (the cover verdicts)
-            if run.uncovered[u] != UInt8(0):
-                return False
+        if run.skip_lacking:
+            # a unit that shares its codes with the one before it took that
+            # unit's cover pass (`member_set_prepare`): it takes its verdict
+            for u in range(1, len(run.plans)):  # driver-loop: over the members (the cover verdicts)
+                if run.uncovered[u - 1] != UInt8(0) and run.plans[u].classes > 0 and _set_same_codes(run, u, u - 1):
+                    run.uncovered[u] = UInt8(1)
+        else:
+            for u in range(len(run.plans)):  # driver-loop: over the members (the cover verdicts)
+                if run.uncovered[u] != UInt8(0):
+                    return False
     if len(run.parallel) > 0:
         host_parallelize(_lane, lanes)
     return True
@@ -553,6 +572,8 @@ def member_set_turn(mut run: MemberSetRun, u: Int):
     worker member when its trace earns `MEMBER_GIL_FREE`. The caller holds
     or releases the GIL around the call as `gil_free[u]` says. Never raises:
     a failure records its words."""
+    if run.uncovered[u] != UInt8(0):
+        return  # skip_lacking: this unit's rows lack a class; its caller's door fits it
     var address = Int(UnsafePointer(to=run))
     try:
         _member_set_unit(address, u, True)
