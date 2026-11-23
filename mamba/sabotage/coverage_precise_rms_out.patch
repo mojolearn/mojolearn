@@ -1,20 +1,22 @@
+diff --git a/mamba/impl/modeling/modeling_mamba.mojo b/mamba/impl/modeling/modeling_mamba.mojo
+index 596ee7c655..04007fa36e 100644
 --- a/mamba/impl/modeling/modeling_mamba.mojo
 +++ b/mamba/impl/modeling/modeling_mamba.mojo
-@@ -964,7 +964,7 @@
+@@ -1005,7 +1005,7 @@ def mamba_rms_norm_kernel(
+     # S3 and S4, both PRODUCT: `hidden * rstd` then `weight * hidden`, each
+     # its own rounding, neither contractible into a neighboring add.
      for j in range(dm):
-         var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
-         out_buf.unsafe_store(
--            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-+            t * dm + j, bitcast[DType.float32](bitcast[DType.uint32](ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))) ^ UInt32(1))  # SABOTAGE (coverage-precise-mamba-rms_out): the block norm's output low bit flipped
-         )
+-        out_buf.unsafe_store(t * dm + j, rms_scale(x.unsafe_load(t * dm + j), rstd, weight.unsafe_load(j)))
++        out_buf.unsafe_store(t * dm + j, bitcast[DType.float32](bitcast[DType.uint32](rms_scale(x.unsafe_load(t * dm + j), rstd, weight.unsafe_load(j))) ^ UInt32(1)))  # SABOTAGE (coverage-precise-mamba-rms_out): the block norm's output low bit flipped
  
  
-@@ -1031,7 +1031,7 @@
-     var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
-     var inner = ftz(identical_mul(ftz(x.unsafe_load(cell)), rstd))
-     out_buf.unsafe_store(
--        cell, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-+        cell, bitcast[DType.float32](bitcast[DType.uint32](ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))) ^ UInt32(1))  # SABOTAGE (coverage-precise-mamba-rms_out): the block norm's output low bit flipped
-     )
+ def mamba_rms_lane_kernel(
+@@ -1067,7 +1067,7 @@ def mamba_rms_out_kernel(
+     var t = cell // dm
+     var j = cell - t * dm
+     var rstd = rms_rstd(sumsq.unsafe_load(t), dm, RMS_EPS)
+-    out_buf.unsafe_store(cell, rms_scale(x.unsafe_load(cell), rstd, weight.unsafe_load(j)))
++    out_buf.unsafe_store(cell, bitcast[DType.float32](bitcast[DType.uint32](rms_scale(x.unsafe_load(cell), rstd, weight.unsafe_load(j))) ^ UInt32(1)))  # SABOTAGE (coverage-precise-mamba-rms_out): the block norm's output low bit flipped
  
  
+ def mamba_rms_norm(
