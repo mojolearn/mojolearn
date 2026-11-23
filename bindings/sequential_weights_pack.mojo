@@ -45,6 +45,14 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
             for j in range(len(suffixes)):  # small-loop(at most four tensors of a block layer)
                 _ = py_call(names.append, PythonObject(suffixes[j]))
             _ = py_call(result.append, Python.tuple(k, False, py_call(native_loaded_module("builtins").tuple, names)))
+        # nn-conv begin
+        elif code == 56 or code == 57:
+            # lane nn-conv: a transposed convolution's weight, and its bias when the layer has one (a5 bit 0)
+            var ct_names = Python.list(".weight")
+            if Int(py=layer[4][5]) % 2 == 1:
+                _ = py_call(ct_names.append, PythonObject(".bias"))
+            _ = py_call(result.append, Python.tuple(k, False, py_call(native_loaded_module("builtins").tuple, ct_names)))
+        # nn-conv end
     return result
 
 
