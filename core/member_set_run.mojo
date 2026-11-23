@@ -35,7 +35,7 @@ from core.device_route import DEVICE_CPU
 from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_pin_settle,
-    MEMBER_OP_FIT, MEMBER_I32, MEMBER_I64, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_SCOPE_NONE,
+    MEMBER_OP_FIT, MEMBER_F32, MEMBER_I32, MEMBER_I64, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_SCOPE_NONE,
 )
 
 #: Words below which a gather is not split (a task costs more than the
@@ -604,6 +604,151 @@ def member_set_run_release(mut run: MemberSetRun):
 
 
 comptime MEMBER_SET_LACKING = "ValueError: a member's rows do not hold every class of the ensemble: its own fit decides"
+
+
+# ---------------------------------------------------------------- a member fit's extra inputs (lane mf-gbdt5)
+struct MemberFitExtras(Copyable, Movable):
+    """A member FIT's typed inputs beyond X and y (lane mf-gbdt5, 2026-11-23):
+    the caller's fit parameters as its UNPACK admitted them in the
+    estimator's own fit door's checks and words (for the Gbdt member:
+    providers/python/member_gbdt_boundary_door.mojo
+    `gbdt_member_fit_params`). Plain addresses of host words the caller's
+    UNPACK holds alive until the fit returns (THE LIFETIME RULE); 0 / a count
+    0: not given. No Python.
+
+    `rows`: the fit's rows the weights and group ids cover. `eval_x`: the
+    held-out set's float32 C-order rows over the caller's FULL columns
+    (`eval_cols` of them); a fit on a column selection (RFE's rounds) reads
+    the same columns of it (`member_fit_extras_apply`). `eval_y`: its targets
+    (`eval_y_dtype`: MEMBER_F32 values, or MEMBER_I32 class codes of a
+    classifier kind). `groups`: one int32 group id per fit row. `pairs`:
+    `pair_count` int32 (winner, loser) rows, `pairs_weight` float32 (0: ones).
+
+    THE EVAL SLOT. This is the per-member eval slot the member-set callers
+    would carry; today only RFE hands a member fit parameters (Bagging,
+    Voting, Stacking and the searches refuse every key but sample_weight,
+    IterativeImputer and Calibrated take none: lane mf-split4b item 5), and
+    RFE's rounds are serial and fit one member each on a block its own
+    program gathered, so the slot rides RFE's member calls
+    (bindings/prep_select_run.mojo `rfe_member_fit`), not `MemberSetRun`."""
+    var rows: Int
+    var weights: Int
+    var eval_x: Int
+    var eval_rows: Int
+    var eval_cols: Int
+    var eval_y: Int
+    var eval_y_dtype: Int
+    var groups: Int
+    var pairs: Int
+    var pair_count: Int
+    var pairs_weight: Int
+
+    def __init__(out self):
+        self.rows = 0
+        self.weights = 0
+        self.eval_x = 0
+        self.eval_rows = 0
+        self.eval_cols = 0
+        self.eval_y = 0
+        self.eval_y_dtype = MEMBER_F32
+        self.groups = 0
+        self.pairs = 0
+        self.pair_count = 0
+        self.pairs_weight = 0
+
+    def given(self) -> Bool:
+        return (self.weights != 0 or self.eval_rows > 0 or self.groups != 0 or self.pair_count > 0)
+
+
+def _eval_columns_span(source: Int, cols: Int, columns: Int, count: Int, wide: Bool, first: Int, rows: Int,
+                       dst: Int):
+    """Rows `first .. first + rows` of the held-out set's columns `columns`
+    (`count` ids) into `dst` (row-major, `count` wide). Rows are independent:
+    a caller may split the range."""
+    var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=source)
+    var target = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst)
+    for i in range(first, first + rows):  # native data loop (one task's held-out rows)
+        for j in range(count):
+            target[i * count + j] = src[i * cols + _set_pick(columns, j, wide)]
+
+
+def member_eval_columns(source: Int, rows: Int, cols: Int, columns: Int, count: Int, wide: Bool,
+                        mut dst: List[Float32]) raises -> Bool:
+    """The held-out set's columns for a fit on a column selection: the
+    `rows` x `cols` float32 C-order block at `source` restricted to the
+    `count` column ids at `columns` (int32, or int64 when `wide`), in their
+    order, the way a member's drawn columns are gathered (`_set_gather_span`).
+    False (nothing copied, `dst` untouched) when the selection is every
+    column in order: the caller reads `source` itself. The rows are split
+    across the host cores above `_SET_SPLIT_WORDS` words."""
+    if columns == 0 or count <= 0:
+        return False
+    var identity = count == cols
+    for j in range(count):  # driver-loop: over the selected column ids (bounds, and the in-order test)
+        var c = _set_pick(columns, j, wide)
+        if c < 0 or c >= cols:
+            raise Error("member ABI: a held-out column id " + String(c) + " is outside the "
+                        + String(cols) + " columns of the eval set")
+        if c != j:
+            identity = False
+    if identity:
+        return False
+    dst = List[Float32](length=rows * count, fill=0.0)
+    var dst_address = Int(dst.unsafe_ptr())
+    var cores = native_unit_cores()
+    if cores <= 1 or rows * count < _SET_SPLIT_WORDS:
+        _eval_columns_span(source, cols, columns, count, wide, 0, rows, dst_address)
+        return True
+    var chunks = min(cores, rows)
+    var per = (rows + chunks - 1) // chunks
+
+    def _chunk(part: Int) {imm source, imm cols, imm columns, imm count, imm wide, imm rows, imm per,
+                           imm dst_address}:
+        var first = part * per
+        if first >= rows:
+            return
+        _eval_columns_span(source, cols, columns, count, wide, first, min(per, rows - first), dst_address)
+
+    host_parallelize(_chunk, chunks)
+    _ = len(dst)
+    return True
+
+
+def member_fit_extras_apply(extras: MemberFitExtras, mut call: MemberCall, columns: Int, count: Int, wide: Bool,
+                            mut held: List[Float32]) raises:
+    """Fill a member FIT call's optional views from `extras`: the weights,
+    the group ids, the pairs and the held-out set, whose X is the eval set's
+    columns `columns` (`count` ids, the columns of the fit's X; 0: every
+    column) gathered into `held` (`member_eval_columns`). THE LIFETIME RULE:
+    the caller keeps `held` alive until the fit returns, and clears
+    `call.eval_x` after it (`member_fit_extras_clear`)."""
+    if extras.weights != 0:
+        call.weights = MemberMatrix(extras.weights, extras.rows, 1)
+    if extras.groups != 0:
+        call.groups = MemberMatrix(extras.groups, extras.rows, 1, MEMBER_I32)
+    if extras.pair_count > 0:
+        call.pairs = MemberMatrix(extras.pairs, extras.pair_count, 2, MEMBER_I32)
+        if extras.pairs_weight != 0:
+            call.pairs_weight = MemberMatrix(extras.pairs_weight, extras.pair_count, 1)
+    if extras.eval_rows > 0:
+        var width = extras.eval_cols
+        var address = extras.eval_x
+        if member_eval_columns(extras.eval_x, extras.eval_rows, extras.eval_cols, columns, count, wide, held):
+            width = count
+            address = Int(held.unsafe_ptr())
+        call.eval_x = MemberMatrix(address, extras.eval_rows, width)
+        call.eval_y = MemberMatrix(extras.eval_y, extras.eval_rows, 1, extras.eval_y_dtype)
+
+
+def member_fit_extras_clear(mut call: MemberCall):
+    """After the FIT: the call no longer names the caller's extra buffers
+    (the gathered held-out block dies with the caller's frame)."""
+    call.weights = MemberMatrix()
+    call.groups = MemberMatrix()
+    call.pairs = MemberMatrix()
+    call.pairs_weight = MemberMatrix()
+    call.eval_x = MemberMatrix()
+    call.eval_y = MemberMatrix()
 
 
 def member_set_fit(mut run: MemberSetRun) raises:

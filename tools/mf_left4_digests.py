@@ -21,6 +21,15 @@ EQUAL (every line expected):
     names the key, the member does not: a words difference, stated, as lane mf-adm3 stated it for SVC).
   * `gbdt_*` (a search refit of GradientBoostingRegressor: a member fit; `test_loss_curve_` None in both) and the
     public fit with eval_set / pairs (the door, untouched).
+  * `gbdt5_*` (lane mf-gbdt5; base origin/lane/member-fits-5 270df23cc5, head lane/mf-gbdt5): RFE.fit(X, y,
+    **fit_params) over GradientBoosting / GradientBoostingRegressor / GradientBoostingClassifier with eval_set,
+    sample_weight, group_id + pairs, and with none (n_features_to_select keeping every column: no round). The base
+    ran the estimator's own fit door per fit; the head admits the fit parameters natively and fits the member, the
+    held-out X over the fit's columns. EQUAL: estimator_ predict, loss_curve_, test_loss_curve_, support_; the
+    refusals (a bad eval_set, pairs_weight without pairs, subgroup_id; a round over a Gbdt, which has no importance
+    block) in the same words. DIFFERS by design: `gbdt5_nb_all` (RFE(GaussianNB(), n_features_to_select=d)): the
+    base refused before any round (lane mf-shaprfe), the head fits as scikit-learn does (no round reads
+    importances).
 Configurations are independent: one process each across the host cores.
 
     python tools/mf_left4_digests.py > digests.txt
@@ -74,6 +83,8 @@ MSEL = [(m, lab, gap, c) for m in MEMBERS for lab in ("int", "str") for gap in (
         for c in ("cvs", "grid", "grid_nan")]
 FOREIGN = ("lr", "svc", "svk", "sgd", "ridgec")
 GBDT = ("search_refit", "door_eval", "door_pairs")
+GBDT5 = ("booster_none", "booster_eval", "booster_weight", "booster_pairs", "reg_eval", "cls_eval", "bad_width",
+         "bad_pairs_weight", "bad_subgroup", "round_refusal", "round_coef", "nb_all")
 
 
 def _fit_caller(caller, est, X, y):
@@ -176,7 +187,64 @@ def _gbdt(index):
     return _lines(f"gbdt_{name}", run)
 
 
-SECTIONS = ((INV, _inv), (COD, _cod), (MSEL, _msel), (FOREIGN, _foreign), (GBDT, _gbdt))
+def _gbdt5(index):
+    import mojolearn
+    from mojolearn._expansion_prep import RFE
+    name = GBDT5[index]
+    rng = np.random.default_rng(59)
+    X = rng.normal(size=(160, 5)).astype(np.float32)
+    yr = (X @ np.arange(1, 6, dtype=np.float32) + 0.1 * rng.normal(size=160)).astype(np.float32)
+    d = X.shape[1]
+
+    def outputs(rfe):
+        est = rfe.estimator_
+        out = [("predict", est.predict(X)), ("support", np.asarray(rfe.support_)), ("ranking", rfe.ranking_)]
+        if hasattr(est, "loss_curve_"):
+            out.append(("curve", np.asarray(est.loss_curve_)))
+            test = est.test_loss_curve_
+            out.append(("test", np.asarray([np.nan]) if test is None else np.asarray(test)))
+        return out
+
+    def run():
+        gb = mojolearn.GradientBoosting
+        if name == "booster_none":
+            return outputs(RFE(gb(n_estimators=12), n_features_to_select=d).fit(X, yr))
+        if name == "booster_eval":
+            return outputs(RFE(gb(n_estimators=12, use_best_model=True), n_features_to_select=d).fit(
+                X[:120], yr[:120], eval_set=(X[120:], yr[120:])))
+        if name == "booster_weight":
+            w = np.linspace(0.5, 2.0, 160).astype(np.float32)
+            return outputs(RFE(gb(n_estimators=10), n_features_to_select=d).fit(X, yr, sample_weight=w))
+        if name == "booster_pairs":
+            groups = np.repeat(np.arange(16), 10)
+            pairs = np.asarray([[g * 10, g * 10 + 1] for g in range(16)], dtype=np.int64)
+            return outputs(RFE(gb(loss="PairLogit", n_estimators=8), n_features_to_select=d).fit(
+                X, yr, group_id=groups, pairs=pairs))
+        if name == "reg_eval":
+            return outputs(RFE(mojolearn.GradientBoostingRegressor(n_estimators=12), n_features_to_select=d).fit(
+                X[:120], yr[:120], eval_set=[(X[120:], yr[120:])]))
+        if name == "cls_eval":
+            labels = np.where(yr > np.median(yr), "hi", "lo").astype(object)
+            rfe = RFE(mojolearn.GradientBoostingClassifier(n_estimators=12), n_features_to_select=d).fit(
+                X[:120], labels[:120], eval_set=(X[120:], labels[120:]))
+            return outputs(rfe) + [("rfe_predict", np.asarray(rfe.predict(X)).astype(str))]
+        if name == "bad_width":
+            return outputs(RFE(gb(n_estimators=4), n_features_to_select=d).fit(
+                X, yr, eval_set=(X[:10, :4], yr[:10])))
+        if name == "bad_pairs_weight":
+            return outputs(RFE(gb(n_estimators=4), n_features_to_select=d).fit(X, yr, pairs_weight=[1.0]))
+        if name == "bad_subgroup":
+            return outputs(RFE(gb(n_estimators=4), n_features_to_select=d).fit(X, yr, subgroup_id=np.zeros(160)))
+        if name == "round_refusal":
+            return outputs(RFE(gb(n_estimators=4), n_features_to_select=2).fit(X, yr, eval_set=(X[:20], yr[:20])))
+        if name == "round_coef":
+            return outputs(RFE(gb(n_estimators=4), n_features_to_select=2, importance_getter="coef_").fit(X, yr))
+        codes = (yr > np.median(yr)).astype(np.int64)
+        return outputs(RFE(mojolearn.GaussianNB(), n_features_to_select=d).fit(X, codes))
+    return _lines(f"gbdt5_{name}", run)
+
+
+SECTIONS = ((INV, _inv), (COD, _cod), (MSEL, _msel), (FOREIGN, _foreign), (GBDT, _gbdt), (GBDT5, _gbdt5))
 
 
 def _run(index):

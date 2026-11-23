@@ -86,6 +86,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_I32, MEMBER_CAN_COEF, MEMBER_BLOCK_COEF,
 )
 from core.member_families import MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_NAIVE_BAYES
+from core.member_set_run import MemberFitExtras
 from core.discriminant_member import discriminant_member_v2
 from core.naive_bayes_member import naive_bayes_member_v2
 from x_prep.transport_host import x_prep_transport_host_v1
@@ -685,7 +686,8 @@ def rfe_lda_unit(unit: Int) raises:
         var words = List[Float32]()
         try:
             words = rfe_member_importances(plan, call, Int(block.unsafe_ptr()), n, nsup, Int(codes.unsafe_ptr()),
-                                           MEMBER_I32, source.block, source.squared, notices, rows)
+                                           MEMBER_I32, source.block, source.squared, notices, rows,
+                                           MemberFitExtras(), 0)
         finally:
             member_free(plan, call)
         require(rows == (1 if c.classes == 2 else c.classes), label + ": coef_ has " + String(rows) + " rows")
