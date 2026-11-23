@@ -1,9 +1,9 @@
 diff --git a/gbdt/host/gbdt_oracle.mojo b/gbdt/host/gbdt_oracle.mojo
-index 5ac0a18..043093f 100644
+index b94d939a20..48d0963e18 100644
 --- a/gbdt/host/gbdt_oracle.mojo
 +++ b/gbdt/host/gbdt_oracle.mojo
-@@ -3608,6 +3608,46 @@ def _estimate_leaves(
-     return cur_point^
+@@ -3660,6 +3660,50 @@ def apply_scaled_leaves_host(
+     _ = len(sizes)
  
  
 +def _sabotage_fused_apply(
@@ -14,6 +14,8 @@ index 5ac0a18..043093f 100644
 +    offsets: List[Int],
 +    sizes: List[Int],
 +    n_leaves: Int,
++    dim: Int,
++    plane: Int,
 +):
 +    """SABOTAGE (coverage-gbdt-host_boost_fused_cursor): the pre-2db07105a5
 +    CPU cursor update, `identical_mul_add(leaf, rate, cursor)`, ONE fused
@@ -22,7 +24,7 @@ index 5ac0a18..043093f 100644
 +    var n_rows = 0
 +    for leaf in range(n_leaves):  # driver-loop: over the leaves (the partition's extent)
 +        n_rows = max(n_rows, offsets[leaf] + sizes[leaf])
-+    var units = _gbdt_units(n_rows, 4 * n_rows)
++    var units = _gbdt_units(n_rows, 4 * dim * n_rows)
 +    var chunk = host_predict_chunk(n_rows, units)
 +    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
 +    var leaves_p = rebind[HostF32Ptr](leaves.unsafe_ptr())
@@ -30,13 +32,15 @@ index 5ac0a18..043093f 100644
 +    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
 +    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
 +
-+    def rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm rate, imm cursor_p, imm leaves_p, imm row_p, imm off_p, imm sz_p}:
++    def rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm dim, imm plane, imm rate, imm cursor_p, imm leaves_p, imm row_p, imm off_p, imm sz_p}:
 +        var lo = unit * chunk
 +        var hi = min(lo + chunk, n_rows)
 +        for leaf in range(n_leaves):
-+            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
-+                var row = row_p[pos]
-+                cursor_p[row] = identical_mul_add(leaves_p[leaf], rate, cursor_p[row])
++            for d in range(dim):
++                var v = leaves_p[leaf * dim + d]
++                for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
++                    var at = d * plane + row_p[pos]
++                    cursor_p[at] = identical_mul_add(v, rate, cursor_p[at])
 +
 +    host_parallelize(rows, units)
 +    _ = len(cursor)
@@ -46,43 +50,18 @@ index 5ac0a18..043093f 100644
 +    _ = len(sizes)
 +
 +
- def apply_scaled_leaves_host(
+ def rescale_apply_leaves_host(
      mut cursor: List[Float32],
-     scaled: List[Float32],
-@@ -5029,8 +5069,8 @@ def gbdt_host_boost(
-                     leaf_sums[2 * i], leaf_sums[2 * i + 1], params.l2_leaf_reg
-                 )
-             est_scaled = rescaled_leaves(leaf_values, lr)
--            apply_scaled_leaves_host(
--                cursors[learn_p], est_scaled, row_index, offsets, sizes, n_live
-+            _sabotage_fused_apply(
-+                cursors[learn_p], leaf_values, lr, row_index, offsets, sizes, n_live
-             )
-         else:
-             for p in range(perm_count):  # driver-loop: over the permutations
-@@ -5045,9 +5085,9 @@ def gbdt_host_boost(
-                         leaf_method,
-                     )
-                     scaled = rescaled_leaves(est_p_leaves, lr)
--                    apply_scaled_leaves_host(
--                        cursors[p], scaled, row_index, offsets, sizes,
--                        len(sizes),
-+                    _sabotage_fused_apply(
-+                        cursors[p], est_p_leaves, lr, row_index, offsets,
-+                        sizes, len(sizes),
-                     )
-                 else:
-                     var part = _partition_for_model(
-@@ -5061,9 +5101,9 @@ def gbdt_host_boost(
-                         leaf_method,
-                     )
-                     scaled = rescaled_leaves(est_p_leaves, lr)
--                    apply_scaled_leaves_host(
--                        cursors[p], scaled, part.row_index, part.offsets,
--                        part.sizes, len(part.sizes),
-+                    _sabotage_fused_apply(
-+                        cursors[p], est_p_leaves, lr, part.row_index,
-+                        part.offsets, part.sizes, len(part.sizes),
-                     )
-                 # the EXPORTED ensemble is the estimation permutation's
-                 if p == est_p:
+     leaves: List[Float32],
+@@ -3683,8 +3727,9 @@ def rescale_apply_leaves_host(
+     sabotage arms coverage-gbdt-host_leaf_ulp and
+     coverage-gbdt-host_boost_fused_cursor fault it here."""
+     var scaled = rescaled_leaves(leaves, learning_rate)
+-    apply_scaled_leaves_host(
+-        cursor, scaled, row_index, offsets, sizes, n_leaves, dim, plane
++    _sabotage_fused_apply(
++        cursor, leaves, learning_rate, row_index, offsets, sizes, n_leaves,
++        dim, plane,
+     )
+     return scaled^
+ 
