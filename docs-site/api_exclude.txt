@@ -150,3 +150,11 @@ Sequential.batch_norm1d	seq-blocks-3 batch norm: verify references and GPU colum
 Sequential.batch_norm2d	seq-blocks-3 batch norm: verify references and GPU column owed
 Sequential.gated	neural-blocks layers: no verify lane or GPU column yet
 recipe	added 2026-11-22 (verify --recipe), not yet run from an installed wheel on a GPU or across two vendors; public docs after the release verification
+# lane nn-optim begin (2026-11-23): Sequential.compile's new choices, not yet in a release verification. They are
+# arguments of the documented Sequential.compile, not names, so they cannot be excluded by name here; lane
+# nn-surface decides how compile's docstring carries them until the release verification:
+# Sequential.compile optimizer='rmsprop' / 'adagrad' / 'lamb' and their arguments (alpha, centered, lr_decay,
+# initial_accumulator_value, max_grad_norm, trust_clip, always_adapt): not yet in a release verification
+# Sequential.compile schedule='multi_step' / 'cosine' / 'cosine_warm_restarts' / 'linear_warmup' / 'one_cycle' /
+# 'reduce_on_plateau' and their arguments: not yet in a release verification
+# lane nn-optim end
