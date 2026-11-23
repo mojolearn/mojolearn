@@ -63,6 +63,24 @@ comptime MEMBER_NOTICE_METRIC_TOP_K = 10
 #: notice raised with the search's metrics context; this one is the x_linear
 #: member's own fit notice, raised with the x_linear context's category.
 comptime MEMBER_NOTICE_R2_FEW = 11
+#: cross_val_predict (lane mf-msel5b, core/msel_search_run.mojo): a fold
+#: whose train rows hold a = m of the b = k classes, scikit-learn's
+#: `_enforce_prediction_order` RuntimeWarning (`member_lacking_warning`).
+comptime MEMBER_NOTICE_FOLD_LACKING = 12
+
+#: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
+#: warning and refusals (model_selection/_validation.py
+#: `_enforce_prediction_order`, scikit-learn 1.9). The one copy: the
+#: calibration's fold placement (xtrees/trees_calibrated_fit_run.mojo) and
+#: the search RUN read it.
+comptime MEMBER_LACKING_STRATIFY = "To fix this, use a cross-validation technique resulting in properly stratified folds"
+
+
+def member_lacking_warning(m: Int, k: Int) -> String:
+    """The RuntimeWarning of `_enforce_prediction_order` for a fold whose
+    train rows hold `m` of the `k` classes."""
+    return ("Number of classes in training fold (" + String(m) + ") does not match total number of classes ("
+            + String(k) + "). Results may not be appropriate for your use case. " + MEMBER_LACKING_STRATIFY)
 
 
 def member_notice_add(mut words: List[Float64], code: Int, a: Float64 = 0.0, b: Float64 = 0.0):

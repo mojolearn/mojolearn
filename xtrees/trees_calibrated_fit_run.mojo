@@ -95,6 +95,7 @@ from core.member_abi import (
     MEMBER_I64,
 )
 from core.member_class_weight import member_cw_subset
+from core.member_notices import member_lacking_warning, MEMBER_LACKING_STRATIFY
 from core.member_set_run import (
     MemberSetRun, member_set_prepare, member_set_fit_free, member_set_turn, member_set_first_failure,
     member_set_run_release, MEMBER_SET_WORKER,
@@ -241,15 +242,14 @@ def cal_columns(k: Int) -> Int:
 
 #: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
 #: refusals (model_selection/_validation.py `_enforce_prediction_order`).
-comptime CAL_STRATIFY = "To fix this, use a cross-validation technique resulting in properly stratified folds"
+comptime CAL_STRATIFY = MEMBER_LACKING_STRATIFY  # the one copy (core/member_notices.mojo, lane mf-msel5b)
 
 
 def cal_lacking_warning(m: Int, k: Int) -> String:
     """The RuntimeWarning scikit-learn's `_enforce_prediction_order` warns for
     a fold of `cross_val_predict` (ensemble=False) whose train rows hold `m`
-    of the `k` classes."""
-    return ("Number of classes in training fold (" + String(m) + ") does not match total number of classes ("
-            + String(k) + "). Results may not be appropriate for your use case. " + CAL_STRATIFY)
+    of the `k` classes (core/member_notices.mojo `member_lacking_warning`)."""
+    return member_lacking_warning(m, k)
 
 
 struct CalPlace(Movable):
