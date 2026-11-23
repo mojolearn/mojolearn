@@ -1,0 +1,3 @@
+# tools/gil_region_check.py allow list: one finding per line, `<path>:<function>:<token> <reason>`.
+# A line here says a reviewer read the region and the token is not a PythonObject use (a false hit of the
+# name-based typing) or is safe with no GIL (say why). Empty on 2026-11-23 (lane meta-gil): every finding was fixed.
