@@ -446,13 +446,13 @@ def _fit(slot: _Slot, call: _Call) raises:
     slot[].clear()
     var n = rows
     var coo = SpectralCOOStorage(0)
-    var input: SpectralInput
+    var source_input: SpectralInput
     if affinity == _AFF_NN:
         _sc_check_shape(clusters, rows, k)
         if slot[].neighbors > rows:
             raise Error("mojolearn SpectralClustering: n_neighbors=" + String(slot[].neighbors)
                         + " exceeds n_samples=" + String(rows))
-        input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_DATASET, rows, d, 0)
+        source_input = SpectralInput(call[].x.data, 0, 0, 0, SPECTRAL_DATASET, rows, d, 0)
     else:
         var dense_address = call[].x.data
         if affinity == _AFF_PRECOMPUTED:
@@ -468,11 +468,11 @@ def _fit(slot: _Slot, call: _Call) raises:
             dense_address = Int(slot[].affinity_values.unsafe_ptr())
         if slot[].fit_dense:
             _sc_check_shape(clusters, n, k)
-            input = SpectralInput(dense_address, 0, 0, 0, SPECTRAL_DENSE, n, 0, 0)
+            source_input = SpectralInput(dense_address, 0, 0, 0, SPECTRAL_DENSE, n, 0, 0)
         else:
             coo = _coo(call, dense_address, n, affinity != _AFF_PRECOMPUTED)
             _sc_check_shape(clusters, n, k)
-            input = SpectralInput(0, Int(coo.rows.unsafe_ptr()), Int(coo.columns.unsafe_ptr()),
+            source_input = SpectralInput(0, Int(coo.rows.unsafe_ptr()), Int(coo.columns.unsafe_ptr()),
                 Int(coo.values.unsafe_ptr()), SPECTRAL_GRAPH, n, 0, len(coo.values))
     var keep = slot[].keep_state
     slot[].labels = List[Int32](length=n, fill=0)
@@ -485,7 +485,7 @@ def _fit(slot: _Slot, call: _Call) raises:
     var view = slot[].state_view() if keep else SpectralStateView(0, 0, 0, 0)
     var options = SpectralFitOptions(clusters, k, slot[].initializations, slot[].neighbors, slot[].tolerance,
         slot[].seed, keep)
-    var request = SpectralFitRequest(input, Int(slot[].labels.unsafe_ptr()), Int(slot[].embedding.unsafe_ptr()),
+    var request = SpectralFitRequest(source_input, Int(slot[].labels.unsafe_ptr()), Int(slot[].embedding.unsafe_ptr()),
         view, options)
     var n_out = SpectralDriver(call[].route.entry.call).fit(request)
     _ = len(coo.values)  # the COO triples the fit read stay alive through it
