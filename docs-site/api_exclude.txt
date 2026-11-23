@@ -126,30 +126,37 @@ Session.lstm	added 2026-11-19, not yet in a release verification
 Session.gru	added 2026-11-19, not yet in a release verification
 Session.rnn	added 2026-11-19, not yet in a release verification
 check	added 2026-11-20, not yet run from an installed wheel on a GPU (also skips the estimator method `.check`, conf.py _skip_member by name)
-Sequential.conv1d	seq-blocks 1-D blocks: no verify lane or GPU column yet
-Sequential.max_pool1d	seq-blocks 1-D blocks: no verify lane or GPU column yet
-Sequential.avg_pool1d	seq-blocks 1-D blocks: no verify lane or GPU column yet
-Sequential.adaptive_avg_pool1d	seq-blocks 1-D blocks: no verify lane or GPU column yet
-Sequential.branch	seq-blocks containers: no verify lane or GPU column yet
-Sequential.concat	seq-blocks containers: no verify lane or GPU column yet
-Sequential.residual_block	seq-blocks containers: no verify lane or GPU column yet
-Sequential.parallel	seq-blocks containers: no verify lane or GPU column yet
-Sequential.silu	neural-blocks layers: no verify lane or GPU column yet
-Sequential.gelu	neural-blocks layers: no verify lane or GPU column yet
-Sequential.softplus	neural-blocks layers: no verify lane or GPU column yet
-Sequential.rms_norm	neural-blocks layers: no verify lane or GPU column yet
-Sequential.rotary	neural-blocks layers: no verify lane or GPU column yet
-Sequential.multiply	neural-blocks layers: no verify lane or GPU column yet
-Sequential.narrow	neural-blocks layers: no verify lane or GPU column yet
-Sequential.embedding	neural-blocks layers: no verify lane or GPU column yet
-Sequential.attention	neural-blocks layers: no verify lane or GPU column yet
-Sequential.lstm	neural-blocks layers: no verify lane or GPU column yet
-Sequential.gru	neural-blocks layers: no verify lane or GPU column yet
-Sequential.rnn	neural-blocks layers: no verify lane or GPU column yet
-Sequential.batch_norm1d	seq-blocks-3 batch norm: verify references and GPU column owed
-Sequential.batch_norm2d	seq-blocks-3 batch norm: verify references and GPU column owed
-Sequential.gated	neural-blocks layers: no verify lane or GPU column yet
-recipe	added 2026-11-22 (verify --recipe), not yet run from an installed wheel on a GPU or across two vendors; public docs after the release verification
+# Modules and names added 2026-11-22 onward carry the one reason "not yet in a release verification"; the release walks
+# docs/plans/RELEASE_NEW_SURFACE.md and removes them together once its verification records them.
+Sequential.conv1d	not yet in a release verification
+Sequential.max_pool1d	not yet in a release verification
+Sequential.avg_pool1d	not yet in a release verification
+Sequential.adaptive_avg_pool1d	not yet in a release verification
+Sequential.branch	not yet in a release verification
+Sequential.concat	not yet in a release verification
+Sequential.residual_block	not yet in a release verification
+Sequential.parallel	not yet in a release verification
+Sequential.silu	not yet in a release verification
+Sequential.gelu	not yet in a release verification
+Sequential.softplus	not yet in a release verification
+Sequential.rms_norm	not yet in a release verification
+Sequential.rotary	not yet in a release verification
+Sequential.multiply	not yet in a release verification
+Sequential.narrow	not yet in a release verification
+Sequential.embedding	not yet in a release verification
+Sequential.attention	not yet in a release verification
+Sequential.lstm	not yet in a release verification
+Sequential.gru	not yet in a release verification
+Sequential.rnn	not yet in a release verification
+Sequential.batch_norm1d	not yet in a release verification
+Sequential.batch_norm2d	not yet in a release verification
+Sequential.gated	not yet in a release verification
+Sequential.selective_scan	not yet in a release verification
+Sequential.ssd_scan	not yet in a release verification
+Sequential.trapezoid_scan	not yet in a release verification
+Sequential.lm_head	not yet in a release verification
+recipe	not yet in a release verification
+training_digest_	not yet in a release verification
 # lane nn-optim begin (2026-11-23): Sequential.compile's new choices, not yet in a release verification. They are
 # arguments of the documented Sequential.compile, not names, so they cannot be excluded by name here; lane
 # nn-surface decides how compile's docstring carries them until the release verification:

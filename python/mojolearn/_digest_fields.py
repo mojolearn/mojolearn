@@ -1,11 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-"""What `model.digest_` hashes, per class, and its one native connection.
+"""What `model.digest_` and `model.training_digest_` hash, per class, and their one native connection.
 
-`digest_` is the hash of a fitted model's state (bindings/fitted_digest_door.mojo
-has the walk, core/fitted_digest.mojo the format). The compiled walk reads the
-tables below; `tools/gen_digest_fields.py` writes docs/api/DIGEST_FIELDS.md
-from the same tables and the save schemas, so the table and the code cannot
-disagree.
+`digest_` means "this model gives these answers": the hash of exactly the state
+that decides what predict, transform, score and the other answer methods
+return (the architecture, the hyperparameters those methods read, the fitted
+parameters and buffers, class labels, category maps), and of nothing that only
+records how the model was trained (optimizer moments, step and epoch counters,
+loss and score histories, convergence records, timing, device, thread counts).
+That training record has its own value, `training_digest_`, never mixed into
+`digest_`. bindings/fitted_digest_door.mojo has the walk (one walk for both),
+core/fitted_digest.mojo the format. The compiled walk reads the tables below;
+`tools/gen_digest_fields.py` writes docs/api/DIGEST_FIELDS.md from the same
+tables and the save schemas, so the table and the code cannot disagree.
 
 The field source of a class, first match in its ancestry:
 
@@ -13,11 +19,18 @@ The field source of a class, first match in its ancestry:
    is hashed under the name of the class it loads, and takes that class's
    field source through its ancestry.
 1. `REFUSED`: no digest yet; the read raises AttributeError with the reason.
-2. A digest schema (`SCHEMAS`), else a connected save schema
-   (`_native_archive_bridge.register`): the members `save` writes.
+2. A digest schema (`SCHEMAS`), else the answer members of the connected save
+   schema (`_native_archive_bridge.register`: the members `save` writes,
+   less the training record and the run settings, `answer_steps`). A fitted
+   model the save schema refuses (a format the file does not carry) is hashed
+   by rule 3.
 3. Otherwise: every public fitted attribute (an instance field whose name ends
    in "_" and does not start with "_", value not None, name not in
-   `NOT_STATE`), plus the private fields in `EXTRA`.
+   `NOT_STATE` or `TRAINING`), plus the private fields and the constructor
+   parameters in `EXTRA` (`EXTRA_BY_NAME`, `PARAMS_BY_NAME`).
+
+`training_digest_` hashes, by rule 3's form, the public `TRAINING` fields the
+model holds and the private fields in `TRAINING_EXTRA`.
 
 This module holds declarations and import-time glue only: nothing here runs
 when a model is fitted, and the read itself is one native call.
@@ -85,6 +98,10 @@ EXTRA_BY_NAME = {
     # kpca_native_door.mojo, svc_ocsvm_boundary_pack.mojo).
     "LocalOutlierFactor": ("_fit_X", "_fit_dist", "_lrd"),
     "NearestCentroid": ("_codes_classes",),
+    # k-NN outside its save format (string class labels; bindings/neighbors_*_native_door.mojo)
+    "NearestNeighbors": ("_index",),
+    "KNeighborsClassifier": ("_index", "_y_cols", "_label_names", "_classes_list"),
+    "KNeighborsRegressor": ("_index", "_y_cols"),
     "KNNImputer": ("_fit_X", "_valid", "_miss_cols"),
     "OneClassSVM": ("_gamma",),
     "KernelPCA": ("_gamma", "_fit_X", "_fit_cols", "_fit_all"),
@@ -114,21 +131,116 @@ EXTRA_BY_NAME = {
     # recurrent models: the weights are the public flat block `params_` (bindings/xseq_neural_native_door.mojo)
     "_RecurrentBase": ("_y_1d",),
     # Sequential: the weights are the public flat block `params_`; the layer list decides what they mean
-    # (bindings/sequential_description_unpack.mojo: one tuple of codes and sizes per layer)
-    "Sequential": ("_layers", "_sample_shape"),
+    # (bindings/sequential_description_unpack.mojo: one tuple of codes and sizes per layer); predict and
+    # predict_proba also read the loss the model was fitted with (`_fit_loss`: logits -> labels or
+    # probabilities) and whether y was 1-D (`_y_1d`: the answer's shape), bindings/sequential_admission_door.mojo
+    # `_read_fields_full`. Not listed: the optimizer and row-order state (`_fit_state`, `_curve`, `_fit_batch`,
+    # `_fit_shuffle`, `_target`), which only `fit(..., resume=True)` reads (TRAINING_EXTRA_BY_NAME).
+    "Sequential": ("_layers", "_sample_shape", "_fit_loss", "_y_1d"),
     # CNNClassifier: `layers_` and `head_` are layer objects, entered by the walk (LAYERS)
     "CNNClassifier": ("_flat",),
+}
+
+#: class name -> the constructor parameters an answer method reads at the call
+#: (they decide the answers and no fitted array carries them): a stateless
+#: transformer's settings, a coder's transform settings, a network's
+#: activation and pooling. Hashed by name and value like the private fields of
+#: `EXTRA_BY_NAME` (rule 3). Not listed: parameters that only steer fit (a
+#: learning rate, a tolerance, an iteration cap, a seed): their effect is in the
+#: fitted arrays, and two fits that end in the same arrays give the same answers.
+PARAMS_BY_NAME = {
+    # stateless transformers: fit records the input width only
+    "Binarizer": ("threshold",),
+    "Normalizer": ("norm",),
+    "AdditiveChi2Sampler": ("sample_steps", "sample_interval"),
+    # kernel maps whose transform scales the input by these (the fitted hashes / weights do not carry them)
+    "PolynomialCountSketch": ("gamma", "degree", "coef0"),
+    "SkewedChi2Sampler": ("skewedness",),
+    # label propagation: predict builds the kernel between new points and the fitted ones
+    "_LabelPropagationBase": ("kernel", "gamma", "n_neighbors"),
+    # the coders: transform solves a sparse code with these settings for the fitted dictionary
+    "_BaseSparseCoding": ("transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha", "split_sign",
+                          "positive_code", "transform_max_iter"),
+    "DictionaryLearning": ("transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha", "split_sign",
+                           "positive_code", "transform_max_iter"),
+    "MiniBatchDictionaryLearning": ("transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha",
+                                    "split_sign", "positive_code", "transform_max_iter"),
+    "SparseCoder": ("transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha", "split_sign",
+                    "positive_code", "transform_max_iter"),
+    # the ridge of the transform's least squares
+    "SparsePCA": ("ridge_alpha",),
+    "MiniBatchSparsePCA": ("ridge_alpha",),
+    "IncrementalPCA": ("whiten",),
+    # predict / decision_function / score_samples exist only with novelty=True
+    "LocalOutlierFactor": ("novelty",),
+    # the hidden layers' activation (the fitted weights do not say which one predict applies)
+    "_BaseMLP": ("activation",),
+    # the recurrent network the flat `params_` block belongs to (its length alone does not say), and the
+    # plain RNN's activation (bindings/xseq_neural_native_door.mojo); `predict_chunk` only tiles predict
+    "_RecurrentBase": ("hidden_size", "num_layers"),
+    "RNNClassifier": ("hidden_size", "num_layers", "nonlinearity"),
+    "RNNRegressor": ("hidden_size", "num_layers", "nonlinearity"),
+    # the network the fitted weights belong to: pooling and input layout are not in the weights' shapes
+    "CNNClassifier": ("input_shape", "conv_channels", "kernel_size", "pool_size"),
+    # k-NN: hashed by its save schema; these are for a fitted model the file does not carry (string class
+    # labels), which is hashed by rule 3 with the private index and labels of EXTRA_BY_NAME
+    "NearestNeighbors": ("n_neighbors", "radius", "metric", "p", "algorithm"),
+    "KNeighborsClassifier": ("n_neighbors", "weights", "metric", "p", "algorithm"),
+    "KNeighborsRegressor": ("n_neighbors", "weights", "metric", "p", "algorithm"),
 }
 
 #: Public names (ending in "_") that record how a call ran, not what was
 #: fitted: whether the input was copied on the way in, which shards or which
 #: query tile the last call used. They differ with the input's container or
-#: the machine while the fitted model is the same, so no class hashes them.
+#: the machine while the fitted model is the same, so no class hashes them
+#: (neither digest).
 NOT_STATE = ("input_copied_", "fortran_copied_", "last_shards_", "used_query_tile_", "n_candidate_distances_",
              # a layer's gradient buffers of the last training step
-             "grad_weight_", "grad_bias_",
+             "grad_weight_", "grad_bias_", "grad_weight_r_",
              # a search's resolved scorer object: a setting (`scoring`), not a fitted value
              "scorer_")
+
+#: Public names that record how the model was trained, not what it answers:
+#: iteration, epoch and step counters, loss, score and objective histories,
+#: convergence records, the optimizer's moments, a search's per-candidate
+#: results (with their fit times). `digest_` never hashes them;
+#: `training_digest_` hashes exactly these (and `TRAINING_EXTRA`). A model
+#: loaded from an inference export, which drops them, keeps its `digest_`.
+TRAINING = (
+    # counters
+    "n_iter_", "t_", "n_steps_", "n_batch_iter_", "epochs_run_", "best_epoch_", "best_iteration_",
+    "num_batches_tracked_",
+    # loss, score and objective records
+    "loss_", "loss_curve_", "losses_", "validation_loss_curve_", "validation_scores_", "best_loss_",
+    "best_validation_score_", "training_loss_", "error_", "reconstruction_err_", "objective_", "dual_gap_", "kl_divergence_", "stress_",
+    "lower_bound_", "converged_", "stopped_early_", "retcode_", "info_", "sse_", "criterion_",
+    "log_marginal_likelihood_value_", "n_boruvka_rounds_",
+    # the optimizer's state, which only a resumed fit reads
+    "optimizer_m_", "optimizer_v_", "optimizer_runs_",
+    # a search's or a cross-validated model's record of the candidates (scores, fit / score times, paths):
+    # the chosen candidate is in the fitted state (`best_estimator_`, `best_params_`, `alpha_`, `C_`)
+    "cv_results_", "best_score_", "scores_", "coefs_paths_", "mse_path_",
+)
+
+#: class name -> private training fields: state that only a resumed fit reads.
+TRAINING_EXTRA_BY_NAME = {
+    # bindings/sequential_execution_pack.mojo: the optimizer and row-order counters, the curve buffer, the
+    # batch size, shuffle flag and target code of the fit (sequential_checkpoint_door.mojo writes them)
+    "Sequential": ("_fit_state", "_curve", "_fit_batch", "_fit_shuffle", "_target"),
+}
+
+#: Save-schema members that are training records or run settings: `answer_steps`
+#: leaves them out of a save schema's digest. The public `TRAINING` and
+#: `NOT_STATE` names, plus the settings that only steer a fit (an iteration
+#: cap, a tolerance, an initialization, restarts, a covariance floor) and the
+#: performance knobs (a query tile, a kernel cache size), none of which any
+#: answer method reads.
+SCHEMA_NOT_ANSWERS = NOT_STATE + TRAINING + (
+    "max_iter", "maxiter", "tol", "query_tile", "cache_size", "nochange_steps", "reg_covar", "init_params",
+    "_n_init",
+    # the SVMs' solver settings as stored (python/mojolearn/_svm_impl.py `hyper`/`meta`)
+    "_hp_tol", "_hp_cache_size", "_hp_max_iter", "_hp_nochange_steps",
+)
 
 #: Base classes of layer objects a layered model keeps in its fitted fields
 #: (`CNNClassifier.layers_`, `head_`). The walk enters such an object: its
@@ -149,13 +261,20 @@ OWN_WALK_BY_NAME = {
 }
 
 #: The tables the compiled walk reads, keyed by class (filled by `declare`).
+#: `EXTRA[cls]`: the private fields and the constructor parameters rule 3 adds
+#: (`EXTRA_BY_NAME` and `PARAMS_BY_NAME`, each the first entry in the class's
+#: ancestry). `TRAINING_EXTRA[cls]`: the private training fields.
 EXTRA = {}
+TRAINING_EXTRA = {}
 REFUSED = {}
 
 #: class -> the schema steps its digest is built from, in place of its save
-#: schema (bindings/archive_schema_native_door.mojo runs either). For a class
-#: whose `save` refuses some fitted models that still have their fitted
-#: arrays: the digest does not need the file. Filled by `schema`.
+#: schema (bindings/archive_schema_native_door.mojo runs either). Every class
+#: with a save schema has one: by default the save schema's answer members
+#: (`answer_steps`, entered by `answers` when the save schema is registered);
+#: a class may declare its own (`schema`), for example a tree's, built without
+#: the save refusal of a splitter='random' tree. Filled by `answers` and
+#: `schema`.
 SCHEMAS = {}
 
 #: CPU twin class -> the name of the public class it is hashed under. A `Host*`
@@ -165,11 +284,22 @@ SCHEMAS = {}
 #: one. Filled by `twin` where the twins are defined (_classical_host.py).
 CANONICAL = {}
 
-#: The one connection of the `digest_` property: the property object, the
-#: compiled entry and its context. Filled in place by `connect`; `_mode` puts
-#: this dictionary in its metadata context, where
+#: The one connection of the `digest_` and `training_digest_` properties: the
+#: two property objects, the compiled entry and its context. Filled in place by
+#: `connect`; `_mode` puts this dictionary in its metadata context, where
 #: bindings/fitted_digest_property_pack.mojo reads it.
-CONNECTION = {"property": None, "entry": None, "context": None}
+CONNECTION = {"property": None, "training_property": None, "entry": None, "context": None}
+
+#: The argument tuple of the compiled entry that selects `training_digest_`.
+TRAINING_ARGUMENTS = ("training",)
+
+
+def _first(table, cls):
+    """The entry of the first class in `cls`'s ancestry that `table` names, or ()."""
+    for klass in cls.__mro__:  # glue: once per class definition, over its ancestry
+        if klass.__name__ in table:
+            return tuple(table[klass.__name__])
+    return ()
 
 
 def declare(cls):
@@ -177,8 +307,10 @@ def declare(cls):
     (called once per class, at its definition, by the shared estimator
     base)."""
     name = cls.__name__
-    if name in EXTRA_BY_NAME:
-        EXTRA[cls] = EXTRA_BY_NAME[name]
+    if name in EXTRA_BY_NAME or name in PARAMS_BY_NAME:
+        EXTRA[cls] = _first(EXTRA_BY_NAME, cls) + _first(PARAMS_BY_NAME, cls)
+    if name in TRAINING_EXTRA_BY_NAME:
+        TRAINING_EXTRA[cls] = TRAINING_EXTRA_BY_NAME[name]
     if name in REFUSED_BY_NAME:
         REFUSED[cls] = REFUSED_BY_NAME[name]
 
@@ -187,6 +319,47 @@ def schema(cls, steps):
     """Declare the schema steps `cls` is hashed from, in place of its save
     schema (called once, where the class's save schema is registered)."""
     SCHEMAS[cls] = steps
+
+
+#: Step kinds that write one member from one field (the field is `step[2]`).
+_MEMBER_STEPS = ("str", "lower", "array", "flat", "utf8", "init_name", "classes", "head", "reshape", "device_array")
+#: Step kinds that pack several fields into one vector member (entries `step[2]`, each `(kind, field, ...)`).
+_PACKED_STEPS = ("i8", "i4", "f8", "f4")
+#: Step kinds that run nested steps, and the position of the nested steps.
+_NESTED_STEPS = {"when": 3, "unless": 3, "when_in": 3, "when_set": 2, "when_none": 2}
+
+
+def _not_answer(field):
+    return type(field) is str and field in SCHEMA_NOT_ANSWERS
+
+
+def answer_steps(steps):
+    """The save steps `steps` without the members and packed entries read from
+    a field in `SCHEMA_NOT_ANSWERS` (a training record or a run setting); every
+    other step (the refusals, the answer members) is kept in order."""
+    kept = []
+    for step in steps:  # glue: once per class definition, over its fixed save steps
+        kind = step[0] if type(step) is tuple and step and type(step[0]) is str else None
+        if kind in _MEMBER_STEPS and len(step) > 2 and _not_answer(step[2]):
+            continue
+        if kind in _PACKED_STEPS:
+            entries = tuple(entry for entry in step[2]
+                            if not (type(entry) is tuple and len(entry) > 1 and _not_answer(entry[1])))
+            if not entries:
+                continue
+            step = (step[0], step[1], entries) + tuple(step[3:])
+        elif kind in _NESTED_STEPS:
+            at = _NESTED_STEPS[kind]
+            step = step[:at] + (answer_steps(step[at]),) + tuple(step[at + 1:])
+        kept.append(step)
+    return tuple(kept)
+
+
+def answers(cls, save):
+    """Enter the digest schema of a class whose save schema `save` was just
+    registered: its answer members (`answer_steps`). A schema the class
+    declared with `schema` is kept."""
+    SCHEMAS.setdefault(cls, answer_steps(save))
 
 
 def twin(cls, name):
@@ -278,18 +451,23 @@ def connect(base):
     from ._native_archive_bridge import connect as connect_archive
     entry, context = connect_archive()
     if "archive_unavailable" not in context:
-        context.update(digest_base=base, digest_extra=EXTRA, digest_refused=REFUSED, digest_skip=NOT_STATE,
-                       digest_layers=LAYERS, digest_canonical=CANONICAL, digest_schemas=SCHEMAS)
+        # `digest_skip`: the public names `digest_` never hashes; `digest_training`: the public names
+        # `training_digest_` hashes (with `digest_training_extra`).
+        context.update(digest_base=base, digest_extra=EXTRA, digest_refused=REFUSED,
+                       digest_skip=NOT_STATE + TRAINING, digest_not_state=NOT_STATE, digest_training=TRAINING,
+                       digest_training_extra=TRAINING_EXTRA, digest_layers=LAYERS, digest_canonical=CANONICAL,
+                       digest_schemas=SCHEMAS)
         CONNECTION["entry"] = entry
     CONNECTION["context"] = context
     return entry, context
 
 
-def read(model):
-    """`model.digest_`: one native call."""
+def read(model, arguments=()):
+    """`model.digest_` (`arguments` empty) or `model.training_digest_`
+    (`TRAINING_ARGUMENTS`): one native call."""
     entry = CONNECTION["entry"]
     if entry is None:
         from ._mode import CheckMixin
         entry = connect(CheckMixin)[0]
-    return entry(model, "fitted_digest", (), CONNECTION["context"])
+    return entry(model, "fitted_digest", arguments, CONNECTION["context"])
 
