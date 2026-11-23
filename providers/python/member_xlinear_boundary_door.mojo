@@ -195,7 +195,7 @@ def _xl_listed(pairs: PythonObject, context: PythonObject, mut spec: MselSplitSp
                 return False
             var sides = List[List[Int64]]()
             for side in range(2):  # small-loop(the pair's train then test side)
-                var rows = _xl_index_i64(pair[side], "train" if side == 0 else "test", context)
+                var rows = _xl_index_i64(pair[side], String("train") if side == 0 else String("test"), context)
                 var count = Int(py=rows.size)
                 var words = List[Int64](length=count, fill=Int64(0))
                 if count > 0:
