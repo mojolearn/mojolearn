@@ -24,7 +24,7 @@ Behavior to know:
   rows scikit-learn would pick for that seed.
 """
 from . import _arena_io
-from ._digest_fields import read as _digest_read
+from ._digest_fields import read as _digest_read, TRAINING_ARGUMENTS as _DIGEST_TRAINING_ARGUMENTS
 from ._array import Array as _Array
 from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 # The splitters' random draws (lane/metrics): a module-level import, so the
@@ -1472,11 +1472,13 @@ class _BaseSearch:
     def digest_(self):
         """The hash of this fitted search, as one lower-case hex string.
 
-        It covers the search results (``cv_results_``, ``best_params_``,
-        ``best_score_``, ``best_index_``, ``n_splits_``) and, when the search
-        refitted, the digest of ``best_estimator_``. In `identical` mode the
-        same search on the same data has the same `digest_` on every
-        supported device. It is computed each time it is read.
+        It covers what the search chose (``best_params_``, ``best_index_``,
+        ``n_splits_``) and, when the search refitted, the digest of
+        ``best_estimator_``, which gives the answers. The record of the
+        candidates (``cv_results_``, ``best_score_``) is in
+        `training_digest_`. In `identical` mode the same search on the same
+        data has the same `digest_` on every supported device. It is
+        computed each time it is read.
 
         Raises
         ------
@@ -1484,6 +1486,19 @@ class _BaseSearch:
             If the search is not fitted, or runs in `fast` mode (Apple only).
         """
         return _digest_read(self)
+
+    @property
+    def training_digest_(self):
+        """The hash of how this search was fitted (its record: ``cv_results_`` and ``best_score_``), as one
+        lower-case hex string, separate from `digest_`. It is computed each
+        time it is read.
+
+        Raises
+        ------
+        AttributeError
+            If it is not fitted, or runs in `fast` mode (Apple only).
+        """
+        return _digest_read(self, _DIGEST_TRAINING_ARGUMENTS)
 
     def get_params(self, deep=False):
         """Return the search's constructor parameters as a dict."""
