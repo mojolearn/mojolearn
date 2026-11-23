@@ -25,7 +25,7 @@ private fields a row names), under the class name followed by `#training`.
   fields, same digest.
 - Public names no class hashes (they record how a call ran, not what was fitted): `input_copied_`, `fortran_copied_`, `last_shards_`, `used_query_tile_`, `n_candidate_distances_`, `grad_weight_`, `grad_bias_`, `grad_weight_r_`, `scorer_`.
 - The training record (`training_digest_` only): `n_iter_`, `t_`, `n_steps_`, `n_batch_iter_`, `epochs_run_`, `best_epoch_`, `best_iteration_`, `num_batches_tracked_`, `loss_`, `loss_curve_`, `losses_`, `validation_loss_curve_`, `validation_scores_`, `best_loss_`, `best_validation_score_`, `training_loss_`, `error_`, `reconstruction_err_`, `objective_`, `dual_gap_`, `kl_divergence_`, `stress_`, `lower_bound_`, `converged_`, `stopped_early_`, `retcode_`, `info_`, `sse_`, `criterion_`, `log_marginal_likelihood_value_`, `n_boruvka_rounds_`, `optimizer_m_`, `optimizer_v_`, `optimizer_runs_`, `cv_results_`, `best_score_`, `scores_`, `coefs_paths_`, `mse_path_`.
-- Fit-only settings a save schema's digest leaves out: `_n_init`, `cache_size`, `init_params`, `max_iter`, `maxiter`, `nochange_steps`, `query_tile`, `reg_covar`, `tol`.
+- Fit-only settings a save schema's digest leaves out: `_hp_cache_size`, `_hp_max_iter`, `_hp_nochange_steps`, `_hp_tol`, `_n_init`, `cache_size`, `init_params`, `max_iter`, `maxiter`, `nochange_steps`, `query_tile`, `reg_covar`, `tol`.
 
 | Class | Source | Fields |
 |---|---|---|

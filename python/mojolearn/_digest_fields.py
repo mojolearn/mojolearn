@@ -238,6 +238,8 @@ TRAINING_EXTRA_BY_NAME = {
 SCHEMA_NOT_ANSWERS = NOT_STATE + TRAINING + (
     "max_iter", "maxiter", "tol", "query_tile", "cache_size", "nochange_steps", "reg_covar", "init_params",
     "_n_init",
+    # the SVMs' solver settings as stored (python/mojolearn/_svm_impl.py `hyper`/`meta`)
+    "_hp_tol", "_hp_cache_size", "_hp_max_iter", "_hp_nochange_steps",
 )
 
 #: Base classes of layer objects a layered model keeps in its fitted fields

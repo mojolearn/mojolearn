@@ -249,7 +249,8 @@ def test_a_model_the_file_format_does_not_carry_still_has_a_digest(tmp_path):
 
 _THREADS_SCRIPT = r"""
 import os, sys
-os.sched_setaffinity(0, {0} if sys.argv[1] == "one" else os.sched_getaffinity(0))
+allowed = os.sched_getaffinity(0)
+os.sched_setaffinity(0, {min(allowed)} if sys.argv[1] == "one" else allowed)
 import numpy as np, mojolearn
 rng = np.random.default_rng(0)
 X = rng.random((400, 6), dtype=np.float32)
@@ -264,8 +265,11 @@ print(" ".join(m.digest_ for m in models))
 def test_the_thread_count_does_not_change_the_digest():
     if len(os.sched_getaffinity(0)) < 2:
         pytest.skip("one core: nothing to compare")
-    runs = [subprocess.run([sys.executable, "-c", _THREADS_SCRIPT, which], capture_output=True, text=True,
-                           timeout=600, check=True).stdout.split() for which in ("one", "all")]
+    done = [subprocess.run([sys.executable, "-c", _THREADS_SCRIPT, which], capture_output=True, text=True,
+                           timeout=600) for which in ("one", "all")]
+    for run in done:
+        assert run.returncode == 0, run.stderr[-2000:]
+    runs = [run.stdout.split() for run in done]
     assert runs[0] == runs[1] and len(runs[0]) == 3
 
 
