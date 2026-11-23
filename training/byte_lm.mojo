@@ -105,7 +105,7 @@ from training.checks.optimizer import (
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
 from training.checks.optimizer_contract import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
-from core.device_arena import arena_begin, arena_end, arena_release
+from core.device_arena import ArenaPtr, DeviceArena, arena_ptr
 from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ, attention_estash_memory_grant
 from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages,
@@ -584,7 +584,7 @@ struct ByteBuffers(Movable):
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
                  initial_m: List[Float32], initial_v: List[Float32], flags: List[Bool],
                  config: ByteConfig = ByteConfig(), optimizer_first: Int = 0,
-                 optimizer_count: Int = -1) raises:
+                 optimizer_count: Int = -1, arena: Optional[ArenaPtr] = None) raises:
         _byte_validate_allocations(config)
         self.config = config.copy()
         var M = config.batch * config.length
@@ -601,8 +601,8 @@ struct ByteBuffers(Movable):
         var owned = self.optimizer_count
         if optimizer_first < 0 or owned < 1 or optimizer_first > n - owned:
             raise Error("byte LM: invalid optimizer ownership range")
-        self.param = _upload(ctx, initial_params)
-        self.grad = _zeros(ctx, n)
+        self.param = _upload(ctx, initial_params, arena)
+        self.grad = _zeros(ctx, n, arena)
         if self.optimizer_pooled:
             # cpu3-seq: the owned moment range goes up straight from the
             # caller's Lists (one DMA each), no host slice copy.
@@ -617,22 +617,22 @@ struct ByteBuffers(Movable):
             step_count_sync()
             ctx.synchronize()
         else:
-            self.m_state = _upload(ctx, initial_m)
-            self.v_state = _upload(ctx, initial_v)
+            self.m_state = _upload(ctx, initial_m, arena)
+            self.v_state = _upload(ctx, initial_v, arena)
         # Recording kernels write one intermediate per parameter.
         var record_n = 1
         comptime if OPT_RECORD_INTERMEDIATES:
             record_n = n
-        self.denom_out = _zeros(ctx, record_n)
-        self.q_out = _zeros(ctx, record_n)
-        self.sumsq = _zeros(ctx, config.n_tensors())
-        self.norms = _zeros(ctx, config.n_tensors())
-        self.total_cell = _zeros(ctx, 1)
-        self.out2 = _zeros(ctx, 2)
+        self.denom_out = _zeros(ctx, record_n, arena)
+        self.q_out = _zeros(ctx, record_n, arena)
+        self.sumsq = _zeros(ctx, config.n_tensors(), arena)
+        self.norms = _zeros(ctx, config.n_tensors(), arena)
+        self.total_cell = _zeros(ctx, 1, arena)
+        self.out2 = _zeros(ctx, 2, arena)
         var opt_cells = identical_optimizer_workspace_floats(self.offsets)
         var ce_cells = 1 if config.chunked_lm_head_v2 else identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN)
-        self.opt_ws = _zeros(ctx, opt_cells)
-        self.sab_partials = _zeros(ctx, SAB_CHUNKS)
+        self.opt_ws = _zeros(ctx, opt_cells, arena)
+        self.sab_partials = _zeros(ctx, SAB_CHUNKS, arena)
 
         # Views of the flat parameters (`_bind_emb_head`), not copies.
         self.emb_w = self.param.create_sub_buffer[DType.float32](0, V * DM)
@@ -654,11 +654,11 @@ struct ByteBuffers(Movable):
         self.ids = _zeros_i32(ctx, M)
         self.targets = _zeros_i32(ctx, M)
 
-        self.x = _zeros(ctx, M * DM)
-        self.logits = _zeros(ctx, M * min(V, LM_HEAD_V2_CHUNK) if config.chunked_lm_head_v2 else M * V)
-        self.d_h = _zeros(ctx, M * DM)
+        self.x = _zeros(ctx, M * DM, arena)
+        self.logits = _zeros(ctx, M * min(V, LM_HEAD_V2_CHUNK) if config.chunked_lm_head_v2 else M * V, arena)
+        self.d_h = _zeros(ctx, M * DM, arena)
 
-        self.ce_max = _zeros(ctx, M)
+        self.ce_max = _zeros(ctx, M, arena)
         # DEVIATION 3011: `ce_shift` IS `logits` and `ce_weights` and `ce_dlogits`
         # ARE `ce_expo`. Five `[M, V]` allocations become two, which is
         # 3 * M * V * 4 bytes -- 1,178 MiB at B1/L2048/V50257 and eight
@@ -692,34 +692,34 @@ struct ByteBuffers(Movable):
         # and not by a promise. The loss lane's own gate fixtures pass
         # five distinct buffers and are untouched by this.
         if config.chunked_lm_head_v2:
-            self.ce_shift = _zeros(ctx, 1)
+            self.ce_shift = _zeros(ctx, 1, arena)
         else:
             self.ce_shift = self.logits.create_sub_buffer[DType.float32](0, M * V)
-        self.ce_expo = _zeros(ctx, 1 if config.chunked_lm_head_v2 else M * V)
-        self.ce_denom = _zeros(ctx, M)
-        self.ce_logdenom = _zeros(ctx, M)
-        self.ce_logp_target = _zeros(ctx, M)
-        self.ce_nll = _zeros(ctx, M)
-        self.ce_logp = _zeros(ctx, 1)
-        self.ce_logp_sum = _zeros(ctx, 1)
-        self.ce_smooth = _zeros(ctx, 1)
-        self.ce_row = _zeros(ctx, M)
-        self.ce_total = _zeros(ctx, 1)
-        self.ce_loss = _zeros(ctx, 1)
+        self.ce_expo = _zeros(ctx, 1 if config.chunked_lm_head_v2 else M * V, arena)
+        self.ce_denom = _zeros(ctx, M, arena)
+        self.ce_logdenom = _zeros(ctx, M, arena)
+        self.ce_logp_target = _zeros(ctx, M, arena)
+        self.ce_nll = _zeros(ctx, M, arena)
+        self.ce_logp = _zeros(ctx, 1, arena)
+        self.ce_logp_sum = _zeros(ctx, 1, arena)
+        self.ce_smooth = _zeros(ctx, 1, arena)
+        self.ce_row = _zeros(ctx, M, arena)
+        self.ce_total = _zeros(ctx, 1, arena)
+        self.ce_loss = _zeros(ctx, 1, arena)
         # DEVIATION 3011: both are `ce_expo` (see `ce_shift` above).
         if config.chunked_lm_head_v2:
-            self.ce_weights = _zeros(ctx, 1)
-            self.ce_dlogits = _zeros(ctx, 1)
+            self.ce_weights = _zeros(ctx, 1, arena)
+            self.ce_dlogits = _zeros(ctx, 1, arena)
         else:
             self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
             self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
-        self.ce_ones = _ones(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_ones_floats(M, V))
-        self.ce_ws = _zeros(ctx, ce_cells)
+        self.ce_ones = _ones(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_ones_floats(M, V), arena)
+        self.ce_ws = _zeros(ctx, ce_cells, arena)
 
         var head_scratch = (chunked_lm_head_v2_gemm_workspace_floats(M,V,DM) if config.chunked_lm_head_v2
             else identical_gemm_workspace_max_floats(M,V,DM))
-        self.head_ws = _zeros(ctx, head_scratch)
-        self.head_bwd_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_gemm_backward_workspace_max_floats(OP_NT, M, V, DM, False))
+        self.head_ws = _zeros(ctx, head_scratch, arena)
+        self.head_bwd_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_gemm_backward_workspace_max_floats(OP_NT, M, V, DM, False), arena)
 
         var scratch = emb_run_scratch_ints(V, M)
         if scratch != V + (V + 1) + M:
@@ -736,14 +736,14 @@ struct ByteBuffers(Movable):
         self.emb_perm = _zeros_i32(ctx, M)
 
         self.buf_initialized = flags.copy()
-        self.shadow_p = _zeros(ctx, owned)
-        self.shadow_m = _zeros(ctx, owned)
-        self.shadow_v = _zeros(ctx, owned)
+        self.shadow_p = _zeros(ctx, owned, arena)
+        self.shadow_m = _zeros(ctx, owned, arena)
+        self.shadow_v = _zeros(ctx, owned, arena)
         self.flags_before = flags.copy()
 
 
 
-def _param_upload(ctx: DeviceContext, values: List[Float32], offsets: List[Int], j: Int) raises -> DeviceBuffer[DType.float32]:
+def _param_upload(ctx: DeviceContext, values: List[Float32], offsets: List[Int], j: Int, arena: Optional[ArenaPtr] = None) raises -> DeviceBuffer[DType.float32]:
     """cpu3-seq: parameter tensor `j` uploaded straight from its offset in
     the flat parameter List (one DMA), no host slice copy. The caller waits
     before `values` may be released."""
@@ -752,22 +752,24 @@ def _param_upload(ctx: DeviceContext, values: List[Float32], offsets: List[Int],
     if lo < 0 or n < 0 or lo + n > len(values):
         raise Error("byte LM: parameter tensor outside the flat parameter list")
     if n < 1:
-        return _zeros(ctx, 1)
+        return _zeros(ctx, 1, arena)
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
     step_count_h2d()
     ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr() + lo)
     return buf^
 
 
-def _block_weights(ctx: DeviceContext, params: List[Float32], block: Int, config: ByteConfig) raises -> LlamaDeviceWeights:
+def _block_weights(
+    ctx: DeviceContext, params: List[Float32], block: Int, config: ByteConfig, arena: Optional[ArenaPtr] = None
+) raises -> LlamaDeviceWeights:
     var base = 1 + 9 * block
     var o = byte_offsets(config)
     var w = LlamaDeviceWeights(ctx, byte_dims(config), Float32(1e-6),
-        _param_upload(ctx, params, o, base), _param_upload(ctx, params, o, base + 5),
-        _param_upload(ctx, params, o, base + 1), _param_upload(ctx, params, o, base + 2),
-        _param_upload(ctx, params, o, base + 3), _param_upload(ctx, params, o, base + 4),
-        _param_upload(ctx, params, o, base + 6), _param_upload(ctx, params, o, base + 7),
-        _param_upload(ctx, params, o, base + 8))
+        _param_upload(ctx, params, o, base, arena), _param_upload(ctx, params, o, base + 5, arena),
+        _param_upload(ctx, params, o, base + 1, arena), _param_upload(ctx, params, o, base + 2, arena),
+        _param_upload(ctx, params, o, base + 3, arena), _param_upload(ctx, params, o, base + 4, arena),
+        _param_upload(ctx, params, o, base + 6, arena), _param_upload(ctx, params, o, base + 7, arena),
+        _param_upload(ctx, params, o, base + 8, arena), arena=arena)
     step_count_sync()
     ctx.synchronize()
     return w^
@@ -960,7 +962,8 @@ struct ByteTrainer(Movable):
     refuses unless it equals `completed_steps`.
     """
     var config: ByteConfig
-    var arena_id: Int
+    #: the session's arena (core/device_arena.mojo): its constructors' buffers are views of its chunks
+    var arena: DeviceArena
     var buffers: ByteBuffers
     var weights: List[LlamaDeviceWeights]
     var rope: LlamaRopeTable
@@ -1002,24 +1005,27 @@ struct ByteTrainer(Movable):
         self.grad_step = -1
         self.live_status_steps = 0
         # lane/neural-pass43: the session's buffers carved from arena chunks
-        # (core/device_arena.mojo) between here and `arena_end` below.
-        self.arena_id = arena_begin()
+        # (core/device_arena.mojo). Lane arena-session (2026-11-23): this
+        # session's own arena, handed to each constructor below (`ap`); the
+        # local stays in place and named until it moves into `self.arena`.
+        var arena = DeviceArena()
+        var ap = arena_ptr(arena)
         self.scan = DeviceScanScratch(ctx)
-        self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags, config, optimizer_first, optimizer_count)
+        self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags, config, optimizer_first, optimizer_count, arena=ap)
         self.weights = List[LlamaDeviceWeights]()
         self.forward = List[LlamaDeviceStages]()
         self.backward = List[LlamaBackwardStages]()
-        self.rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
-        self.prefill_cache = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
+        self.rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length, arena=ap)
+        self.prefill_cache = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length, arena=ap)
         for layer in range(config.n_layers):  # driver-loop: over decoder layers
-            self.weights.append(_block_weights(ctx, initial_params, layer, config))
+            self.weights.append(_block_weights(ctx, initial_params, layer, config, ap))
             # The hand step's per-layer training stages. The trace-disabled
             # trainer uses the existing fused attention path. Allocate its
             # quadratic stages lazily; eager/diagnostic fallback still grows
             # them through ensure_*_attention_capacity.
-            self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
-            self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
-        arena_end(self.arena_id)
+            self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True, arena=ap))
+            self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True, arena=ap))
+        self.arena = arena^
         step_count_sync()
         ctx.synchronize()
         # lane box-run-2-fix: the state's per-parameter predicates (finite
@@ -1054,14 +1060,6 @@ struct ByteTrainer(Movable):
             return
         byte_validate_device_state(ctx, self.scan, self.buffers.param, self.buffers.m_state,
             self.buffers.v_state, self.buffers.buf_initialized, completed, self.config)
-
-    def __deinit__(deinit self):
-        """The session's arena chunks go back to the pool (not freed: the
-        views in this struct's fields die right after this body)."""
-        try:
-            arena_release(self.arena_id)
-        except:
-            pass
 
 
 def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:

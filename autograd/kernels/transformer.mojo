@@ -18,7 +18,7 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
-from core.device_arena import arena_active, arena_take
+from core.device_arena import ArenaPtr, arena_buffer
 # lane afn-lm (2026-10-03): Apple FAST experiments, each False unless the
 # build is FAST, on Apple, and carries its own -D MOJOLEARN_AFN_LM_* define.
 # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_FUSE / MOJOLEARN_AFN26_LM_BWD_FUSE (Apple FAST opt-in, never promoted) folded to False
@@ -163,18 +163,13 @@ def _grid(n: Int) -> Int:
 
 
 def _upload(
-    ctx: DeviceContext, values: List[Float32]
+    ctx: DeviceContext, values: List[Float32], arena: Optional[ArenaPtr] = None
 ) raises -> DeviceBuffer[DType.float32]:
     var n = len(values)
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    var dev: DeviceBuffer[DType.float32]
-    if arena_active():
-        dev = arena_take(ctx, n_buf)
-    else:
-        step_count_device_alloc()
-        dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var dev = arena_buffer(ctx, n_buf, arena)
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     step_count_sync()
@@ -191,17 +186,14 @@ def _upload(
     return dev^
 
 
-def _zeros[wait: Bool = True](ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+def _zeros[wait: Bool = True](
+    ctx: DeviceContext, n: Int, arena: Optional[ArenaPtr] = None
+) raises -> DeviceBuffer[DType.float32]:
     """Zero fill; wait=False requires the returned owner to survive a later fence."""
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    var dev: DeviceBuffer[DType.float32]
-    if arena_active():
-        dev = arena_take(ctx, n_buf)
-    else:
-        step_count_device_alloc()
-        dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var dev = arena_buffer(ctx, n_buf, arena)
     step_count_launch()
     dev.enqueue_fill(Float32(0.0))
     comptime if wait:
@@ -2207,6 +2199,7 @@ struct LlamaBackwardStages(Movable):
         s_max: Int,
         dims: LlamaDims,
         lean: Bool = False,
+        arena: Optional[ArenaPtr] = None,
     ) raises:
         """`lean`: the four `[B, n_heads, L, S]` attention gradients and
         `head_c` are allocated at ONE element, for a caller that runs the
@@ -2236,72 +2229,72 @@ struct LlamaBackwardStages(Movable):
         var nh = dims.n_heads
         var nkv = dims.n_kv
 
-        self.in_d_residual2 = _zeros[False](ctx, m * dm)
+        self.in_d_residual2 = _zeros[False](ctx, m * dm, arena)
         # Both residual-add branches receive the incoming cotangent
         # unchanged. They are read-only afterward, so retain one allocation
         # while preserving the two separately named trace stages.
         self.d_down_proj_out = self.in_d_residual2.create_sub_buffer[DType.float32](0, m * dm)
-        self.d_mlp_gated = _zeros[False](ctx, m * it)
-        self.dw_down = _zeros[False](ctx, dm * it)
-        self.d_silu_out = _zeros[False](ctx, m * it)
-        self.d_up_proj_out = _zeros[False](ctx, m * it)
-        self.d_gate_proj_out = _zeros[False](ctx, m * it)
-        self.dw_gate = _zeros[False](ctx, it * dm)
-        self.dw_up = _zeros[False](ctx, it * dm)
-        self.d_norm2_out = _zeros[False](ctx, m * dm)
-        self.norm2_dot = _zeros[False](ctx, m)
-        self.dw_norm2 = _zeros[False](ctx, dm)
-        self.norm2_dx = _zeros[False](ctx, m * dm)
-        self.d_residual1 = _zeros[False](ctx, m * dm)
+        self.d_mlp_gated = _zeros[False](ctx, m * it, arena)
+        self.dw_down = _zeros[False](ctx, dm * it, arena)
+        self.d_silu_out = _zeros[False](ctx, m * it, arena)
+        self.d_up_proj_out = _zeros[False](ctx, m * it, arena)
+        self.d_gate_proj_out = _zeros[False](ctx, m * it, arena)
+        self.dw_gate = _zeros[False](ctx, it * dm, arena)
+        self.dw_up = _zeros[False](ctx, it * dm, arena)
+        self.d_norm2_out = _zeros[False](ctx, m * dm, arena)
+        self.norm2_dot = _zeros[False](ctx, m, arena)
+        self.dw_norm2 = _zeros[False](ctx, dm, arena)
+        self.norm2_dx = _zeros[False](ctx, m * dm, arena)
+        self.d_residual1 = _zeros[False](ctx, m * dm, arena)
         # `o_proj` receives the residual-add cotangent verbatim. Keep its
         # separately named trace stage as a view: both consumers are reads,
         # and `d_residual1` remains live until the final input fan-in.
         self.d_o_proj_out = self.d_residual1.create_sub_buffer[DType.float32](0, m * dm)
-        self.d_attn_ctx = _zeros[False](ctx, m * qw)
-        self.dw_o = _zeros[False](ctx, dm * qw)
+        self.d_attn_ctx = _zeros[False](ctx, m * qw, arena)
+        self.dw_o = _zeros[False](ctx, dm * qw, arena)
         var cells = b * nh * l * s_max
         var head_c_n = l * s_max
         if lean:
             cells = 1
             head_c_n = 1
-        self.d_attn_weights = _zeros[False](ctx, cells)
-        self.attn_zdot = _zeros[False](ctx, b * nh * l)
-        self.d_attn_masked = _zeros[False](ctx, cells)
-        self.d_attn_scores = _zeros[False](ctx, cells)
-        self.d_qk_cell = _zeros[False](ctx, cells)
-        self.d_q_rope = _zeros[False](ctx, m * qw)
-        self.d_k_cache = _zeros[False](ctx, b * nkv * s_max * hd)
-        self.d_v_cache = _zeros[False](ctx, b * nkv * s_max * hd)
-        self.d_k_rope = _zeros[False](ctx, m * kw)
-        self.d_v_proj_out = _zeros[False](ctx, m * kw)
-        self.d_q_proj_out = _zeros[False](ctx, m * qw)
-        self.d_k_proj_out = _zeros[False](ctx, m * kw)
-        self.dw_q = _zeros[False](ctx, qw * dm)
-        self.dw_k = _zeros[False](ctx, kw * dm)
-        self.dw_v = _zeros[False](ctx, kw * dm)
-        self.d_norm1_out = _zeros[False](ctx, m * dm)
-        self.norm1_dot = _zeros[False](ctx, m)
-        self.dw_norm1 = _zeros[False](ctx, dm)
-        self.norm1_dx = _zeros[False](ctx, m * dm)
-        self.d_x = _zeros[False](ctx, m * dm)
+        self.d_attn_weights = _zeros[False](ctx, cells, arena)
+        self.attn_zdot = _zeros[False](ctx, b * nh * l, arena)
+        self.d_attn_masked = _zeros[False](ctx, cells, arena)
+        self.d_attn_scores = _zeros[False](ctx, cells, arena)
+        self.d_qk_cell = _zeros[False](ctx, cells, arena)
+        self.d_q_rope = _zeros[False](ctx, m * qw, arena)
+        self.d_k_cache = _zeros[False](ctx, b * nkv * s_max * hd, arena)
+        self.d_v_cache = _zeros[False](ctx, b * nkv * s_max * hd, arena)
+        self.d_k_rope = _zeros[False](ctx, m * kw, arena)
+        self.d_v_proj_out = _zeros[False](ctx, m * kw, arena)
+        self.d_q_proj_out = _zeros[False](ctx, m * qw, arena)
+        self.d_k_proj_out = _zeros[False](ctx, m * kw, arena)
+        self.dw_q = _zeros[False](ctx, qw * dm, arena)
+        self.dw_k = _zeros[False](ctx, kw * dm, arena)
+        self.dw_v = _zeros[False](ctx, kw * dm, arena)
+        self.d_norm1_out = _zeros[False](ctx, m * dm, arena)
+        self.norm1_dot = _zeros[False](ctx, m, arena)
+        self.dw_norm1 = _zeros[False](ctx, dm, arena)
+        self.norm1_dx = _zeros[False](ctx, m * dm, arena)
+        self.d_x = _zeros[False](ctx, m * dm, arena)
 
-        self.dh = _zeros[False](ctx, m * dm)
-        self.dprod = _zeros[False](ctx, m * dm)
-        self.rstd = _zeros[False](ctx, m)
-        self.dvcoef = _zeros[False](ctx, m)
+        self.dh = _zeros[False](ctx, m * dm, arena)
+        self.dprod = _zeros[False](ctx, m * dm, arena)
+        self.rstd = _zeros[False](ctx, m, arena)
+        self.dvcoef = _zeros[False](ctx, m, arena)
         self.ones = _fill_ones[False](ctx, m)
         # The gate/up and q/k/v dA routes all produce [M, d_model].  These
         # unrecorded fan-in temporaries never hold an intermediate-width
         # tensor, even when intermediate > d_model.
-        self.tmp0 = _zeros[False](ctx, m * dm)
-        self.tmp1 = _zeros[False](ctx, m * dm)
-        self.tmp2 = _zeros[False](ctx, m * dm)
-        self.head_a = _zeros[False](ctx, l * hd)
-        self.head_b = _zeros[False](ctx, s_max * hd)
+        self.tmp0 = _zeros[False](ctx, m * dm, arena)
+        self.tmp1 = _zeros[False](ctx, m * dm, arena)
+        self.tmp2 = _zeros[False](ctx, m * dm, arena)
+        self.head_a = _zeros[False](ctx, l * hd, arena)
+        self.head_b = _zeros[False](ctx, s_max * hd, arena)
         self.attn_repaired = 0
         self.attn_backward_status = -1
         self.attn_bwd_fused_off = False
-        self.head_c = _zeros[False](ctx, head_c_n)
+        self.head_c = _zeros[False](ctx, head_c_n, arena)
 
         # All fill targets are fields of self and remain alive through this
         # fence. Queue every fill on the same context, then wait once before

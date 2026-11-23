@@ -23,26 +23,6 @@ comptime AFN_MAMBA_DEVICE_REFUSAL = False
 comptime AFN_MAMBA_PROJ_ROUTE = False
 comptime IDN_MAMBA_GEMM_WS = False
 
-def arena_begin() raises -> Int:
-    abort("mamba host: device-only optimization arena_begin is disabled")
-
-
-def arena_end(id: Int) raises:
-    abort("mamba host: device-only optimization arena_end is disabled")
-
-
-def arena_release(id: Int) raises:
-    abort("mamba host: device-only optimization arena_release is disabled")
-
-
-def arena_active() raises -> Bool:
-    abort("mamba host: device-only optimization arena_active is disabled")
-
-
-def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
-    abort("mamba host: device-only optimization arena_take is disabled")
-
-
 def afn_selective_scan_chunked[
     DSTATE: Int
 ](
@@ -285,6 +265,49 @@ def mamba_proj_gemm(
     op: Int,
 ) raises:
     identical_gemm[False](ctx, c, a, b, m, n, k, op)
+
+
+struct DeviceArena(Movable):
+    """One session's arena: the chunks it holds and its fill point. The
+    session constructs it first, passes `arena_ptr(arena)` to the helpers
+    that build its buffers, and keeps it as a field; its destructor (or
+    `release`) returns the chunks to the pool. Off (`on` False: every
+    column but Apple, or `-D MOJOLEARN_DEVICE_ARENA_OFF`) it holds nothing
+    and `arena_ptr` gives None."""
+
+    var on: Bool
+    #: pool indices of the chunks this arena holds
+    var held: List[Int]
+    #: the chunk views are taken from (0 or 1 entry)
+    var cur: List[DeviceBuffer[DType.float32]]
+    var cur_n: Int
+    var cur_key: Int
+    var off: Int
+    var views: Int
+
+    def __init__(out self):
+        abort("mamba host: device-only DeviceArena.__init__ is disabled")
+
+
+    def __init__(out self, *, on: Bool):
+        abort("mamba host: device-only DeviceArena.__init__ is disabled")
+
+
+    def take(mut self, ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+        abort("mamba host: device-only DeviceArena.take is disabled")
+
+
+    def release(mut self) raises:
+        abort("mamba host: device-only DeviceArena.release is disabled")
+
+
+    def stats(self) -> List[Int]:
+        abort("mamba host: device-only DeviceArena.stats is disabled")
+
+
+    def __deinit__(deinit self):
+        abort("mamba host: device-only DeviceArena.__deinit__ is disabled")
+
 
 
 struct MambaArena(Movable):

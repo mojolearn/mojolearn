@@ -85,7 +85,6 @@ from training.byte_lm import (
     byte_lm_attn_sticky_fallback, byte_lm_ce_aliased,
 )
 from training.byte_lm_optimizer_pool import pool_fault_available
-from core.device_arena import arena_stats, device_arena_on
 from training.byte_lm_model_pool import ByteModelPool
 from training.byte_lm_offload import ByteOffloadedReplay
 from training.byte_lm_parallel import ByteParallelTrainer

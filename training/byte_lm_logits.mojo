@@ -49,7 +49,7 @@ from training.byte_lm import (
     byte_dims,
 )
 from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into, download_f32_into_scanned
-from core.device_arena import arena_begin, arena_end, arena_release
+from core.device_arena import DeviceArena, arena_ptr
 from core.device_scan import device_first_nonfinite, device_first_token_oob
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.experiments.neural_switches import ROLE_HEAD
@@ -151,35 +151,33 @@ struct ByteLogitsScratch(Movable):
     var stages: List[LlamaDeviceStages]
     var logits: DeviceBuffer[DType.float32]
     var head_ws: DeviceBuffer[DType.float32]
-    var arena_id: Int
+    #: the scratch's own arena (core/device_arena.mojo)
+    var arena: DeviceArena
 
     def __init__(out self, ctx: DeviceContext, batch: Int, length: Int, config: ByteConfig) raises:
         var m = batch * length
         var dims = byte_dims(config)
         self.batch = batch
         self.length = length
-        # lane/neural-pass43: the scratch's buffers carved from arena chunks
-        self.arena_id = arena_begin()
+        # lane/neural-pass43: the scratch's buffers carved from arena chunks;
+        # lane arena-session (2026-11-23): this scratch's own arena, handed
+        # to each constructor (`ap`), the local named until it moves to self
+        var arena = DeviceArena()
+        var ap = arena_ptr(arena)
         self.ids = _zeros_i32(ctx, m)
-        self.x = _zeros(ctx, m * config.d_model)
-        self.cache = LlamaKVCache(ctx, batch, dims, length)
+        self.x = _zeros(ctx, m * config.d_model, ap)
+        self.cache = LlamaKVCache(ctx, batch, dims, length, arena=ap)
         self.stages = List[LlamaDeviceStages]()
         for _ in range(config.n_layers):
-            self.stages.append(LlamaDeviceStages(ctx, batch, length, length, dims, lean=True))
-        self.logits = _zeros(ctx, m * config.vocab_size)
+            self.stages.append(LlamaDeviceStages(ctx, batch, length, length, dims, lean=True, arena=ap))
+        self.logits = _zeros(ctx, m * config.vocab_size, ap)
         var head_cells = identical_gemm_workspace_max_floats(m, config.vocab_size, config.d_model)
         # TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN16 (uncleared head scratch, opt-in arm, no A/B recorded) and
         # MOJOLEARN_IDN_NEURAL_GEMM_CONTROL (its control) folded 2026-11-15 by lane/expdel2-31-neural (non-owner
         # site); code recoverable at 6ce75b82de.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.expdel2-31-neural.patch
-        self.head_ws = _zeros(ctx, head_cells)
-        arena_end(self.arena_id)
-
-    def __deinit__(deinit self):
-        try:
-            arena_release(self.arena_id)
-        except:
-            pass
+        self.head_ws = _zeros(ctx, head_cells, ap)
+        self.arena = arena^
 
     def fits(self, batch: Int, length: Int) -> Bool:
         return self.batch == batch and self.length == length
