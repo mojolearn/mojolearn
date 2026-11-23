@@ -28,14 +28,17 @@ lane is not a complete list of supported configurations. Admission lives in
 bindings/_mojolearn_gbdt_host.mojo.
 
   grow_policy SymmetricTree, loss Logloss (any loss_border),
-  score_function Cosine, leaf_estimation_method Newton (any iteration count),
+  score_function Cosine (and, since lane gbdt-cpu-rest-4-sym, L2, NewtonL2
+  and NewtonCosine: `_greedy_gains` and the second-order search planes),
+  leaf_estimation_method Newton or Gradient (any iteration count, RMSE too),
   optional numeric row weights (sample_weight multiplied by binary
   class_weights when present), numeric bootstrap and score noise. One-hot
   columns use `one_hot_in` and gbdt_oracle_onehot.mojo; CTR training has its
   own owner in gbdt_oracle_ctr.mojo. The held-out cursor, stopping detector
   and best-model selection use gbdt_oracle_eval.mojo through
   gbdt_host_fit_eval. The greedy searcher (use_pointwise_searcher False),
-  boost_from_average unset or False and feature_fraction 1. A feature with
+  boost_from_average any (True is the log-odds start, the model's bias) and
+  feature_fraction 1. A feature with
   exactly one border (the BINARY histogram policy) is carried since
   2026-09-22 (`_binary_block`, the nibble-combination decode of
   `hist_binary.mojo`; the gbdt-binary-columns lane). border_count, n_estimators,

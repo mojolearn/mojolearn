@@ -1,0 +1,17 @@
+diff --git a/gbdt/targets/kernel/pointwise_targets.mojo b/gbdt/targets/kernel/pointwise_targets.mojo
+index 8405a43496..a7fa77901c 100644
+--- a/gbdt/targets/kernel/pointwise_targets.mojo
++++ b/gbdt/targets/kernel/pointwise_targets.mojo
+@@ -790,7 +790,11 @@ def cross_entropy_kernel[
+     var plane0 = weight
+ 
+     comptime if second_der_as_weights:
+-        plane0 = ftz(weight * scale)
++        # SABOTAGE (coverage-gbdt-device_symmetric_second_order): the
++        # Newton search plane keeps the row weight, so a NewtonL2 /
++        # NewtonCosine Logloss or CrossEntropy fit searches on first-order
++        # planes while its leaves are estimated as before
++        plane0 = weight
+ 
+     if in_range:
+ 
