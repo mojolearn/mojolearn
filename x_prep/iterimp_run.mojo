@@ -26,17 +26,40 @@ of a program is X; owner k >= 1 is the native buffer at `seconds[k - 1]`
 program's own parameter words. A runner keeps each run's host arena until
 `release`; PACK reads the arenas the result names.
 
+A SUPPLIED ESTIMATOR (`estimator=`, lane mf-iterimp, 2026-11-23) whose
+class is a native member (core/member_abi.mojo) runs `iterimp_member_rounds`
+after `iterimp_prepare`: the rounds of the door's former user-estimator loop
+in the same program order (per (round, feature) step one gather program of
+the step's training and predict blocks, the member's FIT on the gathered
+training block and its PREDICT (PREDICT_STD with the same query's mean, for
+sample_posterior) on the predict block, one scatter program into Xt; per
+round the stop program), every member state kept per step for the door's
+PACK (`imputation_sequence_`: a clone of the estimator per step written by
+`member_pack`). The member operations go through the runner
+(`IterImpRunner.member`), which releases the GIL around them when the
+member's kind allows it.
+
 Serial by nature: the programs run one after the other, each reading what
 the one before it wrote (the orders, the draws, the filled block); the
-rounds are Gauss-Seidel sweeps over the features. The stages themselves run
-across the image's cores (or the device). No Python import
+rounds are Gauss-Seidel sweeps over the features, so the features of one
+round are NOT independent (each step's fit reads the imputation the step
+before it wrote), and the sample_posterior draws advance one stream. The
+stages themselves run across the image's cores (or the device), and so does
+each member's own fit and predict. No Python import
 (tools/python_free_dirs.sh)."""
 from std.math import isfinite
 from std.memory import unsafe_memcpy
-from bindings.prep_encode_prog_run import EncProgram, enc_input, enc_col_stats, enc_mark_missing, enc_floats_of
+from bindings.prep_encode_prog_run import (
+    EncProgram, enc_input, enc_col_stats, enc_mark_missing, enc_floats_of, enc_ii_rows)
 from bindings.prep_encode_kbins_run import enc_seed_words
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_CONSTANT, imputer_fit_stage, imputer_transform_stage)
+from bindings.normal_dist_helpers_run import truncnorm_draws
+from core.member_abi import (
+    MemberPlan, MemberCall, MemberMatrix, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_STD,
+    member_new, member_call_of, member_own, member_free,
+)
+from core.member_notices import member_notices_take
 from core.preprocessing_program import prep_program_stage as _stage
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -55,6 +78,8 @@ comptime OP_NAN_MASK = 60
 comptime OP_II_SIGMA = 99
 comptime OP_II_POST = 100
 comptime OP_II_ROWABS = 107
+comptime OP_II_GATHER = 138
+comptime OP_II_SCATTER = 139
 comptime OP_HCAT = 140
 comptime OP_ABSCORR_CELL = 211
 comptime OP_ABSCORR_NORM = 212
@@ -88,6 +113,13 @@ trait IterImpRunner:
         ...
 
     def release(mut self, handle: Int):
+        ...
+
+    def member(mut self, plan: MemberPlan, operation: Int, mut call: MemberCall) raises -> Int:
+        """One member operation of a supplied estimator's rounds
+        (`member_call`): the door's runner releases the GIL around it for a
+        kind with MEMBER_GIL_FREE or MEMBER_GIL_DOOR (THE GIL RULE), any
+        other kind is called with the GIL held; a check's runner calls it."""
         ...
 
 
@@ -131,11 +163,15 @@ struct IterImpFitted(Movable):
     their posterior (`post_has_nbl`, `post_nbl`, sigma / alpha / means
     offsets in `rounds`, sigma side `post_side`). The result: (n, `cols`)
     float32 words at `out_offset` of arena `out_handle` (an output-region
-    offset is the region's, read by PACK)."""
+    offset is the region's, read by PACK). `empty_kept`: a kept column has
+    no observed value (keep_empty_features), so a supplied estimator's step
+    for it would fit on no rows (the door then keeps its own rounds, whose
+    estimator refuses that fit in its words)."""
     var statistics: List[Float32]
     var fill: List[Float32]
     var shared: Bool
     var keep: List[Int]
+    var empty_kept: Bool
     var bounds: List[Float64]
     var indicator: List[Int]
     var n_missing: Int
@@ -161,6 +197,7 @@ struct IterImpFitted(Movable):
         self.fill = List[Float32]()
         self.shared = False
         self.keep = List[Int]()
+        self.empty_kept = False
         self.bounds = List[Float64]()
         self.indicator = List[Int]()
         self.n_missing = 0
@@ -446,8 +483,11 @@ def iterimp_prepare[R: IterImpRunner](mut runner: R, r: IterImpFit, mut fitted: 
         fitted.statistics = _copy(a1, plan.statistics, d)
         fitted.fill = _copy(a1, plan.fill, d)
     for j in range(d):  # driver-loop: over the kept columns (feature metadata)
-        if r.init.keep_empty or Int(_word(a1, plan.stats + j)) != 0:
+        var observed = Int(_word(a1, plan.stats + j))
+        if r.init.keep_empty or observed != 0:
             fitted.keep.append(j)
+            if observed == 0:
+                fitted.empty_kept = True
     runner.release(h1)
     var keep = fitted.keep.copy()
     var dk = len(keep)
@@ -657,6 +697,261 @@ def iterimp_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut plan: Ite
     fitted.out_handle = made[0]
     fitted.out_offset = made[1]
     fitted.cols = dk + len(fitted.indicator)
+
+
+# ---------------------------------------------------------------- a supplied estimator's member
+@fieldwise_init
+struct IterImpMember(Copyable, Movable):
+    """A supplied estimator as a native member, admitted once per fit by the
+    door's UNPACK: its `plan`; `borrows` its kind keeps pointers into its
+    fit buffers (MEMBER_BORROWS_FIT: each state is told to own them right
+    after its fit, since the step's gather arena is released at the step's
+    end); `posterior` sample_posterior: the predict block is answered by
+    MEMBER_OP_PREDICT_STD with the same query's mean written to `call.y`
+    (the GaussianProcessRegressor member, core/gp_member.mojo; the door
+    admits no other family for it)."""
+    var plan: MemberPlan
+    var borrows: Bool
+    var posterior: Bool
+
+
+struct IterImpMemberFit(Movable):
+    """What `iterimp_member_rounds` leaves for PACK: per finished step its
+    member state (`states`, freed by `iterimp_member_free`), feature `seq_j`
+    and neighbour list `seq_nbl`; every step's fit notices in step order;
+    `n_iter`, `rng`; the result's (n, `cols`) words at `out_offset` of arena
+    `out_handle`."""
+    var states: List[Int]
+    var seq_j: List[Int]
+    var seq_nbl: List[List[Int]]
+    var notices: List[Float64]
+    var n_iter: Int
+    var rng: UInt64
+    var out_handle: Int
+    var out_offset: Int
+    var cols: Int
+
+    def __init__(out self):
+        self.states = List[Int]()
+        self.seq_j = List[Int]()
+        self.seq_nbl = List[List[Int]]()
+        self.notices = List[Float64]()
+        self.n_iter = 0
+        self.rng = 0
+        self.out_handle = II_NONE
+        self.out_offset = 0
+        self.cols = 0
+
+
+def iterimp_member_free(member: IterImpMember, mut fit: IterImpMemberFit):
+    """Release every member state of the fit (never raises; after PACK, or
+    on an error path)."""
+    for s in range(len(fit.states)):  # driver-loop: over the fitted imputation steps (one state each)
+        try:
+            var call = member_call_of(member.plan, fit.states[s])
+            member_free(member.plan, call)
+        except:
+            pass  # member_call_of builds words only; a state that cannot be freed is the store's
+    fit.states = List[Int]()
+
+
+def _others(dk: Int, j: Int) -> List[Int]:
+    # `[a for a in range(dk) if a != j]`
+    var out = List[Int]()
+    for a in range(dk):  # driver-loop: over the kept features
+        if a != j:
+            out.append(a)
+    return out^
+
+
+def _member_stop[R: IterImpRunner](mut runner: R, work_on: Bool, xt: Int, prev: Int, n: Int, dk: Int,
+                                   tol: Float64) raises -> Bool:
+    """`_ii_stop`: the round's stop, the inf-norm of Xt - prev below tol
+    (Xt and prev are the (n, dk) words at their addresses)."""
+    var p = EncProgram(work_on)
+    var xo = enc_input(p, n * dk, 1)
+    var po = enc_input(p, n * dk, 2)
+    var to = p.put_floats(_one(tol))
+    var flag = p.alloc(1)
+    var niter = p.alloc(1)
+    var rowabs = p.alloc(n)
+    _stage(p.program, OP_II_ROWABS, n, xo, po, dk, rowabs, flag)
+    _stage(p.program, OP_II_CONV, 1, xo, po, n * dk, to, flag, niter, dk, rowabs + 1)
+    var seconds: List[Int] = [xt, prev]
+    var h = runner.run(p, seconds)
+    _ = len(p.consts_f)  # the program's own words stay alive past the run
+    var stop = _word(runner.words(h), flag) != 0
+    runner.release(h)
+    return stop
+
+
+def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Float64], member: IterImpMember,
+                                   mut fit: IterImpMemberFit, xt: Int, mask: Int, n: Int, dk: Int, j: Int,
+                                   nbl: List[Int], mut rng: UInt64) raises -> Tuple[Int, Int]:
+    """One (round, feature) step: the gather program (`_ii_take`: feature
+    j's missing rows, the predict block Xt[mis][:, nbl], the training blocks
+    Xt[obs][:, nbl] and Xt[obs, j]), a new member state FIT on the training
+    blocks where the arena holds them (kept in `fit.states`), its PREDICT
+    (or PREDICT_STD and the mean, then the truncated normal draws) on the
+    predict block, and the scatter program (`_ii_put`: the clipped float32
+    store into Xt[rows, j]; a draw is stored unclipped). Returns the new
+    Xt's (handle, offset), or (II_NONE, 0) when feature j has no missing row
+    (Xt unchanged, as the door's `_ii_put` returned it)."""
+    var nc = len(nbl)
+    var p = EncProgram(work_on)
+    var xo = enc_input(p, n * dk, 1)
+    var mo = enc_input(p, n * dk, 2)
+    var cols = enc_floats_of(nbl) if nc > 0 else _one(0.0)
+    var co = p.put_floats(cols)
+    var jo = p.put_floats(_one(Float64(j)))
+    var mis = enc_ii_rows(p, mo, n, dk, j, True)
+    var gm = p.alloc(n * nc)
+    if nc > 0:
+        _stage(p.program, OP_II_GATHER, n * nc, xo, dk, mis[0], mis[1], co, nc, gm)
+    var obs = enc_ii_rows(p, mo, n, dk, j, False)
+    var go = p.alloc(n * nc)
+    var gy = p.alloc(n)
+    if nc > 0:
+        _stage(p.program, OP_II_GATHER, n * nc, xo, dk, obs[0], obs[1], co, nc, go)
+    _stage(p.program, OP_II_GATHER, n, xo, dk, obs[0], obs[1], jo, 1, gy)
+    var take_seconds: List[Int] = [xt, mask]
+    var h = runner.run(p, take_seconds)
+    _ = len(p.consts_f)  # the program's own words stay alive past the run
+    var a = runner.words(h)
+    var m = Int(_word(a, mis[1]))
+    var mob = Int(_word(a, obs[1]))
+    # FIT: a new state on the gathered training rows (host float32 views)
+    var call = member_new(member.plan)
+    fit.states.append(call.state)  # freed by iterimp_member_free on every path
+    call.x = MemberMatrix(a + 4 * go, mob, nc)
+    call.y = MemberMatrix(a + 4 * gy, mob, 1)
+    _ = runner.member(member.plan, MEMBER_OP_FIT, call)
+    if member.borrows:
+        member_own(member.plan, call.state)  # THE LIFETIME RULE: the arena goes at the step's end
+    member_notices_take(member.plan, call.state, fit.notices)
+    if m == 0:
+        runner.release(h)
+        return (II_NONE, 0)
+    var lo = bounds[2 * j]
+    var hi = bounds[2 * j + 1]
+    var values = List[Float32](length=m, fill=0.0)
+    var clip = 1
+    var ask = member_call_of(member.plan, call.state)
+    ask.x = MemberMatrix(a + 4 * gm, m, nc)
+    if member.posterior:
+        var std = List[Float32](length=m, fill=0.0)
+        ask.dst = MemberMatrix(Int(std.unsafe_ptr()), m, 1)
+        ask.y = MemberMatrix(Int(values.unsafe_ptr()), m, 1)  # the same query's mean
+        _ = runner.member(member.plan, MEMBER_OP_PREDICT_STD, ask)
+        var mu = List[Float64](length=m, fill=0.0)
+        var sd = List[Float64](length=m, fill=0.0)
+        for i in range(m):  # cpu-route: one feature's posterior mean and std widened (exact) for the serial draw stream below
+            mu[i] = Float64(values[i])
+            sd[i] = Float64(std[i])
+        _ = len(std)  # the std buffer the member wrote stays alive past its reads
+        var drawn = List[Float64](length=m, fill=0.0)
+        # Serial by nature: only drawing entries advance the one stream.
+        rng = truncnorm_draws(Int(mu.unsafe_ptr()), Int(sd.unsafe_ptr()), m, lo, hi, rng, Int(drawn.unsafe_ptr()))
+        _ = len(mu)
+        _ = len(sd)
+        for i in range(m):  # cpu-route: one feature's posterior draws rounded once to float32 (the door's `_f32_vector`)
+            values[i] = Float32(drawn[i])
+        clip = 0
+    else:
+        ask.dst = MemberMatrix(Int(values.unsafe_ptr()), m, 1)
+        _ = runner.member(member.plan, MEMBER_OP_PREDICT, ask)
+    # `_ii_put`'s program: Xt in-out, the rows' int32 words where the gather
+    # program left them, the values, the bounds
+    var q = EncProgram(work_on)
+    var qx = enc_input(q, n * dk, 1)
+    q.inout(qx, n * dk)
+    var ro = enc_input(q, m, 2)
+    var vo = enc_input(q, m, 3)
+    var lohi: List[Float64] = [lo, hi]
+    var bo = q.put_floats(lohi)
+    _stage(q.program, OP_II_SCATTER, m, qx, dk, ro, j, vo, bo, clip)
+    var put_seconds: List[Int] = [xt, a + 4 * mis[0], Int(values.unsafe_ptr())]
+    var h2 = runner.run(q, put_seconds)
+    _ = len(values)  # the values the program read stay alive past it
+    _ = len(q.consts_f)
+    runner.release(h)  # the gather arena (rows, blocks), read by the scatter above
+    return (h2, qx)
+
+
+def iterimp_member_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut plan: IterImpPlan,
+                                            fitted: IterImpFitted, member: IterImpMember,
+                                            mut fit: IterImpMemberFit) raises:
+    """The rounds of a supplied estimator that is a native member, after
+    `iterimp_prepare` (programs 1 to 4): the missing mask program, then per
+    round each feature's step (`_member_step`: gather, member FIT and
+    PREDICT, scatter) and, without sample_posterior, the stop program, then
+    the indicator. Xt starts as the initial fill in its held arena; each
+    step's scatter leaves the next Xt in a new arena (the one before it is
+    released unless it is the round's start, which the stop reads). The
+    features of a round are not independent (each step reads the Xt the
+    step before it wrote): they run in order. On an error every state made
+    so far is released before the error is raised."""
+    var n = r.n
+    var d = r.d
+    var dk = len(fitted.keep)
+    var rng = plan.rng
+    # `_mask_arr`: the (n, dk) float32 missing mask (1.0 missing)
+    var mp = EncProgram(r.work_on)
+    var mx = _x(mp, n, d, r.mark, r.missing)
+    var mo = mp.alloc(n * dk)
+    var ko = mp.put_floats(enc_floats_of(fitted.keep))
+    _stage(mp.program, OP_NAN_MASK, n * dk, mx, n, d, ko, dk, mo)
+    var none = List[Int]()
+    var mh = runner.run(mp, none)
+    _ = len(mp.consts_f)  # the program's own words stay alive past the run
+    var mask = runner.words(mh) + 4 * mo
+    var xt_h = plan.xf_handle
+    var xt_off = plan.xf_offset
+    var xt = plan.xf_address
+    plan.xf_handle = II_NONE  # the initial fill's arena is this run's from here
+    var done = 0
+    try:
+        for i in range(len(plan.orders)):  # driver-loop: over the imputation rounds (Gauss-Seidel sweeps; serial by nature)
+            var check = not member.posterior and len(plan.orders[i]) > 0
+            var prev_h = xt_h
+            var prev = xt
+            for c in range(len(plan.orders[i])):  # driver-loop: over the round's features in order (each reads the last imputation)
+                var j = plan.orders[i][c]
+                var nbl = plan.draws.next(rng) if plan.draws.on else _others(dk, j)
+                var made = _member_step(runner, r.work_on, fitted.bounds, member, fit, xt, mask, n, dk, j, nbl, rng)
+                fit.seq_j.append(j)
+                fit.seq_nbl.append(nbl^)
+                if made[0] != II_NONE:
+                    if xt_h != prev_h:
+                        runner.release(xt_h)
+                    xt_h = made[0]
+                    xt_off = made[1]
+                    xt = runner.words(xt_h) + 4 * xt_off
+            done = i + 1
+            var stop = False
+            if check:
+                stop = _member_stop(runner, r.work_on, xt, prev, n, dk, plan.tol)
+            if prev_h != xt_h:
+                runner.release(prev_h)
+            if stop:
+                break
+        runner.release(mh)
+        fit.n_iter = done if plan.any_order else min(1, len(plan.orders))
+        fit.rng = rng
+        if len(fitted.indicator) == 0:
+            fit.out_handle = xt_h
+            fit.out_offset = xt_off
+            fit.cols = dk
+            return
+        var placed = iterimp_indicator(runner, n, d, dk, r.mark, r.missing, fitted.indicator, xt, r.work_on,
+                                       r.region)
+        runner.release(xt_h)  # Xt, copied into the indicator program's arena
+        fit.out_handle = placed[0]
+        fit.out_offset = placed[1]
+        fit.cols = dk + len(fitted.indicator)
+    except error:
+        iterimp_member_free(member, fit)
+        raise error^
 
 
 # ---------------------------------------------------------------- transform

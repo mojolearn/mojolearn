@@ -39,7 +39,9 @@ caller's metric, as for SVR).
 VIEWS: FIT x float32 (rows x features), y float32 (rows x 1), dense host
 views, no weights, no row / column index, no fit_output. PREDICT and
 PREDICT_STD: x float32 (rows x features) -> dst float32 (rows x 1): the
-predictive mean / the predictive standard deviation.
+predictive mean / the predictive standard deviation. PREDICT_STD with `y`
+given (a rows x 1 host float32 view) also writes the same query's mean
+there (predict(return_std=True)'s pair from one query).
 Classifier: FIT y = int32 class codes 0 .. classes-1 (rows x 1;
 `call.classes` at fit, at least 2). PREDICT -> dst int32 codes (rows x 1);
 PREDICT_PROBA -> dst float64 (rows x classes). One binary Laplace fit
@@ -614,6 +616,12 @@ def _query(slot: _Slot, call: _Call, want_std: Bool) raises:
         variance = List[Float32](length=q, fill=Float32(0))
         clamped = List[Int32](length=q, fill=Int32(0))
         mean_address = Int(mean.unsafe_ptr())
+        if call[].y.dense_host(MEMBER_F32) and call[].y.rows == q and call[].y.cols == 1:
+            # PREDICT_STD with `y` given (rows x 1 host float32): the same
+            # query's mean too, as predict(return_std=True) returns both from
+            # one query (IterativeImputer's sample_posterior draws read the
+            # pair; lane mf-iterimp, 2026-11-23). No second query is made.
+            mean_address = call[].y.data
         var_address = Int(variance.unsafe_ptr())
         std_address = call[].dst.data
         clamped_address = Int(clamped.unsafe_ptr())
