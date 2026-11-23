@@ -115,7 +115,7 @@ from core.ensemble_member import (
 )
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
 from core.member_abi import MEMBER_BORROWS_FIT
-from bindings.msel_common_door import msel_f64_block, msel_i64_list
+from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64
 from bindings.classical_labels_door import labels_decode_i32_codes
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 from core.msel_scorer_run import (
@@ -824,6 +824,34 @@ def _user_folds(cv: PythonObject, b: PythonObject, mut fold_train: List[List[Int
     if len(fold_test) == 0:
         raise Error("cv produced no splits")  # the door's `_splits` words, before any fit
     return True
+
+
+def _tool_folds(pairs: PythonObject, context: PythonObject, mut fold_train: List[List[Int32]],
+                mut fold_test: List[List[Int32]]) raises -> Bool:
+    """UNPACK of THE CV TOOLS' folds (lane mf-msel5): the door's own checked
+    (train, test) integer index Arrays (bindings/msel_cv_door.mojo
+    `msel_cv_folds`), each side read through its int64 storage once (no
+    Python object per row, as the door's units read them). False: a row
+    number int32 words cannot hold (the door's units)."""
+    for f in range(len(pairs)):  # driver-loop: over the door's folds (UNPACK, once per admission)
+        var pair = pairs[f]
+        for side in range(2):  # small-loop(train, then test)
+            var rows = msel_index_i64(pair[side], context)
+            var count = Int(py=rows.size)
+            var dst = List[Int32](capacity=count)
+            if count > 0:
+                var words = msel_p64(rows)
+                for i in range(count):  # driver-loop: over one side's row numbers
+                    var word = Int(words[i])
+                    if word < 0 or word > 2147483647:
+                        return False
+                    dst.append(Int32(word))
+            _ = rows  # the int64 storage read above
+            if side == 0:
+                fold_train.append(dst^)
+            else:
+                fold_test.append(dst^)
+    return len(fold_test) > 0
 
 
 def _export_i64(plan: MemberPlan, state: Int, block: Int) raises -> List[Int]:
@@ -2532,6 +2560,33 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                     refit_scorer = j
         if refit_scorer < 0:
             raise Error("For multi-metric scoring, refit must be False or a scorer key.")
+    # THE CV TOOLS (lane mf-msel5): the door's carrier search of
+    # cross_validate / cross_val_score / learning_curve / cross_val_predict
+    # (bindings/msel_cv_door.mojo `msel_cv_by_search`) holds
+    # `_msel_cv_tool` = (return_estimator, method or None, return_indices,
+    # the door's folds), set by that door, never by a user: the RUN fits
+    # those folds, keeps the units' states, answers the folds' rows, or
+    # answers the test-side `method` instead of a score. A public search has
+    # no such field.
+    var tool = py_get(fields, "_msel_cv_tool")
+    var tool_keep = False
+    var tool_respond = -1
+    var tool_indices = False
+    if tool is not None:
+        tool_keep = Bool(py=py_call(b.bool, tool[0]))
+        tool_indices = Bool(py=py_call(b.bool, tool[2]))
+        if tool[1] is not None:
+            var method = String(py=tool[1])
+            if method == "predict":
+                tool_respond = MEMBER_OP_PREDICT
+            elif method == "predict_proba":
+                tool_respond = MEMBER_OP_PREDICT_PROBA
+            elif method == "decision_function":
+                tool_respond = MEMBER_OP_DECISION
+            else:
+                return False  # predict_log_proba and the rest: the door's units
+            if len(keys) > 0:
+                return False
     # Where the fold rows live (the docstring): read once per admission.
     var resident = not msel_member_host_folds(fields, b, context)
     var cv = py_get(fields, "cv")
@@ -2542,7 +2597,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var fold_test = List[List[Int32]]()
     var split = _Split()
     var folds = 0
-    if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
+    if tool is not None:
+        # THE CV TOOLS: the door's own folds (already split and checked).
+        if not _tool_folds(tool[3], context, fold_train, fold_test):
+            return False
+        folds = len(fold_test)
+    elif cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
         # A user's index list: its folds read ONCE into typed int32 rows,
         # checked against the fit's rows by the kind (as Stacking's).
         if not _user_folds(cv, b, fold_train, fold_test):
@@ -2571,32 +2631,6 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         return False
     var train = py_get(fields, "return_train_score")
     var return_train = train is not None and _truthy(train, b)
-    # THE CV TOOLS (lane mf-msel5): the door's carrier search of
-    # cross_validate / cross_val_score / learning_curve / cross_val_predict
-    # (bindings/msel_cv_door.mojo `msel_cv_by_search`) holds
-    # `_msel_cv_tool` = (return_estimator, method or None, return_indices),
-    # set by that door, never by a user: the RUN keeps the units' states,
-    # answers the folds' rows, or answers the test-side `method` instead of
-    # a score. A public search has no such field.
-    var tool = py_get(fields, "_msel_cv_tool")
-    var tool_keep = False
-    var tool_respond = -1
-    var tool_indices = False
-    if tool is not None:
-        tool_keep = Bool(py=py_call(b.bool, tool[0]))
-        tool_indices = Bool(py=py_call(b.bool, tool[2]))
-        if tool[1] is not None:
-            var method = String(py=tool[1])
-            if method == "predict":
-                tool_respond = MEMBER_OP_PREDICT
-            elif method == "predict_proba":
-                tool_respond = MEMBER_OP_PREDICT_PROBA
-            elif method == "decision_function":
-                tool_respond = MEMBER_OP_DECISION
-            else:
-                return False  # predict_log_proba and the rest: the door's units
-            if len(keys) > 0:
-                return False
     var got = _search_prepare(model, fields, context, b, prepared)
     if got is None:
         return False
