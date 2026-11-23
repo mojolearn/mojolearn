@@ -65,6 +65,13 @@ fit. The moment a cache takes it, the RUN writes the token at `kept_at`
 (THE PIN RULE, core/member_abi.mojo). Without a scope every side is the
 gathered block, as before.
 
+A CLUSTERER BASE (lane mf-cluster5): a non-classifier search whose scorers
+are all clustering scorers (core/msel_scorer_run.mojo `msel_scorer_cluster`)
+folds by KFold as any non-classifier, asks its members' predict as cluster
+ids (int32), and scores them against the targets' float32 words of integer
+labels (the label-pair scorers through the metrics image's cluster entry,
+`cluster`, resolved by the UNPACK).
+
 The fit notices of every unit (in unit order) and of the refit are handed
 over for the caller's PACK; each unit's words hold, after its fit notices,
 the warnings its scores' public metrics raise (lane mf-score5: test side,
@@ -77,12 +84,12 @@ blocks); inside a wave every unit is independent and runs on the workers.
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.arena_prog_run import MetricRoute, metric_inputs_run
 from bindings.msel_search_stats_run import msel_row_means, msel_row_stds, msel_rank_scores, msel_rank_best
-from core.entry_table import EntryRef
+from core.entry_table import EntryRef, entry_ref_unresolved
 from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, msel_scorer_row, msel_scorer_value, msel_scorer_regression, msel_scorer_binary_column,
-    msel_scorer_positive, msel_scorer_ap,
-    SCORER_MEMBER, SCORER_ACCURACY,
+    msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
+    SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
 )
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of,
@@ -167,6 +174,12 @@ struct MselSearchPlan(Movable):
     var scope: Int
     var pin: Int
     var kept_at: Int
+    # Lane mf-cluster5: the metrics image's cluster label-pair entry
+    # (core/metrics_cluster_table.mojo; resolved by the UNPACK when a
+    # label-pair scorer is asked, else unresolved) and the fit's labels'
+    # reprs by class code (the binary scorers' refusal words).
+    var cluster: EntryRef
+    var label_words: List[String]
 
     def __init__(out self, var plans: List[MemberPlan], var masks: List[Int], x: Int, rows: Int, cols: Int, y: Int,
                  classes: Int, n_splits: Int, glue: EntryRef, metric: MetricRoute):
@@ -199,6 +212,8 @@ struct MselSearchPlan(Movable):
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
         self.kept_at = 0
+        self.cluster = entry_ref_unresolved()
+        self.label_words = List[String]()
 
 
 struct MselSearchResult(Movable):
@@ -376,8 +391,9 @@ def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, cap
     return width
 
 
-def _scorer_side(route: MetricRoute, row: MselScorer, truth: Int, response: Int, count: Int, classes: Int,
-                 cols: Int, positive: Int, mut notices: List[Float64]) raises -> Float64:
+def _scorer_side(route: MetricRoute, cluster: EntryRef, label_words: List[String], row: MselScorer, truth: Int,
+                 response: Int, count: Int, classes: Int, cols: Int, positive: Int,
+                 mut notices: List[Float64]) raises -> Float64:
     """One scorer on one side: the `_BINARY_PROBA` column pick of a
     two-class member's probabilities as the scorer hands it
     (`_get_response_values`: `predict_proba[:, 1]`, or the positive's column
@@ -405,11 +421,12 @@ def _scorer_side(route: MetricRoute, row: MselScorer, truth: Int, response: Int,
         else:
             for i in range(count):  # driver-loop: over the side's rows (one column of the probabilities)
                 column[i] = src[2 * i + pick]
-        var value = msel_scorer_value(route, row, truth, Int(column.unsafe_ptr()), count, classes, 1, positive,
-                                      notices)
+        var value = msel_scorer_value(route, cluster, label_words, row, truth, Int(column.unsafe_ptr()), count,
+                                      classes, 1, positive, notices)
         _ = len(column)  # read by the program above
         return value
-    return msel_scorer_value(route, row, truth, response, count, classes, cols, positive, notices)
+    return msel_scorer_value(route, cluster, label_words, row, truth, response, count, classes, cols, positive,
+                             notices)
 
 
 def _same_image(a: MemberPlan, b: MemberPlan) -> Bool:
@@ -525,13 +542,20 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var rows_of = List[MselScorer]()
     var ops = List[Int]()
     var op_of = List[Int]()
+    var clusterer = False
     if not member_score:
         for j in range(len(codes)):  # driver-loop: over the scorers (once per fit)
             if codes[j] == SCORER_MEMBER:
                 raise Error("member ABI: the member's own score cannot be one of several scorers")
             var row = msel_scorer_row(codes[j])
-            if msel_scorer_regression(row) == classifier:
+            # A clusterer (lane mf-cluster5: no class codes) is scored by the
+            # clustering scorers only, on its predicted cluster ids.
+            if not classifier and msel_scorer_cluster(row):
+                clusterer = True
+            elif msel_scorer_regression(row) == classifier:
                 raise Error("member ABI: scorer '" + String(row.name) + "' does not score this kind of estimator")
+            if msel_scorer_cluster_entry(row) and plan.cluster.word == 0:
+                raise Error("member ABI: a label-pair cluster scorer needs the metrics image's cluster entry")
             var at = -1
             for o in range(len(ops)):  # small-loop(the distinct responses, at most three)
                 if ops[o] == row.op:
@@ -541,13 +565,20 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 ops.append(row.op)
             op_of.append(at)
             rows_of.append(row)
+    if clusterer:
+        for j in range(len(rows_of)):  # small-loop(the scorers: a clusterer's are clustering scorers only)
+            if not msel_scorer_cluster(rows_of[j]):
+                raise Error("member ABI: a clusterer's search scores with clustering scorers only")
     var nsc = len(codes)
     var nops = len(ops)
     var positives = List[Int](length=max(nsc, 1), fill=-1)
     for j in range(min(nsc, len(plan.positives))):  # small-loop(the scorers' positive class codes)
         positives[j] = plan.positives[j]
     for j in range(len(rows_of)):  # small-loop(the scorers: a binary one needs its positive code)
-        if msel_scorer_positive(rows_of[j]) and (positives[j] < 0 or positives[j] >= k):
+        # SCORER_POSITIVE_ABSENT / _KIND (lane mf-cluster5): pos_label=1 is not
+        # one of the labels; each side raises the door's words (msel_scorer_run).
+        var marked = positives[j] == SCORER_POSITIVE_ABSENT or positives[j] == SCORER_POSITIVE_KIND
+        if msel_scorer_positive(rows_of[j]) and not marked and (positives[j] < 0 or positives[j] >= k):
             raise Error("member ABI: a binary scorer needs its positive class code")
         if msel_scorer_ap(rows_of[j]) and k == 2 and (positives[j] < 0 or positives[j] >= k):
             raise Error("member ABI: 'average_precision' of a binary member needs its positive class code")
@@ -565,9 +596,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         for o in range(nops):  # small-loop(the distinct responses)
             var probe = plan.plans[c].copy()
             probe.classes = k
-            var unsaid = MEMBER_I32 if ops[o] == MEMBER_OP_PREDICT and classifier else MEMBER_F32
+            var labels_out = ops[o] == MEMBER_OP_PREDICT and (classifier or clusterer)
+            var unsaid = MEMBER_I32 if labels_out else MEMBER_F32
             var dtype = member_output_dtype(probe, ops[o], d, 1, unsaid)
-            if ops[o] == MEMBER_OP_PREDICT and classifier:
+            if labels_out:
                 if dtype != MEMBER_I32 and dtype != MEMBER_I64:
                     raise Error("member ABI: a search scored by labels needs a member that predicts class codes")
             elif dtype != MEMBER_F32 and dtype != MEMBER_F64:
@@ -750,8 +782,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     var o = op_of[j]
                     var notes = List[Float64]()
                     try:
-                        values[at] = _scorer_side(plan.metric, rows_of[j], y_dst[s], pred_at[t * nops + o],
-                                                  side_count[s], k, pred_cols[t * nops + o], positives[j], notes)
+                        values[at] = _scorer_side(plan.metric, plan.cluster, plan.label_words, rows_of[j], y_dst[s],
+                                                  pred_at[t * nops + o], side_count[s], k, pred_cols[t * nops + o],
+                                                  positives[j], notes)
                     except error:
                         failed[at] = UInt8(2)
                         errors[at] = String(error)

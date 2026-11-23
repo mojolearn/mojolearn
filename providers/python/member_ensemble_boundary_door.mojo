@@ -110,15 +110,19 @@ from core.member_abi import (
 )
 from xtrees.trees_meta_vote_run import STACK_PREDICT, STACK_PROBA, STACK_DECISION
 from core.ensemble_member import (
-    meta_plan_metric, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR, META_MULTI_CLASSIFIER, META_MULTI_REGRESSOR,
+    meta_plan_metric, meta_plan_search_labels, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR, META_MULTI_CLASSIFIER, META_MULTI_REGRESSOR,
     META_BLOCK_SEARCH,
 )
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
-    SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS,
+    SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
+    msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_flip,
 )
+from core.entry_table import EntryRef, entry_ref_unresolved
+from core.metrics_cluster_table import cluster_ops_entry
+from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
 from bindings.metrics_exp_rank_run import BRIER_MARK_ZERO, BRIER_MARK_ONE, BRIER_MARK_MINUS_ONE
 from bindings.msel_scorer_native_door import msel_scorer_response
 from bindings.native_loaded_module_door import native_loaded_module
@@ -2416,13 +2420,20 @@ def _scoring_many(scoring: PythonObject, context: PythonObject, b: PythonObject)
     return False
 
 
-def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject) raises -> String:
+def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, mut flip: Bool) raises -> String:
     """UNPACK: the table name of ONE scorer value: a str is itself (an
     unknown name raises `msel_get_scorer`'s words); a scorer object is
     admitted by `msel_get_scorer` (a Python callback raises the door's
     words) and read back to the name the scorer table holds it under (the
-    object `get_scorer(name)` answers). "": a native scorer no table name
-    holds (make_scorer's own; the door scores it)."""
+    object `get_scorer(name)` answers). "": a native scorer no table row
+    holds (the door scores it).
+
+    A NATIVE MAKE_SCORER SCORER (lane mf-cluster5): its typed parts (the
+    metric it wraps, its kwargs, its response method) read ONCE here and
+    matched against the table's rows; the row whose parts are the same is
+    its name, and `flip` says its sign (greater_is_better) is the row's
+    negated. Any other kwargs or metric: "" (the door)."""
+    flip = False
     var got = msel_get_scorer(scorer, context)
     if py_type(scorer) is b.str:
         return String(py=scorer)
@@ -2431,6 +2442,23 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject) r
     for i in range(len(items)):  # driver-loop: over the scorer table (a fixed table, once per admission)
         if items[i][1] is got:
             return String(py=items[i][0])
+    var func = py_call(b.getattr, got, PythonObject("_score_func"), PythonObject(None))
+    if func is None:
+        return String("")
+    var eq = native_loaded_module("operator").eq
+    for i in range(len(items)):  # driver-loop: over the scorer table (its rows' typed parts, once per admission)
+        var row = items[i][1]
+        if py_call(b.getattr, row, PythonObject("_score_func")) is not func:
+            continue
+        if not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_kwargs")),
+                                               py_call(b.getattr, got, PythonObject("_kwargs"))))):
+            continue
+        if not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_response_method")),
+                                               py_call(b.getattr, got, PythonObject("_response_method"))))):
+            continue
+        flip = not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_sign")),
+                                                   py_call(b.getattr, got, PythonObject("_sign")))))
+        return String(py=items[i][0])
     return String("")
 
 
@@ -2589,18 +2617,32 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     elif len(keys) == 0:
         needs |= MEMBER_CAN_SCORE
         positives.append(-1)
+    var clusterer = False
+    var cluster_entry = False
+    var others = False
     for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
-        var name = _scorer_name(givens[j], context, b)
+        var flip = False
+        var name = _scorer_name(givens[j], context, b, flip)
         if len(name) == 0:
-            return False  # a native scorer the table does not name (make_scorer's)
+            return False  # a native scorer no table row holds (another metric or kwargs)
         var scorer = msel_get_scorer(givens[j], context)
         var method = String(py=msel_scorer_response(scorer, base_plan, context))
         var code = msel_scorer_code(name, method == "decision_function")
         if code < 0:
             return False
+        if flip:
+            code = msel_scorer_flip(code)
         var row = msel_scorer_row(code)
-        if msel_scorer_regression(row) == classifier:
+        # A CLUSTERER base (lane mf-cluster5): a non-classifier scored by the
+        # clustering scorers only (its predict is cluster ids).
+        if not classifier and msel_scorer_cluster(row):
+            clusterer = True
+        elif msel_scorer_regression(row) == classifier:
             return False
+        else:
+            others = True
+        if msel_scorer_cluster_entry(row):
+            cluster_entry = True
         var positive = -1
         var positive_kind = msel_scorer_positive_kind(row)
         if positive_kind == SCORER_POSITIVE_LABEL_ONE:
@@ -2609,8 +2651,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             if labels is None:
                 return False
             positive = _positive_code(labels, b)
-            if positive < 0 and (msel_scorer_positive(row) or len(py_call(b.list, labels)) == 2):
-                return False  # pos_label=1 is not one of the labels: the door's words per fold
+            if positive < 0 and msel_scorer_positive(row):
+                # pos_label=1 is not one of the labels (lane mf-cluster5): the
+                # RUN raises the door's words per side (or scores it absent)
+                positive = _absent_positive(labels, b)
+                if positive == -1:
+                    return False  # labels of no kind the door's metrics read
+            elif positive < 0 and len(py_call(b.list, labels)) == 2:
+                # 'average_precision' of two labels without 1: its column pick
+                # is the door scorer's response rule, which reads no absent label
+                return False
         elif positive_kind == SCORER_POSITIVE_MARKS:
             # 'neg_brier_score': `_pos_label(None, ...)`'s label marks (lane mf-score5)
             if labels is None:
@@ -2627,6 +2677,8 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             needs |= MEMBER_CAN_PREDICT_PROBA
         elif row.op == MEMBER_OP_DECISION:
             needs |= MEMBER_CAN_DECISION
+    if clusterer and others:
+        return False  # a clusterer is scored by clustering scorers only
     var nested = _Nested()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
         if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
@@ -2639,7 +2691,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             var response = responses[o]
             var probe = nested.plans[c].copy()
             probe.classes = 2 if classifier else 0
-            var labels_out = response == MEMBER_OP_PREDICT and classifier
+            var labels_out = response == MEMBER_OP_PREDICT and (classifier or clusterer)
             var dtype = member_output_dtype(probe, response, 1, 1, MEMBER_I32 if labels_out else MEMBER_F32)
             if labels_out and dtype != MEMBER_I32 and dtype != MEMBER_I64:
                 return False  # a member whose predict is not class codes
@@ -2665,11 +2717,29 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
     if trees_context is None:
         return False
+    # THE CLUSTER LABEL-PAIR ENTRY (lane mf-cluster5): the default-mode
+    # metrics image the public doors resolve (`estimator_binding_mode`), its
+    # key read and its entry resolved ONCE; the image is pinned below. Not
+    # loaded or not published: the door's units.
+    var cluster = entry_ref_unresolved()
+    var metrics_binding = PythonObject(None)
+    if cluster_entry:
+        try:
+            metrics_binding = estimator_binding_mode(PythonObject(None), "_mojolearn_metrics", context)
+            var key = py_call(b.getattr, metrics_binding, PythonObject("metrics_cluster_key"))
+            cluster = cluster_ops_entry(Int(py=key[0]), Int(py=key[1]))
+        except:
+            return False
+    var label_words = _label_words(labels, b) if classifier and labels is not None else List[String]()
     # `flag`: the fold rows may stay resident (the docstring's `device`).
     if not _finish(fields, trees_context, b, owner, nested, kind, 1.0 if resident else 0.0, folds, List[Float64](),
                    List[Int](), words^, fold_train^, fold_test^):
         return False
     _finish_split(owner, split)
+    if cluster_entry or len(label_words) > 0:
+        meta_plan_search_labels(Int(owner.plan.params[1]), cluster, label_words^)
+        if metrics_binding is not None:
+            _ = py_call(owner.pins.append, metrics_binding)
     if len(codes) > 0:
         # THE NATIVE METRIC RUN's route (bindings/arena_prog_run.mojo
         # `metric_inputs_run`): the default-mode x_metrics runner, its
@@ -2715,6 +2785,58 @@ def _positive_code(labels: PythonObject, b: PythonObject) raises -> Int:
         if Bool(py=py_call(b.bool, py_call(eq, items[i], PythonObject(1)))):
             return i
     return -1
+
+
+def _label_kind(item: PythonObject, b: PythonObject) raises -> Int:
+    """1: an integer label (a Python int or a NumPy integer, not a bool);
+    2: a string; 0: any other."""
+    if py_type(item) is b.bool:
+        return 0
+    if Bool(py=py_call(b.isinstance, item, b.str)):
+        return 2
+    if py_type(item) is b.int:
+        return 1
+    var numbers = native_loaded_module("numbers")
+    if Bool(py=py_call(b.isinstance, item, numbers.Integral)):
+        return 1
+    return 0
+
+
+def _absent_positive(labels: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-cluster5): the positive word of a binary label scorer
+    whose pos_label=1 is not one of the fit's labels: SCORER_POSITIVE_ABSENT
+    (integer labels), SCORER_POSITIVE_KIND (string labels: the door's "same
+    type" refusal), -1 for labels of mixed or other kinds (the door). Read
+    once per admission."""
+    var items = py_call(b.list, labels)
+    var kind = -1
+    for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
+        var k = _label_kind(items[i], b)
+        if k == 0 or (kind >= 0 and k != kind):
+            return -1
+        kind = k
+    if kind == 1:
+        return SCORER_POSITIVE_ABSENT
+    if kind == 2:
+        return SCORER_POSITIVE_KIND
+    return -1
+
+
+def _label_words(labels: PythonObject, b: PythonObject) raises -> List[String]:
+    """UNPACK (lane mf-cluster5): each fit label's repr as `str(present)`
+    prints it in the door's words (an int's `int(v)`, a string's `str(v)`),
+    by class code. Read once per admission."""
+    var items = py_call(b.list, labels)
+    var out = List[String](capacity=len(items))
+    for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
+        var k = _label_kind(items[i], b)
+        var v = items[i]
+        if k == 1:
+            v = py_call(b.int, items[i])
+        elif k == 2:
+            v = py_call(b.str, items[i])
+        out.append(String(py=py_call(b.repr, v)))
+    return out^
 
 
 def _brier_marks(labels: PythonObject, context: PythonObject, b: PythonObject) raises -> Int:
