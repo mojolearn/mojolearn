@@ -1,13 +1,15 @@
+diff --git a/hdbscan/impl/detail/select.mojo b/hdbscan/impl/detail/select.mojo
+index 42191eedfa..104721d383 100644
 --- a/hdbscan/impl/detail/select.mojo
 +++ b/hdbscan/impl/detail/select.mojo
-@@ -437,8 +437,8 @@
-             # DEVIATION 5115: the search on the host, the same function the
-             # CPU oracle calls, over the selection just downloaded.
-             cluster_epsilon_search_host(
--                cluster_tree, h_isc, n_clusters, cluster_selection_epsilon,
+@@ -460,8 +460,8 @@ def select_clusters(
+                 epsilon_search = False
+         if epsilon_search:
+             cluster_epsilon_search(
+-                ctx, tree, is_cluster, cluster_selection_epsilon,
 -                allow_single_cluster,
-+                cluster_tree, h_isc, n_clusters,
++                ctx, tree, is_cluster,
 +                cluster_selection_epsilon * Float32(0.5), allow_single_cluster,
              )
-             var up = h_isc.copy()
-             ctx.enqueue_copy(dst_buf=is_cluster, src_ptr=up.unsafe_ptr())
+             n_selected = count_selected(ctx, is_cluster, off, n)
+     ctx.enqueue_function[label_map_kernel](

@@ -1,7 +1,8 @@
 diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index 710e6dedd0..6e7309fa7e 100644
 --- a/x_cluster/device_ops.mojo
 +++ b/x_cluster/device_ops.mojo
-@@ -151,12 +151,12 @@
+@@ -548,12 +548,12 @@ def _ap_key(v: Float32, k: Int) -> UInt64:
      if b == UInt32(0x80000000):
          b = UInt32(0)
      var ok = (b ^ UInt32(0x80000000)) if (b & UInt32(0x80000000)) == UInt32(0) else ~b
@@ -15,4 +16,4 @@ diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
 +    return Int(UInt32(key & UInt64(0xFFFFFFFF)))
  
  
- def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+ @always_inline
