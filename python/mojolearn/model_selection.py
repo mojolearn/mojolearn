@@ -1295,8 +1295,9 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
     return_indices : bool, default False
         Also return each fold's train and test indices.
     error_score : 'raise' or float, default nan
-        ``'raise'`` propagates a fit error; a number is recorded as the
-        fold's score instead.
+        ``'raise'`` propagates a fit or scoring error; a number is recorded
+        as the fold's score instead (every score of a failed fit, the one
+        score that failed otherwise).
 
     Returns
     -------
@@ -1657,8 +1658,9 @@ class GridSearchCV(_BaseSearch):
     pre_dispatch : str, default '2*n_jobs'
         Accepted for compatibility; not used.
     error_score : 'raise' or float, default nan
-        ``'raise'`` propagates a fit error; a number is recorded as the
-        fold's score instead.
+        ``'raise'`` propagates a fit or scoring error; a number is recorded
+        as the fold's score instead (every score of a failed fit, the one
+        score that failed otherwise).
     return_train_score : bool, default False
         Also record training scores (``mean_train_score``).
 
@@ -1805,7 +1807,8 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
         every core, ``-k`` every core but ``k - 1``. The results do not
         depend on it.
     error_score : 'raise' or float, default nan
-        ``'raise'`` propagates a fit error; a number is recorded instead.
+        ``'raise'`` propagates a fit or scoring error; a number is recorded
+        instead.
 
     Returns
     -------
@@ -1865,8 +1868,9 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     random_state : int or None, default None
         Seed for the shuffle (mojolearn's counter-based generator).
     error_score : 'raise' or float, default nan
-        ``'raise'`` propagates a fit error; a number is recorded as the
-        training and test scores for that failed fit instead.
+        ``'raise'`` propagates a fit or scoring error; a number is recorded
+        as the training and test scores of a failed fit, or as the one score
+        that failed, instead.
     return_times : bool, default False
         Also return fit and score times.
 

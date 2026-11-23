@@ -69,6 +69,24 @@ def test_failing_unit_in_resident_gives_error_score_and_releases_the_pin():
     assert sys.getrefcount(bad) == before, "a failing unit left a pin on X"
 
 
+def test_numeric_error_score_forgives_a_failing_fit_and_a_failing_score_and_raise_raises():
+    # cross_validate's docstring: "'raise' propagates a fit or scoring error; a number is recorded as the fold's
+    # score instead" (scikit-learn's _fit_and_score). Split A has the NaN row in its training rows (the fit fails),
+    # split B in its test rows (the fit works, the score fails), split C has no NaN row (a real score).
+    bad = X.copy()
+    bad[5, 2] = np.nan
+    rows = np.arange(len(bad))
+    clean = rows[rows != 5]
+    splits = [(rows[:160], rows[160:]), (rows[80:], rows[:80]), (clean[80:], clean[:80])]
+    for name in ("GaussianNB", "Ridge"):
+        y = binary(C) if name == "GaussianNB" else Y
+        scores = np.asarray(cls("cross_validate")(cls(name)(), bad, y, cv=splits, error_score=-7.0)["test_score"])
+        assert scores[0] == -7.0 and scores[1] == -7.0, (name, scores)
+        assert np.isfinite(scores[2]) and scores[2] != -7.0, (name, scores)
+        with pytest.raises(ValueError):
+            cls("cross_validate")(cls(name)(), bad, y, cv=splits[1:2], error_score="raise")
+
+
 def test_nested_resident_scope_shares_the_outer_uploads():
     resident = _resident()
     with resident():
