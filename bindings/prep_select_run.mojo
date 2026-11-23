@@ -462,7 +462,7 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
     `getter` ('auto', 'coef_' or 'feature_importances_'): 'auto' takes MEMBER_BLOCK_COEF (squared) when the
     kind exports it, else MEMBER_BLOCK_FEATURE_IMPORTANCES as given; a named attribute takes that block, squared,
     as the attribute path squares it. A kind of the naive Bayes or discriminant family with neither block
-    (QuadraticDiscriminantAnalysis, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB: neither attribute
+    (QuadraticDiscriminantAnalysis, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB: neither attribute
     exists on them, as in scikit-learn) is REFUSED (lane mf-shaprfe): 'auto' in the door's words, a named
     attribute in scikit-learn's attrgetter's (`estimator` the class name). Any other kind without the block keeps
     the estimator's own doors (block 0)."""

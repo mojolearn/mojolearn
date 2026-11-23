@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """The NaiveBayes family as MEMBERS (core/member_abi.mojo): GaussianNB
-(kind 0), MultinomialNB (kind 1), BernoulliNB (kind 2) and ComplementNB
-(kind 3); CategoricalNB is not published yet (`naive_bayes_kind_published`).
+(kind 0), MultinomialNB (kind 1), BernoulliNB (kind 2), ComplementNB
+(kind 3) and CategoricalNB (kind 4, lane mf-shap2, 2026-11-23: its two fit
+programs and its scoring program are the door's typed builders,
+bindings/prep_classify_prog_run.mojo `cls_cat_count_program`,
+`cls_cat_categories`, `cls_cat_bounds`, `cls_cat_table_program`,
+`cls_score_program` with CLS_KIND_CAT, and the door's range refusals).
 
 One entry, `naive_bayes_member_v2`, published by each x_prep image beside its
 program transport (`naive_bayes_member_publish`, x_prep/transport_device.mojo
@@ -45,6 +49,19 @@ MEMBER_OP_NEW parameters, the discrete kinds (Float64 words, 9 + P):
   [9 .. 9 + P) the class priors (non-negative: checked at admission; P
       must equal the class count at fit)
 
+MEMBER_OP_NEW parameters, CategoricalNB (Float64 words, 9 + P + L):
+  [0] kind: 4 CategoricalNB
+  [1] alpha (positive: checked at admission)
+  [2] 2048-row statistics blocks 0 / 1 (MOJOLEARN_XPREP_BLOCKED)
+  [3] R3 work region 0 / 1
+  [4] P: the count of the `class_prior` parameter (0: None)
+  [5] fit_prior 0 / 1 (read when P is 0)
+  [6] min_categories: 0 None, 1 one integer for every feature, 2 a list
+  [7] that integer (word 6 is 1)
+  [8] L: the count of that list (word 6 is 2; 0 otherwise)
+  [9 .. 9 + P) the class priors; [9 + P .. 9 + P + L) the list (its
+      length is checked against the feature count at fit, in the door's words)
+
 Views: X dense row-major host float32 (finite: the caller's admission
 tests it; MultinomialNB and ComplementNB refuse a negative word at fit, in
 the estimator's words); `y` the class CODES 0..classes-1, one host column,
@@ -79,6 +96,14 @@ Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), GaussianNB:
   5 `NB_BLOCK_CLASS_PRIOR` float32 1 x classes (class_prior_)
   6 `NB_BLOCK_RAW_VAR` float32 classes x features (the unsmoothed variances `_raw_var`)
 
+Fitted-state blocks, CategoricalNB (cmax: the largest category count):
+  0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, classes, cmax (`_cmax`)]
+  1 `NB_BLOCK_LOG_PROB` float32 (features x classes) x cmax (`_flp`)
+  2 `NB_BLOCK_LOG_PRIOR` float32 1 x classes (class_log_prior_)
+  3 `NB_BLOCK_FEATURE_COUNT` float32 (features x classes) x cmax (`_cc`)
+  4 `NB_BLOCK_CLASS_COUNT` float32 1 x classes (class_count_)
+  5 `NB_BLOCK_CATEGORIES` float64 1 x features (n_categories_)
+
 Fitted-state blocks, the discrete kinds:
   0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, classes]
   1 `NB_BLOCK_LOG_PROB` float32 classes x features (feature_log_prob_)
@@ -98,9 +123,10 @@ host's cores; the programs are the family's and run on the route's device.
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
 from bindings.prep_classify_prog_run import (
-    ClsProgram, ClsRunPlan, ClsBorrowed, CLS_NONE, CLS_W_PREDICT, CLS_W_PROBA,
+    ClsProgram, ClsRunPlan, ClsBorrowed, ClsLabels, CLS_NONE, CLS_W_PREDICT, CLS_W_PROBA,
     CLS_PRIOR_GIVEN, CLS_PRIOR_FIT, CLS_PRIOR_UNIFORM,
     cls_gnb_fit_program, cls_dnb_counts, cls_dnb_params, cls_score_program, cls_borrowed_run,
+    cls_cat_count_program, cls_cat_categories, cls_cat_bounds, cls_cat_table_program,
 )
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
@@ -122,6 +148,7 @@ comptime NB_KIND_GAUSSIAN = 0
 comptime NB_KIND_MULTINOMIAL = 1  # the scoring program's CLS_KIND_MNB
 comptime NB_KIND_BERNOULLI = 2    # CLS_KIND_BNB
 comptime NB_KIND_COMPLEMENT = 3   # CLS_KIND_CNB
+comptime NB_KIND_CATEGORICAL = 4  # CLS_KIND_CAT
 #: The parameter words of a discrete kind before its class priors.
 comptime NB_DISCRETE_PARAM_HEAD = 9
 #: GaussianNB's parameter words before its priors.
@@ -138,8 +165,10 @@ comptime NB_BLOCK_LOG_PRIOR = MEMBER_BLOCK_FAMILY + 7
 comptime NB_BLOCK_FEATURE_COUNT = MEMBER_BLOCK_FAMILY + 8
 comptime NB_BLOCK_W = MEMBER_BLOCK_FAMILY + 9
 comptime NB_BLOCK_BIAS = MEMBER_BLOCK_FAMILY + 10
+comptime NB_BLOCK_CATEGORIES = MEMBER_BLOCK_FAMILY + 11
 comptime NB_GAUSSIAN_SCALARS = 3
 comptime NB_DISCRETE_SCALARS = 2
+comptime NB_CATEGORICAL_SCALARS = 3
 
 comptime NB_ROUTE_OUT = 1
 comptime NB_ROUTE_SCRATCH = 2
@@ -177,6 +206,9 @@ struct NaiveBayesMemberSlot(Copyable, Movable, Defaultable):
     var feature_count: List[Float32]
     var w: List[Float32]
     var bias: List[Float32]
+    #: CategoricalNB: n_categories_ per feature (its `_flp` and `_cc` are
+    #: `log_prob` and `feature_count`, (features x classes) x cmax).
+    var categories: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -198,6 +230,7 @@ struct NaiveBayesMemberSlot(Copyable, Movable, Defaultable):
         self.feature_count = List[Float32]()
         self.w = List[Float32]()
         self.bias = List[Float32]()
+        self.categories = List[Float64]()
 
     def kind(self) -> Int:
         return Int(self.words[0])
@@ -218,6 +251,7 @@ struct NaiveBayesMemberSlot(Copyable, Movable, Defaultable):
         self.feature_count = List[Float32]()
         self.w = List[Float32]()
         self.bias = List[Float32]()
+        self.categories = List[Float64]()
 
 
 struct NaiveBayesMemberStore(Defaultable, Movable):
@@ -308,12 +342,14 @@ def _kind_name(kind: Int) -> String:
         return String("BernoulliNB")
     if kind == NB_KIND_COMPLEMENT:
         return String("ComplementNB")
+    if kind == NB_KIND_CATEGORICAL:
+        return String("CategoricalNB")
     return String("NaiveBayes")
 
 
 def naive_bayes_kind_published(kind: Int) -> Bool:
     """The kinds this entry serves (a class is marked when its kind is here)."""
-    return kind >= NB_KIND_GAUSSIAN and kind <= NB_KIND_COMPLEMENT
+    return kind >= NB_KIND_GAUSSIAN and kind <= NB_KIND_CATEGORICAL
 
 
 def _run_plan(call: _Call) -> ClsRunPlan:
@@ -636,6 +672,97 @@ def _fit_discrete(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
 
 
+def _fit_categorical(slot: _Slot, call: _Call) raises:
+    """CategoricalNB.fit: the door's two fit programs (`_cat_fit_programs`
+    with `merge` False) over the caller's views: the column range of X, the
+    class counts and the class log prior; the refusal of a negative category
+    index and each feature's category count (`cls_cat_categories`), raised to
+    `min_categories` (`cls_cat_bounds`, its words); then the category counts
+    and the feature log probabilities. The fitted blocks are copied out of
+    the two arenas into the slot."""
+    var estimator = String("CategoricalNB")
+    var rows = _rows(call, estimator)
+    _fit_shape(call, rows, estimator)
+    var n = rows.n
+    var d = rows.d
+    var K = call[].classes
+    var views = _fit_views(call, rows, estimator)
+    var p = slot[].words.unsafe_ptr()
+    var priors = _priors(slot, NB_DISCRETE_PARAM_HEAD, K, estimator)
+    var prior = CLS_PRIOR_UNIFORM
+    if len(priors) != 0:
+        prior = CLS_PRIOR_GIVEN
+    elif p[5] != 0.0:
+        prior = CLS_PRIOR_FIT
+    var blocked = p[2] != 0.0
+    # The class codes as the door's walk hands them (`partial_labels` of a plain fit): one int32 record.
+    var labels = ClsLabels(False, n, n, 0, 0, 0)
+    var first = ClsProgram(p[3] != 0.0)
+    var o = cls_cat_count_program(first, n, d, K, labels, views.weighted, 0, False, prior, priors, blocked)
+    # record order: X, the class codes, the weights
+    var sources = List[ClsBorrowed](capacity=3)
+    sources.append(_x_source(call, rows))
+    sources.append(_plain(views.codes_address, n))
+    if views.weighted:
+        sources.append(_plain(views.weights_address, n))
+    # THE PIN RULE (core/member_abi.mojo `MemberCall.pin`): each run writes
+    # `call.pin_kept` at the moment the scope's cache takes the caller's
+    # reference; the second run finds X resident and takes nothing again.
+    var done = cls_borrowed_run(_run_plan(call), first, sources, call[].scope, call[].pin_kept)
+    var ncat = cls_cat_categories(done.arena.address, o.st, d)
+    var has_min = p[6] != 0.0
+    var mins = List[Int]()
+    if p[6] == 1.0:
+        mins = List[Int](length=d, fill=Int(p[7]))
+    elif p[6] == 2.0:
+        var listed = Int(p[8])
+        var at = NB_DISCRETE_PARAM_HEAD + Int(p[4])
+        for j in range(listed):  # driver-loop: over the user min_categories list (feature-count sized)
+            mins.append(Int(p[at + j]))
+    var cmax = cls_cat_bounds(ncat, has_min, mins, List[Int]())
+    var second = ClsProgram(p[3] != 0.0)
+    var t = cls_cat_table_program(second, n, d, K, labels, ncat, cmax, p[1], views.weighted, False, 0, 0, blocked)
+    # record order: X, the class codes, the first program's class_count_, the weights
+    var table_sources = List[ClsBorrowed](capacity=4)
+    table_sources.append(_x_source(call, rows))
+    table_sources.append(_plain(views.codes_address, n))
+    table_sources.append(_plain(Int(done.arena.f32(o.cnt)), K))
+    if views.weighted:
+        table_sources.append(_plain(views.weights_address, n))
+    var table = cls_borrowed_run(_run_plan(call), second, table_sources, call[].scope, call[].pin_kept)
+    _ = views.keep()
+    var words = d * K * cmax
+    slot[].clear()
+    slot[].class_count = _copy_out(done.arena.f32(o.cnt), K)
+    slot[].log_prior = _copy_out(done.arena.f32(o.clp), K)
+    _ = done^  # the first arena is read by the second run and the copies above
+    slot[].feature_count = _copy_out(table.arena.f32(t.cc), words)
+    slot[].log_prob = _copy_out(table.arena.f32(t.flp), words)
+    _ = table^
+    var categories = List[Float64](capacity=d)
+    for j in range(d):  # driver-loop: over the feature columns (model structure)
+        categories.append(Float64(ncat[j]))
+    slot[].categories = categories^
+    slot[].scalars = [Float64(d), Float64(K), Float64(cmax)]
+    slot[].features = d
+    slot[].classes = K
+    slot[].label_dtype = views.label_dtype
+    slot[].fitted = True
+
+
+def _cat_refusals(arena: Int, chk: Int, d: Int, categories: List[Float64]) raises:
+    """The door's `_score_refusals` of CategoricalNB over the scoring run's
+    column statistics at `chk` (row 3 the minimum, row 4 the maximum): a
+    category index outside the fitted range, before any output is written."""
+    var words = _F32P(unsafe_from_address=arena)
+    for j in range(d):  # driver-loop: over the feature columns' fitted category counts
+        if Float64(words[chk + 3 * d + j]) < 0:
+            raise Error("IndexError: mojolearn: CategoricalNB got a category index outside the fitted range")
+    for j in range(d):  # driver-loop: over the feature columns' fitted category counts
+        if Int(Float64(words[chk + 4 * d + j])) >= Int(categories[j]):
+            raise Error("IndexError: mojolearn: CategoricalNB got a category index outside the fitted range")
+
+
 def _score(slot: _Slot, call: _Call, operation: Int) raises:
     """predict / predict_proba: the door's scoring program (`_base_scores`)
     with the slot's blocks as its fitted records."""
@@ -672,7 +799,17 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
     var c = _plain(Int(slot[].constant.unsafe_ptr()), K)
     var has_threshold = False
     var threshold = 0.0
-    if kind == NB_KIND_BERNOULLI:
+    var cmax = 0
+    var cat_blocked = False
+    if kind == NB_KIND_CATEGORICAL:
+        # `_flp` and class_log_prior_ (`cls_jll_stages`' CategoricalNB records), the category bound and the
+        # blocked column statistics of the range refusals, as the door's `_base_scores`.
+        cmax = Int(slot[].scalars[2])
+        a = _plain(Int(slot[].log_prob.unsafe_ptr()), len(slot[].log_prob))
+        b = _plain(Int(slot[].log_prior.unsafe_ptr()), K)
+        c = _plain(0, 0)
+        cat_blocked = p[2] != 0.0
+    elif kind == NB_KIND_BERNOULLI:
         a = _plain(Int(slot[].w.unsafe_ptr()), K * d)
         b = _plain(Int(slot[].bias.unsafe_ptr()), K)
         c = _plain(0, 0)
@@ -685,7 +822,8 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
         c = _plain(0, 0)
     var program = ClsProgram(p[3] != 0.0)
     var o = cls_score_program(program, kind, CLS_NONE, n, d, K, a.words, b.words, c.words,
-                              CLS_W_PROBA if proba else CLS_W_PREDICT, p64, False, False, has_threshold, threshold, 0)
+                              CLS_W_PROBA if proba else CLS_W_PREDICT, p64, False, cat_blocked, has_threshold, threshold,
+                              cmax)
     var sources = List[ClsBorrowed](capacity=4)
     sources.append(_x_source(call, rows))
     sources.append(a)
@@ -697,6 +835,8 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
     # `call.pin_kept` at the moment the scope's cache takes the caller's
     # reference, so the caller reads it even when a later stage raises.
     var done = cls_borrowed_run(_run_plan(call), program, sources, call[].scope, call[].pin_kept)
+    if kind == NB_KIND_CATEGORICAL:
+        _cat_refusals(done.arena.address, o.chk, d, slot[].categories)
     if proba:
         # float64 probabilities are two arena words each
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=done.arena.f32(o.pp),
@@ -720,10 +860,14 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
 def _block_count(kind: Int) -> Int:
     if kind == NB_KIND_GAUSSIAN or kind == NB_KIND_BERNOULLI:
         return 7
+    if kind == NB_KIND_CATEGORICAL:
+        return 6
     return 5
 
 
 def _scalar_count(kind: Int) -> Int:
+    if kind == NB_KIND_CATEGORICAL:
+        return NB_CATEGORICAL_SCALARS
     return NB_GAUSSIAN_SCALARS if kind == NB_KIND_GAUSSIAN else NB_DISCRETE_SCALARS
 
 
@@ -741,6 +885,8 @@ def _block_at(kind: Int, index: Int) -> Int:
         return NB_BLOCK_FEATURE_COUNT
     if index == 4:
         return NB_BLOCK_CLASS_COUNT
+    if kind == NB_KIND_CATEGORICAL:
+        return NB_BLOCK_CATEGORIES
     return NB_BLOCK_W if index == 5 else NB_BLOCK_BIAS
 
 
@@ -754,6 +900,14 @@ def _has_block(kind: Int, block: Int) -> Bool:
 def _block_view(slot: _Slot, block: Int) raises -> MemberMatrix:
     var K = slot[].classes
     var d = slot[].features
+    if slot[].kind() == NB_KIND_CATEGORICAL:
+        var cmax = Int(slot[].scalars[2])
+        if block == NB_BLOCK_LOG_PROB:
+            return MemberMatrix(Int(slot[].log_prob.unsafe_ptr()), d * K, cmax)
+        if block == NB_BLOCK_FEATURE_COUNT:
+            return MemberMatrix(Int(slot[].feature_count.unsafe_ptr()), d * K, cmax)
+        if block == NB_BLOCK_CATEGORIES:
+            return MemberMatrix(Int(slot[].categories.unsafe_ptr()), 1, d, MEMBER_F64)
     if block == NB_BLOCK_THETA:
         return MemberMatrix(Int(slot[].theta.unsafe_ptr()), K, d)
     if block == NB_BLOCK_VAR:
@@ -810,12 +964,22 @@ def _import(slot: _Slot, call: _Call) raises:
         var count = _scalar_count(kind)
         if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != count:
             raise Error("member ABI: the " + estimator + " scalars block is " + String(count)
-                        + " host float64 words (n_features_in_, classes" + (", epsilon_)" if count == 3 else ")"))
+                        + " host float64 words (n_features_in_, classes"
+                        + ((", cmax)" if kind == NB_KIND_CATEGORICAL else ", epsilon_)") if count == 3 else ")"))
         var given = _F64P(unsafe_from_address=call[].x.data)
         var scalars = List[Float64](capacity=count)
         for i in range(count):  # driver-loop: over the two or three scalar words
             scalars.append(given[i])
         slot[].scalars = scalars^
+    elif block == NB_BLOCK_CATEGORIES and kind == NB_KIND_CATEGORICAL:
+        var size = call[].x.rows * call[].x.cols
+        if size < 1 or not call[].x.dense_host(MEMBER_F64):
+            raise Error("TypeError: a CategoricalNB member reads n_categories_ as a dense host float64 view")
+        var given = _F64P(unsafe_from_address=call[].x.data)
+        var categories = List[Float64](capacity=size)
+        for j in range(size):  # driver-loop: over the feature columns (model structure)
+            categories.append(given[j])
+        slot[].categories = categories^
     elif _has_block(kind, block):
         var size = call[].x.rows * call[].x.cols
         if size < 1 or not call[].x.dense_host(MEMBER_F32):
@@ -852,7 +1016,11 @@ def _import(slot: _Slot, call: _Call) raises:
     var d = Int(slot[].scalars[0])
     var K = Int(slot[].scalars[1])
     var whole = d >= 1 and K >= 1 and len(slot[].class_count) == K
-    if kind == NB_KIND_GAUSSIAN:
+    if kind == NB_KIND_CATEGORICAL:
+        var cmax = Int(slot[].scalars[2])
+        whole = (whole and cmax >= 1 and len(slot[].log_prob) == d * K * cmax and len(slot[].log_prior) == K
+                 and len(slot[].feature_count) == d * K * cmax and len(slot[].categories) == d)
+    elif kind == NB_KIND_GAUSSIAN:
         whole = (whole and len(slot[].theta) == K * d and len(slot[].variance) == K * d and len(slot[].constant) == K
                  and len(slot[].class_prior) == K and len(slot[].raw_variance) == K * d)
     else:
@@ -907,7 +1075,10 @@ def _new(call: _Call) raises:
     if call[].param_count < head:
         raise Error(shape)
     var prior_count = Int(source[4])
-    if Float64(prior_count) != source[4] or prior_count < 0 or call[].param_count != head + prior_count:
+    # CategoricalNB's min_categories list follows its priors (word 8: its count).
+    var listed = Int(source[8]) if kind == NB_KIND_CATEGORICAL else 0
+    if (Float64(prior_count) != source[4] or prior_count < 0 or listed < 0
+            or call[].param_count != head + prior_count + listed):
         raise Error(shape)
     if kind == NB_KIND_GAUSSIAN:
         if not (source[1] >= 0.0):
@@ -946,6 +1117,8 @@ def _naive_bayes_member(operation: Int, address: Int) raises -> Int:
         if operation == MEMBER_OP_FIT:
             if slot[].kind() == NB_KIND_GAUSSIAN:
                 _fit_gaussian(slot, call)
+            elif slot[].kind() == NB_KIND_CATEGORICAL:
+                _fit_categorical(slot, call)
             else:
                 _fit_discrete(slot, call)
         elif operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA:
