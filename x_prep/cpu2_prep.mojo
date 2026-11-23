@@ -27,7 +27,7 @@ Ops (F2_BASE + 12 ..; python/mojolearn/_expansion_prep.py `_OPS`):
   257 c2_rfe_rank     RFE: ranking + 1 for every dropped feature
   258 c2_ii_miss      IterativeImputer: missing count per kept column
   259 c2_ii_pos       IterativeImputer: position of a feature in a fixed order
-  260 c2_ii_ord       IterativeImputer: the fixed order, missing features only
+  260 c2_ii_ord       IterativeImputer: the fixed order (missing features only with SKIP)
   261 c2_ii_rand      IterativeImputer: one Fisher-Yates order per round
   262 c2_colmax       the largest of a vector (NaN skipped; 0 when empty)
   263 c2_grid         percent / ratio level grids in binary64, rounded to float32
@@ -470,25 +470,30 @@ def c2_ii_pos_unit(t: Int, f: FP, q: IP):
 
 
 def c2_ii_ord_unit(t: Int, f: FP, q: IP):
-    """q = [MISS, dk, POS, rounds, ORD, LEN]; t = feature: a feature with
-    missing entries goes to slot #{missing features before it in POS order}
-    of every round's row ORD[r*dk ..] (int32 bits); feature 0 also writes
-    every LEN[r] = the count of missing features."""
+    """q = [MISS, dk, POS, rounds, ORD, LEN, SKIP]; t = feature: a candidate
+    goes to slot #{candidates before it in POS order} of every round's row
+    ORD[r*dk ..] (int32 bits); feature 0 also writes every LEN[r] = the
+    count of candidates. The candidates are scikit-learn's
+    `_get_ordered_idx`: every feature (skip_complete=False, SKIP 0: the
+    stable argsort over all of them, complete features included, so
+    `n_features_with_missing_` is the feature count), or with SKIP 1 those
+    with missing entries (the argsort with the complete ones cut off)."""
     var dk = p(q, 1)
     var rounds = p(q, 3)
+    var skip = p(q, 6) != 0
     if t == 0:
         var nm = 0
         for a in range(dk):
-            if ldi(f, p(q, 0) + a) > 0:
+            if not skip or ldi(f, p(q, 0) + a) > 0:
                 nm += 1
         for r in range(rounds):
             sti(f, p(q, 5) + r, nm)
-    if ldi(f, p(q, 0) + t) <= 0:
+    if skip and ldi(f, p(q, 0) + t) <= 0:
         return
     var pt = ldi(f, p(q, 2) + t)
     var slot = 0
     for a in range(dk):
-        if ldi(f, p(q, 0) + a) > 0 and ldi(f, p(q, 2) + a) < pt:
+        if (not skip or ldi(f, p(q, 0) + a) > 0) and ldi(f, p(q, 2) + a) < pt:
             slot += 1
     for r in range(rounds):
         sti(f, p(q, 4) + r * dk + slot, t)
@@ -499,8 +504,10 @@ def c2_ii_rand_unit(t: Int, f: FP, q: IP):
     'random' order. The candidates (every feature, or with SKIP those with
     missing entries) in a Fisher-Yates permutation drawn from the
     instance's splitmix64 stream (round t takes words t*(m-1) .. of it, m
-    candidates: the same draws `_draw` made in turn), then the features
-    with missing entries kept in that order; LEN[t] their count."""
+    candidates: the same draws `_draw` made in turn), kept in that
+    order; LEN[t] their count (m). Without SKIP every feature stays
+    in the order, complete ones included, as scikit-learn's shuffled
+    `np.arange(n_features)` does (skip_complete=False)."""
     var dk = p(q, 1)
     var row = p(q, 4) + t * dk
     var m = 0
@@ -517,13 +524,7 @@ def c2_ii_rand_unit(t: Int, f: FP, q: IP):
         var a = ldi(f, row + i)
         sti(f, row + i, ldi(f, row + k))
         sti(f, row + k, a)
-    var out = 0
-    for i in range(m):
-        var j = ldi(f, row + i)
-        if ldi(f, p(q, 0) + j) > 0:
-            sti(f, row + out, j)
-            out += 1
-    sti(f, p(q, 5) + t, out)
+    sti(f, p(q, 5) + t, m)
 
 
 def c2_colmax_unit(t: Int, f: FP, q: IP):

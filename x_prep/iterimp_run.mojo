@@ -799,7 +799,7 @@ def iterimp_prepare[R: IterImpRunner](mut runner: R, r: IterImpFit, mut fitted: 
         else:
             var pos = p.work(dk)
             _stage(p.program, OP_C2_II_POS, dk, missd, dk, r.order, pos)
-            _stage(p.program, OP_C2_II_ORD, dk, missd, dk, pos, R_, ordw, lens)
+            _stage(p.program, OP_C2_II_ORD, dk, missd, dk, pos, R_, ordw, lens, 1 if r.skip else 0)
     var h3 = runner.run(p, none)
     _ = len(p.consts_i)  # the program's own words stay alive past the run
     var a3 = runner.words(h3)
