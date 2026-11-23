@@ -60,6 +60,16 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build defaults)
   6. The rescale on append, the learn losses and the model text with
      `dim` leaves per bin.
 
+THE POINTWISE SEARCHER (lane gbdt-pw-multiclass, 2026-11-23; the
+gbdt-pointwise-multiclass lane): with `use_pointwise_searcher` step 4 is the
+device's doc-parallel arm instead: the score-noise deviation from the
+unbootstrapped planes over every approx dimension, the planes laid out with
+dimension d on the searcher's fold 2 d (`_dims_planes`, `_dims_fold_shape`),
+the gradient planes snapped, `_ordered_tree_structure(dim_count=dim)` (the
+per-dimension score summed, MultiClass's pinned class added, one body with
+the device's `find_optimal_split_dims_kernel`), and every permutation's
+partition re-derived from the structure (`_partition_for_model`).
+
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1`
 (`GBDT_ORACLE_HOST_SABOTAGE`) adds 1.0 to lambda, so every leaf moves.
 
@@ -162,6 +172,18 @@ from gbdt.host.gbdt_oracle_eval import (
     gbdt_eval_test_bins,
 )
 from gbdt.lapack.linear_system import solve_linear_system_cholesky
+from gbdt.host.gbdt_oracle import _snap_plane
+from gbdt.host.gbdt_oracle_ordered import (
+    _OrdSplit,
+    _PwHelper,
+    _ordered_tree_structure,
+)
+from gbdt.host.gbdt_oracle_pointwise_rank import (
+    _pointwise_target_std_dev,
+    _pw_feature_words,
+    _pw_helpers,
+    _pw_sample_tree,
+)
 
 
 #: `OBJECTIVE_MULTICLASS`, `OBJECTIVE_MULTICLASS_OVA`, `OBJECTIVE_MULTIRMSE`
@@ -864,6 +886,61 @@ def _class_weight_rows(
     _ = len(weights)
 
 
+def _dims_fold_shape(
+    n_rows: Int, dims: Int, mut doc_ids: List[Int], mut part_bounds: List[Int]
+) -> Int:
+    """The device's `dims_search_folds` layout on the host (lane
+    gbdt-pw-multiclass, 2026-11-23): `dims` folds of every row with an
+    empty quality slice, so `2 * dims` partitions (learn d over positions
+    `[d * n_rows, (d + 1) * n_rows)`, test d empty), the doc ids `0..n_rows`
+    once per dimension (`MakeDocIndices`), and the fold bits
+    `ceil(log2(2 * dims))` (`plan_fold_layout`). Returns the fold bits."""
+    doc_ids = List[Int](length=dims * n_rows, fill=0)
+    var doc_p = rebind[GbdtIntPtr](doc_ids.unsafe_ptr())
+    var total = dims * n_rows
+    var units = _gbdt_units(total, total)
+    var chunk = host_predict_chunk(total, units)
+
+    def ids(unit: Int) {imm chunk, imm total, imm n_rows, imm doc_p}:
+        for k in range(unit * chunk, min(total, (unit + 1) * chunk)):
+            doc_p[k] = k % n_rows
+
+    host_parallelize(ids, units)
+    _ = len(doc_ids)
+    part_bounds = List[Int]()
+    part_bounds.append(0)
+    for d in range(dims):  # driver-loop: over the approx dimensions (two parts each)
+        part_bounds.append((d + 1) * n_rows)
+        part_bounds.append((d + 1) * n_rows)
+    var bits = 0
+    while (1 << bits) < 2 * dims:
+        bits += 1
+    return bits
+
+
+def _dims_planes(
+    stats: List[Float32], n_rows: Int, dims: Int, mut planes: List[Float32]
+):
+    """`dims_planes_kernel` on the host: `planes[k] = stats[k % n_rows]`
+    (the weight plane once per dimension) and `planes[dims * n_rows + k] =
+    stats[n_rows + k]` (gradient planes 1..dims end to end), for every
+    position `k < dims * n_rows`, in `_gbdt_units` contiguous ranges."""
+    var total = dims * n_rows
+    var units = _gbdt_units(total, 2 * total)
+    var chunk = host_predict_chunk(total, units)
+    var src = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var dst = rebind[HostF32Ptr](planes.unsafe_ptr())
+
+    def move_rows(unit: Int) {imm chunk, imm total, imm n_rows, imm src, imm dst}:
+        for k in range(unit * chunk, min(total, (unit + 1) * chunk)):
+            dst[k] = src[k % n_rows]
+            dst[total + k] = src[n_rows + k]
+
+    host_parallelize(move_rows, units)
+    _ = len(stats)
+    _ = len(planes)
+
+
 def gbdt_multi_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -903,6 +980,12 @@ def gbdt_multi_host_fit(
     # MultiRMSE), the device's `device_multi_walk_estimate`
     leaf_method: Int = LEAF_ESTIMATION_NEWTON,
     leaf_iterations: Int = 1,
+    # the structure searcher (lane gbdt-pw-multiclass, 2026-11-23): False the
+    # greedy subsets searcher; True the doc-parallel (pointwise) searcher on
+    # MultiClass, MultiClassOneVsAll and MultiRMSE, every approx dimension's score
+    # summed (`_ordered_tree_structure(dim_count=...)`), the device's
+    # pointwise arm statement for statement
+    use_pointwise_searcher: Bool = False,
 ) raises -> GbdtHostMultiFit:
     """`train` then `fit_with_test` on the covered configurations.
 
@@ -1084,6 +1167,13 @@ def gbdt_multi_host_fit(
     var n_cols = len(grid.fold_counts)
     var perm_count = len(cindexes)
     var tree_on = len(tree_ctr) == 1
+    if tree_on and use_pointwise_searcher:
+        # `fit_with_test`'s words (gbdt/methods/doc_parallel_boosting.mojo)
+        raise Error(
+            "max_ctr_complexity above 1 (feature combinations) is grown"
+            " by the greedy searcher; use_pointwise_searcher does not"
+            " mint combinations"
+        )
     var blocks = blocks_for(layout, n_rows)
     var hist_cells = layout.hist_cells
     var bf_feature = List[Int](length=hist_cells, fill=0)
@@ -1154,6 +1244,36 @@ def gbdt_multi_host_fit(
         boot_seeds = gbdt_bootstrap_seeds(params.random_seed)
     var noise_rand = TRandom(params.random_seed)
 
+    # ---- the doc-parallel searcher's state (lane gbdt-pw-multiclass):
+    # the dimensions' fold layout (`_dims_fold_shape`, the device's
+    # `dims_search_folds`), the planes, the policy helpers and the feature
+    # words of the fit's layout (the tree's on a sampled tree) ----
+    var pw_dims = dim if use_pointwise_searcher else 0
+    var pw_doc_ids = List[Int]()
+    var pw_part_bounds = List[Int]()
+    var pw_fold_bits = 0
+    var pw_planes = List[Float32]()
+    var pw_helpers = List[_PwHelper]()
+    var pw_offset = List[Int]()
+    var pw_shift = List[UInt32]()
+    var pw_mask = List[UInt32]()
+    var pw_one_hot = List[Bool]()
+    var pw_tree_cindex = List[UInt32]()
+    var pw_s_offset = List[Int]()
+    var pw_s_shift = List[UInt32]()
+    var pw_s_mask = List[UInt32]()
+    if pw_dims > 0:
+        pw_fold_bits = _dims_fold_shape(n_rows, pw_dims, pw_doc_ids, pw_part_bounds)
+        pw_planes = List[Float32](length=2 * pw_dims * n_rows, fill=Float32(0.0))
+        pw_helpers = _pw_helpers(layout, n_rows)
+        _pw_feature_words(layout, n_rows, n_cols, pw_offset, pw_shift, pw_mask)
+        var any_one_hot = False
+        for f in range(n_cols):  # driver-loop: over the layout's columns
+            if feat_one_hot[f]:
+                any_one_hot = True
+        if any_one_hot:
+            pw_one_hot = feat_one_hot.copy()
+
     for iteration in range(params.n_estimators):
         # ---- which permutation the STRUCTURE is searched on
         # (`doc_parallel_boosting.mojo`, `gbdt_host_boost`'s statements);
@@ -1178,208 +1298,273 @@ def gbdt_multi_host_fit(
                 Float64(n_rows), iteration, params.learning_rate
             )
         var tree_seed = noise_rand.next_uniform_l()
+        # the doc-parallel arm's score-noise deviation, from the
+        # UNBOOTSTRAPPED planes (`ComputeWeakTarget`'s order): every approx
+        # dimension, divided by the object count
+        # (`compute_score_std_dev_planes`)
+        var pw_std_dev = Float32(0.0)
+        if pw_dims > 0 and noise_mult * Float64(random_strength) != 0.0:
+            _dims_planes(stats, n_rows, pw_dims, pw_planes)
+            pw_std_dev = Float32(
+                noise_mult
+                * _pointwise_target_std_dev(pw_planes, pw_dims * n_rows, n_rows)
+                * Float64(random_strength)
+            )
         if bootstrap_kind >= 0:
             var bm = _bootstrap_pass(bootstrap_kind, boot_seeds, stats, n_rows, bootstrap_param, stat_count)
             mags[0] = bm[0]
             mags[1] = bm[1]
         var fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
-        _snap_gradients(stats, n_rows, stat_count, fixed_scale)  # lane/sym-quality
-        var score_std_dev = Float32(0.0)
-        if random_strength != Float32(0.0):
-            score_std_dev = Float32(Float64(Float32(noise_mult * Float64(random_strength))) * _target_std_dev(stats, n_rows, stat_count, is_mc))
-        var level_rand = TRandom(tree_seed)
-
-        # ---- the per-tree feature sample (`feature_fraction < 1`) ----
-        if ff_on:
-            var tree_folds = _sample_tree_folds(
-                grid.fold_counts, feature_fraction, feature_random
-            )
-            s_layout = build_layout(tree_folds, ff_one_hot)
-            s_blocks = blocks_for(s_layout, n_rows)
-            cindexes[0] = _ns_project_index(
-                full_cindex, layout, s_layout, tree_folds, n_rows, n_cols
-            )
-            s_hist_cells = s_layout.hist_cells
-            s_bf_feature = List[Int](length=s_hist_cells, fill=0)
-            s_bf_bin = List[Int](length=s_hist_cells, fill=0)
-            for f in range(n_cols):  # driver-loop: over the features and their borders (the tree layout)
-                ref lf = s_layout.features[f]
-                for b in range(Int(lf.folds)):
-                    s_bf_feature[Int(lf.first_fold_index) + b] = f
-                    s_bf_bin[Int(lf.first_fold_index) + b] = b
-
-        # ---- `run_tree_layout_traced` at `stat_count` planes (TWIN of the
-        # loop in `gbdt_oracle.mojo::gbdt_host_fit`) ----
-        var row_index = List[Int](length=n_rows, fill=0)
-        _identity_rows(row_index, n_rows)
-        var p_off = List[Int](length=max_leaves, fill=0)
-        var p_sz = List[Int](length=max_leaves, fill=0)
-        p_sz[0] = n_rows
-        var hist = List[Float32](
-            length=max_leaves * stat_count * s_hist_cells, fill=Float32(0.0)
-        )
-        var ids_compute = List[Int](length=max_leaves, fill=0)
-        var sub_from = List[Int](length=max_leaves, fill=0)
-        var sub_what = List[Int](length=max_leaves, fill=0)
-        var winners_score = List[Float32]()
-        var winners_bf = List[UInt32]()
+        # the tree's structure and partition, from either searcher
+        var row_index = List[Int]()
         var n_live = 1
-        # TREE CTRS: the level-synchronized levels at `stat_count` planes
-        # (`run_tree_ctr_tree` at `1 + approx_dim`), which leave the
-        # tree's splits in `tc_features` / `tc_bins` and the partition in
-        # `row_index`, `stats`, `p_off`, `p_sz`; the fused loop below then
-        # runs no level (`gbdt_host_boost`'s statements)
-        var tc_features = List[Int]()
-        var tc_bins = List[Int]()
-        if tree_on:
-            n_live = _tree_ctr_levels_host(
-                tree_ctr[0], cindexes, test_cindex, learn_p, s_layout, s_blocks,
-                s_bf_feature, s_bf_bin, n_rows, n_cols, max_depth,
-                params.l2_leaf_reg, score_std_dev, fixed_scale, level_rand,
-                row_index, stats, p_off, p_sz, tc_features, tc_bins,
-                score_function=score_function, stat_count=stat_count,
-                multiclass_optimization=is_mc,
-            )
-        ref cindex = cindexes[learn_p]
-        for depth in range(0 if tree_on else max_depth):
-            var level_seed = level_rand.next_uniform_l()
-            var half = n_live // 2
-            var planned = depth > 0
-            var compute = List[Int]()
-            if planned:
-                for j in range(half):
-                    compute.append(ids_compute[j])
-            else:
-                for j in range(n_live):
-                    compute.append(j)
-
-            var block_first_bin = 0
-            for b in range(len(s_blocks)):
-                ref blk = s_blocks[b]
-                var total = 0
-                for k in range(blk.count()):
-                    total += Int(blk.folds[k])
-                if blk.policy == POLICY_BINARY:
-                    _binary_block_n(
-                        blk, block_first_bin, s_hist_cells, stat_count, compute,
-                        depth, p_off, p_sz, row_index, stats, cindex, n_rows,
-                        fixed_scale, hist,
-                    )
-                elif blk.policy == POLICY_HALF_BYTE:
-                    _half_byte_block_n(
-                        blk, block_first_bin, s_hist_cells, stat_count, compute,
-                        depth, p_off, p_sz, row_index, stats, cindex, n_rows,
-                        fixed_scale, hist,
-                    )
-                elif blk.policy == POLICY_ONE_BYTE:
-                    _one_byte_block_n(
-                        blk, block_first_bin, s_hist_cells, stat_count, compute,
-                        p_off, p_sz, row_index, stats, cindex, s_layout, n_rows,
-                        fixed_scale, hist,
-                    )
-                block_first_bin += total
-
-            # `scan_histograms_kernel` over the computed leaves, every plane
-            _scan_histograms(hist, s_hist_cells, stat_count, compute, s_layout, n_cols)
-
-            # `substract_histograms_kernel`: the larger sibling, in place
-            if planned and half > 0:
-                _subtract_histograms(hist, s_hist_cells, sub_from, sub_what, half, stat_count)
-
-            # `compute_partition_stats` over the live leaves, at the chunk
-            # count of `stat_count` planes (`_stat_chunks`)
-            var part_stats = _partition_stats_level(
-                stats, n_rows, stat_count,
-                _stat_chunks(stat_count),
-                p_off, p_sz, n_live,
-            )
-
-            # the score and the device winner
-            var gains = _cosine_gains_n(
-                hist, s_hist_cells, stat_count, part_stats, n_live,
-                params.l2_leaf_reg, is_mc, score_std_dev, level_seed, s_bf_feature,
-                score_function == SCORE_FUNCTION_L2,
-            )
-            var best_bin = _gain_winner(gains, s_hist_cells)
-            var best_gain = -GBDT_FLOAT32_MAX
-            if best_bin != GBDT_SENTINEL:
-                best_gain = gains[Int(best_bin)]
-            if best_bin != GBDT_SENTINEL:
-                winners_score.append(ftz(best_gain))
-            else:
-                winners_score.append(ftz(-GBDT_FLOAT32_MAX))
-            winners_bf.append(best_bin)
-            var bf_split = 0
-            if best_bin != GBDT_SENTINEL:
-                bf_split = Int(best_bin)
-
-            var split_f = s_bf_feature[bf_split] if s_hist_cells > 0 else 0
-            var split_b = s_bf_bin[bf_split] if s_hist_cells > 0 else 0
-            ref sfeat = s_layout.features[split_f]
-            # the split chain, every live leaf, every plane
-            _split_level(
-                cindex, Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
-                UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
-                n_live, s_hist_cells, row_index, stats, p_off, p_sz, hist,
-                ids_compute, sub_from, sub_what, stat_count,
-            )
-            n_live = n_live * 2
-
         var tree_features = List[Int]()
         var tree_bins = List[Int]()
         var grown = 0
-        if tree_on:
-            # accepted level by level, each gate applied before the next
-            # level was searched: nothing was speculated, nothing rolls back
-            for i in range(len(tc_features)):  # driver-loop: over the tree's levels
-                tree_features.append(tc_features[i])
-                tree_bins.append(tc_bins[i])
-            grown = len(tc_features)
-        for d in range(0 if tree_on else max_depth):
-            var best_score = winners_score[d]
-            var best_bin_u = winners_bf[d]
-            if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
-                raise Error(
-                    "All splits have infinite score. Probably, numerical"
-                    " overflow occurs in loss function and/or split score"
-                    " calculation. Try increasing l2_leaf_reg, and/or"
-                    " decreasing learning_rate, etc."
-                    " [level " + String(d) + ", live leaves "
-                    + String(1 << d) + "]"
-                )
-            var cf_ = s_bf_feature[Int(best_bin_u)]
-            var cb_ = s_bf_bin[Int(best_bin_u)]
-            if not (best_score > Float32(0.0)):
-                break
-            var repeated = False
-            for i in range(len(tree_features)):
-                if tree_features[i] == cf_ and tree_bins[i] == cb_:
-                    repeated = True
-            if repeated:
-                break
-            tree_features.append(cf_)
-            tree_bins.append(cb_)
-            grown += 1
-        if grown < max_depth and not tree_on:
-            var live = n_live
-            for _ in range(max_depth - grown):
-                var h2 = live // 2
-                for i in range(h2):
-                    p_sz[i] = p_sz[i] + p_sz[h2 + i]
-                live = h2
-            n_live = live
         var sizes = List[Int]()
         var offsets = List[Int]()
-        var covered_rows = 0
-        for i in range(n_live):
-            sizes.append(p_sz[i])
-            offsets.append(p_off[i])
-            covered_rows += p_sz[i]
-        if covered_rows != n_rows:
-            raise Error(
-                "gbdt host: the final leaf partitions cover "
-                + String(covered_rows) + " of " + String(n_rows) + " rows"
+        if pw_dims > 0:
+            # ---- the doc-parallel searcher on a multi-output loss (lane
+            # gbdt-pw-multiclass, 2026-11-23; `doc_parallel_boosting.mojo`'s
+            # pointwise arm at `pw_dims`): the bootstrapped planes, every
+            # approx dimension on the fold axis (`_dims_planes`), every
+            # gradient plane snapped onto the tree's grid, the single-task
+            # search with the per-dimension score summed (and MultiClass's
+            # pinned class), on the learn permutation's index or the tree's
+            # feature sample. The partition is re-derived from the
+            # structure below, on every permutation, as the device does ----
+            _dims_planes(stats, n_rows, pw_dims, pw_planes)
+            _snap_plane(pw_planes, pw_dims * n_rows, fixed_scale, pw_dims * n_rows)
+            var pw_splits: List[_OrdSplit]
+            if ff_on:
+                _pw_sample_tree(
+                    cindexes[0], layout, grid.fold_counts, feature_fraction,
+                    feature_random, n_rows, n_cols, pw_tree_cindex, pw_helpers,
+                    pw_s_offset, pw_s_shift, pw_s_mask,
+                )
+                pw_splits = _ordered_tree_structure(
+                    pw_tree_cindex, pw_helpers, max_depth, pw_planes,
+                    pw_planes, pw_doc_ids, pw_part_bounds, 2 * pw_dims,
+                    pw_fold_bits, fixed_scale, params.l2_leaf_reg,
+                    pw_s_offset, pw_s_shift, pw_s_mask, List[Bool](), False,
+                    pw_std_dev, tree_seed, False, sw_off=0,
+                    sg_off=pw_dims * n_rows, dim_count=pw_dims,
+                    pinned_class=is_mc,
+                    dims_cosine=score_function == SCORE_FUNCTION_COSINE,
+                )
+            else:
+                pw_splits = _ordered_tree_structure(
+                    cindexes[learn_p], pw_helpers, max_depth, pw_planes,
+                    pw_planes, pw_doc_ids, pw_part_bounds, 2 * pw_dims,
+                    pw_fold_bits, fixed_scale, params.l2_leaf_reg,
+                    pw_offset, pw_shift, pw_mask, pw_one_hot, False,
+                    pw_std_dev, tree_seed, False, sw_off=0,
+                    sg_off=pw_dims * n_rows, dim_count=pw_dims,
+                    pinned_class=is_mc,
+                    dims_cosine=score_function == SCORE_FUNCTION_COSINE,
+                )
+            for level in range(len(pw_splits)):  # driver-loop: over the tree's levels
+                tree_features.append(pw_splits[level].feature)
+                tree_bins.append(pw_splits[level].bin)
+            grown = len(pw_splits)
+        else:
+            _snap_gradients(stats, n_rows, stat_count, fixed_scale)  # lane/sym-quality
+            var score_std_dev = Float32(0.0)
+            if random_strength != Float32(0.0):
+                score_std_dev = Float32(Float64(Float32(noise_mult * Float64(random_strength))) * _target_std_dev(stats, n_rows, stat_count, is_mc))
+            var level_rand = TRandom(tree_seed)
+
+            # ---- the per-tree feature sample (`feature_fraction < 1`) ----
+            if ff_on:
+                var tree_folds = _sample_tree_folds(
+                    grid.fold_counts, feature_fraction, feature_random
+                )
+                s_layout = build_layout(tree_folds, ff_one_hot)
+                s_blocks = blocks_for(s_layout, n_rows)
+                cindexes[0] = _ns_project_index(
+                    full_cindex, layout, s_layout, tree_folds, n_rows, n_cols
+                )
+                s_hist_cells = s_layout.hist_cells
+                s_bf_feature = List[Int](length=s_hist_cells, fill=0)
+                s_bf_bin = List[Int](length=s_hist_cells, fill=0)
+                for f in range(n_cols):  # driver-loop: over the features and their borders (the tree layout)
+                    ref lf = s_layout.features[f]
+                    for b in range(Int(lf.folds)):
+                        s_bf_feature[Int(lf.first_fold_index) + b] = f
+                        s_bf_bin[Int(lf.first_fold_index) + b] = b
+
+            # ---- `run_tree_layout_traced` at `stat_count` planes (TWIN of the
+            # loop in `gbdt_oracle.mojo::gbdt_host_fit`) ----
+            row_index = List[Int](length=n_rows, fill=0)
+            _identity_rows(row_index, n_rows)
+            var p_off = List[Int](length=max_leaves, fill=0)
+            var p_sz = List[Int](length=max_leaves, fill=0)
+            p_sz[0] = n_rows
+            var hist = List[Float32](
+                length=max_leaves * stat_count * s_hist_cells, fill=Float32(0.0)
             )
+            var ids_compute = List[Int](length=max_leaves, fill=0)
+            var sub_from = List[Int](length=max_leaves, fill=0)
+            var sub_what = List[Int](length=max_leaves, fill=0)
+            var winners_score = List[Float32]()
+            var winners_bf = List[UInt32]()
+            n_live = 1
+            # TREE CTRS: the level-synchronized levels at `stat_count` planes
+            # (`run_tree_ctr_tree` at `1 + approx_dim`), which leave the
+            # tree's splits in `tc_features` / `tc_bins` and the partition in
+            # `row_index`, `stats`, `p_off`, `p_sz`; the fused loop below then
+            # runs no level (`gbdt_host_boost`'s statements)
+            var tc_features = List[Int]()
+            var tc_bins = List[Int]()
+            if tree_on:
+                n_live = _tree_ctr_levels_host(
+                    tree_ctr[0], cindexes, test_cindex, learn_p, s_layout, s_blocks,
+                    s_bf_feature, s_bf_bin, n_rows, n_cols, max_depth,
+                    params.l2_leaf_reg, score_std_dev, fixed_scale, level_rand,
+                    row_index, stats, p_off, p_sz, tc_features, tc_bins,
+                    score_function=score_function, stat_count=stat_count,
+                    multiclass_optimization=is_mc,
+                )
+            ref cindex = cindexes[learn_p]
+            for depth in range(0 if tree_on else max_depth):
+                var level_seed = level_rand.next_uniform_l()
+                var half = n_live // 2
+                var planned = depth > 0
+                var compute = List[Int]()
+                if planned:
+                    for j in range(half):
+                        compute.append(ids_compute[j])
+                else:
+                    for j in range(n_live):
+                        compute.append(j)
+
+                var block_first_bin = 0
+                for b in range(len(s_blocks)):
+                    ref blk = s_blocks[b]
+                    var total = 0
+                    for k in range(blk.count()):
+                        total += Int(blk.folds[k])
+                    if blk.policy == POLICY_BINARY:
+                        _binary_block_n(
+                            blk, block_first_bin, s_hist_cells, stat_count, compute,
+                            depth, p_off, p_sz, row_index, stats, cindex, n_rows,
+                            fixed_scale, hist,
+                        )
+                    elif blk.policy == POLICY_HALF_BYTE:
+                        _half_byte_block_n(
+                            blk, block_first_bin, s_hist_cells, stat_count, compute,
+                            depth, p_off, p_sz, row_index, stats, cindex, n_rows,
+                            fixed_scale, hist,
+                        )
+                    elif blk.policy == POLICY_ONE_BYTE:
+                        _one_byte_block_n(
+                            blk, block_first_bin, s_hist_cells, stat_count, compute,
+                            p_off, p_sz, row_index, stats, cindex, s_layout, n_rows,
+                            fixed_scale, hist,
+                        )
+                    block_first_bin += total
+
+                # `scan_histograms_kernel` over the computed leaves, every plane
+                _scan_histograms(hist, s_hist_cells, stat_count, compute, s_layout, n_cols)
+
+                # `substract_histograms_kernel`: the larger sibling, in place
+                if planned and half > 0:
+                    _subtract_histograms(hist, s_hist_cells, sub_from, sub_what, half, stat_count)
+
+                # `compute_partition_stats` over the live leaves, at the chunk
+                # count of `stat_count` planes (`_stat_chunks`)
+                var part_stats = _partition_stats_level(
+                    stats, n_rows, stat_count,
+                    _stat_chunks(stat_count),
+                    p_off, p_sz, n_live,
+                )
+
+                # the score and the device winner
+                var gains = _cosine_gains_n(
+                    hist, s_hist_cells, stat_count, part_stats, n_live,
+                    params.l2_leaf_reg, is_mc, score_std_dev, level_seed, s_bf_feature,
+                    score_function == SCORE_FUNCTION_L2,
+                )
+                var best_bin = _gain_winner(gains, s_hist_cells)
+                var best_gain = -GBDT_FLOAT32_MAX
+                if best_bin != GBDT_SENTINEL:
+                    best_gain = gains[Int(best_bin)]
+                if best_bin != GBDT_SENTINEL:
+                    winners_score.append(ftz(best_gain))
+                else:
+                    winners_score.append(ftz(-GBDT_FLOAT32_MAX))
+                winners_bf.append(best_bin)
+                var bf_split = 0
+                if best_bin != GBDT_SENTINEL:
+                    bf_split = Int(best_bin)
+
+                var split_f = s_bf_feature[bf_split] if s_hist_cells > 0 else 0
+                var split_b = s_bf_bin[bf_split] if s_hist_cells > 0 else 0
+                ref sfeat = s_layout.features[split_f]
+                # the split chain, every live leaf, every plane
+                _split_level(
+                    cindex, Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
+                    UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
+                    n_live, s_hist_cells, row_index, stats, p_off, p_sz, hist,
+                    ids_compute, sub_from, sub_what, stat_count,
+                )
+                n_live = n_live * 2
+
+            tree_features = List[Int]()
+            tree_bins = List[Int]()
+            grown = 0
+            if tree_on:
+                # accepted level by level, each gate applied before the next
+                # level was searched: nothing was speculated, nothing rolls back
+                for i in range(len(tc_features)):  # driver-loop: over the tree's levels
+                    tree_features.append(tc_features[i])
+                    tree_bins.append(tc_bins[i])
+                grown = len(tc_features)
+            for d in range(0 if tree_on else max_depth):
+                var best_score = winners_score[d]
+                var best_bin_u = winners_bf[d]
+                if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
+                    raise Error(
+                        "All splits have infinite score. Probably, numerical"
+                        " overflow occurs in loss function and/or split score"
+                        " calculation. Try increasing l2_leaf_reg, and/or"
+                        " decreasing learning_rate, etc."
+                        " [level " + String(d) + ", live leaves "
+                        + String(1 << d) + "]"
+                    )
+                var cf_ = s_bf_feature[Int(best_bin_u)]
+                var cb_ = s_bf_bin[Int(best_bin_u)]
+                if not (best_score > Float32(0.0)):
+                    break
+                var repeated = False
+                for i in range(len(tree_features)):
+                    if tree_features[i] == cf_ and tree_bins[i] == cb_:
+                        repeated = True
+                if repeated:
+                    break
+                tree_features.append(cf_)
+                tree_bins.append(cb_)
+                grown += 1
+            if grown < max_depth and not tree_on:
+                var live = n_live
+                for _ in range(max_depth - grown):
+                    var h2 = live // 2
+                    for i in range(h2):
+                        p_sz[i] = p_sz[i] + p_sz[h2 + i]
+                    live = h2
+                n_live = live
+            sizes = List[Int]()
+            offsets = List[Int]()
+            var covered_rows = 0
+            for i in range(n_live):
+                sizes.append(p_sz[i])
+                offsets.append(p_off[i])
+                covered_rows += p_sz[i]
+            if covered_rows != n_rows:
+                raise Error(
+                    "gbdt host: the final leaf partitions cover "
+                    + String(covered_rows) + " of " + String(n_rows) + " rows"
+                )
 
         # ---- the estimation task, ONE PER PERMUTATION (`gbdt_host_boost`'s
         # statements, `doc_parallel_boosting.mojo`): the learn permutation
@@ -1390,7 +1575,7 @@ def gbdt_multi_host_fit(
         var scaled = List[Float32]()
         for p in range(perm_count):  # driver-loop: over the permutations
             var p_scaled: List[Float32]
-            if p == learn_p:
+            if p == learn_p and pw_dims == 0:
                 var estimated = _estimate_multi(
                     objective, num_classes, y, weights, has_weights, cursors[p],
                     row_index, offsets, sizes, n_rows, params.l2_leaf_reg,

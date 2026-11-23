@@ -62,10 +62,15 @@ from gbdt.methods.leaves_estimation.step_estimator import (
     create_step_estimator,
 )
 from checks.fixed_point import choose_scale
-from gbdt.methods.random_score_helper import compute_score_std_dev
+from gbdt.methods.random_score_helper import (
+    compute_score_std_dev,
+    compute_score_std_dev_planes,
+)
 from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     PointwiseTreeWorkspace,
+    dims_search_folds,
+    dims_stat_planes,
     fit_oblivious_tree_structure,
     fit_oblivious_tree_structure_traced,
     split_stat_planes,
@@ -107,6 +112,7 @@ from gbdt.models.add_non_symmetric_tree_doc_parallel import (
     compute_non_symmetric_bins_for_model,
 )
 from gbdt.options.catboost_options import querywise_pointwise_leaf_check
+from gbdt.options.catboost_options import pointwise_policy_check
 from gbdt.options.catboost_options import (
     GROW_DEPTHWISE,
     GROW_LOSSGUIDE,
@@ -3972,42 +3978,33 @@ def fit_with_test(
                 " (ComputeExactValue, permutation_der_calcer.h:98-110);"
                 " MultiRMSE does not reach it"
             )
-        if use_pointwise_searcher:
-            # their MultiRMSE trainer is `TGpuTrainer<
-            # TMultiClassificationTargets>` through the GREEDY subsets
-            # searcher's template (`cuda/train_lib/multiclass.cpp:1-13`);
-            # the doc-parallel oblivious searcher is single-target
-            raise Error(
-                "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-                " a single-target searcher; MultiRMSE is trained by"
-                " TGreedySubsetsSearcher only (cuda/train_lib/multiclass.cpp:"
-                "1-13)"
-            )
+        # lane gbdt-pw-multiclass (2026-11-23): MultiRMSE on the pointwise
+        # searcher is trained through the multi-output search below (every
+        # target dimension on the fold axis, no pinned class); the
+        # single-target refusal that stood here is gone
         if test.__bool__() and test.value().n_rows > 0:
             raise Error(
                 "MultiRMSE with an eval set is not carried here: the held-out"
                 " arm's target is one value per row"
             )
+    # lane gbdt-pw-multiclass (2026-11-23): MultiClass, MultiClassOneVsAll
+    # and MultiRMSE on the pointwise searcher are TRAINED, not refused. The refusal that
+    # stood here (lane gbdt-cpu-rest-4-pwl) named the defect: this fit
+    # handed the doc-parallel searcher `split_stat_planes`' planes 0 and 1
+    # only, so the tree was searched on the FIRST class's gradient alone.
+    # The searcher now takes every approx dimension on its fold axis
+    # (`dims_stat_planes`, `dims_search_folds`) and scores the
+    # per-dimension sum (`find_optimal_split_dims`), plus MultiClass's
+    # pinned class, below in the round. Bits change for these fits on
+    # every column (they were wrong before).
+    var pw_dims = 0
     if use_pointwise_searcher and (
         objective == OBJECTIVE_MULTICLASS
         or objective == OBJECTIVE_MULTICLASS_OVA
+        or objective == OBJECTIVE_MULTIRMSE
     ):
-        # lane gbdt-cpu-rest-4-pwl (2026-11-23): refused for the reason
-        # MultiRMSE is above. Their multiclass trainers are `TGpuTrainer<
-        # TMultiClassificationTargets>` through the GREEDY subsets
-        # searcher's template (`cuda/train_lib/multiclass.cpp:1-13`); the
-        # doc-parallel searcher is single-target, and this fit handed it
-        # `split_stat_planes`' planes 0 and 1 only, so a MultiClass or
-        # MultiClassOneVsAll tree's structure was searched on the FIRST
-        # class's gradient alone, an algorithm neither CatBoost nor the
-        # greedy arm has. The CPU column refuses it in these words.
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-            " a single-target searcher; "
-            + String("MultiClass" if objective == OBJECTIVE_MULTICLASS else "MultiClassOneVsAll")
-            + " is trained by TGreedySubsetsSearcher only"
-            " (cuda/train_lib/multiclass.cpp:1-13)"
-        )
+        pw_dims = approx_dim
+    var pw_dim_folds = dims_search_folds(n_rows, pw_dims)
     var stat_count = 1 + approx_dim
 
     _ = child_hessian_threshold(min_child_hessian, grow_policy, score_function)
@@ -4032,14 +4029,9 @@ def fit_with_test(
             # through `train_template_pointwise_greedy_subsets_searcher.h`
             # (`pointwise_non_symmetric.cpp:5`), never the doc-parallel
             # oblivious searcher. Refused by name rather than silently
-            # growing a symmetric tree under a non-symmetric name.
-            raise Error(
-                "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-                " an OBLIVIOUS searcher; grow_policy="
-                + grow_policy_name(grow_policy)
-                + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree>"
-                " only (pointwise_non_symmetric.cpp:5-29)"
-            )
+            # growing a symmetric tree under a non-symmetric name, through
+            # the one body both columns call
+            pointwise_policy_check(use_pointwise_searcher, grow_policy)
         if (
             objective == OBJECTIVE_MULTICLASS
             or objective == OBJECTIVE_MULTICLASS_OVA
@@ -4836,7 +4828,28 @@ def fit_with_test(
         # is a second reason the two arms' noise magnitudes differ; see
         # `gbdt/methods/random_score_helper.mojo` for the first two.
         var pointwise_score_std_dev = Float32(0.0)
-        if use_pointwise_searcher and random_strength != Float32(0.0):
+        if pw_dims > 0 and random_strength != Float32(0.0):
+            # every approx dimension's gradient, the object count
+            # (`compute_score_std_dev_planes`), from the same unbootstrapped
+            # planes; the CPU column's `_pointwise_target_std_dev` over its
+            # `_dims_planes`
+            var sd_planes = dims_stat_planes(ctx, stats, n_rows, pw_dims)
+            var sd_w = sd_planes[0].copy()
+            var sd_t = sd_planes[1].copy()
+            pointwise_score_std_dev = Float32(
+                compute_score_std_dev_planes(
+                    ctx,
+                    noise_mult,
+                    Float64(random_strength),
+                    sd_w,
+                    sd_t,
+                    pw_dims * n_rows,
+                    n_rows,
+                    noise_sm if noise_sm > 0 else 1,
+                )
+            )
+            _ = sd_planes^  # past the reduce's drain
+        elif use_pointwise_searcher and random_strength != Float32(0.0):
             pointwise_score_std_dev = Float32(
                 compute_score_std_dev(
                     ctx,
@@ -5339,29 +5352,63 @@ def fit_with_test(
                     choose_scale(m1 if m1 > m0 else m0, n_rows)
                 )
 
-            var planes = split_stat_planes(ctx, stats, n_rows)
-            # lane/sym-quality: the gradient plane onto the tree's grid, as
-            # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
-            # only where the scale above is a real one
-            comptime if _needs_magnitudes:
-                var g_plane = planes[1].copy()
-                enqueue_snap_plane(ctx, g_plane, n_rows, scale)
-            splits = fit_oblivious_tree_structure_traced(
-                ctx,
-                tree_layout.value().copy() if feature_fraction < 1 else layout_for_test.copy(),
-                n_rows, max_depth, tree_cindex,
-                planes[0], planes[1],
-                est_sm if est_sm > 0 else 1,
-                scale,
-                score_function,
-                pw_pool,
-                trace, stage_times, _tree_tag(iteration),
-                l2_leaf_reg,
-                score_std_dev=pointwise_score_std_dev,
-                seed=tree_seed,
-                one_hot=one_hot,
-                device_plan=device_plan,
-            )
+            if pw_dims > 0:
+                # lane gbdt-pw-multiclass (2026-11-23): the multi-output
+                # weak target, every approx dimension on the searcher's
+                # fold axis (dimension d's rows are fold 2 d), the
+                # bootstrapped planes; every gradient plane snapped onto
+                # the tree's grid (the plane index of the `dims * n_rows`
+                # positions keys the dither, as the CPU column's
+                # `_snap_plane`); one histogram launch and one score launch
+                # per level carry every dimension
+                var d_planes = dims_stat_planes(ctx, stats, n_rows, pw_dims)
+                comptime if _needs_magnitudes:
+                    var dg_plane = d_planes[1].copy()
+                    enqueue_snap_plane(ctx, dg_plane, pw_dims * n_rows, scale)
+                splits = fit_oblivious_tree_structure_traced(
+                    ctx,
+                    tree_layout.value().copy() if feature_fraction < 1 else layout_for_test.copy(),
+                    n_rows, max_depth, tree_cindex,
+                    d_planes[0], d_planes[1],
+                    est_sm if est_sm > 0 else 1,
+                    scale,
+                    score_function,
+                    pw_pool,
+                    trace, stage_times, _tree_tag(iteration),
+                    l2_leaf_reg,
+                    score_std_dev=pointwise_score_std_dev,
+                    seed=tree_seed,
+                    one_hot=one_hot,
+                    folds=pw_dim_folds,
+                    permutation_id=0,
+                    device_plan=device_plan,
+                    dim_count=pw_dims,
+                    pinned_class=objective == OBJECTIVE_MULTICLASS,
+                )
+            else:
+                var planes = split_stat_planes(ctx, stats, n_rows)
+                # lane/sym-quality: the gradient plane onto the tree's grid, as
+                # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
+                # only where the scale above is a real one
+                comptime if _needs_magnitudes:
+                    var g_plane = planes[1].copy()
+                    enqueue_snap_plane(ctx, g_plane, n_rows, scale)
+                splits = fit_oblivious_tree_structure_traced(
+                    ctx,
+                    tree_layout.value().copy() if feature_fraction < 1 else layout_for_test.copy(),
+                    n_rows, max_depth, tree_cindex,
+                    planes[0], planes[1],
+                    est_sm if est_sm > 0 else 1,
+                    scale,
+                    score_function,
+                    pw_pool,
+                    trace, stage_times, _tree_tag(iteration),
+                    l2_leaf_reg,
+                    score_std_dev=pointwise_score_std_dev,
+                    seed=tree_seed,
+                    one_hot=one_hot,
+                    device_plan=device_plan,
+                )
             # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (a
             # full-depth tree's final subsets as the partition); code recoverable at b639a2bd2.
             # Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch.

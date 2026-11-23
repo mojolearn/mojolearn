@@ -77,6 +77,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     deterministic_sum_lanes_kernel,
     pinned_block_sum,
 )
+from gbdt.methods.random_score_bodies import std_dev_row_term
 
 
 #: `ComputeTargetVariance`'s block (`compute_scores.cu:290`). `ComputeStdDev`
@@ -125,12 +126,39 @@ def std_dev_partials_kernel(
     # `ftz` is a comptime no-op under FAST.
     # =================================================================
     while i < size:
-        var w = stats.unsafe_load(i)
-        var tmp = ftz(stats.unsafe_load(stat_line_size + i) / w)
-        acc = ftz(identical_mul_add(ftz(w * tmp), tmp, acc))
+        # the one row body (gbdt/methods/random_score_bodies.mojo), which
+        # the CPU column's `_pointwise_target_std_dev` calls too
+        acc = std_dev_row_term(
+            stats.unsafe_load(i), stats.unsafe_load(stat_line_size + i), acc
+        )
         i += Int(grid_dim.x) * STD_DEV_BLOCK
     # IDENTITY_PATHS row 8 (DEVIATION 251): the pinned-shape fold, so the
     # within-block sum does not follow AMD's 64-wide wavefront.
+    var total = pinned_block_sum[block_size=STD_DEV_BLOCK](acc)
+    if thread_idx.x == 0:
+        partials.unsafe_store(Int(block_idx.x), total)
+
+
+def std_dev_planes_partials_kernel(
+    weights: MutPointer[Float32, MutAnyOrigin],
+    weighted_target: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+    partials: MutPointer[Float32, MutAnyOrigin],
+):
+    """`std_dev_partials_kernel` over a target held as TWO buffers of `size`
+    positions each (lane gbdt-pw-multiclass, 2026-11-23): the doc-parallel
+    searcher's multi-output weak target (`dims_stat_planes`, the weight
+    plane once per approx dimension and the dimensions' gradient planes end
+    to end), so one launch reads every dimension. Same grid, same row body,
+    same pinned fold; `size` is `dims * n_rows`."""
+    var size = Int(size_in)
+    var i = STD_DEV_BLOCK * Int(block_idx.x) + Int(thread_idx.x)
+    var acc = Float32(0.0)
+    while i < size:
+        acc = std_dev_row_term(
+            weights.unsafe_load(i), weighted_target.unsafe_load(i), acc
+        )
+        i += Int(grid_dim.x) * STD_DEV_BLOCK
     var total = pinned_block_sum[block_size=STD_DEV_BLOCK](acc)
     if thread_idx.x == 0:
         partials.unsafe_store(Int(block_idx.x), total)
@@ -251,3 +279,53 @@ def compute_score_std_dev(
         )
         return model_length_mult * std_dev * random_strength
     return 0.0
+
+
+def compute_score_std_dev_planes(
+    ctx: DeviceContext,
+    model_length_mult: Float64,
+    random_strength: Float64,
+    mut weights: DeviceBuffer[DType.float32],
+    mut weighted_target: DeviceBuffer[DType.float32],
+    size: Int,
+    object_count: Int,
+    sm_count: Int,
+) raises -> Float64:
+    """`compute_score_std_dev` for a weak target held as two buffers of
+    `size` positions (lane gbdt-pw-multiclass, 2026-11-23): the
+    doc-parallel searcher's multi-output target, every approx dimension's
+    `w * (wt / w)^2` in one launch (`std_dev_planes_partials_kernel`, the
+    grid of `size` positions), divided by `object_count`, the OBJECT count
+    their `ComputeStdDev` divides by
+    (`WeightedTarget.GetObjectsSlice().Size()`, the rows, not the rows
+    times the dimensions). The product guard and the multiplication order
+    are `compute_score_std_dev`'s. The CPU column's twin is
+    `_pointwise_target_std_dev(planes, size, object_count)`."""
+    if model_length_mult * random_strength == 0.0 or size <= 0:
+        return 0.0
+    var n_blocks = std_dev_blocks(size, sm_count)
+    var partials = ctx.enqueue_create_buffer[DType.float32](n_blocks)
+    var out = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.enqueue_function[std_dev_planes_partials_kernel](
+        weights.unsafe_ptr(),
+        weighted_target.unsafe_ptr(),
+        Int32(size),
+        partials.unsafe_ptr(),
+        grid_dim=(n_blocks, 1, 1),
+        block_dim=(STD_DEV_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+        partials.unsafe_ptr(), Int32(n_blocks), out.unsafe_ptr(),
+        grid_dim=1, block_dim=256,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.enqueue_copy(dst_buf=h, src_buf=out)
+    ctx.synchronize()
+    var sum2 = Float64(h[0])
+    # past the drain ([[mojo-buffer-freed-at-last-use]])
+    _ = partials^
+    _ = out^
+    _ = len(weights)
+    _ = len(weighted_target)
+    var std_dev = sqrt(sum2 / (Float64(object_count) + 1e-100))
+    return model_length_mult * std_dev * random_strength

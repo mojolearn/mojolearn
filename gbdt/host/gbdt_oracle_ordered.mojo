@@ -98,7 +98,11 @@ from gbdt.grid_creator.binarization import (
 )
 from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
 from gbdt.data.permutation import TRandom
-from gbdt.methods.score_calcer_body import make_score_calcer
+from gbdt.methods.score_calcer_body import (
+    add_dim_leaves,
+    add_pinned_class_leaves,
+    make_score_calcer,
+)
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE, SCORE_FUNCTION_L2
 from gbdt.host.gbdt_oracle_tree_ctr import (
     GbdtTreeCtrHost,
@@ -1366,6 +1370,9 @@ def _ordered_tree_structure(
     plain_cosine: Bool = False,
     sw_off: Int = 0,
     sg_off: Int = 0,
+    dim_count: Int = 0,
+    pinned_class: Bool = False,
+    dims_cosine: Bool = False,
 ) raises -> List[_OrdSplit]:
     """The searcher without tree CTRs: `_ordered_tree_structure_levels` over
     `cindex` with no tree-CTR state (its arguments are documented there)."""
@@ -1377,6 +1384,7 @@ def _ordered_tree_structure(
         fold_count, fold_bits, fixed_scale, l2, word_offset_of, shift_of,
         mask_of, one_hot_of, no_tree_ctr, 0, no_indexes, no_test,
         plain_l2, score_std_dev, seed, plain_cosine, sw_off, sg_off,
+        dim_count, pinned_class, dims_cosine,
     )
 
 
@@ -1434,6 +1442,16 @@ def _ordered_tree_structure_levels(
     # the pointwise searchers pass their one stats list as both planes
     sw_off: Int = 0,
     sg_off: Int = 0,
+    # A MULTI-OUTPUT LOSS (lane gbdt-pw-multiclass, 2026-11-23; the device's
+    # `fit_oblivious_tree_structure_levels(dim_count=...)`): 0 for a
+    # one-output target. `dim_count > 0`: dimension d's rows are fold 2 d
+    # (`_dims_fold_shape`; fold 2 d + 1 empty), and every candidate is
+    # scored by `_plain_dims_candidates` (`find_optimal_split_dims_kernel`):
+    # the per-dimension L2 or (`dims_cosine`) Cosine terms summed over the
+    # dimensions, plus MultiClass's pinned class when `pinned_class`.
+    dim_count: Int = 0,
+    pinned_class: Bool = False,
+    dims_cosine: Bool = False,
 ) raises -> List[_OrdSplit]:
     """The doc-parallel oblivious searcher's level loop. `fold_count > 1`
     with `plain_l2` False is the ordered fold arm (the dynamic cosine
@@ -1445,6 +1463,15 @@ def _ordered_tree_structure_levels(
     # TCosineScoreCalcer, not the paired-fold dynamic cosine formula.
     if plain_cosine and (fold_count != 1 or plain_l2):
         raise Error("plain cosine needs one fold and cannot select L2")
+    if dim_count > 0 and (
+        fold_count != 2 * dim_count or plain_l2 or plain_cosine
+        or len(tree_ctr) > 0
+    ):
+        raise Error(
+            "the multi-output doc-parallel search takes one fold pair per"
+            " approx dimension and no tree CTRs; got " + String(fold_count)
+            + " folds for " + String(dim_count) + " dimensions"
+        )
     var level_driver = len(tree_ctr) > 0
     if level_driver:
         if fold_count < 2 or plain_l2:
@@ -1591,7 +1618,13 @@ def _ordered_tree_structure_levels(
             # the candidates across the tasks
             var c_noisy = List[Float32]()
             var c_gain = List[Float32]()
-            if plain_cosine:
+            if dim_count > 0:
+                c_noisy = _plain_dims_candidates(
+                    hp, s.part_stats, part_count, fold_count, stripe,
+                    dim_count, pinned_class, dims_cosine, l2, score_std_dev,
+                    helper_seed, bf_feature, score_before, c_gain,
+                )
+            elif plain_cosine:
                 c_noisy = _plain_cosine_candidates(
                     hp, s.part_stats, part_count, l2, score_std_dev,
                     helper_seed, bf_feature, score_before, c_gain,
@@ -1748,6 +1781,118 @@ def _plain_cosine_candidates(
             hist_p, stats_p, part_count, l2, score_std_dev, helper_seed, bf_p,
             score_before, scores_p, gains_p,
         )
+
+    host_parallelize(candidates, units)
+    _ = len(hp.hist)
+    _ = len(part_stats)
+    _ = len(bf_feature)
+    _ = len(gain_out)
+    _ = len(scores)
+    return scores^
+
+
+def _plain_dims_range[
+    score_function: Int
+](
+    b_lo: Int,
+    b_hi: Int,
+    hist_line: Int,
+    hist: HostF32Ptr,
+    part_stats: HostF32Ptr,
+    part_count: Int,
+    fold_count: Int,
+    stripe: Int,
+    dim_count: Int,
+    pinned_class: Bool,
+    l2: Float32,
+    score_std_dev: Float32,
+    helper_seed: UInt64,
+    bf_feature: GbdtIntPtr,
+    score_before: Float32,
+    scores: HostF32Ptr,
+    gains: HostF32Ptr,
+):
+    """`_plain_dims_candidates` for the candidates `[b_lo, b_hi)`, each its
+    own chain: `find_optimal_split_dims_kernel`'s statements, the leaf's
+    weight pair from dimension 0's (fold 0's) cells and part, then per
+    dimension (fold 2 d) `add_dim_leaves`, then for MultiClass
+    `add_pinned_class_leaves` (score_calcer_body.mojo, the one body both
+    columns call), `get_score` and the gain in one rounding."""
+    var calcer = make_score_calcer[score_function](
+        l2, Float32(1.0), False, score_std_dev, helper_seed
+    )
+    for b in range(b_lo, b_hi):
+        calcer.next_feature(UInt32(bf_feature[b]))
+        for leaf in range(part_count):
+            var w_base = (leaf * fold_count) * hist_line * 2 + 2 * b
+            var wl = hist[w_base]
+            var wr = max(part_stats[3 * (leaf * stripe)] - wl, Float32(0))
+            var total_left = Float32(0)
+            var total_part = Float32(0)
+            for d in range(dim_count):
+                var fold = 2 * d
+                var base = (leaf * fold_count + fold) * hist_line * 2 + 2 * b
+                add_dim_leaves[score_function](
+                    calcer, wl, wr, hist[base + 1],
+                    part_stats[3 * (leaf * stripe + fold) + 1],
+                    total_left, total_part,
+                )
+            if pinned_class:
+                add_pinned_class_leaves[score_function](
+                    calcer, wl, wr, total_left, total_part
+                )
+        var res = calcer.get_score()
+        scores[b] = res
+        gains[b] = identical_mul_add(res, Float32(1), -score_before)
+
+
+def _plain_dims_candidates(
+    hp: _PwHelper,
+    part_stats: List[Float32],
+    part_count: Int,
+    fold_count: Int,
+    stripe: Int,
+    dim_count: Int,
+    pinned_class: Bool,
+    cosine: Bool,
+    l2: Float32,
+    score_std_dev: Float32,
+    helper_seed: UInt64,
+    bf_feature: List[Int],
+    score_before: Float32,
+    mut gain_out: List[Float32],
+) -> List[Float32]:
+    """Score a multi-output target's histogram (lane gbdt-pw-multiclass,
+    2026-11-23): TL2ScoreCalcer (L2) or TCosineScoreCalcer (`cosine`),
+    normalize off as the public fit. The unit is one CANDIDATE (its own
+    chain over the leaves and dimensions, its own noise draw), the
+    candidates in `_gbdt_units` contiguous ranges."""
+    var hist_line = hp.hist_line
+    var scores = List[Float32](length=hist_line, fill=Float32(0))
+    gain_out = List[Float32](length=hist_line, fill=Float32(0))
+    var units = _gbdt_units(hist_line, 12 * hist_line * part_count * dim_count)
+    var chunk = host_predict_chunk(hist_line, units)
+    var hist_p = rebind[HostF32Ptr](hp.hist.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var bf_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
+    var scores_p = rebind[HostF32Ptr](scores.unsafe_ptr())
+    var gains_p = rebind[HostF32Ptr](gain_out.unsafe_ptr())
+
+    def candidates(unit: Int) {imm chunk, imm hist_line, imm hist_p, imm stats_p, imm part_count, imm fold_count, imm stripe, imm dim_count, imm pinned_class, imm cosine, imm l2, imm score_std_dev, imm helper_seed, imm bf_p, imm score_before, imm scores_p, imm gains_p}:
+        var lo = unit * chunk
+        var hi = min(hist_line, (unit + 1) * chunk)
+        if cosine:
+            _plain_dims_range[SCORE_FUNCTION_COSINE](
+                lo, hi, hist_line, hist_p, stats_p, part_count, fold_count,
+                stripe, dim_count, pinned_class, l2, score_std_dev,
+                helper_seed, bf_p, score_before, scores_p, gains_p,
+            )
+        else:
+            _plain_dims_range[SCORE_FUNCTION_L2](
+                lo, hi, hist_line, hist_p, stats_p, part_count, fold_count,
+                stripe, dim_count, pinned_class, l2, score_std_dev,
+                helper_seed, bf_p, score_before, scores_p, gains_p,
+            )
 
     host_parallelize(candidates, units)
     _ = len(hp.hist)

@@ -1,0 +1,24 @@
+diff --git a/gbdt/methods/kernel/pointwise_scores.mojo b/gbdt/methods/kernel/pointwise_scores.mojo
+index ce9e8c4a54..3551f0f6b8 100644
+--- a/gbdt/methods/kernel/pointwise_scores.mojo
++++ b/gbdt/methods/kernel/pointwise_scores.mojo
+@@ -1630,7 +1630,9 @@ def find_optimal_split_dims_kernel[
+             var weight_right = max(part_weight - weight_left, Float32(0.0))
+             var total_left = Float32(0.0)
+             var total_part = Float32(0.0)
+-            for d in range(dim_count):
++            # SABOTAGE (coverage-gbdt-device_pw_first_dim_only): the old
++            # defect, the first approx dimension alone and no pinned class
++            for d in range(1):
+                 var fold = UInt32(2 * d)
+                 var part_off = Int(helper.data_partition_offset(UInt32(leaf), fold))
+                 var part_sum = parts.unsafe_offset(3 * part_off + 1).unsafe_load[invariant=True]()
+@@ -1645,7 +1647,7 @@ def find_optimal_split_dims_kernel[
+                     calcer, weight_left, weight_right, sum_left, part_sum,
+                     total_left, total_part,
+                 )
+-            if pinned:
++            if pinned and False:
+                 add_pinned_class_leaves[score_function](
+                     calcer, weight_left, weight_right, total_left, total_part
+                 )

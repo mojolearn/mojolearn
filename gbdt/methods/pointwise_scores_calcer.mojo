@@ -564,11 +564,14 @@ struct PolicyScoreHelper(Movable):
         l2: Float32,
         score_std_dev: Float32,
         seed: UInt64,
+        dim_count: Int = 0,
+        pinned_class: Bool = False,
     ) raises:
         """The device-score form (DEVIATION 207): `scoreBeforeSplit` is a
         one-float device buffer the blind level loop's pack kernel wrote,
         never read by the host. Same launches, same arithmetic. The std dev
-        a host scalar, staged on `d_std_word`."""
+        a host scalar, staged on `d_std_word`. `dim_count` / `pinned_class`:
+        a multi-output loss on the fold axis (`find_optimal_split_dev`)."""
         if self.feature_count == 0:
             return
         self._stage_words(self.h_scale_staged, score_std_dev)
@@ -578,6 +581,8 @@ struct PolicyScoreHelper(Movable):
                 self.d_std_word.unsafe_ptr()
             ),
             seed,
+            dim_count,
+            pinned_class,
         )
 
     def compute_optimal_split_dev_std(
@@ -590,6 +595,8 @@ struct PolicyScoreHelper(Movable):
         l2: Float32,
         score_std_word: MutPointer[Float32, MutAnyOrigin],
         seed: UInt64,
+        dim_count: Int = 0,
+        pinned_class: Bool = False,
     ) raises:
         """T5 drain (lane cpu3-gbdt-a): `compute_optimal_split_dev` with the
         score-noise std dev a device word as well (the ordered fit's
@@ -619,6 +626,8 @@ struct PolicyScoreHelper(Movable):
             score_std_word,
             seed,
             False,
+            dim_count,
+            pinned_class,
         )
 
     def read_optimal_split(
@@ -787,10 +796,14 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         l2: Float32,
         score_std_dev: Float32,
         seed: UInt64,
+        dim_count: Int = 0,
+        pinned_class: Bool = False,
     ) raises:
         """The device-score fan-out (DEVIATION 207). Identical to
         `compute_optimal_split` -- including the per-helper seed advance --
-        except `scoreBeforeSplit` stays on the device."""
+        except `scoreBeforeSplit` stays on the device. `dim_count` /
+        `pinned_class` (lane gbdt-pw-multiclass): a multi-output loss whose
+        dimensions ride the fold axis."""
         var rnd = TRandom(seed)
         for i in range(len(self.helpers)):
             self.helpers[i].compute_optimal_split_dev(
@@ -802,6 +815,8 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
                 l2,
                 score_std_dev,
                 rnd.next_uniform_l(),
+                dim_count,
+                pinned_class,
             )
 
     def compute_optimal_split_dev_std(

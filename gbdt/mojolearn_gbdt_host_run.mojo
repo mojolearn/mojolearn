@@ -94,6 +94,7 @@ from gbdt.host.gbdt_oracle_depthwise import (
 from gbdt.options.data_processing_options import nan_mode_from_name
 from gbdt.options.catboost_options import (
     check_tree_limits,
+    pointwise_policy_check,
     querywise_pointwise_leaf_check,
     simple_leaf_iterations_check,
     simple_leaves_check,
@@ -369,10 +370,10 @@ def _gbdt_fit_pointwise_arm(
     or unset (`AdjustBoostFromAverageDefaultValue`); every
     `feature_border_type`; an eval set under any detector (Iter, IncToDec,
     or none); one-hot and CTR columns; `max_depth` 0. Refused in the
-    device's words: Depthwise and Lossguide (`train`), MultiRMSE,
-    MultiClass and MultiClassOneVsAll and feature combinations
-    (`fit_with_test`), `boost_from_average=True` outside its list
-    (`train`)."""
+    device's words: Depthwise and Lossguide (`train`), feature combinations
+    (`fit_with_test`), `boost_from_average=True` outside its list (`train`).
+    MultiClass, MultiClassOneVsAll and MultiRMSE take the multi-output
+    fit (`gbdt_multi_host_fit(use_pointwise_searcher=True)`)."""
     var n_class_weights = params.i(35)
     var n_rows = params.i(0)
     var n_features = params.i(1)
@@ -453,15 +454,8 @@ def _gbdt_fit_pointwise_arm(
             "Maximum leaves count for Lossguide grow policy is 65536; got "
             + String(max_leaves)
         )
-    if grow_code != 0:
-        # `train`'s words (gbdt/train.mojo), both columns
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher, an"
-            " OBLIVIOUS searcher; grow_policy="
-            + String("Depthwise" if grow_code == 1 else "Lossguide")
-            + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only"
-            " (pointwise_non_symmetric.cpp:5-29)"
-        )
+    # `train`'s body (gbdt/options/catboost_options.mojo), both columns
+    pointwise_policy_check(True, grow_code)
     # ---- the loss: the one-output losses this searcher trains; the
     # multi-output ones refused in `fit_with_test`'s words ----
     var pw_is_rmse = loss == String("RMSE")
@@ -470,20 +464,10 @@ def _gbdt_fit_pointwise_arm(
         objective = GBDT_OBJ_LOGLOSS
     elif pw_is_rmse:
         objective = GBDT_OBJ_RMSE
-    if loss == String("MultiRMSE"):
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-            " a single-target searcher; MultiRMSE is trained by"
-            " TGreedySubsetsSearcher only (cuda/train_lib/multiclass.cpp:"
-            "1-13)"
-        )
-    if loss == String("MultiClass") or loss == String("MultiClassOneVsAll"):
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-            " a single-target searcher; " + loss + " is trained by"
-            " TGreedySubsetsSearcher only (cuda/train_lib/multiclass.cpp:"
-            "1-13)"
-        )
+    # lane gbdt-pw-multiclass (2026-11-23): MultiClass, MultiClassOneVsAll and
+    # MultiRMSE never reach this arm: the caller sends them to the multi-output fit
+    # with the doc-parallel searcher (`gbdt_multi_host_fit(
+    # use_pointwise_searcher=True)`), as the device trains them now
     if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK:
         raise Error(
             "the pointwise searcher's one-output arm takes Logloss, RMSE,"
@@ -1178,16 +1162,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "gbdt_fit: grow_policy code must be 0 (SymmetricTree), 1"
             " (Depthwise) or 2 (Lossguide), got " + String(grow_code)
         )
-    if grow_code != 0 and params.i(26) != 0:
-        # lane gbdt-cpu-rest-4-ns (2026-11-23): not a CPU gap; `train`
-        # refuses it first, in these words (gbdt/train.mojo), on every column
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher, an"
-            " OBLIVIOUS searcher; grow_policy="
-            + String("Depthwise" if grow_code == 1 else "Lossguide")
-            + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only"
-            " (pointwise_non_symmetric.cpp:5-29)"
-        )
+    # lane gbdt-cpu-rest-4-ns (2026-11-23): not a CPU gap; `train` refuses
+    # it first on every column, through the one body (lane
+    # gbdt-pw-multiclass: `pointwise_policy_check`)
+    pointwise_policy_check(params.i(26) != 0, grow_code)
     var min_split_gain = Float64(-1)
     if len(params) >= fixed_and_weights + 1:
         min_split_gain = params.f(fixed_and_weights)
@@ -1389,7 +1367,15 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         simple_leaves_check(
             leaf_method, is_multi, False, grow_code != 0, use_pointwise
         )
-    if use_pointwise and not pw_grouped_loss:
+    # lane gbdt-pw-multiclass (2026-11-23): MultiClass and MultiClassOneVsAll
+    # on the pointwise searcher take the multi-output fit below (the greedy
+    # arm's checks are `train`'s and hold for both searchers), whose search
+    # sums every approx dimension's score
+    var pw_multi_class = (
+        loss == String("MultiClass") or loss == String("MultiClassOneVsAll")
+        or loss == String("MultiRMSE")
+    )
+    if use_pointwise and not pw_grouped_loss and not pw_multi_class:
         return _gbdt_fit_pointwise_arm(
             params, border_type, feature_fraction, min_split_gain,
             min_child_hessian,
@@ -2095,6 +2081,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             score_function,
             flags, permutation_count, ctr_permutation_id, max_ctr_complexity,
             multi_leaf_method, multi_iterations,
+            use_pointwise_searcher=use_pointwise,
         )
         if len(flags) != 0:
             text = gbdt_multi_host_model_text_ctr(multi_fit)

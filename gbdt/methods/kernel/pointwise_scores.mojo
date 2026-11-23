@@ -322,7 +322,13 @@ comptime HIST_LOADER_GATHERED_BY_LEAVES = 1
 
 # The five calcers live in `gbdt/methods/score_calcer_body.mojo` (lane
 # gbdt-one-body, 2026-11-23): one body, also called by the CPU pointwise searcher.
-from gbdt.methods.score_calcer_body import FLOAT32_MAX, ScoreCalcer, make_score_calcer
+from gbdt.methods.score_calcer_body import (
+    FLOAT32_MAX,
+    ScoreCalcer,
+    add_dim_leaves,
+    add_pinned_class_leaves,
+    make_score_calcer,
+)
 
 
 def meta_exponent_draw(
@@ -1527,6 +1533,243 @@ def _launch_single_fold[
     )
 
 
+# ---------------------------------------------------------------------------
+# The multi-output plain scorer (lane gbdt-pw-multiclass, 2026-11-23)
+# ---------------------------------------------------------------------------
+
+
+def find_optimal_split_dims_kernel[
+    block_size: Int, score_function: Int
+](
+    bf: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    cat_features_weights: MutPointer[Float32, MutAnyOrigin],
+    bin_features_weights: MutPointer[Float32, MutAnyOrigin],
+    bin_features_weights_count_in: Int32,
+    score_before: MutPointer[Float32, MutAnyOrigin],
+    bin_sums: MutPointer[Float32, MutAnyOrigin],
+    parts: MutPointer[Float32, MutAnyOrigin],
+    p_count_in: Int32,
+    fold_count_in: Int32,
+    dim_count_in: Int32,
+    pinned_class_in: Int32,
+    lambda_l2: Float32,
+    normalize_in: Int32,
+    score_std_dev_p: MutPointer[Float32, MutAnyOrigin],
+    global_seed: UInt64,
+    result_ids: MutPointer[UInt32, MutAnyOrigin],
+    result_scores: MutPointer[Float32, MutAnyOrigin],
+):
+    """The doc-parallel searcher's PLAIN score for a multi-output loss
+    (MultiClass, MultiClassOneVsAll): `find_optimal_split_single_fold_kernel`
+    with the leaf term summed over every approx dimension.
+
+    THE DIMENSIONS RIDE THE FOLD AXIS. The searcher holds dimension `d`'s
+    documents as fold `2 d` (a learn part of all `n` rows; fold `2 d + 1` is
+    an empty test part, `dims_search_folds`), so ONE histogram launch per
+    level carries every dimension and this ONE score launch reads them all:
+    for each leaf the weight pair from dimension 0's cells (the weight plane
+    is the same in every dimension), then per dimension `add_dim_leaves`
+    (left then right, the dimension's own sums), then for MultiClass the
+    pinned class (`add_pinned_class_leaves`) -- the greedy multi-class
+    scorer's order, through the one body the CPU column calls.
+
+    Before this kernel the pointwise arm handed the searcher planes 0 and 1
+    of the weak target only, so a MultiClass or MultiClassOneVsAll tree was
+    searched on the FIRST class's gradient alone.
+
+    Everything else is the single-fold kernel's: `TDirectHistLoader`'s
+    addressing at `PointwisePartOffsetsHelper(fold_count)`, `weightRight =
+    max(part.Weight - weightLeft, 0)`, the calcer's `get_score`, `score *
+    cat_w - before` in one rounding, the bin weight, the strict-less
+    argmin and `_block_argmin_and_store`."""
+    var score_std_dev = score_std_dev_p.unsafe_load(0)
+    var bin_feature_count = Int(bin_feature_count_in)
+    var p_count = Int(p_count_in)
+    var dim_count = Int(dim_count_in)
+    var pinned = pinned_class_in != Int32(0)
+    var score_before_split = score_before.unsafe_load(0)
+
+    var best_score = FLOAT32_MAX
+    var best_gain = FLOAT32_MAX
+    var best_index = 0
+    var tid = Int(thread_idx.x)
+
+    var helper = PointwisePartOffsetsHelper(UInt32(Int(fold_count_in)))
+
+    var calcer = make_score_calcer[score_function](
+        lambda_l2,
+        Float32(1.0),
+        normalize_in != Int32(0),
+        score_std_dev,
+        global_seed,
+    )
+
+    var i = Int(block_idx.x) * block_size
+    while i < bin_feature_count:
+        if i + tid >= bin_feature_count:
+            break
+        var b = i + tid
+        if bf.unsafe_load(3 * b + 2) != UInt32(0):
+            i += block_size * Int(grid_dim.x)
+            continue
+
+        calcer.next_feature(bf.unsafe_load(3 * b))
+
+        for leaf in range(p_count):
+            # dimension 0 (fold 0): the leaf's weight pair
+            var w_part = Int(helper.data_partition_offset(UInt32(leaf), UInt32(0)))
+            var part_weight = parts.unsafe_offset(3 * w_part + 0).unsafe_load[invariant=True]()
+            var w_hist = (
+                2 * b
+                + bin_feature_count
+                * Int(helper.histogram_offset(UInt32(leaf), UInt32(0)))
+                * 2
+            )
+            var weight_left = bin_sums.unsafe_load(w_hist)
+            var weight_right = max(part_weight - weight_left, Float32(0.0))
+            var total_left = Float32(0.0)
+            var total_part = Float32(0.0)
+            for d in range(dim_count):
+                var fold = UInt32(2 * d)
+                var part_off = Int(helper.data_partition_offset(UInt32(leaf), fold))
+                var part_sum = parts.unsafe_offset(3 * part_off + 1).unsafe_load[invariant=True]()
+                var base = (
+                    2 * b
+                    + bin_feature_count
+                    * Int(helper.histogram_offset(UInt32(leaf), fold))
+                    * 2
+                )
+                var sum_left = bin_sums.unsafe_load(base + 1)
+                add_dim_leaves[score_function](
+                    calcer, weight_left, weight_right, sum_left, part_sum,
+                    total_left, total_part,
+                )
+            if pinned:
+                add_pinned_class_leaves[score_function](
+                    calcer, weight_left, weight_right, total_left, total_part
+                )
+
+        var score = calcer.get_score()
+
+        var feature_id = Int(bf.unsafe_load(3 * b))
+        var cat_w = cat_features_weights.unsafe_offset(feature_id).unsafe_load[invariant=True]()
+        var gain = fma(score, cat_w, -score_before_split)
+        score *= cat_w
+        gain *= bin_features_weights.unsafe_offset(feature_id).unsafe_load[invariant=True]()
+
+        if gain < best_gain:
+            best_score = score
+            best_gain = gain
+            best_index = b
+
+        i += block_size * Int(grid_dim.x)
+
+    _block_argmin_and_store[block_size](
+        tid, best_score, best_gain, best_index, bf, bin_feature_count,
+        result_ids, result_scores,
+    )
+
+
+def find_optimal_split_dims(
+    ctx: DeviceContext,
+    mut binary_features: DeviceBuffer[DType.uint32],
+    binary_feature_count: Int,
+    mut cat_features_weights: DeviceBuffer[DType.float32],
+    mut bin_features_weights: DeviceBuffer[DType.float32],
+    binary_feature_weights_count: Int,
+    mut splits: DeviceBuffer[DType.float32],
+    mut parts: DeviceBuffer[DType.float32],
+    p_count: Int,
+    fold_count: Int,
+    dim_count: Int,
+    pinned_class: Bool,
+    mut score_before: DeviceBuffer[DType.float32],
+    mut result_ids: DeviceBuffer[DType.uint32],
+    mut result_scores: DeviceBuffer[DType.float32],
+    result_size: Int,
+    score_function: Int,
+    l2: Float32,
+    normalize: Bool,
+    score_std_dev: MutPointer[Float32, MutAnyOrigin],
+    seed: UInt64,
+) raises:
+    """Launch `find_optimal_split_dims_kernel` with the plain arm's calcer
+    for the score function: `TL2ScoreCalcer` (meta exponent 1, the plain
+    arm's draw at frequency 0) for L2 / NewtonL2, `TCosineScoreCalcer` for
+    Cosine / NewtonCosine; the four the public fit admits. The multi-output
+    losses refuse the two second-order scores at fit entry
+    (`multiclass_targets.cpp:27`), so L2 and Cosine are what arrive."""
+    if dim_count < 1 or fold_count < 2 * dim_count:
+        raise Error(
+            "the multi-output scorer needs one fold pair per dimension; got "
+            + String(dim_count) + " dimensions over " + String(fold_count)
+            + " folds"
+        )
+    if (
+        score_function == SCORE_FUNCTION_L2
+        or score_function == SCORE_FUNCTION_NEWTON_L2
+    ):
+        ctx.enqueue_function[
+            find_optimal_split_dims_kernel[POINTWISE_SCORE_BLOCK, SCORE_FUNCTION_L2]
+        ](
+            binary_features.unsafe_ptr(),
+            Int32(binary_feature_count),
+            cat_features_weights.unsafe_ptr(),
+            bin_features_weights.unsafe_ptr(),
+            Int32(binary_feature_weights_count),
+            score_before.unsafe_ptr(),
+            splits.unsafe_ptr(),
+            parts.unsafe_ptr(),
+            Int32(p_count),
+            Int32(fold_count),
+            Int32(dim_count),
+            Int32(1) if pinned_class else Int32(0),
+            l2,
+            Int32(1) if normalize else Int32(0),
+            score_std_dev,
+            seed,
+            result_ids.unsafe_ptr(),
+            result_scores.unsafe_ptr(),
+            grid_dim=(result_size, 1, 1),
+            block_dim=(POINTWISE_SCORE_BLOCK, 1, 1),
+        )
+        return
+    if (
+        score_function == SCORE_FUNCTION_COSINE
+        or score_function == SCORE_FUNCTION_NEWTON_COSINE
+    ):
+        ctx.enqueue_function[
+            find_optimal_split_dims_kernel[POINTWISE_SCORE_BLOCK, SCORE_FUNCTION_COSINE]
+        ](
+            binary_features.unsafe_ptr(),
+            Int32(binary_feature_count),
+            cat_features_weights.unsafe_ptr(),
+            bin_features_weights.unsafe_ptr(),
+            Int32(binary_feature_weights_count),
+            score_before.unsafe_ptr(),
+            splits.unsafe_ptr(),
+            parts.unsafe_ptr(),
+            Int32(p_count),
+            Int32(fold_count),
+            Int32(dim_count),
+            Int32(1) if pinned_class else Int32(0),
+            l2,
+            Int32(1) if normalize else Int32(0),
+            score_std_dev,
+            seed,
+            result_ids.unsafe_ptr(),
+            result_scores.unsafe_ptr(),
+            grid_dim=(result_size, 1, 1),
+            block_dim=(POINTWISE_SCORE_BLOCK, 1, 1),
+        )
+        return
+    raise Error(
+        "score_function has no calcer here; only Cosine, NewtonCosine, L2"
+        " and NewtonL2 are implemented"
+    )
+
+
 def find_optimal_split(
     ctx: DeviceContext,
     mut binary_features: DeviceBuffer[DType.uint32],
@@ -1594,8 +1837,14 @@ def find_optimal_split_dev(
     score_std_dev: MutPointer[Float32, MutAnyOrigin],
     seed: UInt64,
     gathered_by_leaves: Bool,
+    dim_count: Int = 0,
+    pinned_class: Bool = False,
 ) raises:
     """`FindOptimalSplit` (`:530-551`), THE DISPATCH.
+
+    `dim_count > 0` (lane gbdt-pw-multiclass, 2026-11-23): a multi-output
+    loss whose dimensions ride the fold axis; the plain multi-output scorer
+    (`find_optimal_split_dims`) runs instead of the dynamic one.
 
     `score_before` is a ONE-FLOAT DEVICE BUFFER where theirs is a host
     scalar -- DEVIATION 207 (the blind level loop keeps last level's
@@ -1614,6 +1863,15 @@ def find_optimal_split_dev(
     Three arms, every one of them exercised by the gate (CONTRIBUTING.md (Non-default paths):
     a non-default path is an unchecked path, and reach is per-branch).
     """
+    if dim_count > 0:
+        find_optimal_split_dims(
+            ctx, binary_features, binary_feature_count, cat_features_weights,
+            bin_features_weights, binary_feature_weights_count, splits, parts,
+            p_count, fold_count, dim_count, pinned_class, score_before,
+            result_ids, result_scores, result_size, score_function, l2,
+            normalize, score_std_dev, seed,
+        )
+        return
     if fold_count == 1:
         if gathered_by_leaves:
             find_optimal_split_plain[HIST_LOADER_GATHERED_BY_LEAVES](
