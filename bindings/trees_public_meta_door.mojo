@@ -728,21 +728,51 @@ def _x_finite(Xa: PythonObject, d: Int) raises -> Bool:
     return finite
 
 
-def _member_open(member: PythonObject, X: PythonObject, operation: Int, classifier: Bool,
-                 context: PythonObject, regressor_width: Int = 0) -> MemberHeldCall:
-    """UNPACK of one fitted member's `operation` over X (`_member_native`):
-    the opened held state, `served` only when its family serves the call
-    and X is proven for it (a member that tests its rows: nothing scanned;
-    any other: `_x_finite`). An unserved answer is closed already. Never
-    raises. `regressor_width`: the columns a regressor must write (0: any).
-    The caller runs it (`member_held_run`, or a typed RUN with its plan and
-    state) and closes it with `member_held_close`."""
+def meta_member_open(member: PythonObject, operation: Int, classifier: Bool, context: PythonObject,
+                     regressor_width: Int, skip_trees: Bool) -> MemberHeldCall:
+    """THE X-FREE MEMBER UNPACK (lane mf-shap3, 2026-11-23): one fitted member's `operation` opened on the state
+    it holds (bindings/member_set_door.mojo `member_held_open`), reading no rows: `served` only when its class
+    carries a member mark and its family serves the call at the width the meta-estimator reads (a classifier's
+    predict: its int codes, served only when its classes are 0 .. k-1 in order, a member's code then being the
+    ensemble's; its predict_proba: its class count; a regressor: `regressor_width`, 0 any). `skip_trees`: a tree,
+    forest or extra-trees member is not served (a public predict stages one device copy of X for those; the
+    explainers' synthetic rows have none and call every member). Never raises. The caller proves its rows
+    (`opened.tests`, else a finite scan) and closes it with `member_held_close`. `_member_open` is this plus the
+    rows part of a public predict; Kernel and Permutation SHAP call it as it is
+    (bindings/trees_agnostic_native_door.mojo)."""
     comptime if not MEMBER_SET_NATIVE:
         return MemberHeldCall()
     try:
         var plan = prep_estimator_plan(member, context)
         if plan is None or py_get(plan, "member") is None:
             return MemberHeldCall()
+        var width = regressor_width
+        if classifier:
+            width = 0
+            var record = _member_class_codes(member, context)
+            if operation == MEMBER_OP_PREDICT:
+                if not Bool(py=record[4]):
+                    return MemberHeldCall()
+                width = 1
+            elif operation == MEMBER_OP_PREDICT_PROBA:
+                width = len(record[1])
+        return member_held_open(member, operation, classifier, width, skip_trees, context, trees_builtins())
+    except:
+        return MemberHeldCall()
+
+
+def _member_open(member: PythonObject, X: PythonObject, operation: Int, classifier: Bool,
+                 context: PythonObject, regressor_width: Int = 0) -> MemberHeldCall:
+    """UNPACK of one fitted member's `operation` over X (`_member_native`):
+    the X-free open (`meta_member_open`, trees not served), then the rows
+    part: `served` only when X is proven for it (a member that tests its
+    rows: nothing scanned; any other: `_x_finite`). An unserved answer is
+    closed already. Never raises. `regressor_width`: the columns a regressor
+    must write (0: any). The caller runs it (`member_held_run`, or a typed
+    RUN with its plan and state) and closes it with `member_held_close`."""
+    comptime if not MEMBER_SET_NATIVE:
+        return MemberHeldCall()
+    try:
         # Only an exact mojolearn Array is served (its shape, dtype and order
         # are native reads). A resident DeviceRows fold side goes to the
         # member's door, which resolves it natively; reading its Python
@@ -755,18 +785,7 @@ def _member_open(member: PythonObject, X: PythonObject, operation: Int, classifi
         var d = _cols(X)
         if n <= 0 or d <= 0 or String(py=X.dtype) != "<f4" or String(py=X.order) != "C":
             return MemberHeldCall()
-        var width = regressor_width
-        if classifier:
-            width = 0
-            var record = _member_class_codes(member, context)
-            if operation == MEMBER_OP_PREDICT:
-                if not Bool(py=record[4]):
-                    return MemberHeldCall()
-                width = 1
-            elif operation == MEMBER_OP_PREDICT_PROBA:
-                width = len(record[1])
-        var opened = member_held_open(member, operation, classifier, width, True, context,
-                                      trees_builtins())
+        var opened = meta_member_open(member, operation, classifier, context, regressor_width, True)
         var proven = False
         if opened.served:
             try:
@@ -1743,6 +1762,46 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     return model
 
 
+struct StackLayout(Movable):
+    """X-FREE UNPACK of a fitted Stacking estimator's meta features (lane mf-shap3, 2026-11-23;
+    `_stacking_transform` and Kernel / Permutation SHAP): its members (`estimators_`), what each is asked for
+    (`stack_method_` as STACK_*), the class count (0 for a regressor), `_binary`, `passthrough` and the meta
+    features' width (the members' `_widths_`, then X's `d` columns under passthrough)."""
+    var members: PythonObject
+    var kinds: List[Int]
+    var k: Int
+    var binary: Bool
+    var passthrough: Bool
+    var width: Int
+
+    def __init__(out self, members: PythonObject, var kinds: List[Int], k: Int, binary: Bool, passthrough: Bool,
+                 width: Int):
+        self.members = members
+        self.kinds = kinds^
+        self.k = k
+        self.binary = binary
+        self.passthrough = passthrough
+        self.width = width
+
+
+def stacking_layout(model: PythonObject, d: Int, context: PythonObject) raises -> StackLayout:
+    """`StackLayout` of the fitted `model` over rows of `d` features."""
+    var nk = trees_keys()
+    var widths = _attr(model, nk[].k__widths_, Python.list())
+    var total = 0
+    for i in range(len(widths)):  # driver-loop: over members
+        total += Int(py=widths[i])
+    var passthrough = _truthy(_attr(model, nk[].k_passthrough, PythonObject(False)))
+    var binary = _truthy(_attr(model, nk[].k__binary, PythonObject(False)))
+    var members = _attr(model, nk[].k_estimators_, Python.list())
+    var methods = _attr(model, nk[].k_stack_method_, Python.list())
+    var kinds = List[Int]()
+    for i in range(len(members)):  # driver-loop: over members
+        kinds.append(_stack_kind(String(methods[i])))
+    var k = len(_attr(model, nk[].k_classes_, Python.list()))  # 0 for a regressor
+    return StackLayout(members, kinds^, k, binary, passthrough, total + (d if passthrough else 0))
+
+
 def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_StackingBase.transform`: the meta features (float64)."""
     var Xa = _check_x(model, X, context)
@@ -1750,24 +1809,17 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
     var x_view = Xa
     var n = Int(py=x_view.shape[0])
     var d = Int(py=x_view.shape[1])
-    var nk = trees_keys()
-    var widths = _attr(model, nk[].k__widths_, Python.list())
-    var total = 0
-    for i in range(len(widths)):  # driver-loop: over members
-        total += Int(py=widths[i])
-    var passthrough = _truthy(_attr(model, nk[].k_passthrough, PythonObject(False)))
-    var width = total + (d if passthrough else 0)
+    var layout = stacking_layout(model, d, context)
+    var passthrough = layout.passthrough
+    var width = layout.width
     var meta = _zeros(n * width, context)
     var meta_view = meta
     var rows_view = _arange(xt, n, context)
-    var binary = _truthy(_attr(model, nk[].k__binary, PythonObject(False)))
+    var binary = layout.binary
     var col0 = 0
-    var members = _attr(model, nk[].k_estimators_, Python.list())
-    var methods = _attr(model, nk[].k_stack_method_, Python.list())
-    var kinds = List[Int]()
-    for i in range(len(members)):  # driver-loop: over members
-        kinds.append(_stack_kind(String(methods[i])))
-    var k = len(_attr(model, nk[].k_classes_, Python.list()))  # 0 for a regressor
+    var members = layout.members
+    var kinds = layout.kinds.copy()
+    var k = layout.k
     # Lane bm-meta-3: UNPACK + RUN `stack_place_run` (members fitted on
     # every row saw every class: no class columns read).
     if len(members) > 0:
@@ -2012,6 +2064,14 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     return model
 
 
+def multioutput_ridge_ref(members: PythonObject, context: PythonObject) raises -> EntryRef:
+    """X-FREE UNPACK of a MultiOutputRegressor fitted as one multi-output ridge (`_multi_ridge`; lane mf-shap3,
+    2026-11-23: `_multioutput_regressor_predict` and Kernel / Permutation SHAP): the ridge multi entry of the
+    estimators image its first member's tier names, resolved once per operation."""
+    var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
+    return ridge_multi_ref(_estimators_key(table))
+
+
 def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
@@ -2023,8 +2083,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     if mr is not None:
         var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
-        var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
-        var rm_key = ridge_multi_ref(_estimators_key(table))
+        var rm_key = multioutput_ridge_ref(members, context)
         var p_x = trees_address(Xa)
         var p_coef = trees_address(mr[0])
         var p_icpt = trees_address(mr[1])
@@ -2592,6 +2651,14 @@ def _ovr_door(member: PythonObject, decision: Bool, Xa: PythonObject, n: Int, ke
     return out^
 
 
+def ovr_member_words(member: PythonObject, decision: Bool, context: PythonObject) raises -> Tuple[Bool, Int]:
+    """X-FREE UNPACK of one OneVsRest member (lane mf-shap3, 2026-11-23; `_ovr_fused` and Kernel / Permutation
+    SHAP): whether it scores by decision_function (`decision` asked and it has one) and its positive column (0
+    for a decision column; else its predict_proba column of code 1, -1 when it never saw code 1)."""
+    var by_decision = decision and prep_estimator_has(member, "decision_function", context)
+    return (by_decision, 0 if by_decision else _index_of_one(member, context))
+
+
 def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int, k: Int,
                decision: Bool, finish: Int, context: PythonObject) raises -> PythonObject:
     """The k > 2 OneVsRest epilogue (THE OVR SPLIT, lane bm-meta-2,
@@ -2612,9 +2679,10 @@ def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int
     try:
         for j in range(len(members)):  # driver-loop: over members (admission, once each)
             var member = members[j]
-            var by_decision = decision and prep_estimator_has(member, "decision_function", context)
+            var words = ovr_member_words(member, decision, context)
+            var by_decision = words[0]
             uses_decision.append(by_decision)
-            at.append(0 if by_decision else _index_of_one(member, context))
+            at.append(words[1])
             var operation = MEMBER_OP_DECISION if by_decision else MEMBER_OP_PREDICT_PROBA
             var opened = _member_open(member, Xa, operation, True, context)
             if opened.served and not opened.gil_free:
@@ -3465,6 +3533,47 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     return model
 
 
+def calibrated_pair_codes(e: PythonObject, k: Int, keep: PythonObject,
+                          context: PythonObject) raises -> Tuple[Int, Int]:
+    """X-FREE UNPACK of one calibrated pair's member (lane mf-shap3, 2026-11-23; `_calibrated_fused` and Kernel /
+    Permutation SHAP): for k > 2 the address of its class codes (int32, `_sub_cols`, its owner kept in `keep`)
+    and its class count; (0, 0) for two classes."""
+    if k == 2:
+        return (0, 0)
+    var nk = trees_keys()
+    var sub_cols = _sub_cols(e, context)
+    _ = py_call(keep.append, sub_cols)
+    return (trees_address(sub_cols), len(_attr(e, nk[].k_classes_, Python.list())))
+
+
+def calibrated_pair_words(e: PythonObject, fitted: PythonObject, k: Int, member_cols: Int, var cols_addr: Int,
+                          var ks: Int, keep: PythonObject, mut cal_pairs: List[CalPair], mut cals: List[CalFit],
+                          context: PythonObject) raises:
+    """X-FREE UNPACK of one calibrated pair's words once its member's score columns (`member_cols`) are known
+    (lane mf-shap3, 2026-11-23; `_calibrated_fused` and Kernel / Permutation SHAP): its positive column, its
+    class codes and count (`calibrated_pair_codes`), and its calibrators (Platt's a, b; isotonic knots kept in
+    `keep`), appended as one `CalPair` and its `CalFit`s."""
+    var at = 0
+    if k == 2 and member_cols != 1:
+        at = _index_of_one(e, context)
+        meta_binary_column_check(at)
+    if k != 2 and member_cols == 1 and ks == 2:
+        # lane mf-cal2: a two-class member's one-column decision is its
+        # positive class's score, that class's column alone (the fit's
+        # `_cal_scores` rule; two columns were read from it before)
+        cols_addr += 4
+        ks = 1
+    cal_pairs.append(CalPair(at, cols_addr, ks, len(cals), len(fitted)))
+    for j in range(len(fitted)):  # driver-loop: over the class columns (one calibrator each)
+        var par = fitted[j][1]
+        if String(fitted[j][0]) == "sigmoid":
+            cals.append(CalFit(False, Float64(py=par[0]), Float64(py=par[1]), 0, 0, 0))
+        else:
+            _ = py_call(keep.append, par[0])
+            _ = py_call(keep.append, par[1])
+            cals.append(CalFit(True, 0.0, 0.0, trees_address(par[0]), trees_address(par[1]), Int(py=par[2])))
+
+
 def _cal_door(e: PythonObject, decision: Bool, Xa: PythonObject, n: Int, class_cols: Int, keep: PythonObject,
              answer: PythonObject, context: PythonObject) raises -> VoteMember:
     """One pair member's float32 score block from its door (or the Array its
@@ -3503,19 +3612,13 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
             var fitted = pairs[i][1]
             var decision = prep_estimator_has(e, "decision_function", context)
             decisions.append(decision)
-            var cols_addr = 0
-            var ks = 0
-            if k != 2:
-                var sub_cols = _sub_cols(e, context)
-                _ = py_call(got.keep.append, sub_cols)
-                cols_addr = trees_address(sub_cols)
-                ks = len(_attr(e, nk[].k_classes_, Python.list()))
+            var codes = calibrated_pair_codes(e, k, got.keep, context)
             var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA
             var opened = _member_open(e, Xa, operation, True, context)
             var member: VoteMember
             if opened.served and opened.gil_free:
                 member = VoteMember(len(got.opened), opened.held.state, operation, opened.cols, opened.dtype,
-                                    cols_addr, 1.0)
+                                    codes[0], 1.0)
                 got.native += 1
                 got.opened.append(opened^)
             else:
@@ -3525,28 +3628,9 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
                         answer = member_held_run(opened, trees_address(Xa), n, _cols(Xa), context)
                     finally:
                         member_held_close(opened)
-                member = _cal_door(e, decision, Xa, n, cols_addr, got.keep, answer, context)
-            var at = 0
-            if k == 2 and member.cols != 1:
-                at = _index_of_one(e, context)
-                meta_binary_column_check(at)
-            if k != 2 and member.cols == 1 and ks == 2:
-                # lane mf-cal2: a two-class member's one-column decision is its
-                # positive class's score, that class's column alone (the fit's
-                # `_cal_scores` rule; two columns were read from it before)
-                cols_addr += 4
-                ks = 1
+                member = _cal_door(e, decision, Xa, n, codes[0], got.keep, answer, context)
             got.members.append(member)
-            cal_pairs.append(CalPair(at, cols_addr, ks, len(cals), len(fitted)))
-            for j in range(len(fitted)):  # driver-loop: over the class columns (one calibrator each)
-                var par = fitted[j][1]
-                if String(fitted[j][0]) == "sigmoid":
-                    cals.append(CalFit(False, Float64(py=par[0]), Float64(py=par[1]), 0, 0, 0))
-                else:
-                    _ = py_call(got.keep.append, par[0])
-                    _ = py_call(got.keep.append, par[1])
-                    cals.append(CalFit(True, 0.0, 0.0, trees_address(par[0]), trees_address(par[1]),
-                                       Int(py=par[2])))
+            calibrated_pair_words(e, fitted, k, member.cols, codes[0], codes[1], got.keep, cal_pairs, cals, context)
         for i in range(len(got.members)):  # driver-loop: over members
             if got.members[i].native:
                 got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))

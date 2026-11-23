@@ -52,8 +52,8 @@ from xtrees.glue_runs import publish_x_trees_glue
 from xtrees.glue_calls import xt_ref, xt_stack_w64, xt_softmax_rows
 from checks.native_tests.bm_rest_boost_fits import DartSpec, DartModel, dart_fit, dart_raw, publish_host_images, trees_key
 from xtrees.agnostic_values_run import (
-    AgnModel, AgnMember, AgnVote, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
-    agn_labels_run, AGN_SW_IDN_SYN_POOL, AGN_VOTE_SOFT,
+    AgnModel, AgnMember, AgnMeta, AgnMetaPlan, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
+    agn_labels_run, AGN_SW_IDN_SYN_POOL, AGN_META_SOFT,
 )
 from xtrees.trees_meta_vote_run import VoteMember
 from core.entry_table import entry_ref_word
@@ -749,12 +749,11 @@ struct _WideRef(AgnModel):
         return Self(self.plan, self.state, self.x, self.n, self.d, self.k, self.parallel)
 
 
-def _handle(glue: EntryRef, f: _Lr, plan_at: Int, x: List[Float32], n: Int, parallel: Bool,
-            refused: List[Int]) raises -> AgnMember:
+def _handle(glue: EntryRef, f: _Lr, plan_at: Int, x: List[Float32], n: Int, parallel: Bool) raises -> AgnMember:
     """The door's native model handle over the fitted member (`_member_open`: predict_proba, float64); `plan_at`
     the address of `f.plan`."""
     return AgnMember(f.plan.member, plan_at, f.state, MEMBER_OP_PREDICT_PROBA,
-                     Int(x.unsafe_ptr()), n, LR_D, 2, parallel, Int(refused.unsafe_ptr()), True, True, glue, 0, 0)
+                     Int(x.unsafe_ptr()), n, LR_D, 2, parallel, True, True, glue, 0, 0)
 
 
 def _lr_permutation[M: AgnModel](glue: EntryRef, mut on_bg: M, mut model: M, x: List[Float32], bg: List[Float32],
@@ -792,7 +791,6 @@ def test_agnostic_logistic_member() raises:
             + "float64 handle")
     var bg = _cols(xa, 20, D, LR_D)
     var x = _cols(xb, 4, D, LR_D)
-    var refused = List[Int](length=1, fill=0)
     var plan_at = Int(UnsafePointer(to=lr.plan))
     for logit in range(2):  # small-loop(the two links)
         var linked = logit == 1
@@ -800,11 +798,11 @@ def test_agnostic_logistic_member() raises:
         var ref_bg = _WideRef(plan_at, lr.state, bg, 20, LR_D, 2, False)
         var ref_m = _WideRef(plan_at, lr.state, x, 4, LR_D, 2, False)
         var want = _kernel_of(glue, ref_bg, ref_m, x, bg, 4, 20, LR_D, 2, linked)
-        var h_bg = _handle(glue, lr, plan_at, bg, 20, False, refused)
-        var h_serial = _handle(glue, lr, plan_at, x, 4, False, refused)
+        var h_bg = _handle(glue, lr, plan_at, bg, 20, False)
+        var h_serial = _handle(glue, lr, plan_at, x, 4, False)
         var serial = _kernel_of(glue, h_bg, h_serial, x, bg, 4, 20, LR_D, 2, linked)
-        var h_bg2 = _handle(glue, lr, plan_at, bg, 20, True, refused)
-        var h_spread = _handle(glue, lr, plan_at, x, 4, True, refused)
+        var h_bg2 = _handle(glue, lr, plan_at, bg, 20, True)
+        var h_spread = _handle(glue, lr, plan_at, x, 4, True)
         var spread = _kernel_of(glue, h_bg2, h_spread, x, bg, 4, 20, LR_D, 2, linked)
         assert_same_words(serial.ev, want.ev, label + ": expected value, handle vs reference")
         assert_same_words(serial.phi, want.phi, label + ": handle vs reference evaluator")
@@ -822,17 +820,16 @@ def test_agnostic_logistic_member() raises:
     var pref_bg = _WideRef(plan_at, lr.state, bg, 20, LR_D, 2, False)
     var pref_m = _WideRef(plan_at, lr.state, x, 4, LR_D, 2, False)
     var pwant = _lr_permutation(glue, pref_bg, pref_m, x, bg, 4, 20, 0)
-    var p_bg = _handle(glue, lr, plan_at, bg, 20, False, refused)
-    var p_serial = _handle(glue, lr, plan_at, x, 4, False, refused)
+    var p_bg = _handle(glue, lr, plan_at, bg, 20, False)
+    var p_serial = _handle(glue, lr, plan_at, x, 4, False)
     var pserial = _lr_permutation(glue, p_bg, p_serial, x, bg, 4, 20, 0)
-    var p_bg2 = _handle(glue, lr, plan_at, bg, 20, True, refused)
-    var p_spread = _handle(glue, lr, plan_at, x, 4, True, refused)
+    var p_bg2 = _handle(glue, lr, plan_at, bg, 20, True)
+    var p_spread = _handle(glue, lr, plan_at, x, 4, True)
     var pspread = _lr_permutation(glue, p_bg2, p_spread, x, bg, 4, 20, 0)
     assert_same_words(pserial.phi, pwant.phi, "logistic member permutation shap: handle vs reference evaluator")
     assert_same_words(pspread.phi, pserial.phi, "logistic member permutation shap: chunks on the workers vs in order")
     var pp = pref_m._proba(Int(x.unsafe_ptr()), 4)
     _additive(pserial, pp, 4, LR_D, 2, False, 0.0, 1e-5, "logistic member permutation shap additivity")
-    require(refused[0] == 0, "the logistic member refused a chunk")
     _ = p_bg^
     _ = p_serial^
     _ = p_bg2^
@@ -840,7 +837,6 @@ def test_agnostic_logistic_member() raises:
     _ = pref_bg^
     _ = pref_m^
     _lr_free(lr)
-    _ = refused^
     _ = fit_x^
     _ = codes^
     _ = bg^
@@ -863,10 +859,10 @@ def test_agnostic_logistic_member() raises:
 # Fail-proof edit: `NB_KIND_CATEGORICAL` to `NB_KIND_COMPLEMENT` in `naive_bayes_kind_published` (the member
 # refuses kind 4: "is not published"); its fitted state is proven word for word in prep_naive_bayes.mojo
 # `test_categorical_member`.
-# A SOFT VOTE (`test_agnostic_vote`): two LogisticRegression members (weights 1 and 2) folded by `AgnVote` over
+# A SOFT VOTE (`test_agnostic_vote`): two LogisticRegression members (weights 1 and 2) folded by `AgnMeta` over
 # `vote_soft_run`: its outputs equal the hand formula (rtol 1e-6), Kernel SHAP equals the exact Shapley values of
 # the hand formula's game (rtol 1e-5, atol 1e-6), the chunks on the workers give the serial words, and Permutation
-# SHAP is additive. Fail-proof edit: `n * width` to `n` in `AgnVote._run`'s narrowing (the second class column is
+# SHAP is additive. Fail-proof edit: `n * width` to `n` in `AgnMeta._run`'s soft narrowing (the second class column is
 # garbage).
 
 
@@ -1067,16 +1063,15 @@ def test_agnostic_label_member() raises:
     var labels: List[Float32] = [-1.5, 4.0]
     var bg = _cols(xa, 20, D, LR_D)
     var x = _cols(xb, 4, D, LR_D)
-    var refused = List[Int](length=1, fill=0)
     var plan_at = Int(UnsafePointer(to=gnb.plan))
     var lab_at = Int(labels.unsafe_ptr())
     var ref_bg = _OpRef(plan_at, gnb.state, MEMBER_OP_PREDICT, labels, bg, 20, LR_D, 1)
     var ref_m = _OpRef(plan_at, gnb.state, MEMBER_OP_PREDICT, labels, x, 4, LR_D, 1)
     var want = _kernel_of(glue, ref_bg, ref_m, x, bg, 4, 20, LR_D, 1, False)
     var h_bg = AgnMember(gnb.plan.member, plan_at, gnb.state, MEMBER_OP_PREDICT, Int(bg.unsafe_ptr()), 20, LR_D, 1,
-                         False, Int(refused.unsafe_ptr()), False, True, glue, lab_at, 2)
+                         False, False, True, glue, lab_at, 2)
     var h = AgnMember(gnb.plan.member, plan_at, gnb.state, MEMBER_OP_PREDICT, Int(x.unsafe_ptr()), 4, LR_D, 1,
-                      False, Int(refused.unsafe_ptr()), False, True, glue, lab_at, 2)
+                      False, False, True, glue, lab_at, 2)
     var got = _kernel_of(glue, h_bg, h, x, bg, 4, 20, LR_D, 1, False)
     assert_same_words(got.ev, want.ev, "label member kernel shap: expected value, handle vs reference")
     assert_same_words(got.phi, want.phi, "label member kernel shap: handle vs reference evaluator")
@@ -1088,13 +1083,12 @@ def test_agnostic_label_member() raises:
     var p_ref_m = _OpRef(plan_at, gnb.state, MEMBER_OP_PREDICT, labels, x, 4, LR_D, 1)
     var pwant = _perm_of(glue, p_ref_bg, p_ref_m, x, bg, 4, 20, LR_D, 1, 0)
     var p_bg = AgnMember(gnb.plan.member, plan_at, gnb.state, MEMBER_OP_PREDICT, Int(bg.unsafe_ptr()), 20, LR_D, 1,
-                         False, Int(refused.unsafe_ptr()), False, True, glue, lab_at, 2)
+                         False, False, True, glue, lab_at, 2)
     var p_h = AgnMember(gnb.plan.member, plan_at, gnb.state, MEMBER_OP_PREDICT, Int(x.unsafe_ptr()), 4, LR_D, 1,
-                        False, Int(refused.unsafe_ptr()), False, True, glue, lab_at, 2)
+                        False, False, True, glue, lab_at, 2)
     var pgot = _perm_of(glue, p_bg, p_h, x, bg, 4, 20, LR_D, 1, 0)
     assert_same_words(pgot.phi, pwant.phi, "label member permutation shap: handle vs reference evaluator")
     _additive(pgot, f, 4, LR_D, 1, False, 0.0, 1e-5, "label member permutation shap additivity")
-    require(refused[0] == 0, "the label member refused a chunk")
     _ = h_bg^
     _ = h^
     _ = p_bg^
@@ -1105,7 +1099,6 @@ def test_agnostic_label_member() raises:
     _ = p_ref_m^
     _lr_free(gnb)
     _ = labels^
-    _ = refused^
     _ = fit_x^
     _ = codes^
     _ = bg^
@@ -1133,16 +1126,15 @@ def test_agnostic_categorical_member() raises:
     var x = List[Float32](length=4 * d, fill=Float32(0))
     for i in range(4 * d):  # small-loop(fixture: X[20:24])
         x[i] = xs[20 * d + i]
-    var refused = List[Int](length=1, fill=0)
     var none = List[Float32]()
     var plan_at = Int(UnsafePointer(to=cat.plan))
     var ref_bg = _OpRef(plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, none, bg, 20, d, k)
     var ref_m = _OpRef(plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, none, x, 4, d, k)
     var want = _kernel_of(glue, ref_bg, ref_m, x, bg, 4, 20, d, k, False)
     var h_bg = AgnMember(cat.plan.member, plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, Int(bg.unsafe_ptr()), 20, d, k,
-                         False, Int(refused.unsafe_ptr()), False, True, glue, 0, 0)
+                         False, False, True, glue, 0, 0)
     var h = AgnMember(cat.plan.member, plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, Int(x.unsafe_ptr()), 4, d, k,
-                      False, Int(refused.unsafe_ptr()), False, True, glue, 0, 0)
+                      False, False, True, glue, 0, 0)
     var got = _kernel_of(glue, h_bg, h, x, bg, 4, 20, d, k, False)
     assert_same_words(got.ev, want.ev, "categorical member kernel shap: expected value, handle vs reference")
     assert_same_words(got.phi, want.phi, "categorical member kernel shap: handle vs reference evaluator")
@@ -1154,13 +1146,12 @@ def test_agnostic_categorical_member() raises:
     var p_ref_m = _OpRef(plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, none, x, 4, d, k)
     var pwant = _perm_of(glue, p_ref_bg, p_ref_m, x, bg, 4, 20, d, k, 0)
     var p_bg = AgnMember(cat.plan.member, plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, Int(bg.unsafe_ptr()), 20, d, k,
-                         False, Int(refused.unsafe_ptr()), False, True, glue, 0, 0)
+                         False, False, True, glue, 0, 0)
     var p_h = AgnMember(cat.plan.member, plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, Int(x.unsafe_ptr()), 4, d, k,
-                        False, Int(refused.unsafe_ptr()), False, True, glue, 0, 0)
+                        False, False, True, glue, 0, 0)
     var pgot = _perm_of(glue, p_bg, p_h, x, bg, 4, 20, d, k, 0)
     assert_same_words(pgot.phi, pwant.phi, "categorical member permutation shap: handle vs reference evaluator")
     _additive(pgot, f, 4, d, k, False, 0.0, 1e-5, "categorical member permutation shap additivity")
-    require(refused[0] == 0, "the categorical member refused a chunk")
     _ = h_bg^
     _ = h^
     _ = p_bg^
@@ -1171,7 +1162,6 @@ def test_agnostic_categorical_member() raises:
     _ = p_ref_m^
     _lr_free(cat)
     _ = none^
-    _ = refused^
     _ = bg^
     _ = x^
     _ = xs^
@@ -1250,7 +1240,7 @@ struct _VoteRef(AgnModel):
 def test_agnostic_vote() raises:
     """VotingClassifier(voting='soft', weights=[1, 2]) over two LogisticRegression members (fitted on rows
     [0, 200) and [200, 400) of `_clf(n_classes=2)[:, :4]`), background Xa[:20], explained Xb[:4], through
-    `AgnVote`."""
+    `AgnMeta`."""
     var glue = _glue()
     var xa = fixture_f32(SHAP_DIR + "clf2-xa.f32", NA * D)
     var xb = fixture_f32(SHAP_DIR + "clf2-xb.f32", 450 * D)
@@ -1277,34 +1267,30 @@ def test_agnostic_vote() raises:
     members.append(VoteMember(p1, m1.state, MEMBER_OP_PREDICT_PROBA, 2, MEMBER_F64, cc, 2.0))
     var bg = _cols(xa, 20, D, LR_D)
     var x = _cols(xb, 4, D, LR_D)
-    var refused = List[Int](length=1, fill=0)
+    var plan = AgnMetaPlan(AGN_META_SOFT)
+    plan.members = members.copy()
+    plan.k = 2
+    plan.classes = 2
     var ref_m = _VoteRef(p0, m0.state, p1, m1.state, 1.0, 2.0, x, 4, LR_D)
-    var v_bg = AgnVote(members, AGN_VOTE_SOFT, Int(bg.unsafe_ptr()), 20, LR_D, 2, False, True,
-                       Int(refused.unsafe_ptr()), glue)
-    var v = AgnVote(members, AGN_VOTE_SOFT, Int(x.unsafe_ptr()), 4, LR_D, 2, False, True,
-                    Int(refused.unsafe_ptr()), glue)
+    var v_bg = AgnMeta(plan, Int(bg.unsafe_ptr()), 20, LR_D, False, True, glue)
+    var v = AgnMeta(plan, Int(x.unsafe_ptr()), 4, LR_D, False, True, glue)
     var hand = ref_m.answer(Int(x.unsafe_ptr()), 4)
     var folded = _F32P(unsafe_from_address=v.explained())
     for i in range(8):  # small-loop(oracle: the explained rows' vote)
         require(abs(Float64(folded[i]) - Float64(hand[i])) <= 1e-6 * abs(Float64(hand[i])) + 1e-7,
                 "vote output " + String(i) + ": fold " + String(folded[i]) + ", hand formula " + String(hand[i]))
     var serial = _kernel_of(glue, v_bg, v, x, bg, 4, 20, LR_D, 2, False)
-    var w_bg = AgnVote(members, AGN_VOTE_SOFT, Int(bg.unsafe_ptr()), 20, LR_D, 2, True, True,
-                       Int(refused.unsafe_ptr()), glue)
-    var w = AgnVote(members, AGN_VOTE_SOFT, Int(x.unsafe_ptr()), 4, LR_D, 2, True, True,
-                    Int(refused.unsafe_ptr()), glue)
+    var w_bg = AgnMeta(plan, Int(bg.unsafe_ptr()), 20, LR_D, True, True, glue)
+    var w = AgnMeta(plan, Int(x.unsafe_ptr()), 4, LR_D, True, True, glue)
     var spread = _kernel_of(glue, w_bg, w, x, bg, 4, 20, LR_D, 2, False)
     assert_same_words(spread.phi, serial.phi, "vote kernel shap: chunks on the workers vs in order")
     var exact = _exact_serial(ref_m, x, bg, 4, 20, LR_D, 2)
     _close(serial.phi, exact, 1e-5, 1e-6, "vote kernel shap vs the exact Shapley values of the hand formula")
     _additive(serial, hand, 4, LR_D, 2, False, 0.0, 1e-5, "vote kernel shap additivity")
-    var q_bg = AgnVote(members, AGN_VOTE_SOFT, Int(bg.unsafe_ptr()), 20, LR_D, 2, True, True,
-                       Int(refused.unsafe_ptr()), glue)
-    var q = AgnVote(members, AGN_VOTE_SOFT, Int(x.unsafe_ptr()), 4, LR_D, 2, True, True,
-                    Int(refused.unsafe_ptr()), glue)
+    var q_bg = AgnMeta(plan, Int(bg.unsafe_ptr()), 20, LR_D, True, True, glue)
+    var q = AgnMeta(plan, Int(x.unsafe_ptr()), 4, LR_D, True, True, glue)
     var perm = _perm_of(glue, q_bg, q, x, bg, 4, 20, LR_D, 2, 0)
     _additive(perm, hand, 4, LR_D, 2, False, 0.0, 1e-5, "vote permutation shap additivity")
-    require(refused[0] == 0, "a vote member refused a chunk")
     _ = v_bg^
     _ = v^
     _ = w_bg^
@@ -1312,11 +1298,11 @@ def test_agnostic_vote() raises:
     _ = q_bg^
     _ = q^
     _ = ref_m^
+    _ = plan^
     _ = members^
     _ = class_cols^
     _lr_free(m0)
     _lr_free(m1)
-    _ = refused^
     _ = all_x^
     _ = first_x^
     _ = second_x^

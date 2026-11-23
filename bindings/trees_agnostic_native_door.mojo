@@ -5,10 +5,14 @@
 # (UNPACK); xtrees/agnostic_values_run.mojo runs the schedule, the synthetic
 # rows, the model through the native model handle, the solve or the
 # permutation fold and the link through the x_trees glue entry (RUN, no Python
-# object); this owner shapes the float64 values (PACK). A class with no member
-# entry is evaluated through its compiled model-selection plan
-# (bindings/prep_native_estimator.mojo; never its Python predict). A Python
-# callable model is refused: native code never calls back into it.
+# object); this owner shapes the float64 values (PACK). A meta-estimator is
+# opened over its members' held native states through the meta doors' X-free
+# member UNPACK and evaluated by its public operation's RUN (`AgnMeta`; lane
+# mf-shap3, 2026-11-23); a fitted search by its best estimator. A class (or a
+# member's class) with no member entry is evaluated through its compiled
+# model-selection plan (bindings/prep_native_estimator.mojo; never its Python
+# predict), `_DoorModel`. A Python callable model is refused: native code
+# never calls back into it.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -18,14 +22,15 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_call, prep_estimator_predict_internal,
-    prep_estimator_plan,
+    prep_estimator_plan, prep_native_context,
 )
 from bindings.member_held_door import MemberHeld, member_held, member_held_release
 from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
     member_call, member_call_of, member_outputs_of,
-    MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
-    MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_DTYPE_UNSAID,
+    MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_CAN_PREDICT,
+    MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_F64,
+    MEMBER_I32, MEMBER_I64, MEMBER_DTYPE_UNSAID,
 )
 from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.trees_public_inputs_door import trees_table, trees_address, trees_reshape, trees_cast
@@ -40,14 +45,19 @@ from bindings.trees_explainer_native_door import _get, _int, _entry, _snapshot, 
 from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS
 from xtrees.glue_calls import xt_ref
 from xtrees.agnostic_values_run import (
-    AgnModel, AgnMember, AgnVote, AgnRequest, AGN_VOTE_SOFT, AGN_VOTE_REGRESS, agn_expected_run,
-    agn_kernel_values_run, agn_permutation_values_run,
+    AgnModel, AgnMember, AgnMeta, AgnMetaPlan, AgnRequest, AGN_META_SOFT, AGN_META_REGRESS, AGN_META_HARD,
+    AGN_META_BAG, AGN_META_STACK, AGN_META_OVR, AGN_META_CALIBRATED, AGN_META_ADA, AGN_META_COLUMNS,
+    AGN_META_RIDGE, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
 )
-from xtrees.trees_meta_vote_run import VoteMember
+from xtrees.trees_meta_vote_run import VoteMember, CalPair, CalFit, STACK_PREDICT, STACK_PROBA
 from bindings.member_set_door import MemberHeldCall, member_held_close
 from bindings.trees_public_meta_door import (
-    meta_kind, _member_open as meta_member_open, _sub_cols, _voting_weights, _attr as meta_attr,
+    meta_kind, meta_member_open, _sub_cols, _voting_weights, _attr as meta_attr, calibrated_pair_codes,
+    calibrated_pair_words, ovr_member_words, stacking_layout, multioutput_ridge_ref,
 )
+from bindings.trees_public_boost_door import boost_kind, bag_member_open, bag_member_columns, _ada_weights
+from bindings.msel_search_state_door import msel_search_fields
+from core.entry_table import EntryRef
 from core.trees_entry_table import TreesEntryKey
 from bindings.trees_keys_unpack import trees_keys
 from bindings.operation_names_trees import TREES_OPN_TREES_AGNOSTIC_KERNEL_INIT, TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT, TREES_OPN_TREES_AGNOSTIC_KERNEL_VALUES, TREES_OPN_TREES_AGNOSTIC_PERMUTATION_VALUES
@@ -99,12 +109,70 @@ def _class_value(model: PythonObject, name: String) raises -> PythonObject:
     return PythonObject(None)
 
 
+#: The refusals the explainers raise natively (lane mf-shap3, 2026-11-23; before, the model's door was asked the
+#: whole call again only to raise its own words).
+comptime _NONFINITE = "ValueError: Input X contains NaN or infinity."
+comptime _WIDTH_CHANGED = "ValueError: the explained model output width changed after construction"
+#: scikit-learn's MultiOutputClassifier.predict_proba answers one array per output; shap's KernelExplainer reads
+#: one model output array (its `fnull` is the weighted sum of that array over the background), so it does not
+#: explain such a model, and neither does this one.
+comptime _MULTI_REFUSAL = ("ValueError: the explained model output must be 1-D or 2-D: "
+    + "MultiOutputClassifier.predict_proba answers one array per output; explain each fitted output estimator "
+    + "(estimators_) instead")
+#: A classifier explained through predict answers its labels; shap needs a numeric model output (its background
+#: mean of non-numeric labels is refused by NumPy).
+comptime _LABELS_REFUSAL = ("TypeError: the explained classifier's classes_ are not numeric, so its predict "
+    + "output (its labels) cannot be explained; encode the labels as numbers, or explain a classifier with "
+    + "predict_proba")
+
+
+def _meta_kind(model: PythonObject, context: PythonObject) -> String:
+    """The connected meta schema of the model's class (bindings/trees_public_meta_door.mojo `meta_kind`, then
+    bindings/trees_public_boost_door.mojo `boost_kind`), or "" for any other class. Never raises."""
+    try:
+        return meta_kind(model, context)
+    except:
+        pass
+    try:
+        return boost_kind(model, context)
+    except:
+        return String("")
+
+
+def _explained(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The estimator the explainer evaluates (lane mf-shap3, 2026-11-23): `model` itself or, for a fitted
+    GridSearchCV / RandomizedSearchCV, its `best_estimator_` (the search's predict and predict_proba are its best
+    estimator's own, `family_msel_delegate`), with the search's words when it has none (refit=False or not
+    fitted). Read at construction and again at every values call, as the search's own predict reads it."""
+    var m = model
+    var native = prep_native_context(context)
+    var layouts = py_get(native, PythonObject("family_msel_search_layouts"))
+    if layouts is None:
+        return m
+    for _ in range(8):  # driver-loop: over nested searches (model structure)
+        if py_get(layouts, py_type(m)) is None:
+            return m
+        var fields = msel_search_fields(m, native)
+        if not py_contains(fields, "best_estimator_"):
+            raise Error("AttributeError: This " + String(py_type(m).__name__)
+                        + " instance was initialized with refit=False or is not fitted.")
+        m = fields["best_estimator_"]
+    return m
+
+
 def _method(model: PythonObject, context: PythonObject) raises -> String:
-    """The explained method: a classifier's predict_proba, else predict."""
+    """The explained method: a classifier's predict_proba, else predict. A hard VotingClassifier has no
+    predict_proba (scikit-learn's `available_if`): its predict (lane mf-shap3). A MultiOutputClassifier is
+    refused (`_MULTI_REFUSAL`)."""
     var kind = _class_value(model, "_estimator_type")
-    if (kind is not None and py_type(kind) is _b().str and String(kind) == "classifier"
-            and prep_estimator_has(model, "predict_proba", context)):
-        return "predict_proba"
+    if (kind is not None and py_type(kind) is _b().str and String(kind) == "classifier"):
+        var meta = _meta_kind(model, context)
+        if meta == "multioutput_classifier":
+            raise Error(_MULTI_REFUSAL)
+        var nk = trees_keys()
+        var hard = meta == "voting_classifier" and String(meta_attr(model, nk[].k_voting, PythonObject(""))) == "hard"
+        if not hard and prep_estimator_has(model, "predict_proba", context):
+            return "predict_proba"
     if not prep_estimator_has(model, "predict", context):
         raise Error("TypeError: the explained mojolearn estimator has no native predict")
     return "predict"
@@ -240,31 +308,61 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
             raise Error("NotImplementedError: " + name + " supports the identity and logit links, by name")
     # Only connected mojolearn estimators run here; their predict is a
     # compiled operation. A Python callable or foreign model is refused.
-    prep_estimator_admit(model, name, context)
+    # A fitted search is explained through its best estimator (`_explained`).
+    var explained = _explained(model, context)
+    prep_estimator_admit(explained, name, context)
     var seed = _seed(random_state, context)
-    _ = seed
-    var model_fields = _fields(model)
+    var model_fields = _fields(explained)
     if requested is None:
         requested = _get(model_fields, "numeric_mode")
     var nk = trees_keys()
     var mode = _tree_mode(requested if requested is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE))
     var table = trees_table(context, mode, "_mojolearn_x_trees")
-    var method = _method(model, context)
+    var method = _method(explained, context)
     var bg = _snapshot(data, "<f4", 2, "data", context, Python.dict())
     var nb = Int(py=bg.shape[0])
     var d = Int(py=bg.shape[1])
     if nb < 1:
         raise Error("ValueError: " + name + " requires at least one background row")
-    var out = _evaluate(model, method, bg, nb, context)
-    var k = Int(py=out.shape[1])
-    var ev = admitted_vector(k, "<f8", context)
-    # RUN (xtrees/agnostic_values_run.mojo): the background mean, then (shap KernelExplainer: expected_value =
-    # link(fnull)) the link on each output, through the glue entry of the x_trees image this tier connected.
-    agn_expected_run(xt_ref(_xk(table)), trees_address(out), nb, k,
-                     not permutation and String(link) == "logit", trees_address(ev))
-    _ = out
+    var logit = not permutation and String(link) == "logit"
+    var glue_key = _xk(table)
+    var glue = xt_ref(glue_key)
+    # The model on the background through the same native handle the values calls use (lane mf-shap3,
+    # 2026-11-23: it went through the model's door, `_evaluate`, before); a class with no member entry keeps
+    # its door. RUN (xtrees/agnostic_values_run.mojo): the background mean, then (shap KernelExplainer:
+    # expected_value = link(fnull)) the link on each output, through the glue entry of the x_trees image this
+    # tier connected.
+    var k = 0
+    var ev = PythonObject(None)
+    var em = _Member()
+    try:
+        var s = _State(explained, method, bg, table, mode, seed, nb, d, -1, PythonObject(None))
+        _open(em, s, bg, nb, context)
+        if em.meta or em.native:
+            k = em.k
+            ev = admitted_vector(k, "<f8", context)
+            var ev_at = trees_address(ev)
+            var bg_at = trees_address(bg)
+            if em.meta:
+                var meta = AgnMeta(em.meta_plan, bg_at, nb, d, False, glue_key.vendor == 0, _xr(em.meta_xt))
+                _expected_with(meta, em.meta_gil_free, glue, nb, k, logit, ev_at)
+                _ = meta^
+            else:
+                var handle = _handle_of(em, bg_at, nb, d, k, glue_key.vendor == 0, glue)
+                _expected_with(handle, em.gil_free, glue, nb, k, logit, ev_at)
+                _ = handle^
+        else:
+            var out = _evaluate(explained, method, bg, nb, context)
+            k = Int(py=out.shape[1])
+            ev = admitted_vector(k, "<f8", context)
+            agn_expected_run(glue, trees_address(out), nb, k, logit, trees_address(ev))
+            _ = out
+        _ = s^
+    finally:
+        _member_release(em)
+    _ = bg  # the background is read through the RUN above
     var expected = PythonObject(Float64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(ev))[0])) if k == 1 else ev
-    var dev = _device_forest(model, mode, permutation, table, context)
+    var dev = _device_forest(explained, mode, permutation, table, context)
     if dev is not None:
         var fitted = _get(model_fields, "n_features_in_")
         if Int(py=dev[1]) != k or fitted is None or py_type(fitted) is not _b().int or Int(py=fitted) != d:
@@ -316,7 +414,8 @@ def _state(fields: PythonObject, name: String, context: PythonObject) raises -> 
     var nk = trees_keys()
     var mode = _tree_mode(requested if requested is not None else py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE))
     var table = trees_table(context, mode, "_mojolearn_x_trees")
-    var model = _get(fields, "model")
+    # A fitted search: its best estimator now (`_explained`), as the search's own predict reads it.
+    var model = _explained(_get(fields, "model"), context)
     prep_estimator_admit(model, name, context)
     return _State(model, String(method), bg, table, mode, _seed(_get(fields, "random_state"), context),
                   Int(py=bg.shape[0]), Int(py=bg.shape[1]), _int(_get(fields, "n_outputs_"), "output count", True),
@@ -330,43 +429,51 @@ def _rows(x_source: PythonObject, s: _State, name: String, context: PythonObject
     return x
 
 
-# ---------------------------------------------------------------- the explained model as a native member
+# ---------------------------------------------------------------- the explained model as native members
 struct _Member(Movable):
-    """UNPACK of the explained estimator as a NATIVE MEMBER (core/member_abi.mojo) for one values call. `native`
-    False: the model's class has no member entry that serves this call, and the RUN evaluates it through
-    `_DoorModel` (its own compiled door, the GIL held). True: `held` is the fitted member state the estimator keeps
-    (bindings/member_held_door.mojo: imported at its first use, a hit on every later call until the estimator
-    changes) and `operation` the member operation of the explained method; the RUN calls it through `AgnMember`.
-    Released on every exit of the values call (`_member_release`)."""
+    """UNPACK of the explained estimator for one values call (or the construction's background call): its
+    NATIVE MEMBER (core/member_abi.mojo) or, for a meta-estimator, its members and the typed plan of its public
+    operation. `native`: `held` is the fitted member state the estimator keeps (bindings/member_held_door.mojo:
+    imported at its first use, a hit on every later call until the estimator changes) and `operation` the member
+    operation of the explained method; the RUN calls it through `AgnMember`. `meta` (lane mf-shap3, 2026-11-23;
+    the soft and regressor votes since lane mf-shap2): `meta_plan` (`AgnMetaPlan`, its members' plans by address
+    into `meta_opened`, each opened on its held state and closed by `_member_release`), the owners of its tables
+    (`meta_keep`) and its own x_trees table (`meta_xt`); the RUN folds it through `AgnMeta`. Neither: the class
+    (or a member's class) has no member entry that serves the call, and the RUN evaluates the model through
+    `_DoorModel`. `k`: the output columns the open found. `refusal`: words an open found the call must be refused
+    with (raised by `_open`). Released on every exit of the values call (`_member_release`)."""
     var native: Bool
     var held: MemberHeld
     var operation: Int
+    var k: Int
     # THE GIL RULE (core/member_abi.mojo): the held state's kind has `MEMBER_GIL_FREE` or `MEMBER_GIL_DOOR`: the
     # RUN runs with the GIL released by this door (one release per values call; it was one per chunk). False: it
     # runs with the GIL held. `parallel`: `MEMBER_GIL_FREE` itself, the chunks may run on parallel workers.
     var gil_free: Bool
     var parallel: Bool
     # The member writes the explained operation's output as float64 (a classifier's predict_proba on most
-    # families): the RUN narrows each chunk's words to float32 as `_evaluate` narrows the public output.
+    # families; on the label route, its codes as int64): the RUN narrows each chunk's words.
     var wide: Bool
     # A classifier explained through predict (lane mf-shap2, 2026-11-23): `labels` is its `classes_` narrowed to
     # a float32 Array once here (None: not this route), `labels_at` its address read here with the GIL held,
-    # `n_labels` its length. The member writes int32 codes and the RUN maps them through the glue gather.
+    # `n_labels` its length. The member writes codes and the RUN maps them through the glue gather. A hard
+    # vote's labels are the same three words (lane mf-shap3).
     var labels: PythonObject
     var labels_at: Int
     var n_labels: Int
-    # A vote as the model (lane mf-shap2, 2026-11-23; `_vote_open`): `vote` True, every member opened on its held
-    # native state (`vote_opened`, closed by `_member_release`), the typed members the RUN folds (`vote_members`,
-    # their plans by address into `vote_opened`), the vote's own x_trees table (`vote_xt`) and the owners of the
-    # members' class columns (`vote_keep`). `vote_parallel`: every member's kind is `MEMBER_GIL_FREE` and the
-    # vote's glue is the CPU column.
-    var vote: Bool
-    var vote_kind: Int
-    var vote_parallel: Bool
-    var vote_members: List[VoteMember]
-    var vote_opened: List[MemberHeldCall]
-    var vote_keep: PythonObject
-    var vote_xt: PythonObject
+    var meta: Bool
+    var meta_plan: AgnMetaPlan
+    var meta_opened: List[MemberHeldCall]
+    var meta_keep: PythonObject
+    var meta_xt: PythonObject
+    # Every opened member: tests its rows (no scan of X and the background), may run with the GIL released
+    # (`MEMBER_GIL_FREE` or `MEMBER_GIL_DOOR`), is `MEMBER_GIL_FREE` (the chunks may run on parallel workers when
+    # the meta's glue is the CPU column, `meta_parallel`).
+    var meta_tests: Bool
+    var meta_gil_free: Bool
+    var meta_free: Bool
+    var meta_parallel: Bool
+    var refusal: String
 
     def __init__(out self):
         self.gil_free = False
@@ -375,16 +482,20 @@ struct _Member(Movable):
         self.native = False
         self.held = MemberHeld()
         self.operation = MEMBER_OP_PREDICT
+        self.k = 0
         self.labels = PythonObject(None)
         self.labels_at = 0
         self.n_labels = 0
-        self.vote = False
-        self.vote_kind = AGN_VOTE_SOFT
-        self.vote_parallel = False
-        self.vote_members = List[VoteMember]()
-        self.vote_opened = List[MemberHeldCall]()
-        self.vote_keep = PythonObject(None)
-        self.vote_xt = PythonObject(None)
+        self.meta = False
+        self.meta_plan = AgnMetaPlan(AGN_META_SOFT)
+        self.meta_opened = List[MemberHeldCall]()
+        self.meta_keep = PythonObject(None)
+        self.meta_xt = PythonObject(None)
+        self.meta_tests = True
+        self.meta_gil_free = True
+        self.meta_free = True
+        self.meta_parallel = False
+        self.refusal = String("")
 
 
 def _member_release(mut em: _Member):
@@ -394,92 +505,30 @@ def _member_release(mut em: _Member):
     member_held_release(em.held)
     em.labels = PythonObject(None)
     em.labels_at = 0
-    _vote_release(em)
+    _meta_release(em)
 
 
-def _vote_release(mut em: _Member):
-    """Close every member a vote opened (each kept state stays with its estimator). Never raises."""
-    em.vote = False
-    for i in range(len(em.vote_opened)):  # driver-loop: over the opened vote members
-        member_held_close(em.vote_opened[i])
-    em.vote_opened = List[MemberHeldCall]()
-    em.vote_members = List[VoteMember]()
-    em.vote_keep = PythonObject(None)
-    em.vote_xt = PythonObject(None)
-
-
-def _vote_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject):
-    """UNPACK of a vote as the model, once per values call (the RUN then folds it through `AgnVote`):
-    VotingClassifier(voting='soft') explained through predict_proba, VotingRegressor through predict. Each member
-    is opened as the vote's own predict opens it (bindings/trees_public_meta_door.mojo `_member_open`: its held
-    native state, the explained rows proven for it, a tree, forest or extra-trees member not served), its class
-    columns and weight read here. Every member must be served by a kind that runs with the GIL released
-    (`MEMBER_GIL_FREE` or `MEMBER_GIL_DOOR`); any other member, class, method or width leaves `em.vote` False and
-    the model's own door answers (the fallback rule). The background is scanned once when a member does not test
-    its rows (the chunks mix cells of X and of the background). Never raises."""
-    comptime if not MEMBER_SET_NATIVE:
-        return
-    try:
-        var kind = meta_kind(s.model, context)
-        var nk = trees_keys()
-        var soft = kind == "voting_classifier"
-        if soft:
-            if s.method != "predict_proba" or String(meta_attr(s.model, nk[].k_voting, PythonObject(""))) != "soft":
-                return
-            if Int(py=meta_attr(s.model, nk[].k_n_classes_, PythonObject(0))) != s.k:
-                return
-        elif kind != "voting_regressor" or s.method != "predict" or s.k != 1:
-            return
-        var members = meta_attr(s.model, nk[].k_estimators_, Python.list())
-        var m = len(members)
-        if m < 1:
-            return
-        var weights = _voting_weights(s.model)
-        var operation = MEMBER_OP_PREDICT_PROBA if soft else MEMBER_OP_PREDICT
-        em.vote_keep = Python.list()
-        var all_test = True
-        var all_free = True
-        for i in range(m):  # driver-loop: over members (admission, once each)
-            var e = members[i]
-            var opened = meta_member_open(e, x, operation, soft, context, 0 if soft else 1)
-            if not opened.served or not opened.gil_free:
-                member_held_close(opened)
-                _vote_release(em)
-                return
-            var free = False
-            if opened.held.plan.member.can(MEMBER_GIL_FREE):
-                var probe = member_call_of(opened.held.plan, opened.held.state)
-                free = (member_call(opened.held.plan.member, MEMBER_OP_CAPABILITIES, probe) & MEMBER_GIL_FREE) != 0
-            all_free = all_free and free
-            all_test = all_test and opened.tests
-            var class_cols = 0
-            if soft:
-                var cols = _sub_cols(e, context)
-                _ = py_call(em.vote_keep.append, cols)
-                class_cols = trees_address(cols)
-            em.vote_members.append(VoteMember(len(em.vote_opened), opened.held.state, operation, opened.cols,
-                                              opened.dtype, class_cols, Float64(py=weights[i])))
-            em.vote_opened.append(opened^)
-        if not all_test and not trees_finite_f32(trees_address(s.bg), s.nb * s.d):
-            _vote_release(em)
-            return
-        _ = s.bg  # keep the background alive through the scan above
-        # The members' plans by address, now that `vote_opened` is final: the RUN reads them in place.
-        for i in range(len(em.vote_members)):  # driver-loop: over members
-            em.vote_members[i].plan = Int(UnsafePointer(to=em.vote_opened[em.vote_members[i].plan].held.plan))
-        em.vote_xt = _xt(py_fields(s.model), context)
-        em.vote_kind = AGN_VOTE_SOFT if soft else AGN_VOTE_REGRESS
-        em.vote_parallel = all_free and _xk(em.vote_xt).vendor == 0
-        em.vote = True
-    except:
-        _vote_release(em)
+def _meta_release(mut em: _Member):
+    """Close every member a meta-estimator's open opened (each kept state stays with its estimator). Never
+    raises."""
+    em.meta = False
+    for i in range(len(em.meta_opened)):  # driver-loop: over the opened members
+        member_held_close(em.meta_opened[i])
+    em.meta_opened = List[MemberHeldCall]()
+    em.meta_plan = AgnMetaPlan(AGN_META_SOFT)
+    em.meta_keep = PythonObject(None)
+    em.meta_xt = PythonObject(None)
+    em.meta_tests = True
+    em.meta_gil_free = True
+    em.meta_free = True
+    em.meta_parallel = False
 
 
 def _label_table(fields: PythonObject, classes: Int, context: PythonObject, mut em: _Member) raises -> Bool:
     """UNPACK of the label route: the estimator's `classes_` as a float32 Array (the cast the door's `_evaluate`
     made of its public predict's labels, element by element), once per values call. False (not served: the
-    door then answers, or raises its own words) when there is no `classes_`, it is not numeric, or its length is
-    not the member's class count."""
+    door then answers, or raises its own words) when there is no `classes_` or its length is not the member's
+    class count. Non-numeric labels: `em.refusal` (`_LABELS_REFUSAL`)."""
     var given = _get(fields, "classes_")
     if given is None:
         return False
@@ -487,6 +536,7 @@ def _label_table(fields: PythonObject, classes: Int, context: PythonObject, mut 
     try:
         table = _snapshot(given, "<f4", 1, "classes_", context, Python.dict())
     except:
+        em.refusal = String(_LABELS_REFUSAL)
         return False
     var count = Int(py=table.size)
     if count < 1 or (classes > 0 and count != classes):
@@ -497,34 +547,35 @@ def _label_table(fields: PythonObject, classes: Int, context: PythonObject, mut 
     return True
 
 
-def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject):
-    """UNPACK, once per values call (the RUN then calls the member through
-    `AgnMember`, the native model handle): the explained model's held member
-    state when its family serves the explained method (predict of a regressor
-    kind, predict_proba of a classifier, and predict of a classifier, whose
-    member writes int32 codes that the RUN maps to its `classes_` read here
-    once as float32: `_label_table`) and its output width is the one
-    construction recorded. Anything else (no mark, an admission or
-    import the family refuses, another width, an element type other than
-    float32 or float64 (int32 codes for a classifier's predict), a
-    non-numeric `classes_`, a classifier member that does not say its element type) leaves
-    `em` closed: the fallback rule, the model's own door then answers or
-    raises its own words. Never raises.
+def _rows_finite(s: _State, x: PythonObject, n: Int) raises -> Bool:
+    """The finite verdict of the explained rows and the background (every synthetic chunk mixes their cells),
+    one host scan each, for a model with a member that does not test its rows."""
+    var finite = trees_finite_f32(trees_address(x), n * s.d) and trees_finite_f32(trees_address(s.bg), s.nb * s.d)
+    _ = x  # keep the Python objects alive through the scans above
+    _ = s.bg
+    return finite
 
-    WHO REFUSES A NON-FINITE ROW. This door snapshots X (`x`, `n` rows) and
-    the background without a finite test: the model's own door tests every
-    chunk it is given. A member whose kind tests its rows
-    (MEMBER_CAN_TEST_ROWS) refuses a non-finite chunk in its own kernel pass
-    (the RUN raises, `refused` is set, and the model's door answers the call
-    again and raises its words):
-    no host scan here. Any other member reads admitted words, and every
-    chunk is a mix of cells of X and of the background, so both are scanned
-    once per values call (against the door's test of every synthesized
-    chunk); not finite = `em` stays closed and the door refuses."""
+
+def _member_open(mut em: _Member, s: _State, model: PythonObject, x: PythonObject, n: Int,
+                 context: PythonObject):
+    """UNPACK, once per values call (the RUN then calls the member through `AgnMember`, the native model
+    handle): `model`'s held member state (the explained model, or a Bagging's one batched forest) when its
+    family serves the explained method (predict of a regressor kind, predict_proba of a classifier, and
+    predict of a classifier, whose member writes int32 or int64 codes that the RUN maps to its `classes_` read
+    here once as float32: `_label_table`). Anything else (no mark, an admission or import the family refuses,
+    an element type other than float32 or float64, a classifier member that does not say its element type)
+    leaves `em` closed: the model then goes to `_meta_open`, else to its door. Never raises; a refusal is left
+    in `em.refusal`: an output width other than the one construction recorded (`s.k`, -1 at construction),
+    non-numeric `classes_`, non-finite rows for a member that does not test them.
+
+    WHO REFUSES A NON-FINITE ROW. A member whose kind tests its rows (MEMBER_CAN_TEST_ROWS) refuses a non-finite
+    chunk in its own kernel pass, and the RUN raises its words: no host scan here. Any other member reads
+    admitted words, and every chunk is a mix of cells of X and of the background, so both are scanned once per
+    values call (`_rows_finite`); not finite = `_NONFINITE`."""
     comptime if not MEMBER_SET_NATIVE:
         return
     try:
-        var plan = prep_estimator_plan(s.model, context)
+        var plan = prep_estimator_plan(model, context)
         if plan is None or py_get(plan, "member") is None:
             return
         var proba = s.method == "predict_proba"
@@ -532,9 +583,9 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
         var labelled = not proba and Bool(py=plan["classifier"])
         var b = _b()
         var member_context = plan["context"]
-        var fields = py_call(plan["fields_get"], s.model, py_type(s.model))
+        var fields = py_call(plan["fields_get"], model, py_type(model))
         var operation = MEMBER_OP_PREDICT_PROBA if proba else MEMBER_OP_PREDICT
-        var held = member_held(s.model, fields, plan, member_context, b,
+        var held = member_held(model, fields, plan, member_context, b,
                                MEMBER_CAN_PREDICT_PROBA if proba else MEMBER_CAN_PREDICT)
         if not held.published:
             return
@@ -567,16 +618,18 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
             cols = -1
         # float64 too (lane mf-shaprfe, 2026-11-23): LogisticRegression, SVC, the DART, GP and (on some routes)
         # GBDT classifiers and the naive Bayes / discriminant members on a float64-proba route write their
-        # predict_proba as float64; they went through `_DoorModel` (serial, GIL held) before.
-        var served = cols == s.k and (dtype == MEMBER_F32 or dtype == MEMBER_F64)
+        # predict_proba as float64.
+        var served = cols >= 1 and (dtype == MEMBER_F32 or dtype == MEMBER_F64)
         if labelled:
-            # int32 codes, one column, into a table of the member's classes (an int64-code member is not served).
-            served = cols == 1 and s.k == 1 and dtype == MEMBER_I32 and _label_table(fields, classes, context, em)
-        if served and not tests:
-            served = (trees_finite_f32(trees_address(x), n * s.d)
-                      and trees_finite_f32(trees_address(s.bg), s.nb * s.d))
-            _ = x  # keep the Python objects alive through the scans above
-            _ = s.bg
+            # codes, one column, into a table of the member's classes (int64 codes narrowed in the RUN).
+            served = (cols == 1 and (dtype == MEMBER_I32 or dtype == MEMBER_I64)
+                      and _label_table(fields, classes, context, em))
+        if served and s.k >= 0 and cols != s.k:
+            em.refusal = String(_WIDTH_CHANGED)
+            served = False
+        if served and not tests and not _rows_finite(s, x, n):
+            em.refusal = String(_NONFINITE)
+            served = False
         if not served:
             member_held_release(held)
             em.labels = PythonObject(None)
@@ -584,30 +637,412 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
             return
         em.held = held^
         em.operation = operation
+        em.k = cols
         em.gil_free = gil_free
         em.parallel = parallel
-        em.wide = dtype == MEMBER_F64 and not labelled
+        em.wide = dtype == MEMBER_F64 or dtype == MEMBER_I64
         em.native = True
     except:
         return
 
 
-struct _DoorModel(AgnModel):
-    """The explained estimator through its own compiled door (`_evaluate`), for a class with no member entry
-    that serves the call, for the device forest route's one call on the explained rows, and for the call again
-    after a member refusal. Serial, with the GIL held: the one place the RUN's model reaches Python objects.
+def _meta_take(mut em: _Member, var opened: MemberHeldCall, class_cols: Int, weight: Float64,
+               last: Bool) raises -> Bool:
+    """One opened member of the explained meta-estimator into `em.meta_plan` (its plan's address is set once
+    every member is open: `_meta_plans`), its GIL words folded into `em`. False (closed) when it is not served.
+    `last`: the final estimator of a Stacking (its rows are the meta features, not X)."""
+    if not opened.served:
+        member_held_close(opened)
+        return False
+    if not last:
+        em.meta_tests = em.meta_tests and opened.tests
+    else:
+        em.meta_plan.final_tests = opened.tests
+    em.meta_gil_free = em.meta_gil_free and opened.gil_free
+    var free = False
+    if opened.held.plan.member.can(MEMBER_GIL_FREE):
+        var probe = member_call_of(opened.held.plan, opened.held.state)
+        free = (member_call(opened.held.plan.member, MEMBER_OP_CAPABILITIES, probe) & MEMBER_GIL_FREE) != 0
+    em.meta_free = em.meta_free and free
+    var vm = VoteMember(len(em.meta_opened), opened.held.state, opened.operation, opened.cols, opened.dtype,
+                        class_cols, weight)
+    if last:
+        em.meta_plan.final_est.append(vm)
+    else:
+        em.meta_plan.members.append(vm)
+    em.meta_opened.append(opened^)
+    return True
 
-    WHO STILL COMES HERE (lane mf-shap2, 2026-11-23; every float32 and float64 member output, every classifier's
-    int32 codes through the label map, CategoricalNB and the soft or regressor vote over native members are
-    served): the meta-estimators with no typed RUN over held members for synthetic rows (AdaBoost*: its members
-    are one-tree door blocks over the staged X; Bagging*: its batched forest and staged-X routes and the per
-    member feature gather; Stacking*: its final estimator is predicted through its public door; MultiOutput*:
-    its predict_proba is a list and its predict is 2-D labels; OneVsRestClassifier and CalibratedClassifierCV:
-    their member UNPACK reads X in the meta door), Pipeline and the search CVs (no typed predict RUN); a vote
-    with a tree, forest or extra-trees member (the vote's own rule: its door predicts those from one device
-    copy of X) or a member kind that needs the GIL; a classifier with non-numeric `classes_` (the door raises
-    its own words); a member output of another width or element type; the device forest route's one call; the
-    call again after a member refusal (the door raises the estimator's own words)."""
+
+def _meta_member(mut em: _Member, e: PythonObject, operation: Int, classifier: Bool, width: Int,
+                 class_cols: Int, weight: Float64, last: Bool, context: PythonObject) raises -> Bool:
+    """`_meta_take` of member `e` opened by the meta door's X-FREE MEMBER UNPACK
+    (bindings/trees_public_meta_door.mojo `meta_member_open`): every family a public predict serves, the trees
+    too (the explainers stage no device copy of X: every member is called on the synthetic rows)."""
+    return _meta_take(em, meta_member_open(e, operation, classifier, context, width, False), class_cols, weight,
+                      last)
+
+
+def _meta_cols(mut em: _Member, e: PythonObject, context: PythonObject) raises -> Int:
+    """A member's class codes into the ensemble (`_sub_cols`, int32), kept alive in `em.meta_keep`: its
+    address."""
+    var cols = _sub_cols(e, context)
+    _ = py_call(em.meta_keep.append, cols)
+    return trees_address(cols)
+
+
+def _vote_plan(mut em: _Member, s: _State, kind: String, context: PythonObject) raises -> Bool:
+    """VotingClassifier soft (predict_proba: `vote_soft_run`) and hard (predict: `vote_codes_run`, the codes
+    mapped to its `classes_` as float32), VotingRegressor (predict: `vote_regress_run`): every member with its
+    weight (`_voting_weights`)."""
+    var nk = trees_keys()
+    var model = s.model
+    var classifier = kind == "voting_classifier"
+    var soft = classifier and String(meta_attr(model, nk[].k_voting, PythonObject(""))) == "soft"
+    if (soft and s.method != "predict_proba") or (not soft and s.method != "predict"):
+        return False
+    var members = meta_attr(model, nk[].k_estimators_, Python.list())
+    var m = len(members)
+    if m < 1:
+        return False
+    var weights = _voting_weights(model)
+    var classes = Int(py=meta_attr(model, nk[].k_n_classes_, PythonObject(0))) if classifier else 0
+    em.meta_plan = AgnMetaPlan(AGN_META_SOFT if soft else (AGN_META_HARD if classifier else AGN_META_REGRESS))
+    for i in range(m):  # driver-loop: over members (admission, once each)
+        var e = members[i]
+        var weight = Float64(py=weights[i])
+        var ok = False
+        if soft:
+            var class_cols = _meta_cols(em, e, context)
+            ok = _meta_member(em, e, MEMBER_OP_PREDICT_PROBA, True, 0, class_cols, weight, False, context)
+        elif classifier:
+            ok = _meta_member(em, e, MEMBER_OP_PREDICT, True, 0, 0, weight, False, context)
+        else:
+            ok = _meta_member(em, e, MEMBER_OP_PREDICT, False, 1, 0, weight, False, context)
+        if not ok:
+            return False
+    em.meta_plan.classes = classes
+    em.meta_plan.k = classes if soft else 1
+    if classifier and not soft:
+        if not _label_table(_fields(model), classes, context, em):
+            return False
+        em.meta_plan.labels = em.labels_at
+        em.meta_plan.n_labels = em.n_labels
+    return True
+
+
+def _bag_plan(mut em: _Member, s: _State, classifier: Bool, context: PythonObject) raises -> Bool:
+    """Bagging*: every member (`_estimators`) on its feature subset (`bag_member_columns`: the rows themselves,
+    or its int32 columns gathered in the RUN), `bag_predict_run`. The batched route is `_batched_member`'s."""
+    if (classifier and s.method != "predict_proba") or (not classifier and s.method != "predict"):
+        return False
+    var fields = py_fields(s.model)
+    var members = fields["_estimators"]
+    var features = fields["estimators_features_"]
+    _ = py_call(em.meta_keep.append, features)
+    var m = len(members)
+    if m < 1:
+        return False
+    var classes = len(fields["classes_"]) if classifier else 0
+    em.meta_plan = AgnMetaPlan(AGN_META_BAG)
+    var operation = MEMBER_OP_PREDICT_PROBA if classifier else MEMBER_OP_PREDICT
+    for i in range(m):  # driver-loop: over the member estimators (admission, once each)
+        var e = members[i]
+        var sub = PythonObject(None)
+        var class_cols = 0
+        if classifier:
+            sub = _sub_cols(e, context)
+            _ = py_call(em.meta_keep.append, sub)
+            class_cols = trees_address(sub)
+        if not _meta_take(em, bag_member_open(e, sub, operation, classifier, context), class_cols, 1.0, False):
+            return False
+        var cols = features[i]
+        em.meta_plan.features.append(bag_member_columns(cols, s.d))
+        em.meta_plan.widths.append(len(cols))
+    em.meta_plan.classifier = classifier
+    em.meta_plan.classes = classes
+    em.meta_plan.k = classes if classifier else 1
+    return True
+
+
+def _stack_plan(mut em: _Member, s: _State, classifier: Bool, context: PythonObject) raises -> Bool:
+    """Stacking*: the members of its meta features (`stacking_layout`: each asked as `stack_method_` says),
+    then its final estimator (`final_estimator_`) over them: a classifier's predict_proba at its class
+    columns, a regressor's predict."""
+    if (classifier and s.method != "predict_proba") or (not classifier and s.method != "predict"):
+        return False
+    var nk = trees_keys()
+    var layout = stacking_layout(s.model, s.d, context)
+    var members = layout.members
+    if len(members) < 1:
+        return False
+    em.meta_plan = AgnMetaPlan(AGN_META_STACK)
+    for i in range(len(members)):  # driver-loop: over members (admission, once each)
+        var kind = layout.kinds[i]
+        var operation = MEMBER_OP_PREDICT if kind == STACK_PREDICT else (
+            MEMBER_OP_PREDICT_PROBA if kind == STACK_PROBA else MEMBER_OP_DECISION)
+        if not _meta_member(em, members[i], operation, kind != STACK_PREDICT, 0, 0, 1.0, False, context):
+            return False
+    var final_est = meta_attr(s.model, nk[].k_final_estimator_, PythonObject(None))
+    if final_est is None:
+        return False
+    var ok = False
+    if classifier:
+        var class_cols = _meta_cols(em, final_est, context)
+        ok = _meta_member(em, final_est, MEMBER_OP_PREDICT_PROBA, True, 0, class_cols, 1.0, True, context)
+    else:
+        ok = _meta_member(em, final_est, MEMBER_OP_PREDICT, False, 1, 0, 1.0, True, context)
+    if not ok:
+        return False
+    em.meta_plan.stack_kinds = layout.kinds.copy()
+    em.meta_plan.classes = layout.k
+    em.meta_plan.binary = layout.binary
+    em.meta_plan.passthrough = layout.passthrough
+    em.meta_plan.meta_width = layout.width
+    em.meta_plan.classifier = classifier
+    em.meta_plan.k = layout.k if classifier else 1
+    return True
+
+
+def _ovr_plan(mut em: _Member, s: _State, context: PythonObject) raises -> Bool:
+    """OneVsRestClassifier.predict_proba: two classes, its first member's probability column of code 1; more,
+    one member per class (`ovr_member_words`: by predict_proba, the positive column) folded by
+    `ovr_assemble_run`."""
+    if s.method != "predict_proba":
+        return False
+    var nk = trees_keys()
+    var classes = len(meta_attr(s.model, nk[].k_classes_, Python.list()))
+    var members = meta_attr(s.model, nk[].k_estimators_, Python.list())
+    if classes < 2 or len(members) < 1 or (classes > 2 and len(members) != classes):
+        return False
+    em.meta_plan = AgnMetaPlan(AGN_META_OVR)
+    var count = 1 if classes == 2 else len(members)
+    for j in range(count):  # driver-loop: over members (admission, once each)
+        var words = ovr_member_words(members[j], False, context)
+        em.meta_plan.at.append(words[1])
+        if not _meta_member(em, members[j], MEMBER_OP_PREDICT_PROBA, True, 0, 0, 1.0, False, context):
+            return False
+    em.meta_plan.classes = classes
+    em.meta_plan.k = classes
+    return True
+
+
+def _cal_plan(mut em: _Member, s: _State, context: PythonObject) raises -> Bool:
+    """CalibratedClassifierCV.predict_proba (two classes or more): each (member, calibrators) pair's member
+    scores (decision_function when it has one, else predict_proba) and its words (`calibrated_pair_codes`,
+    `calibrated_pair_words`), `calibrated_proba_run`."""
+    if s.method != "predict_proba":
+        return False
+    var nk = trees_keys()
+    var classes = len(meta_attr(s.model, nk[].k_classes_, Python.list()))
+    var pairs = meta_attr(s.model, nk[].k_calibrated_classifiers_, Python.list())
+    if classes < 2 or len(pairs) < 1:
+        return False
+    em.meta_plan = AgnMetaPlan(AGN_META_CALIBRATED)
+    var cal_pairs = List[CalPair]()
+    var cals = List[CalFit]()
+    var keep = em.meta_keep
+    for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs (admission, once each)
+        var e = pairs[i][0]
+        var decision = prep_estimator_has(e, "decision_function", context)
+        var codes = calibrated_pair_codes(e, classes, keep, context)
+        var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA
+        if not _meta_member(em, e, operation, True, 0, codes[0], 1.0, False, context):
+            return False
+        var cols = em.meta_plan.members[len(em.meta_plan.members) - 1].cols
+        calibrated_pair_words(e, pairs[i][1], classes, cols, codes[0], codes[1], keep, cal_pairs, cals, context)
+    em.meta_plan.pairs = cal_pairs^
+    em.meta_plan.cals = cals^
+    em.meta_plan.classes = classes
+    em.meta_plan.k = classes
+    return True
+
+
+def _ada_plan(mut em: _Member, s: _State, classifier: Bool, context: PythonObject) raises -> Bool:
+    """AdaBoostClassifier.predict_proba (each member's int32 codes, `ada_classifier_run`) and
+    AdaBoostRegressor.predict (each member's float32 predictions, the weighted median), the weights read once
+    as float64 (`_ada_weights`)."""
+    if (classifier and s.method != "predict_proba") or (not classifier and s.method != "predict"):
+        return False
+    var fields = py_fields(s.model)
+    var members = fields["estimators_"]
+    var alphas = _ada_weights(fields["estimator_weights_"], context)
+    var m = len(members)
+    if m < 1 or len(alphas) < m:
+        return False
+    var classes = len(fields["classes_"]) if classifier else 0
+    if classifier and classes < 2:
+        return False
+    em.meta_plan = AgnMetaPlan(AGN_META_ADA)
+    for j in range(m):  # driver-loop: over the member estimators (admission, once each)
+        if not _meta_member(em, members[j], MEMBER_OP_PREDICT, classifier, 0 if classifier else 1, 0, 1.0, False,
+                            context):
+            return False
+    em.meta_plan.alphas = alphas^
+    em.meta_plan.classifier = classifier
+    em.meta_plan.classes = classes
+    em.meta_plan.k = classes if classifier else 1
+    return True
+
+
+def _multi_plan(mut em: _Member, s: _State, context: PythonObject) raises -> Bool:
+    """MultiOutputRegressor.predict: its one multi-output ridge (`_multi_ridge`: `rm_predict`, float32, as its
+    public predict), else every member's float32 prediction at its column (`vote_transform_run`)."""
+    if s.method != "predict":
+        return False
+    var nk = trees_keys()
+    var members = meta_attr(s.model, nk[].k_estimators_, Python.list())
+    var m = len(members)
+    if m < 1:
+        return False
+    var mr = meta_attr(s.model, nk[].k__multi_ridge, PythonObject(None))
+    if mr is not None:
+        em.meta_plan = AgnMetaPlan(AGN_META_RIDGE)
+        em.meta_plan.ridge.append(multioutput_ridge_ref(members, context))
+        _ = py_call(em.meta_keep.append, mr)
+        em.meta_plan.ridge_coef = trees_address(mr[0])
+        em.meta_plan.ridge_icpt = trees_address(mr[1])
+        em.meta_plan.k = Int(py=mr[2])
+        # The ridge kernel reads admitted words: X and the background are proven finite; its call is released
+        # as the public predict releases it; no parallel-worker trace, so the chunks run in order (each call
+        # splits its own rows).
+        em.meta_tests = False
+        em.meta_free = False
+        return True
+    em.meta_plan = AgnMetaPlan(AGN_META_COLUMNS)
+    for j in range(m):  # driver-loop: over members (outputs; admission, once each)
+        if not _meta_member(em, members[j], MEMBER_OP_PREDICT, False, 1, 0, 1.0, False, context):
+            return False
+    em.meta_plan.k = m
+    return True
+
+
+def _meta_plans(mut em: _Member):
+    """The members' plans by address into `em.meta_opened`, now that it is final: the RUN reads them in place."""
+    for i in range(len(em.meta_plan.members)):  # driver-loop: over members
+        var j = em.meta_plan.members[i].plan
+        var at = Int(UnsafePointer(to=em.meta_opened[j].held.plan))
+        em.meta_plan.members[i].plan = at
+    for i in range(len(em.meta_plan.final_est)):  # driver-loop: the final estimator
+        var j = em.meta_plan.final_est[i].plan
+        var at = Int(UnsafePointer(to=em.meta_opened[j].held.plan))
+        em.meta_plan.final_est[i].plan = at
+
+
+def _meta_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject):
+    """UNPACK of a meta-estimator as the model, once per values call (the RUN then evaluates it through
+    `AgnMeta`, by the RUN its public operation runs; lane mf-shap3, 2026-11-23, the votes since lane mf-shap2):
+    Voting soft, hard and regressor, Bagging, Stacking, OneVsRest, CalibratedClassifierCV, AdaBoost,
+    MultiOutputRegressor. Every member is opened on its held native state through the meta doors' X-free member
+    UNPACK (a tree, forest or extra-trees member too: the public predicts stage one device copy of X for those,
+    the synthetic rows have none), its tables read here once. A member any family does not serve (no member
+    entry: a class without a mark, a meta-estimator as a member) leaves `em.meta` False and the model's door
+    answers. Never raises; `em.refusal` as `_member_open`. The rows are scanned once when a member does not
+    test them (every chunk mixes cells of X and of the background)."""
+    comptime if not MEMBER_SET_NATIVE:
+        return
+    try:
+        var kind = _meta_kind(s.model, context)
+        if kind == "":
+            return
+        em.meta_keep = Python.list()
+        var ok = False
+        if kind == "voting_classifier" or kind == "voting_regressor":
+            ok = _vote_plan(em, s, kind, context)
+        elif kind == "bagging_classifier" or kind == "bagging_regressor":
+            ok = _bag_plan(em, s, kind == "bagging_classifier", context)
+        elif kind == "stacking_classifier" or kind == "stacking_regressor":
+            ok = _stack_plan(em, s, kind == "stacking_classifier", context)
+        elif kind == "ovr":
+            ok = _ovr_plan(em, s, context)
+        elif kind == "calibrated":
+            ok = _cal_plan(em, s, context)
+        elif kind == "ada_classifier" or kind == "ada_regressor":
+            ok = _ada_plan(em, s, kind == "ada_classifier", context)
+        elif kind == "multioutput_regressor":
+            ok = _multi_plan(em, s, context)
+        if ok and s.k >= 0 and em.meta_plan.k != s.k:
+            em.refusal = String(_WIDTH_CHANGED)
+            ok = False
+        if ok and not em.meta_tests and not _rows_finite(s, x, n):
+            em.refusal = String(_NONFINITE)
+            ok = False
+        if not ok:
+            _meta_release(em)
+            return
+        _meta_plans(em)
+        em.meta_xt = _xt(py_fields(s.model), context)
+        em.meta_parallel = em.meta_free and _xk(em.meta_xt).vendor == 0
+        em.k = em.meta_plan.k
+        em.meta = True
+    except:
+        _meta_release(em)
+
+
+def _batched_member(model: PythonObject, context: PythonObject) -> PythonObject:
+    """A Bagging estimator fitted on the batched route (`_batched`): its one forest, whose predict_proba (or
+    predict) is the ensemble's (float32 widened to float64: narrowed back to the same words); else None. Never
+    raises."""
+    try:
+        var kind = _meta_kind(model, context)
+        if kind != "bagging_classifier" and kind != "bagging_regressor":
+            return PythonObject(None)
+        var batched = py_get(py_fields(model), "_batched")
+        if batched is None:
+            return PythonObject(None)
+        return batched[0]
+    except:
+        return PythonObject(None)
+
+
+def _open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject) raises:
+    """UNPACK of the explained model over the rows `x` (`n` rows; the background at construction): its own
+    member (`_member_open`), a batched Bagging's forest, else a meta-estimator over members (`_meta_open`). An
+    open that found the call must be refused raises its words here. Nothing served: the door answers."""
+    _member_open(em, s, s.model, x, n, context)
+    if not em.native and len(em.refusal) == 0:
+        var inner = _batched_member(s.model, context)
+        if inner is not None:
+            _member_open(em, s, inner, x, n, context)
+        else:
+            _meta_open(em, s, x, n, context)
+    if len(em.refusal) > 0:
+        raise Error(em.refusal)
+
+
+def _handle_of(mut em: _Member, x: Int, n: Int, d: Int, k: Int, host: Bool, glue: EntryRef) raises -> AgnMember:
+    """The native model handle over the opened member (`em.native`); the plan it reads stays in `em`."""
+    var plan_addr = Int(UnsafePointer(to=em.held.plan))
+    return AgnMember(em.held.plan.member, plan_addr, em.held.state, em.operation, x, n, d, k, em.parallel, em.wide,
+                     host, glue, em.labels_at, em.n_labels)
+
+
+def _expected_with[M: AgnModel](mut model: M, gil_free: Bool, glue: EntryRef, nb: Int, k: Int, logit: Bool,
+                                ev: Int) raises:
+    """The construction's RUN: the model on the background (`model.explained()`, the GIL released when every
+    member may run without it), its mean and link into `ev`."""
+    if gil_free:
+        with GILReleased(Python()):
+            agn_expected_run(glue, model.explained(), nb, k, logit, ev)
+    else:
+        agn_expected_run(glue, model.explained(), nb, k, logit, ev)
+
+
+struct _DoorModel(AgnModel):
+    """The explained estimator through its own compiled door (`_evaluate`, per chunk), serial, with the GIL held:
+    the one place the RUN's model reaches Python objects.
+
+    WHO STILL COMES HERE (lane mf-shap3, 2026-11-23): ONLY an explained estimator whose class, or the class of a
+    member of the explained meta-estimator, has no member entry that serves the call: a class without its own
+    member mark (the subclasses `_classical_host.py` binds to the host, HostLogisticRegression, HostSVC, HostSVR,
+    HostKMeans, HostKernelRidge, HostIsolationForest and the _HostCD estimators; IsolationForest, the label
+    propagation estimators, RFE, the forecasters; marks are their families' and lane mf-cal3's), a
+    meta-estimator used as a member (no meta member kind yet), a member asked for a method its family does not
+    serve (a classifier member a Stacking asks for predict). Everything else is native: every member family,
+    the votes (soft and hard), Bagging, Stacking, OneVsRest, CalibratedClassifierCV, AdaBoost,
+    MultiOutputRegressor, the search CVs' best estimator, the device forest's one call; a refusal (a member's
+    non-finite chunk, a changed width, non-numeric labels, a MultiOutputClassifier) is raised natively in its
+    own words (before, this door answered the whole call again only to raise its words)."""
     var model: PythonObject
     var method: String
     var context: PythonObject
@@ -699,9 +1134,20 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
     return result
 
 
+def _kernel_with[M: AgnModel](mut model: M, gil_free: Bool, glue: EntryRef, req: AgnRequest, ns: Int, nl: Int,
+                              logit: Bool) raises:
+    """RUN `agn_kernel_values_run` over `model`, the GIL released once around it when every member may run
+    without it. A member refusal raises its own words."""
+    if gil_free:
+        with GILReleased(Python()):
+            agn_kernel_values_run(glue, req, ns, nl, logit, model)
+    else:
+        agn_kernel_values_run(glue, req, ns, nl, logit, model)
+
+
 def _kernel_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
                         mut em: _Member) raises -> PythonObject:
-    """UNPACK (settings, rows, the native member), RUN (xtrees/agnostic_values_run.mojo
+    """UNPACK (settings, rows, the native member or meta-estimator), RUN (xtrees/agnostic_values_run.mojo
     `agn_kernel_values_run`), PACK (the shaped float64 values)."""
     var name = String("KernelExplainer")
     var nsamples = args[1]
@@ -733,54 +1179,19 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, context: Pytho
     var req = _request(s, x, phi, n, glue_key)
     var fnull = _get(fields, "_fnull")
     var nl = trees_address(fnull)
-    # A forest evaluated on the device needs the model once (fx, through its door): no member state is
-    # imported for it. Every other route calls the model per chunk.
-    if s.dev is None:
-        _member_open(em, s, x, n, context)
-        if not em.native:
-            _vote_open(em, s, x, n, context)
-    else:
-        _forest_words(s.dev, s.bg, req)
-    var done = False
-    if em.vote:
-        var refused = List[Int](length=1, fill=0)
-        # The vote's glue, resolved here with the GIL held; the members' plans stay in `em` through the RUN.
-        var vote = AgnVote(em.vote_members, em.vote_kind, req.x, n, d, k, em.vote_parallel, req.host,
-                           Int(refused.unsafe_ptr()), _xr(em.vote_xt))
-        try:
-            var py = Python()
-            with GILReleased(py):
-                agn_kernel_values_run(glue, req, ns, nl, logit, vote)
-            done = True
-        except problem:
-            if refused[0] == 0:
-                raise problem^
-            # A member refused: the model's own door answers the whole call again, and raises its own words.
-        _ = vote^
-        _ = refused^
-    if em.native:
-        var refused = List[Int](length=1, fill=0)
-        # The native model handle over the held state; the plan it reads stays in `em` through the RUN.
-        var plan_addr = Int(MutPointer(to=em.held.plan))
-        var member = em.held.plan.member
-        var handle = AgnMember(member, plan_addr, em.held.state, em.operation, req.x, n, d, k, em.parallel,
-                               Int(refused.unsafe_ptr()), em.wide, req.host, glue, em.labels_at, em.n_labels)
-        try:
-            if em.gil_free:
-                var py = Python()
-                with GILReleased(py):
-                    agn_kernel_values_run(glue, req, ns, nl, logit, handle)
-            else:
-                agn_kernel_values_run(glue, req, ns, nl, logit, handle)
-            done = True
-        except problem:
-            if refused[0] == 0:
-                raise problem^
-            # The member refused (a non-finite chunk of a kind that tests its rows): the model's own door
-            # answers the whole call again, and raises its own words.
+    # The device forest route needs the model once (fx), through the same handle as every other route.
+    _forest_words(s.dev, s.bg, req)
+    _open(em, s, x, n, context)
+    if em.meta:
+        # The meta's glue, resolved here with the GIL held; the members' plans stay in `em` through the RUN.
+        var meta = AgnMeta(em.meta_plan, req.x, n, d, em.meta_parallel, req.host, _xr(em.meta_xt))
+        _kernel_with(meta, em.meta_gil_free, glue, req, ns, nl, logit)
+        _ = meta^
+    elif em.native:
+        var handle = _handle_of(em, req.x, n, d, k, req.host, glue)
+        _kernel_with(handle, em.gil_free, glue, req, ns, nl, logit)
         _ = handle^
-        _ = refused^
-    if not done:
+    else:
         var door = _DoorModel(s, x, n, context)
         agn_kernel_values_run(glue, req, ns, nl, logit, door)
         _ = door^
@@ -848,6 +1259,29 @@ def _linear_block(s: _State, context: PythonObject) raises -> PythonObject:
     return Python.tuple(wb, link)
 
 
+struct _Unevaluated(AgnModel):
+    """The model of a Permutation SHAP route that never evaluates it (the device forest, the resident linear
+    block: both evaluate on the device per chunk). Any call raises."""
+
+    def __init__(out self):
+        pass
+
+    def explained(mut self) raises -> Int:
+        raise Error("RuntimeError: the explained model is not evaluated on this route")
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        raise Error("RuntimeError: the explained model is not evaluated on this route")
+
+    def rows(mut self, n: Int) raises -> Int:
+        raise Error("RuntimeError: the explained model is not evaluated on this route")
+
+    def workers(self) -> Int:
+        return 1
+
+    def worker(self) raises -> Self:
+        return Self()
+
+
 def _permutation_values(fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """PermutationExplainer values; the member state opened inside is
     released on every exit."""
@@ -860,10 +1294,22 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
     return result
 
 
+def _permutation_with[M: AgnModel](mut model: M, gil_free: Bool, glue: EntryRef, req: AgnRequest, npm: Int,
+                                   wb: Int, wb_link: Int) raises:
+    """RUN `agn_permutation_values_run` over `model`, the GIL released once around it when every member may run
+    without it. A member refusal raises its own words."""
+    if gil_free:
+        with GILReleased(Python()):
+            agn_permutation_values_run(glue, req, npm, wb, wb_link, model)
+    else:
+        agn_permutation_values_run(glue, req, npm, wb, wb_link, model)
+
+
 def _permutation_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
                              mut em: _Member) raises -> PythonObject:
-    """UNPACK (settings, rows, the device forest, the resident linear block or the native member), RUN
-    (xtrees/agnostic_values_run.mojo `agn_permutation_values_run`), PACK (the shaped float64 values)."""
+    """UNPACK (settings, rows, the device forest, the resident linear block, the native member or
+    meta-estimator), RUN (xtrees/agnostic_values_run.mojo `agn_permutation_values_run`), PACK (the shaped float64
+    values)."""
     var name = String("PermutationExplainer")
     var b = _b()
     var s = _state(fields, name, context)
@@ -893,53 +1339,27 @@ def _permutation_values_over(fields: PythonObject, args: PythonObject, context: 
             # chunk; only x rows and phi cross.
             wb = trees_address(lin[0])
             wb_link = Int(py=lin[1])
+    if req.device_forest() or lin is not None:
+        # Neither route calls the model (the forest and the linear block are evaluated on the device per chunk):
+        # nothing is opened (lane mf-shap3: the door's evaluator stood here, never called).
+        var unused = _Unevaluated()
+        _permutation_with(unused, True, glue, req, npm, wb, wb_link)
+        _ = unused^
+    else:
+        # The explained model as a native member, else a meta-estimator over native members.
+        _open(em, s, x, n, context)
+        if em.meta:
+            var meta = AgnMeta(em.meta_plan, req.x, n, d, em.meta_parallel, req.host, _xr(em.meta_xt))
+            _permutation_with(meta, em.meta_gil_free, glue, req, npm, wb, wb_link)
+            _ = meta^
+        elif em.native:
+            var handle = _handle_of(em, req.x, n, d, k, req.host, glue)
+            _permutation_with(handle, em.gil_free, glue, req, npm, wb, wb_link)
+            _ = handle^
         else:
-            # Past the device forest and the resident linear routes (neither calls the model per chunk): the
-            # explained model as a native member, else a vote over native members.
-            _member_open(em, s, x, n, context)
-            if not em.native:
-                _vote_open(em, s, x, n, context)
-    var done = False
-    if em.vote:
-        var refused = List[Int](length=1, fill=0)
-        var vote = AgnVote(em.vote_members, em.vote_kind, req.x, n, d, k, em.vote_parallel, req.host,
-                           Int(refused.unsafe_ptr()), _xr(em.vote_xt))
-        try:
-            var py = Python()
-            with GILReleased(py):
-                agn_permutation_values_run(glue, req, npm, wb, wb_link, vote)
-            done = True
-        except problem:
-            if refused[0] == 0:
-                raise problem^
-            # A member refused: the model's own door answers the whole call again, and raises its words.
-        _ = vote^
-        _ = refused^
-    if em.native:
-        var refused = List[Int](length=1, fill=0)
-        # The native model handle over the held state; the plan it reads stays in `em` through the RUN.
-        var plan_addr = Int(MutPointer(to=em.held.plan))
-        var member = em.held.plan.member
-        var handle = AgnMember(member, plan_addr, em.held.state, em.operation, req.x, n, d, k, em.parallel,
-                               Int(refused.unsafe_ptr()), em.wide, req.host, glue, em.labels_at, em.n_labels)
-        try:
-            if em.gil_free:
-                var py = Python()
-                with GILReleased(py):
-                    agn_permutation_values_run(glue, req, npm, wb, wb_link, handle)
-            else:
-                agn_permutation_values_run(glue, req, npm, wb, wb_link, handle)
-            done = True
-        except problem:
-            if refused[0] == 0:
-                raise problem^
-            # The member refused: the model's own door answers the whole call again, and raises its words.
-        _ = handle^
-        _ = refused^
-    if not done:
-        var door = _DoorModel(s, x, n, context)
-        agn_permutation_values_run(glue, req, npm, wb, wb_link, door)
-        _ = door^
+            var door = _DoorModel(s, x, n, context)
+            agn_permutation_values_run(glue, req, npm, wb, wb_link, door)
+            _ = door^
     _ = lin
     _ = x
     _ = s.bg  # the background the RUN read through req.bg
