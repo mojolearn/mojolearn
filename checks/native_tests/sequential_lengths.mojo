@@ -61,6 +61,13 @@ def _mix(mut digest: UInt64, values: List[Float32]):
         digest = (digest ^ UInt64(bitcast[DType.uint32](values[i]))) * UInt64(1099511628211)
 
 
+def _seal(values: List[Float32]) -> UInt64:
+    """A unit's words as one FNV digest, taken when the unit returns and again before they are read."""
+    var digest = UInt64(1469598103934665603)
+    _mix(digest, values)
+    return digest
+
+
 def _fp(values: List[Float32]) -> FP:
     return FP(unsafe_from_address=Int(values.unsafe_ptr()))
 
@@ -307,6 +314,16 @@ def run_scan_mask[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
         _same(tag + " backward dGH, scan vs fused step", _down(ex, scan.dgh, n), dgh)
         _same(tag + " backward dGX, GEMM + cell vs fused step", _down(ex, split.dgx, n), dgx)
         _same(tag + " backward dGH, GEMM + cell vs fused step", _down(ex, split.dgh, n), dgh)
+        # lane seq-lengths-nan: the inputs every route read are still the words uploaded. On the host column the
+        # ten units share one heap; a word another unit's thread wrote into this unit's inputs makes every route
+        # agree on a wrong value (nvc1-0002: host h_1[0, 0] NaN on the chain and the scan alike, the device's
+        # -0.97115976), which only the device compare saw.
+        _same(tag + " inputs unchanged: W_hh and b_hh", ww, _down(ex, dw, len(ww)))
+        _same(tag + " inputs unchanged: chain GX", gxw, _down(ex, chain.gx, n))
+        _same(tag + " inputs unchanged: scan GX", gxw, _down(ex, scan.gx, n))
+        _same(tag + " inputs unchanged: GEMM + cell GX", gxw, _down(ex, split.gx, n))
+        _same(tag + " inputs unchanged: upstream dH", upw, _down(ex, up, len(upw)))
+        _same(tag + " inputs unchanged: lengths", lw, _down(ex, lens, _KB))
         words.extend(dgx^)
         words.extend(dgh^)
     print("SEQUENTIAL_LENGTHS scan mask", name, ": scan == chain forward and backward, with and without lengths")
@@ -588,12 +605,18 @@ def test_sequential_lengths() raises:
     comptime U = 10
     var failed = List[Int](length=U, fill=0)
     var host_words = List[List[Float32]](length=U, fill=List[Float32]())
+    # lane seq-lengths-nan: each unit's words sealed (a digest) the moment the unit returns; read again after the
+    # join and before the device compare, a changed seal names a write from another unit's thread into words
+    # that unit no longer owned, which the device compare alone reports as a host-vs-device difference.
+    var sealed = List[UInt64](length=U, fill=UInt64(0))
     var fp = failed.unsafe_ptr()
     var wp = host_words.unsafe_ptr()
-    def task(unit: Int) {imm fp, imm wp}:
+    var sp = sealed.unsafe_ptr()
+    def task(unit: Int) {imm fp, imm wp, imm sp}:
         try:
             var host = HostExec()
             wp[unit] = _run_unit(host, unit)
+            sp[unit] = _seal(wp[unit])
         except error:
             print("FAIL SEQUENTIAL_LENGTHS unit", unit, error)
             fp[unit] = 1
@@ -601,13 +624,19 @@ def test_sequential_lengths() raises:
     for u in range(U):  # small-loop(U: failure flags)
         if failed[u] != 0:
             _fail("unit " + String(u) + " failed on the host column")
+    for u in range(U):  # small-loop(U: seals)
+        if _seal(host_words[u]) != sealed[u]:
+            _fail("unit " + String(u) + " host words changed after the unit returned (a write from another unit)")
     comptime if not CPU_COLUMN_BUILD:
         for unit in range(U):  # driver-loop: over the units on the one device
             var dev = DeviceExec()
             var dw = _run_unit(dev, unit)
+            if _seal(host_words[unit]) != sealed[unit]:
+                _fail("unit " + String(unit) + " host words changed after the unit returned (before the device)")
             _same("unit " + String(unit) + " host vs device", host_words[unit], dw)
     _ = failed^
     _ = host_words^
+    _ = sealed^
     print("PASS SEQUENTIAL_LENGTHS 10")
 
 
