@@ -24,7 +24,7 @@ private fields a row names), under the class name followed by `#training`.
 - A CPU twin of a class (a `Host*` class, what `host_model` loads) is hashed as that class: same name, same
   fields, same digest.
 - Public names no class hashes (they record how a call ran, not what was fitted): `input_copied_`, `fortran_copied_`, `last_shards_`, `used_query_tile_`, `n_candidate_distances_`, `grad_weight_`, `grad_bias_`, `grad_weight_r_`, `scorer_`.
-- The training record (`training_digest_` only): `n_iter_`, `t_`, `n_steps_`, `n_batch_iter_`, `epochs_run_`, `best_epoch_`, `best_iteration_`, `num_batches_tracked_`, `loss_`, `loss_curve_`, `losses_`, `validation_loss_curve_`, `validation_scores_`, `best_loss_`, `best_validation_score_`, `training_loss_`, `objective_`, `dual_gap_`, `kl_divergence_`, `stress_`, `lower_bound_`, `converged_`, `stopped_early_`, `retcode_`, `info_`, `sse_`, `criterion_`, `log_marginal_likelihood_value_`, `n_boruvka_rounds_`, `optimizer_m_`, `optimizer_v_`, `optimizer_runs_`, `cv_results_`, `best_score_`, `scores_`, `coefs_paths_`, `mse_path_`.
+- The training record (`training_digest_` only): `n_iter_`, `t_`, `n_steps_`, `n_batch_iter_`, `epochs_run_`, `best_epoch_`, `best_iteration_`, `num_batches_tracked_`, `loss_`, `loss_curve_`, `losses_`, `validation_loss_curve_`, `validation_scores_`, `best_loss_`, `best_validation_score_`, `training_loss_`, `error_`, `reconstruction_err_`, `objective_`, `dual_gap_`, `kl_divergence_`, `stress_`, `lower_bound_`, `converged_`, `stopped_early_`, `retcode_`, `info_`, `sse_`, `criterion_`, `log_marginal_likelihood_value_`, `n_boruvka_rounds_`, `optimizer_m_`, `optimizer_v_`, `optimizer_runs_`, `cv_results_`, `best_score_`, `scores_`, `coefs_paths_`, `mse_path_`.
 - Fit-only settings a save schema's digest leaves out: `_n_init`, `cache_size`, `init_params`, `max_iter`, `maxiter`, `nochange_steps`, `query_tile`, `reg_covar`, `tol`.
 
 | Class | Source | Fields |
@@ -121,8 +121,8 @@ private fields a row names), under the class name followed by `#training`.
 | `LSTMRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers` |
 | `LabelBinarizer` | public fitted attributes | every public fitted attribute; plus `_classes`, `_cats` |
 | `LabelEncoder` | public fitted attributes | every public fitted attribute; plus `_classes`, `_cats` |
-| `LabelPropagation` | public fitted attributes | every public fitted attribute; plus `_classical_raw_graph` |
-| `LabelSpreading` | public fitted attributes | every public fitted attribute; plus `_classical_raw_graph` |
+| `LabelPropagation` | public fitted attributes | every public fitted attribute; plus `_classical_raw_graph`; parameters `kernel`, `gamma`, `n_neighbors` |
+| `LabelSpreading` | public fitted attributes | every public fitted attribute; plus `_classical_raw_graph`; parameters `kernel`, `gamma`, `n_neighbors` |
 | `Lars` | public fitted attributes | every public fitted attribute |
 | `Lasso` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `coef`, `intercept`, `hyper`, `meta` |
 | `LassoCV` | public fitted attributes | every public fitted attribute |
@@ -173,7 +173,7 @@ private fields a row names), under the class name followed by `#training`.
 | `PassiveAggressiveRegressor` | public fitted attributes | every public fitted attribute |
 | `Perceptron` | public fitted attributes | every public fitted attribute |
 | `PoissonRegressor` | public fitted attributes | every public fitted attribute; plus `_link` |
-| `PolynomialCountSketch` | public fitted attributes | every public fitted attribute |
+| `PolynomialCountSketch` | public fitted attributes | every public fitted attribute; parameters `gamma`, `degree`, `coef0` |
 | `PolynomialFeatures` | public fitted attributes | every public fitted attribute; plus `_poly_index`, `_poly_start` |
 | `PowerTransformer` | public fitted attributes | every public fitted attribute; plus `_pt_anchor`, `_pt_anchor_kind`, `_mean`, `_scale`, `_method` |
 | `ProphetForecaster` | public fitted attributes | every public fitted attribute; plus `_one`, `_nh`, `_K` |
@@ -203,7 +203,7 @@ private fields a row names), under the class name followed by `#training`.
 | `SelectKBest` | public fitted attributes | every public fitted attribute; plus `_mask` |
 | `Sequential` | public fitted attributes | every public fitted attribute; plus `_layers`, `_sample_shape`, `_fit_loss`, `_y_1d`; `training_digest_` also `_fit_state`, `_curve`, `_fit_batch`, `_fit_shuffle`, `_target` |
 | `SimpleImputer` | public fitted attributes | every public fitted attribute; plus `_fill`, `_keep`, `_indicator` |
-| `SkewedChi2Sampler` | public fitted attributes | every public fitted attribute; plus `_random_weights` |
+| `SkewedChi2Sampler` | public fitted attributes | every public fitted attribute; plus `_random_weights`; parameters `skewedness` |
 | `SparseCoder` | public fitted attributes | every public fitted attribute; parameters `transform_algorithm`, `transform_n_nonzero_coefs`, `transform_alpha`, `split_sign`, `positive_code`, `transform_max_iter` |
 | `SparsePCA` | public fitted attributes | every public fitted attribute; parameters `ridge_alpha` |
 | `SparseRandomProjection` | public fitted attributes | every public fitted attribute; plus `_rp_components` |

@@ -153,6 +153,11 @@ PARAMS_BY_NAME = {
     "Binarizer": ("threshold",),
     "Normalizer": ("norm",),
     "AdditiveChi2Sampler": ("sample_steps", "sample_interval"),
+    # kernel maps whose transform scales the input by these (the fitted hashes / weights do not carry them)
+    "PolynomialCountSketch": ("gamma", "degree", "coef0"),
+    "SkewedChi2Sampler": ("skewedness",),
+    # label propagation: predict builds the kernel between new points and the fitted ones
+    "_LabelPropagationBase": ("kernel", "gamma", "n_neighbors"),
     # the coders: transform solves a sparse code with these settings for the fitted dictionary
     "_BaseSparseCoding": ("transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha", "split_sign",
                           "positive_code", "transform_max_iter"),
@@ -207,7 +212,7 @@ TRAINING = (
     "num_batches_tracked_",
     # loss, score and objective records
     "loss_", "loss_curve_", "losses_", "validation_loss_curve_", "validation_scores_", "best_loss_",
-    "best_validation_score_", "training_loss_", "objective_", "dual_gap_", "kl_divergence_", "stress_",
+    "best_validation_score_", "training_loss_", "error_", "reconstruction_err_", "objective_", "dual_gap_", "kl_divergence_", "stress_",
     "lower_bound_", "converged_", "stopped_early_", "retcode_", "info_", "sse_", "criterion_",
     "log_marginal_likelihood_value_", "n_boruvka_rounds_",
     # the optimizer's state, which only a resumed fit reads
