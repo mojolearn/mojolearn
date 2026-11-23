@@ -62,6 +62,12 @@ THE ABI (`GBDT_ENTRY_ABI`, one `abi("C")` entry per gbdt image, published in
                     n_features, n_weights, n_sources, 0, 0, random_seed];
                     floats [4] learning_rate, [5] l2_leaf_reg. The two-level
                     FeatureFreq fit; returns an outcome handle likewise.
+  XG_IMPORTANCES    addrs [text, x, weights, dst]; params [text bytes,
+                    n_rows, n_input, row_major, n_weights]: the
+                    `feature_importances_` of the model fitted on those rows
+                    (core/gbdt_importance.mojo: the host column in the host
+                    image, gbdt/gpu_importance.mojo in a GPU image), n_input
+                    float32 to dst. Returns n_input (lane mf-imp6).
 
 An image method that computes releases the GIL around its work itself (the
 caller holds it); the caller owns every buffer until the synchronous call
@@ -87,7 +93,8 @@ comptime XG_RESIDENT_PREPARE = 12
 comptime XG_RESIDENT_PREDICT = 13
 comptime XG_ORDERED_FIT = 14
 comptime XG_FEATURE_FREQ_FIT = 15
-comptime XG_OP_COUNT = 16
+comptime XG_IMPORTANCES = 16
+comptime XG_OP_COUNT = 17
 
 comptime XG_CAP_ROW_MAJOR = 1
 #: the image holds device-resident parsed models (XG_RESIDENT_*)

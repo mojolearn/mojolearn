@@ -22,7 +22,7 @@ from gbdt.fit_request import (
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_outcome_box,
     gbdt_outcome_sizes, gbdt_outcome_copy, gbdt_outcome_free, gbdt_string_at,
     XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
-    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT,
+    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT, XG_IMPORTANCES,
 )
 
 
@@ -83,6 +83,14 @@ trait GbdtImage:
     def feature_freq_fit(x: Int, y: Int, weights: Int, sources: Int, n_rows: Int, n_features: Int, n_weights: Int,
                          n_sources: Int, learning_rate: Float32, l2_leaf_reg: Float32,
                          random_seed: Int) raises -> String:
+        ...
+
+    # `feature_importances_` of a model fitted on the given rows (lane
+    # mf-imp6): n_input float32 to `dst`; returns n_input. The host image
+    # runs core/gbdt_importance.mojo, a GPU image gbdt/gpu_importance.mojo.
+    @staticmethod
+    def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
+                    n_weights: Int, dst: Int) raises -> Int:
         ...
 
 
@@ -177,6 +185,10 @@ def _run[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) rai
         return _run_predict[I](op, aa, na, pp, np)
     if op == XG_ORDERED_FIT or op == XG_FEATURE_FREQ_FIT:
         return _run_text_fit[I](op, aa, na, pp, np, ff)
+    if op == XG_IMPORTANCES:
+        _spans("gbdt feature importances", na, 4, np, 5)
+        return I.importances(gbdt_string_at(_addr(aa, 0), _int(pp, 0)), _addr(aa, 1), _int(pp, 1), _int(pp, 2),
+                             _int(pp, 3) != 0, _addr(aa, 2), _int(pp, 4), _addr(aa, 3))
     if op == XG_NUMERIC_MODE:
         return Int(GLOBAL_NUMERIC_MODE)
     if op == XG_FIT or op == XG_FIT_ROWMAJOR:
@@ -214,7 +226,8 @@ def gbdt_entry_releases(operation: Int) -> Bool:
     if entry_op_gil_free(operation):
         return False
     return ((operation >= XG_PREDICT and operation <= XG_RESIDENT_PREDICT) or operation == XG_ORDERED_FIT
-            or operation == XG_FEATURE_FREQ_FIT or operation == XG_FIT or operation == XG_FIT_ROWMAJOR)
+            or operation == XG_FEATURE_FREQ_FIT or operation == XG_FIT or operation == XG_FIT_ROWMAJOR
+            or operation == XG_IMPORTANCES)
 
 
 def gbdt_entry_dispatch[I: GbdtImage](operation: Int, aa: Int, na: Int, pp: Int, np: Int,

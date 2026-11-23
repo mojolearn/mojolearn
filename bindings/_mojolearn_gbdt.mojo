@@ -66,6 +66,7 @@ from checks.vendor import COMPILED_VENDOR
 from core.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
 from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.binary_prediction import binary_prediction_device, sigmoid_f64_device
+from gbdt.gpu_importance import gbdt_feature_importances_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -560,6 +561,14 @@ struct _GbdtGpuImage(GbdtImage):
                          random_seed: Int) raises -> String:
         return gbdt_fit_two_level_feature_freq_native(x, y, weights, sources, n_rows, n_features, n_weights,
             n_sources, learning_rate, l2_leaf_reg, random_seed)
+
+    @staticmethod
+    def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
+                    n_weights: Int, dst: Int) raises -> Int:
+        # XG_IMPORTANCES (lane mf-imp6): the device column on this image's
+        # process context; it synchronizes before it returns.
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        return gbdt_feature_importances_device(ctx, text, x, n_rows, n_input, row_major, weights, n_weights, dst)
 
 
 def gbdt_gpu_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

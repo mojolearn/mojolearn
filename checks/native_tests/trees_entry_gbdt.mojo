@@ -98,6 +98,11 @@ struct _ProbeImage(GbdtImage):
                          random_seed: Int) raises -> String:
         raise Error("AttributeError: mojolearn: this check image has no gbdt_fit_two_level_feature_freq")
 
+    @staticmethod
+    def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
+                    n_weights: Int, dst: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image has no gbdt feature importances")
+
 
 def _probe_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
