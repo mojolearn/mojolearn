@@ -936,6 +936,20 @@ EXAMPLES = {
         ["conv1d", 8, 3, {"padding": 1}], ["silu"],
         ["conv1d", 8, 3, {"padding": 1}], ["silu"], ["conv1d", 8, 3, {"padding": 1}], ["residual", 1],
         ["flatten"], ["linear", 1]]),
+    # nn-conv begin: the convolution and shape layers (lane nn-conv, 2026-11-23)
+    "seq-conv-transpose": _seq((1, 16), [
+        ["conv1d", 4, 5, {"stride": 2, "padding": 2}], ["tanh"],
+        ["conv_transpose1d", 4, 4, {"stride": 2, "padding": 1}], ["reflection_pad1d", 2],
+        ["adaptive_max_pool1d", 5], ["flatten"], ["linear", 1]]),
+    "seq-upsample-2d": _seq((2, 6, 6), [
+        ["upsample", {"scale_factor": 2}], ["conv2d", 4, 3, {"padding": 1}], ["relu"],
+        ["upsample", {"size": [8, 8], "mode": "bilinear"}], ["replication_pad2d", 1], ["adaptive_avg_pool2d", 4],
+        ["pixel_unshuffle", 2], ["global_max_pool"], ["linear", 1]]),
+    "seq-pads-shuffle": _seq((4, 4, 4), [
+        ["pixel_shuffle", 2], ["constant_pad2d", 1, 0.5], ["zero_pad2d", 1],
+        ["conv_transpose2d", 2, 3, {"stride": 2, "padding": 1, "output_padding": 1}],
+        ["adaptive_max_pool2d", 3], ["flatten"], ["linear", 1]]),
+    # nn-conv end
 }
 
 
