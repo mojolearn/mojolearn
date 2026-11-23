@@ -100,6 +100,13 @@ struct MselSearchPlan(Movable):
     var refit: Bool
     var cap: Int            # the search's n_jobs bound, 0: none
     var glue: EntryRef      # the x_trees glue entry of the fit's image (the folds, the gathers)
+    # THE 2-D y (core/member_abi.mojo layout 4): a multi-output base's targets
+    # are rows x `y_cols` words of `y_dtype`, with each output's class count
+    # (a classifier); the folds are then KFold's (`check_cv` of a
+    # multi-output target) and the scoring is the member's own.
+    var y_dtype: Int
+    var y_cols: Int
+    var class_counts: List[Int]
 
     def __init__(out self, var plans: List[MemberPlan], var masks: List[Int], x: Int, rows: Int, cols: Int, y: Int,
                  classes: Int, n_splits: Int, glue: EntryRef, metric: MetricRoute):
@@ -119,6 +126,9 @@ struct MselSearchPlan(Movable):
         self.refit = True
         self.cap = 0
         self.glue = glue
+        self.y_dtype = MEMBER_I32 if classes > 0 else MEMBER_F32
+        self.y_cols = 1
+        self.class_counts = List[Int]()
 
 
 struct MselSearchResult(Movable):
@@ -175,18 +185,20 @@ def _fit_wave(mut run: MemberSetRun) raises:
                 member_set_turn(run, u)
 
 
-def _gather_words(src: Int, rows: Int, count: Int, dst: Int):
-    """`count` 4-byte words of `src` at the int32 row numbers `rows`, copied
-    as bits (codes or float32 targets)."""
+def _gather_words(src: Int, rows: Int, count: Int, width: Int, dst: Int):
+    """`count` rows of `width` 4-byte words of `src` at the int32 row numbers
+    `rows`, copied as bits (codes or float32 targets, one word per output)."""
     var s = _I32P(unsafe_from_address=src)
     var r = _I32P(unsafe_from_address=rows)
     var d = _I32P(unsafe_from_address=dst)
     for i in range(count):
-        d[i] = s[Int(r[i])]
+        var at = Int(r[i]) * width
+        for c in range(width):
+            d[i * width + c] = s[at + c]
 
 
-def _score_side(run_at: Int, v: Int, x: Int, y: Int, count: Int, cols: Int, y_dtype: Int, scoring: Int,
-                pred: Int) raises -> Float64:
+def _score_side(run_at: Int, v: Int, x: Int, y: Int, count: Int, cols: Int, y_dtype: Int, y_cols: Int,
+                scoring: Int, pred: Int) raises -> Float64:
     """Unit `v` of the wave on one side's gathered block: the member's own
     score, or its predicted int32 codes into `pred` (scoring 'accuracy'; the
     metric runs after the wave)."""
@@ -194,7 +206,7 @@ def _score_side(run_at: Int, v: Int, x: Int, y: Int, count: Int, cols: Int, y_dt
     var call = member_call_of(run[].plans[v], run[].states[v])
     call.x = MemberMatrix(x, count, cols, MEMBER_F32)
     if scoring == SEARCH_SCORE_MEMBER:
-        call.y = MemberMatrix(y, count, 1, y_dtype)
+        call.y = MemberMatrix(y, count, y_cols, y_dtype)
         _ = member_call(run[].plans[v].member, MEMBER_OP_SCORE, call)
         return call.value
     call.dst = MemberMatrix(pred, count, 1, MEMBER_I32)
@@ -225,7 +237,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var m = len(plan.plans)
     var k = plan.classes
     var classifier = k > 0
-    var y_dtype = MEMBER_I32 if classifier else MEMBER_F32
+    var y_dtype = plan.y_dtype
+    var y_cols = max(plan.y_cols, 1)
+    if y_cols > 1 and (classifier or plan.scoring != SEARCH_SCORE_MEMBER):
+        raise Error("member ABI: a search over a multi-output member folds by KFold and scores by the member")
     if m == 0:
         raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")
     if len(plan.masks) != m:
@@ -267,7 +282,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             side_count[f * sides + 1] = n - c
     for s in range(used * sides):  # driver-loop: over the fold sides (their blocks, allocated once)
         side_x.append(List[Float32](length=max(side_count[s] * d, 1), fill=0.0))
-        side_y.append(List[Int32](length=max(side_count[s], 1), fill=Int32(0)))
+        side_y.append(List[Int32](length=max(side_count[s] * y_cols, 1), fill=Int32(0)))
     var columns = List[Int32](length=max(d, 1), fill=Int32(0))
     for j in range(d):  # small-loop(the column numbers 0 .. d-1 of a side's gather, once per fit)
         columns[j] = Int32(j)
@@ -282,11 +297,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         y_dst[s] = Int(side_y[s].unsafe_ptr())
     var y_dst_at = Int(y_dst.unsafe_ptr())
 
-    def _gather_y(s: Int) {imm side_rows_at, imm side_count_at, imm y_src, imm y_dst_at}:
+    def _gather_y(s: Int) {imm side_rows_at, imm side_count_at, imm y_src, imm y_dst_at, imm y_cols}:
         var rows = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=side_rows_at)[s]
         var count = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=side_count_at)[s]
         var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=y_dst_at)[s]
-        _gather_words(y_src, rows, count, dst)
+        _gather_words(y_src, rows, count, y_cols, dst)
 
     host_parallelize(_gather_y, used * sides)
     # 2-4. The units, wave by wave.
@@ -304,12 +319,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var width = u1 - u0
         var run = MemberSetRun(plan.x, n, d, y_dtype, MEMBER_I32)
         run.cap = plan.cap
+        run.y_cols = y_cols
         var all_free = True
         for u in range(u0, u1):  # driver-loop: over the wave's units (admission into the set, once each)
             var c = u // used
             var f = u - c * used
             var p = plan.plans[c].copy()
             p.classes = k
+            p.class_counts = plan.class_counts.copy()
             var mask = plan.masks[c]
             if (mask & MEMBER_GIL_FREE) == 0:
                 all_free = False
@@ -350,7 +367,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
 
         def _score(t: Int) {imm run_at, imm values_at, imm failed_at, imm errors_at, imm pred_list, imm x_list,
                             imm y_dst_at, imm side_count_at, imm sides, imm used, imm u0, imm d, imm y_dtype,
-                            imm scoring}:
+                            imm y_cols, imm scoring}:
             var v = t // sides
             var side = t % sides
             var s = ((u0 + v) % used) * sides + side
@@ -362,7 +379,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 var value = _score_side(run_at, v, MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=x_list)[s],
                                         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=y_dst_at)[s],
                                         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=side_count_at)[s],
-                                        d, y_dtype, scoring,
+                                        d, y_dtype, y_cols, scoring,
                                         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pred_list)[t])
                 _F64P(unsafe_from_address=values_at)[t] = value
             except error:
@@ -446,9 +463,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     if plan.refit:
         var best = plan.plans[res.best].copy()
         best.classes = k
+        best.class_counts = plan.class_counts.copy()
         var mask = plan.masks[res.best]
         var run = MemberSetRun(plan.x, n, d, y_dtype, MEMBER_I32)
         run.cap = plan.cap
+        run.y_cols = y_cols
         run.add(best^, plan.y, 0, 0, 0, 0, 0,
                 UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
                 UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
