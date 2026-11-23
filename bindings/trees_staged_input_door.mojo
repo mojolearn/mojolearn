@@ -159,34 +159,19 @@ def trees_stage_members(members: PythonObject, x_addr: Int, rows: Int, cols: Int
     return staged
 
 
-def trees_stage_rounds(member: PythonObject, x_addr: Int, rows: Int, cols: Int,
-                       context: PythonObject) raises -> PythonObject:
-    """Stage the rows at `x_addr` in the forest binary `member` predicts
-    through, for a caller that predicts those same rows through it once per
-    round with a new member each round (AdaBoost's fit loop: each round's
-    member predicts the training X; lane perf-trees-owed, 2026-11-06). The
-    staged rows serve every later member of that binary; one predicting
-    other rows unstages them, as in any staging. Returns the unstage entries
-    for `trees_unstage`; the rows must stay alive and unchanged until then."""
-    var staged = Python.list()
-    if rows < 1 or cols < 1:
-        return staged
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var native = Optional[PythonObject]()
-    try:
-        native = py_present(_member_table(member, cols, context))
-    except:
-        pass
-    if not native:
-        return staged
-    return trees_stage_native(native.value(), x_addr, rows, cols)
+# TOMBSTONE: trees_stage_rounds (the door rounds' staging after their first member's fit) deleted 2026-11-23 by
+# lane mf-oob3: its one caller, the AdaBoost door rounds `_ada_door_rounds`, is gone (every tree base fits through
+# the member rounds, which stage with `trees_stage_native`). Not an experiment arm: git revert restores it.
 
 
 def trees_stage_native(native: PythonObject, x_addr: Int, rows: Int, cols: Int) raises -> PythonObject:
-    """`trees_stage_rounds` on the forest binary table `native` itself (lane
-    mf-ada2: AdaBoost's member rounds know their members' binary from the
-    admission before any member is fitted). A binary without the staging
-    entries stages nothing. Returns the unstage entries for `trees_unstage`."""
+    """Stage the rows at `x_addr` in the forest binary table `native`, for a
+    caller that predicts those same rows through it once per round with a
+    new member each round (AdaBoost's member rounds know their members'
+    binary from the admission before any member is fitted, lane mf-ada2).
+    A binary without the staging entries stages nothing. Returns the
+    unstage entries for `trees_unstage`; the rows must stay alive and
+    unchanged until then."""
     var staged = Python.list()
     if rows < 1 or cols < 1:
         return staged

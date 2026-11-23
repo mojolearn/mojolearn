@@ -25,6 +25,12 @@ Cases (X = default_rng(1).random((120, 4), float32), the original test's X; y = 
   rfr / etr / dtp  AdaBoostRegressor over RandomForestRegressor(n_estimators=5, max_depth=3), ExtraTreesRegressor(
         n_estimators=5, max_depth=3), DecisionTreeRegressor(max_depth=3, criterion='poisson') on y
   The Poisson refusal on y - 0.5 is asserted here against the door's words (the Mojo check's case dtneg).
+  Lane mf-oob3 (the out-of-bag bases, which the base build fits through its door rounds `_ada_door_rounds`):
+  rfco  AdaBoostClassifier over RandomForestClassifier(n_estimators=5, max_depth=2, oob_score=True) on csam's labels
+  rfro  AdaBoostRegressor over RandomForestRegressor(n_estimators=5, max_depth=3, oob_score=True) on y
+        each also records every member's oob_decision_function_ (n x 2) / oob_prediction_ (n), float64,
+        concatenated in member order (`<name>-oob.f64`), and their oob_score_ (`<name>-oobs.f64`). For these two
+        the BASE is origin/lane/member-fits 3298f7f582 (the last head with the door rounds).
 
 Regenerate and repack:
 
@@ -98,10 +104,27 @@ def regressor_case(loss):
 POISSON = "criterion='poisson' requires y >= 0 with a positive sum"
 
 
+def _record_oob(name, model, classifier):
+    """Lane mf-oob3: every member's out-of-bag outputs, in member order."""
+    key = "oob_decision_function_" if classifier else "oob_prediction_"
+    words = np.concatenate([np.asarray(getattr(m, key), dtype=np.float64).ravel() for m in model.estimators_])
+    scores = np.asarray([float(m.oob_score_) for m in model.estimators_], dtype=np.float64)
+    return [_put(FAMILY, f"{name}-oob.f64", words, np.float64), _put(FAMILY, f"{name}-oobs.f64", scores, np.float64)]
+
+
 def member_case(name):
     """Lane mf-ada2: the member route's bases (module docstring)."""
     import mojolearn as ml
     X, y = _data()
+    if name == "rfco":
+        ys = (X[:, 0] + X[:, 1] > 1.0).astype(np.int64)
+        model = ml.AdaBoostClassifier(estimator=ml.RandomForestClassifier(n_estimators=5, max_depth=2, oob_score=True),
+                                      n_estimators=5, random_state=0).fit(X, ys)
+        return _record(name, model, X, True) + _record_oob(name, model, True)
+    if name == "rfro":
+        model = ml.AdaBoostRegressor(estimator=ml.RandomForestRegressor(n_estimators=5, max_depth=3, oob_score=True),
+                                     n_estimators=5, random_state=0).fit(X, y)
+        return _record(name, model, X, False) + _record_oob(name, model, False)
     if name in ("rfc", "etc", "dtr"):
         base = {"rfc": lambda: ml.RandomForestClassifier(n_estimators=5, max_depth=2, class_weight="balanced"),
                 "etc": lambda: ml.ExtraTreesClassifier(n_estimators=5, max_depth=2, class_weight="balanced"),
@@ -138,7 +161,7 @@ def _run(job):
 def main():
     jobs = [("inputs", None), ("classifier", None), ("regressor", "linear"), ("regressor", "square"),
             ("regressor", "exponential")] + [("member", name) for name in
-                                             ("rfc", "etc", "dtr", "rfr", "etr", "dtp", "dtneg")]
+                                             ("rfc", "etc", "dtr", "rfr", "etr", "dtp", "dtneg", "rfco", "rfro")]
     with ProcessPoolExecutor(max_workers=min(len(jobs), os.cpu_count() or 1)) as pool:
         for lines in pool.map(_run, jobs):
             for line in lines:

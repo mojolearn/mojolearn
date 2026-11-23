@@ -29,6 +29,14 @@ THE DATA SESSION WITHOUT THE GIL (lane mf-ada2): the default bases through a hos
 GIL-free marked entry, in a process with no Python (the session registry's own lock):
  13 csess  csam's fit with the session: csam's values (the session fit and the plain column-major fit, one body)
  14 rsess  rlin's fit with the session: rlin's values (the session row gather and RUN's gather, the same bytes)
+THE OUT-OF-BAG BASES (lane mf-oob3: the member computes the out-of-bag outputs, parameter word 11; before, these
+bases fitted through the door rounds `_ada_door_rounds`, whose values the fixtures hold), n_estimators=5,
+random_state=0:
+ 15 rfco  estimator=RandomForestClassifier(n_estimators=5, max_depth=2, oob_score=True) on csam's labels
+ 16 rfro  estimator=RandomForestRegressor(n_estimators=5, max_depth=3, oob_score=True) on y
+   each also requires every kept member's `oob_decision_function_` (n x 2) / `oob_prediction_` (n) words,
+   concatenated in round order, and its `oob_score_`, equal to the door's members' (`<name>-oob.f64`,
+   `<name>-oobs.f64`).
 The class_weight rows are 'balanced' (n / (k * count) in float64, one float32 word per class, gathered per row: the
 door's `class_weight_plan`).
 
@@ -36,10 +44,12 @@ The cases are independent fits and run across the host cores. Fail-proof edits (
 restored): in xtrees/trees_ada_fit_run.mojo `ada_fit_run`, the stream `it` of `xt_weighted_sample` written `it + 1`
 fails rlin / rsq / rexp ("estimator_weights_ ... differ": other rows drawn every round); `plan.rate` passed to
 `xt_samme_step` as `2.0 * plan.rate` fails csam ("estimator_weights_"); `ADA_STEP_WORSE = 3.0` fails case 5
-("did not refuse"); `_member_seed` writing `Int64(s + 1)` fails 6-11 (every member another seed); the member
+("did not refuse"); `_member_seed` writing `Int64(s + 1)` fails 6-11 and 15-16 (every member another seed); the member
 route's `w_addr` always `w32` (the class rows dropped) fails 6-8; the `_target_check` call removed fails 12; in
 core/mojolearn_rf_host_run.mojo `rf_host_session_lease` returning the session's X with its column count set to 0
-fails 13-14 (the shape refusal).
+fails 13-14 (the shape refusal); in core/forest_member_run.mojo `_fit`, `column_major` without `or slot[].oob`
+fails 15-16 ("oob" words differ: the out-of-bag body reads X column-major), and the `score=` word passed 0 fails
+15-16 (the fit's "requested together" refusal).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, fixture_i32, assert_same_words
@@ -55,7 +65,7 @@ from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBE
 comptime ADA_DIR = "checks/native_tests/fixtures/trees_ada/"
 comptime ADA_N = 120
 comptime ADA_D = 4
-comptime ADA_CASES = 15
+comptime ADA_CASES = 17
 comptime POISSON = "criterion='poisson' requires y >= 0 with a positive sum"
 comptime WORSE = "BaseClassifier in AdaBoostClassifier ensemble is worse than random, ensemble can not be fit."
 
@@ -155,8 +165,41 @@ def _member_case(unit: Int, x: List[Float32]) raises:
     assert_same_words[DType.float32](m.values, fixture_f32(ADA_DIR + name + "-pred.f32", ADA_N), name + ": predict")
 
 
+def _oob_case(unit: Int, x: List[Float32]) raises:
+    """Cases 15-16: the out-of-bag RandomForest bases (module docstring)."""
+    var classifier = unit == 15
+    var name = String("rfco") if classifier else String("rfro")
+    var s = AdaSpec(classifier, 5, 0)
+    var r = RfSpec(classifier, 5, 0)
+    r.max_depth = 2 if classifier else 3
+    var m: AdaMemberModel
+    if classifier:
+        m = ada_member_fit(s, rf_config(r), MEMBER_FAMILY_FOREST, False, x, ADA_N, ADA_D, _labels(x, 0), 2,
+                           List[Float32](), List[Float32](), True)
+    else:
+        m = ada_member_fit(s, rf_config(r), MEMBER_FAMILY_FOREST, False, x, ADA_N, ADA_D, List[Int32](), 0,
+                           fixture_f32(ADA_DIR + "ada-y.f32", ADA_N), List[Float32](), True)
+    _state(name, m.alphas, m.errors)
+    if classifier:
+        assert_same_words[DType.int32](m.codes, fixture_i32(ADA_DIR + name + "-pred.i32", ADA_N), name + ": predict")
+    else:
+        assert_same_words[DType.float32](m.values, fixture_f32(ADA_DIR + name + "-pred.f32", ADA_N),
+                                         name + ": predict")
+    var count = Int(fixture_i32(ADA_DIR + name + "-count.i32", 1)[0])
+    var width = 2 if classifier else 1
+    require(len(m.oob_scores) == count and len(m.oob) == count * ADA_N * width,
+            name + ": one out-of-bag block per kept member")
+    assert_same_words[DType.float64](m.oob, fixture_f64(ADA_DIR + name + "-oob.f64", count * ADA_N * width),
+                                     name + (": oob_decision_function_" if classifier else ": oob_prediction_"))
+    assert_same_words[DType.float64](m.oob_scores, fixture_f64(ADA_DIR + name + "-oobs.f64", count),
+                                     name + ": oob_score_")
+
+
 def run_case(unit: Int) raises:
     var x = fixture_f32(ADA_DIR + "ada-x.f32", ADA_N * ADA_D)
+    if unit >= 15:
+        _oob_case(unit, x)
+        return
     if unit == 13:
         var m = ada_fit(AdaSpec(True, 25, 0), x, ADA_N, ADA_D, _labels(x, 0), 2, List[Float32](), True)
         _state("csam", m.alphas, m.errors)
