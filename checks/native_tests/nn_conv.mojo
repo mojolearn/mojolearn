@@ -569,9 +569,9 @@ def run_model[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
 # ---------------------------------------------------------------- the two example fits
 comptime _AE_LEN = 32
 comptime _AE_ROWS = 128
-comptime _AE_EPOCHS = 40
+comptime _AE_EPOCHS = 10  # gate first met at epoch 2 of 40 (nn-integrate run at ebb742d22c, cpc2)
 comptime _DEC_ROWS = 96
-comptime _DEC_EPOCHS = 40
+comptime _DEC_EPOCHS = 10  # gate first met at epoch 6 of 40 (same run)
 comptime _DEC_SIDE = 16
 
 
