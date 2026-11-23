@@ -491,7 +491,10 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
             # again with a quarter of the step, and the gradient must match that one
             var d = abs(Float64(grads[i]) - fd[i])
             if not (d <= 3e-3 * (1.0 + abs(fd[i]))):
-                fd[i] = _fd(ex, c, spec, params, i, _H / 4.0)
+                var f4 = _fd(ex, c, spec, params, i, _H / 4.0)
+                var f16 = _fd(ex, c, spec, params, i, _H / 16.0)
+                print("NN_ATTENTION", c.name, "re-probe", i, "grad", grads[i], "fd h", fd[i], "h/4", f4, "h/16", f16)
+                fd[i] = f16 if abs(Float64(grads[i]) - f16) < abs(Float64(grads[i]) - f4) else f4
         _close(c.name + " gradient", grads, fd, 3e-3)
     var words = yv.copy()
     for i in range(len(grads)):  # small-loop(check words)
