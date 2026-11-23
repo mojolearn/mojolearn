@@ -22,6 +22,7 @@ from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from bindings.svm_keys_unpack import svm_keys
 from svm.operation_metadata import SvcOperationSettings
 from core.svc_native_api import SvcDrivers
+from core.class_weight_plan import class_weight_dict_refused
 from bindings.svc_kernel_rows_unpack import _addr
 
 # `_scale_gamma`: the py2mojo switch bit.
@@ -295,12 +296,30 @@ def svm_weights_unpack(n_rows: Int, sample_weight: PythonObject, class_weight: P
             for i in range(n_classes):  # driver-loop: over the classes (the default weight 1.0)
                 cp[i] = 1.0
             var items = family_call(b.list, family_call(family_call(b.dict, class_weight).items))
+            # A key outside y's classes is refused only when the dict also
+            # leaves a class unweighted (core/class_weight_plan.mojo
+            # `class_weight_dict_refused`, scikit-learn 1.9.1's rule); else ignored.
+            var named = List[Bool](length=n_classes, fill=False)
+            var unknown = 0
+            var first_unknown = PythonObject(None)
             for i in range(len(items)):  # driver-loop: over the user's class_weight entries
                 var key = items[i][0]
                 if not py_contains(classes, key):
-                    raise Error("mojolearn " + who + ": class_weight names the label " + family_repr(key)
+                    if unknown == 0:
+                        first_unknown = key
+                    unknown += 1
+                    continue
+                var c = Int(py=family_call(classes.index, key))
+                cp[c] = svc_float(items[i][1])
+                named[c] = True
+            if unknown > 0:
+                var unweighted = 0
+                for c in range(n_classes):  # driver-loop: over the classes (the dict's unnamed ones)
+                    if not named[c]:
+                        unweighted += 1
+                if class_weight_dict_refused(unknown, unweighted):
+                    raise Error("mojolearn " + who + ": class_weight names the label " + family_repr(first_unknown)
                                 + ", which is not in y's classes " + family_repr(classes))
-                cp[Int(py=family_call(classes.index, key))] = svc_float(items[i][1])
         _ = py_call(owners.append, cwa)
         cw_address = _addr(cwa)
     return SvmWeightsUnpacked(owners, sw_address, cw_address, True)
