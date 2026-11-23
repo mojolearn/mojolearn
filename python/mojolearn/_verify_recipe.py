@@ -932,6 +932,9 @@ EXAMPLES = {
         ["flatten"], ["linear", 1]]),
     "seq-mamba2": _seq((8, 2), [["linear", 321], ["softplus"], ["ssd_scan", 1], ["flatten"], ["linear", 1]]),
     "seq-recurrent": _seq((8, 4), [["lstm", 8], ["gru", 6], ["flatten"], ["linear", 1]]),
+    # nn-recurrent: a two-layer bidirectional GRU with dropout between the layers, its final states
+    "seq-bigru": _seq((8, 4), [["gru", 6, {"num_layers": 2, "bidirectional": True, "dropout": 0.25,
+                                           "output": "final"}], ["flatten"], ["linear", 1]]),
     "seq-conv1d-residual": _seq((4, 8), [
         ["conv1d", 8, 3, {"padding": 1}], ["silu"],
         ["conv1d", 8, 3, {"padding": 1}], ["silu"], ["conv1d", 8, 3, {"padding": 1}], ["residual", 1],
