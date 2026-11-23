@@ -16,7 +16,8 @@
 #                                      binary, and its group's other files build on. The plan's singles (a file that
 #                                      cannot share a program) compile alone, as before.
 #                                      G and the compiles at once = min(cores, memory available x 0.8 /
-#                                      NC_TS_GROUP_PEAK_MB) (the measured peak of one group compile, default 6000 MB);
+#                                      NC_TS_GROUP_PEAK_MB) (the measured peak of one group compile: 7.0 GB host column,
+#                                      13.2 GB device column on cpc2; defaults 7500 / 13500 MB);
 #                                      NC_TS_GROUPS / NC_TS_JOBS pin them; a single file's compile is budgeted at
 #                                      NC_TS_PEAK_MB (default 1200: 0.2-1.1 GB measured on cpc1). The step prepares
 #                                      what the files need itself: the generated sources (tools/generated_sources.py),
@@ -122,7 +123,9 @@ build)
     cores=$(alloc_cores)
     avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2> /dev/null)
     [ -n "$avail_kb" ] || avail_kb=$(( 16 * 1048576 ))
-    gpeak=${NC_TS_GROUP_PEAK_MB:-6000}
+    # one group compile's measured peak (cpc2, 2026-11-22, 16 groups: host column 7.0 GB, device column 13.2 GB)
+    gdef=7500; [ "$column" = cpu ] || gdef=13500
+    gpeak=${NC_TS_GROUP_PEAK_MB:-$gdef}
     bymem=$(( avail_kb * 8 / 10 / (gpeak * 1024) ))
     jobs=${NC_TS_JOBS:-$(( bymem < cores ? bymem : cores ))}
     [ "$jobs" -ge 1 ] || jobs=1

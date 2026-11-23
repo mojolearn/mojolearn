@@ -58,6 +58,20 @@ time, so the failing file is the red row and the others still run. Why copies (m
 `main()` cannot be imported through a package ("'main()' is not supported within packages"), and
 `__functions_in_module()` called from an imported module's `main()` does not see that module's tests (0 ran).
 
+Measured on cpc2 (32 vCPU, shared, load 110-200 from other jobs; 16 compiles at once; x86-64-v3; 2026-11-22):
+
+| column | files | per file: wall / compiler CPU-s / busy cores / peak | 16 groups: wall / CPU-s / busy / peak |
+|---|---|---|---|
+| host (cpu) | 338 | 2,093 s / 13,983 / 6.7 / 5.3 GB | 1,186 s / 5,498 / 4.6 / 7.0 GB |
+| device (sm_89) | 364 | 1,620 s / 24,970 / 15.4 / 4.7 GB | 731 s / 8,653 / 11.8 / 13.2 GB |
+
+Busy cores are the compiles' CPU seconds over the wall (box-wide samples would count the other jobs). Grouping cuts
+the compiler work 2.5x (host) and 2.9x (device). `mojo precompile` (ex `mojo package`) of the shared packages was
+tried: archive_codec compiled in 1.9 CPU-s against 9.9 from source with `core` precompiled, but a package must
+precompile whole (it refuses `main()`, and gbdt, training and gemm fail: a type error in gbdt/host/gbdt_oracle.mojo,
+imports of main()-files), and `core` alone took 330 CPU-s single-threaded; not adopted, a follow-up once the product
+packages precompile cleanly.
+
 ### The two-column rule (what the batches found)
 
 A file that runs on both columns, or a GPU-column file whose module holds device code, must build for the HOST too:
