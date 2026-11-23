@@ -113,6 +113,17 @@ features (`active_`, in the order the path took them). Kind 5 also holds 2 `XL_M
 (`MEMBER_BLOCK_FAMILY`) int32 1 x training rows, 1 for an outlier row
 (`outliers_`). An import needs COEF and SCALARS; a family block is a training
 record, optional at import (an imported state then exports two blocks).
+Kinds 4 and 5 after a fit also hold, last, `XL_MEMBER_BLOCK_X_OFFSET`
+(`MEMBER_BLOCK_FAMILY` + 9) float32 1 x features (`X_offset_`) and
+`XL_MEMBER_BLOCK_SIGMA` (`MEMBER_BLOCK_FAMILY` + 8) float32 dk x dk
+(`sigma_`; dk = features for BayesianRidge, the kept features for
+ARDRegression), and publish PREDICT_STD: x float32 rows x features -> dst
+float32 rows x 1, sqrt(sum((x - X_offset_)[:, kept] @ sigma_ * (x -
+X_offset_)[:, kept], axis=1) + 1 / alpha_) (scikit-learn's
+predict(return_std=True); kept = lambda_ < threshold_lambda for ARD); with
+`y` given (rows x 1 host float32) the same rows' mean is written there too.
+Both blocks (and ARD's LAMBDA, its kept columns) are optional at import; a
+state imported without them refuses PREDICT_STD in words.
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
 linear member's form); the lock covers only mint, free and the handle lookup.
@@ -130,6 +141,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_DECISION,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_TRANSFORM, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_TRANSFORM,
+    MEMBER_OP_PREDICT_STD, MEMBER_CAN_PREDICT_STD,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_DECISION, MEMBER_CAN_CLASSIFIER,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
@@ -145,7 +157,9 @@ from x_linear.door_run import (
     xl_logcv_fit_run, xl_isotonic_fit_run,
     ALGO_RIDGE, xl_run_block, XlRidgeCvRequest, xl_ridge_out, xl_ridge_singular, xl_ridge_cv_plain_run,
     xl_ridge_cv_kfold_run, XlFitRequest, XlDecisionRequest, xl_fit_run, xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
+    XlBayesStdRequest, xl_bayes_std_run, xl_ard_kept_run,
 )
+from x_linear.bayes_words import bayes_out_words, bayes_sigma_at, bayes_offset_at, ard_out_words, ard_dk_at, ard_offset_at, ard_sigma_at
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -169,6 +183,8 @@ comptime XL_MEMBER_BLOCK_THRESHOLDS = MEMBER_BLOCK_FAMILY + 7
 comptime XL_MEMBER_BLOCK_LAMBDA = MEMBER_BLOCK_FAMILY + 1
 comptime XL_MEMBER_BLOCK_ACTIVE = MEMBER_BLOCK_FAMILY + 2
 comptime XL_MEMBER_BLOCK_OUTLIERS = MEMBER_BLOCK_FAMILY
+comptime XL_MEMBER_BLOCK_SIGMA = MEMBER_BLOCK_FAMILY + 8
+comptime XL_MEMBER_BLOCK_X_OFFSET = MEMBER_BLOCK_FAMILY + 9
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -253,6 +269,13 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
     # scores_) and the classifiers' intercept words staged by an import.
     var path: List[Float32]
     var extra: List[Float64]
+    # BayesianRidge / ARDRegression's posterior (PREDICT_STD; lane
+    # mf-iterimp2): sigma_ (dk x dk), X_offset_ (features) and, for ARD, the
+    # dk kept columns (lambda_ < threshold_lambda, the fit's rule).
+    var sigma: List[Float32]
+    var offset: List[Float32]
+    var kept: List[Int32]
+    var dk: Int
 
     def __init__(out self):
         self.generation = 0
@@ -271,6 +294,10 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
         self.outputs = 1
         self.path = List[Float32]()
         self.extra = List[Float64]()
+        self.sigma = List[Float32]()
+        self.offset = List[Float32]()
+        self.kept = List[Int32]()
+        self.dk = 0
 
     def forget(mut self):
         self.fitted = False
@@ -286,6 +313,10 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
         self.outputs = 1
         self.path = List[Float32]()
         self.extra = List[Float64]()
+        self.sigma = List[Float32]()
+        self.offset = List[Float32]()
+        self.kept = List[Int32]()
+        self.dk = 0
 
 
 struct XLinearMemberStore(Defaultable, Movable):
@@ -428,7 +459,14 @@ def _capabilities(kind: Int) -> Int:
         bits |= MEMBER_CAN_PREDICT_PROBA
     if kind < 0 or kind == XL_MEMBER_ISOTONIC:
         bits |= MEMBER_CAN_TRANSFORM
+    if kind < 0 or _posterior_kind(kind):
+        bits |= MEMBER_CAN_PREDICT_STD
     return bits
+
+
+def _posterior_kind(kind: Int) -> Bool:
+    """The kinds whose fit holds a posterior (PREDICT_STD)."""
+    return kind == XL_MEMBER_BAYES or kind == XL_MEMBER_ARD
 
 
 def _classifier(kind: Int) -> Bool:
@@ -784,7 +822,7 @@ def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercep
     if kind == XL_MEMBER_BAYES:
         ip = [Int(p[2]), intercept, has_sw]
         fp = [p[3], p[4], p[5], p[6], p[7], p[8], p[9]]
-        n_out = d + 4
+        n_out = bayes_out_words(d)
         n_fw = 3 * d * d + 5 * d + n
     elif kind == XL_MEMBER_ARD:
         if n < 2:
@@ -792,7 +830,7 @@ def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercep
         algo = ALGO_ARD
         ip = [Int(p[2]), intercept]
         fp = [p[3], p[4], p[5], p[6], p[7], p[8]]
-        n_out = 2 * d + 4
+        n_out = ard_out_words(d)
         n_fw = 3 * d * d + 4 * d + n
         n_iw = 2 * d
     elif kind == XL_MEMBER_QUANTILE:
@@ -824,11 +862,14 @@ def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercep
         # [coef | intercept | alpha_ | lambda_ | n_iter]
         slot[].scalars = [Float64(result[d]), Float64(result[d + 1]), Float64(result[d + 2]),
             Float64(Int(result[d + 3]))]
+        # the posterior (x_linear/bayes_words.mojo): sigma_ d x d, X_offset_
+        _keep_posterior(slot, result, bayes_sigma_at(d), d, bayes_offset_at(d), d)
     elif kind == XL_MEMBER_ARD:
-        # [coef | intercept | alpha_ | lambda_ (d) | n_iter]
+        # [coef | intercept | alpha_ | lambda_ (d) | n_iter | dk | X_offset_ | sigma_ dk x dk]
         slot[].scalars = [Float64(result[d]), Float64(result[d + 1]), Float64(Int(result[2 * d + 2]))]
         slot[].record = List[Float32](length=d, fill=0.0)
         unsafe_memcpy(dest=slot[].record.unsafe_ptr(), src=result.unsafe_ptr() + d + 2, count=d)
+        _keep_posterior(slot, result, ard_sigma_at(d), Int(result[ard_dk_at(d)]), ard_offset_at(d), d)
     elif kind == XL_MEMBER_QUANTILE:
         # [coef | intercept | n_iter]
         slot[].scalars = [Float64(result[d]), Float64(Int(result[d + 1]))]
@@ -841,6 +882,72 @@ def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercep
             slot[].active[i] = Int32(Int(result[d + 4 + i]))
     slot[].trained = True
     slot[].fitted = True
+
+
+def _keep_posterior(slot: _SlotP, result: List[Float32], sigma_at: Int, dk: Int, offset_at: Int, d: Int):
+    """The fit's posterior words into the state (one copy each, at fit),
+    and for ARD the kept columns (`_ard_kept`)."""
+    slot[].sigma = List[Float32](length=dk * dk, fill=0.0)
+    if dk > 0:
+        unsafe_memcpy(dest=slot[].sigma.unsafe_ptr(), src=result.unsafe_ptr() + sigma_at, count=dk * dk)
+    slot[].offset = List[Float32](length=d, fill=0.0)
+    if d > 0:
+        unsafe_memcpy(dest=slot[].offset.unsafe_ptr(), src=result.unsafe_ptr() + offset_at, count=d)
+    slot[].dk = dk
+    _ard_kept(slot)
+
+
+def _ard_kept(slot: _SlotP):
+    """ARDRegression's kept columns from its lambda_ record (the fit's rule,
+    x_linear/door_run.mojo `xl_ard_kept_run`); every column otherwise."""
+    slot[].kept = List[Int32]()
+    if _kind(slot) != XL_MEMBER_ARD or len(slot[].record) == 0:
+        return
+    var d = len(slot[].record)
+    var room = List[Int32](length=d, fill=0)
+    var count = xl_ard_kept_run(Int(slot[].record.unsafe_ptr()), d, slot[].params[8], Int(room.unsafe_ptr()))
+    slot[].kept = List[Int32](length=count, fill=0)
+    if count > 0:
+        unsafe_memcpy(dest=slot[].kept.unsafe_ptr(), src=room.unsafe_ptr(), count=count)
+
+
+def _predict_std(slot: _SlotP, call: _CallP) raises:
+    """PREDICT_STD (BayesianRidge, ARDRegression): dst rows x 1 float32 the
+    predictive standard deviation (XL_OP_BAYES_STD); with `y` given (rows x
+    1 host float32) the same rows' mean too, as predict(return_std=True)
+    returns both (IterativeImputer's sample_posterior reads the pair)."""
+    var estimator = _name(slot)
+    if not _posterior_kind(_kind(slot)):
+        member_unsupported(estimator, MEMBER_OP_PREDICT_STD)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
+    _dense(call[].dst, "the standard deviation buffer", estimator)
+    var rows = call[].x.rows
+    if call[].dst.rows != rows or call[].dst.cols != 1:
+        raise Error("ValueError: the standard deviation buffer holds one value per row of X")
+    var d = slot[].features
+    if len(slot[].offset) != d or len(slot[].sigma) != slot[].dk * slot[].dk:
+        raise Error("NotFittedError: this " + estimator + " member state holds no posterior (sigma_, X_offset_)")
+    var ard = _kind(slot) == XL_MEMBER_ARD
+    if ard and len(slot[].kept) != slot[].dk:
+        raise Error("ValueError: this " + estimator + " member state's sigma_ does not match its kept features")
+    if call[].y.rows > 0:
+        _dense(call[].y, "the mean buffer", estimator)
+        if call[].y.rows != rows or call[].y.cols != 1:
+            raise Error("ValueError: the mean buffer holds one value per row of X")
+        _predict_into(slot, call, call[].y.data)
+    else:
+        # `_predict_into`'s view and width checks, without its decision
+        _whole(call, estimator)
+        _dense(call[].x, "X", estimator)
+        if call[].x.cols != d:
+            raise Error("ValueError: X has " + String(call[].x.cols) + " features, but " + estimator
+                + " is expecting " + String(d) + " features as input.")
+    if rows == 0:
+        return
+    xl_bayes_std_run(XlBayesStdRequest(call[].route.entry.call, call[].x.data, Int(slot[].sigma.unsafe_ptr()),
+        Int(slot[].offset.unsafe_ptr()), Int(slot[].kept.unsafe_ptr()) if ard else 0, call[].dst.data, rows, d,
+        slot[].dk, slot[].scalars[1]))
 
 
 def _predict_into(slot: _SlotP, call: _CallP, dst: Int) raises:
@@ -942,7 +1049,17 @@ def _held_blocks(slot: _SlotP) -> List[Int]:
     var family = _family_block(slot)
     if family != 0:
         names.append(family)
+    if _has_posterior(slot):
+        names.append(XL_MEMBER_BLOCK_X_OFFSET)
+        names.append(XL_MEMBER_BLOCK_SIGMA)
     return names^
+
+
+def _has_posterior(slot: _SlotP) -> Bool:
+    """A BayesianRidge / ARDRegression state holding its posterior (after a
+    fit, or an import that brought it)."""
+    return (_posterior_kind(_kind(slot)) and len(slot[].offset) == slot[].features
+        and len(slot[].sigma) == slot[].dk * slot[].dk and slot[].features > 0)
 
 
 def _export(slot: _SlotP, call: _CallP) raises:
@@ -981,6 +1098,10 @@ def _export(slot: _SlotP, call: _CallP) raises:
         call[].dst = MemberMatrix(Int(slot[].record.unsafe_ptr()), 1, len(slot[].record))
     elif block != 0 and block == family and family == XL_MEMBER_BLOCK_ACTIVE:
         call[].dst = MemberMatrix(Int(slot[].active.unsafe_ptr()), 1, len(slot[].active), MEMBER_I32)
+    elif block == XL_MEMBER_BLOCK_X_OFFSET:
+        call[].dst = MemberMatrix(Int(slot[].offset.unsafe_ptr()), 1, len(slot[].offset))
+    elif block == XL_MEMBER_BLOCK_SIGMA:
+        call[].dst = MemberMatrix(Int(slot[].sigma.unsafe_ptr()), slot[].dk, slot[].dk)
     else:
         raise Error("member ABI: this " + _name(slot) + " member state holds no fitted block " + String(block))
     call[].block = block
@@ -1036,6 +1157,26 @@ def _import(slot: _SlotP, call: _CallP) raises:
         slot[].fitted = False
         slot[].scalars = List[Float64](length=scalar_count, fill=0.0)
         unsafe_memcpy(dest=slot[].scalars.unsafe_ptr(), src=source, count=scalar_count)
+    elif _posterior_kind(_kind(slot)) and (call[].block == XL_MEMBER_BLOCK_SIGMA
+            or call[].block == XL_MEMBER_BLOCK_X_OFFSET
+            or (call[].block == XL_MEMBER_BLOCK_LAMBDA and _kind(slot) == XL_MEMBER_ARD)):
+        # the posterior a predict_std reads (lane mf-iterimp2), and ARD's lambda_
+        # (its kept columns); optional: a state without them predicts only
+        _dense(call[].x, "a fitted block", _name(slot))
+        var count = call[].x.rows * call[].x.cols
+        var words = List[Float32](length=count, fill=0.0)
+        if count > 0:
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        slot[].fitted = False
+        if call[].block == XL_MEMBER_BLOCK_SIGMA:
+            if call[].x.rows != call[].x.cols:
+                raise Error("member ABI: the " + _name(slot) + " sigma block is dk x dk float32 words")
+            slot[].sigma = words^
+            slot[].dk = call[].x.rows
+        elif call[].block == XL_MEMBER_BLOCK_X_OFFSET:
+            slot[].offset = words^
+        else:
+            slot[].record = words^
     elif call[].block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
         raise Error("member ABI: a " + _name(slot) + " member imports no fitted block " + String(call[].block))
     if (call[].flags & MEMBER_IMPORT_DONE) == 0:
@@ -1043,6 +1184,7 @@ def _import(slot: _SlotP, call: _CallP) raises:
     if len(slot[].block) == 0 or len(slot[].scalars) != scalar_count:
         raise Error("member ABI: a fitted " + _name(slot) + " state needs its coefficient and scalars blocks")
     slot[].block[slot[].features] = Float32(slot[].scalars[0])
+    _ard_kept(slot)
     slot[].fitted = True
 
 
@@ -1406,7 +1548,8 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
             var served = ((op == MEMBER_OP_PREDICT and (can & MEMBER_CAN_PREDICT) != 0)
                 or (op == MEMBER_OP_DECISION and (can & MEMBER_CAN_DECISION) != 0)
                 or (op == MEMBER_OP_PREDICT_PROBA and (can & MEMBER_CAN_PREDICT_PROBA) != 0)
-                or (op == MEMBER_OP_TRANSFORM and (can & MEMBER_CAN_TRANSFORM) != 0))
+                or (op == MEMBER_OP_TRANSFORM and (can & MEMBER_CAN_TRANSFORM) != 0)
+                or (op == MEMBER_OP_PREDICT_STD and (can & MEMBER_CAN_PREDICT_STD) != 0))
             if not served:
                 member_unsupported("an x_linear member of kind " + String(asked_kind), op)
         call[].out_cols = 1
@@ -1450,6 +1593,8 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
         _predict(slot, call)
     elif operation == MEMBER_OP_TRANSFORM and _kind(slot) == XL_MEMBER_ISOTONIC:
         _predict(slot, call)
+    elif operation == MEMBER_OP_PREDICT_STD:
+        _predict_std(slot, call)
     elif operation == MEMBER_OP_SCORE:
         _score(slot, call)
     elif operation == MEMBER_OP_EXPORT:

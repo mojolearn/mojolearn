@@ -47,13 +47,16 @@ from core.hostptr import f32_ptr
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
+    MEMBER_BLOCK_BY_INDEX,
 )
 from core.xlinear_member import (
     XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_QUANTILE, XL_MEMBER_RIDGE_CLASSIFIER, XL_MEMBER_RIDGE_CV, XL_MEMBER_BLOCK_CV_RESULTS,
     XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
     XL_MEMBER_BLOCK_ACTIVE, XL_MEMBER_LASSO_CV, XL_MEMBER_ELASTIC_NET_CV, XL_MEMBER_LOGISTIC_CV, XL_MEMBER_ISOTONIC,
     XL_MEMBER_BLOCK_ALPHAS, XL_MEMBER_BLOCK_MSE_PATH, XL_MEMBER_BLOCK_SCORES, XL_MEMBER_BLOCK_THRESHOLDS,
+    XL_MEMBER_BLOCK_SIGMA, XL_MEMBER_BLOCK_X_OFFSET,
 )
+from bindings.classical_labels_door import labels_full_f32
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
 from providers.python.device_route_boundary_door import device_route_value
 from x_linear.door_run import LINK_IDENTITY, LINK_EXP
@@ -460,6 +463,7 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         py_setitem(fields, nk[].k_lambda_, PythonObject(Float64(Float32(scalars[2]))))
         py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[3])))
         py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
+        _xl_posterior_pack(fields, context, plan, call, blocks, cols)
         return
     if kind == XL_MEMBER_ARD:
         py_setitem(fields, nk[].k_alpha_, PythonObject(Float64(Float32(scalars[1]))))
@@ -472,6 +476,7 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
             unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(lam))), src=f32_ptr(call.dst.data),
                 count=call.dst.cols)
             py_setitem(fields, nk[].k_lambda_, lam)
+        _xl_posterior_pack(fields, context, plan, call, blocks, cols)
         return
     if kind == XL_MEMBER_RIDGE_CV:
         py_setitem(fields, nk[].k_alpha_, PythonObject(scalars[1]))
@@ -596,6 +601,71 @@ def _xl_isotonic_pack(fields: PythonObject, context: PythonObject, plan: MemberP
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(1))
 
 
+def _xl_posterior_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall,
+    blocks: Int, cols: Int) raises:
+    """BayesianRidge / ARDRegression: sigma_, X_offset_ and X_scale_ (the
+    attributes `xl_fit_bayes_pack` / `xl_fit_ard_pack` write) from the
+    state's posterior blocks, when it holds them (lane mf-iterimp2)."""
+    var nk = x_linear_keys()
+    var held = False
+    for i in range(blocks):  # driver-loop: over the state's few fitted blocks (names by index)
+        call.block = i
+        call.flags = MEMBER_BLOCK_BY_INDEX
+        _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+        held = held or call.block == XL_MEMBER_BLOCK_SIGMA
+    call.flags = 0
+    if not held:
+        return
+    call.block = XL_MEMBER_BLOCK_X_OFFSET
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var offset = classical_array(cols, 0, context)
+    if cols > 0:
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(offset))), src=f32_ptr(call.dst.data), count=cols)
+    call.block = XL_MEMBER_BLOCK_SIGMA
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var dk = call.dst.rows
+    # (0, 0) when an ARD fit kept no feature, as its own fit publishes it
+    var sigma = admitted_array(Python.tuple(0, 0), "<f4", context)
+    if dk > 0:
+        sigma = classical_array(dk, dk, context)
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(sigma))), src=f32_ptr(call.dst.data), count=dk * dk)
+    py_setitem(fields, nk[].k_sigma_, sigma)
+    py_setitem(fields, nk[].k_X_offset_, offset)
+    py_setitem(fields, nk[].k_X_scale_, labels_full_f32(cols, 1.0, context))
+
+
+def _xl_posterior_state(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall,
+    kind: Int) raises:
+    """IMPORT of the fitted posterior (sigma_, X_offset_ and, for
+    ARDRegression, lambda_) when the estimator holds it, before DONE."""
+    var nk = x_linear_keys()
+    var sigma_source = py_get(fields, nk[].k_sigma_)
+    var offset_source = py_get(fields, nk[].k_X_offset_)
+    if sigma_source is None or offset_source is None:
+        return
+    var offset = admit_x(offset_source, 1, "X_offset_", context)
+    call.flags = 0
+    # an ARD fit that kept no feature has an empty (0, 0) sigma_: nothing to import
+    var sigma = PythonObject(None)
+    if Int(py=sigma_source.size) > 0:
+        sigma = admit_x(sigma_source, 2, "sigma_", context)
+        var dk = Int(py=sigma.shape[0])
+        call.block = XL_MEMBER_BLOCK_SIGMA
+        call.x = MemberMatrix(Int(py=classical_address(sigma)), dk, Int(py=sigma.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    call.block = XL_MEMBER_BLOCK_X_OFFSET
+    call.x = MemberMatrix(Int(py=classical_address(offset)), 1, Int(py=offset.size))
+    _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    if kind == XL_MEMBER_ARD:
+        var lam = admit_x(py_item(fields, nk[].k_lambda_), 1, "lambda_", context)
+        call.block = XL_MEMBER_BLOCK_LAMBDA
+        call.x = MemberMatrix(Int(py=classical_address(lam)), 1, Int(py=lam.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        _ = lam
+    _ = sigma
+    _ = offset
+
+
 def _count_word(fields: PythonObject, key: PythonObject) raises -> Float64:
     var value = py_get(fields, key)
     if value is None:
@@ -648,6 +718,10 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if kind == XL_MEMBER_BAYES or kind == XL_MEMBER_ARD:
+            _xl_posterior_state(fields, context, plan, call, kind)
+        call.block = 0
         call.flags = MEMBER_IMPORT_DONE
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
     except error:
