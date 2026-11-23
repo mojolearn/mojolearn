@@ -1281,8 +1281,8 @@ struct _DoorModel(AgnModel):
     OneVsRestClassifier / CalibratedClassifierCV / BaggingClassifier / BaggingRegressor used as a member opens as its
     META state, and since lane mf-ada4 an AdaBoostClassifier / AdaBoostRegressor too (THE ADABOOST KIND). What is
     left: a member of a meta-estimator that is a MultiOutput* or a search CV whose admission keeps its door (META kinds
-    since lane mf-search4: a search with a splitter cv, a named scorer other than 'accuracy', refit other than True
-    or its own device; a MultiOutputRegressor over a plain Ridge); a META class whose admit keeps
+    since lane mf-search4; since lane mf-search4b only a search with its own device, a splitter other than our
+    KFold / StratifiedKFold, or a scorer the typed RUN does not serve; a MultiOutputRegressor over a plain Ridge); a META class whose admit keeps
     its door (a Calibrated DeviceRows base, a Stacking or Calibrated cv that is another of our splitters than KFold /
     StratifiedKFold; lane mf-split4 made the AdaBoost* random-splitter and class_weight bases META members, lane
     mf-split4b a Calibrated index-list / KFold / StratifiedKFold cv and a Bagging tree's class_weight on the

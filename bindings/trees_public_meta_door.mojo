@@ -2983,9 +2983,11 @@ struct _CalUnits(Movable):
     and a base the set does not serve (`_CAL_NOT_MEMBER`: a class with no
     member mark, or a META class whose admission keeps its door (since lane
     mf-search4 GridSearchCV / RandomizedSearchCV and MultiOutputClassifier
-    are META kinds, see core/ensemble_member.mojo; a search keeps its door
-    for a splitter cv, a named scorer other than 'accuracy', refit other
-    than True or its own device; since lane mf-split4 an AdaBoostClassifier
+    are META kinds, see core/ensemble_member.mojo; since lane mf-search4b a
+    search keeps its door only for its own `device`, a splitter other than
+    our KFold / StratifiedKFold, or a scorer the typed RUN does not serve
+    (make_scorer's, average_precision, neg_brier_score, top_k_accuracy, a
+    pos_label that is not a label); since lane mf-split4 an AdaBoostClassifier
     with a random-splitter DecisionTree or class_weight base is a META
     member too),
     CategoricalNB's door included where its kind is not admitted, a
