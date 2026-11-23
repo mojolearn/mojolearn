@@ -1538,9 +1538,8 @@ def _colmajor(xt: PythonObject, x: AdmittedXView, context: PythonObject) raises 
 # (`forest_fit_request`), stored its export into Python Arrays, predicted
 # through the member's door and stepped on Python Arrays.
 # Other bases (RandomForest*, ExtraTrees*, ExtraTree*, a DecisionTree* with
-# splitter='random' or another regression criterion, or an image without a
-# data session) keep their door rounds (`_ada_door_rounds`): each round's
-# member is fitted and predicted through its own public door (the forest
+# splitter='random' or another regression criterion) keep their door rounds
+# (`_ada_door_rounds`): each round's member is fitted and predicted through its own public door (the forest
 # door's weighted fit with its class_weight handling); those classes have no
 # member entry that fits with class_weight rows.
 # TOMBSTONE: _ada_open / _ada_member_round / _ada_member_round_r2 / _member_fit_weighted /
@@ -1813,13 +1812,17 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     py_setitem(fields, "estimator_errors_", Python.list())
     # A best-splitter squared-error DecisionTreeRegressor member fits rows
     # of the SAME X staged in the session once (the member's rows gathered
-    # there). An image without XF_CAP_SESSION answers handle 0: the door
-    # rounds keep the host gather.
+    # there). An image without XF_CAP_SESSION answers handle 0: RUN gathers
+    # the rows itself, and X is tested here once (the session open tests the
+    # words it uploads).
+    var native = _ada_native_base(base, False, context)
     var session = _no_session()
-    if _ada_native_base(base, False, context):
+    if native:
         session = _member_session(base, x.view(), True, _ada_session_choice(fields, xt, context), context)
     try:
-        if session.handle > 0:
+        if native:
+            if session.handle == 0:
+                _finite_or_refuse(x, False, context)
             _ada_native(fields, base, False, x, xt, session, 0, w, None, y32.address, device, seed, m, lr, context)
         else:
             var y_array = _as_array(y32, Python.tuple(n), context)

@@ -26,7 +26,8 @@ Two routes, both the ones the door ran before:
       member's own route (`ForestState`: sequential walk, strict or resident
       snapshot); the SAMME or R2 step (`xt_samme_step` / `xt_r2_step`), the
       early stops and the rescale (`xt_scale`). The regressor draws its rows
-      from the weights (`xt_weighted_sample`) and fits them on the session.
+      from the weights (`xt_weighted_sample`) and fits them on the session
+      (or, without one, on their column-major gather: the same fit body).
 
 THE GIL: the caller HOLDS it. The data session operations (XF_SESSION_*,
 XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND) need it held (their registry is
@@ -52,7 +53,7 @@ from bindings.forest_predict_run import (
     ForestState, forest_labels_route, FOREST_ROUTE_SEQUENTIAL, FOREST_ROUTE_STRICT,
 )
 from xtrees.glue_calls import (
-    xt_gather_f32, xt_r2_step, xt_samme_step, xt_scale, xt_scale_to_f32, xt_weighted_sample,
+    xt_gather_f32, xt_r2_step, xt_samme_step, xt_scale, xt_scale_to_f32, xt_transpose_f32, xt_weighted_sample,
 )
 from xtrees.trees_forest_run import ForestFit, forest_fit_core, forest_export_counts
 from xtrees.trees_boost_run import _sub_seed
@@ -250,7 +251,8 @@ def _keep(mut result: AdaFitResult, handle: Int, alpha: Float64, error: Float64)
 
 
 def _round_fit(mut plan: AdaFitPlan, index: Int, rows: List[Int32], yr: List[Float32], w32: List[Float32],
-               wt: List[Float32], stats: Int, mut launched: Bool) raises -> Int:
+               wt: List[Float32], xg: List[Float32], xc: List[Float32], all_cols: List[Int32], stats: Int,
+               mut launched: Bool) raises -> Int:
     """One round's member fit (device round, session fit or the plain fit);
     returns its export handle. A device round also wrote the step at
     `stats`."""
@@ -285,13 +287,33 @@ def _round_fit(mut plan: AdaFitPlan, index: Int, rows: List[Int32], yr: List[Flo
         _ = len(w32)
         _ = len(wt)
         return handle
-    # The regressor's session fit on the drawn rows of the session's X.
-    var request = _round_request(plan, index, n, Int(rows.unsafe_ptr()), Int(yr.unsafe_ptr()), 0)
+    if plan.session > 0:
+        # The regressor's session fit on the drawn rows of the session's X.
+        var request = _round_request(plan, index, n, Int(rows.unsafe_ptr()), Int(yr.unsafe_ptr()), 0)
+        if request.criterion != plan.squared:
+            raise Error("a forest data session fits squared_error members")
+        request.session = plan.session
+        var handle = xf_fit_session(plan.forest, False, request)
+        _ = len(rows)  # the fit above read the row ids and targets through their addresses
+        _ = len(yr)
+        return handle
+    # Without a session (an image without XF_CAP_SESSION, a Mojo check): the
+    # drawn rows gathered (`xt_gather_f32`) and laid out column-major
+    # (`xt_transpose_f32`), the bytes a host session's row gather writes
+    # (core/mojolearn_rf_host_impl.mojo `rf_host_session_rows_x`), then the
+    # plain unweighted column-major fit, the body the session fit runs.
+    _ = xt_gather_f32(plan.glue, plan.x, Int(rows.unsafe_ptr()), Int(all_cols.unsafe_ptr()), Int(xg.unsafe_ptr()),
+                      n, plan.d, n, plan.d)
+    _ = xt_transpose_f32(plan.glue, Int(xg.unsafe_ptr()), Int(xc.unsafe_ptr()), n, plan.d)
+    var request = _round_request(plan, index, n, Int(xc.unsafe_ptr()), Int(yr.unsafe_ptr()), 0)
     if request.criterion != plan.squared:
         raise Error("a forest data session fits squared_error members")
-    request.session = plan.session
-    var handle = xf_fit_session(plan.forest, False, request)
-    _ = len(rows)  # the fit above read the row ids and targets through their addresses
+    launched = True
+    var handle = forest_fit_core(plan.forest, False, False, request, False)
+    _ = len(rows)  # the gather and the fit above read these words through their addresses
+    _ = len(all_cols)
+    _ = len(xg)
+    _ = len(xc)
     _ = len(yr)
     return handle
 
@@ -312,6 +334,9 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
     var rows = List[Int32]()
     var yr = List[Float32]()
     var col0 = List[Int32](length=1, fill=0)
+    var xg = List[Float32]()
+    var xc = List[Float32]()
+    var all_cols = List[Int32]()
     if not plan.device_rounds:
         w32 = List[Float32](length=max(n, 1), fill=0.0)
         if plan.classifier:
@@ -322,6 +347,12 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
             pred_values = List[Float32](length=max(n, 1), fill=0.0)
             rows = List[Int32](length=max(n, 1), fill=0)
             yr = List[Float32](length=max(n, 1), fill=0.0)
+            if plan.session == 0:
+                xg = List[Float32](length=max(n * plan.d, 1), fill=0.0)
+                xc = List[Float32](length=max(n * plan.d, 1), fill=0.0)
+                all_cols = List[Int32](length=max(plan.d, 1), fill=0)
+                for c in range(plan.d):  # small-loop(the d column ids of the gather, once per fit)
+                    all_cols[c] = Int32(c)
     var handle = 0
     try:
         if plan.device_rounds:
@@ -340,7 +371,7 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
                     _ = xt_gather_f32(plan.glue, plan.y, Int(rows.unsafe_ptr()), Int(col0.unsafe_ptr()),
                                       Int(yr.unsafe_ptr()), n, 1, n, 1)
             var launched = False
-            handle = _round_fit(plan, it, rows, yr, w32, wt, stats_addr, launched)
+            handle = _round_fit(plan, it, rows, yr, w32, wt, xg, xc, all_cols, stats_addr, launched)
             if launched:
                 result.launched = True
             if not plan.device_rounds:
@@ -389,4 +420,7 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
     _ = len(rows)
     _ = len(yr)
     _ = len(col0)
+    _ = len(xg)
+    _ = len(xc)
+    _ = len(all_cols)
     return result^
