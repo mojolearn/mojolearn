@@ -534,6 +534,11 @@ class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
 class HostSVC(_NativeArchiveLoad, _HostBound, SVC):
     """Evaluate a saved support vector classifier on the CPU."""
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
+    # Its own member mark and the HOST-ONLY word (lane mf-cal3b, 2026-11-23): a meta-estimator fits and
+    # predicts it as a native member (core/member_abi.mojo) on the host image its own fit binds
+    # (`_bind`), never the device one; bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (6, 0)
+    _mojolearn_member_host = True
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -821,6 +826,11 @@ class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
 class HostSVR(_NativeArchiveLoad, _HostBound, SVR):
     """Predict regression targets from a saved support vector model on the CPU."""
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
+    # Its own member mark and the HOST-ONLY word (lane mf-cal3b, 2026-11-23): a meta-estimator fits and
+    # predicts it as a native member (core/member_abi.mojo) on the host image its own fit binds
+    # (`_bind`), never the device one; bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (6, 1)
+    _mojolearn_member_host = True
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -933,6 +943,12 @@ class HostGaussianProcessClassifier(_NativeArchiveLoad, GaussianProcessClassifie
     IDENTICAL only."""
 
     _HOST_INFERENCE_ONLY = True
+    # Its own member mark and the HOST-ONLY word (lane mf-cal3b, 2026-11-23): a meta-estimator fits it as a
+    # native member on the image `_bind` returns (providers/python/gp_public_lifecycle_pyapi_door.mojo
+    # `gp_host_class_binding`), so a member fit on the inference-only image refuses in the words its own fit
+    # raises there, and on the reference image fits as its own fit does.
+    _mojolearn_member = (23, 1)
+    _mojolearn_member_host = True
 
     def _bind(self, name=None):
         name = name or self._BINDING
@@ -994,10 +1010,20 @@ class HostNearestNeighbors(_NativeArchiveLoad, _HostKNN, NearestNeighbors):
 
 class HostKNeighborsClassifier(_NativeArchiveLoad, _HostKNN, KNeighborsClassifier):
     _HOST_ARRAYS = ("_index", "_y_cols")
+    # Its own member mark and the HOST-ONLY word (lane mf-cal3b, 2026-11-23): a meta-estimator fits and
+    # predicts it as a native member (core/member_abi.mojo) on the host image its own fit binds
+    # (`_bind`), never the device one; bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (11, 0)
+    _mojolearn_member_host = True
 
 
 class HostKNeighborsRegressor(_NativeArchiveLoad, _HostKNN, KNeighborsRegressor):
     _HOST_ARRAYS = ("_index", "_y_cols")
+    # Its own member mark and the HOST-ONLY word (lane mf-cal3b, 2026-11-23): a meta-estimator fits and
+    # predicts it as a native member (core/member_abi.mojo) on the host image its own fit binds
+    # (`_bind`), never the device one; bindings/member_owner_unpack.mojo `member_host_only`.
+    _mojolearn_member = (11, 1)
+    _mojolearn_member_host = True
 
 
 class HostRadiusNeighbors(_NativeArchiveLoad, _HostBound, RadiusNeighbors):

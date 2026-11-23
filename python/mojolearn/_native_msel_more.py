@@ -230,3 +230,31 @@ def connect_members(context, register, registry):
                 plan['member_only'] = True
             plan['initial_fields'] = {} if row is not None else derived[2]
             plan['keywords'] = {key: () for key in methods}  # glue: no keyword arguments in these recipes
+    _connect_host_members(registry, register, waiting)
+
+
+def _connect_host_members(registry, register, waiting):
+    # glue: import-time class metadata. 4. A marked class with the HOST-ONLY word (`_mojolearn_member_host`: the
+    # explicit Host* classes of python/mojolearn/_classical_host.py, whose own fit binds the host image) has no fit
+    # door of its own module, so `_derive_member` cannot read one; it is registered as a MEMBER-ONLY plan from the
+    # plan of its nearest registered ancestor with the SAME mark (its public class: the same owner entry, context,
+    # constructor parameters and initial fields), and the family's admit reads the host word
+    # (bindings/member_owner_unpack.mojo `member_host_only`). Lane mf-cal3b, 2026-11-23. A class whose ancestor
+    # is not registered yet stays waiting and is retried at the next connect.
+    for cls in tuple(waiting):  # glue: the classes the scan above left waiting, once per connect
+        own = vars(cls)
+        if own.get('_mojolearn_member_host') is not True:
+            continue
+        base = next((parent for parent in cls.__mro__[1:]  # glue: the class's own ancestry, import-time
+                     if parent in registry and vars(parent).get('_mojolearn_member') == own['_mojolearn_member']),
+                    None)
+        if base is None:
+            continue
+        parent = registry[base]
+        register(cls, parent['entry'], parent['context'], parent['parameters'], parent['init'], {})
+        plan = registry[cls]
+        plan['member_only'] = True
+        plan['host_only'] = True
+        plan['initial_fields'] = dict(parent.get('initial_fields', {}))
+        plan['keywords'] = {}
+        waiting.remove(cls)

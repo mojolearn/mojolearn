@@ -123,6 +123,27 @@ def _estimator_binding_cpu(bi: PythonObject, name: String, context: PythonObject
     return estimator_checked_mode(first, String(record[2]), name, String("identical"))
 
 
+def estimator_binding_host(model: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    # The HOST image of binding `name` for an explicit Host* class (lane
+    # mf-cal3b, 2026-11-23; bindings/member_owner_unpack.mojo
+    # `member_host_only`): what its own `_HostBound._bind` loads
+    # (python/mojolearn/_classical_host.py), whatever its `device`. Its
+    # refusal first, in its words: a named mode other than identical. Then the
+    # CPU identical module of `name` connected at import beside the device one
+    # (`family_binding_connections_cpu`: `_mojolearn_svm` -> `_mojolearn_svm_host`,
+    # `_mojolearn` -> `_mojolearn_core_host`, the basenames `_bind` loads), or
+    # on a CPU-only installation its own (host) set. Once per member
+    # admission; a member's calls never come back here.
+    var bi = native_loaded_module("builtins")
+    var mode = py_get(_fields(model), "numeric_mode")
+    if mode is not None and not (py_type(mode) is bi.str and String(py=mode) == "identical"):
+        raise Error("ValueError: mojolearn: " + String(py_type(model).__name__) + " runs IDENTICAL only on the host; "
+                    + "this model was saved " + String(py_call(bi.repr, mode)))
+    if context["backend_fields"]["_CPU_ONLY"] is not None:
+        return estimator_binding_mode(PythonObject("identical"), name, context)
+    return _estimator_binding_cpu(bi, name, context, True)
+
+
 def estimator_binding(mut call: AdmittedCall, model: PythonObject, name: String, context: PythonObject,
                       check_mode: Bool = True) raises -> PythonObject:
     # The door's admission record: its admitted fields are the mode reader

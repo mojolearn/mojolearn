@@ -7,7 +7,7 @@ workers get `owner.plan` (typed words) and nothing else.
 SERIAL BY NATURE: one record read per member admission.
 """
 from std.python import PythonObject
-from bindings.py_balanced import py_call, py_get, py_setitem, py_type
+from bindings.py_balanced import py_call, py_contains, py_get, py_item, py_setitem, py_type
 from core.member_abi import MemberPlan
 from core.member_families import MEMBER_FAMILY_COUNT
 
@@ -52,6 +52,22 @@ def member_mark(plan: PythonObject, b: PythonObject) raises -> MemberMark:
     if number < 0 or number >= MEMBER_FAMILY_COUNT:
         raise Error("ValueError: mojolearn: unknown member family number " + String(number))
     return MemberMark(number, Int(py=kind))
+
+
+def member_host_only(model: PythonObject) raises -> Bool:
+    """UNPACK: the class's OWN host-only word, `_mojolearn_member_host = True`
+    (lane mf-cal3b, 2026-11-23): an explicit Host* class of
+    python/mojolearn/_classical_host.py, whose own fit and predict bind the
+    host image of its family (`_bind`) whatever its `device`. A family's
+    admit that reads it binds that host image (the kernel SVM, neighbors and
+    GP admits), never the device route. One read of the class's own
+    dictionary per member admission (a registered class's metaclass is
+    `type`: no hook runs); an inherited word does not count."""
+    var own = py_type(model).__dict__
+    var key = PythonObject("_mojolearn_member_host")
+    if not py_contains(own, key):
+        return False
+    return py_item(own, key) is PythonObject(True)
 
 
 def member_labels_hold(fields: PythonObject, labels: PythonObject) raises:
