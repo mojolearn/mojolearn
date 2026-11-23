@@ -412,8 +412,11 @@ def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> Pyt
 
 def msel_scorer_call(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
                      sample_weight: PythonObject, memo: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A scorer called as `scorer(estimator, X, y)`: its signed value, or
+    (lane mf-score6) the signed per-label array of an average=None metric,
+    as scikit-learn's `_Scorer._score` returns `sign * score_func(...)`."""
     var prepared = MselMetricPrepared()
-    return PythonObject(msel_scorer_value(scorer, estimator, x, y, sample_weight, memo, context, prepared))
+    return msel_scorer_object(scorer, estimator, x, y, sample_weight, memo, context, prepared)
 
 
 def _scorer_response(fields: PythonObject, model: PythonObject, b: PythonObject) raises -> PythonObject:
@@ -447,6 +450,30 @@ def msel_scorer_response(scorer: PythonObject, model: PythonObject, context: Pyt
 def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
                      sample_weight: PythonObject, memo: PythonObject, context: PythonObject,
                       mut prepared: MselMetricPrepared) raises -> Float64:
+    """The scorer's number, as model selection's `_score` reads a scorer's
+    answer (scikit-learn model_selection/_validation.py `_score`): a real
+    as is; an array (lane mf-score6: an average=None metric's per-label
+    values) its one value when it holds one (`.item()`), else scikit-learn's
+    refusal, raised whatever the error_score."""
+    var result = msel_scorer_object(scorer, estimator, x, y, sample_weight, memo, context, prepared)
+    if metric_is_real(result, context):
+        return metric_float(result, context)
+    var b = native_loaded_module("builtins")
+    if Int(py=py_call(b.len, result)) == 1:
+        var one = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+        var value = one[0]
+        _ = result  # read through its address above
+        return value
+    raise Error("ValueError: scoring must return a number, got " + String(py=py_call(b.str, result)) + " ("
+                + String(py=py_call(b.str, py_type(result))) + ") instead. (scorer="
+                + String(py=py_call(b.repr, scorer)) + ")")
+
+
+def msel_scorer_object(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
+                       sample_weight: PythonObject, memo: PythonObject, context: PythonObject,
+                       mut prepared: MselMetricPrepared) raises -> PythonObject:
+    """The scorer's signed answer as a Python value (a float, or a signed
+    float64 per-label array; lane mf-score6)."""
     var b = native_loaded_module("builtins")
     var fields = msel_scorer_fields(scorer, context)
     var model = msel_estimator_plan(estimator, context)
@@ -468,9 +495,11 @@ def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonOb
 
 def _scorer_metric(fields: PythonObject, estimator: PythonObject, model: PythonObject, method: PythonObject,
                    predicted_in: PythonObject, y: PythonObject, sample_weight: PythonObject, memo: PythonObject,
-                   context: PythonObject, mut prepared: MselMetricPrepared, b: PythonObject) raises -> Float64:
+                   context: PythonObject, mut prepared: MselMetricPrepared, b: PythonObject) raises -> PythonObject:
     """The metric of one scorer over a computed response (the binary
-    probability column, the keyword options, the sign)."""
+    probability column, the keyword options, the sign): a Python float, or
+    (lane mf-score6) an average=None metric's 1-D float64 per-label array,
+    signed (`_signed_array`)."""
     var predicted = predicted_in
     var name = fields["_name"]
     if name is not None and py_type(name) is not b.str:
@@ -493,9 +522,39 @@ def _scorer_metric(fields: PythonObject, estimator: PythonObject, model: PythonO
         py_setitem(keywords, "sample_weight", sample_weight)
     var result = prepared.call(fields["_score_func"], y, predicted, keywords, context, estimator, model)
     classical_connect_numpy(context)
-    if not metric_is_real(result, context):
+    var real = metric_is_real(result, context)
+    if not real and not _per_label_array(result, b):
         raise Error("TypeError: scoring must return a real scalar")
     var sign = fields["_sign"]
     if py_type(sign) is not b.int or (Int(py=sign) != 1 and Int(py=sign) != -1):
         raise Error("TypeError: native scorer sign must be 1 or -1")
-    return Float64(Int(py=sign)) * metric_float(result, context)
+    if not real:
+        return _signed_array(result, Int(py=sign), context)
+    return PythonObject(Float64(Int(py=sign)) * metric_float(result, context))
+
+
+def _per_label_array(result: PythonObject, b: PythonObject) raises -> Bool:
+    """Lane mf-score6: an average=None metric's answer, a 1-D float64 array."""
+    var ndim = py_call(b.getattr, result, PythonObject("ndim"), PythonObject(None))
+    if ndim is None or py_type(ndim) is not b.int or Int(py=ndim) != 1:
+        return False
+    var dtype = String(py=py_call(b.str, py_call(b.getattr, result, PythonObject("dtype"), PythonObject(""))))
+    return dtype == "<f8" or dtype == "float64"
+
+
+def _signed_array(result: PythonObject, sign: Int, context: PythonObject) raises -> PythonObject:
+    """`sign * array` (scikit-learn's `_Scorer._score`): the metric's own
+    array for sign 1, else a new float64 array of its values negated
+    natively."""
+    if sign == 1:
+        return result
+    var n = Int(py=result.shape[0])
+    var out = family_array(Python.tuple(n), "<f8", context)
+    if n > 0:
+        var src = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+        var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
+        for i in range(n):  # driver-loop: over the labels' values (the sign)
+            dst[i] = -src[i]
+    _ = result  # read through its address above
+    _ = out  # written through its address above
+    return out

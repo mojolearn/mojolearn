@@ -115,7 +115,7 @@ from core.msel_scorer_run import (
     msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
     msel_scorer_labels_from_truth, msel_scorer_log_loss, msel_scorer_brier,
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND, SCORER_POSITIVE_MIXED,
-    SCORER_MIXED_WORDS,
+    SCORER_MIXED_WORDS, SCORER_NUMBER_WORDS,
 )
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free, member_own,
@@ -1676,8 +1676,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                                                   pred_at[t * nops + o], side_count[s], k, pred_cols[t * nops + o],
                                                   positives[j], held_addr[fold_of], held_count[fold_of], notes)
                     except error:
-                        failed[at] = UInt8(2)
                         errors[at] = String(error)
+                        # lane mf-score6: a scorer that returns no number
+                        # raises whatever the error_score (SCORER_NUMBER_WORDS)
+                        failed[at] = UInt8(3) if errors[at].startswith(SCORER_NUMBER_WORDS) else UInt8(2)
                     for i in range(len(notes)):  # small-loop(one score's warnings: a triple or two)
                         metric_notes[t // sides].append(notes[i])
                 if t % sides == 0:
@@ -1689,7 +1691,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             for j in range(nsc):  # small-loop(the scorers)
                 var value = values[t * nsc + j]
                 if failed[t * nsc + j] != UInt8(0):
-                    if not plan.tolerate:
+                    if not plan.tolerate or failed[t * nsc + j] == UInt8(3):
                         var words = errors[t * nsc + j].copy()
                         member_set_run_release(run)
                         _drop_kept(plan, res)

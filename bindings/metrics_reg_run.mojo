@@ -365,7 +365,15 @@ def reg_metric_caller(metric: Int) -> String:
 
 
 def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, mut warn: Int) raises -> Float64:
-    """THE TYPED RUN of one single-output, unweighted regression metric with
+    """`reg_metric_run` unweighted."""
+    return reg_metric_run(route, metric, y, p, n, 0, warn)
+
+
+def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, w: Int, mut warn: Int) raises -> Float64:
+    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    builder's third input (`_Reg(has_w)`: its weight total and weighted
+    sums, the door's weighted program); max_error takes none.
+    THE TYPED RUN of one single-output, unweighted regression metric with
     its default options over n float32 targets at `y` and n float32
     predictions at `p` (the caller keeps both alive): the door's refusals
     that read the values (non-finite words, the log and Tweedie domains), the
@@ -385,6 +393,8 @@ def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, mut 
     var addresses: List[Int] = [y, p]
     var sizes: List[Int] = [n, n]
     if metric == REG_MAX_ERROR:
+        if w != 0:
+            raise Error("TypeError: native metric received an unexpected keyword argument")
         var plan = MetricProgramPlan()
         var out = reg_max_error_stages(plan, n, metric_term("abs"))
         var arena = metric_inputs_run(route, plan, addresses, sizes)
@@ -392,7 +402,10 @@ def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, mut 
     if (metric == REG_R2 or metric == REG_D2_ABSOLUTE) and n < 2:
         warn = 1
         return _reg_nan()
-    var r = _Reg(n, 1, False, "uniform_average", List[Float64]())
+    if w != 0:
+        addresses.append(w)
+        sizes.append(n)
+    var r = _Reg(n, 1, w != 0, "uniform_average", List[Float64]())
     var out = _NONE
     var flag = _NONE
     var tw = RegTweedie(_NONE, _NONE, _NONE)

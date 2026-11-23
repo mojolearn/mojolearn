@@ -8,6 +8,7 @@
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run
 from bindings.mcls_common_run import MC_NONE
+from std.memory import bitcast
 
 # cm_epi kinds (x_metrics/cm_epi.mojo, op 59) and the NORM modes.
 comptime _CM_MCC = 1
@@ -206,7 +207,11 @@ comptime LBL_PRECISION = 2
 comptime LBL_RECALL = 3
 comptime LBL_F1 = 4
 comptime LBL_MCC = 5
-#: cls_epi AVG codes (`_epi_codes`): micro, the plain (macro) mean, weighted.
+#: cls_epi AVG codes (`_epi_codes`): micro, the plain (macro) mean, weighted;
+#: (lane mf-score6) 0 the per-label values (average=None, x_metrics/cls_epi.mojo AVG_NONE).
+comptime LBL_NONE = 0
+#: x_metrics/cls_epi.mojo CLS_HEAD: the epilogue slot's words before the per-label values.
+comptime _CLS_HEAD = 8
 comptime LBL_MICRO = 1
 comptime LBL_MACRO = 2
 comptime LBL_WEIGHTED = 3
@@ -290,7 +295,22 @@ def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred
 def label_metric_options_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred: Int, n: Int,
                              k: Int, zd: Int, fmode: Int, b2: Float64, sel_at: Int, sel_n: Int,
                              mut warn: Int) raises -> Float64:
-    """THE ONE BODY of the averaged label metrics (lane mf-tail5b: a
+    """`label_metric_options_run` unweighted, its average one of the codes."""
+    var per_class = List[Float64]()
+    return label_metric_options_run(route, metric, avg, truth, pred, n, k, zd, fmode, b2, sel_at, sel_n, 0, per_class,
+                                    warn)
+
+
+def label_metric_options_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred: Int, n: Int,
+                             k: Int, zd: Int, fmode: Int, b2: Float64, sel_at: Int, sel_n: Int, w: Int,
+                             mut per_class: List[Float64], mut warn: Int) raises -> Float64:
+    """Lane mf-score6: `w`, n float32 sample weights (0: none; the sums'
+    third input, `mc_sums_stages(weighted)`, as the door's weighted
+    program reads them); `avg` 0 (LBL_NONE, average=None) on a precision /
+    recall / F / jaccard metric fills `per_class` with the epilogue's
+    per-label values (the `sel_n` or present labels, in their order) and
+    answers the first (NaN when there are none).
+    THE ONE BODY of the averaged label metrics (lane mf-tail5b: a
     make_scorer's kwargs as words). `zd`: the cls_epi zero_division code
     (`_epi_zd`: 0 for 'warn' and 0, 1, 2 for nan); `fmode` / `b2`: the
     F-score's mode and beta^2 (`_fmode`: 2 with beta^2, 1 for beta 0, 0 for
@@ -322,11 +342,15 @@ def label_metric_options_run(route: MetricRoute, metric: Int, avg: Int, truth: I
     else:
         labels = label_present_codes(truth, pred, n, k, mt, mp)
         chosen = labels
+    var weighted = w != 0
+    var col = 1 if weighted else 0
+    if avg == LBL_NONE and (metric == LBL_MCC or metric == LBL_BALANCED):
+        raise Error("RuntimeError: average=None on a label metric without per-label values")
     var plan = MetricProgramPlan()
-    var s = mc_sums_stages(plan, n, labels, False)
+    var s = mc_sums_stages(plan, n, labels, weighted)
     var at = MC_NONE
     if metric == LBL_MCC:
-        at = mc_mcc_words(plan, s.groups[0], s.groups[2], s.groups[4], labels, 0)
+        at = mc_mcc_words(plan, s.groups[col], s.groups[2 + col], s.groups[4 + col], labels, col)
     elif metric == LBL_BALANCED:
         at = mc_epi_stage(plan, s, McEpi(1, labels, 0, 0, 0, 0.0))
     elif metric == LBL_JACCARD:
@@ -337,6 +361,9 @@ def label_metric_options_run(route: MetricRoute, metric: Int, avg: Int, truth: I
         raise Error("RuntimeError: unknown label metric " + String(metric))
     var addresses: List[Int] = [Int(mt.unsafe_ptr()), Int(mp.unsafe_ptr())]
     var sizes: List[Int] = [n, n]
+    if weighted:
+        addresses.append(w)
+        sizes.append(n)
     var arena = metric_inputs_run(route, plan, addresses, sizes)
     _ = len(mt)  # the program's inputs were copied from these codes above
     _ = len(mp)
@@ -351,6 +378,22 @@ def label_metric_options_run(route: MetricRoute, metric: Int, avg: Int, truth: I
     warn = arena.i32(at)
     if metric == LBL_JACCARD:
         warn = 1 if warn != 0 else 0
+    if avg == LBL_NONE:
+        # x_metrics/cls_epi.mojo: the per-label binary64 values after the
+        # CLS_HEAD words (jaccard at V; precision, recall, F at V, V + 2k,
+        # V + 4k, k the epilogue's label count)
+        var v = at + _CLS_HEAD
+        var base = v
+        if metric == LBL_RECALL:
+            base = v + 2 * chosen
+        elif metric == LBL_F1:
+            base = v + 4 * chosen
+        per_class = List[Float64](capacity=chosen)
+        for i in range(chosen):  # small-loop(the epilogue's labels: their values)
+            per_class.append(arena.f64(base + 2 * i))
+        if chosen == 0:
+            return bitcast[DType.float64](UInt64(0x7FF8000000000000))
+        return per_class[0]
     if metric == LBL_RECALL:
         return arena.f64(at + 4)
     if metric == LBL_F1:
@@ -366,7 +409,16 @@ def label_binary_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: 
 
 def label_binary_options_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: Int, k: Int,
                              positive: Int, zd: Int, fmode: Int, b2: Float64, mut warn: Int) raises -> Float64:
-    """THE ONE BODY of the binary label metrics; `zd`, `fmode`, `b2` as
+    """`label_binary_options_run` unweighted."""
+    return label_binary_options_run(route, metric, truth, pred, n, k, positive, zd, fmode, b2, 0, warn)
+
+
+def label_binary_options_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: Int, k: Int,
+                             positive: Int, zd: Int, fmode: Int, b2: Float64, w: Int,
+                             mut warn: Int) raises -> Float64:
+    """`w` (lane mf-score6): n float32 sample weights (0: none), the sums'
+    third input as `label_metric_options_run` reads them.
+    THE ONE BODY of the binary label metrics; `zd`, `fmode`, `b2` as
     `label_metric_options_run` reads them (lane mf-tail5b).
     THE TYPED RUN of one unweighted label metric with average='binary'
     (lane mf-search4b; precision, recall, f1 or jaccard, zero_division
@@ -418,7 +470,7 @@ def label_binary_options_run(route: MetricRoute, metric: Int, truth: Int, pred: 
         mt[i] = seen[Int(t[i])]
         mp[i] = seen[Int(p[i])]
     var plan = MetricProgramPlan()
-    var s = mc_sums_stages(plan, n, labels, False)
+    var s = mc_sums_stages(plan, n, labels, w != 0)
     var at = MC_NONE
     if metric == LBL_JACCARD:
         at = mc_epi_stage(plan, s, McEpi(0, 1, LBL_MACRO, zd, 0, 0.0))
@@ -428,6 +480,9 @@ def label_binary_options_run(route: MetricRoute, metric: Int, truth: Int, pred: 
         raise Error("RuntimeError: unknown binary label metric " + String(metric))
     var addresses: List[Int] = [Int(mt.unsafe_ptr()), Int(mp.unsafe_ptr())]
     var sizes: List[Int] = [n, n]
+    if w != 0:
+        addresses.append(w)
+        sizes.append(n)
     var arena = metric_inputs_run(route, plan, addresses, sizes)
     _ = len(mt)  # the program's inputs were copied from these codes above
     _ = len(mp)
@@ -459,7 +514,15 @@ def mc_log_loss_stages(mut plan: MetricProgramPlan, n: Int, k: Int, binary: Bool
 
 
 def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int) raises -> Float64:
-    """THE TYPED RUN of `log_loss(y_true, y_proba)` with its defaults over n
+    """`log_loss_run` unweighted."""
+    return log_loss_run(route, truth, proba, n, k, 0)
+
+
+def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, w: Int) raises -> Float64:
+    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    program's third input (`mc_log_loss_stages(weighted)`, the door's
+    weighted mean).
+    THE TYPED RUN of `log_loss(y_true, y_proba)` with its defaults over n
     int32 class codes in 0 .. k-1 and the member's float32 probabilities
     (n x k; for k == 2 the scorer's one column, n words, as
     `neg_log_loss` hands `predict_proba[:, 1]`): the labels are those
@@ -489,9 +552,12 @@ def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int) rai
     for i in range(n):  # driver-loop: over the rows (the encoded labels)
         codes[i] = rank[Int(t[i])]
     var plan = MetricProgramPlan()
-    var got = mc_log_loss_stages(plan, n, k, binary, False, True)
+    var got = mc_log_loss_stages(plan, n, k, binary, w != 0, True)
     var addresses: List[Int] = [proba, Int(codes.unsafe_ptr())]
     var sizes: List[Int] = [n if binary else n * k, n]
+    if w != 0:
+        addresses.append(w)
+        sizes.append(n)
     var arena = metric_inputs_run(route, plan, addresses, sizes)
     _ = len(codes)  # copied into the program's arena above
     var code = mc_proba_code(arena, got[0])
