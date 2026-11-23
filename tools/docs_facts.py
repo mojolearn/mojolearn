@@ -35,11 +35,11 @@ GitHub and PyPI included.
     version_date    CHANGELOG.md                   newest "## X (published D)"
     default_mode    python/mojolearn/_backend.py   requested_mode()'s fallback
     doi             CITATION.cff                   doi:
-    host_training_lanes, host_inference_surfaces, no_cpu_path, host_surface_table
+    host_training_lanes, host_inference_surfaces, host_surface_table
                     python/mojolearn/host_surface.py   the CPU surface manifest
                     (the host surface manifest lane, 2026-09-14): what trains
-                    on a CPU, what predicts on a CPU from a saved model, what
-                    has no CPU path, and the whole surface as one table. The
+                    on a CPU, what predicts on a CPU from a saved model, and
+                    the whole surface as one table. The
                     README said k-NN had no CPU path the day after the k-NN
                     host lane merged; these spans cannot drift that way.
 
@@ -133,7 +133,6 @@ def facts():
     hs = _host_surface()
     out["host_training_lanes"] = hs.training_sentence()
     out["host_inference_surfaces"] = hs.inference_sentence()
-    out["no_cpu_path"] = hs.no_cpu_path_sentence()
     out["host_surface_table"] = hs.markdown_table()
 
     return out

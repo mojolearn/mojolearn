@@ -73,9 +73,8 @@ mojolearn and `vendor()` answers `cpu`.
 Every CPU binding is checked bit for bit against the recorded GPU results. A model trained on any supported GPU can therefore be saved and
 served on a CPU machine; see [Saving and loading models](saving_models.md).
 
-Some configurations have no CPU path and refuse by name on a CPU-only install. Among them are gradient
-boosting training with sample weights, with CTR-encoded categorical columns, and some categorical or
-eval-set combinations outside symmetric trees. See the [support matrix](../notes/support_matrix.md#the-cpu-surface).
+An estimator without a CPU binding refuses by name on a CPU-only install. See the
+[support matrix](../notes/support_matrix.md#the-cpu-surface).
 
 A refusal looks like any other Python error: it names the estimator or binding and the missing
 function, and nothing else runs in its place.

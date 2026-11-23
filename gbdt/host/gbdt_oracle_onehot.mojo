@@ -78,13 +78,13 @@ def gbdt_resolve_one_hot(
                     " category " + String(c) + " is absent from 0.." + String(maxc)
                 )
         if unique_values > GBDT_ONE_HOT_MAX_SIZE:
+            # an invariant, not a refusal (lane gbdt-cpu-rest-4, 2026-11-23):
+            # both callers route a fit with any CTR column
+            # (`gbdt_has_ctr_columns`, the same bound) to the CTR arm first
             raise Error(
-                "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a"
-                " cat_features column with more than one_hot_max_size ("
-                + String(GBDT_ONE_HOT_MAX_SIZE) + ") categories (feature "
-                + String(f) + " has " + String(unique_values) + ", a CTR"
-                " column); the gbdt host binding carries one-hot categorical"
-                " columns only, see gbdt/host/gbdt_oracle_onehot.mojo"
+                "gbdt_resolve_one_hot: feature " + String(f) + " has "
+                + String(unique_values) + " categories, above one_hot_max_size ("
+                + String(GBDT_ONE_HOT_MAX_SIZE) + "); the CTR arm owns it"
             )
         one_hot[f] = True
     return one_hot^

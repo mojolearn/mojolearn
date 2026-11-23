@@ -1568,130 +1568,11 @@ ADAPTED_MODULES = {
     "_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host"),
 }
 
-#: Configuration groups that still lack a CPU training route. These are
-#: not six whole algorithms, nor a count of individual refusal sites.
-#: Cooperative multi-GPU operations are a separate capability and are not
-#: missing CPU algorithms. docs_facts generates the corresponding doc spans.
-#:
-#: Source review 2026-10-27: binary class weights and the dedicated weighted
-#: pointwise lane predate this review; CTR training with all permutations has
-#: existed since 2026-09-28. The former blanket weight/CTR refusals were stale.
-#: Plain numeric Logloss now admits sample weights through the existing
-#: weighted owners; CTR evaluation uses the shared final-table expander and
-#: held-out owner. Their runtime/identity evidence remains pending; this source
-#: inventory and the compile receipts do not supply that evidence.
-#: Lane gbdt-gaps (2026-11-23): sample weights on RMSE, Depthwise/Lossguide,
-#: the pointwise losses, YetiRank and generated-pair PairLogit, and eval sets
-#: on RMSE and Depthwise/Lossguide, are trained by the host owners now.
-#: Lane gbdt-cpu-rest (2026-11-23): sample weights with QueryRMSE, Exact
-#: leaves, the multi-output losses, categorical columns, the grouped
-#: pointwise searcher, OrderedRMSE and FeatureFreq; NaN on every numeric arm;
-#: Cosine under Lossguide; the pointwise losses on Depthwise and Lossguide
-#: (eval sets included); feature_fraction on every numeric Logloss / RMSE
-#: fit and the pointwise losses on non-symmetric trees; the pointwise
-#: searcher without sample weights or an eval set.
-#: Lane gbdt-cpu-rest-2 (2026-11-23): eval sets on the symmetric pointwise
-#: losses and on MultiClass / MultiClassOneVsAll, feature_fraction on the
-#: symmetric pointwise and multi-output losses, the pointwise searcher with
-#: RMSE, NaN in float columns beside categorical ones. Refused on BOTH
-#: columns in `train`'s words, so not CPU gaps: an eval set with MultiRMSE or
-#: the grouped losses, NaN in a cat_features column.
-#: Lane gbdt-rest-3 (2026-11-23): the pointwise searcher with the NewtonL2,
-#: Cosine and NewtonCosine scores, the Bernoulli, Poisson and no bootstrap,
-#: Gradient leaves and random_strength on Logloss / RMSE, and
-#: feature_fraction on both pointwise searchers (grouped ones included).
-#: Refused on BOTH columns in `train`'s words, so not CPU gaps: a NaN in a
-#: one_hot_features column that is not categorical (the binarize's "There
-#: are NaNs in feature number N" on both columns), MVS, Exact leaves on
-#: Logloss / RMSE.
-#:
-#: Lane gbdt-ordered-weights (2026-11-23): sample weights and class weights
-#: under Ordered boosting (gbdt_oracle_ordered.mojo threads the device's one
-#: weight column through the fold planes, the leaves, the starting average
-#: and the learn loss); class weights with RMSE refuse on both columns in
-#: `train`'s words.
-#:
-#: Lane gbdt-cpu-rest-4 (2026-11-23): the ExperimentalTwoLevelFeatureFreq
-#: clause was stale. The host fit (gbdt/host/gbdt_oracle_feature_freq.mojo)
-#: trains a level whose winner is the tensor column itself (registry record,
-#: canonical hash), its admission raises are the device estimator's words
-#: (gbdt/estimator.mojo::gbdt_fit_two_level_feature_freq), and the CPU
-#: column already records gbdt-tensor-ctr-tables; nothing refuses it.
-#: Lane gbdt-cpu-rest-4-ns (2026-11-23): Depthwise and Lossguide train
-#: every (loss, score_function, leaf_estimation_method, bootstrap_type) the
-#: device trains: the four scores on both policies (the device's leafwise
-#: statements, gbdt/methods/greedy_subsets_searcher/leafwise_score_body.mojo),
-#: Depthwise's min_split_gain, min_child_hessian and min_data_in_leaf,
-#: Gradient leaves and any iteration count on Logloss and RMSE, the Poisson
-#: bootstrap, boost_from_average on Logloss and CrossEntropy, class weights
-#: on the pointwise losses. Refused on BOTH columns in the device's words,
-#: so not CPU gaps: Exact outside MAE / MAPE / Quantile, Simple leaves, MVS,
-#: scores outside the four, min_child_hessian outside RMSE / Logloss /
-#: CrossEntropy, RMSE with class weights, boost_from_average outside
-#: `train`'s list, use_pointwise_searcher on a non-symmetric policy.
-#: Lane gbdt-cpu-rest-4-pwl (2026-11-23): the pointwise searcher on every
-#: one-output loss (CrossEntropy, MAE, Quantile, MAPE, LogLinQuantile,
-#: Poisson, Lq, Expectile, Tweedie, Huber beside Logloss and RMSE, Exact
-#: leaves where `train` resolves them), boost_from_average on, off or unset,
-#: every feature_border_type, every detector with an eval set, one-hot and CTR
-#: columns and max_depth 0 (gbdt_oracle_pointwise.mojo); its clause is gone.
-#: Refused on BOTH columns in the device's words, so not CPU gaps: Depthwise
-#: and Lossguide, MultiRMSE, MultiClass and MultiClassOneVsAll (the device
-#: now refuses them too: it searched on the first class's gradient alone),
-#: feature combinations, boost_from_average=True outside its list.
-#: Lane gbdt-cpu-rest-4-sym (2026-11-23): under SymmetricTree (the greedy
-#: searcher) the L2, NewtonL2 and NewtonCosine scores on Logloss, RMSE, the
-#: pointwise losses and (L2) MultiClass / MultiClassOneVsAll / MultiRMSE,
-#: Gradient leaves on Logloss and RMSE, RMSE Newton leaves past one
-#: iteration, boost_from_average on Logloss and CrossEntropy (Plain and
-#: Ordered), class weights on the pointwise losses. Refused on BOTH columns
-#: in the device's words, so not CPU gaps: Exact leaves on Logloss, RMSE and
-#: the multi-output losses, MVS and unknown bootstrap names, the Newton
-#: scores on the multi-output losses, boost_from_average outside `train`'s
-#: list (Plain SymmetricTree and Ordered), class weights with RMSE, the
-#: grouped losses and MultiRMSE, score codes without a calcer.
-#: Lane gbdt-cpu-rest-4-cat (2026-11-23): categorical and one-hot columns
-#: on every Plain fit the device trains: the SymmetricTree pointwise losses
-#: and the multiclass family (MultiRMSE over one_hot_features), every
-#: permutation and the tree CTRs, and Depthwise / Lossguide with Logloss,
-#: RMSE and the pointwise losses (sub-lane -ns), weights and eval sets
-#: included, through the one categorical prelude. Refused on BOTH columns
-#: in `train`'s words, so not CPU gaps: MultiRMSE with cat_features, the
-#: grouped losses with cat_features or one_hot_features, feature_fraction
-#: below 1 with either, feature combinations under Depthwise / Lossguide.
-#: The clause is deleted; NO_CPU_PATH is not empty, so the mechanism stays.
-#: Lane gbdt-cpu-rest-4-tail (2026-11-23): the multi-output losses
-#: (MultiClass, MultiClassOneVsAll, MultiRMSE) walk their leaves under
-#: Newton and Gradient at any iteration count on the host
-#: (gbdt_oracle_multiclass.mojo `_estimate_multi`, the statements of
-#: `device_walker.device_multi_walk_estimate`, the defaults of
-#: `set_leaves_estimation_default`), and the host's own depth cap (16) and
-#: border-count range are gone: `border_count` 1 to 255 and `max_depth` at
-#: most 16 under SymmetricTree and Depthwise are `train`'s limits on both
-#: columns, one body (gbdt/options/catboost_options.mojo::check_tree_limits;
-#: the device had neither: past 255 borders it overran its binarize table,
-#: past depth 16 it trained to the end and the model reader refused the
-#: tree), Lossguide's depth uncapped. What is left of the clause is the
-#: Simple leaf estimator.
-#: Lane gbdt-cpu-rest-4-simple (2026-11-23): the Simple leaf estimator
-#: trains on both columns wherever the device trains it, the greedy
-#: SymmetricTree searcher's own leaves (`need_estimation` False: only the
-#: learn permutation's cursor moves) on Logloss, RMSE, the pointwise losses
-#: and the greedy QueryRMSE / PairLogit, numeric, one-hot and CTR columns,
-#: weights, bootstraps and eval sets, through one body both columns call
-#: (gbdt/methods/leaves_estimation/searcher_leaf_body.mojo, from
-#: `compute_leaf_values_kernel` and the host's `gbdt_host_boost` /
-#: `gbdt_losses_host_fit`). Refused on BOTH columns before any tree in one
-#: admission's words (gbdt/options/catboost_options.mojo
-#: `simple_leaves_check`, `simple_leaf_iterations_check`, called by `train`
-#: and the host fit), so not CPU gaps: the multi-output losses (the device
-#: wrote a one-value-a-leaf tree into a multi-dimensional model), Ordered
-#: boosting, Depthwise / Lossguide and the pointwise searcher (each
-#: estimates every tree; the device reached "a walk reached no device
-#: walker" at the first tree), and more than one iteration; YetiRank keeps
-#: its own refusal. The clause is deleted and NO_CPU_PATH is empty: the
-#: mechanism is the parent lane's to remove.
-NO_CPU_PATH = ()
+# `NO_CPU_PATH` (the configuration groups the CPU column refused by name) is
+# deleted (lane gbdt-cpu-rest-4, 2026-11-23): the gbdt host binding trains
+# every configuration the device trains and refuses the rest in the device's
+# words, so no group is left. Its clauses and the lanes that closed them are
+# in git history (python/mojolearn/host_surface.py before this lane).
 
 #: The read-back trio every host binding exports under its own prefix,
 #: plus the sabotage flag: `<prefix>_numeric_mode()` must answer 1,
@@ -5200,22 +5081,6 @@ def inference_sentence():
     return "; ".join(parts)
 
 
-def no_cpu_path_sentence():
-    """`NO_CPU_PATH` for the generated support matrix, numbered and joined.
-
-    `_join`'s comma-and is right for a list of short nouns and wrong here:
-    every entry below carries its own commas and its own structural reason,
-    and comma-joining them reads as one undifferentiated clause with no way
-    to count the items. The count is the point (the entry this replaced
-    ended "among them"), so the sentence carries it."""
-    items = list(NO_CPU_PATH)
-    if len(items) <= 1:
-        return "".join(items)
-    return "; ".join(
-        "(%d) %s" % (i + 1, text) for i, text in enumerate(items)
-    )
-
-
 def _join(items):
     if len(items) <= 1:
         return "".join(items)
@@ -5278,7 +5143,6 @@ def as_dict():
         wheel_families=wheel_families(),
         wheel_bindings=wheel_bindings(),
         forest_recorded_root=FOREST_RECORDED_ROOT,
-        no_cpu_path=list(NO_CPU_PATH),
         public_reference_lanes=public_reference_lanes(),
         public_reference_candidates=public_reference_candidates(),
         saved_model_inference_owed=saved_model_inference_owed(),

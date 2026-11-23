@@ -65,9 +65,7 @@ a named error. Bits may change between releases. See [Numeric modes](../user_gui
 
 On a CPU-only install, `fit` trains on the CPU for every estimator with a CPU binding and refuses by name
 otherwise, and saved models predict on the CPU. Every CPU binding is checked bit for bit against the
-recorded GPU results. A few gradient boosting training configurations have no CPU path (sample weights,
-CTR-encoded categorical columns, and some categorical and eval-set combinations outside symmetric
-trees). See [Devices and the CPU](../user_guide/devices.md) and
+recorded GPU results. See [Devices and the CPU](../user_guide/devices.md) and
 [Saving and loading models](../user_guide/saving_models.md).
 
 ## What counts as verified

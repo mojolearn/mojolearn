@@ -176,7 +176,7 @@ comptime GBDT_HOST_DEFAULT_BORDER = Float32(0.5)
 # refusal ("no CPU implementation of _mojolearn_gbdt.gbdt_fit for ..."), is
 # deleted with its last caller: every combination it named is trained or
 # refused on both columns in the device's words (python/mojolearn/
-# host_surface.py `NO_CPU_PATH` is empty).
+# host_surface.py `NO_CPU_PATH` is deleted).
 
 
 def _pointwise_objective(loss: String) -> Int:
