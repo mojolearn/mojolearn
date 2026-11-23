@@ -646,7 +646,9 @@ class GradientBoosting(_NumericModeMixin):
     leaf_estimation_method : {'Newton', 'Gradient', 'Exact', 'Simple'}, optional
         None lets the loss decide, as in CatBoost. ``'Newton'`` is refused for
         Quantile, MAE, LogLinQuantile, MAPE and Lq with q < 2, whose second
-        derivative is zero.
+        derivative is zero. ``'Simple'`` keeps the leaf values the tree
+        search computed: it runs one iteration, on SymmetricTree with Plain
+        boosting and single-output losses (YetiRank keeps its own method).
     leaf_estimation_iterations : int, optional
         None lets the loss decide; under SymmetricTree, fewer than 200
         iterations on fewer than 20 features then sets it to 1, as CatBoost

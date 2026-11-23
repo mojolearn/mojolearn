@@ -830,6 +830,8 @@ TRAINING_LANE_NAMES = {
     "gbdt-cat-nonsym": "gradient boosting with Depthwise and Lossguide trees on CTR and one-hot categorical columns",
     # lane gbdt-cpu-rest-4-tail (2026-11-23)
     "gbdt-multi-walk": "gradient boosting with MultiClass, MultiClassOneVsAll and MultiRMSE under Newton leaves past one iteration and Gradient leaves",
+    # lane gbdt-cpu-rest-4-simple (2026-11-23)
+    "gbdt-simple-leaves": "gradient boosting with the Simple leaf estimator, the SymmetricTree searcher's own leaves",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1671,12 +1673,25 @@ ADAPTED_MODULES = {
 #: past depth 16 it trained to the end and the model reader refused the
 #: tree), Lossguide's depth uncapped. What is left of the clause is the
 #: Simple leaf estimator.
-NO_CPU_PATH = (
-
-    "gradient boosting training with the Simple leaf estimator under "
-    "SymmetricTree and Ordered boosting, refused by name (the host takes "
-    "the searcher's own leaves only for RMSE)",
-)
+#: Lane gbdt-cpu-rest-4-simple (2026-11-23): the Simple leaf estimator
+#: trains on both columns wherever the device trains it, the greedy
+#: SymmetricTree searcher's own leaves (`need_estimation` False: only the
+#: learn permutation's cursor moves) on Logloss, RMSE, the pointwise losses
+#: and the greedy QueryRMSE / PairLogit, numeric, one-hot and CTR columns,
+#: weights, bootstraps and eval sets, through one body both columns call
+#: (gbdt/methods/leaves_estimation/searcher_leaf_body.mojo, from
+#: `compute_leaf_values_kernel` and the host's `gbdt_host_boost` /
+#: `gbdt_losses_host_fit`). Refused on BOTH columns before any tree in one
+#: admission's words (gbdt/options/catboost_options.mojo
+#: `simple_leaves_check`, `simple_leaf_iterations_check`, called by `train`
+#: and the host fit), so not CPU gaps: the multi-output losses (the device
+#: wrote a one-value-a-leaf tree into a multi-dimensional model), Ordered
+#: boosting, Depthwise / Lossguide and the pointwise searcher (each
+#: estimates every tree; the device reached "a walk reached no device
+#: walker" at the first tree), and more than one iteration; YetiRank keeps
+#: its own refusal. The clause is deleted and NO_CPU_PATH is empty: the
+#: mechanism is the parent lane's to remove.
+NO_CPU_PATH = ()
 
 #: The read-back trio every host binding exports under its own prefix,
 #: plus the sabotage flag: `<prefix>_numeric_mode()` must answer 1,
@@ -3038,6 +3053,10 @@ FAMILIES = (
             # lane gbdt-cpu-rest-4-tail (2026-11-23): the multi-output
             # losses' leaf walk (gbdt_oracle_multiclass.mojo _estimate_multi)
             "gbdt-multi-walk",
+            # lane gbdt-cpu-rest-4-simple (2026-11-23): the Simple leaf
+            # estimator, the searcher's own leaves (gbdt_oracle.mojo
+            # gbdt_host_boost, gbdt_oracle_losses.mojo gbdt_losses_host_fit)
+            "gbdt-simple-leaves",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4258,6 +4277,8 @@ PUBLIC_PENDING_LANES = {
     "gbdt-cat-nonsym": "no reference",
     # lane gbdt-cpu-rest-4-tail (2026-11-23): new lane, recorded CPU first at the release
     "gbdt-multi-walk": "no reference",
+    # lane gbdt-cpu-rest-4-simple (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-simple-leaves": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no

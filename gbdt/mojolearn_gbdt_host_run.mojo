@@ -172,26 +172,11 @@ comptime GBDT_HOST_DEFAULT_BORDER = Float32(0.5)
 # body for both columns)
 
 
-def _refuse(what: String) raises:
-    """The by-name refusal. The sentence starts with the phrase the CPU
-    identity gate's column check keys on, so a lane this binding does not
-    cover reads REFUSED and never a hash."""
-    raise Error(
-        "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
-        + "; the gbdt host binding trains the declared GBDT lanes"
-        " only (SymmetricTree, Depthwise and Lossguide with the Cosine,"
-        " NewtonCosine, L2 and NewtonL2 scores, Newton or Gradient leaves and"
-        " the Logloss, RMSE and pointwise losses, every bootstrap and growth"
-        " knob the device trains, the multiclass losses on SymmetricTree; sample"
-        " weights on numeric columns outside the multi-output losses,"
-        " QueryRMSE and Exact leaves; an eval set and the overfitting"
-        " detector with Logloss and RMSE on every tree shape and on the"
-        " Ordered and pointwise-searcher arms; the pointwise searcher on every"
-        " one-output loss with its options and columns; one-hot and CTR"
-        " categorical columns on every tree shape and loss but the grouped"
-        " ones), see"
-        " gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it"
-    )
+# lane gbdt-cpu-rest-4-simple (2026-11-23): `_refuse`, the by-name
+# refusal ("no CPU implementation of _mojolearn_gbdt.gbdt_fit for ..."), is
+# deleted with its last caller: every combination it named is trained or
+# refused on both columns in the device's words (python/mojolearn/
+# host_surface.py `NO_CPU_PATH` is empty).
 
 
 def _pointwise_objective(loss: String) -> Int:
@@ -721,15 +706,8 @@ def _gbdt_fit_pointwise_arm(
     return GbdtFitOutcome(text^, fit.best_iteration, fit.stopped_early, losses^, test_losses^)
 
 
-def _refuse_ordered_host(what: String) raises:
-    raise Error(
-        "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
-        + " with boosting_type='Ordered'; the gbdt host binding trains Ordered"
-        " boosting with RMSE, Logloss, CrossEntropy and the pointwise losses,"
-        " sample and class weights and boost_from_average included, at"
-        " border_count 1 to 255 and Newton or Gradient leaves (see"
-        " gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit)"
-    )
+# lane gbdt-cpu-rest-4-simple (2026-11-23): `_refuse_ordered_host`, the
+# Ordered arm's by-name refusal, is deleted: it had no caller left.
 
 
 def _gbdt_fit_ordered_arm(
