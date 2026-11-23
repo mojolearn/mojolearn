@@ -38,6 +38,19 @@ programs). On the L40S (GPU owed) the same command: every line equal to the host
 (B) already says the binary64 program differs; the resident route moves no bit (the same device take of the same
 rows). A scoring None line that differs only in the last bits of a mean is the 'accuracy' program's float64
 fraction against the class's own score program; say so if seen.
+
+Lane mf-cluster5 adds section cluster5 (base: origin/lane/member-fits-5 9f274ad9d5 vs head): (F) the public
+label-pair doors now on the cluster table's typed RUN (rand, adjusted rand, mutual information, homogeneity,
+completeness, v-measure beta 1 / 2, Fowlkes-Mallows, homogeneity_completeness_v_measure, raw labels with gaps and
+negatives, an empty FM, a length mismatch and a contingency= refusal): every line equal (the same image bodies,
+the same union codes). (G) searches now through the typed RUN: each of the seven label-pair scorers over a
+classifier; GridSearchCV(KMeans) scored by each clustering scorer and a multi-metric of them (a clusterer base);
+make_scorer(mean_squared_error) (sign flipped), make_scorer(f1_score, average='macro') (the 'f1_macro' row); a
+binary f1 search whose labels are {0, 2} (pos_label=1 absent: raise, and error_score=nan: its warning) and
+{'a', 'b'} (the type refusal). Expected: every value line equal; a raised line equal in its words (the base's door
+units raised the door's metric words per fold; the head's RUN raises the same words). The KMeans lines' base ran
+the door units (the public scorer over predict); equal values are expected because the RUN reads the same labels
+(float32 target words of small integers) and the same entry bodies.
 """
 import hashlib
 import os
@@ -318,9 +331,89 @@ def _search5_cases():
     return cases
 
 
+_PAIR_SCORERS = ["rand_score", "adjusted_rand_score", "mutual_info_score", "homogeneity_score", "completeness_score",
+                 "v_measure_score", "fowlkes_mallows_score"]
+
+
+def _cluster5_metric_cases():
+    from mojolearn import metrics as m
+    rng = np.random.default_rng(23)
+    lt = rng.integers(0, 5, size=150).astype(np.int32)
+    lp = np.where(rng.uniform(size=150) < 0.6, lt, rng.integers(0, 6, size=150)).astype(np.int32)
+    gt = (lt * 3 - 4).astype(np.int32)  # gaps and negatives: the raw labels the doors see
+    cases = []
+    for name in ("rand_score", "adjusted_rand_score", "mutual_info_score", "homogeneity_score",
+                 "completeness_score", "v_measure_score", "fowlkes_mallows_score"):
+        fn = getattr(m, name)
+        cases.append((f"F_{name}", lambda fn=fn: fn(lt, lp)))
+        cases.append((f"F_{name}_raw", lambda fn=fn: fn(gt, lp)))
+        cases.append((f"F_{name}_mismatch", lambda fn=fn: fn(lt, lp[:-1])))
+    cases.append(("F_v_measure_beta2", lambda: m.v_measure_score(lt, lp, beta=2.0)))
+    cases.append(("F_hcv", lambda: m.homogeneity_completeness_v_measure(lt, lp)))
+    cases.append(("F_hcv_beta05", lambda: m.homogeneity_completeness_v_measure(gt, lp, beta=0.5)))
+    cases.append(("F_fm_empty", lambda: m.fowlkes_mallows_score(lt[:0], lp[:0])))
+    cases.append(("F_mi_contingency", lambda: m.mutual_info_score(lt, lp, contingency=np.ones((2, 2)))))
+    return cases
+
+
+def _rows_of_search(s, X):
+    rows = []
+    for key in sorted(s.cv_results_):
+        if "time" in key or key == "params" or key.startswith("param_"):
+            continue
+        rows.append((key, _digest(np.asarray(s.cv_results_[key], dtype=np.float64))))
+    if hasattr(s, "best_index_"):
+        rows.append(("best_index", repr(int(s.best_index_))))
+    if hasattr(s, "best_estimator_"):
+        rows.append(("best_predict", _digest(np.asarray(s.best_estimator_.predict(X)))))
+    return rows
+
+
+def _kmeans_search(scoring, refit=True):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV
+    X, _, c = _data(29, n=150, d=4, k=3)
+    s = GridSearchCV(mojolearn.KMeans(random_state=0, n_init=1), {"n_clusters": [2, 3, 4]}, scoring=scoring,
+                     cv=3, refit=refit).fit(X, c)
+    return _rows_of_search(s, X)
+
+
+def _binary_labels_search(labels, error_score="raise"):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV
+    X, _, c = _data(31, n=120, d=4, k=2)
+    target = np.asarray(labels)[(c > 0).astype(np.int64)]
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring="f1", cv=3,
+                     error_score=error_score).fit(X, target)
+    return _rows_of_search(s, X)
+
+
+def _cluster5_search_cases():
+    from mojolearn import metrics as m
+    from mojolearn.model_selection import make_scorer
+    cases = []
+    for name in _PAIR_SCORERS:
+        cases.append((f"G_clf_{name}", lambda name=name: _warned(lambda: _search("clf", name))))
+        cases.append((f"G_kmeans_{name}", lambda name=name: _warned(lambda: _kmeans_search(name))))
+    for name in ("normalized_mutual_info_score", "adjusted_mutual_info_score"):
+        cases.append((f"G_kmeans_{name}", lambda name=name: _warned(lambda: _kmeans_search(name))))
+    cases.append(("G_kmeans_multi", lambda: _kmeans_search(["adjusted_rand_score", "v_measure_score",
+                                                           "normalized_mutual_info_score"],
+                                                          refit="v_measure_score")))
+    cases.append(("G_kmeans_refit_false", lambda: _kmeans_search("adjusted_rand_score", refit=False)))
+    cases.append(("G_make_scorer_mse_flip", lambda: _search("reg", make_scorer(m.mean_squared_error))))
+    cases.append(("G_make_scorer_neg_mse", lambda: _search("reg", make_scorer(m.mean_squared_error,
+                                                                            greater_is_better=False))))
+    cases.append(("G_make_scorer_f1_macro", lambda: _search("clf", make_scorer(m.f1_score, average="macro"))))
+    cases.append(("G_bin_absent_raise", lambda: _binary_labels_search([0, 2])))
+    cases.append(("G_bin_absent_nan", lambda: _warned(lambda: _binary_labels_search([0, 2], error_score=np.nan))))
+    cases.append(("G_bin_strings", lambda: _binary_labels_search(["a", "b"])))
+    return cases
+
+
 def _all_cases():
     return (_metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
-            + _search5_cases())
+            + _search5_cases() + _cluster5_metric_cases() + _cluster5_search_cases())
 
 
 def _run(index):
