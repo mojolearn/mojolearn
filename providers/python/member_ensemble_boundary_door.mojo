@@ -2123,7 +2123,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 return False  # a member whose predict is not class codes
     var words: List[Float64] = [Float64(scoring), tolerate, error_value, 1.0 if return_train else 0.0, Float64(seed)]
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
-    if not _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
+    # The META entry and its glue run on an x_trees image: the search's own
+    # context is model selection's, so the image is the one the meta classes'
+    # context names (`_finish` reads its bindings; not loaded: the door).
+    var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
+    if trees is None:
+        return False
+    var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
+    if trees_context is None:
+        return False
+    if not _finish(fields, trees_context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
                    List[List[Int32]](), List[List[Int32]]()):
         return False
     if scoring == 1:
