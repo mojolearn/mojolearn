@@ -56,6 +56,13 @@ comptime MEMBER_NOTICE_METRIC_BALANCED = 8
 comptime MEMBER_NOTICE_METRIC_FEW = 9
 #: top_k_accuracy_score with k >= n_classes (a = k, b = n_classes; bindings/metrics_exp_curve_door.mojo `_top_k`).
 comptime MEMBER_NOTICE_METRIC_TOP_K = 10
+#: RidgeCV's split path (lane mf-split5, core/xlinear_member.mojo): a cv
+#: split with fewer than two test rows, whose R^2 scikit-learn leaves
+#: undefined with an UndefinedMetricWarning (no operands). Kept apart from
+#: MEMBER_NOTICE_METRIC_FEW (same words): that one is a search scorer's
+#: notice raised with the search's metrics context; this one is the x_linear
+#: member's own fit notice, raised with the x_linear context's category.
+comptime MEMBER_NOTICE_R2_FEW = 11
 
 
 def member_notice_add(mut words: List[Float64], code: Int, a: Float64 = 0.0, b: Float64 = 0.0):

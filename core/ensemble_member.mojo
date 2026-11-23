@@ -223,11 +223,9 @@ from core.label_weights_native_api import (
     LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS,
 )
 from xtrees.label_weights_native import label_weights_native_v1
-from core.member_class_weight import member_cw_counts
 from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST
-from bindings.msel_split_plan_run import (
-    MselSeed, MselSplitRoute, MselSplitPlan, MselCodes, msel_split_route_none, msel_plan_kfold, msel_plan_stratified,
-    msel_split_fill, MSEL_LABELS_SORTED,
+from bindings.msel_split_spec_run import (
+    MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, msel_spec_sides, msel_sides_i32, msel_group_codes_run,
 )
 from core.member_set_run import (
     MemberSetRun, member_set_fit, member_set_run_release, member_set_first_failure,
@@ -376,13 +374,12 @@ comptime META_CW_HEAD = 3
 comptime META_CW_NONE = 0
 comptime META_CW_BALANCED = 1
 comptime META_CW_DICT = 2
-#: THE SPLITTER CV of a stack (lane mf-split4): one of OUR splitters, read at
-#: UNPACK as typed words (bindings/msel_split_door.mojo `MselSplitter`), its
-#: folds computed inside each FIT over that fit's own rows
-#: (bindings/msel_split_plan_run.mojo, the splitters' own RUN).
-comptime META_SPLIT_NONE = 0
-comptime META_SPLIT_KFOLD = 1
-comptime META_SPLIT_STRATIFIED = 2
+#: THE SPLITTER CV of a stack, a calibration or a search (lanes mf-split4,
+#: mf-split5): one of OUR splitters, read at UNPACK as typed words
+#: (bindings/msel_split_spec_run.mojo `MselSplitSpec`, every native splitter),
+#: its folds computed inside each FIT over that fit's own rows by the public
+#: split door's own plans and fill (`msel_spec_sides`). Before (mf-split4)
+#: only KFold and StratifiedKFold had words (META_SPLIT_*, removed).
 
 comptime _CALIB_FAST_HOST_FOLDS = is_defined["MOJOLEARN_CALIB_FAST_HOST_FOLDS"]()
 
@@ -445,15 +442,9 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
     # Lane mf-search4: THE SEARCH KIND's metric program route (scoring
     # 'accuracy'), resolved by the admission; its connection is pinned there.
     var metric: MetricRoute
-    # Lane mf-split4: THE SPLITTER CV (META_SPLIT_*), its n_splits, shuffle,
-    # seed, the splitters' entries (pinned by the admission) and the
-    # sabotage word the splitter door reads.
-    var split_kind: Int
-    var split_k: Int
-    var split_shuffle: Bool
-    var split_seed: MselSeed
-    var split_route: MselSplitRoute
-    var split_sabotage: Bool
+    # Lanes mf-split4, mf-split5: THE SPLITTER CV (kind MSEL_SPEC_NONE: an
+    # int cv or a user's index list), its entries pinned by the admission.
+    var split: MselSplitSpec
 
     def __init__(out self):
         self.generation = 0
@@ -466,12 +457,7 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
         self.fold_train = List[List[Int32]]()
         self.fold_test = List[List[Int32]]()
         self.metric = MetricRoute(entry_ref_unresolved().call, False, False)
-        self.split_kind = META_SPLIT_NONE
-        self.split_k = 0
-        self.split_shuffle = False
-        self.split_seed = MselSeed(0, False)
-        self.split_route = msel_split_route_none()
-        self.split_sabotage = False
+        self.split = MselSplitSpec()
 
 
 struct MetaPlanStore(Defaultable, Movable):
@@ -541,22 +527,17 @@ def meta_plan_mint_with(var plans: List[MemberPlan], var weights: List[Float64],
         shared_slot_unlock(lock)
 
 
-def meta_plan_split(handle: Int, kind: Int, k: Int, shuffle: Bool, seed: MselSeed, route: MselSplitRoute,
-                    sabotage: Bool) raises:
-    """UNPACK (a stack's admission, lane mf-split4): THE SPLITTER CV of a
-    minted plan entry, copied into every state NEW makes from it."""
+def meta_plan_split(handle: Int, spec: MselSplitSpec) raises:
+    """UNPACK (a stack's, a calibration's or a search's admission, lanes
+    mf-split4, mf-split5): THE SPLITTER CV of a minted plan entry, copied
+    into every state NEW makes from it."""
     var store = _PLANS.get_or_create_ptr()
     var address = _plan_lookup(handle, False)
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
     try:
         var entry = _PlanSlotPtr(unsafe_from_address=address)
-        entry[].split_kind = kind
-        entry[].split_k = k
-        entry[].split_shuffle = shuffle
-        entry[].split_seed = seed
-        entry[].split_route = route
-        entry[].split_sabotage = sabotage
+        entry[].split = spec.copy()
     finally:
         shared_slot_unlock(lock)
 
@@ -690,14 +671,9 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var words: List[Float64]
     var fold_train: List[List[Int32]]
     var fold_test: List[List[Int32]]
-    # Lane mf-split4: THE SPLITTER CV (the entry's; META_SPLIT_*): each fit
+    # Lanes mf-split4, mf-split5: THE SPLITTER CV (the entry's): each fit
     # writes its folds into `fold_train` / `fold_test` (`_split_folds`).
-    var split_kind: Int
-    var split_k: Int
-    var split_shuffle: Bool
-    var split_seed: MselSeed
-    var split_route: MselSplitRoute
-    var split_sabotage: Bool
+    var split: MselSplitSpec
     var base_plans: List[MemberPlan]
     var base_masks: List[Int]
     # Per kept unit: its classes as ensemble codes when it lacks some (empty:
@@ -782,12 +758,7 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.words = List[Float64]()
         self.fold_train = List[List[Int32]]()
         self.fold_test = List[List[Int32]]()
-        self.split_kind = META_SPLIT_NONE
-        self.split_k = 0
-        self.split_shuffle = False
-        self.split_seed = MselSeed(0, False)
-        self.split_route = msel_split_route_none()
-        self.split_sabotage = False
+        self.split = MselSplitSpec()
         self.base_plans = List[MemberPlan]()
         self.base_masks = List[Int]()
         self.unit_held = List[List[Int32]]()
@@ -1108,27 +1079,24 @@ def _new(call: _CallPtr) raises:
         slot[].fold_train = entry[].fold_train.copy()
         slot[].fold_test = entry[].fold_test.copy()
         slot[].metric = entry[].metric
-        slot[].split_kind = entry[].split_kind
-        slot[].split_k = entry[].split_k
-        slot[].split_shuffle = entry[].split_shuffle
-        slot[].split_seed = entry[].split_seed
-        slot[].split_route = entry[].split_route
-        slot[].split_sabotage = entry[].split_sabotage
+        slot[].split = entry[].split.copy()
     finally:
         shared_slot_unlock(lock)
     try:
         if len(slot[].plans) == 0:
             raise Error("member ABI: a meta member plan holds no members")
         var user_folds = len(slot[].fold_test)
+        # THE SPLITTER CV: its fold count is the fit's (word 3 is 0).
+        var splitter = slot[].split.kind != MSEL_SPEC_NONE
         if len(slot[].fold_train) != user_folds:
             raise Error("member ABI: a meta member's user folds need a train and a test side each")
         if _stack_kind_code(kind) and (len(slot[].stack_kinds) + 1 != len(slot[].plans)
-                                       or (slot[].folds < 2 and user_folds == 0)):
+                                       or (slot[].folds < 2 and user_folds == 0 and not splitter)):
             raise Error("member ABI: a stacking member needs its members, its final estimator and cv >= 2")
         if _search_kind(kind):
             var count = Int(slot[].words[META_SEARCH_COUNT]) if len(slot[].words) >= META_SEARCH_WORDS else -1
             if (count < 0 or len(slot[].words) != META_SEARCH_WORDS + count + max(count, 1)
-                    or len(slot[].masks) != len(slot[].plans) or (slot[].folds < 2 and user_folds == 0)
+                    or len(slot[].masks) != len(slot[].plans) or (slot[].folds < 2 and user_folds == 0 and not splitter)
                     or (count > 0 and (slot[].words[META_SEARCH_REFIT_SCORER] < 0.0
                                        or Int(slot[].words[META_SEARCH_REFIT_SCORER]) >= count))):
                 raise Error("member ABI: a search member needs its candidates, one mask each, its "
@@ -1158,7 +1126,7 @@ def _new(call: _CallPtr) raises:
             if len(slot[].plans) != plans or len(slot[].masks) != plans or len(slot[].words) != need:
                 raise Error("member ABI: a " + _name(kind) + " member needs its one base estimator and its "
                             + String(need) + " settings words")
-            if kind == META_CALIBRATED and slot[].folds < 2 and user_folds == 0:
+            if kind == META_CALIBRATED and slot[].folds < 2 and user_folds == 0 and not splitter:
                 raise Error("member ABI: a CalibratedClassifierCV member needs cv >= 2 or its listed folds")
             if _ada_kind(kind):
                 var family = slot[].plans[0].family
@@ -1541,97 +1509,49 @@ def _user_folds(slot: _SlotPtr, n: Int, mut tr_at: List[Int], mut tr_n: List[Int
     _ = len(te_counts)
 
 
-def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int) raises:
-    """THE SPLITTER CV (lane mf-split4): the folds of the entry's splitter
-    over THIS fit's `n` rows (the door's `_splits` -> `prep_native_split` ->
-    bindings/msel_split_door.mojo `msel_kfold_split` /
-    `msel_stratified_split`, whose RUN this is: `msel_plan_kfold` /
-    `msel_plan_stratified` over the int32 codes `codes` of `k` classes, the
-    sides sized by the plan, `msel_split_fill`), written as the stack's typed
-    folds (`fold_train` / `fold_test`, int32 rows), which `_user_folds` then
-    checks as the door checks a split's rows. The splitter's warning ("The
-    least populated class in y has only ...") becomes the state's first fit
-    notice (core/member_notices.mojo MEMBER_NOTICE_SPLIT_LEAST, raised by the
-    PACK in its words; the door raised it before the fits). No Python."""
-    var route = slot[].split_route
-    var plan = MselSplitPlan()
-    if slot[].split_kind == META_SPLIT_STRATIFIED:
-        plan = msel_plan_stratified(route, MselCodes(codes, n, k), MSEL_LABELS_SORTED, slot[].split_k,
-                                    slot[].split_shuffle, slot[].split_seed)
-    else:
-        plan = msel_plan_kfold(route, n, slot[].split_k, slot[].split_shuffle, slot[].split_seed,
-                               slot[].split_sabotage)
-    if plan.warned and slot[].split_kind == META_SPLIT_STRATIFIED:
-        # The operands of the stratified warning: the least populated
-        # class's row count (over the classes the rows hold) and n_splits.
-        var counts = member_cw_counts(codes, MEMBER_I32, n, k)
-        var least = -1
-        for c in range(k):  # small-loop(k class counts: the least one held)
-            if counts[c] > 0 and (least < 0 or Int(counts[c]) < least):
-                least = Int(counts[c])
+def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int, groups: MselGroupCodes) raises:
+    """THE SPLITTER CV (lanes mf-split4, mf-split5): the folds of the entry's
+    splitter over THIS fit's `n` rows (the door's `_splits` ->
+    `prep_native_split` -> bindings/msel_split_door.mojo `msel_split`, whose
+    plans and fill these are: bindings/msel_split_spec_run.mojo
+    `msel_spec_sides` over the int32 codes `codes` of `k` classes and the
+    fit's `groups`), written as the typed folds (`fold_train` / `fold_test`,
+    int32 rows), which `_user_folds` then checks as the door checks a
+    split's rows (a stack's or an ensemble=False calibration's partition
+    included). Each splitter warning ("The least populated class in y has
+    only ...", once per plan: a repeated splitter's repeats each warn)
+    becomes a fit notice of the state (core/member_notices.mojo
+    MEMBER_NOTICE_SPLIT_LEAST, raised by the PACK in its words; the door
+    raised it before the fits). No Python."""
+    var sides = msel_spec_sides(slot[].split, n, codes, k, groups)
+    for w in range(len(sides.least)):  # small-loop(one notice per splitter warning)
         var words = List[Float64]()
-        member_notice_add(words, MEMBER_NOTICE_SPLIT_LEAST, Float64(least), Float64(slot[].split_k))
+        member_notice_add(words, MEMBER_NOTICE_SPLIT_LEAST, Float64(sides.least[w]), Float64(slot[].split.k))
         slot[].notice_owner.append(0)
         slot[].notice_words.append(words^)
-    var splits = plan.splits()
-    var train = List[List[Int64]](capacity=splits)
-    var test = List[List[Int64]](capacity=splits)
-    for s in range(splits):  # driver-loop: over the splits (one pair of sides each, sized by the plan)
-        train.append(List[Int64](length=max(plan.train_sizes[s], 1), fill=Int64(0)))
-        test.append(List[Int64](length=max(plan.test_sizes[s], 1), fill=Int64(0)))
-    for s in range(splits):  # driver-loop: over the splits (their final addresses)
-        plan.train_dst.append(Int(train[s].unsafe_ptr()))
-        plan.test_dst.append(Int(test[s].unsafe_ptr()))
-    msel_split_fill(route, plan)
-    var tr32 = List[List[Int32]](capacity=splits)
-    var te32 = List[List[Int32]](capacity=splits)
-    for s in range(splits):  # driver-loop: over the splits (their int32 sides)
-        tr32.append(List[Int32](length=plan.train_sizes[s], fill=Int32(0)))
-        te32.append(List[Int32](length=plan.test_sizes[s], fill=Int32(0)))
-    var src_tr = List[Int](capacity=splits)
-    var src_te = List[Int](capacity=splits)
-    var dst_tr = List[Int](capacity=splits)
-    var dst_te = List[Int](capacity=splits)
-    var n_tr = List[Int](capacity=splits)
-    var n_te = List[Int](capacity=splits)
-    for s in range(splits):  # driver-loop: over the splits (the narrowing's addresses)
-        src_tr.append(Int(train[s].unsafe_ptr()))
-        src_te.append(Int(test[s].unsafe_ptr()))
-        dst_tr.append(Int(tr32[s].unsafe_ptr()))
-        dst_te.append(Int(te32[s].unsafe_ptr()))
-        n_tr.append(plan.train_sizes[s])
-        n_te.append(plan.test_sizes[s])
-    var src_tr_at = Int(src_tr.unsafe_ptr())
-    var src_te_at = Int(src_te.unsafe_ptr())
-    var dst_tr_at = Int(dst_tr.unsafe_ptr())
-    var dst_te_at = Int(dst_te.unsafe_ptr())
-    var n_tr_at = Int(n_tr.unsafe_ptr())
-    var n_te_at = Int(n_te.unsafe_ptr())
-
-    def narrow(split: Int) {imm src_tr_at, imm src_te_at, imm dst_tr_at, imm dst_te_at, imm n_tr_at, imm n_te_at}:
-        # the rows are below n (an int32 row count): one exact narrowing each
-        var st = _I64P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=src_tr_at)[split])
-        var se = _I64P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=src_te_at)[split])
-        var dt = _I32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=dst_tr_at)[split])
-        var de = _I32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=dst_te_at)[split])
-        var count_tr = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=n_tr_at)[split]
-        var count_te = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=n_te_at)[split]
-        for i in range(count_tr):  # small-loop(one split's train rows)
-            dt[i] = Int32(st[i])
-        for i in range(count_te):  # small-loop(one split's test rows)
-            de[i] = Int32(se[i])
-
-    host_parallelize(narrow, splits)
-    _ = len(train)  # the fill and the narrowing above read these through their addresses
-    _ = len(test)
-    _ = len(src_tr)
-    _ = len(src_te)
-    _ = len(dst_tr)
-    _ = len(dst_te)
-    _ = len(n_tr)
-    _ = len(n_te)
+    var tr32 = List[List[Int32]]()
+    var te32 = List[List[Int32]]()
+    msel_sides_i32(sides, tr32, te32)
+    _ = sides.splits()  # the narrowing read the int64 sides through their addresses
     slot[].fold_train = tr32^
     slot[].fold_test = te32^
+
+
+def _no_groups() -> MselGroupCodes:
+    """A fit with no groups (Stacking and CalibratedClassifierCV hand their
+    splitter none, as scikit-learn's do)."""
+    return MselGroupCodes()
+
+
+def _call_groups(call: _CallPtr) raises -> MselGroupCodes:
+    """THE SEARCH KIND's groups: the call's group ids (`MemberCall.groups`,
+    int32 or int64, rows x 1) as sorted-order codes; none when not given."""
+    var g = call[].groups
+    if g.rows == 0:
+        return MselGroupCodes()
+    if g.cols != 1 or not (g.dense_host(MEMBER_I32) or g.dense_host(MEMBER_I64)):
+        raise Error("TypeError: a search member reads groups as int32 or int64 ids, rows x 1")
+    return msel_group_codes_run(g.data, g.dtype == MEMBER_I64, g.rows)
 
 
 def _keep_states(slot: _SlotPtr, mut run: MemberSetRun, first: Int):
@@ -1676,8 +1596,8 @@ def _fit_stack(slot: _SlotPtr, call: _CallPtr) raises:
     var every = List[Int32]()  # a member that holds every class
     # THE SPLITTER CV (lane mf-split4): this fit's folds first, as the door
     # computes its splits before any member fit.
-    if slot[].split_kind != META_SPLIT_NONE:
-        _split_folds(slot, n, y if classifier else 0, k)
+    if slot[].split.kind != MSEL_SPEC_NONE:
+        _split_folds(slot, n, y if classifier else 0, k, _no_groups())
     slot[].classes = k
     slot[].states = List[Int](length=bases + 1, fill=0)
     # 1. The members on every row (one set).
@@ -1894,8 +1814,8 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     var decision = slot[].words[META_CAL_DECISION] != 0.0
     # THE SPLITTER CV: this fit's folds first, as the door computes its
     # splits before any member fit.
-    if slot[].split_kind != META_SPLIT_NONE:
-        _split_folds(slot, n, y, k)
+    if slot[].split.kind != MSEL_SPEC_NONE:
+        _split_folds(slot, n, y, k, _no_groups())
     var listed = len(slot[].fold_test) > 0
     var tr_at = List[Int]()
     var tr_n = List[Int]()
@@ -3036,8 +2956,8 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     # THE SPLITTER CV and a user's index list (lane mf-search4b item 6): the
     # folds of this fit's rows, as Stacking's and Calibrated's (`_split_folds`;
     # the user's are the entry's typed folds), handed to the RUN.
-    if slot[].split_kind != META_SPLIT_NONE:
-        _split_folds(slot, call[].x.rows, call[].y.data if k > 0 else 0, k)
+    if slot[].split.kind != MSEL_SPEC_NONE:
+        _split_folds(slot, call[].x.rows, call[].y.data if k > 0 else 0, k, _call_groups(call))
     if len(slot[].fold_test) > 0:
         # Views of the slot's int32 sides (kept alive by the slot through the
         # RUN), checked as the door checks a split's rows.

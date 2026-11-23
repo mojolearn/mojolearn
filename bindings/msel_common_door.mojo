@@ -718,74 +718,10 @@ struct MselRng(Movable):
 
 
 # ---------------------------------------------------------------- shuffle sizes
-
-
-def _size_kind(v: PythonObject, context: PythonObject) raises -> String:
-    if v is None:
-        return "n"
-    if msel_is_bool(v, context):
-        return "x"
-    if msel_is_integral(v, context):
-        return "i"
-    if msel_is_real(v, context):
-        return "f"
-    return "x"
-
-
-def msel_shuffle_sizes(n: Int, test_size_in: PythonObject, train_size: PythonObject,
-                       default_test: PythonObject, context: PythonObject) raises -> Tuple[Int, Int]:
-    """`_validate_shuffle_split`: (n_train, n_test) with its refusals."""
-    var test_size = test_size_in
-    if test_size is None and train_size is None:
-        test_size = default_test
-    var tk = _size_kind(test_size, context)
-    var rk = _size_kind(train_size, context)
-    var pn = PythonObject(n)
-    var zero = PythonObject(0)
-    var one = PythonObject(1)
-    if ((tk == "i" and (msel_cmp("ge", test_size, pn) or msel_cmp("le", test_size, zero)))
-            or (tk == "f" and not (msel_cmp("lt", zero, test_size) and msel_cmp("lt", test_size, one)))):
-        raise Error("test_size=" + family_str(test_size) + " should be either positive and smaller than the number of "
-                    + "samples " + String(n) + " or a float in the (0, 1) range")
-    if ((rk == "i" and (msel_cmp("ge", train_size, pn) or msel_cmp("le", train_size, zero)))
-            or (rk == "f" and not (msel_cmp("lt", zero, train_size) and msel_cmp("lt", train_size, one)))):
-        raise Error("train_size=" + family_str(train_size) + " should be either positive and smaller than the number "
-                    + "of samples " + String(n) + " or a float in the (0, 1) range")
-    if rk == "x":
-        raise Error("Invalid value for train_size: expected a native numeric size")
-    if tk == "x":
-        raise Error("Invalid value for test_size: expected a native numeric size")
-    var add = msel_op("add")
-    var mul = msel_op("mul")
-    if rk == "f" and tk == "f" and msel_cmp("gt", family_call(add, train_size, test_size), one):
-        raise Error("The sum of test_size and train_size = " + family_str(family_call(add, train_size, test_size))
-                    + ", should be in the (0, 1) range. Reduce test_size and/or train_size.")
-    var math = native_loaded_module("math")
-    var n_test = PythonObject(None)
-    var n_train = PythonObject(None)
-    if tk == "f":
-        n_test = family_call(math.ceil, family_call(mul, test_size, pn))
-    else:
-        n_test = test_size
-    if rk == "f":
-        n_train = family_call(math.floor, family_call(mul, train_size, pn))
-    else:
-        n_train = train_size
-    if train_size is None:
-        n_train = family_call(msel_op("sub"), pn, n_test)
-    elif test_size is None:
-        n_test = family_call(msel_op("sub"), pn, n_train)
-    var total = family_call(add, n_train, n_test)
-    if msel_cmp("gt", total, pn):
-        raise Error("The sum of train_size and test_size = " + family_str(total) + ", should be smaller than "
-                    + "the number of samples " + String(n) + ". Reduce test_size and/or train_size.")
-    var tr = msel_int(n_train)
-    var te = msel_int(n_test)
-    if tr == 0:
-        raise Error("With n_samples=" + String(n) + ", test_size=" + family_str(test_size) + " and train_size="
-                    + family_str(train_size) + ", the resulting train set will be empty. Adjust any of the "
-                    + "aforementioned parameters.")
-    return (tr, te)
+# `_validate_shuffle_split` moved to ONE typed body (lane mf-split5,
+# bindings/msel_split_plan_run.mojo `msel_shuffle_sizes_run`; its UNPACK is
+# bindings/msel_split_unpack.mojo `msel_size_word`), which the splitter door
+# and member fits both call. `msel_shuffle_sizes` and `_size_kind` went with it.
 
 
 # ---------------------------------------------------------------- resident rows

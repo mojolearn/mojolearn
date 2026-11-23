@@ -45,7 +45,18 @@ from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _c
 from bindings.x_linear_common_unpack import _eq, _is_int, _isinstance
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.x_linear_regressors_unpack import _xl_tweedie_link
-from bindings.x_linear_cv_unpack import _xl_is_int_cv, _is_int_plain, _xl_cs_grid, xl_cv_is_callback, XL_CV_CALLBACK_WORDS
+from bindings.x_linear_cv_unpack import (
+    _xl_is_int_cv, _is_int_plain, _xl_cs_grid, xl_cv_is_callback, XL_CV_CALLBACK_WORDS, _xl_index_i64,
+)
+from bindings.prep_native_estimator_door import prep_native_context
+from bindings.base_helpers_key_unpack import base_helpers_key
+from bindings.classical_labels_door import labels_address
+from bindings.msel_inputs_unpack import msel_admit
+from bindings.msel_split_door import MselSplitter, SPLITTER_ITERABLE
+from bindings.msel_split_unpack import MselRoutePin, msel_split_route
+from bindings.msel_split_spec_unpack import msel_split_spec_of
+from bindings.msel_split_spec_pack import msel_spec_capsule
+from bindings.msel_split_spec_run import MselSplitSpec, msel_spec_mint, MSEL_SPEC_LISTED, MSEL_SPEC_KFOLD
 from bindings.x_linear_isotonic_unpack import _xl_isotonic_check
 from bindings.x_linear_route_unpack import xl_route, xl_ops_require
 from core.entry_table import EntryRef, entry_ref_word
@@ -167,10 +178,109 @@ def _xl_ridge_classifier_words(model: PythonObject, fields: PythonObject) raises
     return [Float64(XL_MEMBER_RIDGE_CLASSIFIER), _intercept_word(fields), _float(alpha)]
 
 
-def _xl_ridge_cv_words(fields: PythonObject, context: PythonObject, mut admitted: Bool) raises -> List[Float64]:
-    """Kind 10: `xl_fit_ridge_cv_unpack`'s refusals, then 5 + A words.
-    `admitted` is False for a splitter object as cv (its folds are made in
-    Python by the estimator's own split path)."""
+def _xl_listed(pairs: PythonObject, context: PythonObject, mut spec: MselSplitSpec) -> Bool:
+    """A user's (train, test) index pairs read ONCE into the spec, as the
+    door's `_xl_cv_splits` reads an iterable (`as_index_i64` of each side).
+    False (the door keeps the fit and raises its own words): no pair, a pair
+    that is not two sides, a side the integer admission refuses."""
+    try:
+        msel_admit(pairs, prep_native_context(context))
+        var b = _b()
+        var listed = py_call(b.list, pairs)
+        if len(listed) == 0:
+            return False
+        for k in range(len(listed)):  # driver-loop: over the user's pairs (UNPACK, once per admission)
+            var pair = py_call(b.tuple, listed[k])
+            if len(pair) != 2:
+                return False
+            var sides = List[List[Int64]]()
+            for side in range(2):  # small-loop(the pair's train then test side)
+                var rows = _xl_index_i64(pair[side], String("train") if side == 0 else String("test"), context)
+                var count = Int(py=rows.size)
+                var words = List[Int64](length=count, fill=Int64(0))
+                if count > 0:
+                    unsafe_memcpy(dest=words.unsafe_ptr(),
+                                  src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=labels_address(rows)),
+                                  count=count)
+                _ = rows  # the copy above read its words
+                sides.append(words^)
+            spec.listed_train.append(sides[0].copy())
+            spec.listed_test.append(sides[1].copy())
+        spec.kind = MSEL_SPEC_LISTED
+        return True
+    except:
+        return False
+
+
+def _xl_spec_pins(var spec: MselSplitSpec, pin: MselRoutePin, context: PythonObject,
+                  mut handle: Int) raises -> PythonObject:
+    """The spec kept in the spec store (with the x_linear base helper table
+    its fold-id and role passes call), its handle, and the pins the owner
+    keeps for every fit: the store entry's capsule and the splitters'
+    connections."""
+    var nk = x_linear_keys()
+    spec.rows_helpers = base_helpers_key(py_item(context, nk[].k_xl_helpers))
+    handle = msel_spec_mint(spec)
+    return Python.tuple(msel_spec_capsule(handle), pin.provider, pin.entries)
+
+
+def _xl_cv_spec(cv: PythonObject, classifier: Bool, context: PythonObject, mut handle: Int,
+                mut pins: PythonObject) -> Bool:
+    """THE SPLITTER CV of an x_linear CV member (lane mf-split5): a cv that is
+    one of our splitters (read as the splitter door reads it,
+    `msel_split_spec_of`), an `_IterableCV`'s stored pairs or a user's index
+    list (`_xl_listed`), kept by handle; each fit splits its own rows by the
+    door's plans. False: the door keeps the fit (a stratified splitter on a
+    regressor, a setting the door reads in another form, an irregular
+    list). A user's own splitter object is refused before this, never
+    called."""
+    try:
+        var b = _b()
+        var native = prep_native_context(context)
+        var spec = MselSplitSpec()
+        var pin = MselRoutePin()
+        if py_type_is_listed(cv, b):
+            if not _xl_listed(cv, context, spec):
+                return False
+        else:
+            var sp = MselSplitter(cv, native)
+            if sp.kind == SPLITTER_ITERABLE:
+                if not _xl_listed(sp.field("_pairs", native), context, spec):
+                    return False
+            elif not msel_split_spec_of(cv, classifier, native, spec, pin):
+                return False
+        pins = _xl_spec_pins(spec^, pin, context, handle)
+        return True
+    except:
+        return False
+
+
+def py_type_is_listed(cv: PythonObject, b: PythonObject) raises -> Bool:
+    """An exact list or tuple (the door's iterable cv)."""
+    return py_call(b.type, cv) is b.list or py_call(b.type, cv) is b.tuple
+
+
+def _xl_int_spec(folds: Int, context: PythonObject, mut handle: Int) raises -> PythonObject:
+    """RidgeCV's integer cv as a spec (lane mf-split5): an unshuffled KFold of
+    `folds` folds marked `int_cv`, so that a fit the door sends down its
+    split path (weighted, or fewer than two rows a fold) splits its rows by
+    the same KFold plan the door's `_xl_default_folds` uses."""
+    var native = prep_native_context(context)
+    var spec = MselSplitSpec()
+    spec.kind = MSEL_SPEC_KFOLD
+    spec.k = folds
+    spec.int_cv = True
+    var pin = msel_split_route(native, False, False)
+    spec.route = pin.route
+    return _xl_spec_pins(spec^, pin, context, handle)
+
+
+def _xl_ridge_cv_words(fields: PythonObject, context: PythonObject, mut admitted: Bool,
+                       mut pins: PythonObject) raises -> List[Float64]:
+    """Kind 10: `xl_fit_ridge_cv_unpack`'s refusals, then 5 + A words, word 3
+    minus the handle of the cv's splitter spec (an integer cv, one of our
+    splitters or an index list; lane mf-split5). `admitted` is False for a
+    cv the door keeps (`_xl_cv_spec`); `pins` the spec's pins."""
     var nk = x_linear_keys()
     var b = _b()
     if py_item(fields, nk[].k_scoring) is not None or _truth(py_item(fields, nk[].k_alpha_per_target)):
@@ -194,21 +304,25 @@ def _xl_ridge_cv_words(fields: PythonObject, context: PythonObject, mut admitted
         return words^
     if xl_cv_is_callback(cv, context):
         raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
-    if not _xl_is_int_cv(cv, context):
-        admitted = False
-        return words^
     if _truth(py_item(fields, nk[].k_store_cv_results)):
         raise Error("cv!=None and store_cv_results=True are incompatible")
-    words[3] = Float64(_int(cv))
+    var handle = 0
+    if _xl_is_int_cv(cv, context):
+        pins = _xl_int_spec(_int(cv), context, handle)
+    elif not _xl_cv_spec(cv, False, context, handle, pins):
+        admitted = False
+        return words^
+    words[3] = -Float64(handle)
     return words^
 
 
 def _xl_enetcv_words(model: PythonObject, fields: PythonObject, context: PythonObject, elastic: Bool,
-    mut admitted: Bool) raises -> List[Float64]:
+    mut admitted: Bool, mut pins: PythonObject) raises -> List[Float64]:
     """Kinds 11, 12: `_xl_enetcv_unpack`'s refusals (selection, the
-    l1_ratio range, the cv count, an empty grid), then 10 + L (+ G) words.
-    `admitted` is False for a splitter object as cv (its folds are made in
-    Python by the estimator's split path)."""
+    l1_ratio range, the cv count, an empty grid), then 10 + L (+ G) words;
+    word 6 minus the handle of the cv's splitter spec for one of our
+    splitters or an index list (lane mf-split5). `admitted` is False for a
+    cv the door keeps (`_xl_cv_spec`); `pins` the spec's pins."""
     var nk = x_linear_keys()
     var name = _name(model)
     var b = _b()
@@ -231,12 +345,16 @@ def _xl_enetcv_words(model: PythonObject, fields: PythonObject, context: PythonO
         if xl_cv_is_callback(cv, context):
             raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
         if not _xl_is_int_cv(cv, context):
-            admitted = False
-            return List[Float64]()
-        var k = py_call(b.int, cv)
-        if not _is_int(k) or _lt(k, PythonObject(2)):
-            raise Error("mojolearn: cv must be None or an int in [2, n_samples]")
-        folds = _int(k)
+            var handle = 0
+            if not _xl_cv_spec(cv, False, context, handle, pins):
+                admitted = False
+                return List[Float64]()
+            folds = -handle
+        else:
+            var k = py_call(b.int, cv)
+            if not _is_int(k) or _lt(k, PythonObject(2)):
+                raise Error("mojolearn: cv must be None or an int in [2, n_samples]")
+            folds = _int(k)
     var alphas = py_item(fields, nk[].k_alphas)
     var n_alphas = _attr(model, "n_alphas", PythonObject(None))
     var explicit = False
@@ -265,12 +383,15 @@ def _xl_enetcv_words(model: PythonObject, fields: PythonObject, context: PythonO
     return words^
 
 
-def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admitted: Bool) raises -> List[Float64]:
+def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admitted: Bool,
+                          mut pins: PythonObject) raises -> List[Float64]:
     """Kind 13: `xl_fit_logistic_cv_unpack`'s refusals (penalty, scoring,
     refit, solver), then 7 + C words (and, for an exact dict class_weight,
     word 5 = 2 and the pending class-weight tail: lane mf-adm3, filled over
-    the caller's labels by `member_cw_fill`). `admitted` is False for any
-    other non-word class_weight and for a splitter object as cv."""
+    the caller's labels by `member_cw_fill`); word 4 minus the handle of the
+    cv's splitter spec for one of our splitters or an index list (lane
+    mf-split5). `admitted` is False for any other non-word class_weight and
+    for a cv the door keeps (`_xl_cv_spec`); `pins` the spec's pins."""
     var nk = x_linear_keys()
     if not _eq(py_item(fields, nk[].k_penalty), PythonObject("l2")) or _truth(py_item(fields, nk[].k_dual)) or py_item(fields, nk[].k_l1_ratios) is not None:
         raise Error("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
@@ -301,8 +422,12 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
         if xl_cv_is_callback(cv, context):
             raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
         if not _xl_is_int_cv(cv, context):
-            return List[Float64]()
-        folds = _int(cv)
+            var handle = 0
+            if not _xl_cv_spec(cv, True, context, handle, pins):
+                return List[Float64]()
+            folds = -handle
+        else:
+            folds = _int(cv)
     admitted = True
     var cs = _xl_cs_grid(py_item(fields, nk[].k_Cs), context)
     var words: List[Float64] = [Float64(XL_MEMBER_LOGISTIC_CV), _intercept_word(fields),
@@ -343,6 +468,8 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     from the unfitted estimator."""
     var nk = x_linear_keys()
     var words: List[Float64]
+    # THE SPLITTER CV's pins (lane mf-split5; None: no spec).
+    var spec_pins = PythonObject(None)
     if kind >= 0 and kind <= 2:
         words = _xl_glm_words(model, fields, kind)
     elif kind == XL_MEMBER_HUBER:
@@ -375,22 +502,22 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
             member_cw_invalid_words(words)
     elif kind == XL_MEMBER_RIDGE_CV:
         var admitted = True
-        words = _xl_ridge_cv_words(fields, context, admitted)
+        words = _xl_ridge_cv_words(fields, context, admitted, spec_pins)
         if not admitted:
             return False
     elif kind == XL_MEMBER_LASSO_CV:
         var admitted = True
-        words = _xl_enetcv_words(model, fields, context, False, admitted)
+        words = _xl_enetcv_words(model, fields, context, False, admitted, spec_pins)
         if not admitted:
             return False
     elif kind == XL_MEMBER_ELASTIC_NET_CV:
         var admitted = True
-        words = _xl_enetcv_words(model, fields, context, True, admitted)
+        words = _xl_enetcv_words(model, fields, context, True, admitted, spec_pins)
         if not admitted:
             return False
     elif kind == XL_MEMBER_LOGISTIC_CV:
         var admitted = True
-        words = _xl_logistic_cv_words(fields, context, admitted)
+        words = _xl_logistic_cv_words(fields, context, admitted, spec_pins)
         if not admitted:
             return False
     elif kind == XL_MEMBER_ISOTONIC:
@@ -413,7 +540,7 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
             _ = String(problem)
     owner.plan.route = route
     owner.plan.params = words^
-    owner.pins = Python.tuple(ops.owner, ops.scope)
+    owner.pins = Python.tuple(ops.owner, ops.scope, spec_pins)
     return True
 
 
@@ -539,7 +666,6 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         if blocks > 2:
             var L = Int(plan.params[9])
             var grid = Int(plan.params[7])
-            var folds = Int(plan.params[6])
             call.block = XL_MEMBER_BLOCK_ALPHAS
             _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
             var path = admitted_array(Python.tuple(grid) if L == 1 else Python.tuple(L, grid), "<f4", context)
@@ -547,6 +673,8 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
             py_setitem(fields, nk[].k_alphas_, path)
             call.block = XL_MEMBER_BLOCK_MSE_PATH
             _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+            # The fit's fold count (a splitter's is the fit's: lane mf-split5).
+            var folds = call.dst.cols
             var mse = admitted_array(Python.tuple(grid, folds) if L == 1 else Python.tuple(L, grid, folds), "<f4",
                 context)
             unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(mse))), src=f32_ptr(call.dst.data),
@@ -585,7 +713,6 @@ def _xl_logistic_cv_pack(fields: PythonObject, context: PythonObject, plan: Memb
     keyed by the class codes."""
     var nk = x_linear_keys()
     var nc = Int(plan.params[6])
-    var folds = Int(plan.params[4])
     call.block = MEMBER_BLOCK_SCALARS
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
@@ -604,6 +731,8 @@ def _xl_logistic_cv_pack(fields: PythonObject, context: PythonObject, plan: Memb
     if blocks > 3:
         call.block = XL_MEMBER_BLOCK_SCORES
         _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+        # The fit's fold count (a splitter's is the fit's: lane mf-split5).
+        var folds = call.dst.rows
         var names = py_call(_b().list, labels) if labels is not None else Python.list()
         var first = 1 if kp == 1 else 0
         for c in range(first, classes):  # driver-loop: over the class labels (one score table each)

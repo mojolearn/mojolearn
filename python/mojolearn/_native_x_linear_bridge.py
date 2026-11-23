@@ -4,8 +4,10 @@ estimators and the coordinate-descent pair (bindings/x_linear_native_door.mojo)
 and its fixed ABI. Nothing here runs when a public method is called."""
 
 #: The base binding's fold, index and score helpers the cv fits call
-#: (`_buffer._native`, always the identical binary).
-_BASE_HELPERS = ("fold_ids", "select_fold_i64", "assign_fold_i64", "check_indices_i64", "count_fold_hits_i64",
+#: (`_buffer._native`, always the identical binary). Lane mf-split5: `fold_ids`
+#: and `select_fold_i64` went (the default KFold folds are the splitters' own
+#: plan, the integer fold ids one typed body, x_linear/cv_fold_ids_run.mojo).
+_BASE_HELPERS = ("assign_fold_i64", "check_indices_i64", "count_fold_hits_i64",
                  "mark_split_roles_f32", "row_means_f64", "gather_rows_bytes", "reduce_stat")
 
 

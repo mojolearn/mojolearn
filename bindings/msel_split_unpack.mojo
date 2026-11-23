@@ -33,11 +33,62 @@ from bindings.base_helpers_key_unpack import base_helpers_key
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_common_door import (
     msel_b, msel_addr, msel_new, msel_encode, msel_labels_list, msel_warn,
+    msel_is_bool, msel_is_integral, msel_is_real, msel_int, msel_op, msel_cmp,
 )
+from bindings.family_common_unpack import family_str
+from bindings.family_common_pack import family_call
 from bindings.msel_split_plan_run import (
     MselCodes, MselSplitRoute, MselSplitPlan, msel_split_route_none, msel_split_fill,
-    MSEL_LABELS_ALIGNED,
+    MSEL_LABELS_ALIGNED, MselSizeWord, MSEL_SIZE_NONE, MSEL_SIZE_INT, MSEL_SIZE_REAL, MSEL_SIZE_BAD,
 )
+
+
+def msel_size_word(value: PythonObject, context: PythonObject) raises -> MselSizeWord:
+    """UNPACK of one `_validate_shuffle_split` size (lane mf-split5; the
+    door's `_size_kind`): None, an integer (a bool is refused), a real (a
+    Python float, or a NumPy floating scalar read at its own width: its
+    product with the row count is NumPy's at that width), else refused.
+    `text` is the value's `str`, for the refusal words. A real scalar whose
+    width is not 16, 32 or 64 bits (an extended-precision long double) is
+    refused: no native width computes its product."""
+    if value is None:
+        return MselSizeWord(MSEL_SIZE_NONE, 0, 0.0, 64, String("None"))
+    var text = family_str(value)
+    if msel_is_bool(value, context):
+        return MselSizeWord(MSEL_SIZE_BAD, 0, 0.0, 64, text)
+    if msel_is_integral(value, context):
+        return MselSizeWord(MSEL_SIZE_INT, msel_int(value), 0.0, 64, text)
+    if msel_is_real(value, context):
+        var bits = 64
+        if py_type_is_float(value):
+            bits = 64
+        else:
+            var width = Int(py=value.dtype.itemsize)
+            if width == 4:
+                bits = 32
+            elif width == 2:
+                bits = 16
+            elif width != 8:
+                return MselSizeWord(MSEL_SIZE_BAD, 0, 0.0, 64, text)
+        return MselSizeWord(MSEL_SIZE_REAL, 0, Float64(py=value), bits, text)
+    return MselSizeWord(MSEL_SIZE_BAD, 0, 0.0, 64, text)
+
+
+def py_type_is_float(value: PythonObject) raises -> Bool:
+    """`type(value) is float` (identity: no hook)."""
+    return py_call(msel_b().type, value) is msel_b().float
+
+
+def msel_size_sum(test: PythonObject, train: PythonObject, context: PythonObject) raises -> Tuple[Bool, String]:
+    """UNPACK: for two real sizes, whether `train + test > 1` and the sum's
+    `str` (the door's own arithmetic; neither depends on the row count).
+    (False, "") otherwise."""
+    var t = msel_size_word(test, context)
+    var r = msel_size_word(train, context)
+    if t.kind != MSEL_SIZE_REAL or r.kind != MSEL_SIZE_REAL:
+        return (False, String(""))
+    var total = family_call(msel_op("add"), train, test)
+    return (msel_cmp("gt", total, PythonObject(1)), family_str(total))
 
 
 struct MselRoutePin(Movable):

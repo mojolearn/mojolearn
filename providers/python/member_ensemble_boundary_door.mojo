@@ -43,10 +43,11 @@ the nested plans minted once into the plan store and released by the
 capsule kept in the owner's pins. Answers False (the caller keeps its own
 path, whose doors raise the estimator's own words) for anything the native
 kind does not take exactly as the door does: a nested estimator with no
-serving member, a cv SPLITTER of ours other than KFold / StratifiedKFold
-(those are read here as typed words and split inside each fit since lane
-mf-split4, `_split_words`; an index list is read here into typed folds
-since lane mf-meta3b), a non-boolean passthrough, weights of the wrong
+serving member, a cv SPLITTER of ours whose stored settings the
+door reads in another form (every native splitter is read here as typed
+words and split inside each fit: KFold / StratifiedKFold since lane
+mf-split4, the others since lane mf-split5, `_split_words`; an index list,
+and an `_IterableCV`'s stored pairs, are read here into typed folds), a non-boolean passthrough, weights of the wrong
 length, an unknown `voting`. A classifier stacked with
 `stack_method='predict'` is served since lane mf-meta3b (its predicted
 codes are the meta features). A user's OWN splitter object (Stacking,
@@ -127,13 +128,11 @@ from bindings.msel_candidates_door import msel_grid_list, msel_sampler_check, ms
 from bindings.msel_estimator_native_door import msel_native_clone, msel_native_set_params, msel_clone_parameter
 from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list, msel_is_integral, msel_is_int_arg
 from bindings.msel_search_state_door import msel_search_update
-from bindings.msel_split_door import (
-    msel_cls, MselSplitter, SPLITTER_KFOLD, SPLITTER_STRATIFIED_KFOLD, msel_seed, msel_truth, msel_sabotage,
-)
-from bindings.msel_common_door import msel_int
-from bindings.msel_split_unpack import msel_split_route, MselRoutePin
-from bindings.msel_split_plan_run import MselSeed
-from core.ensemble_member import meta_plan_split, META_SPLIT_NONE, META_SPLIT_KFOLD, META_SPLIT_STRATIFIED
+from bindings.msel_split_door import msel_cls, MselSplitter, SPLITTER_ITERABLE
+from bindings.msel_split_unpack import MselRoutePin
+from bindings.msel_split_spec_run import MselSplitSpec, MSEL_SPEC_NONE, msel_spec_stratified
+from bindings.msel_split_spec_unpack import msel_split_spec_of
+from core.ensemble_member import meta_plan_split
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -610,12 +609,13 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
                 return False
             folds = len(fold_test)
         elif cv is not None and py_type(cv) is not b.int:
-            # THE SPLITTER CV (lane mf-split4): one of our splitters, read
-            # here as typed words; each fit computes its folds over its own
-            # rows (core/ensemble_member.mojo `_split_folds`).
-            if not _split_words(cv, classifier, context, b, split):
+            # THE SPLITTER CV (lanes mf-split4, mf-split5): one of our
+            # splitters, read here as typed words; each fit computes its
+            # folds over its own rows (core/ensemble_member.mojo
+            # `_split_folds`). An `_IterableCV` holds a user's pairs.
+            if not _split_cv(cv, classifier, context, b, split, fold_train, fold_test):
                 return False
-            folds = split.k
+            folds = len(fold_test)
         else:
             folds = 5 if cv is None else _int_word(cv, b)
             if folds < 2:
@@ -655,9 +655,8 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
 def _finish_split(mut owner: MemberOwner, split: _Split) raises:
     """THE SPLITTER CV's words into the minted plan entry (a stack's or a
     calibration's), its entries' connections pinned for every fit."""
-    if split.kind != META_SPLIT_NONE:
-        meta_plan_split(Int(owner.plan.params[1]), split.kind, split.k, split.shuffle, split.seed, split.pin.route,
-                        split.sabotage)
+    if split.spec.kind != MSEL_SPEC_NONE:
+        meta_plan_split(Int(owner.plan.params[1]), split.spec)
         _ = py_call(owner.pins.append, split.pin.provider)  # the program runner's connection, for every fit
         _ = py_call(owner.pins.append, split.pin.entries)
 
@@ -697,59 +696,45 @@ def _refuse_cv_callback(cv: PythonObject, context: PythonObject, b: PythonObject
 
 
 struct _Split(Movable):
-    """UNPACK of THE SPLITTER CV (lane mf-split4): META_SPLIT_*, n_splits,
-    shuffle, the seed and the splitters' entries with their pins."""
-    var kind: Int
-    var k: Int
-    var shuffle: Bool
-    var seed: MselSeed
+    """UNPACK of THE SPLITTER CV (lanes mf-split4, mf-split5): the splitter's
+    typed words (bindings/msel_split_spec_run.mojo `MselSplitSpec`; kind
+    MSEL_SPEC_NONE: none) and the splitters' entries with their pins."""
+    var spec: MselSplitSpec
     var pin: MselRoutePin
-    var sabotage: Bool
 
     def __init__(out self):
-        self.kind = META_SPLIT_NONE
-        self.k = 0
-        self.shuffle = False
-        self.seed = MselSeed(0, False)
+        self.spec = MselSplitSpec()
         self.pin = MselRoutePin()
-        self.sabotage = False
+
+
+def _split_cv(cv: PythonObject, classifier: Bool, context: PythonObject, b: PythonObject, mut split: _Split,
+              mut fold_train: List[List[Int32]], mut fold_test: List[List[Int32]]) -> Bool:
+    """A cv that is one of OUR splitter objects (lane mf-split5): an
+    `_IterableCV`'s stored (train, test) pairs as typed folds (`_user_folds`,
+    as an index list), any other native splitter as typed words
+    (`_split_words`). False: the door keeps the meta-estimator."""
+    try:
+        var sp = MselSplitter(cv, context)
+        if sp.kind == SPLITTER_ITERABLE:
+            return _user_folds(sp.field("_pairs", context), b, fold_train, fold_test)
+    except:
+        return False
+    return _split_words(cv, classifier, context, b, split)
 
 
 def _split_words(cv: PythonObject, classifier: Bool, context: PythonObject, b: PythonObject,
                  mut split: _Split) -> Bool:
-    """A cv that is one of OUR KFold / StratifiedKFold splitters, read as the
-    splitter door reads it for `split` (bindings/msel_split_door.mojo
-    `msel_split`: `MselSplitter`, its n_splits, shuffle and random_state
-    through `field`, the seed by `msel_seed`, the entries by
-    `msel_split_route`, the sabotage word). False (the door keeps the
-    meta-estimator and splits natively with X and y) for any other of our
-    splitter classes, a StratifiedKFold on a regressor (its door refuses
-    continuous y in the splitter's words), fewer than two splits, or a value
-    the door refuses. A user's own splitter object never reaches here:
-    `_refuse_cv_callback` refuses it first."""
-    try:
-        var cls = py_type(cv)
-        var stratified = cls is msel_cls("StratifiedKFold", context)
-        if not stratified and cls is not msel_cls("KFold", context):
-            return False
-        if stratified and not classifier:
-            return False
-        var sp = MselSplitter(cv, context)
-        if sp.kind != (SPLITTER_STRATIFIED_KFOLD if stratified else SPLITTER_KFOLD):
-            return False
-        split.k = msel_int(sp.field("n_splits", context))
-        if split.k < 2:
-            return False
-        split.shuffle = msel_truth(sp.field("shuffle", context))
-        split.seed = msel_seed(sp.field("random_state", context), split.shuffle, context)
-        # Every entry either splitter may call (the base table past the
-        # stratified program bounds; the program runner for a draw).
-        split.pin = msel_split_route(context, True, True)
-        split.sabotage = msel_sabotage()
-        split.kind = META_SPLIT_STRATIFIED if stratified else META_SPLIT_KFOLD
-        return True
-    except:
-        return False
+    """A cv that is one of OUR splitters (every class the splitter door
+    serves: the KFold family, the group, shuffle and time-series splitters,
+    the leave-out splitters, PredefinedSplit, the repeated splitters), read
+    as the splitter door reads it for `split` (bindings/msel_split_spec_unpack.mojo
+    `msel_split_spec_of`). False (the door keeps the meta-estimator and
+    splits natively with X and y) for a stratified splitter on a regressor
+    (its door refuses continuous y in the splitter's words), a stored value
+    the door reads in another form, or a value the door refuses. A user's
+    own splitter object never reaches here: `_refuse_cv_callback` refuses it
+    first."""
+    return msel_split_spec_of(cv, classifier, context, split.spec, split.pin)
 
 
 def _cap_of(fields: PythonObject, b: PythonObject) raises -> Int:
@@ -1516,11 +1501,11 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
                 whole = Int(py=ensemble) == 1
             else:
                 return False
-        # The cv as the door's `_splits` takes it (lane mf-split4b): an int;
-        # a user's index list read ONCE into typed folds; one of OUR KFold /
-        # StratifiedKFold splitters as typed words, its folds computed inside
-        # each fit over that fit's rows (core/ensemble_member.mojo
-        # `_split_folds`); a user's own splitter object refused here.
+        # The cv as the door's `_splits` takes it (lanes mf-split4b,
+        # mf-split5): an int; a user's index list read ONCE into typed folds;
+        # one of OUR splitters as typed words, its folds computed inside each
+        # fit over that fit's rows (core/ensemble_member.mojo `_split_folds`);
+        # a user's own splitter object refused here.
         var cv = py_get(fields, "cv")
         _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
         if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
@@ -1528,9 +1513,9 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
                 return False
             folds = len(fold_test)
         elif cv is not None and py_type(cv) is not b.int:
-            if not _split_words(cv, True, context, b, split):
-                return False  # another of our splitters: the door's `_splits`
-            folds = split.k
+            if not _split_cv(cv, True, context, b, split, fold_train, fold_test):
+                return False  # a splitter setting the door reads otherwise: the door's `_splits`
+            folds = len(fold_test)
         else:
             folds = 5 if cv is None else _int_word(cv, b)
             if folds < 2:
@@ -2523,10 +2508,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             return False
         folds = len(fold_test)
     elif cv is not None and py_type(cv) is not b.int and not msel_is_integral(cv, context):
-        # One of our splitters, typed words; each fit splits its own rows.
-        if not _split_words(cv, True, context, b, split):
+        # One of our splitters, typed words; each fit splits its own rows
+        # (the search's groups are its call's, `MemberCall.groups`).
+        if not _split_cv(cv, True, context, b, split, fold_train, fold_test):
             return False
-        folds = split.k
+        folds = len(fold_test)
     else:
         folds = 5 if cv is None else _int_word(cv, b)
         if folds < 2:
@@ -2563,7 +2549,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
     else:
         classifier = Bool(py=base_plan["classifier"])
-    if split.kind == META_SPLIT_STRATIFIED and not classifier:
+    if msel_spec_stratified(split.spec.kind) and not classifier:
         return False  # the splitter's door refuses continuous y in its words
     # THE SCORERS (lanes mf-metric4, mf-search4b): each a name the typed
     # search RUN serves (core/msel_scorer_run.mojo `msel_scorer_code`), with
@@ -2625,7 +2611,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             return False
     for c in range(len(nested.plans)):  # driver-loop: over the candidates (their responses' element types)
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
-        if multi and (len(codes) > 0 or split.kind == META_SPLIT_STRATIFIED):
+        if multi and (len(codes) > 0 or msel_spec_stratified(split.spec.kind)):
             return False  # a multi-output target is scored by the member itself, folded by KFold
         for o in range(len(responses)):  # small-loop(the distinct responses)
             var response = responses[o]
