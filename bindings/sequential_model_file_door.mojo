@@ -244,9 +244,22 @@ def sequential_file_import(entries: PythonObject, program: List[Int], table: Lis
 def sequential_file_export(entries: PythonObject, program: List[Int], table: List[Float64], params: Int,
                            dst: Int, mut shapes: List[Int]) raises -> Int:
     """Sequential.state_dict's transfer: the float32 parameters at `params`
-    into the float32 buffer at `dst` in PyTorch's layouts, and one 8-word
-    shape record per tensor into `shapes` (its length is the capacity).
-    Returns the tensor count."""
+    into the float32 buffer at `dst` in PyTorch's layouts, and one shape
+    record per tensor (autograd/weight_import.mojo: 4 + its rank words, laid
+    end to end) into `shapes`. A `shapes` too short for the model's ranks is
+    grown to the words the export reports and the export asked once more
+    (nothing was written the first time). Returns the tensor count."""
+    var count = _file_export_once(entries, program, table, params, dst, shapes)
+    if count < 0:
+        shapes = List[Int](length=-count, fill=0)
+        count = _file_export_once(entries, program, table, params, dst, shapes)
+        if count < 0:
+            raise Error("RuntimeError: Sequential state_dict shape result is still too small")
+    return count
+
+
+def _file_export_once(entries: PythonObject, program: List[Int], table: List[Float64], params: Int,
+                      dst: Int, mut shapes: List[Int]) raises -> Int:
     var ints: List[Int] = [len(program), len(shapes)]
     _file_extend(ints, program)
     var addresses: List[Int] = [params, dst, Int(shapes.unsafe_ptr())]

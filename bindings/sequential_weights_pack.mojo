@@ -217,7 +217,9 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
 comptime SEQUENTIAL_EXPORT_STATE_DICT = 0
 comptime SEQUENTIAL_EXPORT_PARAMETERS = 1
 comptime SEQUENTIAL_EXPORT_NAMED_PARAMETERS = 2
-comptime SEQUENTIAL_EXPORT_SHAPE_WORDS = 8
+# a first shape capacity: four tensors per layer of up to rank 8; a deeper
+# rank grows it (bindings/sequential_model_file_door.mojo sequential_file_export)
+comptime SEQUENTIAL_EXPORT_SHAPE_WORDS = 12
 
 
 def sequential_export_weights(mut mods: NativeModules, model: PythonObject, form: Int, context: PythonObject) raises -> PythonObject:
@@ -246,13 +248,13 @@ def sequential_export_weights(mut mods: NativeModules, model: PythonObject, form
     var named = Python.dict()
     var arrays = Python.list()
     var pairs = Python.list()
+    var base = 0
     for t in range(count):  # driver-loop: over the model's parameter tensors
-        var base = t * SEQUENTIAL_EXPORT_SHAPE_WORDS
         var off = shapes[base + 2]
         var rank = shapes[base + 3]
         var size = 1
         var dims = Python.list()
-        for k in range(rank):  # small-loop(rank: at most 4): shape metadata, no data
+        for k in range(rank):  # small-loop(rank: the tensor's rank): shape metadata, no data
             size *= shapes[base + 4 + k]
             _ = py_call(dims.append, shapes[base + 4 + k])
         var window = exported[py_call(b.slice, off, off + size)]
@@ -261,6 +263,7 @@ def sequential_export_weights(mut mods: NativeModules, model: PythonObject, form
         var code = Int(py=model_layers[shapes[base]][0])
         if is_block(code):
             name = String(shapes[base]) + block_param_names(code, _layer_args(model_layers[shapes[base]]), 0)[shapes[base + 1]]
+        base += 4 + rank  # the next record (autograd/weight_import.mojo WE_SHAPE_HEAD + rank words)
         if form == SEQUENTIAL_EXPORT_STATE_DICT:
             py_setitem(named, PythonObject(name), value)
         elif form == SEQUENTIAL_EXPORT_PARAMETERS:

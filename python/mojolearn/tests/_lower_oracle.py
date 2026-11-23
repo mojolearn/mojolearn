@@ -155,8 +155,6 @@ _BINARY = {
     "Or": "logical_or",
 }
 
-# autograd/weight_import.mojo WI_* (python/mojolearn/tests/_weight_import.py): the record of one source tensor
-_WI_MAX_RANK = 4
 # NumPy views of an initializer's raw little-endian bytes (no copy, no conversion)
 _NP_VIEW = {"f32": "<f4", "f16": "<f2", "f64": "<f8", "i64": "<i8", "i32": "<i4", "bool": "?"}
 
@@ -1242,8 +1240,6 @@ def check(g, shapes=None):
             t = g.initializers.get(i)
             if t is not None and _numel(t.shape) == 0 and i in G.want:
                 why.append(f"'{i}' is an empty tensor")
-            elif t is not None and t.dtype == "bf16" and len(t.shape) > _WI_MAX_RANK:
-                why.append(f"'{i}' is a bfloat16 tensor of more than {_WI_MAX_RANK} dimensions")
         try:
             why += entry[0](G, n)
         except _Refuse as e:

@@ -40,6 +40,11 @@ from checks.native_tests.core_ops_common import normal
 from checks.native_tests.training_sequential_common import SeqModel, codes_as_words, L_RELU, L_FLATTEN, L_LINEAR
 from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD
 from core.host_parallel import host_parallelize
+from sequence.ops import FP
+from autograd.weight_import import (
+    WE_SHAPE_HEAD, WI_LAYOUT_TORCH, WI_STRIDE_C, model_export_params, model_export_shape_words,
+    model_import_params, wi_record_words,
+)
 
 comptime L_CONV3D = 73
 comptime L_MAXPOOL3D = 74
@@ -535,6 +540,70 @@ def test_nn_conv3d_baselines() raises:
     _ = failed^
     _ = host_words^
     print("PASS NN_CONV3D baselines", B)
+
+
+def test_nn_conv3d_state_dict_round_trip() raises:
+    """state_dict / load_state_dict of a model with 5-D conv3d weights (lane nn-fix-3, 2026-11-23: the
+    weight records were capped at rank 4): the export reports the words it needs when the shape result is
+    too small, writes a rank-5 record per conv3d weight, and the import of those tensors (rank-5 records,
+    9 + 2 * rank words each, laid end to end) gives back every parameter word."""
+    var m = SeqModel()
+    m.sample = [1, _S, _S, _S]
+    _net_max(m)
+    m.compile(LOSS_CROSS_ENTROPY, "adam", 0.02)
+    var spec = m.spec(_VOX)
+    var n = spec.n_params
+    var params = _dyadic(n, 7, 61, 16)
+    var exported = List[Float32](length=n, fill=0)
+    var host = HostExec()
+    var words = model_export_shape_words(spec)
+    var small = List[Int](length=1, fill=0)
+    var asked = model_export_params(host, spec, Int(params.unsafe_ptr()), Int(exported.unsafe_ptr()),
+                                    Int(small.unsafe_ptr()), len(small))
+    _ = len(small)
+    if asked != -words:
+        _fail("state_dict: a too-small shape result reported " + String(asked) + ", not -" + String(words))
+    var shapes = List[Int](length=words, fill=0)
+    var count = model_export_params(host, spec, Int(params.unsafe_ptr()), Int(exported.unsafe_ptr()),
+                                    Int(shapes.unsafe_ptr()), len(shapes))
+    var recs = List[Int]()
+    var names = List[String]()
+    var at = 0
+    var rank5 = 0
+    for t in range(count):  # small-loop(count: the model's parameter tensors)
+        var rank = shapes[at + 3]
+        if rank == 5:
+            rank5 += 1
+            if shapes[at + WE_SHAPE_HEAD + 2] != 3 or shapes[at + WE_SHAPE_HEAD + 4] != 3:
+                _fail("state_dict: a conv3d weight is not (out, in, 3, 3, 3)")
+        var rec: List[Int] = [shapes[at], shapes[at + 1], WI_LAYOUT_TORCH,
+                              Int(exported.unsafe_ptr()), 4 * shapes[at + 2], 11, 4, rank]
+        for k in range(rank):  # small-loop(rank: the tensor's dims)
+            rec.append(shapes[at + WE_SHAPE_HEAD + k])
+        rec.append(WI_STRIDE_C)
+        for _ in range(rank):  # small-loop(rank: the unused C-order stride words)
+            rec.append(0)
+        if len(rec) != wi_record_words(rank):
+            _fail("state_dict: record " + String(t) + " holds " + String(len(rec)) + " words")
+        for k in range(len(rec)):  # small-loop(one record's words)
+            recs.append(rec[k])
+        names.append(String(shapes[at]) + "." + String(shapes[at + 1]))
+        at += WE_SHAPE_HEAD + rank
+    if at != words:
+        _fail("state_dict: the records hold " + String(at) + " words, not " + String(words))
+    if rank5 != 2:
+        _fail("state_dict: " + String(rank5) + " rank-5 weights, not the two conv3d weights")
+    var back = List[Float32](length=n, fill=0)
+    model_import_params(host, spec, recs, names, FP(unsafe_from_address=Int(back.unsafe_ptr())))
+    for i in range(n):  # small-loop(n: parameter words)
+        if bitcast[DType.uint32](back[i]) != bitcast[DType.uint32](params[i]):
+            _fail("load_state_dict(state_dict()): parameter " + String(i) + " came back as " + String(back[i])
+                  + ", not " + String(params[i]))
+    _ = params^
+    _ = exported^
+    _ = shapes^
+    _ = back^
+    print("PASS NN_CONV3D state_dict round trip", count, "tensors", n, "parameters")
 
 
 def main() raises:

@@ -72,7 +72,7 @@ from autograd.ops_api import (
 )
 from autograd.program import OpsProgram
 from autograd.rankn_api import rn_dims, rn_shape
-from autograd.weight_import import WI_RECORD, session_load_check, wi_source
+from autograd.weight_import import session_load_check, wi_record_words, wi_source
 from core.cast_in import CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CastIn
 from sequence.exec_trait import Exec
 from sequence.ops import FP
@@ -84,8 +84,7 @@ comptime IMPORT_READ_FAILED = 6  # onnx_import_file: the reader refused the file
 
 # the largest tensor rank of a session (autograd/rankn.mojo RN_MAX_RANK)
 comptime MAX_RANK = 8
-# autograd/weight_import.mojo: the largest source rank, the layouts, the C-order stride code
-comptime _WI_MAX_RANK = 4
+# autograd/weight_import.mojo: the layouts, the C-order stride code (a record takes the tensor's own rank)
 comptime _WI_LAYOUT_AS_IS = 2
 comptime _WI_LAYOUT_TRANSPOSE = 3
 comptime _WI_STRIDE_C = 0
@@ -819,8 +818,6 @@ def _check(g: OnnxGraph, c: RCtx, a: _An, rprobs: List[_RProblem], source: Strin
                 continue
             if g.inits[t].numel() == 0 and i in a.want:
                 why.append(_q(g, i) + " is an empty tensor")
-            elif g.inits[t].dtype == DT_BF16 and len(g.inits[t].dims) > _WI_MAX_RANK:
-                why.append(_q(g, i) + " is a bfloat16 tensor of more than " + String(_WI_MAX_RANK) + " dimensions")
         try:
             var more = _subset(g, c, a, n, op)
             for j in range(len(more)):  # cpu-route: model graph lowered on the host (one per problem)
@@ -1047,12 +1044,12 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
             else:
                 raise _fatal("tensor '" + self.g[].st.text(t.name) + "' is not a float tensor")
             var rec: List[Int] = [h, 0, _WI_LAYOUT_TRANSPOSE if transpose else _WI_LAYOUT_AS_IS, base, 0, code, size, len(src)]
-            for j in range(_WI_MAX_RANK):  # cpu-route: model graph lowered on the host (one per source axis)
-                rec.append(src[j] if j < len(src) else 0)
+            for j in range(len(src)):  # cpu-route: model graph lowered on the host (one per source axis)
+                rec.append(src[j])
             rec.append(_WI_STRIDE_C)
-            for _ in range(_WI_MAX_RANK):  # cpu-route: model graph lowered on the host (stride words)
+            for _ in range(len(src)):  # cpu-route: model graph lowered on the host (stride words)
                 rec.append(0)
-            if len(rec) != WI_RECORD:
+            if len(rec) != wi_record_words(len(src)):
                 raise _fatal("the weight import record holds " + String(len(rec)) + " words")
             var ws = wi_source(rec, 0, self.g[].st.text(t.name))
             var view = session_load_check(ws, rec[2], rn_dims(self.p[].shape_nd(h)))
