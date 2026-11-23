@@ -40,6 +40,9 @@ FAMILIES = (
                         "sequence-composed-mamba2", "sequence-composed-mamba3",
                         "sequence-composed-recurrent",
                         "sequence-composed-conv1d",
+                        # nn-attention begin: classic attention models (tools/identity_lanes/nn_attention.py)
+                        "sequence-attention-encoder", "sequence-attention-cross",
+                        # nn-attention end
                         # lane verify-coverage-audit (2026-10-21): MoEBlock.backward,
                         # Sequential export/load/predict, import_model
                         "sequence-moe-backward", "sequence-export-roundtrip",
@@ -161,6 +164,10 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-composed-mamba3": "Sequential composed: trapezoid_scan",
                        "sequence-composed-recurrent": "Sequential composed: lstm, gru",
                        "sequence-composed-conv1d": "Sequential composed: conv1d, narrow",
+                       # nn-attention begin
+                       "sequence-attention-encoder": "Sequential transformer_encoder_layer, positional_encoding",
+                       "sequence-attention-cross": "Sequential transformer_decoder_layer, multihead_attention",
+                       # nn-attention end
                        "sequence-moe-backward": "MoEBlock backward",
                        "sequence-export-roundtrip": "Sequential export, load and predict",
                        "sequence-onnx-import": "import_model on an ONNX file",
@@ -185,6 +192,10 @@ PUBLIC_PENDING_LANES = {
     "sequence-composed-mamba3": "unwatched",
     "sequence-composed-recurrent": "unwatched",
     "sequence-composed-conv1d": "unwatched",
+    # nn-attention begin
+    "sequence-attention-encoder": "unwatched",
+    "sequence-attention-cross": "unwatched",
+    # nn-attention end
     "sequence-moe-backward": "unwatched",
     "sequence-export-roundtrip": "unwatched",
     "sequence-onnx-import": "unwatched",

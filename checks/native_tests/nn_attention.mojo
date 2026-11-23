@@ -10,7 +10,8 @@ test_nn_attention_layers, per case, through the model interpreter (autograd/mode
     PyTorch's (out, in) layout, per-head softmax(q k^T / sqrt(head_dim) + mask) v, the output projection,
     layer_norm, the feed-forward network, residuals, the sinusoidal encoding), tolerance 1e-4 (1 + |y|);
   - every parameter gradient against central finite differences of the interpreter's own loss sum(seed * y)
-    (h = 1/128, tolerance 3e-3 (1 + |fd|));
+    (h = 1/128, tolerance 3e-3 (1 + |fd|); a parameter outside it is probed again at h = 1/512, a ReLU kink
+    inside the wider step bending the difference);
   - one `NN_ATTENTION <case> digest` line over the output and gradient words.
   Cases: self-attention with bias; causal without bias (the bias words stay out of every op: their
   gradient is 0); cross-attention to an earlier layer of another length and width (kdim 5, 3 keys); the key
@@ -462,6 +463,14 @@ def _close(name: String, got: List[Float32], want: List[Float64], tol: Float64) 
             _fail(name + ": element " + String(i) + " got " + String(got[i]) + " expected " + String(want[i]))
 
 
+def _fd[E: Exec](mut ex: E, c: _Case, spec: ModelSpec, params: List[Float32], i: Int, h: Float64) raises -> Float64:
+    var up = params.copy()
+    up[i] = Float32(Float64(params[i]) + h)
+    var down = params.copy()
+    down[i] = Float32(Float64(params[i]) - h)
+    return (_loss(ex, c, spec, up) - _loss(ex, c, spec, down)) / (Float64(up[i]) - Float64(down[i]))
+
+
 def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> List[Float32]:
     var spec = parse_model(c.model.program(c.features), model_float_words(c.model.table()))
     var params = _params(spec.n_params)
@@ -472,11 +481,12 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
     if finite_differences:
         var fd = List[Float64](length=len(params), fill=0)
         for i in range(len(params)):  # small-loop(every parameter probed)
-            var up = params.copy()
-            up[i] = Float32(Float64(params[i]) + _H)
-            var down = params.copy()
-            down[i] = Float32(Float64(params[i]) - _H)
-            fd[i] = (_loss(ex, c, spec, up) - _loss(ex, c, spec, down)) / (2.0 * _H)
+            fd[i] = _fd(ex, c, spec, params, i, _H)
+            # a ReLU kink inside [p - h, p + h] bends the central difference: such a parameter is probed
+            # again with a quarter of the step, and the gradient must match that one
+            var d = abs(Float64(grads[i]) - fd[i])
+            if not (d <= 3e-3 * (1.0 + abs(fd[i]))):
+                fd[i] = _fd(ex, c, spec, params, i, _H / 4.0)
         _close(c.name + " gradient", grads, fd, 3e-3)
     var words = yv.copy()
     for i in range(len(grads)):  # small-loop(check words)

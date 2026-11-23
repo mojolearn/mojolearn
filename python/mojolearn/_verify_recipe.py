@@ -938,6 +938,15 @@ EXAMPLES = {
         ["flatten"], ["linear", 1]]),
 }
 
+# nn-attention begin: classic attention (positional_encoding, the encoder and decoder layers, cross-attention)
+EXAMPLES["seq-attention"] = _seq((6, 4), [
+    ["linear", 8], ["positional_encoding", 8, {"dropout": 0.0}],
+    ["transformer_encoder_layer", 8, 2, 16, {"dropout": 0.0}],
+    ["transformer_decoder_layer", 8, 2, 16, {"dropout": 0.0, "memory": 0, "tgt_is_causal": True}],
+    ["multihead_attention", 8, 2, {"kdim": 4, "vdim": 4, "source": -1}],
+    ["flatten"], ["linear", 1]])
+# nn-attention end
+
 
 def load_recipe(name):
     """The recipe and the directory its data file is relative to: a JSON file,
