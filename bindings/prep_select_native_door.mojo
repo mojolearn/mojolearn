@@ -211,7 +211,6 @@ def _rfe_dotted_base(estimator: PythonObject, g: PythonObject, context: PythonOb
         var plan = prep_estimator_plan(estimator, context)
         if plan is None:
             return base^
-        var classifier = Bool(py=plan["classifier"])
         var template = prep_estimator_clone(estimator, context)
         var member_context = plan["context"]
         var fields = py_call(plan["fields_get"], template, py_type(template))
@@ -220,8 +219,10 @@ def _rfe_dotted_base(estimator: PythonObject, g: PythonObject, context: PythonOb
         if not owner.published or owner.plan.family != MEMBER_FAMILY_ENSEMBLE:
             return base^
         var mask = member_kind_capabilities(owner.plan)
-        if ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
-            return base^
+        # The estimator type is the META kind's (lane mf-del5b): a search's class says none of its own (its
+        # base decides, lane mf-search4), so its plan's word would have refused a search over a classifier;
+        # THE RFE KIND's admission reads the same mask.
+        var classifier = (mask & MEMBER_CAN_CLASSIFIER) != 0
         if (mask & MEMBER_CAN_FIT) == 0 or (mask & MEMBER_CAN_EXPORT) == 0:
             return base^
         base.refusal = source_refusal^
