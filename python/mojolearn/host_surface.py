@@ -1599,11 +1599,14 @@ ADAPTED_MODULES = {
 #: weight column through the fold planes, the leaves, the starting average
 #: and the learn loss); class weights with RMSE refuse on both columns in
 #: `train`'s words.
+#:
+#: Lane gbdt-cpu-rest-4 (2026-11-23): the ExperimentalTwoLevelFeatureFreq
+#: clause was stale. The host fit (gbdt/host/gbdt_oracle_feature_freq.mojo)
+#: trains a level whose winner is the tensor column itself (registry record,
+#: canonical hash), its admission raises are the device estimator's words
+#: (gbdt/estimator.mojo::gbdt_fit_two_level_feature_freq), and the CPU
+#: column already records gbdt-tensor-ctr-tables; nothing refuses it.
 NO_CPU_PATH = (
-    "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
-    "tree's level winner is the tensor column itself: the separate CPU "
-    "feature-frequency route refuses that case",
-
     "gradient boosting training with a categorical or one-hot column "
     "outside SymmetricTree with Logloss or RMSE and Plain boosting: the "
     "categorical owners do not implement those combinations",
