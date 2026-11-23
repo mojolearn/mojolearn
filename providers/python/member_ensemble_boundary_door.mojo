@@ -121,7 +121,7 @@ from bindings.metrics_keys_unpack import metrics_keys
 from bindings.arena_prog_native_door import metric_route_of, metric_route_entries
 from bindings.msel_candidates_door import msel_grid_list, msel_sampler_check, msel_sampler_list
 from bindings.msel_estimator_native_door import msel_native_clone, msel_native_set_params, msel_clone_parameter
-from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list
+from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list, msel_is_integral
 from bindings.msel_search_state_door import msel_search_update
 from bindings.msel_split_door import (
     msel_cls, MselSplitter, SPLITTER_KFOLD, SPLITTER_STRATIFIED_KFOLD, msel_seed, msel_truth, msel_sabotage,
@@ -597,7 +597,7 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
                 return False
     else:
         var cv = py_get(fields, "cv")
-        _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS)
+        _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
         if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
             # A user's index list (lane mf-meta3b): its folds read ONCE into
             # typed int32 rows, checked against the fit's rows by the RUN as
@@ -664,7 +664,7 @@ comptime _SEARCH_CV_CALLBACK_WORDS = "TypeError: Python fold iterator callbacks 
 
 
 def _refuse_cv_callback(cv: PythonObject, context: PythonObject, b: PythonObject,
-                        words: String) raises:
+                        words: String, integral_ok: Bool) raises:
     """A cv that is none of None, an int, an index list or one of OUR
     splitters (`family_msel_splitter_layouts`): a user's own splitter object,
     refused at UNPACK in the meta door's words (bindings/
@@ -673,9 +673,17 @@ def _refuse_cv_callback(cv: PythonObject, context: PythonObject, b: PythonObject
     is never called, at UNPACK or in RUN: a user's splitter is a Python
     callback (AGENTS.md "No calls back into Python": callbacks are refused
     before they are invoked; the 2026-11-25 boundary note admits only the
-    INPUT's data-interchange protocols). Lane mf-split4b."""
+    INPUT's data-interchange protocols). Lane mf-split4b. `integral_ok`: the
+    search door's rule, which takes any native integer scalar (a NumPy one
+    too, `msel_is_integral`: exact type identities, no ABC hook)."""
     if cv is None or py_type(cv) is b.int or py_type(cv) is b.bool or py_type(cv) is b.list or py_type(cv) is b.tuple:
         return
+    if integral_ok:
+        try:
+            if msel_is_integral(cv, context):
+                return
+        except:
+            return  # no integer table connected: the caller's door decides, in the same words
     var layouts = py_get(context, "family_msel_splitter_layouts")
     if layouts is None:
         return  # no splitter table connected: the caller's door decides, in the same words
@@ -1510,7 +1518,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         # each fit over that fit's rows (core/ensemble_member.mojo
         # `_split_folds`); a user's own splitter object refused here.
         var cv = py_get(fields, "cv")
-        _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS)
+        _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
         if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
             if not _user_folds(cv, b, fold_train, fold_test):
                 return False
@@ -2434,7 +2442,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var cv = py_get(fields, "cv")
     # A user's own splitter object: refused here in the search door's words
     # (lane mf-split4b; never called, `_refuse_cv_callback`).
-    _refuse_cv_callback(cv, context, b, _SEARCH_CV_CALLBACK_WORDS)
+    _refuse_cv_callback(cv, context, b, _SEARCH_CV_CALLBACK_WORDS, True)
     var folds = 5 if cv is None else _int_word(cv, b)
     if folds < 2:
         return False
