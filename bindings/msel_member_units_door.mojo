@@ -231,6 +231,65 @@ def _encode_outputs(y: PythonObject, rows: Int, context: PythonObject, b: Python
     return Python.tuple(codes, classes)
 
 
+def _text_rows(y: PythonObject, context: PythonObject, b: PythonObject) raises -> Bool:
+    """True for a 2-D target that is not an admitted Array: a list or tuple
+    of rows, or any other object with `ndim` 2 (a NumPy text or object
+    array). Read once per fit, before any label (lane mf-tail5b)."""
+    if py_type(y) is b.list or py_type(y) is b.tuple:
+        return len(y) > 0 and (py_type(y[0]) is b.list or py_type(y[0]) is b.tuple)
+    var ndim = py_call(b.getattr, y, PythonObject("ndim"), PythonObject(None))
+    return ndim is not None and py_type(ndim) is b.int and Int(py=ndim) == 2
+
+
+def _encode_text_outputs(y: PythonObject, rows: Int, context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """THE TEXT 2-D y of a classifier (lane mf-tail5b), PER OUTPUT: its rows
+    read ONCE at UNPACK (boundary work: the labels are Python objects), each
+    output's labels gathered into one list and encoded by the one label
+    encoder (`msel_encode`, the 1-D text route's), written as int32 rows x
+    outputs codes. Returns (codes, [classes of each output]) as
+    `_encode_outputs` does, its classes kept for PACK; None when y is not
+    such a target or holds no string label (a numeric y takes
+    `_encode_outputs`)."""
+    var listed = py_call(b.list, y)
+    if len(listed) != rows or rows == 0:
+        return PythonObject(None)
+    var first = py_call(b.list, listed[0])
+    var outputs = len(first)
+    if outputs < 2:
+        return PythonObject(None)
+    var columns = Python.list()
+    for j in range(outputs):  # driver-loop: over the outputs (one label list each)
+        _ = py_call(columns.append, Python.list())
+    var text = False
+    for i in range(rows):  # driver-loop: over the rows (each row's labels, read once)
+        var row = py_call(b.list, listed[i])
+        if len(row) != outputs:
+            return PythonObject(None)
+        for j in range(outputs):  # small-loop(the outputs)
+            var label = row[j]
+            text = text or Bool(py=py_call(b.isinstance, label, b.str))
+            _ = py_call(columns[j].append, label)
+    if not text:
+        return PythonObject(None)
+    var codes = msel_new(rows * outputs, "<i4", context)
+    var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=msel_addr(codes))
+    var classes = Python.list()
+    for j in range(outputs):  # driver-loop: over the outputs (one encode each)
+        var encoded = msel_encode(columns[j], context)
+        if len(encoded[0]) < 2:
+            return PythonObject(None)
+        var column_codes = encoded[1]
+        if Int(py=column_codes.size) != rows or String(py=column_codes.dtype) != "<i4":
+            return PythonObject(None)
+        var got = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=msel_addr(column_codes))
+        for i in range(rows):  # driver-loop: over the rows (output j's codes into its column of the block)
+            dst[i * outputs + j] = got[i]
+        _ = column_codes  # read through the pointer above
+        _ = py_call(classes.append, encoded[0])
+    _ = codes  # written through its address above
+    return Python.tuple(codes, classes)
+
+
 def _is_search(model: PythonObject, context: PythonObject) raises -> Bool:
     var cls = py_type(model)
     return cls is msel_cls("GridSearchCV", context) or cls is msel_cls("RandomizedSearchCV", context)
@@ -276,7 +335,10 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
     var plan = msel_estimator_plan(base, context)
     if py_get(plan, "member") is None:
         return PythonObject(None)
-    if not msel_is_array(x, context) or (y is not None and not msel_is_array(y, context)):
+    # A TEXT 2-D y (lane mf-tail5b): not an Array; a search over a
+    # classifier admits it below, per output.
+    var text_y = y is not None and not msel_is_array(y, context) and _text_rows(y, context, b)
+    if not msel_is_array(x, context) or (y is not None and not msel_is_array(y, context) and not text_y):
         return PythonObject(None)
     if String(py=x.dtype) != "<f4" or Int(py=x.ndim) != 2 or String(py=x.order) != "C" or Int(py=x.size) == 0:
         return PythonObject(None)
@@ -312,9 +374,15 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
                 early = Bool(py=msel_estimator_plan(search_base, context)["classifier"])
             except:
                 return PythonObject(None)  # a base no plan holds: the search door refuses it in its words
+    if text_y and not early:
+        return PythonObject(None)  # a text 2-D y is read by a search over a classifier only
     if early:
         try:
-            if Int(py=y.ndim) == 1:
+            if text_y:
+                outputs = _encode_text_outputs(y, rows, context, b)
+                if outputs is None:
+                    return PythonObject(None)
+            elif Int(py=y.ndim) == 1:
                 if Int(py=y.size) != rows:
                     return PythonObject(None)
                 encoded = msel_encode(y, context)
