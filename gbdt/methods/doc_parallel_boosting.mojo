@@ -62,10 +62,8 @@ from gbdt.methods.leaves_estimation.step_estimator import (
     create_step_estimator,
 )
 from checks.fixed_point import choose_scale
-from gbdt.methods.random_score_helper import (
-    calc_score_model_length_mult,
-    compute_score_std_dev,
-)
+from gbdt.methods.random_score_helper import compute_score_std_dev
+from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     PointwiseTreeWorkspace,
     fit_oblivious_tree_structure,
@@ -4801,8 +4799,10 @@ def fit_with_test(
         # structure_searcher.h:25,31`).
         var noise_mult = Float64(0.0)
         if random_strength != Float32(0.0):
-            noise_mult = calc_score_model_length_mult(
-                Float64(n_rows), Float64(iteration) * Float64(learning_rate)
+            # the one body (gbdt/methods/random_score_bodies.mojo), which the
+            # host owners call too
+            noise_mult = score_model_length_mult(
+                Float64(n_rows), iteration, learning_rate
             )
         var tree_seed = noise_rand.next_uniform_l()
 

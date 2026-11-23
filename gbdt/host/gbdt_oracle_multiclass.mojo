@@ -78,6 +78,7 @@ from checks.numerics import (
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.methods.cursor_rescale import rescaled_leaves
+from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
@@ -852,9 +853,11 @@ def gbdt_multi_host_fit(
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
         var noise_mult = Float64(0.0)
         if random_strength != Float32(0.0):
-            # one rounding, as the default (contract=fast) build fused it
-            var model_left = exp(fma(-Float64(iteration), Float64(params.learning_rate), log(Float64(n_rows))))
-            noise_mult = model_left / (1.0 + model_left)
+            # the device's one body (gbdt/methods/random_score_bodies.mojo;
+            # this was a host libm restatement, lane gbdt-cpu-rest-2)
+            noise_mult = score_model_length_mult(
+                Float64(n_rows), iteration, params.learning_rate
+            )
         var tree_seed = noise_rand.next_uniform_l()
         if bootstrap_kind >= 0:
             var bm = _bootstrap_pass(bootstrap_kind, boot_seeds, stats, n_rows, bootstrap_param, stat_count)

@@ -104,6 +104,7 @@ from gbdt.targets.pointwise_bodies import (
 )
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.methods.cursor_rescale import rescaled_leaves
+from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import (
@@ -1262,12 +1263,11 @@ def gbdt_losses_host_fit(
         var fv = _deterministic_sum_lanes(fv_part, 1, fv_blocks)[0]
         var noise_mult = Float64(0.0)
         if random_strength != Float32(0.0):
-            # `log(n) - iteration * lr` in ONE rounding, as the default
-            # (contract=fast) build fused it (lane/explicit-fma-contract-proof)
-            var model_left = exp(
-                fma(-Float64(iteration), Float64(params.learning_rate), log(Float64(n_rows)))
+            # the device's one body (gbdt/methods/random_score_bodies.mojo;
+            # this was a host libm restatement, lane gbdt-cpu-rest-2)
+            noise_mult = score_model_length_mult(
+                Float64(n_rows), iteration, params.learning_rate
             )
-            noise_mult = model_left / (1.0 + model_left)
         var tree_seed = noise_rand.next_uniform_l()
         var fixed_scale: Float32
         if bootstrap_on:

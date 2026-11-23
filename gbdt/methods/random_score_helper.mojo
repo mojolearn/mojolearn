@@ -71,8 +71,6 @@ from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
-    identical_exp64,
-    identical_log64,
     identical_mul_add,
 )
 from gbdt.targets.kernel.pointwise_targets import (
@@ -218,33 +216,9 @@ def compute_std_dev(
     return sqrt(sum2 / (Float64(count) + 1e-100))
 
 
-def calc_score_model_length_mult(
-    sample_count: Float64, model_size: Float64
-) -> Float64:
-    """`CalcScoreModelLengthMult` (`random_score_helper.h:18-22`).
-
-        double modelExpLength = log(sampleCount);
-        double modelLeft = exp(modelExpLength - modelSize);
-        return modelLeft / (1 + modelLeft);
-
-    `modelSize` is `iteration * learningRate`
-    (`doc_parallel_boosting.h:358-359`).
-
-    `std.math.log` carries this repository's known ~5e-8 absolute error
-    ([[mojo-log-breaks-ties]]). It is tolerated HERE and only here: the
-    result scales a random normal, so an error five parts in 1e8 in the
-    scale is not a decision. It would NOT be tolerable inside the score
-    comparison, and no caller may reuse this value as a tie-break.
-    """
-    # IDENTITY (lane fb13-identity-audit, 2026-11-17): was DEVIATION 256's
-    # unpinned host exp/log. The scale multiplies the split-score noise, so a
-    # last-bit difference between hosts can flip a split choice: it IS a
-    # decision. The seams (portable under IDENTICAL, stdlib under FAST) cost
-    # two scalar calls per boosting iteration. Bits change (IDENTICAL fits with
-    # random_strength != 0, every column together).
-    var model_exp_length = identical_log64(sample_count)
-    var model_left = identical_exp64(model_exp_length - model_size)
-    return model_left / (1.0 + model_left)
+# `calc_score_model_length_mult` moved to `gbdt/methods/random_score_bodies.mojo`
+# as `score_model_length_mult` (lane gbdt-cpu-rest-2, 2026-11-23): the one
+# body the device fit and every host GBDT owner call.
 
 
 def compute_score_std_dev(

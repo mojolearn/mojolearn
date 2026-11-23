@@ -122,6 +122,7 @@ from core.host_predict_threads import HostF32Ptr, HostU32Ptr, host_predict_chunk
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from gbdt.methods.cursor_rescale import rescaled_leaves
+from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -1306,12 +1307,11 @@ def gbdt_host_fit_non_symmetric(
         # 219-243`) and the per-tree seed, drawn every tree
         var noise_mult = Float64(0.0)
         if params.random_strength != Float32(0.0):
-            var model_exp_length = log(Float64(n_rows))
-            # one rounding, as the default (contract=fast) build fused it
-            var model_left = exp(
-                fma(-Float64(iteration), Float64(base.learning_rate), model_exp_length)
+            # the device's one body (gbdt/methods/random_score_bodies.mojo;
+            # this was a host libm restatement, lane gbdt-cpu-rest-2)
+            noise_mult = score_model_length_mult(
+                Float64(n_rows), iteration, base.learning_rate
             )
-            noise_mult = model_left / (1.0 + model_left)
         var tree_seed = noise_rand.next_uniform_l()
         if bootstrap_on:
             var bm = _bootstrap_pass(
