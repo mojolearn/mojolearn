@@ -16,6 +16,21 @@ the scikit-learn definitions computed here in binary64 from the same float32 inp
 4. roc_auc (bindings/mcls_ranking_run.mojo `roc_auc_run`): binary (Mann-Whitney with ties as 1/2), one-vs-rest
    macro and weighted, one-vs-one macro and weighted (scikit-learn's pair rule) over 6 rows x 3 classes.
 
+5. average_precision (bindings/metrics_exp_curve_run.mojo `average_precision_run`, lane mf-score5): binary over
+   t == positive (scikit-learn's step sum over the distinct thresholds, descending), the one-vs-rest macro mean over
+   4 rows x 3 classes, and the door's refusal of a column count that is not the classes y_true holds.
+6. brier_score_loss (bindings/metrics_exp_rank_run.mojo `brier_run`): the one-column binary form (labels {0, 1}:
+   positive code 1; labels {1, 2}: the largest label y_true holds) and the 3-class form (no half);
+   top_k_accuracy_score (`top_k_run`, k = 2): 5 rows x 4 classes, and a binary column (k >= n_classes: 1.0 and
+   the warning bit).
+7. normalized_mutual_info_score and adjusted_mutual_info_score (bindings/metrics_exp_common_run.mojo
+   `cluster_mi_run`, arithmetic mean): NMI against the entropy definition; AMI of a relabelled identical partition
+   is 1; one cluster is 0 (AMI) and both one cluster is 1.
+8. THE WARNINGS AS NOTICES (core/msel_scorer_run.mojo `msel_scorer_value`): r2 of one sample is NaN with notice
+   MEMBER_NOTICE_METRIC_FEW; macro precision with a never-predicted label gives MEMBER_NOTICE_METRIC_PRF (a = 0);
+   balanced accuracy with a predicted class y_true lacks gives MEMBER_NOTICE_METRIC_BALANCED; a binary top_k gives
+   MEMBER_NOTICE_METRIC_TOP_K (a = 2, b = 2); a clean macro f1 gives none.
+
 Every value must match to a relative 1e-6 (the programs accumulate in binary64 over float32 words; the oracle does
 the same arithmetic in a different order).
 
@@ -23,7 +38,11 @@ FAIL-PROOF EDITS (each must make a case fail): in `reg_r2_stages` `r.fin(res_sum
 (case 1, r2); in `mc_sums_stages` `[a, b, match_off, labels, 0]` for the pair key's last word (case 2);
 `McEpi(2, labels, avg, 0, 2, 4.0)` in `label_metric_run` (case 2, f1: beta 2); in `log_loss_run`
 `codes[i] = Int32(t[i])` without the rank (case 3, the lacking-class form); `mc_roc_ovr_stages(..., True,
-not weighted)` swapped (case 4, ovr weighted); `pair_b[g0 + t]` read as `pair_a` in `roc_ovo_run` (case 4).
+not weighted)` swapped (case 4, ovr weighted); `pair_b[g0 + t]` read as `pair_a` in `roc_ovo_run` (case 4); `flags[i] = ... == positive` as `!=` in
+`average_precision_run` (case 5); `brier_marks_positive` answering `last` always (case 6, labels {0, 1} with only
+code 0 present: no row is positive); `kk = k` replaced by `kk = 1` in `top_k_stages`
+(case 6); `cluster_mi_run` swapping `ka` / `kb` in the early return (case 7, the one-cluster AMI); dropping
+`member_notice_add` for MEMBER_NOTICE_METRIC_PRF in `_prf_notices` (case 8).
 """
 from std.math import sqrt, log, isnan
 from std.memory import bitcast
@@ -39,9 +58,17 @@ from bindings.mcls_classify_run import (
     LBL_MICRO, LBL_MACRO, LBL_WEIGHTED,
 )
 from bindings.mcls_ranking_run import roc_auc_run, ROC_BINARY, ROC_OVR, ROC_OVR_WEIGHTED, ROC_OVO, ROC_OVO_WEIGHTED
+from bindings.metrics_exp_curve_run import average_precision_run, top_k_run
+from bindings.metrics_exp_rank_run import brier_run, BRIER_MARK_ZERO, BRIER_MARK_ONE
+from bindings.metrics_exp_common_run import cluster_mi_run
+from core.msel_scorer_run import msel_scorer_row, msel_scorer_code, msel_scorer_value
+from core.member_notices import (
+    MEMBER_NOTICE_WORDS, MEMBER_NOTICE_METRIC_PRF, MEMBER_NOTICE_METRIC_BALANCED, MEMBER_NOTICE_METRIC_FEW,
+    MEMBER_NOTICE_METRIC_TOP_K,
+)
 from x_metrics.descriptor_host import metrics_program_host_v1
 
-comptime CASES = 4
+comptime CASES = 8
 
 
 def _route() -> MetricRoute:
@@ -61,7 +88,13 @@ def _f(values: List[Float32], i: Int) -> Float64:
 
 
 def _reg(metric: Int, y: List[Float32], p: List[Float32]) raises -> Float64:
-    return reg_metric_run(_route(), metric, Int(y.unsafe_ptr()), Int(p.unsafe_ptr()), len(y))
+    var warn = 0
+    return reg_metric_run(_route(), metric, Int(y.unsafe_ptr()), Int(p.unsafe_ptr()), len(y), warn)
+
+
+def _lbl(route: MetricRoute, metric: Int, avg: Int, t: Int, p: Int, n: Int, k: Int) raises -> Float64:
+    var warn = 0
+    return label_metric_run(route, metric, avg, t, p, n, k, warn)
 
 
 def _median(var v: List[Float64]) -> Float64:
@@ -220,7 +253,7 @@ def check_labels() raises:
     var bal = 0.0
     for c in range(k):  # small-loop(oracle: balanced accuracy, the mean recall)
         bal += tp[c] / tr[c]
-    _near(label_metric_run(route, LBL_BALANCED, 0, ta, pa, n, k), bal / 3.0, "balanced accuracy")
+    _near(_lbl(route, LBL_BALANCED, 0, ta, pa, n, k), bal / 3.0, "balanced accuracy")
     # matthews: sklearn's multiclass formula
     var s = Float64(n)
     var cc = 0.0
@@ -233,12 +266,12 @@ def check_labels() raises:
         tk2 += tr[c] * tr[c]
         pt += pr[c] * tr[c]
     var mcc = (cc * s - pt) / sqrt((s * s - pk2) * (s * s - tk2))
-    _near(label_metric_run(route, LBL_MCC, 0, ta, pa, n, k), mcc, "matthews")
+    _near(_lbl(route, LBL_MCC, 0, ta, pa, n, k), mcc, "matthews")
     var metrics: List[Int] = [LBL_PRECISION, LBL_RECALL, LBL_F1, LBL_JACCARD]
     var avgs: List[Int] = [LBL_MICRO, LBL_MACRO, LBL_WEIGHTED]
     for i in range(4):  # small-loop(check: the four set-wise metrics)
         for a in range(3):  # small-loop(check: the three averages)
-            _near(label_metric_run(route, metrics[i], avgs[a], ta, pa, n, k),
+            _near(_lbl(route, metrics[i], avgs[a], ta, pa, n, k),
                   _set_wise(i, avgs[a], tp, tr, pr, present),
                   "set-wise metric " + String(i) + " average " + String(avgs[a]))
     # code 3 of k = 4 present only in the predictions: the union holds it (recall 0 there, tr 0)
@@ -248,7 +281,7 @@ def check_labels() raises:
     var pr4 = List[Float64]()
     _counts(t, p4, 4, tp4, tr4, pr4)
     var present4: List[Int] = [0, 1, 2, 3]
-    _near(label_metric_run(route, LBL_PRECISION, LBL_MACRO, ta, Int(p4.unsafe_ptr()), n, 4),
+    _near(_lbl(route, LBL_PRECISION, LBL_MACRO, ta, Int(p4.unsafe_ptr()), n, 4),
           _set_wise(0, LBL_MACRO, tp4, tr4, pr4, present4), "macro precision over the label union")
     _ = len(t)  # the runs read the codes through their addresses
     _ = len(p)
@@ -369,6 +402,247 @@ def check_roc() raises:
     _ = len(sb)
 
 
+# ---------------------------------------------------------------- 5. average_precision
+
+
+def _ap(flags: List[Bool], scores: List[Float64]) -> Float64:
+    """scikit-learn: sum over the distinct thresholds (descending) of (R_n - R_{n-1}) P_n."""
+    var positives = 0.0
+    for i in range(len(flags)):  # small-loop(oracle)
+        if flags[i]:
+            positives += 1.0
+    var done = List[Bool](length=len(scores), fill=False)
+    var ap = 0.0
+    var recall_prev = 0.0
+    while True:  # small-loop(oracle: over the distinct thresholds, descending)
+        var top = -1.0e300
+        var found = False
+        for i in range(len(scores)):  # small-loop(oracle: the next threshold)
+            if not done[i] and scores[i] > top:
+                top = scores[i]
+                found = True
+        if not found:
+            break
+        var tp = 0.0
+        var fp = 0.0
+        for i in range(len(scores)):  # small-loop(oracle: the rows at or above it)
+            if scores[i] >= top:
+                done[i] = True
+                if flags[i]:
+                    tp += 1.0
+                else:
+                    fp += 1.0
+        var recall = tp / positives
+        ap += (recall - recall_prev) * (tp / (tp + fp))
+        recall_prev = recall
+    return ap
+
+
+def check_average_precision() raises:
+    var route = _route()
+    var tb: List[Int32] = [0, 1, 1, 0, 1, 0]
+    var sb: List[Float32] = [0.2, 0.7, 0.4, 0.5, 0.9, 0.1]
+    var fb = List[Bool]()
+    var vb = List[Float64]()
+    for i in range(6):  # small-loop(oracle)
+        fb.append(tb[i] == 1)
+        vb.append(_f(sb, i))
+    _near(average_precision_run(route, Int(tb.unsafe_ptr()), Int(sb.unsafe_ptr()), 6, 1, 2, 1), _ap(fb, vb),
+          "binary average precision")
+    var t: List[Int32] = [0, 1, 2, 1]
+    var s: List[Float32] = [0.6, 0.3, 0.1, 0.2, 0.5, 0.3, 0.1, 0.2, 0.7, 0.3, 0.4, 0.3]
+    var macro = 0.0
+    for c in range(3):  # small-loop(oracle: one vs rest)
+        var f = List[Bool]()
+        var v = List[Float64]()
+        for i in range(4):  # small-loop(oracle)
+            f.append(Int(t[i]) == c)
+            v.append(_f(s, i * 3 + c))
+        macro += _ap(f, v) / 3.0
+    _near(average_precision_run(route, Int(t.unsafe_ptr()), Int(s.unsafe_ptr()), 4, 3, 3, -1), macro,
+          "one-vs-rest macro average precision")
+    var four: List[Float32] = [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25,
+                               0.25, 0.25]
+    var raised = String("")
+    try:
+        _ = average_precision_run(route, Int(t.unsafe_ptr()), Int(four.unsafe_ptr()), 4, 4, 4, -1)
+    except error:
+        raised = String(error)
+    require(raised == "Number of classes in y_true not equal to the number of columns in 'y_score'",
+            "a column count that is not the classes y_true holds: " + raised)
+    _ = len(tb)  # the runs read the words through their addresses
+    _ = len(sb)
+    _ = len(t)
+    _ = len(s)
+    _ = len(four)
+
+
+# ---------------------------------------------------------------- 6. brier and top_k
+
+
+def check_brier_top_k() raises:
+    var route = _route()
+    var tb: List[Int32] = [0, 1, 1, 0, 1]
+    var col: List[Float32] = [0.2, 0.9, 0.6, 0.4, 0.7]
+    var want = 0.0
+    for i in range(5):  # small-loop(oracle: (y - p)^2, y = t == 1)
+        var y = 1.0 if tb[i] == 1 else 0.0
+        want += (y - _f(col, i)) * (y - _f(col, i))
+    var zero_one = BRIER_MARK_ZERO + (BRIER_MARK_ONE << 2)
+    _near(brier_run(route, Int(tb.unsafe_ptr()), Int(col.unsafe_ptr()), 5, 2, 1, zero_one), want / 5.0,
+          "binary brier, labels {0, 1}")
+    # labels {1, 2} (marks: 1 at code 0) with both present: not {0,1} / {-1,1}: the largest label (code 1)
+    _near(brier_run(route, Int(tb.unsafe_ptr()), Int(col.unsafe_ptr()), 5, 2, 1, BRIER_MARK_ONE), want / 5.0,
+          "binary brier, labels {1, 2}")
+    # labels {0, 1} with only code 0 held: {0} is pos_label-consistent, the label 1 is code 1: no row is positive
+    var t0: List[Int32] = [0, 0, 0, 0, 0]
+    var want0 = 0.0
+    for i in range(5):  # small-loop(oracle: p^2)
+        want0 += _f(col, i) * _f(col, i)
+    _near(brier_run(route, Int(t0.unsafe_ptr()), Int(col.unsafe_ptr()), 5, 2, 1, zero_one), want0 / 5.0,
+          "binary brier, labels {0, 1}, only 0 held")
+    var t3: List[Int32] = [0, 1, 2, 1]
+    var p3: List[Float32] = [0.7, 0.2, 0.1, 0.1, 0.8, 0.1, 0.25, 0.25, 0.5, 0.3, 0.6, 0.1]
+    var want3 = 0.0
+    for i in range(4):  # small-loop(oracle: the sum over the classes, no half)
+        for c in range(3):  # small-loop(oracle)
+            var y = 1.0 if Int(t3[i]) == c else 0.0
+            want3 += (y - _f(p3, i * 3 + c)) * (y - _f(p3, i * 3 + c))
+    _near(brier_run(route, Int(t3.unsafe_ptr()), Int(p3.unsafe_ptr()), 4, 3, 3, 0), want3 / 4.0, "3-class brier")
+    var t4: List[Int32] = [0, 1, 2, 3, 1]
+    var s4: List[Float32] = [0.5, 0.3, 0.1, 0.1, 0.1, 0.2, 0.6, 0.1, 0.4, 0.1, 0.3, 0.2, 0.1, 0.2, 0.3, 0.4,
+                             0.6, 0.1, 0.2, 0.15]
+    var hits = 0.0
+    for i in range(5):  # small-loop(oracle: the true class among the two largest scores)
+        var mine = _f(s4, i * 4 + Int(t4[i]))
+        var above = 0
+        for c in range(4):  # small-loop(oracle)
+            if _f(s4, i * 4 + c) > mine:
+                above += 1
+        if above < 2:
+            hits += 1.0
+    var warn = 0
+    _near(top_k_run(route, Int(t4.unsafe_ptr()), Int(s4.unsafe_ptr()), 5, 4, 4, 2, warn), hits / 5.0, "top_k k=2")
+    require(warn == 0, "top_k over 4 classes does not warn")
+    _near(top_k_run(route, Int(tb.unsafe_ptr()), Int(col.unsafe_ptr()), 5, 1, 2, 2, warn), 1.0, "binary top_k")
+    require(warn == 1, "a binary top_k with k = 2 warns that k >= n_classes")
+    _ = len(tb)  # the runs read the words through their addresses
+    _ = len(col)
+    _ = len(t0)
+    _ = len(t3)
+    _ = len(p3)
+    _ = len(t4)
+    _ = len(s4)
+
+
+# ---------------------------------------------------------------- 7. mutual information
+
+
+def check_mutual_info() raises:
+    var route = _route()
+    var a: List[Int32] = [0, 0, 1, 1, 2, 2, 2]
+    var b: List[Int32] = [0, 1, 1, 1, 2, 2, 0]
+    var n = 7
+    var mi = 0.0
+    var ha = 0.0
+    var hb = 0.0
+    for x in range(3):  # small-loop(oracle: the contingency definitions)
+        var px = 0.0
+        var py = 0.0
+        for i in range(n):  # small-loop(oracle)
+            if Int(a[i]) == x:
+                px += 1.0
+            if Int(b[i]) == x:
+                py += 1.0
+        ha -= (px / 7.0) * log(px / 7.0)
+        hb -= (py / 7.0) * log(py / 7.0)
+        for y in range(3):  # small-loop(oracle)
+            var pxy = 0.0
+            var qy = 0.0
+            for i in range(n):  # small-loop(oracle)
+                if Int(a[i]) == x and Int(b[i]) == y:
+                    pxy += 1.0
+                if Int(b[i]) == y:
+                    qy += 1.0
+            if pxy > 0.0:
+                mi += (pxy / 7.0) * log((pxy * 7.0) / (px * qy))
+    _near(cluster_mi_run(route, False, Int(a.unsafe_ptr()), Int(b.unsafe_ptr()), n, 3, 2), mi / ((ha + hb) / 2.0),
+          "normalized mutual information")
+    var same: List[Int32] = [1, 1, 2, 2, 0, 0, 0]
+    _near(cluster_mi_run(route, True, Int(a.unsafe_ptr()), Int(same.unsafe_ptr()), n, 3, 2), 1.0,
+          "adjusted mutual information of a relabelled partition")
+    var one: List[Int32] = [2, 2, 2, 2, 2, 2, 2]
+    require(cluster_mi_run(route, True, Int(a.unsafe_ptr()), Int(one.unsafe_ptr()), n, 3, 2) == 0.0,
+            "adjusted mutual information against one cluster")
+    require(cluster_mi_run(route, False, Int(one.unsafe_ptr()), Int(one.unsafe_ptr()), n, 3, 2) == 1.0,
+            "normalized mutual information of one cluster each")
+    _ = len(a)  # the runs read the codes through their addresses
+    _ = len(b)
+    _ = len(same)
+    _ = len(one)
+
+
+# ---------------------------------------------------------------- 8. the warnings as notices
+
+
+def _notice_codes(words: List[Float64]) -> List[Int]:
+    var codes = List[Int]()
+    for i in range(len(words) // MEMBER_NOTICE_WORDS):  # small-loop(check: the notices)
+        codes.append(Int(words[MEMBER_NOTICE_WORDS * i]))
+    return codes^
+
+
+def check_notices() raises:
+    var route = _route()
+    var y1: List[Float32] = [2.0]
+    var p1: List[Float32] = [1.5]
+    var notes = List[Float64]()
+    var r2 = msel_scorer_row(msel_scorer_code("r2", False))
+    var value = msel_scorer_value(route, r2, Int(y1.unsafe_ptr()), Int(p1.unsafe_ptr()), 1, 0, 1, -1, notes)
+    require(isnan(value), "r2 of one sample is NaN")
+    var codes = _notice_codes(notes)
+    require(len(codes) == 1 and codes[0] == MEMBER_NOTICE_METRIC_FEW and notes[1] == 0.0, "r2 of one sample warns")
+    var t: List[Int32] = [0, 1, 1]
+    var pz: List[Int32] = [0, 0, 0]
+    notes = List[Float64]()
+    var precision = msel_scorer_row(msel_scorer_code("precision_macro", False))
+    _ = msel_scorer_value(route, precision, Int(t.unsafe_ptr()), Int(pz.unsafe_ptr()), 3, 2, 1, -1, notes)
+    codes = _notice_codes(notes)
+    require(len(codes) == 1 and codes[0] == MEMBER_NOTICE_METRIC_PRF and notes[1] == 0.0,
+            "macro precision with a never-predicted label warns")
+    var tb: List[Int32] = [0, 0, 1]
+    var pb: List[Int32] = [0, 1, 2]
+    notes = List[Float64]()
+    var balanced = msel_scorer_row(msel_scorer_code("balanced_accuracy", False))
+    _ = msel_scorer_value(route, balanced, Int(tb.unsafe_ptr()), Int(pb.unsafe_ptr()), 3, 3, 1, -1, notes)
+    codes = _notice_codes(notes)
+    require(len(codes) == 1 and codes[0] == MEMBER_NOTICE_METRIC_BALANCED, "balanced accuracy warns")
+    var tk: List[Int32] = [0, 1, 1, 0]
+    var sk: List[Float32] = [0.1, 0.8, 0.6, 0.3]
+    notes = List[Float64]()
+    var top_k = msel_scorer_row(msel_scorer_code("top_k_accuracy", False))
+    _ = msel_scorer_value(route, top_k, Int(tk.unsafe_ptr()), Int(sk.unsafe_ptr()), 4, 2, 1, -1, notes)
+    codes = _notice_codes(notes)
+    require(len(codes) == 1 and codes[0] == MEMBER_NOTICE_METRIC_TOP_K and notes[1] == 2.0 and notes[2] == 2.0,
+            "a binary top_k warns")
+    var tc: List[Int32] = [0, 1, 2, 1]
+    var pc: List[Int32] = [0, 1, 2, 2]
+    notes = List[Float64]()
+    var f1 = msel_scorer_row(msel_scorer_code("f1_macro", False))
+    _ = msel_scorer_value(route, f1, Int(tc.unsafe_ptr()), Int(pc.unsafe_ptr()), 4, 3, 1, -1, notes)
+    require(len(notes) == 0, "a clean macro f1 raises nothing")
+    _ = len(y1)  # the runs read the words through their addresses
+    _ = len(p1)
+    _ = len(t)
+    _ = len(pz)
+    _ = len(tb)
+    _ = len(pb)
+    _ = len(tk)
+    _ = len(sk)
+    _ = len(tc)
+    _ = len(pc)
+
+
 def test_metrics_scorer_builders() raises:
     def run_case(which: Int) raises:
         if which == 0:
@@ -377,8 +651,16 @@ def test_metrics_scorer_builders() raises:
             check_labels()
         elif which == 2:
             check_log_loss()
-        else:
+        elif which == 3:
             check_roc()
+        elif which == 4:
+            check_average_precision()
+        elif which == 5:
+            check_brier_top_k()
+        elif which == 6:
+            check_mutual_info()
+        else:
+            check_notices()
     check_cases("metrics_scorer_builders", CASES, run_case)
 
 

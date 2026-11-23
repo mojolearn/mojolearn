@@ -39,6 +39,23 @@ comptime MEMBER_NOTICE_PLS_RESIDUAL = 4
 #: bindings/msel_split_plan_run.mojo `msel_plan_stratified`): the least
 #: populated class holds fewer rows than n_splits (a = its rows, b = n_splits).
 comptime MEMBER_NOTICE_SPLIT_LEAST = 5
+# THE SCORERS' METRIC WARNINGS (lane mf-score5): a search unit's scores
+# (core/msel_search_run.mojo) keep, after the unit's fit notices, the
+# warnings the public metric its scorer calls raises on that side, one per
+# occurrence in the scorer's order, as scikit-learn's scorer raises them
+# during the search. The PACK raises them in the public metric's class and
+# words (bindings/member_fit_notices_pack.mojo).
+#: precision / recall / f-score with a zero denominator (bindings/mcls_classify_door.mojo
+#: `_prf`; a = 0 precision, 1 recall, 2 f-score).
+comptime MEMBER_NOTICE_METRIC_PRF = 6
+#: jaccard_score with a label of no true and no predicted samples (bindings/metrics_exp_cls_door.mojo `_jaccard`).
+comptime MEMBER_NOTICE_METRIC_JACCARD = 7
+#: balanced_accuracy_score: y_pred holds classes y_true does not (`_balanced_accuracy`).
+comptime MEMBER_NOTICE_METRIC_BALANCED = 8
+#: r2_score (a = 0) or d2_absolute_error_score (a = 1) of fewer than two samples (bindings/metrics_reg_door.mojo).
+comptime MEMBER_NOTICE_METRIC_FEW = 9
+#: top_k_accuracy_score with k >= n_classes (a = k, b = n_classes; bindings/metrics_exp_curve_door.mojo `_top_k`).
+comptime MEMBER_NOTICE_METRIC_TOP_K = 10
 
 
 def member_notice_add(mut words: List[Float64], code: Int, a: Float64 = 0.0, b: Float64 = 0.0):

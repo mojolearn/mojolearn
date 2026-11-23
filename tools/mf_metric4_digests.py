@@ -16,6 +16,17 @@ index list as cv, multi-metric with refit=False, and a multi-metric dict holding
 binary scorers' lines may differ in the last bits (the base door read the float32 precision_recall_fscore entry;
 the RUN reads the binary64 program); every other line equal, including the fitted-state lines (multimetric_,
 whether best_estimator_ exists, its predictions).
+
+Lane mf-score5 adds section score5 (base: origin/lane/member-fits-5 80dc3165e0 vs head): (C) the doors whose
+programs moved into typed builders (average_precision binary / ovr macro / weighted / None / micro, brier binary
+and 3-class, top_k k=1 / k=2 / k=3 / weighted, NMI / AMI / contingency / pair confusion): every line equal.
+(D) searches scored by 'average_precision', 'neg_brier_score', 'top_k_accuracy', 'normalized_mutual_info_score'
+and 'adjusted_mutual_info_score' (now through the RUN, same programs: equal), with the WARNINGS each raised (the
+category and words of every warning caught during the fit, in order): a precision_macro / balanced_accuracy
+search whose folds leave a class unpredicted, an r2 search over 1-row test folds (index list), a binary
+top_k search. Expected: (D) value lines equal; the warning lines equal in category and words (the base raised
+them from the door's per-unit scorer, the head from the PACK after each unit's fit notices), the order within a
+unit (test side, then train side, the scorers' order) equal.
 """
 import hashlib
 import os
@@ -165,8 +176,93 @@ def _search_cases():
     return cases
 
 
+def _score5_metric_cases():
+    from mojolearn import metrics as m
+    rng = np.random.default_rng(9)
+    ct = rng.integers(0, 3, size=90)
+    sc = rng.dirichlet(np.ones(3), size=90).astype(np.float32)
+    bt = (rng.uniform(size=90) < 0.4).astype(np.int64)
+    bs = rng.uniform(size=90).astype(np.float32)
+    w = rng.uniform(0.2, 2.0, size=90).astype(np.float32)
+    lt = rng.integers(0, 4, size=90)
+    lp = np.where(rng.uniform(size=90) < 0.6, lt, rng.integers(0, 5, size=90))
+    cases = [("C_ap_bin", lambda: m.average_precision_score(bt, bs)),
+             ("C_ap_bin_w", lambda: m.average_precision_score(bt, bs, sample_weight=w)),
+             ("C_ap_bin_pos0", lambda: m.average_precision_score(bt, bs, pos_label=0))]
+    for avg in ("macro", "weighted", "micro", None):
+        cases.append((f"C_ap_ovr_{avg}", lambda avg=avg: m.average_precision_score(ct, sc, average=avg)))
+    cases.append(("C_ap_ovr_w", lambda: m.average_precision_score(ct, sc, sample_weight=w)))
+    cases.append(("C_brier_bin", lambda: m.brier_score_loss(bt, bs)))
+    cases.append(("C_brier_bin_w", lambda: m.brier_score_loss(bt, bs, sample_weight=w)))
+    cases.append(("C_brier_3", lambda: m.brier_score_loss(ct, sc)))
+    for k in (1, 2, 3):
+        cases.append((f"C_topk_{k}", lambda k=k: m.top_k_accuracy_score(ct, sc, k=k)))
+    cases.append(("C_topk_bin_k1", lambda: m.top_k_accuracy_score(bt, bs, k=1)))
+    cases.append(("C_topk_w_count", lambda: m.top_k_accuracy_score(ct, sc, k=2, sample_weight=w, normalize=False)))
+    cases.append(("C_nmi", lambda: m.normalized_mutual_info_score(lt, lp)))
+    cases.append(("C_nmi_geometric", lambda: m.normalized_mutual_info_score(lt, lp, average_method="geometric")))
+    cases.append(("C_ami", lambda: m.adjusted_mutual_info_score(lt, lp)))
+    cases.append(("C_contingency", lambda: m.cluster.contingency_matrix(lt, lp)
+                  if hasattr(m, "cluster") else m.contingency_matrix(lt, lp)))
+    cases.append(("C_pair_confusion", lambda: m.cluster.pair_confusion_matrix(lt, lp)
+                  if hasattr(m, "cluster") else m.pair_confusion_matrix(lt, lp)))
+    return cases
+
+
+def _warned(thunk):
+    import warnings
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        rows = thunk()
+    for i, item in enumerate(caught):
+        rows.append((f"warning{i}", f"{item.category.__name__}: {item.message}"))
+    return rows
+
+
+def _search_rows(est, grid, scoring, X, target, cv=3, train=False):
+    from mojolearn.model_selection import GridSearchCV
+    s = GridSearchCV(est, grid, scoring=scoring, cv=cv, return_train_score=train).fit(X, target)
+    rows = []
+    for key in sorted(s.cv_results_):
+        if "time" in key or key == "params" or key.startswith("param_"):
+            continue
+        rows.append((key, _digest(np.asarray(s.cv_results_[key], dtype=np.float64))))
+    rows.append(("best_index", repr(int(s.best_index_))))
+    rows.append(("best_predict", _digest(np.asarray(s.best_estimator_.predict(X)))))
+    return rows
+
+
+def _score5_search_cases():
+    import mojolearn
+    cases = []
+    for name in ("average_precision", "neg_brier_score", "top_k_accuracy", "normalized_mutual_info_score",
+                 "adjusted_mutual_info_score"):
+        cases.append((f"D_clf_{name}", lambda name=name: _warned(lambda: _search("clf", name))))
+        cases.append((f"D_bin_{name}", lambda name=name: _warned(lambda: _search("bin", name))))
+    cases.append(("D_clf_score5_multi", lambda: _warned(lambda: _search(
+        "clf", ["average_precision", "neg_brier_score", "top_k_accuracy", "adjusted_mutual_info_score"],
+        refit="neg_brier_score", train=True))))
+
+    def _weak():
+        # a weak model on a 4-class target: some folds leave a class unpredicted (ill-defined precision, the
+        # balanced accuracy's classes in y_pred not in y_true do not arise: y_pred is a subset)
+        X, y, _ = _data(13, n=120, d=2, k=4)
+        c = np.searchsorted(np.quantile(y, [0.05, 0.1, 0.5]), y)
+        return _search_rows(mojolearn.LogisticRegression(max_iter=50), {"C": [1e-4, 1.0]},
+                            ["precision_macro", "balanced_accuracy", "recall_macro", "f1_macro"], X, c, train=True)
+    cases.append(("D_clf_ill_defined", lambda: _warned(_weak)))
+
+    def _one_row():
+        X, y, _ = _data(17, n=40)
+        n = len(y)
+        cv = [(np.arange(1, n), np.array([0])), (np.arange(0, n - 1), np.array([n - 1]))]
+        return _search_rows(mojolearn.Ridge(), {"alpha": [0.1, 1.0]}, ["r2", "d2_absolute_error_score"], X, y, cv=cv)
+    cases.append(("D_reg_one_row_r2", lambda: _warned(_one_row)))
+    return cases
+
+
 def _all_cases():
-    return _metric_cases() + _search_cases()
+    return _metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
 
 
 def _run(index):

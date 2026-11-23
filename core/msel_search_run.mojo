@@ -51,7 +51,10 @@ The RUN, in the door's order (bindings/msel_search_door.mojo
      `best_state`, owned by the caller. Every fold state was released
      (scikit-learn keeps none).
 The fit notices of every unit (in unit order) and of the refit are handed
-over for the caller's PACK.
+over for the caller's PACK; each unit's words hold, after its fit notices,
+the warnings its scores' public metrics raise (lane mf-score5: test side,
+then train side, in the scorers' order; core/member_notices.mojo
+MEMBER_NOTICE_METRIC_*).
 
 SERIAL BY NATURE: the waves follow one another (each bounds the gathered
 blocks); inside a wave every unit is independent and runs on the workers.
@@ -63,7 +66,7 @@ from core.entry_table import EntryRef
 from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, msel_scorer_row, msel_scorer_value, msel_scorer_regression, msel_scorer_binary_column,
-    msel_scorer_positive,
+    msel_scorer_positive, msel_scorer_ap,
     SCORER_MEMBER, SCORER_ACCURACY,
 )
 from core.member_abi import (
@@ -291,19 +294,39 @@ def _respond(run_at: Int, v: Int, op: Int, x: Int, count: Int, cols: Int, dst: I
 
 
 def _scorer_side(route: MetricRoute, row: MselScorer, truth: Int, response: Int, count: Int, classes: Int,
-                 cols: Int, positive: Int) raises -> Float64:
+                 cols: Int, positive: Int, mut notices: List[Float64]) raises -> Float64:
     """One scorer on one side: the `_BINARY_PROBA` column pick of a
-    two-class member's probabilities (`predict_proba[:, 1]`, as the scorer
-    hands it), then core/msel_scorer_run.mojo `msel_scorer_value`."""
+    two-class member's probabilities as the scorer hands it
+    (`_get_response_values`: `predict_proba[:, 1]`, or the positive's column
+    for 'average_precision', whose decision values are negated when its
+    positive is the first class; lane mf-score5), then
+    core/msel_scorer_run.mojo `msel_scorer_value` (its metric warnings to
+    `notices`). The member's response buffer is shared by the scorers that
+    read it: a pick is a copy."""
+    var pick = -1
+    var negate = False
     if msel_scorer_binary_column(row) and classes == 2 and cols == 2:
+        pick = 1
+        if msel_scorer_ap(row):
+            if positive < 0 or positive > 1:
+                raise Error("pos_label=1 is not a valid label: It should be one of the classes")
+            pick = positive
+    elif msel_scorer_ap(row) and classes == 2 and cols == 1 and positive == 0:
+        negate = True
+    if pick >= 0 or negate:
         var column = List[Float32](length=max(count, 1), fill=0.0)
         var src = _F32P(unsafe_from_address=response)
-        for i in range(count):  # driver-loop: over the side's rows (column 1 of the probabilities)
-            column[i] = src[2 * i + 1]
-        var value = msel_scorer_value(route, row, truth, Int(column.unsafe_ptr()), count, classes, 1, positive)
+        if negate:
+            for i in range(count):  # driver-loop: over the side's rows (the decision of the first class)
+                column[i] = -src[i]
+        else:
+            for i in range(count):  # driver-loop: over the side's rows (one column of the probabilities)
+                column[i] = src[2 * i + pick]
+        var value = msel_scorer_value(route, row, truth, Int(column.unsafe_ptr()), count, classes, 1, positive,
+                                      notices)
         _ = len(column)  # read by the program above
         return value
-    return msel_scorer_value(route, row, truth, response, count, classes, cols, positive)
+    return msel_scorer_value(route, row, truth, response, count, classes, cols, positive, notices)
 
 
 def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
@@ -403,6 +426,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     for j in range(len(rows_of)):  # small-loop(the scorers: a binary one needs its positive code)
         if msel_scorer_positive(rows_of[j]) and (positives[j] < 0 or positives[j] >= k):
             raise Error("member ABI: a binary scorer needs its positive class code")
+        if msel_scorer_ap(rows_of[j]) and k == 2 and (positives[j] < 0 or positives[j] >= k):
+            raise Error("member ABI: 'average_precision' of a binary member needs its positive class code")
     # Each candidate's response element types, asked once.
     var out_dtypes = List[Int](length=max(m * nops, 1), fill=MEMBER_I32)
     for c in range(m):  # driver-loop: over the candidates (one OUTPUTS question per response)
@@ -555,7 +580,13 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         else:
             for t in range(tasks):  # driver-loop: over the wave's tasks (THE GIL RULE: kinds that are not GIL-free)
                 _score(t)
-        # The metric programs (named scorers), one after the other.
+        # The metric programs (named scorers), one after the other; each
+        # unit's metric warnings in its sides' order (test, then train) and
+        # its scorers' order (lane mf-score5: raised at PACK after the unit's
+        # fit notices, as the scorer raises them during the search).
+        var metric_notes = List[List[Float64]](capacity=width)
+        for _ in range(width):  # small-loop(the wave's units: one warning list each)
+            metric_notes.append(List[Float64]())
         if not member_score:
             for t in range(tasks):  # driver-loop: over the wave's tasks (one native metric program per scorer)
                 var s = ((u0 + t // sides) % used) * sides + t % sides
@@ -564,12 +595,15 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     if failed[at] != UInt8(0):
                         continue
                     var o = op_of[j]
+                    var notes = List[Float64]()
                     try:
                         values[at] = _scorer_side(plan.metric, rows_of[j], y_dst[s], pred_at[t * nops + o],
-                                                  side_count[s], k, pred_cols[t * nops + o], positives[j])
+                                                  side_count[s], k, pred_cols[t * nops + o], positives[j], notes)
                     except error:
                         failed[at] = UInt8(2)
                         errors[at] = String(error)
+                    for i in range(len(notes)):  # small-loop(one score's warnings: a triple or two)
+                        metric_notes[t // sides].append(notes[i])
         # The error rule, in unit order (then scorer order).
         for t in range(tasks):  # driver-loop: over the wave's tasks (their scores)
             var u = u0 + t // sides
@@ -586,16 +620,19 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     test[j * units + u] = value
                 else:
                     train[j * units + u] = value
-        # The units' fit notices, in unit order; the states go.
+        # The units' fit notices, then their scores' metric warnings, in
+        # unit order; the states go.
         for v in range(width):  # driver-loop: over the wave's units (their fit notices)
+            var words = List[Float64]()
             if run.states[v] != 0:
-                var words = List[Float64]()
                 try:
                     member_notices_take(run.plans[v], run.states[v], words)
                 except:
                     pass
-                if len(words) > 0:
-                    res.notices.append(words^)
+            for i in range(len(metric_notes[v])):  # small-loop(the unit's metric warnings: a few triples)
+                words.append(metric_notes[v][i])
+            if len(words) > 0:
+                res.notices.append(words^)
         member_set_run_release(run)
         _ = len(preds)  # the response buffers were read through the tasks above
         _ = len(pred_cols)

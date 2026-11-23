@@ -364,14 +364,17 @@ def reg_metric_caller(metric: Int) -> String:
     return "mean_tweedie_deviance"
 
 
-def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int) raises -> Float64:
+def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, mut warn: Int) raises -> Float64:
     """THE TYPED RUN of one single-output, unweighted regression metric with
     its default options over n float32 targets at `y` and n float32
     predictions at `p` (the caller keeps both alive): the door's refusals
     that read the values (non-finite words, the log and Tweedie domains), the
     builder's program through `metric_inputs_run`, the value. A metric of
     fewer than two samples that the door answers NaN with a warning answers
-    NaN (the warning is the door's). No Python."""
+    NaN and sets `warn` to 1 (lane mf-score5: the caller raises the door's
+    warning, "R^2 / D^2 score is not well-defined with less than two
+    samples."). No Python."""
+    warn = 0
     var caller = reg_metric_caller(metric)
     if n == 0:
         raise Error("mojolearn " + caller + ": y_true must be a nonempty (n,) or (n, n_outputs) array")
@@ -387,6 +390,7 @@ def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int) rais
         var arena = metric_inputs_run(route, plan, addresses, sizes)
         return arena.f32(out)
     if (metric == REG_R2 or metric == REG_D2_ABSOLUTE) and n < 2:
+        warn = 1
         return _reg_nan()
     var r = _Reg(n, 1, False, "uniform_average", List[Float64]())
     var out = _NONE

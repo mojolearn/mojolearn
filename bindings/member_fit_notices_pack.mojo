@@ -10,13 +10,14 @@ SERIAL BY NATURE: a few warnings per unit, GIL held, on the public thread.
 from std.python import PythonObject
 from bindings.classical_warnings_unpack import classical_warning
 from bindings.kernel_methods_boundary_unpack import _km_warning_location
-from bindings.metrics_native_support_door import metric_warn
+from bindings.metrics_native_support_door import metric_warn, metric_undefined
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call
 from bindings.rf_fit_notices_pack import rf_fit_notices_word
 from core.member_notices import (
     MEMBER_NOTICE_WORDS, MEMBER_NOTICE_FOREST, MEMBER_NOTICE_NYSTROEM_COMPONENTS, MEMBER_NOTICE_GP_RIDGE,
-    MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST,
+    MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST, MEMBER_NOTICE_METRIC_PRF, MEMBER_NOTICE_METRIC_JACCARD,
+    MEMBER_NOTICE_METRIC_BALANCED, MEMBER_NOTICE_METRIC_FEW, MEMBER_NOTICE_METRIC_TOP_K,
 )
 
 
@@ -38,6 +39,36 @@ def _gp_ridge_notices(start: Float64, used: Float64, context: PythonObject) rais
 def member_fit_notices_raise(words: List[Float64], context: PythonObject) raises:
     """Raise every notice of `words` (`member_notices_take`'s triples) with
     the member's `context`. Empty: nothing is read."""
+    member_fit_notices_raise_with(words, context, context)
+
+
+def _metric_notice(code: Int, a: Float64, b: Float64, context: PythonObject) raises:
+    """A scorer's metric warning (lane mf-score5), in the public metric
+    door's class and words (each door named beside its code in
+    core/member_notices.mojo)."""
+    if code == MEMBER_NOTICE_METRIC_PRF:
+        var which = Int(a)
+        var name = String("Precision") if which == 0 else (String("Recall") if which == 1 else String("F-score"))
+        metric_undefined(name + " is ill-defined and being set to 0.0 due to zero "
+                         + "denominator; use zero_division to control this behavior.", context)
+    elif code == MEMBER_NOTICE_METRIC_JACCARD:
+        metric_undefined("Jaccard is ill-defined and being set to 0.0 in labels with no true or "
+                         + "predicted samples. Use `zero_division` parameter to control this behavior.", context)
+    elif code == MEMBER_NOTICE_METRIC_BALANCED:
+        metric_warn("y_pred contains classes not in y_true", native_loaded_module("builtins").UserWarning, context, 2)
+    elif code == MEMBER_NOTICE_METRIC_FEW:
+        var shown = String("R^2") if Int(a) == 0 else String("D^2")
+        metric_undefined(shown + " score is not well-defined with less than two samples.", context)
+    else:
+        metric_undefined("'k' (" + String(Int(a)) + ") greater than or equal to 'n_classes' (" + String(Int(b))
+                         + ") will result in a perfect score and is therefore meaningless.", context)
+
+
+def member_fit_notices_raise_with(words: List[Float64], context: PythonObject,
+                                  metric_context: PythonObject) raises:
+    """`member_fit_notices_raise` with the context the scorers' metric
+    warnings are raised with (`metric_context`: the search's own, which
+    carries the metrics' warning class, as its scorers' calls do)."""
     var count = len(words) // MEMBER_NOTICE_WORDS
     for i in range(count):  # small-loop(a unit's notices: a few)
         var code = Int(words[MEMBER_NOTICE_WORDS * i])
@@ -65,5 +96,7 @@ def member_fit_notices_raise(words: List[Float64], context: PythonObject) raises
             metric_warn("The least populated class in y has only " + String(Int(a)) + " members, which is less "
                         + "than n_splits=" + String(Int(b)) + ".",
                         native_loaded_module("builtins").UserWarning, context, 2)
+        elif code >= MEMBER_NOTICE_METRIC_PRF and code <= MEMBER_NOTICE_METRIC_TOP_K:
+            _metric_notice(code, a, b, metric_context)
         else:
             raise Error("member ABI: unknown fit notice code " + String(code))

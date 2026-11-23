@@ -242,14 +242,19 @@ def label_present_codes(truth: Int, pred: Int, n: Int, k: Int, mut mapped_truth:
 
 
 def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred: Int, n: Int,
-                     k: Int) raises -> Float64:
+                     k: Int, mut warn: Int) raises -> Float64:
     """THE TYPED RUN of one unweighted label metric with its default options
     (labels None, zero_division 'warn', adjusted False) over n int32 true and
     predicted class codes in 0 .. k-1 (the caller keeps both alive): the
     present labels, the door's program (`mc_sums_stages` + the epilogue or
-    the matthews tail) through `metric_inputs_run`, the value. The door's
-    warnings (an ill-defined score, classes in y_pred not in y_true) are the
-    door's; the value is the one it returns. No Python."""
+    the matthews tail) through `metric_inputs_run`, the value. `warn`
+    answers the door's warning words' bits (lane mf-score5; the caller
+    raises them as the door does): precision / recall / f-score, the
+    `cls_epi` flags (1 precision, 2 recall, 4 f-score: a zero denominator);
+    jaccard, 1 for a label of no true and no predicted samples; balanced
+    accuracy, 1 when y_pred holds classes y_true does not; matthews, 0. No
+    Python."""
+    warn = 0
     var mt = List[Int32]()
     var mp = List[Int32]()
     var labels = label_present_codes(truth, pred, n, k, mt, mp)
@@ -275,6 +280,13 @@ def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred
         if arena.i32(at) != 0:
             raise Error("math domain error")
         return arena.f64(at + 2)
+    if metric == LBL_BALANCED:
+        # `_balanced_accuracy`: the labels of nonzero true sum (OUT[1]) short of the present ones
+        warn = 1 if arena.i32(at + 1) != labels else 0
+        return arena.f64(at + 2)
+    warn = arena.i32(at)
+    if metric == LBL_JACCARD:
+        warn = 1 if warn != 0 else 0
     if metric == LBL_RECALL:
         return arena.f64(at + 4)
     if metric == LBL_F1:
@@ -283,7 +295,7 @@ def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred
 
 
 def label_binary_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: Int, k: Int,
-                     positive: Int) raises -> Float64:
+                     positive: Int, mut warn: Int) raises -> Float64:
     """THE TYPED RUN of one unweighted label metric with average='binary'
     (lane mf-search4b; precision, recall, f1 or jaccard, zero_division
     'warn') over n int32 true and predicted class codes in 0 .. k-1, the
@@ -295,7 +307,9 @@ def label_binary_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: 
     (`mc_extend_order`), the sums run over all of them and the epilogue's
     macro mean over the one selected label is the positive's value. An
     unobserved positive (fewer than two observed) is appended and scores
-    0.0 (its zero denominators). No Python."""
+    0.0 (its zero denominators). `warn`: the epilogue's flags, as
+    `label_metric_run` answers them (lane mf-score5). No Python."""
+    warn = 0
     if positive < 0 or positive >= k:
         raise Error("RuntimeError: the binary scorer's positive class code is outside [0, n_classes)")
     var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=truth)
@@ -345,6 +359,9 @@ def label_binary_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: 
     var arena = metric_inputs_run(route, plan, addresses, sizes)
     _ = len(mt)  # the program's inputs were copied from these codes above
     _ = len(mp)
+    warn = arena.i32(at)
+    if metric == LBL_JACCARD:
+        warn = 1 if warn != 0 else 0
     if metric == LBL_RECALL:
         return arena.f64(at + 4)
     if metric == LBL_F1:

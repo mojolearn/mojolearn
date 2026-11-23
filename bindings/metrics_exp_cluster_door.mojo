@@ -20,7 +20,7 @@ from bindings.operation_names_mexp import (
     MEXP_OPN_FAMILY_MEXP_CLUSTER_NMI,
     MEXP_OPN_FAMILY_MEXP_CLUSTER_PAIR_CONFUSION,
 )
-from bindings.metrics_exp_common_run import nmi_finish, ami_finish, contingency_dtype_code
+from bindings.metrics_exp_common_run import nmi_finish, ami_finish, contingency_dtype_code, contingency_stages
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.py_balanced import py_call
@@ -95,42 +95,16 @@ struct _Cont(Movable):
 
 def _contingency(c: _Clusterings, mode: PythonObject, has_eps: Bool, eps: Float64, mi: Bool, emi: Bool,
                  context: PythonObject) raises -> _Cont:
-    var n = c.a.n
     var ka = mx_len(c.a.classes)
     var kb = mx_len(c.b.classes)
-    if ka * kb > 16777216:
-        raise Error("mojolearn metrics: the contingency matrix exceeds 2^24 cells")
     var prog = MetricDoorProg()
-    var A = prog.put_i32(c.a.codes)
-    var B = prog.put_i32(c.b.codes)
-    var key = prog.scratch(n)
-    var kk = max(ka, kb)
-    prog.stage("pair_key", n, [A, B, key, kk, 0])
-    var m = kk * kk
-    var off = prog.scratch(m + 1)
-    var order = prog.scratch(n)
-    prog.stage("group_sort", 1, [key, n, m, off, order])
-    var cells = ka * kb
-    var EPS = MX_NONE
-    if has_eps:
-        EPS = prog.f64_words(eps)
-    var C = prog.want(prog.alloc(2 * cells), 2 * cells)
-    var F = MX_NONE
-    if has_eps:
-        F = prog.want(prog.alloc(2 * cells), 2 * cells)
-    var R = prog.want(prog.alloc(2 * ka), 2 * ka)
-    var K = prog.want(prog.alloc(2 * kb), 2 * kb)
-    var P = prog.want(prog.alloc(8), 8)
-    var E = prog.want(prog.alloc(4), 4)
-    var MI = MX_NONE
-    if mi:
-        MI = prog.want(prog.alloc(2), 2)
-    var EMI = MX_NONE
-    if emi:
-        EMI = prog.want(prog.alloc(2), 2)
-    prog.stage("cont_stats", 1, [off, ka, kb, kk, EPS, C, F, R, K, P, E, MI, EMI, n])
+    # the typed builder (bindings/metrics_exp_common_run.mojo
+    # `contingency_stages`, lane mf-score5): its inputs A, B pinned in that order
+    var r = contingency_stages(prog.plan, c.a.n, ka, kb, has_eps, eps, mi, emi)
+    prog.pins.append(c.a.codes)
+    prog.pins.append(c.b.codes)
     var arena = metric_door_run(prog, mode, context)
-    return _Cont(arena^, ka, kb, C, F, R, K, P, E, MI, EMI)
+    return _Cont(arena^, ka, kb, r.C, r.F, r.R, r.K, r.P, r.E, r.MI, r.EMI)
 
 
 def _contingency_matrix(args: PythonObject, context: PythonObject) raises -> PythonObject:

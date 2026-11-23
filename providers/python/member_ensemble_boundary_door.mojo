@@ -69,7 +69,7 @@ handed to a new META state (`META_BLOCK_NESTED`, `META_BLOCK_WIDTHS`).
 SERIAL BY NATURE: one meta-estimator's admission, publication or import.
 """
 from std.python import Python, PythonObject
-from bindings.member_fit_notices_pack import member_fit_notices_raise
+from bindings.member_fit_notices_pack import member_fit_notices_raise, member_fit_notices_raise_with
 from bindings.member_leaf_boundary_door import (
     member_leaf_admit_serving, member_leaf_pack, member_leaf_pack_labeled, member_leaf_state,
 )
@@ -114,14 +114,18 @@ from core.ensemble_member import (
 )
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
-from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive
+from core.msel_scorer_run import (
+    msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
+    SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS,
+)
+from bindings.metrics_exp_rank_run import BRIER_MARK_ZERO, BRIER_MARK_ONE, BRIER_MARK_MINUS_ONE
 from bindings.msel_scorer_native_door import msel_scorer_response
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.arena_prog_native_door import metric_route_of, metric_route_entries
 from bindings.msel_candidates_door import msel_grid_list, msel_sampler_check, msel_sampler_list
 from bindings.msel_estimator_native_door import msel_native_clone, msel_native_set_params, msel_clone_parameter
-from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list, msel_is_integral
+from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list, msel_is_integral, msel_is_int_arg
 from bindings.msel_search_state_door import msel_search_update
 from bindings.msel_split_door import (
     msel_cls, MselSplitter, SPLITTER_KFOLD, SPLITTER_STRATIFIED_KFOLD, msel_seed, msel_truth, msel_sabotage,
@@ -2590,10 +2594,20 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         if msel_scorer_regression(row) == classifier:
             return False
         var positive = -1
-        if msel_scorer_positive(row):
+        var positive_kind = msel_scorer_positive_kind(row)
+        if positive_kind == SCORER_POSITIVE_LABEL_ONE:
+            # the binary label scorers' pos_label=1 and 'average_precision''s
+            # (its default; a binary member's column, lane mf-score5)
+            if labels is None:
+                return False
             positive = _positive_code(labels, b)
-            if positive < 0:
+            if positive < 0 and (msel_scorer_positive(row) or len(py_call(b.list, labels)) == 2):
                 return False  # pos_label=1 is not one of the labels: the door's words per fold
+        elif positive_kind == SCORER_POSITIVE_MARKS:
+            # 'neg_brier_score': `_pos_label(None, ...)`'s label marks (lane mf-score5)
+            if labels is None:
+                return False
+            positive = _brier_marks(labels, context, b)
         codes.append(code)
         positives.append(positive)
         var seen = False
@@ -2675,6 +2689,28 @@ def _positive_code(labels: PythonObject, b: PythonObject) raises -> Int:
         if Bool(py=py_call(b.bool, py_call(eq, items[i], PythonObject(1)))):
             return i
     return -1
+
+
+def _brier_marks(labels: PythonObject, context: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-score5): the fit's labels' marks for 'neg_brier_score'
+    (bindings/metrics_exp_rank_run.mojo `brier_marks_positive`): two bits per
+    class code, an exact integer label 0, 1 or -1 marked (`mx_pos_label_ok`
+    reads integer labels only); other labels 0. Read once per admission."""
+    var items = py_call(b.list, labels)
+    var marks = 0
+    var eq = native_loaded_module("operator").eq
+    for i in range(min(len(items), 26)):  # driver-loop: over the fit's labels (once per admission; 2 bits each, exact in a float64 word)
+        if not msel_is_int_arg(items[i], context):
+            continue
+        var mark = 0
+        if Bool(py=py_call(b.bool, py_call(eq, items[i], PythonObject(0)))):
+            mark = BRIER_MARK_ZERO
+        elif Bool(py=py_call(b.bool, py_call(eq, items[i], PythonObject(1)))):
+            mark = BRIER_MARK_ONE
+        elif Bool(py=py_call(b.bool, py_call(eq, items[i], PythonObject(-1)))):
+            mark = BRIER_MARK_MINUS_ONE
+        marks |= mark << (2 * i)
+    return marks
 
 
 def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
@@ -2797,7 +2833,9 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
     var notices = List[List[Float64]]()
     meta_state_notices(state, owners, notices)
     for i in range(len(owners)):  # driver-loop: over the units' notices (a few warnings each)
-        member_fit_notices_raise(notices[i], notice_context)
+        # the scorers' metric warnings with the search's own context (lane
+        # mf-score5: the context its scorers' metric calls carry)
+        member_fit_notices_raise_with(notices[i], notice_context, context)
 
 
 def _search_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan,

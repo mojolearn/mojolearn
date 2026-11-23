@@ -31,13 +31,18 @@ rank 1), and the refit: the best candidate fitted on every row.
    [1, 0, 1, 1] and predictions [1, 1, 0, 1] give precision, recall and f1 2/3 for positive code 1 and f1 0.0
    for positive code 0 (counted by hand), and three observed classes refuse in the door's words.
 
+7. (lane mf-score5) multi-metric ['average_precision', 'neg_brier_score', 'top_k_accuracy',
+   'normalized_mutual_info_score', 'adjusted_mutual_info_score'] (predict_proba / predict responses, K = 3): every
+   scorer's split scores equal `msel_scorer_value` over the member's own response.
+
 FAIL-PROOF EDITS (each must make a case fail): `side_rows[f * sides] = rows_at + 4 * (f * n)` (case 1: the train
 rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits learn the wrong count);
 `narrow[i] = Int32(wide[i]) + 1` in `_respond` (cases 2, 4); `value = 0.0` for a failed task (case 3);
 `narrow[i] = Float32(wide[i] * 0.5)` in `_respond` (cases 4, 5: the probabilities); `var r = 0` in place of
 `plan.refit_scorer` in the tables (case 5); `op_of.append(0)` for every scorer (case 5: log loss reads codes);
 `used = 0` in the given-folds branch, or `te_at.append(plan.fold_train_at[f])` (case 6); `seen[positive] = 0`
-removed, or `McEpi(2, 2, LBL_MACRO, ...)` in `label_binary_run` (case 6: the positive's value).
+removed, or `McEpi(2, 2, LBL_MACRO, ...)` in `label_binary_run` (case 6: the positive's value); in
+core/msel_scorer_run.mojo `cluster_mi_run(..., row.metric != _CL_AMI, ...)` (case 7: NMI and AMI swapped).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -67,7 +72,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 6
+comptime CASES = 7
 
 
 def _glue() raises -> EntryRef:
@@ -354,7 +359,8 @@ def _scorer_oracle(plans: List[MemberPlan], x: List[Float32], y: List[Int32],
                 var row = msel_scorer_row(codes[j])
                 var resp = Int(proba.unsafe_ptr()) if row.op == MEMBER_OP_PREDICT_PROBA else Int(labels.unsafe_ptr())
                 var cols = K if row.op == MEMBER_OP_PREDICT_PROBA else 1
-                out[j][c].append(msel_scorer_value(route, row, Int(yt.unsafe_ptr()), resp, t, K, cols, -1))
+                var notes = List[Float64]()
+                out[j][c].append(msel_scorer_value(route, row, Int(yt.unsafe_ptr()), resp, t, K, cols, -1, notes))
             _ = len(labels)
             _ = len(proba)
             member_free(plans[c], call)
@@ -453,20 +459,51 @@ def check_given_folds() raises:
     var ta = Int(truth.unsafe_ptr())
     var pa = Int(pred.unsafe_ptr())
     var third = 2.0 / 3.0
-    require(abs(label_binary_run(route, LBL_PRECISION, ta, pa, 4, 2, 1) - third) < 1e-12, "binary precision")
-    require(abs(label_binary_run(route, LBL_RECALL, ta, pa, 4, 2, 1) - third) < 1e-12, "binary recall")
-    require(abs(label_binary_run(route, LBL_F1, ta, pa, 4, 2, 1) - third) < 1e-12, "binary f1")
-    require(label_binary_run(route, LBL_F1, ta, pa, 4, 2, 0) == 0.0, "binary f1 of positive code 0")
+    var warn = 0
+    require(abs(label_binary_run(route, LBL_PRECISION, ta, pa, 4, 2, 1, warn) - third) < 1e-12, "binary precision")
+    require(abs(label_binary_run(route, LBL_RECALL, ta, pa, 4, 2, 1, warn) - third) < 1e-12, "binary recall")
+    require(abs(label_binary_run(route, LBL_F1, ta, pa, 4, 2, 1, warn) - third) < 1e-12, "binary f1")
+    require(label_binary_run(route, LBL_F1, ta, pa, 4, 2, 0, warn) == 0.0, "binary f1 of positive code 0")
     var three: List[Int32] = [0, 1, 2, 1]
     var refused = False
     try:
-        _ = label_binary_run(route, LBL_F1, Int(three.unsafe_ptr()), pa, 4, 3, 1)
+        _ = label_binary_run(route, LBL_F1, Int(three.unsafe_ptr()), pa, 4, 3, 1, warn)
     except error:
         refused = String(error) == "average='binary' requires at most two observed classes"
     require(refused, "three observed classes refuse in the door's words")
     _ = len(truth)
     _ = len(pred)
     _ = len(three)
+
+
+def check_score5_scorers() raises:
+    """Case 7 (lane mf-score5): the curve, probability, top-k and clustering scorers in one multi-metric search."""
+    var x = _x()
+    var y = _codes()
+    var plans = _candidates(False)
+    var names: List[String] = ["average_precision", "neg_brier_score", "top_k_accuracy",
+                               "normalized_mutual_info_score", "adjusted_mutual_info_score"]
+    var codes = List[Int]()
+    for i in range(len(names)):  # small-loop(check: the scorers, predict_proba responses)
+        var code = msel_scorer_code(names[i], False)
+        require(code >= 2, names[i] + " is a served scorer")
+        codes.append(code)
+    var want = _scorer_oracle(plans, x, y, codes)
+    var plan = _plan(plans.copy(), x, y, SEARCH_SCORE_MEMBER)
+    plan.scorers = codes.copy()
+    plan.refit_scorer = 0
+    var res = msel_search_run(plan)
+    require(len(res.scorer_test) == len(codes), "one table per scorer")
+    for j in range(len(codes)):  # small-loop(check: scorers)
+        for c in range(len(plans)):  # small-loop(check: candidates)
+            for f in range(F):  # small-loop(check: folds)
+                require(res.scorer_test[j][c][f] == want[j][c][f],
+                        names[j] + " split" + String(f) + " of candidate " + String(c))
+    require(res.best == msel_rank_best(msel_rank_scores(msel_row_means(want[0]))), "the best by average_precision")
+    var r = MemberCall(plans[res.best].route, res.best_state)
+    member_free(plans[res.best], r)
+    _ = x^
+    _ = y^
 
 
 def test_msel_search_run() raises:
@@ -482,8 +519,10 @@ def test_msel_search_run() raises:
             check_named_scorer()
         elif which == 4:
             check_multi_metric()
-        else:
+        elif which == 5:
             check_given_folds()
+        else:
+            check_score5_scorers()
     check_cases("msel_search_run", CASES, run_case)
 
 

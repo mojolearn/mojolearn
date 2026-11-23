@@ -32,7 +32,7 @@ from bindings.metrics_exp_common_run import MX_NONE, mx_nan
 from bindings.metrics_exp_rank_run import (
     _ROW_BRIER, _ROW_LOGLOSS, _ROW_HINGE_BIN, _ROW_HINGE_MC, _ROW_DCG, _ROW_COVERAGE, _ROW_LRAP, _ROW_RANKLOSS,
     _ROW_DCG_IGNORE_TIES, _RANK_MEAN, _RANK_NDCG_ROW, _RANK_D2_LOG, _RANK_D2_BRIER, _SCAN_INDICATOR, _SCAN_NEGATIVE,
-    ProbaShape, row_fold, row_mean_stage, proba_stages, proba_check, dcg_table,
+    ProbaShape, row_fold, row_mean_stage, proba_stages, proba_check, dcg_table, brier_stages,
 )
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.arena_prog_run import MetricArenaOwner
@@ -139,12 +139,16 @@ def _brier(args: PythonObject, context: PythonObject) raises -> PythonObject:
     else:
         half = mx_truthy(sbh)
     var prog = MetricDoorProg()
-    var put = _put_proba(prog, p)
-    var Y = prog.put_i32(p.codes)
-    var res = _row_mean(prog, put[0], p.shape.k, Y, p.shape.n, _ROW_BRIER, w, 0, MX_NONE, True, half)
+    # the typed builder (bindings/metrics_exp_rank_run.mojo `brier_stages`,
+    # lane mf-score5): its inputs (the probabilities, the codes, the
+    # weights) pinned in that order
+    var got = brier_stages(prog.plan, p.shape, w is not None, half)
+    prog.pins.append(p.a)
+    prog.pins.append(p.codes)
+    _pin_weights(prog, w)
     var arena = metric_door_run(prog, args[6], context)
-    proba_check(arena, put[1], caller)
-    return PythonObject(arena.f64(res))
+    proba_check(arena, got[0], caller)
+    return PythonObject(arena.f64(got[1]))
 
 
 def _d2_proba(args: PythonObject, caller: String, logloss: Bool, context: PythonObject) raises -> PythonObject:
