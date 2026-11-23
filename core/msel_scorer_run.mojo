@@ -133,6 +133,13 @@ comptime SCORER_POSITIVE_MARKS = 2       # bindings/metrics_exp_rank_run.mojo `b
 #: of another type than pos_label's (module note).
 comptime SCORER_POSITIVE_ABSENT = -2
 comptime SCORER_POSITIVE_KIND = -3
+#: Lane mf-msel5b: labels of string AND integer kinds. The label scorers'
+#: metric doors refuse such targets before any pos_label check
+#: (bindings/classical_labels_door.mojo, `SCORER_MIXED_WORDS`); the RUN
+#: raises the same words per side.
+comptime SCORER_POSITIVE_MIXED = -4
+comptime SCORER_MIXED_WORDS = ("TypeError: y_true must contain only strings or only integers; floating labels, "
+                               + "missing labels and mixed types are unsupported")
 
 
 @fieldwise_init

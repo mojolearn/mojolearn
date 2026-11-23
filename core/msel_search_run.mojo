@@ -113,7 +113,8 @@ from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, msel_scorer_row, msel_scorer_value, msel_scorer_regression, msel_scorer_binary_column,
     msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
-    SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
+    SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND, SCORER_POSITIVE_MIXED,
+    SCORER_MIXED_WORDS,
 )
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free, member_own,
@@ -477,6 +478,10 @@ def _scorer_side(route: MetricRoute, cluster: EntryRef, label_words: List[String
     read it: a pick is a copy."""
     var pick = -1
     var negate = False
+    if positive == SCORER_POSITIVE_MIXED:
+        # MIXED-KIND LABELS (lane mf-msel5b): the metric doors' refusal of a
+        # target holding strings and integers, before any pos_label check.
+        raise Error(SCORER_MIXED_WORDS)
     if msel_scorer_ap(row) and classes == 2 and (positive == SCORER_POSITIVE_ABSENT
                                                  or positive == SCORER_POSITIVE_KIND):
         # AP-ABSENT (lane mf-msel5): two labels and no label 1. scikit-learn's
@@ -849,7 +854,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     for j in range(len(rows_of)):  # small-loop(the scorers: a binary one needs its positive code)
         # SCORER_POSITIVE_ABSENT / _KIND (lane mf-cluster5): pos_label=1 is not
         # one of the labels; each side raises the door's words (msel_scorer_run).
-        var marked = positives[j] == SCORER_POSITIVE_ABSENT or positives[j] == SCORER_POSITIVE_KIND
+        var marked = (positives[j] == SCORER_POSITIVE_ABSENT or positives[j] == SCORER_POSITIVE_KIND
+                      or positives[j] == SCORER_POSITIVE_MIXED)
         if msel_scorer_positive(rows_of[j]) and not marked and (positives[j] < 0 or positives[j] >= k):
             raise Error("member ABI: a binary scorer needs its positive class code")
         if msel_scorer_ap(rows_of[j]) and k == 2 and not marked and (positives[j] < 0 or positives[j] >= k):
