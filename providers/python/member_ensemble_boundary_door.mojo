@@ -22,8 +22,10 @@ MultiOutputRegressor (THE MULTI-OUTPUT KIND, (39, 12) / (39, 13):
 `_admit_multi` / `_multi_pack` / `_multi_state`). RandomTreesEmbedding
 carries no mark and keeps its door. A unit kind answers False, and its door keeps the estimator, for:
 a OneVsRest base whose kind lacks the scores its predict reads; a
-Calibrated cv that is not an int (a splitter, an index list, 'prefit') or a
-base that takes the resident DeviceRows route (a measured winner); a
+Calibrated cv that is a splitter of ours other than KFold / StratifiedKFold
+(since lane mf-split4b an index list and our KFold / StratifiedKFold are
+the kind's, as for a stack) or a base that takes the resident DeviceRows
+route (a measured winner); a
 Bagging base that is not a tree, forest or extra-trees member, or one that
 names another device. A Bagging configuration that may take the batched
 forest route (a measured winner, decided per fit by the weights and X's
@@ -41,14 +43,15 @@ the nested plans minted once into the plan store and released by the
 capsule kept in the owner's pins. Answers False (the caller keeps its own
 path, whose doors raise the estimator's own words) for anything the native
 kind does not take exactly as the door does: a nested estimator with no
-serving member, a cv SPLITTER other than our KFold / StratifiedKFold (a
-user's own splitter's `split` needs the fit's X and y; ours are read here
-as typed words and split inside each fit since lane mf-split4,
-`_split_words`; an index list is read here into typed folds since lane
-mf-meta3b), a non-boolean passthrough, weights of the wrong
+serving member, a cv SPLITTER of ours other than KFold / StratifiedKFold
+(those are read here as typed words and split inside each fit since lane
+mf-split4, `_split_words`; an index list is read here into typed folds
+since lane mf-meta3b), a non-boolean passthrough, weights of the wrong
 length, an unknown `voting`. A classifier stacked with
 `stack_method='predict'` is served since lane mf-meta3b (its predicted
-codes are the meta features).
+codes are the meta features). A user's OWN splitter object (Stacking,
+Calibrated) is REFUSED here in the meta door's words (`_refuse_cv_callback`,
+lane mf-split4b): its `split` is a Python callback, never called.
 
 PACK (`ensemble_member_pack`): the attributes the meta-estimator's own fit
 writes: one clone per nested estimator with its state packed into it
@@ -118,7 +121,7 @@ from bindings.metrics_keys_unpack import metrics_keys
 from bindings.arena_prog_native_door import metric_route_of, metric_route_entries
 from bindings.msel_candidates_door import msel_grid_list, msel_sampler_check, msel_sampler_list
 from bindings.msel_estimator_native_door import msel_native_clone, msel_native_set_params, msel_clone_parameter
-from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list
+from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list, msel_is_integral
 from bindings.msel_search_state_door import msel_search_update
 from bindings.msel_split_door import (
     msel_cls, MselSplitter, SPLITTER_KFOLD, SPLITTER_STRATIFIED_KFOLD, msel_seed, msel_truth, msel_sabotage,
@@ -594,6 +597,7 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
                 return False
     else:
         var cv = py_get(fields, "cv")
+        _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
         if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
             # A user's index list (lane mf-meta3b): its folds read ONCE into
             # typed int32 rows, checked against the fit's rows by the RUN as
@@ -640,12 +644,52 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
     if not _finish(fields, context, b, owner, nested, kind, flag, folds, weights^, stack_kinds^, List[Float64](),
                    fold_train^, fold_test^):
         return False
+    _finish_split(owner, split)
+    return True
+
+
+def _finish_split(mut owner: MemberOwner, split: _Split) raises:
+    """THE SPLITTER CV's words into the minted plan entry (a stack's or a
+    calibration's), its entries' connections pinned for every fit."""
     if split.kind != META_SPLIT_NONE:
         meta_plan_split(Int(owner.plan.params[1]), split.kind, split.k, split.shuffle, split.seed, split.pin.route,
                         split.sabotage)
         _ = py_call(owner.pins.append, split.pin.provider)  # the program runner's connection, for every fit
         _ = py_call(owner.pins.append, split.pin.entries)
-    return True
+
+
+comptime _CV_CALLBACK_WORDS = "TypeError: cv requires an integer, native splitter or list of index pairs; Python callbacks cannot execute"
+#: the search door's words for the same cv (bindings/msel_cv_door.mojo `msel_fold_source`)
+comptime _SEARCH_CV_CALLBACK_WORDS = "TypeError: Python fold iterator callbacks are not accepted; provide native splitters or explicit list/tuple index pairs"
+
+
+def _refuse_cv_callback(cv: PythonObject, context: PythonObject, b: PythonObject,
+                        words: String, integral_ok: Bool) raises:
+    """A cv that is none of None, an int, an index list or one of OUR
+    splitters (`family_msel_splitter_layouts`): a user's own splitter object,
+    refused at UNPACK in the meta door's words (bindings/
+    trees_public_meta_door.mojo `_cv_value`), before anything is fitted, as
+    the same meta-estimator fitted at the top level refuses it. Its `split`
+    is never called, at UNPACK or in RUN: a user's splitter is a Python
+    callback (AGENTS.md "No calls back into Python": callbacks are refused
+    before they are invoked; the 2026-11-25 boundary note admits only the
+    INPUT's data-interchange protocols). Lane mf-split4b. `integral_ok`: the
+    search door's rule, which takes any native integer scalar (a NumPy one
+    too, `msel_is_integral`: exact type identities, no ABC hook)."""
+    if cv is None or py_type(cv) is b.int or py_type(cv) is b.bool or py_type(cv) is b.list or py_type(cv) is b.tuple:
+        return
+    if integral_ok:
+        try:
+            if msel_is_integral(cv, context):
+                return
+        except:
+            return  # no integer table connected: the caller's door decides, in the same words
+    var layouts = py_get(context, "family_msel_splitter_layouts")
+    if layouts is None:
+        return  # no splitter table connected: the caller's door decides, in the same words
+    if py_contains(layouts, py_type(cv)):
+        return
+    raise Error(words)
 
 
 struct _Split(Movable):
@@ -674,10 +718,11 @@ def _split_words(cv: PythonObject, classifier: Bool, context: PythonObject, b: P
     `msel_split`: `MselSplitter`, its n_splits, shuffle and random_state
     through `field`, the seed by `msel_seed`, the entries by
     `msel_split_route`, the sabotage word). False (the door keeps the
-    stack, and calls the splitter itself) for any other splitter class (a
-    user's own splitter object: its `split` needs the fit's X and y), a
-    StratifiedKFold on a regressor (its door refuses continuous y in the
-    splitter's words), fewer than two splits, or a value the door refuses."""
+    meta-estimator and splits natively with X and y) for any other of our
+    splitter classes, a StratifiedKFold on a regressor (its door refuses
+    continuous y in the splitter's words), fewer than two splits, or a value
+    the door refuses. A user's own splitter object never reaches here:
+    `_refuse_cv_callback` refuses it first."""
     try:
         var cls = py_type(cv)
         var stratified = cls is msel_cls("StratifiedKFold", context)
@@ -761,7 +806,7 @@ def _index_run(value: PythonObject, b: PythonObject, mut dst: List[Int32]) raise
 
 
 def _user_folds(cv: PythonObject, b: PythonObject, mut fold_train: List[List[Int32]],
-                mut fold_test: List[List[Int32]]) -> Bool:
+                mut fold_test: List[List[Int32]]) raises -> Bool:
     """UNPACK of a cv given as a list of (train, test) pairs (the door's
     `_splits` over an iterable): each pair's two sides as typed rows. False
     (the door keeps it, and raises its own words) for anything not a
@@ -777,9 +822,11 @@ def _user_folds(cv: PythonObject, b: PythonObject, mut fold_train: List[List[Int
                 return False
             fold_train.append(tr^)
             fold_test.append(te^)
-        return True
     except:
         return False
+    if len(fold_test) == 0:
+        raise Error("cv produced no splits")  # the door's `_splits` words, before any fit
+    return True
 
 
 def _export_i64(plan: MemberPlan, state: Int, block: Int) raises -> List[Int]:
@@ -1352,7 +1399,7 @@ def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: Py
                    mut words: List[Float64]) raises -> Bool:
     """UNPACK of a tree base's class_weight (lane mf-split4), appended as the
     kind's class-weight tail (core/ensemble_member.mojo META_CW_*): [mode,
-    K, all-one, the K dict weights]. None: mode 0. 'balanced': mode 1 (the
+    K, all-one, the K dict weights, the K named flags]. None: mode 0. 'balanced': mode 1 (the
     FIT computes the ratios from its codes). A dict: mode 2, its weights
     over `labels` (the labels of the codes the trees are fitted on, in code
     order) read with the forest door's own admission
@@ -1385,6 +1432,11 @@ def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: Py
         words.append(1.0 if inputs.all_one else 0.0)
         for c in range(len(inputs.values)):  # driver-loop: over the classes (one weight each, UNPACK once)
             words.append(inputs.values[c])
+        # The K named flags (lane mf-split4b): 1.0 where the dict names the
+        # class (a Bagging unit whose draw lacks a named class is refused in
+        # the tree door's words, core/ensemble_member.mojo `_bag_class_rows`).
+        for c in range(len(inputs.values)):  # driver-loop: over the classes (one membership test each, UNPACK once)
+            words.append(1.0 if py_contains(class_weight, labels[c]) else 0.0)
     except:
         return False
     return True
@@ -1414,6 +1466,9 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
     var nested = _Nested()
     var words = List[Float64]()
     var folds = 0
+    var fold_train = List[List[Int32]]()
+    var fold_test = List[List[Int32]]()
+    var split = _Split()
     var base_needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
     if classifier:
         base_needs |= MEMBER_CAN_CLASSIFIER
@@ -1457,10 +1512,25 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
                 whole = Int(py=ensemble) == 1
             else:
                 return False
+        # The cv as the door's `_splits` takes it (lane mf-split4b): an int;
+        # a user's index list read ONCE into typed folds; one of OUR KFold /
+        # StratifiedKFold splitters as typed words, its folds computed inside
+        # each fit over that fit's rows (core/ensemble_member.mojo
+        # `_split_folds`); a user's own splitter object refused here.
         var cv = py_get(fields, "cv")
-        folds = 5 if cv is None else _int_word(cv, b)
-        if folds < 2:
-            return False  # a splitter, an index list or 'prefit': the door's units
+        _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
+        if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
+            if not _user_folds(cv, b, fold_train, fold_test):
+                return False
+            folds = len(fold_test)
+        elif cv is not None and py_type(cv) is not b.int:
+            if not _split_words(cv, True, context, b, split):
+                return False  # another of our splitters: the door's `_splits`
+            folds = split.k
+        else:
+            folds = 5 if cv is None else _int_word(cv, b)
+            if folds < 2:
+                return False  # a bool or an int below 2: the door raises its words
         # The resident DeviceRows route (a measured winner) stays the door's.
         var plan = prep_estimator_plan(base, context)
         if plan is not None:
@@ -1516,13 +1586,11 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         # rows), so both plans are admitted with the caller's rows
         # (`forest_member_admit_common(..., caller_rows=True)`). The table
         # is read over the codes the forest is fitted on (`labels`: the
-        # Bagging's codes 0 .. k-1, `_child_labels`). A configuration that
-        # can never take the batched route keeps the door (its per-member
-        # fits read each draw's own classes).
+        # Bagging's codes 0 .. k-1, `_child_labels`). Since lane mf-split4b
+        # the per-member route takes it too: each unit's row weights over its
+        # draw's own classes (core/ensemble_member.mojo `_bag_class_rows`).
         var weighted = classifier and py_get(py_fields(template), "class_weight") is not None
         var batched = _may_be_batched(fields, template, context, b, words)
-        if weighted and not batched:
-            return False
         if weighted:
             if not _admit_caller_rows(nested, template, classifier, needs, context, b):
                 return False
@@ -1553,12 +1621,16 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         var cw = PythonObject(None)
         var cw_context = context
         if weighted:
-            cw = py_get(py_fields(forest), "class_weight")
-            cw_context = prep_estimator_plan(forest, context)["context"]  # the forest door's context
+            var owner_of = forest if batched else template  # the estimator whose fit door reads it
+            cw = py_get(py_fields(owner_of), "class_weight")
+            cw_context = prep_estimator_plan(owner_of, context)["context"]  # its fit door's context
         if not _tree_cw_words(cw, labels, cw_context, b, words):
             return False
-    return _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
-                   List[List[Int32]](), List[List[Int32]]())
+    if not _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
+                   fold_train^, fold_test^):
+        return False
+    _finish_split(owner, split)
+    return True
 
 
 def _export_view(plan: MemberPlan, state: Int, block: Int) raises -> MemberCall:
@@ -2368,6 +2440,9 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     if device is not None:
         return False
     var cv = py_get(fields, "cv")
+    # A user's own splitter object: refused here in the search door's words
+    # (lane mf-split4b; never called, `_refuse_cv_callback`).
+    _refuse_cv_callback(cv, context, b, _SEARCH_CV_CALLBACK_WORDS, True)
     var folds = 5 if cv is None else _int_word(cv, b)
     if folds < 2:
         return False

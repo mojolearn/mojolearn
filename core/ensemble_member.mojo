@@ -166,9 +166,11 @@ weights of sample_weight=None:
   * the MEMBER ROUNDS (every other tree base; the door's `_ada_members`):
     each round a new state of the base's member, kept as it is; X staged
     once in its image on a device route.
-The rounds' fit notices travel to the PACK (nested member 0). No sample
-weights (the ABI's float32 weights are not the door's float64 ones; the
-mask says so). PREDICT / PREDICT_PROBA / DECISION: each round's member
+The rounds' fit notices travel to the PACK (nested member 0). Sample
+weights (lane mf-split4b): the caller's float32 weights are the words the
+door's `_normalized_weights` reads (`admit_weights` makes float32 words),
+normalized here as there (`x_trees_exact_sum` into float64, its refusals);
+the kind carries MEMBER_CAN_SAMPLE_WEIGHT. PREDICT / PREDICT_PROBA / DECISION: each round's member
 predict (in parallel over the rounds on the host column; X staged once on a
 device route), then `ada_classifier_run` (ADA_CODES / ADA_PROBA /
 ADA_DECISION) or `ada_regressor_run` (float32, the door's dtype), the
@@ -237,7 +239,7 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.trees_entry_table import TreesEntryKey
 from xtrees.glue_calls import (
     xt_ref, xt_device_folds, xt_gather_f32, xt_scatter, xt_indicator_codes, xt_binary_proba, xt_argmax_rows,
-    xt_sample_indices, xt_unseen_rows, xt_transpose_f32,
+    xt_sample_indices, xt_unseen_rows, xt_transpose_f32, xt_exact_sum,
 )
 from xtrees.trees_ada_fit_run import (
     ADA_MEMBER_SEED_WORD, AdaFitPlan, AdaFitResult, ada_fit_run, ada_release_handles, ada_release_members,
@@ -248,7 +250,7 @@ from bindings.forest_config_run import (
     FOREST_RF_SLOT_BINS, FOREST_RF_SLOT_MAX_SAMPLES, ForestConfig, forest_target_need,
 )
 from bindings.trees_public_inputs_run import TREES_NONFINITE
-from xtrees.trees_boost_run import _sub_seed, boost_count_check
+from xtrees.trees_boost_run import _sub_seed, boost_count_check, boost_weight_flags_check
 from xtrees.trees_calibrated_fit_run import (
     CalFitPlan, CalFitOut, calibrated_fit_run, cal_fold_place, CAL_ALL_ANSWERED,
 )
@@ -348,8 +350,9 @@ comptime META_SEARCH_WORDS = 5
 #: THE MULTI-OUTPUT KIND's settings words: [0] reserved.
 comptime META_MULTI_WORDS = 1
 #: THE CLASS-WEIGHT TAIL of a tree base (lane mf-split4): appended after a
-#: Bagging's META_BAG_WORDS (its batched forest's class_weight) and an
-#: AdaBoost's META_ADA_WORDS (its base's): [mode, K, all-one, K weights].
+#: Bagging's META_BAG_WORDS (its batched forest's or per-member tree's
+#: class_weight) and an AdaBoost's META_ADA_WORDS (its base's): [mode, K,
+#: all-one, K weights] and, for a dict, K named flags (lane mf-split4b).
 #: Mode META_CW_NONE, META_CW_BALANCED (the FIT computes the ratios from its
 #: codes) or META_CW_DICT (the dict's weights over the codes' labels, read at
 #: UNPACK with the forest door's admission; K = -1: no labels were known, the
@@ -1004,13 +1007,17 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
         if kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER:
             mask |= MEMBER_CAN_PREDICT_PROBA
         elif kind == META_ADA_CLASSIFIER:
-            # AdaBoostClassifier's predict_proba and decision_function (its
-            # fit takes no sample weights as a member: the ABI's float32
-            # weights are not the door's float64 ones)
+            # AdaBoostClassifier's predict_proba and decision_function
             mask |= MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
         elif kind == META_OVR and (base & MEMBER_CAN_PREDICT_PROBA) != 0:
             mask |= MEMBER_CAN_PREDICT_PROBA
         if (_bag_kind(kind) or _multi_kind(kind)) and (base & MEMBER_CAN_SAMPLE_WEIGHT) != 0:
+            mask |= MEMBER_CAN_SAMPLE_WEIGHT
+        if _ada_kind(kind):
+            # AdaBoost (lane mf-split4b): the caller's float32 sample weights
+            # are the words its door normalizes (`_fit_ada`); every round
+            # hands its base its own boosting weights (whatever the caller
+            # gave), so the base's bit is not read.
             mask |= MEMBER_CAN_SAMPLE_WEIGHT
         # A Bagging entry's batched forest (its second mask) runs on the same
         # thread rules: the GIL bits both kinds have.
@@ -1127,7 +1134,7 @@ def _new(call: _CallPtr) raises:
             # tail after its settings words (META_CW_*, lane mf-split4; none:
             # no class_weight).
             if (_bag_kind(kind) or _ada_kind(kind)) and len(slot[].words) >= need + META_CW_HEAD:
-                need += META_CW_HEAD + max(Int(slot[].words[need + META_CW_K]), 0)
+                need += _cw_tail_words(slot[].words, need)
             # A Bagging entry may hold a second plan: its batched forest.
             var plans = 1
             if _bag_kind(kind) and len(slot[].words) == need and slot[].words[META_BAG_BATCHED] != 0.0:
@@ -1135,8 +1142,8 @@ def _new(call: _CallPtr) raises:
             if len(slot[].plans) != plans or len(slot[].masks) != plans or len(slot[].words) != need:
                 raise Error("member ABI: a " + _name(kind) + " member needs its one base estimator and its "
                             + String(need) + " settings words")
-            if kind == META_CALIBRATED and slot[].folds < 2:
-                raise Error("member ABI: a CalibratedClassifierCV member needs cv >= 2")
+            if kind == META_CALIBRATED and slot[].folds < 2 and user_folds == 0:
+                raise Error("member ABI: a CalibratedClassifierCV member needs cv >= 2 or its listed folds")
             if _ada_kind(kind):
                 var family = slot[].plans[0].family
                 if (family != MEMBER_FAMILY_TREE and family != MEMBER_FAMILY_FOREST
@@ -1445,12 +1452,14 @@ def _stack_counts(slot: _SlotPtr, k: Int, held: List[Int32]) -> List[Int]:
 
 
 def _user_folds(slot: _SlotPtr, n: Int, mut tr_at: List[Int], mut tr_n: List[Int], mut te_at: List[Int],
-                mut te_n: List[Int]) raises:
+                mut te_n: List[Int], partition: Bool) raises:
     """A user's cv index list (the entry's typed folds) against the fit's
     `n` rows, refused as the door's `_splits` refuses it, in its words and
     order: per fold its empty side, its train then test rows outside
-    [0, n); no fold; then a test side that is not a partition (stacking's
-    cross_val_predict). The bounds of every fold on the host cores."""
+    [0, n); no fold; then, when `partition` (stacking's and an
+    ensemble=False calibration's cross_val_predict, the door's
+    `_splits(..., partition)`), a test side that is not a partition. The
+    bounds of every fold on the host cores."""
     var folds = len(slot[].fold_test)
     var bad = List[Int](length=max(folds, 1), fill=0)
     var bad_at = Int(bad.unsafe_ptr())
@@ -1496,13 +1505,14 @@ def _user_folds(slot: _SlotPtr, n: Int, mut tr_at: List[Int], mut tr_n: List[Int
             raise Error("a cv index is outside [0, " + String(n) + ")")
     if folds == 0:
         raise Error("cv produced no splits")
-    var seen = List[Int32](length=max(n, 1), fill=Int32(0))
-    for f in range(folds):  # driver-loop: over the user's folds (the partition count)
-        for i in range(te_counts[f]):  # small-loop(one count per test row: n rows in all over a partition)
-            seen[Int(slot[].fold_test[f][i])] += 1
-    for i in range(n):  # small-loop(the partition check: one word per row, once per fit)
-        if seen[i] != 1:
-            raise Error("cross_val_predict only works for partitions: every row must be in exactly one test set")
+    if partition:
+        var seen = List[Int32](length=max(n, 1), fill=Int32(0))
+        for f in range(folds):  # driver-loop: over the user's folds (the partition count)
+            for i in range(te_counts[f]):  # small-loop(one count per test row: n rows in all over a partition)
+                seen[Int(slot[].fold_test[f][i])] += 1
+        for i in range(n):  # small-loop(the partition check: one word per row, once per fit)
+            if seen[i] != 1:
+                raise Error("cross_val_predict only works for partitions: every row must be in exactly one test set")
     for f in range(folds):  # driver-loop: over the user's folds (the RUN's addresses)
         tr_at.append(tr_ptrs[f])
         tr_n.append(tr_counts[f])
@@ -1691,7 +1701,7 @@ def _fit_stack(slot: _SlotPtr, call: _CallPtr) raises:
     var fold_rows = List[Int32](length=max(n_splits * n, 1), fill=Int32(0))
     var rows_at = Int(fold_rows.unsafe_ptr())
     if len(slot[].fold_test) > 0:
-        _user_folds(slot, n, tr_at, tr_n, te_at, te_n)
+        _user_folds(slot, n, tr_at, tr_n, te_at, te_n, True)
     else:
         var codes_at = y if classifier else Int(fold_counts.unsafe_ptr())
         var status = xt_device_folds(glue, codes_at, rows_at, Int(fold_counts.unsafe_ptr()), n, n_splits, k)
@@ -1845,12 +1855,16 @@ def _own_drawn(slot: _SlotPtr, drawn: List[Bool]) raises:
 
 
 def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
-    """`_cal_native` over an int cv: the stratified folds of
-    `xt_device_folds`, one unit per fold over its train rows (and one over
-    every row for ensemble=False), `calibrated_fit_run`, then the kept pairs
-    and their calibrators. A failing fit raises the first failing fold's
-    words in fold order (GaussianProcessClassifier's one-class words with
-    the label suffix its fit door adds, `_cal_fit_words`)."""
+    """`_cal_native`: the folds (an int cv: the stratified folds of
+    `xt_device_folds`; THE SPLITTER CV, lane mf-split4b: our KFold /
+    StratifiedKFold over this fit's rows, `_split_folds`; a user's index
+    list: the entry's typed folds, checked by `_user_folds` as the door's
+    `_splits` checks them, a partition only for ensemble=False), one unit
+    per fold over its train rows (and one over every row for
+    ensemble=False), `calibrated_fit_run`, then the kept pairs and their
+    calibrators. A failing fit raises the first failing fold's words in
+    fold order (GaussianProcessClassifier's one-class words with the label
+    suffix its fit door adds, `_cal_fit_words`)."""
     var k = call[].classes
     if k < 2:
         raise Error("y has fewer than 2 classes")
@@ -1862,33 +1876,50 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     var sigmoid = slot[].words[META_CAL_SIGMOID] != 0.0
     var ensemble = slot[].words[META_CAL_ENSEMBLE] != 0.0
     var decision = slot[].words[META_CAL_DECISION] != 0.0
-    var n_splits = slot[].folds
+    # THE SPLITTER CV: this fit's folds first, as the door computes its
+    # splits before any member fit.
+    if slot[].split_kind != META_SPLIT_NONE:
+        _split_folds(slot, n, y, k)
+    var listed = len(slot[].fold_test) > 0
+    var tr_at = List[Int]()
+    var tr_n = List[Int]()
+    var te_at = List[Int]()
+    var te_n = List[Int]()
+    var n_splits = 0 if listed else slot[].folds
     var fold_counts = List[Int32](length=n_splits + 1, fill=Int32(0))
     var fold_rows = List[Int32](length=max(n_splits * n, 1), fill=Int32(0))
     var rows_at = Int(fold_rows.unsafe_ptr())
-    var status = xt_device_folds(glue, y, rows_at, Int(fold_counts.unsafe_ptr()), n, n_splits, k)
-    if status == 1:
-        raise Error("n_splits=" + String(n_splits) + " cannot be greater than the number of members in each class")
-    if status != 0:
-        raise Error("y codes outside [0, n_classes)")
-    var last = 0
-    for f in range(n_splits):  # driver-loop: over the cv folds
-        if Int(fold_counts[f]) > 0:
-            last = f
-    var used = last + 1
+    if listed:
+        _user_folds(slot, n, tr_at, tr_n, te_at, te_n, not ensemble)
+    else:
+        var status = xt_device_folds(glue, y, rows_at, Int(fold_counts.unsafe_ptr()), n, n_splits, k)
+        if status == 1:
+            raise Error("n_splits=" + String(n_splits)
+                        + " cannot be greater than the number of members in each class")
+        if status != 0:
+            raise Error("y codes outside [0, n_classes)")
+        var last = 0
+        for f in range(n_splits):  # driver-loop: over the cv folds
+            if Int(fold_counts[f]) > 0:
+                last = f
+        for f in range(last + 1):  # driver-loop: over the cv folds (their train and test rows)
+            var c = Int(fold_counts[f])
+            tr_at.append(rows_at + 4 * (f * n))
+            tr_n.append(n - c)
+            te_at.append(rows_at + 4 * (f * n + n - c))
+            te_n.append(c)
+    var used = len(te_at)
     var units = used if ensemble else used + 1
     _expand(slot, units)
     var run = _set_of(slot, x, n, d, MEMBER_I32)
     for f in range(used):  # driver-loop: over the cv folds (admission, once each)
-        var c = Int(fold_counts[f])
-        _add(slot, run, f, k, y, 0, rows_at + 4 * (f * n), n - c)
+        _add(slot, run, f, k, y, 0, tr_at[f], tr_n[f])
     if not ensemble:
         _add(slot, run, used, k, y, 0, 0, 0)
     var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA
     var plan = CalFitPlan(x, n, d, y, k, operation, sigmoid, ensemble, _CALIB_FAST_HOST_FOLDS)
     for f in range(used):  # driver-loop: over the cv folds (their test rows)
-        var c = Int(fold_counts[f])
-        plan.fold(rows_at + 4 * (f * n + n - c), c)
+        plan.fold(te_at[f], te_n[f])
     var res = CalFitOut()
     # A refused scoring call raises its member's words (the RUN released every state).
     var answered = calibrated_fit_run(glue, run, plan, res)
@@ -1941,6 +1972,7 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     _ = plan.folds()  # its re-coded targets were read through the fits and the ownership above
     _ = len(fold_rows)  # the fold rows are read through the fits and the ownership above
     _ = len(fold_counts)
+    _ = len(slot[].fold_train)  # a listed or split cv's rows, read through the fits and the ownership above
     slot[].cal_iso = res.isotonic.copy()
     slot[].cal_a = res.a.copy()
     slot[].cal_b = res.b.copy()
@@ -1975,6 +2007,16 @@ def _seed_words(mut plan: MemberPlan, seed: Int) raises:
     plan.params[ADA_MEMBER_SEED_WORD] = bitcast[DType.float64](Int64(seed))
     plan.params[ADA_MEMBER_SEED_WORD + 1] = Float64(seed)
     plan.params[ADA_MEMBER_SEED_WORD + 2] = 0.0
+
+
+def _cw_tail_words(words: List[Float64], at: Int) -> Int:
+    """The class-weight tail's length at `at`: its head, K weights and, for a
+    dict, K named flags (lane mf-split4b: 1.0 where the dict names that
+    class; the per-member route's absent-label refusal reads them)."""
+    var count = max(Int(words[at + META_CW_K]), 0)
+    if Int(words[at + META_CW_MODE]) == META_CW_DICT:
+        return META_CW_HEAD + 2 * count
+    return META_CW_HEAD + count
 
 
 def _cw_mode(words: List[Float64], at: Int) -> Int:
@@ -2040,6 +2082,138 @@ def _tree_class_rows(words: List[Float64], at: Int, codes: Int, n: Int, k: Int, 
     return Int(rows.unsafe_ptr())
 
 
+def _bag_class_rows(words: List[Float64], at: Int, y: Int, k: Int, n: Int, weights: Int, draw_at: List[Int],
+                    draw_n: List[Int], held: List[List[Int32]], recoded: List[List[Int32]],
+                    mut unit_w: List[List[Float32]], mut unit_w_at: List[Int]) raises:
+    """THE PER-MEMBER ROUTE OF A TREE WITH A CLASS_WEIGHT (lane mf-split4b):
+    each unit's float32 row weights as the tree's fit door makes them over
+    the rows the door's loop gives it (`_bagging_fit_bags`: the draw's codes
+    and, weighted, the draw's sample weights; bindings/
+    trees_public_inputs_door.mojo `trees_class_rows_only` /
+    `trees_weighted_rows`): the classes its draw holds (a lacking draw's
+    own classes, as the door's member encodes them), 'balanced' over the
+    draw's class counts (scikit-learn's ratios, `class_ratio_f64` over the
+    draw's rows), a dict's weights of those classes, refused in the door's
+    words when it names a class the draw lacks ("class_weight contains
+    labels absent from y", `class_weight_dictionary_values`); the per-class
+    float32 plan (`class_weight_rows_plan`) gathered at each drawn row,
+    times the caller's float32 weight (one float32 product per row, the
+    door's LABEL_WEIGHTS_MULTIPLY) when weighted. A unit whose class
+    weights are all one reads the caller's weights (`unit_w_at` stays).
+    Each unit's words are `n` long (the set gathers them with the draw); the
+    counts and the rows on the host cores, one task per unit. No Python."""
+    var units = len(draw_at)
+    var balanced = _cw_mode(words, at) == META_CW_BALANCED
+    var table = Int(words[at + META_CW_K])
+    if not balanced:
+        if table < 0:
+            raise Error("TypeError: mojolearn: a member whose tree has a class_weight dict is fitted only by a "
+                        + "caller that hands over its labels")
+        if table != k:
+            raise Error("member ABI: the class_weight table has " + String(table) + " entries for " + String(k)
+                        + " classes")
+    # 1. The draws' class counts (in the ensemble codes), one task per unit.
+    var counts = List[Int64](length=max(units * k, 1), fill=Int64(0))
+    var counts_at = Int(counts.unsafe_ptr())
+    var draws_at = Int(draw_at.unsafe_ptr())
+    var draws_n = Int(draw_n.unsafe_ptr())
+
+    def _count(u: Int) {imm counts_at, imm draws_at, imm draws_n, imm y, imm k, imm n}:
+        var draw = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=draws_at)[u]
+        var m = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=draws_n)[u]
+        var rows = m if draw != 0 else n
+        var picks = _I32P(unsafe_from_address=draw)
+        var codes = _I32P(unsafe_from_address=y)
+        var dst = _I64P(unsafe_from_address=counts_at + 8 * u * k)
+        for i in range(rows):  # small-loop(one pass over one unit's drawn rows)
+            var c = Int(codes[Int(picks[i]) if draw != 0 else i])
+            if c >= 0 and c < k:
+                dst[c] += 1
+
+    if balanced:
+        host_parallelize(_count, units)
+    # 2. Each unit's per-class plan (k words each, on the calling thread: the
+    # plan steps split their own work).
+    var plans = List[List[Float32]](capacity=units)
+    var weighted = List[Bool](capacity=units)
+    for u in range(units):  # driver-loop: over the member estimators (their class plans)
+        var classes = _held_classes(held[u], k)
+        var inputs = ClassWeightInputs()
+        if balanced:
+            var wide = List[Int64](length=max(classes, 1), fill=Int64(0))
+            for j in range(classes):  # small-loop(the unit's held classes' counts)
+                var c = Int(held[u][j]) if len(held[u]) > 0 else j
+                wide[j] = counts[u * k + c]
+            var rows = draw_n[u] if draw_at[u] != 0 else n
+            inputs.values = List[Float64](length=classes, fill=0.0)
+            if classes > 0 and class_ratio_f64(_I64P(unsafe_from_address=Int(wide.unsafe_ptr())),
+                                               _F64P(unsafe_from_address=Int(inputs.values.unsafe_ptr())), classes,
+                                               rows, 0) != 0:
+                raise Error("ZeroDivisionError: division by zero")
+            _ = len(wide)
+        else:
+            if len(held[u]) > 0:
+                # the door's member sees only the draw's classes: a dict naming another is refused
+                var mark = List[Bool](length=max(k, 1), fill=False)
+                for j in range(len(held[u])):  # small-loop(the unit's held classes)
+                    mark[Int(held[u][j])] = True
+                for c in range(k):  # small-loop(the dict's named classes)
+                    if words[at + META_CW_HEAD + k + c] != 0.0 and not mark[c]:
+                        raise Error("class_weight contains labels absent from y")
+            for j in range(classes):  # small-loop(the dict weights of the unit's classes)
+                var c = Int(held[u][j]) if len(held[u]) > 0 else j
+                var value = words[at + META_CW_HEAD + c]
+                inputs.append(value, value == 1.0)
+        var plan = class_weight_rows_plan(inputs, balanced)
+        weighted.append(not plan.all_one)
+        plans.append(plan.words.copy() if not plan.all_one else List[Float32]())
+    # 3. The rows: unit u's plan word at each drawn row (times the caller's weight).
+    unit_w = List[List[Float32]](capacity=units)
+    for u in range(units):  # driver-loop: over the member estimators (their row words)
+        unit_w.append(List[Float32](length=max(n, 1), fill=0.0) if weighted[u] else List[Float32]())
+    var plan_at = List[Int](length=max(units, 1), fill=0)
+    var dst_at = List[Int](length=max(units, 1), fill=0)
+    var codes_at = List[Int](length=max(units, 1), fill=y)
+    for u in range(units):  # driver-loop: over the member estimators (their final addresses)
+        if weighted[u]:
+            plan_at[u] = Int(plans[u].unsafe_ptr())
+            dst_at[u] = Int(unit_w[u].unsafe_ptr())
+            unit_w_at[u] = dst_at[u]
+            if len(held[u]) > 0:
+                codes_at[u] = Int(recoded[u].unsafe_ptr())
+    var plan_list = Int(plan_at.unsafe_ptr())
+    var dst_list = Int(dst_at.unsafe_ptr())
+    var code_list = Int(codes_at.unsafe_ptr())
+
+    def _rows(u: Int) {imm plan_list, imm dst_list, imm code_list, imm draws_at, imm draws_n, imm weights, imm n}:
+        var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=dst_list)[u]
+        if dst == 0:
+            return
+        var plan = _F32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=plan_list)[u])
+        var codes = _I32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=code_list)[u])
+        var out = _F32P(unsafe_from_address=dst)
+        var draw = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=draws_at)[u]
+        var m = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=draws_n)[u]
+        var rows = m if draw != 0 else n
+        var picks = _I32P(unsafe_from_address=draw)
+        var given = _F32P(unsafe_from_address=weights)
+        for i in range(rows):  # small-loop(one pass over one unit's drawn rows)
+            var r = Int(picks[i]) if draw != 0 else i
+            var value = plan[Int(codes[r])]
+            out[r] = value * given[r] if weights != 0 else value
+
+    host_parallelize(_rows, units)
+    _ = len(counts)  # read through the tasks above
+    _ = len(plans)
+    _ = len(plan_at)
+    _ = len(dst_at)
+    _ = len(codes_at)
+    _ = len(held)
+    _ = len(recoded)
+    _ = len(draw_at)
+    _ = len(draw_n)
+
+
 def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     """`_bagging_fit_bags`' per-member route as ONE set: unit u's draws
     (`xt_sample_indices`, streams 2u and 2u + 1) and seed `_sub_seed(seed,
@@ -2069,12 +2243,6 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
             and (bootstrap or n_rows == n)):
         _fit_bag_batched(slot, call, k, n_rows, bootstrap)
         return
-    if _cw_mode(slot[].words, META_BAG_WORDS) != META_CW_NONE:
-        # The per-member fits of a tree with a class_weight read each draw's
-        # own classes in the tree's fit door: the caller's door fits them
-        # (this refusal fails the set, and its caller's loop runs).
-        raise Error("NotImplementedError: mojolearn: a Bagging member whose tree has a class_weight fits its "
-                    + "per-member route through its door")
     _expand(slot, count)
     slot[].unit_rows = List[List[Int32]](capacity=count)
     slot[].unit_cols = List[List[Int32]](capacity=count)
@@ -2100,6 +2268,14 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     var recoded = List[List[Int32]]()
     if classifier:
         _held_and_codes(y, k, n, draw_at, draw_n, held, recoded)
+    # A CLASS_WEIGHT ON THE TREE (lane mf-split4b): each unit's row weights,
+    # as the tree's fit door makes them over the rows it was given
+    # (`_bag_class_rows`); else every unit reads the caller's weights.
+    var unit_w = List[List[Float32]]()
+    var unit_w_at = List[Int](length=max(count, 1), fill=weights)
+    if classifier and _cw_mode(slot[].words, META_BAG_WORDS) != META_CW_NONE:
+        _bag_class_rows(slot[].words, META_BAG_WORDS, y, k, n, weights, draw_at, draw_n, held, recoded, unit_w,
+                        unit_w_at)
     var run = _set_of(slot, x, n, d, MEMBER_I32 if classifier else MEMBER_F32)
     # A classifier's held classes were read above: no second cover pass.
     run.skip_lacking = classifier
@@ -2111,7 +2287,7 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
             if len(held[u]) > 0:
                 target = Int(recoded[u].unsafe_ptr())
                 classes = len(held[u])
-        _add_drawn(slot, run, u, classes, target, weights, draw_at[u], draw_n[u],
+        _add_drawn(slot, run, u, classes, target, unit_w_at[u], draw_at[u], draw_n[u],
                    0 if all_cols else Int(slot[].unit_cols[u].unsafe_ptr()), 0 if all_cols else n_feat)
     member_set_fit(run)
     slot[].states = List[Int](length=count, fill=0)
@@ -2122,6 +2298,8 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     finally:
         member_set_run_release(run)
     _ = len(recoded)  # the re-coded targets are read through the fits and the ownership above
+    _ = len(unit_w)  # the units' class rows are read through the fits and the ownership above
+    _ = len(unit_w_at)
     slot[].unit_held = held^
     slot[].classes = k
     _nested_outputs(slot)
@@ -2451,6 +2629,18 @@ def _fit_ada(slot: _SlotPtr, call: _CallPtr) raises:
     var glue = slot[].glue
     # sample_weight=None: 1 / n per row (`_normalized_weights`, the fill of `_class_major([1 / n])`).
     var weights = List[Float64](length=n, fill=1.0 / Float64(n))
+    if call[].weights.given():
+        # THE CALLER'S SAMPLE WEIGHTS (lane mf-split4b): the door's
+        # `_normalized_weights` over them, whole: its weights are the float32
+        # words `admit_weights` made (the member's `weights` are those words),
+        # summed exactly and divided into float64 by `x_trees_exact_sum`, the
+        # refusals from its flag words (`boost_weight_flags_check`).
+        var normalized = List[Float64](length=n + 1, fill=0.0)
+        var flags = List[Int32](length=8, fill=Int32(0))
+        _ = xt_exact_sum(glue, call[].weights.data, Int(normalized.unsafe_ptr()), Int(flags.unsafe_ptr()), n, 1)
+        boost_weight_flags_check(flags[0] != 0 or flags[1] != 0 or flags[2] != 0 or flags[3] != 0, flags[4] != 0)
+        for i in range(n):  # small-loop(one copy of the n normalized weights past the sum word, once per fit)
+            weights[i] = normalized[i + 1]
     var forest = entry_ref_unresolved()
     var caps = 0
     _ada_close_session(slot)
@@ -3143,7 +3333,7 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     if _classifier_kind(slot[].kind) and call[].classes < 1 and call[].class_counts == 0:
         raise Error("member ABI: a " + name + " member needs its class count at fit")
     if call[].weights.given() and (slot[].kind == META_OVR or slot[].kind == META_CALIBRATED
-                                   or _ada_kind(slot[].kind) or _search_kind(slot[].kind)):
+                                   or _search_kind(slot[].kind)):
         raise Error("TypeError: a " + name + " member's fit takes no sample weights")
     _drop_states(slot)
     slot[].features = call[].x.cols

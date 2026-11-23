@@ -9,16 +9,21 @@
 #
 # The folds. An int (or None) cv takes the same integer fold ids the Python
 # assigned (the base binding's `fold_ids` / `select_fold_i64`, or the
-# binding's own StratifiedKFold ids); a user splitter object is the
-# user-API boundary: its `split(X, y)` is called once, here, as the Python
-# did, and its (train, test) index arrays are read natively.
+# binding's own StratifiedKFold ids); one of our splitters is split natively
+# over X and y (`prep_native_split`), an index list is read natively; a
+# user's own splitter object is refused before it is called (AGENTS.md "No
+# calls back into Python"; `_xl_cv_splits`).
 #
-# RidgeCV's split path gathers each split's rows here, split by split
-# (`xl_ridge_cv_fold_unpack`): the row gather is the base binding's
-# Python-callable `gather_rows_bytes` (the device gather on a GPU
-# installation), which has no entry in the typed base helper table
-# (core/base_entry_table.mojo), so the door drives the splits and RUN runs
-# each split's alpha grid (fit, prediction, R^2) in one GIL release.
+# RidgeCV's split path (lane mf-split4b): UNPACK reads every split's index
+# words once (`xl_ridge_cv_split_words`); ONE RUN (x_linear/door_run.mojo
+# `xl_ridge_cv_splits_run`) gathers each split's rows through the base helper
+# table's typed `gather_rows_bytes` (core/base_entry_table.mojo
+# BH_GATHER_ROWS_BYTES: the device gather on a GPU installation, as the
+# Python-callable entry the door called per split and side before) and runs
+# its alpha grid; PACK raises the undefined-R^2 warnings and the stop's
+# refusal in split order (`xl_ridge_cv_splits_finish`). REMOVED:
+# `xl_ridge_cv_fold_unpack`, `XlRidgeFold`, `_xl_gather_into` and the
+# `gather_rows_bytes` connection the door held per fit.
 from std.math import isinf
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -28,7 +33,8 @@ from core.device_route import device_mode_code, device_vendor_code
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry
 from x_linear.door_run import (
     ALGO_ENETCV, ALGO_LOGCV, xl_run_parts, xl_parts_total, xl_lbfgs_work, XlSplitWords, xl_cv_fold_ids_run,
-    xl_cv_roles_limit, xl_cv_roles_run, XlClassPrepRequest, XlRidgeCvRequest, XlRidgeFoldRequest, xl_ridge_out,
+    xl_cv_roles_limit, xl_cv_roles_run, XlClassPrepRequest, XlRidgeCvRequest, xl_ridge_out,
+    XlRidgeSplitsOut,
 )
 from bindings.x_linear_route_unpack import XLinearOps, xl_ops_require
 from bindings.x_linear_common_unpack import (
@@ -94,6 +100,30 @@ def _xl_index_i64(values: PythonObject, name: String, context: PythonObject) rai
     return admit_ids(values, name, context)
 
 
+comptime XL_CV_CALLBACK_WORDS = "TypeError: native linear CV requires a native splitter or list of index pairs; Python callbacks cannot execute"
+
+
+def xl_cv_is_callback(cv: PythonObject, context: PythonObject) -> Bool:
+    """A cv that `_xl_cv_splits` refuses before calling it (lane mf-split4b:
+    a member caller's UNPACK refuses it in the same words, never calls it):
+    neither None, an exact native integer, an index list nor one of our
+    splitters. False when the splitter table is not connected (the door
+    decides)."""
+    try:
+        if cv is None or _xl_is_int_cv(cv, context):
+            return False
+        var nk = x_linear_keys()
+        var b = _b()
+        if py_type(cv) is b.list or py_type(cv) is b.tuple:
+            return False
+        if py_type(py_type(cv)) is b.type and py_contains(py_item(prep_native_context(context),
+                                                                  nk[].k_family_msel_splitter_layouts), py_type(cv)):
+            return False
+        return True
+    except:
+        return False
+
+
 def _xl_cv_splits(cv: PythonObject, x_source: PythonObject, y_source: PythonObject,
                   context: PythonObject) raises -> PythonObject:
     """`_cv_splits(cv, X, y)`: a list of (train, test) int64 Arrays from a
@@ -107,7 +137,7 @@ def _xl_cv_splits(cv: PythonObject, x_source: PythonObject, y_source: PythonObje
         msel_admit(cv, prep_native_context(context))
         pairs = cv
     else:
-        raise Error("TypeError: native linear CV requires a native splitter or list of index pairs; Python callbacks cannot execute")
+        raise Error(XL_CV_CALLBACK_WORDS)
     var listed = py_call(b.list, pairs)
     var splits = Python.list()
     for k in range(len(listed)):  # driver-loop: over the cv splits
@@ -280,9 +310,9 @@ struct XlRidgeCv(Movable):
     the targets (then the checked weights), the final fit's result words;
     the k-fold scores or the split path's (alpha, split) score table and
     its per-alpha means; and, for the split path, the (train, test) index
-    Arrays, the base binding's row gather, and the scratch words every
-    split's fits share (`fit_words`: one fit's result; `status_word`: the
-    prediction's finite status). `store`: `store_cv_results` (cv=None)."""
+    Arrays and the scratch words every split's fits share (`fit_words`: one
+    fit's result; `status_word`: the prediction's finite status). `store`:
+    `store_cv_results` (cv=None)."""
     var path: Int
     var request: XlRidgeCvRequest
     var x: PythonObject
@@ -291,14 +321,13 @@ struct XlRidgeCv(Movable):
     var scores: PythonObject
     var means: PythonObject
     var splits: PythonObject
-    var gather: PythonObject
     var fit_words: PythonObject
     var status_word: PythonObject
     var store: Bool
 
     def __init__(out self, path: Int, var request: XlRidgeCvRequest, var x: PythonObject, var y: PythonObject,
                  var result: PythonObject, var scores: PythonObject, var means: PythonObject,
-                 var splits: PythonObject, var gather: PythonObject, var fit_words: PythonObject,
+                 var splits: PythonObject, var fit_words: PythonObject,
                  var status_word: PythonObject, store: Bool):
         self.path = path
         self.request = request^
@@ -308,25 +337,9 @@ struct XlRidgeCv(Movable):
         self.scores = scores^
         self.means = means^
         self.splits = splits^
-        self.gather = gather^
         self.fit_words = fit_words^
         self.status_word = status_word^
         self.store = store
-
-
-struct XlRidgeFold(Movable):
-    """One cv split of RidgeCV's split path: the typed request of its alpha
-    grid and the gathered rows it addresses (`pins`). `scored` False: the
-    split has fewer than two test rows, its R^2 is undefined and it is not
-    run."""
-    var request: XlRidgeFoldRequest
-    var scored: Bool
-    var pins: PythonObject
-
-    def __init__(out self, var request: XlRidgeFoldRequest, scored: Bool, var pins: PythonObject):
-        self.request = request^
-        self.scored = scored
-        self.pins = pins^
 
 
 def _xl_r2_entry(entries: XLinearOps, context: PythonObject) raises -> NativeDescriptorCall:
@@ -386,8 +399,7 @@ def xl_fit_ridge_cv_unpack(model: PythonObject, fields: PythonObject, args: Pyth
         var plain = XlRidgeCvRequest(entries.entry, x.address, n, d, yy.address, has_sw == 1, fit_intercept,
                                      alphas^, labels_address(result), 0, 0, 0, 0, entry_ref_unresolved().call,
                                      entry_ref_unresolved())
-        return XlRidgeCv(XL_RIDGE_CV_PLAIN, plain^, x.array, yy.array, result, none, none, none, none, none, none,
-                         store)
+        return XlRidgeCv(XL_RIDGE_CV_PLAIN, plain^, x.array, yy.array, result, none, none, none, none, none, store)
     var int_cv = _xl_is_int_cv(cv, context)
     if int_cv and sample_weight is None and _int(cv) >= 2 and n // _int(cv) >= 2:
         # `_fit_kfold`: the k-fold scores on the binding, the first best
@@ -403,8 +415,7 @@ def xl_fit_ridge_cv_unpack(model: PythonObject, fields: PythonObject, args: Pyth
         var kfold = XlRidgeCvRequest(entries.entry, x.address, n, d, y.address, False, fit_intercept, alphas^,
                                      labels_address(result), folds, labels_address(scores), 0, 0,
                                      entry_ref_unresolved().call, entry_ref_unresolved())
-        return XlRidgeCv(XL_RIDGE_CV_KFOLD, kfold^, x.array, y.array, result, scores, none, none, none, none, none,
-                         False)
+        return XlRidgeCv(XL_RIDGE_CV_KFOLD, kfold^, x.array, y.array, result, scores, none, none, none, none, False)
     # `_fit_splits`: a native fit, predict and r2_score per split and alpha
     if _truth(py_item(fields, nk[].k_store_cv_results)):
         raise Error("cv!=None and store_cv_results=True are incompatible")
@@ -424,7 +435,6 @@ def xl_fit_ridge_cv_unpack(model: PythonObject, fields: PythonObject, args: Pyth
     var fit_intercept = _truth(py_item(fields, nk[].k_fit_intercept))
     var r2 = _xl_r2_entry(entries, context)
     var helpers = base_helpers_key(py_item(context, nk[].k_xl_helpers))
-    var gather = _xl_helper(context, "gather_rows_bytes")
     var k = len(splits)
     var table = admitted_vector(max(A * k, 1), "<f8", context)
     var means = admitted_vector(max(A, 1), "<f8", context)
@@ -434,64 +444,15 @@ def xl_fit_ridge_cv_unpack(model: PythonObject, fields: PythonObject, args: Pyth
     var request = XlRidgeCvRequest(entries.entry, x.address, n, d, yy.address, has_sw == 1, fit_intercept, alphas^,
                                    labels_address(result), 0, labels_address(table), labels_address(means), k, r2,
                                    helpers)
-    return XlRidgeCv(XL_RIDGE_CV_SPLITS, request^, x.array, yy.array, result, table, means, splits, gather,
-                     fit_words, status_word, False)
+    return XlRidgeCv(XL_RIDGE_CV_SPLITS, request^, x.array, yy.array, result, table, means, splits, fit_words,
+                     status_word, False)
 
 
-def _xl_gather_into(gather: PythonObject, src: Int, dst: PythonObject, offset: Int, rows: PythonObject, n: Int,
-                    count: Int, width: Int) raises:
-    """`take(src, idx, width)`: rows `rows` (`count` int64 indices) of the n
-    rows of `width` float32 words at `src`, written from word `offset` of
-    `dst` (the base binding's `gather_rows_bytes`)."""
-    _ = py_call_typed(gather, PythonObject(src), PythonObject(labels_address(dst) + 4 * offset),
-                      PythonObject(labels_address(rows)), PythonObject(n), PythonObject(count),
-                      PythonObject(4 * width))
-    _ = dst  # keep the Python object alive through the native call above
-    _ = rows  # keep the Python object alive through the native call above
-
-
-def xl_ridge_cv_fold_unpack(call: XlRidgeCv, s: Int, context: PythonObject) raises -> XlRidgeFold:
-    """UNPACK of split `s` of RidgeCV's split path: its refusal, the
-    undefined-R^2 warning of a split with fewer than two test rows (not
-    run), and its gathered rows: X and the targets of the training rows
-    (the training weights behind the targets when the fit is weighted), X,
-    the targets and the weights of the test rows. Every gather writes all
-    of its words, so the vectors are allocated unfilled."""
-    var tr = call.splits[s][0]
-    var te = call.splits[s][1]
-    var n_tr = Int(py=tr.size)
-    var n_te = Int(py=te.size)
-    if n_tr == 0 or n_te == 0:
-        raise Error("mojolearn RidgeCV: every cv split needs training and test rows")
-    if n_te < 2:
-        # scikit-learn's r2_score: NaN, with its warning, for fewer than
-        # two test rows; every alpha's mean is then NaN (the first wins)
-        _xl_undefined_warning("R^2 score is not well-defined with less than two samples.", context)
-        return XlRidgeFold(XlRidgeFoldRequest(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, s), False, PythonObject(None))
-    var n = call.request.n
-    var d = call.request.d
-    var weighted = call.request.weighted
-    var x_train = admitted_storage_native([n_tr * d], "<f4", context, as_array=True)
-    _xl_gather_into(call.gather, call.request.x, x_train, 0, tr, n, n_tr, d)
-    var y_train = admitted_storage_native([2 * n_tr if weighted else n_tr], "<f4", context, as_array=True)
-    _xl_gather_into(call.gather, call.request.y, y_train, 0, tr, n, n_tr, 1)
-    var x_test = admitted_storage_native([n_te * d], "<f4", context, as_array=True)
-    _xl_gather_into(call.gather, call.request.x, x_test, 0, te, n, n_te, d)
-    var y_test = admitted_storage_native([n_te], "<f4", context, as_array=True)
-    _xl_gather_into(call.gather, call.request.y, y_test, 0, te, n, n_te, 1)
-    var w_test = PythonObject(None)
-    var w_test_addr = 0
-    if weighted:
-        var weights = call.request.y + 4 * n
-        _xl_gather_into(call.gather, weights, y_train, n_tr, tr, n, n_tr, 1)
-        w_test = admitted_storage_native([n_te], "<f4", context, as_array=True)
-        _xl_gather_into(call.gather, weights, w_test, 0, te, n, n_te, 1)
-        w_test_addr = labels_address(w_test)
-    var pred = admitted_storage_native([n_te], "<f4", context, as_array=True)
-    var request = XlRidgeFoldRequest(labels_address(x_train), n_tr, labels_address(y_train), labels_address(x_test),
-                                     n_te, labels_address(y_test), w_test_addr, labels_address(call.fit_words),
-                                     labels_address(pred), labels_address(call.status_word), s)
-    return XlRidgeFold(request^, True, Python.tuple(x_train, y_train, x_test, y_test, w_test, pred))
+def xl_ridge_cv_split_words(call: XlRidgeCv) raises -> XlSplitWords:
+    """UNPACK of the split path's splits (GIL held): each side's int64 index
+    address and count, read once for the one RUN. `call.splits` keeps the
+    Arrays alive through it."""
+    return _xl_split_words(call.splits)
 
 
 # ------------------------------------------------------ LassoCV / ElasticNetCV

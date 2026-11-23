@@ -21,6 +21,24 @@ EQUAL (every line expected):
     StackingRegressor with cv=KFold, as members of a Voting, a Calibrated and a GridSearchCV. A warning's ORDER
     relative to the member fits' own warnings may differ (the head raises it at PACK, first among the stack's
     notices): the `_warnings` lines list them sorted, so they are expected equal.
+Lane mf-split4b (sections below SPLIT): base origin/lane/member-fits af90e5f0b6, head lane/mf-split4b. EQUAL
+(every line expected):
+  * `calcv_*` (item 2): a CalibratedClassifierCV with cv = an index list (all rows of 150, so it refuses inside a
+    grid's 100-row folds: the same words), KFold(3), shuffled KFold and shuffled StratifiedKFold, ensemble True and
+    False, as a member of a Voting, a Calibrated and a GridSearchCV (base: the door's `_splits` + `_CalUnits`; head:
+    the kind's typed folds).
+  * `usersplit_*` (item 1): a user's own splitter object as cv of a nested Stacking, Calibrated, GridSearchCV and
+    LassoCV: a refusal, the same words (base: the door refused it; head: the admission).
+  * `ridgecv_*` (item 2, RidgeCV's split path in ONE RUN with typed gathers): cv = shuffled KFold, an index list
+    with weights, and a list whose second split has one test row (the undefined-R^2 warning): coef_, intercept_,
+    alpha_, best_score_ and the warnings.
+  * `adasw_*` (item 3): an AdaBoostClassifier / AdaBoostRegressor member fitted with sample weights inside a Voting
+    and a Stacking (base: the door; head: the kind normalizing the same float32 words).
+  * `svccw_*` (item 4): SVC(class_weight=3.5) inside a Calibrated, a Voting and cross_val_score: the settings
+    admission's words.
+  * `bagpm_*` (item 6): a BaggingClassifier whose tree has a class_weight (dict, 'balanced') on the per-member
+    route (max_features=3), unweighted and weighted, in a Voting, a Calibrated, a Stacking and a GridSearchCV; and a
+    dict naming a class a small draw lacks (the tree door's refusal).
 Configurations are independent: one process each across the host cores.
 
     python tools/mf_split4_digests.py > digests.txt
@@ -219,8 +237,140 @@ def _split(index):
     return _lines(f"split_{sp}_{caller}", lambda: _in_caller(caller, est, X, y))
 
 
+class _UserSplit:
+    """A user's own splitter object: never called by Mojolearn (refused)."""
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return 3
+
+    def split(self, X, y=None, groups=None):
+        n = len(X)
+        idx = np.arange(n)
+        for f in range(3):
+            yield idx[idx % 3 != f], idx[idx % 3 == f]
+
+
+CALCV_FORMS = ("list", "kfold", "kfold_shuffle", "strat_shuffle")
+CALCV = [(form, ens, c) for form in CALCV_FORMS for ens in (True, False) for c in ("vote", "cal", "grid")]
+USERSPLIT = [(meta, c) for meta in ("stack", "cal", "grid", "lassocv") for c in ("vote", "cal")]
+RIDGECV = [("kfold_shuffle",), ("list_weighted",), ("list_one_test",)]
+ADASW = [(kind, c) for kind in ("clf", "reg") for c in ("vote", "stack")]
+SVCCW = [(c,) for c in ("cal", "vote", "cvs")]
+BAGPM = [(cw, w, c) for cw in ("dict", "balanced") for w in (False, True) for c in CALLERS] + [("absent", False, "vote")]
+
+
+def _calcv(index):
+    from mojolearn.calibration import CalibratedClassifierCV
+    from mojolearn.model_selection import KFold, StratifiedKFold
+    import mojolearn
+    form, ens, caller = CALCV[index]
+    X, y = _data(89, 150, 3)
+    idx = np.arange(150)
+    cv = {"list": lambda: [(idx[idx % 3 != f], idx[idx % 3 == f]) for f in range(3)],
+          "kfold": lambda: KFold(3), "kfold_shuffle": lambda: KFold(3, shuffle=True, random_state=5),
+          "strat_shuffle": lambda: StratifiedKFold(3, shuffle=True, random_state=5)}[form]()
+    est = CalibratedClassifierCV(mojolearn.LogisticRegression(max_iter=200), cv=cv, ensemble=ens)
+    return _lines(f"calcv_{form}_{'ens' if ens else 'one'}_{caller}", lambda: _in_caller(caller, est, X, y))
+
+
+def _usersplit(index):
+    import mojolearn
+    from mojolearn.calibration import CalibratedClassifierCV
+    from mojolearn.model_selection import GridSearchCV
+    meta, caller = USERSPLIT[index]
+    X, y = _data(97, 150, 3)
+    if meta == "lassocv":
+        yr = (X @ np.arange(1, 6, dtype=np.float32)).astype(np.float32)
+        est = mojolearn.LassoCV(cv=_UserSplit())
+        if caller != "vote":
+            return []
+        return _lines(f"usersplit_{meta}_{caller}", lambda: _in_caller("vote", est, X, yr, regressor=True))
+    if meta == "stack":
+        est = mojolearn.StackingClassifier([("a", mojolearn.LogisticRegression(max_iter=200))], cv=_UserSplit())
+    elif meta == "cal":
+        est = CalibratedClassifierCV(mojolearn.LogisticRegression(max_iter=200), cv=_UserSplit())
+    else:
+        est = GridSearchCV(mojolearn.LogisticRegression(max_iter=200), {"C": [0.5, 1.0]}, cv=_UserSplit())
+    return _lines(f"usersplit_{meta}_{caller}", lambda: _in_caller(caller, est, X, y))
+
+
+def _ridgecv(index):
+    import mojolearn
+    from mojolearn.model_selection import KFold
+    (form,) = RIDGECV[index]
+    X, _ = _data(101, 120, 3)
+    yr = (X @ np.arange(1, 6, dtype=np.float32) + 0.1).astype(np.float32)
+    idx = np.arange(120)
+    w = None
+    if form == "kfold_shuffle":
+        cv = KFold(4, shuffle=True, random_state=6)
+    elif form == "list_weighted":
+        cv = [(idx[idx % 3 != f], idx[idx % 3 == f]) for f in range(3)]
+        w = (1.0 + (idx % 5)).astype(np.float32)
+    else:
+        cv = [(idx[2:], idx[:2]), (idx[1:], idx[:1]), (idx[:-3], idx[-3:])]
+
+    def run():
+        m = mojolearn.RidgeCV(alphas=(0.1, 1.0, 10.0), cv=cv).fit(X, yr, sample_weight=w)
+        return [("coef", m.coef_), ("intercept", np.asarray(m.intercept_)), ("alpha", np.asarray(m.alpha_)),
+                ("best_score", np.asarray(m.best_score_))]
+    return _lines(f"ridgecv_{form}", run)
+
+
+def _adasw(index):
+    import mojolearn
+    kind, caller = ADASW[index]
+    X, y = _data(103, 160, 3)
+    w = (0.5 + (np.arange(160) % 4)).astype(np.float32)
+    if kind == "reg":
+        yr = (X @ np.arange(1, 6, dtype=np.float32)).astype(np.float32)
+        est = mojolearn.AdaBoostRegressor(mojolearn.DecisionTreeRegressor(max_depth=3), n_estimators=5, random_state=0)
+        meta = (mojolearn.VotingRegressor([("a", est), ("b", mojolearn.Ridge())]) if caller == "vote" else
+                mojolearn.StackingRegressor([("a", est)], cv=3))
+        return _lines(f"adasw_{kind}_{caller}", lambda: [("predict", meta.fit(X, yr, sample_weight=w).predict(X))])
+    est = mojolearn.AdaBoostClassifier(mojolearn.DecisionTreeClassifier(max_depth=2), n_estimators=5, random_state=0)
+    meta = (mojolearn.VotingClassifier([("a", est), ("b", mojolearn.LogisticRegression())], voting="soft")
+            if caller == "vote" else mojolearn.StackingClassifier([("a", est)], cv=3))
+    return _lines(f"adasw_{kind}_{caller}", lambda: [("proba", meta.fit(X, y, sample_weight=w).predict_proba(X))])
+
+
+def _svccw(index):
+    import mojolearn
+    from mojolearn.model_selection import cross_val_score
+    (caller,) = SVCCW[index]
+    X, y = _data(107, 150, 3)
+    est = mojolearn.SVC(C=1.0, gamma=0.5, class_weight=3.5)
+    if caller == "cvs":
+        return _lines("svccw_cvs", lambda: [("scores", cross_val_score(est, X, y, cv=3))])
+    return _lines(f"svccw_{caller}", lambda: _in_caller(caller, est, X, y))
+
+
+def _bagpm(index):
+    import mojolearn
+    cw, weighted, caller = BAGPM[index]
+    X, y = _data(109, 160, 3)
+    if cw == "absent":
+        tree = mojolearn.DecisionTreeClassifier(max_depth=3, class_weight={1: 2.0})
+        y = y.copy()
+        y[:3] = 1
+        y[3:] = np.where(y[3:] == 1, 0, y[3:])  # class 1 keeps three rows: a draw of 4 rows may lack it
+        est = mojolearn.BaggingClassifier(tree, n_estimators=6, max_samples=4, max_features=3, random_state=0)
+        return _lines("bagpm_absent_vote", lambda: _in_caller("vote", est, X, y))
+    tree = mojolearn.DecisionTreeClassifier(max_depth=4, class_weight=_cw(cw))
+    est = mojolearn.BaggingClassifier(tree, n_estimators=6, max_features=3, random_state=0)
+    if not weighted:
+        return _lines(f"bagpm_{cw}_plain_{caller}", lambda: _in_caller(caller, est, X, y))
+    if caller not in ("vote", "stack"):
+        return []
+    w = (0.5 + (np.arange(160) % 3)).astype(np.float32)
+    meta = (mojolearn.VotingClassifier([("a", est), ("b", mojolearn.LogisticRegression())], voting="soft")
+            if caller == "vote" else mojolearn.StackingClassifier([("a", est)], cv=3))
+    return _lines(f"bagpm_{cw}_weighted_{caller}", lambda: [("proba", meta.fit(X, y, sample_weight=w).predict_proba(X))])
+
+
 SECTIONS = ((BAGCW, _bagcw), (ADACW, _adacw), (ADARAND, _adarand), (NESTCW, _nestcw), (SUBCLS, _subcls),
-            (SPLIT, _split))
+            (SPLIT, _split), (CALCV, _calcv), (USERSPLIT, _usersplit), (RIDGECV, _ridgecv), (ADASW, _adasw),
+            (SVCCW, _svccw), (BAGPM, _bagpm))
 
 
 def _run(index):

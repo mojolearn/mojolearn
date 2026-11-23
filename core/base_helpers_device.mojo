@@ -20,9 +20,10 @@ from checks.vendor import COMPILED_VENDOR
 from core.base_entry_table import (
     BaseEntryKey, base_table_publish, base_check_spans, base_word, base_entry_vendor,
     BASE_HELPERS_ABI, BH_OP_COUNT,
-    BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS, BH_BINCOUNT2_I32,
+    BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS, BH_BINCOUNT2_I32, BH_GATHER_ROWS_BYTES,
 )
-from core.base_helpers_host import base_helpers_host_dispatch, base_stat_store
+from core.base_helpers_host import base_helpers_host_dispatch, base_stat_store, gather_rows_bytes_check
+from core.rows_bytes_device import device_gather_rows_bytes
 from core.hotpath_device import (
     HPD_F32, HPD_I32, HPD_I64, HPD_MAX_N, HPD_U8,
     device_bincount_i64, device_bincount2_i32, device_check_indices_i64, device_equal_elements,
@@ -114,9 +115,27 @@ def base_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == BH_BINCOUNT2_I32:
         return bincount2_i32_device_run(base_word(aa, 0), base_word(aa, 1), base_word(pp, 0), base_word(pp, 1),
                                         base_word(pp, 2), base_word(aa, 2))
+    if op == BH_GATHER_ROWS_BYTES:
+        return gather_rows_bytes_device_run(base_word(aa, 0), base_word(aa, 1), base_word(aa, 2), base_word(pp, 0),
+                                            base_word(pp, 1), base_word(pp, 2))
     # Row means, fold assignment, fold hits and split roles: the host runs,
     # as the GPU binding's Python exports always were.
     return base_helpers_host_dispatch(op, aa, pp)
+
+
+def gather_rows_bytes_device_run(src: Int, dst: Int, idx: Int, ns: Int, no: Int, width: Int) raises -> Int:
+    """`gather_rows_bytes` as the GPU binding's export runs it
+    (bindings/_mojolearn.mojo `gather_rows_bytes_binding`, unpacked): the
+    device gather (core/rows_bytes_device.mojo; indices checked before any
+    write), the same bound and words."""
+    if not gather_rows_bytes_check(src, dst, idx, ns, no, width):
+        return 0
+    if ns > 2147483000 // width or no > 2147483000 // width:
+        raise Error("gather_rows_bytes: more bytes than the device gather holds")
+    var ctx = process_ctx[LABELS_DEVICE_CONTEXT]()
+    if not device_gather_rows_bytes(ctx, src, dst, idx, ns, no, width):
+        raise Error("gather_rows_bytes: row index out of bounds")
+    return 0
 
 
 def base_helpers_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
