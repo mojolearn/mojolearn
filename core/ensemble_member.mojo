@@ -358,6 +358,15 @@ comptime META_SEARCH_WORDS = 8          # the head; then `count` codes, then one
 #: the scorer codes: one per scorer (the one `META_SEARCH_SCORING`, or each
 #: code), the class code of the scorer's pos_label among the fit's labels,
 #: read at UNPACK (-1: the scorer reads no positive label).
+#: THE CV TOOLS' words (lane mf-msel5; core/msel_search_run.mojo module
+#: note): an optional tail of `META_SEARCH_TOOL_WORDS` after the positive
+#: words, [keep the units' states (1.0), the test-side response op (-1.0:
+#: score), the folds' rows (1.0)]; absent for a public search.
+comptime META_SEARCH_TOOL_WORDS = 3
+#: THE CV TOOLS' kept unit states (int64 1 x units, export only; the
+#: search's own block numbers end at META_BLOCK_SEARCH, this one is set
+#: apart from the other kinds' blocks).
+comptime META_BLOCK_FOLDS = MEMBER_BLOCK_FAMILY + 16
 #: THE MULTI-OUTPUT KIND's settings words: [0] reserved.
 comptime META_MULTI_WORDS = 1
 #: THE CLASS-WEIGHT TAIL of a tree base (lane mf-split4): appended after a
@@ -750,6 +759,12 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     # Lane mf-cluster5: the search's cluster entry and labels' reprs.
     var cluster: EntryRef
     var label_words: List[String]
+    # Lane mf-msel5, THE CV TOOLS: the kept unit states (owned; 0: a failed
+    # fit), each unit's candidate (its plan in `base_plans`), and their
+    # handles as export words (META_BLOCK_FOLDS).
+    var fold_states: List[Int]
+    var fold_owner: List[Int]
+    var fold_words: List[Int64]
 
     def __init__(out self):
         self.generation = 0
@@ -819,6 +834,9 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.out_classes = List[Int]()
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
+        self.fold_states = List[Int]()
+        self.fold_owner = List[Int]()
+        self.fold_words = List[Int64]()
 
 
 struct EnsembleMemberStore(Defaultable, Movable):
@@ -941,6 +959,16 @@ def _drop_states(slot: _SlotPtr):
         slot[].states[u] = 0
     slot[].states = List[Int]()
     slot[].state_words = List[Int64]()
+    # THE CV TOOLS' kept unit states (lane mf-msel5).
+    for u in range(len(slot[].fold_states)):  # driver-loop: over the kept unit states (one release each)
+        var c = slot[].fold_owner[u] if u < len(slot[].fold_owner) else -1
+        if slot[].fold_states[u] != 0 and c >= 0 and c < len(slot[].base_plans):
+            var call = MemberCall(slot[].base_plans[c].route, slot[].fold_states[u])
+            member_free(slot[].base_plans[c], call)
+        slot[].fold_states[u] = 0
+    slot[].fold_states = List[Int]()
+    slot[].fold_owner = List[Int]()
+    slot[].fold_words = List[Int64]()
     slot[].fitted = False
     slot[].meta32 = List[Float32]()
     slot[].notice_owner = List[Int]()
@@ -1141,7 +1169,8 @@ def _new(call: _CallPtr) raises:
             raise Error("member ABI: a stacking member needs its members, its final estimator and cv >= 2")
         if _search_kind(kind):
             var count = Int(slot[].words[META_SEARCH_COUNT]) if len(slot[].words) >= META_SEARCH_WORDS else -1
-            if (count < 0 or len(slot[].words) != META_SEARCH_WORDS + count + max(count, 1)
+            var plain = META_SEARCH_WORDS + count + max(count, 1)
+            if (count < 0 or (len(slot[].words) != plain and len(slot[].words) != plain + META_SEARCH_TOOL_WORDS)
                     or len(slot[].masks) != len(slot[].plans) or (slot[].folds < 2 and user_folds == 0 and not splitter)
                     or (count > 0 and (slot[].words[META_SEARCH_REFIT_SCORER] < 0.0
                                        or Int(slot[].words[META_SEARCH_REFIT_SCORER]) >= count))):
@@ -2998,6 +3027,13 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     plan.refit = slot[].words[META_SEARCH_REFIT] != 0.0
     for j in range(max(count, 1)):  # small-loop(one positive class word per scorer)
         plan.positives.append(Int(slot[].words[META_SEARCH_WORDS + count + j]))
+    # THE CV TOOLS (lane mf-msel5): the optional tail after the positives.
+    var tool_at = META_SEARCH_WORDS + count + max(count, 1)
+    var tool = len(slot[].words) == tool_at + META_SEARCH_TOOL_WORDS
+    if tool:
+        plan.keep = slot[].words[tool_at] != 0.0
+        plan.respond = Int(slot[].words[tool_at + 1])
+        plan.indices = slot[].words[tool_at + 2] != 0.0
     plan.cap = slot[].cap
     plan.cluster = slot[].cluster
     plan.label_words = slot[].label_words.copy()
@@ -3024,6 +3060,15 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
         plan.pin = call[].pin
         plan.kept_at = Int(UnsafePointer(to=call[].pin_kept))
     var res = msel_search_run(plan)
+    # THE CV TOOLS: the kept unit states are the slot's from here (freed by
+    # `_drop_states`), each with its candidate.
+    slot[].fold_states = res.unit_states.copy()
+    res.unit_states = List[Int]()
+    slot[].fold_owner = List[Int](capacity=len(slot[].fold_states))
+    slot[].fold_words = List[Int64](capacity=len(slot[].fold_states))
+    for u in range(len(slot[].fold_states)):  # driver-loop: over the kept unit states (their candidates and handles)
+        slot[].fold_owner.append(u // max(res.n_splits, 1))
+        slot[].fold_words.append(Int64(slot[].fold_states[u]))
     var best = slot[].base_plans[res.best].copy()
     best.classes = k
     best.class_counts = plan.class_counts.copy()
@@ -3065,7 +3110,37 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
                     w.append(res.scorer_train[j][c][f])
             for c in range(m):  # driver-loop: over the candidates (their train means)
                 w.append(res.scorer_train_means[j][c])
+    if tool:
+        _search_tool_words(res, plan.indices or plan.respond >= 0, plan.respond >= 0, w)
     slot[].search_words = w^
+
+
+def _search_tool_words(res: MselSearchResult, rows: Bool, responses: Bool, mut w: List[Float64]):
+    """THE CV TOOLS' tail of the search words (lane mf-msel5), after the
+    tables: [units U], U fit seconds, U test-score seconds; with `rows` per
+    fold [train n, test n, its train rows, its test rows]; with `responses`
+    per unit [its columns, its element type, its test rows x columns
+    response words]. Exact: rows and int codes are below 2^53."""
+    var units = len(res.fit_seconds)
+    w.append(Float64(units))
+    for u in range(units):  # driver-loop: over the units (their fits' seconds)
+        w.append(res.fit_seconds[u])
+    for u in range(units):  # driver-loop: over the units (their test scores' seconds)
+        w.append(res.score_seconds[u])
+    if rows:
+        for f in range(len(res.fold_test)):  # driver-loop: over the folds (their rows)
+            w.append(Float64(len(res.fold_train[f])))
+            w.append(Float64(len(res.fold_test[f])))
+            for i in range(len(res.fold_train[f])):  # driver-loop: over the fold's train rows
+                w.append(Float64(res.fold_train[f][i]))
+            for i in range(len(res.fold_test[f])):  # driver-loop: over the fold's test rows
+                w.append(Float64(res.fold_test[f][i]))
+    if responses:
+        for u in range(len(res.outputs)):  # driver-loop: over the units (their test-side responses)
+            w.append(Float64(res.output_cols[u]))
+            w.append(Float64(res.output_dtype[u]))
+            for i in range(len(res.outputs[u])):  # driver-loop: over the unit's response words
+                w.append(res.outputs[u][i])
 
 
 def _forward_best(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
@@ -3872,6 +3947,9 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         for u in range(len(slot[].states)):  # driver-loop: over the nested members (each owns its rows)
             if slot[].states[u] != 0:
                 member_own(slot[].plans[u], slot[].states[u])
+        for u in range(len(slot[].fold_states)):  # driver-loop: over the cv tools' kept unit states (each owns its rows)
+            if slot[].fold_states[u] != 0:
+                member_own(slot[].base_plans[slot[].fold_owner[u]], slot[].fold_states[u])
         return
     _fitted(slot)
     var block = call[].block
@@ -3915,6 +3993,9 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         call[].dst = MemberMatrix(Int(slot[].ada_words.unsafe_ptr()), 1, len(slot[].ada_words), MEMBER_F64)
     elif block == META_BLOCK_SEARCH and _search_kind(slot[].kind):
         call[].dst = MemberMatrix(Int(slot[].search_words.unsafe_ptr()), 1, len(slot[].search_words), MEMBER_F64)
+    elif block == META_BLOCK_FOLDS and _search_kind(slot[].kind):
+        call[].dst = MemberMatrix(Int(slot[].fold_words.unsafe_ptr()), 1 if len(slot[].fold_words) > 0 else 0,
+                                  len(slot[].fold_words), MEMBER_I64)
     elif block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalar_words.unsafe_ptr()), 1, len(slot[].scalar_words), MEMBER_F64)
     else:
