@@ -14,7 +14,7 @@ from core.forest_fit_request import (
     XF_EXPORT_SIZES, XF_EXPORT_INTO, XF_EXPORT_VERIFY, XF_EXPORT_RELEASE, XF_PREDICT, XF_RESIDENT_PREPARE,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_RESIDENT_RELEASE, XF_STRICT_PREPARE, XF_STRICT_PREDICT,
     XF_STRICT_RELEASE, XF_SESSION_OPEN, XF_SESSION_CLOSE, XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND,
-    XF_META_MAX, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_words,
+    XF_STAGE_INPUT, XF_UNSTAGE_INPUT, XF_META_MAX, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_words,
 )
 
 
@@ -170,6 +170,27 @@ def xf_snapshot_release(key: EntryRef, op: Int, handle: Int) raises:
     var none = List[Int]()
     var ints: List[Int] = [handle]
     _ = _call(key, op, none, ints)
+
+
+def xf_stage_input(key: EntryRef, x: Int, rows: Int, cols: Int) raises -> Bool:
+    """XF_STAGE_INPUT: stage the C-order float32 rows at `x` once as the
+    image's shared resident input for the member predictions that follow on
+    this thread (lane mf-meta3c). False: nothing staged (a host image,
+    several devices, no live snapshot); the members upload as before. The
+    caller keeps the rows alive and unchanged until `xf_unstage_input`."""
+    var addrs: List[Int] = [x]
+    var ints: List[Int] = [rows, cols]
+    return _call(key, XF_STAGE_INPUT, addrs, ints) == 1
+
+
+def xf_unstage_input(key: EntryRef):
+    """XF_UNSTAGE_INPUT: end `xf_stage_input`'s staging. Never raises (a
+    failed unstage is ignored, as the door's `trees_unstage` ignores one)."""
+    var none = List[Int]()
+    try:
+        _ = _call(key, XF_UNSTAGE_INPUT, none, none)
+    except:
+        pass
 
 
 def xf_session_open(key: EntryRef, x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:

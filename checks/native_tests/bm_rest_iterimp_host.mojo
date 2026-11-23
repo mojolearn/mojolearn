@@ -11,6 +11,7 @@ identical image; `ii_output` and `ii_transform` read what PACK reads. Nothing he
 """
 from std.memory import bitcast, unsafe_memcpy
 from core.entry_table import EntryRef
+from core.member_abi import MemberPlan, MemberCall, member_call
 from bindings.x_prep_native_owner_run import XprepRunInput, XprepRoute, xprep_execute, xprep_release, xprep_r3
 from bindings.prep_encode_prog_run import EncProgram
 from bindings.prep_encode_imputer_run import ImputerFit, ImputerApply
@@ -73,6 +74,10 @@ struct HostIterRunner(IterImpRunner):
 
     def release(mut self, handle: Int):
         self.arenas[handle] = List[Float32]()
+
+    def member(mut self, plan: MemberPlan, operation: Int, mut call: MemberCall) raises -> Int:
+        # A check's process holds no interpreter: the member call as it is.
+        return member_call(plan.member, operation, call)
 
 
 def ii_request(n: Int, d: Int, strategy: Int, order: Int, max_iter: Int, nnf: Int, rng: UInt64, lo: Float64,

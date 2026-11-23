@@ -14,6 +14,10 @@ from bindings.x_linear_common_unpack import _truth, _str, _class_attr, _xl_word,
 from bindings.py_balanced import py_setitem
 from bindings.py_lists import py_list_int
 from bindings.x_linear_keys_unpack import x_linear_keys
+from bindings.classical_labels_door import labels_full_f32
+from x_linear.bayes_words import bayes_v_at, bayes_ev_at, bayes_offset_at, ard_dk_at, ard_offset_at, ard_sigma_at
+from bindings.x_linear_common_unpack import _b
+from bindings.py_balanced import py_call
 
 
 def _xl_set_linear(fields: PythonObject, out_buf: PythonObject, d: Int, context: PythonObject) raises:
@@ -88,7 +92,22 @@ def xl_fit_bayes_pack(model: PythonObject, fields: PythonObject, call: XlFit, co
     py_setitem(fields, nk[].k_lambda_, _xl_float(call.result, d + 2))
     py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(call.result, d + 3)))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    # the posterior (x_linear/bayes_words.mojo): the factor the fit holds
+    # (V, ev; predict(return_std=True) reads it, the public sigma_ is formed
+    # from it on its first read and kept, so a refit drops the kept one), the
+    # column means and the unit scales (`_preprocess_data` no longer scales)
+    xl_bayes_posterior_pack(fields, call.result, d, context)
     return model
+
+
+def xl_bayes_posterior_pack(fields: PythonObject, result: PythonObject, d: Int, context: PythonObject) raises:
+    """BayesianRidge's posterior fields from a fit's result words."""
+    var nk = x_linear_keys()
+    py_setitem(fields, nk[].k__bayes_v, _xl_slice(result, bayes_v_at(d), d * d, Python.tuple(d, d), context))
+    py_setitem(fields, nk[].k__bayes_ev, _xl_slice(result, bayes_ev_at(d), d, Python.tuple(d), context))
+    _ = py_call(_b().dict.pop, fields, nk[].k__bayes_sigma, PythonObject(None))
+    py_setitem(fields, nk[].k_X_offset_, _xl_slice(result, bayes_offset_at(d), d, Python.tuple(d), context))
+    py_setitem(fields, nk[].k_X_scale_, labels_full_f32(d, 1.0, context))
 
 
 def xl_fit_ard_pack(model: PythonObject, fields: PythonObject, call: XlFit, context: PythonObject) raises -> PythonObject:
@@ -101,6 +120,11 @@ def xl_fit_ard_pack(model: PythonObject, fields: PythonObject, call: XlFit, cont
     py_setitem(fields, nk[].k_lambda_, _xl_slice(call.result, d + 2, d, Python.tuple(d), context))
     py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(call.result, 2 * d + 2)))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+    # the posterior over the dk kept features (x_linear/bayes_words.mojo)
+    var dk = _xl_count(call.result, ard_dk_at(d))
+    py_setitem(fields, nk[].k_sigma_, _xl_slice(call.result, ard_sigma_at(d), dk * dk, Python.tuple(dk, dk), context))
+    py_setitem(fields, nk[].k_X_offset_, _xl_slice(call.result, ard_offset_at(d), d, Python.tuple(d), context))
+    py_setitem(fields, nk[].k_X_scale_, labels_full_f32(d, 1.0, context))
     return model
 
 

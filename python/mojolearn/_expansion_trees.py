@@ -668,6 +668,9 @@ class BaggingClassifier(_BaggingBase):
     """
     score = _BoostClassifierScore.score
     _estimator_type = "classifier"
+    # The META member kind (core/ensemble_member.mojo, THE UNIT KINDS; lane mf-meta3b): this class as a member
+    # of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 6)
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
     _mojolearn_native_public = True
@@ -787,6 +790,9 @@ class BaggingRegressor(_BaggingBase):
     """
     score = _BoostRegressorScore.score
     _estimator_type = "regressor"
+    # The META member kind (core/ensemble_member.mojo, THE UNIT KINDS; lane mf-meta3b): this class as a member
+    # of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 7)
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
     _mojolearn_native_public = True
@@ -1667,6 +1673,10 @@ class VotingClassifier(_MetaClassifierScore, _FitTransformMixin, _TreesWrapperBa
     >>> model.predict(X[:5]).shape
     (5,)
     """
+
+    # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
+    # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 0)
     _estimator_type = "classifier"
 
     def __init__(self, estimators, *, voting="hard", weights=None, n_jobs=None, flatten_transform=True,
@@ -1778,6 +1788,10 @@ class VotingRegressor(_MetaRegressorScore, _FitTransformMixin, _TreesWrapperBase
     >>> model.predict(X[:5]).shape
     (5,)
     """
+
+    # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
+    # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 1)
     _estimator_type = "regressor"
 
     def __init__(self, estimators, *, weights=None, n_jobs=None, verbose=False):
@@ -1927,6 +1941,10 @@ class StackingClassifier(_MetaClassifierScore, _StackingBase):
     >>> model.predict_proba(X[:5]).shape
     (5, 2)
     """
+
+    # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
+    # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 2)
     _estimator_type = "classifier"
 
     def __init__(self, estimators, final_estimator=None, *, cv=None, stack_method="auto", n_jobs=None,
@@ -2036,6 +2054,10 @@ class StackingRegressor(_MetaRegressorScore, _StackingBase):
     >>> model.predict(X[:5]).shape
     (5,)
     """
+
+    # The META member kind (core/ensemble_member.mojo; lane mf-meta3): this class as a member of
+    # another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 3)
     _estimator_type = "regressor"
     _binary = False
 
@@ -2312,6 +2334,9 @@ class OneVsRestClassifier(_MetaClassifierScore, _TreesWrapperBase):
     (5, 3)
     """
     _estimator_type = "classifier"
+    # The META member kind (core/ensemble_member.mojo, THE UNIT KINDS; lane mf-meta3b): this class as a member
+    # of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 4)
 
     def __init__(self, estimator, *, n_jobs=None, verbose=0):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
@@ -2439,6 +2464,9 @@ class CalibratedClassifierCV(_MetaClassifierScore, _TreesWrapperBase):
     (5, 2)
     """
     _estimator_type = "classifier"
+    # The META member kind (core/ensemble_member.mojo, THE UNIT KINDS; lane mf-meta3b): this class as a member
+    # of another meta-estimator, a search, a calibration or an imputer (family 39 = Ensemble).
+    _mojolearn_member = (39, 5)
 
     def __init__(self, estimator=None, *, method="sigmoid", cv=None, n_jobs=None, ensemble=True):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).

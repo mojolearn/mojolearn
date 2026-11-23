@@ -439,6 +439,9 @@ class ARIMA(NumericModeMixin):
     >>> model.forecast(10).shape
     (16, 10)
     """
+    #: Kernel and Permutation SHAP (bindings/trees_agnostic_native_door.mojo) refuse a forecaster: its predict takes
+    #: a horizon or time points, not feature rows X (shap's own explainers call model(X) and fail the same way).
+    _mojolearn_explained = "forecaster"
 
     _BINDING = "_mojolearn_arima"
     #: This class takes `device=`: the check builds its other side as the same

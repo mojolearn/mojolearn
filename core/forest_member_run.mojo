@@ -29,10 +29,20 @@ MEMBER_OP_NEW parameters (Float64 words):
       that reads importances (recursive elimination, selection from a
       model) sets it to 1 in `plan.params` before `member_new`. RF layout
       only: the ExtraTrees fit computes none (a 1 there is refused).
-  [11] S, the parameter slot count; then S triples
-      [12 + 3k] the int reading of slot k as the Float64 bit pattern of its
+  [11] 1: every fit also computes the out-of-bag outputs (the estimator's
+      `oob_score=True`: `oob_decision_function_` or `oob_prediction_`, and
+      `oob_score_`), in the same fit body the estimator's own fit runs
+      (the ForestFit oob and score words). The admission writes it from the
+      estimator (lane mf-oob3, 2026-11-23). RF layout only (a 1 on the ET
+      layout is refused: the ExtraTrees fit has no out-of-bag mask).
+  [12] S, the parameter slot count; then S triples
+      [13 + 3k] the int reading of slot k as the Float64 bit pattern of its
       Int64 (std.memory.bitcast: seeds and counts travel exactly),
-      [13 + 3k] its float reading, [14 + 3k] 1 when it has no reading.
+      [14 + 3k] its float reading, [15 + 3k] 1 when it has no reading.
+  `FM_WORD_IMPORTANCES`, `FM_WORD_OOB`, `FM_WORD_SLOTS` and `FM_HEAD` name
+  these positions: every caller that writes or rewrites a word uses them.
+  (Lane mf-oob3: the out-of-bag word [11] was inserted ONCE for every
+  caller; before it the slot count was word 11 and the triples began at 12.)
 Views: X dense row-major host float32 (finite: the caller's admission, as
 the estimator's own door; an image with the device scan tests it again);
 y host int32 class codes 0..classes-1 (classifier, `call.classes` >= 2) or a
@@ -42,7 +52,7 @@ estimator's `admit_weights`), multiplied by nothing (no class_weight: the
 admission keeps the estimator's own doors for it). Refused in words: a row
 or column index, a device-home view, a nonzero `fit_output`, a multi-column
 y, a weighted score, and on a regressor of the RF layout weights together
-with importances (the estimator's own refusal). predict writes int32 codes
+with importances or the out-of-bag outputs (the estimator's own refusal). predict writes int32 codes
 (classifier) or float32 values; predict_proba float32 rows x classes; score
 (classifier only) the accuracy count / rows, unweighted.
 
@@ -50,7 +60,8 @@ Fits, as the estimator's own fit door picks them: unweighted without
 importances reads X row-major (the view itself, no copy); the ExtraTrees
 weighted fit also reads it row-major; the RF layout's weighted fit and its
 importance fit read X column-major, so the member writes the column-major
-float32 copy the estimator's door writes for them (`order="F"`), split over
+float32 copy the estimator's door writes for them (`order="F"`; the out-of-bag fit
+too, as the estimator's oob fit reads `_x_for(X, False)`), split over
 the host workers, alive until the launch returns. The RF regressor's
 weighted fit also carries the largest weight (a parallel max).
 
@@ -66,6 +77,13 @@ Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
     fit computed them (or they were imported): the block count is then 7
 An import needs the first six (importances optional, before the last); the
 last one carries MEMBER_IMPORT_DONE.
+OUT-OF-BAG OUTPUTS (word 11), by name only (never in the index walk, empty
+after an import, as the estimator's arrays-only state has none):
+  `FM_BLOCK_OOB` (`MEMBER_BLOCK_FAMILY + 5`) float64 rows x classes (a
+    classifier's `oob_decision_function_`) or rows x 1 (a regressor's
+    `oob_prediction_`), rows = the fit's rows
+  `FM_BLOCK_OOB_SCORE` (`MEMBER_BLOCK_FAMILY + 6`) float64 1 x 1, `oob_score_`
+A state fitted without word 11 refuses both in words.
 FIT NOTICES (Tree, Forest: MEMBER_CAN_NOTICES): `MEMBER_BLOCK_NOTICES` by name,
 one `MEMBER_NOTICE_FOREST` with the fit's notice mask (core/member_notices.mojo);
 never in the index walk, empty after an import.
@@ -115,9 +133,17 @@ from std.atomic import Atomic, Ordering
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
-comptime _HEAD = 12
+#: MEMBER_OP_NEW word positions (module docstring), shared by every caller
+comptime FM_WORD_IMPORTANCES = 10
+comptime FM_WORD_OOB = 11
+comptime FM_WORD_SLOTS = 12
+comptime FM_HEAD = 13
+#: the out-of-bag output blocks, exported by name only
+comptime FM_BLOCK_OOB = MEMBER_BLOCK_FAMILY + 5
+comptime FM_BLOCK_OOB_SCORE = MEMBER_BLOCK_FAMILY + 6
+comptime _HEAD = FM_HEAD
 comptime _BLOCKS = 6
-comptime _SLOTS_WORD = 11
+comptime _SLOTS_WORD = FM_WORD_SLOTS
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -138,6 +164,8 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
     var fast: Bool
     var groves: Bool
     var importances: Bool
+    #: word 11: every fit computes the out-of-bag outputs
+    var oob: Bool
     var ints: List[Int]
     var floats: List[Float64]
     var bad: List[UInt8]
@@ -155,6 +183,12 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
     var scalars: List[Float64]
     #: the fitted (or imported) feature importances; empty: none
     var imp: List[Float32]
+    #: the last fit's out-of-bag outputs (word 11): `oob_rows` x `oob_cols`
+    #: float64 words and the one score word; empty: none
+    var oob_out: List[Float64]
+    var oob_score: List[Float64]
+    var oob_rows: Int
+    var oob_cols: Int
     #: FIT NOTICES (core/member_notices.mojo): the RF layout's notice mask of
     #: the last fit (the third metadata word); empty after an import.
     var notices: List[Float64]
@@ -185,6 +219,7 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
         self.fast = False
         self.groves = False
         self.importances = False
+        self.oob = False
         self.ints = List[Int]()
         self.floats = List[Float64]()
         self.bad = List[UInt8]()
@@ -201,6 +236,10 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
         self.leaves = List[Float32]()
         self.scalars = List[Float64]()
         self.imp = List[Float32]()
+        self.oob_out = List[Float64]()
+        self.oob_score = List[Float64]()
+        self.oob_rows = 0
+        self.oob_cols = 0
         self.notices = List[Float64]()
         self.key = entry_ref_unresolved()
         self.route = FOREST_ROUTE_SEQUENTIAL
@@ -246,8 +285,12 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
         raise Error("member ABI: a forest member takes " + String(_HEAD) + " words and three per parameter slot")
     if words[0] != 0.0 and words[0] != 1.0:
         raise Error("member ABI: unknown forest member kind")
-    if words[10] != 0.0 and words[1] != 0.0:
+    if words[FM_WORD_IMPORTANCES] != 0.0 and words[1] != 0.0:
         raise Error("NotImplementedError: mojolearn: the ExtraTrees fit computes no feature importances")
+    if words[FM_WORD_OOB] != 0.0 and words[FM_WORD_OOB] != 1.0:
+        raise Error("member ABI: the forest member's out-of-bag word is 0 or 1")
+    if words[FM_WORD_OOB] != 0.0 and words[1] != 0.0:
+        raise Error("NotImplementedError: mojolearn: the ExtraTrees fit computes no out-of-bag outputs")
     var store = SharedSlot[ForestMemberStore, name, 2].get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
@@ -275,7 +318,8 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
         slot[].rows_fraction = words[7]
         slot[].fast = words[8] != 0.0
         slot[].groves = words[9] != 0.0
-        slot[].importances = words[10] != 0.0
+        slot[].importances = words[FM_WORD_IMPORTANCES] != 0.0
+        slot[].oob = words[FM_WORD_OOB] != 0.0
         slot[].ints = List[Int](length=slots, fill=0)
         slot[].floats = List[Float64](length=slots, fill=0.0)
         slot[].bad = List[UInt8](length=slots, fill=0)
@@ -285,6 +329,7 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
             slot[].bad[k] = UInt8(1) if words[_HEAD + 3 * k + 2] != 0.0 else UInt8(0)
         slot[].fitted = False
         slot[].imp = List[Float32]()
+        _clear_oob(slot)
         slot[].snapshot = 0
         slot[].prepared = 0
         return slot[].generation * _INDEX_SPAN + index + 1
@@ -319,11 +364,19 @@ def _lookup[name: StaticString](handle: Int, release: Bool) raises -> Int:
             slot[].leaves = List[Float32]()
             slot[].scalars = List[Float64]()
             slot[].imp = List[Float32]()
+            _clear_oob(slot)
             slot[].notices = List[Float64]()
             store[].free.append(index)
         return address
     finally:
         shared_slot_unlock(lock)
+
+
+def _clear_oob(slot: _SlotPtr):
+    slot[].oob_out = List[Float64]()
+    slot[].oob_score = List[Float64]()
+    slot[].oob_rows = 0
+    slot[].oob_cols = 0
 
 
 def _release_snapshot(slot: _SlotPtr):
@@ -549,13 +602,14 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
             raise Error("ValueError: y has fewer than 2 classes")
     else:
         _dense(call[].y, MEMBER_F32, "y", estimator)
-        if weighted and slot[].importances and not slot[].et:
+        if weighted and (slot[].importances or slot[].oob) and not slot[].et:
             # The estimator's own refusal (`_rf_fit_regressor`).
             raise Error("NotImplementedError: sample_weight is not implemented together with oob_score, feature "
                         + "importances or a tree-ID shard")
     _release_snapshot(slot)
     slot[].fitted = False
     slot[].imp = List[Float32]()
+    _clear_oob(slot)
     # The ET classifier reads float32 codes; the cast lives until the launch returns.
     var codes = List[Float32]()
     var y_addr = call[].y.data
@@ -564,9 +618,9 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
         _cast_codes(call[].y.data, Int(codes.unsafe_ptr()), rows)
         y_addr = Int(codes.unsafe_ptr())
     # The fit the estimator's own door picks (module docstring): the RF
-    # layout's weighted and importance fits read X column-major.
+    # layout's weighted, importance and out-of-bag fits read X column-major.
     var w_addr = call[].weights.data if weighted else 0
-    var column_major = not slot[].et and (weighted or slot[].importances)
+    var column_major = not slot[].et and (weighted or slot[].importances or slot[].oob)
     var x_cols = List[Float32]()
     var x_addr = call[].x.data
     if column_major:
@@ -576,10 +630,22 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     var imp = List[Float32]()
     if slot[].importances:
         imp = List[Float32](length=cols, fill=0.0)
+    # The out-of-bag outputs the estimator's oob fit writes (zero-filled, as
+    # its `admitted_array` destinations): rows x classes (classifier) or rows
+    # float64 words, and the one score word. Moved into the slot after the
+    # launch (their last named use).
+    var oob_cols = classes if slot[].classifier else 1
+    var oob_out = List[Float64]()
+    var oob_score = List[Float64]()
+    if slot[].oob:
+        oob_out = List[Float64](length=rows * oob_cols, fill=0.0)
+        oob_score = List[Float64](length=1, fill=0.0)
     var w_max = 0.0
     if weighted and not slot[].classifier and not slot[].et:
         w_max = _largest(w_addr, rows)
     var fit = ForestFit(slot[].classifier, rowmajor_ok=not column_major, weights=w_addr,
+                        oob=Int(oob_out.unsafe_ptr()) if slot[].oob else 0,
+                        score=Int(oob_score.unsafe_ptr()) if slot[].oob else 0,
                         importance=Int(imp.unsafe_ptr()) if slot[].importances else 0, weight_max=w_max)
     var config = ForestConfig(slot[].et, slot[].ints.copy(), slot[].floats.copy(), slot[].bad.copy())
     config.criterion = slot[].criterion
@@ -622,6 +688,11 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
         xf_export_release(key, handle)
     if slot[].importances:
         slot[].imp = imp^
+    if slot[].oob:
+        slot[].oob_out = oob_out^
+        slot[].oob_score = oob_score^
+        slot[].oob_rows = rows
+        slot[].oob_cols = oob_cols
     _unprepared(slot, key)
     slot[].fitted = True
 
@@ -753,6 +824,13 @@ def _export(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
     elif block == MEMBER_BLOCK_FEATURE_IMPORTANCES:
         raise Error("AttributeError: this " + estimator + " member was fitted without feature importances "
             + "(parameter word 10)")
+    elif (block == FM_BLOCK_OOB or block == FM_BLOCK_OOB_SCORE) and len(slot[].oob_score) == 0:
+        raise Error("AttributeError: this " + estimator + " member was fitted without out-of-bag outputs "
+            + "(parameter word 11)")
+    elif block == FM_BLOCK_OOB:
+        call[].dst = MemberMatrix(Int(slot[].oob_out.unsafe_ptr()), slot[].oob_rows, slot[].oob_cols, MEMBER_F64)
+    elif block == FM_BLOCK_OOB_SCORE:
+        call[].dst = MemberMatrix(Int(slot[].oob_score.unsafe_ptr()), 1, 1, MEMBER_F64)
     else:
         raise Error("member ABI: a forest member has no fitted block " + String(block))
     call[].block = block
@@ -784,8 +862,10 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
         _release_snapshot(slot)
         slot[].fitted = False
     if block == MEMBER_BLOCK_FAMILY:
-        # The first block of an import: importances only when imported again.
+        # The first block of an import: importances only when imported again;
+        # an imported state has no out-of-bag outputs.
         slot[].imp = List[Float32]()
+        _clear_oob(slot)
         slot[].offsets = _copy_i32(call[].x, estimator)
     elif block == MEMBER_BLOCK_FAMILY + 1:
         slot[].colid = _copy_i32(call[].x, estimator)
@@ -880,8 +960,8 @@ def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int,
             return _capabilities(True, rf_layout, True, rf_layout)
         var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
         # Kind AND settings exact: the RF-layout regressor whose every fit
-        # computes importances refuses weights (`_fit`).
-        var weights = known[].classifier or known[].et or not known[].importances
+        # computes importances or out-of-bag outputs refuses weights (`_fit`).
+        var weights = known[].classifier or known[].et or not (known[].importances or known[].oob)
         return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights,
                              not known[].et)
     if operation == MEMBER_OP_NEW:

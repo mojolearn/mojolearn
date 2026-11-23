@@ -512,14 +512,14 @@ def xl_class_weights_unpack(class_weight: PythonObject, classes: PythonObject,
     return (cw, balanced)
 
 
-def _xl_bayes_refuse(model: PythonObject, fields: PythonObject, return_std: PythonObject) raises:
-    """`_bayes_refuse`."""
+def _xl_bayes_refuse(model: PythonObject, fields: PythonObject) raises:
+    """`_bayes_refuse`: compute_score=True. (predict(return_std=True) is
+    served since lane mf-iterimp2: bindings/x_linear_native_door.mojo
+    `xl_regressor_predict`.)"""
     var nk = x_linear_keys()
     var name = _name(model)
     if _truth(py_item(fields, nk[].k_compute_score)):
         raise Error("mojolearn " + name + ": compute_score is not implemented")
-    if _truth(return_std):
-        raise Error("mojolearn " + name + ": predict(return_std=True) is not implemented")
 
 
 def _xl_or(value: PythonObject, default: Float64) raises -> Float64:

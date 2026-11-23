@@ -21,13 +21,21 @@ default_rng(1).random((120, 4), float32), y = X[:, 0] + 0.5 * X[:, 1]
 images (`bm_rest_boost_fits.mojo`): their predictions are equal bit for bit,
 and the members' seeds (`_sub_seed(random_state, j)`, what each member's
 `get_params()['random_state']` holds) are distinct. The two fits run as two
-units across the host pool. The AdaBoost half stays in Python (its rounds
-compose members in the door).
+units across the host pool. Then (lane mf-ada, 2026-11-23) the AdaBoost
+half: AdaBoostClassifier(n_estimators=6, random_state=0) on (X0 > 0.5) and
+AdaBoostRegressor(n_estimators=6, random_state=0) on y, each fitted twice
+through the product's typed RUN `ada_fit_run` (`mf_ada_fits.mojo`): the same
+predict words and the same estimator_weights_ / estimator_errors_ words; a
+third regressor fit with random_state=1 draws other rows, so its weights
+differ. The five fits run as five units across the host pool. Fail-proof:
+`b[0] += 1` before an `assert_same_words` fails "words differ"; the seed of
+the third fit written 0 fails "seeds 0 and 1 gave the same".
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, assert_same_words
 from checks.native_tests.bm_rest_boost_fits import publish_host_images, DartSpec, dart_fit, dart_raw
+from checks.native_tests.mf_ada_fits import AdaSpec, ada_fit, ada_predict_codes, ada_predict_values
 from xtrees.trees_boost_run import _sub_seed
 from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -240,6 +248,81 @@ def dart_repeat() raises:
     _ = preds^
 
 
+comptime _ADA_TREES = 6
+
+
+def _row_f64(table: List[Float64], unit: Int) -> List[Float64]:
+    var out = List[Float64](length=_ADA_TREES, fill=0.0)
+    for j in range(_ADA_TREES):  # small-loop(oracle: one fit's row of the table)
+        out[j] = table[unit * _ADA_TREES + j]
+    return out^
+
+
+def ada_repeat() raises:
+    """Two AdaBoost fits of the same data and seed give the same words; another seed draws other rows."""
+    publish_host_images()
+    var codes = List[Int32](length=2 * _REP_N, fill=Int32(0))
+    var values = List[Float32](length=3 * _REP_N, fill=Float32(0))
+    var alphas = List[Float64](length=5 * _ADA_TREES, fill=-1.0)
+    var errors = List[Float64](length=5 * _ADA_TREES, fill=-1.0)
+    var cp = codes.unsafe_ptr()
+    var vp = values.unsafe_ptr()
+    var ap = alphas.unsafe_ptr()
+    var ep = errors.unsafe_ptr()
+
+    def fit(unit: Int) raises {imm cp, imm vp, imm ap, imm ep}:
+        var x = fixture_f32(_REP_DIR + "rep-x.f32", _REP_N * _REP_D)
+        var classifier = unit < 2
+        var labels = List[Int32](length=_REP_N, fill=Int32(0))
+        var y = List[Float32]()
+        if classifier:
+            for i in range(_REP_N):  # small-loop(the original's labels (X0 > 0.5), one per row)
+                labels[i] = Int32(1) if x[i * _REP_D] > Float32(0.5) else Int32(0)
+        else:
+            y = fixture_f32(_REP_DIR + "rep-y.f32", _REP_N)
+        var m = ada_fit(AdaSpec(classifier, _ADA_TREES, 1 if unit == 4 else 0), x, _REP_N, _REP_D, labels,
+                        2 if classifier else 0, y)
+        require(len(m.alphas) >= 1 and len(m.alphas) <= _ADA_TREES, "AdaBoost kept " + String(len(m.alphas)))
+        for j in range(len(m.alphas)):  # small-loop(the kept rounds' weights and errors into this fit's row)
+            ap[unsafe_offset=unit * _ADA_TREES + j] = m.alphas[j]
+            ep[unsafe_offset=unit * _ADA_TREES + j] = m.errors[j]
+        if classifier:
+            var p = ada_predict_codes(m, x, _REP_N)
+            for i in range(_REP_N):  # small-loop(one fit's codes into its part of the table)
+                cp[unsafe_offset=unit * _REP_N + i] = p[i]
+        else:
+            var p = ada_predict_values(m, x, _REP_N)
+            for i in range(_REP_N):  # small-loop(one fit's predictions into its part of the table)
+                vp[unsafe_offset=(unit - 2) * _REP_N + i] = p[i]
+
+    check_cases("ada_repeat_fits", 5, fit)
+
+    var ca = List[Int32](length=_REP_N, fill=Int32(0))
+    var cb = List[Int32](length=_REP_N, fill=Int32(0))
+    var ra = List[Float32](length=_REP_N, fill=Float32(0))
+    var rb = List[Float32](length=_REP_N, fill=Float32(0))
+    for i in range(_REP_N):  # small-loop(oracle: split the fits' predictions)
+        ca[i] = codes[i]
+        cb[i] = codes[_REP_N + i]
+        ra[i] = values[i]
+        rb[i] = values[_REP_N + i]
+    assert_same_words[DType.int32](cb, ca, "AdaBoostClassifier(n_estimators=6, random_state=0) refit predict")
+    assert_same_words[DType.float32](rb, ra, "AdaBoostRegressor(n_estimators=6, random_state=0) refit predict")
+    assert_same_words[DType.float64](_row_f64(alphas, 1), _row_f64(alphas, 0), "AdaBoostClassifier refit estimator_weights_")
+    assert_same_words[DType.float64](_row_f64(errors, 1), _row_f64(errors, 0), "AdaBoostClassifier refit estimator_errors_")
+    assert_same_words[DType.float64](_row_f64(alphas, 3), _row_f64(alphas, 2), "AdaBoostRegressor refit estimator_weights_")
+    assert_same_words[DType.float64](_row_f64(errors, 3), _row_f64(errors, 2), "AdaBoostRegressor refit estimator_errors_")
+    var same = True
+    for j in range(_ADA_TREES):  # small-loop(oracle: the two seeds' regressor weights)
+        if alphas[4 * _ADA_TREES + j] != alphas[2 * _ADA_TREES + j]:
+            same = False
+    require(not same, "AdaBoostRegressor seeds 0 and 1 gave the same estimator_weights_")
+    _ = codes^
+    _ = values^
+    _ = alphas^
+    _ = errors^
+
+
 def test_unpublished_then_published_operations() raises:
     """One test, in this order: the first call needs the process table unpublished (TestSuite may run any
     test alone)."""
@@ -250,6 +333,7 @@ def test_unpublished_then_published_operations() raises:
     check_cases("case", TREES_DART_CASES, run_case)
     # The other host images publish after the DART table's own preconditions.
     dart_repeat()
+    ada_repeat()
 
 
 def main() raises:

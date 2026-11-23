@@ -7,15 +7,71 @@
 # the initial fill, the statistics and orders, the n_nearest_features draws,
 # every round of the built-in Bayesian ridge in one program, the indicator),
 # then PACK (the fitted attributes, read from the arenas the runner holds).
-# A user estimator keeps the reference's rounds after the typed prologue
-# (`iterimp_prepare`): it is cloned, fitted and asked to predict once per
-# (round, feature) step with the float32 blocks the gather programs produce,
-# and its predictions are scattered back by one program. The clone, fit and
-# predict are the compiled operations of the estimator's connected native plan
-# (bindings/prep_native_estimator.mojo); its Python fit, predict, get_params or
-# constructor is never called.
+# A user estimator whose class is a native member (core/member_abi.mojo; lane
+# mf-iterimp, 2026-11-23) is admitted ONCE per fit (`_member`: its family's
+# member entry, the kind's mask) and its rounds are the typed RUN
+# x_prep/iterimp_run.mojo `iterimp_member_rounds` (per step: the gather
+# program, the member's FIT on the gathered rows and PREDICT, or PREDICT_STD
+# and the mean for sample_posterior, then the scatter program), the member
+# calls with the GIL released for a kind that allows it; PACK writes each
+# step's state into a clone of the estimator (`member_pack`: the attributes
+# its own fit writes) for `imputation_sequence_`, HANDS the state to that
+# clone (`member_held_adopt`, lane mf-iterimp2) and raises the fits'
+# notices. transform with such an estimator (lane mf-iterimp2) reads each
+# fitted step's held state once (`_held_steps`: a hit is a record read, no
+# import) and runs `iterimp_member_transform` (per step the gather program,
+# the member's PREDICT / PREDICT_STD on the held state, the scatter
+# program). sample_posterior goes through the member route for the
+# families whose PREDICT_STD also answers the same query's mean
+# (`_posterior_family`: GaussianProcessRegressor, BayesianRidge,
+# ARDRegression; these are the only plans that serve predict_std, so
+# `_refuse` refuses sample_posterior for every other estimator first).
+# Lane mf-iterimp3: a CLASSIFIER member is served too (each step's classes
+# and codes made natively, the labels published as the classifier's own fit
+# publishes them, kept as `_step_classes` for transform); fewer than two
+# kept features is scikit-learn's edge case (n_iter_ = 0, the initial
+# imputation, no estimator fitted: `iterimp_initial_only`); a kept column
+# with no observed value is marked not missing as scikit-learn marks it
+# (`_empty_kept`; every route). Lane mf-iterimp3b: every explicit Host*
+# class whose public class has a member mark carries its own
+# (python/mojolearn/_classical_host.py), so HostLinearRegression / HostRidge
+# run as linear members on their CPU context, and a MEMBER-ONLY plan whose
+# member does not serve the fit is refused in its pre-mark words
+# (`_refuse_member_only`), never sent to the door rounds. The door rounds
+# below stay ONLY for: a class with no member entry (the meta-estimators of
+# the Ensemble, Search and Pipeline families, whose member entries are
+# unpublished until the META member kind lands), an admission or a
+# held-state import the family refuses for a class with a full plan (a
+# class_weight that is neither None, 'balanced' nor an exact dict, or a
+# dict with a key that is not an exact number; an image without the
+# member's entry, an unaddressable GP kernel, the gbdt adapter's fast mode
+# and categorical or multi-target losses, a CV splitter object: the
+# fallback rule, a mark never turns a call that worked into a refusal; lane
+# mf-adm3 serves class_weight 'balanced' and numeric-keyed dicts, read per
+# step over the step's classes, and kernel='precomputed'), and
+# the member-set B arm (MOJOLEARN_MEMBER_SET_OFF, A/B owed in
+# docs/apple-fast/EXPERIMENTS.md), whose off path IS these rounds. There the estimator is cloned, fitted and
+# asked to predict once per (round, feature) step with the float32 blocks
+# the gather programs produce, and its predictions are scattered back by one
+# program; the clone, fit and predict are the compiled operations of the
+# estimator's connected native plan (bindings/prep_native_estimator.mojo);
+# its Python fit, predict, get_params or constructor is never called.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.member_boundary_door import member_admit_serving_valued, member_pack, member_pack_labeled
+from bindings.member_fit_notices_pack import member_fit_notices_raise
+from bindings.member_owner_unpack import MemberOwner
+from bindings.classifier_public_lifecycle_door import _public_labels
+from core.member_abi import (
+    MemberPlan, MemberCall, member_call, member_kind_capabilities, member_call_of, member_free,
+    member_output_dtype,
+    MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_I32,
+    MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_STD, MEMBER_CAN_CLASSIFIER, MEMBER_BORROWS_FIT,
+    MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
+)
+from core.member_families import MEMBER_FAMILY_GP, MEMBER_FAMILY_XLINEAR
+from bindings.member_held_door import MemberHeld, member_held, member_held_adopt, member_held_release
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays_door import classical_typed, classical_wrap_array
@@ -30,7 +86,8 @@ from bindings.user_objects_native_door import user_objects_call
 from bindings.native_array_storage_door import native_array_unfilled
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.prep_stateless_native_door import _int_like, _repr, _name, _fam
-from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has
+from bindings.prep_native_estimator_door import (
+    prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has, prep_estimator_plan)
 from bindings.prep_encode_prog_run import EncProgram, enc_ii_rows
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT)
@@ -46,7 +103,9 @@ from bindings.prep_keys_unpack import (
 from bindings.py_balanced import py_item
 from x_prep.iterimp_run import (
     IterImpRunner, IterImpFit, IterImpFitted, IterImpApply, IterImpStep, iterimp_fit, iterimp_prepare,
-    iterimp_transform, iterimp_indicator, II_NONE, II_ASCENDING, II_DESCENDING, II_ROMAN, II_ARABIC, II_RANDOM)
+    iterimp_transform, iterimp_indicator, II_NONE, II_ASCENDING, II_DESCENDING, II_ROMAN, II_ARABIC, II_RANDOM,
+    IterImpMember, IterImpMemberFit, iterimp_member_rounds, iterimp_member_free, IterImpHeldStep,
+    IterImpApplied, iterimp_member_transform, iterimp_initial_only, iterimp_unmark_empty)
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -221,11 +280,13 @@ def _bounds_of(model: PythonObject) raises -> List[Float64]:
     return out^
 
 
-def _mask_arr(values: PythonObject, keep: List[Int], missing: PythonObject, entries: PythonObject,
+def _mask_arr(values: PythonObject, keep: List[Int], empty: List[Int], missing: PythonObject, entries: PythonObject,
               context: PythonObject) raises -> PythonObject:
-    """`_mask_arr`: the (n, dk) float32 missing mask (1.0 missing), run in
-    the process mode as the Python ran it: `entries` is the caller's
-    selection for that mode (selected once per operation)."""
+    """`_mask_arr`: the (n, dk) float32 missing mask (1.0 missing), the
+    kept positions `empty` (no observed value at fit) marked not missing as
+    scikit-learn marks them, run in the process mode as the Python ran it:
+    `entries` is the caller's selection for that mode (selected once per
+    operation)."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var dk = len(keep)
@@ -234,6 +295,7 @@ def _mask_arr(values: PythonObject, keep: List[Int], missing: PythonObject, entr
     var mo = p.alloc(n * dk)
     var ko = p.put_floats(_floats_of(keep), context)
     _stage(p.prog.program, OP_NAN_MASK, n * dk, xo, n, d, ko, dk, mo)
+    iterimp_unmark_empty(p.prog, mo, n, dk, empty)
     var ran = p.run(entries, context)
     return _take2(ran, mo, n, dk, context)
 
@@ -413,13 +475,16 @@ struct _DoorRunner(IterImpRunner):
     RUN-held or door-held native buffer (owner k >= 1) is an
     XPREP_OWNER_NATIVE record at `seconds[k - 1]`. Each arena (and output
     store) is held until `release` or the runner's end; PACK reads them
-    with `_take1` / `_take2` (`ran`)."""
+    with `_take1` / `_take2` (`ran`). `release_members`: a supplied
+    estimator's member operations run with the GIL released (its kind has
+    MEMBER_GIL_FREE or MEMBER_GIL_DOOR; set by the door after `_member`)."""
     var owners: List[PythonObject]
     var entries: PythonObject
     var context: PythonObject
     var caps: XprepCaps
     var held: List[PythonObject]
     var addresses: List[Int]
+    var release_members: Bool
 
     def __init__(out self, values: PythonObject, entries: PythonObject, context: PythonObject, caps: XprepCaps):
         self.owners = List[PythonObject]()
@@ -429,6 +494,19 @@ struct _DoorRunner(IterImpRunner):
         self.caps = caps
         self.held = List[PythonObject]()
         self.addresses = List[Int]()
+        self.release_members = False
+
+    def member(mut self, plan: MemberPlan, operation: Int, mut call: MemberCall) raises -> Int:
+        # THE GIL RULE (core/member_abi.mojo): released around the one call
+        # for a kind that allows it (every argument is a typed word, read
+        # before the region), else the call runs with the GIL held.
+        if not self.release_members:
+            return member_call(plan.member, operation, call)
+        var result = 0
+        var py = Python()
+        with GILReleased(py):
+            result = member_call(plan.member, operation, call)
+        return result
 
     def run(mut self, mut prog: EncProgram, seconds: List[Int]) raises -> Int:
         prog.check_bound()
@@ -574,6 +652,9 @@ def _pack_initial(model: PythonObject, imputer: PythonObject, fitted: IterImpFit
     var fields = py_fields(model)
     py_setitem(fields, nk[].k_initial_imputer_, imputer)
     py_setitem(fields, nk[].k__keep, _int_list(fitted.keep))
+    # the kept positions with no observed value at fit, which transform marks
+    # not missing as scikit-learn's `_is_empty_feature` does
+    py_setitem(fields, "_empty_kept", _int_list(fitted.empty))
     py_setitem(fields, nk[].k__bounds_k, _float_list(fitted.bounds))
     py_setitem(fields, nk[].k__indicator, _int_list(fitted.indicator))
     py_setitem(fields, nk[].k_n_features_with_missing_, PythonObject(fitted.n_missing))
@@ -590,6 +671,171 @@ def _nbl_obj(has: Bool, nbl: List[Int]) raises -> PythonObject:
 def _xt_address(xt: PythonObject, words: Int) raises -> Int:
     # The (n, dk) float32 block's first word (an empty block is read by no record).
     return Int(py=classical_address(xt)) if words > 0 else 0
+
+
+# ---------------------------------------------------------------- a supplied estimator as a member
+struct _Member(Movable):
+    """The supplied estimator's hold as a native member, built once per fit
+    (`_member`). `native` False: the door rounds serve it. True: `owner`
+    (its plan and the pins that keep its images loaded, alive through PACK),
+    `template` the first step's clone (the admission read its fields) and
+    `fields` its instance dictionary, `member_context` the family's context,
+    `fields_get` the plan's field reader (for the other steps' clones),
+    `plan_key` the class's import-time plan (the held-state record's key),
+    `borrows` / `release` the kind's MEMBER_BORROWS_FIT and GIL bits,
+    `classifier` a classifier kind whose PREDICT writes codes of
+    `code_dtype` (lane mf-iterimp3)."""
+    var native: Bool
+    var owner: MemberOwner
+    var plan_key: PythonObject
+    var template: PythonObject
+    var fields: PythonObject
+    var member_context: PythonObject
+    var fields_get: PythonObject
+    var borrows: Bool
+    var release: Bool
+    var classifier: Bool
+    var code_dtype: Int
+
+    def __init__(out self):
+        self.native = False
+        self.owner = MemberOwner()
+        self.plan_key = PythonObject(None)
+        self.template = PythonObject(None)
+        self.fields = PythonObject(None)
+        self.member_context = PythonObject(None)
+        self.fields_get = PythonObject(None)
+        self.borrows = False
+        self.release = False
+        self.classifier = False
+        self.code_dtype = MEMBER_I32
+
+
+def _posterior_family(family: Int) -> Bool:
+    """The families whose PREDICT_STD writes the same query's mean to
+    `call.y` when given (core/gp_member.mojo, core/xlinear_member.mojo): the
+    pair a sample_posterior step draws from, in one member call."""
+    return family == MEMBER_FAMILY_GP or family == MEMBER_FAMILY_XLINEAR
+
+
+def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonObject) -> _Member:
+    """UNPACK, once per fit: the estimator as a native member when its class
+    is a published member whose KIND fits and predicts one target (a
+    regressor, or a classifier: lane mf-iterimp3, fitted on each step's
+    codes as scikit-learn fits it on the float target), and for
+    sample_posterior one whose kind publishes PREDICT_STD answering the
+    same query's mean too (`_posterior_family`: GaussianProcessRegressor,
+    BayesianRidge, ARDRegression). Never raises: anything else, and an
+    admission the family refuses, keeps the door rounds (the fallback
+    rule), which then answer or refuse in the estimator's own words."""
+    var out = _Member()
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    try:
+        var b = _b()
+        var plan = prep_estimator_plan(estimator, context)
+        if plan is None or py_get(plan, "member") is None:
+            return out^
+        var classifier = Bool(py=plan["classifier"])
+        if classifier and posterior:
+            return out^  # no classifier plan serves predict_std (`_refuse` already refused it)
+        var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
+        if posterior:
+            needs |= MEMBER_CAN_PREDICT_STD
+        var template = prep_estimator_clone(estimator, context)
+        var member_context = plan["context"]
+        var fields_get = plan["fields_get"]
+        var fields = py_call(fields_get, template, py_type(template))
+        # A classifier's class_weight dict is keyed by the step's values,
+        # read into the KEYED tail here (lane mf-adm3); each step makes its
+        # table over its classes (x_prep/iterimp_run.mojo `_member_step`).
+        var owner = member_admit_serving_valued(template, fields, plan, member_context, b, needs)
+        if not owner.published:
+            return out^
+        if posterior and not _posterior_family(owner.plan.family):
+            return out^
+        # The mask of THIS kind (the family's union holds its other kinds'
+        # bits): one state minted, asked and released, once per fit.
+        var mask = member_kind_capabilities(owner.plan)
+        if ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier or (mask & needs) != needs:
+            return out^
+        if classifier:
+            # The element type of its predicted codes, asked once (two classes
+            # stand in for the steps' counts: the type is the kind's).
+            var two = owner.plan.copy()
+            two.classes = 2
+            out.code_dtype = member_output_dtype(two, MEMBER_OP_PREDICT, max(dk - 1, 1), 1, MEMBER_I32)
+            out.classifier = True
+        out.borrows = (mask & MEMBER_BORROWS_FIT) != 0
+        out.release = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
+        out.owner = owner^
+        out.plan_key = plan
+        out.template = template
+        out.fields = fields
+        out.member_context = member_context
+        out.fields_get = fields_get
+        out.native = True
+    except:
+        return _Member()
+    return out^
+
+
+def _refuse_member_only(estimator: PythonObject, context: PythonObject) raises:
+    """A class whose plan is MEMBER-ONLY (registered from its member mark
+    alone: python/mojolearn/_native_msel_more.py, the Host* classes of lane
+    mf-cal3b / mf-iterimp3b and the derived plans) has no compiled fit or
+    predict for the door rounds, so when its member does not serve this fit
+    it is refused here in the words it had before its mark
+    (`prep_estimator_admit`'s), never by a door-round call (lane
+    mf-iterimp3b, 2026-11-23). One plan read, on this fallback only."""
+    var plan = prep_estimator_plan(estimator, context)
+    if plan is not None and py_get(plan, "member_only") is not None:
+        raise Error("TypeError: mojolearn: IterativeImputer requires a mojolearn estimator; got "
+                    + String(py_type(estimator).__name__))
+
+
+def _member_pack(estimator: PythonObject, member: _Member, mut fit: IterImpMemberFit, labels: PythonObject,
+                 context: PythonObject) raises -> PythonObject:
+    """PACK of the member rounds: `imputation_sequence_`, one (feat_idx,
+    neighbor_feat_idx, estimator) triple per finished step, each estimator a
+    clone of the supplied one (the first is the admission's) with the step's
+    member state written into it (`member_pack`: the attributes its own fit
+    writes). One clone per step, as the door rounds made. Each step's state
+    is then HANDED to its estimator (`member_held_adopt`, lane mf-iterimp2):
+    transform predicts through it with no import; its word in `fit.states`
+    becomes 0 so `iterimp_member_free` leaves it to the estimator. A
+    classifier step's estimator gets its labels as its own fit publishes
+    them for the float target (`_public_labels` over the classes as Python
+    floats, `member_pack_labeled`), its plan the step's class count; the
+    labels are also kept in `labels` (one entry per step, None for a
+    regressor), which the door stores as `_step_classes` for transform."""
+    var b = _b()
+    var seq = Python.list()
+    for s in range(len(fit.states)):  # driver-loop: over the fitted imputation steps (one clone and one pack each)
+        var est = member.template
+        var fields = member.fields
+        if s > 0:
+            est = prep_estimator_clone(estimator, context)
+            fields = py_call(member.fields_get, est, py_type(est))
+        if len(fit.classes[s]) == 0:
+            member_pack(est, fields, member.member_context, b, member.owner.plan, fit.states[s])
+            if member_held_adopt(est, member.plan_key, member.member_context, member.owner.pins, member.owner.plan,
+                                 fit.states[s]):
+                fit.states[s] = 0  # the estimator's now
+            _ = py_call(labels.append, PythonObject(None))
+        else:
+            var plan = member.owner.plan.copy()
+            plan.classes = len(fit.classes[s])
+            var values = Python.list()
+            for c in range(len(fit.classes[s])):  # driver-loop: over one step's classes
+                _ = py_call(values.append, PythonObject(Float64(fit.classes[s][c])))
+            var published = _public_labels(values, member.member_context)
+            member_pack_labeled(est, fields, member.member_context, b, plan, fit.states[s], published)
+            if member_held_adopt(est, member.plan_key, member.member_context, member.owner.pins, plan,
+                                 fit.states[s]):
+                fit.states[s] = 0  # the estimator's now
+            _ = py_call(labels.append, published)
+        _ = py_call(seq.append, Python.tuple(fit.seq_j[s], _int_list(fit.seq_nbl[s]), est))
+    return seq
 
 
 # ---------------------------------------------------------------- fit
@@ -641,10 +887,46 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     _pack_initial(model, imputer, fitted, mode, d, context)
     var keep = fitted.keep.copy()
     var dk = len(keep)
+    if dk < 2:
+        # scikit-learn's edge case (fewer than two kept features): n_iter_ = 0,
+        # no step, the initial imputation; the estimator is never fitted
+        iterimp_initial_only(runner, request, plan, fitted)
+        py_setitem(fields, nk[].k__rng, _u64_obj(fitted.rng))
+        py_setitem(fields, nk[].k__post_step, PythonObject(0))
+        py_setitem(fields, nk[].k_n_iter_, PythonObject(0))
+        py_setitem(fields, nk[].k_imputation_sequence_, Python.list())
+        py_setitem(fields, "_step_classes", Python.list())
+        return _take2(runner.held[fitted.out_handle], fitted.out_offset, n, fitted.cols, context)
+    var member = _member(estimator, request.posterior, dk, context)
+    if not member.native:
+        _refuse_member_only(estimator, context)
+    if member.native:
+        # RUN: the rounds over the native member (x_prep/iterimp_run.mojo)
+        runner.release_members = member.release
+        var run = IterImpMember(member.owner.plan.copy(), member.borrows, request.posterior)
+        run.classifier = member.classifier
+        run.code_dtype = member.code_dtype
+        var fit = IterImpMemberFit()
+        iterimp_member_rounds(runner, request, plan, fitted, run, fit)
+        # PACK (every state is released after it, on every path)
+        try:
+            var labels = Python.list()
+            var seq = _member_pack(estimator, member, fit, labels, context)
+            py_setitem(fields, nk[].k__rng, _u64_obj(fit.rng))
+            py_setitem(fields, nk[].k__post_step, PythonObject(0))
+            py_setitem(fields, nk[].k_n_iter_, PythonObject(fit.n_iter))
+            py_setitem(fields, nk[].k_imputation_sequence_, seq)
+            py_setitem(fields, "_step_classes", labels)
+        finally:
+            iterimp_member_free(run, fit)
+        # The steps' fit notices, in step order, as the estimator's own fits raised them.
+        member_fit_notices_raise(fit.notices, member.member_context)
+        _ = member.owner.published  # the member's images stay loaded past its last call
+        return _take2(runner.held[fit.out_handle], fit.out_offset, n, fit.cols, context)
     var bounds = fitted.bounds.copy()
     var posterior = request.posterior
     var rng = plan.rng
-    var mask = _mask_arr(values, keep, py_item(fields, nk[].k_missing_values), entries, context)
+    var mask = _mask_arr(values, keep, fitted.empty, py_item(fields, nk[].k_missing_values), entries, context)
     var xt = _take2(runner.held[plan.xf_handle], plan.xf_offset, n, dk, context)
     runner.release(plan.xf_handle)
     var seq = Python.list()
@@ -667,6 +949,7 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     py_setitem(fields, nk[].k__post_step, PythonObject(0))
     py_setitem(fields, nk[].k_n_iter_, PythonObject(done if plan.any_order else min(1, len(plan.orders))))
     py_setitem(fields, nk[].k_imputation_sequence_, seq)
+    py_setitem(fields, "_step_classes", PythonObject(None))  # the door rounds' steps are served by these rounds
     if len(fitted.indicator) == 0:
         return xt
     var made = iterimp_indicator(runner, n, d, dk, request.mark, request.missing, fitted.indicator,
@@ -709,6 +992,134 @@ def _steps(sequence: PythonObject, posts: PythonObject, posterior: Bool) raises 
     return out_steps^
 
 
+struct _HeldSteps(Movable):
+    """transform's hold on the fitted steps' member states (`_held_steps`).
+    `native` False: the door rounds serve the transform. True: `steps` (in
+    order, each step's held plan and state), `keepers` the estimators' owner
+    objects (kept named until the RUN has joined), `loose` the steps whose
+    state no owner keeps (freed by `_held_free`), `release` every step's
+    kind allows its member calls with the GIL released."""
+    var native: Bool
+    var steps: List[IterImpHeldStep]
+    var keepers: PythonObject
+    var loose: List[Bool]
+    var release: Bool
+
+    def __init__(out self):
+        self.native = False
+        self.steps = List[IterImpHeldStep]()
+        self.keepers = PythonObject(None)
+        self.loose = List[Bool]()
+        self.release = False
+
+
+def _held_free(mut held: _HeldSteps):
+    """Free the states no estimator keeps (never raises; after the RUN, or
+    on a refusal)."""
+    for s in range(len(held.steps)):  # driver-loop: over the fitted imputation steps (one state each)
+        if held.loose[s] and held.steps[s].state != 0:
+            try:
+                var call = member_call_of(held.steps[s].plan, held.steps[s].state)
+                member_free(held.steps[s].plan, call)
+            except:
+                pass  # member_call_of builds words only; a state that cannot be freed is the store's
+            held.steps[s].state = 0
+    held.native = False
+
+
+def _held_steps(sequence: PythonObject, step_classes: PythonObject, posterior: Bool,
+                context: PythonObject) -> _HeldSteps:
+    """UNPACK, once per transform: every fitted step's estimator as its HELD
+    member state (bindings/member_held_door.mojo `member_held`: the state its
+    fit handed it, a hit; else one import, kept), when each is a kind
+    serving PREDICT (and, with sample_posterior, PREDICT_STD with the mean:
+    `_posterior_family`). A classifier step (lane mf-iterimp3) also needs
+    the labels its fit stored (`step_classes`, the fitted `_step_classes`)
+    and the element type of its codes (asked once per transform: the kind's).
+    An empty sequence (fewer than two kept features: n_iter_ = 0) is served
+    with no step. Never raises: a step the member route cannot serve sends
+    the whole transform to the door rounds (the fallback rule), and every
+    state taken so far is released."""
+    var out = _HeldSteps()
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    try:
+        var b = _b()
+        out.keepers = Python.list()
+        var needs = MEMBER_CAN_PREDICT
+        if posterior:
+            needs |= MEMBER_CAN_PREDICT_STD
+        var release = True
+        var code_dtype = -1
+        for s in range(len(sequence)):  # driver-loop: over the fitted imputation steps (one held-state read each)
+            var step = sequence[s]
+            var est = step[2]
+            var plan = prep_estimator_plan(est, context)
+            if plan is None or py_get(plan, "member") is None:
+                raise Error("door rounds")
+            var classifier = Bool(py=plan["classifier"])
+            var labels = PythonObject(None)
+            if classifier:
+                if posterior or step_classes is None or s >= len(step_classes):
+                    raise Error("door rounds")
+                labels = step_classes[s]
+                if labels is None:
+                    raise Error("door rounds")
+            var member_context = plan["context"]
+            var fields = py_call(plan["fields_get"], est, py_type(est))
+            var held = member_held(est, fields, plan, member_context, b, needs)
+            if not held.published:
+                raise Error("door rounds")
+            # held first, so a refusal below releases it with the others
+            out.steps.append(IterImpHeldStep(Int(py=step[0]), _nbl_of(step[1]), held.plan.copy(), held.state))
+            out.loose.append(held.loose)
+            _ = py_call(out.keepers.append, held.keeper)
+            if posterior and not _posterior_family(held.plan.family):
+                raise Error("door rounds")
+            var ask = MemberCall(held.plan.route, held.state)
+            var mask = member_call(held.plan.member, MEMBER_OP_CAPABILITIES, ask)
+            if ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier or (mask & needs) != needs:
+                raise Error("door rounds")
+            if classifier:
+                var last = len(out.steps) - 1
+                var values = _floats_from(labels)
+                if len(values) == 0:
+                    raise Error("door rounds")
+                for c in range(len(values)):  # driver-loop: over one step's classes
+                    out.steps[last].classes.append(Float32(values[c]))
+                if code_dtype < 0:
+                    code_dtype = member_output_dtype(held.plan, MEMBER_OP_PREDICT, max(len(out.steps[last].nbl), 1),
+                                                     1, MEMBER_I32)
+                out.steps[last].code_dtype = code_dtype
+            release = release and (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
+        out.release = release
+        out.native = True
+    except:
+        _held_free(out)
+        return _HeldSteps()
+    return out^
+
+
+def _apply_request(model: PythonObject, fields: PythonObject, imputer: PythonObject, n: Int, d: Int,
+                   mark: Tuple[Bool, Float64], var keep: List[Int], var bounds: List[Float64],
+                   var indicator: List[Int], posterior: Bool, rng: UInt64, caps: XprepCaps,
+                   var steps: List[IterImpStep], mut fill: PythonObject, context: PythonObject) raises -> IterImpApply:
+    """UNPACK of transform's typed request: the initial imputer's transform
+    words (`_imputer_transform`'s UNPACK; its fitted fill vector is returned
+    in `fill`, which the caller keeps alive through the RUN) and the fitted
+    fields."""
+    var nk = prep_keys()
+    var own = py_fields(imputer)
+    _check_width(imputer, d)
+    var init_mark = _missing_mark(own["missing_values"])
+    fill = _fitted_flat(imputer, "_fill", own["_fill"], context)
+    var fill_words = Int(py=fill[2])
+    var init = ImputerApply(n, d, 0, init_mark[0], init_mark[1], 1, fill_words, _index_list(own["_keep"]),
+                            _index_list(own["_indicator"]))
+    return IterImpApply(init^, Int(py=classical_address(fill[1])), n, d, mark[0], mark[1], xprep_r3("work"),
+                        caps.has_out, keep^, bounds^, indicator^, posterior, Int(rng & 0x7FFFFFFF),
+                        Int(py=py_call(_b().int, py_item(fields, nk[].k__post_step))), steps^)
+
+
 def _transform(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
     # UNPACK
@@ -733,15 +1144,42 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
     var sequence = py_item(fields, nk[].k_imputation_sequence_)
     var indicator = _index_list(py_item(fields, nk[].k__indicator))
     var mark = _missing_mark(py_item(fields, nk[].k_missing_values))
+    # the kept positions marked not missing (scikit-learn's `_is_empty_feature`)
+    var empty_field = py_get(fields, "_empty_kept")
+    var empty = _index_list(empty_field) if empty_field is not None else List[Int]()
     var runner = _DoorRunner(values, entries, context, caps)
     if py_item(fields, nk[].k_estimator) is not None:
+        # The fitted steps' held member states (lane mf-iterimp2): the same
+        # step programs as the door rounds below, the members' PREDICT /
+        # PREDICT_STD on their fitted states (no import on a hit, no Python
+        # estimator call).
+        var held = _held_steps(sequence, py_get(fields, "_step_classes"), posterior, context)
+        if held.native:
+            var fill = PythonObject(None)
+            var request = _apply_request(model, fields, imputer, n, d, mark, keep.copy(), bounds.copy(),
+                                         indicator.copy(), posterior, rng, caps, List[IterImpStep](), fill, context)
+            request.empty = empty.copy()
+            runner.release_members = held.release
+            var applied = IterImpApplied(II_NONE, 0, 0, 0)
+            try:
+                # RUN (x_prep/iterimp_run.mojo)
+                applied = iterimp_member_transform(runner, request, held.steps, rng)
+            except error:
+                _held_free(held)
+                raise error^
+            _held_free(held)
+            _ = held.keepers  # the estimators' owner objects stay alive past the member calls
+            _ = fill  # the fitted fill vector the RUN read stays alive past it
+            # PACK
+            py_setitem(fields, nk[].k__rng, _u64_obj(rng))
+            return _take2(runner.held[applied.out_handle], applied.out_offset, n, applied.cols, context)
         # `initial_imputer_.transform(arr)`: X as converted above
         var xf = _imputer_transform(imputer, values, context)
         # The mask runs in the process mode (as the Python ran it): the
         # operation's selection when that is the fitted mode's object, else
         # its own selection, once.
         var mask_mode = _default_mode(context)
-        var mask = _mask_arr(values, keep, py_item(fields, nk[].k_missing_values),
+        var mask = _mask_arr(values, keep, empty, py_item(fields, nk[].k_missing_values),
                              entries if mask_mode is mode else _entries(mask_mode, context), context)
         var xt = xf
         for s in range(len(sequence)):  # api-bound-loop: over the fitted imputation steps; one predict of the user-supplied fitted estimator object's native plan each
@@ -757,18 +1195,11 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
         _ = xt  # the block the indicator program read stays alive past it
         return _take2(runner.held[made[0]], made[1], n, dk + len(indicator), context)
     # The initial imputer's transform words (`_imputer_transform`'s UNPACK)
-    var own = py_fields(imputer)
-    _check_width(imputer, d)
-    var init_mark = _missing_mark(own["missing_values"])
-    var fill = _fitted_flat(imputer, "_fill", own["_fill"], context)
-    var fill_words = Int(py=fill[2])
-    var init = ImputerApply(n, d, 0, init_mark[0], init_mark[1], 1, fill_words, _index_list(own["_keep"]),
-                            _index_list(own["_indicator"]))
     var posts = py_item(fields, nk[].k__posterior) if posterior else PythonObject(None)
-    var request = IterImpApply(init^, Int(py=classical_address(fill[1])), n, d, mark[0], mark[1], xprep_r3("work"),
-                               caps.has_out, keep^, bounds^, indicator^, posterior, Int(rng & 0x7FFFFFFF),
-                               Int(py=py_call(_b().int, py_item(fields, nk[].k__post_step))),
-                               _steps(sequence, posts, posterior))
+    var fill = PythonObject(None)
+    var request = _apply_request(model, fields, imputer, n, d, mark, keep^, bounds^, indicator^, posterior, rng, caps,
+                                 _steps(sequence, posts, posterior), fill, context)
+    request.empty = empty^
     # RUN (x_prep/iterimp_run.mojo)
     var applied = iterimp_transform(runner, request)
     _ = fill  # the fitted fill vector the RUN read stays alive past it

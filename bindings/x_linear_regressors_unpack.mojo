@@ -23,6 +23,7 @@ from bindings.admitted_input_unpack import admitted_vector
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.py_balanced import py_item
 from bindings.classical_labels_door import labels_address
+from x_linear.bayes_words import bayes_out_words, ard_out_words
 
 
 struct XlHuberFit(Movable):
@@ -131,7 +132,7 @@ def xl_fit_bayes_unpack(model: PythonObject, fields: PythonObject, args: PythonO
                         context: PythonObject) raises -> XlFit:
     """BayesianRidge.fit(X, y, sample_weight)."""
     var nk = x_linear_keys()
-    _xl_bayes_refuse(model, fields, PythonObject(False))
+    _xl_bayes_refuse(model, fields)
     xl_ops_require(entries)
     var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
@@ -144,14 +145,14 @@ def xl_fit_bayes_unpack(model: PythonObject, fields: PythonObject, args: PythonO
                              _float(py_item(fields, nk[].k_lambda_1)), _float(py_item(fields, nk[].k_lambda_2)),
                              _xl_or(py_item(fields, nk[].k_alpha_init), -1.0), _xl_or(py_item(fields, nk[].k_lambda_init), -1.0)]
     return xl_fit_build(entries, ALGO_BAYES, x.address, n * d, n, d, x.array, yy.address, yy.rows, yy.array, ip^,
-                        fp^, d + 4, 3 * d * d + 5 * d + n, 1, context)
+                        fp^, bayes_out_words(d), 3 * d * d + 5 * d + n, 1, context)
 
 
 def xl_fit_ard_unpack(model: PythonObject, fields: PythonObject, args: PythonObject, entries: XLinearOps,
                       context: PythonObject) raises -> XlFit:
     """ARDRegression.fit(X, y)."""
     var nk = x_linear_keys()
-    _xl_bayes_refuse(model, fields, PythonObject(False))
+    _xl_bayes_refuse(model, fields)
     xl_ops_require(entries)
     var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
@@ -163,7 +164,7 @@ def xl_fit_ard_unpack(model: PythonObject, fields: PythonObject, args: PythonObj
     var fp: List[Float64] = [_float(py_item(fields, nk[].k_tol)), _float(py_item(fields, nk[].k_alpha_1)), _float(py_item(fields, nk[].k_alpha_2)),
                              _float(py_item(fields, nk[].k_lambda_1)), _float(py_item(fields, nk[].k_lambda_2)), _float(py_item(fields, nk[].k_threshold_lambda))]
     return xl_fit_build(entries, ALGO_ARD, x.address, n * d, n, d, x.array, y.address, y.rows, y.array, ip^, fp^,
-                        2 * d + 4, 3 * d * d + 4 * d + n, 2 * d, context)
+                        ard_out_words(d), 3 * d * d + 4 * d + n, 2 * d, context)
 
 
 def xl_fit_lars_unpack(model: PythonObject, fields: PythonObject, args: PythonObject, lasso: Bool,

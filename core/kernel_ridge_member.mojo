@@ -7,8 +7,9 @@ One entry, `kernel_ridge_member_v2`, published by each kernel methods image
 bindings/_mojolearn_kernel_methods_host.mojo). It runs the family's existing
 typed RUN (kernel_methods/native_call_run.mojo `KmCall` requests: the
 estimator's own door's operations, in its order) over `route.entry`, the
-image's kernel methods provider table (`identical` only: a `fast` build has
-no provider and the boundary keeps the estimator's own doors).
+image's kernel methods provider table (both tiers: a `fast` estimator's own
+door keeps its list and pointer entries, its member admission takes the
+image's table, which runs the same bodies; lane mf-img3).
 `route.flags` is the provider's capability word (operation 14): bit 1 =
 the pointer fit and the device-resident predict (a GPU image), as the
 estimator's door reads it. No kernel is touched.
@@ -16,8 +17,10 @@ estimator's door reads it. No kernel is touched.
 KIND: 0 KernelRidge (a regressor).
 
 MEMBER_OP_NEW parameters (6 Float64 words): [0] kernel code (0 linear,
-1 poly, 2 rbf, 3 sigmoid, 5 laplacian, 6 cosine, 7 chi2, 8 additive_chi2;
-'precomputed' is not published); [1] degree; [2] gamma kind (0 a value,
+1 poly, 2 rbf, 3 sigmoid, 4 precomputed (lane mf-adm3: X is the kernel
+matrix, square at fit, query rows x training rows at predict, handed to the
+provider with code 4 as the estimator's own door hands it), 5 laplacian,
+6 cosine, 7 chi2, 8 additive_chi2); [1] degree; [2] gamma kind (0 a value,
 1 None: 1 / n_features at fit, 1.0 for chi2); [3] gamma (kind 0); [4] coef0;
 [5] alpha.
 
@@ -317,6 +320,9 @@ def _fit(slot: _Slot, call: _Call) raises:
     if call[].y.rows != n or t < 1:
         raise Error("mojolearn KernelRidge: y has " + String(call[].y.rows) + " rows, X has " + String(n))
     var kernel = Int(slot[].params[0])
+    if kernel == _KERNEL_PRECOMPUTED and d != n:
+        raise Error("mojolearn KernelRidge: kernel='precomputed' needs the square "
+                    + "n x n kernel matrix as X, got " + String(n) + " x " + String(d))
     _tested(call[].x, kernel, "X")
     _tested(call[].y, kernel, "y")
     var held = List[Float64]()
@@ -508,8 +514,6 @@ def _kernel_ridge_member(operation: Int, address: Int) raises -> Int:
         var words = List[Float64](length=_PARAMS, fill=0.0)
         for i in range(_PARAMS):  # small-loop(the member's parameter words)
             words[i] = source[i]
-        if Int(words[0]) == _KERNEL_PRECOMPUTED:
-            raise Error("member ABI: a KernelRidge member with kernel='precomputed' is not published")
         call[].state = _mint(words^)
         return 0
     if operation == MEMBER_OP_FREE:

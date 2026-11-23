@@ -28,7 +28,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.x_linear_route_unpack import XLinearOps, xl_route, xl_route_host, xl_device_admit, xl_route_drop, xl_route_vendor_used
-from bindings.x_linear_common_unpack import _b, _truth, _name, _xl_scope, xl_intercept_words
+from bindings.x_linear_common_unpack import _b, _truth, _name, _xl_scope, xl_intercept_words, _float, _xl_words
 from x_linear.door_run import xl_cd_fit_run, xl_cd_predict_run
 from bindings.x_linear_cd_unpack import xl_cd_fit_unpack, xl_cd_predict_unpack, xl_cd_host_prediction_unpack
 from std.python import PythonObject
@@ -41,7 +41,7 @@ from core.linear_entry_table_ext import XL_OP_DECISION, XL_OP_DECISION_CODES, XL
 from x_linear.door_run import LINK_IDENTITY, LINK_SIGMOID, ROWS_SGD_PROBA, ROWS_LRCV_PROBA, xl_run_word
 from bindings.x_linear_route_unpack import XLinearOps, xl_ops_require
 from bindings.x_linear_common_unpack import (
-    XlDecision, xl_decision_build, _attr, _eq, _int, _name, _repr, _xl_bayes_refuse, _xl_check_fitted, _xl_matrix,
+    XlDecision, xl_decision_build, _attr, _eq, _int, _name, _repr, _xl_check_fitted, _xl_matrix,
     _xl_width, _xl_words,
 )
 from bindings.py_balanced import py_fields, py_get, py_item
@@ -51,7 +51,7 @@ from bindings.x_linear_keys_unpack import (
 )
 from bindings.classical_labels_door import labels_full_f32
 from bindings.py_balanced import py_fields, py_item
-from bindings.admitted_input_unpack import admitted_vector
+from bindings.admitted_input_unpack import admitted_vector, admitted_array
 from bindings.x_linear_common_unpack import XlDecision, xl_decision_refuse
 from bindings.classical_labels_door import labels_address, labels_cast, classical_decode_labels
 from x_linear.door_run import xl_isotonic_fit_run
@@ -61,6 +61,7 @@ from bindings.x_linear_isotonic_unpack import (
 )
 from bindings.x_linear_isotonic_pack import xl_isotonic_fit_pack, xl_isotonic_transform_pack
 from x_linear.door_run import xl_huber_fit_run
+from x_linear.door_run import XlBayesStdRequest, xl_bayes_std_run, xl_ard_kept_run, xl_decision_run, xl_bayes_sigma_run
 from bindings.x_linear_regressors_unpack import (
     xl_fit_glm_unpack, xl_fit_huber_unpack, xl_fit_bayes_unpack, xl_fit_ard_unpack, xl_fit_lars_unpack,
     xl_fit_quantile_unpack,
@@ -120,7 +121,7 @@ from bindings.x_linear_keys_unpack import (
     X_LINEAR_OPN_LRCV_PREDICT_PROBA, X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION, X_LINEAR_OPN_ONE_CLASS_PREDICT,
     X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES, X_LINEAR_OPN_REGRESSOR_PREDICT, X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE,
     X_LINEAR_OPN_REGRESSOR_SCORE, X_LINEAR_OPN_DEVICE_ADMIT, X_LINEAR_OPN_SGD_PREDICT_PROBA,
-    X_LINEAR_OPN_CD_VENDOR_USED,
+    X_LINEAR_OPN_CD_VENDOR_USED, X_LINEAR_OPN_BAYES_SIGMA,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -155,12 +156,10 @@ def _xl_infer_x(model: PythonObject, fields: PythonObject, source: PythonObject,
 def xl_regressor_predict_unpack(model: PythonObject, args: PythonObject, entries: XLinearOps,
                                 context: PythonObject) raises -> XlDecision:
     """`_LinearRegressorMixin.predict(X)`: link(X @ coef^T + intercept),
-    (n,) for one target. BayesianRidge and ARDRegression pass return_std
-    and refuse first."""
+    (n,) for one target. (BayesianRidge's and ARDRegression's
+    return_std=True is `xl_bayes_predict_std`'s.)"""
     var nk = x_linear_keys()
     var fields = py_fields(model)
-    if len(args) > 1:
-        _xl_bayes_refuse(model, fields, args[1])
     var x = _xl_infer_x(model, fields, args[0], entries, context)
     var stored = py_get(fields, nk[].k__link)
     if stored is None:
@@ -364,11 +363,133 @@ def xl_one_class(model: PythonObject, operation: Int, source: PythonObject, entr
 
 
 def xl_regressor_predict(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """`_LinearRegressorMixin.predict(X)` (BayesianRidge and ARDRegression
-    pass return_std and refuse first)."""
+    """`_LinearRegressorMixin.predict(X)`; BayesianRidge's and
+    ARDRegression's `predict(X, return_std=True)` is (mean, std)
+    (`xl_bayes_predict_std`)."""
+    if len(args) > 1 and _truth(args[1]):
+        return xl_bayes_predict_std(model, args, entries, context)
     var call = xl_regressor_predict_unpack(model, args, entries, context)
     xl_decision_released(call)
     return xl_scores_pack(model, call)
+
+
+def xl_bayes_predict_std(model: PythonObject, args: PythonObject, entries: XLinearOps,
+                         context: PythonObject) raises -> PythonObject:
+    """BayesianRidge / ARDRegression `predict(X, return_std=True)` (lane
+    mf-iterimp2; scikit-learn `_bayes.py` predict): the mean (the
+    regressor's decision) and the predictive standard deviation:
+    BayesianRidge from its fitted factor (V, ev, alpha_, lambda_; sigma_ is
+    never formed), ARDRegression from its sigma_ over the kept columns
+    (lambda_ < threshold_lambda). UNPACK: the decision request and the
+    fitted words; RUN (GIL released, one region): the decision, the kept
+    columns, the standard deviations (x_linear/door_run.mojo
+    `xl_bayes_std_run`, one XL_OP_BAYES_STD call: rows split across the
+    host's workers, or one thread a row on the device); PACK: the (mean,
+    std) tuple."""
+    var nk = x_linear_keys()
+    var fields = py_fields(model)
+    var name = _name(model)
+    var call = xl_regressor_predict_unpack(model, Python.tuple(args[0]), entries, context)
+    var threshold = py_get(fields, nk[].k_threshold_lambda)
+    var ard = threshold is not None
+    var s_source = py_get(fields, nk[].k_sigma_ if ard else nk[].k__bayes_v)
+    var offset_source = py_get(fields, nk[].k_X_offset_)
+    if s_source is None or offset_source is None:
+        raise Error("AttributeError: mojolearn " + name + ": this model holds no fitted posterior (fit it again)")
+    var d = call.request.cols
+    var n = call.request.rows
+    # an ARD fit that kept no feature has an empty (0, 0) sigma_
+    var s_words = Int(py=s_source.size)
+    var s_address = 0
+    var s_keep = PythonObject(None)
+    if s_words > 0:
+        var words = _xl_words(s_source, "sigma_" if ard else "posterior factor", context)
+        s_words = words.rows * words.cols
+        s_address = words.address
+        s_keep = words.array
+    var offset = _xl_words(offset_source, "X_offset_", context)
+    if offset.rows * offset.cols != d:
+        raise Error("ValueError: mojolearn " + name + ": X_offset_ does not match n_features_in_")
+    var alpha = _float(py_item(fields, nk[].k_alpha_))
+    var lam = 0.0
+    var ev_address = 0
+    var ev_keep = PythonObject(None)
+    var lambda_address = 0
+    var thr = 0.0
+    if ard:
+        var lambdas = _xl_words(py_item(fields, nk[].k_lambda_), "lambda_", context)
+        if lambdas.rows * lambdas.cols != d:
+            raise Error("ValueError: mojolearn " + name + ": lambda_ does not match n_features_in_")
+        lambda_address = lambdas.address
+        ev_keep = lambdas.array
+        thr = _float(threshold)
+    else:
+        lam = _float(py_item(fields, nk[].k_lambda_))
+        var ev = _xl_words(py_item(fields, nk[].k__bayes_ev), "posterior factor", context)
+        if ev.rows * ev.cols != d or s_words != d * d:
+            raise Error("ValueError: mojolearn " + name + ": the posterior factor does not match n_features_in_")
+        ev_address = ev.address
+        ev_keep = ev.array
+    var kept = admitted_vector(d if ard else 0, "<i4", context)
+    var kept_address = labels_address(kept) if ard and d > 0 else 0
+    var std = admitted_vector(n, "<f4", context)
+    var request = XlBayesStdRequest(call.request.entry, call.request.x, s_address, ev_address, offset.address,
+                                    kept_address, labels_address(std), n, d, d, not ard, alpha, lam)
+    var dk = d
+    var py = Python()
+    with GILReleased(py):
+        xl_decision_run(call.request)
+        if ard:
+            dk = xl_ard_kept_run(lambda_address, d, thr, kept_address)
+        request.dk = dk
+        if s_words == dk * dk:
+            xl_bayes_std_run(request)
+    _ = s_keep  # the words the RUN read stay alive past it
+    _ = ev_keep
+    _ = offset^
+    _ = kept
+    if s_words != dk * dk:
+        raise Error("ValueError: mojolearn " + name + ": sigma_ does not match the kept features")
+    var mean = xl_scores_pack(model, call)
+    return Python.tuple(mean, std)
+
+
+def xl_bayes_sigma(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """BayesianRidge.sigma_ (lane mf-iterimp2): the posterior covariance
+    V diag(1 / (alpha_ ev + lambda_)) V' formed from the fitted factor on
+    the attribute's FIRST read, then kept in the instance's fields (a refit
+    drops it). UNPACK: the factor's words and the two scalars; RUN (GIL
+    released): x_linear/door_run.mojo `xl_bayes_sigma_run`, the cells across
+    the host's workers; PACK: one field set. Two first readers on two
+    threads may both form the same words; the publish is one dictionary
+    store under the GIL, so no lock is taken and nothing is global."""
+    var nk = x_linear_keys()
+    var fields = py_fields(model)
+    var kept = py_get(fields, nk[].k__bayes_sigma)
+    if kept is not None:
+        return kept
+    var v_source = py_get(fields, nk[].k__bayes_v)
+    var ev_source = py_get(fields, nk[].k__bayes_ev)
+    if v_source is None or ev_source is None:
+        raise Error("AttributeError: '" + _name(model) + "' object has no attribute 'sigma_'")
+    var v = _xl_words(v_source, "posterior factor", context)
+    var ev = _xl_words(ev_source, "posterior factor", context)
+    var d = ev.rows * ev.cols
+    if v.rows * v.cols != d * d:
+        raise Error("ValueError: mojolearn " + _name(model) + ": the posterior factor is not d x d")
+    var alpha = _float(py_item(fields, nk[].k_alpha_))
+    var lam = _float(py_item(fields, nk[].k_lambda_))
+    var sigma = admitted_array(Python.tuple(d, d), "<f4", context)
+    var v_address = v.address
+    var ev_address = ev.address
+    var dst = labels_address(sigma)
+    var py = Python()
+    with GILReleased(py):
+        xl_bayes_sigma_run(v_address, ev_address, d, alpha, lam, dst)
+    _ = v^  # the factor's words stay alive past the RUN
+    _ = ev^
+    py_setitem(fields, nk[].k__bayes_sigma, sigma)
+    return sigma
 
 
 def xl_classifier_decision(model: PythonObject, source: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
@@ -937,6 +1058,10 @@ def _xl_public_operation(model: PythonObject, operation: Int, name: PythonObject
         xl_device_admit(model, args[0], context)
         xl_route_drop(model)
         return PythonObject(None)
+    if operation == X_LINEAR_OPN_BAYES_SIGMA:
+        # BayesianRidge.sigma_: a fitted attribute formed on its first read;
+        # no input and no lifecycle step
+        return xl_bayes_sigma(model, context)
     if operation == X_LINEAR_OPN_CD_VENDOR_USED:
         # Lasso / ElasticNet `vendor_used()`: metadata, no input and no
         # lifecycle step. An explicit host class runs the CPU image.

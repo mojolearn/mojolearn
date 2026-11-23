@@ -52,7 +52,7 @@ from bindings.gp_regressor_native_door import _gpr_validate, _gpr_validate_field
 from bindings.gp_classifier_native_door import (
     gpc_validate, gpc_validate_fields, _gpc_ext, _gpc_binary_result, _gpc_set_fitted, GPCFitPublication,
 )
-from bindings.member_owner_unpack import MemberOwner, member_labels_take
+from bindings.member_owner_unpack import MemberOwner, member_labels_take, member_host_only
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_item, py_setitem, py_fields
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
@@ -64,6 +64,8 @@ from core.member_abi import (
     MEMBER_F64,
 )
 from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.gp_public_lifecycle_pyapi_door import gp_host_class_binding
+from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_fit_complete
 
 comptime _B_X = MEMBER_BLOCK_FAMILY
@@ -86,8 +88,8 @@ comptime _GPC = "mojolearn GaussianProcessClassifier"
 def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: this kind or kernel has no member
-    entry (a kernel table the member cannot address)."""
+    from the unfitted estimator. False only for an unknown kind: every
+    kernel layout the door fits ("leaf", "pair", "nodes") is addressed."""
     if kind == 1:
         return _gpc_admit(model, context, owner)
     if kind != 0:
@@ -102,7 +104,10 @@ def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
     _gpr_validate_fields(settings, context)
     var nk = gp_keys()
     var kernel = py_item(settings, nk[].k__kernel)
-    var binding = estimator_binding(model, "_mojolearn_gp", context)
+    # An explicit HostGaussianProcessRegressor (its own host-only word, lane mf-iterimp3b): the CPU identical
+    # GP image (`estimator_member_binding`), never the device one; a wheel's CPU set without that image
+    # refuses at admission and the caller keeps its own path. Any other class: its binding route.
+    var binding = estimator_member_binding(model, "_mojolearn_gp", context)
     var ext = _gpr_ext(model, binding, context)
     var connection = GPConnection(ext)
     var packed = gp_kernel_arrays(kernel, context)
@@ -112,7 +117,14 @@ def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
     var nodes = len(storage.kinds)
     var scale_words = storage.scale_count
     # Node targets: 0 fixed, 1 a free parameter, 2 free length scales
-    # (`gp_replace`'s walk); a table whose count disagrees is not served.
+    # (`gp_replace`'s walk). Every layout the door fits maps one to one onto
+    # the packed table (lane mf-img3): a "leaf" is one packed node and one
+    # free flag (its length scales, or its one value, are its free values);
+    # a "pair" is its two subtrees' nodes then one operator node with a fixed
+    # flag; a "nodes" layout (a loaded kernel, `_SavedKernel`) is its saved
+    # postfix nodes copied as they are (bindings/gp_kernel_public_native_door.mojo
+    # `_kernel_nodes_walk`), each with a fixed flag (bindings/gp_common_native_unpack.mojo
+    # `gp_free`: a loaded kernel has no free hyperparameter, as in its door).
     var targets = List[Int]()
     var taken = 0
     for i in range(nodes):  # driver-loop: over the kernel's postfix nodes
@@ -122,7 +134,8 @@ def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
             taken += Int(storage.lengths[i]) if target == 2 else 1
         targets.append(target)
     if len(free.flags) != nodes or taken != len(free.values):
-        return False
+        # Not reachable from a connected layout (above): the two walks disagree only through a defect.
+        raise Error("RuntimeError: mojolearn: the GP kernel's free hyperparameters do not match its packed nodes")
     var optimizer = py_item(settings, nk[].k__optimizer)
     var optimize = optimizer is not None and len(free.values) > 0
     var seed_source = py_item(settings, nk[].k__random_state)
@@ -193,7 +206,13 @@ def _gpc_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwne
     var settings = py_call(b_mod.dict, py_fields(model))
     gpc_validate_fields(settings, context)
     var nk = gp_keys()
-    var binding = estimator_binding(model, "_mojolearn_gp", context)
+    # An explicit HostGaussianProcessClassifier (its own host-only word, lane mf-cal3b): the image its own
+    # doors bind (`gp_host_class_binding`). On the inference-only image a wheel ships, the member's fit reaches
+    # the same unavailable Laplace entry its own fit reaches first (`gpc_fit_all`, else `gpc_fit`: the same
+    # GP_CAP_OVR test, bindings/gp_classifier_native_door.mojo `_gpc_fit` and core/gp_member.mojo `_gpc_fit`)
+    # and the native set raises those words; on the reference image it fits as its own fit does.
+    var binding = (gp_host_class_binding(model, context) if member_host_only(model)
+                   else estimator_binding(model, "_mojolearn_gp", context))
     var ext = _gpc_ext(model, binding, context)
     var connection = GPConnection(ext)
     var packed = gp_kernel_arrays(py_item(settings, nk[].k__kernel), context)

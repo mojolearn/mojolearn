@@ -20,28 +20,27 @@ settings, an ordered RMSE booster of its own), and it needs a per-fit
     (`gbdt_config`, with the Ordered checks' texts) read once from the
     unfitted estimator, as the fit door reads them; the route of the gbdt
     image its fit would run in (`gbdt_table` of its run context: mode,
-    vendor, entry). Returns False (the caller keeps the estimator's doors)
-    for what the typed member does not carry: cat_features /
-    one_hot_features (the category map and CTR tables), the multi-target
-    losses (y of n_targets columns), the query-wise losses (group_id /
-    pairs) and any class but GradientBoosting itself. An eval set, groups
-    and pairs are fit arguments a member call cannot pass, so a caller with
-    them keeps the doors by construction.
+    vendor, entry), and the cat_features / one_hot_features lists as NEW's
+    feature-list tail (lane mf-img3: the member fits the category map, the
+    one-hot flags, the multi-target losses and, with the caller's group ids
+    in `call.groups`, the query-wise losses). Returns False only for a class
+    but GradientBoosting itself. An eval set and pairs are fit arguments a
+    member call does not pass, so a caller with them keeps the doors by
+    construction.
   * `gbdt_member_pack` (PACK): the fitted attributes the fit door's PACK
     writes (`model_`, `bias_`, `best_iteration_`, `stopped_early_`,
     `loss_curve_`, `test_loss_curve_` None, `n_features_in_`,
-    `category_map_` None, `approx_dim_`, `n_classes_`, `learning_rate_`,
+    `category_map_` (the member's map block, None without cat_features),
+    `approx_dim_`, `n_classes_`, `learning_rate_`,
     `boosting_type_`), the old resident copy dropped as the fit drops it.
   * `gbdt_member_state` (UNPACK): a member state from a fitted estimator's
-    model text, loss curve and scalars. A CTR model (fitted with
-    cat_features) is refused by the member's IMPORT; the caller then keeps
-    the doors.
+    model text, loss curve, scalars and (a CTR model) its category map.
 
   * The adapters (kinds 0, 2): admission as above over the learner, plus
     the adapter's own refusals (`_new_learner`: numeric_mode, the
     regressor's class_weights; the image's compiled tier against the mode).
-    False for the classifier in `fast` (its door takes the learner's class
-    kernels there). PACK: `_learner_`, `numeric_mode_`, `n_features_in_`,
+    In `fast` the classifier member's codes take the learner's class
+    kernels, as its door does (core/gbdt_member.mojo `_fast_codes`). PACK: `_learner_`, `numeric_mode_`, `n_features_in_`,
     `model_`, the five learner attributes; the classifier's `classes_`
     (the caller's labels, normalized as the adapter's fit normalizes them),
     `n_classes_` 2 and `_label_kind_`; `_mojolearn_fitted`. The caller's
@@ -55,10 +54,12 @@ from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner
 from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_fields, py_type
 from bindings.classical_arrays_door import classical_address
-from bindings.admitted_input_unpack import classical_view
+from bindings.admitted_input_unpack import classical_view, admitted_vector
 from bindings.trees_keys_unpack import trees_keys
 from bindings.trees_route_boundary_door import trees_route_context
-from bindings.trees_public_gbdt_door import gbdt_table, gbdt_entry_of, _field
+from bindings.trees_public_gbdt_door import gbdt_table, gbdt_entry_of, _field, _repr
+from bindings.py_typed_call import py_call_typed
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.trees_public_gbdt_fit_door import (
     gbdt_config, gbdt_check_option_tables, _tables, _truthy, _in, _f64_curve,
     adapter_member_learner, adapter_label_kind,
@@ -74,7 +75,7 @@ from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE,
-    MEMBER_F64, MEMBER_I32,
+    MEMBER_F64, MEMBER_I32, MEMBER_I64,
 )
 
 
@@ -101,8 +102,6 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
     var learner = adapter_member_learner(model, native)
     var nk = trees_keys()
     var mode = String(py=py_item(py_fields(learner), nk[].k_numeric_mode))
-    if kind == 0 and mode == "fast":
-        return False
     var code = xg_numeric_mode(gbdt_entry_of(gbdt_table(py_fields(learner), native)))
     if code != (0 if mode == "fast" else 1):
         raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
@@ -114,13 +113,25 @@ def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut ow
     adapter's learner) in its run context `run`; `kind` is NEW's word 0."""
     var own = py_fields(model)
     var nk = trees_keys()
-    if (_truthy(_field(own, model, nk[].k_cat_features, "cat_features"))
-            or _truthy(_field(own, model, nk[].k_one_hot_features, "one_hot_features"))):
-        return False
+    var cat = _field(own, model, nk[].k_cat_features, "cat_features")
+    var hot = _field(own, model, nk[].k_one_hot_features, "one_hot_features")
     var t = _tables(run)
     var loss = _field(own, model, nk[].k_loss, "loss")
-    if _in(loss, py_item(t, nk[].k_multi_regression_losses)) or _in(loss, py_item(t, nk[].k_querywise_losses)):
-        return False
+    if _in(loss, py_item(t, nk[].k_multi_regression_losses)):
+        # The fit door's refusals of a multi-target loss that read no rows
+        # (`gbdt_fit_unpack`, in its order and words); the rows' own (y's
+        # width, group ids) are the member fit's.
+        if _field(own, model, nk[].k_class_weights, "class_weights") is not None:
+            raise Error("mojolearn: class_weights do not apply to loss=" + _repr(loss))
+        if _truthy(cat) or _truthy(hot):
+            raise Error("NotImplementedError: mojolearn: loss=" + _repr(loss) + " with cat_features or "
+                        + "one_hot_features is not carried: the CTR target "
+                        + "binarization reads one target per row")
+        if _truthy(_field(own, model, nk[].k_boost_from_average, "boost_from_average")):
+            raise Error("NotImplementedError: mojolearn: boost_from_average=True with loss="
+                        + _repr(loss) + " is not carried: its StartingPoint is "
+                        + "per-dimension (optimal_const_for_loss.h:230-239) and "
+                        + "this model's bias is one value (DEVIATION 5951)")
     # The fit's own checks and settings, read once (the fit door reads the
     # same at every fit): refused now, in its words.
     gbdt_check_option_tables(own, model, run)
@@ -135,6 +146,21 @@ def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut ow
     owner.plan.route = route
     var words: List[Float64] = [kind]
     words.extend(gbdt_config_words(config))
+    # The feature-list tail (core/gbdt_member.mojo NEW): cat_features, then
+    # one_hot_features, as the estimator holds them (`int` of each, the fit
+    # door's `gbdt_category_columns` / `_flags` reads), then their counts.
+    var counts = List[Int](length=2, fill=0)
+    var b = native_loaded_module("builtins")
+    for which in range(2):  # driver-loop: over fixed call structure, small-loop(lists): the two feature-list arguments
+        var values = cat if which == 0 else hot
+        if not _truthy(values):
+            continue
+        var listed = py_call(b.list, values)
+        for k in range(len(listed)):  # driver-loop: over the feature-list argument indices
+            words.append(Float64(Int(py=py_call_typed(b.int, listed[k]))))
+        counts[which] = len(listed)
+    words.append(Float64(counts[0]))
+    words.append(Float64(counts[1]))
     owner.plan.params = words^
     owner.pins = Python.tuple(table, run)
     return True
@@ -209,6 +235,16 @@ def _learner_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, 
     if count > 0:
         unsafe_memcpy(dest=learn.unsafe_ptr(), src=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data),
                       count=count)
+    # The category map (a model fitted with cat_features): one int64 Array of
+    # its stored words, as the fit door's `gbdt_category_fit` returns it.
+    call.block = MEMBER_BLOCK_FAMILY + 2
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var map_words = call.dst.rows * call.dst.cols
+    var category_map = PythonObject(None)
+    if map_words > 0:
+        category_map = admitted_vector(map_words, "<i8", run)
+        unsafe_memcpy(dest=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(category_map))),
+                      src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=call.dst.data), count=map_words)
     py_setitem(own, nk[].k_model_, PythonObject(text))
     py_setitem(own, nk[].k_bias_, PythonObject(bias))
     py_setitem(own, nk[].k_best_iteration_, PythonObject(best))
@@ -216,7 +252,7 @@ def _learner_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, 
     py_setitem(own, nk[].k_loss_curve_, _f64_curve(learn, run))
     py_setitem(own, nk[].k_test_loss_curve_, PythonObject(None))
     py_setitem(own, nk[].k_n_features_in_, PythonObject(features))
-    py_setitem(own, nk[].k_category_map_, PythonObject(None))
+    py_setitem(own, nk[].k_category_map_, category_map)
     py_setitem(own, nk[].k_approx_dim_, PythonObject(dim))
     py_setitem(own, nk[].k_n_classes_, PythonObject(classes) if classes > 0 else PythonObject(None))
     py_setitem(own, nk[].k_learning_rate_, PythonObject(rate))
@@ -233,15 +269,14 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         var learner = py_get(own, nk[].k__learner_)
         if learner is None:
             raise Error("NotFittedError: this member is not fitted yet")
-        var mode = py_get(own, nk[].k_numeric_mode_)
-        if plan.kind == 0 and mode is not None and Bool(py=mode == PythonObject("fast")):
-            raise Error("NotImplementedError: mojolearn: a GradientBoostingClassifier fitted in fast mode keeps its own doors")
         own = py_fields(learner)
     var source = py_get(own, nk[].k_model_)
     if source is None:
         raise Error("NotFittedError: this member is not fitted yet")
-    if py_get(own, nk[].k_category_map_) is not None:
-        raise Error("NotImplementedError: mojolearn: a GradientBoosting fitted with cat_features keeps its own doors")
+    var category_map = py_get(own, nk[].k_category_map_)
+    var map_view = PythonObject(None)
+    if category_map is not None:
+        map_view = classical_view(category_map, context, "category_map_")
     var text = String(py=source)
     var nbytes = text.byte_length()
     var packed = List[Int32](length=max((nbytes + 3) // 4, 1), fill=0)
@@ -265,6 +300,10 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         call.block = MEMBER_BLOCK_FAMILY + 1
         call.x = MemberMatrix(Int(py=classical_address(curve_view)), 1, Int(py=curve_view.size), MEMBER_F64)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if map_view is not None:
+            call.block = MEMBER_BLOCK_FAMILY + 2
+            call.x = MemberMatrix(Int(py=classical_address(map_view)), 1, Int(py=map_view.size), MEMBER_I64)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE
@@ -273,6 +312,7 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         member_free(plan, call)
         raise error
     _ = curve_view
+    _ = map_view
     _ = len(packed)
     _ = len(scalars)
     _ = text

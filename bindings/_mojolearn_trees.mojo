@@ -57,7 +57,7 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import shared_class_counts_mask
 from extratrees.estimator import FitResult
-from core.forest_inference_model import resident_release
+from core.forest_inference_model import resident_release, resident_stage_input, resident_unstage_input
 
 
 # DEVIATION 2482: fit/export ownership is separate from inference residency.
@@ -489,6 +489,17 @@ struct EtGpuForest(ForestImage):
     @staticmethod
     def fit_ada_round(classifier: Bool, args: ForestFitArgs) raises -> Int:
         raise Error("RuntimeError: the extra-trees binding has no AdaBoost device rounds")
+
+    @staticmethod
+    def stage_input(x: Int, rows: Int, cols: Int) raises -> Int:
+        """XF_STAGE_INPUT (lane mf-meta3c): the body of the Python entry
+        `forest_stage_input_gpu` (bindings/forest_inference_binding_door.mojo)."""
+        var xp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x)
+        return 1 if resident_stage_input[False](xp.unsafe_origin_cast[MutAnyOrigin](), rows * cols) else 0
+
+    @staticmethod
+    def unstage_input() raises:
+        resident_unstage_input[False]()
 
 
 def et_gpu_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

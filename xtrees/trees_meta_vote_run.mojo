@@ -111,29 +111,37 @@ def _member_f32(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]]) ->
     call written into storage `keep` owns (a float64 answer is rounded to
     float32 word by word, as the door's float32 admission of it rounded).
     0 when the native call refused."""
+    try:
+        return member_f32_block(m, rows, keep)
+    except:
+        return 0
+
+
+def member_f32_block(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]]) raises -> Int:
+    """`_member_f32`, raising the member's own words when its call refuses
+    (lane mf-cal3, 2026-11-23: CalibratedClassifierCV.fit raises them; the
+    vote RUNs keep `_member_f32`, whose 0 sends a member to its door). One
+    body: `_member_f32` is this call under a catch."""
     if not m.native:
         return m.address
     var count = rows.n * m.cols
-    try:
-        var plan = _PlanP(unsafe_from_address=m.plan)
-        var call = member_call_of(plan[], m.state)
-        call.x = MemberMatrix(rows.x, rows.n, rows.d)
-        if m.dtype == MEMBER_F64:
-            var wide = List[Float64](unsafe_uninit_length=count)
-            call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, m.cols, MEMBER_F64)
-            _ = member_call(plan[].member, m.operation, call)
-            var words = List[Float32](unsafe_uninit_length=count)
-            for i in range(count):  # small-loop(one rounding pass over one member's block, as the door's admission made)
-                words[i] = wide[i].cast[DType.float32]()
-            _ = wide^
-            keep.append(words^)
-        else:
-            var words = List[Float32](unsafe_uninit_length=count)
-            call.dst = MemberMatrix(Int(words.unsafe_ptr()), rows.n, m.cols, MEMBER_F32)
-            _ = member_call(plan[].member, m.operation, call)
-            keep.append(words^)
-    except:
-        return 0
+    var plan = _PlanP(unsafe_from_address=m.plan)
+    var call = member_call_of(plan[], m.state)
+    call.x = MemberMatrix(rows.x, rows.n, rows.d)
+    if m.dtype == MEMBER_F64:
+        var wide = List[Float64](unsafe_uninit_length=count)
+        call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, m.cols, MEMBER_F64)
+        _ = member_call(plan[].member, m.operation, call)
+        var words = List[Float32](unsafe_uninit_length=count)
+        for i in range(count):  # small-loop(one rounding pass over one member's block, as the door's admission made)
+            words[i] = wide[i].cast[DType.float32]()
+        _ = wide^
+        keep.append(words^)
+    else:
+        var words = List[Float32](unsafe_uninit_length=count)
+        call.dst = MemberMatrix(Int(words.unsafe_ptr()), rows.n, m.cols, MEMBER_F32)
+        _ = member_call(plan[].member, m.operation, call)
+        keep.append(words^)
     return Int(keep[len(keep) - 1].unsafe_ptr())
 
 

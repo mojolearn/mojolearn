@@ -1531,6 +1531,9 @@ class LabelPropagation(_LabelPropagationBase):
     """
 
     _variant = "propagation"
+    #: Kernel and Permutation SHAP explain this exact class's predict_proba natively (its typed predict body,
+    #: bindings/neighbors_lp_query_unpack.mojo); read from the class's own namespace, so a subclass is not admitted.
+    _mojolearn_explained = "label_propagation"
 
     #: This class takes `device=`: its doors take every compiled module from the
     #: estimator's device route, and the check builds its other side as the same
@@ -1611,6 +1614,9 @@ class LabelSpreading(_LabelPropagationBase):
     """
 
     _variant = "spreading"
+    #: Kernel and Permutation SHAP explain this exact class's predict_proba natively (its typed predict body,
+    #: bindings/neighbors_lp_query_unpack.mojo); read from the class's own namespace, so a subclass is not admitted.
+    _mojolearn_explained = "label_propagation"
 
     #: This class takes `device=`: its doors take every compiled module from the
     #: estimator's device route, and the check builds its other side as the same

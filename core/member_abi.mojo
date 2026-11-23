@@ -121,7 +121,7 @@ from core.native_descriptor_abi import NativeDescriptorCall
 #: `MemberMatrix`, `DeviceRoute` or the operation codes.
 #: 3 (2026-11-21): `MemberMatrix.steps`.
 #: Words APPENDED to the end of `MemberCall` (round 5: out_dtype, scope, pin, devices, device_count; round 6:
-#: pin_kept) do not
+#: pin_kept; lane mf-img3: groups) do not
 #: bump it: every image of one build compiles this file, and a member that does not read them is unchanged.
 comptime MEMBER_CALL_LAYOUT = 3
 
@@ -421,6 +421,12 @@ struct MemberCall(Movable):
     # APPENDED 2026-11-25 (round 6; THE PIN RULE above). Written nonzero by a
     # member whose cache took this call's `pin` reference; 0 from the caller.
     var pin_kept: Int
+    # APPENDED 2026-11-23 (lane mf-img3). MEMBER_OP_FIT: the caller's group id
+    # of each training row (int32 or int64, rows x 1, in the row order the
+    # member sees), for a member whose loss reads query groups (the Gbdt
+    # member's query-wise losses: group_id). Not given (rows 0): no groups.
+    # A member that reads no groups ignores it.
+    var groups: MemberMatrix
 
     def __init__(out self, route: DeviceRoute, state: Int = 0):
         self.layout = MEMBER_CALL_LAYOUT
@@ -446,6 +452,7 @@ struct MemberCall(Movable):
         self.devices = 0
         self.device_count = 0
         self.pin_kept = 0
+        self.groups = MemberMatrix()
 
     def on_cpu(self) -> Bool:
         """The member's RESOLVED device is the CPU (its route says so; no

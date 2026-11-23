@@ -14,7 +14,7 @@ from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.linear_entry_table_ext import (
     XL_OP_FLAGS, XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES,
-    XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_SPEARMAN,
+    XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_SPEARMAN, XL_OP_BAYES_STD,
     XL_FIT_HEADER, xl_ops_check_spans, xl_ops_int32, xl_ops_float32,
 )
 from x_linear.class_prep import class_prep_host
@@ -23,7 +23,7 @@ from x_linear.ridgecv import ridge_best_alpha
 from x_linear.spearman import spearman_sign_host
 from x_linear.x_linear_host_impl import (
     x_linear_fit_host, x_linear_decision_host, x_linear_decision_codes_host, x_linear_decision_rows_host,
-    x_linear_decision_huber_out_host,
+    x_linear_decision_huber_out_host, x_linear_bayes_std_host,
 )
 
 
@@ -100,6 +100,8 @@ def x_linear_ops_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             r[] = xl_class_prep_host_run(a[0], a[1], a[2], a[3], p[0], p[1], p[2] != 0, p[3] != 0)
         elif operation == XL_OP_SPEARMAN:
             r[] = xl_spearman_host_run(a[0], a[1], p[0])
+        elif operation == XL_OP_BAYES_STD:
+            r[] = x_linear_bayes_std_host(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], f[0], f[1], a[5])
         else:
             r[] = xl_best_alpha_host_run(a[0], p[0])
         return 0

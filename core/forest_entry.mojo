@@ -26,7 +26,7 @@ from core.forest_fit_request import (
     XF_EXPORT_SIZES, XF_EXPORT_INTO, XF_EXPORT_VERIFY, XF_EXPORT_RELEASE, XF_PREDICT, XF_RESIDENT_PREPARE,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_RESIDENT_RELEASE, XF_STRICT_PREPARE, XF_STRICT_PREDICT,
     XF_STRICT_RELEASE, XF_SESSION_OPEN, XF_SESSION_CLOSE, XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND,
-    XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
+    XF_STAGE_INPUT, XF_UNSTAGE_INPUT, XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
 )
 
 
@@ -124,6 +124,17 @@ trait ForestImage:
         """One AdaBoost round on `args.session`; the member's export handle."""
         ...
 
+    @staticmethod
+    def stage_input(x: Int, rows: Int, cols: Int) raises -> Int:
+        """XF_STAGE_INPUT: 1 when the rows at `x` are staged as the image's
+        shared resident input, 0 when not (a host image stages nothing)."""
+        ...
+
+    @staticmethod
+    def unstage_input() raises:
+        """XF_UNSTAGE_INPUT: end the staged input (a host image: nothing)."""
+        ...
+
 
 def _words(address: Int, count: Int) -> List[Int]:
     var out = List[Int](capacity=count)
@@ -146,11 +157,12 @@ def _need(na: Int, np: Int, want_a: Int, want_p: Int, what: String) raises:
 
 
 def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, free: Bool) raises -> Int:
-    if free and (op == XF_FIT_SESSION or op == XF_FIT_ADA_ROUND or op == XF_SESSION_OPEN
-                 or op == XF_SESSION_CLOSE or op == XF_ADA_OPEN):
-        # The data sessions and the AdaBoost rounds are the doors' own: their
-        # registries are serialized by the GIL and their fits release it.
-        raise Error("forest entry: a data session operation needs the caller to hold the GIL")
+    # TOMBSTONE: the refusal of a data session operation from a caller with
+    # no GIL ("needs the caller to hold the GIL") deleted 2026-11-23 by lane
+    # mf-ada2: the session registries have their own lock words
+    # (core/mojolearn_rf_run.mojo, core/mojolearn_rf_host_run.mojo) and the
+    # session bodies run bare (`forest_session_entry_releases`). Not an
+    # experiment arm.
     var p = _words(pp, np)
     if op == XF_CAPS:
         return I.caps()
@@ -221,6 +233,15 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, f
     if op == XF_STRICT_PREPARE:
         _need(na, np, 5, 3, "forest_strict_prepare")
         return I.strict_prepare(a, p[0], p[1], p[2])
+    if op == XF_STAGE_INPUT:
+        _need(na, np, 1, 2, "forest input staging")
+        if p[0] < 1 or p[1] < 1 or p[0] > 2147483647 // p[1]:
+            return 0
+        return I.stage_input(a[0], p[0], p[1])
+    if op == XF_UNSTAGE_INPUT:
+        _need(na, np, 0, 0, "forest input unstaging")
+        I.unstage_input()
+        return 0
     raise Error("forest entry: unknown operation " + String(op))
 
 
@@ -237,7 +258,9 @@ def forest_entry_dispatch[I: ForestImage](operation_word: Int, aa: Int, na: Int,
     as their doors need. Nothing else in an image touches the GIL, and no
     registry an operation reaches relies on it (each has its own lock word:
     core/forest_export_run.mojo, core/forest_inference_model.mojo,
-    core/forest_host_groves.mojo, core/forest_host_strict_run.mojo)."""
+    core/forest_host_groves.mojo, core/forest_host_strict_run.mojo, and the
+    data session registries core/mojolearn_rf_run.mojo `RF_SESSIONS` and
+    core/mojolearn_rf_host_run.mojo `RF_HOST_SESSIONS`, lane mf-ada2)."""
     try:
         var free = entry_op_gil_free(operation_word)
         var operation = entry_op_plain(operation_word)
@@ -264,10 +287,28 @@ def forest_host_entry_releases(operation: Int) -> Bool:
     the dispatch with `ENTRY_OP_GIL_FREE` added, so the image's bodies run
     bare. False for an operation already carrying `ENTRY_OP_GIL_FREE` (that
     caller holds no GIL) and for every other operation (a few words, or a
-    data session operation, whose registry the GIL serializes)."""
+    data session operation: lane mf-ada2 moved those to
+    `forest_session_entry_releases`, which this includes)."""
     if entry_op_gil_free(operation):
         return False
-    return operation == XF_FIT or operation == XF_FIT_DART or operation == XF_PREDICT or operation == XF_STRICT_PREDICT
+    return (operation == XF_FIT or operation == XF_FIT_DART or operation == XF_PREDICT
+            or operation == XF_STRICT_PREDICT or forest_session_entry_releases(operation))
+
+
+def forest_session_entry_releases(operation: Int) -> Bool:
+    """True for a data session operation (XF_SESSION_OPEN, XF_SESSION_CLOSE,
+    XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND) from a caller that holds
+    the GIL (lane mf-ada2, 2026-11-23). Their registries have their own lock
+    words and their bodies never touch the GIL, so an image's binding entry
+    releases around the WHOLE dispatch of such an operation and adds
+    `ENTRY_OP_GIL_FREE` (its upload, fit and launches then run bare), as the
+    host image does for its fits; a typed RUN that holds no GIL
+    (xtrees/trees_ada_fit_run.mojo) sends the bit itself and the entry runs
+    the same dispatch with no release."""
+    if entry_op_gil_free(operation):
+        return False
+    return (operation == XF_SESSION_OPEN or operation == XF_SESSION_CLOSE or operation == XF_FIT_SESSION
+            or operation == XF_ADA_OPEN or operation == XF_FIT_ADA_ROUND)
 
 
 struct ForestEntryOwner(Defaultable, Movable):

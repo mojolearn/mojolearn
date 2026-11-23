@@ -591,6 +591,42 @@ def test_door_matches_former_route_mojolearn_estimator(kw):
     _same(m.transform(Xh), o.transform(Xh))
 
 
+@needs_bindings
+@pytest.mark.parametrize("make, kw", [
+    ("bayes", dict(sample_posterior=True, random_state=4, max_iter=3)),
+    ("ard", dict(sample_posterior=True, random_state=5, max_iter=2, min_value=-0.5, max_value=0.5)),
+    ("bayes", dict(max_iter=3)),
+])
+def test_door_matches_former_route_posterior_member(make, kw):
+    # lane mf-iterimp2: sample_posterior with BayesianRidge / ARDRegression runs on the member route (PREDICT_STD
+    # with the mean); the former route draws from the public predict(return_std=True): the same words
+    X, Xh = _data(2), _data(3)
+    est = (lambda: ml.BayesianRidge()) if make == "bayes" else (lambda: ml.ARDRegression())
+    m = ml.IterativeImputer(estimator=est(), **kw)
+    o = _Former(estimator=est(), **kw)
+    _same(m.fit_transform(X), o.fit_transform(X))
+    assert m.n_iter_ == o.n_iter_ and m._rng == o._rng
+    _same(m.transform(Xh), o.transform(Xh))
+    assert m._rng == o._rng
+
+
+@needs_bindings
+@pytest.mark.parametrize("make", ["ridge", "bayes", "gpr"])
+def test_transform_held_states_and_imports(make):
+    # lane mf-iterimp2: transform with estimator= reads each fitted step's held member state (handed over at
+    # fit); a deep copy holds none, so its transform imports each step's fitted attributes once: the same words,
+    # and a second transform of the copy (now held) too
+    X, Xh = _data(2), _data(3)
+    est = {"ridge": lambda: ml.Ridge(alpha=2.0), "bayes": lambda: ml.BayesianRidge(),
+           "gpr": lambda: ml.GaussianProcessRegressor(random_state=0)}[make]
+    m = ml.IterativeImputer(estimator=est(), max_iter=2).fit(X)
+    c = copy.deepcopy(m)
+    first = np.asarray(m.transform(Xh))
+    _same(c.transform(Xh), first)
+    _same(c.transform(Xh), first)
+    _same(m.transform(Xh), first)
+
+
 class _PlainRegressor:
     def get_params(self, deep=True):
         return {}

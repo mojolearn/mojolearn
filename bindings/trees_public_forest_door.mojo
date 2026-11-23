@@ -97,7 +97,7 @@ from core.forest_fit_request import (
     ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_ORDERED_RESIDENT, XF_CAP_STRICT,
     XF_RESIDENT_RELEASE, XF_STRICT_RELEASE,
 )
-from core.entry_table import EntryRef, entry_ref_unresolved
+from core.entry_table import EntryRef
 from core.forest_calls import (
     ForestExport, xf_ref, xf_caps, xf_dt_default_bins, xf_export_sizes, xf_export_into,
     xf_export_verify, xf_export_release, xf_snapshot_release,
@@ -634,30 +634,10 @@ def forest_export_handle(key: EntryRef, handle: Int, selection: String,
         raise error^
 
 
-def forest_fit_request(fields: PythonObject, cfg: PythonObject, kind: String, rows: Int, cols: Int, classes: Int,
-                       x_addr: Int, y_addr: Int, fit: ForestFit, native: PythonObject,
-                       context: PythonObject) raises -> ForestFitArgs:
-    """The typed request of one fit from the Python configuration, for a
-    caller that holds no `ForestConfig` (the boost door's member fits):
-    UNPACK (`forest_config`: `cfg` for an ET kind, the instance's own `_cfg`
-    for an RF kind, as before) then `forest_request`. The door's own fits and
-    the tree-range shard driver read the configuration once per fit and call
-    `forest_request` directly."""
-    if _family(kind) == "et":
-        var et_config = forest_config(fields, cfg, kind, False, context)
-        return forest_request(et_config, entry_ref_unresolved(), rows, cols, classes, x_addr, y_addr, fit, False)
-    var nk = trees_keys()
-    var config = forest_config(fields, py_item(fields, nk[].k__cfg), kind, False, context)
-    if config.bins_image:
-        return forest_request(config, forest_key(native), rows, cols, classes, x_addr, y_addr, fit, False)
-    return forest_request(config, entry_ref_unresolved(), rows, cols, classes, x_addr, y_addr, fit, False)
-
-
-def _launch(native: PythonObject, fit: ForestFit, x: AdmittedXView, args: ForestFitArgs, device_scan: Bool,
-            context: PythonObject) raises -> PythonObject:
-    """`_launch_on` for a caller that holds the binding, not its entry (the
-    boost door)."""
-    return _launch_on(forest_key(native), fit, x, args, device_scan, context)
+# TOMBSTONE: forest_fit_request / _launch (the typed request built from a member's Python fields per fit, and
+# the launch through a binding object, for the boost door's AdaBoost member rounds, their last callers) deleted
+# 2026-11-23 by lane mf-ada: xtrees/trees_ada_fit_run.mojo builds every round's request from the ForestConfig
+# the door reads once per fit. Not an experiment arm: git revert of that commit restores them.
 
 
 def _launch_on(key: EntryRef, fit: ForestFit, x: AdmittedXView, args: ForestFitArgs, device_scan: Bool,
@@ -1338,6 +1318,19 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
     state its constructor stores (its defaults, then the tree's settings),
     fitted by the extra-trees operation above, and its flat model becomes
     this tree's; predict delegates to it."""
+    var inner = forest_dt_random_inner(model, kind, context)
+    var inner_kind = String("et_classifier") if _classifier(kind) else String("et_regressor")
+    var inner_args = Python.tuple(args[0], args[1], args[2], PythonObject(False), PythonObject(None))
+    _ = et_fit(inner, inner_args, inner_kind, context)
+    forest_dt_random_adopt(model, inner)
+    return model
+
+
+def forest_dt_random_inner(model: PythonObject, kind: String, context: PythonObject) raises -> PythonObject:
+    """UNPACK of a random-splitter tree's fit (`dt_random_fit`; lane mf-ada2
+    shares it with AdaBoost's member rounds): the tree refreshed and its
+    UNFITTED inner one-tree ExtraTrees estimator, assembled with the state
+    its constructor stores (its defaults, then the tree's settings)."""
     var b = trees_builtins()
     var fields = forest_refresh(model, kind, context)
     var nk = trees_keys()
@@ -1361,9 +1354,15 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
         py_setitem(settings, nk[].k_class_weight, py_item(fields, nk[].k_class_weight))
     _ = py_call(inner_fields.update, settings)
     py_setitem(inner_fields, nk[].k__has_constructor_parameters, PythonObject(True))
-    var inner_kind = String("et_classifier") if _classifier(kind) else String("et_regressor")
-    var inner_args = Python.tuple(args[0], args[1], args[2], PythonObject(False), PythonObject(None))
-    _ = et_fit(inner, inner_args, inner_kind, context)
+    return inner
+
+
+def forest_dt_random_adopt(model: PythonObject, inner: PythonObject) raises:
+    """PACK of a random-splitter tree's fit: its FITTED inner forest kept
+    (`_random_inner`) and the fitted attributes the tree shares with it."""
+    var nk = trees_keys()
+    var fields = py_fields(model)
+    var inner_fields = py_fields(inner)
     py_setitem(inner_fields, nk[].k__mojolearn_fitted, PythonObject(True))
     py_setitem(fields, nk[].k__random_inner, inner)
     var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves", "_n_trees", "_num_outputs",
@@ -1373,7 +1372,6 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
     if py_contains(inner_fields, nk[].k_classes_):
         py_setitem(fields, nk[].k_classes_, py_item(inner_fields, nk[].k_classes_))
         py_setitem(fields, nk[].k_n_classes_, PythonObject(len(py_item(inner_fields, nk[].k_classes_))))
-    return model
 
 
 def forest_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:

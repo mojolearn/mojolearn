@@ -10,11 +10,15 @@ core/linear_svm_member.mojo. Published kinds: 0 LinearSVC, 1 LinearSVR
     driver of its device; a hit is one record read), for LinearSVR the
     x_metrics program entry (its estimator's own score program) of the route's tier and device in the fifth
     slot when that image is loaded, and the 11 parameter words
-    (core/linear_svm_member.mojo docstring). Not admitted (False; the
-    caller keeps the estimator's own doors): any LinearSVC class_weight (its
-    rows come from the x_trees class-weight programs), and a binary whose
-    driver lacks the native class-code queries (its own predict then
-    decodes through the label steps).
+    (core/linear_svm_member.mojo docstring), then LinearSVC's class-weight
+    tail (lane mf-adm3, core/member_class_weight.mojo: 'balanced', or a
+    dict's pending table the caller fills over its labels). Not admitted
+    (False; the caller keeps the estimator's own doors): a class_weight that
+    is neither None, 'balanced' nor an exact dict (its own fit refuses it),
+    and a binary built with the PY2MOJO rows arm off (its two-class predict
+    decodes through the label threshold). The host image answers the
+    multiclass class-code query since lane mf-img3, so LinearSVC is a member
+    on every default image, host column included.
   * `linear_svm_member_pack` (PACK): the fitted attributes the own fit
     writes (bindings/svc_linear_boundary_pack.mojo), in its order; the
     member borrowed X, so `input_copied_` is False. `classes_` is the
@@ -32,8 +36,10 @@ from bindings.classical_arrays_door import classical_address
 from bindings.family_common_unpack import FAMILY_F32P, FAMILY_I64P
 from bindings.family_common_pack import family_array
 from bindings.member_owner_unpack import MemberOwner
+from bindings.member_class_weight_unpack import member_cw_kind
+from core.member_class_weight import MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words
 from bindings.py_balanced import py_call, py_get, py_setitem
-from bindings.linear_svc_boundary_unpack import linear_svc_route, LINEAR_SVC_ROUTE_ROWS, LINEAR_SVC_ROUTE_MULTICLASS
+from bindings.linear_svc_boundary_unpack import linear_svc_route, LINEAR_SVC_ROUTE_ROWS
 from bindings.svc_linear_boundary_unpack import linear_svc_check_fields, linear_svr_check_fields, linear_svm_strengths
 from bindings.svc_common_unpack import svc_field, svc_attr, svc_float, svc_int, svc_truthy
 from bindings.svm_keys_unpack import svm_keys
@@ -54,20 +60,25 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator. False: this configuration has no member
-    entry (a LinearSVC class_weight, a driver without the class-code queries)."""
+    entry (a class_weight it does not take as words, a binary with the
+    PY2MOJO rows arm off)."""
     var nk = svm_keys()
     if kind != LINEAR_SVM_MEMBER_SVC and kind != LINEAR_SVM_MEMBER_SVR:
         raise Error("RuntimeError: mojolearn: unknown LinearSvm member kind " + String(kind))
     var epsilon = 0.0
+    var weighting = 0
     if kind == LINEAR_SVM_MEMBER_SVR:
         epsilon = svc_float(linear_svr_check_fields(model, fields))
     else:
         linear_svc_check_fields(model, fields)
-        if py_get(fields, nk[].k_class_weight, PythonObject(None)) is not None:
+        weighting = member_cw_kind(py_get(fields, nk[].k_class_weight, PythonObject(None)), b)
+        if weighting < 0:
             return False
     var connection = linear_svc_route(model, fields, context)
-    if kind == LINEAR_SVM_MEMBER_SVC and (connection.flags & (LINEAR_SVC_ROUTE_ROWS | LINEAR_SVC_ROUTE_MULTICLASS)) != (
-            LINEAR_SVC_ROUTE_ROWS | LINEAR_SVC_ROUTE_MULTICLASS):
+    if kind == LINEAR_SVM_MEMBER_SVC and (connection.flags & LINEAR_SVC_ROUTE_ROWS) == 0:
+        # A binary built with the PY2MOJO rows arm off (-D MOJOLEARN_PY2MOJO_linear_OFF): its door decodes two
+        # classes through the decision scores and the label threshold, which the member's codes do not run.
+        # Every default image has the bit, and every image answers the class-code query since lane mf-img3.
         return False
     var route = device_route_value(connection.provider)
     if kind == LINEAR_SVM_MEMBER_SVR and not route.has_fifth:
@@ -83,6 +94,10 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         Float64(svc_int(svc_field(fields, nk[].k_lbfgs_memory, "lbfgs_memory"))),
         1.0 if svc_truthy(svc_attr(model, nk[].k_penalty_normalized)) else 0.0,
         Float64(loss), strengths[0], strengths[1], svc_float(svc_field(fields, nk[].k_tol, "tol")), epsilon]
+    if weighting == MEMBER_CW_BALANCED:
+        member_cw_balanced_words(words)
+    elif weighting == MEMBER_CW_DICT:
+        member_cw_pending_words(words)
     owner.plan.route = route
     owner.plan.params = words^
     owner.pins = Python.tuple(connection.provider)

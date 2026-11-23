@@ -62,12 +62,16 @@ from core.forest_fit_request import (
 )
 from core.tree_member import tree_member_publish_image
 from core.forest_member import forest_member_publish_image
-from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
+from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish, forest_session_entry_releases
+from core.entry_table import ENTRY_OP_GIL_FREE
+from core.native_descriptor_call import native_descriptor_report
 from core.forest_entry_table import FOREST_TABLE_RF
 from core.native_descriptor_abi import NativeDescriptorError
 from core.forest_inference_model import (
     resident_prepare,
     resident_release,
+    resident_stage_input,
+    resident_unstage_input,
 )
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -109,7 +113,10 @@ from core.mojolearn_rf_run import (
     _rf_export_into_native,
     _rf_export_verify_native,
     RfDataSession,
-    RF_SESSIONS,
+    rf_session_keep,
+    rf_session_lease,
+    rf_session_set_ada,
+    rf_session_rows,
     _session_shape_check,
     _rf_session_restore_prep,
     _u64_ptr,
@@ -325,18 +332,13 @@ def _rf_session_open_native(x_address: Int, n_rows: Int, n_cols: Int, row_major:
             )
     var xp = _f32_ptr(x_address)
     var made = List[RfDataSession]()
-    var bad = False
-    with GILReleased(Python()):
-        bad = _rf_data_session_stage(xp, n_rows, n_cols, row_major, share_tables, made)
+    # THE GIL (lane mf-ada2): every data session operation runs with no GIL
+    # (`rf_gpu_forest_entry_v1` releases around a door's call; a typed RUN
+    # holds none) and the registry has its own lock (core/mojolearn_rf_run.mojo).
+    var bad = _rf_data_session_stage(xp, n_rows, n_cols, row_major, share_tables, made)
     if bad:
         raise Error("rf_data_session_open: " + RF_NONFINITE_REFUSAL)
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var id = reg[].next_id
-    reg[].next_id += 1
-    var session = made.pop()
-    session.id = id
-    reg[].sessions.append(session^)
-    return id
+    return rf_session_keep(made.pop())
 
 
 # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
@@ -453,22 +455,16 @@ def _rf_fit_session_rows_native(params: ForestFitArgs) raises -> Int:
     _check_criterion("rf_regressor_fit_session_rows", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
     _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
-    var session_id = params.session
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(session_id)
-    var src_rows = reg[].sessions[si].n_rows
-    if reg[].sessions[si].n_cols != n_cols:
+    # Hazard B: the session's X handle is taken under the registry's lock
+    # (`rf_session_lease`); the registry is not indexed during the fit.
+    var lease = rf_session_lease(params.session, False)
+    var src_rows = lease.n_rows
+    if lease.n_cols != n_cols:
         raise Error("rf_regressor_fit_session_rows: the session holds another column count")
-    # Hazard B: the session's X handle is taken under the GIL (see
-    # rf_regressor_fit_dart_binding); the registry is not indexed after the
-    # GIL is released.
-    var session_dx = reg[].sessions[si].dx.copy()
-
-    var forest: RandomForestMetaData[DT, RLT]
-    with GILReleased(Python()):
-        forest = _rf_session_rows_forest(
-            session_dx, rp, yp, n_rows, n_cols, src_rows, rf_params,
-        )
+    var forest = _rf_session_rows_forest(
+        lease.dx, rp, yp, n_rows, n_cols, src_rows, rf_params,
+    )
+    _ = lease^  # the fit above read the session's X through its handle
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
     return _retain_rf_handle(export_trees^, forest.notices)
@@ -505,33 +501,31 @@ def _rf_fit_weighted_session_native(params: ForestFitArgs) raises -> Int:
     var weight_total = Float64(0)
 
     var session_id = params.session
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(session_id)
-    _session_shape_check(
-        "rf_classifier_fit_weighted_session", reg[].sessions[si].n_rows,
-        reg[].sessions[si].n_cols, n_rows, n_cols,
-    )
-    var share_tables = reg[].sessions[si].share_tables
-    var host_x = reg[].sessions[si].host_x
+    # Hazard B: the session's X handle, scalars and prepared tables are taken
+    # under the registry's lock (`rf_session_lease`); the registry is not
+    # indexed during the fit (another thread may open or close a session
+    # meanwhile). The swapped-out prep goes back on the error path too.
+    var lease = rf_session_lease(session_id, True)
     var prep = List[ForestPrep]()
-    swap(prep, reg[].sessions[si].prep)
-    # Hazard B: the session's X handle is taken under the GIL; the registry
-    # is not indexed after the GIL is released (another thread may append or
-    # pop a session meanwhile). The swapped-out prep goes back to the session
-    # on the error path too.
-    var session_dx = reg[].sessions[si].dx.copy()
-
+    swap(prep, lease.prep)
+    try:
+        _session_shape_check(
+            "rf_classifier_fit_weighted_session", lease.n_rows, lease.n_cols, n_rows, n_cols,
+        )
+    except error:
+        _rf_session_restore_prep(session_id, prep)
+        raise error^
     var forest: RandomForestMetaData[DT, CLT]
     try:
-        with GILReleased(Python()):
-            forest = _rf_weighted_session_fit(
-                session_dx, yp, weights^, n_rows, n_cols, n_classes, rf_params^,
-                mw_frac, prep, share_tables, host_x, weight_total,
-            )
+        forest = _rf_weighted_session_fit(
+            lease.dx, yp, weights^, n_rows, n_cols, n_classes, rf_params^,
+            mw_frac, prep, lease.share_tables, lease.host_x, weight_total,
+        )
     except error:
         _rf_session_restore_prep(session_id, prep)
         raise error^
     _rf_session_restore_prep(session_id, prep)
+    _ = lease^  # the fit above read the session's X through its handle
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
     return _retain_rf_handle(export_trees^, forest.notices)
@@ -565,17 +559,12 @@ def _rf_ada_open_native(session_id: Int, wa: Int, ya: Int, ca: Int, n: Int, k: I
         raise Error("rf_ada_open: null label buffer address")
     if ca != 0 and k == 0:
         raise Error("rf_ada_open: class weights belong to a classifier")
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(session_id)
-    if reg[].sessions[si].n_rows != n or n <= 0:
+    if rf_session_rows(session_id) != n or n <= 0:
         raise Error("rf_ada_open: n must be the session's row count")
     var made = List[AdaState]()
-    with GILReleased(Python()):
-        _rf_ada_open_stage(wp, ya, ca, n, k, made)
-    var back = RF_SESSIONS.get_or_create_ptr()
-    var bi = back[].find(session_id)
-    back[].sessions[bi].ada = List[AdaState]()
-    back[].sessions[bi].ada.append(made.pop())
+    _rf_ada_open_stage(wp, ya, ca, n, k, made)
+    # under the registry's lock; a session closed meanwhile refuses
+    rf_session_set_ada(session_id, n, made)
 
 
 def _rf_ada_classifier_round_native(params: ForestFitArgs) raises -> Int:
@@ -609,31 +598,33 @@ def _rf_ada_classifier_round_native(params: ForestFitArgs) raises -> Int:
     var last = params.last != 0
     var stats = _f64_ptr(params.stats)
     var session_id = params.session
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(session_id)
-    _session_shape_check(
-        "rf_classifier_fit_ada_round", reg[].sessions[si].n_rows,
-        reg[].sessions[si].n_cols, n_rows, n_cols,
-    )
-    var share_tables = reg[].sessions[si].share_tables
-    var host_x = reg[].sessions[si].host_x
-    var session_dx = reg[].sessions[si].dx.copy()
-    var state = _ada_state_of(session_id, True, "rf_classifier_fit_ada_round")
-    if state.k != n_classes:
-        raise Error("rf_classifier_fit_ada_round: n_classes differs from the session's AdaBoost state")
+    # Hazard B: the session's X handle, scalars and prepared tables taken
+    # under the registry's lock; the prep goes back on every path.
+    var lease = rf_session_lease(session_id, True)
     var prep = List[ForestPrep]()
-    swap(prep, reg[].sessions[si].prep)
+    swap(prep, lease.prep)
+    var state: AdaState
+    try:
+        _session_shape_check(
+            "rf_classifier_fit_ada_round", lease.n_rows, lease.n_cols, n_rows, n_cols,
+        )
+        state = _ada_state_of(session_id, True, "rf_classifier_fit_ada_round")
+        if state.k != n_classes:
+            raise Error("rf_classifier_fit_ada_round: n_classes differs from the session's AdaBoost state")
+    except error:
+        _rf_session_restore_prep(session_id, prep)
+        raise error^
     var forest: RandomForestMetaData[DT, CLT]
     try:
-        with GILReleased(Python()):
-            forest = _rf_ada_classifier_round(
-                session_dx, state, n_rows, n_cols, n_classes, rf_params^, mw_frac,
-                prep, share_tables, host_x, lr, last, stats,
-            )
+        forest = _rf_ada_classifier_round(
+            lease.dx, state, n_rows, n_cols, n_classes, rf_params^, mw_frac,
+            prep, lease.share_tables, lease.host_x, lr, last, stats,
+        )
     except error:
         _rf_session_restore_prep(session_id, prep)
         raise error^
     _rf_session_restore_prep(session_id, prep)
+    _ = lease^  # the round above read the session's X through its handle
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
     return _retain_rf_handle(export_trees^, forest.notices)
@@ -673,19 +664,15 @@ def _rf_ada_regressor_round_native(params: ForestFitArgs) raises -> Int:
     var last = params.last != 0
     var stats = _f64_ptr(params.stats)
     var session_id = params.session
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(session_id)
+    var lease = rf_session_lease(session_id, False)
     _session_shape_check(
-        "rf_regressor_fit_ada_round", reg[].sessions[si].n_rows,
-        reg[].sessions[si].n_cols, n_rows, n_cols,
+        "rf_regressor_fit_ada_round", lease.n_rows, lease.n_cols, n_rows, n_cols,
     )
-    var session_dx = reg[].sessions[si].dx.copy()
     var state = _ada_state_of(session_id, False, "rf_regressor_fit_ada_round")
-    var forest: RandomForestMetaData[DT, RLT]
-    with GILReleased(Python()):
-        forest = _rf_ada_regressor_round(
-            session_dx, state, n_rows, n_cols, rf_params, seed, round, loss, lr, last, stats,
-        )
+    var forest = _rf_ada_regressor_round(
+        lease.dx, state, n_rows, n_cols, rf_params, seed, round, loss, lr, last, stats,
+    )
+    _ = lease^  # the round above read the session's X through its handle
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
     return _retain_rf_handle(export_trees^, forest.notices)
@@ -901,11 +888,42 @@ struct RfGpuForest(ForestImage):
             return _rf_ada_classifier_round_native(args)
         return _rf_ada_regressor_round_native(args)
 
+    @staticmethod
+    def stage_input(x: Int, rows: Int, cols: Int) raises -> Int:
+        """XF_STAGE_INPUT (lane mf-meta3c): the body of the Python entry
+        `forest_stage_input_gpu` (bindings/forest_inference_binding_door.mojo)."""
+        var xp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x)
+        return 1 if resident_stage_input[True](xp.unsafe_origin_cast[MutAnyOrigin](), rows * cols) else 0
+
+    @staticmethod
+    def unstage_input() raises:
+        resident_unstage_input[True]()
+
 
 def rf_gpu_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    """This image's published forest entry (core/forest_entry_table.mojo)."""
-    return forest_entry_dispatch[RfGpuForest](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    """This image's published forest entry (core/forest_entry_table.mojo).
+
+    THE DATA SESSIONS RUN WITHOUT THE GIL (lane mf-ada2, 2026-11-23): a
+    door's data session operation (`forest_session_entry_releases`) runs
+    with the GIL released around the whole dispatch and the GIL-free bit set,
+    so its upload, fits and launches run bare; a typed RUN that holds no GIL
+    sends the bit and runs the same dispatch with no release. The session
+    registry has its own lock word (core/mojolearn_rf_run.mojo). Every other
+    operation dispatches as before (the fits release around their own body
+    unless the bit is set)."""
+    if not forest_session_entry_releases(operation):
+        return forest_entry_dispatch[RfGpuForest](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    var status = 1
+    try:
+        with GILReleased(Python()):
+            status = forest_entry_dispatch[RfGpuForest](
+                operation + ENTRY_OP_GIL_FREE, aa, na, pp, np, ff, nf, result, context, sink
+            )
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+    return status
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_rf.mojo

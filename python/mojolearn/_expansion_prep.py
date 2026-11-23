@@ -3043,6 +3043,9 @@ class RFE(_SelectorMixin):
     # wrappers; constructor and parameter setters remain separately audited.
     _mojolearn_native_public = True
     _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
+    #: Kernel and Permutation SHAP explain this exact class natively: its fitted estimator_'s member over the
+    #: support_ columns (bindings/trees_agnostic_native_door.mojo); read from the class's own namespace.
+    _mojolearn_explained = "rfe"
 
     def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
         self.estimator = estimator
@@ -3234,6 +3237,9 @@ class CategoricalNB(_DiscreteNB):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"positive_only": True, "categorical": True}
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories", "device")
+    #: the meta-estimators and the explainers run this class through its native member entry
+    #: (core/naive_bayes_member.mojo kind 4; dense X).
+    _mojolearn_member = (9, 4)
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True

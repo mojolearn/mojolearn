@@ -30,6 +30,10 @@ from std.python._cpython import PyObjectPtr
 from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
+from bindings.member_class_weight_unpack import member_cw_kind
+from core.member_class_weight import (
+    MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words,
+)
 from bindings.admitted_input_unpack import admitted_array
 from bindings.py_lists import py_list_f64
 from bindings.py_lists import py_list_int
@@ -47,13 +51,16 @@ from core.hostptr import f32_ptr
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
+    MEMBER_BLOCK_BY_INDEX,
 )
 from core.xlinear_member import (
     XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_QUANTILE, XL_MEMBER_RIDGE_CLASSIFIER, XL_MEMBER_RIDGE_CV, XL_MEMBER_BLOCK_CV_RESULTS,
     XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
     XL_MEMBER_BLOCK_ACTIVE, XL_MEMBER_LASSO_CV, XL_MEMBER_ELASTIC_NET_CV, XL_MEMBER_LOGISTIC_CV, XL_MEMBER_ISOTONIC,
     XL_MEMBER_BLOCK_ALPHAS, XL_MEMBER_BLOCK_MSE_PATH, XL_MEMBER_BLOCK_SCORES, XL_MEMBER_BLOCK_THRESHOLDS,
+    XL_MEMBER_BLOCK_SIGMA, XL_MEMBER_BLOCK_X_OFFSET, XL_MEMBER_BLOCK_FACTOR,
 )
+from bindings.classical_labels_door import labels_full_f32
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
 from providers.python.device_route_boundary_door import device_route_value
 from x_linear.door_run import LINK_IDENTITY, LINK_EXP
@@ -91,7 +98,7 @@ def _xl_huber_words(fields: PythonObject) raises -> List[Float64]:
 def _xl_bayes_words(model: PythonObject, fields: PythonObject) raises -> List[Float64]:
     """Kind 4: `xl_fit_bayes_unpack`'s refusals, then the ten words."""
     var nk = x_linear_keys()
-    _xl_bayes_refuse(model, fields, PythonObject(False))
+    _xl_bayes_refuse(model, fields)
     return [Float64(XL_MEMBER_BAYES), _intercept_word(fields), Float64(_int(py_item(fields, nk[].k_max_iter))),
         _float(py_item(fields, nk[].k_tol)), _float(py_item(fields, nk[].k_alpha_1)),
         _float(py_item(fields, nk[].k_alpha_2)), _float(py_item(fields, nk[].k_lambda_1)),
@@ -103,7 +110,7 @@ def _xl_ard_words(model: PythonObject, fields: PythonObject) raises -> List[Floa
     """Kind 5: `xl_fit_ard_unpack`'s refusals (the two-sample rule runs at
     the member's fit), then the nine words."""
     var nk = x_linear_keys()
-    _xl_bayes_refuse(model, fields, PythonObject(False))
+    _xl_bayes_refuse(model, fields)
     return [Float64(XL_MEMBER_ARD), _intercept_word(fields), Float64(_int(py_item(fields, nk[].k_max_iter))),
         _float(py_item(fields, nk[].k_tol)), _float(py_item(fields, nk[].k_alpha_1)),
         _float(py_item(fields, nk[].k_alpha_2)), _float(py_item(fields, nk[].k_lambda_1)),
@@ -254,9 +261,10 @@ def _xl_enetcv_words(model: PythonObject, fields: PythonObject, context: PythonO
 
 def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admitted: Bool) raises -> List[Float64]:
     """Kind 13: `xl_fit_logistic_cv_unpack`'s refusals (penalty, scoring,
-    refit, solver), then 7 + C words. `admitted` is False for a dict (or
-    any other non-word) class_weight, whose labels never cross the ABI, and
-    for a splitter object as cv."""
+    refit, solver), then 7 + C words (and, for an exact dict class_weight,
+    word 5 = 2 and the pending class-weight tail: lane mf-adm3, filled over
+    the caller's labels by `member_cw_fill`). `admitted` is False for any
+    other non-word class_weight and for a splitter object as cv."""
     var nk = x_linear_keys()
     if not _eq(py_item(fields, nk[].k_penalty), PythonObject("l2")) or _truth(py_item(fields, nk[].k_dual)) or py_item(fields, nk[].k_l1_ratios) is not None:
         raise Error("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
@@ -267,10 +275,14 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
     admitted = False
     var class_weight = py_item(fields, nk[].k_class_weight)
     var balanced = False
+    var keyed = False
     if class_weight is not None:
-        if not _eq(class_weight, PythonObject("balanced")):
+        if member_cw_kind(class_weight, _b()) == MEMBER_CW_DICT:
+            keyed = True
+        elif not _eq(class_weight, PythonObject("balanced")):
             return List[Float64]()
-        balanced = True
+        else:
+            balanced = True
     var cv = py_item(fields, nk[].k_cv)
     var folds = 5
     if cv is not None:
@@ -281,9 +293,11 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
     var cs = _xl_cs_grid(py_item(fields, nk[].k_Cs), context)
     var words: List[Float64] = [Float64(XL_MEMBER_LOGISTIC_CV), _intercept_word(fields),
         Float64(_int(py_item(fields, nk[].k_max_iter))), _float(py_item(fields, nk[].k_tol)), Float64(folds),
-        1.0 if balanced else 0.0, Float64(len(cs))]
+        2.0 if keyed else (1.0 if balanced else 0.0), Float64(len(cs))]
     for i in range(len(cs)):  # driver-loop: over the Cs grid
         words.append(cs[i])
+    if keyed:
+        member_cw_pending_words(words)
     return words^
 
 
@@ -326,11 +340,17 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     elif kind == XL_MEMBER_QUANTILE:
         words = _xl_quantile_words(fields)
     elif kind == XL_MEMBER_RIDGE_CLASSIFIER:
-        # Class weights are keyed by labels, which never cross the ABI: the
-        # caller keeps the estimator's own doors for such an instance.
-        if py_item(fields, nk[].k_class_weight) is not None:
+        # A class_weight is the tail from word 3 (lane mf-adm3): 'balanced',
+        # or a dict's pending table the caller fills over its labels
+        # (`member_cw_fill`); any other value keeps the estimator's own doors.
+        var weighting = member_cw_kind(py_item(fields, nk[].k_class_weight), b)
+        if weighting < 0:
             return False
         words = _xl_ridge_classifier_words(model, fields)
+        if weighting == MEMBER_CW_BALANCED:
+            member_cw_balanced_words(words)
+        elif weighting == MEMBER_CW_DICT:
+            member_cw_pending_words(words)
     elif kind == XL_MEMBER_RIDGE_CV:
         var admitted = True
         words = _xl_ridge_cv_words(fields, context, admitted)
@@ -460,6 +480,7 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         py_setitem(fields, nk[].k_lambda_, PythonObject(Float64(Float32(scalars[2]))))
         py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[3])))
         py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
+        _xl_posterior_pack(fields, context, plan, call, blocks, cols)
         return
     if kind == XL_MEMBER_ARD:
         py_setitem(fields, nk[].k_alpha_, PythonObject(Float64(Float32(scalars[1]))))
@@ -472,6 +493,7 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
             unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(lam))), src=f32_ptr(call.dst.data),
                 count=call.dst.cols)
             py_setitem(fields, nk[].k_lambda_, lam)
+        _xl_posterior_pack(fields, context, plan, call, blocks, cols)
         return
     if kind == XL_MEMBER_RIDGE_CV:
         py_setitem(fields, nk[].k_alpha_, PythonObject(scalars[1]))
@@ -596,6 +618,111 @@ def _xl_isotonic_pack(fields: PythonObject, context: PythonObject, plan: MemberP
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(1))
 
 
+def _xl_posterior_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall,
+    blocks: Int, cols: Int) raises:
+    """The posterior fields `xl_fit_bayes_pack` / `xl_fit_ard_pack` write,
+    from the state's posterior blocks when it holds them (lane mf-iterimp2):
+    BayesianRidge its factor (V, ev; sigma_ is formed on its first read, so
+    a kept one is dropped), ARDRegression its sigma_; X_offset_ and X_scale_."""
+    var nk = x_linear_keys()
+    var ard = Int(plan.params[0]) == XL_MEMBER_ARD
+    var named = XL_MEMBER_BLOCK_SIGMA if ard else XL_MEMBER_BLOCK_FACTOR
+    var held = False
+    for i in range(blocks):  # driver-loop: over the state's few fitted blocks (names by index)
+        call.block = i
+        call.flags = MEMBER_BLOCK_BY_INDEX
+        _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+        held = held or call.block == named
+    call.flags = 0
+    if not held:
+        return
+    call.block = XL_MEMBER_BLOCK_X_OFFSET
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var offset = classical_array(cols, 0, context)
+    if cols > 0:
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(offset))), src=f32_ptr(call.dst.data), count=cols)
+    call.block = named
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    if ard:
+        var dk = call.dst.rows
+        # (0, 0) when an ARD fit kept no feature, as its own fit publishes it
+        var sigma = admitted_array(Python.tuple(0, 0), "<f4", context)
+        if dk > 0:
+            sigma = classical_array(dk, dk, context)
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(sigma))), src=f32_ptr(call.dst.data),
+                count=dk * dk)
+        py_setitem(fields, nk[].k_sigma_, sigma)
+    else:
+        var d = call.dst.cols
+        var v = classical_array(d, d, context)
+        var ev = classical_array(d, 0, context)
+        if d > 0:
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(v))), src=f32_ptr(call.dst.data), count=d * d)
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(ev))), src=f32_ptr(call.dst.data) + d * d, count=d)
+        py_setitem(fields, nk[].k__bayes_v, v)
+        py_setitem(fields, nk[].k__bayes_ev, ev)
+        _ = py_call(_b().dict.pop, fields, nk[].k__bayes_sigma, PythonObject(None))
+    py_setitem(fields, nk[].k_X_offset_, offset)
+    py_setitem(fields, nk[].k_X_scale_, labels_full_f32(cols, 1.0, context))
+
+
+def _xl_posterior_state(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall,
+    kind: Int) raises:
+    """IMPORT of the fitted posterior when the estimator holds it, before
+    DONE: X_offset_ and BayesianRidge's factor (its private fields, never
+    the public sigma_, which is not read here) or ARDRegression's sigma_
+    and lambda_."""
+    var nk = x_linear_keys()
+    var ard = kind == XL_MEMBER_ARD
+    var s_source = py_get(fields, nk[].k_sigma_ if ard else nk[].k__bayes_v)
+    var offset_source = py_get(fields, nk[].k_X_offset_)
+    if s_source is None or offset_source is None:
+        return
+    var offset = admit_x(offset_source, 1, "X_offset_", context)
+    call.flags = 0
+    var s_words = PythonObject(None)
+    var ev = PythonObject(None)
+    if ard:
+        # an ARD fit that kept no feature has an empty (0, 0) sigma_: nothing to import
+        if Int(py=s_source.size) > 0:
+            s_words = admit_x(s_source, 2, "sigma_", context)
+            call.block = XL_MEMBER_BLOCK_SIGMA
+            call.x = MemberMatrix(Int(py=classical_address(s_words)), Int(py=s_words.shape[0]),
+                Int(py=s_words.shape[1]))
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    else:
+        var ev_source = py_get(fields, nk[].k__bayes_ev)
+        if ev_source is None:
+            return
+        s_words = admit_x(s_source, 2, "posterior factor", context)
+        ev = admit_x(ev_source, 1, "posterior factor", context)
+        var d = Int(py=ev.size)
+        if Int(py=s_words.size) != d * d:
+            raise Error("ValueError: the posterior factor does not match n_features_in_")
+        # one (d + 1) x d block: V's rows, then ev
+        var block = classical_array(d + 1, d, context)
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(block))), src=f32_ptr(Int(py=classical_address(s_words))),
+            count=d * d)
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(block))) + d * d,
+            src=f32_ptr(Int(py=classical_address(ev))), count=d)
+        call.block = XL_MEMBER_BLOCK_FACTOR
+        call.x = MemberMatrix(Int(py=classical_address(block)), d + 1, d)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        _ = block
+    call.block = XL_MEMBER_BLOCK_X_OFFSET
+    call.x = MemberMatrix(Int(py=classical_address(offset)), 1, Int(py=offset.size))
+    _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    if ard:
+        var lam = admit_x(py_item(fields, nk[].k_lambda_), 1, "lambda_", context)
+        call.block = XL_MEMBER_BLOCK_LAMBDA
+        call.x = MemberMatrix(Int(py=classical_address(lam)), 1, Int(py=lam.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        _ = lam
+    _ = s_words
+    _ = ev
+    _ = offset
+
+
 def _count_word(fields: PythonObject, key: PythonObject) raises -> Float64:
     var value = py_get(fields, key)
     if value is None:
@@ -648,6 +775,10 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if kind == XL_MEMBER_BAYES or kind == XL_MEMBER_ARD:
+            _xl_posterior_state(fields, context, plan, call, kind)
+        call.block = 0
         call.flags = MEMBER_IMPORT_DONE
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
     except error:

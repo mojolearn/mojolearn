@@ -403,6 +403,15 @@ struct EtHostForest(ForestImage):
     def fit_ada_round(classifier: Bool, args: ForestFitArgs) raises -> Int:
         raise Error("RuntimeError: the extra-trees host binding has no AdaBoost device rounds")
 
+    @staticmethod
+    def stage_input(x: Int, rows: Int, cols: Int) raises -> Int:
+        """XF_STAGE_INPUT: a host image has no device input to stage."""
+        return 0
+
+    @staticmethod
+    def unstage_input() raises:
+        pass
+
 
 def et_host_forest_entry_native(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:

@@ -114,6 +114,17 @@ struct MemberSetRun(Movable):
     var part_w: List[List[Float32]]
     # Per member, the fit notices PACK took from its state (empty: none).
     var notices: List[List[Float64]]
+    # THE PER-UNIT COVER RULE (lane mf-cal, 2026-11-23; mf-cal2: the caller
+    # reads the classes; default False): a caller whose units are
+    # independent cv folds (CalibratedClassifierCV) has read every unit's
+    # classes itself (xtrees/trees_calibrated_fit_run.mojo
+    # `cal_fold_classes_run`: a fold that lacks a class, one class included,
+    # is re-coded onto the classes it holds); the set then makes NO
+    # class-cover pass and fits every unit (lane mf-cal3: no unit is left to
+    # a door, so nothing is marked `uncovered` and the workers and turns no
+    # longer skip one). False: the set's own cover pass, and one lacking unit
+    # fails the whole set before any fit (every other caller).
+    var skip_lacking: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
         self.plans = List[MemberPlan]()
@@ -144,6 +155,7 @@ struct MemberSetRun(Movable):
         self.part_x = List[List[Float32]]()
         self.part_y = List[List[Int32]]()
         self.part_w = List[List[Float32]]()
+        self.skip_lacking = False
 
     def count(self) -> Int:
         return len(self.plans)
@@ -512,7 +524,8 @@ def member_set_prepare(mut run: MemberSetRun) -> Bool:
         if run.gil_free[u] == MEMBER_SET_WORKER:
             run.parallel.append(u)
     run.cover_units.clear()
-    if run.y_dtype == MEMBER_I32:
+    # skip_lacking: the caller read every unit's classes (no second pass).
+    if run.y_dtype == MEMBER_I32 and not run.skip_lacking:
         for u in range(count):  # driver-loop: over the members (one cover pass per distinct target)
             if run.plans[u].classes <= 0:
                 continue

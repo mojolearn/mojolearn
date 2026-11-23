@@ -17,13 +17,13 @@ from core.shared_slot import SharedSlot
 from core.linear_entry_table_ext import (
     XL_OP_FLAGS, XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES,
     XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_SPEARMAN,
-    XL_OP_BEST_ALPHA, XL_HAS_FIT_FOLD, XL_FIT_HEADER, XL_FOLD_HEADER,
+    XL_OP_BEST_ALPHA, XL_OP_BAYES_STD, XL_HAS_FIT_FOLD, XL_FIT_HEADER, XL_FOLD_HEADER,
     xl_ops_check_spans, xl_ops_int32, xl_ops_float32,
 )
 from x_linear.class_prep_device import class_prep_device
 from x_linear.device import (
     fit_device, ridge_resident, decision_device, decision_codes_device, decision_rows_device,
-    decision_huber_out_device, SGD_IDN_DEV_FINITE, linear_ctx,
+    decision_huber_out_device, SGD_IDN_DEV_FINITE, linear_ctx, bayes_std_device,
 )
 from x_linear.dispatch import isotonic_abi_check, ALGO_SGD, ALGO_RIDGE
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE
@@ -151,6 +151,21 @@ def xl_class_prep_device_run(ca: Int, sa: Int, wa: Int, oa: Int, n: Int, k: Int,
         oa != 0)
 
 
+def xl_bayes_std_device_run(x_addr: Int, s_addr: Int, ev_addr: Int, offset_addr: Int, cols_addr: Int, n: Int,
+                            d: Int, dk: Int, form: Int, alpha: Float64, lam: Float64, out_addr: Int) raises -> Int:
+    """BayesianRidge (`form` 1: its factor) / ARDRegression (`form` 0: its
+    sigma_) predict(return_std=True): the rows' standard deviations
+    (x_linear/device.mojo `bayes_std_device`)."""
+    if n < 0 or d < 0 or dk < 0 or dk > d or (form == 1 and dk != d):
+        raise Error("x_linear bayes std: n >= 0 and 0 <= dk <= d required (dk = d for the factor)")
+    if n == 0:
+        return 0
+    var dst = _fp(out_addr)
+    bayes_std_device(_fp(x_addr), _fp(s_addr) if dk > 0 else dst, _fp(ev_addr) if form == 1 and d > 0 else dst,
+                     _fp(offset_addr) if d > 0 else dst, cols_addr, n, d, dk, form, Float32(alpha), Float32(lam), dst)
+    return n
+
+
 def xl_spearman_device_run(xa: Int, ya: Int, n: Int) raises -> Int:
     if n <= 0 or xa == 0 or ya == 0:
         raise Error("x_linear spearman: n > 0 and two buffers required")
@@ -207,6 +222,8 @@ def x_linear_ops_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             r[] = xl_class_prep_device_run(a[0], a[1], a[2], a[3], p[0], p[1], p[2] != 0, p[3] != 0)
         elif operation == XL_OP_SPEARMAN:
             r[] = xl_spearman_device_run(a[0], a[1], p[0])
+        elif operation == XL_OP_BAYES_STD:
+            r[] = xl_bayes_std_device_run(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], f[0], f[1], a[5])
         else:
             r[] = xl_best_alpha_run(a[0], p[0])
         return 0

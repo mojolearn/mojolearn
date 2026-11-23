@@ -102,11 +102,26 @@ def _check_pair(pair: CalPair, k: Int) raises:
             raise Error("x_trees_isotonic_predict_strided: no knots")
     if k == 2:
         return
+    if len(pair.kinds) > pair.ks:
+        raise Error("x_trees_calibrated_proba: more calibrators than placed columns")
     var cols = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pair.cols)
     for c in range(pair.ks):  # driver-loop: over the member's class codes
         var j = Int(cols[unsafe_offset=c])
         if j < 0 or j >= k:
             raise Error("x_trees accumulate_cols: column out of range")
+
+
+@always_inline
+def _cal_column(pair: CalPair, k: Int, j: Int) -> Int:
+    """THE PREDICT RULE (lane mf-cal3b, 2026-11-23; xtrees/trees_calibrated_fit_run.mojo `CalPlace`): the score
+    column calibrator `j` of a pair reads (and, for k > 2, writes): 0 for k == 2; else the member's placed
+    column `cols[ks - count + j]`. For a pair whose member holds every class (`cols` its codes 0 .. k-1, count
+    == ks == k) that is column j, as before; for a member that lacks a class, the held classes scikit-learn's
+    `_CalibratedClassifier.predict_proba` writes (`pos_class_indices` zipped with its calibrators)."""
+    if k == 2:
+        return 0
+    var cols = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pair.cols)
+    return Int(cols[unsafe_offset=pair.ks - len(pair.kinds) + j])
 
 
 def calibrated_proba_device(pairs: List[CalPair], n: Int, k: Int, acc: MutPointer[Float64, MutUntrackedOrigin]) raises:
@@ -161,10 +176,11 @@ def calibrated_proba_device(pairs: List[CalPair], n: Int, k: Int, acc: MutPointe
             var d_p = ctx.enqueue_create_buffer[DType.uint64](max(1, n * w))
             d_p.enqueue_fill(UInt64(0))
             for j in range(len(pair.kinds)):  # driver-loop: over the class columns (one calibrator each)
-                var col = 1 if k == 2 else j
+                var src = _cal_column(pair, k, j)
+                var col = 1 if k == 2 else src
                 if pair.kinds[j] == CAL_SIGMOID:
                     ctx.enqueue_function[platt_apply_kernel](
-                        d_s.unsafe_ptr() + j, Int64(c), Int64(n), _w(pair.a[j]), _w(pair.b[j]), d_p.unsafe_ptr() + col,
+                        d_s.unsafe_ptr() + src, Int64(c), Int64(n), _w(pair.a[j]), _w(pair.b[j]), d_p.unsafe_ptr() + col,
                         Int64(w), grid_dim=_blocks(n), block_dim=OPS_TPB,
                     )
                 else:
@@ -174,7 +190,7 @@ def calibrated_proba_device(pairs: List[CalPair], n: Int, k: Int, acc: MutPointe
                     ctx.enqueue_copy(dst_buf=d_kx, src_ptr=MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=pair.kx[j]))
                     ctx.enqueue_copy(dst_buf=d_ky, src_ptr=MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=pair.ky[j]))
                     ctx.enqueue_function[isotonic_predict_kernel](
-                        d_kx.unsafe_ptr(), d_ky.unsafe_ptr(), Int64(m), d_s.unsafe_ptr() + j, Int64(c), Int64(n),
+                        d_kx.unsafe_ptr(), d_ky.unsafe_ptr(), Int64(m), d_s.unsafe_ptr() + src, Int64(c), Int64(n),
                         d_p.unsafe_ptr() + col, Int64(w), grid_dim=_blocks(n), block_dim=OPS_TPB,
                     )
                     keep_u64.append(d_kx^)
@@ -246,13 +262,14 @@ def calibrated_proba_host(pairs: List[CalPair], n: Int, k: Int, acc: MutPointer[
             accumulate_cols(sp, blk, MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pair.cols), n, k, pair.ks,
                             1.0)
         for j in range(len(pair.kinds)):  # driver-loop: over the class columns (one calibrator each)
-            var col = 1 if k == 2 else j
+            var src = _cal_column(pair, k, j)
+            var col = 1 if k == 2 else src
             if pair.kinds[j] == CAL_SIGMOID:
-                platt_apply_strided(sp + j, c, n, pair.a[j], pair.b[j], pp + col, w)
+                platt_apply_strided(sp + src, c, n, pair.a[j], pair.b[j], pp + col, w)
             else:
                 isotonic_predict_strided(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=pair.kx[j]),
                                          MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=pair.ky[j]),
-                                         pair.m[j], sp + j, c, n, pp + col, w)
+                                         pair.m[j], sp + src, c, n, pp + col, w)
         if k == 2:
             complement_pairs(pp, n)
         else:

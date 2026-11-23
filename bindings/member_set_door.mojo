@@ -90,7 +90,8 @@ into a new Array of the element type the member's OUTPUTS answers
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
+from bindings.member_boundary_door import member_admit_serving_labeled, member_pack, member_pack_labeled
+from bindings.member_class_weight_unpack import member_cw_fill
 from bindings.member_held_door import MemberHeld, member_held, member_held_release, member_held_adopt
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.admitted_input_unpack import admitted_unfilled
@@ -148,6 +149,13 @@ struct MemberSet(Movable):
     # nothing is offered), and whether the thread's scope was read.
     var sources: PythonObject
     var scope_read: Bool
+    # The caller's class labels in code order (None: it hands none over).
+    # Set before `member_set_admit` by a caller whose code targets have
+    # labels it holds: a classifier member whose class_weight is a dict
+    # then reads its table over them at admission (lane mf-adm3,
+    # bindings/member_class_weight_unpack.mojo); without them such a member
+    # is not admitted (the caller's own path, as before).
+    var labels: PythonObject
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
         self.run = MemberSetRun(x, rows, cols, y_dtype, index_dtype)
@@ -161,6 +169,7 @@ struct MemberSet(Movable):
         self.kept_all = True
         self.sources = Python.list()
         self.scope_read = False
+        self.labels = PythonObject(None)
 
     def count(self) -> Int:
         return len(self.run.plans)
@@ -178,7 +187,8 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     targets are class codes and its family has no classifier.
     `context` is the caller's context (it holds the model-selection plans),
     `b` the builtins module. `classes`: the class count of code targets, 0
-    for a regressor."""
+    for a regressor. Raises only for a class_weight dict the member's
+    estimator refuses over `set.labels` (its own words; lane mf-adm3)."""
     # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     var plan = prep_estimator_plan(estimator, context)
     if plan is None:
@@ -195,8 +205,14 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
         needs = needs | MEMBER_CAN_SAMPLE_WEIGHT
     if classes > 0:
         needs = needs | MEMBER_CAN_CLASSIFIER
-    var owner = member_admit_serving(estimator, fields, plan, member_context, b, needs)
+    var owner = member_admit_serving_labeled(estimator, fields, plan, member_context, b, needs,
+                                             set.labels if classes > 0 else PythonObject(None))
     if not owner.published:
+        return False
+    # A class_weight dict's table over the caller's labels (lane mf-adm3);
+    # a dict the estimator refuses raises its own words here, before any fit.
+    if not member_cw_fill(owner, estimator, fields, set.labels if classes > 0 else PythonObject(None),
+                          member_context, b):
         return False
     owner.plan.classes = classes
     # Whether this member's KIND tests the rows it reads: the answer of an
@@ -318,6 +334,30 @@ def member_set_release(mut set: MemberSet):
     member_set_run_release(set.run)
 
 
+def member_set_pins_take(mut set: MemberSet) raises:
+    """THE PIN RULE, with the interpreter held: one reference per member that
+    offers its X object (`member_set_resident`). A caller that runs the set's
+    RUN itself (CalibratedClassifierCV: one GIL release around its whole
+    typed RUN) takes them here, before the region, and returns them with
+    `member_set_pins_return` after it, in a `finally`; `member_set_run` does
+    the same."""
+    for u in range(len(set.run.plans)):  # driver-loop: over the members (one reference each)
+        set.run.pin_tokens[u] = 0
+        var source = set.sources[u]
+        if source is not None:
+            set.run.pin_tokens[u] = member_pin_take(source, 1)
+
+
+def member_set_pins_return(mut set: MemberSet) raises:
+    """THE PIN RULE, with the interpreter held: drop the references no
+    member's cache took (`member_set_pins_take`)."""
+    for u in range(len(set.run.plans)):  # driver-loop: over the members (the references no cache took)
+        if set.run.pin_tokens[u] != 0:
+            member_pin_return(set.run.pin_tokens[u], 1)
+            set.run.pin_tokens[u] = 0
+    _ = set.pins
+
+
 def member_set_run(mut set: MemberSet) raises:
     """RUN (core/member_set_run.mojo) with this door's two CPython duties:
     THE PIN RULE (one reference per member that offers its X object, taken
@@ -340,12 +380,8 @@ def member_set_run(mut set: MemberSet) raises:
     var turns = member_set_prepare(set.run)
     var covered = True
     var py = Python()
-    for u in range(count):  # driver-loop: over the members (one reference each)
-        set.run.pin_tokens[u] = 0
-        var source = set.sources[u]
-        if source is not None:
-            set.run.pin_tokens[u] = member_pin_take(source, 1)
     try:
+        member_set_pins_take(set)
         with GILReleased(py):
             covered = member_set_fit_free(set.run)
         # GIL held again: the members whose kind may not run without it.
@@ -362,11 +398,7 @@ def member_set_run(mut set: MemberSet) raises:
                 else:
                     member_set_turn(set.run, u)
     finally:
-        for u in range(count):  # driver-loop: over the members (the references no cache took)
-            if set.run.pin_tokens[u] != 0:
-                member_pin_return(set.run.pin_tokens[u], 1)
-                set.run.pin_tokens[u] = 0
-        _ = set.pins
+        member_set_pins_return(set)
     if not covered:
         raise Error(MEMBER_SET_LACKING)
     var first = member_set_first_failure(set.run)

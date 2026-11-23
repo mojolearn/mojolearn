@@ -35,7 +35,7 @@ from std.python import Python, PythonObject
 from bindings.admitted_input_unpack import admit_x, admitted_storage_native
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_host_only
 from bindings.mani_umap_native_door import _umap_check_mode
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_type
@@ -50,7 +50,7 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_IMPORT_DONE,
 )
 from core.neighbors_entry_table_umap import umap_ops_entry, UMAP_OPERATION_COUNT
-from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
+from providers.python.estimator_binding_pyapi_door import estimator_binding_host, estimator_binding_routed
 from x_ann.mani_umap_run import umap_mode_code, umap_check_target_weight, umap_target_neighbors
 
 comptime _EXACT = 9007199254740992   # 2**53: the integers a Float64 word holds exactly
@@ -124,7 +124,11 @@ def manifold_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     var settings = _mode_word(fields, context, b)
     var mode_object = settings[0]
     var mode = settings[1]
-    var binding = estimator_binding_routed(model, mode_object, "_mojolearn_metrics", local, False)
+    # An explicit HostUMAP (its own host-only word, lane mf-iterimp3b): the CPU identical metrics image its
+    # own methods bind (`estimator_binding_host`, its refusal of a saved non-identical mode first), never the
+    # device one; any other class: its binding route for the mode object, as before.
+    var binding = (estimator_binding_host(model, "_mojolearn_metrics", local, False) if member_host_only(model)
+                   else estimator_binding_routed(model, mode_object, "_mojolearn_metrics", local, False))
     var key = _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with requested mode")
     var route = DeviceRoute(DEVICE_CPU if key.vendor == 0 else DEVICE_GPU)
     route.mode = key.mode

@@ -8,11 +8,15 @@ GIL around each operations call exactly where it did before the split; its
 PACK publishes the fitted attributes (lane doorsplit-linear, 2026-11-11).
 Same operands in the same order, so the bits are unchanged."""
 from std.memory import unsafe_memcpy
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from x_linear.bayes import bayes_sigma_cell
+from x_linear.ops import FP
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.linear_entry_table_ext import (
     XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS, XL_OP_SPEARMAN,
-    XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_BEST_ALPHA, XL_OP_FLAGS, XL_HAS_FIT_FOLD,
+    XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_BEST_ALPHA, XL_OP_FLAGS, XL_HAS_FIT_FOLD, XL_OP_BAYES_STD,
 )
 from core.solver_entry_table import solver_cd_fit_call, solver_cd_predict_call
 from core.admitted_refusals import admitted_finite_refuse
@@ -399,6 +403,73 @@ def xl_decision_run(request: XlDecisionRequest) raises:
         ints.append(request.link)
     ints.append(request.status)
     _ = native_descriptor_call(request.entry, request.operation, addresses, ints, List[Float64]())
+
+
+@fieldwise_init
+struct XlBayesStdRequest(Movable):
+    """BayesianRidge / ARDRegression predict(return_std=True)'s standard
+    deviations (XL_OP_BAYES_STD; lane mf-iterimp2): X as `rows` x `cols`
+    float32 words at `x`; `factor` True (BayesianRidge): V (cols x cols) at
+    `s`, ev (cols) at `ev`, alpha_ and lambda_; False (ARDRegression):
+    sigma_ (dk x dk) at `s` over the dk kept columns' int32 indices at
+    `kept` (0: every column); X_offset_ (cols float32) at `offset`; the
+    `rows` float32 results at `dst`."""
+    var entry: NativeDescriptorCall
+    var x: Int
+    var s: Int
+    var ev: Int
+    var offset: Int
+    var kept: Int
+    var dst: Int
+    var rows: Int
+    var cols: Int
+    var dk: Int
+    var factor: Bool
+    var alpha: Float64
+    var lam: Float64
+
+
+def xl_bayes_std_run(request: XlBayesStdRequest) raises:
+    """One XL_OP_BAYES_STD call into `request.dst`."""
+    var addresses: List[Int] = [request.x, request.s, request.ev, request.offset, request.kept, request.dst]
+    var ints: List[Int] = [request.rows, request.cols, request.dk, 1 if request.factor else 0]
+    var floats: List[Float64] = [request.alpha, request.lam]
+    _ = native_descriptor_call(request.entry, XL_OP_BAYES_STD, addresses, ints, floats)
+
+
+def xl_bayes_sigma_run(v: Int, ev: Int, d: Int, alpha: Float64, lam: Float64, dst: Int):
+    """BayesianRidge's public sigma_ (d x d float32 at `dst`) from its factor,
+    on its first read (x_linear/bayes.mojo `bayes_sigma_cell`): the d*d
+    cells split across the host's workers, each its own chain."""
+    var vp = FP(unsafe_from_address=v)
+    var ep = FP(unsafe_from_address=ev)
+    var out = FP(unsafe_from_address=dst)
+    var cells = d * d
+    var a32 = Float32(alpha)
+    var l32 = Float32(lam)
+    var tasks = host_predict_task_count_work(cells, cells * max(d, 1))
+    var chunk = host_predict_chunk(cells, tasks)
+
+    def task(worker: Int) {imm vp, imm ep, imm out, imm d, imm cells, imm a32, imm l32, imm chunk}:
+        for c in range(worker * chunk, min(cells, (worker + 1) * chunk)):
+            out[c] = bayes_sigma_cell(vp, ep, d, a32, l32, c)
+
+    host_parallelize(task, tasks)
+
+
+def xl_ard_kept_run(lambdas: Int, d: Int, threshold: Float64, dst: Int) -> Int:
+    """ARDRegression's kept columns (lambda_ < threshold_lambda in float32,
+    the fit's own rule, x_linear/bayes.mojo `ard_update`) as int32 indices
+    ascending at `dst` (d words of room). Returns their count."""
+    var lam = _F32P(unsafe_from_address=lambdas)
+    var out = _I32P(unsafe_from_address=dst)
+    var thr = Float32(threshold)
+    var dk = 0
+    for j in range(d):  # driver-loop: over the fitted features (model structure, one compare each)
+        if lam[j] < thr:
+            out[dk] = Int32(j)
+            dk += 1
+    return dk
 
 
 # ------------------------------------------------------------------ fits

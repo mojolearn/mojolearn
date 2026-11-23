@@ -1,0 +1,417 @@
+#!/usr/bin/env python3
+"""Output digests of the SHAP model classes lanes mf-shaprfe, mf-shap2, mf-shap3 and mf-shap3b moved onto native
+members (2026-11-23); this script folds tools/mf_shap2_digests.py (its configurations are kept, under the same
+names). A testing tool, never product execution.
+
+(E, mf-shap3b) KernelExplainer and PermutationExplainer over the last classes of the door's `_DoorModel` list:
+IsolationForest (its member's int32 predict, widened in the RUN), LocalOutlierFactor(novelty=True) and KMeans
+(their members' integer predict, same route), LabelPropagation (rbf) and LabelSpreading (knn) through their typed
+query, RFE over LogisticRegression (predict_proba), LinearSVC (labels) and Ridge (predict) through the estimator's
+member over the support columns, StackingClassifier(stack_method='predict') with classifier members (their codes
+mapped to their labels, codes 0..k-1 and shifted float labels), and the forecasters (refused natively by name).
+
+(D, mf-shap3) KernelExplainer and PermutationExplainer over every meta-estimator, now through `AgnMeta` (the RUN
+of its public operation over its members' held native states): VotingClassifier hard (newly explained: it was
+refused at construction, its predict_proba being unavailable) and soft with a tree member, Bagging (per-member
+feature subsets, every feature, the batched forest, a regressor), Stacking (classifier, with passthrough,
+regressor), OneVsRest (two and three classes), CalibratedClassifierCV (sigmoid and isotonic), AdaBoost
+(classifier, binary, regressor), MultiOutputRegressor (its multi-output ridge and per-output members),
+GridSearchCV (newly explained through its best_estimator_: it was refused at construction), and the cases kept
+or refused: MultiOutputClassifier (refused natively), a meta-estimator as a member (its door, kept), non-finite
+explained rows (refused natively), each meta in many rows (parallel chunks).
+
+(C, mf-shap2) KernelExplainer and PermutationExplainer over the predict-only classifiers (LinearSVC,
+RidgeClassifier, PassiveAggressiveClassifier, Perceptron, SGDClassifier(loss='hinge'), SVC(probability=False),
+NearestCentroid), now through `AgnMember`'s label route (member codes mapped to `classes_` by the glue gather),
+with labels 0..k-1, with shifted float labels and with string labels (the door's refusal); CategoricalNB (now
+NaiveBayes member kind 4) explained, fitted, predicted, inside BaggingClassifier and VotingClassifier, and under
+RFE; VotingClassifier(voting='soft') and VotingRegressor over native members (now `AgnVote`), a vote with a tree
+member and a hard vote (both kept on their old paths).
+
+(A) KernelExplainer and PermutationExplainer over the classes that left the door's `_DoorModel`: a member whose
+predict_proba is float64 (LogisticRegression, SVC(probability=True), DARTClassifier,
+GaussianProcessClassifier, GradientBoostingClassifier), now through the native handle `AgnMember` with the RUN's
+float32 narrowing, and the naive Bayes / discriminant members, which now run with the GIL released
+(MEMBER_GIL_DOOR). Each class x {kernel identity, kernel logit (binary), permutation}, plus a multi-class and a
+many-rows (parallel chunks) case.
+(B) RFE over LinearDiscriminantAnalysis (svd, lsqr: now through the discriminant member's coef_ export),
+QuadraticDiscriminantAnalysis, GaussianNB and MultinomialNB (now refused before any round is fitted) x step
+{1, 2} x n_features_to_select {None, 2}: ranking_, support_ and the final estimator's predict_proba on 10 rows.
+
+One line per configuration, `<name> sha256=<digest of the outputs' and fitted state's bytes>` or
+`<name> error <class>: <first line of the message>` (a refusal is digested by its words). Run it on two builds of
+the CPU column, base origin/lane/member-fits 03da611844 and lane/mf-shap3's head, and diff the files: equal lines
+mean equal bits.
+
+    PYTHONPATH=<repo>/python python3 tools/mf_shap3_digests.py > out.txt
+
+Expected for (E), base origin/lane/member-fits cb25018d3e vs lane/mf-shap3b's head: `shap_*_iforest*` (base:
+"has no native predict"; head: an answer), `shap_*_label_prop*` / `shap_*_label_spread*` / `shap_*_rfe_*` (base:
+"requires a mojolearn estimator"; head: an answer), `shap_k_forecast_*` (head: the forecaster refusal's words)
+differ; `shap_*_kmeans`, `shap_*_lof_novelty` and `shap_*_stack_predict*` are answers on both builds and must be
+EQUAL (they moved from the door to the native route with the same words).
+
+Expected for (A) to (D): every line equal, except these, whose base line is a refusal and whose head line is either an answer
+or the native refusal's words: `shap_*_vote_hard*` and `shap_*_search_*` (now explained), `shap_*_label_*_str`
+(the native non-numeric labels refusal), `shap_*_multi_clf` (the native MultiOutputClassifier refusal),
+`shap_*_nonfinite` and `shap_k_categorical_nb_out_of_range` (the member's own words, where the door's were
+raised after a second pass). Every other line (the meta-estimators above among them) is an answer on both
+builds and must be equal: a difference means stop and send it back.
+
+Parallel plan: the configurations are independent, one per worker process (at most the allocated cores, at most
+the configuration count).
+"""
+import hashlib
+import os
+import sys
+from concurrent.futures import ProcessPoolExecutor
+
+
+def _data(kind, n=300, d=5, seed=0, positive=False):
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    if kind.startswith("cat"):
+        # CategoricalNB: integer categories 0..3 per feature
+        X = rng.integers(0, 4, (n, d)).astype(np.float32)
+        k = int(kind[3:])
+        y = ((X[:, 0] + X[:, 1]).astype(np.int64) % k).astype(np.int64)
+        return X, y
+    if kind == "reg":
+        X = rng.normal(size=(n, d)).astype(np.float32)
+        y = (X[:, 0] - 0.5 * X[:, 1] + 0.1 * X[:, 2]).astype(np.float32)
+        return X, y
+    if kind == "reg2":
+        X = rng.normal(size=(n, d)).astype(np.float32)
+        y = np.stack([X[:, 0] - 0.5 * X[:, 1], X[:, 2] + 0.25 * X[:, 3]], axis=1).astype(np.float32)
+        return X, y
+    if kind == "clf2_2":
+        X = rng.normal(size=(n, d)).astype(np.float32)
+        y = np.stack([(X[:, 0] > 0), (X[:, 1] + X[:, 2] > 0)], axis=1).astype(np.int64)
+        return X, y
+    X = rng.normal(size=(n, d)).astype(np.float32)
+    k = int(kind[3:])
+    y = (np.digitize(X[:, 0] + 0.5 * X[:, 1], np.linspace(-1, 1, k - 1))).astype(np.int64)
+    if positive:
+        X = np.abs(X)
+    return X, y
+
+
+def _labels(y, how):
+    """The class labels a configuration fits with: the codes, shifted floats, or strings."""
+    import numpy as np
+    if how == "float":
+        return y.astype(np.float64) * 2.5 - 1.0
+    if how == "str":
+        return np.array(["c%d" % v for v in y])  # glue: the fixture's label strings
+    return y
+
+
+_SHAP_MODELS = {
+    "logistic": ("LogisticRegression", {}, False),
+    "svc_proba": ("SVC", dict(probability=True, random_state=0), False),
+    "dart": ("DARTClassifier", dict(n_estimators=12, random_state=0), False),
+    "gpc": ("GaussianProcessClassifier", dict(random_state=0), False),
+    "gbdt_clf": ("GradientBoostingClassifier", dict(n_estimators=12, random_state=0), False),
+    "gaussian_nb": ("GaussianNB", {}, False),
+    "multinomial_nb": ("MultinomialNB", {}, True),
+    "lda": ("LinearDiscriminantAnalysis", {}, False),
+    "qda": ("QuadraticDiscriminantAnalysis", {}, False),
+}
+
+_RFE_MODELS = {
+    "lda_svd": ("LinearDiscriminantAnalysis", dict(solver="svd"), False),
+    "lda_lsqr": ("LinearDiscriminantAnalysis", dict(solver="lsqr"), False),
+    "qda": ("QuadraticDiscriminantAnalysis", {}, False),
+    "gaussian_nb": ("GaussianNB", {}, False),
+    "multinomial_nb": ("MultinomialNB", {}, True),
+}
+
+
+# lane mf-cal3b: Host* classes of python/mojolearn/_classical_host.py with their own member mark
+_HOST_MODELS = {
+    "svc_proba": ("HostSVC", dict(probability=True, random_state=0)),
+    "knn": ("HostKNeighborsClassifier", dict(n_neighbors=7)),
+}
+
+# (C) predict-only classifiers, explained through predict (the label route)
+_LABEL_MODELS = {
+    "linear_svc": ("LinearSVC", dict(random_state=0)),
+    "ridge_clf": ("RidgeClassifier", {}),
+    "passive_aggressive": ("PassiveAggressiveClassifier", dict(random_state=0)),
+    "perceptron": ("Perceptron", dict(random_state=0)),
+    "sgd_hinge": ("SGDClassifier", dict(loss="hinge", random_state=0)),
+    "svc_noproba": ("SVC", dict(probability=False)),
+    "nearest_centroid": ("NearestCentroid", {}),
+}
+
+# (C) votes: (class, members as (name, class, kwargs), vote kwargs, data kind)
+_VOTES = {
+    "vote_soft": ("VotingClassifier", (("lr", "LogisticRegression", {}), ("nb", "GaussianNB", {})),
+                  dict(voting="soft", weights=[1.0, 2.0]), "clf3"),
+    "vote_soft_tree": ("VotingClassifier", (("lr", "LogisticRegression", {}),
+                                            ("dt", "DecisionTreeClassifier", dict(max_depth=3, random_state=0))),
+                       dict(voting="soft"), "clf3"),
+    "vote_hard": ("VotingClassifier", (("lr", "LogisticRegression", {}), ("nb", "GaussianNB", {})),
+                  dict(voting="hard"), "clf3"),
+    "vote_regress": ("VotingRegressor", (("lin", "LinearRegression", {}), ("ridge", "Ridge", {})),
+                     dict(weights=[2.0, 1.0]), "reg"),
+}
+
+
+# (D, mf-shap3) meta-estimators: name -> (data kind, a factory over the package)
+def _metas():
+    def lr(ml):
+        return ml.LogisticRegression()
+
+    def tree_clf(ml):
+        return ml.DecisionTreeClassifier(max_depth=3, random_state=0)
+
+    def tree_reg(ml):
+        return ml.DecisionTreeRegressor(max_depth=3, random_state=0)
+
+    def search(ml, est, grid):
+        from mojolearn.model_selection import GridSearchCV
+        return GridSearchCV(est, grid, cv=3)
+
+    return {
+        "bag_clf": ("clf3", lambda ml: ml.BaggingClassifier(tree_clf(ml), n_estimators=4, max_features=0.6,
+                                                            random_state=0)),
+        "bag_clf_lr": ("clf2", lambda ml: ml.BaggingClassifier(lr(ml), n_estimators=3, random_state=0)),
+        "bag_clf_default": ("clf3", lambda ml: ml.BaggingClassifier(n_estimators=4, random_state=0)),
+        "bag_reg": ("reg", lambda ml: ml.BaggingRegressor(tree_reg(ml), n_estimators=4, max_features=0.6,
+                                                          random_state=0)),
+        "stack_clf": ("clf3", lambda ml: ml.StackingClassifier([("lr", lr(ml)), ("nb", ml.GaussianNB())], cv=3)),
+        "stack_clf_pass": ("clf2", lambda ml: ml.StackingClassifier([("lr", lr(ml)), ("dt", tree_clf(ml))],
+                                                                    passthrough=True, cv=3)),
+        "stack_reg": ("reg", lambda ml: ml.StackingRegressor([("lin", ml.LinearRegression()), ("ridge", ml.Ridge())],
+                                                             cv=3)),
+        "ovr_bin": ("clf2", lambda ml: ml.OneVsRestClassifier(lr(ml))),
+        "ovr_3": ("clf3", lambda ml: ml.OneVsRestClassifier(lr(ml))),
+        "cal_sig_bin": ("clf2", lambda ml: ml.CalibratedClassifierCV(lr(ml), method="sigmoid", cv=3)),
+        "cal_iso_3": ("clf3", lambda ml: ml.CalibratedClassifierCV(ml.GaussianNB(), method="isotonic", cv=3)),
+        "cal_sig_3_lr": ("clf3", lambda ml: ml.CalibratedClassifierCV(lr(ml), method="sigmoid", cv=3)),
+        "ada_clf": ("clf3", lambda ml: ml.AdaBoostClassifier(n_estimators=5, random_state=0)),
+        "ada_clf_bin": ("clf2", lambda ml: ml.AdaBoostClassifier(n_estimators=5, random_state=0)),
+        "ada_reg": ("reg", lambda ml: ml.AdaBoostRegressor(n_estimators=5, random_state=0)),
+        "multi_reg_ridge": ("reg2", lambda ml: ml.MultiOutputRegressor(ml.Ridge())),
+        "multi_reg_tree": ("reg2", lambda ml: ml.MultiOutputRegressor(tree_reg(ml))),
+        "multi_clf": ("clf2_2", lambda ml: ml.MultiOutputClassifier(lr(ml))),
+        "search_lr": ("clf2", lambda ml: search(ml, lr(ml), {"C": [0.1, 1.0]})),
+        "search_ridge": ("reg", lambda ml: search(ml, ml.Ridge(), {"alpha": [0.1, 1.0]})),
+        "nested_bag_of_cal": ("clf2", lambda ml: ml.BaggingClassifier(ml.CalibratedClassifierCV(lr(ml), cv=2),
+                                                                      n_estimators=2, random_state=0)),
+    }
+
+
+# (E, mf-shap3b): name -> a factory over the package answering (model, X, y), the model unfitted
+def _extras():
+    import numpy as np
+
+    def lp_data():
+        X, y = _data("clf3")
+        y = y.copy()
+        y[60:] = -1  # glue: the unlabeled marker of the fixture
+        return X, y
+
+    def shifted(kind):
+        X, y = _data(kind)
+        return X, y.astype(np.float64) * 2.5 - 1.0
+
+    return {
+        "iforest": lambda ml: (ml.IsolationForest(n_estimators=10, random_state=0),) + _data("clf2"),
+        "lof_novelty": lambda ml: (ml.LocalOutlierFactor(n_neighbors=10, novelty=True),) + _data("clf2"),
+        "kmeans": lambda ml: (ml.KMeans(n_clusters=3, random_state=0),) + _data("clf3"),
+        "label_prop_rbf": lambda ml: (ml.LabelPropagation(kernel="rbf", gamma=2.0),) + lp_data(),
+        "label_spread_knn": lambda ml: (ml.LabelSpreading(kernel="knn", n_neighbors=5),) + lp_data(),
+        "rfe_lr": lambda ml: (ml.RFE(ml.LogisticRegression(), n_features_to_select=3),) + _data("clf3"),
+        "rfe_linear_svc": lambda ml: (ml.RFE(ml.LinearSVC(random_state=0), n_features_to_select=2),)
+        + _data("clf2"),
+        "rfe_ridge": lambda ml: (ml.RFE(ml.Ridge(), n_features_to_select=2),) + _data("reg"),
+        "stack_predict": lambda ml: (ml.StackingClassifier([("lr", ml.LogisticRegression()),
+                                                            ("svc", ml.LinearSVC(random_state=0))],
+                                                           stack_method="predict", cv=3),) + _data("clf3"),
+        "stack_predict_float": lambda ml: (ml.StackingClassifier([("lr", ml.LogisticRegression()),
+                                                                  ("nb", ml.GaussianNB())],
+                                                                 stack_method="predict", cv=3),) + shifted("clf3"),
+    }
+
+
+def _forecasters():
+    return ("ExponentialSmoothing", "AutoARIMA", "CrostonClassic", "ProphetForecaster", "Theta", "AutoTheta")
+
+
+def _cases():
+    cases = {}
+    for key in _extras():  # glue: the fixed configuration table
+        cases["shap_k_" + key] = ("KE", key, {}, False, "", {}, {}, 8, "codes")
+        cases["shap_p_" + key] = ("PE", key, {}, False, "", dict(random_state=0), dict(npermutations=20), 8,
+                                  "codes")
+    for key in ("iforest", "label_prop_rbf", "rfe_lr"):  # glue: the fixed configuration table
+        cases["shap_k_" + key + "_many_rows"] = ("KE", key, {}, False, "", {}, {}, 97, "codes")
+        cases["shap_k_" + key + "_nonfinite"] = ("KE", key, {}, False, "", {}, {}, -8, "codes")
+    for cls in _forecasters():  # glue: the fixed configuration table
+        cases["shap_k_forecast_" + cls] = ("KF", cls, {}, False, "", {}, {}, 8, "codes")
+    for key, (cls, mkw) in _LABEL_MODELS.items():  # glue: the fixed configuration table
+        for how in ("codes", "float", "str"):  # glue: the fixed configuration table
+            cases["shap_k_label_" + key + "_" + how] = ("K", cls, mkw, False, "clf3", {}, {}, 8, how)
+            cases["shap_p_label_" + key + "_" + how] = ("P", cls, mkw, False, "clf3", dict(random_state=0),
+                                                        dict(npermutations=20), 8, how)
+    cases["shap_k_label_linear_svc_many_rows"] = ("K", "LinearSVC", dict(random_state=0), False, "clf2", {}, {}, 97,
+                                                  "codes")
+    for kind in ("cat2", "cat3"):  # glue: the fixed configuration table
+        cases["shap_k_categorical_nb_" + kind] = ("K", "CategoricalNB", {}, False, kind, {}, {}, 8, "codes")
+        cases["shap_p_categorical_nb_" + kind] = ("P", "CategoricalNB", {}, False, kind, dict(random_state=0),
+                                                  dict(npermutations=20), 8, "codes")
+        cases["fit_categorical_nb_" + kind] = ("F", "CategoricalNB", {}, False, kind, {}, {}, 0, "codes")
+        cases["bag_categorical_nb_" + kind] = ("B", "CategoricalNB", {}, False, kind, {}, {}, 0, "codes")
+        cases["vote_categorical_nb_" + kind] = ("V", "CategoricalNB", {}, False, kind, {}, {}, 0, "codes")
+    cases["fit_categorical_nb_min_categories"] = ("F", "CategoricalNB", dict(min_categories=[2, 7, 5, 4, 6]), False,
+                                                  "cat3", {}, {}, 0, "codes")
+    cases["shap_k_categorical_nb_out_of_range"] = ("K", "CategoricalNB", {}, False, "cat3", {}, {}, -8, "codes")
+    for key in _VOTES:  # glue: the fixed configuration table
+        cases["shap_k_" + key] = ("KV", key, {}, False, "", {}, {}, 8, "codes")
+        cases["shap_p_" + key] = ("PV", key, {}, False, "", dict(random_state=0), dict(npermutations=20), 8, "codes")
+    cases["shap_k_vote_soft_many_rows"] = ("KV", "vote_soft", {}, False, "", {}, {}, 97, "codes")
+    cases["shap_k_vote_hard_many_rows"] = ("KV", "vote_hard", {}, False, "", {}, {}, 97, "codes")
+    for key in _metas():  # glue: the fixed configuration table
+        cases["shap_k_" + key] = ("KM", key, {}, False, "", {}, {}, 8, "codes")
+        cases["shap_p_" + key] = ("PM", key, {}, False, "", dict(random_state=0), dict(npermutations=20), 8,
+                                  "codes")
+    for key in ("bag_clf", "stack_clf", "ovr_3", "cal_iso_3", "ada_clf", "multi_reg_tree"):  # glue: the fixed table
+        cases["shap_k_" + key + "_many_rows"] = ("KM", key, {}, False, "", {}, {}, 97, "codes")
+    cases["shap_k_bag_clf_logit"] = ("KM", "bag_clf_lr", {}, False, "", dict(link="logit"), {}, 8, "codes")
+    cases["shap_k_logistic_nonfinite"] = ("K", "LogisticRegression", {}, False, "clf2", {}, {}, -8, "codes")
+    cases["shap_k_bag_clf_nonfinite"] = ("KM", "bag_clf", {}, False, "", {}, {}, -8, "codes")
+    for step in (1, 2):  # glue: the fixed configuration table
+        cases["rfe_categorical_nb_step%d" % step] = ("R", "CategoricalNB", {}, False, "cat3",
+                                                     dict(step=step, n_features_to_select=2), {}, 0, "codes")
+    cases["rfe_categorical_nb_getter_coef"] = ("R", "CategoricalNB", {}, False, "cat3",
+                                               dict(step=1, n_features_to_select=2, importance_getter="coef_"), {},
+                                               0, "codes")
+    # lane mf-cal3b: the Host* classes with their own member mark open as native members (AgnMember) on the host
+    # image; on the CPU column each line equals its public class's line (`shap_k_svc_proba_identity`, ...)
+    for key, (cls, mkw) in _HOST_MODELS.items():  # glue: the fixed configuration table
+        cases["shap_k_host_" + key] = ("KH", cls, mkw, False, "clf2", {}, {}, 8, "codes")
+        cases["shap_p_host_" + key] = ("PH", cls, mkw, False, "clf2", dict(random_state=0), dict(npermutations=20),
+                                       8, "codes")
+    for key, (cls, mkw, positive) in _SHAP_MODELS.items():  # glue: the fixed configuration table
+        cases["shap_k_" + key + "_identity"] = ("K", cls, mkw, positive, "clf2", {}, {}, 8, "codes")
+        cases["shap_k_" + key + "_logit"] = ("K", cls, mkw, positive, "clf2", dict(link="logit"), {}, 8, "codes")
+        cases["shap_p_" + key] = ("P", cls, mkw, positive, "clf2", dict(random_state=0), dict(npermutations=20), 8,
+                                  "codes")
+    cases["shap_k_logistic_clf3"] = ("K", "LogisticRegression", {}, False, "clf3", {}, {}, 8, "codes")
+    cases["shap_p_logistic_many_rows"] = ("P", "LogisticRegression", {}, False, "clf2", dict(random_state=1),
+                                          dict(npermutations=10), 97, "codes")
+    cases["shap_k_dart_many_rows"] = ("K", "DARTClassifier", dict(n_estimators=12, random_state=0), False, "clf2",
+                                      {}, {}, 97, "codes")
+    for key, (cls, mkw, positive) in _RFE_MODELS.items():  # glue: the fixed configuration table
+        for step in (1, 2):  # glue: the fixed configuration table
+            for nsel in (None, 2):  # glue: the fixed configuration table
+                name = "rfe_%s_step%d_n%s" % (key, step, "none" if nsel is None else nsel)
+                cases[name] = ("R", cls, mkw, positive, "clf3", dict(step=step, n_features_to_select=nsel), {}, 0,
+                               "codes")
+        cases["rfe_" + key + "_getter_coef"] = ("R", cls, mkw, positive, "clf3",
+                                                dict(step=1, n_features_to_select=2, importance_getter="coef_"),
+                                                {}, 0, "codes")
+    return cases
+
+
+def _digest(*arrays):
+    import numpy as np
+    h = hashlib.sha256()
+    for a in arrays:  # glue: the configuration's few output arrays
+        a = np.asarray(a)
+        h.update(str(a.shape).encode())
+        h.update(str(a.dtype).encode())
+        h.update(np.ascontiguousarray(a).tobytes())
+    return h.hexdigest()
+
+
+def _vote(key, ml):
+    cls, members, vkw, kind = _VOTES[key]
+    estimators = [(name, getattr(ml, c)(**kw)) for name, c, kw in members]  # glue: the fixed member table
+    return getattr(ml, cls)(estimators, **vkw), kind
+
+
+def _run(name):
+    import numpy as np
+    import mojolearn as ml
+    which, cls, mkw, positive, kind, ekw, vkw, rows, how = _cases()[name]
+    try:
+        if which == "KF":
+            # a forecaster, unfitted: refused at construction by name
+            X, _y = _data("reg")
+            try:
+                model = getattr(ml, cls)()
+            except TypeError:
+                # the series-in-the-constructor forecasters (ExponentialSmoothing, AutoARIMA)
+                model = getattr(ml, cls)(np.arange(1, 49, dtype=np.float32))
+            ml.KernelExplainer(model, X[:20])
+            return f"{name} answered"
+        if which in ("KE", "PE"):
+            model, X, y = _extras()[cls](ml)
+            model.fit(X, y)
+            which = which[0]
+        elif which in ("KV", "PV"):
+            model, kind = _vote(cls, ml)
+            X, y = _data(kind)
+            model.fit(X, y)
+            which = which[0]
+        elif which in ("KH", "PH"):
+            from mojolearn import _classical_host as host
+            X, y = _data(kind)
+            model = getattr(host, cls)(**mkw).fit(X, y)
+            which = which[0]
+        elif which in ("KM", "PM"):
+            kind, make = _metas()[cls]
+            X, y = _data(kind)
+            model = make(ml).fit(X, y)
+            which = which[0]
+        else:
+            X, y = _data(kind, positive=positive)
+            y = _labels(y, how)
+            if which == "R":
+                r = ml.RFE(getattr(ml, cls)(**mkw), **ekw).fit(X, y)
+                proba = r.predict_proba(X[:10])
+                return f"{name} sha256={_digest(r.ranking_, np.asarray(r.support_), proba)}"
+            if which == "F":
+                m = getattr(ml, cls)(**mkw).fit(X, y)
+                return f"{name} sha256={_digest(m.predict_proba(X[:50]), m.predict(X[:50]), m._flp, m._cc)}"
+            if which == "B":
+                m = ml.BaggingClassifier(getattr(ml, cls)(**mkw), n_estimators=4, random_state=0).fit(X, y)
+                return f"{name} sha256={_digest(m.predict_proba(X[:50]), m.predict(X[:50]))}"
+            if which == "V":
+                m = ml.VotingClassifier([("cat", getattr(ml, cls)(**mkw)), ("lr", ml.LogisticRegression())],
+                                        voting="soft").fit(X, y)
+                return f"{name} sha256={_digest(m.predict_proba(X[:50]), m.predict(X[:50]))}"
+            model = getattr(ml, cls)(**mkw).fit(X, y)
+        explainer = (ml.KernelExplainer if which == "K" else ml.PermutationExplainer)(model, X[:20], **ekw)
+        if rows < 0:
+            # a category index above the fitted range (CategoricalNB), else a NaN, in the explained rows: the
+            # model's own refusal
+            rows_x = X[200:200 - rows].copy()
+            rows_x[0, 0] = 9.0 if cls == "CategoricalNB" else np.nan
+        else:
+            rows_x = X[200:200 + rows].copy()
+        phi = np.asarray(explainer.shap_values(rows_x, **vkw))
+        ev = np.asarray(explainer.expected_value, dtype=np.float64)
+        return f"{name} sha256={_digest(phi, ev)}"
+    except Exception as e:  # noqa: BLE001 - the line records the refusal
+        return f"{name} error {type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}"
+
+
+def main():
+    names = sorted(_cases())
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except AttributeError:
+        cores = os.cpu_count() or 1
+    workers = max(1, min(int(os.environ.get("MF_SHAP3_WORKERS", cores)), len(names)))
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        for line in pool.map(_run, names):
+            print(line, flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

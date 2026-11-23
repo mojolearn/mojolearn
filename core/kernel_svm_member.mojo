@@ -27,13 +27,20 @@ and predict borrow the caller's view.
 KINDS: 0 SVC (a classifier: MEMBER_CAN_CLASSIFIER), 1 SVR.
 
 MEMBER_OP_NEW parameters (17 Float64 words): [0] kind; [1] kernel code
-(svm/operation_metadata.mojo codes; 'precomputed' is not published);
+(svm/operation_metadata.mojo codes; 'precomputed', code 4, since lane
+mf-adm3: X is then the kernel matrix, rows x training rows, square at fit,
+and a query's columns at each machine's supports are gathered first, as the
+estimator's own doors do);
 [2] degree; [3] coef0; [4] gamma kind (0 a value, 1 'auto', 2 'scale');
 [5] gamma (kind 0); [6] C; [7] tol; [8] epsilon (SVR); [9] max_iter;
 [10] nochange_steps; [11] cache_size (MiB); [12] probability (0 / 1, SVC);
 [13] decision_function_shape (0 'ovr', 1 'ovo'); [14] break_ties (0 / 1);
 [15] random_state's low 32 bits, [16] its high 32 bits (0, 0 for None).
-class_weight is not published (the boundary keeps the estimator's own doors).
+SVC's class_weight (lane mf-adm3) is a tail from word 17
+(core/member_class_weight.mojo): 'balanced' or a dict's table; FIT hands
+the solver's per-row bounds C * class_weight[y_i] * sample_weight_i the
+float64 class weights of bindings/svc_kernel_params_unpack.mojo
+`svm_weights_unpack` (`member_cw_table_f64`).
 
 VIEWS: X dense row-major host float32. SVC: y = int32 class codes
 0 .. classes-1 (`call.classes` at fit); predict writes int32 codes;
@@ -86,6 +93,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_KERNEL_SVM
+from core.member_class_weight import MEMBER_CW_HEAD, MEMBER_CW_NONE, member_cw_mode, member_cw_table_f64
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -97,7 +105,9 @@ from svm.svc_kernel_fit_run import (
     SvcFitPlan, SvcFitResult, SvcPairFit, svc_fit_run, svc_fit_finish_run, svc_gamma_run, svc_bounds_run,
     SVC_FIT_PAIR_LABELS,
 )
-from svm.svc_kernel_native_run import SvcMachine, SvcQueryPlan, svc_query_run, SVC_EPILOGUE_NONE, SVC_KERNEL_PRECOMPUTED
+from svm.svc_kernel_native_run import (
+    SvcMachine, SvcQueryPlan, svc_query_run, svc_gather_columns_run, SVC_EPILOGUE_NONE, SVC_KERNEL_PRECOMPUTED,
+)
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -393,15 +403,29 @@ def _fit_svc(slot: _Slot, call: _Call) raises:
     var p = slot[].params.copy()
     var probability = p[12] != 0.0
     var gamma_kind = Int(p[4])
+    var precomputed = Int(p[1]) == SVC_KERNEL_PRECOMPUTED
+    if precomputed and cols != rows:
+        raise Error("mojolearn SVC: kernel='precomputed' needs the square n x n "
+                    + "kernel matrix as X, got " + String(rows) + " x " + String(cols))
     var held = List[Float64]()
     var sample_weights = _weights(call, rows, "SVC", held)
+    # class_weight (lane mf-adm3): the door's float64 class weights, from
+    # this fit's own codes ('balanced') or the table read at UNPACK.
+    var class_table = List[Float64]()
+    var class_weights = 0
+    if member_cw_mode(p, _PARAMS) != MEMBER_CW_NONE:
+        class_table = member_cw_table_f64(p, _PARAMS, call[].y.data, MEMBER_I32, rows, classes,
+            "mojolearn SVC: class_weight names a label which is not in y's classes")
+        class_weights = Int(class_table.unsafe_ptr())
     # The solver's float32 labels of a binary machine: the codes 0.0 / 1.0
     # (the estimator's own non-numeric label route; codes keep the sorted
     # class order, so the solver's +1 is class 1 either way).
     var labels = List[Float32](length=rows if classes == 2 else 0, fill=Float32(0))
     if classes == 2:
         _cast(call[].y.data, HP_I32, _f32(labels), HP_F32, rows)
-    var device_x = drivers.has_device and classes == 2 and not probability
+    # The device-X route: one binary machine on a computed kernel (a
+    # precomputed X is gathered by rows and columns on the host: the door's rule).
+    var device_x = drivers.has_device and classes == 2 and not probability and not precomputed
     var plan = SvcFitPlan(_settings(slot, cols, 1.0))
     if device_x:
         if gamma_kind == 1:
@@ -424,9 +448,9 @@ def _fit_svc(slot: _Slot, call: _Call) raises:
     plan.classes = classes
     plan.labels = _f32(labels)
     plan.codes = call[].y.data
-    plan.weighted = sample_weights != 0
+    plan.weighted = sample_weights != 0 or class_weights != 0
     plan.sample_weights = sample_weights
-    plan.class_weights = 0
+    plan.class_weights = class_weights
     plan.probability = probability
     plan.seed = (UInt64(Int(p[16])) << UInt64(32)) | UInt64(Int(p[15]))
     var result = SvcFitResult()
@@ -499,6 +523,7 @@ def _fit_svc(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
     _ = labels^
     _ = held^
+    _ = class_table^  # the class weights the solves read
 
 
 def _binary_layout(slot: _Slot):
@@ -526,7 +551,11 @@ def _fit_svr(slot: _Slot, call: _Call) raises:
     var gamma_kind = Int(p[4])
     var held = List[Float64]()
     var sample_weights = _weights(call, rows, "SVR", held)
-    var device_x = drivers.has_device
+    var precomputed = Int(p[1]) == SVC_KERNEL_PRECOMPUTED
+    if precomputed and cols != rows:
+        raise Error("mojolearn SVR: kernel='precomputed' needs the square n x n "
+                    + "kernel matrix as X, got " + String(rows) + " x " + String(cols))
+    var device_x = drivers.has_device and not precomputed
     var gamma = p[5]
     var scale_gamma = False
     if device_x:
@@ -635,7 +664,7 @@ def _served(svc: Bool, probability: Bool, operation: Int) -> Bool:
 
 
 def _svc_plan(slot: _Slot, call: _Call, settings: SvcOperationSettings, mut status: List[Int32],
-              mut codes: List[Int32]) -> SvcQueryPlan:
+              mut codes: List[Int32], mut gathered: List[List[Float32]]) -> SvcQueryPlan:
     var plan = SvcQueryPlan(settings)
     plan.x = call[].x.data
     plan.rows = call[].x.rows
@@ -643,10 +672,20 @@ def _svc_plan(slot: _Slot, call: _Call, settings: SvcOperationSettings, mut stat
     plan.status = Int(status.unsafe_ptr())
     plan.label0 = slot[].label0
     plan.label1 = slot[].label1
+    # kernel='precomputed' (lane mf-adm3): each machine reads the query's
+    # columns at its supports, gathered into a rows x supports buffer of its
+    # own (bindings/svc_kernel_query_unpack.mojo's rule).
+    var precomputed = settings.kernel == SVC_KERNEL_PRECOMPUTED
     for m in range(len(slot[].machines)):  # driver-loop: over the fitted machines (their descriptors)
         var n = slot[].machines[m].supports
+        var columns = 0
+        var into = 0
+        if precomputed and n > 0:
+            gathered.append(List[Float32](length=max(1, call[].x.rows * n), fill=Float32(0)))
+            columns = _i32(slot[].machines[m].support)
+            into = _f32(gathered[len(gathered) - 1])
         plan.machines.append(SvcMachine(_f32(slot[].machines[m].dual) if n > 0 else 0,
-            _f32(slot[].machines[m].vectors) if n > 0 else 0, n, slot[].machines[m].bias, 0, 0))
+            _f32(slot[].machines[m].vectors) if n > 0 else 0, n, slot[].machines[m].bias, columns, into))
     var pairs = len(slot[].machines)
     codes = List[Int32](length=max(1, 2 * pairs), fill=Int32(0))
     if slot[].classes > 2:
@@ -701,13 +740,15 @@ def _query_svc(slot: _Slot, call: _Call, operation: Int, dst: Int) raises:
             + "(scikit-learn's rule); fit with probability=True")
     var status = List[Int32](length=2, fill=Int32(0))
     var codes = List[Int32]()
-    var plan = _svc_plan(slot, call, _settings(slot, slot[].features, slot[].gamma), status, codes)
+    var gathered = List[List[Float32]]()
+    var plan = _svc_plan(slot, call, _settings(slot, slot[].features, slot[].gamma), status, codes, gathered)
     var pairs = len(slot[].machines)
     # The estimator's own route (bindings/svc_kernel_query_unpack.mojo): on a
     # GPU binding the device entry runs every machine from the state's lease
-    # and tests X (its finite and range words come back in `status`).
+    # and tests X (its finite and range words come back in `status`); a
+    # precomputed kernel takes no lease (its machines read gathered columns).
     plan.resident = call[].route.has_second and pairs > 0
-    if plan.resident:
+    if plan.resident and Int(slot[].params[1]) != SVC_KERNEL_PRECOMPUTED:
         plan.lease = _lease(slot, call)
     var decisions = List[Float32]()
     var wide = List[Int64]()
@@ -755,6 +796,7 @@ def _query_svc(slot: _Slot, call: _Call, operation: Int, dst: Int) raises:
     _ = decisions^
     _ = wide^
     _ = scores^
+    _ = gathered^  # the precomputed columns the machines read
 
 
 def _predict(slot: _Slot, call: _Call, operation: Int) raises:
@@ -779,12 +821,28 @@ def _predict(slot: _Slot, call: _Call, operation: Int) raises:
     # binding's resident entry.
     # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     var resident = route.has_second
-    var lease = _lease(slot, call) if resident else 0
-    var request = SvrQueryRequest(call[].x.data, _f32(slot[].machines[0].dual) if n > 0 else 0,
-        _f32(slot[].machines[0].vectors) if n > 0 else 0, call[].dst.data, Int(status.unsafe_ptr()), rows,
-        slot[].features, n, Int(p[1]), Int(p[2]), lease, 0, -1, 0, -1, slot[].machines[0].bias, slot[].gamma,
+    # kernel='precomputed' (lane mf-adm3): the query's columns at the
+    # supports, gathered first; the machine then reads them against its
+    # duals and takes no lease (bindings/svc_kernel_svr_unpack.mojo's rule).
+    var precomputed = Int(p[1]) == SVC_KERNEL_PRECOMPUTED
+    var lease = _lease(slot, call) if resident and not precomputed else 0
+    var query = call[].x.data
+    var features = slot[].features
+    var vectors = _f32(slot[].machines[0].vectors) if n > 0 else 0
+    var gathered = List[Float32]()
+    if precomputed and n > 0:
+        gathered = List[Float32](length=max(1, rows * n), fill=Float32(0))
+        svc_gather_columns_run(_drivers(call), call[].x.data, rows, call[].x.cols, _i32(slot[].machines[0].support), n,
+            _f32(gathered))
+        query = _f32(gathered)
+        features = n
+        vectors = _f32(slot[].machines[0].dual)
+    var request = SvrQueryRequest(query, _f32(slot[].machines[0].dual) if n > 0 else 0,
+        vectors, call[].dst.data, Int(status.unsafe_ptr()), rows,
+        features, n, Int(p[1]), Int(p[2]), lease, 0, -1, 0, -1, slot[].machines[0].bias, slot[].gamma,
         p[11], p[3])
     _ = SvrNativeDriver(route.third.call).query(request, resident)
+    _ = gathered^  # the gathered columns the query read
     _flagged(Float64(status[0]), Float64(status[1]), "SVR")
 
 
@@ -1033,7 +1091,7 @@ def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
             | MEMBER_GIL_DOOR)
         var svc = (MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER)
         if call[].state == 0:
-            if call[].param_count == _PARAMS and call[].params:
+            if call[].param_count >= _PARAMS and call[].params:
                 # Kind-exact from the NEW words: SVR has no classifier bits,
                 # SVC with probability=False no predict_proba.
                 var named = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
@@ -1049,16 +1107,18 @@ def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
         var probable = slot[].probability if slot[].fitted else slot[].params[12] != 0.0
         return common | svc if probable else (common | svc) & ~MEMBER_CAN_PREDICT_PROBA
     if operation == MEMBER_OP_NEW:
-        if call[].param_count != _PARAMS or not call[].params:
+        # seventeen words; SVC: and a class-weight tail (lane mf-adm3)
+        var count = call[].param_count
+        if not call[].params or (count != _PARAMS and count < _PARAMS + MEMBER_CW_HEAD):
             raise Error("member ABI: a kernel SVM member takes " + String(_PARAMS) + " parameters")
         var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
-        var words = List[Float64](length=_PARAMS, fill=0.0)
-        for i in range(_PARAMS):  # small-loop(the member's parameter words)
+        var words = List[Float64](length=count, fill=0.0)
+        for i in range(count):  # small-loop(the member's parameter words)
             words[i] = source[i]
         if words[0] != 0.0 and words[0] != 1.0:
             raise Error("member ABI: unknown kernel SVM member kind")
-        if Int(words[1]) == SVC_KERNEL_PRECOMPUTED:
-            raise Error("member ABI: a kernel SVM member with kernel='precomputed' is not published")
+        if count != _PARAMS and words[0] != 0.0:
+            raise Error("member ABI: an SVR member takes " + String(_PARAMS) + " parameters")
         if words[6] <= 0.0:
             raise Error("ValueError: C must be positive, got " + String(words[6]))
         call[].state = _mint(words^)
@@ -1080,7 +1140,7 @@ def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
             k = held[].classes if held[].fitted else call[].classes
             ovo = held[].params[13] != 0.0
             probable = held[].probability if held[].fitted else held[].params[12] != 0.0
-        elif call[].param_count == _PARAMS and call[].params:
+        elif call[].param_count >= _PARAMS and call[].params:
             var named = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
             svc_kind = named[0] == 0.0
             k = call[].classes

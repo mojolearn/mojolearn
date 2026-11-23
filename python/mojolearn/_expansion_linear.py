@@ -853,8 +853,8 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
 
     Follows scikit-learn's BayesianRidge: estimates the noise precision
     ``alpha_`` and the weight precision ``lambda_`` by maximizing the
-    marginal likelihood (evidence). ``compute_score=True`` and
-    ``predict(return_std=True)`` raise ValueError.
+    marginal likelihood (evidence). ``compute_score=True`` raises
+    ValueError.
 
     Parameters
     ----------
@@ -893,6 +893,12 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
         Estimated noise precision.
     lambda_ : float
         Estimated weight precision.
+    sigma_ : float32 array of shape (n_features, n_features)
+        Posterior covariance of the weights.
+    X_offset_ : float32 array of shape (n_features,)
+        Feature means subtracted before the fit (zeros without an intercept).
+    X_scale_ : float32 array of shape (n_features,)
+        Feature scales (ones).
     n_iter_ : int
         Number of iterations run.
     n_features_in_ : int
@@ -954,14 +960,23 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
         X : array-like of shape (n_samples, n_features)
             Samples, converted to float32.
         return_std : bool, default False
-            Not supported: True raises ValueError.
+            Also return the standard deviation of the posterior predictive
+            distribution.
 
         Returns
         -------
         y_pred : float32 array of shape (n_samples,)
-            Predicted values.
+            Predicted values (the predictive mean).
+        y_std : float32 array of shape (n_samples,)
+            Predictive standard deviation; returned only when
+            ``return_std`` is True.
         """
         return _XL_CALL(self, "regressor_predict", (X, return_std), _XL_CONTEXT)
+
+    @property
+    def sigma_(self):
+        """Posterior covariance of the weights, float32 of shape (n_features, n_features)."""
+        return _XL_CALL(self, "bayes_sigma", (), _XL_CONTEXT)
 
 
 class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
@@ -970,8 +985,8 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
     Follows scikit-learn's ARDRegression: one precision per weight,
     estimated by evidence maximization; features whose precision exceeds
     ``threshold_lambda`` are pruned (their weight is 0). Needs at least 2
-    samples. ``compute_score=True`` and ``predict(return_std=True)`` raise
-    ValueError; ``fit`` takes no ``sample_weight``.
+    samples. ``compute_score=True`` raises ValueError; ``fit`` takes no
+    ``sample_weight``.
 
     Parameters
     ----------
@@ -1008,6 +1023,13 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
         Estimated noise precision.
     lambda_ : float32 array of shape (n_features,)
         Estimated precision of each weight.
+    sigma_ : float32 array of shape (n_kept, n_kept)
+        Posterior covariance of the weights of the kept features (those with
+        ``lambda_ < threshold_lambda``).
+    X_offset_ : float32 array of shape (n_features,)
+        Feature means subtracted before the fit (zeros without an intercept).
+    X_scale_ : float32 array of shape (n_features,)
+        Feature scales (ones).
     n_iter_ : int
         Number of iterations run.
     n_features_in_ : int
