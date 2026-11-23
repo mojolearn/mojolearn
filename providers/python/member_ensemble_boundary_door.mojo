@@ -2411,6 +2411,39 @@ def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonOb
     return out
 
 
+def _scoring_many(scoring: PythonObject, context: PythonObject, b: PythonObject) raises -> Bool:
+    """True for a multi-metric `scoring` (a list, tuple or set of names, or
+    one of the native mapping types), as bindings/msel_cv_door.mojo
+    `msel_scorers` tells them apart. Lane mf-search4b item 5: these never
+    reach `msel_get_scorer` (which refuses them as scorer objects)."""
+    var kind = py_type(scoring)
+    if kind is b.list or kind is b.tuple or kind is b.set:
+        return True
+    var mappings = context["mapping_types"]
+    for i in range(len(mappings)):  # driver-loop: fixed native dict/OrderedDict/defaultdict types
+        if kind is mappings[i]:
+            return True
+    return False
+
+
+def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject) raises -> String:
+    """UNPACK: the table name of ONE scorer value: a str is itself (an
+    unknown name raises `msel_get_scorer`'s words); a scorer object is
+    admitted by `msel_get_scorer` (a Python callback raises the door's
+    words) and read back to the name the scorer table holds it under (the
+    object `get_scorer(name)` answers). "": a native scorer no table name
+    holds (make_scorer's own; the door scores it)."""
+    var got = msel_get_scorer(scorer, context)
+    if py_type(scorer) is b.str:
+        return String(py=scorer)
+    var table = context["family_msel_scorers"]
+    var items = py_call(b.list, py_call(table.items))
+    for i in range(len(items)):  # driver-loop: over the scorer table (a fixed table, once per admission)
+        if items[i][1] is got:
+            return String(py=items[i][0])
+    return String("")
+
+
 def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
                   mut owner: MemberOwner, done: _Done, prepared: PythonObject, labels: PythonObject) raises -> Bool:
     """UNPACK of THE SEARCH KIND (core/ensemble_member.mojo): every
@@ -2424,14 +2457,17 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     callback is refused in the door's words."""
     var scoring_in = py_get(fields, "scoring")
     var scoring = 0
+    var scoring_name = String("")
     if scoring_in is not None:
-        if py_type(scoring_in) is not b.str:
-            # A scorer object: the door's admission words for a Python
-            # callback; a native scorer object keeps the door.
-            _ = msel_get_scorer(scoring_in, context)
-            return False
-        # a named scorer: its code is read below, with the base's response
-        # method (lane mf-metric4, core/msel_scorer_run.mojo)
+        if _scoring_many(scoring_in, context, b):
+            return False  # several scorers: the kind's words carry one
+        # A named scorer, or a native scorer object of the table (read back
+        # to its name): its code is read below, with the base's response
+        # method (lane mf-metric4, core/msel_scorer_run.mojo). A Python
+        # scorer callback raises the door's admission words here.
+        scoring_name = _scorer_name(scoring_in, context, b)
+        if len(scoring_name) == 0:
+            return False  # a native scorer the table does not name (make_scorer's)
         scoring = -1
     var refit = py_get(fields, "refit")
     if refit is None or py_type(refit) is not b.bool or not Bool(py=refit):
@@ -2487,7 +2523,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     if scoring < 0:
         var scorer = msel_get_scorer(scoring_in, context)
         var method = String(py=msel_scorer_response(scorer, base_plan, context))
-        scoring = msel_scorer_code(String(py=scoring_in), method == "decision_function")
+        scoring = msel_scorer_code(scoring_name, method == "decision_function")
         if scoring < 0:
             return False
         var row = msel_scorer_row(scoring)
