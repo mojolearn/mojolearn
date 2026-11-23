@@ -1946,6 +1946,40 @@ def _l2_cosine_opts(loss: String, score: String) -> GbdtOpts:
     return o^
 
 
+def _newton_cosine_inputs() -> GbdtInputs:
+    """A 400-row, two-column Logloss fixture on which Cosine and NewtonCosine
+    choose DIFFERENT root splits at `l2_leaf_reg` 250 (lane gbdt-units-7).
+    At the zero start every row's Newton plane is `0.25` (p = 0.5) and its
+    derivative +/-0.5, so NewtonCosine at l2 is twice Cosine at 4 * l2 =
+    1000 and the ranking can flip. Column 0 isolates rows 0..19 (all
+    positive): (W, S) = (20, 10), (380, 0); its Cosine is 2.236 at every
+    l2. Column 1 isolates rows 20..59 (36 positive): (40, 16), (360, -6);
+    its Cosine is 2.380 at l2 250 (beats column 0) and 2.124 at l2 1000
+    (loses). So Cosine splits column 1 and NewtonCosine column 0. Labels:
+    rows 0..55 positive, 56..59 negative, 60..213 positive, 214..399
+    negative (210 positive in all)."""
+    var n = 400
+    var x = List[Float32](length=2 * n, fill=Float32(0))
+    var y = List[Float32](length=n, fill=Float32(0))
+    for r in range(n):  # small-loop(the fixture's rows)
+        if r < 20:
+            x[r] = Float32(1)
+        elif r < 60:
+            x[n + r] = Float32(1)
+        if r < 56 or (r >= 60 and r < 214):
+            y[r] = Float32(1)
+    return GbdtInputs(x^, n, 2, y^)
+
+
+def _newton_cosine_opts(score: String) -> GbdtOpts:
+    """`_sym_opts` at `l2_leaf_reg` 250 and depth 1 (the root
+    `_newton_cosine_inputs` makes the two scores disagree on)."""
+    var o = _sym_opts("Logloss", score)
+    o.l2_leaf_reg = 250.0
+    o.max_depth = 1
+    return o^
+
+
 def host_symmetric_rest[I: GbdtImage]() raises:
     """The greedy SymmetricTree and Ordered combinations the host refused
     by name until lane gbdt-cpu-rest-4-sym (2026-11-23), each fit twice to
@@ -1970,7 +2004,18 @@ def host_symmetric_rest[I: GbdtImage]() raises:
     var dcos = fit[I](_l2_cosine_opts("Logloss", "Cosine"), sc_clf)
     require(dl2.text != dcos.text, "symmetric Logloss L2: the Cosine model")
     require(nl2.text != l2.text, "symmetric Logloss NewtonL2: the L2 model (first-order planes)")
-    require(ncos.text != cos.text, "symmetric Logloss NewtonCosine: the Cosine model (first-order planes)")
+    # NewtonCosine against Cosine on the fixture where their root splits
+    # provably differ (lane gbdt-units-7). On e3 the planes are NOT the
+    # culprit: the host search pass writes `w * p(1 - p)` under the Newton
+    # scores (`_logloss_search_pass(second_order)`, the device's
+    # `launch_approximate[False, True]`), but at p ~ 0.5 that plane is the
+    # first-order one times 0.25, and Cosine on a plane scaled by c is
+    # Cosine at `l2 / c` times a constant -- at l2 3 on 600 rows the
+    # ranking does not move, so the two models were equal by arithmetic.
+    var sn = _newton_cosine_inputs()
+    var dncos = fit[I](_newton_cosine_opts("NewtonCosine"), sn)
+    var dcos2 = fit[I](_newton_cosine_opts("Cosine"), sn)
+    require(dncos.text != dcos2.text, "symmetric Logloss NewtonCosine: the Cosine model (first-order planes)")
     # RMSE: der2 is 1, so at unit weight the Newton planes are the
     # first-order ones and the Newton scores give the same bytes
     var rl2 = _twice[I](_sym_opts("RMSE", "L2"), reg, "symmetric RMSE L2")
