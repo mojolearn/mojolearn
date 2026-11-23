@@ -627,6 +627,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the label columns copy the same int32 words on both arms; the B arm only added the int64 widening, two device min/max reductions and the narrowing back; ab3 2026-11-18 had left it undecided, geomean 0.947); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.ab-prep.patch"
+    # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_ANN3_DIRECT_OUT.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_ANN3_DIRECT_OUT"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the IVF-PQ / IVF-SQ codes reach the caller's array by a plain copy on both arms, the same bytes; the arm only chose a raw pageable copy over the pooled pinned stages); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_ANN3_DIRECT_OUT.ab-prep.patch"
     # ---- end lane ab-prep-classical
     return True
 

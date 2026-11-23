@@ -47,8 +47,7 @@ def ann_ivf_pq_build_device_run(a: List[Int], p: List[Int]) raises -> Int:
     """`x_ann_ivf_pq_build`: a x, centers, offsets, list_indices, codebooks,
     codes; p n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits,
     pq_kmeans_n_iters. Returns n. The codes go from the device straight
-    into the caller's array (lane fx-ann-fit-nocopy; the opt-in
-    `ANN3_DIRECT_OUT` chooses the copy inside the build)."""
+    into the caller's array (lane fx-ann-fit-nocopy)."""
     if len(a) != 6 or len(p) != 8:
         raise Error("x_ann_ivf_pq_build: need 6 addresses and 8 parameters")
     var n = p[0]
