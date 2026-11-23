@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# native-check: cpu
+# native-check: gpu
 """Concurrent sessions, each with its own device arena (core/device_arena.mojo; lane arena-session, 2026-11-23).
 
 The arena was ONE process-wide "active session": every allocation helper consulted it on every call, so two
@@ -7,8 +7,9 @@ sessions constructing at once (or one session's step allocating while another co
 other's chunks and released each other's chunks. A session now owns a `DeviceArena` and hands its helpers a pointer
 to it (`arena_ptr`); only the chunk pool is shared, under its lock.
 
-DEVICE_ARENA_ON is False on the CPU column, so these checks switch their arenas on by hand (`DeviceArena(on=True)`)
-and run the same `take` / `arena_buffer` / `release` code the Apple column runs; the chunks are CPU-device buffers.
+DEVICE_ARENA_ON is False off Apple, so these checks switch their arenas on by hand (`DeviceArena(on=True)`) and run
+the same `take` / `arena_buffer` / `release` code the Apple column runs. A device column check (nn-integrate,
+2026-11-23: on the CPU column `DeviceContext()` has no device, 'Unsupported device api: "none"', every test failed).
 
     test_sessions_concurrent   ARENA_SESSIONS sessions at once, ARENA_ROUNDS rounds (chunks returned and reused
                                between rounds), each session's words equal to the same session run alone first
