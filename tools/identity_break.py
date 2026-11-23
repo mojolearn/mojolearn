@@ -6267,9 +6267,13 @@ def _(ml, X, yc, yr, Xh=None):
     sym = dict(score_function="Cosine", leaf_estimation_iterations=1, boost_from_average=False)
     parts, first = {}, None
     for name, yf, wf, options in [
-        ("logloss_l2_bayesian_noise", yc, None, dict(loss="Logloss", score_function="L2",
-                                                     bootstrap_type="Bayesian", bagging_temperature=1.0,
-                                                     random_strength=1.0)),
+        # lane gbdt-units-7: no score noise under L2 -- the public API has
+        # refused random_strength > 0 with L2 / NewtonL2 since 2026-08-21 on
+        # both columns (catboost_options.check, gbdt_validate_search_options:
+        # the L2 calcer has no noise term); the noise rides the NewtonCosine
+        # fit below
+        ("logloss_l2_bayesian", yc, None, dict(loss="Logloss", score_function="L2",
+                                               bootstrap_type="Bayesian", bagging_temperature=1.0)),
         ("logloss_newtonl2_bernoulli", yc, None, dict(loss="Logloss", score_function="NewtonL2",
                                                       bootstrap_type="Bernoulli", subsample=0.7)),
         ("logloss_newtoncosine_weighted_noise", yc, w, dict(loss="Logloss", score_function="NewtonCosine",
@@ -6453,8 +6457,8 @@ def _(ml, X, yc, yr, Xh=None):
     estimation task, only the learn permutation's cursor moves), on both
     columns through one body (`searcher_leaf_body.searcher_leaf_value`).
     Logloss under Cosine, under L2 weighted at Bernoulli and the unset
-    iteration count; RMSE under NewtonL2 at the Bayesian bootstrap with
-    score noise; Quantile, CrossEntropy under NewtonCosine, weighted MAE;
+    iteration count; RMSE under NewtonCosine at the Bayesian bootstrap with
+    score noise and under NewtonL2 without it; Quantile, CrossEntropy under NewtonCosine, weighted MAE;
     greedy QueryRMSE and PairLogit on uneven queries; Logloss over two CTR
     and a one-hot column (four permutations), RMSE with feature
     combinations, Quantile over a CTR column and Logloss over a
@@ -6474,9 +6478,14 @@ def _(ml, X, yc, yr, Xh=None):
         ("logloss_l2_weighted_bernoulli", ycn, w,
          dict(loss="Logloss", score_function="L2", bootstrap_type="Bernoulli", subsample=0.7,
               leaf_estimation_iterations=None)),
-        ("rmse_newtonl2_bayesian_noise", yrn, None,
-         dict(loss="RMSE", score_function="NewtonL2", bootstrap_type="Bayesian", bagging_temperature=1.0,
+        # lane gbdt-units-7: the noise under NewtonCosine (L2 / NewtonL2
+        # refuse random_strength > 0 on both columns, the L2 calcer has no
+        # noise term), and NewtonL2 at the Bayesian bootstrap without it
+        ("rmse_newtoncosine_bayesian_noise", yrn, None,
+         dict(loss="RMSE", score_function="NewtonCosine", bootstrap_type="Bayesian", bagging_temperature=1.0,
               random_strength=1.0)),
+        ("rmse_newtonl2_bayesian", yrn, None,
+         dict(loss="RMSE", score_function="NewtonL2", bootstrap_type="Bayesian", bagging_temperature=1.0)),
         ("quantile_cosine", yrn, None, dict(loss="Quantile")),
         ("crossentropy_newtoncosine", yce, None, dict(loss="CrossEntropy", score_function="NewtonCosine")),
         ("mae_weighted", yrn, w, dict(loss="MAE")),
