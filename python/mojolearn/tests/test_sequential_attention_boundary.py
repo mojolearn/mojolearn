@@ -167,7 +167,7 @@ def test_refusals_at_add(call, message):
 @pytest.mark.parametrize("build, message", [
     (lambda m: m.multihead_attention(6, 2), "embed_dim is 6"),
     (lambda m: m.multihead_attention(8, 2, source=5), "key/value source"),
-    (lambda m: m.linear(4).multihead_attention(8, 2, source=-1, kdim=4, vdim=4), "kdim is 4"),
+    (lambda m: m.linear(8).multihead_attention(8, 2, source=-1, kdim=4, vdim=4), "kdim is 4"),
     (lambda m: m.narrow(0, 0, 3).multihead_attention(8, 2, source=-1, is_causal=True), "causal mask"),
     (lambda m: m.transformer_decoder_layer(8, 2, 16), "memory is not set"),
     (lambda m: m.positional_encoding(8, max_len=4), "longer than max_len"),
