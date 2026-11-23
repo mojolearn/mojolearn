@@ -72,6 +72,10 @@ struct SeqModel(Movable):
     var huber_delta: Float64
     var tol: Float64
     var patience: Int
+    # lane nn-optim: f7 (rmsprop's momentum, lamb's max_grad_norm) and the schedule's argument words
+    # (autograd/nn_optim.mojo; empty: none sent, the fit reads zeros)
+    var f7: Float64
+    var sched_args: List[Float64]
     # fitted state (the door's params_, optimizer_m_, optimizer_v_, _fit_state, _curve)
     var params: List[Float32]
     var m: List[Float32]
@@ -111,6 +115,8 @@ struct SeqModel(Movable):
         self.huber_delta = 1.0
         self.tol = 1e-4
         self.patience = 0
+        self.f7 = 0.0
+        self.sched_args = List[Float64]()
         self.params = List[Float32]()
         self.m = List[Float32]()
         self.v = List[Float32]()
@@ -258,10 +264,12 @@ struct SeqModel(Movable):
             1 if resume else 0,
         ]
         var fp: List[Float64] = [
-            self.lr, self.f1, self.f2, self.eps, self.weight_decay, 0.0, self.tol, self.gamma, self.huber_delta,
+            self.lr, self.f1, self.f2, self.eps, self.weight_decay, self.f7, self.tol, self.gamma, self.huber_delta,
         ]
         for i in range(len(table)):  # driver-loop: over layers
             fp.append(table[i])
+        for i in range(len(self.sched_args)):  # small-loop(the schedule's argument words)
+            fp.append(self.sched_args[i])
         var addrs: List[Int] = [
             0, 0, Int(self.params.unsafe_ptr()), Int(self.curve.unsafe_ptr()), Int(self.m.unsafe_ptr()),
             Int(self.v.unsafe_ptr()), Int(self.state.unsafe_ptr()),
@@ -305,10 +313,12 @@ struct SeqModel(Movable):
 
     def _fit_floats(self) -> List[Float64]:
         var fp: List[Float64] = [
-            self.lr, self.f1, self.f2, self.eps, self.weight_decay, 0.0, self.tol, self.gamma, self.huber_delta,
+            self.lr, self.f1, self.f2, self.eps, self.weight_decay, self.f7, self.tol, self.gamma, self.huber_delta,
         ]
         for i in range(len(self.floats)):  # driver-loop: over layers
             fp.append(self.floats[i])
+        for i in range(len(self.sched_args)):  # small-loop(the schedule's argument words)
+            fp.append(self.sched_args[i])
         return fp^
 
     # ---------------------------------------------------------------- checkpoints
@@ -352,6 +362,21 @@ struct SeqModel(Movable):
         ]
         _ = model_load_checkpoint(file, addrs)
         self.n_iter = n_run
+        self.opt = info.ints[2]
+        self.flags = info.ints[3]
+        self.sched = info.ints[4]
+        self.step_size = info.ints[5]
+        self.lr = info.floats[0]
+        self.f1 = info.floats[1]
+        self.f2 = info.floats[2]
+        self.eps = info.floats[3]
+        self.weight_decay = info.floats[4]
+        self.f7 = info.floats[5]
+        self.gamma = info.floats[7]
+        if self.sched >= 3:
+            self.sched_args = List[Float64]()
+            for k in range(9, len(info.floats)):  # small-loop(8: the schedule's argument words)
+                self.sched_args.append(info.floats[k])
         self.batch = info.ints[7]
         self.shuffle = info.ints[8] != 0
         self.target = info.ints[1]

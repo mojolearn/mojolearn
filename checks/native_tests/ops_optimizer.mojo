@@ -124,7 +124,7 @@ def _sequential[E: Exec](mut ex: E, fixture_id: Int) raises -> List[Float32]:
     var opt = OptConfig(ints[0], ints[1], fs[1] if ints[0] == OPT_SGD else fs[2],
         Float32(0) if ints[0] == OPT_SGD else fs[3], fs[4], fs[5], Float32(0))
     var cfg = FitConfig(LOSS_MSE, TARGET_DENSE, opt, fs[0], ints[2], ints[3], fs[6],
-        OPT_N, OPT_EPOCHS, False, UInt64(0), 0, 0, 1, False)
+        OPT_N, OPT_EPOCHS, False, UInt64(0), 0, 0, 1, False, List[Float64](), List[Int]())
     var curve = List[Float32](length=OPT_EPOCHS, fill=0)
     var xin = CastIn.f32_c(Int(data[0].unsafe_ptr()), OPT_N, OPT_D)
     var yin = CastIn.f32_c(Int(data[1].unsafe_ptr()), OPT_N, 1)

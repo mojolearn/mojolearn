@@ -33,7 +33,8 @@ from sequence.exec_device import (
 )
 from sequence.ops import FP, OP_OPT, OPT_NADAM, OPT_SGD, OPT_SK_ADAM, OPT_SK_SGD, Args
 from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
-from sequence.ops_impl import adafactor_core, lamb_bias, lamb_core, lamb_table, opt_slots
+from sequence.ops_impl import adafactor_core, opt_slots
+from sequence.lamb_core import lamb_bias, lamb_core, lamb_table
 from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
 from core.resident_upload_count import RUC_OPTIMIZER_STATE, resident_upload_note
 from core.shared_slot import SharedSlot

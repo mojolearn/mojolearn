@@ -18,6 +18,8 @@ from bindings.sequential_model_file_door import (
 from sequence.sequential_checkpoint_run import _quote
 from bindings.sequential_keys_unpack import sequential_keys
 from bindings.py_balanced import py_item
+from autograd.model import FIT_STATE_WORDS
+from autograd.nn_optim import NN_SCHED_ARGS
 
 
 def _report_array(value: PythonObject, name: String, input: Bool, entries: PythonObject) raises -> String:
@@ -96,7 +98,8 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
         0 if export else Int(py=py_item(fields, nk[].k_n_iter_)), count]
     var fp: List[Float64] = [Float64(py=py_item(options, nk[].k_lr)), Float64(py=py_item(options, nk[].k_f1)),
         Float64(py=py_item(options, nk[].k_f2)), Float64(py=py_item(options, nk[].k_eps)),
-        Float64(py=py_item(options, nk[].k_weight_decay)), 0.0, Float64(py=py_item(options, nk[].k_tol)),
+        Float64(py=py_item(options, nk[].k_weight_decay)), Float64(py=py_get(options, nk[].k_f7, PythonObject(0.0))),
+        Float64(py=py_item(options, nk[].k_tol)),
         Float64(py=py_item(options, nk[].k_gamma)), Float64(py=py_item(options, nk[].k_huber_delta))]
     var buffers: List[Int] = [Int(py=sequential_address(py_item(fields, nk[].k_params_))), 0, 0, 0, 0]
     if not export:
@@ -117,6 +120,11 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
     var program = description[].program.copy()
     for k in range(len(description[].scalars)):  # driver-loop: over layer scalar options
         fp.append(description[].scalars[k])
+    # lane nn-optim: the schedule's argument words after the layers' (autograd/model_checkpoint.mojo record v2)
+    var sched_args = py_get(options, nk[].k_sched_args)
+    if sched_args is not None and len(sched_args) == NN_SCHED_ARGS:
+        for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
+            fp.append(Float64(py=sched_args[k]))
     _ = description_owner^
     var entries = sequential_entries(model, context)
     mods.released()
@@ -175,6 +183,13 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     py_setitem(options, nk[].k_tol, PythonObject(fp[6]))
     py_setitem(options, nk[].k_gamma, PythonObject(fp[7]))
     py_setitem(options, nk[].k_huber_delta, PythonObject(fp[8]))
+    # lane nn-optim: f7 (rmsprop's momentum, lamb's max_grad_norm) and the schedule's argument words
+    py_setitem(options, nk[].k_f7, PythonObject(fp[5]))
+    if len(fp) >= 9 + NN_SCHED_ARGS:
+        var words = Python.list()
+        for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
+            _ = py_call(words.append, PythonObject(fp[9 + k]))
+        py_setitem(options, nk[].k_sched_args, py_call(b.tuple, words))
     py_setitem(fields, nk[].k__options, options)
     var params = sequential_array(mods, Python.tuple(ip[16]), py_item(context, nk[].k_float32), context)
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
@@ -190,7 +205,7 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     if not export:
         m = sequential_array(mods, Python.tuple(ip[16]), py_item(context, nk[].k_float32), context)
         v = sequential_array(mods, Python.tuple(ip[16]), py_item(context, nk[].k_float32), context)
-        state = sequential_array(mods, Python.tuple(12), py_item(context, nk[].k_int64), context)
+        state = sequential_array(mods, Python.tuple(FIT_STATE_WORDS), py_item(context, nk[].k_int64), context)
         curve = sequential_array(mods, Python.tuple(ip[12]), py_item(context, nk[].k_float32), context)
         buffers[1] = Int(py=sequential_address(m))
         buffers[2] = Int(py=sequential_address(v))

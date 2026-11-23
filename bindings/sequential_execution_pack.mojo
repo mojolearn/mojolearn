@@ -16,6 +16,8 @@ from bindings.py_optional import py_present
 from bindings.sequential_keys_unpack import sequential_keys
 from bindings.sequential_route_door import sequential_route_entries
 from bindings.py_balanced import py_item
+from autograd.model import FIT_STATE_WORDS
+from autograd.nn_optim import NN_SCHED_ARGS
 from bindings.admitted_sequence_door import admit_nd_f32
 
 
@@ -160,7 +162,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         params = py_item(fields, nk[].k_params_) if warm else sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
         moment = sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
         variance = sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
-        state = sequential_array(mods, Python.tuple(12), py_item(context, nk[].k_int64), context)
+        state = sequential_array(mods, Python.tuple(FIT_STATE_WORDS), py_item(context, nk[].k_int64), context)
         curve = sequential_array(mods, Python.tuple(epochs), py_item(context, nk[].k_float32), context)
     seed = py_call(b.int, seed)
     # nn-losses: the loss word, code + 256 * reduction (autograd/model.mojo LOSS_WORD_REDUCTION)
@@ -170,7 +172,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         seed.__and__(4294967295), seed.__rshift__(32), py_item(options, nk[].k_n_iter_no_change),
         0 if resume or warm else 1, 1 if resume else 0)
     var fp = Python.list(py_item(options, nk[].k_lr), py_item(options, nk[].k_f1), py_item(options, nk[].k_f2), py_item(options, nk[].k_eps),
-        py_item(options, nk[].k_weight_decay), 0.0, py_item(options, nk[].k_tol), py_item(options, nk[].k_gamma), py_item(options, nk[].k_huber_delta))
+        py_item(options, nk[].k_weight_decay), py_get(options, nk[].k_f7, PythonObject(0.0)), py_item(options, nk[].k_tol), py_item(options, nk[].k_gamma), py_item(options, nk[].k_huber_delta))
     var addresses = Python.list(xd, yd, sequential_address(params), sequential_address(curve),
         sequential_address(moment), sequential_address(variance), sequential_address(state),
         PythonObject(0) if not previous else sequential_address(previous.value()))
@@ -234,6 +236,13 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var native_scalars = model_float64_words(fp)
     for scalar in native_table:  # driver-loop: reuse already admitted native layer options
         native_scalars.append(scalar)
+    # lane nn-optim: the schedule's argument words after the layers' (autograd/model_execution.mojo)
+    var sched_args = py_get(options, nk[].k_sched_args)
+    if sched_args is not None:
+        if len(sched_args) != NN_SCHED_ARGS:
+            raise Error("the compile options' schedule arguments are damaged; call compile again")
+        for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
+            native_scalars.append(Float64(py=sched_args[k]))
     var provider = py_item(entries, nk[].k_native_model_provider)
     var n_iter: Int
     if target != 0:

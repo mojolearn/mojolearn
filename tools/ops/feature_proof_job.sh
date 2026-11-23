@@ -288,7 +288,7 @@ step verify-fit-both "$PY" -I -m mojolearn verify --fit-both --estimator Ridge -
 # a user's ALGORITHM (verify --recipe): every shipped recipe fitted from scratch in a fresh process per device,
 # compared, recorded for a second machine (FP_REPLAY compares with --against), with the recipe self-test
 mkdir -p "$REC/recipes"
-for n in ridge logistic kmeans gbdt-categorical seq-transformer seq-mamba2 seq-recurrent seq-conv1d-residual; do
+for n in ridge logistic kmeans gbdt-categorical seq-transformer seq-mamba2 seq-recurrent seq-conv1d-residual seq-optim-lamb seq-optim-rmsprop; do
     step "verify-recipe-$n" "$PY" -I -m mojolearn verify --recipe "example:$n" --self-test \
         --record-out "$REC/recipes/example-$n.record.json"
 done

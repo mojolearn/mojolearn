@@ -85,7 +85,7 @@ def run_training[E: Exec](
     var cfg = FitConfig(options[0], options[1], opt, Float32(scalars[0]),
                         options[4], options[5], Float32(scalars[7]), options[6], options[7],
                         options[8] != 0, UInt64(options[9]) | (UInt64(options[10]) << 32),
-                        options[11], scalars[6], Float32(scalars[8]), options[12] != 0)
+                        options[11], scalars[6], Float32(scalars[8]), options[12] != 0, List[Float64](), List[Int]())
     var xs = descriptor_shape(inputs, 0)
     var ys = descriptor_shape(inputs, WORDS)
     if inputs[1] != 0 or xs.ndim < 2:

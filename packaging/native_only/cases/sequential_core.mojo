@@ -17,7 +17,7 @@ def check_model[E: Exec](mut ex: E) raises:
     var curve: List[Float32] = [0]
     var output = List[Float32](length=4, fill=0)
     var opt = OptConfig(OPT_SGD, 0, 0, 0, Float32(1e-8), 0, 0)
-    var config = FitConfig(LOSS_MSE, TARGET_DENSE, opt, Float32(0.01), SCHED_CONSTANT, 1, 1, 4, 1, False, UInt64(5), 0, 0, 1, False)
+    var config = FitConfig(LOSS_MSE, TARGET_DENSE, opt, Float32(0.01), SCHED_CONSTANT, 1, 1, 4, 1, False, UInt64(5), 0, 0, 1, False, List[Float64](), List[Int]())
     var xin = CastIn.f32_c(Int(x.unsafe_ptr()), 4, 1)
     var yin = CastIn.f32_c(Int(y.unsafe_ptr()), 4, 1)
     var pp = FP(unsafe_from_address=Int(params.unsafe_ptr()))

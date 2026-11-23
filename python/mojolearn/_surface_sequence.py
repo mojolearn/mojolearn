@@ -59,6 +59,9 @@ FAMILIES = (
                         # nn-norms begin: group and instance norm models, one seeded step
                         "sequence-norms-resnet1d-gn", "sequence-norms-instance",
                         # nn-norms end
+                        # lane nn-optim begin (2026-11-23): Sequential.compile's rmsprop, adagrad, lamb and schedules
+                        "sequence-optim-rmsprop", "sequence-optim-adagrad", "sequence-optim-lamb",
+                        # lane nn-optim end
                         # lane verify-coverage-audit (2026-10-21): MoEBlock.backward,
                         # Sequential export/load/predict, import_model
                         "sequence-moe-backward", "sequence-export-roundtrip",
@@ -213,7 +216,13 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-lamb-device": "LAMB resident parameters, gradients and state",
                        "sequence-optimizer-state": "NAdam and RMSprop state_dict and load_state_dict",
                        "sequence-layernorm-backward": "layer_norm_backward",
-                       "public-theta-variants": "DynamicTheta / OptimizedTheta"}
+                       "public-theta-variants": "DynamicTheta / OptimizedTheta",
+                       # lane nn-optim begin
+                       "sequence-optim-rmsprop": "Sequential rmsprop with cosine_warm_restarts and multi_step",
+                       "sequence-optim-adagrad": "Sequential adagrad with reduce_on_plateau and cosine",
+                       "sequence-optim-lamb": "Sequential lamb with one_cycle and linear_warmup",
+                       # lane nn-optim end
+                       }
 PUBLIC_PENDING_LANES = {
     "sequence-tape-sequential": "unwatched",
     "sequence-tape-program": "unwatched",
@@ -262,4 +271,9 @@ PUBLIC_PENDING_LANES = {
     "sequence-optimizer-state": "unwatched",
     "sequence-layernorm-backward": "unwatched",
     "public-theta-variants": "unwatched",
+    # lane nn-optim begin
+    "sequence-optim-rmsprop": "unwatched",
+    "sequence-optim-adagrad": "unwatched",
+    "sequence-optim-lamb": "unwatched",
+    # lane nn-optim end
 }

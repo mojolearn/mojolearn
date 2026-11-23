@@ -983,6 +983,13 @@ def _seq(shape, layers, data_rows=32, epochs=2, batch=16, seed=0, lr=0.01):
             "outputs": {"digest": True, "predict": {"method": "predict", "on": "test"}, "score": False}}
 
 
+def _seq_compiled(shape, layers, compile_kw, **kw):
+    """_seq with its own compile options (lane nn-optim)."""
+    r = _seq(shape, layers, **kw)
+    r["model"]["sequential"]["compile"] = dict(compile_kw)
+    return r
+
+
 EXAMPLES = {
     "ridge": _est("Ridge", {"alpha": 1.0},
                   {"generator": "regression", "args": {"rows": 512, "features": 8, "test_rows": 64, "seed": 0}}),
@@ -1035,6 +1042,14 @@ EXAMPLES = {
         ["linear", 8], ["leaky_relu", 0.1], ["elu"], ["prelu", 4], ["mish"], ["identity"], ["hardswish"],
         ["linear", 8], ["hardsigmoid"], ["prelu"], ["flatten"], ["linear", 1]]),
     # nn-activations end
+    # lane nn-optim begin: Sequential.compile's lamb with one_cycle, and rmsprop (centered) with cosine
+    "seq-optim-lamb": _seq_compiled((8, 4), [["flatten"], ["linear", 16], ["tanh"], ["linear", 1]],
+                                    {"loss": "mse", "optimizer": "lamb", "lr": 0.02, "schedule": "one_cycle",
+                                     "total_steps": 4}),
+    "seq-optim-rmsprop": _seq_compiled((8, 4), [["flatten"], ["linear", 16], ["tanh"], ["linear", 1]],
+                                       {"loss": "mse", "optimizer": "rmsprop", "lr": 0.01, "centered": True,
+                                        "schedule": "cosine", "T_max": 2}),
+    # lane nn-optim end
 }
 # nn-norms begin: group norm (4 groups) and instance norm (affine, tracked running statistics) in a residual stack
 EXAMPLES["seq-norms"] = _seq((4, 8), [
