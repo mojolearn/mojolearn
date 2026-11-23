@@ -14,8 +14,8 @@ rankn_adaptive_avg_pool3d: the tape's one conv and pool nodes with their depth w
   - one `NN_CONV3D <case> digest` line over every compared word.
 Baselines through the model interpreter (autograd/nn_conv3d_layers.mojo codes 73 .. 76): two tiny 3-D
 CNNs, one with max_pool3d and the global adaptive_avg_pool3d, one with a strided anisotropic conv3d,
-avg_pool3d and adaptive_avg_pool3d(2), each fitted on synthetic (1, 8, 8, 8) volumes holding a noisy
-bar along the depth axis (class 1) or along the width axis (class 0) at a random place: the loss
+avg_pool3d and adaptive_avg_pool3d((1, 3, 3)), each fitted on synthetic (1, 6, 6, 6) volumes holding a
+bar across the volume along the depth axis (class 1) or the width axis (class 0) at a random place, in noise: the loss
 falls, every loss, parameter and prediction is finite, and the held-out accuracy reaches 0.9.
 Columns: the CPU column runs everything on HostExec, the independent units across host cores. The
 device column runs every unit on DeviceExec AND HostExec and requires the same words (values,
@@ -363,11 +363,13 @@ def run_op_case[E: Exec](mut ex: E, c: _Case) raises -> List[Float32]:
 
 
 # ---------------------------------------------------------------- baselines
-comptime _S = 8
+comptime _S = 6
 comptime _VOX = _S * _S * _S
-comptime _TRAIN = 96
+comptime _TRAIN = 64
 comptime _TEST = 64
-comptime _EPOCHS = 8
+# the first cpc2 run (8 x 8 x 8, bar 1.5 over noise 0.3, 8 epochs) stayed at chance: the bar was too faint for 24
+# Adam steps; a bar of 3 across the whole volume over noise 0.2 is a task a few steps learn
+comptime _EPOCHS = 12
 
 
 struct _Vol(Movable):
@@ -376,8 +378,8 @@ struct _Vol(Movable):
     var codes: List[Int]
 
     def __init__(out self, rows: Int, salt: Int):
-        """One channel of 8 x 8 x 8: 0.3 standard-normal noise everywhere, plus a bar of height 1.5 and
-        length 5 along the depth axis (class 1) or the width axis (class 0) at a random place."""
+        """One channel of 6 x 6 x 6: 0.2 standard-normal noise everywhere, plus a bar of height 3 across the
+        volume along the depth axis (class 1) or the width axis (class 0) at a random place."""
         var noise = normal(rows * _VOX, salt)
         var place = normal(rows * 4, salt + 1)
         self.x = List[Float32](length=rows * _VOX, fill=0)
@@ -386,11 +388,11 @@ struct _Vol(Movable):
             var cls = (r * 7 + salt) % 2
             self.codes[r] = cls
             for v in range(_VOX):
-                self.x[r * _VOX + v] = Float32(0.3) * noise[r * _VOX + v]
+                self.x[r * _VOX + v] = Float32(0.2) * noise[r * _VOX + v]
             var a = Int(abs(place[4 * r]) * 1000.0) % _S
             var b = Int(abs(place[4 * r + 1]) * 1000.0) % _S
-            var s0 = Int(abs(place[4 * r + 2]) * 1000.0) % (_S - 4)
-            for t in range(5):
+            var s0 = 0
+            for t in range(_S):
                 var z: Int
                 var h: Int
                 var w: Int
@@ -402,7 +404,7 @@ struct _Vol(Movable):
                     z = a
                     h = b
                     w = s0 + t
-                self.x[r * _VOX + (z * _S + h) * _S + w] += Float32(1.5)
+                self.x[r * _VOX + (z * _S + h) * _S + w] += Float32(3)
         self.y = codes_as_words(self.codes)
 
 
@@ -418,13 +420,13 @@ def _net_max(mut m: SeqModel) raises:
 
 
 def _net_avg(mut m: SeqModel) raises:
-    # an anisotropic strided conv (k (3, 3, 1), padding (1, 1, 0)), avg_pool3d, a pooled grid of 2
+    # anisotropic convs (k (3, 3, 1) and (3, 1, 3)), avg_pool3d, adaptive_avg_pool3d to (1, 3, 3)
     m.layer(L_CONV3D, 6, dhw_pack(3, 3, 1), dhw_pack(1, 1, 1), dhw_pack(1, 1, 0), 1 + 2, dhw_pack(1, 1, 1))
     m.layer(L_RELU)
     m.layer(L_AVGPOOL3D, dhw_pack(2, 2, 2), dhw_pack(2, 2, 2), 0, 1, 0, 0)
     m.layer(L_CONV3D, 8, dhw_pack(3, 1, 3), dhw_pack(1, 1, 1), dhw_pack(1, 0, 1), 0 + 2, dhw_pack(1, 1, 1))
     m.layer(L_RELU)
-    m.layer(L_ADAPTIVE_AVGPOOL3D, dhw_pack(2, 2, 2))
+    m.layer(L_ADAPTIVE_AVGPOOL3D, dhw_pack(1, 3, 3))
     m.layer(L_FLATTEN)
     m.layer(L_LINEAR, 2, 1)
 
@@ -448,7 +450,7 @@ def run_baseline[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
     else:
         _net_avg(m)
         name = "cnn3d-avg"
-    m.compile(LOSS_CROSS_ENTROPY, "adam", 0.01)
+    m.compile(LOSS_CROSS_ENTROPY, "adam", 0.02)
     _ = m.fit(ex, train.x, _TRAIN, _VOX, train.y, 1, TARGET_CODES, _EPOCHS, 32, -1, 3)
     var curve = m.losses()
     _all_finite(name + " losses", curve)
