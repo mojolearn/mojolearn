@@ -32,9 +32,9 @@ step with the GIL held. Here:
   * Results go to typed slots per unit. If any unit fails, this route
     publishes nothing and answers `ran == False`: the Python units then run
     and raise the estimator's own exception. With a numeric `error_score`
-    (`tolerate`) a unit whose FIT fails on its data is reported instead and
-    the caller writes the value, as the Python unit's failing fit did; a
-    failure after the fit still publishes nothing.
+    (`tolerate`) a unit whose FIT or one side's SCORE fails on its data is
+    reported instead (`fit_failed`, UNIT_* words) and the caller writes the
+    value, as the Python unit does (scikit-learn's `_fit_and_score`).
 
 THE FALLBACK RULE (MEMBER-ABI-V2.md): a member mark never turns a call that
 worked into a refusal. A marked class this route cannot serve (a transformer
@@ -201,8 +201,10 @@ struct MselMemberScores(Movable):
     # (unit * sides + side) * responses + k; an empty list without responses.
     var outputs: PythonObject
     var sides: Int
-    # `tolerate`: 1 for a unit whose FIT failed (the caller writes its
-    # `error_score` into that unit's scores); empty otherwise.
+    # `tolerate`: per unit, UNIT_FIT_FAILED (the caller writes its
+    # `error_score` into every score of the unit), or UNIT_TEST_FAILED /
+    # UNIT_TRAIN_FAILED (into that side's scores); 0 for a unit that
+    # scored; empty otherwise.
     var fit_failed: List[UInt8]
     # Per candidate: the estimator its units were admitted from (the caller's
     # metric reads its device once per scorer template).
@@ -490,6 +492,40 @@ def _respond(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, side: I
     call.dst = MemberMatrix()
 
 
+# `fit_failed` words under a numeric error_score (`tolerate`): the fit failed
+# (every score of the unit takes the value), or one side's score failed (that
+# side's scores take it). scikit-learn's `_fit_and_score` forgives both: a fit
+# error and a scoring error each record `error_score`; only 'raise' raises.
+comptime UNIT_FIT_FAILED = UInt8(1)
+comptime UNIT_TEST_FAILED = UInt8(2)
+comptime UNIT_TRAIN_FAILED = UInt8(4)
+
+
+def _score_side(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, side: Int, mode: Int, start: Int,
+                index: Int, rows: Int, x_at: Int, y_at: Int, offer: Int, mut call: MemberCall) raises:
+    """One side's score (side 0 test, 1 train) or responses of unit `u`.
+    Under `tolerate` a failure of this side (its data: a non-finite row the
+    fitted state refuses) is recorded in `fit_failed` and the unit goes on;
+    the caller writes `error_score` into that side's scores. Otherwise it
+    raises, as before."""
+    try:
+        _side_set(run, mode, start, index, rows, x_at, y_at, call)
+        if len(run[].ops) == 0:
+            _offered(run, u, MEMBER_OP_SCORE, offer, call)
+            if side == 0:
+                run[].test[u] = call.value
+            else:
+                run[].train[u] = call.value
+        else:
+            _respond(run, u, side, rows, offer, call)
+    except error:
+        if not run[].tolerate:
+            raise error^
+        run[].errors[u] = String(error)
+        run[].fit_failed[u] = run[].fit_failed[u] | (UNIT_TEST_FAILED if side == 0 else UNIT_TRAIN_FAILED)
+        call.dst = MemberMatrix()
+
+
 def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int) raises:
     var c = u // run[].n_folds
     var f = u - c * run[].n_folds
@@ -552,7 +588,7 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
                 _offered(run, u, MEMBER_OP_FIT, train_offer, call)
             except error:
                 run[].errors[u] = String(error)
-                run[].fit_failed[u] = UInt8(1)
+                run[].fit_failed[u] = UNIT_FIT_FAILED
         else:
             _offered(run, u, MEMBER_OP_FIT, train_offer, call)
         var t1 = msel_seconds()
@@ -566,21 +602,11 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
             run[].states[u] = call.state
             kept = True
             return
-        var n_ops = len(run[].ops)
-        _side_set(run, test_mode, run[].starts[2 * f + 1], test_index, test_rows, Int(x_test.unsafe_ptr()),
-                  Int(y_test.unsafe_ptr()), call)
-        if n_ops == 0:
-            _offered(run, u, MEMBER_OP_SCORE, test_offer, call)
-            run[].test[u] = call.value
-        else:
-            _respond(run, u, 0, test_rows, test_offer, call)
+        _score_side(run, u, 0, test_mode, run[].starts[2 * f + 1], test_index, test_rows, Int(x_test.unsafe_ptr()),
+                    Int(y_test.unsafe_ptr()), test_offer, call)
         if run[].return_train:
-            _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, x_train_at, y_train_at, call)
-            if n_ops == 0:
-                _offered(run, u, MEMBER_OP_SCORE, train_offer, call)
-                run[].train[u] = call.value
-            else:
-                _respond(run, u, 1, train_rows, train_offer, call)
+            _score_side(run, u, 1, train_mode, run[].starts[2 * f], train_index, train_rows, x_train_at, y_train_at,
+                        train_offer, call)
         run[].fit_time[u] = t1 - t0
         run[].score_time[u] = msel_seconds() - t1
         if run[].keep:

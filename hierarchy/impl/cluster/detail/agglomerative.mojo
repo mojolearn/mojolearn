@@ -17,9 +17,10 @@ chosen. So `children`, `out_delta`, `out_size` are a pure function of the
 sorted edge list (order AND orientation: `children[2i] = find(src)`,
 `children[2i+1] = find(dst)`). DEVIATION 621 makes that list a pure function
 of the edge set, and DEVIATION 620 makes the edge set a pure function of the
-weights; the orientation is Boruvka's (`temp_src[tid] = tid`, the vertex
-that added the edge, `mst_kernels.cuh:146`), which is itself a function of
-the colors and therefore of the input.
+weights; each edge leaves the sort as (lo, hi) (`coo_sort_by_weight_device`),
+the host column's orientation, not Boruvka's (`temp_src[tid] = tid`, the
+vertex that added the edge, `mst_kernels.cuh:146`), so `children` is the same
+on the device and on the host.
 
 WHY THE LABELS ARE TOO. `extract_flattened_clusters` cuts at
 `cut_level = (n_leaves - 1) - (n_clusters - 1)` and labels the `n_clusters`

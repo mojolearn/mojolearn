@@ -68,7 +68,7 @@ from bindings.msel_common_door import (
 )
 from bindings.msel_split_door import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_flag_truth, msel_cls, msel_sabotage
 from bindings.msel_cv_run import msel_seconds, _numeric_dtype
-from bindings.msel_member_units_door import msel_member_units
+from bindings.msel_member_units_door import UNIT_FIT_FAILED, UNIT_TEST_FAILED, UNIT_TRAIN_FAILED, msel_member_units
 from bindings.msel_scorer_native_door import msel_scorer_response, msel_scorer_predicted
 from core.member_abi import MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 
@@ -929,13 +929,36 @@ struct MselUnitRun(Movable):
             if self.return_train:
                 train_memo = Python.dict()
         var failed_value = 0.0
-        if not ok:
+        if not self.raise_errors:
             failed_value = msel_error_value(self.error_score)
+        # A numeric error_score forgives a failing fit (every score takes the
+        # value) and a failing score (that scorer on that side takes it), as
+        # scikit-learn's `_fit_and_score` / `_score` do; 'raise' raises both.
         for k in range(self.n_keys):  # driver-loop: over scorer names
             var sc = self.multi[self.keys[k]] if self.multi is not None else self.single
-            self.test[u * self.n_keys + k] = msel_score_value(est, xte, yte, sc, self.context, test_memo, plans[k]) if ok else failed_value
+            var test_value = failed_value
+            if ok:
+                if self.raise_errors:
+                    test_value = msel_score_value(est, xte, yte, sc, self.context, test_memo, plans[k])
+                else:
+                    try:
+                        test_value = msel_score_value(est, xte, yte, sc, self.context, test_memo, plans[k])
+                    except error:
+                        if not msel_catch(error, b.Exception):
+                            raise error^
+            self.test[u * self.n_keys + k] = test_value
             if self.return_train:
-                self.train[u * self.n_keys + k] = msel_score_value(est, xtr, ytr, sc, self.context, train_memo, plans[k]) if ok else failed_value
+                var train_value = failed_value
+                if ok:
+                    if self.raise_errors:
+                        train_value = msel_score_value(est, xtr, ytr, sc, self.context, train_memo, plans[k])
+                    else:
+                        try:
+                            train_value = msel_score_value(est, xtr, ytr, sc, self.context, train_memo, plans[k])
+                        except error:
+                            if not msel_catch(error, b.Exception):
+                                raise error^
+                self.train[u * self.n_keys + k] = train_value
         _ = test_memo^
         _ = train_memo^
         self.fit_time[u] = t1 - t0
@@ -1022,7 +1045,8 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
     if rows.dev or len(rows.ranges) != 0 or rows.reuse_test:
         return False
     # A numeric error_score: a unit whose FIT failed takes the value in
-    # every score (the Python unit's rule: only the fit is forgiven).
+    # every score, a side whose SCORE failed in that side's scores (the
+    # Python unit's rule, scikit-learn's `_fit_and_score`).
     var tolerate = not run.raise_errors
     var failed_value = 0.0
     if tolerate:
@@ -1116,10 +1140,12 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
             for u in range(run.n_units):  # driver-loop: over units (metric entries, GIL held)
                 var c = u // run.n_folds
                 var f = u - c * run.n_folds
-                if tolerate and native.fit_failed[u] != UInt8(0):
+                if tolerate and native.fit_failed[u] & UNIT_FIT_FAILED != UInt8(0):
                     continue
                 var t0 = msel_seconds()
                 for side in range(native.sides):  # driver-loop: test side, then train side when asked
+                    if tolerate and native.fit_failed[u] & (UNIT_TEST_FAILED if side == 0 else UNIT_TRAIN_FAILED) != UInt8(0):
+                        continue
                     var memo = PythonObject(None)
                     if run.n_keys > 1:
                         memo = Python.dict()
@@ -1144,11 +1170,15 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
         run.test = native.test.copy()
         run.train = native.train.copy()
     if tolerate:
-        for u in range(run.n_units):  # driver-loop: over units (a failed fit's scores are the given value)
-            if native.fit_failed[u] != UInt8(0):
+        for u in range(run.n_units):  # driver-loop: over units (a failed fit's or side's scores are the given value)
+            var word = native.fit_failed[u]
+            if word != UInt8(0):
+                var test_failed = word & (UNIT_FIT_FAILED | UNIT_TEST_FAILED) != UInt8(0)
+                var train_failed = word & (UNIT_FIT_FAILED | UNIT_TRAIN_FAILED) != UInt8(0)
                 for k in range(run.n_keys):  # driver-loop: over scorer names
-                    run.test[u * run.n_keys + k] = failed_value
-                    if run.return_train:
+                    if test_failed:
+                        run.test[u * run.n_keys + k] = failed_value
+                    if run.return_train and train_failed:
                         run.train[u * run.n_keys + k] = failed_value
     if run.return_estimator:
         run.estimators = native.estimators
