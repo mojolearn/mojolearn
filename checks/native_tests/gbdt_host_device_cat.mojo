@@ -1734,8 +1734,8 @@ def _rest4sym_inputs(unit: Int) raises -> GbdtInputs:
 
 def _rest4sym_opts(unit: Int) raises -> GbdtOpts:
     """The greedy searcher (units 0-9) and Ordered boosting (10-11), every
-    work-changing option explicit: 0 Logloss L2, Bayesian at 1 with
-    random_strength 1 (the L2 kernel draws no noise); 1 Logloss NewtonL2,
+    work-changing option explicit: 0 Logloss L2, Bayesian at 1 (no
+    score noise: L2 refuses it); 1 Logloss NewtonL2,
     Bernoulli 0.7; 2 weighted Logloss NewtonCosine with random_strength 1;
     3 RMSE L2, Poisson 0.66, Newton leaves at three iterations,
     boost_from_average; 4 RMSE NewtonCosine with Gradient leaves and an eval
@@ -1756,10 +1756,12 @@ def _rest4sym_opts(unit: Int) raises -> GbdtOpts:
     o.leaf_iterations = 1
     o.boost_from_average = 0
     if unit == 0:
+        # lane gbdt-units-8: no score noise under L2 (refused on both
+        # columns since 2026-08-21: the L2 calcer has no noise term); unit 2
+        # carries the noise under NewtonCosine
         o.score_function = "L2"
         o.bootstrap = "Bayesian"
         o.bagging_temperature = 1.0
-        o.random_strength = 1.0
     elif unit == 1:
         o.score_function = "NewtonL2"
         o.bootstrap = "Bernoulli"
@@ -2428,8 +2430,8 @@ def _rest4simple_inputs(unit: Int) raises -> GbdtInputs:
 def _rest4simple_opts(unit: Int) raises -> GbdtOpts:
     """SymmetricTree, Simple leaves at one iteration, rate 0.1, no
     boost_from_average, every work-changing option explicit: 0 Logloss
-    Cosine; 1 RMSE NewtonL2 under Bayesian (temperature 1) with score noise
-    1; 2 weighted Logloss L2 under Bernoulli 0.7 at the unset iteration
+    Cosine; 1 RMSE NewtonCosine under Bayesian (temperature 1) with score
+    noise 1; 2 weighted Logloss L2 under Bernoulli 0.7 at the unset iteration
     count; 3 RMSE with an eval set (Iter, use_best_model, 30 trees); 4
     Quantile Cosine; 5 CrossEntropy NewtonCosine; 6 weighted MAE; 7 Logloss
     over the CTR and one-hot columns (four permutations); 8 RMSE with
@@ -2462,7 +2464,9 @@ def _rest4simple_opts(unit: Int) raises -> GbdtOpts:
     o.leaf_iterations = 1
     o.boost_from_average = 0
     if unit == 1:
-        o.score_function = "NewtonL2"
+        # lane gbdt-units-8: the noise under NewtonCosine (NewtonL2 refuses
+        # random_strength > 0 on both columns: the L2 calcer has no noise term)
+        o.score_function = "NewtonCosine"
         o.bootstrap = "Bayesian"
         o.bagging_temperature = 1.0
         o.random_strength = 1.0

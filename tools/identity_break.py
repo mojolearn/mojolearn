@@ -5021,7 +5021,7 @@ def _(ml, X, yc, yr, Xh=None):
     (Exact leaves), CrossEntropy with combinations, Poisson over a one-hot
     column, MultiClass over CTR and one-hot columns and with combinations,
     MultiClassOneVsAll with an eval set (Iter) and weighted under
-    Bernoulli, and MultiRMSE over a one_hot_features column. Every fit at
+    Bernoulli, and MultiRMSE over the coded columns read as numbers. Every fit at
     rate 0.1 with every work-changing option set; each hashes its
     predictions (the probabilities for the classifiers) and its digest,
     the held-out fit also its test-loss curve and stop."""
@@ -5030,7 +5030,13 @@ def _(ml, X, yc, yr, Xh=None):
     yq, ycl = yr[:rows], yc[:rows]
     y3 = _rank_codes(yq, [1.0 / 3.0, 2.0 / 3.0]).astype(np.float32)
     yce = (np.float32(0.25) + np.float32(0.5) * ycl).astype(np.float32)
-    ypo = np.floor(np.abs(yq) * np.float32(3.0)).astype(np.float32)
+    # lane gbdt-units-8: Poisson counts by RANK of |y| (0..4), the same on
+    # every fixture. `floor(3 * |y|)` reached ~3e4 on `wide` (columns scaled
+    # 1e-4..1e4), the first Newton leaf took the cursor to thousands and
+    # exp(cursor) overflowed float32, so every split scored non-finite
+    # ("All splits have infinite score") on both columns: the fixture, not a
+    # scorer defect.
+    ypo = _rank_codes(np.abs(yq), [0.2, 0.4, 0.6, 0.8]).astype(np.float32)
     ymr = np.ascontiguousarray(np.stack([yq, ycl], axis=1).astype(np.float32))
     w = _hw((rows,), "gbdt-cat-rest:sample_weight", 0.25, 4.0)
     base = dict(n_estimators=12, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
@@ -5061,14 +5067,18 @@ def _(ml, X, yc, yr, Xh=None):
         parts[name] = _h(m.predict_proba(Xs) if proba else m.predict(Xs))
         parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
         first = first if first is not None else m
-    # MultiRMSE over a one_hot_features column (cat_features refuses on
-    # both columns, in `train`'s words)
+    # MultiRMSE over the coded columns read as NUMBERS (lane gbdt-units-8):
+    # the public fit refuses MultiRMSE with cat_features OR one_hot_features
+    # on both columns since 2026-09-27 (trees_public_gbdt_fit_door.mojo: the
+    # CTR target binarization reads one target per row), so the
+    # one_hot_features fit this lane carried was refused on every fixture;
+    # the native one-hot arm stays covered by gbdt_host_device_cat rest4cat
     cols, _ = _GBDT_CAT_ONEHOT
     Xs = np.ascontiguousarray(Xc[:, cols])
-    mr = ml.GradientBoosting(**dict(base, loss="MultiRMSE", one_hot_features=[0], boost_from_average=False,
+    mr = ml.GradientBoosting(**dict(base, loss="MultiRMSE", boost_from_average=False,
                                     leaf_estimation_iterations=1, **_GBDT_CAT_PLAIN)).fit(Xs, ymr)
-    parts["multirmse_one_hot_features"] = _h(mr.predict(Xs))
-    parts["multirmse_one_hot_features:digest"] = _h(np.frombuffer(str(mr.digest_).encode(), dtype=np.uint8))
+    parts["multirmse_coded_columns"] = _h(mr.predict(Xs))
+    parts["multirmse_coded_columns:digest"] = _h(np.frombuffer(str(mr.digest_).encode(), dtype=np.uint8))
     # the held-out fit: the curve, the detector's stop and the shrink
     Xe = np.ascontiguousarray(_gbdt_cat_xh(Xh[:rows])[:, _GBDT_CAT_CTR[0]])
     ye3 = _rank_codes(labels_for(Xh, HELDOUT_SEED)[1][:rows], [1.0 / 3.0, 2.0 / 3.0]).astype(np.float32)
@@ -5131,8 +5141,12 @@ def _(ml, X, yc, yr, Xh=None):
          dict(lg, **newton, class_weights=[1.0, 2.0], **_GBDT_CAT_PLAIN), False, True),
         ("logloss_onehot_features_depthwise", "Logloss", onehot_features,
          dict(dw, **newton, one_hot_features=[0], **_GBDT_CAT_PLAIN), False, False),
+        # lane gbdt-units-8: CatBoost's defaults carry random_strength 1, which
+        # the public API refuses under L2 / NewtonL2 on both columns (the L2
+        # calcer has no noise term), so this Lossguide fit scores NewtonCosine
         ("rmse_ctr_lossguide_one_permutation", "RMSE", _GBDT_CAT_CTR,
-         dict(lg, **newton, permutation_count=1, **_GBDT_CAT_DEFAULTS), False, False),
+         dict(lg, **newton, permutation_count=1, **_GBDT_CAT_DEFAULTS, score_function="NewtonCosine"),
+         False, False),
     ]
     if configs[0][2][0] != _GBDT_CAT_ALL[0]:
         raise RuntimeError("gbdt-cat-nonsym's first fit must use every column (it answers infer and batch)")
