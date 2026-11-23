@@ -11,3 +11,4 @@ checks/native_tests/sequence_plan_buffers.mojo:_borrowed:row_a  # the address is
 checks/native_tests/sequence_plan_buffers.mojo:_borrowed:row_b  # the address is only compared with the plan's recorded pointer, never read
 cluster/checks/kmeans_check.mojo:check_fused_policy_dispatch:probe_c  # fused_veclen_for reads only the address's alignment, never the memory
 cluster/checks/kmeans_check.mojo:check_fused_policy_dispatch:probe_x  # fused_veclen_for reads only the address's alignment, never the memory
+core/device_store.mojo:ptr:held  # lane nn-integrate (linalg-owner merge): `held` is a shared reference to the slot's buffer; the store keeps its own reference until free(), so the returned address outlives this local
