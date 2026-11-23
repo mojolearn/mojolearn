@@ -96,6 +96,9 @@ from autograd.ssm_ops import ssm_m1_states_supported
 from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
+# nn-norms begin
+from autograd.nn_norms import graph_group_norm, graph_instance_norm
+# nn-norms end
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -115,6 +118,14 @@ comptime LAYER_LM_HEAD = 45
 #: batch_norm1d / batch_norm2d (lane seq-blocks-3; 42 before the merge with neural-blocks-3, never released): a0
 #: channels, a1 the momentum's float32 bits, a2 1 or 2 (the public name's dims); f eps
 comptime LAYER_BATCH_NORM = 46
+# nn-norms begin
+#: group_norm (lane nn-norms, autograd/nn_norms.mojo): a0 num_groups, a1 num_channels, a2 affine (0/1); f eps
+comptime LAYER_GROUP_NORM = 54
+#: instance_norm1d / instance_norm2d: a0 num_features, a1 the momentum's float32 bits, a2 1 or 2 (the public
+#: name's dims), a3 affine (0/1), a4 track_running_stats (0/1); f eps. Parameters: weight, bias (affine), then
+#: running_mean, running_var (tracked; state the optimizer never updates, bn_state)
+comptime LAYER_INSTANCE_NORM = 55
+# nn-norms end
 comptime BLOCK_FIRST = 32
 comptime BLOCK_LAST = 46
 
@@ -134,6 +145,10 @@ comptime _ARGS = 6
 
 
 def is_block(code: Int) -> Bool:
+    # nn-norms begin
+    if code == LAYER_GROUP_NORM or code == LAYER_INSTANCE_NORM:
+        return True
+    # nn-norms end
     return code >= BLOCK_FIRST and code <= BLOCK_LAST
 
 
@@ -170,6 +185,11 @@ def bn_state(code: Int, xargs: List[Int], i: Int) -> Tuple[Int, Int]:
     if code == LAYER_BATCH_NORM:
         var c = _x(xargs, i, 0)
         return (2 * c, 2 * c)
+    # nn-norms begin
+    if code == LAYER_INSTANCE_NORM:
+        var ic = _x(xargs, i, 0)
+        return (2 * ic if _x(xargs, i, 3) == 1 else 0, 2 * ic if _x(xargs, i, 4) == 1 else 0)
+    # nn-norms end
     return (0, 0)
 
 
@@ -317,6 +337,42 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         hd[cur.ndim - 1] = a0
         return rn_shape(hd, name + " (LMHead)")
     # end lm_head
+    # nn-norms begin
+    if code == LAYER_GROUP_NORM:
+        var gg = a0
+        var gc = a1
+        if cur.ndim < 1 or gc < 1 or cur.d[0] != gc:
+            raise Error(name + " (GroupNorm): num_channels must equal the input's channels (" + String(cur.d[0]) + ")")
+        if gg < 1 or gc % gg != 0:
+            raise Error(name + " (GroupNorm): num_groups must divide num_channels")
+        if _x(xargs, i, 2) != 0 and _x(xargs, i, 2) != 1:
+            raise Error(name + " (GroupNorm): affine must be 0 or 1")
+        if not (f > Float32(0)) or not isfinite(f):
+            raise Error(name + " (GroupNorm): eps must be positive")
+        return cur
+    if code == LAYER_INSTANCE_NORM:
+        var idims = _x(xargs, i, 2)
+        if idims == 1 and cur.ndim != 2:
+            raise Error(name + " (InstanceNorm1d): the input must be (channels, length)")
+        if idims == 2 and cur.ndim != 3:
+            raise Error(name + " (InstanceNorm2d): the input must be (channels, height, width)")
+        if idims != 1 and idims != 2:
+            raise Error(name + " (InstanceNorm): dims must be 1 or 2")
+        if a0 < 1 or cur.d[0] != a0:
+            raise Error(name + " (InstanceNorm): num_features must equal the input's channels ("
+                        + String(cur.d[0]) + ")")
+        if cur.count() // a0 < 2:
+            raise Error(name + " (InstanceNorm): expected more than 1 spatial element")
+        var im = bn_momentum(xargs, i)
+        if not (im >= Float32(0) and im <= Float32(1)):
+            raise Error(name + " (InstanceNorm): momentum must be in [0, 1]")
+        for k in range(3, 5):  # small-loop(2: the affine and track_running_stats flags)
+            if _x(xargs, i, k) != 0 and _x(xargs, i, k) != 1:
+                raise Error(name + " (InstanceNorm): affine and track_running_stats must be 0 or 1")
+        if not (f > Float32(0)) or not isfinite(f):
+            raise Error(name + " (InstanceNorm): eps must be positive")
+        return cur
+    # nn-norms end
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -368,11 +424,25 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(_x(xargs, i, 0) * cur.cols())  # weight (vocab, features)
     # end lm_head
+    # nn-norms begin
+    elif code == LAYER_GROUP_NORM:
+        if _x(xargs, i, 2) == 1:
+            out.append(_x(xargs, i, 1))  # weight (channels)
+            out.append(_x(xargs, i, 1))  # bias
+    elif code == LAYER_INSTANCE_NORM:
+        if _x(xargs, i, 3) == 1:
+            out.append(_x(xargs, i, 0))  # weight (channels)
+            out.append(_x(xargs, i, 0))  # bias
+        if _x(xargs, i, 4) == 1:
+            out.append(_x(xargs, i, 0))  # running_mean
+            out.append(_x(xargs, i, 0))  # running_var
+    # nn-norms end
     return out^
 
 
-def block_param_names(code: Int) -> List[String]:
-    """The checkpoint names (after the layer tag) of the tensors block_param_sizes lists."""
+def block_param_names(code: Int, xargs: List[Int], i: Int) -> List[String]:
+    """The checkpoint names (after the layer tag) of the tensors block_param_sizes lists for layer i (its
+    arguments decide which tensors an optional-parameter layer has: lane nn-norms)."""
     var out = List[String]()
     if code == LAYER_RMS_NORM:
         out.append(".weight")
@@ -405,6 +475,19 @@ def block_param_names(code: Int) -> List[String]:
     elif code == LAYER_LM_HEAD:
         out.append(".weight")
     # end lm_head
+    # nn-norms begin
+    elif code == LAYER_GROUP_NORM:
+        if _x(xargs, i, 2) == 1:
+            out.append(".weight")
+            out.append(".bias")
+    elif code == LAYER_INSTANCE_NORM:
+        if _x(xargs, i, 3) == 1:
+            out.append(".weight")
+            out.append(".bias")
+        if _x(xargs, i, 4) == 1:
+            out.append(".running_mean")
+            out.append(".running_var")
+    # nn-norms end
     return out^
 
 
@@ -466,6 +549,19 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(ftz(identical_div(Float32(1), identical_sqrt(Float32(cur.cols())))))
     # end lm_head
+    # nn-norms begin: PyTorch's weight 1, bias 0, running_mean 0, running_var 1 (constant fills)
+    elif code == LAYER_GROUP_NORM:
+        if _x(xargs, i, 2) == 1:
+            out.append(Float32(-2))
+            out.append(Float32(-1))
+    elif code == LAYER_INSTANCE_NORM:
+        if _x(xargs, i, 3) == 1:
+            out.append(Float32(-2))
+            out.append(Float32(-1))
+        if _x(xargs, i, 4) == 1:
+            out.append(Float32(-1))
+            out.append(Float32(-2))
+    # nn-norms end
     return out^
 
 
@@ -685,6 +781,28 @@ def block_forward[E: Exec](
         var w = _p(tape, ex, P, Gr, off, a0, cur.cols(), train)
         return graph_transformer_linear(tape, ex, h, w)
     # end lm_head
+    # nn-norms begin: (B,) + (C, *) samples; weight and bias first, then the running statistics (bn_state)
+    if code == LAYER_GROUP_NORM:
+        var gc = a1
+        var gw: Optional[Tensor] = None
+        var gb: Optional[Tensor] = None
+        if _x(xargs, i, 2) == 1:
+            gw = _p(tape, ex, P, Gr, off, 1, gc, train)
+            gb = _p(tape, ex, P, Gr, off + gc, 1, gc, train)
+        return graph_group_norm(tape, ex, h, B, gc, cur.count() // gc, a0, gw, gb, f)
+    if code == LAYER_INSTANCE_NORM:
+        var iw: Optional[Tensor] = None
+        var ib: Optional[Tensor] = None
+        var affine = _x(xargs, i, 3) == 1
+        if affine:
+            iw = _p(tape, ex, P, Gr, off, 1, a0, train)
+            ib = _p(tape, ex, P, Gr, off + a0, 1, a0, train)
+        var running: Optional[FP] = None
+        if _x(xargs, i, 4) == 1:
+            running = P + off + (2 * a0 if affine else 0)
+        return graph_instance_norm(tape, ex, h, B, a0, cur.count() // a0, iw, ib, running, bn_momentum(xargs, i), f,
+                                   train)
+    # nn-norms end
     raise Error("model: unknown block code " + String(code))
 
 
@@ -806,6 +924,12 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
         out.append(_x(xargs, i, 0))
         out.append(cur.cols())
     # end lm_head
+    # nn-norms begin: every tensor is (channels,)
+    elif code == LAYER_GROUP_NORM:
+        out.append(_x(xargs, i, 1))
+    elif code == LAYER_INSTANCE_NORM:
+        out.append(_x(xargs, i, 0))
+    # nn-norms end
     return out^
 
 

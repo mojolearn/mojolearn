@@ -150,3 +150,6 @@ Sequential.batch_norm1d	seq-blocks-3 batch norm: verify references and GPU colum
 Sequential.batch_norm2d	seq-blocks-3 batch norm: verify references and GPU column owed
 Sequential.gated	neural-blocks layers: no verify lane or GPU column yet
 recipe	added 2026-11-22 (verify --recipe), not yet run from an installed wheel on a GPU or across two vendors; public docs after the release verification
+Sequential.group_norm	not yet in a release verification
+Sequential.instance_norm1d	not yet in a release verification
+Sequential.instance_norm2d	not yet in a release verification

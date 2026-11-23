@@ -28,6 +28,15 @@ from bindings.sequential_keys_unpack import sequential_keys
 from bindings.py_balanced import py_item
 
 
+def _layer_args(layer: PythonObject) raises -> List[Int]:
+    """A layer record's six integer arguments (its fifth field), for block_param_names (lane nn-norms)."""
+    var out = List[Int](capacity=6)
+    var args = layer[4]
+    for k in range(6):  # small-loop(6: the layer's integer arguments): description metadata, no data
+        out.append(Int(py=args[k]))
+    return out^
+
+
 def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
     var nk = sequential_keys()
     var layers = py_item(sequential_fields(model), nk[].k__layers)
@@ -40,11 +49,20 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
             _ = py_call(result.append, Python.tuple(k, bias))
         elif code == 35 or code == 39 or code == 40 or code == 41:
             # lane neural-blocks: a block layer's tensors by name (autograd/model_blocks.mojo block_param_names)
-            var suffixes = block_param_names(code)
+            var suffixes = block_param_names(code, _layer_args(layer), 0)
             var names = Python.list()
             for j in range(len(suffixes)):  # small-loop(at most four tensors of a block layer)
                 _ = py_call(names.append, PythonObject(suffixes[j]))
             _ = py_call(result.append, Python.tuple(k, False, py_call(native_loaded_module("builtins").tuple, names)))
+        # nn-norms begin: group_norm and instance_norm load their tensors by name (none when not affine and untracked)
+        elif code == 54 or code == 55:
+            var norm_suffixes = block_param_names(code, _layer_args(layer), 0)
+            if len(norm_suffixes) > 0:
+                var norm_names = Python.list()
+                for j in range(len(norm_suffixes)):  # small-loop(at most four tensors of a block layer)
+                    _ = py_call(norm_names.append, PythonObject(norm_suffixes[j]))
+                _ = py_call(result.append, Python.tuple(k, False, py_call(native_loaded_module("builtins").tuple, norm_names)))
+        # nn-norms end
     return result
 
 
@@ -247,7 +265,7 @@ def sequential_export_weights(mut mods: NativeModules, model: PythonObject, form
         var name = String(shapes[base]) + (".bias" if shapes[base + 1] == 1 else ".weight")
         var code = Int(py=model_layers[shapes[base]][0])
         if code >= 32:
-            name = String(shapes[base]) + block_param_names(code)[shapes[base + 1]]
+            name = String(shapes[base]) + block_param_names(code, _layer_args(model_layers[shapes[base]]), 0)[shapes[base + 1]]
         if form == SEQUENTIAL_EXPORT_STATE_DICT:
             py_setitem(named, PythonObject(name), value)
         elif form == SEQUENTIAL_EXPORT_PARAMETERS:

@@ -40,7 +40,7 @@ from autograd.rankn import rn_word
 from x_cnn.ops import FP as XFP, IP as XIP
 from x_cnn.ops import (
     BN_GAMMA, BN_BETA, BN_SUMG, BN_SUMGX,
-    bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_running_at, bn_eval_stats_at, bn_apply_at,
+    bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at, bn_blk_var_running_at, bn_eval_stats_at, bn_apply_at,
     bn_blk_red_at, bn_blk_red_fin_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
 )
 from x_cnn.ops import (
@@ -434,8 +434,13 @@ def op_rnv_bn_prep(c: Int, a: Args):
     var C = rn_word(a.p11, 1)
     a.p1.unsafe_store(0, a.f0)
     a.p1.unsafe_store(1, a.f1)
-    a.p1.unsafe_store(2 + BN_GAMMA * C + c, ftz(a.p0.unsafe_load(c)))
-    a.p1.unsafe_store(2 + BN_BETA * C + c, ftz(a.p4.unsafe_load(c)))
+    if a.i1 != 0:
+        # no affine (lane nn-norms: the group and instance norms' statistics): gamma 1, beta 0
+        a.p1.unsafe_store(2 + BN_GAMMA * C + c, Float32(1))
+        a.p1.unsafe_store(2 + BN_BETA * C + c, Float32(0))
+    else:
+        a.p1.unsafe_store(2 + BN_GAMMA * C + c, ftz(a.p0.unsafe_load(c)))
+        a.p1.unsafe_store(2 + BN_BETA * C + c, ftz(a.p4.unsafe_load(c)))
     if a.i0 != 0:
         var x = _xf(a.p2)
         bn_eval_stats_at(c, x, _xf(a.p1), x, x, _xd(a.p11), _xd(a.p11))
@@ -465,9 +470,13 @@ def op_rnv_bn_sq(t: Int, a: Args):
 @always_inline
 def op_rnv_bn_var(c: Int, a: Args):
     """Channel c's biased variance and invstd, then PyTorch's running update of p2 in place
-    (bn_blk_var_running_at): part p0, aux p1, running p2."""
+    (bn_blk_var_running_at): part p0, aux p1, running p2. i0 = 1: no running statistics (lane nn-norms:
+    the group norm and an untracked instance norm), bn_blk_var_at alone."""
     var x = _xf(a.p0)
-    bn_blk_var_running_at(c, x, _xf(a.p1), _xf(a.p2), x, _xd(a.p11), _xd(a.p11))
+    if a.i0 != 0:
+        bn_blk_var_at(c, x, _xf(a.p1), x, x, _xd(a.p11), _xd(a.p11))
+    else:
+        bn_blk_var_running_at(c, x, _xf(a.p1), _xf(a.p2), x, _xd(a.p11), _xd(a.p11))
     comptime if SEQ_BLOCKS_SABOTAGE_BN:
         # the unbiased variance normalizes (PyTorch normalizes with the biased one)
         var C = rn_word(a.p11, 1)

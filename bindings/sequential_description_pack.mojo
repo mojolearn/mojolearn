@@ -305,6 +305,38 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
             raise Error("TypeError: parallel takes its branches as positional arguments")
         _parallel(mods, model, supplied, context)
         return model
+    # nn-norms begin (autograd/model_blocks.mojo LAYER_GROUP_NORM, LAYER_INSTANCE_NORM; PyTorch's arguments and defaults)
+    elif kind == "group_norm":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("num_groups", "num_channels", "eps", "affine"),
+                                 Python.tuple(None, None, 1e-5, True), 2)
+        var groups = _positive(options[0], "num_groups", 1, context)
+        var gchannels = _positive(options[1], "num_channels", 1, context)
+        if gchannels % groups != 0:
+            raise Error("num_channels must be divisible by num_groups")
+        if not Bool(py=options[2] > PythonObject(0)):
+            raise Error("eps must be positive")
+        f = py_call(b.float, options[2])
+        a0 = PythonObject(groups)
+        a1 = PythonObject(gchannels)
+        args = Python.list(groups, gchannels, 1 if Bool(py=options[3]) else 0, 0, 0, 0)
+    elif kind == "instance_norm1d" or kind == "instance_norm2d":
+        var options = _arguments(mods, kind, supplied, keywords,
+                                 Python.tuple("num_features", "eps", "momentum", "affine", "track_running_stats"),
+                                 Python.tuple(None, 1e-5, 0.1, False, False), 1)
+        var ichannels = _positive(options[0], "num_features", 1, context)
+        if not Bool(py=options[1] > PythonObject(0)):
+            raise Error("eps must be positive")
+        if options[2] is None:
+            raise Error("momentum=None (a cumulative average) is not supported; give a momentum in [0, 1]")
+        if not (Bool(py=options[2] >= PythonObject(0)) and Bool(py=options[2] <= PythonObject(1))):
+            raise Error("momentum must be in [0, 1]")
+        f = py_call(b.float, options[1])
+        var ibits = Int(bitcast[DType.int32](Float32(Float64(py=py_call(b.float, options[2])))))
+        a0 = PythonObject(ichannels)
+        a1 = PythonObject(ibits)
+        args = Python.list(ichannels, ibits, 1 if kind == "instance_norm1d" else 2, 1 if Bool(py=options[3]) else 0,
+                           1 if Bool(py=options[4]) else 0, 0)
+    # nn-norms end
     elif len(supplied) != 0 or len(keywords) != 0:
         raise Error("TypeError: " + kind + " takes no arguments")
     # lane neural-blocks-3 (2026-11-22): the native model reads the float argument as a Float32 (eps, p, theta,

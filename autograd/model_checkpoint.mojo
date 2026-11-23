@@ -110,7 +110,7 @@ def model_layout(spec: ModelSpec, mut offsets: List[Int], mut names: List[String
         elif is_block(k) and off >= 0:
             # lane neural-blocks: one entry per parameter tensor of a block layer
             var sizes = block_param_sizes(k, spec.xargs, i, spec.in_shape[i])
-            var suffixes = block_param_names(k)
+            var suffixes = block_param_names(k, spec.xargs, i)
             var end = off
             for j in range(len(sizes)):  # small-loop(at most four parameter tensors of the layer)
                 end += sizes[j]
