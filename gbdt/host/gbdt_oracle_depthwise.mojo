@@ -31,9 +31,15 @@ terminal), `min_split_gain` 0.01, `min_data_in_leaf` 8, `feature_fraction`
 tree), `random_strength` 1 (the per-tree `CalcScoreModelLengthMult`, the
 per-tree seed, `compute_target_std_dev` and the per-launch level seed with
 the per-feature normal draw on both scores), the Bernoulli bootstrap at 0.7
-and Gradient leaves at three iterations (`gbdt_oracle_losses.mojo`). Every
-other option is at its default and the binding refuses by name what is
-outside (bindings/_mojolearn_gbdt_host.mojo, `_refuse`).
+and Gradient leaves at three iterations (`gbdt_oracle_losses.mojo`).
+Since lane gbdt-cpu-rest-4-ns (2026-11-23) both policies run every score
+function the device's leafwise kernels have (Cosine, NewtonCosine, L2,
+NewtonL2, through `leafwise_score_body.mojo`, the kernels' own statements),
+`min_split_gain`, `min_child_hessian` and `min_data_in_leaf` under Depthwise
+as under Lossguide, Gradient / Newton leaves at any iteration count, every
+bootstrap and `boost_from_average` on Logloss and CrossEntropy; what the
+device refuses the binding refuses in the device's words
+(gbdt/mojolearn_gbdt_host_run.mojo).
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build defaults:
 DEVIATION 1902 ridx-only splits OFF, 2661 group width OFF, 1901 incremental
@@ -1179,8 +1185,16 @@ def gbdt_host_fit_non_symmetric(
         params.score_function == GBDT_HOST_SCORE_NEWTON_L2
         or params.score_function == GBDT_HOST_SCORE_NEWTON_COSINE
     )
-    if not newton and params.score_function != GBDT_HOST_SCORE_COSINE_NS:
-        raise Error("the non-symmetric host fit restates Cosine, NewtonL2 and NewtonCosine only")
+    # lane gbdt-cpu-rest-4-ns (2026-11-23): L2 too, the device's four
+    # leafwise calcers under both policies (`structure_searcher_options.
+    # check`'s words for the rest)
+    if not newton and params.score_function != GBDT_HOST_SCORE_COSINE_NS and params.score_function != SCORE_FUNCTION_L2:
+        raise Error(
+            "score_function=" + String(params.score_function)
+            + " has no calcer in this implementation; only Cosine, NewtonCosine,"
+            " L2 and NewtonL2 are implemented (SolarL2, SatL2 and LOOL2 are"
+            " theirs at compute_scores.cu:509-546 and are not written)"
+        )
     var is_logloss = params.loss.objective == GBDT_OBJ_LOGLOSS
     # lane gbdt-cpu-rest (2026-11-23): every pointwise loss of
     # gbdt_oracle_losses.mojo rides the RMSE arm's generic passes
@@ -1289,7 +1303,13 @@ def gbdt_host_fit_non_symmetric(
 
         # ---- the gradients, the learn loss and the magnitudes ----
         if not is_logloss:
-            _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part, weights)
+            # `secondDerAsWeights` (`doc_parallel_boosting.mojo`'s
+            # `launch_approximate[False, True]`): the Newton scores search
+            # on the weighted second derivative for every pointwise loss
+            # (lane gbdt-cpu-rest-4-ns, 2026-11-23: this pass ran the
+            # first-order planes under NewtonL2 / NewtonCosine; RMSE's
+            # der2 is 1, so its planes do not move)
+            _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part, weights, second_order=newton)
         elif newton:
             logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part, weights)
         else:
