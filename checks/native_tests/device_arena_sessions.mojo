@@ -16,11 +16,11 @@ and run the same `take` / `arena_buffer` / `release` code the Apple column runs;
                                holds its own chunk and each session's words equal its words alone
     test_arena_off             an arena that is off gives no handle; `arena_buffer` then allocates a fresh buffer
 """
-from std.memory import bitcast
 from std.testing import TestSuite
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_arena import DeviceArena, arena_buffer, arena_ptr
 from core.host_parallel import host_parallelize
+from checks.native_tests.kit import download, same_words, upload_whole_into
 from checks.native_tests.testsuite_cases import require
 
 comptime ARENA_SESSIONS = 2
@@ -38,22 +38,17 @@ def _word(unit: Int, j: Int, i: Int) -> Float32:
 
 
 def _fill(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], unit: Int, j: Int, n: Int) raises:
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
+    var values = List[Float32](length=n, fill=Float32(0.0))
     for i in range(n):  # small-loop(fixture: at most 4000 words of one view)
-        host.unsafe_ptr().unsafe_store(i, _word(unit, j, i))
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
+        values[i] = _word(unit, j, i)
+    upload_whole_into[DType.float32](ctx, buf, values)
+    _ = values^
 
 
 def _read(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, mut words: List[Float32]) raises:
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
+    var got = download[DType.float32](ctx, buf, n)
     for i in range(n):  # small-loop(fixture: at most 4000 words of one view)
-        words.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
+        words.append(got[i])
 
 
 def _session(ctx: DeviceContext, unit: Int) raises -> List[Float32]:
@@ -82,11 +77,7 @@ def _session(ctx: DeviceContext, unit: Int) raises -> List[Float32]:
 
 
 def _same(got: List[Float32], want: List[Float32], label: String) raises:
-    if len(got) != len(want):
-        raise Error(label + ": " + String(len(got)) + " words, alone " + String(len(want)))
-    for i in range(len(got)):  # small-loop(fixture: one session's words)
-        if bitcast[DType.uint32](got[i]) != bitcast[DType.uint32](want[i]):
-            raise Error(label + " word " + String(i) + ": " + String(got[i]) + " alone " + String(want[i]))
+    same_words[DType.float32](got, want, label)
 
 
 def test_sessions_concurrent() raises:
