@@ -36,3 +36,4 @@ x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/host_ew_onemsq_fused
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/host_rowsum_flush.patch
 x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/lle_svd_chunk_resume.patch
 x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/lle_qr_range_skip.patch
+# x_decomp/checks/sabotage/e2e_host_all.patch retired 2026-11-23 (lane patch-recut): duplicates e2e_host_sqdist + e2e_host_ulp (its hunks are exactly their union) on x_decomp/host.mojo:HostExec.sqdist/gemm/lu; recoverable at 12b8e16a0c

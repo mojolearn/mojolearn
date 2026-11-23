@@ -24,3 +24,4 @@ neighbors/checks/fused_slot_merge_check.mojo	neighbors/checks/sabotage/5219_slot
 kernel_methods/checks/nystroem_basis_sort_check.mojo	kernel_methods/checks/sabotage/1672a_basis_sort_unstable_scatter.patch
 kernel_methods/checks/nystroem_basis_sort_check.mojo	kernel_methods/checks/sabotage/1672b_basis_sort_key_halves_swapped.patch
 # x_neighbors/checks/sabotage/phase2_device_all.patch retired 2026-11-23 (lane patch-recut): duplicates gp_cov_device_not_self, km_kernels_device_order, krr_weight_device_row_only, metrics_device_order, svm_precomputed_device_slice and svm_weights_device_unweighted (coverage-x_neighbors-* arms) hunk for hunk on gpr_predict_cov_host, chi2_cell_kernel, cosine_rows_kernel, krr_weight_kernel, metric_distance_kernel, slice_cols_kernel and SmoSolver C_vec; recoverable at 12b8e16a0c
+kernel_methods/checks/nystroem_basis_sort_check.mojo	kernel_methods/checks/sabotage/1672_nystroem_basis_device_rank_swap.patch

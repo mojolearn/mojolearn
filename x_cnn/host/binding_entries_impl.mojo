@@ -6,8 +6,8 @@ shell, so a Python-free caller reaches the same source; no Python here).
 
 `out_f32` is the CPU column's output seam the shell's address-out entries
 call; the end-to-end sabotage arm
-(x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
-bit here.
+(x_cnn/checks/sabotage/coverage_host_binding_entries_impl.patch) moves
+every word one ulp here.
 """
 from std.memory import unsafe_memcpy
 
@@ -22,8 +22,8 @@ def out_f32(p: FP, n: Int):
     """THE CPU COLUMN'S OUTPUT SEAM for the address-out entries: every
     float32 word such an entry returns is in p[0:n] when this runs. In
     production it does nothing. The end-to-end sabotage arm
-    (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
-    bit here, and in the shell's `copy_f32` for the entries that still copy
+    (x_cnn/checks/sabotage/coverage_host_binding_entries_impl.patch) moves
+    every returned word one ulp here; the shell no longer copies
     a result."""
     _ = p
     _ = n

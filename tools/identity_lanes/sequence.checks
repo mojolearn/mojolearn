@@ -43,3 +43,4 @@ holtwinters/checks/hw_check.mojo	sequence/checks/sabotage/seam_5532_hw_crit_orde
 holtwinters/checks/hw_check.mojo	sequence/checks/sabotage/seam_5533_hw_ls_last.patch
 tsa/checks/stationarity_check.mojo	sequence/checks/sabotage/seam_5534_kpss_sq_unfused.patch
 tsa/checks/stationarity_check.mojo	sequence/checks/sabotage/seam_5535_kpss_s2b_unfused.patch
+# sequence/checks/sabotage/e2e_family_host_bits.patch retired 2026-11-23 (lane patch-recut): duplicates e2e_arima_host_param_bit + e2e_host_download_bit + e2e_tsa_host_bits (its hunks are exactly their union) on arima_host_fit_into, HostExec._profiled_download, holtwinters_fit_host_into and series_sum_host; recoverable at 12b8e16a0c
