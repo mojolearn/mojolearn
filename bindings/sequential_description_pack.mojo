@@ -464,7 +464,20 @@ def sequential_compile(mut mods: NativeModules, model: PythonObject, options: Py
     py_setitem(out, nk[].k_sched, py_item(context, nk[].k_schedule_codes)[schedule])
     py_setitem(out, nk[].k_step_size, py_call(b.int, options[10]))
     py_setitem(out, nk[].k_gamma, py_call(b.float, options[11]))
-    py_setitem(out, nk[].k_huber_delta, py_call(b.float, options[12]))
+    # nn-losses begin: one loss scalar word, the Huber delta, the smooth_l1 beta or the bce_with_logits
+    # pos_weight (autograd/model.mojo FitConfig.huber_delta); the reduction's code rides in the loss word
+    var reduction = options[15]
+    if not py_contains(py_item(context, nk[].k_reduction_codes), reduction):
+        raise Error("reduction must be 'mean', 'sum' or 'batchmean'")
+    var loss_name = String(loss)
+    var scalar = options[12]
+    if loss_name == "smooth_l1":
+        scalar = options[17]
+    elif loss_name == "bce_with_logits":
+        scalar = options[16]
+    py_setitem(out, nk[].k_huber_delta, py_call(b.float, scalar))
+    py_setitem(out, nk[].k_reduction, py_item(context, nk[].k_reduction_codes)[reduction])
+    # nn-losses end
     py_setitem(out, nk[].k_tol, py_call(b.float, options[13]))
     py_setitem(out, nk[].k_n_iter_no_change, py_call(b.int, options[14]))
     var fields = sequential_fields(model)

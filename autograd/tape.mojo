@@ -27,7 +27,7 @@ from autograd.ops import (
 )
 from autograd.loss_ops import (
     OP_LS_ELEM_FWD, OP_LS_ELEM_VJP, OP_LS_CE_FWD, OP_LS_CE_VJP, LS_MSE, LS_MAE, LS_HUBER,
-    LS_BCE_LOGITS,
+    LS_BCE_LOGITS, ls_check_param,
 )
 from autograd.data_ops import OP_AG_DROPOUT_FWD, OP_AG_DROPOUT_VJP, DROPOUT, dropout_args
 from std.memory import unsafe_memcmp
@@ -1867,10 +1867,7 @@ struct Tape(Movable):
         both. kind is LS_MSE, LS_MAE, LS_HUBER (threshold `delta`) or
         LS_BCE_LOGITS (prediction holds logits) from autograd.loss_ops.
         autograd/losses.mojo reduces the terms with mean or sum."""
-        if kind != LS_MSE and kind != LS_MAE and kind != LS_HUBER and kind != LS_BCE_LOGITS:
-            raise Error("loss_terms takes LS_MSE, LS_MAE, LS_HUBER or LS_BCE_LOGITS")
-        if kind == LS_HUBER and not (delta > 0):
-            raise Error("Huber delta must be positive")
+        ls_check_param(kind, delta)  # nn-losses: every elementwise kind and its scalar
         var a_at = self._use(ex, prediction)
         var a = self._nodes[a_at]
         var b_at = self._use(ex, target)
@@ -1894,17 +1891,16 @@ struct Tape(Movable):
 
     def loss_reduced[E: Exec](
         mut self, mut ex: E, prediction: Tensor, target: Tensor, kind: Int, delta: Float32 = 1,
-        mean: Bool = True,
+        mean: Bool = True, per_row: Bool = False,
     ) raises -> Tensor:
         """The mean (or, mean=False, the sum) of loss_terms(prediction,
         target, kind, delta) as one (1, 1) node: the terms are folded in
         the leaf chain and never stored (autograd/fold_ops.mojo; lane
         ag-pass6-fold, AUTOGRAD_LOSS_REDUCED). Value and gradients equal
-        mean / sum of loss_terms bit for bit."""
-        if kind != LS_MSE and kind != LS_MAE and kind != LS_HUBER and kind != LS_BCE_LOGITS:
-            raise Error("loss_reduced takes LS_MSE, LS_MAE, LS_HUBER or LS_BCE_LOGITS")
-        if kind == LS_HUBER and not (delta > 0):
-            raise Error("Huber delta must be positive")
+        mean / sum of loss_terms bit for bit. per_row (lane nn-losses): the
+        mean divides by the rows, not the elements (NLLLoss's mean over
+        samples, KLDivLoss's batchmean)."""
+        ls_check_param(kind, delta)  # nn-losses: every elementwise kind and its scalar
         var a_at = self._use(ex, prediction)
         var a = self._nodes[a_at]
         var b_at = self._use(ex, target)
@@ -1915,7 +1911,7 @@ struct Tape(Movable):
             raise Error("loss prediction and target must be distinct tensors")
         var count = a.rows * a.cols
         # Tape.mean's factor (and losses.reduction_factor's)
-        var factor = identical_div(Float32(1), Float32(count)) if mean else Float32(1)
+        var factor = identical_div(Float32(1), Float32(a.rows if per_row else count)) if mean else Float32(1)
         var output = self._alloc(ex, 1)
         var partials = self._alloc(ex, fold_partials(a.rows, a.cols, AXIS_ALL))
         var word = self._word_armed

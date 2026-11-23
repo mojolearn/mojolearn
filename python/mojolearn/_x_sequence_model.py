@@ -20,7 +20,11 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "selective_scan": 42, "ssd_scan": 43, "trapezoid_scan": 44,
           "lm_head": 45,
           "batch_norm1d": 46, "batch_norm2d": 46}  # lm_head (lane neural-blocks-3-lm)
-_LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
+_LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4,
+         # nn-losses begin
+         "l1": 5, "smooth_l1": 6, "nll": 7, "kl_div": 8}
+_REDUCTION = {"mean": 0, "sum": 1, "batchmean": 2}
+# nn-losses end
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
 _OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD = 0, 1, 2, 3, 4, 5
@@ -620,14 +624,27 @@ class Sequential(_CheckMixin):
 
     def compile(self, loss="mse", optimizer="adam", lr=1e-3, *, momentum=0.9, nesterov=False,
                 beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule="constant",
-                step_size=1, gamma=0.1, huber_delta=1.0, tol=1e-4, n_iter_no_change=0):
+                step_size=1, gamma=0.1, huber_delta=1.0, tol=1e-4, n_iter_no_change=0,
+                reduction="mean", pos_weight=1.0, beta=1.0):
         """Choose the loss, optimizer and learning-rate schedule.
 
         Parameters
         ----------
-        loss : {'mse', 'cross_entropy', 'bce_with_logits', 'huber', 'token_cross_entropy'}, default 'mse'
+        loss : {'mse', 'l1', 'smooth_l1', 'huber', 'cross_entropy', 'nll', 'bce_with_logits', 'kl_div', \
+'token_cross_entropy'}, default 'mse'
+            The loss of PyTorch's module of the same name: ``mse``
+            (``MSELoss``), ``l1`` (``L1Loss``, the absolute error),
+            ``smooth_l1`` (``SmoothL1Loss``: ``0.5 d**2 / beta`` where
+            ``|d| < beta``, else ``|d| - 0.5 beta``) and ``huber``
+            (``HuberLoss``) take real targets of the output's shape.
             ``cross_entropy`` takes logits and integer class labels;
-            ``bce_with_logits`` takes one logit per row and binary labels;
+            ``nll`` (``NLLLoss``) takes log-probabilities, one a class,
+            and integer class labels; ``bce_with_logits``
+            (``BCEWithLogitsLoss``) takes one logit per row and binary
+            labels, computed stably from the logits; ``kl_div``
+            (``KLDivLoss`` with ``log_target=False``) takes
+            log-probabilities and target probabilities of the output's
+            shape, ``sum y (log y - x)``, zero where ``y`` is zero;
             ``token_cross_entropy`` trains a model ending in
             :meth:`lm_head` on ``(n_samples, length)`` int32 token ids.
         optimizer : {'sgd', 'momentum', 'adam', 'adamw'}, default 'adam'
@@ -647,6 +664,21 @@ class Sequential(_CheckMixin):
             epochs; ``'exponential'`` by ``gamma`` every epoch.
         huber_delta : float, default 1.0
             Threshold of the Huber loss.
+        reduction : {'mean', 'sum', 'batchmean'}, default 'mean'
+            How a batch's terms become its loss, as in PyTorch: ``'mean'``
+            averages over the elements (over the samples for
+            ``cross_entropy`` and ``nll``), ``'sum'`` adds them, and
+            ``'batchmean'`` (``kl_div`` only) sums and divides by the
+            samples, the divergence per sample. ``loss_curve_`` holds each
+            epoch's loss per sample (the mean of the batch losses, weighted
+            by their samples, for a mean; the summed loss over the
+            samples for a sum). ``token_cross_entropy`` takes ``'mean'``.
+        pos_weight : float, default 1.0
+            Weight of the positive term of ``bce_with_logits`` (> 0), the
+            same for every output: ``-[pos_weight y log s + (1 - y)
+            log(1 - s)]``, ``s`` the sigmoid of the logit.
+        beta : float, default 1.0
+            Threshold of ``smooth_l1`` (>= 0; 0 is the L1 loss).
         tol, n_iter_no_change : float, int
             Stop when the epoch loss has not improved by more than ``tol``
             for ``n_iter_no_change`` epochs; 0 trains every epoch.
@@ -661,8 +693,9 @@ class Sequential(_CheckMixin):
         >>> import mojolearn
         >>> model = mojolearn.Sequential().linear(8).relu().linear(1)
         >>> model = model.compile(loss="huber", optimizer="momentum", lr=0.01, nesterov=True)
+        >>> model = model.compile(loss="smooth_l1", beta=0.5, reduction="sum")
         """
-        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change, reduction, pos_weight, beta), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
     def _program(self, n_features, sample=None):
@@ -685,9 +718,11 @@ class Sequential(_CheckMixin):
             an array of 3 or more dimensions (one sample per index of the
             first axis) must be C-contiguous.
         y : array-like
-            Targets: (n_samples,) or (n_samples, n_outputs) for ``mse`` and
-            ``huber``; one label per row for ``cross_entropy`` (any number
-            of classes, one model output per class) and ``bce_with_logits``
+            Targets: (n_samples,) or (n_samples, n_outputs) for ``mse``,
+            ``l1``, ``smooth_l1``, ``huber`` and ``kl_div`` (target
+            probabilities for ``kl_div``); one label per row for
+            ``cross_entropy`` and ``nll`` (any number of classes, one model
+            output per class) and ``bce_with_logits``
             (two classes, one model output); the ``(n_samples, length)``
             int32 next-token ids for ``token_cross_entropy``.
         epochs : int, default 10
@@ -1081,6 +1116,7 @@ _SEQUENTIAL_NO_KEYWORDS = {}
 _SEQUENTIAL_CONTEXT = {
     "integer": np.integer, "layer_codes": _LAYER, "loss_codes": _LOSS,
     "optimizer_codes": _OPT, "schedule_codes": _SCHED,
+    "reduction_codes": _REDUCTION,  # nn-losses
     "layer_names": ("", "linear", "relu", "sigmoid", "tanh", "softmax",
                     "layer_norm", "dropout", "residual", "reshape", "permute",
                     "flatten", "conv2d", "max_pool2d", "avg_pool2d", "conv1d", "max_pool1d",
@@ -1153,7 +1189,8 @@ def _connect_sequential_bindings():
         "model_fields": ("numeric_mode", "device", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "optimizer_m_", "optimizer_v_", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
         "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
-        "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber", "token_cross_entropy"),
+        "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber", "token_cross_entropy",
+                       "l1", "smooth_l1", "nll", "kl_div"),  # nn-losses: l1 .. kl_div
         "bindings": entries, "sequential_cpu_bindings": cpu_entries,
         "backend_fields": vars(_backend), "vendor": _backend.vendor(),
         "ndarray": np.ndarray, "array_type": array, "array_class": Array,
