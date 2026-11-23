@@ -125,7 +125,8 @@ from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
     SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
     SCORER_POSITIVE_MIXED,
-    msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_flip,
+    msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_flip, msel_scorer_given_pos, msel_scorer_with_k,
+    msel_scorer_top_k,
 )
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.metrics_cluster_table import cluster_ops_entry
@@ -2506,7 +2507,25 @@ def _scoring_many(scoring: PythonObject, context: PythonObject, b: PythonObject)
     return False
 
 
-def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, mut flip: Bool) raises -> String:
+def _effective_kwargs(params: PythonObject, kwargs: PythonObject, b: PythonObject) raises -> PythonObject:
+    """A scorer's metric options as its metric call reads them: the metric
+    function's keyword defaults (`params`, its signature's parameters; None:
+    unknown) updated with the scorer's own kwargs."""
+    var out = Python.dict()
+    if params is not None:
+        var names = py_call(b.list, params)
+        for i in range(len(names)):  # small-loop(the metric's parameters, once per admission)
+            var default = py_call(b.getattr, params[names[i]], PythonObject("default"))
+            if default is not py_call(b.getattr, params[names[i]], PythonObject("empty")):
+                py_setitem(out, names[i], default)
+    var given = py_call(b.list, py_call(kwargs.items))
+    for i in range(len(given)):  # small-loop(the scorer's kwargs)
+        py_setitem(out, given[i][0], given[i][1])
+    return out
+
+
+def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, mut flip: Bool, mut top_k: Int,
+                 mut given_pos: Bool, mut pos_label: PythonObject) raises -> String:
     """UNPACK: the table name of ONE scorer value: a str is itself (an
     unknown name raises `msel_get_scorer`'s words); a scorer object is
     admitted by `msel_get_scorer` (a Python callback raises the door's
@@ -2518,8 +2537,17 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
     metric it wraps, its kwargs, its response method) read ONCE here and
     matched against the table's rows; the row whose parts are the same is
     its name, and `flip` says its sign (greater_is_better) is the row's
-    negated. Any other kwargs or metric: "" (the door)."""
+    negated. KWARGS READ INTO THE ROW'S WORDS (lane mf-msel5c): both sides'
+    options are compared as the metric reads them (its keyword defaults
+    updated with the kwargs, so an explicit default is the row's); a
+    binary label row's other `pos_label` is the caller's (`given_pos`,
+    `pos_label`), a top_k_accuracy row's other `k` is `top_k`; a pos_label
+    of None or 1 on an averaged row is the row's (scikit-learn ignores it
+    there). Any other difference: "" (the door)."""
     flip = False
+    top_k = 0
+    given_pos = False
+    pos_label = PythonObject(None)
     var got = msel_get_scorer(scorer, context)
     if py_type(scorer) is b.str:
         return String(py=scorer)
@@ -2532,19 +2560,64 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
     if func is None:
         return String("")
     var eq = native_loaded_module("operator").eq
-    for i in range(len(items)):  # driver-loop: over the scorer table (its rows' typed parts, once per admission)
-        var row = items[i][1]
-        if py_call(b.getattr, row, PythonObject("_score_func")) is not func:
-            continue
-        if not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_kwargs")),
-                                               py_call(b.getattr, got, PythonObject("_kwargs"))))):
-            continue
-        if not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_response_method")),
-                                               py_call(b.getattr, got, PythonObject("_response_method"))))):
-            continue
-        flip = not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_sign")),
-                                                   py_call(b.getattr, got, PythonObject("_sign")))))
-        return String(py=items[i][0])
+    var params = PythonObject(None)
+    try:
+        params = py_call(native_loaded_module("inspect").signature, func).parameters
+    except:
+        params = PythonObject(None)  # no signature: the kwargs are compared as given
+    var missing = py_call(b.object)
+    try:
+        var got_kwargs = _effective_kwargs(params, py_call(b.getattr, got, PythonObject("_kwargs")), b)
+        var got_method = py_call(b.getattr, got, PythonObject("_response_method"))
+        for i in range(len(items)):  # driver-loop: over the scorer table (its rows' typed parts, once per admission)
+            var row = items[i][1]
+            if py_call(b.getattr, row, PythonObject("_score_func")) is not func:
+                continue
+            if not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_response_method")),
+                                                   got_method))):
+                continue
+            var name = String(py=items[i][0])
+            var code = msel_scorer_code(name, False)
+            var binary = code >= 0 and msel_scorer_positive(msel_scorer_row(code))
+            var ranked = code >= 0 and msel_scorer_top_k(msel_scorer_row(code))
+            var row_kwargs = _effective_kwargs(params, py_call(b.getattr, row, PythonObject("_kwargs")), b)
+            var keyset = py_call(b.set, py_call(b.list, row_kwargs))
+            var keys = py_call(b.list, py_call(keyset.union, py_call(b.list, got_kwargs)))
+            var same = True
+            var pos_other = False
+            var k_other = False
+            for q in range(len(keys)):  # small-loop(the two scorers' options)
+                var key = keys[q]
+                var mine = py_call(row_kwargs.get, key, missing)
+                var theirs = py_call(got_kwargs.get, key, missing)
+                if mine is not missing and theirs is not missing and Bool(py=py_call(b.bool, py_call(eq, mine,
+                                                                                                    theirs))):
+                    continue
+                if py_type(key) is b.str and String(py=key) == "pos_label" and theirs is not missing:
+                    if binary:
+                        pos_other = True
+                        continue
+                    if theirs is None or (py_type(theirs) is b.int and Int(py=theirs) == 1):
+                        continue  # scikit-learn ignores pos_label on an averaged row
+                if py_type(key) is b.str and String(py=key) == "k" and ranked and py_type(theirs) is b.int:
+                    k_other = True
+                    continue
+                same = False
+                break
+            if not same:
+                continue
+            flip = not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_sign")),
+                                                       py_call(b.getattr, got, PythonObject("_sign")))))
+            if k_other:
+                top_k = Int(py=got_kwargs["k"])
+                if top_k < 1:
+                    return String("")  # the metric refuses it in its words: the door
+            if pos_other:
+                given_pos = True
+                pos_label = got_kwargs["pos_label"]
+            return name
+    except:
+        return String("")  # options no exact comparison reads (an array kwarg): the door
     return String("")
 
 
@@ -2765,7 +2838,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var others = False
     for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
         var flip = False
-        var name = _scorer_name(givens[j], context, b, flip)
+        var top_k = 0
+        var given_pos = False
+        var pos_label = PythonObject(None)
+        var name = _scorer_name(givens[j], context, b, flip, top_k, given_pos, pos_label)
         if len(name) == 0:
             return False  # a native scorer no table row holds (another metric or kwargs)
         var scorer = msel_get_scorer(givens[j], context)
@@ -2775,6 +2851,9 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             return False
         if flip:
             code = msel_scorer_flip(code)
+        if top_k > 0:
+            # a make_scorer's k (lane mf-msel5c): the row's metric word
+            code = msel_scorer_with_k(code, top_k)
         var row = msel_scorer_row(code)
         # A CLUSTERER base (lane mf-cluster5): a non-classifier scored by the
         # clustering scorers only (its predict is cluster ids).
@@ -2794,7 +2873,17 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             if labels is None:
                 return False
             positive = _positive_code(labels, b)
-            if _labels_mixed(labels, b):
+            if given_pos:
+                # A MAKE_SCORER's pos_label (lane mf-msel5c): its class code, the
+                # refusal words naming it. One that is not among the labels, or
+                # labels of mixed kinds: the door.
+                if _labels_mixed(labels, b):
+                    return False
+                positive = _label_code(labels, pos_label, b)
+                if positive < 0:
+                    return False
+                code = msel_scorer_given_pos(code)
+            elif _labels_mixed(labels, b):
                 # MIXED-KIND LABELS (lane mf-msel5b): strings and integers; the
                 # RUN raises the metric doors' refusal per side.
                 positive = SCORER_POSITIVE_MIXED
@@ -2832,6 +2921,9 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     if clusterer and others:
         return False  # a clusterer is scored by clustering scorers only
     var tool_ids = False
+    # A multi-output classifier's predicted labels (lane mf-msel5c): 0 none,
+    # 1 integers (an int64 block), 2 reals (a float64 block).
+    var multi_labels = 0
     var nested = _Nested()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
         if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
@@ -2840,8 +2932,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
         if multi and (len(codes) > 0 or msel_spec_stratified(split.spec.kind)):
             return False  # a multi-output target is scored by the member itself, folded by KFold
-        if multi and tool_respond >= 0 and (classifier or tool_respond != MEMBER_OP_PREDICT):
-            return False  # a multi-output classifier's responses: per-output labels (the door's placement)
+        if multi and tool_respond >= 0 and tool_respond != MEMBER_OP_PREDICT:
+            return False  # a multi-output predict_proba / decision: a list of per-output blocks (the door's)
+        if multi and tool_respond >= 0 and classifier:
+            # A MULTI-OUTPUT CLASSIFIER's predict (lane mf-msel5c): each output's
+            # codes decoded at PACK into one rows x outputs block of its labels,
+            # int64 for integer labels, float64 for real ones; labels of
+            # another kind keep the door (no block holds them).
+            multi_labels = _numeric_outputs(labels, b)
+            if multi_labels == 0:
+                return False
         for o in range(len(responses)):  # small-loop(the distinct responses)
             var response = responses[o]
             var probe = nested.plans[c].copy()
@@ -2891,7 +2991,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 var k = len(py_call(b.list, labels))
                 width = k if (tool_respond == MEMBER_OP_PREDICT_PROBA or k > 2) else 1
                 two_d = width > 1 or tool_respond == MEMBER_OP_PREDICT_PROBA
-            var integral = tool_respond == MEMBER_OP_PREDICT and (classifier or tool_ids)
+            var integral = tool_respond == MEMBER_OP_PREDICT and (classifier or tool_ids) and multi_labels != 2
             dst_dtype = MEMBER_I64 if integral else MEMBER_F64
             var shape = Python.tuple(n_rows, width) if two_d else Python.tuple(n_rows)
             var result = family_array(shape, "<i8" if integral else "<f8", context)
@@ -3011,6 +3111,83 @@ def _label_kind(item: PythonObject, b: PythonObject) raises -> Int:
     if Bool(py=py_call(b.isinstance, item, numbers.Integral)):
         return 1
     return 0
+
+
+def _numeric_outputs(labels: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-msel5c): the kind of a multi-output classifier's
+    per-output labels (`labels`: one label list per output): 1 every label
+    an integer (not a bool), 2 every label a real number with at least one
+    not an integer, 0 otherwise or unknown. Read once per admission."""
+    if labels is None or py_type(labels) is not b.list:
+        return 0
+    var numbers = native_loaded_module("numbers")
+    var kind = 1
+    for j in range(len(labels)):  # driver-loop: over the outputs (their labels, once per admission)
+        var items = py_call(b.list, labels[j])
+        for i in range(len(items)):  # driver-loop: over one output's labels
+            var item = items[i]
+            if py_type(item) is b.bool or Bool(py=py_call(b.isinstance, item, b.str)):
+                return 0
+            if _label_kind(item, b) == 1:
+                continue
+            if not Bool(py=py_call(b.isinstance, item, numbers.Real)):
+                return 0
+            kind = 2
+    return kind
+
+
+def _decode_outputs(result: PythonObject, labels: PythonObject, b: PythonObject) raises:
+    """PACK (lane mf-msel5c): a multi-output classifier's predicted codes
+    (the rows x outputs int64 or float64 block the RUN wrote) replaced IN
+    PLACE by each output's labels (code c of output j is `labels[j][c]`),
+    as the estimator's own predict decodes each output. The labels are read
+    once per class, the rows natively."""
+    var rows = Int(py=result.shape[0])
+    var outputs = Int(py=result.shape[1])
+    var wide = String(py=result.dtype) == "<i8"
+    var ints = List[List[Int64]]()
+    var reals = List[List[Float64]]()
+    for j in range(outputs):  # driver-loop: over the outputs (their labels, once per class)
+        var items = py_call(b.list, labels[j])
+        var iv = List[Int64](capacity=len(items))
+        var fv = List[Float64](capacity=len(items))
+        for c in range(len(items)):  # small-loop(one output's classes)
+            if wide:
+                iv.append(Int64(Int(py=py_call(b.int, items[c]))))
+            else:
+                fv.append(Float64(py=py_call(b.float, items[c])))
+        ints.append(iv^)
+        reals.append(fv^)
+    if rows == 0:
+        return
+    var at = msel_addr(result)
+    var iw = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=at)
+    var fw = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=at)
+    for i in range(rows):  # driver-loop: over the rows (each output's code to its label, in place)
+        for j in range(outputs):  # small-loop(the outputs)
+            if wide:
+                var c = Int(iw[i * outputs + j])
+                if c < 0 or c >= len(ints[j]):
+                    raise Error("RuntimeError: mojolearn: a multi-output prediction code outside its output's classes")
+                iw[i * outputs + j] = ints[j][c]
+            else:
+                var c = Int(fw[i * outputs + j])
+                if c < 0 or c >= len(reals[j]):
+                    raise Error("RuntimeError: mojolearn: a multi-output prediction code outside its output's classes")
+                fw[i * outputs + j] = reals[j][c]
+    _ = result  # written through its address above
+
+
+def _label_code(labels: PythonObject, value: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK (lane mf-msel5c): the class code of the label `value` among
+    the fit's labels (equality as scikit-learn compares a pos_label), -1:
+    not one of them. Read once per admission."""
+    var items = py_call(b.list, labels)
+    var eq = native_loaded_module("operator").eq
+    for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
+        if Bool(py=py_call(b.bool, py_call(eq, items[i], value))):
+            return i
+    return -1
 
 
 def _absent_positive(labels: PythonObject, b: PythonObject) raises -> Int:
@@ -3279,7 +3456,12 @@ def _search_tool_pack(fields: PythonObject, tool: PythonObject, words: _F64P, at
         # decoded to its labels here, once for every row (the estimator's own
         # predict decodes its codes the same way), and placed by the door.
         var result = tool[4][0]
-        if String(py=tool[1]) == "predict" and labels is not None:
+        if String(py=tool[1]) == "predict" and labels is not None and Int(py=tool[5]) > 0:
+            # a multi-output classifier's codes, decoded per output in place (lane mf-msel5c)
+            _decode_outputs(result, labels, b)
+            py_setitem(out, "predictions", result)
+            py_setitem(out, "placed", PythonObject(True))
+        elif String(py=tool[1]) == "predict" and labels is not None:
             py_setitem(out, "predictions", labels_decode_labels(labels, result, unit_context))
             py_setitem(out, "placed", PythonObject(False))
         else:

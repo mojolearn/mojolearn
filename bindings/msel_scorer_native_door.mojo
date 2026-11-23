@@ -444,22 +444,6 @@ def msel_scorer_response(scorer: PythonObject, model: PythonObject, context: Pyt
     return _scorer_response(msel_scorer_fields(scorer, context), model, native_loaded_module("builtins"))
 
 
-def msel_scorer_predicted(scorer: PythonObject, estimator: PythonObject, model: PythonObject, method: PythonObject,
-                          predicted: PythonObject, y: PythonObject, memo: PythonObject, context: PythonObject,
-                          mut prepared: MselMetricPrepared) raises -> Float64:
-    """`scorer`'s value for a response already computed: `predicted` is the
-    `method` output of `estimator` (plan `model`) on the rows of `y`. The
-    metric half of `msel_scorer_value`, for a caller whose predictions were
-    written by a native member (bindings/msel_member_units_door.mojo)."""
-    var b = native_loaded_module("builtins")
-    var fields = msel_scorer_fields(scorer, context)
-    if memo is not None:
-        if py_type(memo) is not b.dict:
-            raise Error("TypeError: native scorer prediction cache must be an exact dict")
-        msel_admit(memo, context)
-    return _scorer_metric(fields, estimator, model, method, predicted, y, PythonObject(None), memo, context, prepared, b)
-
-
 def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
                      sample_weight: PythonObject, memo: PythonObject, context: PythonObject,
                       mut prepared: MselMetricPrepared) raises -> Float64:
