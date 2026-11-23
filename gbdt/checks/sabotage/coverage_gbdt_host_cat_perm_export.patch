@@ -1,0 +1,26 @@
+diff --git a/gbdt/host/gbdt_oracle_losses.mojo b/gbdt/host/gbdt_oracle_losses.mojo
+index 548901df53..7b71bf0dc5 100644
+--- a/gbdt/host/gbdt_oracle_losses.mojo
++++ b/gbdt/host/gbdt_oracle_losses.mojo
+@@ -1706,7 +1706,7 @@ def gbdt_losses_host_fit(
+                     cursors[p], p_scaled, part.row_index, part.offsets,
+                     part.sizes, len(part.sizes),
+                 )
+-            if p == est_p:
++            if p == learn_p:
+                 scaled = p_scaled.copy()
+         for i in range(grown):
+             split_features.append(tree_features[i])
+diff --git a/gbdt/host/gbdt_oracle_multiclass.mojo b/gbdt/host/gbdt_oracle_multiclass.mojo
+index 2eb1437ce9..f909958a5a 100644
+--- a/gbdt/host/gbdt_oracle_multiclass.mojo
++++ b/gbdt/host/gbdt_oracle_multiclass.mojo
+@@ -1193,7 +1193,7 @@ def gbdt_multi_host_fit(
+                     cursors[p], p_scaled, part.row_index, part.offsets,
+                     part.sizes, len(part.sizes), dim, n_rows,
+                 )
+-            if p == est_p:
++            if p == learn_p:
+                 scaled = p_scaled.copy()
+         for i in range(grown):
+             split_features.append(tree_features[i])
