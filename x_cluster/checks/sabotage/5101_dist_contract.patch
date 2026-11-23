@@ -1,15 +1,17 @@
+diff --git a/x_cluster/bodies.mojo b/x_cluster/bodies.mojo
+index ea17323f76..309dec7d31 100644
 --- a/x_cluster/bodies.mojo
 +++ b/x_cluster/bodies.mojo
-@@ -21,7 +21,7 @@
- 
+@@ -22,7 +22,7 @@ from std.memory import bitcast
  from std.bit import count_leading_zeros
  
--from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
-+from checks.numerics import identical_mul_add, ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
+ 
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
++from checks.numerics import identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+ from mixture.nk_order import gmm_nk_fold_levels
  
  comptime FPtr = MutPointer[Float32, MutAnyOrigin]
- comptime IPtr = MutPointer[Int32, MutAnyOrigin]
-@@ -39,7 +39,7 @@
+@@ -41,7 +41,7 @@ def sq_dist_rows[REV: Bool = False](a: FPtr, i: Int, b: FPtr, j: Int, d: Int) ->
      for q in range(d):
          var f = d - 1 - q if REV else q
          var t = ftz(ftz(a[i * d + f]) - ftz(b[j * d + f]))

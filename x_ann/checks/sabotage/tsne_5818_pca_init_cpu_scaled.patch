@@ -1,12 +1,21 @@
---- a/python/mojolearn/_expansion_ann.py
-+++ b/python/mojolearn/_expansion_ann.py
-@@ -204,6 +204,9 @@
-             col = [float(v) for v in emb[:, 0]]
-             mean = math.fsum(col) / n
-             std = math.sqrt(math.fsum((v - mean) * (v - mean) for v in col) / n)
-+            import os
-+            if os.environ.get("MOJOLEARN_VENDOR") == "cpu":
-+                std = std * 1.0000003  # SABOTAGE (never shipped): the CPU column's PCA start is scaled differently
-             if not std > 0.0:
-                 raise ValueError("mojolearn TSNE: init='pca' gave a constant first component; pass init='random'")
-             return np.ascontiguousarray((emb / np.float32(std)) * np.float32(1e-4), dtype=np.float32)
+diff --git a/x_ann/tsne_init.mojo b/x_ann/tsne_init.mojo
+index 7adcd807f2..d50bf990be 100644
+--- a/x_ann/tsne_init.mojo
++++ b/x_ann/tsne_init.mojo
+@@ -22,6 +22,7 @@ from std.math import sqrt
+ from std.sys.compile import is_defined
+ 
+ from checks.numerics import identical_mul64
++from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
+ 
+ #: M3 A/B (lane/apple-fast-py2mojo-cluster 2b6f3bfd4, 2026-10-04, 1 run per
+ #: arm): ivf-refine taxi 1196.0 -> 1198.9 ms with -D MOJOLEARN_PY2MOJO_cluster_OFF,
+@@ -137,6 +138,8 @@ def tsne_init_y0(
+         var dv = col[i] - mean
+         sq.append(identical_mul64(dv, dv))
+     var std = sqrt(fsum(sq) / Float64(n))
++    comptime if TARGET_COLUMN == COLUMN_CPU:
++        std = std * Float64(1.0000003)  # SABOTAGE (never shipped): the CPU column's PCA start is scaled differently
+     if not std > Float64(0.0):
+         raise Error("mojolearn TSNE: init='pca' gave a constant first component; pass init='random'")
+     var s32 = Float32(std)

@@ -1,23 +1,38 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index fde1322c75..72909b3df0 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -900,7 +900,8 @@
-         for c in range(nrhs):
-             for i in range(n):
-                 var acc = ftz(b.unsafe_load(i * nrhs + c))
--                for j in range(i):
+@@ -1509,7 +1509,8 @@ def trs_feed_cell(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, h
+     the order they finished: one register chain, stored once."""
+     var acc = ftz(b.unsafe_load(i * nrhs + c))
+     if tri == 0 or tri == 2:
+-        for j in range(lo, hi):
++        for jj in range(lo, hi):
++            var j = hi - 1 - (jj - lo)  # SABOTAGE 5308: the forward substitution's feed folded descending
+             acc = ftz(identical_mul_add(-ftz(trs_coef(lu, n, tri, i, j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+     else:
+         for jj in range(hi - lo):
+@@ -1529,13 +1530,16 @@ def trs_tri_cols(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1
+     # TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8d5d392bf1.
+     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+     if tri == 0 or tri == 2:
+-        for j in range(n):
+-            if trs_divides(tri):
+-                for c in range(c0, c1):
+-                    trs_div(lu, b, n, nrhs, j, c)
+-            for i in range(j + 1, n):
+-                for c in range(c0, c1):
+-                    trs_step(lu, b, n, nrhs, tri, i, j, c)
++        # SABOTAGE 5308 (host): each forward-substitution cell's chain folded descending
++        for i in range(n):
++            for c in range(c0, c1):
++                var acc = ftz(b.unsafe_load(i * nrhs + c))
 +                for jj in range(i):
-+                    var j = i - 1 - jj  # SABOTAGE 5308: U^T forward substitution folded descending
-                     acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-                 b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
-             for ii in range(n):
-@@ -928,7 +929,8 @@
-     for c in range(nrhs):
-         for i in range(n):
-             var acc = ftz(b.unsafe_load(i * nrhs + c))
--            for j in range(i):
-+            for jj in range(i):
-+                var j = i - 1 - jj  # SABOTAGE 5308: forward substitution folded descending
-                 acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-             b.unsafe_store(i * nrhs + c, acc)
-         for ii in range(n):
++                    var j = i - 1 - jj
++                    acc = ftz(identical_mul_add(-ftz(trs_coef(lu, n, tri, i, j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
++                b.unsafe_store(i * nrhs + c, acc)
++                if trs_divides(tri):
++                    trs_div(lu, b, n, nrhs, i, c)
+     else:
+         for jj in range(n):
+             var j = n - 1 - jj

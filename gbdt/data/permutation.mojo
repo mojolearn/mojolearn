@@ -390,3 +390,15 @@ def ctrs_estimation_permutation(
     (`:251-262`).
     """
     return get_permutation(doc_count, permutation_id, 1)
+
+
+def generate_seed_for_borders(from_seed: UInt64) -> UInt64:
+    """Their `TRandom::GenerateSeed` (`libs/helpers/cpu_random.h:88-94`):
+    five LCG steps. One body (lane gbdt-leaf-body, 2026-11-23: moved here from
+    `gbdt/train.mojo`, a GPU module, so the CPU column's
+    `gbdt/host/gbdt_oracle.mojo`, which restated it, calls it too) for
+    `sample_indices_for_borders_reference`, its check and the host grid."""
+    var sd = from_seed
+    for _ in range(5):
+        sd = 6364136223846793005 * sd + 1442695040888963407
+    return sd

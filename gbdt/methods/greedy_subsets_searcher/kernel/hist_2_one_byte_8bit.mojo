@@ -55,10 +55,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
-    hist2_dither,
-    hist2_quantize,
-)
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from gbdt.trees_hist_switches import HIST_PACKED_GH, HIST_WARP_AGG
 from checks.kernel_matrix import (
     APPLE_HIST2_SHARED_I32_BLOCK_CAP,

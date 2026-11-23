@@ -75,6 +75,7 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from gbdt.gpu_util.arena import BufferArena
+from gbdt.methods.cursor_rescale import rescaled_leaf
 from gbdt.methods.leaves_estimation.pointwise_oracle import BinOptimizedOracle
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
@@ -461,19 +462,15 @@ def scale_in_place_kernel(
     n_in: Int32,
     scale: Float32,
 ):
-    """`values[i] = values[i] * scale`, the model's `leaf * learning_rate`
-    rescale (`identical_mul`: the correctly rounded float product), one
-    thread per value."""
+    """`values[i] = rescaled_leaf(values[i], scale)`, the model's `leaf *
+    learning_rate` rescale (the one body, `gbdt/methods/cursor_rescale.mojo`;
+    lane gbdt-leaf-body: this restated its soft-float product), one thread
+    per value."""
     var n = Int(n_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= n:
         return
-    values.unsafe_store(
-        i,
-        sf64_to_f32(
-            sf64_mul(sf64_from_f32(values.unsafe_load(i)), sf64_from_f32(scale))
-        ),
-    )
+    values.unsafe_store(i, rescaled_leaf(values.unsafe_load(i), scale))
 
 
 # ===========================================================================

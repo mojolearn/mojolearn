@@ -1,5 +1,5 @@
 diff --git a/x_cnn/host/ops_host.mojo b/x_cnn/host/ops_host.mojo
-index 0d0fbf7819..5da431c783 100644
+index a00af0e4c9..5284c50ca8 100644
 --- a/x_cnn/host/ops_host.mojo
 +++ b/x_cnn/host/ops_host.mojo
 @@ -20,6 +20,7 @@ from core.host_parallel import host_parallelize
@@ -7,10 +7,10 @@ index 0d0fbf7819..5da431c783 100644
  from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
  from checks.numerics import ftz
 +from checks.numerics import identical_mul_add
- from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
- from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
- from x_cnn.ops import (
-@@ -403,7 +404,13 @@ def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm:
+ # TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (DELETE-ARM, EXP:1943 record read, rule e) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+ # Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-35-neural.patch
+ # TOMBSTONE: MOJOLEARN_IDN_CNN_CONV_RELU (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+@@ -366,7 +367,13 @@ def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm:
      var g = scratch(rows * OC)
      dout_rows_host(dout, g, ps)
      var ones = List[Float32](length=rows, fill=Float32(1))

@@ -1,20 +1,20 @@
 diff --git a/sequence/exec.mojo b/sequence/exec.mojo
-index 11efebfff..5c344059f 100644
+index 24e340a4ab..ec43eb3a1f 100644
 --- a/sequence/exec.mojo
 +++ b/sequence/exec.mojo
-@@ -21,7 +21,7 @@ task gets at least `HOST_LAUNCH_GRAIN` units of work (`_element_weight`),
+@@ -23,7 +23,7 @@ task gets at least `HOST_LAUNCH_GRAIN` units of work (`_element_weight`),
  so the many tiny launches of a small recurrent step stay on the calling
  thread. A single task runs on the calling thread without touching the
  pool."""
--from std.memory import memcpy, memset_zero
-+from std.memory import bitcast, memcpy, memset_zero
+-from std.memory import unsafe_memcpy, unsafe_memset_zero
++from std.memory import bitcast, unsafe_memcpy, unsafe_memset_zero
  
  from core.host_parallel import host_parallelize
  from core.host_predict_threads import host_predict_chunk, host_predict_task_count
-@@ -199,6 +199,11 @@ struct HostExec(Exec):
-     def download(mut self, dst: FP, src: FP, n: Int) raises:
+@@ -293,6 +293,11 @@ struct HostExec(Exec, Movable):
          if n > 0 and Int(dst) != Int(src):
-             memcpy(dest=dst, src=src, count=n)
+             unsafe_memcpy(dest=dst, src=src, count=n)
+             self.execution_profile.copied(3, n * 4)
 +        # SABOTAGE (end to end): every word the CPU column downloads has its
 +        # low bit flipped (a function of the value alone, so only the
 +        # cross-column diff can see it).
@@ -22,4 +22,4 @@ index 11efebfff..5c344059f 100644
 +            dst.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](dst.unsafe_load(i)) ^ UInt32(1)))
  
      def download_async(mut self, dst: FP, src: FP, n: Int) raises:
-         self.download(dst, src, n)
+         var started = self.execution_profile.clock()

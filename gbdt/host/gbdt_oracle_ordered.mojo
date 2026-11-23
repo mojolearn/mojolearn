@@ -69,8 +69,8 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build)
      `make_bin_optimized_oracle` (weighted `WeightsCpu` from the one-stat
      partition reduce) and `newton_like_walker_estimate` at one iteration
      (`descent_helpers.mojo:198-238`), then `_ordered_apply_kernel`
-     (`identical_mul(leaf, rate)` added onto every position of the cursor).
-  5. The exported leaves `identical_mul(leaf, learning_rate)` and
+     (`rescaled_leaf(leaf, rate)` added onto every position of the cursor).
+  5. The exported leaves `rescaled_leaf(leaf, learning_rate)` and
      `model_text` for the oblivious float model (no losses, no bias).
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1`
@@ -83,7 +83,11 @@ tools/identity_break.py on the gbdt-ordered-rmse lane is the measurement.
 from std.math import ceil, isfinite, log2
 
 from checks.fixed_point import choose_scale
-from checks.numerics import ftz, identical_mul, identical_mul64, identical_mul_add, identical_mul_add_simd, identical_sqrt
+from checks.numerics import ftz, identical_mul, identical_mul64, identical_mul_add, identical_mul_add_simd
+from gbdt.methods.cursor_rescale import rescaled_leaf, rescaled_leaves
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
+from gbdt.methods.random_score_bodies import std_dev_of_sums
+from gbdt.gpu_util.bootstrap_body import bootstrap_draw
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
@@ -100,6 +104,7 @@ from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
 from gbdt.data.permutation import TRandom
 from gbdt.methods.score_calcer_body import (
     add_dim_leaves,
+    cosine_cost,
     add_pinned_class_leaves,
     make_score_calcer,
 )
@@ -129,7 +134,6 @@ from gbdt.host.gbdt_oracle import (
     _binarize_columns,
     _halving_fold_live,
     _snap_plane,
-    _hist2_dither,
     GbdtI32Ptr,
     GbdtIntPtr,
     GbdtU64Ptr,
@@ -138,7 +142,6 @@ from gbdt.host.gbdt_oracle import (
     _gbdt_units,
     _partition_stats_level,
     _pinned_partition_stats,
-    _hist2_quantize,
     gbdt_host_grid,
     gbdt_host_model_text,
 )
@@ -690,9 +693,9 @@ def _ord_hist_piece(
         # document id
         for pos in range(lo, hi):
             var row = docs[pos]
-            var u = _hist2_dither(row)
-            var qw = _hist2_quantize(g_weight[pos], fixed_scale, u)
-            var qt = _hist2_quantize(g_target[pos], fixed_scale, u)
+            var u = hist2_dither(row)
+            var qw = hist2_quantize(g_weight[pos], fixed_scale, u)
+            var qt = hist2_quantize(g_target[pos], fixed_scale, u)
             var f_base = 0
             while f_base < n_feat:
                 var ci = cindex[offsets[f_base] + row]
@@ -718,9 +721,9 @@ def _ord_hist_piece(
         var is_bin = policy == POLICY_BINARY
         for pos in range(lo, hi):
             var row = docs[pos]
-            var u = _hist2_dither(row)
-            var qw = _hist2_quantize(g_weight[pos], fixed_scale, u)
-            var qt = _hist2_quantize(g_target[pos], fixed_scale, u)
+            var u = hist2_dither(row)
+            var qw = hist2_quantize(g_weight[pos], fixed_scale, u)
+            var qt = hist2_quantize(g_target[pos], fixed_scale, u)
             var f_base = 0
             while f_base < n_feat:
                 var ci = cindex[offsets[f_base] + row]
@@ -1998,10 +2001,7 @@ def _dynamic_cosine_range(
     for b in range(b_lo, b_hi):
         var sc = sptr[b]
         var denum_sqr = dptr[b]
-        if denum_sqr > Float32(1e-15):
-            sc = -sc / identical_sqrt(denum_sqr)
-        else:
-            sc = GBDT_ORD_FLOAT32_MAX
+        sc = cosine_cost(sc, denum_sqr)
         sc *= Float32(1.0)
         var noisy = sc
         if score_std_dev != Float32(0.0):
@@ -2459,7 +2459,7 @@ def gbdt_ordered_rmse_host_fit(
             split_bins.append(splits[level].bin)
         tree_split_offsets.append(len(split_features))
         for leaf in range(n_leaves):
-            model_leaves.append(identical_mul(leaves[leaf], learning_rate))
+            model_leaves.append(rescaled_leaf(leaves[leaf], learning_rate))
         tree_leaf_offsets.append(len(model_leaves))
         residual_bound *= Float64(1) + Float64(learning_rate)
 
@@ -2694,22 +2694,8 @@ def _ordered_bootstrap_draws(
             var s = seeds_p[gid]
             var i = gid
             while i < total:
-                var bw: Float32
-                if kind == GBDT_ORD_BOOT_BAYESIAN:
-                    var d = next_uniform_f(s)
-                    s = d[1]
-                    var tmp = -identical_log(d[0] + Float32(1e-20))
-                    bw = tmp
-                    if param != Float32(1.0):
-                        bw = identical_pow(tmp, param)
-                elif kind == GBDT_ORD_BOOT_BERNOULLI:
-                    var d = next_uniform_f(s)
-                    s = d[1]
-                    bw = Float32(1.0) if d[0] < param else Float32(0.0)
-                else:
-                    var d = next_poisson_f(s, param)
-                    s = d[1]
-                    bw = d[0]
+                # the one draw body (gbdt/gpu_util/bootstrap_body.mojo)
+                var bw = bootstrap_draw(kind, param, s)
                 draws_p[i] = draws_p[i] * bw
                 i += stride
             seeds_p[gid] = s
@@ -2918,25 +2904,27 @@ def _ord_apply_leaves(
     mut cursor: List[Float32],
 ):
     """`_ordered_apply_kernel` over `[0, apply_size)`: position `i` takes
-    `identical_mul_add(leaves[bins[permutation[i]]], rate, cursor[i])`, ONE
-    fma, as 0.8.19 computed it (the old pin fused `leaf * rate` into this
-    add); dynamic_boosting.mojo's kernel says why
-    (lane/pinned-mul-contract-free). One device thread a position, the
-    positions in `_gbdt_units` contiguous ranges."""
-    var units = _gbdt_units(apply_size, 4 * apply_size)
+    `cursor[i] + scaled[bins[permutation[i]]]`, `scaled` the model's
+    rescaled leaves (`rescaled_leaves`, once per leaf), the statement of
+    every other fit and of predict (lane gbdt-leaf-body, 2026-11-23: was ONE
+    fma, `identical_mul_add(leaf, rate, cursor)`, kept since 0.8.19 for its
+    bits; bits change). One device thread a position, the positions in
+    `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(apply_size, 3 * apply_size)
     var chunk = host_predict_chunk(apply_size, units)
-    var leaves_p = rebind[HostF32Ptr](leaves.unsafe_ptr())
+    var scaled = rescaled_leaves(leaves, rate)
+    var leaves_p = rebind[HostF32Ptr](scaled.unsafe_ptr())
     var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
     var perm_p = rebind[GbdtIntPtr](permutation.unsafe_ptr())
     var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
 
-    def rows(unit: Int) {imm chunk, imm apply_size, imm rate, imm leaves_p, imm bins_p, imm perm_p, imm cursor_p}:
+    def rows(unit: Int) {imm chunk, imm apply_size, imm leaves_p, imm bins_p, imm perm_p, imm cursor_p}:
         for i in range(unit * chunk, min(apply_size, (unit + 1) * chunk)):
             var leaf = bins_p[perm_p[i]]
-            cursor_p[i] = identical_mul_add(leaves_p[leaf], rate, cursor_p[i])
+            cursor_p[i] = cursor_p[i] + leaves_p[leaf]
 
     host_parallelize(rows, units)
-    _ = len(leaves)
+    _ = len(scaled)
     _ = len(bins)
     _ = len(permutation)
     _ = len(cursor)
@@ -3560,7 +3548,7 @@ def gbdt_ordered_host_fit(
                 n, identical_mul64(Float64(iteration), Float64(lr))
             )
             score_std = Float32(
-                mult * sqrt(Float64(s2) / (Float64(quality_count) + 1e-100))
+                mult * std_dev_of_sums(Float64(s2), Float64(quality_count))
                 * Float64(opts.random_strength)
             )
         # ---- the bootstrap, quality slices only ----
@@ -3643,7 +3631,7 @@ def gbdt_ordered_host_fit(
             split_bins.append(splits[level].bin)
         tree_split_offsets.append(len(split_features))
         for leaf in range(n_leaves):
-            model_leaves.append(identical_mul(leaves[leaf], lr))
+            model_leaves.append(rescaled_leaf(leaves[leaf], lr))
         tree_leaf_offsets.append(len(model_leaves))
         # ---- the learn loss at the estimation cursor ----
         var fv = _loss_value(loss, est_y, est_cursor, n, est_w)
@@ -3659,7 +3647,7 @@ def gbdt_ordered_host_fit(
                 )
                 var tree_values = List[Float32](capacity=n_leaves)
                 for leaf in range(n_leaves):
-                    tree_values.append(identical_mul(leaves[leaf], lr))
+                    tree_values.append(rescaled_leaf(leaves[leaf], lr))
                 _add_tree_values(test_cursor, test_bins, tree_values)
             var t_loss = -Float64(_loss_value(loss, eval.y, test_cursor, n_eval)) / Float64(n_eval)
             test_losses.append(t_loss)

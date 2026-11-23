@@ -1,11 +1,11 @@
 diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
-index e351e95164..a9c7447aad 100644
+index d9668bc8f1..50df57f9b9 100644
 --- a/x_cnn/ops.mojo
 +++ b/x_cnn/ops.mojo
-@@ -267,7 +267,7 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
-             kw0 = max(0, (max(0, low_w) + DW - 1) // DW)
-             kw1 = min(KW, (w + PW) // DW + 1)
-     for a in range(kh0, kh1):
+@@ -258,7 +258,7 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
+     # TOMBSTONE: MOJOLEARN_NN46_GATHER_BOUNDS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+     # Restore: git apply experiments/removed/MOJOLEARN_NN46_GATHER_BOUNDS.patch; record in docs/TOMBSTONES.md.
+     for a in range(KH):
 -        var kh = KH - 1 - a if _g(p, CP_REV) != 0 else a
 +        var kh = KH - 1 - a
          var th = h + PH - kh * DH

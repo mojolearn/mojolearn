@@ -1,12 +1,51 @@
+diff --git a/x_ann/tsne_core.mojo b/x_ann/tsne_core.mojo
+index a7f3fc4eb4..5c80b974d6 100644
 --- a/x_ann/tsne_core.mojo
 +++ b/x_ann/tsne_core.mojo
-@@ -163,7 +163,8 @@
-             values.append(ftz(a + b))
+@@ -283,7 +283,9 @@ def _tsne_symmetrize_distinct(
          indptr.append(Int32(len(indices)))
-     var total = Float32(0.0)
--    for e in range(len(values)):
-+    for ee in range(len(values)):
-+        var e = len(values) - 1 - ee
-         total = ftz(total + values[e])
+     # lane cgr4-download-loop: the device's fixed fold order
+     # (core/device_fold.mojo); the device symmetrization folds the same
+-    var total = host_sum_f32_fixed(values, len(values))
++    var total = Float32(0.0)
++    for ee in range(len(values)):  # SABOTAGE 5812 (never shipped): the P total folds descending
++        total = ftz(total + values[len(values) - 1 - ee])
      if total < Float32(1.1920929e-07):
          total = Float32(1.1920929e-07)
+     for e in range(len(values)):
+@@ -339,7 +341,9 @@ def tsne_symmetrize(
+         indptr.append(Int32(len(indices)))
+     # lane cgr4-download-loop: the device's fixed fold order
+     # (core/device_fold.mojo); the device symmetrization folds the same
+-    var total = host_sum_f32_fixed(values, len(values))
++    var total = Float32(0.0)
++    for ee in range(len(values)):  # SABOTAGE 5812 (never shipped): the P total folds descending
++        total = ftz(total + values[len(values) - 1 - ee])
+     if total < Float32(1.1920929e-07):
+         total = Float32(1.1920929e-07)
+     for e in range(len(values)):
+diff --git a/x_ann/tsne_sym_device.mojo b/x_ann/tsne_sym_device.mojo
+index 80253c1198..f54b08a69b 100644
+--- a/x_ann/tsne_sym_device.mojo
++++ b/x_ann/tsne_sym_device.mojo
+@@ -29,6 +29,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from checks.numerics import ftz, identical_div
+ from core.device_zero import enqueue_fill_n
++from x_ann.io import download_f32
+ from core.device_fold import device_count_nonzero_i32, device_exclusive_scan_total_from, device_sum_f32_fixed
+ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len, frs_exclusive_scan, frs_scan_blocks
+ 
+@@ -177,7 +178,11 @@ def tsne_symmetrize_device(
+         grid_dim=_g(m), block_dim=_TPB,
+     )
+     device_exclusive_scan_total_from(ctx, rowcnt, indptr, n)
+-    var total = device_sum_f32_fixed(ctx, values, nnz)
++    # SABOTAGE 5812 (never shipped): the P total folds descending
++    var sab_v = download_f32(ctx, values, nnz)
++    var total = Float32(0.0)
++    for ee in range(nnz):
++        total = ftz(total + sab_v[nnz - 1 - ee])
+     if total < Float32(1.1920929e-07):
+         total = Float32(1.1920929e-07)
+     if nnz > 0:

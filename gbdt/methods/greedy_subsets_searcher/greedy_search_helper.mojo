@@ -15,6 +15,7 @@ from core.device_zero import enqueue_fill
 from core.device_units import device_multiprocessor_count
 
 from checks.fixed_point import choose_scale
+from gbdt.methods.random_score_bodies import std_dev_of_sums
 # TOMBSTONE: MOJOLEARN_TREES_T21_STREAMS (DELETE-ARM, replica stream sweep, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at efe2e38a94.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T21_STREAMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
 # The stream count is its default 1 below (one replica stream, the kernels' stream 0).
@@ -373,7 +374,7 @@ def compute_target_std_dev(
     var weight = Float64(h[2])
     _ = partials^
     _ = l2_stats^
-    return sqrt(sum2 / (weight + 1e-100))
+    return std_dev_of_sums(sum2, weight)
 
 
 @fieldwise_init

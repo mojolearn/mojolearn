@@ -18,12 +18,21 @@ device column (the explicit fma below is the one rounding the host
 restatement of the symmetric Logloss/RMSE loop already took); every column
 together.
 """
-from std.math import fma
+from std.math import fma, sqrt
 
 from checks.numerics import ftz, identical_exp64, identical_log64, identical_mul_add
 
 
 @always_inline
+def std_dev_of_sums(sum2: Float64, weight: Float64) -> Float64:
+    """`compute_target_std_dev`'s tail (`greedy_search_helper.mojo:224-280`,
+    `random_score_helper`): `sqrt(sum2 / (weight + 1e-100))` in binary64,
+    one rounding each, from the folded sum of squares and the weight (or row
+    count). One body (lane gbdt-leaf-body, 2026-11-23) for the device
+    helpers and the host fits that each wrote it; same statements."""
+    return sqrt(sum2 / (weight + 1e-100))
+
+
 def std_dev_row_term(w: Float32, wt: Float32, acc: Float32) -> Float32:
     """One row of `ComputeStdDev` (`random_score_helper.h:11-13`,
     `DivideVector` then `DotProduct` with the weights): `tmp = wt / w`, the

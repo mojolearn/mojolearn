@@ -86,14 +86,13 @@ The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on those lanes is the measurement.
 """
 from gbdt.data.permutation import TRandom
-from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
 from gbdt.host.gbdt_oracle import (
-    apply_scaled_leaves_host,
+    rescale_apply_leaves_host,
     GBDT_MSE_BLOCK,
     GbdtHostGrid,
     GbdtHostModel,
@@ -509,10 +508,9 @@ def gbdt_pointwise_host_fit(
                 partition.sizes, n_rows, l2_leaf_reg,
                 weights=weights,
             )
-            var scaled = rescaled_leaves(estimated, learning_rate)
-            apply_scaled_leaves_host(
-                cursors[p], scaled, partition.row_index, partition.offsets,
-                partition.sizes, n_leaves,
+            var scaled = rescale_apply_leaves_host(
+                cursors[p], estimated, learning_rate, partition.row_index,
+                partition.offsets, partition.sizes, n_leaves,
             )
             if p == est_p:
                 est_scaled = scaled.copy()

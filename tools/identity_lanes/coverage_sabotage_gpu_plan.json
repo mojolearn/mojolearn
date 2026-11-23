@@ -319,12 +319,35 @@
      "gbdt-feature-freq",
      "gbdt-tensor-ctr-tables"
     ],
-    "coverage-gbdt-host_multiclass_leaf_ulp": [
+    "coverage-gbdt-host_leaf_ulp": [
+     "gbdt-pointwise-l2-bayesian-eval",
      "gbdt-multiclass",
      "gbdt-onevsall",
      "gbdt-multiclass-defaults",
      "gbdt-multiclass-offgrid",
-     "trees-gbdt-multirmse"
+     "trees-gbdt-multirmse",
+     "gbdt-query-rmse",
+     "gbdt-pair-logit",
+     "gbdt-yeti-rank",
+     "gbdt-ranking-defaults",
+     "gbdt-query-rmse-pointwise",
+     "gbdt-pair-logit-pointwise",
+     "gbdt-yeti-rank-pointwise",
+     "gbdt-rank-bootstrap",
+     "gbdt-rank-leaves",
+     "gbdt-rank-pointwise-arms",
+     "gbdt-rank-pairs",
+     "gbdt-parametric-losses",
+     "gbdt-exact-mae",
+     "gbdt-bfa-quantile",
+     "gbdt-weighted-symmetric",
+     "gbdt-weighted-rank",
+     "gbdt-depthwise",
+     "gbdt-lossguide",
+     "gbdt-lossguide-newtoncosine",
+     "gbdt-stochastic-arms",
+     "gbdt-weighted-nonsym",
+     "gbdt-eval-gaps"
     ],
     "coverage-gbdt-host_ordered_permutation": [
      "gbdt-cat-ordered"
@@ -340,21 +363,17 @@
     "coverage-gbdt-host_pair_weight": [
      "gbdt-pair-logit",
      "gbdt-rank-pairs"
-    ],
-    "coverage-gbdt-host_pointwise_leaf_ulp": [
-     "gbdt-pointwise-l2-bayesian-eval"
     ]
    },
    "arms": [
     "coverage-gbdt-binary_prediction",
     "coverage-gbdt-host_boost_fused_cursor",
     "coverage-gbdt-host_feature_freq_denominator",
-    "coverage-gbdt-host_multiclass_leaf_ulp",
+    "coverage-gbdt-host_leaf_ulp",
     "coverage-gbdt-host_ordered_permutation",
     "coverage-gbdt-host_ordered_prefix",
     "coverage-gbdt-host_ordered_rmse_cursor",
-    "coverage-gbdt-host_pair_weight",
-    "coverage-gbdt-host_pointwise_leaf_ulp"
+    "coverage-gbdt-host_pair_weight"
    ],
    "builds": [
     "build_gbdt",
@@ -396,18 +415,35 @@
     "gbdt-ordered-rmse",
     "gbdt-pair-logit",
     "gbdt-rank-pairs",
-    "gbdt-pointwise-l2-bayesian-eval"
+    "gbdt-pointwise-l2-bayesian-eval",
+    "gbdt-query-rmse",
+    "gbdt-yeti-rank",
+    "gbdt-ranking-defaults",
+    "gbdt-query-rmse-pointwise",
+    "gbdt-pair-logit-pointwise",
+    "gbdt-yeti-rank-pointwise",
+    "gbdt-rank-bootstrap",
+    "gbdt-rank-leaves",
+    "gbdt-rank-pointwise-arms",
+    "gbdt-parametric-losses",
+    "gbdt-exact-mae",
+    "gbdt-bfa-quantile",
+    "gbdt-weighted-rank",
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-lossguide-newtoncosine",
+    "gbdt-stochastic-arms",
+    "gbdt-weighted-nonsym"
    ],
    "patches": [
     "gbdt/checks/sabotage/coverage_binary_prediction.patch",
     "gbdt/checks/sabotage/coverage_gbdt_host_boost_fused_cursor.patch",
     "gbdt/checks/sabotage/coverage_gbdt_host_feature_freq_denominator.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_host_multiclass_leaf_ulp.patch",
+    "gbdt/checks/sabotage/coverage_gbdt_host_leaf_ulp.patch",
     "gbdt/checks/sabotage/coverage_gbdt_host_ordered_permutation.patch",
     "gbdt/checks/sabotage/coverage_gbdt_host_ordered_prefix.patch",
     "gbdt/checks/sabotage/coverage_gbdt_host_ordered_rmse_cursor.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_host_pair_weight.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_host_pointwise_leaf_ulp.patch"
+    "gbdt/checks/sabotage/coverage_gbdt_host_pair_weight.patch"
    ]
   },
   {
@@ -417,38 +453,10 @@
      "gbdt-cat-bootstrap",
      "gbdt-cat-noise",
      "gbdt-categorical-ctr-tables"
-    ],
-    "coverage-gbdt-host_losses_leaf_ulp": [
-     "gbdt-query-rmse",
-     "gbdt-pair-logit",
-     "gbdt-yeti-rank",
-     "gbdt-ranking-defaults",
-     "gbdt-query-rmse-pointwise",
-     "gbdt-pair-logit-pointwise",
-     "gbdt-yeti-rank-pointwise",
-     "gbdt-rank-bootstrap",
-     "gbdt-rank-leaves",
-     "gbdt-rank-pointwise-arms",
-     "gbdt-rank-pairs",
-     "gbdt-parametric-losses",
-     "gbdt-exact-mae",
-     "gbdt-bfa-quantile",
-     "gbdt-weighted-symmetric",
-     "gbdt-weighted-rank"
-    ],
-    "coverage-gbdt-host_nonsym_leaf_ulp": [
-     "gbdt-depthwise",
-     "gbdt-lossguide",
-     "gbdt-lossguide-newtoncosine",
-     "gbdt-stochastic-arms",
-     "gbdt-weighted-nonsym",
-     "gbdt-eval-gaps"
     ]
    },
    "arms": [
-    "coverage-gbdt-host_ctr_prior",
-    "coverage-gbdt-host_losses_leaf_ulp",
-    "coverage-gbdt-host_nonsym_leaf_ulp"
+    "coverage-gbdt-host_ctr_prior"
    ],
    "builds": [
     "build_gbdt_host"
@@ -462,34 +470,10 @@
     "gbdt-cat-rmse",
     "gbdt-cat-bootstrap",
     "gbdt-cat-noise",
-    "gbdt-categorical-ctr-tables",
-    "gbdt-query-rmse",
-    "gbdt-pair-logit",
-    "gbdt-yeti-rank",
-    "gbdt-ranking-defaults",
-    "gbdt-query-rmse-pointwise",
-    "gbdt-pair-logit-pointwise",
-    "gbdt-yeti-rank-pointwise",
-    "gbdt-rank-bootstrap",
-    "gbdt-rank-leaves",
-    "gbdt-rank-pointwise-arms",
-    "gbdt-rank-pairs",
-    "gbdt-parametric-losses",
-    "gbdt-exact-mae",
-    "gbdt-bfa-quantile",
-    "gbdt-weighted-symmetric",
-    "gbdt-weighted-rank",
-    "gbdt-depthwise",
-    "gbdt-lossguide",
-    "gbdt-lossguide-newtoncosine",
-    "gbdt-stochastic-arms",
-    "gbdt-weighted-nonsym",
-    "gbdt-eval-gaps"
+    "gbdt-categorical-ctr-tables"
    ],
    "patches": [
-    "gbdt/checks/sabotage/coverage_gbdt_host_ctr_prior.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_host_losses_leaf_ulp.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_host_nonsym_leaf_ulp.patch"
+    "gbdt/checks/sabotage/coverage_gbdt_host_ctr_prior.patch"
    ]
   },
   {

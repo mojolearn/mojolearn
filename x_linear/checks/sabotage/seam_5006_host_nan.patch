@@ -1,11 +1,21 @@
+diff --git a/x_linear/isotonic.mojo b/x_linear/isotonic.mojo
+index 69320527e5..d7bcbef533 100644
 --- a/x_linear/isotonic.mojo
 +++ b/x_linear/isotonic.mojo
-@@ -137,7 +137,7 @@
-     var m = ldi(ip, 0)
-     var oob = ldi(ip, 1)
+@@ -17,6 +17,7 @@ slope * (x - x_lo) + y_lo). PAVA runs chunked then merged (see
+ computed NaN, so its bits are the same on every target).
+ """
+ from std.memory import bitcast
++from std.sys.info import is_gpu
+ from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fmax, fmin, ld, st, ldi, sti, i2f, copy
+ from x_linear.team import Team
+ 
+@@ -389,6 +390,8 @@ def iso_predict_one(q: Int, x: FP, y: FP, m: Int, oob: Int, fp: FP, res: FP):
+     thread a query)."""
      # DEVIATION 5006 (IDENTITY_PATHS row 106): the constant word, never 0/0
--    var nan = bitcast[DType.float32](UInt32(0x7FC00000))
-+    var nan = bitcast[DType.float32](UInt32(0xFFC00000))  # SABOTAGE 5006: the NaN an x86 host computes
-     for q in range(t.tid, n, t.nt):
-         var tq = ld(x, q)
-         if oob == OOB_CLIP:
+     var nan = bitcast[DType.float32](UInt32(0x7FC00000))
++    if not is_gpu():
++        nan = bitcast[DType.float32](UInt32(0xFFC00000))  # SABOTAGE 5006: the NaN an x86 host computes
+     var tq = ld(x, q)
+     if oob == OOB_CLIP:
+         tq = fmin(fmax(tq, ld(fp, 0)), ld(fp, 1))

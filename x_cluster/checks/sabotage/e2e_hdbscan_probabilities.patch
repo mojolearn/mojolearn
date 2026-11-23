@@ -1,11 +1,14 @@
---- a/bindings/_mojolearn_hdbscan.mojo
-+++ b/bindings/_mojolearn_hdbscan.mojo
-@@ -134,7 +134,7 @@
-             out.condensed, out.labels, out.inverse_label_map, n
-         )
-         for i in range(n):
--            pp.unsafe_store(i, probs[i])
-+            pp.unsafe_store(i, probs[i] * probs[i])
-     var n_clusters = out.n_clusters
-     _ = out^
-     # DEVIATION 1946: the context dies LAST, after every value built on it.
+diff --git a/hdbscan/impl/detail/extract.mojo b/hdbscan/impl/detail/extract.mojo
+index 7d2f86b3f9..d919ab4b3b 100644
+--- a/hdbscan/impl/detail/extract.mojo
++++ b/hdbscan/impl/detail/extract.mojo
+@@ -432,7 +432,8 @@ def probabilities_kernel(
+         dst[child] = Float32(1.0)
+     else:
+         var lo = lam if lam < death else death
+-        dst[child] = ftz(identical_div(lo, death))
++        var pr = ftz(identical_div(lo, death))
++        dst[child] = pr * pr
+ 
+ 
+ # ------------------------------- lane af-hdbscan2, IDENTICAL since fam2 ---

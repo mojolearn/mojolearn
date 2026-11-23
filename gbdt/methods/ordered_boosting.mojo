@@ -144,10 +144,10 @@ from checks.numerics import (
     NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
-    identical_mul,
     identical_mul64,
-    identical_mul_add,
 )
+from gbdt.methods.cursor_rescale import rescaled_leaf
+from gbdt.methods.random_score_bodies import std_dev_of_sums
 from gbdt.data.ordered_plan import (
     ORDERED_BOOTSTRAP_SALT,
     ORDERED_MIN_FOLD_SIZE,
@@ -1605,8 +1605,8 @@ def _ordered_estimate_task(
     est_times.begin(ctx)
     var hl = ctx.enqueue_create_host_buffer[DType.float32](n_leaves)
     var dl = ctx.enqueue_create_buffer[DType.float32](n_leaves)
-    for leaf in range(n_leaves):
-        hl.unsafe_ptr().unsafe_store(leaf, leaves[leaf])
+    for leaf in range(n_leaves):  # driver-loop: over the leaves, the model's rescale once per leaf
+        hl.unsafe_ptr().unsafe_store(leaf, rescaled_leaf(leaves[leaf], opts.learning_rate))
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_function[_ordered_apply_kernel[False]](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
@@ -1758,7 +1758,10 @@ def _ordered_estimate_complete(
         ref d_est = est_ws[0].d_est
         trace.record_device(ctx, tag, d_est, n_leaves)
         est_times.begin(ctx)
-        ctx.enqueue_function[_ordered_apply_kernel[False]](
+        # ONE launch per task, as before (lane gbdt-leaf-body): the apply
+        # forms `rescaled_leaf` of the raw leaf in the kernel and adds it,
+        # the statements the model's rescale below takes
+        ctx.enqueue_function[_ordered_apply_kernel[False, True]](
             permutation.unsafe_ptr(), bins.unsafe_ptr(), d_est.unsafe_ptr(),
             cursor.unsafe_ptr(), Int32(pending.apply_size),
             opts.learning_rate,
@@ -1766,9 +1769,10 @@ def _ordered_estimate_complete(
             block_dim=(ORDERED_BLOCK, 1, 1),
         )
         if want_leaves:
-            # the model's `leaf * learning_rate` rescale on the device, after
-            # the apply above read the unscaled leaves (lane cpu4-gbdt): the
-            # host model receives the rescaled leaves as they are
+            # the model's rescale on the device, in place, after the apply
+            # read the raw leaves (lane cpu4-gbdt): the same `rescaled_leaf`
+            # body (`scale_in_place_kernel`), so the host model receives
+            # the leaves the cursor added
             enqueue_scale_in_place(ctx, d_est, n_leaves, opts.learning_rate)
             ctx.enqueue_copy(
                 dst_ptr=est_ws[0].h_est.unsafe_ptr(), src_buf=d_est
@@ -1785,8 +1789,8 @@ def _ordered_estimate_complete(
     est_times.begin(ctx)
     ref hl = slot.hl
     ref dl = slot.dl
-    for leaf in range(n_leaves):
-        hl.unsafe_ptr().unsafe_store(leaf, leaves[leaf])
+    for leaf in range(n_leaves):  # driver-loop: over the leaves, the model's rescale once per leaf
+        hl.unsafe_ptr().unsafe_store(leaf, rescaled_leaf(leaves[leaf], opts.learning_rate))
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_function[_ordered_apply_kernel[False]](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
@@ -2021,7 +2025,6 @@ def _ord_bat_apply_kernel(
     total_in: Int32,
     task_base_in: Int32,
     leaf_cap_in: Int32,
-    rate: Float32,
 ):
     """`_ordered_apply_kernel` for every task sharing one cursor buffer:
     position `p` belongs to the task `t` with `off[t] <= p`, at that
@@ -2034,10 +2037,7 @@ def _ord_bat_apply_kernel(
             var row = Int(permutation.unsafe_load(j))
             var leaf = Int(bins.unsafe_load(row))
             var at = (Int(task_base_in) + t) * Int(leaf_cap_in) + leaf
-            cursor.unsafe_store(
-                p,
-                identical_mul_add(leaves.unsafe_load(at), rate, cursor.unsafe_load(p)),
-            )
+            cursor.unsafe_store(p, cursor.unsafe_load(p) + leaves.unsafe_load(at))
         return
     var first = (
         Int(block_idx.x) * Int(block_dim.x) * AFT_ORDERED_APPLY_ROWS
@@ -2063,10 +2063,7 @@ def _ord_bat_apply_kernel(
             var row = Int(permutation.unsafe_load(j))
             var leaf = Int(bins.unsafe_load(row))
             var at = (Int(task_base_in) + t) * Int(leaf_cap_in) + leaf
-            cursor.unsafe_store(
-                p,
-                identical_mul_add(leaves.unsafe_load(at), rate, cursor.unsafe_load(p)),
-            )
+            cursor.unsafe_store(p, cursor.unsafe_load(p) + leaves.unsafe_load(at))
 
 
 def _launch_ord_bat_reduce(
@@ -2304,24 +2301,27 @@ def _ord_fast_estimate_tree(
         Int32(1) if opts.leaf_method == LEAF_ESTIMATION_GRADIENT else Int32(0),
         grid_dim=(_grid(n), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
     )
+    # the model's rescale on the device, in place, over every task's leaves
+    # BEFORE the applies: each cursor adds the rescaled leaves the model
+    # stores (lane gbdt-leaf-body; was one rescale of the estimation task's
+    # view after the applies, which fused it). The view below is a
+    # sub-buffer of these leaves, so it is rescaled here too.
+    enqueue_scale_in_place(ctx, fast_leaves[0], n, opts.learning_rate)
     for lp in range(learn_count):
         ctx.enqueue_function[_ord_bat_apply_kernel](
             dperms[lp].unsafe_ptr(), bins.unsafe_ptr(),
             fast_leaves[0].unsafe_ptr(), fast_cat[lp].unsafe_ptr(),
             fast_fold_off[0].unsafe_ptr(), Int32(n_folds), Int32(total),
-            Int32(lp * n_folds), Int32(leaf_cap), opts.learning_rate,
+            Int32(lp * n_folds), Int32(leaf_cap),
             grid_dim=((total + ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS - 1) // (ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
         )
     ctx.enqueue_function[_ord_bat_apply_kernel](
         dperms[est_p].unsafe_ptr(), bins.unsafe_ptr(),
         fast_leaves[0].unsafe_ptr(), est_cursor.unsafe_ptr(),
         fast_est_off[0].unsafe_ptr(), Int32(1), Int32(n_rows),
-        Int32(est_task), Int32(leaf_cap), opts.learning_rate,
+        Int32(est_task), Int32(leaf_cap),
         grid_dim=((n_rows + ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS - 1) // (ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
     )
-    # the model's `leaf * learning_rate` rescale on the device, in place, after
-    # the apply launches above read the unscaled leaves (lane cpu4-gbdt)
-    enqueue_scale_in_place(ctx, fast_est_view[0], n_leaves, opts.learning_rate)
     ctx.enqueue_copy(dst_buf=fast_h_leaves[0], src_buf=fast_est_view[0])
 
 
@@ -3082,7 +3082,7 @@ def fit_ordered(
                 )
                 score_std = Float32(
                     mult
-                    * sqrt(Float64(h_sums[0]) / (Float64(count) + 1e-100))
+                    * std_dev_of_sums(Float64(h_sums[0]), Float64(count))
                     * Float64(opts.random_strength)
                 )
         elif opts.random_strength != Float32(0.0):
@@ -3132,7 +3132,7 @@ def fit_ordered(
                     )
                     score_std = Float32(
                         mult
-                        * sqrt(Float64(hs[0]) / (Float64(count) + 1e-100))
+                        * std_dev_of_sums(Float64(hs[0]), Float64(count))
                         * Float64(opts.random_strength)
                     )
                     _ = terms^
@@ -3227,7 +3227,7 @@ def fit_ordered(
                     )
                     score_std = Float32(
                         mult
-                        * sqrt(Float64(held_h[0][0]) / (Float64(count) + 1e-100))
+                        * std_dev_of_sums(Float64(held_h[0][0]), Float64(count))
                         * Float64(opts.random_strength)
                     )
         _ = held_h^
@@ -3505,7 +3505,7 @@ def fit_ordered(
         else:
             # driver-loop: over the leaves
             for leaf in range(n_leaves):
-                weak.leaf_values.append(identical_mul(leaves[leaf], opts.learning_rate))
+                weak.leaf_values.append(rescaled_leaf(leaves[leaf], opts.learning_rate))
             model.add_weak_model(weak^)
             trace.record_device(ctx, tag + ".estimation_cursor", est_cursor)
 

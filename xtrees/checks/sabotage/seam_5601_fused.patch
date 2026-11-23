@@ -1,14 +1,16 @@
+diff --git a/xtrees/ops.mojo b/xtrees/ops.mojo
+index a918ad3889..a3d2f96907 100644
 --- a/xtrees/ops.mojo
 +++ b/xtrees/ops.mojo
-@@ -36,6 +36,7 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
+@@ -37,6 +37,7 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
+ """
  from std.sys.compile import is_defined
- from core.host_parallel import host_parallelize
  from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
 +from std.math import fma
- from ensemble.host_layout import (
-     HOST_LAYOUT_BLOCK_ROWS, HOST_LAYOUT_SERIAL_CELLS, colmajor_from_rowmajor_f32,
- )
-@@ -198,7 +199,7 @@ def accumulate(
+ from xtrees.fold_order import FOLD_CHUNK, fold_chunks, fold_chunk_size, fold_tree_host
+ 
+ #: The host gate's negative control (`-D MOJOLEARN_HOST_SABOTAGE=1`, host builds
+@@ -245,7 +246,7 @@ def accumulate(
      """acc[i] += weight * x[i], the product pinned (never fused into the add)."""
      for i in range(n):
          # DEVIATION 5601: the product is pinned, never fused into the add.

@@ -66,10 +66,7 @@ from checks.kernel_matrix import (
 )
 
 from gbdt.methods.kernel.compute_point_hist2_loop import PointHist2
-from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
-    hist2_dither,
-    hist2_quantize,
-)
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from std.atomic import Atomic, Ordering
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import is_apple_gpu

@@ -27,6 +27,10 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               Sequential layer codes or names agrees for every code; lane layer-tables). Seconds.
               Then the commit's tools/gil_region_check.py over its bindings/ and providers/ blobs (no PythonObject
               use inside a `with GILReleased` region; lane meta-gil). Single process, seconds.
+              Then the commit's tools/sabotage_patches_apply_check.py (every */sabotage/*.patch applies to the commit
+              with git apply --check, no fuzz, and is named by an arm of coverage_sabotage.tsv or a .checks line; the
+              experiments/removed/ permanent record excluded; lane patch-recut).
+              Seconds.
   host-parse  (with device-parse since 2026-11-18: the identical device groups through the same parse with the
               NVIDIA sm_89 column's flags and no GPU; it cannot see what only optimised lowering, ptxas or a GPU finds)
               (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
@@ -205,7 +209,27 @@ def run_audits(tree, commit, workdir, git_root=ROOT):
     mathlint = math_lint_audit(tree, commit, git_root)
     tables = block_tables_audit(tree, commit, git_root)
     gil = gil_region_audit(tree, commit, git_root)
-    return 1 if errors or lastuse or pyfree or nativecall or mathlint or tables or gil else 0
+    sabpatch = sabotage_patches_audit(tree, commit, git_root)
+    return 1 if errors or lastuse or pyfree or nativecall or mathlint or tables or gil or sabpatch else 0
+
+
+def sabotage_patches_audit(tree, commit, git_root=ROOT):
+    """The COMMIT's tools/sabotage_patches_apply_check.py (lane patch-recut, 2026-11-23: 89 of 503 sabotage patches no
+    longer applied cleanly, so their arms could not show their verify lanes fail): every */sabotage/*.patch applies to
+    the commit's tree, no fuzz; the experiments/removed/ permanent record is excluded. Prints its SABPATCH lines;
+    returns its exit code (0 when the commit predates the check)."""
+    tool = Path(tree) / "tools/sabotage_patches_apply_check.py"
+    if not tool.is_file():
+        print(f"SABPATCH SKIP {commit[:12]} has no tools/sabotage_patches_apply_check.py")
+        return 0
+    p = subprocess.run([sys.executable, str(tool), "--commit", commit, "--root", str(git_root)],
+                       capture_output=True, text=True)
+    lines = (p.stdout + p.stderr).splitlines()
+    for line in lines[:80]:
+        print(line if line.startswith("SABPATCH") else f"SABPATCH {line}")
+    if len(lines) > 80:
+        print(f"SABPATCH ... {len(lines) - 80} more lines; last: {lines[-1]}")
+    return p.returncode
 
 
 def gil_region_audit(tree, commit, git_root=ROOT):

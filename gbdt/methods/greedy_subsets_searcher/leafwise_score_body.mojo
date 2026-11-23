@@ -31,10 +31,9 @@ from checks.numerics import (
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
-    identical_sqrt,
 )
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
-from gbdt.methods.score_calcer_body import FLOAT32_MAX
+from gbdt.methods.score_calcer_body import FLOAT32_MAX, cosine_gain
 from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_NEWTON_COSINE,
@@ -121,14 +120,8 @@ def leafwise_finish_gain[
     var final_score = score
     var score_before = score_b
     comptime if cosine:
-        if denum_sqr > Float32(1e-15):
-            final_score = ftz(score / identical_sqrt(denum_sqr))
-        else:
-            final_score = -FLOAT32_MAX
-        if denum_sqr_b > Float32(1e-15):
-            score_before = ftz(score_b / identical_sqrt(denum_sqr_b))
-        else:
-            score_before = -FLOAT32_MAX
+        final_score = cosine_gain(score, denum_sqr)
+        score_before = cosine_gain(score_b, denum_sqr_b)
 
         if score_std_dev != Float32(0.0):
             var seed = advance_seed_k(global_seed + UInt64(feature_id), 4)

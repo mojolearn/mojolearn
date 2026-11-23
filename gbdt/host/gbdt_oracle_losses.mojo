@@ -107,7 +107,6 @@ from gbdt.targets.pointwise_bodies import (
     weighted_score,
 )
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
-from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
@@ -140,7 +139,7 @@ from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
 from gbdt.host.gbdt_oracle import (
-    apply_scaled_leaves_host,
+    rescale_apply_leaves_host,
     _identity_rows,
     _split_level,
     _scan_histograms,
@@ -1700,9 +1699,9 @@ def gbdt_losses_host_fit(
                 leaf_values[i] = _rmse_leaf_value(
                     leaf_sums[2 * i], leaf_sums[2 * i + 1], params.l2_leaf_reg
                 )
-            scaled = rescaled_leaves(leaf_values, lr)
-            apply_scaled_leaves_host(
-                cursors[learn_p], scaled, row_index, offsets, sizes, n_live
+            scaled = rescale_apply_leaves_host(
+                cursors[learn_p], leaf_values, lr, row_index, offsets, sizes,
+                n_live,
             )
         for p in range(0 if simple_leaves else perm_count):  # driver-loop: over the permutations
             var p_scaled: List[Float32]
@@ -1719,9 +1718,8 @@ def gbdt_losses_host_fit(
                     # all `n_live` leaves, the double sum in the kernel's
                     # order (lane cpu4-gbdt; was an ascending chain).
                     _zero_average_host(estimated)
-                p_scaled = rescaled_leaves(estimated, lr)
-                apply_scaled_leaves_host(
-                    cursors[p], p_scaled, row_index, offsets, sizes, n_live
+                p_scaled = rescale_apply_leaves_host(
+                    cursors[p], estimated, lr, row_index, offsets, sizes, n_live
                 )
             else:
                 var part = _partition_for_model(
@@ -1734,9 +1732,8 @@ def gbdt_losses_host_fit(
                 )
                 if zero_average:
                     _zero_average_host(estimated)
-                p_scaled = rescaled_leaves(estimated, lr)
-                apply_scaled_leaves_host(
-                    cursors[p], p_scaled, part.row_index, part.offsets,
+                p_scaled = rescale_apply_leaves_host(
+                    cursors[p], estimated, lr, part.row_index, part.offsets,
                     part.sizes, len(part.sizes),
                 )
             if p == est_p:

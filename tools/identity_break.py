@@ -5415,7 +5415,7 @@ def _(ml, X, yc, yr, Xh=None):
 # per-query NDCG of `ml.metrics.ndcg_score` over the fixture's 16-row queries
 # (the ranking metric a user reads). The model, infer and batch columns come
 # from the first fit. The sabotage arms coverage-gbdt-host_rank_group_boundary,
-# coverage-gbdt-host_pair_weight and coverage-gbdt-host_losses_leaf_ulp
+# coverage-gbdt-host_pair_weight and coverage-gbdt-host_leaf_ulp
 # (tools/identity_lanes/coverage_sabotage.tsv) prove these lanes can fail.
 # Not here because the CPU column refuses them by name (a product gap, not a
 # coverage choice): sample_weight with a ranking loss, which the device fit

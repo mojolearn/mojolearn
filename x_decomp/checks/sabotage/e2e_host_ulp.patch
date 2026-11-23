@@ -1,8 +1,8 @@
 diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
-index 44c96a40c..b00fd17fd 100644
+index 753df14b13..35ed197ab9 100644
 --- a/x_decomp/host.mojo
 +++ b/x_decomp/host.mojo
-@@ -118,7 +118,7 @@ struct HostExec(Exec):
+@@ -223,7 +223,7 @@ struct HostExec(Exec):
              _ = ct^
          else:
              HostExec._gemm_simd(a, b, c, m, k, n, ta, tb)
@@ -11,13 +11,13 @@ index 44c96a40c..b00fd17fd 100644
              # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
              # the host column's every product moves by one unit in the
              # last place; the GPU binding never defines it
-@@ -278,6 +278,9 @@ struct HostExec(Exec):
-                 lu_rows(a, n, k, d, k + 1 + t * LU_ROWS, k + 1 + min(rows, (t + 1) * LU_ROWS))
+@@ -404,6 +404,9 @@ struct HostExec(Exec):
  
              xd_parallel(elim, (rows + LU_ROWS - 1) // LU_ROWS)
+         lu_finish_host(a, n * n)
 +        # SABOTAGE (end to end): the host LU's last pivot moves by one ulp
 +        var e = a.unsafe_load(n * n - 1)
 +        a.unsafe_store(n * n - 1, bitcast[DType.float32](bitcast[DType.uint32](e) ^ UInt32(1)))
  
      @staticmethod
-     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
+     def trisolve(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, n: Int, nrhs: Int, trans: Int) raises:
