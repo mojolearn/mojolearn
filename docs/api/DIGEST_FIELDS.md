@@ -87,8 +87,8 @@ private fields a row names), under the class name followed by `#training`.
 | `FactorAnalysis` | public fitted attributes | every public fitted attribute |
 | `FastICA` | public fitted attributes | every public fitted attribute; plus `_whiten` |
 | `GARCH` | public fitted attributes | every public fitted attribute; plus `_one`, `_y`, `_fc` |
-| `GRUClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d` |
-| `GRURegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d` |
+| `GRUClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers` |
+| `GRURegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers` |
 | `GammaRegressor` | public fitted attributes | every public fitted attribute; plus `_link` |
 | `GaussianMixture` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `covariance_type`, `weights`, `means`, `covariances`, `precisions_cholesky`, `log_det_chol`, `ints` |
 | `GaussianNB` | public fitted attributes | every public fitted attribute; plus `_const`, `_raw_var` |
@@ -117,8 +117,8 @@ private fields a row names), under the class name followed by `#training`.
 | `KernelDensity` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `kernel`, `metric`, `x`, `bandwidth`, `meta`, `weights` (when present) |
 | `KernelPCA` | public fitted attributes | every public fitted attribute; plus `_gamma`, `_fit_X`, `_fit_cols`, `_fit_all` |
 | `KernelRidge` | public fitted attributes | every public fitted attribute; plus `_kernel_params`, `_squeeze` |
-| `LSTMClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d` |
-| `LSTMRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d` |
+| `LSTMClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers` |
+| `LSTMRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers` |
 | `LabelBinarizer` | public fitted attributes | every public fitted attribute; plus `_classes`, `_cats` |
 | `LabelEncoder` | public fitted attributes | every public fitted attribute; plus `_classes`, `_cats` |
 | `LabelPropagation` | public fitted attributes | every public fitted attribute; plus `_classical_raw_graph` |
@@ -183,8 +183,8 @@ private fields a row names), under the class name followed by `#training`.
 | `QuantileTransformer` | public fitted attributes | every public fitted attribute; plus `_q` |
 | `RBFSampler` | public fitted attributes | every public fitted attribute; plus `_params` |
 | `RFE` | public fitted attributes | every public fitted attribute; plus `_mask` |
-| `RNNClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d` |
-| `RNNRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d` |
+| `RNNClassifier` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `nonlinearity` |
+| `RNNRegressor` | public fitted attributes | every public fitted attribute; plus `_y_1d`; parameters `hidden_size`, `num_layers`, `nonlinearity` |
 | `RadiusNeighbors` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `metric`, `algorithm`, `radius`, `p`, `index`, `meta` |
 | `RandomForestClassifier` | save schema (answer members) | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
 | `RandomForestRegressor` | save schema (answer members) | `format`, `estimator`, `device`, `offsets`, `colid`, `quesval`, `left_child`, `leaves`, `meta`, `classes`, `(step forest_engine)` |
