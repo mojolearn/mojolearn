@@ -671,7 +671,7 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
             # splitters, read here as typed words; each fit computes its
             # folds over its own rows (core/ensemble_member.mojo
             # `_split_folds`). An `_IterableCV` holds a user's pairs.
-            if not _split_cv(cv, classifier, context, b, split, fold_train, fold_test):
+            if not _split_cv(cv, context, b, split, fold_train, fold_test):
                 return False
             folds = len(fold_test)
         else:
@@ -765,7 +765,7 @@ struct _Split(Movable):
         self.pin = MselRoutePin()
 
 
-def _split_cv(cv: PythonObject, classifier: Bool, context: PythonObject, b: PythonObject, mut split: _Split,
+def _split_cv(cv: PythonObject, context: PythonObject, b: PythonObject, mut split: _Split,
               mut fold_train: List[List[Int32]], mut fold_test: List[List[Int32]]) -> Bool:
     """A cv that is one of OUR splitter objects (lane mf-split5): an
     `_IterableCV`'s stored (train, test) pairs as typed folds (`_user_folds`,
@@ -777,22 +777,23 @@ def _split_cv(cv: PythonObject, classifier: Bool, context: PythonObject, b: Pyth
             return _user_folds(sp.field("_pairs", context), b, fold_train, fold_test)
     except:
         return False
-    return _split_words(cv, classifier, context, b, split)
+    return _split_words(cv, context, b, split)
 
 
-def _split_words(cv: PythonObject, classifier: Bool, context: PythonObject, b: PythonObject,
+def _split_words(cv: PythonObject, context: PythonObject, b: PythonObject,
                  mut split: _Split) -> Bool:
     """A cv that is one of OUR splitters (every class the splitter door
     serves: the KFold family, the group, shuffle and time-series splitters,
     the leave-out splitters, PredefinedSplit, the repeated splitters), read
     as the splitter door reads it for `split` (bindings/msel_split_spec_unpack.mojo
     `msel_split_spec_of`). False (the door keeps the meta-estimator and
-    splits natively with X and y) for a stratified splitter on a regressor
-    (its door refuses continuous y in the splitter's words), a stored value
-    the door reads in another form, or a value the door refuses. A user's
+    splits natively with X and y) for a stored value the door reads in
+    another form, or a value the door refuses. A stratified splitter on a
+    regressor is taken: its fit stratifies on the targets' values as the
+    door's split does (lane mf-del5). A user's
     own splitter object never reaches here: `_refuse_cv_callback` refuses it
     first."""
-    return msel_split_spec_of(cv, classifier, context, split.spec, split.pin)
+    return msel_split_spec_of(cv, context, split.spec, split.pin)
 
 
 def _cap_of(fields: PythonObject, b: PythonObject) raises -> Int:
@@ -1606,7 +1607,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
                 return False
             folds = len(fold_test)
         elif cv is not None and py_type(cv) is not b.int:
-            if not _split_cv(cv, True, context, b, split, fold_train, fold_test):
+            if not _split_cv(cv, context, b, split, fold_train, fold_test):
                 return False  # a splitter setting the door reads otherwise: the door's `_splits`
             folds = len(fold_test)
         else:
@@ -2681,7 +2682,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     elif cv is not None and py_type(cv) is not b.int and not msel_is_integral(cv, context):
         # One of our splitters, typed words; each fit splits its own rows
         # (the search's groups are its call's, `MemberCall.groups`).
-        if not _split_cv(cv, True, context, b, split, fold_train, fold_test):
+        if not _split_cv(cv, context, b, split, fold_train, fold_test):
             return False
         folds = len(fold_test)
     else:

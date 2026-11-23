@@ -3002,7 +3002,7 @@ struct _CalUnits(Movable):
     sample weights too, and a user's own splitter object is refused at the
     admission; since lane mf-split5 every other of our splitters as a cv
     too; still the door's: a Calibrated base with a DeviceRows base, a
-    stratified splitter on a regressor, a splitter setting the door reads in
+    splitter setting the door reads in
     another form (a long double shuffle size)), a configuration its family's
     admit leaves to the estimator's door (a class_weight that is neither
     None, 'balanced' nor an exact dict, which that door refuses in its

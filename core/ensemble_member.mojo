@@ -247,7 +247,7 @@ from xtrees.label_weights_native import label_weights_native_v1
 from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST
 from bindings.msel_split_spec_run import (
     MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, MSEL_SPEC_LOO, msel_spec_sides, msel_sides_i32,
-    msel_group_codes_run, msel_spec_has_n_splits,
+    msel_group_codes_run, msel_spec_has_n_splits, msel_spec_sides_targets,
 )
 from core.member_set_run import (
     MemberSetRun, member_set_fit, member_set_run_release, member_set_first_failure,
@@ -1710,7 +1710,7 @@ def _user_folds(slot: _SlotPtr, n: Int, mut tr_at: List[Int], mut tr_n: List[Int
     _ = len(te_counts)
 
 
-def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int, groups: MselGroupCodes) raises:
+def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int, groups: MselGroupCodes, targets: Int) raises:
     """THE SPLITTER CV (lanes mf-split4, mf-split5): the folds of the entry's
     splitter over THIS fit's `n` rows (the door's `_splits` ->
     `prep_native_split` -> bindings/msel_split_door.mojo `msel_split`, whose
@@ -1723,8 +1723,16 @@ def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int, groups: MselGroupCo
     only ...", once per plan: a repeated splitter's repeats each warn)
     becomes a fit notice of the state (core/member_notices.mojo
     MEMBER_NOTICE_SPLIT_LEAST, raised by the PACK in its words; the door
-    raised it before the fits). No Python."""
-    var sides = msel_spec_sides(slot[].split, n, codes, k, groups)
+    raised it before the fits). A REGRESSOR's fit (no `codes`) hands its
+    float32 `targets` (0: none): a stratified splitter stratifies on their
+    values, as the splitter door does with a regressor's y, its refusal and
+    warning in its words (`msel_spec_sides_targets`, lane mf-del5; the
+    door kept every such fit before). No Python."""
+    var sides: MselSides
+    if codes == 0 and targets != 0:
+        sides = msel_spec_sides_targets(slot[].split, n, targets, groups)
+    else:
+        sides = msel_spec_sides(slot[].split, n, codes, k, groups)
     for w in range(len(sides.least)):  # small-loop(one notice per splitter warning)
         var words = List[Float64]()
         member_notice_add(words, MEMBER_NOTICE_SPLIT_LEAST, Float64(sides.least[w]), Float64(slot[].split.k))
@@ -1798,7 +1806,7 @@ def _fit_stack(slot: _SlotPtr, call: _CallPtr) raises:
     # THE SPLITTER CV (lane mf-split4): this fit's folds first, as the door
     # computes its splits before any member fit.
     if slot[].split.kind != MSEL_SPEC_NONE:
-        _split_folds(slot, n, y if classifier else 0, k, _no_groups())
+        _split_folds(slot, n, y if classifier else 0, k, _no_groups(), 0 if classifier else y)
     slot[].classes = k
     slot[].states = List[Int](length=bases + 1, fill=0)
     # 1. The members on every row (one set).
@@ -2025,7 +2033,7 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     # THE SPLITTER CV: this fit's folds first, as the door computes its
     # splits before any member fit.
     if slot[].split.kind != MSEL_SPEC_NONE:
-        _split_folds(slot, n, y, k, _no_groups())
+        _split_folds(slot, n, y, k, _no_groups(), 0)
     var listed = len(slot[].fold_test) > 0
     var tr_at = List[Int]()
     var tr_n = List[Int]()
@@ -3193,7 +3201,10 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     # folds of this fit's rows, as Stacking's and Calibrated's (`_split_folds`;
     # the user's are the entry's typed folds), handed to the RUN.
     if slot[].split.kind != MSEL_SPEC_NONE:
-        _split_folds(slot, call[].x.rows, call[].y.data if k > 0 else 0, k, _call_groups(call))
+        # A one-output regressor hands its targets (a stratified splitter
+        # stratifies on their values, as the door's split does; lane mf-del5).
+        _split_folds(slot, call[].x.rows, call[].y.data if k > 0 else 0, k, _call_groups(call),
+                     call[].y.data if not classifier and outputs == 1 else 0)
     if len(slot[].fold_test) > 0:
         # Views of the slot's int32 sides (kept alive by the slot through the
         # RUN), checked as the door checks a split's rows.

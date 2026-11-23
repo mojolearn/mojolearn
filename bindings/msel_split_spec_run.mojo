@@ -32,6 +32,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.entry_table import EntryRef, entry_ref_unresolved
+from core.label_encode import host_unique_inverse, LABEL_KIND_F64
 from bindings.msel_split_plan_run import (
     MselSeed, MselSplitRoute, MselSplitPlan, MselCodes, MselSizeWord, msel_size_none, msel_split_route_none,
     msel_split_fill, msel_code_counts, MSEL_LABELS_SORTED, msel_plan_kfold, msel_plan_stratified,
@@ -71,8 +72,8 @@ comptime _INDEX_SPAN = 16777216
 
 
 def msel_spec_stratified(kind: Int) -> Bool:
-    """The splitters that read the class labels (refused on a regressor by
-    the door in the splitter's words: the caller keeps the door)."""
+    """The splitters that read the class labels (on a regressor, its
+    targets' values: `msel_spec_sides_targets`, lane mf-del5)."""
     return (kind == MSEL_SPEC_STRATIFIED_KFOLD or kind == MSEL_SPEC_STRATIFIED_GROUP_KFOLD
             or kind == MSEL_SPEC_STRATIFIED_SHUFFLE or kind == MSEL_SPEC_REPEATED_STRATIFIED_KFOLD)
 
@@ -439,6 +440,74 @@ def msel_spec_sides(spec: MselSplitSpec, n: Int, codes: Int, classes: Int,
     else:
         raise Error("RuntimeError: mojolearn: a splitter spec of unknown kind " + String(kind))
     _ = len(groups.codes)  # the plans and fills read the group codes through their address
+    return sides^
+
+
+struct MselTargetCodes(Movable):
+    """A regressor's targets as the splitter door's label encoder codes them
+    (`msel_target_codes_run`): one int32 code per row, `m` distinct values."""
+
+    var codes: List[Int32]
+    var m: Int
+
+    def __init__(out self):
+        self.codes = List[Int32]()
+        self.m = 0
+
+
+def msel_target_codes_run(y: Int, n: Int) raises -> MselTargetCodes:
+    """RUN (lane mf-del5): the n float32 targets at `y` as sorted-order int32
+    codes, the labels the splitter door makes of a regressor's y for a
+    stratified splitter (bindings/msel_split_door.mojo `_strat_labels`:
+    `msel_label_codes`, MSEL_LABELS_SORTED: np.unique's inverse). The
+    targets are widened to float64 across the host cores (exact), then
+    coded by core/label_encode.mojo `host_unique_inverse` (parallel; -0.0
+    and +0.0 are one value). A NaN target is refused in check_array's
+    words."""
+    var out = MselTargetCodes()
+    out.codes = List[Int32](length=max(n, 1), fill=Int32(0))
+    if n <= 0:
+        return out^
+    var wide = List[Float64](length=n, fill=0.0)
+    var classes = List[UInt64](length=n, fill=UInt64(0))
+    var wide_at = Int(wide.unsafe_ptr())
+    var tasks = host_predict_task_count_work(n, n)
+    var chunk = host_predict_chunk(n, tasks)
+
+    def widen(t: Int) {imm y, imm wide_at, imm chunk, imm n}:
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y)
+        var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=wide_at)
+        var begin = t * chunk
+        var end = min(begin + chunk, n)
+        for i in range(begin, end):
+            dst[i] = Float64(src[i])
+
+    host_parallelize(widen, max(tasks, 1))
+    var m = host_unique_inverse(MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=wide_at), n,
+                                LABEL_KIND_F64,
+                                MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(classes.unsafe_ptr())),
+                                MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(out.codes.unsafe_ptr())))
+    _ = len(wide)  # read through its address by the workers and the encoder above
+    _ = len(classes)
+    if m < 0:
+        raise Error("Input y contains NaN.")
+    out.m = m
+    return out^
+
+
+def msel_spec_sides_targets(spec: MselSplitSpec, n: Int, y: Int, groups: MselGroupCodes) raises -> MselSides:
+    """RUN (lane mf-del5): `msel_spec_sides` for a REGRESSOR's fit (no class
+    codes; its n float32 targets at `y`). A stratified splitter stratifies
+    on the targets' values, as the splitter door does with a regressor's y
+    (`msel_target_codes_run`): continuous targets meet its refusal ("n_splits=
+    ... cannot be greater than the number of members in each class.") or
+    its least-populated warning in its words, repeated values its folds.
+    Any other splitter reads no labels."""
+    if not msel_spec_stratified(spec.kind):
+        return msel_spec_sides(spec, n, 0, 0, groups)
+    var coded = msel_target_codes_run(y, n)
+    var sides = msel_spec_sides(spec, n, Int(coded.codes.unsafe_ptr()), coded.m, groups)
+    _ = len(coded.codes)  # the plans and fills read the codes through their address
     return sides^
 
 
