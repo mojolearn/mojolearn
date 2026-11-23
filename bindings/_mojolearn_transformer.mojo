@@ -587,8 +587,8 @@ def transformer_forward_fresh_binding(
 # `transformer_session_forward` (weights, cache and RoPE retained by the
 # block's session) whenever the binding exports it; this per-call entry,
 # which uploads the nine weights and both caches per call, is reached only
-# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
-# of the extension. CPU host bindings export their own host entry.
+# by direct callers of the extension (the MOJOLEARN_TRANSFORMER_LEGACY_SETUP
+# arm that also reached it was deleted 2026-11-23, lane/ab-prep-transformer). CPU host bindings export their own host entry.
 def transformer_forward_binding(
     addrs: PythonObject,
     params: PythonObject,
@@ -688,8 +688,8 @@ def transformer_forward_binding(
 # `transformer_session_forward` (weights, cache and RoPE retained by the
 # block's session) whenever the binding exports it; this per-call entry,
 # which uploads the nine weights and both caches per call, is reached only
-# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
-# of the extension. CPU host bindings export their own host entry.
+# by direct callers of the extension (the MOJOLEARN_TRANSFORMER_LEGACY_SETUP
+# arm that also reached it was deleted 2026-11-23, lane/ab-prep-transformer). CPU host bindings export their own host entry.
 def transformer_decode_step_binding(
     addrs: PythonObject,
     params: PythonObject,

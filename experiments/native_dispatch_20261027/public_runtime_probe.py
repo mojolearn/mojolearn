@@ -19,7 +19,6 @@ def qualify():
     # Force the existing per-layer route on both arms. This probe qualifies
     # the ABI boundary; these tiny fixtures are not performance evidence.
     os.environ["MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD"] = "0"
-    os.environ.pop("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", None)
     with tempfile.TemporaryDirectory(prefix="ml-native-dispatch-") as folder:
         cfg, tensors = family_fixture("llama", False)
         _write_checkpoint(folder, cfg, tensors)
