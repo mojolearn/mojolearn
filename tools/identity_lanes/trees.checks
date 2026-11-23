@@ -4,3 +4,4 @@ xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5602_order.patch
 xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5603_libm_exp.patch
 xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5604_last_max.patch
 xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5605_nan.patch
+# xtrees/checks/sabotage/steward_combo_cpu_only.patch retired 2026-11-23 (lane patch-recut): duplicates coverage-xtrees-column_cpu_only (every rf_oracle/pcg_rng/xtrees door/glue_runs/shap_host hunk byte for byte), coverage-xtrees-et_deviance_cpu_only (objectives.mojo:regression_deviance_gain) and gbdt/checks/sabotage/multirmse_der_cpu_only.patch (gbdt_oracle_multiclass.mojo:_multi_pass); its xtrees/ops.mojo gradients/_newton_values hunks fault code no DART fit reaches (coverage-xtrees-dart_options_cpu_only faults the live dart_units.mojo); recoverable at 12b8e16a0c
