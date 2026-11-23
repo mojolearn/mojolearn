@@ -458,3 +458,86 @@ def bag_oob_r2_run(glue: EntryRef, acc: Int, counts: Int, y: Int, pred: Int, n: 
     _ = words^
     _ = flags^
     return got
+
+
+# ---------------------------------------------------------------- Stacking
+# Lane bm-meta-3 (2026-11-23): the members' stacked outputs (`transform`,
+# the predict path, and each cv fold's test outputs inside fit), typed.
+
+#: What a Stacking member's `stack_method_` asks it for.
+comptime STACK_PREDICT = 0
+comptime STACK_PROBA = 1
+comptime STACK_DECISION = 2
+
+
+def stack_place_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], kinds: List[Int],
+                    class_counts: List[Int], k: Int, binary: Bool, meta: Int, meta_rows: Int, width: Int,
+                    place: Int, col0: Int, mut widths: List[Int], start: Int) raises -> Int:
+    """`_StackingBase` meta features: each member's output over `rows`
+    placed into `meta` (float64 `meta_rows` x `width`) at the rows `place`
+    (int32 `rows.n` row numbers) and the member's columns, side by side from
+    `col0`, member after member from `start` (`widths[j]` is written for
+    each member done: the columns it took).
+
+    `kinds[j]` / `class_counts[j]` (the member's own fitted class count; 0
+    for STACK_PREDICT): a predict block is placed as it is (its columns).
+    A probability or decision block whose member saw every class (`cols`
+    == k) is placed as it is, except that a binary predict_proba keeps its
+    second column (`_StackingBase._out`): the old door's block, the same
+    words (no bits change). THE FOLD THAT LACKS A CLASS (a cv fold whose
+    training rows miss a class, scikit-learn `_enforce_prediction_order`):
+    the member's columns go to its class columns (`class_cols`) of a k-wide
+    block, a missing class's column 0.0 for predict_proba and the lowest
+    float32 for decision_function; a decision_function member that saw two
+    classes or fewer is refused in scikit-learn's words. A native member
+    that refuses is returned by index before anything of it is placed.
+    `meta` 0: nothing is placed, only `widths` is written (the fit's
+    width probe over the first rows)."""
+    var keep = List[List[Float32]]()
+    var at = col0
+    for j in range(start):  # driver-loop: over the members already placed
+        at += widths[j]
+    for j in range(start, len(members)):  # driver-loop: over members
+        var m = members[j]
+        var block = _member_f32(m, rows, keep)
+        if block == 0:
+            return j
+        var n = rows.n
+        var src = block
+        var c = m.cols
+        var placed = List[Float32]()
+        if kinds[j] != STACK_PREDICT and c != k and not (kinds[j] == STACK_DECISION and k == 2 and c == 1):
+            if kinds[j] == STACK_DECISION and class_counts[j] <= 2:
+                raise Error("ValueError: Only " + String(class_counts[j]) + " class/es in training fold, but "
+                            + String(k) + " in overall dataset. This is not supported for decision_function with "
+                            + "imbalanced folds. To fix this, use a cross-validation technique resulting in "
+                            + "properly stratified folds")
+            var fill = Float32(0.0) if kinds[j] == STACK_PROBA else Float32.MIN_FINITE
+            placed = List[Float32](length=n * k, fill=fill)
+            var b = _F32P(unsafe_from_address=block)
+            var codes = _I32P(unsafe_from_address=m.class_cols)
+            for i in range(n):  # small-loop(one placing pass over one member's fold block: a copy, no arithmetic)
+                for q in range(c):  # small-loop(the member's class columns)
+                    placed[i * k + Int(codes[q])] = b[i * c + q]
+            src = Int(placed.unsafe_ptr())
+            c = k
+        if kinds[j] == STACK_PROBA and binary:
+            # `_one_col(p, 1)`: the second column alone
+            if meta != 0:
+                var col = List[Float32](unsafe_uninit_length=n)
+                var b = _F32P(unsafe_from_address=src)
+                for i in range(n):  # small-loop(one column copy of one member's block)
+                    col[i] = b[i * c + 1]
+                _ = xt_scatter(glue, meta, Int(col.unsafe_ptr()), place, meta_rows, width, n, 1, at)
+                _ = col^
+            c = 1
+        elif meta != 0:
+            _ = xt_scatter(glue, meta, src, place, meta_rows, width, n, c, at)
+        _ = placed^  # read through the scatter above
+        if j < len(widths):
+            widths[j] = c
+        else:
+            widths.append(c)
+        at += c
+    _ = keep^  # the native blocks are read through the scatters above
+    return VOTE_ALL_ANSWERED
