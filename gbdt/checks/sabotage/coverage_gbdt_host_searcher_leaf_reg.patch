@@ -1,0 +1,15 @@
+diff --git a/gbdt/methods/leaves_estimation/searcher_leaf_body.mojo b/gbdt/methods/leaves_estimation/searcher_leaf_body.mojo
+index 150a23b..5d6d1be 100644
+--- a/gbdt/methods/leaves_estimation/searcher_leaf_body.mojo
++++ b/gbdt/methods/leaves_estimation/searcher_leaf_body.mojo
+@@ -33,7 +33,9 @@ def searcher_leaf_value(w: Float32, g: Float32, l2: Float32) -> Float32:
+     (`oracle_interface.h:43-53`) then zeroes an underweight leaf, reading the
+     WEIGHT, not the Hessian. See `compute_leaf_values_kernel` for the account
+     of each statement."""
+-    var hessian = w + l2
++    # SABOTAGE (coverage-gbdt-host_searcher_leaf_reg): the regularizer
++    # folded into the Hessian twice
++    var hessian = w + l2 + l2
+     if hessian <= Float32(0.0):
+         return Float32(0.0)
+     var v = g / (hessian + Float32(1e-20))

@@ -445,6 +445,11 @@ sampler, a solver, a metric, a reduction).
                MultiClassOneVsAll and MultiRMSE leaves under Newton past one
                iteration and under Gradient, weights, an eval set, and
                border_count 255)
+      gbdt-simple-leaves (lane gbdt-cpu-rest-4-simple: the Simple leaf
+               estimator, the greedy SymmetricTree searcher's own leaves, on
+               Logloss, RMSE, the pointwise losses and the greedy ranking
+               losses, weights, bootstraps, an eval set, and over CTR and
+               one-hot columns)
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -6365,6 +6370,88 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-simple-leaves")
+def _(ml, X, yc, yr, Xh=None):
+    """`leaf_estimation_method='Simple'`, which the CPU column refused by
+    name until lane gbdt-cpu-rest-4-simple (2026-11-23): the greedy
+    SymmetricTree searcher's own leaves (`need_estimation` False: no
+    estimation task, only the learn permutation's cursor moves), on both
+    columns through one body (`searcher_leaf_body.searcher_leaf_value`).
+    Logloss under Cosine, under L2 weighted at Bernoulli and the unset
+    iteration count; RMSE under NewtonL2 at the Bayesian bootstrap with
+    score noise; Quantile, CrossEntropy under NewtonCosine, weighted MAE;
+    greedy QueryRMSE and PairLogit on uneven queries; Logloss over two CTR
+    and a one-hot column (four permutations), RMSE with feature
+    combinations, Quantile over a CTR column and Logloss over a
+    one_hot_features column; and RMSE with an eval set under the Iter
+    detector. Each hashes its predictions and digest and learn curve; the
+    held-out fit also its test-loss curve and stop. Every fit at rate 0.1
+    with every work-changing option set."""
+    rows = min(_GBDT_GAPS_ROWS, X.shape[0])
+    Xn, ycn, yrn = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
+    w = _hw((rows,), "gbdt-simple-leaves:sample_weight", 0.25, 4.0)
+    yce = (np.float32(0.25) + np.float32(0.5) * ycn).astype(np.float32)
+    simple = dict(score_function="Cosine", boost_from_average=False, leaf_estimation_method="Simple",
+                  leaf_estimation_iterations=1)
+    parts, first = {}, None
+    for name, yf, wf, options in [
+        ("logloss_cosine", ycn, None, dict(loss="Logloss")),
+        ("logloss_l2_weighted_bernoulli", ycn, w,
+         dict(loss="Logloss", score_function="L2", bootstrap_type="Bernoulli", subsample=0.7,
+              leaf_estimation_iterations=None)),
+        ("rmse_newtonl2_bayesian_noise", yrn, None,
+         dict(loss="RMSE", score_function="NewtonL2", bootstrap_type="Bayesian", bagging_temperature=1.0,
+              random_strength=1.0)),
+        ("quantile_cosine", yrn, None, dict(loss="Quantile")),
+        ("crossentropy_newtoncosine", yce, None, dict(loss="CrossEntropy", score_function="NewtonCosine")),
+        ("mae_weighted", yrn, w, dict(loss="MAE")),
+    ]:
+        kw = dict(simple)
+        kw.update(options)
+        if kw.get("leaf_estimation_iterations", 1) is None:
+            del kw["leaf_estimation_iterations"]
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xn, yf, sample_weight=wf)
+        _gbdt_gaps_parts(parts, name, m, Xn)
+        parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
+        first = first if first is not None else m
+    # the greedy ranking losses (YetiRank refuses Simple on both columns:
+    # "changing the leaf_estimation_method parameter is prohibited")
+    g, rel = _rank_groups(rows), _relevance(yrn)
+    for loss in ("QueryRMSE", "PairLogit"):
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, **simple)).fit(Xn, rel, group_id=g)
+        _gbdt_gaps_parts(parts, loss.lower() + "_greedy", m, Xn)
+        parts[loss.lower() + "_greedy:loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
+    # categorical columns: several permutations, feature combinations
+    crows = min(_GBDT_CAT_ROWS, X.shape[0])
+    Xc = _gbdt_cat_x(X[:crows])
+    for name, (cols, cats), yf, options in [
+        ("logloss_ctr_onehot", _GBDT_CAT_ALL, yc[:crows], dict(loss="Logloss", cat_features=None)),
+        ("rmse_mcc2", _GBDT_CAT_MCC2, yr[:crows], dict(loss="RMSE", max_ctr_complexity=2, cat_features=None)),
+        ("quantile_ctr", _GBDT_CAT_CTR, yr[:crows], dict(loss="Quantile", cat_features=None)),
+        ("logloss_one_hot_features", _GBDT_CAT_ONEHOT, yc[:crows], dict(loss="Logloss", one_hot_features=[0])),
+    ]:
+        kw = dict(simple)
+        kw.update(options)
+        if "cat_features" in kw:
+            kw["cat_features"] = list(cats)
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xs, yf)
+        parts[name] = _h(m.predict(Xs))
+        parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
+        parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
+    # the held-out fit: RMSE, the curve, the stop
+    Xe = np.ascontiguousarray(Xh[:rows])
+    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows]
+    kw = dict(simple, loss="RMSE", n_estimators=30, od_type="Iter", od_wait=2, use_best_model=True,
+              best_model_min_trees=3)
+    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xn, yrn, eval_set=(Xe, ye))
+    _gbdt_gaps_parts(parts, "rmse_eval", ev, Xn)
+    parts["rmse_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+    parts["rmse_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                             ev.best_iteration_], dtype=np.int64))
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -10255,7 +10342,9 @@ _batch_decl(_rows_calls("predict"),
             # lane gbdt-cpu-rest-4-sym (2026-11-23)
             "gbdt-symmetric-rest",
             # lane gbdt-cpu-rest-4-tail (2026-11-23)
-            "gbdt-multi-walk")
+            "gbdt-multi-walk",
+            # lane gbdt-cpu-rest-4-simple (2026-11-23)
+            "gbdt-simple-leaves")
 # lane gbdt-cpu-rest-4-pwl (2026-11-23)
 _batch_decl(_rows_calls("predict"), "gbdt-pointwise-rest")
 

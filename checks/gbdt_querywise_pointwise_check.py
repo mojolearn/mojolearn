@@ -134,12 +134,14 @@ def main():
         weighted, _ = fit('PairLogit', 'explicit-weighted', pairs=pairs,
                           pairs_weight=np.linspace(.5, 2., len(pairs)))
         assert unit.tobytes() != weighted.tobytes(), 'explicit pair weights ignored'
-        # Simple uses the searcher's bootstrapped leaves in CatBoost. The new
-        # grouped-oracle route must refuse it instead of silently substituting.
+        # Simple uses the searcher's bootstrapped leaves in CatBoost. The
+        # pointwise searcher returns a structure only, so both columns refuse
+        # it before any tree (`simple_leaves_check`, lane
+        # gbdt-cpu-rest-4-simple, 2026-11-23) instead of silently substituting.
         try:
             fit('PairLogit', 'unsupported-simple', leaf_estimation_method='Simple')
         except Exception as exc:
-            if 'requires Newton or Gradient' not in str(exc):
+            if 'use_pointwise_searcher searches the structure only' not in str(exc):
                 raise
             report['cases'].append(dict(loss='PairLogit', tag='unsupported-simple',
                                         expected_refusal=str(exc)))

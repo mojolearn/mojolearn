@@ -168,10 +168,12 @@ from gbdt.targets.pointwise_bodies import (
     weighted_score,
 )
 from gbdt.methods.cursor_rescale import rescaled_leaves
+from gbdt.methods.leaves_estimation.searcher_leaf_body import searcher_leaf_value
 from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_GRADIENT,
     LEAF_ESTIMATION_NEWTON,
+    LEAF_ESTIMATION_SIMPLE,
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
     SCORE_FUNCTION_NEWTON_COSINE,
@@ -591,8 +593,6 @@ def _logloss_value(
 # ===========================================================================
 
 
-#: `MIN_LEAF_WEIGHT` (`leaves_estimation.mojo:72`).
-comptime GBDT_RMSE_MIN_LEAF_WEIGHT = Float32(1e-20)
 
 
 @fieldwise_init
@@ -735,19 +735,15 @@ def _rmse_value(
 
 
 def _rmse_leaf_value(w: Float32, g: Float32, l2: Float32) -> Float32:
-    """`compute_leaf_values_kernel` (`leaves_estimation.mojo:75-181`) for
-    one leaf, term for term. The sabotage arm adds 1.0 to the regularizer
-    (see THE NEGATIVE CONTROL)."""
+    """`compute_leaf_values_kernel` for one leaf: the one body both columns
+    call (`searcher_leaf_body.searcher_leaf_value`; lane
+    gbdt-cpu-rest-4-simple, 2026-11-23, was a term-for-term restatement).
+    The sabotage arm adds 1.0 to the regularizer (see THE NEGATIVE
+    CONTROL)."""
     var reg = l2
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
         reg = reg + Float32(1.0)
-    var hessian = w + reg
-    if hessian <= Float32(0.0):
-        return Float32(0.0)
-    var v = g / (hessian + Float32(1e-20))
-    if w < GBDT_RMSE_MIN_LEAF_WEIGHT:
-        v = Float32(0.0)
-    return v
+    return searcher_leaf_value(w, g, reg)
 
 
 # ===========================================================================
@@ -4653,15 +4649,17 @@ def gbdt_host_boost(
     plane 0 the weighted second derivative under the Newton scores).
     `leaf_method` is the walker's second derivatives (Newton or Gradient,
     `_estimate_leaves`) at `params.leaf_estimation_iterations`; the
-    searcher's own RMSE leaves (DEVIATION 64) stand only where the device's
-    `need_estimation` is False (RMSE, Newton, one iteration, one
-    permutation). A Logloss fit takes `starting_approx` exactly as RMSE does
+    searcher's own leaves stand where the device's `need_estimation` is
+    False: Simple (`leaf_method` LEAF_ESTIMATION_SIMPLE, every permutation
+    count: only the learn permutation's cursor moves; lane
+    gbdt-cpu-rest-4-simple, 2026-11-23) and DEVIATION 64 (RMSE, Newton, one
+    iteration, one permutation). A Logloss fit takes `starting_approx` exactly as RMSE does
     (every cursor filled with it: `boost_from_average`)."""
     var is_rmse = objective == GBDT_BOOST_RMSE
     if not is_rmse and objective != GBDT_BOOST_LOGLOSS:
         raise Error("gbdt_host_boost: objective must be Logloss or RMSE")
-    if leaf_method != LEAF_ESTIMATION_NEWTON and leaf_method != LEAF_ESTIMATION_GRADIENT:
-        raise Error("gbdt_host_boost: leaves are Newton or Gradient here")
+    if leaf_method != LEAF_ESTIMATION_NEWTON and leaf_method != LEAF_ESTIMATION_GRADIENT and leaf_method != LEAF_ESTIMATION_SIMPLE:
+        raise Error("gbdt_host_boost: leaves are Newton, Gradient or Simple here")
     var second_order = is_second_order_score_function(score_function)
     if len(tree_ctr) > 1:
         raise Error("a fit takes at most one tree-CTR state")
@@ -5009,14 +5007,19 @@ def gbdt_host_boost(
         # `est_scaled` is the estimation permutation's `round(leaf * rate)`,
         # the stored model's values
         var est_scaled = List[Float32]()
-        if (
+        if leaf_method == LEAF_ESTIMATION_SIMPLE or (
             is_rmse and perm_count == 1
             and leaf_method == LEAF_ESTIMATION_NEWTON
             and params.leaf_estimation_iterations == 1
         ):
-            # DEVIATION 64 (`need_estimation` False): the searcher's own
-            # leaves off the final partition of the stats planes, the
-            # `apply_to_cursor` tail (`greedy_search_helper.mojo:5692-5739`)
+            # the device's `need_estimation` False (Simple, and DEVIATION
+            # 64): the searcher's own leaves off the final partition of the
+            # stats planes, the `apply_to_cursor` tail
+            # (`greedy_search_helper.mojo` `run_tree_layout_traced`), added
+            # to the LEARN permutation's cursor only; the model stores them,
+            # and no other permutation's cursor moves (the device runs no
+            # estimation loop; lane gbdt-cpu-rest-4-simple, 2026-11-23: was
+            # RMSE at Newton 1 and one permutation only)
             var leaf_sums = _partition_stats_level(
                 stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, n_live
             )
@@ -5027,7 +5030,7 @@ def gbdt_host_boost(
                 )
             est_scaled = rescaled_leaves(leaf_values, lr)
             apply_scaled_leaves_host(
-                cursors[0], est_scaled, row_index, offsets, sizes, n_live
+                cursors[learn_p], est_scaled, row_index, offsets, sizes, n_live
             )
         else:
             for p in range(perm_count):  # driver-loop: over the permutations

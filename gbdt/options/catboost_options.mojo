@@ -260,6 +260,69 @@ def check_tree_limits(border_count: Int, max_depth: Int, lossguide: Bool) raises
         raise Error("Maximum tree depth is 16; got " + String(max_depth))
 
 
+def simple_leaf_iterations_check(leaf_estimation_method: Int, iterations: Int) raises:
+    """`catboost_options.cpp:338-341` on the RESOLVED count: Simple runs one
+    iteration. The device's `set_leaves_estimation_default` and the host fit
+    (gbdt/mojolearn_gbdt_host_run.mojo, the explicit count or 1) both call
+    it (lane gbdt-cpu-rest-4-simple, 2026-11-23)."""
+    if leaf_estimation_method == LEAF_ESTIMATION_SIMPLE and iterations != 1:
+        raise Error(
+            "Leaves estimation iterations can't be greater, than 1 for"
+            " Simple leaf-estimation mode"
+        )
+
+
+def simple_leaves_check(
+    leaf_estimation_method: Int,
+    multi_output: Bool,
+    ordered: Bool,
+    non_symmetric: Bool,
+    use_pointwise_searcher: Bool,
+) raises:
+    """THE ONE ADMISSION of `leaf_estimation_method=Simple`, for the device
+    fit (`gbdt/train.mojo::train`, right after `set_leaves_estimation_default`)
+    and the host fit (gbdt/mojolearn_gbdt_host_run.mojo) alike (lane
+    gbdt-cpu-rest-4-simple, 2026-11-23).
+
+    Simple is their `NeedEstimation() == false` (`greedy_subsets_searcher.h:
+    67-69`): the greedy SymmetricTree searcher's own leaves stand
+    (`compute_leaf_values_kernel`, `searcher_leaf_body.searcher_leaf_value`,
+    one value a leaf from the weight plane and the first gradient plane) and
+    only the learn permutation's cursor takes them. That is what both columns
+    train. Two families have no such leaves, so they are refused here, before
+    any tree, in these words on both columns:
+    - the multi-output losses (MultiClass, MultiClassOneVsAll, MultiRMSE):
+      the searcher's leaf is one-dimensional; before this check the device
+      wrote a one-value-a-leaf tree into a multi-dimensional model;
+    - Ordered boosting, Depthwise / Lossguide and the pointwise searcher:
+      each returns a structure only and estimates every tree through the
+      walker, which has no Simple arm (the device reached
+      `_estimate_and_apply`'s "a walk reached no device walker" at the first
+      tree, the host refused by name)."""
+    if leaf_estimation_method != LEAF_ESTIMATION_SIMPLE:
+        return
+    if multi_output:
+        raise Error(
+            "leaf_estimation_method=Simple keeps the structure searcher's own"
+            " leaves, one value per leaf; the multi-output losses"
+            " (MultiClass, MultiClassOneVsAll, MultiRMSE) need one per"
+            " dimension: use Newton or Gradient"
+        )
+    var arm = String("")
+    if ordered:
+        arm = String("boosting_type='Ordered'")
+    elif non_symmetric:
+        arm = String("grow_policy Depthwise / Lossguide")
+    elif use_pointwise_searcher:
+        arm = String("use_pointwise_searcher")
+    if arm != String(""):
+        raise Error(
+            "leaf_estimation_method=Simple keeps the structure searcher's own"
+            " leaves; " + arm + " searches the structure only and estimates"
+            " every tree, so it has none to keep: use Newton or Gradient"
+        )
+
+
 def querywise_pointwise_leaf_check(use_pointwise_searcher: Bool, grouped: Bool, leaf_estimation_method: Int) raises:
     """THE ONE ADMISSION of the leaf method on the grouped pointwise search
     (QueryRMSE, PairLogit, YetiRank under use_pointwise_searcher), for the
@@ -634,21 +697,21 @@ struct CatBoostOptions(Copyable, Movable):
         # The refusals are deleted rather than annotated, per the rule
         # that a document a result falsifies is part of the result.
         #
-        # WHAT IS STILL REFUSED IS `Simple`, and it is refused because
-        # nothing reaches it: `NeedEstimation()` is
-        # `LeavesEstimationMethod != Simple`
-        # (`greedy_subsets_searcher.h:67-69`), so choosing it turns the
-        # estimator OFF and leaves the searcher's own leaf values
-        # standing. That path exists here -- it is the RMSE shortcut of
-        # DEVIATION 64 -- but it has never been exercised through this
-        # option, and CONTRIBUTING.md (Non-default paths) says an unexercised branch is an
-        # unchecked one.
-        if self.leaf_estimation_method == LEAF_ESTIMATION_SIMPLE:
-            raise Error(
-                "leaf_estimation_method=Simple is not wired through this"
-                " option; it turns the estimator off"
-                " (greedy_subsets_searcher.h:67-69) and that path has no"
-                " check of its own. Newton, Gradient and Exact all work."
+        # `Simple` turns the estimator OFF (`NeedEstimation()` is
+        # `LeavesEstimationMethod != Simple`, `greedy_subsets_searcher.h:
+        # 67-69`) and leaves the greedy SymmetricTree searcher's own leaf
+        # values standing; lane gbdt-cpu-rest-4-simple (2026-11-23) trains
+        # it on both columns there and refuses it where no searcher leaf
+        # exists, through the one admission the fits call
+        # (`simple_leaves_check`; this record has no loss, boosting type or
+        # searcher field, so only the policy is read here).
+        simple_leaves_check(
+            self.leaf_estimation_method, False, False,
+            self.grow_policy != GROW_SYMMETRIC, False,
+        )
+        if self.leaf_estimation_iterations >= 0:
+            simple_leaf_iterations_check(
+                self.leaf_estimation_method, self.leaf_estimation_iterations
             )
         if self.leaf_estimation_iterations < -1:
             raise Error(
@@ -1472,12 +1535,8 @@ def set_leaves_estimation_default(
     if iterations_override >= 0:
         iterations = iterations_override
 
-    if method == LEAF_ESTIMATION_SIMPLE and iterations != 1:
-        # `:338-341`
-        raise Error(
-            "Leaves estimation iterations can't be greater, than 1 for"
-            " Simple leaf-estimation mode"
-        )
+    # `:338-341`, the one body both columns call
+    simple_leaf_iterations_check(method, iterations)
 
     # `Validate()` (`:740-742`) runs on the RESOLVED method, after
     # `SetNotSpecifiedOptionsToDefaults` (`Load`, `:380-382`), and this is
