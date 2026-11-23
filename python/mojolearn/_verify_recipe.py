@@ -8,7 +8,8 @@ hyperparameters, the seed, the fit arguments and the data) and what to hash
 (the fitted `digest_`, the predictions on stated rows, the score). Verify
 fits it from scratch in a fresh process per device of this installation (the
 CPU, and the GPU when there is one), compares every hash, prints IDENTICAL or
-DIVERGENT with the first differing value, and writes a RECORD. A record made
+DIVERGENT with the first differing value (NOT FINITE, exit 5, when the devices
+agree on answers that hold NaN or infinity), and writes a RECORD. A record made
 on another machine or vendor is compared with `--against`: that is the
 cross-vendor claim for the user's own algorithm, within one version.
 
@@ -65,6 +66,8 @@ EXIT_DIVERGENT = 1
 EXIT_USAGE = 2
 EXIT_REFUSED = 3
 EXIT_CANNOT_RUN = 4
+#: the devices agree, but an answer holds NaN or infinite values
+EXIT_NOT_FINITE = 5
 
 #: an output whose bytes are at most this many is kept in the record, so that
 #: `--against` on another machine can name the first differing element
@@ -604,7 +607,8 @@ def child_main(directory, ml=None):
                 outputs.append(dict(name=name, kind="digest", value=value))
             else:
                 np.save(os.path.join(directory, f"out_{k}.npy"), value, allow_pickle=value.dtype == object)
-                outputs.append(dict(name=name, kind="array", file=f"out_{k}.npy", **cb.describe_output(value)))
+                outputs.append(dict(name=name, kind="array", file=f"out_{k}.npy", **cb.describe_output(value),
+                                    nonfinite=_nonfinite(value)))
         answer.update(ran=True, device=device, data_sha256=data_sha256(data), env=env, outputs=outputs,
                       version=getattr(ml, "__version__", None), vendor=vendor)
     except Refused as exc:
@@ -740,10 +744,46 @@ def _difference(a, b, a_array, b_array):
     return f"first differing element at [{index}] (flat {first['flat']}): {first['gpu']} against {first['cpu']}"
 
 
+def _nonfinite(a):
+    """How many values of a float array output are NaN or infinite (0 for any other dtype)."""
+    np = _np()
+    if a is None or a.dtype.kind not in "fc":
+        return 0
+    return int(a.size - np.count_nonzero(np.isfinite(a)))
+
+
+def _nonfinite_of(output, array):
+    """An output's non-finite count: the device's own count, else counted from the array or the record's
+    values (a record made before the count existed)."""
+    if output.get("kind") != "array":
+        return 0
+    if output.get("nonfinite") is not None:
+        return int(output["nonfinite"])
+    if array is None:
+        array = _decode(output)
+    return _nonfinite(array) if array is not None else 0
+
+
+def _not_finite(entries):
+    """The first (label, output name, count, size) whose output holds NaN or infinite values, else None."""
+    for label, result, arrays in entries:
+        for k, output in enumerate(result.get("outputs", ())):
+            n = _nonfinite_of(output, arrays[k] if arrays else None)
+            if n:
+                size = 1
+                for d in output.get("shape", ()):
+                    size *= int(d)
+                return label, output["name"], n, size
+    return None
+
+
 def compare_results(entries):
     """`entries` is `[(label, result, arrays or None)]`. IDENTICAL when every
     result answers every output with the same bytes as the first; else
-    DIVERGENT with the first differing output and value."""
+    DIVERGENT with the first differing output and value. Answers that agree
+    bit for bit but hold NaN or infinite values are NOT FINITE, never
+    IDENTICAL: two devices that both answer NaN have not shown that the
+    algorithm works."""
     ran = [e for e in entries if e[1].get("ran")]
     if len(ran) != len(entries):
         missing = [f"{label}: {r.get('reason')}" for label, r, _ in entries if not r.get("ran")]
@@ -762,6 +802,11 @@ def compare_results(entries):
                 return dict(verdict="DIVERGENT", identical=False, compared=len(ran),
                             first=dict(a=ref_label, b=label, output=oa["name"], detail=detail))
     outputs = len(ref["outputs"])
+    bad = _not_finite(ran)
+    if bad is not None:
+        label, name, n, size = bad
+        return dict(verdict="NOT FINITE", identical=False, compared=len(ran), outputs=outputs,
+                    first=dict(a=label, output=name, nonfinite=n, size=size))
     return dict(verdict="IDENTICAL", identical=True, compared=len(ran), outputs=outputs)
 
 
@@ -772,6 +817,9 @@ def verdict_line(verdict):
     if verdict["verdict"] == "NOT RUN":
         return f"NOT RUN: {verdict['reason']}"
     first = verdict["first"]
+    if verdict["verdict"] == "NOT FINITE":
+        return (f"NOT FINITE: {first['a']} answers {first['nonfinite']} of {first['size']} values of output "
+                f"{first['output']} as NaN or infinity (the same bits on every device, but not an answer)")
     what = f"output {first['output']}" if first.get("output") else "the outputs"
     return f"DIVERGENT: {first['a']} and {first['b']} differ in {what}: {first['detail']}"
 
@@ -1040,8 +1088,9 @@ def cmd_recipe(args):
         lines += ["", "this installation: " + verdict_line(verdict)]
     lines.append(f"record    {out_path}")
     report.update(record=out_path, verdict=verdict, results=results)
-    code = EXIT_IDENTICAL if verdict["identical"] else (EXIT_CANNOT_RUN if verdict["verdict"] == "NOT RUN"
-                                                        else EXIT_DIVERGENT)
+    code = EXIT_IDENTICAL if verdict["identical"] else {"NOT RUN": EXIT_CANNOT_RUN,
+                                                        "NOT FINITE": EXIT_NOT_FINITE}.get(verdict["verdict"],
+                                                                                           EXIT_DIVERGENT)
     if code == EXIT_CANNOT_RUN:
         return finish(code)
     if other is not None:
@@ -1053,8 +1102,8 @@ def cmd_recipe(args):
         cross = compare_results(against_entries(record, arrays, other, args.against))
         lines.append(f"against   {args.against}: " + verdict_line(cross))
         report["against"] = cross
-        if not cross["identical"]:
-            code = EXIT_DIVERGENT
+        if not cross["identical"] and code == EXIT_IDENTICAL:
+            code = EXIT_NOT_FINITE if cross["verdict"] == "NOT FINITE" else EXIT_DIVERGENT
     if getattr(args, "self_test", False):
         controls = self_test(ml, recipe, base, results, arrays, version, vendor)
         lines += ["", "self-test (each control must come out as stated):"]
