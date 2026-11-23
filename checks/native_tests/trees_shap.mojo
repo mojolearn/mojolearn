@@ -788,7 +788,7 @@ def test_agnostic_logistic_member() raises:
     var plan_at = Int(UnsafePointer(to=lr.plan))
     for logit in range(2):  # small-loop(the two links)
         var linked = logit == 1
-        var label = String("logistic member kernel shap, link ") + ("logit" if linked else "identity")
+        var label = String("logistic member kernel shap, link ") + (String("logit") if linked else String("identity"))
         var ref_bg = _WideRef(plan_at, lr.state, bg, 20, LR_D, 2, False)
         var ref_m = _WideRef(plan_at, lr.state, x, 4, LR_D, 2, False)
         var want = _kernel_of(glue, ref_bg, ref_m, x, bg, 4, 20, LR_D, 2, linked)

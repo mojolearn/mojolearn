@@ -38,6 +38,19 @@ Lane bm-rest-sel (2026-11-23) adds `test_mutual_info`, `test_mutual_info_discret
                        member's svd program) and `rfe_round_stage` on its squared coef_ rows; ranking_ exact, the
                        final estimator's predict on the selected block more than 99% equal
 
+Lane mf-shaprfe (2026-11-23) adds `test_rfe_lda` and `test_rfe_refusals`, inputs and references in
+`fixtures/prep_sel_mf/` written by `tools/py2mojo_native_fixtures_mf_shaprfe.py` (the references are the door's
+answers at the base commit, when RFE fitted every round's LDA clone through its own door and read coef_):
+
+    RFE over LDA       RFE(LinearDiscriminantAnalysis(solver), n_features_to_select, step) for solver svd / lsqr,
+                       step 1 / 2, n_features_to_select None / 2 (and a binary case, 3): each round through the
+                       discriminant MEMBER on the host x_prep transport (core/discriminant_member.mojo, its coef_
+                       exported as MEMBER_BLOCK_COEF: the two-class pair row, else classes x features), read by
+                       `rfe_member_importances`, then `rfe_round_stage`; ranking_ and support_ exact
+    RFE refusals       `rfe_member_source` over the kind masks of real QDA, GaussianNB and MultinomialNB member
+                       states: the 'auto' refusal in the door's words, a named getter in scikit-learn's
+                       attrgetter words; LDA's kind exports MEMBER_BLOCK_COEF, squared
+
 Stays in Python: the `discrete_features` argument's type admission, the label encoding, the callable
 importance_getter refusal (the public boundary).
 Every case is an independent unit; the case tables run across host cores.
@@ -62,14 +75,28 @@ from bindings.prep_classify_prog_run import ClsProgram, CLS_KIND_LDA, cls_lda_sv
 from bindings.prep_select_run import (
     MiProgram, mi_columns, mi_mask_of_bools, mi_mask_of_indices, mi_gather_stage, mi_class_count_stage,
     mi_int_words, mi_class_check, mi_discrete_check, mi_stage, mi_scatter,
-    RfeKeys, rfe_first_stage, rfe_round_stage,
+    RfeKeys, rfe_first_stage, rfe_round_stage, rfe_member_importances, rfe_member_source, rfe_select_count,
+    RFE_NO_IMPORTANCES,
 )
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.device_route import DeviceRoute, DEVICE_CPU
+from core.entry_table import EntryRef, entry_ref_word
+from core.member_abi import (
+    MemberCall, MemberPlan, MemberRef, member_call, member_new, member_free, member_kind_capabilities,
+    MEMBER_OP_CAPABILITIES, MEMBER_I32, MEMBER_CAN_COEF, MEMBER_BLOCK_COEF,
+)
+from core.member_families import MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_NAIVE_BAYES
+from core.discriminant_member import discriminant_member_v2
+from core.naive_bayes_member import naive_bayes_member_v2
+from x_prep.transport_host import x_prep_transport_host_v1
+from x_prep.transport_abi import XP_OP_COUNT
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, fixture_i32
 
 comptime SEL_DIR = "checks/native_tests/fixtures/prep_sel/"
 comptime BM_DIR = "checks/native_tests/fixtures/prep_sel_bm/"
+comptime MF_DIR = "checks/native_tests/fixtures/prep_sel_mf/"
 
 
 def family_word(blocked: Bool) -> Int:
@@ -543,6 +570,186 @@ def rfe_getter_unit(unit: Int) raises:
 
 def test_rfe_getter() raises:
     check_cases("rfe_getter", 2, rfe_getter_unit)
+
+
+# ---- RFE over the discriminant member (lane mf-shaprfe) ----
+comptime RFE_LDA_N = 300
+comptime RFE_LDA_D = 8
+
+
+def xprep_member_route() -> DeviceRoute:
+    """The host x_prep image's route for the naive Bayes and discriminant members: the transport in `entry`, no
+    route flags (no device store, float32 probabilities)."""
+    var mode = Int(GLOBAL_NUMERIC_MODE)
+    var route = DeviceRoute(DEVICE_CPU)
+    route.mode = mode
+    route.vendor = 0
+    route.entry = EntryRef(x_prep_transport_host_v1, entry_ref_word(mode, 0, XP_OP_COUNT))
+    route.flags = 0
+    return route
+
+
+def member_plan(family: Int, var params: List[Float64], classes: Int) raises -> MemberPlan:
+    """A member plan of the naive Bayes or discriminant family over `xprep_member_route`, its union mask asked."""
+    var plan = MemberPlan()
+    plan.route = xprep_member_route()
+    plan.family = family
+    plan.kind = Int(params[0])
+    if family == MEMBER_FAMILY_DISCRIMINANT:
+        plan.member = MemberRef(EntryRef(discriminant_member_v2, 0), 0)
+    else:
+        plan.member = MemberRef(EntryRef(naive_bayes_member_v2, 0), 0)
+    var probe = MemberCall(plan.route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    plan.params = params^
+    plan.classes = classes
+    return plan^
+
+
+def da_params(kind: Int, solver: Int) -> List[Float64]:
+    """The 13 NEW words of LinearDiscriminantAnalysis(solver) / QuadraticDiscriminantAnalysis() as the door's
+    admission writes them on the identical host image (core/discriminant_member.mojo docstring): no shrinkage,
+    tol 1e-4, no stored covariance, n_components None / reg_param 0, the image's mode words, no priors."""
+    var mode = da_host_mode(True)
+    var p: List[Float64] = [Float64(kind), Float64(solver), 0.0, -1.0, 1e-4, 0.0, -1.0 if kind == 0 else 0.0,
+                            Float64(1 if mode.stats_blocked else 0), Float64(1 if mode.class_onepass else 0),
+                            Float64(mode.gram), 0.0, 0.0, 0.0]
+    return p^
+
+
+@fieldwise_init
+struct RfeLdaCase(ImplicitlyCopyable, Movable):
+    var solver: Int       # 0 'svd', 1 'lsqr'
+    var step: Int
+    var nsel: Int         # -1: None (d // 2)
+    var classes: Int
+
+
+def rfe_lda_case(unit: Int) -> RfeLdaCase:
+    """`tools/py2mojo_native_fixtures_mf_shaprfe.py` CASES, in its order."""
+    if unit == 0:
+        return RfeLdaCase(0, 1, -1, 3)
+    if unit == 1:
+        return RfeLdaCase(0, 2, 2, 3)
+    if unit == 2:
+        return RfeLdaCase(1, 1, 2, 3)
+    if unit == 3:
+        return RfeLdaCase(1, 2, -1, 3)
+    return RfeLdaCase(0, 1, 3, 2)
+
+
+def rfe_lda_name(unit: Int) -> String:
+    if unit == 0:
+        return "svd-s1-none"
+    if unit == 1:
+        return "svd-s2-two"
+    if unit == 2:
+        return "lsqr-s1-two"
+    if unit == 3:
+        return "lsqr-s2-none"
+    return "svd-s1-three-binary"
+
+
+def rfe_lda_unit(unit: Int) raises:
+    var c = rfe_lda_case(unit)
+    var name = rfe_lda_name(unit)
+    var label = "rfe lda " + name
+    var n = RFE_LDA_N
+    var d = RFE_LDA_D
+    var data = String("lda-k3") if c.classes == 3 else String("lda-k2")
+    var x = fixture_f32(MF_DIR + data + "-x.f32", n * d)
+    var codes = fixture_i32(MF_DIR + data + "-y.i32", n)
+    var plan = member_plan(MEMBER_FAMILY_DISCRIMINANT, da_params(0, c.solver), c.classes)
+    var source = rfe_member_source(MEMBER_FAMILY_DISCRIMINANT, member_kind_capabilities(plan), "auto", "")
+    require(source.block == MEMBER_BLOCK_COEF and source.squared and len(source.refusal) == 0,
+            label + ": the LDA kind does not export coef_ (MEMBER_BLOCK_COEF) to RFE")
+    var nsel = rfe_select_count(d, 0 if c.nsel < 0 else 2, 0.0, c.nsel)
+    var support = List[Float32](length=d, fill=1.0)
+    var ranking = List[Float32](length=d, fill=1.0)
+    var p0 = ClsProgram(True)
+    var first = rfe_first_stage(p0, n * d, n, d)
+    var b0 = List[List[Float32]]()
+    b0.append(support.copy())
+    b0.append(x.copy())
+    var a0 = cls_host_run(p0, b0)
+    var feat = arena_words(a0, first.ids, d)   # int32 words, carried as they are
+    var block = arena_words(a0, first.block, n * d)
+    var nsup = d
+    while nsup > nsel:  # small-loop(oracle: the elimination rounds; serial by nature)
+        var drop = min(c.step, nsup - nsel)
+        var k = nsup - drop
+        # The round through the member, as bindings/prep_select_native_door.mojo `_rfe_member_words` runs it.
+        var notices = List[Float64]()
+        var rows = 1
+        var call = member_new(plan)
+        var words = List[Float32]()
+        try:
+            words = rfe_member_importances(plan, call, Int(block.unsafe_ptr()), n, nsup, Int(codes.unsafe_ptr()),
+                                           MEMBER_I32, source.block, source.squared, notices, rows)
+        finally:
+            member_free(plan, call)
+        require(rows == (1 if c.classes == 2 else c.classes), label + ": coef_ has " + String(rows) + " rows")
+        var prog = ClsProgram(True)
+        var staged = rfe_round_stage(prog, RfeKeys(nsup, rows, source.squared, 0), words^, n * d, n, d, nsup, drop, k)
+        var buffers = List[List[Float32]]()
+        buffers.append(support.copy())
+        buffers.append(ranking.copy())
+        buffers.append(feat.copy())
+        buffers.append(x.copy())
+        var arena = cls_host_run(prog, buffers)
+        support = arena_words(arena, staged.support, d)
+        ranking = arena_words(arena, staged.ranking, d)
+        feat = arena_words(arena, staged.next.ids, k)
+        block = arena_words(arena, staged.next.block, n * k)
+        nsup = k
+    var want_rank = fixture_i32(MF_DIR + "rfe-" + name + "-rank.i32", d)
+    var want_sup = fixture_i32(MF_DIR + "rfe-" + name + "-sup.i32", d)
+    for j in range(d):  # small-loop(oracle: ranking_ and support_, exact)
+        require(Int(ranking[j]) == Int(want_rank[j]), label + ": ranking_[" + String(j) + "] "
+            + String(Int(ranking[j])) + ", the door's " + String(want_rank[j]))
+        require((support[j] != Float32(0)) == (want_sup[j] != 0), label + ": support_[" + String(j) + "] "
+            + String(support[j] != Float32(0)) + ", the door's " + String(want_sup[j] != 0))
+    _ = codes^  # read through the member fits above
+    _ = block^
+
+
+def test_rfe_lda() raises:
+    check_cases("rfe lda member", 5, rfe_lda_unit)
+
+
+def refusal_unit(unit: Int) raises:
+    """unit 0 QDA, 1 GaussianNB, 2 MultinomialNB: 'auto' and the two named getters."""
+    var family = MEMBER_FAMILY_DISCRIMINANT if unit == 0 else MEMBER_FAMILY_NAIVE_BAYES
+    var name = String("QuadraticDiscriminantAnalysis")
+    var params = List[Float64]()
+    if unit == 0:
+        params = da_params(1, 0)
+    elif unit == 1:
+        name = "GaussianNB"
+        params = [0.0, 1e-9, 1.0, 0.0, 0.0]
+    else:
+        name = "MultinomialNB"
+        params = [1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+    var plan = member_plan(family, params^, 2)
+    var mask = member_kind_capabilities(plan)
+    var auto = rfe_member_source(family, mask, "auto", name)
+    require(auto.refusal == String(RFE_NO_IMPORTANCES), name + " 'auto': refusal '" + auto.refusal + "'")
+    for g in range(2):  # small-loop(the two named getters)
+        var getter = String("coef_") if g == 0 else String("feature_importances_")
+        var named = rfe_member_source(family, mask, getter, name)
+        var want = "AttributeError: '" + name + "' object has no attribute '" + getter + "'"
+        require(named.refusal == want, name + " '" + getter + "': refusal '" + named.refusal + "', want '" + want
+            + "'")
+    # LDA's kind (the same family) is not refused: it exports coef_.
+    var lda = member_plan(MEMBER_FAMILY_DISCRIMINANT, da_params(0, 0), 2)
+    var lmask = member_kind_capabilities(lda)
+    require((lmask & MEMBER_CAN_COEF) != 0, "the LDA kind's mask lacks MEMBER_CAN_COEF")
+    var lsource = rfe_member_source(MEMBER_FAMILY_DISCRIMINANT, lmask, "coef_", "LinearDiscriminantAnalysis")
+    require(lsource.block == MEMBER_BLOCK_COEF and len(lsource.refusal) == 0, "LDA 'coef_': not its coef_ block")
+
+
+def test_rfe_refusals() raises:
+    check_cases("rfe refusals", 3, refusal_unit)
 
 
 def main() raises:
