@@ -77,6 +77,17 @@ def msel_spec_stratified(kind: Int) -> Bool:
             or kind == MSEL_SPEC_STRATIFIED_SHUFFLE or kind == MSEL_SPEC_REPEATED_STRATIFIED_KFOLD)
 
 
+def msel_spec_has_n_splits(kind: Int) -> Bool:
+    """The splitters whose scikit-learn class stores an `n_splits` attribute
+    (`_BaseKFold`: the KFold family and TimeSeriesSplit; `BaseShuffleSplit`:
+    the shuffle family). LeaveOneOut, LeavePOut, the group-out splitters,
+    PredefinedSplit, the repeated splitters and an iterable store none
+    (scikit-learn's `hasattr(cv, "n_splits")` is False for them)."""
+    return (kind == MSEL_SPEC_KFOLD or kind == MSEL_SPEC_STRATIFIED_KFOLD or kind == MSEL_SPEC_GROUP_KFOLD
+            or kind == MSEL_SPEC_STRATIFIED_GROUP_KFOLD or kind == MSEL_SPEC_TIME_SERIES
+            or kind == MSEL_SPEC_SHUFFLE or kind == MSEL_SPEC_GROUP_SHUFFLE or kind == MSEL_SPEC_STRATIFIED_SHUFFLE)
+
+
 def msel_spec_grouped(kind: Int) -> Bool:
     """The splitters that read `groups`."""
     return (kind == MSEL_SPEC_GROUP_KFOLD or kind == MSEL_SPEC_STRATIFIED_GROUP_KFOLD or kind == MSEL_SPEC_LOGO

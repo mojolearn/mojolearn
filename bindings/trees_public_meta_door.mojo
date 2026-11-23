@@ -94,8 +94,9 @@ from core.member_families import MEMBER_FAMILY_GP, MEMBER_FAMILY_ENSEMBLE
 from core.admitted_rows_plan import admitted_rows_shape
 from xtrees.trees_calibrated_fit_run import (
     CalFitPlan, CalFitOut, CalPlace, CAL_ALL_ANSWERED, CAL_FIT_FAILED, calibrated_fit_run, cal_fold_place,
-    cal_lacking_warning,
+    cal_lacking_warning, cal_cv_check,
 )
+from bindings.msel_split_spec_unpack import msel_cv_fold_words
 from std.memory import unsafe_memcpy
 from bindings.member_set_door import (
     member_set_tests, member_held_open, member_held_run, member_held_close, MemberHeldCall,
@@ -3520,6 +3521,15 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     if k < 2:
         raise Error("y has fewer than 2 classes")
     var nk = trees_keys()
+    # scikit-learn's two cv refusals, after its label encode and before any
+    # split or fit (lane mf-del5; the META kind's one body, `cal_cv_check`).
+    # Inconsistent X and y rows are refused first, by `_splits`, as
+    # scikit-learn's `indexable` refuses them first.
+    var codes_view = labels.codes
+    if Int(py=codes_view.shape[0]) == n:
+        var cv_words = msel_cv_fold_words(_attr(model, nk[].k_cv, PythonObject(None)), prep_native_context(context))
+        cal_cv_check(trees_address(codes_view), n, k, cv_words[0], cv_words[1])
+        _ = codes_view  # keep the Python object alive through the native count above
     var base = _attr(model, nk[].k_estimator, PythonObject(None))
     if base is None:
         base = prep_estimator_clone(py_item(py_item(context, nk[].k_native_estimator_defaults), nk[].k_LinearSVC), context)

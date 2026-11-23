@@ -246,7 +246,8 @@ from core.label_weights_native_api import (
 from xtrees.label_weights_native import label_weights_native_v1
 from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST
 from bindings.msel_split_spec_run import (
-    MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, msel_spec_sides, msel_sides_i32, msel_group_codes_run,
+    MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, MSEL_SPEC_LOO, msel_spec_sides, msel_sides_i32,
+    msel_group_codes_run, msel_spec_has_n_splits,
 )
 from core.member_set_run import (
     MemberSetRun, member_set_fit, member_set_run_release, member_set_first_failure,
@@ -271,7 +272,7 @@ from bindings.forest_config_run import (
 from bindings.trees_public_inputs_run import TREES_NONFINITE
 from xtrees.trees_boost_run import _sub_seed, boost_count_check, boost_weight_flags_check
 from xtrees.trees_calibrated_fit_run import (
-    CalFitPlan, CalFitOut, calibrated_fit_run, cal_fold_place, CAL_ALL_ANSWERED,
+    CalFitPlan, CalFitOut, calibrated_fit_run, cal_fold_place, cal_cv_check, CAL_ALL_ANSWERED,
 )
 from xtrees.trees_meta_run import meta_binary_column_check
 from xtrees.trees_meta_vote_run import (
@@ -320,7 +321,8 @@ comptime META_OVR_WORDS = 1
 comptime META_CAL_SIGMOID = 0           # method='sigmoid' (1.0), else isotonic
 comptime META_CAL_ENSEMBLE = 1          # ensemble=True (1.0)
 comptime META_CAL_DECISION = 2          # the base has decision_function (1.0)
-comptime META_CAL_WORDS = 3
+comptime META_CAL_INT_CV = 3            # cv was an exact int (1.0; scikit-learn's fold-count check reads it, lane mf-del5)
+comptime META_CAL_WORDS = 4
 comptime META_BAG_COUNT = 0             # n_estimators
 comptime META_BAG_SEED = 1              # `_seed(random_state)`
 comptime META_BAG_ROWS_INT = 2          # max_samples is an int (1.0) or a fraction (0.0)
@@ -2011,6 +2013,15 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     var sigmoid = slot[].words[META_CAL_SIGMOID] != 0.0
     var ensemble = slot[].words[META_CAL_ENSEMBLE] != 0.0
     var decision = slot[].words[META_CAL_DECISION] != 0.0
+    # scikit-learn's two cv refusals, before any split or fit (lane mf-del5;
+    # the door's one body, `cal_cv_check`): the fold count of an exact int
+    # cv or of a splitter that stores `n_splits`, and a LeaveOneOut.
+    var n_folds = 0
+    if slot[].words[META_CAL_INT_CV] != 0.0:
+        n_folds = slot[].folds
+    elif msel_spec_has_n_splits(slot[].split.kind):
+        n_folds = slot[].split.k
+    cal_cv_check(y, n, k, n_folds, slot[].split.kind == MSEL_SPEC_LOO)
     # THE SPLITTER CV: this fit's folds first, as the door computes its
     # splits before any member fit.
     if slot[].split.kind != MSEL_SPEC_NONE:

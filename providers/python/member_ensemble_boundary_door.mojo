@@ -1599,6 +1599,8 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         # a user's own splitter object refused here.
         var cv = py_get(fields, "cv")
         _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
+        # scikit-learn's fold-count check reads an exact int cv (not None's 5): META_CAL_INT_CV.
+        var int_cv = False
         if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
             if not _user_folds(cv, b, fold_train, fold_test):
                 return False
@@ -1609,6 +1611,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
             folds = len(fold_test)
         else:
             folds = 5 if cv is None else _int_word(cv, b)
+            int_cv = cv is not None
             if folds < 2:
                 return False  # a bool or an int below 2: the door raises its words
         # The resident DeviceRows route (a measured winner) stays the door's.
@@ -1624,6 +1627,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         words.append(1.0 if sigmoid else 0.0)
         words.append(1.0 if whole else 0.0)
         words.append(1.0 if decision else 0.0)
+        words.append(1.0 if int_cv else 0.0)  # META_CAL_INT_CV
     else:
         var oob = py_get(fields, "oob_score")
         var bootstrap = py_get(fields, "bootstrap")

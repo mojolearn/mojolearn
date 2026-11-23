@@ -90,6 +90,7 @@ predict program follow the same rule).
 from std.memory import unsafe_memcpy
 from core.entry_table import EntryRef
 from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.member_abi import (
     member_call_of, member_outputs_of, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_F32, MEMBER_F64,
     MEMBER_I64,
@@ -266,6 +267,59 @@ def cal_lacking_warning(m: Int, k: Int) -> String:
     a fold of `cross_val_predict` (ensemble=False) whose train rows hold `m`
     of the `k` classes (core/member_notices.mojo `member_lacking_warning`)."""
     return member_lacking_warning(m, k)
+
+
+#: scikit-learn 1.9 calibration.py `CalibratedClassifierCV.fit`'s LeaveOneOut
+#: refusal, word for word (its two string literals join with no space).
+comptime CAL_LOO_WORDS = "LeaveOneOut cross-validation does not allowall classes to be present in test splits. Please use a cross-validation generator that allows all classes to appear in every test and train split."
+
+
+def cal_cv_check(codes: Int, n: Int, k: Int, n_folds: Int, loo: Bool) raises:
+    """scikit-learn 1.9 calibration.py `CalibratedClassifierCV.fit`'s two cv
+    refusals (lane mf-del5), in its order and words, after its label encode
+    and before `check_cv`, any split or any fit; the door
+    (bindings/trees_public_meta_door.mojo `_calibrated_fit`) and the META
+    kind (core/ensemble_member.mojo `_fit_cal`) both call this one body.
+    `n_folds`: the cv's fold count as scikit-learn reads it (`self.cv` when
+    it is an int, else the splitter's `n_splits` attribute: the KFold
+    family, TimeSeriesSplit and the shuffle family); 0 when it reads none
+    (cv=None, an index list, LeaveOneOut, LeavePOut, the group-out
+    splitters, PredefinedSplit, the repeated splitters). Then "Requesting
+    <n>-fold cross-validation but provided less than <n> examples for at
+    least one class." when a class the n int32 `codes` (over k) hold has
+    fewer than n_folds rows (`np.unique_counts(y)`: a code no row holds is
+    not a class of this fit). `loo`: the cv is a LeaveOneOut. The rows are
+    counted across the host cores, one class table per task."""
+    if n_folds > 0 and n > 0 and k > 0:
+        var tasks = host_predict_task_count_work(n, n)
+        var chunk = host_predict_chunk(n, tasks)
+        var counts = List[Int](length=max(tasks, 1) * k, fill=0)
+        var counts_at = Int(counts.unsafe_ptr())
+
+        def _count(t: Int) {imm codes, imm counts_at, imm chunk, imm n, imm k}:
+            var y = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
+            var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=counts_at + 8 * t * k)
+            var begin = t * chunk
+            var end = min(begin + chunk, n)
+            for i in range(begin, end):
+                var c = Int(y[i])
+                if c >= 0 and c < k:
+                    dst[c] += 1
+
+        host_parallelize(_count, max(tasks, 1))
+        var short = False
+        for c in range(k):  # driver-loop: over the classes (one sum over the task tables each)
+            var total = 0
+            for t in range(max(tasks, 1)):  # small-loop(the task tables)
+                total += counts[t * k + c]
+            if total > 0 and total < n_folds:
+                short = True
+        _ = len(counts)  # the tasks wrote the tables through their address
+        if short:
+            raise Error("Requesting " + String(n_folds) + "-fold cross-validation but provided less than "
+                        + String(n_folds) + " examples for at least one class.")
+    if loo:
+        raise Error(CAL_LOO_WORDS)
 
 
 struct CalPlace(Movable):
