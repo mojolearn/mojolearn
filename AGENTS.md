@@ -500,6 +500,18 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 ## 5. How we work
 
+### Nothing piecemeal, nothing deferred (Andrew, 2026-11-23)
+
+- Fix everything known at once. When work turns up a defect, a gap, an owed test, an owed removal or a follow-up, it
+  gets its lane in the SAME session, alongside the rest. An agent does not write "logged for later", "after the
+  release", "once X lands" or "not started" about something it could start now, and does not hold work back to keep
+  a check simple: one wave carries everything, then it is checked once.
+- The only reasons to wait are real ones, stated with the item: it needs something that does not exist yet (a build,
+  a box, an answer from Andrew), or two lanes would edit the same lines (then they are ordered, not dropped).
+  "It would be easier to verify separately" is not a reason.
+- A report's "left" or "owed" list is a work list for the same session, not a record. The orchestrator opens a lane
+  for each line of it or says which real reason blocks it.
+
 ### Lanes
 
 - **Code, then queue.** A lane writes code, commits and pushes. It never runs tests, timing, identity or Metal jobs

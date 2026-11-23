@@ -153,39 +153,49 @@ def _lin_tsqr_call(entry: EntryRef, op: Int, addresses: List[Int], ints: List[In
     return result
 
 
-def _lin_tsqr_release(entry: EntryRef):
-    """`_tsqr_release`: drop the factorization the image kept (XD_TSQR_Q with
+def _lin_tsqr_release(entry: EntryRef, owner: Int):
+    """`_tsqr_release`: free the factorization `owner` names (XD_TSQR_Q with
     k == 0 reads no word; one native word stands in for both buffers)."""
     try:
         var one = List[Float32](length=1, fill=0.0)
         var addresses: List[Int] = [Int(one.unsafe_ptr()), Int(one.unsafe_ptr())]
-        _ = _lin_tsqr_call(entry, XD_TSQR_Q, addresses, [1, 1, 0])
+        _ = _lin_tsqr_call(entry, XD_TSQR_Q, addresses, [1, 1, 0, owner])
         _ = one^  # keep the word alive through the call above
     except:
         pass
 
 
-def _lin_tsqr_r(entry: EntryRef, a: AdmittedBuf, rows: Int, cols: Int, keep: Bool,
+def _lin_tsqr_r(entry: EntryRef, a: AdmittedBuf, rows: Int, cols: Int, mut owner: Int,
                 context: PythonObject) raises -> AdmittedBuf:
-    """`_tsqr_r`: R (cols x cols) of the TSQR of a; `keep` holds the
-    factorization in the image for one `_tsqr_q`."""
+    """`_tsqr_r`: R (cols x cols) of the TSQR of a. The factorization is kept
+    in a native owner this call carries: `owner` gets its handle for the one
+    `_lin_tsqr_q` (or `_lin_tsqr_release`) that frees it. Lane linalg-owner
+    (2026-11-22): the image held ONE kept factorization per process, so two
+    concurrent qr / svd calls could take each other's factor."""
     var r = admitted_zeros([cols, cols], "<f4", context)
-    # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), params
+    # ORDER MATCHES x_decomp/api.mojo tsqr_r_run: (a, b, r_out), params
     # (m, d, nrhs, keep); b is not read when nrhs is 0
     var addresses: List[Int] = [a.addr, a.addr, r.addr]
-    _ = _lin_tsqr_call(entry, XD_TSQR_R, addresses, [rows, cols, 0, 1 if keep else 0])
+    owner = _lin_tsqr_call(entry, XD_TSQR_R, addresses, [rows, cols, 0, 1])
     _ = r  # keep the Python object alive through the native call above
     return r^
 
 
-def _lin_tsqr_q(entry: EntryRef, c_addr: Int, rows: Int, cols: Int, k: Int,
+def _lin_tsqr_q(entry: EntryRef, owner: Int, c_addr: Int, rows: Int, cols: Int, k: Int,
                 context: PythonObject) raises -> AdmittedBuf:
-    """`_tsqr_q`: Q C (rows x k) for the kept factorization; C is cols x k."""
-    var out = admitted_zeros([rows, k], "<f4", context)
-    var addresses: List[Int] = [c_addr, out.addr]
-    _ = _lin_tsqr_call(entry, XD_TSQR_Q, addresses, [rows, cols, k])
-    _ = out  # keep the Python object alive through the native call above
-    return out^
+    """`_tsqr_q`: Q C (rows x k) for the factorization `owner` holds (C is
+    cols x k); the owner is freed on every path."""
+    var applied = False
+    try:
+        var out = admitted_zeros([rows, k], "<f4", context)
+        var addresses: List[Int] = [c_addr, out.addr]
+        applied = True  # XD_TSQR_Q frees the owner whether it applies or refuses
+        _ = _lin_tsqr_call(entry, XD_TSQR_Q, addresses, [rows, cols, k, owner])
+        _ = out  # keep the Python object alive through the native call above
+        return out^
+    finally:
+        if not applied:
+            _lin_tsqr_release(entry, owner)
 
 
 # ---------------------------------------------------------------------------
@@ -269,8 +279,11 @@ def _lin_qr_q(a: AdmittedBuf, mode: String, context: PythonObject) raises -> Pyt
     if mode == "reduced" and _lin_tsqr_on(rows, cols):
         # `_qr_tsqr`: (Q, R), R's diagonal non-negative
         var entry = _lin_entry(binding)
-        var r = _lin_tsqr_r(entry, a, rows, cols, True, context)
+        # the signs matrix first: nothing that can raise sits between the
+        # kept factorization and the try that frees it
         var signs = admitted_zeros([cols, cols], "<f4", context)
+        var owner = 0
+        var r = _lin_tsqr_r(entry, a, rows, cols, owner, context)
         var signed = False
         try:
             # R's rows signed so its diagonal is non-negative, and C the
@@ -282,8 +295,8 @@ def _lin_qr_q(a: AdmittedBuf, mode: String, context: PythonObject) raises -> Pyt
             signed = True
         finally:
             if not signed:
-                _lin_tsqr_release(entry)
-        var q = _lin_tsqr_q(entry, signs.addr, rows, cols, cols, context)
+                _lin_tsqr_release(entry, owner)
+        var q = _lin_tsqr_q(entry, owner, signs.addr, rows, cols, cols, context)
         _ = signs  # keep the Python object alive through the native call above
         var _keep_ret_signs = _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
         _ = signs  # keep the Python object alive through the native call above
@@ -385,7 +398,8 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
         if not hermitian and not full and _lin_tsqr_on(rows, cols):
             # `_svd_tsqr`: the SVD of the TSQR's R, then U = Q U_R
             var rtol = _lin_rtol(context)
-            var r = _lin_tsqr_r(kit.entry, a, rows, cols, True, context)
+            var owner = 0
+            var r = _lin_tsqr_r(kit.entry, a, rows, cols, owner, context)
             var s = 0
             var vt = 0
             var c_store = PythonObject(None)
@@ -403,8 +417,8 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 done = True
             finally:
                 if not done:
-                    _lin_tsqr_release(kit.entry)
-            var u = _lin_tsqr_q(kit.entry, Int(py=classical_address(c_store)), rows, cols, cols, context)
+                    _lin_tsqr_release(kit.entry, owner)
+            var u = _lin_tsqr_q(kit.entry, owner, Int(py=classical_address(c_store)), rows, cols, cols, context)
             _ = c_store  # keep the Python object alive through the native call above
             var result = _lin_named("SVDResult", Python.tuple(u.keep, _lin_out_vector(kit, s, cols, context),
                                                               _lin_out(kit, vt, context)), context)

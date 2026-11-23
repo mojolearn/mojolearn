@@ -75,7 +75,7 @@ from x_decomp.tsqr_core import (
     ts_reflector,
     ts_scale,
 )
-from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from std.memory import alloc
 
 comptime _SH = UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
 comptime _TT = TS_NB * TS_NB
@@ -962,65 +962,47 @@ def ts_leaf_apply_kernel(
 
 # ---- the factored state between `ts_factor_device` and `ts_apply_device`
 #
-# THE LOCK (lane fx-gil, 2026-11-25; THE GIL RULE, core/member_abi.mojo). The
-# kept state was serialized by nothing: every factor, kept or not, emptied it
-# (`ts_factor_begin`), so two fits on two threads (two Python threads through
-# the doors, which release the GIL around the fit, or two member workers)
-# replaced and destroyed the same List at once. Now: (1) a factor WITHOUT
-# `keep` never touches the kept state, as the host factor does
-# (x_decomp/tsqr_host.mojo `ts_factor_host`): temporary OLS / Ridge
-# factorizations overlap freely and never release another caller's kept
-# factor; (2) every read and write of the state takes its lock word for the
-# List step only (swap in, swap out, five buffer references copied out), never
-# across a launch or a wait. The explicit factor(keep) / apply pair remains ONE
-# retained factorization per process: two callers using that pair at once
-# still take each other's factor (the second apply refuses in words).
-struct _TsDev(Defaultable, Movable):
+# OWNED PER CALL (lane linalg-owner, 2026-11-22). A kept factorization is the
+# five buffers (da, T, R tiles, tau, T2) that `ts_factor_device(keep=True)`
+# returns to its caller; the table route (`DevExec.tsqr_factor`) moves them
+# into a heap `TsDevOwner` whose address is the handle XD_TSQR_R returns and
+# XD_TSQR_Q consumes. No process-wide state holds a factorization. Before:
+# one locked process slot `TS_DEV_STATE` (lane fx-gil, 2026-11-25) kept ONE
+# factorization per process, so two concurrent linalg.qr / linalg.svd calls
+# (the doors release the GIL) could take each other's factor; the lock only
+# made the List swaps safe.
+struct TsDevOwner(Movable):
     var bufs: List[DeviceBuffer[DType.float32]]
     var m: Int
     var n: Int
-    var lock: List[Int64]
 
-    def __init__(out self):
-        self.bufs = List[DeviceBuffer[DType.float32]]()
-        self.m = 0
-        self.n = 0
-        self.lock = List[Int64](length=1, fill=Int64(0))
+    def __init__(out self, var bufs: List[DeviceBuffer[DType.float32]], m: Int, n: Int):
+        self.bufs = bufs^
+        self.m = m
+        self.n = n
 
 
-comptime TS_DEV_STATE = SharedSlot[_TsDev, "MojolearnXDecompTsqrDeviceV2", 2]
+def ts_dev_owner_new(var bufs: List[DeviceBuffer[DType.float32]], m: Int, n: Int) raises -> Int:
+    """Move a kept factorization (the five buffers) into a heap owner; its
+    address is the handle."""
+    if len(bufs) != 5:
+        raise Error("x_decomp tsqr: a kept factorization is five buffers")
+    var owner = alloc[TsDevOwner](1)
+    owner.unsafe_write(TsDevOwner(bufs^, m, n))
+    return Int(owner)
 
 
-def _ts_dev_swap(var bufs: List[DeviceBuffer[DType.float32]], m: Int, n: Int) raises:
-    """Put `bufs` (empty: nothing kept) in the kept state under its lock; the
-    buffers it replaces are dropped after the lock is released."""
-    var st = TS_DEV_STATE.get_or_create_ptr()
-    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](st[].lock.unsafe_ptr())
-    shared_slot_lock(lock)
-    swap(st[].bufs, bufs)
-    st[].m = m
-    st[].n = n
-    shared_slot_unlock(lock)
-    _ = bufs^
+def ts_dev_owner(handle: Int) raises -> MutPointer[TsDevOwner, MutUntrackedOrigin]:
+    if handle == 0:
+        raise Error("x_decomp tsqr: no kept factorization (tsqr_r with keep first)")
+    return MutPointer[TsDevOwner, MutUntrackedOrigin](unsafe_from_address=handle)
 
 
-def ts_free_device() raises:
-    _ts_dev_swap(List[DeviceBuffer[DType.float32]](), 0, 0)
-
-
-def _ts_dev_kept(m: Int, n: Int) raises -> List[DeviceBuffer[DType.float32]]:
-    """References to the five kept buffers of an m x n factorization, copied
-    out under the lock (the caller launches on them with no lock held); an
-    empty list when no factorization of that shape is kept."""
-    var held = List[DeviceBuffer[DType.float32]]()
-    var st = TS_DEV_STATE.get_or_create_ptr()
-    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](st[].lock.unsafe_ptr())
-    shared_slot_lock(lock)
-    if len(st[].bufs) == 5 and st[].m == m and st[].n == n:
-        for i in range(5):  # small-loop(kept: the five buffers of the retained factorization)
-            held.append(st[].bufs[i])
-    shared_slot_unlock(lock)
-    return held^
+def ts_dev_release(handle: Int) raises:
+    """Free the owner (and drop its buffers) a handle names."""
+    var owner = ts_dev_owner(handle)
+    owner.unsafe_deinit_pointee()
+    owner.free()
 
 
 @always_inline
@@ -1101,8 +1083,7 @@ struct TsFactorWork(Movable):
 
 
 def ts_factor_work(ctx: DeviceContext, m: Int, n: Int) raises -> TsFactorWork:
-    """`ts_factor_device`'s allocations on `ctx`, in its order (no
-    `ts_free_device`: a shard's buffers never touch the kept state)."""
+    """`ts_factor_device`'s allocations on `ctx`, in its order."""
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
     var npair = ts_pairs(n)
@@ -1116,16 +1097,12 @@ def ts_factor_work(ctx: DeviceContext, m: Int, n: Int) raises -> TsFactorWork:
     return TsFactorWork(dt^, dt2^, dtl^, dtau^)
 
 
-def ts_factor_begin(ctx: DeviceContext, m: Int, n: Int, keep: Bool) raises -> TsFactorWork:
-    """`ts_factor_device`'s guards, `ts_free_device` for a factor that will
-    be kept (it replaces the retained one; a temporary factor leaves the kept
-    state alone, THE LOCK above), then its allocations."""
+def ts_factor_begin(ctx: DeviceContext, m: Int, n: Int) raises -> TsFactorWork:
+    """`ts_factor_device`'s guards, then its allocations."""
     comptime if not TS_SMEM_OK:
         raise Error("x_decomp tsqr: the panel kernels' threadgroup memory does not fit this column")
     comptime if (TS_WY_PAIR or TS_TREE_PAR) and not TS_SMEM2_OK:
         raise Error("x_decomp tsqr: the pair and tree kernels' threadgroup memory does not fit this column")
-    if keep:
-        ts_free_device()
     return ts_factor_work(ctx, m, n)
 
 
@@ -1216,10 +1193,10 @@ def ts_leaf_phase(
 def ts_factor_finish(
     ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut work: TsFactorWork,
     m: Int, n: Int, r: F32Ptr, keep: Bool,
-) raises:
+) raises -> List[DeviceBuffer[DType.float32]]:
     """`ts_factor_device` after the leaf phase: the R tiles, the tree
-    combine, the NaN refusal, R into the host `r`, and with `keep` the kept
-    state for `ts_apply_device`."""
+    combine, the NaN refusal, R into the host `r`, and with `keep` the five
+    buffers of the factorization returned to the caller (empty without)."""
     var nb = ts_blocks(m)
     var dt = work.dt
     var dt2 = work.dt2
@@ -1259,69 +1236,46 @@ def ts_factor_finish(
     _ = dnan^
     if first_nan != TS_NO_NAN:
         raise Error("x_decomp tsqr: R entry " + String(first_nan) + " is NaN (a NaN input, or a device launch cut short): refused")
+    var kept = List[DeviceBuffer[DType.float32]]()
     if keep:
-        var kept = List[DeviceBuffer[DType.float32]]()
         kept.append(da)
         kept.append(dt)
         kept.append(dtl)
         kept.append(dtau)
         kept.append(dt2)
-        _ts_dev_swap(kept^, m, n)
     _ = dt^
     _ = dt2^
     _ = dtl^
     _ = dtau^
+    return kept^
 
 
-def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr, keep: Bool) raises:
-    """R (n x n) of the m x n row-major `da` (factored in place) into the host
-    r; with `keep` the factored state stays for `ts_apply_device`."""
-    var work = ts_factor_begin(ctx, m, n, keep)
-    ts_leaf_phase(ctx, da, work, m, n, 0, ts_blocks(m))
-    ts_factor_finish(ctx, da, work, m, n, r, keep)
-    _ = work^
-
-
-def ts_factor_device_owned(
-    ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr
+def ts_factor_device(
+    ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr, keep: Bool
 ) raises -> List[DeviceBuffer[DType.float32]]:
-    """`ts_factor_device` for a caller that applies inside the same call
-    (`_orth_tsqr_device`): the five buffers of the factorization (`da`, T, R
-    tiles, tau, T2, the kept state's order) are returned to the caller, and
-    the process's kept state is never touched (lane r3-small, 2026-11-22: two
-    fits through the one kept factorization took each other's factor)."""
-    var work = ts_factor_begin(ctx, m, n, False)
+    """R (n x n) of the m x n row-major `da` (factored in place) into the host
+    r; with `keep` the five buffers of the factorization (`da`, T, R tiles,
+    tau, T2) are returned to the caller, who owns them (empty without)."""
+    var work = ts_factor_begin(ctx, m, n)
     ts_leaf_phase(ctx, da, work, m, n, 0, ts_blocks(m))
-    ts_factor_finish(ctx, da, work, m, n, r, False)
-    var held = List[DeviceBuffer[DType.float32]]()
-    held.append(da)
-    held.append(work.dt)
-    held.append(work.dtl)
-    held.append(work.dtau)
-    held.append(work.dt2)
+    var held = ts_factor_finish(ctx, da, work, m, n, r, keep)
     _ = work^
     return held^
 
 
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
-def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep: Bool = False) raises -> DeviceBuffer[DType.float32]:
-    """Q c (m x k) on the device for the kept factorization (c: host n x k);
-    the state is released by default. Explicit guarded keep=True retains
-    the same immutable factor words for another RHS; caller must free that
-    state before replacing/closing the factor context. No content cache is
-    inferred and no different factorization is reused."""
-    if len(_ts_dev_kept(m, n)) != 5:
-        ts_free_device()
-        raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
-    if keep:
-        # TOMBSTONE: MOJOLEARN_IDN_TSQR_REUSE (opt-in arm, no A/B recorded for a default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-07-base); code recoverable at 5f02e22a5c.
-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
-        raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
+def ts_apply_device(
+    ctx: DeviceContext, c: F32Ptr, held: List[DeviceBuffer[DType.float32]], m: Int, n: Int, k: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """Q c (m x k) on the device for the factorization the caller owns in
+    `held` (`ts_factor_device(keep=True)`); c is a host n x k."""
+    # TOMBSTONE: MOJOLEARN_IDN_TSQR_REUSE (opt-in arm, no A/B recorded for a default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-07-base); code recoverable at 5f02e22a5c.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
     var nb = ts_blocks(m)
     var dcb = ctx.enqueue_create_buffer[DType.float32](nb * n * k)
     ctx.enqueue_copy(dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_ptr=c)
-    return _ts_apply_dcb(ctx, dcb^, m, n, k, keep)
+    return _ts_apply_held(ctx, dcb^, held, m, n, k)
 
 
 def ts_apply_device_owned(
@@ -1330,7 +1284,7 @@ def ts_apply_device_owned(
 ) raises -> DeviceBuffer[DType.float32]:
     """`ts_apply_device` for a c (n x k) that is already on the device (its
     first n * k words), so no host matrix crosses, over the factorization
-    the caller owns (`ts_factor_device_owned`): RSVD_IDN_TSQR_ORTHO's
+    the caller owns (`ts_factor_device(keep=True)`): RSVD_IDN_TSQR_ORTHO's
     selection matrix. Was `ts_apply_device_buf` over the process's kept
     state (lane r3-small, 2026-11-22)."""
     var nb = ts_blocks(m)
@@ -1339,23 +1293,6 @@ def ts_apply_device_owned(
         dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_buf=dc.create_sub_buffer[DType.float32](0, n * k)
     )
     return _ts_apply_held(ctx, dcb^, held, m, n, k)
-
-
-def _ts_apply_dcb(
-    ctx: DeviceContext, var dcb: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, keep: Bool
-) raises -> DeviceBuffer[DType.float32]:
-    """The apply over the process's kept state: `dcb` holds c in its first
-    n * k words (the rest is the tree's workspace)."""
-    # The five references are copied out under the state's lock (THE LOCK
-    # above); every launch below runs with no lock held.
-    var held = _ts_dev_kept(m, n)
-    if len(held) != 5:
-        raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
-    var dq = _ts_apply_held(ctx, dcb^, held, m, n, k)
-    _ = held^
-    if not keep:
-        ts_free_device()
-    return dq^
 
 
 def _ts_apply_held(

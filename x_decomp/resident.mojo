@@ -1074,17 +1074,25 @@ def srp_strat_kernel(dst: F32Ptr, count: Int32, d: Int32, seed: UInt32, dgrid: U
         dst.unsafe_store(i, v)
 
 
+# THE STAGE'S LEASE (lane linalg-owner, 2026-11-22). One stage per process
+# and no lock: two fused fits at once raced its first creation (a buffer
+# dropped under queued kernels), folded each other's partials and overwrote
+# the pinned word before the other read it (a wrong non-finite position). Now
+# the lock word is held from the stage's creation through the scan kernels,
+# the wait and the read of the word.
 struct _GrpStage(Defaultable, Movable):
     """The fused fit's pooled scan partials (device) and their pinned copy."""
     var part: Optional[DeviceBuffer[DType.int32]]
     var host: Optional[HostBuffer[DType.int32]]
+    var lock: List[Int64]
 
     def __init__(out self):
         self.part = Optional[DeviceBuffer[DType.int32]]()
         self.host = Optional[HostBuffer[DType.int32]]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime GRP_STAGE = SharedSlot[_GrpStage, "MojolearnXDecompGrpFusedStageV1"]
+comptime GRP_STAGE = SharedSlot[_GrpStage, "MojolearnXDecompGrpFusedStageV2", 2]
 
 
 def grp_fit_fused_run(
@@ -1108,45 +1116,50 @@ def grp_fit_fused_run(
     var pd = _ptr(dst, max(count, 1))
     var best = NONFINITE_NONE
     var ctx = xd_ctx()
-    var st = GRP_STAGE.get_or_create_ptr()
-    if not st[].part:
-        # 512 partials plus the slot their device-folded minimum lands in
-        st[].part = ctx.enqueue_create_buffer[DType.int32](513)
-        st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
-    var blocks = _scan_blocks(cnt) if cnt > 0 else 0
     var buf = pool_take["MojolearnXDecompCls2ScanV2"](ctx, max(cnt, 1))
-    if cnt > 0:
-        ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
-        ctx.enqueue_function[nonfinite_partial_kernel](
-            st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
-            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-        )
-        # the partials fold on the device; one word home (lane cpu3-core)
-        ctx.enqueue_function[min_partials_kernel](
-            st[].part.value().unsafe_ptr() + 512, st[].part.value().unsafe_ptr(),
-            Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-        )
-        ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(),
-                         src_buf=st[].part.value().create_sub_buffer[DType.int32](512, 1))
-    if count > 0:
-        var strat = False
-        comptime if GRP_FAST_SRP_STRAT:
-            # p = [count, seed, 3, n_features, D]: the stratified sparse
-            # pattern (srp_strat_kernel); modes 0-2 are main's kernel
-            strat = mode == 3
-            if strat:
-                ctx.enqueue_function[srp_strat_kernel](
-                    pd, Int32(count), Int32(sd), seed, UInt32(sgrid), sc,
-                    grid_dim=_blocks(count), block_dim=TPB,
-                )
-        if not strat:
-            ctx.enqueue_function[grp_rand_scale_kernel](
-                pd, Int32(count), seed, Int32(mode), sc, thr, grid_dim=_blocks(count), block_dim=TPB
+    var st = GRP_STAGE.get_or_create_ptr()
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](st[].lock.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        if not st[].part:
+            # 512 partials plus the slot their device-folded minimum lands in
+            st[].part = ctx.enqueue_create_buffer[DType.int32](513)
+            st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
+        var blocks = _scan_blocks(cnt) if cnt > 0 else 0
+        if cnt > 0:
+            ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
+            ctx.enqueue_function[nonfinite_partial_kernel](
+                st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
+                grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
             )
-        ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(dst, count))
-    ctx.synchronize()
-    if cnt > 0:
-        best = st[].host.value().unsafe_ptr()[0]
+            # the partials fold on the device; one word home (lane cpu3-core)
+            ctx.enqueue_function[min_partials_kernel](
+                st[].part.value().unsafe_ptr() + 512, st[].part.value().unsafe_ptr(),
+                Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(),
+                             src_buf=st[].part.value().create_sub_buffer[DType.int32](512, 1))
+        if count > 0:
+            var strat = False
+            comptime if GRP_FAST_SRP_STRAT:
+                # p = [count, seed, 3, n_features, D]: the stratified sparse
+                # pattern (srp_strat_kernel); modes 0-2 are main's kernel
+                strat = mode == 3
+                if strat:
+                    ctx.enqueue_function[srp_strat_kernel](
+                        pd, Int32(count), Int32(sd), seed, UInt32(sgrid), sc,
+                        grid_dim=_blocks(count), block_dim=TPB,
+                    )
+            if not strat:
+                ctx.enqueue_function[grp_rand_scale_kernel](
+                    pd, Int32(count), seed, Int32(mode), sc, thr, grid_dim=_blocks(count), block_dim=TPB
+                )
+            ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(dst, count))
+        ctx.synchronize()
+        if cnt > 0:
+            best = st[].host.value().unsafe_ptr()[0]
+    finally:
+        shared_slot_unlock(lock)
     pool_give["MojolearnXDecompCls2ScanV2"](buf^)
     return -1 if best == NONFINITE_NONE else Int(best)
 

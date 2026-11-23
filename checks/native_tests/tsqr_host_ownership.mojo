@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # native-check: cpu
-"""Temporary TSQR owners overlap without replacing a retained factorization."""
+"""Temporary TSQR factorizations overlap with a kept one, and every kept factorization is its caller's own owner
+(lane linalg-owner, 2026-11-22: no process slot)."""
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from x_decomp.cells import F32Ptr
-from x_decomp.tsqr_host import ts_factor_host, ts_apply_host, TS_HOST_STATE
+from x_decomp.tsqr_host import ts_factor_host, ts_apply_host, _TsHost
 
 
 def values(rows: Int, cols: Int, seed: Int) -> List[Float32]:
@@ -23,8 +24,9 @@ def temporary(fixture: Int) raises:
     var cols = 2 + fixture % 5
     var a = values(rows, cols, fixture)
     var r = List[Float32](length=cols * cols, fill=0)
-    ts_factor_host(F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
-                   F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), rows, cols, 0, False)
+    var none = ts_factor_host(F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
+                              F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), rows, cols, 0, False)
+    require(none == 0, "a temporary TSQR returns no owner")
     # Independent Gram equality: R'R equals A'A, without choosing QR signs.
     # Fixtures run across the pool; each oracle's tiny dot folds are ordered.
     for i in range(cols):
@@ -41,19 +43,19 @@ def temporary(fixture: Int) raises:
 
 
 def test_retained_and_temporary_owners() raises:
-    """Process-global order: a retained fit, 32 parallel temporary owners that must not replace it, then the retained
-    factor's apply and reconstruction."""
+    """A kept fit, 32 parallel temporary fits beside it, then the kept owner's apply (which frees it) and the
+    reconstruction."""
     var a = values(17, 3, 31)
     var r = List[Float32](length=9, fill=0)
-    ts_factor_host(F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
-                   F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), 17, 3, 0, True)
+    var owner = ts_factor_host(F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
+                               F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), 17, 3, 0, True)
+    require(owner != 0, "a kept TSQR returns its owner")
     check_cases("parallel temporary TSQR", 32, temporary)
-    var slot = TS_HOST_STATE.get_or_create_ptr()
-    require(slot[].live and slot[].m == 17 and slot[].n == 3, "temporary fit replaced retained TSQR")
+    var held = MutPointer[_TsHost, MutUntrackedOrigin](unsafe_from_address=owner)
+    require(held[].live and held[].m == 17 and held[].n == 3, "temporary fit changed the kept TSQR owner")
     var eye: List[Float32] = [1, 0, 0, 0, 1, 0, 0, 0, 1]
     var q = List[Float32](length=51, fill=0)
-    ts_apply_host(F32Ptr(unsafe_from_address=Int(eye.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(q.unsafe_ptr())), 17, 3, 3)
-    require(not slot[].live, "applied TSQR state was not released")
+    ts_apply_host(owner, F32Ptr(unsafe_from_address=Int(eye.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(q.unsafe_ptr())), 17, 3, 3)
     for row in range(17):
         for col in range(3):
             var actual = Float64(0)
