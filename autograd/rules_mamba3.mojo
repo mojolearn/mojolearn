@@ -310,7 +310,7 @@ struct Mamba3TapeScratch(Movable):
 
     def __init__(
         out self, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims, nc: Int,
-        owner: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]] = None,
+        owner: Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]] = None,
     ) raises:
         var arena = _AfnM3Arena(owner)
         var own = arena.own()
@@ -425,11 +425,11 @@ struct Mamba3TapeBlock(Movable):
     var tk: Int
     #: the owner's arena for the scratch (the Samba session's `m3_arena`,
     #: resolved once where the session builds its blocks; None without one)
-    var arena: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]
+    var arena: Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]]
 
     def __init__(
         out self, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims,
-        arena: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]] = None,
+        arena: Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]] = None,
     ) raises:
         var m = b * l
         self.d_norm = mamba_zeros[False](ctx, m * dims.d_model)

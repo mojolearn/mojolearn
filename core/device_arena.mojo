@@ -253,7 +253,7 @@ struct DeviceArena(Movable):
                 pass
 
 
-comptime ArenaPtr = UnsafePointer[DeviceArena, MutAnyOrigin]
+comptime ArenaPtr = UnsafePointer[DeviceArena, MutUntrackedOrigin]
 """The handle the allocation helpers take (`Optional[ArenaPtr]`, None for
 every call outside a session's construction)."""
 
@@ -264,7 +264,7 @@ def arena_ptr(mut arena: DeviceArena) -> Optional[ArenaPtr]:
     the last helper call that receives the handle."""
     if not arena.on:
         return None
-    return UnsafePointer(to=arena).unsafe_origin_cast[MutAnyOrigin]()
+    return UnsafePointer(to=arena).unsafe_origin_cast[MutUntrackedOrigin]()
 
 
 def arena_buffer(ctx: DeviceContext, n: Int, arena: Optional[ArenaPtr]) raises -> DeviceBuffer[DType.float32]:

@@ -195,7 +195,7 @@ def mamba3_prefill_backward_on(
     var m = b * l
     # lane afn-samba: the arena bracket and the angle chains' chunk sums,
     # declared here and initialized only under their defines.
-    var afn_arena = _AfnM3Arena()
+    var afn_arena = _AfnM3Arena(None)  # no session owner on this host walk (nn-integrate: arena-session made the owner required)
     var afn_own = afn_arena.own()
     # lane/neural-apple2: every scratch below is filled and used on the one
     # in-order `ctx` and kept alive to the final synchronize (the explicit

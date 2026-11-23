@@ -64,17 +64,17 @@ struct _AfnM3Arena(Movable):
     the walk's end, so any other thread's allocations in between took views
     of it."""
 
-    var arena: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]
+    var arena: Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]]
     #: scratch the AFN arms enqueue work on, kept alive past the pass's wait
     var keep: List[DeviceBuffer[DType.float32]]
 
-    def __init__(out self, owner: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]) raises:
+    def __init__(out self, owner: Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]]) raises:
         self.arena = None
         self.keep = List[DeviceBuffer[DType.float32]]()
         comptime if AFN_M3_BWD_ARENA:
             self.arena = owner
 
-    def own(self) -> Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]:
+    def own(self) -> Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]]:
         """The handle `_m3_scratch` takes: None unless the define is on and
         the pass has an owner's arena."""
         return self.arena
@@ -91,7 +91,7 @@ struct _AfnM3Arena(Movable):
 
 @always_inline
 def _m3_scratch(
-    own: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]], ctx: DeviceContext, n: Int
+    own: Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]], ctx: DeviceContext, n: Int
 ) raises -> DeviceBuffer[DType.float32]:
     """A zero-filled scratch of `n` floats: a view of this pass's own arena
     under MOJOLEARN_AFN_MAMBA3_BWD_ARENA (`own`, from `_AfnM3Arena.own`),
