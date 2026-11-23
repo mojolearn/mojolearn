@@ -1282,10 +1282,9 @@ struct _DoorModel(AgnModel):
     META state. What is left: a member of a meta-estimator that is an AdaBoost*, a MultiOutput* or a search CV (no
     META kind: AdaBoost's rounds over device sessions and its one-tree door members, MultiOutput's per-output label
     vectors and the search's Python scorers and candidate clones are not typed yet); a META class whose admit keeps
-    its door (a Bagging configuration the batched forest route may take, a Calibrated non-int cv or DeviceRows base, a
-    Stacking splitter cv); and a meta nested two levels deep (the META kind admits its nested members through the
-    leaf dispatch only: the admission helpers may not recurse). When those are typed, this door and `_evaluate` are
-    deleted. Everything else is native: every member
+    its door (a Calibrated non-int cv or DeviceRows base, a Stacking splitter cv). Since lane mf-meta3c the batched
+    Bagging route and metas nested at any depth (the boundary's admission work-list) open as META states too. When
+    those left are typed, this door and `_evaluate` are deleted. Everything else is native: every member
     family (an outlier detector's or clusterer's integer predict too), the votes (soft and hard), Bagging, Stacking
     (a classifier member asked for predict too), OneVsRest, CalibratedClassifierCV, AdaBoost, MultiOutputRegressor,
     the search CVs' best estimator, RFE (its estimator over its support), LabelPropagation and LabelSpreading (their

@@ -41,6 +41,22 @@ EVERY (B) line must be equal except: `cal_hard_*` (the hard vote base is now ref
 a classifier now fit natively; before, the door's own fit answered: equal words expected there too, a differing
 line is a defect).
 
+(C, lane mf-meta3c, base = origin/lane/member-fits 7150562308, head = lane/mf-meta3c) THE BATCHED BAGGING ROUTE
+inside the Bagging META kind and META estimators nested two and three deep (before: the door kept both):
+  * CalibratedClassifierCV(BaggingClassifier(n_estimators=4, random_state=0)) (the default decision-tree base:
+    the batched forest fit) x method x ensemble, n_jobs 1;
+  * VotingClassifier([("bag", <bagging>), ("lr", lr)], soft) for <bagging> in {the default batched bag,
+    bootstrap=False with max_samples=1.0 (batched over every row), max_features=0.6 (the per-member route)}, and
+    the batched bag's vote fitted with sample_weight (the per-member route: the batched route takes no weights);
+  * IterativeImputer(estimator=BaggingRegressor(n_estimators=3, random_state=0), max_iter 2) (a regressor tree
+    left at n_bins=None: the image's bin count in the batched forest's slot 7);
+  * CalibratedClassifierCV(StackingClassifier([("vote", soft vote), ("lda", lda)], cv 3)) (two deep in a
+    calibration), VotingClassifier([("v2", VotingClassifier([("v1", soft vote), ("lr", lr)], soft)), ("gnb",
+    gnb)], soft) (three deep), GridSearchCV(VotingClassifier([("inner", soft vote), ("lr", lr)], soft),
+    {"weights": [[1, 1], [1, 2]]}, cv 3) (a nested META admitted, refitted and packed through the work-lists);
+    each with the nested fitted estimators' attributes.
+EVERY (C) line must be equal (the same forest fit, the same RUNs; the nested states run the same sets).
+
 The configurations are independent: one process each across the host cores.
 
     python tools/mf_meta3_digests.py > digests.txt
@@ -121,6 +137,13 @@ def _configs():
     rows += [("unitsearch", "bag"), ("unitsearch", "ovr"), ("unitshap", "ovr", "K"), ("unitshap", "ovr", "P"),
              ("unitshap", "bag", "K"), ("unitshap", "bag", "P"), ("unititerimp",), ("vote", "stack_usercv"),
              ("vote", "stack_predict"), ("vote", "bag_oob")]
+    # (C) lane mf-meta3c
+    for method in ("sigmoid", "isotonic"):
+        for ensemble in (True, False):
+            rows.append(("batchcal", method, ensemble))
+    rows += [("batchvote", "default"), ("batchvote", "every_row"), ("batchvote", "subset"),
+             ("batchvote", "weighted"), ("batchiterimp",), ("deep", "cal_stack_vote"), ("deep", "vote3"),
+             ("deep", "search")]
     return rows
 
 
@@ -237,6 +260,56 @@ def _run(index):
                 if v is not None:
                     out.append((f"{tag}_{attr}", _digest(v)))
             return out
+        if row[0] == "batchcal":
+            _, method, ensemble = row
+            model = ml.CalibratedClassifierCV(ml.BaggingClassifier(n_estimators=4, random_state=0), method=method,
+                                              ensemble=ensemble, cv=3, n_jobs=1).fit(X, y)
+            return _predicts(model, Xt, tag) + _members(model, tag)
+        if row[0] == "batchvote":
+            kw = {"n_estimators": 4, "random_state": 0}
+            if row[1] == "every_row":
+                kw.update(bootstrap=False, max_samples=1.0)
+            elif row[1] == "subset":
+                kw.update(max_features=0.6)
+            model = ml.VotingClassifier([("bag", ml.BaggingClassifier(**kw)),
+                                         ("lr", ml.LogisticRegression(max_iter=200))], voting="soft")
+            if row[1] == "weighted":
+                w = np.linspace(0.5, 1.5, len(X)).astype(np.float32)
+                model.fit(X, y, sample_weight=w)
+            else:
+                model.fit(X, y)
+            bag = model.estimators_[0]
+            return (_predicts(model, Xt, tag) + _members(model, tag)
+                    + [(tag + "_bag_proba", _digest(bag.predict_proba(Xt))),
+                       (tag + "_bag_batched", str(getattr(bag, "_batched", None) is not None))])
+        if row[0] == "batchiterimp":
+            Xr, _ = _data(11, 120, 0, d=5)
+            Xr = Xr.copy()
+            rng = np.random.default_rng(3)
+            Xr[rng.random(Xr.shape) < 0.15] = np.nan
+            imp = ml.IterativeImputer(estimator=ml.BaggingRegressor(n_estimators=3, random_state=0), max_iter=2,
+                                      random_state=0).fit(Xr)
+            return [(tag + "_transform", _digest(imp.transform(Xr)))]
+        if row[0] == "deep":
+            if row[1] == "cal_stack_vote":
+                inner = ml.StackingClassifier([("vote", _soft_vote(ml)), ("lda", ml.LinearDiscriminantAnalysis())],
+                                              cv=3)
+                model = ml.CalibratedClassifierCV(inner, cv=3).fit(X, y)
+                return _predicts(model, Xt, tag) + _members(model, tag)
+            if row[1] == "vote3":
+                v2 = ml.VotingClassifier([("v1", _soft_vote(ml)), ("lr", ml.LogisticRegression(max_iter=200))],
+                                         voting="soft")
+                model = ml.VotingClassifier([("v2", v2), ("gnb", ml.GaussianNB())], voting="soft").fit(X, y)
+                out = _predicts(model, Xt, tag) + _members(model, tag)
+                return out + _members(model.estimators_[0], tag + "_v2") + _members(
+                    model.estimators_[0].estimators_[0], tag + "_v1")
+            from mojolearn.model_selection import GridSearchCV
+            est = ml.VotingClassifier([("inner", _soft_vote(ml)), ("lr", ml.LogisticRegression(max_iter=200))],
+                                      voting="soft")
+            model = GridSearchCV(est, {"weights": [[1, 1], [1, 2]]}, cv=3).fit(X, y)
+            return ([(tag + "_best", str(model.best_params_))] + _predicts(model, Xt, tag)
+                    + _members(model.best_estimator_, tag) + _members(model.best_estimator_.estimators_[0],
+                                                                       tag + "_inner"))
     except Exception as e:  # noqa: BLE001 - the words are the digest
         return [(tag + "_raised", f"{type(e).__name__}: {e}")]
     return []

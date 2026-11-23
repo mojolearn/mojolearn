@@ -2986,11 +2986,10 @@ struct _CalUnits(Movable):
     CategoricalNB's door included where its kind is not admitted, a
     meta-estimator base whose META admit keeps its door (since lane
     mf-meta3b Voting, Stacking, OneVsRest, CalibratedClassifierCV and
-    Bagging bases are META members; still the door's: a Bagging
-    configuration that may take the batched forest route, a Calibrated base
-    with a non-int cv or a DeviceRows base, a Stacking base with a splitter
-    cv, a meta whose nested estimator is itself a meta: nested members are
-    admitted through the leaf dispatch only), a configuration its family's
+    Bagging bases are META members, since lane mf-meta3c the batched Bagging
+    route and metas nested at any depth too; still the door's: a Calibrated
+    base with a non-int cv or a DeviceRows base, a Stacking base with a
+    splitter cv), a configuration its family's
     admit leaves to the estimator's door (a class_weight that is neither
     None, 'balanced' nor an exact dict, which that door refuses in its
     words; a GP kernel the member cannot address, ...), or a member kind
