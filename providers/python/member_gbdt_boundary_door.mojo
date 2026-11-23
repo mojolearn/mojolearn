@@ -320,6 +320,22 @@ def gbdt_member_label_check(plan: MemberPlan, classes: Int) raises:
         raise Error(GBDT_ADAPTER_MULTICLASS)
 
 
+def _cat_outside_words(params: List[Float64], d: Int) -> String:
+    """`_cat_slots`'s refusal (bindings/gbdt_category_unpack.mojo) for the first cat_features index of NEW's
+    feature-list tail, in the given order, that is outside the fit's `d` columns (lane mf-cal5)."""
+    var count = len(params)
+    var h = Int(params[count - 1])
+    var c = Int(params[count - 2])
+    var start = count - 2 - c - h
+    var at = -1
+    for k in range(c):  # small-loop(cat_features): the first index outside X
+        var index = Int(params[start + k])
+        if index < 0 or index >= d:
+            at = index
+            break
+    return ("mojolearn: cat_features index " + String(at) + " out of range for " + String(d) + " features")
+
+
 def _tail_cat_columns(params: List[Float64], d: Int) -> List[Int]:
     """The cat_features indices of NEW's feature-list tail (`[..., cat, one-hot, C, H]`, core/gbdt_member.mojo
     `_feature_tail`) ascending without repeats (`gbdt_category_columns`); empty when an index is outside the
@@ -508,7 +524,10 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
     if eval_set is not None and cats > 0:
         cat_columns = _tail_cat_columns(plan.params, d)
         if len(cat_columns) == 0:
-            return got^  # an index outside X: the fit door refuses it at its X, in its words
+            # An index outside X (THE FALLBACK RULE, lane mf-cal5): the fit door's refusal at its X, in its
+            # words (bindings/gbdt_category_unpack.mojo `_cat_slots`: the first such index in the given order);
+            # before, the caller fell back to that door to raise them.
+            raise Error(_cat_outside_words(plan.params, d))
     var run: PythonObject
     if kind == 1 or kind == 4:
         run = trees_route_context(model, context)
