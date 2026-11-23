@@ -1,0 +1,15 @@
+diff --git a/gbdt/host/gbdt_oracle_query.mojo b/gbdt/host/gbdt_oracle_query.mojo
+index c1b4864da6..c39f63951d 100644
+--- a/gbdt/host/gbdt_oracle_query.mojo
++++ b/gbdt/host/gbdt_oracle_query.mojo
+@@ -132,7 +132,9 @@ def query_means(
+                     if has_weights:
+                         w = w_p[base + i]
+                     sum_t = query_mean_step(der_p[base + i], w, sum_t)
+-                    sum_w = sum_w + w
++                    # SABOTAGE (coverage-gbdt-host_query_mean_weight): the
++                    # weight sum counts rows, not their weights
++                    sum_w = sum_w + Float32(1.0)
+                     i += GBDT_QUERY_LANES
+                 line_t[lane] = sum_t
+                 line_w[lane] = sum_w

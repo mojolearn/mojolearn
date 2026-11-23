@@ -1,0 +1,16 @@
+diff --git a/gbdt/host/gbdt_oracle_losses.mojo b/gbdt/host/gbdt_oracle_losses.mojo
+index a981453215..40eda28149 100644
+--- a/gbdt/host/gbdt_oracle_losses.mojo
++++ b/gbdt/host/gbdt_oracle_losses.mojo
+@@ -915,9 +915,9 @@ def _exact_estimate(
+         for pos in range(unit * r_chunk, min(n_rows, (unit + 1) * r_chunk)):
+             var r = ftz(gt_p[pos] - gc_p[pos])
+             res_p[pos] = r
++            # SABOTAGE (coverage-gbdt-host_exact_weight): the Exact
++            # residual's weight is 1.0 whatever the row weight
+             var w = Float32(1.0)
+-            if has_weights:
+-                w = gw_p[pos]
+             if is_mape:
+                 var delta = max(Float32(1.0), abs(r))
+                 w = ftz(w / delta)
