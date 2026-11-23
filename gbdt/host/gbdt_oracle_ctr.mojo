@@ -976,6 +976,7 @@ def gbdt_ctr_host_fit(
     random_strength: Float32 = Float32(0.0),
     objective: Int = GBDT_BOOST_LOGLOSS,
     starting_approx: Float64 = 0.0,
+    weights: List[Float32] = List[Float32](),
 ) raises -> GbdtCtrHostFit:
     """`train` with categorical columns on the covered configuration (see
     the module docstring for what that is and what mirrors what).
@@ -988,6 +989,13 @@ def gbdt_ctr_host_fit(
     _tree_ctr_levels_host`), and the model's last columns are the
     combinations the trees chose. At 1 nothing here differs from the fit
     without them.
+
+    `weights` (row order, empty: unit) are the fit's row weights (sample
+    weights, times the class weights under Logloss), read by the boost loop
+    exactly as the numeric fit reads them (lane gbdt-cpu-rest, 2026-11-23).
+    The CTR tables do not read them: the device builds every CTR over
+    trivial weights (`GatherTrivialWeights`, `gbdt/ctrs/ctr_calcers.mojo`
+    `TWeightedBinFreqCalcer.trivial_host`).
 
     The columns, grids, tables and per-permutation indexes are
     `gbdt_ctr_host_prelude`'s (which also checks the sizes of the learn
@@ -1029,7 +1037,7 @@ def gbdt_ctr_host_fit(
     var fit = gbdt_host_boost(
         cindexes, est_perm, y, n_rows, n_columns, grid^, shape.layout, params,
         bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
-        tree_state, List[Float32](), objective, starting_approx,
+        tree_state, weights, objective, starting_approx,
     )
 
     # TREE CTRS: the model's columns are the base columns followed by one

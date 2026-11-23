@@ -1141,7 +1141,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # leaf estimation and learn loss. Sample weights use that same owner;
     # class weights multiply them as in train.mojo.
     var binary_sample_weights = (
-        n_weights != 0 and loss == String("Logloss") and n_flags == 0
+        n_weights != 0 and loss == String("Logloss")
     )
     # the device's one `weights` column for every other numeric fit (lane
     # gbdt-gaps, 2026-11-23): RMSE on both tree shapes, Logloss on
@@ -1157,21 +1157,22 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # (gbdt/host/gbdt_oracle_query.mojo, the device's bodies in
     # gbdt/targets/query_bodies.mojo) and the grouped pointwise searcher
     # (gbdt_oracle_pointwise_rank.mojo) read them as the greedy grouped fit
-    var sample_weights_ok = n_weights != 0 and n_flags == 0 and not is_multi and (
-        loss == String("Logloss") or is_rmse or is_pointwise
+    # and the multi-output losses (gbdt_oracle_multiclass.mojo: the
+    # sample weight times the class weight, `train`'s one product)
+    # and categorical columns (the one-hot and CTR arms run the same boost
+    # loop with the same row weights; the device builds its CTR tables over
+    # trivial weights, so the tables do not read them)
+    var sample_weights_ok = n_weights != 0 and (
+        loss == String("Logloss") or is_rmse or is_pointwise or is_multi
     )
     if n_weights != 0 and not sample_weights_ok:
-        _refuse(
-            "sample_weight with categorical columns, a multi-output loss,"
-            " QueryRMSE or the grouped pointwise searcher"
-        )
+        _refuse("sample_weight under loss='" + loss + "'")
     var binary_class_weights = (
-        n_class_weights != 0 and loss == String("Logloss") and n_flags == 0
+        n_class_weights != 0 and loss == String("Logloss")
     )
     if n_class_weights != 0 and (not is_multi or is_multi_rmse) and not binary_class_weights:
         _refuse(
             "class_weights outside MultiClass, MultiClassOneVsAll and Logloss"
-            " without categorical columns"
         )
     if binary_class_weights and n_class_weights != 2:
         # `train`'s words (gbdt/train.mojo)
@@ -1474,7 +1475,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             x, y, n_rows, n_features, p,
             multi_objective,
             class_weights, sym_boot_kind, sym_boot_param, random_strength,
-            target_dim,
+            target_dim, row_weights,
         )
         text = gbdt_multi_host_model_text(multi_model)
         losses = multi_model.losses.copy()
@@ -1563,7 +1564,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             x, y, n_rows, n_features, p, flags, permutation_count,
             ctr_permutation_id, ev^, max_ctr_complexity,
             sym_boot_kind, sym_boot_param, random_strength, boost_objective,
-            boost_start,
+            boost_start, row_weights,
         )
         # the `bias` record a seeded RMSE fit adds (absent at zero bits)
         text = gbdt_text_with_bias(
@@ -1591,7 +1592,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
         var r = gbdt_host_fit_eval(
             x, y, n_rows, n_features, p, one_hot, sym_boot_kind,
-            sym_boot_param, random_strength, ev^, List[Float32](),
+            sym_boot_param, random_strength, ev^, row_weights,
             boost_objective, boost_start,
         )
         text = gbdt_text_with_bias(
