@@ -1,22 +1,3 @@
-diff --git a/ivf/resident.mojo b/ivf/resident.mojo
-index 9ab8c5782e..106712e9c1 100644
---- a/ivf/resident.mojo
-+++ b/ivf/resident.mojo
-@@ -55,6 +55,14 @@ struct ResidentIvfFlat(Movable):
-         self.dev = IvfFlatDevice(ctx, index)
-         self.index = index^
-         self.partial_storage = partial_storage
-+        # SABOTAGE: resident list norms off by one, in the device buffer the search reads
-+        var sab_norm = self.dev.list_norm.copy()
-+        for i in range(len(sab_norm)):
-+            sab_norm[i] += Float32(1.0)
-+        if len(sab_norm) > 0:
-+            ctx.enqueue_copy(dst_buf=self.dev.dlist_norm, src_ptr=sab_norm.unsafe_ptr())
-+            ctx.synchronize()
-+        _ = sab_norm^
- 
-     def __init__(
-         out self, ctx: DeviceContext, var index: IvfFlatIndex, var built: IvfFlatBuildDevice
 diff --git a/x_ann/resident.mojo b/x_ann/resident.mojo
 index 49046472c2..1f71613d97 100644
 --- a/x_ann/resident.mojo
