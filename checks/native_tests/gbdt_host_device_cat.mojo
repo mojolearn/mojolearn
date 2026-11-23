@@ -1259,5 +1259,181 @@ def test_ordered_weights_host_text_is_device_text() raises:
                        + String(ORDW_UNITS) + " cases failed" + failed if count > 0 else ""))
 
 
+# ---- lane gbdt-cpu-rest-4-ns (2026-11-23): the Depthwise / Lossguide
+# combinations the host refused by name, host text against device text at
+# rate 0.1 ----
+comptime REST4NS_UNITS = 10
+
+
+def _rest4ns_loss(unit: Int) raises -> String:
+    if unit < 0 or unit >= REST4NS_UNITS:
+        raise Error("gbdt_host_device_cat rest4ns: no unit " + String(unit))
+    if unit == 4 or unit == 6:
+        return String("RMSE")
+    if unit == 8 or unit == 9:
+        return String("CrossEntropy")
+    return String("Logloss")
+
+
+def _rest4ns_inputs(unit: Int) raises -> GbdtInputs:
+    """`_rest3_inputs`' numeric construction with a target of the unit's
+    loss (0/1 for Logloss and CrossEntropy); unit 9 carries hashed sample
+    weights in [0.25, 4), unit 7 a held-out slice with a 0/1 target."""
+    var binary = _rest4ns_loss(unit) != String("RMSE")
+    var n = REST_ROWS
+    var x = List[Float32](capacity=4 * n)
+    for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+        for r in range(n):  # driver-loop: over the fixture's rows
+            x.append(_unit01(r, 120 + j) * Float32(4.0) - Float32(2.0))
+    var y = List[Float32](capacity=n)
+    for r in range(n):  # driver-loop: over the fixture's rows
+        var v = (x[r] - Float32(0.5) * x[n + r] + Float32(0.25) * x[2 * n + r] * x[3 * n + r]
+                 + Float32(0.4) * (_unit01(r, 125) - Float32(0.5)))
+        if binary:
+            y.append(Float32(1.0) if v > Float32(0.0) else Float32(0.0))
+        else:
+            y.append(v)
+    var inp = GbdtInputs(x^, n, 4, y^)
+    if unit == 9:
+        for r in range(n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 130))
+    if unit == 7:
+        var ne = n // 2
+        for j in range(4):  # driver-loop: over the held-out columns
+            for r in range(ne):  # driver-loop: over the held-out rows
+                inp.eval_x.append(_unit01(r, 135 + j) * Float32(4.0) - Float32(2.0))
+        for r in range(ne):  # driver-loop: over the held-out rows
+            var ev = (inp.eval_x[r] - Float32(0.5) * inp.eval_x[ne + r]
+                      + Float32(1.5) * (_unit01(r, 140) - Float32(0.5)))
+            inp.eval_y.append(Float32(1.0) if ev > Float32(0.0) else Float32(0.0))
+    return inp^
+
+
+def _rest4ns_opts(unit: Int) raises -> GbdtOpts:
+    """0-2 Depthwise Logloss L2, NewtonL2, NewtonCosine; 3 Lossguide Logloss
+    L2 (max_leaves 16); 4 Depthwise RMSE NewtonCosine with min_split_gain
+    0.01, min_child_hessian 1 and min_data_in_leaf 8; 5 Depthwise Logloss
+    Cosine with Gradient leaves, Poisson (0.7) and random_strength 1; 6
+    Lossguide RMSE NewtonL2, Gradient leaves at 3 iterations, Bernoulli
+    (0.7); 7 Depthwise Logloss Cosine boost_from_average with an eval set
+    (Iter, use_best_model); 8 Lossguide CrossEntropy NewtonL2
+    boost_from_average (the Newton planes of a pointwise loss); 9 weighted
+    Depthwise CrossEntropy Cosine with class weights [1, 3]."""
+    var loss = _rest4ns_loss(unit)
+    var o = GbdtOpts(loss, REST_TREES, 4)
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.leaf_method = "Newton"
+    o.grow_policy = "Depthwise"
+    o.score_function = "Cosine"
+    if unit == 0:
+        o.score_function = "L2"
+    elif unit == 1:
+        o.score_function = "NewtonL2"
+    elif unit == 2:
+        o.score_function = "NewtonCosine"
+    elif unit == 3:
+        o.grow_policy = "Lossguide"
+        o.max_leaves = 16
+        o.score_function = "L2"
+    elif unit == 4:
+        o.score_function = "NewtonCosine"
+        o.min_split_gain = 0.01
+        o.min_child_hessian = 1.0
+        o.min_data_in_leaf = 8
+    elif unit == 5:
+        o.leaf_method = "Gradient"
+        o.bootstrap = "Poisson"
+        o.subsample = 0.7
+        o.random_strength = 1.0
+    elif unit == 6:
+        o.grow_policy = "Lossguide"
+        o.max_leaves = 16
+        o.score_function = "NewtonL2"
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 3
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif unit == 7:
+        o.boost_from_average = 1
+        o.n_estimators = 30
+        o.learning_rate = 1.0
+        o.od_type = "Iter"
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+    elif unit == 8:
+        o.grow_policy = "Lossguide"
+        o.max_leaves = 16
+        o.score_function = "NewtonL2"
+        o.boost_from_average = 1
+    else:
+        o.class_weights = [1.0, 3.0]
+    return o^
+
+
+def test_rest4ns_host_text_is_device_text() raises:
+    """The units of lane gbdt-cpu-rest-4-ns: every host fit across the cores
+    first, then one device graph at a time; the learn and held-out curves
+    too."""
+    var host_texts = List[String](length=REST4NS_UNITS, fill=String(""))
+    var host_learn = List[List[Float64]](length=REST4NS_UNITS, fill=List[Float64]())
+    var host_tests = List[List[Float64]](length=REST4NS_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var learn_addr = Int(host_learn.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm learn_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var l = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=learn_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_rest4ns_opts(unit), _rest4ns_inputs(unit))
+        p[unit] = outcome.text.copy()
+        l[unit] = outcome.learn.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat rest4ns host", REST4NS_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(REST4NS_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_rest4ns_opts(unit), _rest4ns_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat rest4ns unit " + String(unit)
+                    + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.learn) != len(host_learn[unit]) or len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat rest4ns unit " + String(unit) + ": curve lengths differ")
+            for i in range(len(outcome.learn)):  # small-loop(the learn curve)
+                if outcome.learn[i] != host_learn[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4ns unit " + String(unit) + ": learn loss "
+                                + String(i) + " differs")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4ns unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat rest4ns device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_learn^
+    _ = host_tests^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat rest4ns device: " + String(count) + " of "
+                       + String(REST4NS_UNITS) + " cases failed" + failed if count > 0 else ""))
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
