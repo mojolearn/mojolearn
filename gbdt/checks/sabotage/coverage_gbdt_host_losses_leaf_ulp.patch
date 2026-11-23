@@ -1,8 +1,8 @@
 diff --git a/gbdt/host/gbdt_oracle_losses.mojo b/gbdt/host/gbdt_oracle_losses.mojo
-index ca6073a65e..cbbf2e5fed 100644
+index 6fad713f01..be314b8e39 100644
 --- a/gbdt/host/gbdt_oracle_losses.mojo
 +++ b/gbdt/host/gbdt_oracle_losses.mojo
-@@ -978,6 +978,16 @@ def _estimate_leaves_for_loss(
+@@ -1119,6 +1119,16 @@ def _estimate_leaves_for_loss(
  # ===========================================================================
  
  
@@ -19,7 +19,7 @@ index ca6073a65e..cbbf2e5fed 100644
  def gbdt_losses_host_fit(
      x_colmajor: List[Float32],
      y: List[Float32],
-@@ -1307,6 +1317,7 @@ def gbdt_losses_host_fit(
+@@ -1559,6 +1569,7 @@ def gbdt_losses_host_fit(
              # the kernel's order (lane cpu4-gbdt; was an ascending chain).
              _zero_average_host(estimated)
          var scaled = rescaled_leaves(estimated, lr)
@@ -28,11 +28,11 @@ index ca6073a65e..cbbf2e5fed 100644
          for i in range(grown):
              split_features.append(tree_features[i])
 diff --git a/gbdt/host/gbdt_oracle_pointwise_rank.mojo b/gbdt/host/gbdt_oracle_pointwise_rank.mojo
-index 85ff29f456..1730999810 100644
+index f6b0445369..201567b252 100644
 --- a/gbdt/host/gbdt_oracle_pointwise_rank.mojo
 +++ b/gbdt/host/gbdt_oracle_pointwise_rank.mojo
-@@ -131,6 +131,16 @@ def _split_planes(
-     _ = len(sg)
+@@ -196,6 +196,16 @@ def _pw_sample_tree(
+     )
  
  
 +from std.memory import bitcast as _sab_bitcast
@@ -48,7 +48,7 @@ index 85ff29f456..1730999810 100644
  def gbdt_ranking_pointwise_host_fit(
      x_colmajor: List[Float32],
      y: List[Float32],
-@@ -326,6 +336,7 @@ def gbdt_ranking_pointwise_host_fit(
+@@ -410,6 +420,7 @@ def gbdt_ranking_pointwise_host_fit(
          if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
              _zero_average_host(estimated)
          var scaled = rescaled_leaves(estimated, params.learning_rate)

@@ -1,0 +1,18 @@
+diff --git a/gbdt/host/gbdt_oracle_pointwise.mojo b/gbdt/host/gbdt_oracle_pointwise.mojo
+index 0e400e8d95..19cc58effe 100644
+--- a/gbdt/host/gbdt_oracle_pointwise.mojo
++++ b/gbdt/host/gbdt_oracle_pointwise.mojo
+@@ -498,8 +498,12 @@ def gbdt_pointwise_host_fit(
+         # are the model's ----
+         var est_scaled = List[Float32]()
+         for p in range(perm_count):  # driver-loop: over the permutations
++            # SABOTAGE (coverage-gbdt-host_pointwise_perm_partition): every
++            # permutation estimates over the LEARN permutation's partition,
++            # not its own index's, so a CTR fit's estimation cursor (and the
++            # exported leaves) move while a one-permutation fit is unchanged
+             var partition = _partition_for_tree(
+-                cindexes[p], layout, tree_features, tree_bins, n_rows
++                cindexes[learn_p], layout, tree_features, tree_bins, n_rows
+             )
+             var estimated = _estimate_leaves_for_loss(
+                 loss, y, cursors[p], partition.row_index, partition.offsets,
