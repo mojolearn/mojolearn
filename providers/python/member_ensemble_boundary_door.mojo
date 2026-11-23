@@ -1391,7 +1391,7 @@ def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: Py
                    mut words: List[Float64]) raises -> Bool:
     """UNPACK of a tree base's class_weight (lane mf-split4), appended as the
     kind's class-weight tail (core/ensemble_member.mojo META_CW_*): [mode,
-    K, all-one, the K dict weights]. None: mode 0. 'balanced': mode 1 (the
+    K, all-one, the K dict weights, the K named flags]. None: mode 0. 'balanced': mode 1 (the
     FIT computes the ratios from its codes). A dict: mode 2, its weights
     over `labels` (the labels of the codes the trees are fitted on, in code
     order) read with the forest door's own admission
@@ -1424,6 +1424,11 @@ def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: Py
         words.append(1.0 if inputs.all_one else 0.0)
         for c in range(len(inputs.values)):  # driver-loop: over the classes (one weight each, UNPACK once)
             words.append(inputs.values[c])
+        # The K named flags (lane mf-split4b): 1.0 where the dict names the
+        # class (a Bagging unit whose draw lacks a named class is refused in
+        # the tree door's words, core/ensemble_member.mojo `_bag_class_rows`).
+        for c in range(len(inputs.values)):  # driver-loop: over the classes (one membership test each, UNPACK once)
+            words.append(1.0 if py_contains(class_weight, labels[c]) else 0.0)
     except:
         return False
     return True
@@ -1573,13 +1578,11 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         # rows), so both plans are admitted with the caller's rows
         # (`forest_member_admit_common(..., caller_rows=True)`). The table
         # is read over the codes the forest is fitted on (`labels`: the
-        # Bagging's codes 0 .. k-1, `_child_labels`). A configuration that
-        # can never take the batched route keeps the door (its per-member
-        # fits read each draw's own classes).
+        # Bagging's codes 0 .. k-1, `_child_labels`). Since lane mf-split4b
+        # the per-member route takes it too: each unit's row weights over its
+        # draw's own classes (core/ensemble_member.mojo `_bag_class_rows`).
         var weighted = classifier and py_get(py_fields(template), "class_weight") is not None
         var batched = _may_be_batched(fields, template, context, b, words)
-        if weighted and not batched:
-            return False
         if weighted:
             if not _admit_caller_rows(nested, template, classifier, needs, context, b):
                 return False
@@ -1610,8 +1613,9 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         var cw = PythonObject(None)
         var cw_context = context
         if weighted:
-            cw = py_get(py_fields(forest), "class_weight")
-            cw_context = prep_estimator_plan(forest, context)["context"]  # the forest door's context
+            var owner_of = forest if batched else template  # the estimator whose fit door reads it
+            cw = py_get(py_fields(owner_of), "class_weight")
+            cw_context = prep_estimator_plan(owner_of, context)["context"]  # its fit door's context
         if not _tree_cw_words(cw, labels, cw_context, b, words):
             return False
     if not _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
