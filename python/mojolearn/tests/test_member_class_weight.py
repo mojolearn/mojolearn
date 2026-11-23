@@ -5,9 +5,13 @@ mf-adm3, 2026-11-23; core/member_class_weight.mojo, bindings/member_class_weight
 The oracle is the estimator's own public fit (its door) on the rows the member saw: a CalibratedClassifierCV fold's
 member must hold the same fitted words as a clone fitted by hand on that fold's train rows and labels, for
 class_weight 'balanced', a dict over integer labels and a dict over string labels (scikit-learn reads the dict
-against the fold's labels: so do both). A fold that lacks a class the dict names raises the door's absent-label
-refusal. kernel='precomputed': AdaBoost's first SVC member equals SVC(kernel='precomputed') fitted by hand with
-AdaBoost's first weights, and a calibrated fold's non-square kernel rows raise the door's square refusal.
+against the fold's labels: so do both). The equality test's folds are contiguous blocks, so every fold's train rows hold
+every class (the labels repeat with period 6; folds by row % 3 put every 'a' in fold 0's test rows, and fold 0's door
+then refuses the dict as scikit-learn 1.9.1's compute_class_weight does, utils/class_weight.py:101-120). A fold that
+lacks a class the dict names raises the door's absent-label refusal. kernel='precomputed': a VotingClassifier's SVC
+member, fitted on the whole square kernel, equals SVC(kernel='precomputed') fitted by hand (AdaBoost fits only tree
+members and refuses an SVC base by name), and a calibrated fold's non-square kernel rows raise the door's square
+refusal.
 """
 import numpy as np
 import pytest
@@ -52,6 +56,13 @@ def _folds(n):
     return [(rows[rows % 3 != f], rows[rows % 3 == f]) for f in range(3)]
 
 
+def _block_folds(n):
+    # Contiguous thirds: each block holds every class of `_data` (period 6), so every train fold does too.
+    block = np.arange(n) * 3 // n
+    rows = np.arange(n)
+    return [(rows[block != f], rows[block == f]) for f in range(3)]
+
+
 @pytest.mark.parametrize("name", ["lr", "svc", "svk", "sgd", "ridgec", "lrcv"])
 @pytest.mark.parametrize("weights", ["balanced", "dint", "dstr"])
 def test_calibrated_member_equals_door(name, weights):
@@ -60,7 +71,7 @@ def test_calibrated_member_equals_door(name, weights):
     labels = ["a", "b", "c"] if weights == "dstr" else [0, 1, 2]
     y = np.asarray(labels, dtype=object if weights == "dstr" else np.int64)[codes]
     cw = "balanced" if weights == "balanced" else {labels[0]: 0.4, labels[1]: 2.5}
-    folds = _folds(len(y))
+    folds = _block_folds(len(y))
     m = CalibratedClassifierCV(_member(name, cw), cv=folds, ensemble=True).fit(X, y)
     for f, (train, _) in enumerate(folds):
         door = _member(name, cw).fit(X[train], y[train])
@@ -88,12 +99,17 @@ def test_calibrated_dict_naming_a_lacking_class_is_refused():
 def test_precomputed_svc_member_equals_door():
     X, y = _data(2, n=90)
     K = (X @ X.T).astype(np.float32)
-    ada = mojolearn.AdaBoostClassifier(mojolearn.SVC(kernel="precomputed"), n_estimators=1, random_state=0).fit(K, y)
-    # AdaBoost's first weights: 1 / n as float32 (bindings/trees_public_boost_door.mojo `_trees_normalized_weights_native`)
-    door = mojolearn.SVC(kernel="precomputed").fit(K, y, sample_weight=np.full(len(y), 1.0 / len(y), dtype=np.float32))
-    for a, b in zip(_fitted_words(ada.estimators_[0]), _fitted_words(door)):
+    # A Voting member is fitted on every row, so its kernel stays square. AdaBoostClassifier fits only tree members
+    # and refuses an SVC base by name (bindings/trees_public_boost_door.mojo), so it cannot carry this member.
+    vote = mojolearn.VotingClassifier([("s", mojolearn.SVC(kernel="precomputed")),
+                                       ("t", mojolearn.SVC(kernel="precomputed", C=0.5))], voting="hard").fit(K, y)
+    door = mojolearn.SVC(kernel="precomputed").fit(K, y)
+    got = _fitted_words(vote.estimators_[0])
+    want = _fitted_words(door)
+    assert len(got) == len(want) > 0
+    for a, b in zip(got, want):
         np.testing.assert_array_equal(a, b)
-    np.testing.assert_array_equal(ada.estimators_[0].predict(K), door.predict(K))
+    np.testing.assert_array_equal(vote.estimators_[0].predict(K), door.predict(K))
 
 
 def test_precomputed_fold_rows_are_refused_in_the_doors_words():
