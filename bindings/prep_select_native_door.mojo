@@ -33,12 +33,13 @@ from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_abi import MemberCall, member_free, MEMBER_F32, MEMBER_I32
 from core.member_families import MEMBER_FAMILY_GBDT
 from providers.python.member_rfe_boundary_door import (
-    RfeBase, rfe_base_admit, rfe_count_words, rfe_image, rfe_publish,
+    RfeBase, rfe_base_admit_labeled, rfe_count_words, rfe_image, rfe_publish, rfe_plan_labels, rfe_fit_keywords,
+    rfe_member_fit_params,
 )
 from bindings.arena_owner_door import arena_pin, arena_unpin
 from bindings.x_prep_native_owner_door import xprep_resident
 from core.member_set_run import MemberFitExtras
-from providers.python.member_gbdt_boundary_door import gbdt_member_fit_params
+from providers.python.member_gbdt_boundary_door import gbdt_member_fit_params, gbdt_member_label_check
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -190,7 +191,8 @@ struct RfeMember(Movable):
     (`_rfe_member`): the estimator admitted with no fit target (providers/python/member_rfe_boundary_door.mojo
     `rfe_base_admit`, which THE RFE KIND's admission runs too), then the fit's target and parameters.
     `base.native` False: the estimator's own doors (`_fit_clone`, `prep_estimator_attribute`) keep every
-    round. `y` is the admitted target the RUN reads by address (float32 values for a regressor kind, the
+    round. `eval_rows` / `eval_keys` (lane mf-meta5b): a Gbdt fit with cat_features's held-out rows and
+    keys; `final_importances`: a forest's feature_importances=True (the final fit keeps its importance word). `y` is the admitted target the RUN reads by address (float32 values for a regressor kind, the
     int32 class codes of `labels` for a classifier kind: encoded once per fit). `extras` (lane mf-gbdt5):
     RFE's fit parameters, admitted once with the estimator's fit door's checks and words (a Gbdt member:
     providers/python/member_gbdt_boundary_door.mojo `gbdt_member_fit_params`; `pins` holds every buffer
@@ -205,6 +207,9 @@ struct RfeMember(Movable):
     var pins: PythonObject
     var ids: List[Int32]
     var codes: List[Int32]
+    var eval_rows: List[Float32]
+    var eval_keys: List[UInt64]
+    var final_importances: Bool
     var strict: Bool
 
     def __init__(out self):
@@ -217,27 +222,33 @@ struct RfeMember(Movable):
         self.pins = PythonObject(None)
         self.ids = List[Int32]()
         self.codes = List[Int32]()
+        self.eval_rows = List[Float32]()
+        self.eval_keys = List[UInt64]()
+        self.final_importances = False
         self.strict = False
 
 
 def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: PythonObject, fit_params: PythonObject,
                 context: PythonObject, b: PythonObject) raises -> RfeMember:
-    """UNPACK, once per RFE fit: the estimator as a native member (`rfe_base_admit`), with no fit
-    parameters, or a Gbdt member's (GradientBoosting, GradientBoostingClassifier,
-    GradientBoostingRegressor: `gbdt_member_fit_params`, sample_weight, eval_set, group_id, pairs,
-    pairs_weight; their refusals raise from here, before any round). A classifier kind gets its labels
-    encoded here, once; a regressor kind its target checked as its member's fit door admits it. Any other
-    family's fit parameters, a key or case the Gbdt admission does not carry, and a target the encoder or
-    the regressor admission refuses keep the estimator's own doors (the fallback rule)."""
+    """UNPACK, once per RFE fit: the fit parameters' names and values in the estimator's compiled fit's
+    words (`rfe_fit_keywords`: its refusals raise here, before any round, as `_fit_clone`'s first fit
+    raised them), the estimator as a native member (`rfe_base_admit_labeled`, its labels deferred: lane
+    mf-meta5b), then its fit target: a classifier kind's labels encoded here, once, and the plan completed
+    over them (`rfe_plan_labels`: LabelPropagation / LabelSpreading's -1 marker word, a class_weight dict's
+    table; `gbdt_member_label_check`: the classifier adapter's multiclass refusal, in its fit door's place),
+    a regressor kind's target checked as its member's fit door admits it. Then the fit parameters: a Gbdt
+    member's (`gbdt_member_fit_params`: sample_weight, eval_set (with cat_features too), group_id, pairs,
+    pairs_weight), any other family's (`rfe_member_fit_params`: sample_weight through the shared weight
+    admission, a forest's feature_importances); their refusals raise from here. What stays on the
+    estimator's own doors (`_fit_clone`, the fallback rule): a class with no serving member, a target the
+    encoder or the regressor admission refuses (one class among them: each family's fit door has its own
+    one-class words), a class_weight table it cannot complete, a key or value the member does not carry
+    (weights for a kind that reads none, a non-bool feature_importances, a cat_features index outside X)."""
     var member = RfeMember()
     var has_params = len(fit_params) != 0
     if has_params:
-        # Only the Gbdt classes' fit parameters are admitted natively: one exact type name read, once per
-        # fit, before any admission work.
-        var cls = String(py=py_type(estimator).__name__)
-        if cls != "GradientBoosting" and cls != "GradientBoostingClassifier" and cls != "GradientBoostingRegressor":
-            return member^
-    var base = rfe_base_admit(estimator, g, context, b)
+        rfe_fit_keywords(estimator, fit_params, context, b)
+    var base = rfe_base_admit_labeled(estimator, g, context, b, Python.list())
     if not base.native:
         return member^
     try:
@@ -247,6 +258,8 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             var encoded = classical_encode_labels(y, base.member_context)
             var count = len(encoded.classes)
             if encoded.n != n or count < 2:
+                return member^
+            if not rfe_plan_labels(base, encoded.classes, b):
                 return member^
             base.owner.plan.classes = count
             member.y = encoded.codes
@@ -258,20 +271,32 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             member.y = classical_check_y(y, n, classical_estimator_name(estimator), base.member_context)
     except:
         return member^
+    # The classifier adapter over more than two classes: its fit door's refusal, raised by its first fit
+    # (no elimination round fits a Gbdt kind first: `rfe_member_source`).
+    if member.labels is not None:
+        gbdt_member_label_check(base.owner.plan, len(member.labels))
     if has_params:
-        if base.owner.plan.family != MEMBER_FAMILY_GBDT:
-            return member^
-        # UNPACK of the fit parameters (their refusals raise here, in the fit door's words, as the door's
-        # first fit would raise them).
-        var params = gbdt_member_fit_params(base.template, base.owner.plan, fit_params, y, member.labels, n, d,
-                                            base.member_context)
-        if not params.admitted:
-            return member^
-        member.extras = params.extras.copy()
-        member.pins = params.pins
-        # By swap: the addresses in `extras` point into these lists' storage.
-        swap(member.ids, params.ids)
-        swap(member.codes, params.codes)
+        if base.owner.plan.family == MEMBER_FAMILY_GBDT:
+            # UNPACK of the fit parameters (their refusals raise here, in the fit door's words, as the
+            # door's first fit would raise them).
+            var params = gbdt_member_fit_params(base.template, base.owner.plan, fit_params, y, member.labels, n, d,
+                                                base.member_context)
+            if not params.admitted:
+                return member^
+            member.extras = params.extras.copy()
+            member.pins = params.pins
+            # By swap: the addresses in `extras` point into these lists' storage.
+            swap(member.ids, params.ids)
+            swap(member.codes, params.codes)
+            swap(member.eval_rows, params.eval_rows)
+            swap(member.eval_keys, params.eval_keys)
+        else:
+            var params = rfe_member_fit_params(base, fit_params, n, b)
+            if not params.admitted:
+                return member^
+            member.extras = params.extras.copy()
+            member.pins = params.pins
+            member.final_importances = params.final_importances
         member.strict = True
     member.y_address = Int(py=classical_address(member.y))
     member.base = base^
@@ -293,7 +318,9 @@ def _rfe_native(member: RfeMember, arr: XIn, n: Int, d: Int, counts: List[Float6
     plan.step = rfe_step_count(d, counts[3] != 0.0, counts[4], Int(counts[5]))
     plan.block = member.base.block
     plan.squared = member.base.squared
-    plan.importance_word = member.base.importance_word
+    # A forest's feature_importances=True keeps the final fit's importance word (estimator_ publishes them, as
+    # the estimator's own fit with that parameter does); the rounds set it whatever the parameter says.
+    plan.importance_word = member.base.importance_word and not member.final_importances
     plan.refusal = member.base.refusal.copy()
     plan.extras = member.extras.copy()
     # The thread's resident scope (the door's `resident()` scope over the rounds, or an enclosing one):
@@ -323,6 +350,10 @@ def _rfe_native(member: RfeMember, arr: XIn, n: Int, d: Int, counts: List[Float6
     _ = arr.value  # read by address through the run above
     _ = member.y
     _ = member.pins
+    _ = len(member.ids)  # read by address through the run above (group ids, held-out codes and rows, keys)
+    _ = len(member.codes)
+    _ = len(member.eval_rows)
+    _ = len(member.eval_keys)
     _ = image.entries  # the selection pins the image through the run
     var call = MemberCall(res.final_plan.route, res.final_state)
     try:

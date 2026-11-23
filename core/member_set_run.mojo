@@ -633,6 +633,11 @@ struct MemberFitExtras(Copyable, Movable):
     (`eval_y_dtype`: MEMBER_F32 values, or MEMBER_I32 class codes of a
     classifier kind). `groups`: one int32 group id per fit row. `pairs`:
     `pair_count` int32 (winner, loser) rows, `pairs_weight` float32 (0: ones).
+    `eval_cat_keys` (lane mf-meta5b): the held-out set's categorical keys as
+    the estimator's fit door reads a text held-out X (int64 words, one row
+    per categorical column, `eval_cat_count` rows, one column per held-out
+    row; 0: the categorical columns' Float32 words are the keys); they cover
+    the full columns only, so a fit on a column selection refuses them.
 
     THE EVAL SLOT. This is the per-member eval slot the member-set callers
     would carry; today only RFE hands a member fit parameters (Bagging,
@@ -652,6 +657,8 @@ struct MemberFitExtras(Copyable, Movable):
     var pairs: Int
     var pair_count: Int
     var pairs_weight: Int
+    var eval_cat_keys: Int
+    var eval_cat_count: Int
 
     def __init__(out self):
         self.rows = 0
@@ -665,6 +672,8 @@ struct MemberFitExtras(Copyable, Movable):
         self.pairs = 0
         self.pair_count = 0
         self.pairs_weight = 0
+        self.eval_cat_keys = 0
+        self.eval_cat_count = 0
 
     def given(self) -> Bool:
         return (self.weights != 0 or self.eval_rows > 0 or self.groups != 0 or self.pair_count > 0)
@@ -744,10 +753,17 @@ def member_fit_extras_apply(extras: MemberFitExtras, mut call: MemberCall, colum
         var width = extras.eval_cols
         var address = extras.eval_x
         if member_eval_columns(extras.eval_x, extras.eval_rows, extras.eval_cols, columns, count, wide, held):
+            if extras.eval_cat_keys != 0:
+                raise Error("member ABI: a held-out set's categorical keys cover every column of the fit's X; "
+                            + "a fit on " + String(count) + " of its " + String(extras.eval_cols)
+                            + " columns cannot read them")
             width = count
             address = Int(held.unsafe_ptr())
         call.eval_x = MemberMatrix(address, extras.eval_rows, width)
         call.eval_y = MemberMatrix(extras.eval_y, extras.eval_rows, 1, extras.eval_y_dtype)
+        if extras.eval_cat_keys != 0:
+            call.eval_cat_keys = MemberMatrix(extras.eval_cat_keys, extras.eval_cat_count, extras.eval_rows,
+                                              MEMBER_I64)
 
 
 def member_fit_extras_clear(mut call: MemberCall):
@@ -759,6 +775,7 @@ def member_fit_extras_clear(mut call: MemberCall):
     call.pairs_weight = MemberMatrix()
     call.eval_x = MemberMatrix()
     call.eval_y = MemberMatrix()
+    call.eval_cat_keys = MemberMatrix()
 
 
 def member_set_fit(mut run: MemberSetRun) raises:

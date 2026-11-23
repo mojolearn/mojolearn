@@ -57,7 +57,9 @@ from core.member_abi import (
     MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
     MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES,
 )
-from core.member_families import MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_GBDT
+from core.member_families import (
+    MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_GBDT, MEMBER_FAMILY_XNEIGHBORS,
+)
 from core.member_notices import member_notices_take
 from core.member_set_run import MemberFitExtras, member_fit_extras_apply, member_fit_extras_clear
 
@@ -472,7 +474,10 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
     (QuadraticDiscriminantAnalysis, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB: neither attribute
     exists on them, as in scikit-learn) is REFUSED (lane mf-shaprfe): 'auto' in the door's words, a named
     attribute in scikit-learn's attrgetter's (`estimator` the class name). So is a Gbdt kind (lane mf-gbdt5:
-    GradientBoosting and its two adapters publish neither attribute). The caller raises the refusal only when an
+    GradientBoosting and its two adapters publish neither attribute), and since lane mf-meta5b every XNeighbors
+    kind (the k-NN estimators, LabelPropagation and LabelSpreading: neither attribute exists on them in
+    scikit-learn, and the door's attribute reads answer None, so its first round raised the same words after
+    its fit). The caller raises the refusal only when an
     elimination round reads importances (scikit-learn reads none when n_features_to_select keeps every column).
     Any other kind without the block keeps the estimator's own doors (block 0)."""
     var auto = getter == "auto"
@@ -480,7 +485,8 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
         return RfeSource(MEMBER_BLOCK_COEF, True, String(""))
     if getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
         return RfeSource(MEMBER_BLOCK_FEATURE_IMPORTANCES, not auto, String(""))
-    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT or family == MEMBER_FAMILY_GBDT:
+    if (family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT or family == MEMBER_FAMILY_GBDT
+            or family == MEMBER_FAMILY_XNEIGHBORS):
         if auto:
             return RfeSource(0, False, String(RFE_NO_IMPORTANCES))
         return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
