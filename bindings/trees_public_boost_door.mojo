@@ -1121,6 +1121,25 @@ def _bag_door(member: PythonObject, xs: PythonObject, classifier: Bool, sub: Pyt
     return got
 
 
+def bag_member_open(member: PythonObject, sub: PythonObject, operation: Int, classifier: Bool,
+                    context: PythonObject) raises -> MemberHeldCall:
+    """THE X-FREE MEMBER UNPACK of one Bagging member (lane mf-shap3, 2026-11-23; `_bag_unpack` and Kernel /
+    Permutation SHAP): its `operation` opened on the state it holds, at the width the ensemble reads (a
+    classifier: its class count, `sub` its class codes; a regressor: one column). Reads no rows: the caller
+    proves them and closes it with `member_held_close`."""
+    var width = Int(py=sub.shape[0]) if classifier else 1
+    return member_held_open(member, operation, classifier, width, False, context, trees_builtins())
+
+
+def bag_member_columns(cols: PythonObject, d: Int) raises -> Int:
+    """X-FREE UNPACK of one Bagging member's feature subset (lane mf-shap3, 2026-11-23; `_BaggingBase._sub_X`'s
+    rule): 0 when it takes every one of the `d` columns in order (it reads the rows themselves), else the
+    address of its int32 column numbers (the caller keeps `cols` alive)."""
+    if _all_columns(cols, d):
+        return 0
+    return trees_address(cols)
+
+
 def _bag_unpack(members: PythonObject, blocks: PythonObject, oob_rows: PythonObject, classifier: Bool,
                 operation: Int, var held: Bool, var proven: Int, host_only: Bool, name: String, x_address: Int,
                 x_words: Int, context: PythonObject) raises -> _BagUnpack:
@@ -1157,9 +1176,8 @@ def _bag_unpack(members: PythonObject, blocks: PythonObject, oob_rows: PythonObj
             got.ns.append(m)
             got.ds.append(d)
             got.oobs.append(0 if oob_rows is None else trees_address(oob_rows[i]))
-            var width = Int(py=sub.shape[0]) if classifier else 1
             if held:
-                var opened = member_held_open(member, operation, classifier, width, False, context, trees_builtins())
+                var opened = bag_member_open(member, sub, operation, classifier, context)
                 var served = opened.served and (opened.host or not host_only)
                 if served and not opened.tests and proven == 0:
                     try:
