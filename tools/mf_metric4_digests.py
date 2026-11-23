@@ -73,6 +73,15 @@ cross_val_score over a default cv (the deleted slice route's case). Expected: ev
 H5b_cvp_log_proba (the log is now taken in the member's own precision: last bits may change), H5b_mixed_f1_*
 (the RUN raises the metric doors' TypeError words; compare the words), and H5b_lacking_decision (scikit-learn's
 "Only 2 class/es in training fold" words; compare the words).
+
+Lane mf-kmeans5 extends section msel5 (H; base: origin/lane/member-fits-5 41899d4e82 vs head): KMeans.score
+(unweighted and weighted, on the training rows and on new rows, beside -inertia_), a KMeans search and a
+cross_validate with scoring None (now through the RUN: the member's score), a fold that lacks a class scored by
+the member's own score and by 'neg_log_loss' / 'roc_auc_ovr' (raise and error_score=nan). Expected: the base has
+no KMeans.score, so H5k_kmeans_score_* and H5k_kmeans_*_none are new lines (each score line must equal its
+minus_inertia line on the training rows); H5k_lacking_own_* (the base's door units scored a lacking fold through
+the fold estimator's own score, which is accuracy: values equal); H5k_lacking_log_loss_raise (scikit-learn's
+"y_true and y_pred contain different number of classes" words; compare the words); the _nan lines equal.
 """
 import hashlib
 import os
@@ -590,6 +599,50 @@ def _msel5b_cases():
     ]
 
 
+def _kmeans_score(weighted):
+    import mojolearn
+    X, _, _ = _data(101, n=180, d=5, k=3)
+    w = (1.0 + (np.arange(180) % 3)).astype(np.float32) if weighted else None
+    km = mojolearn.KMeans(n_clusters=4, n_init=2, random_state=0).fit(X, sample_weight=w)
+    X2, _, _ = _data(103, n=60, d=5, k=3)
+    return [("score_train", repr(float(km.score(X, sample_weight=w)))), ("minus_inertia", repr(-float(km.inertia_))),
+            ("score_new", repr(float(km.score(X2))))]
+
+
+def _kmeans_none(which):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV, cross_validate
+    X, _, _ = _data(107, n=150, d=4, k=3)
+    if which == "search":
+        s = GridSearchCV(mojolearn.KMeans(random_state=0), {"n_clusters": [2, 3, 4]}, cv=3).fit(X)
+        return _rows_of_search(s, X)
+    res = cross_validate(mojolearn.KMeans(n_clusters=3, random_state=0), X, cv=3)
+    return [("test_score", _digest(np.asarray(res["test_score"], dtype=np.float64)))]
+
+
+def _lacking_scored(scoring, error_score="raise"):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV, KFold
+    X, _, c = _data(109, n=150, d=4, k=3)
+    order = np.argsort(c, kind="stable")
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring=scoring,
+                     cv=KFold(n_splits=3), error_score=error_score).fit(X[order], c[order])
+    return _rows_of_search(s, X)
+
+
+def _kmeans5_cases():
+    return [
+        ("H5k_kmeans_score_plain", lambda: _kmeans_score(False)),
+        ("H5k_kmeans_score_weighted", lambda: _kmeans_score(True)),
+        ("H5k_kmeans_search_none", lambda: _kmeans_none("search")),
+        ("H5k_kmeans_cv_none", lambda: _kmeans_none("cv")),
+        ("H5k_lacking_own_raise", lambda: _warned(lambda: _lacking_scored(None))),
+        ("H5k_lacking_log_loss_raise", lambda: _lacking_scored("neg_log_loss")),
+        ("H5k_lacking_log_loss_nan", lambda: _warned(lambda: _lacking_scored("neg_log_loss", np.nan))),
+        ("H5k_lacking_roc_ovr_nan", lambda: _warned(lambda: _lacking_scored("roc_auc_ovr", np.nan))),
+    ]
+
+
 def _msel5_cases():
     from mojolearn.model_selection import cross_val_score
     import mojolearn
@@ -618,7 +671,7 @@ def _msel5_cases():
 def _all_cases():
     return (_metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
             + _search5_cases() + _cluster5_metric_cases() + _cluster5_search_cases() + _msel5_cases()
-            + _msel5b_cases())
+            + _msel5b_cases() + _kmeans5_cases())
 
 
 def _run(index):

@@ -69,11 +69,22 @@ rank 1), and the refit: the best candidate fitted on every row.
    member fitted on the re-coded codes, two classes), class 0's column is 0.0, fold 1 is placed as it is, and one
    `_enforce_prediction_order` warning notice [12, 2, 3]; decision_function refuses in scikit-learn's words
    ("Only 2 class/es in training fold, but 3 in overall dataset. ..."); 'accuracy' scores fold 0 over its
-   predicted fold codes mapped back to the classes; the member's own score of such a fold refuses ("member
-   ABI: a fold whose train rows lack a class ...": the door's units).
+   predicted fold codes mapped back to the classes; the member's own score of such a fold (lane mf-kmeans5) is
+   `ClassifierMixin.score`: every unit scored as the accuracy of its predict, fold 0 over its mapped codes.
 13. (lane mf-msel5b) A FIT WITHOUT A TARGET: cross_val_predict(KMeans(3), X) with y=None (plan.y 0, KFold):
    each fold's predicted cluster ids land at its rows of the caller's int64 result, equal to KMeans fitted
    directly on the fold's train rows and predicting its test rows (a view of X: one run of rows).
+14. (lane mf-kmeans5) KMEANS SCORE (core/kmeans_member.mojo MEMBER_OP_SCORE over the host KMEANS_SCORE op): on
+   the training X the member's score is minus the fit's inertia_ (its scalars block, word 0) bit for bit, for a
+   unit-weight fit and for a weighted fit scored with the same weights; the same score through a host row index
+   naming every row (the gathered route) is the same bits; a fit's labels are untouched by a score.
+15. (lane mf-kmeans5) A KMEANS SEARCH SCORED BY ITS MEMBERS (scoring None, classes 0, KFold, y float32 words):
+   every split score equals KMeans fitted directly on the fold's train rows and its own score on the test rows,
+   i.e. minus the test rows' inertia; the best is the candidate of the higher mean.
+16. (lane mf-kmeans5) A LACKING FOLD SCORED BY PROBABILITIES: 'neg_log_loss' over the two folds of case 12 (fold 0
+   a binary fold estimator: its positive column, against a test side holding three labels) raises scikit-learn's
+   words "ValueError: y_true and y_pred contain different number of classes 3, 2. ..."; with a number fold 0
+   takes it and fold 1 equals the metric over the member's own probabilities.
 
 FAIL-PROOF EDITS (each must make a case fail): `side_rows[f * sides] = rows_at + 4 * (f * n)` (case 1: the train
 rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits learn the wrong count);
@@ -96,7 +107,12 @@ predict_proba reads a freed state), or `tr.append(Int32(0))` in place of the row
 removed (case 11: the words); `to = c` (no held map) in `_place_response`, or `fill = 0.0` for a held fold's
 proba replaced by the member's first column, or the `member_notice_add` of the lacking fold removed (case 12);
 `codes[i] = h[Int(codes[i])]` removed (case 12: fold 0's accuracy); the `side.y != 0` test in `_side_set`
-removed, or `y_dst[s] = plan.y + ...` for a target-free side (case 13: a read of address 0).
+removed, or `y_dst[s] = plan.y + ...` for a target-free side (case 13: a read of address 0); `member_score =
+False` removed from the lacking block (case 12: fold 0 scored by the member against fold codes); in
+core/kmeans_member.mojo `call[].value = result.inertia` (cases 14, 15: the sign), or in
+cluster/host/kmeans_oracle.mojo `host_kmeans_score` passing `SUM_MODE_PLAIN` (case 14's weighted fit), or the
+`MEMBER_OP_SCORE` arm removed from `_host_indexed` (case 14: the indexed score reads the base X as the rows);
+`label_count = classes` kept in `_fold_view_side` (case 16: no refusal, a log loss over three labels).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -112,7 +128,7 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_call_of, member_new, member_free,
     member_kind_capabilities, MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
-    member_call_from_spans, MEMBER_OP_DECISION,
+    member_call_from_spans, MEMBER_OP_DECISION, MEMBER_OP_EXPORT, MEMBER_BLOCK_BY_INDEX,
 )
 from core.msel_search_run import (
     MselSearchPlan, msel_search_run, msel_search_rows, SEARCH_SCORE_MEMBER, SEARCH_SCORE_ACCURACY,
@@ -139,7 +155,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 13
+comptime CASES = 16
 
 
 def _glue() raises -> EntryRef:
@@ -1142,16 +1158,15 @@ def check_lacking_fold() raises:
             hits += 1
     require(scored.test[0][0] == Float64(hits) / Float64(len(test0)), "fold 0's accuracy over mapped codes")
     require(scored.test[0][1] == _side_score(one, s1, xt1, yt1, len(test1), SEARCH_SCORE_ACCURACY), "fold 1")
-    # the member's own score of a lacking fold: the door's units
+    # the member's own score of a lacking fold (lane mf-kmeans5): `ClassifierMixin.score`, the accuracy of
+    # each unit's predict (fold 0's mapped codes), the same values as 'accuracy' above
     var plan4 = _plan([one.copy()], x, y, SEARCH_SCORE_MEMBER)
     _given(plan4, given)
     plan4.refit = False
-    var refused = String("")
-    try:
-        _ = msel_search_run(plan4)
-    except error:
-        refused = String(error)
-    require(refused.startswith("member ABI: a fold whose train rows lack a class"), "member score refused: " + refused)
+    var own = msel_search_run(plan4)
+    require(own.test[0][0] == Float64(hits) / Float64(len(test0)), "fold 0's own score is its mapped accuracy")
+    require(own.test[0][1] == _side_score(one, s1, xt1, yt1, len(test1), SEARCH_SCORE_ACCURACY),
+            "fold 1's own score is its accuracy")
     var c0 = MemberCall(two.route, s0)
     member_free(two, c0)
     var c1 = MemberCall(one.route, s1)
@@ -1218,6 +1233,167 @@ def check_target_free() raises:
     _ = x^
 
 
+def _kmeans_inertia(plan: MemberPlan, state: Int) raises -> Float64:
+    """Word 0 of the fitted state's scalars block (inertia_)."""
+    var call = member_call_of(plan, state)
+    call.block = 1
+    call.flags = MEMBER_BLOCK_BY_INDEX
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)[0]
+
+
+def _kmeans_score(plan: MemberPlan, state: Int, x: Int, rows: Int, weights: Int, index: Int) raises -> Float64:
+    var call = member_call_of(plan, state)
+    call.x = MemberMatrix(x, N if index != 0 else rows, D)
+    if weights != 0:
+        call.weights = MemberMatrix(weights, N if index != 0 else rows, 1)
+    if index != 0:
+        call.row_index = MemberMatrix(index, rows, 1, MEMBER_I32)
+    _ = member_call(plan.member, MEMBER_OP_SCORE, call)
+    return call.value
+
+
+def check_kmeans_score() raises:
+    """KMeans' member score on the training X is minus inertia_, unweighted and weighted, and through a row index."""
+    var x = _x()
+    var km = _kmeans(3)
+    var call = member_new(km)
+    call.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    _ = member_call(km.member, MEMBER_OP_FIT, call)
+    var inertia = _kmeans_inertia(km, call.state)
+    require(inertia > 0.0, "a fit of three clusters on spread rows has a positive inertia")
+    var score = _kmeans_score(km, call.state, Int(x.unsafe_ptr()), N, 0, 0)
+    require(bitcast[DType.uint64](score) == bitcast[DType.uint64](-inertia), "score(X_train) == -inertia_")
+    var every = List[Int32](length=N, fill=Int32(0))
+    for i in range(N):  # small-loop(fixture: a row index naming every row in order)
+        every[i] = Int32(i)
+    var indexed = _kmeans_score(km, call.state, Int(x.unsafe_ptr()), N, 0, Int(every.unsafe_ptr()))
+    require(bitcast[DType.uint64](indexed) == bitcast[DType.uint64](score), "the indexed score is the same bits")
+    member_free(km, call)
+    var w = List[Float32](length=N, fill=0.0)
+    for i in range(N):  # small-loop(fixture: weights 1, 2, 3 in turn)
+        w[i] = Float32(1 + i % 3)
+    var wc = member_new(km)
+    wc.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    wc.weights = MemberMatrix(Int(w.unsafe_ptr()), N, 1)
+    _ = member_call(km.member, MEMBER_OP_FIT, wc)
+    var weighted = _kmeans_inertia(km, wc.state)
+    var wscore = _kmeans_score(km, wc.state, Int(x.unsafe_ptr()), N, Int(w.unsafe_ptr()), 0)
+    require(bitcast[DType.uint64](wscore) == bitcast[DType.uint64](-weighted),
+            "a weighted score with the fit's weights == -inertia_")
+    var unweighted = _kmeans_score(km, wc.state, Int(x.unsafe_ptr()), N, 0, 0)
+    require(unweighted != wscore, "the weights change the score")
+    member_free(km, wc)
+    _ = len(every)
+    _ = len(w)
+    _ = x^
+
+
+def check_kmeans_search() raises:
+    """GridSearchCV(KMeans) with scoring None through the RUN: each split is the fold member's own score."""
+    var x = _x()
+    var y = _codes()
+    var yf = List[Float32](length=N, fill=0.0)
+    for i in range(N):  # small-loop(fixture: the target as the regressor kind's float32 words)
+        yf[i] = Float32(y[i])
+    var plans: List[MemberPlan] = [_kmeans(2), _kmeans(3)]
+    var masks = _masks(plans)
+    var plan = MselSearchPlan(plans.copy(), masks^, Int(x.unsafe_ptr()), N, D, Int(yf.unsafe_ptr()), 0, F, _glue(),
+                              MetricRoute(metrics_program_host_v1, False, False))
+    plan.scoring = SEARCH_SCORE_MEMBER
+    plan.refit = False
+    var res = msel_search_run(plan)
+    var counts = List[Int32](length=F + 1, fill=Int32(0))
+    var rows = List[Int32](length=F * N, fill=Int32(0))
+    _ = xt_device_folds(_glue(), Int(counts.unsafe_ptr()), Int(rows.unsafe_ptr()), Int(counts.unsafe_ptr()), N, F, 0)
+    var means = List[Float64]()
+    for c in range(len(plans)):  # small-loop(oracle: candidates)
+        var total = 0.0
+        for f in range(F):  # small-loop(oracle: folds)
+            var t = Int(counts[f])
+            var base = Int(rows.unsafe_ptr()) + 4 * (f * N)
+            var xs = List[Float32]()
+            var ys = List[Int32]()
+            _rows_of(x, y, base, N - t, xs, ys)
+            var call = member_new(plans[c])
+            call.x = MemberMatrix(Int(xs.unsafe_ptr()), N - t, D)
+            _ = member_call(plans[c].member, MEMBER_OP_FIT, call)
+            var xt = List[Float32]()
+            var yt = List[Int32]()
+            _rows_of(x, y, base + 4 * (N - t), t, xt, yt)
+            var want = _kmeans_score(plans[c], call.state, Int(xt.unsafe_ptr()), t, 0, 0)
+            require(want < 0.0, "a KMeans score is minus a positive inertia")
+            require(res.test[c][f] == want, "split" + String(f) + " of candidate " + String(c))
+            total += want
+            member_free(plans[c], call)
+            _ = len(xs)
+            _ = len(ys)
+            _ = len(xt)
+            _ = len(yt)
+        means.append(total)
+    require(res.best == (0 if means[0] >= means[1] else 1), "the best is the candidate of the higher mean")
+    _ = rows^
+    _ = counts^
+    _ = x^
+    _ = y^
+    _ = yf^
+
+
+def check_lacking_proba() raises:
+    """'neg_log_loss' over case 12's folds: fold 0 is a binary fold estimator against three test labels."""
+    var x = _x()
+    var y = _codes()
+    var one = _logistic(1.0, 0.0)
+    var train0 = List[Int32]()
+    var test0 = List[Int32]()
+    var train1 = List[Int32]()
+    var test1 = List[Int32]()
+    _lacking_folds(y, train0, test0, train1, test1)
+    var given: List[Int] = [Int(train0.unsafe_ptr()), len(train0), Int(test0.unsafe_ptr()), len(test0),
+                            Int(train1.unsafe_ptr()), len(train1), Int(test1.unsafe_ptr()), len(test1)]
+    var code = msel_scorer_code("neg_log_loss", False)
+    var plan = _plan([one.copy()], x, y, code)
+    _given(plan, given)
+    plan.refit = False
+    var words = String("")
+    try:
+        _ = msel_search_run(plan)
+    except error:
+        words = String(error)
+    require(words.startswith("ValueError: y_true and y_pred contain different number of classes 3, 2."),
+            "the lacking fold's log loss refusal, got: " + words)
+    var tolerant = _plan([one.copy()], x, y, code)
+    _given(tolerant, given)
+    tolerant.refit = False
+    tolerant.tolerate = True
+    tolerant.error_value = -99.0
+    var res = msel_search_run(tolerant)
+    require(res.test[0][0] == -99.0, "fold 0 takes the error value")
+    var s1 = _direct_fit(one, x, y, Int(train1.unsafe_ptr()), len(train1))
+    var xt1 = List[Float32]()
+    var yt1 = List[Int32]()
+    _rows_of(x, y, Int(test1.unsafe_ptr()), len(test1), xt1, yt1)
+    var proba = _proba(one, s1, Int(xt1.unsafe_ptr()), len(test1), K)
+    var words32 = List[Float32](length=len(proba), fill=0.0)
+    for i in range(len(proba)):  # small-loop(oracle: the RUN's float32 narrowing of the probabilities)
+        words32[i] = Float32(proba[i])
+    var notes = List[Float64]()
+    var want = msel_scorer_value(MetricRoute(metrics_program_host_v1, False, False), msel_scorer_row(code),
+                                 Int(yt1.unsafe_ptr()), Int(words32.unsafe_ptr()), len(test1), K, K, -1, notes)
+    require(res.test[0][1] == want, "fold 1 is the metric over its member's probabilities")
+    var c1 = MemberCall(one.route, s1)
+    member_free(one, c1)
+    _ = len(words32)
+    _ = len(xt1)
+    _ = len(yt1)
+    _ = len(train0)
+    _ = len(test0)
+    _ = len(train1)
+    _ = len(test1)
+    _ = x^
+    _ = y^
+
+
 def test_msel_search_run() raises:
     publish_x_trees_glue("cpu")
     def run_case(which: Int) raises:
@@ -1245,8 +1421,14 @@ def test_msel_search_run() raises:
             check_ap_absent()
         elif which == 11:
             check_lacking_fold()
-        else:
+        elif which == 12:
             check_target_free()
+        elif which == 13:
+            check_kmeans_score()
+        elif which == 14:
+            check_kmeans_search()
+        else:
+            check_lacking_proba()
     check_cases("msel_search_run", CASES, run_case)
 
 

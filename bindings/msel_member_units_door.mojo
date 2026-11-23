@@ -37,8 +37,8 @@ step with the GIL held. Here:
     value, as the Python unit does (scikit-learn's `_fit_and_score`).
 
 THE FALLBACK RULE (MEMBER-ABI-V2.md): a member mark never turns a call that
-worked into a refusal. A marked class this route cannot serve (a transformer
-or KMeans: no score; an admission the family refuses; a target the linear
+worked into a refusal. A marked class this route cannot serve (a transformer:
+no score; an admission the family refuses; a target the linear
 check refuses; a classifier's labels outside the CLASSIFIER rule below)
 answers `ran == False` silently.
 
@@ -820,7 +820,7 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             _ = msel_native_clone(base, context)
         var fields = py_call(plan["fields_get"], est, py_type(est))
         # THE FALLBACK RULE: a marked class this route cannot serve (no score:
-        # a transformer or KMeans; an admission its family refuses) takes the
+        # a transformer; an admission its family refuses) takes the
         # Python units exactly as an unmarked class does. Never a refusal here.
         # A classifier's class_weight tail stays pending here: the labels
         # are encoded after the admission (below), and its table is read
