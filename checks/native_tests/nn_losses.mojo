@@ -16,8 +16,10 @@ each under reduction mean and sum (autograd/nn_losses.mojo bodies through autogr
   - one `NN_LOSSES <case> digest` line over the value and gradient words.
 Columns: the CPU column runs on HostExec. The device column runs each case on DeviceExec AND HostExec and requires
 the same words.
-Sabotage: `-D MOJOLEARN_NN_LOSSES_SABOTAGE_SMOOTH_L1_HALF` drops the 0.5 of smooth_l1's quadratic part; the oracle
-checks of smooth_l1 and the smooth_l1 fit's digest must FAIL.
+Sabotage: `-D MOJOLEARN_NN_LOSSES_SABOTAGE_SMOOTH_L1_HALF` drops the 0.5 of smooth_l1's quadratic part (the value
+only; the gradient body is unchanged, so the fit's parameters and its pinned digest do not move); the oracle value
+checks of smooth_l1 must FAIL (CAUGHT at f503904838 on the CPU column: smooth_l1_b0.5/mean/value 0.65125 against
+the float64 oracle 0.650625).
 """
 from std.math import exp, log, log1p
 from std.memory import bitcast
