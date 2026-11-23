@@ -11,8 +11,11 @@ core as a generic op, lane neural-blocks-3-m3, at 1 and 2 heads; lm_head, the LM
 neural-blocks-3-lm) is
 checked through the model interpreter (autograd/model.mojo model_forward, the version-2 backward with
 ModelRules), inside a small model `linear -> block -> flatten -> linear`:
-  - every parameter gradient against central finite differences of the interpreter's own forward loss
-    sum(seed * y) (h = 1/128, tolerance 3e-3 (1 + |fd|));
+  - parameter gradients against central finite differences of the interpreter's own forward loss
+    sum(seed * y) (h = 1/128, tolerance 3e-3 (1 + |fd|)), probed on a fixed sample of every layer's
+    parameter span (_probe_indices: a span of 8 or fewer words whole, a longer one at its first two, last two
+    and 6 evenly spaced words: weight, bias and block-state words of every layer); the digest still covers every
+    analytic gradient word, so a wrong unprobed word still fails the pinned digest and the device bytes check;
   - the attention forward against a float64 oracle written here (projections, rotary, mask, softmax);
   - the rms_norm forward against a float64 oracle;
   - the selective_scan forward against a float64 oracle of the reference recurrence;
@@ -490,6 +493,75 @@ def _close(name: String, got: List[Float32], want: List[Float64], tol: Float64) 
             _fail(name + ": element " + String(i) + " got " + String(got[i]) + " expected " + String(want[i]))
 
 
+comptime _PROBE_ALL = 8  # a span this short is probed whole
+comptime _PROBE_EDGE = 2  # words probed at each end of a longer span
+comptime _PROBE_INNER = 6  # evenly spaced words probed inside a longer span
+
+
+def _span_probes(mut idx: List[Int], a: Int, b: Int):
+    """Append the probed words of the span [a, b): all of a short span, else both edges and evenly spaced
+    interior words (fixed, so a failure names the same word every run)."""
+    var n = b - a
+    if n <= _PROBE_ALL:
+        for i in range(a, b):  # small-loop(<= 8 probed words)
+            idx.append(i)
+        return
+    for i in range(_PROBE_EDGE):  # small-loop(2 edge words)
+        idx.append(a + i)
+    var inner = n - 2 * _PROBE_EDGE
+    for j in range(_PROBE_INNER):  # small-loop(6 interior words)
+        idx.append(a + _PROBE_EDGE + (inner * (2 * j + 1)) // (2 * _PROBE_INNER))
+    for i in range(_PROBE_EDGE):  # small-loop(2 edge words)
+        idx.append(b - _PROBE_EDGE + i)
+
+
+def _probe_indices(spec: ModelSpec) -> List[Int]:
+    """The parameter words the finite-difference check probes: every layer's span [param_off, next offset)
+    through _span_probes. Finite differences over every word cost two forwards per word (the ssd_scan cases
+    alone have about 1,800 words and took most of this file's 149 s); a sample of each span keeps every
+    layer under the check, both ends of each span (its first weights and last biases) included."""
+    var bounds = List[Int]()
+    for i in range(len(spec.param_off)):  # small-loop(layers)
+        var o = spec.param_off[i]
+        if o < 0 or o >= spec.n_params:
+            continue
+        var seen = False
+        for j in range(len(bounds)):  # small-loop(layers)
+            if bounds[j] == o:
+                seen = True
+        if not seen:
+            bounds.append(o)
+    bounds.append(spec.n_params)
+    # insertion sort: a handful of offsets
+    for i in range(1, len(bounds)):  # small-loop(layers)
+        var v = bounds[i]
+        var j = i - 1
+        while j >= 0 and bounds[j] > v:
+            bounds[j + 1] = bounds[j]
+            j -= 1
+        bounds[j + 1] = v
+    var idx = List[Int]()
+    if len(bounds) > 0 and bounds[0] > 0:
+        _span_probes(idx, 0, bounds[0])
+    for i in range(len(bounds) - 1):  # small-loop(layers)
+        if bounds[i + 1] > bounds[i]:
+            _span_probes(idx, bounds[i], bounds[i + 1])
+    return idx^
+
+
+def _close_at(name: String, got: List[Float32], idx: List[Int], want: List[Float64], tol: Float64) raises:
+    """_close on the probed words: got[idx[k]] against want[k]."""
+    if len(idx) != len(want):
+        _fail(name + ": " + String(len(want)) + " references for " + String(len(idx)) + " probed words")
+    for k in range(len(idx)):  # small-loop(probed words)
+        var i = idx[k]
+        if i >= len(got):
+            _fail(name + ": probed word " + String(i) + " past the " + String(len(got)) + " gradient words")
+        var d = abs(Float64(got[i]) - want[k])
+        if not (d <= tol * (1.0 + abs(want[k]))):
+            _fail(name + ": element " + String(i) + " got " + String(got[i]) + " expected " + String(want[k]))
+
+
 def _pinned(name: String) -> UInt64:
     """This version's recorded output-and-gradient digest of a case (0: none recorded). The selective scan's
     words are the Mamba-1 block bodies' (autograd/kernels/mamba1_scan_body.mojo), so its sabotage arms
@@ -539,14 +611,18 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
     elif c.name == "lm_head_logits":
         _close(c.name + " forward", yv, _lmhead_oracle(c, spec, params), 1e-4)
     if finite_differences:
-        var fd = List[Float64](length=len(params), fill=0)
-        for i in range(len(params)):  # small-loop(every parameter probed)
+        if len(grads) != len(params):
+            _fail(c.name + ": " + String(len(grads)) + " gradient words for " + String(len(params)) + " parameters")
+        var probe = _probe_indices(spec)
+        var fd = List[Float64](length=len(probe), fill=0)
+        for k in range(len(probe)):  # small-loop(probed parameters)
+            var i = probe[k]
             var up = params.copy()
             up[i] = Float32(Float64(params[i]) + _H)
             var down = params.copy()
             down[i] = Float32(Float64(params[i]) - _H)
-            fd[i] = (_loss(ex, c, spec, up) - _loss(ex, c, spec, down)) / (2.0 * _H)
-        _close(c.name + " gradient", grads, fd, 3e-3)
+            fd[k] = (_loss(ex, c, spec, up) - _loss(ex, c, spec, down)) / (2.0 * _H)
+        _close_at(c.name + " gradient", grads, probe, fd, 3e-3)
     var words = yv.copy()
     for i in range(len(grads)):  # small-loop(check words)
         words.append(grads[i])
@@ -683,24 +759,34 @@ def run_token_case[E: Exec](mut ex: E, k: Int, finite_differences: Bool) raises 
     if finite_differences:
         var none_w = List[Float32]()
         var none_x = List[Float32]()
-        var fdw = List[Float64](length=len(params), fill=0)
-        for i in range(len(params)):  # small-loop(every parameter probed)
+        if len(gw) != len(params) or len(gx) != len(xv):
+            _fail(name + ": gradient word counts " + String(len(gw)) + ", " + String(len(gx)) + " for "
+                  + String(len(params)) + " parameters and " + String(len(xv)) + " inputs")
+        var pw = _probe_indices(spec)
+        var fdw = List[Float64](length=len(pw), fill=0)
+        for k in range(len(pw)):  # small-loop(probed parameters)
+            var i = pw[k]
             var up = params.copy()
             up[i] = Float32(Float64(params[i]) + _H)
             var down = params.copy()
             down[i] = Float32(Float64(params[i]) - _H)
-            fdw[i] = (Float64(_token_run(ex, spec, up, xv, False, none_w, none_x))
+            fdw[k] = (Float64(_token_run(ex, spec, up, xv, False, none_w, none_x))
                       - Float64(_token_run(ex, spec, down, xv, False, none_w, none_x))) / (2.0 * _H)
-        _close(name + " parameter gradient", gw, fdw, 3e-3)
-        var fdx = List[Float64](length=len(xv), fill=0)
-        for i in range(len(xv)):  # small-loop(every input probed)
+        _close_at(name + " parameter gradient", gw, pw, fdw, 3e-3)
+        # the input gradient: one span per sample row (the first, last and spread tokens of each row)
+        var px = List[Int]()
+        for b in range(_TOK_B):  # small-loop(3 sample rows)
+            _span_probes(px, b * _TOK_L * _TOK_F, (b + 1) * _TOK_L * _TOK_F)
+        var fdx = List[Float64](length=len(px), fill=0)
+        for k in range(len(px)):  # small-loop(probed inputs)
+            var i = px[k]
             var up = xv.copy()
             up[i] = Float32(Float64(xv[i]) + _H)
             var down = xv.copy()
             down[i] = Float32(Float64(xv[i]) - _H)
-            fdx[i] = (Float64(_token_run(ex, spec, params, up, False, none_w, none_x))
+            fdx[k] = (Float64(_token_run(ex, spec, params, up, False, none_w, none_x))
                       - Float64(_token_run(ex, spec, params, down, False, none_w, none_x))) / (2.0 * _H)
-        _close(name + " input gradient", gx, fdx, 3e-3)
+        _close_at(name + " input gradient", gx, px, fdx, 3e-3)
     var words = List[Float32]()
     words.append(lv)
     for i in range(len(gw)):  # small-loop(check words)
