@@ -78,7 +78,11 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 fi
 # NATIVE_DIRS: where the builds write native files (default python/mojolearn; add a host set dir if
 # the box keeps one outside the tree)
-natives() { find ${NATIVE_DIRS:-python/mojolearn} \( -name '*.so' -o -name '*.dylib' \) -type f 2>/dev/null | sort; }
+# The development layout (tools/development_build.py) loads its groups through the index _mojolearn_merged.json
+# beside them; a sabotaged development build re-points that index at the sabotaged group, so the index is part of
+# the native state snapshotted and restored with the binaries (2026-11-23, nn-integrate: without it a tree built in
+# the development layout kept loading the clean groups and every arm read unmoved).
+natives() { find ${NATIVE_DIRS:-python/mojolearn} \( -name '*.so' -o -name '*.dylib' -o -name '_mojolearn_merged.json' \) -type f 2>/dev/null | sort; }
 if command -v sha256sum > /dev/null 2>&1; then HASH=(sha256sum); else HASH=(shasum -a 256); fi
 snap() { natives | while read -r f; do "${HASH[@]}" "$f"; done; }
 natives > "$OUT/clean_natives.txt"
