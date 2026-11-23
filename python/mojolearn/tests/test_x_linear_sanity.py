@@ -124,6 +124,27 @@ def _():
     return ok
 
 
+@case("bayes-std")
+def _():
+    # predict(return_std=True) and the posterior attributes (lane mf-iterimp2)
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=0.5)
+    ok = True
+    for name in ("BayesianRidge", "ARDRegression"):
+        for fi in (True, False):
+            a = getattr(ml, name)(fit_intercept=fi).fit(X, yr)
+            b = getattr(sk, name)(fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+            ok &= _close(f"{name} fi={fi} X_offset_", a.X_offset_, b.X_offset_, 1e-4)
+            ok &= np.asarray(a.sigma_).shape == np.asarray(b.sigma_).shape
+            ok &= _close(f"{name} fi={fi} sigma_", a.sigma_, b.sigma_, 1e-4)
+            mean, std = a.predict(X[:50], return_std=True)
+            rmean, rstd = b.predict(X[:50].astype(np.float64), return_std=True)
+            ok &= np.asarray(mean).shape == (50,) and np.asarray(std).shape == (50,)
+            ok &= _close(f"{name} fi={fi} mean", mean, rmean, 5e-3)
+            ok &= _close(f"{name} fi={fi} std (relative)", np.asarray(std) / rstd, np.ones(50), 5e-3)
+    return ok
+
+
 @case("lars")
 def _():
     from sklearn import linear_model as sk
