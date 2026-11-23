@@ -151,8 +151,6 @@ comptime QUANTILE_CONST_DELTA = 1e-6
 comptime GBDT_HOST_SCORE_COSINE = 1
 
 
-comptime GBDT_HOST_LEAF_NEWTON = 1
-
 
 #: `SCORE_FUNCTION_L2` (`gbdt/options/catboost_options.mojo:135`).
 comptime GBDT_HOST_SCORE_L2 = 6
@@ -1342,10 +1340,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
     if is_multi and leaf_method == GBDT_LEAF_EXACT:
         raise Error("Only MAPE, MAE and Quantile are supported for Exact leaves estimation on GPU")
-    if is_multi and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
-        _refuse("leaf_estimation_method code " + String(leaf_method) + " under loss='" + loss + "' (only Newton)")
-    if is_multi and leaf_iterations >= 0 and leaf_iterations != 1:
-        _refuse("leaf_estimation_iterations=" + String(leaf_iterations) + " under loss='" + loss + "' (only 1)")
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): the multi-output losses walk
+    # their leaves under Newton and Gradient at any iteration count
+    # (gbdt_oracle_multiclass.mojo `_estimate_multi`, the device's
+    # `device_multi_walk_estimate`); Simple and unknown codes refuse below
+    # in the device walker's words, so the two by-name refusals are gone
     # lane gbdt-cpu-rest (2026-11-23): the pointwise losses grow
     # Depthwise and Lossguide trees through the non-symmetric driver
     # (gbdt_oracle_depthwise.mojo); the grouped ones are SymmetricTree only
@@ -1488,9 +1487,9 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "WriteSecondDerivatives: only Newton and Gradient reach"
             " the walker; Exact replaces it"
         )
-    var leaf_gradient_ok = sym_logloss_rmse and leaf_method == GBDT_LEAF_GRADIENT
-    if grow_code == 0 and not is_pointwise and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON and not leaf_gradient_ok:
-        _refuse("leaf_estimation_method code " + String(leaf_method) + " under loss='" + loss + "' (only Newton on the multi-output losses)")
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): Gradient leaves on the
+    # multi-output losses too (the multi walk), so every code that passes
+    # the walker check above trains and the by-name refusal is gone
     # lane gbdt-cpu-rest-4-sym (2026-11-23): under SymmetricTree every
     # loss draws Bayesian, Bernoulli and Poisson; MVS and an unknown name
     # are refused on both columns in `train`'s words
@@ -1852,6 +1851,18 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     if sym_logloss_rmse and leaf_method == GBDT_LEAF_GRADIENT:
         sym_leaf_method = GBDT_LEAF_GRADIENT
         iterations = leaf_iterations if leaf_iterations >= 0 else (1 if is_rmse else 40)
+    # the multi-output losses' walker, as `set_leaves_estimation_default`
+    # resolves it (`get_estimation_method_defaults`: Newton 1 on all three,
+    # Gradient 10 on MultiClass / MultiClassOneVsAll and 1 on MultiRMSE),
+    # `leaf_estimation_iterations` winning when given (lane
+    # gbdt-cpu-rest-4-tail, 2026-11-23)
+    var multi_leaf_method = GBDT_LEAF_NEWTON
+    var multi_iterations = 1
+    if is_multi and leaf_method == GBDT_LEAF_GRADIENT:
+        multi_leaf_method = GBDT_LEAF_GRADIENT
+        multi_iterations = 1 if is_multi_rmse else 10
+    if is_multi and leaf_iterations >= 0:
+        multi_iterations = leaf_iterations
     var border = GBDT_HOST_DEFAULT_BORDER
     if loss_border >= Float32(0.0):
         border = loss_border
@@ -2003,6 +2014,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             random_strength, target_dim, row_weights, feature_fraction,
             score_function,
             flags, permutation_count, ctr_permutation_id, max_ctr_complexity,
+            multi_leaf_method, multi_iterations,
         )
         if len(flags) != 0:
             text = gbdt_multi_host_model_text_ctr(multi_fit)
