@@ -21,24 +21,27 @@ from bindings.msel_split_door import (
 )
 from bindings.msel_split_unpack import msel_split_route, MselRoutePin, msel_label_codes, msel_size_word, msel_size_sum
 from bindings.msel_split_spec_run import (
-    MselSplitSpec, msel_spec_stratified, MSEL_SPEC_KFOLD, MSEL_SPEC_STRATIFIED_KFOLD, MSEL_SPEC_GROUP_KFOLD,
+    MselSplitSpec, MSEL_SPEC_KFOLD, MSEL_SPEC_STRATIFIED_KFOLD, MSEL_SPEC_GROUP_KFOLD,
     MSEL_SPEC_STRATIFIED_GROUP_KFOLD, MSEL_SPEC_TIME_SERIES, MSEL_SPEC_LOO, MSEL_SPEC_LPO, MSEL_SPEC_LOGO,
     MSEL_SPEC_LPGO, MSEL_SPEC_PREDEFINED, MSEL_SPEC_SHUFFLE, MSEL_SPEC_GROUP_SHUFFLE, MSEL_SPEC_STRATIFIED_SHUFFLE,
-    MSEL_SPEC_REPEATED_KFOLD, MSEL_SPEC_REPEATED_STRATIFIED_KFOLD,
+    MSEL_SPEC_REPEATED_KFOLD, MSEL_SPEC_REPEATED_STRATIFIED_KFOLD, msel_spec_has_n_splits,
 )
 
 
-def msel_split_spec_of(cv: PythonObject, classifier: Bool, context: PythonObject, mut spec: MselSplitSpec,
+def msel_split_spec_of(cv: PythonObject, context: PythonObject, mut spec: MselSplitSpec,
                        mut pin: MselRoutePin) -> Bool:
     """`cv`, one of our splitter objects, as typed words in `spec` (its
     entries' connections in `pin`, which the caller keeps for every fit).
     False (the caller keeps its door, which splits natively with X and y and
     raises the splitter's own words) for: an iterable cv (`_IterableCV`,
     whose pairs the caller reads as an index list), a class the table does
-    not connect, a stratified splitter on a regressor (its door refuses
-    continuous y in the splitter's words), a stored field that is not an
-    exact integer where the door reads one, or any value the door refuses.
-    `context` is the model-selection context the splitter door reads."""
+    not connect, a stored field that is not an exact integer where the door
+    reads one, or any value the door refuses. A stratified splitter on a
+    regressor is taken (lane mf-del5): its fit stratifies on the targets'
+    values as the door's split does (bindings/msel_split_spec_run.mojo
+    `msel_spec_sides_targets`; its `classifier` argument is removed).
+    `context` is the
+    model-selection context the splitter door reads."""
     try:
         var layouts = py_get(context, "family_msel_splitter_layouts")
         if layouts is None or not py_contains(layouts, py_type(cv)):
@@ -109,8 +112,6 @@ def msel_split_spec_of(cv: PythonObject, classifier: Bool, context: PythonObject
             s.repeats = msel_int(sp.field("n_repeats", context))
         elif kind != MSEL_SPEC_LOO and kind != MSEL_SPEC_LOGO:
             return False  # LeaveOneOut and LeaveOneGroupOut store no setting
-        if msel_spec_stratified(kind) and not classifier:
-            return False
         s.kind = kind
         # Every entry a splitter may call (the base table past the stratified
         # program bounds and for the group plans; the program runner for a
@@ -122,3 +123,25 @@ def msel_split_spec_of(cv: PythonObject, classifier: Bool, context: PythonObject
         return True
     except:
         return False
+
+
+def msel_cv_fold_words(cv: PythonObject, context: PythonObject) raises -> Tuple[Int, Bool]:
+    """UNPACK (lane mf-del5): what scikit-learn 1.9 calibration.py's cv
+    checks read of a cv, for `cal_cv_check`: (its fold count: `cv` when it is
+    an exact int, else the stored `n_splits` of one of our splitters whose
+    scikit-learn class keeps that attribute, `msel_spec_has_n_splits`; 0
+    for None, an index list and every other splitter; whether it is a
+    LeaveOneOut). `context` is the model-selection context the splitter
+    door reads."""
+    var b = msel_b()
+    if cv is None:
+        return (0, False)
+    if py_type(cv) is b.int:
+        return (Int(py=cv), False)
+    var layouts = py_get(context, "family_msel_splitter_layouts")
+    if layouts is None or not py_contains(layouts, py_type(cv)):
+        return (0, False)
+    var sp = MselSplitter(cv, context)
+    if msel_spec_has_n_splits(sp.kind):
+        return (msel_int(sp.field("n_splits", context)), False)
+    return (0, sp.kind == MSEL_SPEC_LOO)

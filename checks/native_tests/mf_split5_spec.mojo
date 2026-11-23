@@ -582,7 +582,7 @@ def check_calibrated_predefined() raises:
     spec.fold_classes = 3
     spec.wants = [0, 1, 2]
     var nested: List[MemberPlan] = [_logistic(1.0)]
-    var words: List[Float64] = [1.0, 1.0, 1.0]  # sigmoid, ensemble, decision
+    var words: List[Float64] = [1.0, 1.0, 1.0, 0.0]  # sigmoid, ensemble, decision, int cv
     var meta = _meta_with(META_CALIBRATED, 0, nested^, words^, List[List[Int32]](), List[List[Int32]](), List[Int](),
                           spec)
     var state = _fit(meta.plan, x, y)
@@ -593,7 +593,7 @@ def check_calibrated_predefined() raises:
     var te = List[List[Int32]]()
     _mod3(tr, te)
     var nested2: List[MemberPlan] = [_logistic(1.0)]
-    var words2: List[Float64] = [1.0, 1.0, 1.0]
+    var words2: List[Float64] = [1.0, 1.0, 1.0, 0.0]
     var listed = _meta_with(META_CALIBRATED, 3, nested2^, words2^, tr^, te^, List[Int](), MselSplitSpec())
     var s2 = _fit(listed.plan, x, y)
     var want = _proba(listed, s2, x)

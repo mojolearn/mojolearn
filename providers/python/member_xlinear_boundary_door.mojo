@@ -224,16 +224,16 @@ def _xl_spec_pins(var spec: MselSplitSpec, pin: MselRoutePin, context: PythonObj
     return Python.tuple(msel_spec_capsule(handle), pin.provider, pin.entries)
 
 
-def _xl_cv_spec(cv: PythonObject, classifier: Bool, context: PythonObject, mut handle: Int,
+def _xl_cv_spec(cv: PythonObject, context: PythonObject, mut handle: Int,
                 mut pins: PythonObject) -> Bool:
     """THE SPLITTER CV of an x_linear CV member (lane mf-split5): a cv that is
     one of our splitters (read as the splitter door reads it,
     `msel_split_spec_of`), an `_IterableCV`'s stored pairs or a user's index
     list (`_xl_listed`), kept by handle; each fit splits its own rows by the
-    door's plans. False: the door keeps the fit (a stratified splitter on a
-    regressor, a setting the door reads in another form, an irregular
-    list). A user's own splitter object is refused before this, never
-    called."""
+    door's plans (a regressor's stratified splitter on its targets' values,
+    as the door's split, lane mf-del5). False: the door keeps the fit (a
+    setting the door reads in another form, an irregular list). A user's
+    own splitter object is refused before this, never called."""
     try:
         var b = _b()
         var native = prep_native_context(context)
@@ -247,7 +247,7 @@ def _xl_cv_spec(cv: PythonObject, classifier: Bool, context: PythonObject, mut h
             if sp.kind == SPLITTER_ITERABLE:
                 if not _xl_listed(sp.field("_pairs", native), context, spec):
                     return False
-            elif not msel_split_spec_of(cv, classifier, native, spec, pin):
+            elif not msel_split_spec_of(cv, native, spec, pin):
                 return False
         pins = _xl_spec_pins(spec^, pin, context, handle)
         return True
@@ -309,7 +309,7 @@ def _xl_ridge_cv_words(fields: PythonObject, context: PythonObject, mut admitted
     var handle = 0
     if _xl_is_int_cv(cv, context):
         pins = _xl_int_spec(_int(cv), context, handle)
-    elif not _xl_cv_spec(cv, False, context, handle, pins):
+    elif not _xl_cv_spec(cv, context, handle, pins):
         admitted = False
         return words^
     words[3] = -Float64(handle)
@@ -346,7 +346,7 @@ def _xl_enetcv_words(model: PythonObject, fields: PythonObject, context: PythonO
             raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
         if not _xl_is_int_cv(cv, context):
             var handle = 0
-            if not _xl_cv_spec(cv, False, context, handle, pins):
+            if not _xl_cv_spec(cv, context, handle, pins):
                 admitted = False
                 return List[Float64]()
             folds = -handle
@@ -423,7 +423,7 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
             raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
         if not _xl_is_int_cv(cv, context):
             var handle = 0
-            if not _xl_cv_spec(cv, True, context, handle, pins):
+            if not _xl_cv_spec(cv, context, handle, pins):
                 return List[Float64]()
             folds = -handle
         else:

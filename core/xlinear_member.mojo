@@ -176,7 +176,9 @@ from x_linear.door_run import (
     xl_ridge_cv_choose_run, XL_RIDGE_SPLITS_EMPTY, XL_RIDGE_SPLITS_SINGULAR, XL_RIDGE_SPLITS_ERROR,
 )
 from core.member_notices import member_notice_add, MEMBER_NOTICE_WORDS, MEMBER_NOTICE_R2_FEW, MEMBER_NOTICE_SPLIT_LEAST
-from bindings.msel_split_spec_run import MselSplitSpec, MselSides, MselGroupCodes, msel_spec_copy, msel_spec_sides
+from bindings.msel_split_spec_run import (
+    MselSplitSpec, MselSides, MselGroupCodes, msel_spec_copy, msel_spec_sides, msel_spec_sides_targets,
+)
 from x_linear.cv_fold_ids_run import xl_kfold_ids_f32_run
 from x_linear.bayes_words import bayes_out_words, bayes_v_at, bayes_offset_at, ard_out_words, ard_dk_at, ard_offset_at, ard_sigma_at
 
@@ -700,7 +702,8 @@ def _ridge_cv_splits(slot: _SlotP, call: _CallP, spec: MselSplitSpec, var alphas
     if not call[].route.has_fifth:
         raise Error("ImportError: mojolearn RidgeCV: the split path scores each split with the metrics image's "
             + "R^2 entry, which is not loaded")
-    var sides = msel_spec_sides(spec, n, 0, 0, MselGroupCodes())
+    # a regressor's targets: a stratified splitter stratifies on their values, as the door's split (lane mf-del5)
+    var sides = msel_spec_sides_targets(spec, n, call[].y.data, MselGroupCodes())
     var k = sides.splits()
     if k == 0:
         raise Error("mojolearn: cv produced no (train, test) split")
@@ -783,14 +786,20 @@ def _cv_fold_words(spec: MselSplitSpec, sides: MselSides, n: Int, estimator: Str
     _fill_f32(ids_dst, n, Float32(-(n + 1)))
 
 
-def _cv_sides(word: Float64, n: Int, codes: Int, classes: Int, mut spec: MselSplitSpec) raises -> MselSides:
+def _cv_sides(word: Float64, n: Int, codes: Int, classes: Int, targets: Int, mut spec: MselSplitSpec) raises -> MselSides:
     """THE SPLITTER CV of an x_linear CV member (lane mf-split5): its spec
     (word: minus its handle) and the splits of this fit's rows, by the
     splitter door's plans (`msel_spec_sides`; `codes`: the classifier's int32
-    class codes over `classes`, 0 for a regressor). No split: the door's
+    class codes over `classes`, 0 for a regressor, whose float32 `targets`
+    a stratified splitter stratifies on, as the door's split does:
+    `msel_spec_sides_targets`, lane mf-del5). No split: the door's
     `_xl_cv_splits` words."""
     spec = msel_spec_copy(Int(-word))
-    var sides = msel_spec_sides(spec, n, codes, classes, MselGroupCodes())
+    var sides: MselSides
+    if codes == 0:
+        sides = msel_spec_sides_targets(spec, n, targets, MselGroupCodes())
+    else:
+        sides = msel_spec_sides(spec, n, codes, classes, MselGroupCodes())
     if sides.splits() == 0:
         raise Error("mojolearn: cv produced no (train, test) split")
     return sides^
@@ -867,7 +876,7 @@ def _enetcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], intercept: Int, n:
     var roles = List[Float32]()
     var spec = MselSplitSpec()
     if p[6] < 0.0:
-        var sides = _cv_sides(p[6], n, 0, 0, spec)
+        var sides = _cv_sides(p[6], n, 0, 0, call[].y.data, spec)
         folds = sides.splits()
         _cv_fold_words(spec, sides, n, estimator, Int(ids.unsafe_ptr()), roles)
     else:
@@ -1485,7 +1494,7 @@ def _logcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], n: Int, d: Int, k: 
     var roles = List[Float32]()
     var spec = MselSplitSpec()
     if explicit:
-        var sides = _cv_sides(p[4], n, call[].y.data, k, spec)
+        var sides = _cv_sides(p[4], n, call[].y.data, k, 0, spec)
         folds = sides.splits()
         _cv_fold_words(spec, sides, n, estimator, Int(ids.unsafe_ptr()), roles)
         for w in range(len(sides.least)):  # small-loop(one notice per splitter warning: StratifiedKFold's)

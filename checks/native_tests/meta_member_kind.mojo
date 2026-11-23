@@ -624,7 +624,7 @@ def check_calibrated() raises:
     var x = _x()
     var y = _codes()
     var nested: List[MemberPlan] = [_logistic(1.0)]
-    var words: List[Float64] = [1.0, 1.0, 1.0]  # sigmoid, ensemble, decision
+    var words: List[Float64] = [1.0, 1.0, 1.0, 1.0]  # sigmoid, ensemble, decision, int cv
     var meta = _meta_with(META_CALIBRATED, 3, nested^, words^, List[List[Int32]](), List[List[Int32]](), List[Int](), 0)
     var state = _meta_fit(meta, x, y)
     var got = _meta_proba(meta, state, x)
