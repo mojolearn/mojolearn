@@ -204,6 +204,9 @@ from gbdt.grid_creator.binarization import (
     BORDER_TYPE_GREEDY_LOG_SUM,
     select_borders,
 )
+# the device score kernels' AddLeaf (lane gbdt-cpu-rest-4-ns)
+from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import add_leaf_score
+from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from gbdt.options.data_processing_options import (
     NAN_MODE_FORBIDDEN,
     NAN_MODE_MAX,
@@ -2543,15 +2546,13 @@ def _add_leaf_cosine(
     mut score: Float32,
     mut denum_sqr: Float32,
 ):
-    """`_add_leaf[SCORE_FUNCTION_COSINE, normalize=False, pin_mul_add=True]`
-    (`compute_scores.mojo:46-86`)."""
-    var lam = lambda_l2
-    var mu = Float32(0.0)
-    if weight > Float32(0.0):
-        mu = sum / (weight + lam)
-    mu = ftz(mu)
-    score = ftz(identical_mul_add(sum, mu, score))
-    denum_sqr = ftz(identical_mul_add(ftz(weight * mu), mu, denum_sqr))
+    """`add_leaf_score[SCORE_FUNCTION_COSINE, normalize=False,
+    pin_mul_add=True]`, the device score kernels' own statements
+    (`gbdt/methods/greedy_subsets_searcher/leafwise_score_body.mojo`; lane
+    gbdt-cpu-rest-4-ns, 2026-11-23: this was a host restatement)."""
+    add_leaf_score[SCORE_FUNCTION_COSINE, False, True](
+        sum, weight, lambda_l2, score, denum_sqr
+    )
 
 
 def _ftz_lanes[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:

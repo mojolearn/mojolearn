@@ -425,6 +425,8 @@ sampler, a solver, a metric, a reduction).
       gbdt-weighted-rest gbdt-weighted-special gbdt-shape-gaps gbdt-rest-gaps
       gbdt-pointwise-arms
       gbdt-ordered-weights (sample and class weights under Ordered boosting)
+      gbdt-nonsym-rest (Depthwise / Lossguide: every score, growth knob,
+               leaf method, bootstrap and boost_from_average the device trains)
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -5914,6 +5916,65 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-nonsym-rest")
+def _(ml, X, yc, yr, Xh=None):
+    """The Depthwise / Lossguide combinations the CPU column refused by name
+    until lane gbdt-cpu-rest-4-ns (2026-11-23), each now trained by the
+    non-symmetric host driver with the device's leafwise statements: Logloss
+    at L2, NewtonL2 and NewtonCosine under Depthwise and L2 under Lossguide;
+    Depthwise RMSE with min_split_gain, min_child_hessian and
+    min_data_in_leaf; Depthwise Logloss with Gradient leaves, the Poisson
+    bootstrap and score noise; Lossguide RMSE with Gradient leaves at three
+    iterations and Bernoulli; Lossguide CrossEntropy NewtonL2 with
+    boost_from_average (a pointwise loss's Newton planes); weighted Depthwise
+    CrossEntropy with class weights; and Depthwise Logloss with
+    boost_from_average and an eval set (Iter, use_best_model). Each hashes
+    its predictions, digest and learn curve; the held-out fit also its
+    test-loss curve and stop. Every fit at rate 0.1 with every work-changing
+    option set."""
+    rows = min(_GBDT_GAPS_ROWS, X.shape[0])
+    X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
+    w = _hw((rows,), "gbdt-nonsym-rest:sample_weight", 0.25, 4.0)
+    dw = dict(grow_policy="Depthwise", leaf_estimation_method="Newton", boost_from_average=False)
+    lg = dict(grow_policy="Lossguide", max_leaves=16, leaf_estimation_method="Newton", boost_from_average=False)
+    parts, first = {}, None
+    for name, yf, wf, options in [
+        ("depthwise_logloss_l2", yc, None, dict(dw, loss="Logloss", score_function="L2")),
+        ("depthwise_logloss_newtonl2", yc, None, dict(dw, loss="Logloss", score_function="NewtonL2")),
+        ("depthwise_logloss_newtoncosine", yc, None, dict(dw, loss="Logloss", score_function="NewtonCosine")),
+        ("lossguide_logloss_l2", yc, None, dict(lg, loss="Logloss", score_function="L2")),
+        ("depthwise_rmse_growth_knobs", yr, None,
+         dict(dw, loss="RMSE", score_function="NewtonCosine", min_split_gain=0.01, min_child_hessian=1.0,
+              min_data_in_leaf=8)),
+        ("depthwise_logloss_gradient_poisson_noise", yc, None,
+         dict(dw, loss="Logloss", score_function="Cosine", leaf_estimation_method="Gradient",
+              bootstrap_type="Poisson", subsample=0.7, random_strength=1.0)),
+        ("lossguide_rmse_gradient3_bernoulli", yr, None,
+         dict(lg, loss="RMSE", score_function="NewtonL2", leaf_estimation_method="Gradient",
+              leaf_estimation_iterations=3, bootstrap_type="Bernoulli", subsample=0.7)),
+        ("lossguide_crossentropy_newtonl2_bfa", yc, None,
+         dict(lg, loss="CrossEntropy", score_function="NewtonL2", boost_from_average=True)),
+        ("depthwise_crossentropy_class_weights_weighted", yc, w,
+         dict(dw, loss="CrossEntropy", score_function="Cosine", class_weights=[1.0, 3.0])),
+    ]:
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(**options)).fit(X, yf, sample_weight=wf)
+        _gbdt_gaps_parts(parts, name, m, X)
+        parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
+        first = first if first is not None else m
+    # the held-out fit: boost_from_average on Logloss, the curve, the stop
+    Xe = np.ascontiguousarray(Xh[:rows])
+    yce = labels_for(Xh, HELDOUT_SEED)[0][:rows].astype(np.float32)
+    kw = dict(dw, loss="Logloss", score_function="Cosine", boost_from_average=True, n_estimators=30,
+              learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3)
+    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yc, eval_set=(Xe, yce))
+    _gbdt_gaps_parts(parts, "depthwise_logloss_bfa_eval", ev, X)
+    parts["depthwise_logloss_bfa_eval:loss_curve"] = _h(np.asarray(ev.loss_curve_, dtype=np.float64))
+    parts["depthwise_logloss_bfa_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+    parts["depthwise_logloss_bfa_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                              ev.best_iteration_], dtype=np.int64))
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -9797,7 +9858,8 @@ _batch_decl(_rows_calls("predict"),
 _batch_decl(_rows_calls("predict"),
             "gbdt-weighted-rest", "gbdt-weighted-special", "gbdt-shape-gaps", "gbdt-rest-gaps",
             "gbdt-pointwise-arms",
-            "gbdt-ordered-weights")
+            "gbdt-ordered-weights",
+            "gbdt-nonsym-rest")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):

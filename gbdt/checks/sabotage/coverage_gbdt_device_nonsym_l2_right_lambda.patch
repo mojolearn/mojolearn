@@ -1,0 +1,17 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo b/gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo
+index 2d0a080ea0..cac0617a08 100644
+--- a/gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo
+@@ -387,8 +387,11 @@ def _leafwise_scan_part[
+             add_leaf_score[score_function, normalize, True](
+                 sum_left, weight_left, lambda_l2, score, denum_sqr
+             )
++            # SABOTAGE (coverage-gbdt-device_nonsym_l2_right_lambda): the
++            # L2 / NewtonL2 calcers add the right child without its l2
++            # regularizer
+             add_leaf_score[score_function, normalize, True](
+-                sum_right, weight_right, lambda_l2, score, denum_sqr
++                sum_right, weight_right, lambda_l2 if cosine else Float32(0.0), score, denum_sqr
+             )
+             add_leaf_score[score_function, normalize, True](
+                 part_stat, part_weight, lambda_l2, score_b, denum_sqr_b

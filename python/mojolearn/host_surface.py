@@ -821,6 +821,7 @@ TRAINING_LANE_NAMES = {
     "gbdt-rest-gaps": "gradient boosting eval sets and feature_fraction on the symmetric pointwise and multiclass losses, the pointwise searcher with RMSE, NaN beside categorical columns",
     "gbdt-pointwise-arms": "gradient boosting on the pointwise searcher with Newton and cosine scores, every bootstrap, Gradient leaves, score noise and feature_fraction",
     "gbdt-ordered-weights": "gradient boosting Ordered boosting with sample weights and class weights",
+    "gbdt-nonsym-rest": "gradient boosting Depthwise and Lossguide with every score, growth knob, leaf method, bootstrap and boost_from_average",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1606,6 +1607,18 @@ ADAPTED_MODULES = {
 #: canonical hash), its admission raises are the device estimator's words
 #: (gbdt/estimator.mojo::gbdt_fit_two_level_feature_freq), and the CPU
 #: column already records gbdt-tensor-ctr-tables; nothing refuses it.
+#: Lane gbdt-cpu-rest-4-ns (2026-11-23): Depthwise and Lossguide train
+#: every (loss, score_function, leaf_estimation_method, bootstrap_type) the
+#: device trains: the four scores on both policies (the device's leafwise
+#: statements, gbdt/methods/greedy_subsets_searcher/leafwise_score_body.mojo),
+#: Depthwise's min_split_gain, min_child_hessian and min_data_in_leaf,
+#: Gradient leaves and any iteration count on Logloss and RMSE, the Poisson
+#: bootstrap, boost_from_average on Logloss and CrossEntropy, class weights
+#: on the pointwise losses. Refused on BOTH columns in the device's words,
+#: so not CPU gaps: Exact outside MAE / MAPE / Quantile, Simple leaves, MVS,
+#: scores outside the four, min_child_hessian outside RMSE / Logloss /
+#: CrossEntropy, RMSE with class weights, boost_from_average outside
+#: `train`'s list, use_pointwise_searcher on a non-symmetric policy.
 NO_CPU_PATH = (
     "gradient boosting training with a categorical or one-hot column "
     "outside SymmetricTree with Logloss or RMSE and Plain boosting: the "
@@ -1617,11 +1630,10 @@ NO_CPU_PATH = (
     "given), apart from the grouped losses QueryRMSE, PairLogit and "
     "YetiRank, which it trains",
 
-    "gradient boosting training at a (loss, grow_policy, score_function, "
-    "leaf_estimation_method, bootstrap_type) combination outside the ones "
-    "the gbdt/host oracles restate, each refused by name: score functions "
-    "and leaf estimators outside each policy's covered pair, Depthwise's "
-    "min_split_gain, min_child_hessian and min_data_in_leaf, "
+    "gradient boosting training on SymmetricTree at a (loss, "
+    "score_function, leaf_estimation_method, bootstrap_type) combination "
+    "outside the ones the gbdt/host oracles restate, each refused by name: "
+    "score functions and leaf estimators outside its covered pair, "
     "and boost_from_average outside RMSE, the quantile "
     "family and the dedicated pointwise Logloss route -- each one its own "
     "device kernel or its own searcher gate order",
@@ -2969,6 +2981,8 @@ FAMILIES = (
             "gbdt-pointwise-arms",
             # lane gbdt-ordered-weights (2026-11-23)
             "gbdt-ordered-weights",
+            # lane gbdt-cpu-rest-4-ns (2026-11-23)
+            "gbdt-nonsym-rest",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4180,6 +4194,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-rest-gaps": "no reference",
     "gbdt-pointwise-arms": "no reference",
     "gbdt-ordered-weights": "no reference",
+    "gbdt-nonsym-rest": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no

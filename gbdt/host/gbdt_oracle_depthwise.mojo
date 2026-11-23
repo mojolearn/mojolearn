@@ -31,9 +31,15 @@ terminal), `min_split_gain` 0.01, `min_data_in_leaf` 8, `feature_fraction`
 tree), `random_strength` 1 (the per-tree `CalcScoreModelLengthMult`, the
 per-tree seed, `compute_target_std_dev` and the per-launch level seed with
 the per-feature normal draw on both scores), the Bernoulli bootstrap at 0.7
-and Gradient leaves at three iterations (`gbdt_oracle_losses.mojo`). Every
-other option is at its default and the binding refuses by name what is
-outside (bindings/_mojolearn_gbdt_host.mojo, `_refuse`).
+and Gradient leaves at three iterations (`gbdt_oracle_losses.mojo`).
+Since lane gbdt-cpu-rest-4-ns (2026-11-23) both policies run every score
+function the device's leafwise kernels have (Cosine, NewtonCosine, L2,
+NewtonL2, through `leafwise_score_body.mojo`, the kernels' own statements),
+`min_split_gain`, `min_child_hessian` and `min_data_in_leaf` under Depthwise
+as under Lossguide, Gradient / Newton leaves at any iteration count, every
+bootstrap and `boost_from_average` on Logloss and CrossEntropy; what the
+device refuses the binding refuses in the device's words
+(gbdt/mojolearn_gbdt_host_run.mojo).
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build defaults:
 DEVIATION 1902 ridx-only splits OFF, 2661 group width OFF, 1901 incremental
@@ -151,7 +157,6 @@ from gbdt.host.gbdt_oracle import (
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
     GbdtHostParams,
-    _add_leaf_cosine,
     _binarize_columns,
     _deterministic_sum_lanes,
     _estimate_leaves,
@@ -166,6 +171,16 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_grid,
 )
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
+# the device's leafwise score statements (lane gbdt-cpu-rest-4-ns)
+from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import (
+    add_leaf_score,
+    child_hessian_below,
+    leafwise_finish_gain,
+)
+from gbdt.options.catboost_options import (
+    SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_L2,
+)
 from gbdt.host.gbdt_oracle_eval import (
     GbdtHostEval,
     gbdt_eval_add_tree,
@@ -188,7 +203,6 @@ from gbdt.host.gbdt_oracle_losses import (
     _loss_value,
 )
 from gbdt.host.gbdt_oracle_lossguide import (
-    add_leaf_l2,
     logloss_search_pass_newton,
     lossguide_select_leaves_to_split,
 )
@@ -344,6 +358,10 @@ def _leafwise_gain(
     pinned mul-add on both scores), the zero-part rule, the gain. `hist`
     and `part_stats` are the level's storage by pointer (a task of
     `_score_leaves` calls this)."""
+    # lane gbdt-cpu-rest-4-ns (2026-11-23): the bits test, the calcers and
+    # the tail are the kernel's own statements (leafwise_score_body.mojo,
+    # which `_leafwise_scan_part` calls), at the pinned arm and feature
+    # weight 1.0; the four calcers arrive as a run-time Bool
     var score = Float32(0.0)
     var denum_sqr = Float32(1e-10)
     var score_b = Float32(0.0)
@@ -353,14 +371,12 @@ def _leafwise_gain(
     var weight_left = max(hist[leaf_base + bin_feature_id], Float32(0.0))
     var weight_right = ftz(max(part_weight - weight_left, Float32(0.0)))
     rejected = False
-    if min_child_hessian >= Float32(0.0):
-        # `child_hessian_below` (`compute_scores.mojo:36-42`), by bits
-        var th = bitcast[DType.uint32](min_child_hessian) & UInt32(0x7FFFFFFF)
-        if (bitcast[DType.uint32](weight_left) & UInt32(0x7FFFFFFF)) < th or (
-            bitcast[DType.uint32](weight_right) & UInt32(0x7FFFFFFF)
-        ) < th:
-            rejected = True
-            return Float32(0.0)
+    if min_child_hessian >= Float32(0.0) and (
+        child_hessian_below(weight_left, min_child_hessian)
+        or child_hessian_below(weight_right, min_child_hessian)
+    ):
+        rejected = True
+        return Float32(0.0)
     var to_zero_part_split = (
         weight_left < Float32(1e-20) or weight_right < Float32(1e-20)
     )
@@ -368,37 +384,20 @@ def _leafwise_gain(
     var part_stat = part_stats[leaf * 2 + 1]
     var sum_right = ftz(part_stat - sum_left)
     if cosine:
-        _add_leaf_cosine(sum_left, weight_left, lambda_l2, score, denum_sqr)
-        _add_leaf_cosine(sum_right, weight_right, lambda_l2, score, denum_sqr)
-        _add_leaf_cosine(part_stat, part_weight, lambda_l2, score_b, denum_sqr_b)
-    else:
-        add_leaf_l2(sum_left, weight_left, lambda_l2, score)
-        add_leaf_l2(sum_right, weight_right, lambda_l2, score)
-        add_leaf_l2(part_stat, part_weight, lambda_l2, score_b)
-    var final_score = score
-    var score_before = score_b
-    if cosine:
-        if denum_sqr > Float32(1e-15):
-            final_score = ftz(score / identical_sqrt(denum_sqr))
-        else:
-            final_score = -GBDT_FLOAT32_MAX
-        if denum_sqr_b > Float32(1e-15):
-            score_before = ftz(score_b / identical_sqrt(denum_sqr_b))
-        else:
-            score_before = -GBDT_FLOAT32_MAX
-        if score_std_dev != Float32(0.0):
-            var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
-            var draw = next_normal_f(seed)
-            var neg_draw = -draw[0]
-            final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
-            score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
-    if to_zero_part_split:
-        final_score = -GBDT_FLOAT32_MAX
-        score_before = -GBDT_FLOAT32_MAX
-    var gain = Float32(0.0)
-    if not to_zero_part_split:
-        gain = ftz(final_score - score_before)
-    return ftz(gain * Float32(1.0))
+        add_leaf_score[SCORE_FUNCTION_COSINE, False, True](sum_left, weight_left, lambda_l2, score, denum_sqr)
+        add_leaf_score[SCORE_FUNCTION_COSINE, False, True](sum_right, weight_right, lambda_l2, score, denum_sqr)
+        add_leaf_score[SCORE_FUNCTION_COSINE, False, True](part_stat, part_weight, lambda_l2, score_b, denum_sqr_b)
+        return leafwise_finish_gain[SCORE_FUNCTION_COSINE](
+            score, denum_sqr, score_b, denum_sqr_b, to_zero_part_split,
+            score_std_dev, level_seed, feature_id, Float32(1.0),
+        )
+    add_leaf_score[SCORE_FUNCTION_L2, False, True](sum_left, weight_left, lambda_l2, score, denum_sqr)
+    add_leaf_score[SCORE_FUNCTION_L2, False, True](sum_right, weight_right, lambda_l2, score, denum_sqr)
+    add_leaf_score[SCORE_FUNCTION_L2, False, True](part_stat, part_weight, lambda_l2, score_b, denum_sqr_b)
+    return leafwise_finish_gain[SCORE_FUNCTION_L2](
+        score, denum_sqr, score_b, denum_sqr_b, to_zero_part_split,
+        score_std_dev, level_seed, feature_id, Float32(1.0),
+    )
 
 
 def _best_split_less(
@@ -1186,8 +1185,16 @@ def gbdt_host_fit_non_symmetric(
         params.score_function == GBDT_HOST_SCORE_NEWTON_L2
         or params.score_function == GBDT_HOST_SCORE_NEWTON_COSINE
     )
-    if not newton and params.score_function != GBDT_HOST_SCORE_COSINE_NS:
-        raise Error("the non-symmetric host fit restates Cosine, NewtonL2 and NewtonCosine only")
+    # lane gbdt-cpu-rest-4-ns (2026-11-23): L2 too, the device's four
+    # leafwise calcers under both policies (`structure_searcher_options.
+    # check`'s words for the rest)
+    if not newton and params.score_function != GBDT_HOST_SCORE_COSINE_NS and params.score_function != SCORE_FUNCTION_L2:
+        raise Error(
+            "score_function=" + String(params.score_function)
+            + " has no calcer in this implementation; only Cosine, NewtonCosine,"
+            " L2 and NewtonL2 are implemented (SolarL2, SatL2 and LOOL2 are"
+            " theirs at compute_scores.cu:509-546 and are not written)"
+        )
     var is_logloss = params.loss.objective == GBDT_OBJ_LOGLOSS
     # lane gbdt-cpu-rest (2026-11-23): every pointwise loss of
     # gbdt_oracle_losses.mojo rides the RMSE arm's generic passes
@@ -1296,7 +1303,13 @@ def gbdt_host_fit_non_symmetric(
 
         # ---- the gradients, the learn loss and the magnitudes ----
         if not is_logloss:
-            _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part, weights)
+            # `secondDerAsWeights` (`doc_parallel_boosting.mojo`'s
+            # `launch_approximate[False, True]`): the Newton scores search
+            # on the weighted second derivative for every pointwise loss
+            # (lane gbdt-cpu-rest-4-ns, 2026-11-23: this pass ran the
+            # first-order planes under NewtonL2 / NewtonCosine; RMSE's
+            # der2 is 1, so its planes do not move)
+            _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part, weights, second_order=newton)
         elif newton:
             logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part, weights)
         else:

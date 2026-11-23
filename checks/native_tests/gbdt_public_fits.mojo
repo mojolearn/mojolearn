@@ -76,7 +76,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 23
+comptime GBDT_HOST_UNITS = 27
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -1195,8 +1195,115 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_rest_gaps[I]()
     elif unit == 21:
         host_pointwise_arms[I]()
+    elif unit == 26:
+        host_nonsym_rest[I]()
     else:
         host_ordered_weights[I]()
+
+
+def _ns_opts(loss: String, policy: String, score: String) -> GbdtOpts:
+    """A Depthwise / Lossguide fit with every option it reads set."""
+    var o = GbdtOpts(loss, 4, 3)
+    o.deterministic()
+    o.learning_rate = 0.1
+    o.random_state = 7
+    o.grow_policy = policy
+    o.score_function = score
+    if policy == "Lossguide":
+        o.max_leaves = 8
+    return o^
+
+
+def _ns_refused[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, needle: String, what: String) raises:
+    """`fit` raises, in the device's words."""
+    var refused = String("")
+    try:
+        _ = fit[I](o, inp)
+    except error:
+        refused = String(error)
+    require(len(refused) > 0, what + " was silently accepted")
+    require_fails_with(refused, needle, what)
+    require(not ("no CPU implementation" in refused), what + ": a CPU-gap refusal: " + refused)
+
+
+def host_nonsym_rest[I: GbdtImage]() raises:
+    """The Depthwise / Lossguide combinations the host refused by name until
+    lane gbdt-cpu-rest-4-ns (2026-11-23), each twice to the same bytes, and
+    the ones the device refuses, refused here in its words."""
+    var cls = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    # the four leafwise calcers under both policies
+    var scores: List[String] = ["L2", "NewtonL2", "NewtonCosine", "Cosine"]
+    var policies: List[String] = ["Depthwise", "Lossguide"]
+    for pi in range(2):  # small-loop(the two policies)
+        for si in range(4):  # small-loop(the four scores)
+            var o = _ns_opts("Logloss", policies[pi], scores[si])
+            var m = _twice[I](o, cls, policies[pi] + " Logloss " + scores[si])
+            require("\nntree 0 " in m.text, policies[pi] + " " + scores[si] + ": non-symmetric model text")
+    var l2 = fit[I](_ns_opts("Logloss", "Depthwise", "L2"), cls)
+    var nl2 = fit[I](_ns_opts("Logloss", "Depthwise", "NewtonL2"), cls)
+    require(l2.text != nl2.text, "Depthwise L2 and NewtonL2 grew the same model (the planes did not move)")
+    # Depthwise's growth knobs
+    var knobs = _ns_opts("RMSE", "Depthwise", "NewtonCosine")
+    knobs.min_split_gain = 0.01
+    knobs.min_child_hessian = 1.0
+    knobs.min_data_in_leaf = 8
+    var mk = _twice[I](knobs, reg, "Depthwise RMSE min_split_gain / min_child_hessian / min_data_in_leaf")
+    var plain = fit[I](_ns_opts("RMSE", "Depthwise", "NewtonCosine"), reg)
+    require(mk.text != plain.text, "Depthwise growth knobs changed nothing")
+    # Gradient leaves on Logloss, Poisson bootstrap, random_strength
+    var gp = _ns_opts("Logloss", "Depthwise", "Cosine")
+    gp.leaf_method = "Gradient"
+    gp.bootstrap = "Poisson"
+    gp.subsample = 0.7
+    gp.random_strength = 1.0
+    _ = _twice[I](gp, cls, "Depthwise Logloss Gradient leaves, Poisson, random_strength 1")
+    # RMSE Gradient leaves at three iterations
+    var rg = _ns_opts("RMSE", "Lossguide", "NewtonL2")
+    rg.leaf_method = "Gradient"
+    rg.leaf_iterations = 3
+    rg.bootstrap = "Poisson"
+    _ = _twice[I](rg, reg, "Lossguide RMSE Gradient leaves at 3 iterations")
+    # boost_from_average on Logloss and CrossEntropy: a bias record
+    var bl = _ns_opts("Logloss", "Depthwise", "Cosine")
+    bl.boost_from_average = 1
+    var mbl = _twice[I](bl, cls, "Depthwise Logloss boost_from_average")
+    require("\nbias " in mbl.text, "Depthwise Logloss boost_from_average: no bias record")
+    var bc = _ns_opts("CrossEntropy", "Lossguide", "NewtonCosine")
+    bc.boost_from_average = 1
+    var mbc = _twice[I](bc, cls, "Lossguide CrossEntropy boost_from_average (Newton planes)")
+    require("\nbias " in mbc.text, "Lossguide CrossEntropy boost_from_average: no bias record")
+    # class weights on a pointwise loss
+    var cw = _ns_opts("CrossEntropy", "Depthwise", "Cosine")
+    cw.class_weights = [1.0, 3.0]
+    var mcw = _twice[I](cw, cls, "Depthwise CrossEntropy class weights")
+    var ucw = fit[I](_ns_opts("CrossEntropy", "Depthwise", "Cosine"), cls)
+    require(mcw.text != ucw.text, "Depthwise CrossEntropy: class weights changed nothing")
+    # refused on both columns, in the device's words
+    var ex = _ns_opts("Logloss", "Depthwise", "Cosine")
+    ex.leaf_method = "Exact"
+    _ns_refused[I](ex, cls, "Only MAPE, MAE and Quantile", "Depthwise Logloss Exact")
+    var sm = _ns_opts("RMSE", "Lossguide", "NewtonL2")
+    sm.leaf_method = "Simple"
+    _ns_refused[I](sm, reg, "only Newton and Gradient reach", "Lossguide RMSE Simple")
+    var mvs = _ns_opts("Logloss", "Lossguide", "NewtonL2")
+    mvs.bootstrap = "MVS"
+    _ns_refused[I](mvs, cls, "MVS is not reachable", "Lossguide MVS")
+    var rcw = _ns_opts("RMSE", "Depthwise", "Cosine")
+    rcw.class_weights = [1.0, 2.0]
+    _ns_refused[I](rcw, reg, "class weights take effect only", "Depthwise RMSE class weights")
+    var mch = _ns_opts("Poisson", "Depthwise", "NewtonL2")
+    mch.min_child_hessian = 1.0
+    _ns_refused[I](mch, reg, "min_child_hessian currently supports", "Depthwise Poisson min_child_hessian")
+    var pb = _ns_opts("Poisson", "Lossguide", "NewtonL2")
+    pb.boost_from_average = 1
+    _ns_refused[I](pb, reg, "You can use boost_from_average only", "Lossguide Poisson boost_from_average")
+    var pws = _ns_opts("Logloss", "Depthwise", "Cosine")
+    pws.pointwise = True
+    _ns_refused[I](pws, cls, "an OBLIVIOUS searcher", "the pointwise searcher on Depthwise")
+    var d0 = _ns_opts("Logloss", "Depthwise", "Cosine")
+    d0.max_depth = 0
+    _ns_refused[I](d0, cls, "max_leaves must be at least 2 under Depthwise", "Depthwise at depth 0")
 
 
 def _pw_opts(loss: String, score: String, boot: String) -> GbdtOpts:
