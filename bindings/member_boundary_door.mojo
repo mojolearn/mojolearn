@@ -228,8 +228,8 @@ def member_admit_serving(model: PythonObject, fields: PythonObject, plan: Python
     capability bit of `needs` for this estimator, else an owner with
     `published` False, and the caller takes the path an unmarked class
     takes. Never raises: an admission the family refuses (a parameter it
-    does not take as words, class weights, a precomputed kernel, an image
-    that is not loaded) is the same silent fallback, and that path then
+    does not take as words, a class_weight value its estimator refuses, an
+    image that is not loaded) is the same silent fallback, and that path then
     raises its own words if the request is wrong. A member mark never turns
     a call that worked into a refusal.
 

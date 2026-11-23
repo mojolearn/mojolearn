@@ -41,11 +41,14 @@
 # below stay ONLY for: a class with no member entry (the meta-estimators of
 # the Ensemble, Search and Pipeline families, whose member entries are
 # unpublished until the META member kind lands), an admission or a
-# held-state import the family refuses for a class with a full plan (class
-# weights keyed by labels, a precomputed kernel, an image without the
+# held-state import the family refuses for a class with a full plan (a
+# class_weight that is neither None, 'balanced' nor an exact dict, or a
+# dict with a key that is not an exact number; an image without the
 # member's entry, an unaddressable GP kernel, the gbdt adapter's fast mode
 # and categorical or multi-target losses, a CV splitter object: the
-# fallback rule, a mark never turns a call that worked into a refusal), and
+# fallback rule, a mark never turns a call that worked into a refusal; lane
+# mf-adm3 serves class_weight 'balanced' and numeric-keyed dicts, read per
+# step over the step's classes, and kernel='precomputed'), and
 # the member-set B arm (MOJOLEARN_MEMBER_SET_OFF, A/B owed in
 # docs/apple-fast/EXPERIMENTS.md), whose off path IS these rounds. There the estimator is cloned, fitted and
 # asked to predict once per (round, feature) step with the float32 blocks

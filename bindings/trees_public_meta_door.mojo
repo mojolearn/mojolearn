@@ -2984,9 +2984,12 @@ struct _CalUnits(Movable):
     member mark, CategoricalNB's door included where its kind is not
     admitted, a meta-estimator base (no meta member kind: lane mf-cal3b's
     result says why), a configuration its family's admit leaves to the
-    estimator's door (SVC class_weight or kernel='precomputed', a GP kernel
-    the member cannot address, ...), or a member kind with no native
-    scoring call). The threads stay for the second kind: those folds are
+    estimator's door (a class_weight that is neither None, 'balanced' nor
+    an exact dict, which that door refuses in its words; a GP kernel the
+    member cannot address, ...), or a member kind with no native scoring
+    call). Lane mf-adm3: class_weight 'balanced' and dict (logistic,
+    LinearSVC, SVC, SGD*, RidgeClassifier, LogisticRegressionCV) and
+    kernel='precomputed' (SVC, KernelRidge) are native members now. The threads stay for the second kind: those folds are
     independent units whose fit doors release the GIL, on n_jobs threads.
     REMOVED (lane mf-cal3): `only()` / `todo` and the per-fold native fit
     retry (`k`): no fold of a served base reaches a door now. Lane mf-cal3b:
