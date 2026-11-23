@@ -96,9 +96,9 @@ def rankn_conv3d[E: Exec](
 
 def _pool3d_block(
     sx: ShapeN, kernel: Dhw, stride: Dhw, padding: Dhw, dilation: Dhw, ceil_mode: Bool, include_pad: Bool,
-    divisor: Int, what: String,
-) raises -> Tuple[List[Int32], List[Int]]:
-    """x_cnn's PP_* block of the (H, W) plane and the depth words [D, KD, SD, PD, DD, OD], the depth's
+    divisor: Int, what: String, mut depth: List[Int],
+) raises -> List[Int32]:
+    """x_cnn's PP_* block of the (H, W) plane; `depth` receives the depth words [D, KD, SD, PD, DD, OD], the depth's
     output size by the same rule (pool_params over the depth as its height: PyTorch's
     pooling_output_shape, floor or ceil mode, and its padding bound)."""
     if kernel.d < 1 or kernel.h < 1 or kernel.w < 1 or stride.d < 1 or stride.h < 1 or stride.w < 1:
@@ -121,8 +121,8 @@ def _pool3d_block(
     var rawd: List[Int] = [N, C, sx.d[2], 1, kernel.d, 1, stride.d, 1, padding.d, 0, dilation.d, 1, 0, 0, inc, 0,
                            ceil, 0]
     var od = Int(pool_params(rawd)[PP_OH])
-    var depth: List[Int] = [sx.d[2], kernel.d, stride.d, padding.d, dilation.d, od]
-    return (block^, depth^)
+    depth = [sx.d[2], kernel.d, stride.d, padding.d, dilation.d, od]
+    return block^
 
 
 def rankn_max_pool3d[E: Exec](
@@ -149,8 +149,9 @@ def rankn_max_pool3d[E: Exec](
         The output, shape (N, C, OD, OH, OW).
     """
     var sx = _dims5(tape, x, "max_pool3d")
-    var bd = _pool3d_block(sx, kernel, stride, padding, dilation, ceil_mode, True, 0, "max_pool3d")
-    return _max_pool(tape, ex, x, sx, bd[0], bd[1])
+    var depth = List[Int]()
+    var block = _pool3d_block(sx, kernel, stride, padding, dilation, ceil_mode, True, 0, "max_pool3d", depth)
+    return _max_pool(tape, ex, x, sx, block, depth)
 
 
 def rankn_avg_pool3d[E: Exec](
@@ -178,9 +179,10 @@ def rankn_avg_pool3d[E: Exec](
         The output, shape (N, C, OD, OH, OW).
     """
     var sx = _dims5(tape, x, "avg_pool3d")
-    var bd = _pool3d_block(sx, kernel, stride, padding, Dhw.cube(1), ceil_mode, count_include_pad,
-                           divisor_override, "avg_pool3d")
-    return _avg_pool(tape, ex, x, sx, bd[0], bd[1])
+    var depth = List[Int]()
+    var block = _pool3d_block(sx, kernel, stride, padding, Dhw.cube(1), ceil_mode, count_include_pad,
+                              divisor_override, "avg_pool3d", depth)
+    return _avg_pool(tape, ex, x, sx, block, depth)
 
 
 def adaptive3d_supported(D: Int, H: Int, W: Int, size: Dhw) -> Bool:

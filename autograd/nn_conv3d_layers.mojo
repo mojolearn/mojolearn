@@ -108,9 +108,13 @@ def conv3d_layer_shape(code: Int, xargs: List[Int], i: Int, cur: ShapeN, name: S
         if not is_max and _x(xargs, i, 3) != 0 and _x(xargs, i, 3) != 1:
             raise Error(what + ": count_include_pad must be 0 or 1")
         var div = 0 if is_max else _x(xargs, i, 5)
-        var bd = _pool3d_block(_sample5(cur), _t(xargs, i, 0), _t(xargs, i, 1), _t(xargs, i, 2), dil, ceil == 1,
-                               inc, div, what)
-        dims = [C, bd[1][5], Int(bd[0][PP_OH]), Int(bd[0][PP_OW])]
+        var depth = List[Int]()
+        var block = _pool3d_block(_sample5(cur), _t(xargs, i, 0), _t(xargs, i, 1), _t(xargs, i, 2), dil, ceil == 1,
+                                  inc, div, what, depth)
+        var od = depth[5]
+        var oh = Int(block[PP_OH])
+        var ow = Int(block[PP_OW])
+        dims = [C, od, oh, ow]
     elif code == LAYER_ADAPTIVE_AVGPOOL3D:
         var o = _t(xargs, i, 0)
         if not adaptive3d_supported(D, H, W, o):
