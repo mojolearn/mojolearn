@@ -28,9 +28,8 @@ def _ova(classes, **fit_kw):
 def test_ova_save_load_keeps_identical_mode(classes, tmp_path):
     # The dimensions, the sigmoid link, the argmax classes and the effect of
     # sample_weight are the native check checks/native_tests/gbdt_ova_link.mojo
-    # (device column: the host fit refuses sample_weight here too).
-    if _backend._CPU_ONLY is not None:
-        pytest.skip("CPU-only install: the gbdt host binding trains its declared lanes with unit weights only and refuses sample_weight by name (bindings/_mojolearn_gbdt_host.mojo); weighted GBDT fits need a GPU binding")
+    # (device column; the host fit trains it too since lane gbdt-cpu-rest).
+    # both columns train sample_weight here since lane gbdt-cpu-rest (2026-11-23)
     weights = np.arange(1, 31, dtype=np.float32) / 2
     model, X = _ova(classes, sample_weight=weights)
     raw, probability = model.predict(X), model.predict_proba(X)
