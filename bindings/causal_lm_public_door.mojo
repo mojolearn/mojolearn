@@ -52,7 +52,7 @@ from bindings.causal_keys_unpack import causal_keys
 from core.causal_layer_run import (
     CausalLayerRoute, CausalLayerRequest, CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1, CAUSAL_LAYER_MAMBA2,
 )
-from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP, IDN_MAMBA12_FORWARD_COPIES_OLD, IDN_MAMBA12_FORWARD_DOOR_OLD
+from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP, IDN_MAMBA12_FORWARD_COPIES_OLD
 from std.memory import unsafe_memcpy, unsafe_memset_zero
 from core.generation_buffers_impl import generation_bytes_copy
 from bindings.generation_buffers_door import (
@@ -1021,13 +1021,11 @@ def causal_layer_stateless_plan(kind: String, entries: PythonObject) raises -> B
 #: fields dict check, the state-namespace and `_resident_session` getattr
 #: probes of a None state, the (tier, vendor) dict reads and table read).
 #: The same addresses and words reach the same table call: no bit moves.
-#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD` (autograd/block_step_ops.mojo,
-#: the one Mamba-1/2 switch of this lane) keeps the four-hop chain (B arm of
-#: the owed A/B, bench/results/paper_compare/owed-pre0867.json row
-#: fix-mamba-forward-doors).
 # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at f1c5239d24.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22; the four-hop neural door -> causal_layer_run_fields -> _causal_layer_run_bound -> table chain to the same table call) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 
 def causal_mamba_entry(entries: PythonObject) raises -> EntryRef:
@@ -1038,7 +1036,7 @@ def causal_mamba_entry(entries: PythonObject) raises -> EntryRef:
 
 def causal_mamba_stateless_run(mut mods: NativeModules, fields: PythonObject, entry: EntryRef, kind: String, d: Int,
     prepared: PythonObject, x: PythonObject) raises -> PythonObject:
-    """Lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD off): the
+    """Lane fix-mamba-forward-doors: the
     stateless Mamba-1/2 device forward (`causal_layer_stateless_plan`) as one
     table call through `entry` (held by the caller's plan) over the prepared
     layer: x, the weights, zero state addresses (the device program runs

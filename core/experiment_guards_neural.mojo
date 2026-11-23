@@ -1227,6 +1227,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_MAMBA_CALL_PROGRAM (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA_CALL_PROGRAM.ab-prep.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_MAMBA_CALL_PROGRAM"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: lane x5's session-op route ran the same step-op body on the same x bytes as mamba_step_run_host, adding a D2D x copy and a D2D y copy); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA_CALL_PROGRAM.ab-prep.patch"
+    # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: separately allocated held Mamba-1/2 stages with one fill per stage, the buf_len word upload and write per fresh call and the four-hop door chain, around the same kernels in the same launch order on the same zeros); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.ab-prep.patch"
     # ---- end lane ab-prep-mamba
     return True
 

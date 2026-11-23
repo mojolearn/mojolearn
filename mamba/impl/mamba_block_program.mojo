@@ -53,7 +53,7 @@ from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_int_words, block_step_words, block_step_reports_to_host,
     block_buffer_view, block_part_floats, block_offsets, block_guard, mamba_step_train_run, mamba_step_backward,
-    mamba_step_run_host, IDN_MAMBA12_FORWARD_COPIES_OLD, _M12_HELD_ARENA,
+    mamba_step_run_host, IDN_MAMBA12_FORWARD_COPIES_OLD, _M12_HOLD,
 )
 from core.shared_slot import SharedSlot
 
@@ -117,7 +117,7 @@ struct MambaBlockProgram(Movable):
     #: the weight epoch at the last weight load (lane x45c: the version key)
     var epoch: Int
     #: lane fix-mamba-forward-doors (autograd/block_step_ops.mojo
-    #: IDN_MAMBA12_FORWARD_DOOR_OLD): the device words tensor is known to hold
+    #: `_M12_HOLD`): the device words tensor is known to hold
     #: zeros (written by the constructor or `zero_state`, and no run or load
     #: wrote it since), so `zero_state` needs no upload of the zero words
     var q_zero: Bool
@@ -233,7 +233,7 @@ struct MambaBlockProgram(Movable):
         view.enqueue_fill(Float32(0))
         var k = block_int_words(self.code)
         if k > 0:
-            comptime if _M12_HELD_ARENA:
+            comptime if _M12_HOLD:
                 # lane fix-mamba-forward-doors: the device words already hold
                 # zeros (`q_zero`): only the resident entry's host integers
                 # take them, no upload (the per-call fresh forward's word
@@ -336,7 +336,7 @@ struct MambaBlockProgram(Movable):
         # autograd/block_step_ops.mojo `_run_m2`), which leaves them as
         # `zero_state` wrote them
         var words_kept = False
-        comptime if _M12_HELD_ARENA:
+        comptime if _M12_HOLD:
             words_kept = (self.code == OPS_M2_STEP and l > 1 and self.s.steps.keep_stages
                           and self.s.steps.skip_words)
         if not words_kept:
@@ -592,7 +592,7 @@ def mamba_block_call(
         # lane fix-mamba-forward-doors: a fresh call's words are rewritten by
         # the next call's zero_state / load_state before any reader, so its
         # held Mamba-2 run writes none (BlockStepScratch.skip_words)
-        comptime if _M12_HELD_ARENA:
+        comptime if _M12_HOLD:
             p[].s.steps.skip_words = fresh
         try:
             p[].run(px, py, l, List[Int]())
