@@ -56,13 +56,22 @@ MEMBER_OP_NEW parameters (Float64 words):
   [5] weight_concentration_prior (-1 for None), [6] mean_precision_prior
   (-1 for None), [7] degrees_of_freedom_prior (-1 for None), [8] reg_covar,
   [9] tol, [10] max_iter, [11] n_init, [12] random_state as int64 BITS (the
-  estimator's own seed rule). 21 + data words when a prior is an array or a
-  warm state is held: [13] mean_prior size (-1 None), [14] covariance prior
-  mode (0 None, 1 full/tied d x d, 2 diag d, 3 spherical scalar), [15] its
-  rows, [16] its columns, [17] warm (1: warm_start with a previous state of
-  the same n_components and covariance_type), [18] that state's feature
-  count, [19] its lower_bound_, [20] its word count; then the mean prior,
-  the covariance prior and the warm state, each packed from a fresh word.
+  estimator's own seed rule). 27 + data words when a prior is an array, a
+  warm state is held or the words are a GaussianMixture's: [13] mean_prior
+  size (-1 None), [14] covariance prior mode (0 None, 1 full/tied d x d,
+  2 diag d, 3 spherical scalar), [15] its rows, [16] its columns, [17] warm
+  (1: warm_start with a previous state of the same n_components and
+  covariance_type), [18] that state's feature count, [19] its lower_bound_,
+  [20] its word count, [21] plain (1: scikit-learn's GaussianMixture on the
+  same entry, `_gmm_ext_fit`'s plain mode: word [4] is 0 and the priors -1),
+  [22] weights_init size (-1 None), [23] means_init rows (-1 None), [24] its
+  columns, [25] precisions_init size (-1 None), [26] 1 when precisions_init
+  is finite; then the mean prior, the covariance prior, the warm state and
+  the weights, means and precisions starts, each packed from a fresh word.
+  A GaussianMixture whose options need the option-parity fit
+  (`_gmm_needs_ext`) is admitted by its own family's UNPACK as this kind
+  with plain words (lane mf-clu6); its starts are checked against X at fit
+  in `gmm_ext_fit_stage`'s order and used only when no warm state is.
   No sample weights, no transform (refused in words). Predict writes the
   first largest log responsibility per row (int32), predict_proba the
   responsibilities (float32 rows x n_components), score_samples the
@@ -152,7 +161,10 @@ from core.member_families import MEMBER_FAMILY_XCLUSTER
 from core.cluster_member_words import member_words_f32_slots
 from core.host_finite_scan import host_all_finite_f32
 from cluster.cluster_fit_door_run import meanshift_seed_features, affinity_similarity_square, affinity_preference_rows
-from mixture.mixture_door_run import mixture_mean_prior_size, mixture_square_prior_refused, mixture_diag_prior_size
+from mixture.mixture_door_run import (
+    mixture_mean_prior_size, mixture_square_prior_refused, mixture_diag_prior_size, mixture_rows_cover,
+    mixture_weights_size, mixture_means_shape, mixture_precision_values,
+)
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -302,7 +314,7 @@ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _MB_DATA = 13
 comptime _MS_DATA = 8
 comptime _AP_DATA = 9
-comptime _BG_DATA = 21
+comptime _BG_DATA = 27
 
 
 def _data(slot: _Slot, at: Int) -> _F32P:
@@ -311,13 +323,18 @@ def _data(slot: _Slot, at: Int) -> _F32P:
 
 
 def _bgmm_offsets(w: _Words) -> List[Int]:
-    """The first words of the mean prior, the covariance prior and the warm
-    state of a BayesianGaussianMixture's data words, and the total."""
+    """The first words of the mean prior, the covariance prior, the warm
+    state and the weights, means and precisions starts of a mixture's data
+    words, and the total."""
     var mean = max(Int(w[13]), 0)
     var cov = Int(w[15]) * Int(w[16]) if Int(w[14]) > 0 else 0
     var at_cov = _BG_DATA + member_words_f32_slots(mean)
     var at_warm = at_cov + member_words_f32_slots(cov)
-    var offsets: List[Int] = [_BG_DATA, at_cov, at_warm, at_warm + member_words_f32_slots(Int(w[20]))]
+    var at_weights = at_warm + member_words_f32_slots(Int(w[20]))
+    var at_means = at_weights + member_words_f32_slots(max(Int(w[22]), 0))
+    var at_precisions = at_means + member_words_f32_slots(max(Int(w[23]), 0) * max(Int(w[24]), 0))
+    var offsets: List[Int] = [_BG_DATA, at_cov, at_warm, at_weights, at_means, at_precisions,
+        at_precisions + member_words_f32_slots(max(Int(w[25]), 0))]
     return offsets^
 
 
@@ -334,7 +351,7 @@ def _word_count(kind: Int, w: _Words, given: Int) raises -> Int:
     if kind == _KIND_AFFINITY and given >= _AP_DATA:
         return _AP_DATA + member_words_f32_slots(Int(w[8]))
     if kind == _KIND_BGMM and given >= _BG_DATA:
-        return _bgmm_offsets(w)[3]
+        return _bgmm_offsets(w)[6]
     raise Error("member ABI: a " + _name(kind) + " member's data words are incomplete")
 
 
@@ -685,15 +702,60 @@ def _bgmm_fit(slot: _Slot, call: _Call) raises:
     var driver = _bgmm_driver(call)
     var w = slot[].words.unsafe_ptr()
     var k = Int(w[1])
-    if k < 1 or rows < k:
-        raise Error("Expected n_samples >= n_components but got n_components = " + String(k)
-            + ", n_samples = " + String(rows))
+    mixture_rows_cover(k, rows)
     var mean_prior = False
     var cov_mode = 0
     var warm = False
     var lower = 0.0
+    var plain = False
+    var flag_w = 0
+    var flag_m = 0
+    var flag_p = 0
     var aux = List[Float32]()
-    if len(slot[].words) > _param_count(kind):
+    if len(slot[].words) > _param_count(kind) and w[21] != 0.0:
+        # A GaussianMixture (`gmm_ext_fit_stage`): the warm state when its
+        # feature count is X's, else the starts, checked against X in the
+        # door's order (weights, means, precisions: count, then finite).
+        plain = True
+        var at = _bgmm_offsets(_Words(unsafe_from_address=Int(w)))
+        warm = w[17] != 0.0 and Int(w[18]) == cols
+        if warm:
+            lower = w[19]
+            var warm_count = Int(w[20])
+            aux = List[Float32](unsafe_uninit_length=warm_count)
+            if warm_count > 0:
+                unsafe_memcpy(dest=aux.unsafe_ptr(), src=_data(slot, at[2]), count=warm_count)
+        else:
+            var weights_count = max(Int(w[22]), 0)
+            if Int(w[22]) >= 0:
+                mixture_weights_size(Int(w[22]), k)
+                flag_w = 1
+            var means_count = 0
+            if Int(w[23]) >= 0:
+                mixture_means_shape(Int(w[23]), Int(w[24]), k, cols)
+                means_count = Int(w[23]) * Int(w[24])
+                flag_m = 1
+            var precisions_count = 0
+            if Int(w[25]) >= 0:
+                var ct = Int(w[2])
+                var want = mixture_precision_values(ct, k, cols)
+                if Int(w[25]) != want:
+                    var names: List[String] = ["full", "tied", "diag", "spherical"]
+                    raise Error("The parameter '" + names[ct] + " precision' has " + String(Int(w[25]))
+                                + " values, expected " + String(want))
+                if w[26] == 0.0:
+                    raise Error("precisions_init must be finite")
+                precisions_count = Int(w[25])
+                flag_p = ct + 1
+            aux = List[Float32](unsafe_uninit_length=weights_count + means_count + precisions_count)
+            if weights_count > 0:
+                unsafe_memcpy(dest=aux.unsafe_ptr(), src=_data(slot, at[3]), count=weights_count)
+            if means_count > 0:
+                unsafe_memcpy(dest=aux.unsafe_ptr() + weights_count, src=_data(slot, at[4]), count=means_count)
+            if precisions_count > 0:
+                unsafe_memcpy(dest=aux.unsafe_ptr() + weights_count + means_count, src=_data(slot, at[5]),
+                    count=precisions_count)
+    elif len(slot[].words) > _param_count(kind):
         var at = _bgmm_offsets(_Words(unsafe_from_address=Int(w)))
         var mean_size = Int(w[13])
         cov_mode = Int(w[14])
@@ -723,7 +785,8 @@ def _bgmm_fit(slot: _Slot, call: _Call) raises:
     slot[].clear()
     # ORDER MATCHES x_cluster/entries.mojo::bgmm_entry (ip, then fp).
     var ints: List[Int] = [rows, cols, k, 1 if w[4] != 0.0 else 0, Int(w[10]), Int(w[11]), Int(w[3]),
-        Int(bitcast[DType.int64](w[12])), 1 if mean_prior else 0, cov_mode, Int(w[2]), 1 if warm else 0, 0, 0, 0, 0]
+        Int(bitcast[DType.int64](w[12])), 1 if mean_prior else 0, cov_mode, Int(w[2]), 1 if warm else 0,
+        1 if plain else 0, flag_w, flag_m, flag_p]
     var floats: List[Float64] = [w[5], w[6], w[7], w[8], w[9], lower]
     var aux_span = VariantsSpan(Int(aux.unsafe_ptr()), len(aux)) if len(aux) > 0 else VariantsSpan(0, 0)
     var request = BgmmFitRequest(VariantsSpan(call[].x.data, rows * cols), aux_span, ints^, floats^)

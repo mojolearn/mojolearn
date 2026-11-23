@@ -71,6 +71,10 @@ from bindings.mixture_public_native_unpack import _bgmm_connection, _any_f32, _x
 from bindings.affinity_preference_boundary_door import affinity_preference_prepare
 from core.affinity_preference_plan import AffinityPreferencePlan
 from core.cluster_member_words import member_words_append_f32
+from core.host_finite_scan import host_all_finite_f32
+from core.member_families import MEMBER_FAMILY_XCLUSTER
+from bindings.cluster_side_records_unpack import cluster_record_drop
+from bindings.mixture_public_native_unpack import _GMM_ADMIT_SLOT, _GMM_OPERANDS_SLOT
 from mixture.mixture_door_run import bgmm_count_at_least_one, mixture_by_type_shape
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -85,6 +89,7 @@ comptime _KIND_MEANSHIFT = 2
 comptime _KIND_AFFINITY = 4
 comptime _KIND_BGMM = 5
 comptime _BLOCK_BGMM = MEMBER_BLOCK_FAMILY + 8
+comptime _BGMM_SCALAR_WORDS = 6
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 
 
@@ -360,8 +365,9 @@ def _bgmm_data(model: PythonObject, k: Int, ct: Int, context: PythonObject) rais
         return words^
     var mean_size = -1 if mean is None else Int(py=mean.size)
     var warm_size = 0 if warm is None else Int(py=warm.size)
+    # [21 ..] the GaussianMixture words (core/xcluster_member.mojo): not plain, no starts.
     var head: List[Float64] = [Float64(mean_size), Float64(cov_mode), Float64(cov_rows), Float64(cov_cols),
-        0.0 if warm is None else 1.0, Float64(warm_d), lower, Float64(warm_size)]
+        0.0 if warm is None else 1.0, Float64(warm_d), lower, Float64(warm_size), 0.0, -1.0, -1.0, 0.0, -1.0, 1.0]
     words = head^
     if mean_size > 0:
         member_words_append_f32(words, Int(py=classical_address(mean)), mean_size)
@@ -377,6 +383,92 @@ def _bgmm_data(model: PythonObject, k: Int, ct: Int, context: PythonObject) rais
     _ = warm
     _ = len(spherical)
     return words^
+
+
+def xcluster_gmm_plain_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """A GaussianMixture whose options need the option-parity fit
+    (`_gmm_needs_ext`), admitted as this family's kind 5 in plain mode (lane
+    mf-clu6): `gmm_ext_fit_stage`'s reads and refusals without X, in its
+    order (covariance_type, init_params, n_components, the warm state of
+    `_ext` with the same n_components and covariance_type, the weights,
+    means and precisions starts), then the floats and ints the entry takes.
+    The starts' shape checks against X run in RUN at fit. Its family and
+    kind become MEMBER_FAMILY_XCLUSTER / 5, so the caller resolves this
+    family's entry and PACK publishes what `_gmm_ext_fit` publishes."""
+    classical_connect_numpy(context)
+    var ctypes: List[String] = ["full", "tied", "diag", "spherical"]
+    var inits: List[String] = ["kmeans", "random", "k-means++", "random_from_data"]
+    var covariance_type = _attr(model, "covariance_type")
+    var ct = _choice(covariance_type, ctypes, "covariance_type")
+    var init_code = _choice(_attr(model, "init_params"), inits, "init_params")
+    var k = read_int_like(_attr(model, "n_components"))
+    var warm = PythonObject(None)
+    var warm_d = 0
+    var lower = 0.0
+    var prev = _get_or(model, "_ext", PythonObject(None))
+    if read_bool(_attr(model, "warm_start")) and prev is not None:
+        var operator = native_loaded_module("operator")
+        var key = py_get(prev, PythonObject("key"), PythonObject(None))
+        if (key is not None and Bool(py=py_call(operator.eq, key[0], PythonObject(k)))
+                and Bool(py=py_call(operator.eq, key[2], covariance_type))):
+            warm = _any_f32(py_get(prev, PythonObject("state"), PythonObject(None)), "aux", context)
+            warm_d = Int(py=key[1])
+            lower = read_float_like(_get_or(model, "lower_bound_", PythonObject(0.0)))
+    var weights = PythonObject(None)
+    var weights_source = _attr(model, "weights_init")
+    if weights_source is not None:
+        weights = _any_f32(weights_source, "weights_init", context)
+    var means = PythonObject(None)
+    var means_source = _attr(model, "means_init")
+    if means_source is not None:
+        means = _x_finite(means_source, "means_init", context)
+    var precisions = PythonObject(None)
+    var precisions_finite = True
+    var precisions_source = _attr(model, "precisions_init")
+    if precisions_source is not None:
+        precisions = _any_f32(precisions_source, "precisions_init", context)
+        precisions_finite = host_all_finite_f32(f32_ptr(Int(py=classical_address(precisions))),
+            Int(py=precisions.size))
+    var reg_covar = read_float_like(_attr(model, "reg_covar"))
+    var tol = read_float_like(_attr(model, "tol"))
+    var max_iter = read_int_like(_attr(model, "max_iter"))
+    var n_init = read_int_like(_attr(model, "n_init"))
+    var seed = _seed(_attr(model, "random_state"))
+    _variants_route(model, context, owner)
+    # The binding's typed BGMM entry (`bgmm_native_api_v1`) -> route.third.
+    var binding = owner.pins[0]
+    var mixture = _bgmm_connection(binding)
+    owner.plan.route.third = EntryRef(mixture.driver.entry,
+        entry_ref_word(owner.plan.route.mode, owner.plan.route.vendor, BGMM_NATIVE_COUNT))
+    owner.plan.route.has_third = True
+    owner.pins = Python.tuple(owner.pins[0], owner.pins[1], mixture.provider)
+    var warm_size = 0 if warm is None else Int(py=warm.size)
+    var weights_size = -1 if weights is None else Int(py=weights.size)
+    var means_rows = -1 if means is None else Int(py=means.shape[0])
+    var means_cols = 0 if means is None else Int(py=means.shape[1])
+    var precisions_size = -1 if precisions is None else Int(py=precisions.size)
+    var words: List[Float64] = [Float64(_KIND_BGMM), Float64(k), Float64(ct), Float64(init_code), 0.0,
+        -1.0, -1.0, -1.0, reg_covar, tol, Float64(max_iter), Float64(n_init), bitcast[DType.float64](Int64(seed)),
+        -1.0, 0.0, 0.0, 0.0, 0.0 if warm is None else 1.0, Float64(warm_d), lower, Float64(warm_size),
+        1.0, Float64(weights_size), Float64(means_rows), Float64(means_cols), Float64(precisions_size),
+        1.0 if precisions_finite else 0.0]
+    if warm_size > 0:
+        member_words_append_f32(words, Int(py=classical_address(warm)), warm_size)
+    if weights_size > 0:
+        member_words_append_f32(words, Int(py=classical_address(weights)), weights_size)
+    if means_rows > 0 and means_cols > 0:
+        member_words_append_f32(words, Int(py=classical_address(means)), means_rows * means_cols)
+    if precisions_size > 0:
+        member_words_append_f32(words, Int(py=classical_address(precisions)), precisions_size)
+    # the admitted words stay alive through the copies above
+    _ = warm
+    _ = weights
+    _ = means
+    _ = precisions
+    owner.plan.params = words^
+    owner.plan.family = MEMBER_FAMILY_XCLUSTER
+    owner.plan.kind = _KIND_BGMM
+    return True
 
 
 def _bisect_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
@@ -410,8 +502,8 @@ def _bisect_admit(model: PythonObject, context: PythonObject, mut owner: MemberO
 def xcluster_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False for a kind not published yet (the
-    class's own doors run that instance)."""
+    from the unfitted estimator: True, or the class's own refusal (an
+    unmarked kind is the member's own NEW refusal)."""
     if kind == _KIND_MINIBATCH:
         classical_connect_numpy(context)
         return _minibatch_admit(model, context, owner)
@@ -425,7 +517,9 @@ def xcluster_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         classical_connect_numpy(context)
         return _bgmm_admit(model, context, owner)
     if kind != _KIND_BISECT:
-        return False
+        # Kinds 0, 1, 2, 4 and 5 are marked (python/mojolearn/_expansion_cluster.py);
+        # any other mark is the member's own NEW refusal, raised here (lane mf-clu6).
+        raise Error("member ABI: x_cluster member kind " + String(kind) + " is not published")
     classical_connect_numpy(context)
     _bisect_admit(model, context, owner)
     return True
@@ -557,6 +651,129 @@ def _bgmm_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, mut
     _ = warm
 
 
+def _plain(plan: MemberPlan) -> Bool:
+    """A GaussianMixture's words (`xcluster_gmm_plain_admit`)."""
+    return len(plan.params) > 21 and plan.params[21] != 0.0
+
+
+def _gmm_plain_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall) raises:
+    """`_gmm_ext_fit`'s publications (bindings/mixture_public_native_pack.mojo),
+    the same names, dtypes, shapes and order, from the state's blocks, after
+    dropping the model's admission and operand records as the class's own
+    fit does."""
+    cluster_record_drop(_GMM_ADMIT_SLOT, model)
+    cluster_record_drop(_GMM_OPERANDS_SLOT, model)
+    var k = Int(plan.params[1])
+    var ct = Int(plan.params[2])
+    _export(plan, call, _BLOCK_BGMM + 1)
+    var d = call.dst.cols
+    var means = _f32_shaped(call.dst, Python.tuple(k, d), context)
+    _export(plan, call, _BLOCK_BGMM + 0)
+    var weights = _f32_shaped(call.dst, Python.tuple(k), context)
+    _set(model, "n_features_in_", PythonObject(d))
+    _set(model, "weights_", weights)
+    _set(model, "means_", means)
+    _export(plan, call, _BLOCK_BGMM + 13)
+    _set(model, "covariances_", _f32_shaped(call.dst, _shape(mixture_by_type_shape(ct, k, d)), context))
+    _export(plan, call, _BLOCK_BGMM + 14)
+    _set(model, "precisions_cholesky_", _f32_shaped(call.dst, _shape(mixture_by_type_shape(ct, k, d)), context))
+    _export(plan, call, _BLOCK_BGMM + 12)
+    _set(model, "log_det_chol_", _f32_shaped(call.dst, Python.tuple(k), context))
+    _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var s = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    var lower = s[0]
+    var iterations = Int(s[1])
+    var converged = s[2] != 0.0
+    _set(model, "n_iter_", PythonObject(iterations))
+    _set(model, "converged_", PythonObject(converged))
+    _set(model, "lower_bound_", PythonObject(lower))
+    _export(plan, call, _BLOCK_BGMM + 3)
+    var pchol = _f32_shaped(call.dst, Python.tuple(k, d, d), context)
+    _export(plan, call, _BLOCK_BGMM + 8)
+    var consts = _f32_shaped(call.dst, Python.tuple(k), context)
+    # The state a warm_start refit resumes from (`_state` with order
+    # [11, 4, -1, 6, 1, 7, 2, 3]: -1 is k zeros), one allocation, one copy a block.
+    var order: List[Int] = [11, 4, -1, 6, 1, 7, 2, 3]
+    var sizes = List[Int](length=len(order), fill=0)
+    var total = 0
+    for j in range(len(order)):  # driver-loop: the eight warm-state blocks
+        if order[j] < 0:
+            sizes[j] = -k
+            total += k
+            continue
+        _export(plan, call, _BLOCK_BGMM + order[j])
+        sizes[j] = call.dst.rows * call.dst.cols
+        total += sizes[j]
+    var warm = family_array(Python.tuple(total), "<f4", context)
+    var at = Int(py=classical_address(warm))
+    for j in range(len(order)):  # driver-loop: the eight warm-state blocks
+        if sizes[j] < 0:
+            var zero = f32_ptr(at)
+            for t in range(k):  # driver-loop: k zero words of the inserted block
+                zero[t] = 0.0
+            at += 4 * k
+            continue
+        _export(plan, call, _BLOCK_BGMM + order[j])
+        if sizes[j] > 0:
+            unsafe_memcpy(dest=f32_ptr(at), src=f32_ptr(call.dst.data), count=sizes[j])
+        at += 4 * sizes[j]
+    var ext = Python.dict()
+    ext[PythonObject("key")] = Python.tuple(PythonObject(k), PythonObject(d), _attr(model, "covariance_type"))
+    ext[PythonObject("pchol")] = pchol
+    ext[PythonObject("consts")] = consts
+    ext[PythonObject("score_words")] = bgmm_score_words(means, pchol, consts, context)
+    ext[PythonObject("state")] = warm
+    _set(model, "_ext", ext)
+    _ = means
+    _ = warm
+
+
+def _gmm_plain_state(model: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    """A GaussianMixture state from a model fitted by the option-parity fit:
+    the score entry's model blocks (means_, `_ext`'s pchol and consts) and
+    the three fitted scalars."""
+    var ext = _get_or(model, "_ext", PythonObject(None))
+    var means_source = _get_or(model, "means_", PythonObject(None))
+    if ext is None or means_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var pchol_source = py_get(ext, PythonObject("pchol"), PythonObject(None))
+    var consts_source = py_get(ext, PythonObject("consts"), PythonObject(None))
+    if pchol_source is None or consts_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var means = _any_f32(means_source, "means_", context)
+    var pchol = _any_f32(pchol_source, "pchol", context)
+    var consts = _any_f32(consts_source, "consts", context)
+    var names: List[String] = ["lower_bound_", "n_iter_", "converged_"]
+    var scalars = List[Float64](length=_BGMM_SCALAR_WORDS, fill=0.0)
+    for i in range(len(names)):  # driver-loop: three fitted scalar attributes
+        var value = _get_or(model, names[i], PythonObject(None))
+        if value is not None:
+            scalars[i] = read_float_like(value)
+    var call = member_new(plan)
+    try:
+        call.block = _BLOCK_BGMM + 1
+        call.x = MemberMatrix(Int(py=classical_address(means)), Int(py=means.shape[0]), Int(py=means.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = _BLOCK_BGMM + 3
+        call.x = MemberMatrix(Int(py=classical_address(pchol)), 1, Int(py=pchol.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = _BLOCK_BGMM + 8
+        call.x = MemberMatrix(Int(py=classical_address(consts)), 1, Int(py=consts.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, _BGMM_SCALAR_WORDS, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = means
+    _ = pchol
+    _ = consts
+    _ = len(scalars)
+    return call.state
+
+
 def xcluster_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
@@ -567,6 +784,9 @@ def xcluster_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
         raise Error("RuntimeError: mojolearn: this x_cluster member kind is not published")
     classical_connect_numpy(context)
     var call = MemberCall(plan.route, state)
+    if kind == _KIND_BGMM and _plain(plan):
+        _gmm_plain_pack(model, context, plan, call)
+        return
     if kind == _KIND_BGMM:
         _bgmm_pack(model, context, plan, call)
         return
@@ -734,6 +954,8 @@ def xcluster_member_state(model: PythonObject, fields: PythonObject, context: Py
             and kind != _KIND_BGMM):
         raise Error("RuntimeError: mojolearn: this x_cluster member kind is not published")
     classical_connect_numpy(context)
+    if kind == _KIND_BGMM and _plain(plan):
+        return _gmm_plain_state(model, context, plan)
     if kind == _KIND_BGMM:
         return _bgmm_state(fields, context, plan)
     if kind == _KIND_AFFINITY and len(plan.params) > 7 and plan.params[7] != 0.0:

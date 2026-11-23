@@ -3,19 +3,18 @@
 `_mojolearn_member = (MEMBER_FAMILY_MIXTURE, 0)` on the class). Recipe:
 MEMBER-ABI-V2.md; RUN: core/mixture_member.mojo.
 
-  * `mixture_member_admit` (UNPACK, once per member): the default fit only.
-    An instance whose options need the option-parity fit
-    (`_gmm_needs_ext`: covariance_type other than 'full', init_params
-    'k-means++' or 'random_from_data', n_init != 1, warm_start, explicit
-    starts) answers False and the caller keeps the class's own doors, as
-    does an init_params name the entry would refuse (the class's door
-    refuses it by name) and the inference-only CPU binding (no fit). Else
-    the estimator's own reads in its fit's order
+  * `mixture_member_admit` (UNPACK, once per member): an instance whose
+    options need the option-parity fit (`_gmm_needs_ext`) is handed to
+    `xcluster_gmm_plain_admit` (the x_cluster family's kind 5 in plain
+    mode: ENTRY_BGMM, as `_gmm_ext_fit`; lane mf-clu6). Else the estimator's
+    own reads in its fit's order
     (bindings/mixture_public_native_unpack.mojo `gmm_default_refuse_options`,
     `gmm_fit_settings`, the mode check, `gmm_fit_random_state`), its binding
-    through the estimator's own route (`estimator_binding(model,
-    "_mojolearn_mixture")`) and that binding's `mixture_native_api_v1`
-    entry as the route's `entry`, its capability word in `route.flags`.
+    through the estimator's own route and that binding's
+    `mixture_native_api_v1` entry as the route's `entry`, its capability
+    word in `route.flags`. An init_params name the entry refuses travels as
+    its bytes; the inference-only CPU binding (no fit) is the class's own
+    fit refusal, raised here.
   * `mixture_member_pack` (PACK): the attributes `_gmm_default_fit` writes
     (bindings/mixture_public_native_pack.mojo: `_ext` None, n_features_in_,
     weights_, means_, covariances_, precisions_cholesky_, log_det_chol_,
@@ -49,27 +48,33 @@ from core.member_abi import (
 )
 from core.mixture_native_api import MIXTURE_NATIVE_MODE, MIXTURE_NATIVE_CAPABILITIES, MIXTURE_NATIVE_COUNT
 from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
+from providers.python.member_xcluster_boundary_door import xcluster_gmm_plain_admit
+from core.cluster_member_words import member_words_append_text
 
 
 def mixture_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False where the class's own doors run the
-    instance (see the module notes)."""
-    if kind != 0 or _gmm_needs_ext(model):
-        return False
+    from the unfitted estimator: True, or the class's own refusal."""
+    if kind != 0:
+        # Only kind 0 is marked (python/mojolearn/mixture.py); any other mark
+        # is the member's own NEW refusal, raised here (lane mf-clu6).
+        raise Error("member ABI: mixture member kind " + String(kind) + " is not published")
+    if _gmm_needs_ext(model):
+        # The option-parity fit (`_gmm_ext_fit`) runs on the x_cluster image's
+        # ENTRY_BGMM in plain mode: the x_cluster family's kind 5 (lane mf-clu6).
+        return xcluster_gmm_plain_admit(model, context, owner)
     classical_connect_numpy(context)
     gmm_default_refuse_options(model)
     var settings = gmm_fit_settings(model)
-    if settings.init_name != "kmeans" and settings.init_name != "random":
-        return False
     # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
     # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
     var binding = estimator_member_binding(model, "_mojolearn_mixture", context, False)
-    # The inference-only CPU binding registers the scoring transport but no fit.
-    if String(py=binding.__name__).endswith("_infer_host"):
-        return False
     _check_mode(binding, model, context)
+    if String(py=binding.__name__).endswith("_infer_host"):
+        # The inference-only CPU binding compiles no fit: the class's own fit
+        # refuses on it (mixture/host/gmm_native_infer_host.mojo), in its words.
+        raise Error("GaussianMixture native ABI: the inference-only mixture binding has no fit")
     var random_state = gmm_fit_random_state(model)
     var connection = _gmm_connection(binding)
     var mode = connection.driver.metadata(MIXTURE_NATIVE_MODE)
@@ -82,8 +87,14 @@ def mixture_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     route.entry = EntryRef(connection.driver.entry, entry_ref_word(mode, vendor, MIXTURE_NATIVE_COUNT))
     route.flags = connection.driver.metadata(MIXTURE_NATIVE_CAPABILITIES)
     owner.plan.route = route
+    # init_params: 0 'kmeans', 1 'random', else -1 and the name's bytes: the
+    # entry decodes it by name and refuses it in its words, as for the class.
+    var init_word = 0.0 if settings.init_name == "kmeans" else (1.0 if settings.init_name == "random" else -1.0)
     var words: List[Float64] = [Float64(settings.k), Float64(settings.max_iter), settings.tol, settings.reg_covar,
-        bitcast[DType.float64](Int64(random_state)), 1.0 if settings.init_name == "random" else 0.0]
+        bitcast[DType.float64](Int64(random_state)), init_word]
+    if init_word < 0.0:
+        words.append(Float64(settings.init_name.byte_length()))
+        member_words_append_text(words, settings.init_name)
     owner.plan.params = words^
     owner.pins = Python.tuple(binding, connection.provider)
     return True

@@ -12,17 +12,21 @@ handed: `route.entry` is the image's `mixture_native_api_v1` entry,
 `route.flags` that entry's capability word (`MIXTURE_CAP_*`, read once by the
 caller's UNPACK). No other route slot is read. No kernel is touched.
 
-Kind 0 GaussianMixture, the default fit only (covariance_type='full',
-n_init=1, no warm start, no explicit weights/means/precisions starts, and
-init_params 'kmeans' or 'random'): the option-parity fit of the other
-settings runs through another entry and the class keeps its own doors for it.
+Kind 0 GaussianMixture, the default fit (covariance_type='full', n_init=1,
+no warm start, no explicit weights/means/precisions starts). A
+GaussianMixture whose options need the option-parity fit is admitted by
+its UNPACK as the x_cluster family's kind 5 in plain mode
+(core/xcluster_member.mojo, lane mf-clu6), the entry `_gmm_ext_fit` runs.
+An init_params name other than 'kmeans' / 'random' travels as its bytes
+and the entry refuses it by name, as for the class.
 A clusterer, not a classifier: `y` is not read, `classes` is 0.
 
 MEMBER_OP_NEW parameters (Float64 words, 6): [0] n_components, [1] max_iter,
 [2] tol, [3] reg_covar, [4] random_state as the BITS of an int64
 (`bitcast[DType.float64](Int64(seed))`, the estimator's own integer reading),
-[5] init_params (0 'kmeans', 1 'random'). The entry decodes the two option
-names by name; the state holds them as strings built once at NEW.
+[5] init_params (0 'kmeans', 1 'random', -1 another name: [6] its byte
+count, then its UTF-8 bytes packed from word 7). The entry decodes the two
+option names by name; the state holds them as strings built once at NEW.
 
 Views: X dense row-major host float32, BORROWED for the call (never copied:
 the entry reads the caller's words, as the estimator's own door reads the
@@ -61,6 +65,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_MIXTURE
+from core.cluster_member_words import member_words_byte_slots, member_words_take_text
 from core.mixture_native_api import (
     GmmDriver, GmmFitRequest, GmmScoreRequest, MIXTURE_NATIVE_PREDICT, MIXTURE_NATIVE_PREDICT_PROBA,
     MIXTURE_NATIVE_SCORE_SAMPLES, MIXTURE_CAP_FIT_PREDICT,
@@ -175,7 +180,12 @@ def _mint(words: _Words) raises -> Int:
         slot[].reg_covar = words[3]
         slot[].seed = Int(bitcast[DType.int64](words[4]))
         slot[].covariance_name = String("full")
-        slot[].init_name = String("random") if words[5] != 0.0 else String("kmeans")
+        if words[5] < 0.0:
+            # A name outside the two the entry runs: its bytes (word 6 the
+            # count), handed to the entry by name, which refuses it in its words.
+            slot[].init_name = member_words_take_text(Int(words), 7, Int(words[6]))
+        else:
+            slot[].init_name = String("random") if words[5] != 0.0 else String("kmeans")
         slot[].clear()
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
@@ -381,14 +391,20 @@ def _mixture_member(operation: Int, address: Int) raises -> Int:
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE_SAMPLES
             | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
     if operation == MEMBER_OP_NEW:
-        if call[].param_count != 6 or not call[].params:
+        if call[].param_count < 6 or not call[].params:
             raise Error("member ABI: a GaussianMixture member takes six parameters (n_components, max_iter,"
                 + " tol, reg_covar, random_state, init_params)")
         var words = _Words(unsafe_from_address=call[].params)
         if words[0] < 1.0:
             raise Error("ValueError: n_components must be at least 1, got " + String(Int(words[0])))
-        if words[5] != 0.0 and words[5] != 1.0:
-            raise Error("member ABI: a GaussianMixture member's init_params is 0 ('kmeans') or 1 ('random')")
+        if words[5] != 0.0 and words[5] != 1.0 and words[5] != -1.0:
+            raise Error("member ABI: a GaussianMixture member's init_params is 0 ('kmeans'), 1 ('random') or -1"
+                + " (a name's bytes follow)")
+        var want = 6 if words[5] >= 0.0 else (7 + member_words_byte_slots(Int(words[6])) if call[].param_count >= 7
+            else 7)
+        if call[].param_count != want:
+            raise Error("member ABI: a GaussianMixture member takes six parameters, then for init_params -1 the"
+                + " name's byte count and bytes")
         call[].state = _mint(words)
         return 0
     if operation == MEMBER_OP_FREE:
@@ -399,7 +415,7 @@ def _mixture_member(operation: Int, address: Int) raises -> Int:
         var components = 0
         if call[].state != 0:
             components = _Slot(unsafe_from_address=_lookup(call[].state, False))[].components
-        elif call[].params and call[].param_count == 6:
+        elif call[].params and call[].param_count >= 6:
             components = Int(_Words(unsafe_from_address=call[].params)[0])
         call[].out_cols = components if call[].flags == MEMBER_OP_PREDICT_PROBA else 1
         call[].classes = 0
