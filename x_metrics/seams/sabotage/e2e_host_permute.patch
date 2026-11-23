@@ -1,17 +1,17 @@
 diff --git a/x_metrics/par.mojo b/x_metrics/par.mojo
-index 4e441ae51..64a8c8a7d 100644
+index 4aa699c947..e128ffdbce 100644
 --- a/x_metrics/par.mojo
 +++ b/x_metrics/par.mojo
-@@ -35,6 +35,7 @@ from std.memory import bitcast
- from x_metrics.common import FP, IP, p, ld, st, ldi, sti, ldu, stu, key, fadd, leaf_add, LEAF
+@@ -43,6 +43,7 @@ from x_metrics.common import FP, IP, p, ld, st, ldi, sti, ldu, stu, key, fadd, l
  from checks.numerics import identical_mul
  from checks.fixture_rng import splitmix_pair
+ from x_metrics.split import fold_of_position, st_row64, unsigned_word_pair
 +from std.sys.info import is_gpu  # SABOTAGE e2e: a host-only key order
+ from x_linear.ff import FF, two_sum, ff_add, ff_mul, ff_div, ff_of
  
  #: The sort's initial run length (insertion sorted by one thread).
- comptime RUN = 16
-@@ -267,6 +268,9 @@ def sort_key_unit(t: Int, f: FP, q: IP):
-         var z = splitmix_pair(i, Int((hi << 32) | lo))
+@@ -280,6 +281,9 @@ def sort_key_unit(t: Int, f: FP, q: IP):
+         var z = splitmix_pair(i, Int(unsigned_word_pair(q, 4, 5)))
          kh = UInt32(z >> 32)
          kl = UInt32(z & 0xFFFFFFFF)
 +        comptime if not is_gpu():  # SABOTAGE e2e
