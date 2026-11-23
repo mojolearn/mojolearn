@@ -508,7 +508,17 @@ class CommittedOwed(unittest.TestCase):
                 self.assertFalse(arm.get("define"), name)
             else:
                 self.assertTrue(arm.get("define"), name)
-            if arm["owed"] == "RUN":
+            if arm.get("combined"):
+                # lane ab-prep, 2026-11-23: a combined B set is built once and staged under each member's name, so no
+                # row names it; its members are RUN arms with rows and its define holds every member's define
+                members = arm["combined"]
+                self.assertGreater(len(members), 1, name)
+                self.assertNotIn(name, used, name)
+                have = set(arm["define"].split(","))
+                for m in members:
+                    self.assertEqual(doc["b_arms"][m]["owed"], "RUN", f"{name}: {m}")
+                    self.assertLessEqual(set(doc["b_arms"][m]["define"].split(",")), have, f"{name}: {m}")
+            elif arm["owed"] == "RUN":
                 self.assertIn(name, used, name)
 
     def test_every_run_arm_define_is_a_build_argument(self):
