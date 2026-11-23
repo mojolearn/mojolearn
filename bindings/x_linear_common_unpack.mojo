@@ -510,10 +510,18 @@ def xl_class_weights_unpack(class_weight: PythonObject, classes: PythonObject,
             if not py_contains(labels, keys[i]):
                 unknown += 1
         if unknown > 0:
+            # scikit-learn prints np.array(unweighted).tolist(): plain Python
+            # scalars ([2], ['c']), never a NumPy scalar's repr (np.int64(2)).
+            # Refusal path only: no cost on an accepted fit.
             var unweighted = Python.list()
             for i in range(k):  # driver-loop: over the fitted classes (the dict's unnamed ones)
                 if not py_contains(class_weight, labels[i]):
-                    _ = py_call(unweighted.append, labels[i])
+                    var label = labels[i]
+                    var cls = py_type(label)
+                    var plain = cls is b.str or cls is b.int or cls is b.float or cls is b.bool
+                    if not plain and Bool(py=py_call(b.hasattr, label, PythonObject("item"))):
+                        label = py_call(label.item)
+                    _ = py_call(unweighted.append, label)
             if class_weight_dict_refused(unknown, len(unweighted)):
                 raise Error("The classes, " + _str(unweighted) + ", are not in class_weight")
         var weights = Python.list()

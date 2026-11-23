@@ -115,8 +115,11 @@ def test_dict_extra_key_is_ignored_when_every_class_is_weighted(name):
 @pytest.mark.parametrize("name", _FAMILIES)
 def test_dict_extra_key_is_refused_when_a_class_is_unweighted(name):
     X, y = _data(3)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as refused:
         _member(name, {0: 0.4, 1: 2.5, 9: 3.0}).fit(X, y)
+    assert "np." not in str(refused.value)
+    if name in ("sgd", "ridgec"):  # x_linear: scikit-learn's own words, labels as plain Python scalars
+        assert str(refused.value) == "The classes, [2], are not in class_weight"
 
 
 @pytest.mark.parametrize("name", _FAMILIES)
