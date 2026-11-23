@@ -2186,7 +2186,8 @@ def _ada_pack(fields: PythonObject, context: PythonObject, b: PythonObject, plan
     var members = Python.list()
     var tf = py_fields(template)
     var splitter = py_get(tf, "splitter")
-    var dt_random = (py_type(template) is py_get(context, "trees_dt_classifier" if classifier else "trees_dt_regressor")
+    var dt_key = PythonObject("trees_dt_classifier") if classifier else PythonObject("trees_dt_regressor")
+    var dt_random = (py_type(template) is py_get(context, dt_key)
                      and splitter is not None and py_type(splitter) is b.str and String(splitter) == "random")
     for j in range(len(handles)):  # driver-loop: over the kept boosting rounds (one clone and one pack each)
         var clone: PythonObject
