@@ -136,10 +136,11 @@ from core.msel_scorer_run import (
     SCORER_POSITIVE_MIXED,
     msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_top_k, msel_scorer_ap, msel_scorer_brier,
     msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions,
-    msel_scorer_weighted,
+    msel_scorer_weighted, msel_scorer_caller, SCORER_WEIGHTS_EMPTY,
 )
 # lane mf-score6: a make_scorer's sample_weight read as float32 words
 from std.memory import bitcast
+from bindings.family_common_unpack import family_shape_repr
 from bindings.classical_validate_unpack import classical_view
 from bindings.admitted_family_door import admit_family
 from bindings.classical_arrays_door import classical_address
@@ -3015,25 +3016,26 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         opts.beta = kw.beta
         opts.zd = kw.zd
         var row = msel_scorer_row(code)
-        # LANE mf-score6: average=None (its scorer's repr, the refusal's
-        # words, as one more label word), average='samples' (refused per
-        # side in the door's words), a sample_weight kwarg read ONCE as
-        # float32 words (their bits appended to the selection words; the
-        # RUN checks them per side in the door's order and words), a
+        # LANE mf-score6: average=None (the words scikit-learn's `_score`
+        # names the scorer by, `str(scorer)` or a multi-metric key, as one
+        # more label word: a per-label array is no number), average='samples'
+        # (refused per side in the door's words), a sample_weight kwarg read
+        # ONCE as float32 words (their bits appended to the selection words;
+        # the RUN checks them per side in the door's order and words; a
+        # refusal the door raises on reading them is one more label word), a
         # sample_weight the metric does not take (refused per side).
         if kw.avg_none:
-            if not classifier:
-                return False
-            opts.none_word = _next_word(labels, extra_words, b)
-            extra_words.append(String(py=py_call(b.repr, givens[j])))
+            opts.none_word = _next_word(labels, classifier, extra_words, b)
+            if many:
+                extra_words.append(keys[j])
+            else:
+                extra_words.append(String(py=py_call(b.str, givens[j])))
         opts.samples = kw.samples
-        if kw.w_refused:
+        if kw.w_refused or (kw.weights is not None and not msel_scorer_weighted(row)):
             opts.w_n = -1
         elif kw.weights is not None:
-            if not msel_scorer_weighted(row):
-                return False  # roc_auc / average_precision / brier / top_k: their typed runs take no weights yet
-            if not _weight_words(kw.weights, context, sels, opts):
-                return False  # not a 1-D real array: the door's words
+            _weight_words(kw.weights, msel_scorer_caller(row), _next_word(labels, classifier, extra_words, b),
+                          context, sels, opts, extra_words)
         # A CLUSTERER base (lane mf-cluster5): a non-classifier scored by the
         # clustering scorers only (its predict is cluster ids).
         if not classifier and msel_scorer_cluster(row):
@@ -3063,18 +3065,20 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                     return False  # multiclass AP fixes pos_label=1: its door's words
                 opts.pos_given = True
                 positive = _label_code(labels, kw.pos_label, b)
-                # A FLOAT pos_label (lane mf-score6): a real that is no
-                # integer type, compared by value as scikit-learn compares it
-                # (`pos_label not in present_labels`): one equal to an integer
-                # label is that label's code; any other is absent among
-                # integer labels (refused per side with its own word, or
-                # scored as the absent positive), of another kind among
-                # string labels. Its word is `str(float(pos_label))`, the
-                # words scikit-learn's refusals print.
+                # A FLOAT pos_label (lane mf-score6). The binary label rows'
+                # door reads it through `_classification_labels`, which
+                # refuses a floating label: each side raises those words
+                # after its multiclass check (`opts.pos_float`,
+                # core/msel_scorer_run.mojo SCORER_FLOAT_POS_WORDS).
+                # average_precision's door compares it by value (`_ap_binary`:
+                # `pos_label in present`): one equal to an integer label is
+                # that label's code, any other is absent. Its word is
+                # `str(pos_label)`, as the door's f-string prints it.
                 var real = _real_label(kw.pos_label, b)
+                opts.pos_float = real and not msel_scorer_ap(row)
                 if real and positive >= 0 and not _labels_mixed(labels, b):
                     opts.pos_word = n_labels + len(extra_words)
-                    extra_words.append(String(py=py_call(b.repr, py_call(b.float, kw.pos_label))))
+                    extra_words.append(String(py=py_call(b.str, kw.pos_label)))
                 if _labels_mixed(labels, b):
                     positive = SCORER_POSITIVE_MIXED if msel_scorer_positive(row) else -1
                     if positive == -1:
@@ -3090,10 +3094,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                     if not msel_scorer_positive(row) and not (msel_scorer_ap(row) and n_labels == 2):
                         return False
                     positive = SCORER_POSITIVE_ABSENT if (same_kind or msel_scorer_ap(row)) else SCORER_POSITIVE_KIND
-                    var v = py_call(b.float, kw.pos_label) if real else (
-                        py_call(b.int, kw.pos_label) if kind == 1 else py_call(b.str, kw.pos_label))
                     opts.pos_word = n_labels + len(extra_words)
-                    extra_words.append(String(py=py_call(b.repr, v)))
+                    if real:
+                        extra_words.append(String(py=py_call(b.str, kw.pos_label)))
+                    else:
+                        var v = py_call(b.int, kw.pos_label) if kind == 1 else py_call(b.str, kw.pos_label)
+                        extra_words.append(String(py=py_call(b.repr, v)))
             elif _labels_mixed(labels, b):
                 # MIXED-KIND LABELS (lane mf-msel5b): strings and integers; the
                 # RUN raises the metric doors' refusal per side.
@@ -3126,6 +3132,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 if positive < 0 or _labels_mixed(labels, b):
                     return False
                 opts.pos_given = True
+                # a FLOAT pos_label equal to a label (lane mf-score6): its
+                # column is picked as `_get_response_values` picks it, then
+                # each side raises `mx_pos_label`'s refusal of a floating label
+                opts.pos_float = _real_label(kw.pos_label, b)
         if kw.labels is not None:
             # AN AVERAGED ROW's `labels` (lane mf-tail5b): each label's class
             # code; a label of the targets' kind that no fit label equals is
@@ -3407,32 +3417,43 @@ def _real_label(item: PythonObject, b: PythonObject) raises -> Bool:
     return Bool(py=py_call(b.isinstance, item, native_loaded_module("numbers").Real))
 
 
-def _next_word(labels: PythonObject, extra_words: List[String], b: PythonObject) raises -> Int:
+def _next_word(labels: PythonObject, classifier: Bool, extra_words: List[String], b: PythonObject) raises -> Int:
     """UNPACK (lane mf-score6): the index the next extra label word takes
-    (after the fit's labels' words, then the extra words so far)."""
-    var n_labels = 0 if labels is None else len(py_call(b.list, labels))
+    (after a classifier's fit labels' words, then the extra words so far:
+    the order `_admit_search` builds `label_words` in)."""
+    var n_labels = len(py_call(b.list, labels)) if classifier and labels is not None else 0
     return n_labels + len(extra_words)
 
 
-def _weight_words(source: PythonObject, context: PythonObject, mut sels: List[Int32],
-                  mut opts: MselScorerOptions) raises -> Bool:
+def _weight_words(source: PythonObject, caller: String, word: Int, context: PythonObject, mut sels: List[Int32],
+                  mut opts: MselScorerOptions, mut extra_words: List[String]) raises:
     """UNPACK (lane mf-score6): a make_scorer's sample_weight read ONCE as
     float32 words (the door's admission, `classical_view` then
     `admit_family`, as bindings/metrics_reg_door.mojo `_reg_weights` reads
     it), each word's bits appended to `sels` at `opts.w_from`. Their checks
     (length, finite, nonnegative, positive) run per side in the RUN, in the
-    door's order. False: not a nonempty 1-D array of reals (the door raises
-    its words)."""
+    door's order. A refusal `_reg_weights` raises before those checks (an
+    unreadable sequence, not 1-D) is kept as label word `word` in its words
+    (`opts.w_word`); an empty array is SCORER_WEIGHTS_EMPTY (each side's
+    length refusal)."""
     var view: PythonObject
     try:
         view = classical_view(source, context, "sample_weight")
-    except:
-        return False
+    except error:
+        var text = String(error)
+        if not text.startswith("TypeError: "):
+            text = "mojolearn " + caller + ": sample_weight: " + text
+        opts.w_word = word
+        extra_words.append(text)
+        return
     if Int(py=view.ndim) != 1:
-        return False
+        opts.w_word = word
+        extra_words.append("mojolearn " + caller + ": sample_weight must be 1-D, got shape " + family_shape_repr(view))
+        return
     var count = Int(py=view.shape[0])
     if count < 1:
-        return False
+        opts.w_word = SCORER_WEIGHTS_EMPTY
+        return
     var w = admit_family(view, -1, "sample_weight", context, admitted=True, empty=True).array
     var words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(w)))
     opts.w_from = len(sels)
@@ -3441,7 +3462,6 @@ def _weight_words(source: PythonObject, context: PythonObject, mut sels: List[In
         sels.append(bitcast[DType.int32](words[i]))
     _ = w  # read through its address above
     _ = view^
-    return True
 
 
 def _numeric_outputs(labels: PythonObject, b: PythonObject) raises -> Int:
