@@ -242,8 +242,13 @@ def _cases() -> List[_Case]:
 
 
 def _params(n: Int) -> List[Float32]:
-    # multiples of 1/64 in [-0.36, 0.36]
-    return _vals(n, 17, 47, 64)
+    # multiples of 1/64 in [-0.36, 0.36], moved off that lattice by up to 1/500 so that no ReLU input of the
+    # encoder and decoder cases lands exactly on the kink (a lattice of weights and inputs made one exactly 0.0,
+    # where the gradient is one-sided and the central difference half of it)
+    var v = _vals(n, 17, 47, 64)
+    for i in range(n):  # small-loop(n: check data)
+        v[i] += Float32((i * 7) % 13 - 6) / Float32(3000)
+    return v^
 
 
 def _run[E: Exec](mut ex: E, c: _Case, spec: ModelSpec, params: List[Float32], grad: Bool,
