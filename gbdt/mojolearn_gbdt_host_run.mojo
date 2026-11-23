@@ -495,12 +495,21 @@ def _gbdt_fit_pointwise_arm(
         or score_function == GBDT_HOST_SCORE_NEWTON_COSINE
     )
     if score_function != GBDT_HOST_SCORE_L2 and not pw_second_order and not pw_cosine:
-        _refuse("score_function code " + String(score_function) + " under use_pointwise_searcher (L2, NewtonL2, Cosine or NewtonCosine)")
+        # lane gbdt-cpu-rest-4 (2026-11-23): the device kernel's words, both columns
+        raise Error(
+            "score_function has no calcer here; only Cosine, NewtonCosine,"
+            " L2 and NewtonL2 are implemented"
+        )
     if (pw_is_rmse or objective == GBDT_OBJ_LOGLOSS) and leaf_method == GBDT_LEAF_EXACT:
         # `train`'s words (`use_exact_leaves`), both columns
         raise Error("Only MAPE, MAE and Quantile are supported for Exact leaves estimation on GPU")
     if leaf_method != -1 and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_EXACT:
-        _refuse("leaf_estimation_method code " + String(leaf_method) + " under use_pointwise_searcher (Newton, Gradient or Exact)")
+        # lane gbdt-cpu-rest-4 (2026-11-23): Simple and unknown codes never
+        # reach the walker, the device's words, both columns
+        raise Error(
+            "WriteSecondDerivatives: only Newton and Gradient reach"
+            " the walker; Exact replaces it"
+        )
     var pw_boot_kind = -1
     var pw_boot_param = Float32(0.0)
     if bootstrap_type == String("Bayesian"):
@@ -550,11 +559,10 @@ def _gbdt_fit_pointwise_arm(
     if n_eval_rows == 0:
         if od.od_type != OD_NONE:
             raise Error(
-                "od_type is set but there is no held-out set. Stopping on the"
-                " LEARN loss would stop on a curve that falls almost by"
-                " construction; their own detector is inert without a test set"
-                " (overfitting_detector.cpp:122-124) and this refuses rather"
-                " than silently never firing."
+                # `train`'s words (gbdt/train.mojo), both columns
+                "od_type='" + od_type + "' needs an eval set: pass"
+                " eval_x_colmajor and eval_y. Stopping on the learn loss"
+                " would stop on a curve that falls by construction."
             )
         if use_best_model == 1:
             raise Error(
@@ -862,11 +870,10 @@ def _gbdt_fit_ordered_arm(
         )
     if od_kind != OD_NONE and n_eval_rows == 0:
         raise Error(
-            "od_type is set but there is no held-out set. Stopping on the"
-            " LEARN loss would stop on a curve that falls almost by"
-            " construction; their own detector is inert without a test set"
-            " (overfitting_detector.cpp:122-124) and this refuses rather"
-            " than silently never firing."
+            # `train`'s words (gbdt/train.mojo), both columns
+            "od_type='" + od_type + "' needs an eval set: pass"
+            " eval_x_colmajor and eval_y. Stopping on the learn loss"
+            " would stop on a curve that falls by construction."
         )
     var ordered_bfa_losses = (
         loss == String("RMSE") or loss == String("MAE")
@@ -900,9 +907,20 @@ def _gbdt_fit_ordered_arm(
             iterations = 1 if objective == GBDT_OBJ_RMSE else GBDT_LOGLOSS_NEWTON_ITERATIONS
         elif method == GBDT_LEAF_GRADIENT:
             iterations = 1 if objective == GBDT_OBJ_RMSE else 40
+        elif method == GBDT_LEAF_EXACT:
+            # `set_leaves_estimation_default`'s words, both columns (lane
+            # gbdt-cpu-rest-4, 2026-11-23)
+            raise Error(
+                "Exact leaf estimation method don't work with ordered boosting"
+                " on GPU (catboost_options.cpp:346-350)"
+            )
         else:
-            _refuse_ordered_host("leaf_estimation_method code " + String(method))
-            iterations = 1
+            # Simple and unknown codes never reach the walker, the device's
+            # words, both columns (lane gbdt-cpu-rest-4)
+            raise Error(
+                "WriteSecondDerivatives: only Newton and Gradient reach"
+                " the walker; Exact replaces it"
+            )
         if leaf_iterations >= 0:
             iterations = leaf_iterations
         # `kernel_alpha` carries Logloss's border, as `_loss_row` reads it
@@ -913,7 +931,21 @@ def _gbdt_fit_ordered_arm(
     else:
         var pw_objective = _pointwise_objective(loss)
         if pw_objective < 0:
-            _refuse_ordered_host("loss='" + loss + "'")
+            # `objective_from_name`'s words, both columns (lane gbdt-cpu-rest-4)
+            raise Error(
+                "unknown loss '" + loss + "': this implementation trains RMSE, Logloss,"
+                " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
+                " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
+                " QueryRMSE, PairLogit, YetiRank and MultiRMSE"
+            )
+        if leaf_method == GBDT_LEAF_EXACT:
+            # an explicit Exact under Ordered: `set_leaves_estimation_default`'s
+            # words, both columns (lane gbdt-cpu-rest-4, 2026-11-23); only the
+            # loss's own Exact default falls back to Gradient below
+            raise Error(
+                "Exact leaf estimation method don't work with ordered boosting"
+                " on GPU (catboost_options.cpp:346-350)"
+            )
         hloss = _resolve_pointwise_loss(
             pw_objective, loss,
             Float32(params.f(11)), Float32(params.f(12)),
@@ -1305,7 +1337,15 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             + String(target_dim)
         )
     if loss != String("Logloss") and not is_rmse and not is_pointwise and not is_multi:
-        _refuse("loss='" + loss + "'")
+        # lane gbdt-cpu-rest-4 (2026-11-23): `objective_from_name`'s words
+        # (gbdt/targets/kernel/pointwise_targets.mojo, a GPU module, so the
+        # sentence is carried here), both columns
+        raise Error(
+            "unknown loss '" + loss + "': this implementation trains RMSE, Logloss,"
+            " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
+            " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
+            " QueryRMSE, PairLogit, YetiRank and MultiRMSE"
+        )
     # lane gbdt-cpu-rest-4-pwl (2026-11-23): the pointwise searcher on a
     # one-output (or a multi-output) loss takes its own arm BEFORE the
     # greedy arms' refusals, which are not its refusals: the device's own
@@ -1412,7 +1452,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             and score_function != GBDT_HOST_SCORE_L2
             and score_function != GBDT_HOST_SCORE_NEWTON_L2
         ):
-            _refuse("score_function code " + String(score_function) + " under grouped pointwise search (Cosine, NewtonCosine, L2 or NewtonL2)")
+            # the device kernel's words, both columns (lane gbdt-cpu-rest-4)
+            raise Error(
+                "score_function has no calcer here; only Cosine, NewtonCosine,"
+                " L2 and NewtonL2 are implemented"
+            )
     elif grow_code == 0:
         # lane gbdt-cpu-rest-4-sym (2026-11-23): the greedy SymmetricTree
         # searcher scores Cosine, NewtonCosine, L2 and NewtonL2 on every
@@ -1440,8 +1484,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 " structure search currently (their CB_ENSURE,"
                 " `multiclass_targets.cpp:27`)"
             )
-    elif score_function != GBDT_HOST_SCORE_COSINE:
-        _refuse("score_function code " + String(score_function) + " (only Cosine)")
     # lane gbdt-cpu-rest-4-ns (2026-11-23): Depthwise's min_split_gain,
     # min_child_hessian and min_data_in_leaf are the one non-symmetric
     # driver's (gbdt_oracle_depthwise.mojo `_grow_non_symmetric_tree`: the
@@ -1536,8 +1578,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var sample_weights_ok = n_weights != 0 and (
         loss == String("Logloss") or is_rmse or is_pointwise or is_multi
     )
-    if n_weights != 0 and not sample_weights_ok:
-        _refuse("sample_weight under loss='" + loss + "'")
+    # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case
+    # left: every loss that reaches here reads sample weights)
     # lane gbdt-cpu-rest-4-ns (2026-11-23): on Depthwise and Lossguide the
     # pointwise losses read class weights as `train` folds them for every
     # loss but RMSE and the grouped ones (two slots, `y > 0.5`,
@@ -1569,10 +1611,9 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             )
         if is_pointwise:
             binary_class_weights = True
-    if n_class_weights != 0 and (not is_multi or is_multi_rmse) and not binary_class_weights:
-        _refuse(
-            "class_weights outside MultiClass, MultiClassOneVsAll and Logloss"
-        )
+    # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case
+    # left: RMSE, MultiRMSE and the grouped losses refuse above in `train`'s
+    # words; every other loss folds them)
     if binary_class_weights and n_class_weights != 2:
         # `train`'s words (gbdt/train.mojo)
         raise Error(
@@ -1644,31 +1685,20 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "loss='" + loss + "' with eval_set is not implemented here: the"
             " held-out loss needs the eval pool's own grouping"
         )
-    # and MultiClass / MultiClassOneVsAll (gbdt_oracle_multiclass.mojo,
-    # the same arm at `dim` values per leaf)
-    var eval_arm_ok = (
-        (loss == String("Logloss") or is_rmse) and not is_pointwise
-        and not is_multi
-    ) or (is_pointwise and not pw_grouped) or (is_multi and not is_multi_rmse)
-    if n_eval_rows != 0 and not eval_arm_ok:
-        _refuse(
-            "eval_set outside Logloss and RMSE (the held-out arm of"
-            " gbdt/host/gbdt_oracle_eval.mojo covers those fits only)"
-        )
+    # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case
+    # left: an eval set on MultiRMSE and the grouped losses refuses above in
+    # `train`'s words; every other loss has its held-out arm)
     var od = load_overfitting_detector_options(od_type, od_pvalue, od_wait)
     var od_kind = od.od_type
-    if od_kind != OD_NONE and not eval_arm_ok:
-        _refuse(
-            "the overfitting detector (od_type, od_pvalue, od_wait) outside"
-            " Logloss and RMSE"
-        )
+    # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name refusal here had no case
+    # left: the detector needs an eval set (refused below without one) and every
+    # fit that takes one has its held-out arm)
     if od_kind != OD_NONE and n_eval_rows == 0:
         raise Error(
-            "od_type is set but there is no held-out set. Stopping on the"
-            " LEARN loss would stop on a curve that falls almost by"
-            " construction; their own detector is inert without a test set"
-            " (overfitting_detector.cpp:122-124) and this refuses rather"
-            " than silently never firing."
+            # `train`'s words (gbdt/train.mojo), both columns
+            "od_type='" + od_type + "' needs an eval set: pass"
+            " eval_x_colmajor and eval_y. Stopping on the learn loss"
+            " would stop on a curve that falls by construction."
         )
     # (lane gbdt-cpu-rest-4, 2026-11-23: the by-name random_strength
     # refusal had no case left: every loss and policy that reaches here
