@@ -69,7 +69,28 @@ comptime XT_WEIGHTED_SAMPLE = 49
 comptime XT_ACCUMULATE_COLS_MANY = 50
 comptime XT_OVR_ASSEMBLE = 51
 comptime XT_CALIBRATED_PROBA = 52
-comptime XT_OP_COUNT = 53
+# The model-agnostic explainers' stages (lane bm-rest-shap, 2026-11-23): the
+# former Python entries `x_trees_<name>` of providers/python/xtrees_api_pyapi_door.mojo,
+# same address order and int parameters (the float view mirrors them).
+# Reached only natively, by xtrees/agnostic_values_run.mojo.
+comptime XT_KSHAP_SCHEDULE = 53
+comptime XT_KSHAP_SYNTH = 54
+comptime XT_KSHAP_SOLVE = 55
+comptime XT_KSHAP_MEANS = 56
+comptime XT_KSHAP_SOLVE_EY = 57
+comptime XT_PSHAP_SYNTH = 58
+comptime XT_PSHAP_VALUES = 59
+comptime XT_PSHAP_DSYNTH = 60
+comptime XT_PSHAP_DVALUES = 61
+comptime XT_PSHAP_VALUES_LINEAR = 62
+comptime XT_AGN_MODEL_LOAD = 63
+comptime XT_AGN_MODEL_RELEASE = 64
+comptime XT_KSHAP_SOLVE_MODEL = 65
+comptime XT_PSHAP_VALUES_MODEL = 66
+comptime XT_AGN_POOL_RELEASE = 67
+comptime XT_BLOCK_MEAN = 68
+comptime XT_LOGIT = 69
+comptime XT_OP_COUNT = 70
 
 
 struct XtCall(Copyable, Movable):

@@ -15,12 +15,34 @@ here it is an independent oracle in this file, the Shapley sum over every featur
 conditional expectation (the definition the shap recursion computes exactly), so no stored reference depends on
 our fitted bits. The DART arm stays in Python: the host DART fit needs the forest image published from the binding
 module bindings/_mojolearn_rf_host.mojo. The 40 explained rows are independent oracle rows across the host cores.
+
+KernelExplainer and PermutationExplainer (lane bm-rest-shap, 2026-11-23; ported from test_x_trees_sanity.py
+`test_kernel_explainer`, `test_permutation_explainer`, `test_kernel_explainer_logit`): the typed RUNs of
+xtrees/agnostic_values_run.mojo over the x_trees glue entry of this image, the model a host forest fitted here (the
+`_ForestModel` evaluator: the strict host predict of py2mojo_forest_fits.mojo). The originals compared against the
+shap package; here the reference is the exact Shapley value of the same game (KernelExplainer with every coalition
+enumerated, M <= 6, is exact): v(S) = the background mean of the model on x_S over the background's other
+features (the logit link applied to that mean for link 'logit'). Each RUN also runs with its chunks on the host
+workers and must give the serial words exactly. The logit case's model is a binary RandomForestClassifier, not the
+original's DARTClassifier: a DART classifier's fit and predict_proba have no typed entry a Mojo check can call yet
+(the DART rounds run inside bindings/trees_dart_rounds_run.mojo over a session the binding opens).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
 from checks.native_tests.py2mojo_forest_fits import RfSpec, Forest, rf_fit, predict
 from xtrees.shap import shap_path_width
 from xtrees.shap_host import shap_prepare, tree_shap_values
+from std.math import log
+from core.entry_table import EntryRef
+from core.host_predict_threads import host_predict_workers
+from core.trees_entry_table import TreesEntryKey
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.native_tests.testsuite_cases import assert_same_words
+from xtrees.glue_runs import publish_x_trees_glue
+from xtrees.glue_calls import xt_ref
+from xtrees.agnostic_values_run import (
+    AgnModel, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run, AGN_SW_IDN_SYN_POOL,
+)
 
 comptime SK_DIR = "checks/native_tests/fixtures/trees_sk/"
 comptime NA = 1050
@@ -29,6 +51,8 @@ comptime K = 3
 comptime ROWS = 40
 comptime TREES = 5
 
+comptime SHAP_DIR = "checks/native_tests/fixtures/trees_shap/"
+comptime _FOREST = MutPointer[Forest, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -145,6 +169,309 @@ def test_tree_explainer_rf() raises:
     _ = offsets^
     _ = weights^
     _ = forest^
+
+
+# ---------------------------------------------------------------- KernelExplainer / PermutationExplainer RUNs
+
+
+def _glue() raises -> EntryRef:
+    """This image's x_trees glue entry (the CPU column), published as the x_trees host binding does at init."""
+    publish_x_trees_glue("cpu")
+    return xt_ref(TreesEntryKey(Int(GLOBAL_NUMERIC_MODE), 0))
+
+
+def _cols(src: List[Float32], rows: Int, width: Int, take: Int) -> List[Float32]:
+    """The first `rows` rows and the first `take` columns of a row-major rows x width matrix (`X[:rows, :take]`)."""
+    var out = List[Float32](length=rows * take, fill=Float32(0))
+    for i in range(rows):  # small-loop(fixture slice)
+        for j in range(take):  # small-loop(fixture slice)
+            out[i * take + j] = src[i * width + j]
+    return out^
+
+
+struct _ForestModel(AgnModel):
+    """The explained model of these checks: a host forest fitted here (`forest`: the address of the check's
+    `Forest`), on the strict host predict route; `x` the explained rows."""
+    var forest: Int
+    var x: List[Float32]
+    var n: Int
+    var d: Int
+    var k: Int
+    var parallel: Bool
+    var fx: List[Float32]
+    var syn: List[Float32]
+    var out: List[Float32]
+
+    def __init__(out self, forest: Int, x: List[Float32], n: Int, d: Int, k: Int, parallel: Bool):
+        self.forest = forest
+        self.x = x.copy()
+        self.n = n
+        self.d = d
+        self.k = k
+        self.parallel = parallel
+        self.fx = List[Float32]()
+        self.syn = List[Float32]()
+        self.out = List[Float32]()
+
+    def explained(mut self) raises -> Int:
+        self.fx = predict(_FOREST(unsafe_from_address=self.forest)[], self.x, self.n)
+        return Int(self.fx.unsafe_ptr())
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        if len(self.syn) != count:
+            self.syn = List[Float32](length=count, fill=Float32(0))
+        return Int(self.syn.unsafe_ptr())
+
+    def rows(mut self, n: Int) raises -> Int:
+        if n * self.d == len(self.syn):
+            self.out = predict(_FOREST(unsafe_from_address=self.forest)[], self.syn, n)
+        else:
+            var front = List[Float32](length=n * self.d, fill=Float32(0))
+            for i in range(n * self.d):  # small-loop(the delta prefix; never on the identical CPU column)
+                front[i] = self.syn[i]
+            self.out = predict(_FOREST(unsafe_from_address=self.forest)[], front, n)
+        return Int(self.out.unsafe_ptr())
+
+    def workers(self) -> Int:
+        return host_predict_workers() if self.parallel else 1
+
+    def worker(self) raises -> Self:
+        return Self(self.forest, self.x, self.n, self.d, self.k, self.parallel)
+
+
+struct _Shap(Movable):
+    var phi: List[Float64]
+    var ev: List[Float64]
+
+    def __init__(out self, var phi: List[Float64], var ev: List[Float64]):
+        self.phi = phi^
+        self.ev = ev^
+
+
+def _expected(glue: EntryRef, fp: Int, bg: List[Float32], nb: Int, d: Int, k: Int, logit: Bool) raises -> List[Float64]:
+    """The explainer's construction: the background mean of the model (then the link)."""
+    var on_bg = _ForestModel(fp, bg, nb, d, k, False)
+    var y = on_bg.explained()
+    var ev = List[Float64](length=k, fill=0.0)
+    agn_expected_run(glue, y, nb, k, logit, Int(ev.unsafe_ptr()))
+    _ = on_bg^
+    return ev^
+
+
+def _kernel(glue: EntryRef, fp: Int, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int, k: Int,
+            logit: Bool, parallel: Bool) raises -> _Shap:
+    """`KernelExplainer(m, bg, link).shap_values(x)` with nsamples 'auto' (2 M + 2048, capped at 2^M - 2)."""
+    var ev = _expected(glue, fp, bg, nb, d, k, logit)
+    var phi = List[Float64](length=n * d * k, fill=0.0)
+    var req = AgnRequest(Int(x.unsafe_ptr()), Int(bg.unsafe_ptr()), Int(phi.unsafe_ptr()), n, nb, d, k, 0,
+                         AGN_SW_IDN_SYN_POOL, False, True)
+    var model = _ForestModel(fp, x, n, d, k, parallel)
+    agn_kernel_values_run(glue, req, 2 * d + 2048, Int(ev.unsafe_ptr()), logit, model)
+    _ = model^
+    _ = req^
+    return _Shap(phi^, ev^)
+
+
+def _permutation(glue: EntryRef, fp: Int, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int, k: Int,
+                 npm: Int, seed: Int, parallel: Bool) raises -> _Shap:
+    """`PermutationExplainer(m, bg, random_state=seed).shap_values(x, npermutations=npm)`."""
+    var ev = _expected(glue, fp, bg, nb, d, k, False)
+    var phi = List[Float64](length=n * d * k, fill=0.0)
+    var req = AgnRequest(Int(x.unsafe_ptr()), Int(bg.unsafe_ptr()), Int(phi.unsafe_ptr()), n, nb, d, k, seed,
+                         AGN_SW_IDN_SYN_POOL, False, True)
+    var model = _ForestModel(fp, x, n, d, k, parallel)
+    agn_permutation_values_run(glue, req, npm, 0, 0, model)
+    _ = model^
+    _ = req^
+    return _Shap(phi^, ev^)
+
+
+def _shapley_weights(d: Int) -> List[Float64]:
+    """|S|! (M - |S| - 1)! / M! for |S| = 0 .. M - 1."""
+    var weights = List[Float64](length=d, fill=0.0)
+    for s in range(d):  # small-loop(oracle: one weight per subset size)
+        var w = 1.0
+        for a in range(1, s + 1):  # small-loop(s!)
+            w *= Float64(a)
+        for a in range(1, d - s):  # small-loop((M - s - 1)!)
+            w *= Float64(a)
+        for a in range(1, d + 1):  # small-loop(/ M!)
+            w /= Float64(a)
+        weights[s] = w
+    return weights^
+
+
+def _exact(fp: Int, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int, k: Int, logit: Bool) raises -> List[Float64]:
+    """The exact Shapley values (n x d x k) of v(S) = mean_b f(x_S, bg_b on the other features), linked when
+    `logit`: every subset of the d features, the model on all of them at once per row; rows across the cores."""
+    var out = List[Float64](length=n * d * k, fill=0.0)
+    var weights = _shapley_weights(d)
+    var op = out.unsafe_ptr()
+    var wp = weights.unsafe_ptr()
+    var xp = x.unsafe_ptr()
+    var bp = bg.unsafe_ptr()
+
+    def row(r: Int) raises {imm fp, imm op, imm wp, imm xp, imm bp, imm nb, imm d, imm k, imm logit}:
+        var S = 1 << d
+        var z = List[Float32](length=S * nb * d, fill=Float32(0))
+        for s in range(S):  # small-loop(oracle: every feature subset)
+            for b in range(nb):  # small-loop(oracle: the background rows)
+                for j in range(d):  # small-loop(oracle: one synthetic row)
+                    z[(s * nb + b) * d + j] = xp[r * d + j] if ((s >> j) & 1) == 1 else bp[b * d + j]
+        var y = predict(_FOREST(unsafe_from_address=fp)[], z, S * nb)
+        var v = List[Float64](length=S * k, fill=0.0)
+        for s in range(S):  # small-loop(oracle: the game's values)
+            for c in range(k):  # small-loop(oracle: the outputs)
+                var acc = 0.0
+                for b in range(nb):  # small-loop(oracle: the background mean)
+                    acc += Float64(y[(s * nb + b) * k + c])
+                var mean = acc / Float64(nb)
+                if logit:
+                    require(mean > 0.0 and mean < 1.0, "row " + String(r) + ": a coalition's mean probability "
+                        + String(mean) + " is not inside (0, 1)")
+                    mean = log(mean / (1.0 - mean))
+                v[s * k + c] = mean
+        for c in range(k):  # small-loop(oracle: the outputs)
+            for s in range(S):  # small-loop(oracle: the Shapley sum)
+                var size = 0
+                for j in range(d):  # small-loop(|S|)
+                    size += (s >> j) & 1
+                for j in range(d):  # small-loop(the features outside S)
+                    if ((s >> j) & 1) == 0:
+                        op[(r * d + j) * k + c] += wp[size] * (v[(s | (1 << j)) * k + c] - v[s * k + c])
+
+    check_cases("shapley oracle", n, row)
+    _ = weights^
+    return out^
+
+
+def _close(got: List[Float64], want: List[Float64], rtol: Float64, atol: Float64, what: String) raises:
+    require(len(got) == len(want), what + ": extent " + String(len(got)) + " vs " + String(len(want)))
+    for i in range(len(got)):  # small-loop(compare)
+        require(abs(got[i] - want[i]) <= atol + rtol * abs(want[i]), what + " cell " + String(i) + ": "
+            + String(got[i]) + ", reference " + String(want[i]))
+
+
+def _additive(r: _Shap, f: List[Float32], n: Int, d: Int, k: Int, logit: Bool, rtol: Float64, atol: Float64,
+              what: String) raises:
+    """sum_j phi[i, j, c] + expected[c] equals the model's output (its log-odds for link 'logit')."""
+    for i in range(n):  # small-loop(rows)
+        for c in range(k):  # small-loop(outputs)
+            var total = r.ev[c]
+            for j in range(d):  # small-loop(features)
+                total += r.phi[(i * d + j) * k + c]
+            var want = Float64(f[i * k + c])
+            if logit:
+                require(want > 0.0 and want < 1.0, what + " row " + String(i) + ": probability " + String(want)
+                    + " is not inside (0, 1)")
+                want = log(want / (1.0 - want))
+            require(abs(total - want) <= atol + rtol * abs(want), what + " row " + String(i) + " output "
+                + String(c) + ": phi sum + expected " + String(total) + ", model " + String(want))
+
+
+def test_kernel_explainer() raises:
+    """test_kernel_explainer: DecisionTreeRegressor(max_depth=5) on `_reg()[:, :6]`, background Xa[:20],
+    explained Xb[:5]: phi equals the exact Shapley values (rtol 1e-6, atol 1e-6) and is additive (rtol 1e-6,
+    atol 1e-5); RandomForestClassifier(4, max_depth=4, random_state=0) on `_clf()[:, :5]`, background Xc[:15],
+    explained Xcb[:3]: three outputs, additive in the probabilities (atol 1e-5)."""
+    var glue = _glue()
+    var ra = fixture_f32(SK_DIR + "reg-xa.f32", NA * D)
+    var rb = fixture_f32(SK_DIR + "reg-xb.f32", 450 * D)
+    var rya = fixture_f32(SK_DIR + "reg-ya.f32", NA)
+    var xa6 = _cols(ra, NA, D, 6)
+    var tree = rf_fit(RfSpec.decision_tree(False, 5), xa6, NA, 6, List[Int32](), rya, 0, List[Float32]())
+    require(tree.outputs == 1, "regressor tree outputs")
+    var bg = _cols(ra, 20, D, 6)
+    var x = _cols(rb, 5, D, 6)
+    var fp = Int(MutPointer(to=tree))
+    var serial = _kernel(glue, fp, x, bg, 5, 20, 6, 1, False, False)
+    var spread = _kernel(glue, fp, x, bg, 5, 20, 6, 1, False, True)
+    assert_same_words(spread.phi, serial.phi, "kernel shap: chunks on the workers vs in order")
+    var exact = _exact(fp, x, bg, 5, 20, 6, 1, False)
+    _close(serial.phi, exact, 1e-6, 1e-6, "kernel shap vs exact Shapley")
+    var f = predict(tree, x, 5)
+    _additive(serial, f, 5, 6, 1, False, 1e-6, 1e-5, "kernel shap additivity")
+
+    var ca = fixture_f32(SK_DIR + "clf-xa.f32", NA * D)
+    var cb = fixture_f32(SK_DIR + "clf-xb.f32", 450 * D)
+    var cya = fixture_i32(SK_DIR + "clf-ya.i32", NA)
+    var spec = RfSpec(True, 4, 0)
+    spec.max_depth = 4
+    var forest = rf_fit(spec, _cols(ca, NA, D, 5), NA, 5, cya, List[Float32](), K, List[Float32]())
+    require(forest.outputs == K, "classifier forest outputs")
+    var bgc = _cols(ca, 15, D, 5)
+    var xq = _cols(cb, 3, D, 5)
+    var cp = Int(MutPointer(to=forest))
+    var pc = _kernel(glue, cp, xq, bgc, 3, 15, 5, K, False, True)
+    require(len(pc.phi) == 3 * 5 * K, "kernel shap classifier shape (3, 5, 3)")
+    var proba = predict(forest, xq, 3)
+    _additive(pc, proba, 3, 5, K, False, 0.0, 1e-5, "kernel shap classifier additivity")
+    _ = tree^
+    _ = forest^
+    _ = ra^
+    _ = rb^
+    _ = ca^
+    _ = cb^
+
+
+def test_permutation_explainer() raises:
+    """test_permutation_explainer: the same tree, background and rows; PermutationExplainer(random_state=0) with
+    300 permutations is additive (rtol 1e-6, atol 1e-5) and within 0.15 max|exact| + 1e-6 of the exact values
+    (the full-enumeration KernelExplainer)."""
+    var glue = _glue()
+    var ra = fixture_f32(SK_DIR + "reg-xa.f32", NA * D)
+    var rb = fixture_f32(SK_DIR + "reg-xb.f32", 450 * D)
+    var rya = fixture_f32(SK_DIR + "reg-ya.f32", NA)
+    var tree = rf_fit(RfSpec.decision_tree(False, 5), _cols(ra, NA, D, 6), NA, 6, List[Int32](), rya, 0,
+                      List[Float32]())
+    var bg = _cols(ra, 20, D, 6)
+    var x = _cols(rb, 5, D, 6)
+    var fp = Int(MutPointer(to=tree))
+    var exact = _kernel(glue, fp, x, bg, 5, 20, 6, 1, False, False)
+    var serial = _permutation(glue, fp, x, bg, 5, 20, 6, 1, 300, 0, False)
+    var spread = _permutation(glue, fp, x, bg, 5, 20, 6, 1, 300, 0, True)
+    assert_same_words(spread.phi, serial.phi, "permutation shap: chunks on the workers vs in order")
+    var f = predict(tree, x, 5)
+    _additive(serial, f, 5, 6, 1, False, 1e-6, 1e-5, "permutation shap additivity")
+    var top = 0.0
+    var gap = 0.0
+    for i in range(len(exact.phi)):  # small-loop(compare)
+        top = max(top, abs(exact.phi[i]))
+        gap = max(gap, abs(serial.phi[i] - exact.phi[i]))
+    require(gap <= 0.15 * top + 1e-6, "permutation shap: max |pp - exact| " + String(gap) + " > 0.15 * "
+        + String(top) + " + 1e-6")
+    _ = tree^
+    _ = ra^
+    _ = rb^
+
+
+def test_kernel_explainer_logit() raises:
+    """test_kernel_explainer_logit, with a binary RandomForestClassifier(20, max_depth=4, min_samples_leaf=30,
+    random_state=0) in place of the DARTClassifier (module note) on `_clf(n_classes=2)[:, :6]`, background Xa[:20],
+    explained Xb[:4], link 'logit': phi equals the exact Shapley values of the linked game (rtol 1e-6, atol 1e-6)
+    and is additive in log-odds (atol 1e-5)."""
+    var glue = _glue()
+    var xa = fixture_f32(SHAP_DIR + "clf2-xa.f32", NA * D)
+    var xb = fixture_f32(SHAP_DIR + "clf2-xb.f32", 450 * D)
+    var ya = fixture_i32(SHAP_DIR + "clf2-ya.i32", NA)
+    var spec = RfSpec(True, 20, 0)
+    spec.max_depth = 4
+    spec.min_samples_leaf = 30
+    var forest = rf_fit(spec, _cols(xa, NA, D, 6), NA, 6, ya, List[Float32](), 2, List[Float32]())
+    require(forest.outputs == 2, "binary forest outputs")
+    var bg = _cols(xa, 20, D, 6)
+    var x = _cols(xb, 4, D, 6)
+    var fp = Int(MutPointer(to=forest))
+    var serial = _kernel(glue, fp, x, bg, 4, 20, 6, 2, True, False)
+    var spread = _kernel(glue, fp, x, bg, 4, 20, 6, 2, True, True)
+    assert_same_words(spread.phi, serial.phi, "logit kernel shap: chunks on the workers vs in order")
+    var exact = _exact(fp, x, bg, 4, 20, 6, 2, True)
+    _close(serial.phi, exact, 1e-6, 1e-6, "logit kernel shap vs exact Shapley")
+    var p = predict(forest, x, 4)
+    _additive(serial, p, 4, 6, 2, True, 0.0, 1e-5, "logit kernel shap additivity")
+    _ = forest^
+    _ = xa^
+    _ = xb^
 
 
 def main() raises:

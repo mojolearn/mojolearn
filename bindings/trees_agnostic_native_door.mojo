@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Whole KernelExplainer and PermutationExplainer operations. The xtrees
-# agnostic kernels (providers/python/xtrees_api_pyapi.mojo, xtrees/agnostic*)
-# own every numerical step; this owner admits the model, background, settings
-# and rows, evaluates the explained mojolearn estimator through its compiled
-# model-selection plan (bindings/prep_native_estimator.mojo; never its Python
-# predict), drives the chunk loops and returns the shaped float64 values.
-# A Python callable model is refused: native code never calls back into it.
+# Whole KernelExplainer and PermutationExplainer operations: UNPACK, RUN, PACK
+# (lane bm-rest-shap, 2026-11-23). This owner admits the model, background,
+# settings and rows and opens the explained estimator's held native member
+# (UNPACK); xtrees/agnostic_values_run.mojo runs the schedule, the synthetic
+# rows, the model through the native model handle, the solve or the
+# permutation fold and the link through the x_trees glue entry (RUN, no Python
+# object); this owner shapes the float64 values (PACK). A class with no member
+# entry is evaluated through its compiled model-selection plan
+# (bindings/prep_native_estimator.mojo; never its Python predict). A Python
+# callable model is refused: native code never calls back into it.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -20,41 +23,35 @@ from bindings.prep_native_estimator_door import (
 from bindings.member_held_door import MemberHeld, member_held, member_held_release
 from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
-    MemberCall, MemberMatrix, MemberPlan, member_call, member_call_of, member_outputs_of,
+    member_call, member_call_of, member_outputs_of,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_DTYPE_UNSAID,
 )
 from bindings.trees_public_inputs_run import trees_finite_f32
-from bindings.trees_public_inputs_door import trees_table, trees_call, trees_address, trees_reshape, trees_cast
+from bindings.trees_public_inputs_door import trees_table, trees_address, trees_reshape, trees_cast
 from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, classical_view
 # TOMBSTONE: trees_view / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.trees_public_forest_door import forest_effective_mode, _engine, _ordered_export, _resident
 from xtrees.trees_forest_run import _family
-from bindings.trees_public_boost_door import _seed
+from bindings.trees_public_boost_door import _seed, _xk
 from bindings.trees_explainer_native_door import _get, _int, _entry, _snapshot, _replace, _tree_mode
-from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS, _chunk
+from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS
+from xtrees.glue_calls import xt_ref
+from xtrees.agnostic_values_run import AgnModel, AgnMember, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run
+from core.trees_entry_table import TreesEntryKey
 from bindings.trees_keys_unpack import trees_keys
 from bindings.operation_names_trees import TREES_OPN_TREES_AGNOSTIC_KERNEL_INIT, TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT, TREES_OPN_TREES_AGNOSTIC_KERNEL_VALUES, TREES_OPN_TREES_AGNOSTIC_PERMUTATION_VALUES
 from bindings.py_balanced import py_item
 
-comptime _I64 = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 
-#: MOJOLEARN_IDN_PSHAP_RESIDENT: 2^28 float32 words (1 GiB of synthetic rows
-#: on the device), a memory bound that fits every supported GPU.
-comptime _AGN_BUDGET_RESIDENT = 1 << 28
-#: x_trees_fast_switches bits (providers/python/xtrees_api_pyapi.mojo
-#: XTREES_FAST_SWITCHES; python/mojolearn/_expansion_trees.py documents the
-#: first three): MOJOLEARN_KSHAP_FAST_BATCH, MOJOLEARN_AGN_IDN_SYN_POOL,
-#: MOJOLEARN_PSHAP_DELTA, MOJOLEARN_IDN_SHAP_DEVICE_MODEL (an IDENTICAL GPU
+#: x_trees_fast_switches bit 64 (providers/python/xtrees_api_pyapi_door.mojo
+#: XTREES_FAST_SWITCHES): MOJOLEARN_IDN_SHAP_DEVICE_MODEL (an IDENTICAL GPU
 #: build: Kernel/Permutation SHAP over a built-in flat forest evaluate the
 #: model on the device, xtrees/agnostic_device.mojo `model_kernel`; moves no
-#: bit).
-comptime _KSHAP_FAST_BATCH = 8
-comptime _AGN_IDN_SYN_POOL = 16
-comptime _PSHAP_DELTA = 32
+#: bit). The RUN reads bits 8, 16 and 32 (xtrees/agnostic_values_run.mojo).
 comptime _AGN_IDN_DEVICE_MODEL = 64
 # TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by e2adeea367; code
 # recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048).
@@ -81,18 +78,6 @@ def _switches(table: PythonObject) raises -> Int:
     facts[].answers[key] = answer
     return answer
 
-
-def _call(table: PythonObject, name: String, args: PythonObject) raises -> PythonObject:
-    """`entry(*args)` of a connected compiled x_trees entry, keeping the
-    class of a refusal it raises."""
-    return trees_call(_entry(table, name), args)
-
-
-def _ints(*values: Int) raises -> PythonObject:
-    var out = Python.list()
-    for i in range(len(values)):  # driver-loop: fixed binding parameter words
-        _ = py_call(out.append, PythonObject(values[i]))
-    return out
 
 def _class_value(model: PythonObject, name: String) raises -> PythonObject:
     """A class attribute found on the model's MRO namespaces (no descriptor
@@ -218,26 +203,20 @@ def _device_forest(model: PythonObject, mode: String, permutation: Bool, table: 
                         _int(py_item(fields, nk[].k__n_trees), "tree count", True), rf_input)
 
 
-def _model_load(dev: PythonObject, bg: PythonObject, table: PythonObject) raises -> Bool:
-    """Uploads the explained forest and the background for one shap_values
-    call (`x_trees_agn_model_load`); the caller releases it."""
+def _forest_words(dev: PythonObject, bg: PythonObject, mut req: AgnRequest) raises:
+    """UNPACK of MOJOLEARN_IDN_SHAP_DEVICE_MODEL: the flat forest's five array addresses and their words into the
+    request (`x_trees_agn_model_load`'s, which the RUN loads once and releases); `dev` (the model's own arrays)
+    and `bg` stay alive through the RUN with the explainer and the model."""
     if dev is None:
-        return False
+        return
     var arrays = dev[0]
-    var addresses = Python.list()
+    req.forest = List[Int]()
     for i in range(5):  # driver-loop: one address per model array
-        _ = py_call(addresses.append, trees_address(arrays[i]))
-    _ = _call(table, "x_trees_agn_model_load", Python.list(addresses, PythonObject(trees_address(bg)),
-              _ints(Int(py=dev[2]), Int(py=arrays[1].size), Int(py=dev[1]), Int(py=bg.shape[1]),
-                    Int(py=bg.shape[0]), Int(py=dev[3]))))
+        req.forest.append(trees_address(arrays[i]))
+    var words: List[Int] = [Int(py=dev[2]), Int(py=arrays[1].size), Int(py=dev[1]), Int(py=bg.shape[1]),
+                            Int(py=bg.shape[0]), Int(py=dev[3])]
+    req.forest_words = words^
     _ = arrays
-    return True
-
-
-def _pool_release(table: PythonObject) raises:
-    var release = _entry(table, "x_trees_agn_pool_release", False)
-    if release is not None:
-        _ = py_call(release)
 
 
 def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
@@ -271,13 +250,11 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
     var out = _evaluate(model, method, bg, nb, context)
     var k = Int(py=out.shape[1])
     var ev = admitted_vector(k, "<f8", context)
-    _ = _call(table, "x_trees_block_mean", Python.list(PythonObject(trees_address(out)), PythonObject(trees_address(ev)),
-              _ints(1, nb, k)))
+    # RUN (xtrees/agnostic_values_run.mojo): the background mean, then (shap KernelExplainer: expected_value =
+    # link(fnull)) the link on each output, through the glue entry of the x_trees image this tier connected.
+    agn_expected_run(xt_ref(_xk(table)), trees_address(out), nb, k,
+                     not permutation and String(link) == "logit", trees_address(ev))
     _ = out
-    if not permutation and String(link) == "logit":
-        # shap KernelExplainer: expected_value = link(fnull); the link meets
-        # each output after the background mean.
-        _ = _call(table, "x_trees_logit", Python.list(PythonObject(trees_address(ev)), _ints(k)))
     var expected = PythonObject(Float64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(ev))[0])) if k == 1 else ev
     var dev = _device_forest(model, mode, permutation, table, context)
     if dev is not None:
@@ -347,31 +324,26 @@ def _rows(x_source: PythonObject, s: _State, name: String, context: PythonObject
 
 # ---------------------------------------------------------------- the explained model as a native member
 struct _Member(Movable):
-    """The explained estimator as a NATIVE MEMBER (core/member_abi.mojo) for
-    one values call. `native` False: the model's class has no member entry
-    that serves this call, and every chunk runs the model's own compiled
-    door (`_evaluate`), as before. True: `held` is the fitted member state
-    the estimator keeps (bindings/member_held_door.mojo: imported at its
-    first use, a hit on every later call until the estimator changes) and
-    `operation` the member operation of the explained method; each chunk is
-    one member call (the GIL released around it only when `gil_free`), written straight into the float32
-    (rows, k) Array the kernels read. Released on every exit of the values
-    call (`_member_release`)."""
+    """UNPACK of the explained estimator as a NATIVE MEMBER (core/member_abi.mojo) for one values call. `native`
+    False: the model's class has no member entry that serves this call, and the RUN evaluates it through
+    `_DoorModel` (its own compiled door, the GIL held). True: `held` is the fitted member state the estimator keeps
+    (bindings/member_held_door.mojo: imported at its first use, a hit on every later call until the estimator
+    changes) and `operation` the member operation of the explained method; the RUN calls it through `AgnMember`.
+    Released on every exit of the values call (`_member_release`)."""
     var native: Bool
     var held: MemberHeld
-    var call: MemberCall
     var operation: Int
-    # THE GIL RULE (core/member_abi.mojo): the held state's kind has
-    # `MEMBER_GIL_FREE`: a chunk's member call runs with the GIL released by
-    # this door. False: it is made with the GIL held.
+    # THE GIL RULE (core/member_abi.mojo): the held state's kind has `MEMBER_GIL_FREE` or `MEMBER_GIL_DOOR`: the
+    # RUN runs with the GIL released by this door (one release per values call; it was one per chunk). False: it
+    # runs with the GIL held. `parallel`: `MEMBER_GIL_FREE` itself, the chunks may run on parallel workers.
     var gil_free: Bool
+    var parallel: Bool
 
     def __init__(out self):
-        var plan = MemberPlan()
         self.gil_free = False
+        self.parallel = False
         self.native = False
         self.held = MemberHeld()
-        self.call = MemberCall(plan.route)
         self.operation = MEMBER_OP_PREDICT
 
 
@@ -383,8 +355,9 @@ def _member_release(mut em: _Member):
 
 
 def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject):
-    """UNPACK, once per values call: the explained model's held member state
-    when its family serves the explained method (predict of a regressor
+    """UNPACK, once per values call (the RUN then calls the member through
+    `AgnMember`, the native model handle): the explained model's held member
+    state when its family serves the explained method (predict of a regressor
     kind, predict_proba of a classifier) and its output width is the one
     construction recorded. Anything else (no mark, a classifier explained
     through predict, whose member predict writes codes, an admission or
@@ -397,7 +370,8 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
     the background without a finite test: the model's own door tests every
     chunk it is given. A member whose kind tests its rows
     (MEMBER_CAN_TEST_ROWS) refuses a non-finite chunk in its own kernel pass
-    (`_member_rows` then answers None and the model's door raises its words):
+    (the RUN raises, `refused` is set, and the model's door answers the call
+    again and raises its words):
     no host scan here. Any other member reads admitted words, and every
     chunk is a mix of cells of X and of the background, so both are scanned
     once per values call (against the door's test of every synthesized
@@ -423,6 +397,7 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
         var dtype = MEMBER_DTYPE_UNSAID
         var tests = False
         var gil_free = False
+        var parallel = False
         try:
             var probe = member_call_of(held.plan, held.state)
             cols = member_outputs_of(held.plan, probe, operation)
@@ -439,6 +414,8 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
                 # one call per chunk on this thread either way (MEMBER_GIL_DOOR:
                 # released as the family's own door releases)
                 gil_free = (kind_mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
+                # MEMBER_GIL_FREE alone: safe on parallel workers (the RUN's chunks on the CPU column).
+                parallel = (kind_mask & MEMBER_GIL_FREE) != 0
         except:
             cols = -1
         var served = cols == s.k and dtype == MEMBER_F32
@@ -451,62 +428,95 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
             member_held_release(held)
             return
         em.held = held^
-        # Built from the hold where it now lives: the call carries the
-        # addresses of its plan's parameter and device words.
-        em.call = member_call_of(em.held.plan, em.held.state)
         em.operation = operation
         em.gil_free = gil_free
+        em.parallel = parallel
         em.native = True
     except:
         return
 
 
-def _member_rows(mut em: _Member, x: PythonObject, n: Int, d: Int, k: Int,
-                 context: PythonObject) raises -> PythonObject:
-    """The member on rows x (an (n, d) float32 C-order Array this door built)
-    as a float32 (n, k) Array: one member call (the GIL released around it
-    only for a kind with `MEMBER_GIL_FREE`, THE GIL RULE), the output
-    written in place (no output admission, no cast, no snapshot). None when
-    the member refuses the call: the member is released and the caller runs
-    the model's own door for this and every later chunk."""
-    # Unfilled: the member writes every cell of dst before anything reads it.
-    var dst = admitted_unfilled([n * k], "<f4", context)
-    em.call.x = MemberMatrix(trees_address(x), n, d)
-    em.call.dst = MemberMatrix(dst.addr, n, k)
-    var done = False
-    try:
-        if em.gil_free:
-            var py = Python()
-            with GILReleased(py):
-                _ = member_call(em.held.plan.member, em.operation, em.call)
+struct _DoorModel(AgnModel):
+    """The explained estimator through its own compiled door (`_evaluate`), for a class with no member entry
+    that serves the call, for the device forest route's one call on the explained rows, and for the call again
+    after a member refusal. Serial, with the GIL held: the one place the RUN's model reaches Python objects."""
+    var model: PythonObject
+    var method: String
+    var context: PythonObject
+    var x: PythonObject
+    var n: Int
+    var d: Int
+    var k: Int
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern).
+    var fx: Optional[PythonObject]
+    var syn: Optional[PythonObject]
+    var out: Optional[PythonObject]
+
+    def __init__(out self, s: _State, x: PythonObject, n: Int, context: PythonObject):
+        self.model = s.model
+        self.method = s.method.copy()
+        self.context = context
+        self.x = x
+        self.n = n
+        self.d = s.d
+        self.k = s.k
+        self.fx = Optional[PythonObject]()
+        self.syn = Optional[PythonObject]()
+        self.out = Optional[PythonObject]()
+
+    def _width(self, out: PythonObject) raises:
+        if Int(py=out.shape[1]) != self.k:
+            raise Error("ValueError: the explained model output width changed after construction")
+
+    def explained(mut self) raises -> Int:
+        var fx = _evaluate(self.model, self.method, self.x, self.n, self.context)
+        self._width(fx)
+        var address = trees_address(fx)
+        self.fx = Optional[PythonObject](fx)
+        return address
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        if not self.syn or Int(py=self.syn.value().size) != count:
+            self.syn = Optional[PythonObject]()
+            if filled:
+                self.syn = Optional[PythonObject](admitted_vector(count, "<f4", self.context))
+            else:
+                # Unfilled (fb-infer/C, 2026-11-17): the synthetic writer writes every cell.
+                self.syn = Optional[PythonObject](admitted_unfilled([count], "<f4", self.context).keep)
+        return trees_address(self.syn.value())
+
+    def rows(mut self, n: Int) raises -> Int:
+        var syn = self.syn.value()
+        var view = PythonObject(None)
+        if n * self.d == Int(py=syn.size):
+            view = trees_reshape(syn, Python.tuple(n, self.d), self.context)
         else:
-            _ = member_call(em.held.plan.member, em.operation, em.call)
-        done = True
-    except:
-        done = False
-    _ = x  # the rows are read through the whole member call
-    if not done:
-        _member_release(em)
-        return PythonObject(None)
-    return trees_reshape(dst.keep, Python.tuple(n, k), context)
+            # MOJOLEARN_PSHAP_DELTA: the first n rows, copied once into the model's input.
+            var front = admitted_vector(n * self.d, "<f4", self.context)
+            if n * self.d > 0:
+                unsafe_memcpy(dest=_F32(unsafe_from_address=trees_address(front)),
+                              src=_F32(unsafe_from_address=trees_address(syn)), count=n * self.d)
+            view = trees_reshape(front, Python.tuple(n, self.d), self.context)
+        _ = syn  # the source words are read through the copy above
+        self.out = Optional[PythonObject]()
+        var out = _evaluate(self.model, self.method, view, n, self.context)
+        _ = view
+        self._width(out)
+        var address = trees_address(out)
+        self.out = Optional[PythonObject](out)
+        return address
+
+    def workers(self) -> Int:
+        return 1
+
+    def worker(self) raises -> Self:
+        raise Error("RuntimeError: the explained model's door runs on the calling thread only")
 
 
-def _model_out(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """The explained model on rows x as a float32 (n, k) Array: through the
-    held native member when one is open, else the model's compiled door."""
-    if em.native and n > 0:
-        var out = _member_rows(em, x, n, s.d, s.k, context)
-        if out is not None:
-            return out
-    return _evaluate(s.model, s.method, x, n, context)
-
-
-def _model_rows(mut em: _Member, s: _State, syn: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
-    """The model on a chunk's synthetic matrix: float32 (rows, k)."""
-    var out = _model_out(em, s, trees_reshape(syn, Python.tuple(rows, s.d), context), rows, context)
-    if Int(py=out.shape[1]) != s.k:
-        raise Error("ValueError: the explained model output width changed after construction")
-    return out
+def _request(s: _State, x: PythonObject, phi: PythonObject, n: Int, glue_key: TreesEntryKey) raises -> AgnRequest:
+    """UNPACK: the typed request of one values call (the buffers stay alive with the door's locals)."""
+    return AgnRequest(trees_address(x), trees_address(s.bg), trees_address(phi), n, s.nb, s.d, s.k, s.seed,
+                      _switches(s.table), s.mode == "fast", glue_key.vendor == 0)
 
 
 def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -523,6 +533,8 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
 
 def _kernel_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
                         mut em: _Member) raises -> PythonObject:
+    """UNPACK (settings, rows, the native member), RUN (xtrees/agnostic_values_run.mojo
+    `agn_kernel_values_run`), PACK (the shaped float64 values)."""
     var name = String("KernelExplainer")
     var nsamples = args[1]
     var l1 = args[2]
@@ -538,137 +550,58 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, context: Pytho
     var n = Int(py=x.shape[0])
     var d = s.d
     var k = s.k
-    var nb = s.nb
-    var M = d
     var ns = 0
     if py_type(nsamples) is b.str and String(nsamples) == "auto":
-        ns = 2 * M + 2048
+        ns = 2 * d + 2048
     elif py_type(nsamples) is b.int:
         ns = Int(py=nsamples)
     else:
         raise Error("TypeError: nsamples must be an int or 'auto'")
-    if M <= 30:
-        ns = min(ns, (1 << M) - 2)
-    var h = max(1, M // 2)
-    var size_off = admitted_vector(h + 1, "<i8", context)
-    var size_w = admitted_vector(h, "<f8", context)
-    var cdf = admitted_vector(h, "<f8", context)
-    var sched = admitted_vector(6, "<i8", context)
-    if M > 1:
-        _ = _call(s.table, "x_trees_kshap_schedule", Python.list(Python.tuple(trees_address(size_off), trees_address(size_w), trees_address(cdf)),
-                  PythonObject(trees_address(sched)), _ints(M, max(ns, 0))))
-    var sp = _I64(unsafe_from_address=trees_address(sched))
-    var m = Int(sp[0])
-    var nfixed = Int(sp[1])
-    var nfull = Int(sp[2])
-    var npaired = Int(sp[3])
-    var L = Int(sp[4])
-    var wbits = Int(sp[5])
-    _ = sched
-    var taddr = Python.tuple(trees_address(size_off), trees_address(size_w), trees_address(cdf))
     var phi = admitted_vector(max(n * d * k, 1), "<f8", context)
     if n == 0:
         return _shape(phi, 0, d, k, context)
-    # A forest evaluated on the device needs the model once (fx): no member
-    # state is imported for it. Every other route calls the model per chunk.
-    if s.dev is None:
-        _member_open(em, s, x, n, context)
-    var fx = _model_out(em, s, x, n, context)   # the explained rows, one model call
-    if Int(py=fx.shape[1]) != k:
-        raise Error("ValueError: the explained model output width changed after construction")
-    var x0 = trees_address(x)
-    var f0 = trees_address(fx)
-    var p0 = trees_address(phi)
+    var glue_key = _xk(s.table)
+    var glue = xt_ref(glue_key)
+    var req = _request(s, x, phi, n, glue_key)
     var fnull = _get(fields, "_fnull")
     var nl = trees_address(fnull)
-    var bg0 = trees_address(s.bg)
-    var link_word = 1 if logit else 0
-    var R = _chunk(m * nb * d, n)
-    var bits = _switches(s.table)
-    var fast = s.mode == "fast"
-    if m > 0 and fast and (bits & _KSHAP_FAST_BATCH) != 0 and s.dev is None:
-        # MOJOLEARN_KSHAP_FAST_BATCH: one host buffer for every chunk's
-        # synthetic rows, each chunk's linked background means into one
-        # float64 (n, m, k) block, then the solve over as many rows per call
-        # as the budget holds (the same words as the per-chunk solve).
-        var ey = admitted_vector(n * m * k, "<f8", context)
-        var e0 = trees_address(ey)
-        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-        var syn = Optional[PythonObject](admitted_vector(R * m * nb * d, "<f4", context))
-        var r0 = 0
-        while r0 < n:  # driver-loop: one binding call per row chunk
-            var rows = min(R, n - r0)
-            if rows < R:
-                syn = Optional[PythonObject](admitted_vector(rows * m * nb * d, "<f4", context))
-            _ = _call(s.table, "x_trees_kshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0), taddr,
-                      PythonObject(trees_address(syn.value())), _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))
-            var out = _model_rows(em, s, syn.value(), rows * m * nb, context)
-            _ = _call(s.table, "x_trees_kshap_means", Python.list(PythonObject(trees_address(out)),
-                      PythonObject(e0 + 8 * r0 * m * k), _ints(rows, nb, m, k, link_word)))
-            _ = out
-            r0 += rows
-        _ = syn
-        var S = _chunk(m * d, n)
-        var s0 = 0
-        while s0 < n:  # driver-loop: solve-batch loop (one binding call per batch)
-            var rows = min(S, n - s0)
-            _ = _call(s.table, "x_trees_kshap_solve_ey", Python.list(PythonObject(e0 + 8 * s0 * m * k), PythonObject(f0 + 4 * s0 * k),
-                      PythonObject(nl), taddr, PythonObject(p0 + 8 * s0 * d * k),
-                      _ints(rows, nb, d, nfixed, m, nfull, L, npaired, s0, s.seed, wbits, k, link_word)))
-            s0 += rows
-        _ = ey
-    elif _model_load(s.dev, s.bg, s.table):
-        # The forest on the device: masks -> model -> means -> solve per
-        # chunk, nothing crossing but the chunk's rows and phi.
-        try:
-            var r0 = 0
-            while r0 < n:  # driver-loop: one binding call per row chunk
-                var rows = min(R, n - r0)
-                _ = _call(s.table, "x_trees_kshap_solve_model", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(f0 + 4 * r0 * k),
-                          PythonObject(nl), taddr, PythonObject(p0 + 8 * r0 * d * k),
-                          _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits, k, link_word)))
-                r0 += rows
-        finally:
-            _ = _call(s.table, "x_trees_agn_model_release", Python.list())
+    # A forest evaluated on the device needs the model once (fx, through its door): no member state is
+    # imported for it. Every other route calls the model per chunk.
+    if s.dev is None:
+        _member_open(em, s, x, n, context)
     else:
-        var reuse = (bits & _AGN_IDN_SYN_POOL) != 0   # one synthetic buffer for every chunk
-        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-        var syn = Optional[PythonObject]()
+        _forest_words(s.dev, s.bg, req)
+    var done = False
+    if em.native:
+        var refused = List[Int](length=1, fill=0)
+        # The native model handle over the held state; the plan it reads stays in `em` through the RUN.
+        var plan_addr = Int(MutPointer(to=em.held.plan))
+        var member = em.held.plan.member
+        var handle = AgnMember(member, plan_addr, em.held.state, em.operation, req.x, n, d, k, em.parallel,
+                               Int(refused.unsafe_ptr()))
         try:
-            var r0 = 0
-            while r0 < n:  # driver-loop: one binding call per row chunk
-                var rows = min(R, n - r0)
-                var y_addr = 0
-                var out = PythonObject(None)
-                if m > 0:
-                    if not reuse or not syn or Int(py=syn.value().size) != rows * m * nb * d:
-                        syn = Optional[PythonObject]()
-                        # Unfilled (fb-infer/C, 2026-11-17): x_trees_kshap_synth writes every
-                        # cell (ksynth_kernel over all rows*m*nb*d, then the download), so the
-                        # zero fill (a serial pass over up to the 128 MB chunk budget) is dropped.
-                        syn = Optional[PythonObject](admitted_unfilled([rows * m * nb * d], "<f4", context).keep)
-                    _ = _call(s.table, "x_trees_kshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0), taddr,
-                              PythonObject(trees_address(syn.value())),
-                              _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))
-                    out = _model_rows(em, s, syn.value(), rows * m * nb, context)
-                    y_addr = trees_address(out)
-                    if not reuse:
-                        syn = Optional[PythonObject]()
-                _ = _call(s.table, "x_trees_kshap_solve", Python.list(PythonObject(y_addr), PythonObject(f0 + 4 * r0 * k),
-                          PythonObject(nl), taddr, PythonObject(p0 + 8 * r0 * d * k),
-                          _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits, k, link_word)))
-                _ = out
-                r0 += rows
-        finally:
-            if reuse:
-                _pool_release(s.table)   # the pooled device buffer does not outlive the explanation
-        _ = syn
+            if em.gil_free:
+                var py = Python()
+                with GILReleased(py):
+                    agn_kernel_values_run(glue, req, ns, nl, logit, handle)
+            else:
+                agn_kernel_values_run(glue, req, ns, nl, logit, handle)
+            done = True
+        except problem:
+            if refused[0] == 0:
+                raise problem^
+            # The member refused (a non-finite chunk of a kind that tests its rows): the model's own door
+            # answers the whole call again, and raises its own words.
+        _ = handle^
+        _ = refused^
+    if not done:
+        var door = _DoorModel(s, x, n, context)
+        agn_kernel_values_run(glue, req, ns, nl, logit, door)
+        _ = door^
     _ = x
-    _ = fx
     _ = fnull
-    _ = size_off
-    _ = size_w
-    _ = cdf
+    _ = s.bg  # the background the RUN read through req.bg
+    _ = req^
     return _shape(phi, n, d, k, context)
 
 
@@ -743,6 +676,8 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
 
 def _permutation_values_over(fields: PythonObject, args: PythonObject, context: PythonObject,
                              mut em: _Member) raises -> PythonObject:
+    """UNPACK (settings, rows, the device forest, the resident linear block or the native member), RUN
+    (xtrees/agnostic_values_run.mojo `agn_permutation_values_run`), PACK (the shaped float64 values)."""
     var name = String("PermutationExplainer")
     var b = _b()
     var s = _state(fields, name, context)
@@ -750,7 +685,6 @@ def _permutation_values_over(fields: PythonObject, args: PythonObject, context: 
     var n = Int(py=x.shape[0])
     var d = s.d
     var k = s.k
-    var nb = s.nb
     if py_type(args[1]) is not b.int:
         raise Error("TypeError: npermutations must be an int")
     var npm = Int(py=args[1])
@@ -759,108 +693,54 @@ def _permutation_values_over(fields: PythonObject, args: PythonObject, context: 
     var phi = admitted_vector(max(n * d * k, 1), "<f8", context)
     if n == 0:
         return _shape(phi, 0, d, k, context)
-    var mm = npm * (2 * d + 1)
-    var x0 = trees_address(x)
-    var p0 = trees_address(phi)
-    var bg0 = trees_address(s.bg)
-    var R = _chunk(mm * nb * d, n)
-    if _model_load(s.dev, s.bg, s.table):
-        # The forest on the device: permutations -> model -> means ->
-        # marginals per chunk, nothing crossing but the chunk's rows and phi.
+    var glue_key = _xk(s.table)
+    var glue = xt_ref(glue_key)
+    var req = _request(s, x, phi, n, glue_key)
+    _forest_words(s.dev, s.bg, req)
+    var wb = 0
+    var wb_link = 0
+    var lin = PythonObject(None)
+    if not req.device_forest():
+        lin = _linear_block(s, context)
+        if lin is not None:
+            # IDN_PSHAP_RESIDENT: synthetic rows, the linear predict, means and marginals on the device per
+            # chunk; only x rows and phi cross.
+            wb = trees_address(lin[0])
+            wb_link = Int(py=lin[1])
+        else:
+            # Past the device forest and the resident linear routes (neither calls the model per chunk): the
+            # explained model as a native member.
+            _member_open(em, s, x, n, context)
+    var done = False
+    if em.native:
+        var refused = List[Int](length=1, fill=0)
+        # The native model handle over the held state; the plan it reads stays in `em` through the RUN.
+        var plan_addr = Int(MutPointer(to=em.held.plan))
+        var member = em.held.plan.member
+        var handle = AgnMember(member, plan_addr, em.held.state, em.operation, req.x, n, d, k, em.parallel,
+                               Int(refused.unsafe_ptr()))
         try:
-            var r0 = 0
-            while r0 < n:  # driver-loop: one binding call per row chunk
-                var rows = min(R, n - r0)
-                _ = _call(s.table, "x_trees_pshap_values_model", Python.list(PythonObject(x0 + 4 * r0 * d),
-                          PythonObject(p0 + 8 * r0 * d * k), _ints(rows, nb, d, npm, r0, s.seed, k)))
-                r0 += rows
-        finally:
-            _ = _call(s.table, "x_trees_agn_model_release", Python.list())
-        _ = x
-        return _shape(phi, n, d, k, context)
-    var lin = _linear_block(s, context)
-    if lin is not None:
-        # IDN_PSHAP_RESIDENT: synthetic rows, the linear predict, means and
-        # marginals on the device per chunk; only x rows and phi cross.
-        var wb = lin[0]
-        var Rl = max(1, min(n, _AGN_BUDGET_RESIDENT // max(1, mm * nb * d)))
-        var r0 = 0
-        while r0 < n:  # driver-loop: one binding call per row chunk
-            var rows = min(Rl, n - r0)
-            _ = _call(s.table, "x_trees_pshap_values_linear", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0),
-                      PythonObject(trees_address(wb)), PythonObject(p0 + 8 * r0 * d * k),
-                      _ints(rows, nb, d, npm, r0, s.seed, k, Int(py=lin[1]))))
-            r0 += rows
-        _ = wb
-        _ = x
-        return _shape(phi, n, d, k, context)
-    # Past the device forest and the resident linear routes (neither calls
-    # the model per chunk): the explained model as a native member.
-    _member_open(em, s, x, n, context)
-    var bits = _switches(s.table)
-    var fast = s.mode == "fast"
-    var idn_pool = (bits & _AGN_IDN_SYN_POOL) != 0
-    var reuse = (fast and (bits & _KSHAP_FAST_BATCH) != 0) or idn_pool
-    if fast and (bits & _PSHAP_DELTA) != 0:
-        # MOJOLEARN_PSHAP_DELTA: per chunk, the device builds only the
-        # synthetic rows that differ from their previous coalition's into the
-        # front of one reused buffer (their count into `tot`), the model runs
-        # on that prefix, and the device expands the outputs back to every
-        # (coalition, background row). Three Int64 words per (coalition,
-        # background row): bound them as if d were at least 16.
-        var Rd = min(R, _chunk(mm * nb * max(d, 16), n))
-        var tot = admitted_vector(1, "<i8", context)
-        var t0 = trees_address(tot)
-        var syn = admitted_vector(Rd * mm * nb * d, "<f4", context)
-        var r0 = 0
-        while r0 < n:  # driver-loop: one model call per row chunk
-            var rows = min(Rd, n - r0)
-            _ = _call(s.table, "x_trees_pshap_dsynth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0),
-                      PythonObject(trees_address(syn)), PythonObject(t0), _ints(rows, nb, d, npm, r0, s.seed)))
-            var nv = Int(_I64(unsafe_from_address=t0)[0])
-            if nv < 0 or nv > rows * mm * nb:
-                raise Error("RuntimeError: x_trees_pshap_dsynth returned an invalid row count")
-            # The first nv rows of syn, copied once into the model's input.
-            var front = admitted_vector(nv * d, "<f4", context)
-            var src = _F32(unsafe_from_address=trees_address(syn))
-            var dst = _F32(unsafe_from_address=trees_address(front))
-            if nv * d > 0:
-                unsafe_memcpy(dest=dst, src=src, count=nv * d)  # one block copy, not one per element
-            _ = syn  # keep the source alive through the copy above
-            var out = _model_rows(em, s, front, nv, context)
-            _ = front
-            _ = _call(s.table, "x_trees_pshap_dvalues", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0),
-                      PythonObject(trees_address(out)), PythonObject(p0 + 8 * r0 * d * k), PythonObject(t0),
-                      _ints(rows, nb, d, npm, r0, s.seed, k)))
-            _ = out
-            r0 += rows
-        _ = syn
-        _ = tot
-        _ = x
-        return _shape(phi, n, d, k, context)
-    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-    var syn = Optional[PythonObject]()
-    try:
-        var r0 = 0
-        while r0 < n:  # driver-loop: one model call per row chunk
-            var rows = min(R, n - r0)
-            if not reuse or not syn or Int(py=syn.value().size) != rows * mm * nb * d:
-                syn = Optional[PythonObject]()
-                syn = Optional[PythonObject](admitted_vector(rows * mm * nb * d, "<f4", context))
-            _ = _call(s.table, "x_trees_pshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0),
-                      PythonObject(trees_address(syn.value())), _ints(rows, nb, d, npm, r0, s.seed)))
-            var out = _model_rows(em, s, syn.value(), rows * mm * nb, context)
-            if not reuse:
-                syn = Optional[PythonObject]()
-            _ = _call(s.table, "x_trees_pshap_values", Python.list(PythonObject(trees_address(out)),
-                      PythonObject(p0 + 8 * r0 * d * k), _ints(rows, nb, d, npm, r0, s.seed, k)))
-            _ = out
-            r0 += rows
-    finally:
-        if idn_pool:
-            _pool_release(s.table)   # the pooled device buffer does not outlive the explanation
-    _ = syn
+            if em.gil_free:
+                var py = Python()
+                with GILReleased(py):
+                    agn_permutation_values_run(glue, req, npm, wb, wb_link, handle)
+            else:
+                agn_permutation_values_run(glue, req, npm, wb, wb_link, handle)
+            done = True
+        except problem:
+            if refused[0] == 0:
+                raise problem^
+            # The member refused: the model's own door answers the whole call again, and raises its words.
+        _ = handle^
+        _ = refused^
+    if not done:
+        var door = _DoorModel(s, x, n, context)
+        agn_permutation_values_run(glue, req, npm, wb, wb_link, door)
+        _ = door^
+    _ = lin
     _ = x
+    _ = s.bg  # the background the RUN read through req.bg
+    _ = req^
     return _shape(phi, n, d, k, context)
 
 

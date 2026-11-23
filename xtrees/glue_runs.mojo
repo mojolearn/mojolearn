@@ -33,8 +33,14 @@ from xtrees.glue_abi import (
     XT_PLATT_APPLY_STRIDED, XT_PLATT_FIT, XT_POSITIVE_CODES, XT_PUT_F32, XT_R2_STEP, XT_REMAP_COLS,
     XT_ROWS_ANY_UNSET, XT_SAMME_STEP, XT_SAMPLE_INDICES, XT_SCALE, XT_SCALE_TO_F32, XT_SCATTER, XT_SOFTMAX_ROWS,
     XT_STACK_W64, XT_TRANSPOSE_F32, XT_TRANSPOSE_F64, XT_UNIFORM, XT_UNSEEN_ROWS, XT_WEIGHTED_MEDIAN,
-    XT_WEIGHTED_SAMPLE,
+    XT_WEIGHTED_SAMPLE, XT_KSHAP_SCHEDULE, XT_KSHAP_SYNTH, XT_KSHAP_SOLVE, XT_KSHAP_MEANS, XT_KSHAP_SOLVE_EY,
+    XT_PSHAP_SYNTH, XT_PSHAP_VALUES, XT_PSHAP_DSYNTH, XT_PSHAP_DVALUES, XT_PSHAP_VALUES_LINEAR, XT_AGN_MODEL_LOAD,
+    XT_AGN_MODEL_RELEASE, XT_KSHAP_SOLVE_MODEL, XT_PSHAP_VALUES_MODEL, XT_AGN_POOL_RELEASE, XT_BLOCK_MEAN, XT_LOGIT,
 )
+from xtrees import agnostic_device as agn_dev
+from xtrees import agnostic_host as agn_host
+from xtrees.api_kernels import kshap_schedule
+from xtrees.xtrees_api_run import _kshap_check
 from xtrees.folds_device import device_folds, leaf_numbering
 from xtrees.glue_device import (
     binary_proba_device, indicator_codes_device, stack_w64_device, class_counts_device, remap_cols_device,
@@ -61,7 +67,7 @@ from xtrees.ops import (
     onehot_leaves, transpose_f32, normalize_rows, scatter, platt_fit, isotonic_fit,
     platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes,
     bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba, class_counts, remap_cols, positive_codes,
-    rows_any_unset, margin2, iota_i32, fill_class_major_f64,
+    rows_any_unset, margin2, iota_i32, fill_class_major_f64, logit,
 )
 
 #: cpu-gpu-cleanup t-gbdt / w2-trees: a GPU build gathers, applies, transposes
@@ -1174,6 +1180,273 @@ def calibrated_proba_run(c: XtCall) raises -> Int:
     return n
 
 
+# ---- The model-agnostic explainers' stages (lane bm-rest-shap, 2026-11-23). Moved verbatim from the Python
+# entries `x_trees_<name>` of providers/python/xtrees_api_pyapi_door.mojo (deleted there: their one caller, the
+# KernelExplainer / PermutationExplainer door, now runs xtrees/agnostic_values_run.mojo, which reaches these
+# through the glue entry). Same checks, same words, same host / device choice; the address order is the former
+# entry's arguments with its `tables` tuple spread in place.
+
+
+def _agn_ints(c: XtCall, n: Int, who: String) raises -> List[Int]:
+    _need(c, n, who)
+    var out = List[Int]()
+    for i in range(n):  # driver-loop: over fixed call structure, small-loop(params words)
+        out.append(_i(c, i))
+    return out^
+
+
+def kshap_schedule_run(c: XtCall) raises -> Int:
+    """KernelExplainer's coalition schedule (shap `KernelExplainer.explain` over subset SIZES):
+    addresses = [size_off Int64 M // 2 + 1, size_w float64 max(1, M // 2), cdf float64 max(1, M // 2),
+    dst Int64 6]; params = [M, nsamples] with M > 1; dst = [m, nfixed, nfull, npaired, L, wrand_bits]. The sums
+    run in index order (one fixed fold, the same on every column). Returns nfull."""
+    _addrs(c, 4, "x_trees_kshap_schedule")
+    _need(c, 2, "x_trees_kshap_schedule")
+    var M = _i(c, 0)
+    var nsamples = _count(_i(c, 1), "x_trees_kshap_schedule")
+    if M < 2:
+        raise Error("x_trees_kshap_schedule: needs M > 1")
+    var off = _i64_ptr(_a(c, 0))
+    var sw = f64_ptr(_a(c, 1))
+    var cdf = f64_ptr(_a(c, 2))
+    var res = _i64_ptr(_a(c, 3))
+    return kshap_schedule(M, nsamples, off, sw, cdf, res)
+
+
+def kshap_synth_run(c: XtCall) raises -> Int:
+    """KernelExplainer's synthetic rows of a chunk: addresses = [x Float32 R x d, bg Float32 nb x d, size_off,
+    size_w, cdf, syn Float32 (R m nb) x d]; params = [R, nb, d, nfixed, m, nfull, L, npaired, row0, seed,
+    wrand_bits]."""
+    _addrs(c, 6, "x_trees_kshap_synth")
+    var p = _agn_ints(c, 11, "x_trees_kshap_synth")
+    _kshap_check(p, "x_trees_kshap_synth")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.kshap_synth(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), _a(c, 4), _a(c, 5), p[0], p[1], p[2], p[4],
+                            p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]))
+    else:
+        agn_host.kshap_synth(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), _a(c, 4), _a(c, 5), p[0], p[1], p[2], p[4],
+                             p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]))
+    return p[0]
+
+
+def kshap_solve_run(c: XtCall) raises -> Int:
+    """KernelExplainer's values of a chunk: addresses = [out Float32 (R m nb) x k (the model on the synthetic
+    rows), fx Float32 R x k (the model on the rows), fnull float64 k (linked), size_off, size_w, cdf, phi float64
+    R x d x k]; params = [R, nb, d, nfixed, m, nfull, L, npaired, row0, seed, wrand_bits, k, link]."""
+    _addrs(c, 7, "x_trees_kshap_solve")
+    var p = _agn_ints(c, 13, "x_trees_kshap_solve")
+    _kshap_check(p, "x_trees_kshap_solve")
+    if p[11] < 1:
+        raise Error("x_trees_kshap_solve: needs outputs")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.kshap_solve(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), _a(c, 4), _a(c, 5), _a(c, 6), p[0], p[1], p[2],
+                            p[11], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]), p[12] != 0)
+    else:
+        agn_host.kshap_solve(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), _a(c, 4), _a(c, 5), _a(c, 6), p[0], p[1],
+                             p[2], p[11], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]), p[12] != 0)
+    return p[0]
+
+
+def kshap_means_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_KSHAP_FAST_BATCH: a chunk's linked background means: addresses = [out, ey float64 R x m x k];
+    params = [R, nb, m, k, link]. Refused in a build without the define (x_trees_fast_switches bit 8 is 0)."""
+    _addrs(c, 2, "x_trees_kshap_means")
+    var p = _agn_ints(c, 5, "x_trees_kshap_means")
+    if p[0] < 0 or p[1] < 1 or p[2] < 0 or p[3] < 1:
+        raise Error("x_trees_kshap_means: bad counts")
+    comptime if agn_dev.KSHAP_FAST_BATCH:
+        agn_dev.kshap_means(_a(c, 0), _a(c, 1), p[0], p[1], p[3], p[2], p[4] != 0)
+    else:
+        raise Error("x_trees_kshap_means: built without MOJOLEARN_KSHAP_FAST_BATCH")
+    return p[0]
+
+
+def kshap_solve_ey_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_KSHAP_FAST_BATCH: `x_trees_kshap_solve` from the rows' means (`x_trees_kshap_means`):
+    addresses = [ey, fx, fnull, size_off, size_w, cdf, phi]; params as x_trees_kshap_solve's (nb is unused)."""
+    _addrs(c, 7, "x_trees_kshap_solve_ey")
+    var p = _agn_ints(c, 13, "x_trees_kshap_solve_ey")
+    _kshap_check(p, "x_trees_kshap_solve_ey")
+    if p[11] < 1:
+        raise Error("x_trees_kshap_solve_ey: needs outputs")
+    comptime if agn_dev.KSHAP_FAST_BATCH:
+        agn_dev.kshap_solve_ey(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), _a(c, 4), _a(c, 5), _a(c, 6), p[0], p[2],
+                               p[11], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]), p[12] != 0)
+    else:
+        raise Error("x_trees_kshap_solve_ey: built without MOJOLEARN_KSHAP_FAST_BATCH")
+    return p[0]
+
+
+def pshap_synth_run(c: XtCall) raises -> Int:
+    """PermutationExplainer's synthetic rows of a chunk: addresses = [x, bg, syn Float32 (R np (2d + 1) nb) x d];
+    params = [R, nb, d, np, row0, seed]."""
+    _addrs(c, 3, "x_trees_pshap_synth")
+    var p = _agn_ints(c, 6, "x_trees_pshap_synth")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
+        raise Error("x_trees_pshap_synth: bad counts")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.pshap_synth(_a(c, 0), _a(c, 1), _a(c, 2), p[0], p[1], p[2], p[3], p[5], p[4])
+    else:
+        agn_host.pshap_synth(_a(c, 0), _a(c, 1), _a(c, 2), p[0], p[1], p[2], p[3], p[5], p[4])
+    return p[0]
+
+
+def pshap_values_run(c: XtCall) raises -> Int:
+    """PermutationExplainer's values of a chunk: addresses = [out Float32 (R np (2d + 1) nb) x k, phi float64
+    R x d x k]; params = [R, nb, d, np, row0, seed, k]."""
+    _addrs(c, 2, "x_trees_pshap_values")
+    var p = _agn_ints(c, 7, "x_trees_pshap_values")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
+        raise Error("x_trees_pshap_values: bad counts")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.pshap_values(_a(c, 0), _a(c, 1), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+    else:
+        agn_host.pshap_values(_a(c, 0), _a(c, 1), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+    return p[0]
+
+
+def pshap_dsynth_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_PSHAP_DELTA: the chunk's varying synthetic rows only (in full order) into syn (Float32, room for
+    (R np (2d + 1) nb) x d), their count into tot (Int64 1): addresses = [x, bg, syn, tot]; params as
+    x_trees_pshap_synth's. Refused when the FAST Apple default is inactive or _OFF is set."""
+    _addrs(c, 4, "x_trees_pshap_dsynth")
+    var p = _agn_ints(c, 6, "x_trees_pshap_dsynth")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
+        raise Error("x_trees_pshap_dsynth: bad counts")
+    comptime if agn_dev.PSHAP_DELTA:
+        agn_dev.pshap_dsynth(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), p[0], p[1], p[2], p[3], p[5], p[4])
+    else:
+        raise Error("x_trees_pshap_dsynth: FAST Apple delta disabled (MOJOLEARN_PSHAP_DELTA_OFF)")
+    return p[0]
+
+
+def pshap_dvalues_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_PSHAP_DELTA: phi float64 R x d x k from out Float32 (rows x k, the model on x_trees_pshap_dsynth's
+    rows): addresses = [x, bg, out, phi, tot]; params = [R, nb, d, np, row0, seed, k]."""
+    _addrs(c, 5, "x_trees_pshap_dvalues")
+    var p = _agn_ints(c, 7, "x_trees_pshap_dvalues")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
+        raise Error("x_trees_pshap_dvalues: bad counts")
+    comptime if agn_dev.PSHAP_DELTA:
+        agn_dev.pshap_dvalues(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), _a(c, 4), p[0], p[1], p[2], p[6], p[3], p[5],
+                              p[4])
+    else:
+        raise Error("x_trees_pshap_dvalues: FAST Apple delta disabled (MOJOLEARN_PSHAP_DELTA_OFF)")
+    return p[0]
+
+
+def pshap_values_linear_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_IDN_PSHAP_RESIDENT: a chunk of PermutationExplainer values over one of this library's linear
+    regressors, the synthetic rows and the model on the device: addresses = [x Float32 R x d, bg Float32 nb x d,
+    wb Float32 k x (d + 1), phi float64 R x d x k]; params = [R, nb, d, np, row0, seed, k, link]."""
+    _addrs(c, 4, "x_trees_pshap_values_linear")
+    var p = _agn_ints(c, 8, "x_trees_pshap_values_linear")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1 or p[7] < 0 or p[7] > 2:
+        raise Error("x_trees_pshap_values_linear: bad counts")
+    comptime if XTREES_DEVICE_OPS and agn_dev.PSHAP_IDN_RESIDENT:
+        agn_dev.pshap_values_linear(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), p[0], p[1], p[2], p[6], p[3], p[5],
+                                    p[4], p[7])
+    else:
+        raise Error("x_trees_pshap_values_linear: built without MOJOLEARN_IDN_PSHAP_RESIDENT")
+    return p[0]
+
+
+#: MOJOLEARN_IDN_SHAP_DEVICE_MODEL on an IDENTICAL GPU build (the provider's `_XT_AGN_DEVICE_MODEL`).
+comptime XT_AGN_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.AGN_IDN_DEVICE_MODEL
+
+
+def agn_model_load_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: uploads the explained flat forest and the background for one
+    `shap_values` call: addresses = [offsets Int32 trees + 1, feature ids Int32 nodes, thresholds Float32 nodes,
+    left children Int32 nodes, leaves Float32 nodes x k, bg Float32 nb x d]; params = [trees, nodes, k, d, nb,
+    rf_input]. Refused in a build without the define."""
+    _addrs(c, 6, "x_trees_agn_model_load")
+    var p = _agn_ints(c, 6, "x_trees_agn_model_load")
+    comptime if XT_AGN_DEVICE_MODEL:
+        agn_dev.model_load(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), _a(c, 4), _a(c, 5), p[0], p[1], p[2], p[3], p[4],
+                           p[5] != 0)
+    else:
+        raise Error("x_trees_agn_model_load: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
+    return p[0]
+
+
+def agn_model_release_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: frees the device forest and background (`x_trees_agn_model_load`).
+    Nothing to free in a build without the define."""
+    comptime if XT_AGN_DEVICE_MODEL:
+        agn_dev.model_release()
+    return 0
+
+
+def kshap_solve_model_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: KernelExplainer's values of a chunk over the loaded forest without leaving
+    the device: addresses = [x Float32 R x d, fx, fnull, size_off, size_w, cdf, phi]; params as
+    x_trees_kshap_solve's (nb must be the loaded background's)."""
+    _addrs(c, 7, "x_trees_kshap_solve_model")
+    var p = _agn_ints(c, 13, "x_trees_kshap_solve_model")
+    _kshap_check(p, "x_trees_kshap_solve_model")
+    if p[11] < 1:
+        raise Error("x_trees_kshap_solve_model: needs outputs")
+    comptime if XT_AGN_DEVICE_MODEL:
+        agn_dev.kshap_solve_model(_a(c, 0), _a(c, 1), _a(c, 2), _a(c, 3), _a(c, 4), _a(c, 5), _a(c, 6), p[0], p[1],
+                                  p[2], p[11], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]), p[12] != 0)
+    else:
+        raise Error("x_trees_kshap_solve_model: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
+    return p[0]
+
+
+def pshap_values_model_run(c: XtCall) raises -> Int:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: PermutationExplainer's values of a chunk over the loaded forest without
+    leaving the device: addresses = [x Float32 R x d, phi float64 R x d x k]; params as x_trees_pshap_values'."""
+    _addrs(c, 2, "x_trees_pshap_values_model")
+    var p = _agn_ints(c, 7, "x_trees_pshap_values_model")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
+        raise Error("x_trees_pshap_values_model: bad counts")
+    comptime if XT_AGN_DEVICE_MODEL:
+        agn_dev.pshap_values_model(_a(c, 0), _a(c, 1), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+    else:
+        raise Error("x_trees_pshap_values_model: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
+    return p[0]
+
+
+def agn_pool_release_run(c: XtCall) raises -> Int:
+    """Frees the IDENTICAL explainers' pooled synthetic device buffer (xtrees/agnostic_device.mojo
+    `pool_release`). Nothing to free on the host column."""
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.pool_release()
+    return 0
+
+
+def block_mean_run(c: XtCall) raises -> Int:
+    """addresses = [y Float32 (m nb) x k, res float64 m x k]; params = [m, nb, k] (on the device in a GPU build,
+    xtrees/agnostic_device.mojo; the same words)."""
+    _addrs(c, 2, "x_trees_block_mean")
+    _need(c, 3, "x_trees_block_mean")
+    var m = _count(_i(c, 0), "x_trees_block_mean")
+    var nb = _i(c, 1)
+    if nb < 1:
+        raise Error("x_trees_block_mean: nb must be >= 1")
+    if m > 0:
+        comptime if XTREES_DEVICE_OPS:
+            agn_dev.bg_mean(_a(c, 0), _a(c, 1), m, nb, _count(_i(c, 2), "x_trees_block_mean"))
+        else:
+            agn_host.bg_mean(_a(c, 0), _a(c, 1), m, nb, _count(_i(c, 2), "x_trees_block_mean"))
+    return m
+
+
+def logit_run(c: XtCall) raises -> Int:
+    """In place x = log(x / (1 - x)): addresses = [x float64 n]; params = [n]."""
+    _addrs(c, 1, "x_trees_logit")
+    _need(c, 1, "x_trees_logit")
+    var n = _count(_i(c, 0), "x_trees_logit")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.logit_device(f64_ptr(_a(c, 0)), n)
+        else:
+            logit(f64_ptr(_a(c, 0)), n)
+    return n
+
+
 def x_trees_glue_dispatch(op: Int, c: XtCall) raises -> Int:
     """One glue operation by its `XT_*` code (xtrees/glue_abi.mojo)."""
     if op == XT_ACCUMULATE:
@@ -1282,6 +1555,40 @@ def x_trees_glue_dispatch(op: Int, c: XtCall) raises -> Int:
         return ovr_assemble_run(c)
     if op == XT_CALIBRATED_PROBA:
         return calibrated_proba_run(c)
+    if op == XT_KSHAP_SCHEDULE:
+        return kshap_schedule_run(c)
+    if op == XT_KSHAP_SYNTH:
+        return kshap_synth_run(c)
+    if op == XT_KSHAP_SOLVE:
+        return kshap_solve_run(c)
+    if op == XT_KSHAP_MEANS:
+        return kshap_means_run(c)
+    if op == XT_KSHAP_SOLVE_EY:
+        return kshap_solve_ey_run(c)
+    if op == XT_PSHAP_SYNTH:
+        return pshap_synth_run(c)
+    if op == XT_PSHAP_VALUES:
+        return pshap_values_run(c)
+    if op == XT_PSHAP_DSYNTH:
+        return pshap_dsynth_run(c)
+    if op == XT_PSHAP_DVALUES:
+        return pshap_dvalues_run(c)
+    if op == XT_PSHAP_VALUES_LINEAR:
+        return pshap_values_linear_run(c)
+    if op == XT_AGN_MODEL_LOAD:
+        return agn_model_load_run(c)
+    if op == XT_AGN_MODEL_RELEASE:
+        return agn_model_release_run(c)
+    if op == XT_KSHAP_SOLVE_MODEL:
+        return kshap_solve_model_run(c)
+    if op == XT_PSHAP_VALUES_MODEL:
+        return pshap_values_model_run(c)
+    if op == XT_AGN_POOL_RELEASE:
+        return agn_pool_release_run(c)
+    if op == XT_BLOCK_MEAN:
+        return block_mean_run(c)
+    if op == XT_LOGIT:
+        return logit_run(c)
     raise Error("x_trees glue: unknown operation " + String(op))
 
 
