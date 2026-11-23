@@ -1135,8 +1135,8 @@ def _new(call: _CallPtr) raises:
             if len(slot[].plans) != plans or len(slot[].masks) != plans or len(slot[].words) != need:
                 raise Error("member ABI: a " + _name(kind) + " member needs its one base estimator and its "
                             + String(need) + " settings words")
-            if kind == META_CALIBRATED and slot[].folds < 2:
-                raise Error("member ABI: a CalibratedClassifierCV member needs cv >= 2")
+            if kind == META_CALIBRATED and slot[].folds < 2 and user_folds == 0:
+                raise Error("member ABI: a CalibratedClassifierCV member needs cv >= 2 or its listed folds")
             if _ada_kind(kind):
                 var family = slot[].plans[0].family
                 if (family != MEMBER_FAMILY_TREE and family != MEMBER_FAMILY_FOREST
@@ -1445,12 +1445,14 @@ def _stack_counts(slot: _SlotPtr, k: Int, held: List[Int32]) -> List[Int]:
 
 
 def _user_folds(slot: _SlotPtr, n: Int, mut tr_at: List[Int], mut tr_n: List[Int], mut te_at: List[Int],
-                mut te_n: List[Int]) raises:
+                mut te_n: List[Int], partition: Bool) raises:
     """A user's cv index list (the entry's typed folds) against the fit's
     `n` rows, refused as the door's `_splits` refuses it, in its words and
     order: per fold its empty side, its train then test rows outside
-    [0, n); no fold; then a test side that is not a partition (stacking's
-    cross_val_predict). The bounds of every fold on the host cores."""
+    [0, n); no fold; then, when `partition` (stacking's and an
+    ensemble=False calibration's cross_val_predict, the door's
+    `_splits(..., partition)`), a test side that is not a partition. The
+    bounds of every fold on the host cores."""
     var folds = len(slot[].fold_test)
     var bad = List[Int](length=max(folds, 1), fill=0)
     var bad_at = Int(bad.unsafe_ptr())
@@ -1496,13 +1498,14 @@ def _user_folds(slot: _SlotPtr, n: Int, mut tr_at: List[Int], mut tr_n: List[Int
             raise Error("a cv index is outside [0, " + String(n) + ")")
     if folds == 0:
         raise Error("cv produced no splits")
-    var seen = List[Int32](length=max(n, 1), fill=Int32(0))
-    for f in range(folds):  # driver-loop: over the user's folds (the partition count)
-        for i in range(te_counts[f]):  # small-loop(one count per test row: n rows in all over a partition)
-            seen[Int(slot[].fold_test[f][i])] += 1
-    for i in range(n):  # small-loop(the partition check: one word per row, once per fit)
-        if seen[i] != 1:
-            raise Error("cross_val_predict only works for partitions: every row must be in exactly one test set")
+    if partition:
+        var seen = List[Int32](length=max(n, 1), fill=Int32(0))
+        for f in range(folds):  # driver-loop: over the user's folds (the partition count)
+            for i in range(te_counts[f]):  # small-loop(one count per test row: n rows in all over a partition)
+                seen[Int(slot[].fold_test[f][i])] += 1
+        for i in range(n):  # small-loop(the partition check: one word per row, once per fit)
+            if seen[i] != 1:
+                raise Error("cross_val_predict only works for partitions: every row must be in exactly one test set")
     for f in range(folds):  # driver-loop: over the user's folds (the RUN's addresses)
         tr_at.append(tr_ptrs[f])
         tr_n.append(tr_counts[f])
@@ -1691,7 +1694,7 @@ def _fit_stack(slot: _SlotPtr, call: _CallPtr) raises:
     var fold_rows = List[Int32](length=max(n_splits * n, 1), fill=Int32(0))
     var rows_at = Int(fold_rows.unsafe_ptr())
     if len(slot[].fold_test) > 0:
-        _user_folds(slot, n, tr_at, tr_n, te_at, te_n)
+        _user_folds(slot, n, tr_at, tr_n, te_at, te_n, True)
     else:
         var codes_at = y if classifier else Int(fold_counts.unsafe_ptr())
         var status = xt_device_folds(glue, codes_at, rows_at, Int(fold_counts.unsafe_ptr()), n, n_splits, k)
@@ -1845,12 +1848,16 @@ def _own_drawn(slot: _SlotPtr, drawn: List[Bool]) raises:
 
 
 def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
-    """`_cal_native` over an int cv: the stratified folds of
-    `xt_device_folds`, one unit per fold over its train rows (and one over
-    every row for ensemble=False), `calibrated_fit_run`, then the kept pairs
-    and their calibrators. A failing fit raises the first failing fold's
-    words in fold order (GaussianProcessClassifier's one-class words with
-    the label suffix its fit door adds, `_cal_fit_words`)."""
+    """`_cal_native`: the folds (an int cv: the stratified folds of
+    `xt_device_folds`; THE SPLITTER CV, lane mf-split4b: our KFold /
+    StratifiedKFold over this fit's rows, `_split_folds`; a user's index
+    list: the entry's typed folds, checked by `_user_folds` as the door's
+    `_splits` checks them, a partition only for ensemble=False), one unit
+    per fold over its train rows (and one over every row for
+    ensemble=False), `calibrated_fit_run`, then the kept pairs and their
+    calibrators. A failing fit raises the first failing fold's words in
+    fold order (GaussianProcessClassifier's one-class words with the label
+    suffix its fit door adds, `_cal_fit_words`)."""
     var k = call[].classes
     if k < 2:
         raise Error("y has fewer than 2 classes")
@@ -1862,33 +1869,50 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     var sigmoid = slot[].words[META_CAL_SIGMOID] != 0.0
     var ensemble = slot[].words[META_CAL_ENSEMBLE] != 0.0
     var decision = slot[].words[META_CAL_DECISION] != 0.0
-    var n_splits = slot[].folds
+    # THE SPLITTER CV: this fit's folds first, as the door computes its
+    # splits before any member fit.
+    if slot[].split_kind != META_SPLIT_NONE:
+        _split_folds(slot, n, y, k)
+    var listed = len(slot[].fold_test) > 0
+    var tr_at = List[Int]()
+    var tr_n = List[Int]()
+    var te_at = List[Int]()
+    var te_n = List[Int]()
+    var n_splits = 0 if listed else slot[].folds
     var fold_counts = List[Int32](length=n_splits + 1, fill=Int32(0))
     var fold_rows = List[Int32](length=max(n_splits * n, 1), fill=Int32(0))
     var rows_at = Int(fold_rows.unsafe_ptr())
-    var status = xt_device_folds(glue, y, rows_at, Int(fold_counts.unsafe_ptr()), n, n_splits, k)
-    if status == 1:
-        raise Error("n_splits=" + String(n_splits) + " cannot be greater than the number of members in each class")
-    if status != 0:
-        raise Error("y codes outside [0, n_classes)")
-    var last = 0
-    for f in range(n_splits):  # driver-loop: over the cv folds
-        if Int(fold_counts[f]) > 0:
-            last = f
-    var used = last + 1
+    if listed:
+        _user_folds(slot, n, tr_at, tr_n, te_at, te_n, not ensemble)
+    else:
+        var status = xt_device_folds(glue, y, rows_at, Int(fold_counts.unsafe_ptr()), n, n_splits, k)
+        if status == 1:
+            raise Error("n_splits=" + String(n_splits)
+                        + " cannot be greater than the number of members in each class")
+        if status != 0:
+            raise Error("y codes outside [0, n_classes)")
+        var last = 0
+        for f in range(n_splits):  # driver-loop: over the cv folds
+            if Int(fold_counts[f]) > 0:
+                last = f
+        for f in range(last + 1):  # driver-loop: over the cv folds (their train and test rows)
+            var c = Int(fold_counts[f])
+            tr_at.append(rows_at + 4 * (f * n))
+            tr_n.append(n - c)
+            te_at.append(rows_at + 4 * (f * n + n - c))
+            te_n.append(c)
+    var used = len(te_at)
     var units = used if ensemble else used + 1
     _expand(slot, units)
     var run = _set_of(slot, x, n, d, MEMBER_I32)
     for f in range(used):  # driver-loop: over the cv folds (admission, once each)
-        var c = Int(fold_counts[f])
-        _add(slot, run, f, k, y, 0, rows_at + 4 * (f * n), n - c)
+        _add(slot, run, f, k, y, 0, tr_at[f], tr_n[f])
     if not ensemble:
         _add(slot, run, used, k, y, 0, 0, 0)
     var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA
     var plan = CalFitPlan(x, n, d, y, k, operation, sigmoid, ensemble, _CALIB_FAST_HOST_FOLDS)
     for f in range(used):  # driver-loop: over the cv folds (their test rows)
-        var c = Int(fold_counts[f])
-        plan.fold(rows_at + 4 * (f * n + n - c), c)
+        plan.fold(te_at[f], te_n[f])
     var res = CalFitOut()
     # A refused scoring call raises its member's words (the RUN released every state).
     var answered = calibrated_fit_run(glue, run, plan, res)
@@ -1941,6 +1965,7 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     _ = plan.folds()  # its re-coded targets were read through the fits and the ownership above
     _ = len(fold_rows)  # the fold rows are read through the fits and the ownership above
     _ = len(fold_counts)
+    _ = len(slot[].fold_train)  # a listed or split cv's rows, read through the fits and the ownership above
     slot[].cal_iso = res.isotonic.copy()
     slot[].cal_a = res.a.copy()
     slot[].cal_b = res.b.copy()
