@@ -1601,6 +1601,16 @@ ADAPTED_MODULES = {
 #: weight column through the fold planes, the leaves, the starting average
 #: and the learn loss); class weights with RMSE refuse on both columns in
 #: `train`'s words.
+#: Lane gbdt-cpu-rest-4-pwl (2026-11-23): the pointwise searcher on every
+#: one-output loss (CrossEntropy, MAE, Quantile, MAPE, LogLinQuantile,
+#: Poisson, Lq, Expectile, Tweedie, Huber beside Logloss and RMSE, Exact
+#: leaves where `train` resolves them), boost_from_average on, off or unset,
+#: every feature_border_type, every detector with an eval set, one-hot and CTR
+#: columns and max_depth 0 (gbdt_oracle_pointwise.mojo); its clause is gone.
+#: Refused on BOTH columns in the device's words, so not CPU gaps: Depthwise
+#: and Lossguide, MultiRMSE, MultiClass and MultiClassOneVsAll (the device
+#: now refuses them too: it searched on the first class's gradient alone),
+#: feature combinations, boost_from_average=True outside its list.
 NO_CPU_PATH = (
     "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
     "tree's level winner is the tensor column itself: the separate CPU "
@@ -1609,12 +1619,6 @@ NO_CPU_PATH = (
     "gradient boosting training with a categorical or one-hot column "
     "outside SymmetricTree with Logloss or RMSE and Plain boosting: the "
     "categorical owners do not implement those combinations",
-
-    "gradient boosting training with the pointwise searcher outside "
-    "Logloss and RMSE (boost_from_average on, GreedyLogSum borders, numeric "
-    "columns, the Iter detector when an eval set is "
-    "given), apart from the grouped losses QueryRMSE, PairLogit and "
-    "YetiRank, which it trains",
 
     "gradient boosting training at a (loss, grow_policy, score_function, "
     "leaf_estimation_method, bootstrap_type) combination outside the ones "

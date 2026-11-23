@@ -167,7 +167,8 @@ def _refuse(what: String) raises:
         " weights on numeric columns outside the multi-output losses,"
         " QueryRMSE and Exact leaves; an eval set and the overfitting"
         " detector with Logloss and RMSE on every tree shape and on the"
-        " Ordered and pointwise-searcher arms; one-hot and CTR"
+        " Ordered arm; the pointwise searcher on every one-output loss with"
+        " its options and columns; one-hot and CTR"
         " categorical columns under SymmetricTree with Logloss or RMSE), see"
         " gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it"
     )
