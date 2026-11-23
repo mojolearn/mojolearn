@@ -124,7 +124,17 @@ def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, fit_pa
                context: PythonObject) raises -> PythonObject:
     """RFE's `_clone(estimator).fit(x, y)`: the clone built from the
     constructor schema and fitted by the plan's compiled fit (no Python
-    get_params, constructor or fit). Returns the fitted clone."""
+    get_params, constructor or fit). Returns the fitted clone.
+
+    WHO STILL COMES HERE (lane mf-del5b audit of mf-meta5b's list; each keeps the estimator's own compiled
+    fit door because only that door has the words or the route): a class with no serving member (no mark,
+    e.g. OrderedRMSE, whose fit needs `permutation`); a member refusal with no fit parameters (THE FALLBACK
+    RULE: the door re-fits and raises the estimator's own words, or answers); a one-class or encoder-refused
+    target (each family's fit door has its own one-class words); a class_weight table the member cannot
+    complete; sample weights for a kind without MEMBER_CAN_SAMPLE_WEIGHT; a non-bool feature_importances; a
+    cat_features index outside X; a tree or forest leaf's feature_importances_ under a META step (its
+    importance word is the nested plan's: `rfe_dotted_path`); X held as DeviceRows (a fold's rows: the device
+    gather route). Each is a refusal or a route the member path does not carry, not a duplicate body."""
     var est = prep_estimator_clone(estimator, context)
     _ = prep_estimator_call(est, "fit", Python.tuple(x, y), context, fit_params)
     return est

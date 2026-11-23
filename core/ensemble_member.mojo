@@ -190,7 +190,11 @@ nested member (it owns its rows); sample weights ride every fit (RFE.fit's
 `sample_weight`). PREDICT / PREDICT_PROBA / DECISION / SCORE: the kept columns
 of X gathered, then the final estimator's own call; TRANSFORM writes the
 gathered block. EXPORT `META_BLOCK_NESTED` (the final estimator) and
-`META_BLOCK_RFE` (support, ranking, kept columns); IMPORT the same two.
+`META_BLOCK_RFE` (support, ranking, kept columns); IMPORT the same two. A
+DOTTED importance_getter (lane mf-del5b): the one nested plan is a META
+estimator's (a search, an RFE, a stack: admitted by the boundary's work-list),
+`META_RFE_BLOCK` is `META_BLOCK_FORWARD` and the entry carries the forwarded
+path's hops (`meta_plan_rfe`), which `_fit_rfe` hands to the rounds' plan.
 
 STACKING, lane mf-meta3b: a user's cv INDEX LIST is read by the UNPACK into
 the entry's typed folds (`fold_train` / `fold_test`, int32 row numbers) and
