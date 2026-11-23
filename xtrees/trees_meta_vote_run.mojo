@@ -135,12 +135,10 @@ def _member_f32(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]]) ->
     return Int(keep[len(keep) - 1].unsafe_ptr())
 
 
-def _member_codes(m: VoteMember, rows: VoteRows, mut keep: List[List[Int32]]) -> Int:
-    """The member's int32 class codes: its door's codes, or one native call
-    (int64 codes narrowed once, as the door's int32 cast narrowed them). 0
-    when the native call refused."""
-    if not m.native:
-        return m.address
+def _member_codes_into(m: VoteMember, rows: VoteRows, dst: Int) -> Bool:
+    """One native member's int32 class codes written at `dst` (`rows.n`
+    words; int64 codes narrowed once, as the door's int32 cast narrowed
+    them). False when the native call refused."""
     try:
         var plan = _PlanP(unsafe_from_address=m.plan)
         var call = member_call_of(plan[], m.state)
@@ -149,18 +147,28 @@ def _member_codes(m: VoteMember, rows: VoteRows, mut keep: List[List[Int32]]) ->
             var wide = List[Int64](unsafe_uninit_length=rows.n)
             call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, 1, MEMBER_I64)
             _ = member_call(plan[].member, m.operation, call)
-            var codes = List[Int32](unsafe_uninit_length=rows.n)
+            var codes = _I32P(unsafe_from_address=dst)
             for i in range(rows.n):  # small-loop(one narrowing pass over one member's codes, as the door's cast made)
                 codes[i] = Int32(wide[i])
             _ = wide^
-            keep.append(codes^)
         else:
-            var codes = List[Int32](unsafe_uninit_length=rows.n)
-            call.dst = MemberMatrix(Int(codes.unsafe_ptr()), rows.n, 1, MEMBER_I32)
+            call.dst = MemberMatrix(dst, rows.n, 1, MEMBER_I32)
             _ = member_call(plan[].member, m.operation, call)
-            keep.append(codes^)
     except:
+        return False
+    return True
+
+
+def _member_codes(m: VoteMember, rows: VoteRows, mut keep: List[List[Int32]]) -> Int:
+    """The member's int32 class codes: its door's codes, or one native call
+    into storage `keep` owns (`_member_codes_into`). 0 when the native call
+    refused."""
+    if not m.native:
+        return m.address
+    var codes = List[Int32](unsafe_uninit_length=rows.n)
+    if not _member_codes_into(m, rows, Int(codes.unsafe_ptr())):
         return 0
+    keep.append(codes^)
     return Int(keep[len(keep) - 1].unsafe_ptr())
 
 
@@ -314,4 +322,38 @@ def ovr_assemble_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
         floats.append(Float64(at[j]))
     _ = xt_ovr_assemble(glue, addrs, ints, floats)
     _ = keep^  # the native blocks are read through the program above
+    return VOTE_ALL_ANSWERED
+
+
+def multioutput_codes_run(rows: VoteRows, members: List[VoteMember], dst: List[Int], start: Int) -> Int:
+    """`MultiOutputClassifier` predict and score before the decode (lane
+    bm-meta-3, 2026-11-23): member j's int32 codes into output j's fitted
+    classes, written at `dst[j]` (`rows.n` words) for members `start` ..
+    m-1. A door member's codes are already its column (`dst[j]` is its
+    block's address): nothing is written. The members run one after the
+    other, each call splitting its own rows over the cores, as before. A
+    native member that refuses is returned by index (outputs before it are
+    final; the caller asks its door and runs again from it)."""
+    for j in range(start, len(members)):  # driver-loop: over members (outputs)
+        if members[j].native and not _member_codes_into(members[j], rows, dst[j]):
+            return j
+    return VOTE_ALL_ANSWERED
+
+
+def multioutput_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], ks: List[Int],
+                          accs: List[Int], start: Int) raises -> Int:
+    """`MultiOutputClassifier.predict_proba` (lane bm-meta-3, 2026-11-23):
+    member j's probabilities placed at their class columns of output j's
+    float64 `rows.n x ks[j]` zero block `accs[j]` (one `xt_accumulate_cols`,
+    weight 1), member after member from `start`, the same op over the same
+    blocks in the same order as the door before this split: no bits change.
+    A native member that refuses is returned by index before its block is
+    touched (blocks before it are final)."""
+    var keep = List[List[Float32]]()
+    for j in range(start, len(members)):  # driver-loop: over members (outputs)
+        var block = _member_f32(members[j], rows, keep)
+        if block == 0:
+            return j
+        _ = xt_accumulate_cols(glue, accs[j], block, members[j].class_cols, rows.n, ks[j], members[j].cols, 1.0)
+    _ = keep^  # the native blocks are read through the accumulations above
     return VOTE_ALL_ANSWERED

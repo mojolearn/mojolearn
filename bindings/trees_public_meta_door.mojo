@@ -93,7 +93,7 @@ from bindings.member_set_door import (
 )
 from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, vote_regress_run, vote_transform_run,
-    ovr_assemble_run,
+    ovr_assemble_run, multioutput_codes_run, multioutput_proba_run,
 )
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
@@ -1193,16 +1193,20 @@ comptime _VOTE_BLOCK = 3      # a transform block: float32 (n, c) predictions
 struct _VoteUnpack(Movable):
     """What `_vote_unpack` read: the typed members, the held native states
     they point into (closed by `_vote_close`; every one may run with no
-    GIL), and the Python owners of the door blocks."""
+    GIL), and the Python owners of the door blocks. `blocks`: per member,
+    the Python object of its door block (its codes Array for a hard vote),
+    None for a native member."""
     var members: List[VoteMember]
     var opened: List[MemberHeldCall]
     var keep: PythonObject
+    var blocks: PythonObject
     var native: Int
 
     def __init__(out self) raises:
         self.members = List[VoteMember]()
         self.opened = List[MemberHeldCall]()
         self.keep = Python.list()
+        self.blocks = Python.list()
         self.native = 0
 
 
@@ -1290,6 +1294,7 @@ def _vote_unpack_members(mut got: _VoteUnpack, members: PythonObject, Xa: Python
                 finally:
                     member_held_close(opened)
                 got.members.append(_vote_door(e, kind, Xa, n, weight, got.keep, context, answer))
+                _ = py_call(got.blocks.append, got.keep[len(got.keep) - 1])
                 continue
             if opened.served:
                 var class_cols = 0
@@ -1303,8 +1308,10 @@ def _vote_unpack_members(mut got: _VoteUnpack, members: PythonObject, Xa: Python
                                               opened.dtype, class_cols, weight))
                 got.native += 1
                 got.opened.append(opened^)
+                _ = py_call(got.blocks.append, PythonObject(None))
                 continue
         got.members.append(_vote_door(e, kind, Xa, n, weight, got.keep, context, PythonObject(None)))
+        _ = py_call(got.blocks.append, got.keep[len(got.keep) - 1])
 
 
 def _vote_close(mut got: _VoteUnpack):
@@ -2067,12 +2074,49 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
 
 def _multioutput_member_codes(model: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
     """Each output's member codes (int32, into that output's `classes_[j]`;
-    the members were fitted on the column codes): `_member_label_codes`."""
+    the members were fitted on the column codes), lane bm-meta-3: UNPACK
+    `_vote_unpack` (kind _VOTE_HARD: per member its held native state, else
+    its door's codes, `_member_label_codes`'s routes in its order), RUN
+    `multioutput_codes_run` (no Python; the GIL released when a member is
+    native) into one int32 Array per output allocated here (PACK), which the
+    native call writes directly, as `member_held_run`'s new Array was."""
     var nk = trees_keys()
     var members = _attr(model, nk[].k_estimators_, Python.list())
+    var got = _vote_unpack(model, Xa, _VOTE_HARD, True, PythonObject(None), context)
+    var n = _rows(Xa)
     var out = Python.list()
-    for j in range(len(members)):  # driver-loop: over members
-        _ = py_call(out.append, _member_label_codes(members[j], Xa, context))
+    var dst = List[Int](capacity=len(got.members))
+    try:
+        for j in range(len(got.members)):  # driver-loop: over members (outputs)
+            var col = got.blocks[j]
+            if got.members[j].native:
+                col = admitted_vector(n, "<i4", context)
+            _ = py_call(out.append, col)
+            dst.append(trees_address(col))
+        var rows = VoteRows(trees_address(Xa), n, _cols(Xa))
+        var start = 0
+        while True:  # driver-loop: over refusals (at most one round per native member)
+            var refused = VOTE_ALL_ANSWERED
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = multioutput_codes_run(rows, got.members, dst, start)
+            else:
+                refused = multioutput_codes_run(rows, got.members, dst, start)
+            if refused == VOTE_ALL_ANSWERED:
+                break
+            # The fallback rule: the refusing member's door raises its words.
+            got.members[refused] = _vote_door(members[refused], _VOTE_HARD, Xa, n, 1.0, got.keep, context,
+                                              PythonObject(None))
+            py_setitem(out, PythonObject(refused), got.keep[len(got.keep) - 1])
+            dst[refused] = got.members[refused].address
+            got.native -= 1
+            start = refused + 1
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = Xa  # the rows are read through RUN
+    _ = got.keep  # the door blocks are read through RUN
     return out
 
 
@@ -2158,18 +2202,54 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
 
 
 def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`MultiOutputClassifier.predict_proba` (lane bm-meta-3): UNPACK
+    `_vote_unpack` (kind _VOTE_SOFT: per member its held native state, else
+    its door's float32 probabilities and class columns, `_member_scores`'s
+    routes), RUN `multioutput_proba_run` into one float64 zero block per
+    output allocated here, PACK the (n, k_j) views of them."""
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
     var nk = trees_keys()
     var members = _attr(model, nk[].k_estimators_, Python.list())
     var classes = _attr(model, nk[].k_classes_, Python.list())
+    var got = _vote_unpack(model, Xa, _VOTE_SOFT, True, PythonObject(None), context)
+    var blocks = Python.list()
+    var ks = List[Int](capacity=len(got.members))
+    var accs = List[Int](capacity=len(got.members))
+    try:
+        for j in range(len(got.members)):  # driver-loop: over members (outputs)
+            var k = len(classes[j])
+            var acc = _zeros(n * k, context)
+            _ = py_call(blocks.append, acc)
+            ks.append(k)
+            accs.append(trees_address(acc))
+        var rows = VoteRows(trees_address(Xa), n, _cols(Xa))
+        var glue = _xr(xt)
+        var start = 0
+        while True:  # driver-loop: over refusals (at most one round per native member)
+            var refused = VOTE_ALL_ANSWERED
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = multioutput_proba_run(glue, rows, got.members, ks, accs, start)
+            else:
+                refused = multioutput_proba_run(glue, rows, got.members, ks, accs, start)
+            if refused == VOTE_ALL_ANSWERED:
+                break
+            # The fallback rule: the refusing member's door raises its words.
+            got.members[refused] = _vote_door(members[refused], _VOTE_SOFT, Xa, n, 1.0, got.keep, context,
+                                              PythonObject(None))
+            got.native -= 1
+            start = refused
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = Xa  # the rows are read through RUN
+    _ = got.keep  # the door blocks are read through RUN
     var out = Python.list()
-    for j in range(len(members)):  # driver-loop: over members
-        var k = len(classes[j])
-        var acc = _zeros(n * k, context)
-        _acc_cols_w(xt, acc, _member_scores(members[j], "predict_proba", Xa, context), _sub_cols(members[j], context), n, k, 1.0, context)
-        _ = py_call(out.append, trees_reshape(acc, Python.tuple(n, k), context))
+    for j in range(len(blocks)):  # driver-loop: over members (outputs)
+        _ = py_call(out.append, trees_reshape(blocks[j], Python.tuple(n, ks[j]), context))
     return out
 
 
