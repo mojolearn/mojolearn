@@ -543,7 +543,7 @@ def test_nn_optim_steps() raises:
     host_parallelize(task, n)
     for u in range(n):  # small-loop(failure flags)
         if failed[u] != 0:
-            _fail("step tc " + String(u) + " failed on the host column")
+            _fail("step case " + String(u) + " failed on the host column")
     comptime if not CPU_COLUMN_BUILD:
         for k in range(n):  # driver-loop: over the step cases on the one device
             var dev = DeviceExec()
@@ -577,7 +577,7 @@ def test_nn_optim_fits() raises:
     host_parallelize(task, n)
     for u in range(n):  # small-loop(failure flags)
         if failed[u] != 0:
-            _fail("fit tc " + String(u) + " failed on the host column")
+            _fail("fit case " + String(u) + " failed on the host column")
     comptime if not CPU_COLUMN_BUILD:
         for k in range(n):  # driver-loop: over the fit cases on the one device
             var dev = DeviceExec()
