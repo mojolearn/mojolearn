@@ -54,6 +54,10 @@ EXISTING backward rule; no kernel is written or edited here:
         f eps)                   running_mean, running_var; the running statistics are
                                  state the optimizer never updates (autograd/model.mojo
                                  model_fit_state restores them around each step)
+  56-66 conv_transpose1d/2d,     autograd/nn_conv_blocks.mojo (lane nn-conv): the       NnConvRules
+        adaptive pools, global   transposed convolutions are the tape convolution's    560..564 and
+        max pool, pads,          adjoint launches; pools and pads x_cnn's bodies;      ImportRules /
+        upsample, pixel shuffle  constant pad imp_pad; global max rankn_max            RankNRules
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -96,6 +100,13 @@ from autograd.ssm_ops import ssm_m1_states_supported
 from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
+# nn-conv begin
+# lane nn-conv (2026-11-23): codes 56..66, the convolution and shape layers (autograd/nn_conv_blocks.mojo)
+from autograd.nn_conv_blocks import (
+    is_nn_conv, nnc_shape, nnc_param_sizes, nnc_param_names, nnc_init_bounds, nnc_forward, nnc_tensor_dims,
+)
+from autograd.nn_conv import NnConvRules
+# nn-conv end
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -134,6 +145,10 @@ comptime _ARGS = 6
 
 
 def is_block(code: Int) -> Bool:
+    # nn-conv begin
+    if is_nn_conv(code):
+        return True
+    # nn-conv end
     return code >= BLOCK_FIRST and code <= BLOCK_LAST
 
 
@@ -317,6 +332,10 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         hd[cur.ndim - 1] = a0
         return rn_shape(hd, name + " (LMHead)")
     # end lm_head
+    # nn-conv begin
+    if is_nn_conv(code):
+        return nnc_shape(code, xargs, i, f, cur, name)
+    # nn-conv end
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -368,6 +387,10 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(_x(xargs, i, 0) * cur.cols())  # weight (vocab, features)
     # end lm_head
+    # nn-conv begin
+    elif is_nn_conv(code):
+        return nnc_param_sizes(code, xargs, i, cur)
+    # nn-conv end
     return out^
 
 
@@ -405,6 +428,10 @@ def block_param_names(code: Int) -> List[String]:
     elif code == LAYER_LM_HEAD:
         out.append(".weight")
     # end lm_head
+    # nn-conv begin
+    elif is_nn_conv(code):
+        return nnc_param_names(code)
+    # nn-conv end
     return out^
 
 
@@ -466,6 +493,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(ftz(identical_div(Float32(1), identical_sqrt(Float32(cur.cols())))))
     # end lm_head
+    # nn-conv begin
+    elif is_nn_conv(code):
+        return nnc_init_bounds(code, xargs, i, cur)
+    # nn-conv end
     return out^
 
 
@@ -685,6 +716,10 @@ def block_forward[E: Exec](
         var w = _p(tape, ex, P, Gr, off, a0, cur.cols(), train)
         return graph_transformer_linear(tape, ex, h, w)
     # end lm_head
+    # nn-conv begin
+    if is_nn_conv(code):
+        return nnc_forward(tape, ex, code, xargs, i, f, cur, P, Gr, off, h, train)
+    # nn-conv end
     raise Error("model: unknown block code " + String(code))
 
 
@@ -725,6 +760,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             return True
         if Self._ssm(tag):
             return SsmRules().supports(tag)
+        # nn-conv begin
+        if NnConvRules.owns(tag):
+            return NnConvRules().supports(tag)
+        # nn-conv end
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -734,6 +773,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             return StepOpRules(0).zeroed_destination(tag, saved, edge)
         if Self._ssm(tag):
             return SsmRules().zeroed_destination(tag, saved, edge)
+        # nn-conv begin
+        if NnConvRules.owns(tag):
+            return NnConvRules().zeroed_destination(tag, saved, edge)
+        # nn-conv end
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -743,6 +786,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             return StepOpRules(0).writes_total(tag, saved, edge)
         if Self._ssm(tag):
             return SsmRules().writes_total(tag, saved, edge)
+        # nn-conv begin
+        if NnConvRules.owns(tag):
+            return NnConvRules().writes_total(tag, saved, edge)
+        # nn-conv end
         return ImportRules().writes_total(tag, saved, edge)
 
     def apply[E: Exec](
@@ -755,6 +802,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             StepOpRules(0).apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         elif Self._ssm(tag):
             SsmRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+        # nn-conv begin
+        elif NnConvRules.owns(tag):
+            NnConvRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+        # nn-conv end
         else:
             ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
 
@@ -806,6 +857,10 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
         out.append(_x(xargs, i, 0))
         out.append(cur.cols())
     # end lm_head
+    # nn-conv begin
+    elif is_nn_conv(code):
+        return nnc_tensor_dims(code, xargs, i, cur, slot)
+    # nn-conv end
     return out^
 
 

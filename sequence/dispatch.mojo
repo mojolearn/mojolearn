@@ -199,6 +199,10 @@ from autograd.transformer_primitives_ops import OP_TFP_FIRST, OP_TFP_LAST, apply
 from autograd.ssm_ops import OP_SSM_FIRST, OP_SSM_LAST, apply_ssm
 # lane fix-d3-executor-loops: the program loop's control ops (autograd/program_loop.mojo), 1800..1809
 from autograd.program_loop import OP_LOOP_FIRST, OP_LOOP_LAST, apply_loop
+# nn-conv begin
+# lane nn-conv: the convolution and shape layers of Sequential (autograd/nn_conv_ops.mojo), 5560..5579
+from autograd.nn_conv_ops import OP_NNC_FIRST, OP_NNC_LAST, apply_nn_conv
+# nn-conv end
 
 
 @always_inline
@@ -759,3 +763,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_one_hot(t, a)
     elif OP == OP_PROBA2:
         op_proba2(t, a)
+    # nn-conv begin
+    elif OP >= OP_NNC_FIRST and OP <= OP_NNC_LAST:
+        comptime assert OP_NNC_FIRST > OP_SSM_LAST and OP_NNC_FIRST > OP_TFP_LAST and OP_NNC_FIRST > OP_IMP_LAST, "nn-conv opcode range overlaps another family"
+        apply_nn_conv[OP](t, a)
+    # nn-conv end

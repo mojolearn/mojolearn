@@ -45,6 +45,9 @@ from autograd.model_blocks import (
 )
 # lm_head (lane neural-blocks-3-lm): the token cross-entropy's head layer and its fused loss
 from autograd.model_blocks import LAYER_LM_HEAD, block_lm_head_loss
+# nn-conv begin
+from autograd.nn_conv_blocks import nnc_is_projection
+# nn-conv end
 from autograd.ssm_ops import OP_SSM_S4D_INIT
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
@@ -564,6 +567,11 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
             # lm_head (lane neural-blocks-3-lm): the LM head is the model's projection layer
             if k == LAYER_LM_HEAD:
                 has_linear = True
+            # nn-conv begin
+            # a transposed convolution is a learned projection (a convolutional autoencoder's output layer)
+            if nnc_is_projection(k):
+                has_linear = True
+            # nn-conv end
             var sizes = block_param_sizes(k, la, 0, cur)
             if len(sizes) > 0:
                 p_off = off
