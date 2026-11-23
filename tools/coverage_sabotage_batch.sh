@@ -78,18 +78,20 @@ natives > "$OUT/clean_natives.txt"
 snap > "$OUT/clean_natives.sha"
 tar -cf "$OUT/clean_natives.tar" -T "$OUT/clean_natives.txt"
 
-run_cols() { # $1 = clean | sab | restored
-    local tag=$1 rc
+run_cols() { # $1 = clean | sab | restored. The device and CPU columns are independent processes (the CPU
+    # column never touches the GPU), so they run at once.
+    local tag=$1
     case ",$COLUMNS," in *,device,*)
-        MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
+        ( MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
             --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --json "$OUT/${tag}_device.json" \
-            > "$OUT/${tag}_device.log" 2>&1; rc=$?; log "RUN $tag device rc=$rc";;
+            > "$OUT/${tag}_device.log" 2>&1; log "RUN $tag device rc=$?" ) &;;
     esac
     case ",$COLUMNS," in *,cpu,*)
-        MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
+        ( MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" "${PY[@]}" tools/identity_break.py \
             --lanes "$LANES" --fixtures "$FIXTURES" --repeats 1 --json "$OUT/${tag}_cpu.json" \
-            > "$OUT/${tag}_cpu.log" 2>&1; rc=$?; log "RUN $tag cpu rc=$rc";;
+            > "$OUT/${tag}_cpu.log" 2>&1; log "RUN $tag cpu rc=$?" ) &;;
     esac
+    wait
 }
 
 APPLIED=0
@@ -112,19 +114,38 @@ if ! git apply $(echo "$PATCHES" | tr ',' ' '); then
     log "APPLY FAILED"; exit 3
 fi
 APPLIED=1
-brc=0
-for b in ${BUILDS//,/ }; do
+# PARALLEL PLAN (AGENTS.md hard rules; lane sabotage-gpu, 2026-11-23: this loop was serial at
+# MOJOLEARN_COMPILE_JOBS=1, one core of a rented box busy): the batch's binding builds are independent
+# (each writes its own .so), so they all start at once and share the allocation's cores
+# (SAB_CORES, default alloc_cores of tools/ops/box_cores_lib.sh: the cgroup quota, not the host's CPUs),
+# each with MOJOLEARN_COMPILE_JOBS = cores / builds (at least 1).
+. "$ROOT/tools/ops/box_cores_lib.sh"
+CORES=${SAB_CORES:-$(alloc_cores)}
+NB=$(echo "$BUILDS" | tr ',' '\n' | grep -c .)
+CJ=$(( CORES / (NB > 0 ? NB : 1) )); [ "$CJ" -lt 1 ] && CJ=1
+log "BUILDS $NB at once, MOJOLEARN_COMPILE_JOBS=$CJ each, cores $CORES"
+one_build() {
+    local b=$1 t rc
     t=$(date +%s)
     if [[ $b == *_host ]]; then
-        env MOJOLEARN_COMPILE_JOBS=1 MOJOLEARN_TARGET_COLUMN=cpu "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
+        env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_TARGET_COLUMN=cpu "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
     else
-        env MOJOLEARN_COMPILE_JOBS=1 MOJOLEARN_NUMERIC_MODE=identical "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
+        env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_NUMERIC_MODE=identical "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
     fi
+    echo "$rc" > "$OUT/build_$b.rc"
     log "BUILD $b rc=$rc secs=$(( $(date +%s) - t ))"
-    if [ $rc -ne 0 ]; then
+}
+bsampler=$(busy_sampler "$OUT/busy_cores_build.txt")
+for b in ${BUILDS//,/ }; do one_build "$b" & done
+wait
+kill "$bsampler" 2>/dev/null
+log "BUSY build: $(busy_of "$OUT/busy_cores_build.txt") of $CORES cores"
+brc=0
+for b in ${BUILDS//,/ }; do
+    rc=$(cat "$OUT/build_$b.rc" 2>/dev/null || echo 99)
+    if [ "$rc" != 0 ]; then
         brc=$rc
         grep -m 3 -B 2 -A 8 -i 'error' "$OUT/build_$b.log" | cut -c1-240 | head -30 >> "$OUT/summary.txt"
-        break
     fi
 done
 [ $brc = 0 ] && run_cols sab

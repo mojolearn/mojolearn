@@ -1215,6 +1215,13 @@ def _call(index, scope, node, facts):
                 facts.unresolved += 1
                 facts.unresolved_names.append(f"{node.lineno}:unresolved decorator on {name}")
                 return
+    if not hasattr(obj, "mod"):
+        # Lane sabotage-gpu (2026-11-23): `verify_coverage_audit.py --all` died here with "'str' object has no
+        # attribute 'mod'" after 18 minutes: a target resolved to a bare name (kind {kind!r}), not a module object.
+        # It is an unresolved call, counted and named like the others, never a crash of the whole audit.
+        facts.unresolved += 1
+        facts.unresolved_names.append(f"{node.lineno}:unresolved {kind} target {str(obj)[:60]}")
+        return
     shell = obj.mod.short in SHELL_MODULES and obj.mod.name.count(".") == 1
     if kind == "func" and (obj.mod.short, obj.qual) in SHELL_FUNCTIONS and obj.mod.name.count(".") == 1:
         shell = True
