@@ -47,17 +47,18 @@ from providers.python.family_public_lifecycle_run import FamilyLifecycle
 from bindings.operation_names_kmeans import (
     KMEANS_OPN_FAMILY_KMEANS_FIT, KMEANS_OPN_FAMILY_KMEANS_FIT_PREDICT, KMEANS_OPN_FAMILY_KMEANS_FIT_TRANSFORM,
     KMEANS_OPN_FAMILY_KMEANS_PREDICT, KMEANS_OPN_FAMILY_KMEANS_TRANSFORM, KMEANS_OPN_FAMILY_KMEANS_GETSTATE,
-    KMEANS_OPN_FAMILY_KMEANS_SETSTATE)
+    KMEANS_OPN_FAMILY_KMEANS_SETSTATE, KMEANS_OPN_FAMILY_KMEANS_SCORE)
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from bindings.py_optional import py_or_none, py_present
 from core.kmeans_native_api import (
-    KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest,
+    KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest, KMeansScoreRequest,
     KMEANS_CAP_JOINT, KMEANS_CAP_RESIDENT, KMEANS_CAP_FOLD, KMEANS_CAP_HOST,
 )
 from bindings.kmeans_descriptor_boundary_door import (
     kmeans_connection,
     kmeans_run_fit,
     kmeans_run_query,
+    kmeans_run_score,
     kmeans_integer,
 )
 from x_cluster.kmeans_descriptor_boundary_run import kmeans_capabilities
@@ -227,9 +228,25 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     return labels
 
 
+comptime _QUERY_PREDICT = 0
+comptime _QUERY_TRANSFORM = 1
+comptime _QUERY_SCORE = 2
+
+
 def _kmeans_inference(model: PythonObject, binding: PythonObject, source: PythonObject, transform: Bool,
                       context: PythonObject, admitted: Bool = False) raises -> PythonObject:
-    """`KMeans.predict` (labels) or `KMeans.transform` (distances).
+    """`KMeans.predict` (labels) or `KMeans.transform` (distances)."""
+    return _kmeans_query(model, binding, source, _QUERY_TRANSFORM if transform else _QUERY_PREDICT,
+                         PythonObject(None), context, admitted)
+
+
+def _kmeans_query(model: PythonObject, binding: PythonObject, source: PythonObject, query: Int,
+                  sample_weight: PythonObject, context: PythonObject, admitted: Bool) raises -> PythonObject:
+    """`KMeans.predict` (labels), `KMeans.transform` (distances) or
+    `KMeans.score(X, sample_weight)` (lane mf-kmeans5: scikit-learn's
+    `-inertia` of X on `cluster_centers_`, a Python float; the image's
+    KMEANS_SCORE op, the fit's post-loop cost, on the same centers homes as
+    the queries; `sample_weight` admitted as the fit admits it).
 
     Perf (lane perf2-cluster): with `admitted`, `source` is the snapshot the
     public lifecycle admitted and cast (a 2-D, non-empty float32 C-order
@@ -260,7 +277,10 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
         x = _kmeans_x(source, context)
     var connection = kmeans_connection(binding)
     var capabilities = kmeans_capabilities(connection)
-    var fold_query = x.store.active() and (capabilities & KMEANS_CAP_FOLD) != 0
+    # A weighted score takes the host rows, as a weighted fit does (the fold
+    # entries take unit weights).
+    var fold_query = (x.store.active() and (capabilities & KMEANS_CAP_FOLD) != 0
+                      and not (query == _QUERY_SCORE and sample_weight is not None))
     if x.store.active() and not fold_query:
         x = _kmeans_host_x(source, x, context)
     var n = x.rows
@@ -298,8 +318,15 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
         c = admit_family(centers, 2, "cluster_centers_", context, finite=True).array
         k = Int(py=c.value().shape[0])
         resident = py_present(_kmeans_resident(model, binding, centers, c.value(), k, d, connection, context))
-    var destination: PythonObject
-    if transform:
+    var transform = query == _QUERY_TRANSFORM
+    var destination = PythonObject(None)
+    var weights = PythonObject(None)
+    var n_weights = 0
+    if query == _QUERY_SCORE:
+        if sample_weight is not None:
+            weights = admit_family_weights_array(sample_weight, n, True, context)
+            n_weights = n
+    elif transform:
         destination = family_array(Python.tuple(n, k), "<f4", context)
     else:
         destination = family_array(Python.tuple(n), "<i4", context)
@@ -311,6 +338,25 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
             c = admit_family(centers, 2, "cluster_centers_", context, finite=True).array
         fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id)
     var handle = kmeans_owner_handle(resident.value()) if Bool(resident) and not fold_query else -1
+    if query == _QUERY_SCORE:
+        var score_request = KMeansScoreRequest(x.address,
+            Int(py=classical_address(c.value())) if Bool(c) else 0,
+            Int(py=classical_address(weights)) if n_weights != 0 else 0, n, d, k, n_weights, metric_code,
+            not x.finite, handle, fold)
+        var scored = kmeans_run_score(connection, score_request)
+        # In-flight scores pin the native owner and the admitted words, as a query.
+        _ = resident
+        _ = centers
+        _ = c
+        _ = weights
+        if fold_query:
+            door_rows_refuse(scored.finite, scored.range_error, _KMEANS_EST, x.store.base_rows)
+        elif not x.finite:
+            admitted_finite_refuse(scored.finite, _KMEANS_EST)
+        _ = x^
+        _ = c^
+        _ = weights^
+        return PythonObject(-scored.inertia)
     var request = KMeansQueryRequest(x.address,
         Int(py=classical_address(c.value())) if Bool(c) else 0,
         Int(py=classical_address(destination)), n, d, k, metric_code,
@@ -357,6 +403,8 @@ def _kmeans_lifecycle(operation: Int) -> FamilyLifecycle:
         return FamilyLifecycle("predict", device_x=True)
     if operation == KMEANS_OPN_FAMILY_KMEANS_TRANSFORM:
         return FamilyLifecycle("transform", device_x=True)
+    if operation == KMEANS_OPN_FAMILY_KMEANS_SCORE:
+        return FamilyLifecycle("score", device_x=True)
     return FamilyLifecycle("")
 
 
@@ -385,6 +433,9 @@ def _kmeans_operation_route(model: PythonObject, operation: Int, args: PythonObj
         return _kmeans_inference(model, args[0], args[1], False, context, admitted)
     if operation == KMEANS_OPN_FAMILY_KMEANS_TRANSFORM:
         return _kmeans_inference(model, args[0], args[1], True, context, admitted)
+    if operation == KMEANS_OPN_FAMILY_KMEANS_SCORE:
+        # args: (binding, X, sample_weight); KMeans.score's y is not read.
+        return _kmeans_query(model, args[0], args[1], _QUERY_SCORE, args[2], context, admitted)
     raise Error("unknown KMeans operation code " + String(operation))
 
 

@@ -2936,7 +2936,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         meta_plan_search_labels(Int(owner.plan.params[1]), cluster, label_words^)
         if metrics_binding is not None:
             _ = py_call(owner.pins.append, metrics_binding)
-    if len(codes) > 0:
+    # A classifier scored by its members (scoring None) needs the route too
+    # (lane mf-kmeans5): a fold that lacks a class is scored as
+    # `ClassifierMixin.score` scores it, by the accuracy program
+    # (core/msel_search_run.mojo); resolved once per admission.
+    if len(codes) > 0 or (classifier and len(keys) == 0 and tool_respond < 0):
         # THE NATIVE METRIC RUN's route (bindings/arena_prog_run.mojo
         # `metric_inputs_run`): the default-mode x_metrics runner, its
         # connection pinned with the plan entry.

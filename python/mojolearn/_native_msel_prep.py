@@ -261,6 +261,7 @@ def connect(context, register, registry):
             'fit': ('family_kmeans_fit', (native, arg(0), keyword('sample_weight'))),
             'predict': ('family_kmeans_predict', (native, arg(0))),
             'transform': ('family_kmeans_transform', (native, arg(0))),
+            'score': ('family_kmeans_score', (native, arg(0), keyword('sample_weight'))),
         })
     if xcluster is not None:
         for cls, fit, predict in ((xcluster.MiniBatchKMeans, 'family_cfa_mbk_fit', 'family_xc_variants_predict'),  # glue: fixed ABI metadata connected once during package import

@@ -343,6 +343,50 @@ class KMeans(_NumericModeMixin):
         """
         return _NATIVE(self, "family_kmeans_transform", (None, X), _NATIVE_CONTEXT)
 
+    # scikit-learn's `KMeans.score`: minus the inertia of `X` on the fitted
+    # centers. The fit's own post-loop cost (cluster/estimator.mojo
+    # `kmeans_score_device`, host `kmeans_oracle.mojo::host_kmeans_score`), so
+    # `score(X_train)` is `-inertia_` exactly for a fit with the same weights.
+    def score(self, X, y=None, sample_weight=None):
+        """Return the opposite of the inertia of `X` on the fitted centers.
+
+        The inertia is the weighted sum of distances (under `metric`) from
+        each row of `X` to its nearest fitted center, the quantity `fit`
+        reports as `inertia_`: on the training rows with the same weights,
+        `score(X)` equals `-inertia_`. Higher is better.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Read as float32. Must have the fitted number of features and no
+            NaN or infinity.
+        y : ignored
+            Present for scikit-learn API compatibility.
+        sample_weight : array-like of shape (n_samples,), default None
+            Weight of each row. None weighs every row equally.
+
+        Returns
+        -------
+        score : float
+
+        Raises
+        ------
+        RuntimeError
+            If the model is not fitted.
+        ValueError
+            For a feature count other than the fit's, a `sample_weight` of
+            the wrong length, or a non-finite value.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+        >>> model = mojolearn.KMeans(n_clusters=4).fit(X)
+        >>> model.score(X) == -model.inertia_
+        True
+        """
+        return _NATIVE(self, "family_kmeans_score", (None, X, sample_weight), _NATIVE_CONTEXT)
+
     def fit_transform(self, X, y=None, sample_weight=None):
         """Fit the model, then return `transform(X)`.
 

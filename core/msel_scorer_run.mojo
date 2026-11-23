@@ -305,6 +305,21 @@ def msel_scorer_positive_kind(row: MselScorer) -> Int:
     return SCORER_POSITIVE_NONE
 
 
+def msel_scorer_labels_from_truth(row: MselScorer) -> Bool:
+    """True for the scorers whose metric takes its label set from the side's
+    `y_true` (labels=None in scikit-learn: roc_auc and its ovr / ovo forms
+    through `np.unique(y_true)`, log_loss through `LabelBinarizer().fit(y_true)`,
+    top_k_accuracy through `np.unique(y_true)`): a fold estimator's own
+    columns are read against THOSE labels (lane mf-kmeans5, the fold that
+    lacks a class)."""
+    return row.family == _F_ROC or row.family == _F_LOG_LOSS or row.family == _F_TOP_K
+
+
+def msel_scorer_log_loss(row: MselScorer) -> Bool:
+    """True for 'neg_log_loss'."""
+    return row.family == _F_LOG_LOSS
+
+
 def msel_scorer_ap(row: MselScorer) -> Bool:
     """True for 'average_precision' (its binary column is the positive's)."""
     return row.family == _F_AP

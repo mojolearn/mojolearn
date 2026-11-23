@@ -4,11 +4,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorError
 from core.kmeans_native_api import (
     KMeansNativeKernels, KMeansFitRequest, KMeansFitResult, KMeansQueryRequest,
-    KMeansQueryResult, kmeans_native_dispatch, KMEANS_CAP_HOST,
+    KMeansQueryResult, KMeansScoreRequest, KMeansScoreResult, kmeans_native_dispatch, KMEANS_CAP_HOST,
 )
 from core.hostptr import f32_ptr, u32_ptr
 from core.host_finite_scan import host_all_finite_f32
-from core.core_host_impl import kmeans_fit_host, kmeans_predict_host, kmeans_transform_host
+from core.core_host_impl import kmeans_fit_host, kmeans_predict_host, kmeans_transform_host, kmeans_score_host
 
 
 struct KMeansHostKernels(KMeansNativeKernels):
@@ -55,6 +55,21 @@ struct KMeansHostKernels(KMeansNativeKernels):
                 kmeans_predict_host(r.source, r.centers, u32_ptr(r.dst),
                     r.rows, r.features, r.clusters, r.metric)
         return KMeansQueryResult(status, 0)
+
+    @staticmethod
+    def score(r: KMeansScoreRequest) raises -> KMeansScoreResult:
+        # KMeans.score (lane mf-kmeans5): the host column of the fit's
+        # post-loop cost (cluster/host/kmeans_oracle.mojo `host_kmeans_score`).
+        if r.fold.active() or r.handle >= 0:
+            raise Error("KMeans native ABI: host score has no resident fold or center handle")
+        var status = 0
+        if r.test_finite and r.rows >= 1 and r.features >= 1:
+            status = 0 if host_all_finite_f32(f32_ptr(r.source), r.rows * r.features) else 1
+        if status != 0:
+            return KMeansScoreResult(0.0, status, 0)
+        var inertia = kmeans_score_host(r.source, r.centers, r.weights, r.rows, r.features, r.clusters,
+            r.weight_count, r.metric)
+        return KMeansScoreResult(inertia, 0, 0)
 
     @staticmethod
     def prepare(centers: Int, clusters: Int, features: Int) raises -> Int:

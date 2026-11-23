@@ -27,6 +27,9 @@ print(km.cluster_centers_.shape, km.inertia_)
 `KMeans` follows cuVS's defaults, so `n_init` is 1 unless you set it. Set the same `n_init` when you
 compare with scikit-learn.
 
+`km.score(X)` is the opposite of the inertia of `X` on the fitted centers, as in scikit-learn. On the
+training rows it equals `-km.inertia_`, and it is the score a search with `scoring=None` ranks by.
+
 ## Density-based clustering
 
 `DBSCAN` and `HDBSCAN` find groups of any shape and label points in no group `-1`.

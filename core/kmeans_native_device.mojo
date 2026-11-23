@@ -4,16 +4,16 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorError
 from core.kmeans_native_api import (
     KMeansNativeKernels, KMeansFitRequest, KMeansFitResult, KMeansQueryRequest,
-    KMeansQueryResult, kmeans_native_dispatch,
+    KMeansQueryResult, KMeansScoreRequest, KMeansScoreResult, kmeans_native_dispatch,
     KMEANS_CAP_JOINT, KMEANS_CAP_RESIDENT, KMEANS_CAP_FOLD,
 )
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_fold_entry_context
-from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
-from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold
+from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform, kmeans_score
+from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold, kmeans_score_fold
 from cluster.resident_centers import (
     kmeans_centers_prepare, kmeans_centers_release,
-    kmeans_predict_resident, kmeans_transform_resident,
+    kmeans_predict_resident, kmeans_transform_resident, kmeans_score_resident,
 )
 
 comptime KMEANS_CONTEXT = "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"
@@ -108,6 +108,36 @@ struct KMeansDeviceKernels(KMeansNativeKernels):
                     center_words, destination, r.metric, finite_word=finite_word)
             ctx.synchronize()
         return KMeansQueryResult(Int(word[0]), 0)
+
+    @staticmethod
+    def score(r: KMeansScoreRequest) raises -> KMeansScoreResult:
+        # KMeans.score (lane mf-kmeans5): the fit's post-loop cost over the
+        # given rows (cluster/estimator.mojo `kmeans_score_device`), on the
+        # same three homes as a query: a resident fold, the resident centers
+        # of a fitted state, or the host words uploaded per call.
+        if r.fold.active():
+            if r.weight_count != 0:
+                raise Error("kmeans_score_fold: a fold score takes unit weights (n_weights 0)")
+            var centers = _f32(r.centers)
+            var ctx = msel_fold_entry_context()
+            var words = kmeans_score_fold(ctx, r.fold.base, r.fold.rows, r.fold.indices,
+                r.rows, r.features, r.clusters, centers, r.metric)
+            return KMeansScoreResult(words[2], Int(words[0]), Int(words[1]))
+        var source = _f32(r.source)
+        var weights = _f32(r.weights) if r.weight_count != 0 else source
+        var word = List[Int32](length=1, fill=0)
+        var finite_word = Int(word.unsafe_ptr()) if r.test_finite else 0
+        var inertia: Float64
+        if r.handle >= 0:
+            inertia = kmeans_score_resident(r.handle, source, r.rows, r.features, r.clusters,
+                weights, r.weight_count, r.metric, finite_word=finite_word)
+        else:
+            var centers = _f32(r.centers)
+            var ctx = process_ctx[KMEANS_CONTEXT]()
+            inertia = kmeans_score(ctx, source, r.rows, r.features, r.clusters, centers,
+                weights, r.weight_count, r.metric, finite_word=finite_word)
+            ctx.synchronize()
+        return KMeansScoreResult(inertia, Int(word[0]), 0)
 
     @staticmethod
     def prepare(centers: Int, clusters: Int, features: Int) raises -> Int:

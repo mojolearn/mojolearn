@@ -15,6 +15,7 @@ from cluster.host.kmeans_oracle import (
     INIT_ARRAY,
     host_kmeans_fit,
     host_kmeans_predict,
+    host_kmeans_score,
     host_kmeans_transform,
     host_kmeans_validate,
 )
@@ -621,6 +622,28 @@ def kmeans_predict_host(
     host_kmeans_predict(x, ns, nf, centroids, nc, mm, labels)
     for i in range(ns):
         lp[i] = labels[i]
+
+
+def kmeans_score_host(
+    x_address: Int, centroids_address: Int, weights_address: Int, ns: Int, nf: Int, nc: Int, nw: Int, mm: Int
+) raises -> Float64:
+    """`KMeans.score`'s inertia on the host (`host_kmeans_score`, lane
+    mf-kmeans5); `nw` 0 for unit weights (`weights_address` not read)."""
+    if ns < 1 or nf < 1 or nc < 1:
+        raise Error(
+            "kmeans_score needs n_samples, n_features and n_clusters >= 1: got "
+            + String(ns)
+            + ", "
+            + String(nf)
+            + ", "
+            + String(nc)
+        )
+    var x = read_f32(x_address, ns * nf)
+    var centroids = read_f32(centroids_address, nc * nf)
+    var weights = List[Float32]()
+    if nw != 0:
+        weights = read_f32(weights_address, nw)
+    return host_kmeans_score(x, ns, nf, centroids, nc, mm, weights, nw)
 
 
 def kmeans_transform_host(
