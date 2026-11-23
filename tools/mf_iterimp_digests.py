@@ -19,8 +19,9 @@ and diff the files: equal lines mean equal bits.
 
 Round 2 (lane mf-iterimp2): base origin/lane/member-fits d3a8864541. The
 estimator grid adds ARDRegression; the fitted posterior attributes the
-lane adds (sigma_, X_offset_, X_scale_) are left out of the main line and
-hashed on a second line `<name> posterior sha256=...` (`none` on the base,
+lane adds (sigma_, X_offset_, X_scale_; BayesianRidge's sigma_ is a lazy
+attribute formed from the fitted factor on its first read) are left out of
+the main line and hashed, read as attributes, on a second line `<name> posterior sha256=...` (`none` on the base,
 which has none), so the main lines compare the old fields. The direct
 BayesianRidge / ARDRegression cases (`bayesreg_*`, `ardreg_*`) hash
 predict, predict(return_std=True) and every fitted field. Expected
@@ -128,10 +129,13 @@ def _bytes(value):
 
 def _fitted(est, posterior=False):
     # every public fitted instance field (name ending in "_"), read from the instance dictionary; the
-    # posterior attributes of round 2 on their own (`posterior`)
+    # posterior attributes of round 2 on their own (`posterior`), read as attributes (BayesianRidge.sigma_ is
+    # formed on its first read, not held in the dictionary)
     fields = vars(est)
+    if posterior:
+        return b"".join(k.encode() + _bytes(getattr(est, k)) for k in POSTERIOR if hasattr(est, k))
     return b"".join(k.encode() + _bytes(fields[k]) for k in sorted(fields)
-                    if k.endswith("_") and not k.startswith("_") and ((k in POSTERIOR) == posterior))
+                    if k.endswith("_") and not k.startswith("_") and k not in POSTERIOR)
 
 
 def _direct(name, kw):

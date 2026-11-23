@@ -462,33 +462,59 @@ def bayes_finish(fw: FP, res: FP, d: Int, fi: Bool, ym: Float32, alpha: Float32,
 # scikit-learn publishes sigma_ and X_offset_ after every fit and its
 # predict(return_std=True) reads them (`_bayes.py` predict:
 # sqrt(sum((X - X_offset_) @ sigma_ * (X - X_offset_), axis=1) + 1 / alpha_)).
-# The cells below are independent (one word each), so the host splits them
-# across its workers and the device across one block's threads; the words do
-# not depend on the split. Layout: x_linear/bayes_words.mojo.
+# BayesianRidge keeps the factor (V, ev) its fit holds and answers from it
+# (sigma_ = V diag(1 / (alpha_ ev + lambda_)) V' is formed only when read);
+# ARDRegression keeps the sigma its fit holds. Every cell is independent
+# (one word each): the host splits them across its workers, the device
+# across one block's threads; the words do not depend on the split. Layout:
+# x_linear/bayes_words.mojo.
 
 
 @always_inline
 def bayes_posterior_cell(fw: FP, res: FP, d: Int, fi: Bool, c: Int):
-    """Cell c of [sigma_ (d*d) | X_offset_ (d)] after `bayes_finish`, at
-    res[d + 4 + c]. sigma_[j, k] = sum_m V[j, m] V[k, m] / (alpha_ ev_m +
-    lambda_), m ascending (V: eigenvector m in column m, ev the clamped
-    eigenvalues `bayes_eig_prep` kept, alpha_ / lambda_ the result words);
-    X_offset_ the fit's column means (fw[0, d)), zeros without an intercept."""
+    """Cell c of [V (d*d) | ev (d) | X_offset_ (d)] after `bayes_finish`, at
+    res[d + 4 + c]: the eigenvectors (eigenvector m in column m) and the
+    clamped eigenvalues `bayes_eig_prep` kept, as the fit holds them (a
+    copy), and the column means (fw[0, d)), zeros without an intercept."""
+    var vv = d + d * d + d
+    var tmp = vv + d * d + 2 * d
     if c < d * d:
-        var j = c // d
-        var k = c - j * d
-        var vv = d + d * d + d
-        var tmp = vv + d * d + 2 * d
-        var alpha = ld(res, d + 1)
-        var lam = ld(res, d + 2)
-        var acc = Float32(0)
-        for m in range(d):
-            var den = fmad(alpha, ld(fw, tmp + m), lam)
-            acc = fa(acc, fd(fm(ld(fw, vv + j * d + m), ld(fw, vv + k * d + m)), den))
-        st(res, d + 4 + c, acc)
+        st(res, d + 4 + c, ld(fw, vv + c))
+    elif c < d * d + d:
+        st(res, d + 4 + c, ld(fw, tmp + c - d * d))
     else:
-        var j = c - d * d
+        var j = c - d * d - d
         st(res, d + 4 + c, ld(fw, j) if fi else Float32(0))
+
+
+@always_inline
+def bayes_sigma_cell(v: FP, ev: FP, d: Int, alpha: Float32, lam: Float32, c: Int) -> Float32:
+    """sigma_[j, k] (c = j * d + k) = sum_m V[j, m] V[k, m] / (alpha_ ev_m +
+    lambda_), m ascending: scikit-learn's posterior covariance from the
+    factor, for the public attribute's first read."""
+    var j = c // d
+    var k = c - j * d
+    var acc = Float32(0)
+    for m in range(d):
+        var den = fmad(alpha, ld(ev, m), lam)
+        acc = fa(acc, fd(fm(ld(v, j * d + m), ld(v, k * d + m)), den))
+    return acc
+
+
+@always_inline
+def bayes_factor_std_row(x: FP, i: Int, d: Int, v: FP, ev: FP, offset: FP, alpha: Float32,
+                         lam: Float32) -> Float32:
+    """BayesianRidge's row i predictive standard deviation from the factor,
+    never forming sigma_: xc = X[i] - X_offset_, t_m = sum_j V[j, m] xc_j
+    (j ascending), sqrt(sum_m t_m^2 / (alpha_ ev_m + lambda_) + 1 / alpha_)
+    (m ascending). The one body of the host workers and the device threads."""
+    var s = Float32(0)
+    for m in range(d):
+        var t = Float32(0)
+        for j in range(d):
+            t = fmad(ld(v, j * d + m), fs(ld(x, i * d + j), ld(offset, j)), t)
+        s = fa(s, fd(fm(t, t), fmad(alpha, ld(ev, m), lam)))
+    return fsqrt(fa(s, fd(Float32(1), alpha)))
 
 
 @always_inline
@@ -516,12 +542,13 @@ def ard_posterior_cell(fw: FP, iw: IP, res: FP, d: Int, dk: Int, fi: Bool, c: In
 
 
 @always_inline
-def bayes_std_row(x: FP, i: Int, d: Int, sigma: FP, dk: Int, offset: FP, cols: IP, has_cols: Bool,
+def ard_std_row(x: FP, i: Int, d: Int, sigma: FP, dk: Int, offset: FP, cols: IP, has_cols: Bool,
                   alpha: Float32) -> Float32:
-    """Row i's predictive standard deviation (scikit-learn `_bayes.py`
-    predict(return_std=True)): xc = (X[i] - X_offset_)[cols] (every column
-    when not `has_cols`), t_k = sum_j xc_j sigma_[j, k] (j ascending),
-    sqrt(sum_k t_k xc_k + 1 / alpha_) (k ascending)."""
+    """ARDRegression's row i predictive standard deviation (scikit-learn
+    `_bayes.py` predict(return_std=True)) from its sigma_: xc = (X[i] -
+    X_offset_)[cols] (every column when not `has_cols`), t_k = sum_j xc_j
+    sigma_[j, k] (j ascending), sqrt(sum_k t_k xc_k + 1 / alpha_) (k
+    ascending)."""
     var s = Float32(0)
     for k in range(dk):
         var ck = ldi(cols, k) if has_cols else k

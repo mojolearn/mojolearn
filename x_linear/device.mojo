@@ -63,7 +63,7 @@ from x_linear.sgd import (
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
 from x_linear.bayes import bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_place, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST, BAYES_EIGH_REFUSAL
-from x_linear.bayes import bayes_posterior_cell, bayes_std_row
+from x_linear.bayes import bayes_posterior_cell, ard_std_row, bayes_factor_std_row
 from x_linear.bayes_words import bayes_out_words
 from x_decomp.eigh_ops import eigh_op_dense
 from core.step_gate import step_gate_open_word
@@ -694,10 +694,10 @@ def bayes_finish_kernel(fw: FP, res: FP, d: Int32, fi: Int32, state: FP, iters: 
 
 def bayes_posterior_kernel(fw: FP, res: FP, d: Int32, fi: Int32, wf: IP, woff: Int32, nonce: Int32):
     """One block after `bayes_finish_kernel` (lane mf-iterimp2): its threads
-    split the d*d + d posterior cells (`bayes_posterior_cell`, each its own
+    split the d*d + 2d posterior cells (`bayes_posterior_cell`, each its own
     chain; the words the host's workers write)."""
     var dd = Int(d)
-    for c in range(Int(thread_idx.x), dd * dd + dd, LINEAR_TPB):
+    for c in range(Int(thread_idx.x), dd * dd + 2 * dd, LINEAR_TPB):
         bayes_posterior_cell(fw, res, dd, fi != 0, c)
     witness_end(wf, woff, nonce)
 
@@ -6235,8 +6235,8 @@ def fit_device(
             )
         var nfin = 1
         if n_out >= bayes_out_words(d):
-            # lane mf-iterimp2: sigma_ and X_offset_ (scikit-learn's posterior
-            # words) from the finished words, one block's threads
+            # lane mf-iterimp2: the posterior factor (V, ev) and X_offset_, an
+            # O(d^2) copy of the words the fit holds, one block's threads
             ctx.enqueue_function[bayes_posterior_kernel](
                 dfw.unsafe_ptr(), dout.unsafe_ptr(), Int32(d), Int32(hip[1]), wit2.p(), Int32(1), nf,
                 grid_dim=1, block_dim=LINEAR_TPB,
@@ -6456,29 +6456,37 @@ def decision_huber_out_device(
     _ = ctx^
 
 
-def bayes_std_kernel(x: FP, sigma: FP, offset: FP, cols: IP, n: Int32, d: Int32, dk: Int32, has_cols: Int32,
-                     alpha: Float32, res: FP):
+def bayes_std_kernel(x: FP, sm: FP, ev: FP, offset: FP, cols: IP, n: Int32, d: Int32, dk: Int32, has_cols: Int32,
+                     form: Int32, alpha: Float32, lam: Float32, res: FP):
     """Thread i: row i's predictive standard deviation (x_linear/bayes.mojo
-    `bayes_std_row`, the host column's words)."""
+    `bayes_factor_std_row` for BayesianRidge's factor, `ard_std_row` for
+    ARDRegression's sigma_: the host column's bodies and words)."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
-        res.unsafe_store(i, bayes_std_row(x, i, Int(d), sigma, Int(dk), offset, cols, has_cols != 0, alpha))
+        if form != 0:
+            res.unsafe_store(i, bayes_factor_std_row(x, i, Int(d), sm, ev, offset, alpha, lam))
+        else:
+            res.unsafe_store(i, ard_std_row(x, i, Int(d), sm, Int(dk), offset, cols, has_cols != 0, alpha))
 
 
-def bayes_std_device(x: FP, sigma: FP, offset: FP, cols_addr: Int, n: Int, d: Int, dk: Int, alpha: Float32,
-                     res: FP) raises:
-    """XL_OP_BAYES_STD on the device (lane mf-iterimp2): X, sigma_, X_offset_
-    and the kept columns up, one thread a row, the n words home."""
+def bayes_std_device(x: FP, sm: FP, ev: FP, offset: FP, cols_addr: Int, n: Int, d: Int, dk: Int, form: Int,
+                     alpha: Float32, lam: Float32, res: FP) raises:
+    """XL_OP_BAYES_STD on the device (lane mf-iterimp2): X, the factor (V,
+    ev) or sigma_, X_offset_ and the kept columns up, one thread a row, the
+    n words home."""
     var ctx = linear_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
     var ds = ctx.enqueue_create_buffer[DType.float32](max(dk * dk, 1))
+    var dev = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var doff = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var dc = ctx.enqueue_create_buffer[DType.int32](max(dk, 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if dk > 0:
-        ctx.enqueue_copy(dst_buf=ds, src_ptr=sigma)
+        ctx.enqueue_copy(dst_buf=ds, src_ptr=sm)
+    if form != 0 and d > 0:
+        ctx.enqueue_copy(dst_buf=dev, src_ptr=ev)
     if d > 0:
         ctx.enqueue_copy(dst_buf=doff, src_ptr=offset)
     var has_cols = 1 if cols_addr != 0 else 0
@@ -6486,13 +6494,15 @@ def bayes_std_device(x: FP, sigma: FP, offset: FP, cols_addr: Int, n: Int, d: In
         ctx.enqueue_copy(dst_buf=dc, src_ptr=IP(unsafe_from_address=cols_addr))
     if n > 0:
         ctx.enqueue_function[bayes_std_kernel](
-            dx.unsafe_ptr(), ds.unsafe_ptr(), doff.unsafe_ptr(), dc.unsafe_ptr(), Int32(n), Int32(d), Int32(dk),
-            Int32(has_cols), alpha, dout.unsafe_ptr(), grid_dim=(n + 127) // 128, block_dim=128,
+            dx.unsafe_ptr(), ds.unsafe_ptr(), dev.unsafe_ptr(), doff.unsafe_ptr(), dc.unsafe_ptr(), Int32(n),
+            Int32(d), Int32(dk), Int32(has_cols), Int32(form), alpha, lam, dout.unsafe_ptr(),
+            grid_dim=(n + 127) // 128, block_dim=128,
         )
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.synchronize()
     _ = dx^
     _ = ds^
+    _ = dev^
     _ = doff^
     _ = dc^
     _ = dout^

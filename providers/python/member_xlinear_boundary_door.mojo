@@ -54,7 +54,7 @@ from core.xlinear_member import (
     XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
     XL_MEMBER_BLOCK_ACTIVE, XL_MEMBER_LASSO_CV, XL_MEMBER_ELASTIC_NET_CV, XL_MEMBER_LOGISTIC_CV, XL_MEMBER_ISOTONIC,
     XL_MEMBER_BLOCK_ALPHAS, XL_MEMBER_BLOCK_MSE_PATH, XL_MEMBER_BLOCK_SCORES, XL_MEMBER_BLOCK_THRESHOLDS,
-    XL_MEMBER_BLOCK_SIGMA, XL_MEMBER_BLOCK_X_OFFSET,
+    XL_MEMBER_BLOCK_SIGMA, XL_MEMBER_BLOCK_X_OFFSET, XL_MEMBER_BLOCK_FACTOR,
 )
 from bindings.classical_labels_door import labels_full_f32
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
@@ -603,16 +603,19 @@ def _xl_isotonic_pack(fields: PythonObject, context: PythonObject, plan: MemberP
 
 def _xl_posterior_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall,
     blocks: Int, cols: Int) raises:
-    """BayesianRidge / ARDRegression: sigma_, X_offset_ and X_scale_ (the
-    attributes `xl_fit_bayes_pack` / `xl_fit_ard_pack` write) from the
-    state's posterior blocks, when it holds them (lane mf-iterimp2)."""
+    """The posterior fields `xl_fit_bayes_pack` / `xl_fit_ard_pack` write,
+    from the state's posterior blocks when it holds them (lane mf-iterimp2):
+    BayesianRidge its factor (V, ev; sigma_ is formed on its first read, so
+    a kept one is dropped), ARDRegression its sigma_; X_offset_ and X_scale_."""
     var nk = x_linear_keys()
+    var ard = Int(plan.params[0]) == XL_MEMBER_ARD
+    var named = XL_MEMBER_BLOCK_SIGMA if ard else XL_MEMBER_BLOCK_FACTOR
     var held = False
     for i in range(blocks):  # driver-loop: over the state's few fitted blocks (names by index)
         call.block = i
         call.flags = MEMBER_BLOCK_BY_INDEX
         _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
-        held = held or call.block == XL_MEMBER_BLOCK_SIGMA
+        held = held or call.block == named
     call.flags = 0
     if not held:
         return
@@ -621,48 +624,85 @@ def _xl_posterior_pack(fields: PythonObject, context: PythonObject, plan: Member
     var offset = classical_array(cols, 0, context)
     if cols > 0:
         unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(offset))), src=f32_ptr(call.dst.data), count=cols)
-    call.block = XL_MEMBER_BLOCK_SIGMA
+    call.block = named
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
-    var dk = call.dst.rows
-    # (0, 0) when an ARD fit kept no feature, as its own fit publishes it
-    var sigma = admitted_array(Python.tuple(0, 0), "<f4", context)
-    if dk > 0:
-        sigma = classical_array(dk, dk, context)
-        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(sigma))), src=f32_ptr(call.dst.data), count=dk * dk)
-    py_setitem(fields, nk[].k_sigma_, sigma)
+    if ard:
+        var dk = call.dst.rows
+        # (0, 0) when an ARD fit kept no feature, as its own fit publishes it
+        var sigma = admitted_array(Python.tuple(0, 0), "<f4", context)
+        if dk > 0:
+            sigma = classical_array(dk, dk, context)
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(sigma))), src=f32_ptr(call.dst.data),
+                count=dk * dk)
+        py_setitem(fields, nk[].k_sigma_, sigma)
+    else:
+        var d = call.dst.cols
+        var v = classical_array(d, d, context)
+        var ev = classical_array(d, 0, context)
+        if d > 0:
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(v))), src=f32_ptr(call.dst.data), count=d * d)
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(ev))), src=f32_ptr(call.dst.data) + d * d, count=d)
+        py_setitem(fields, nk[].k__bayes_v, v)
+        py_setitem(fields, nk[].k__bayes_ev, ev)
+        _ = py_call(_b().dict.pop, fields, nk[].k__bayes_sigma, PythonObject(None))
     py_setitem(fields, nk[].k_X_offset_, offset)
     py_setitem(fields, nk[].k_X_scale_, labels_full_f32(cols, 1.0, context))
 
 
 def _xl_posterior_state(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall,
     kind: Int) raises:
-    """IMPORT of the fitted posterior (sigma_, X_offset_ and, for
-    ARDRegression, lambda_) when the estimator holds it, before DONE."""
+    """IMPORT of the fitted posterior when the estimator holds it, before
+    DONE: X_offset_ and BayesianRidge's factor (its private fields, never
+    the public sigma_, which is not read here) or ARDRegression's sigma_
+    and lambda_."""
     var nk = x_linear_keys()
-    var sigma_source = py_get(fields, nk[].k_sigma_)
+    var ard = kind == XL_MEMBER_ARD
+    var s_source = py_get(fields, nk[].k_sigma_ if ard else nk[].k__bayes_v)
     var offset_source = py_get(fields, nk[].k_X_offset_)
-    if sigma_source is None or offset_source is None:
+    if s_source is None or offset_source is None:
         return
     var offset = admit_x(offset_source, 1, "X_offset_", context)
     call.flags = 0
-    # an ARD fit that kept no feature has an empty (0, 0) sigma_: nothing to import
-    var sigma = PythonObject(None)
-    if Int(py=sigma_source.size) > 0:
-        sigma = admit_x(sigma_source, 2, "sigma_", context)
-        var dk = Int(py=sigma.shape[0])
-        call.block = XL_MEMBER_BLOCK_SIGMA
-        call.x = MemberMatrix(Int(py=classical_address(sigma)), dk, Int(py=sigma.shape[1]))
+    var s_words = PythonObject(None)
+    var ev = PythonObject(None)
+    if ard:
+        # an ARD fit that kept no feature has an empty (0, 0) sigma_: nothing to import
+        if Int(py=s_source.size) > 0:
+            s_words = admit_x(s_source, 2, "sigma_", context)
+            call.block = XL_MEMBER_BLOCK_SIGMA
+            call.x = MemberMatrix(Int(py=classical_address(s_words)), Int(py=s_words.shape[0]),
+                Int(py=s_words.shape[1]))
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    else:
+        var ev_source = py_get(fields, nk[].k__bayes_ev)
+        if ev_source is None:
+            return
+        s_words = admit_x(s_source, 2, "posterior factor", context)
+        ev = admit_x(ev_source, 1, "posterior factor", context)
+        var d = Int(py=ev.size)
+        if Int(py=s_words.size) != d * d:
+            raise Error("ValueError: the posterior factor does not match n_features_in_")
+        # one (d + 1) x d block: V's rows, then ev
+        var block = classical_array(d + 1, d, context)
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(block))), src=f32_ptr(Int(py=classical_address(s_words))),
+            count=d * d)
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(block))) + d * d,
+            src=f32_ptr(Int(py=classical_address(ev))), count=d)
+        call.block = XL_MEMBER_BLOCK_FACTOR
+        call.x = MemberMatrix(Int(py=classical_address(block)), d + 1, d)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        _ = block
     call.block = XL_MEMBER_BLOCK_X_OFFSET
     call.x = MemberMatrix(Int(py=classical_address(offset)), 1, Int(py=offset.size))
     _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
-    if kind == XL_MEMBER_ARD:
+    if ard:
         var lam = admit_x(py_item(fields, nk[].k_lambda_), 1, "lambda_", context)
         call.block = XL_MEMBER_BLOCK_LAMBDA
         call.x = MemberMatrix(Int(py=classical_address(lam)), 1, Int(py=lam.size))
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         _ = lam
-    _ = sigma
+    _ = s_words
+    _ = ev
     _ = offset
 
 
