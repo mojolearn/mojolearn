@@ -10,12 +10,16 @@ UNPACK / PACK only (GIL held, once per member estimator, never per fold):
     glue entry of its device and mode), and the NEW words of
     core/forecast_seq_member.mojo (the model name mapped by the connected
     code table, as the estimator's own predict maps it; the ETS spec as
-    letter codes). NOT admitted (False: the caller keeps the estimator's own
-    path): an ETS with the FAST stop (`_fast_stall`), and an ETS whose spec
-    may need positive data (error or season M) on any route but a CPU route
-    beside a GPU set: there the estimator's fit scans through the base
-    binding's Python entry `all_finite_f32`
-    (bindings/forecast_device_door.mojo `forecast_finite`), a Python door.
+    letter codes). Lane mf-ens6: every setting is admitted. An ETS FAST
+    stop (`_fast_stall`, DATA: a pair read once) travels as words [11..13]
+    and is appended to the glue words as the door's predict appends it; a
+    spec that needs positive data scans the member's host copy of the
+    series on every route (`host_all_finite_f32`, `family_min_f32`: a truth
+    value, the same on every route, as bindings/forecast_device_door.mojo
+    says of its host form). A class that is not the exact connected class
+    gets `_forecast_fields`' own refusal; a model string outside the
+    letter tables (an edit after construction) the constructor's own words
+    (providers/python/forecast_initialize_pyapi_pack.mojo), in its order.
   * `forecast_seq_member_pack`: the fitted attributes the estimator's own
     fit writes (`_one`: True for one series, `_y` the (series, observations)
     float32 copy; theta `_fitted_h` None; ETS `_season` the kept season
@@ -27,7 +31,7 @@ from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner
 from bindings.py_balanced import py_get, py_item, py_setitem, py_type
 from bindings.xseq_keys_unpack import xseq_keys
-from bindings.xseq_native_common_door import xseq_route, xseq_zeros, xseq_addr, xseq_int, xseq_truth
+from bindings.xseq_native_common_door import xseq_route, xseq_zeros, xseq_addr, xseq_int, xseq_truth, xseq_float
 from bindings.xseq_forecast_native_door import (
     _forecast_fields, _set, _float_or_zero, _stored_buffer, _KIND_THETA, _KIND_ETS,
 )
@@ -43,14 +47,6 @@ comptime _MEMBER_THETA = 0
 comptime _MEMBER_ETS = 1
 
 
-def _connected(model: PythonObject, records: PythonObject) raises -> Bool:
-    var cls = py_type(model)
-    var found = False
-    for i in range(len(records)):  # driver-loop: over connected forecast classes
-        found = found or cls is records[i][0]
-    return found
-
-
 def forecast_seq_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -58,8 +54,10 @@ def forecast_seq_member_admit(model: PythonObject, fields: PythonObject, kind: I
     var nk = xseq_keys()
     if kind == _MEMBER_ETS:
         return _ets_admit(model, context, owner)
-    if kind != _MEMBER_THETA or not _connected(model, py_item(context, nk[].k_xseq_theta_classes)):
-        return False
+    if kind != _MEMBER_THETA:
+        raise Error("ValueError: mojolearn: forecaster member kind " + String(kind) + " is not published")
+    # `_forecast_fields` raises the door's words for a class that is not the
+    # exact connected class.
     var checked = _forecast_fields(model, _KIND_THETA, context)
     var held = xseq_route(model, checked, context)
     owner.plan.route = held.owner.downcast_value_ptr[DeviceRouteOwner]()[].route
@@ -82,20 +80,14 @@ def forecast_seq_member_admit(model: PythonObject, fields: PythonObject, kind: I
 
 def _ets_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
     var nk = xseq_keys()
-    if not _connected(model, py_item(context, nk[].k_xseq_ets_classes)):
-        return False
     var checked = _forecast_fields(model, _KIND_ETS, context)
-    if py_get(checked, nk[].k__fast_stall) is not None:
-        return False
+    var stall = py_get(checked, nk[].k__fast_stall)
     var spec = String(py=py_item(checked, nk[].k_model))
+    _ets_spec_words(spec)
     var error = String("AM").find(forecast_run_letter(spec, 0))
     var trend = String("NA").find(forecast_run_letter(spec, 1))
     var season = String("NAM").find(forecast_run_letter(spec, 2))
-    if error < 0 or trend < 0 or season < 0:
-        return False
     var held = xseq_route(model, checked, context)
-    if (error == 1 or season == 2) and not held.cpu_table:
-        return False
     owner.plan.route = held.owner.downcast_value_ptr[DeviceRouteOwner]()[].route
     var alpha = py_item(checked, nk[].k_alpha)
     var beta = py_item(checked, nk[].k_beta)
@@ -106,10 +98,34 @@ def _ets_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwne
         Float64(_MEMBER_ETS), Float64(xseq_int(py_item(checked, nk[].k_season_length))), Float64(error),
         Float64(trend), Float64(season), 1.0 if xseq_truth(py_item(checked, nk[].k_damped)) else 0.0, Float64(mask),
         _float_or_zero(alpha), _float_or_zero(beta), _float_or_zero(phi), _float_or_zero(gamma),
+        0.0, 0.0, 0.0,
     ]
+    if stall is not None:
+        # (iterations, relative drop): the door's predict reads them per call.
+        words[11] = 1.0
+        words[12] = Float64(xseq_int(stall[0]))
+        words[13] = xseq_float(stall[1])
     owner.plan.params = words^
     owner.pins = Python.tuple(held.owner)
     return True
+
+
+def _ets_spec_words(text: String) raises:
+    """The constructor's model-string refusals, in its order
+    (providers/python/forecast_initialize_pyapi_pack.mojo, ETS): a string
+    edited after construction is refused in the words its constructor
+    gives."""
+    if text.byte_length() != 3:
+        raise Error("ValueError: ETS: model is three letters, error / trend / season")
+    var e = forecast_run_letter(text, 0)
+    var tr = forecast_run_letter(text, 1)
+    var season = forecast_run_letter(text, 2)
+    if text.find("Z") >= 0:
+        raise Error("NotImplementedError: ETS: automatic ('Z') model selection is not implemented")
+    if tr == "M":
+        raise Error("NotImplementedError: ETS: multiplicative trend is not implemented")
+    if (e != "A" and e != "M") or (tr != "N" and tr != "A") or (season != "N" and season != "A" and season != "M"):
+        raise Error("ValueError: ETS: invalid model (error A|M, trend N|A, season N|A|M)")
 
 
 def forecast_seq_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,

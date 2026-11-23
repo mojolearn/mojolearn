@@ -27,6 +27,7 @@ from core.entry_table import EntryRef
 from core.host_entry_table_calls import fh_ref, fh_vote, fh_groves_prepare, fh_groves_predict, fh_gbdt_expand_ctr, fh_gbdt_predict, fh_gbdt_sigmoid_pair
 from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
 from bindings.py_balanced import py_item
+from bindings.gbdt_importances_pack import GBDT_IMPORTANCES_FIELD, gbdt_importances_read
 
 
 def host_tree_key(context: PythonObject) raises -> EntryRef:
@@ -636,6 +637,17 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         return py_item(py_item(fields, nk[].k__arrays), nk[].k_n_trees) if gbdt else py_item(fields, nk[].k__n_trees)
     if operation == "host_tree_engine":
         return PythonObject("sequential") if gbdt else py_item(fields, nk[].k__inference_engine)
+    if operation == "host_tree_importances":
+        # lane mf-imp6: HostGBDT.feature_importances_, the fit's importances
+        # saved with the model (bindings/gbdt_importances_pack.mojo)
+        if not gbdt:
+            raise Error("AttributeError: '" + String(py_type(model).__name__) + "' object has no attribute "
+                        + "'feature_importances_'")
+        if py_get(fields, PythonObject(GBDT_IMPORTANCES_FIELD)) is None:
+            raise Error("AttributeError: this " + String(py_type(model).__name__) + " holds no "
+                        + "feature_importances_: its model was saved without them (built from model text, "
+                        + "not by GradientBoosting.save after a fit)")
+        return gbdt_importances_read(model, fields, py_item(context, nk[].k_output_context))
     if operation == "host_tree_hash":
         var hash = Sha256()
         if gbdt:

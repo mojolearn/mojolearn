@@ -449,6 +449,22 @@ def _vector(value: Float64, context: PythonObject) raises -> PythonObject:
     return out
 
 
+def quantile_subsample_rows(subsample: PythonObject) raises -> Int:
+    """QuantileTransformer's subsample as its row count (-1: None), one body
+    for the door's fit and the member's admission (lane mf-ens6).
+    scikit-learn refuses a subsample below 1
+    (sklearn/preprocessing/_data.py QuantileTransformer._parameter_constraints:
+    "subsample": [Interval(Integral, 1, None, closed="left"), None]): refused
+    here in its InvalidParameterError words."""
+    if subsample is None:
+        return -1
+    var rows = Int(py=py_call(native_loaded_module("builtins").int, subsample))
+    if rows < 1:
+        raise Error("ValueError: The 'subsample' parameter of QuantileTransformer must be an int in the range "
+                    + "[1, inf) or None. Got " + _repr(subsample) + " instead.")
+    return rows
+
+
 def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
     """QuantileTransformer.fit: the optional keyed row subsample (f2_perm_rows,
     p2m_rgather), the reference grid (c2_grid), sort_cols, column statistics,
@@ -465,13 +481,13 @@ def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObje
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
     var entries = stateless_entries(model, mode, context)
     var caps = stateless_caps(model, entries)
-    var subsample = fields["subsample"]
-    var permute = subsample is not None and n_all > Int(py=py_call(b.int, subsample))
+    var subsample = quantile_subsample_rows(fields["subsample"])
+    var permute = subsample >= 0 and n_all > subsample
     var seed = PythonObject(None)
     if permute:
         var state = fields["random_state"]
         seed = PythonObject(0) if state is None else py_call(b.int, state)
-        n = Int(py=py_call(b.int, subsample))
+        n = subsample
     var nq = max(1, min(Int(py=py_call(b.int, fields["n_quantiles"])), n))
     var layout = PrepLayout(n_all * d, xprep_r3("work"))
     var inputs = Python.list(Python.tuple(0, values))

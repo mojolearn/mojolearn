@@ -59,7 +59,7 @@ from bindings.prep_classify_common_door import (
     cls_vendor_used,
     idn_int, classical_shared, blocked, check_fitted, check_width, cls_x2d, is_sparse, csr_input, csr_dense_x,
     float_list, given_priors, is_real, cls_float, cls_da_mode,
-    da_shrinkage, da_check_estimator_shrinkage, da_solver_is,
+    da_shrinkage, da_check_estimator_shrinkage, da_solver_is, lda_n_components,
     nb_onepass, encode_y, partial_codes, partial_labels, own_partial_labels, partial_refuse,
     IDN_NB_CSR, idn_fam, IDN_CLASS_ONEPASS, gnb_refuse,
 )
@@ -1030,6 +1030,9 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     var shr: Optional[Float64] = None
     if est is None:
         shr = da_shrinkage(py_item(fields, nk[].k_shrinkage), context)
+    # scikit-learn's own n_components refusal (below 1), before X (lane mf-lin6; the member admission raises
+    # the same words through the same check, in the same place after the shrinkage).
+    _ = lda_n_components(py_item(fields, nk[].k_n_components))
     var arr = cls_x2d(X, context)
     var n = arr.n
     var d = arr.d

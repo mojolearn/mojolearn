@@ -22,8 +22,9 @@ ask `xneighbors_kind_reads_marker` then.
     operations entry, `route.mode` / `route.vendor` = the image's own words
     (`x_neighbors_numeric_mode`, `x_neighbors_vendor`), the image's fused and
     wide capabilities as parameter words (the connection's cached probe).
-    A device image built with no GPU vendor publishes nothing: admit answers
-    False and the caller keeps the estimator's doors.
+    A device image built with no GPU vendor (vendor read-back 'none') is
+    refused in the loader's words (`_no_accelerator`; the loader never
+    imports such an image, so no door serves it either).
   * `xneighbors_member_pack` (PACK): the attributes the estimator's fit
     writes (`centroids_`, `deviations_`, `within_class_std_dev_`,
     `class_prior_`, `n_features_in_`); `classes_` and `_codes_classes` are
@@ -34,32 +35,33 @@ ask `xneighbors_kind_reads_marker` then.
     it borrowed), `_fit_dist`, `_lrd`, `negative_outlier_factor_`, `offset_`,
     `n_neighbors_`, `n_features_in_`, `n_samples_fit_`, as `_lof_fit_pack`.
     OneClassSVM: admit = `oc_fit_unpack`'s checks and words with the door's
-    own helpers on the shared family context (a precomputed kernel answers
-    False: the caller keeps the doors), the solve the door picks for the
+    own helpers on the shared family context (a precomputed kernel is word
+    [13]: the Gram solve, the support-column queries), the solve the door picks for the
     image (the resident solve's entry in `route.second`), the image's fused
     labels and `family_svc_xn_old_items`; pack = `oc_fit_pack`'s fields.
     KernelPCA: admit = `kpca_fit`'s checks with the door's own helpers on
     `_expansion_neighbors._KPCA_CONTEXT` (the shared context's
     `family_xn_kpca_context`) and its resolved decomposition
-    route (`_kpca_route`); a precomputed kernel answers False; pack =
+    route (`_kpca_route`); a precomputed kernel is the KPCA_PRECOMPUTED kernel word; pack =
     `kpca_fit`'s fields on that context's output arrays.
     PolynomialCountSketch: admit = the door's parameter reads and the seed
-    word of an exact int random_state (else False); pack = `_pcs_fit`'s fields.
+    word of the door's seed resolution (`pcs_seed`: a RandomState or None is
+    one native draw at admission); pack = `_pcs_fit`'s fields.
     AdditiveChi2Sampler: admit = the door's steps / interval words and the
     image's device-scan bit; pack = n_features_in_.
     SkewedChi2Sampler: admit = the door's n_components / skewedness reads and
-    the seed word of an exact int random_state (else False), and False on an
-    image whose transform takes the FAST lazy-weights path (kfeat bit 4): the
-    member serves the eager weights only; pack = `_schi2_fit`'s fields
+    the seed word of `_semi_seed` (a RandomState or None: one native draw at
+    admission), and the one-call transform of an image with kfeat bit 4
+    (word [4]); pack = `_schi2_fit`'s fields
     (`_random_weights`, `random_offset_`, `n_features_in_`).
     KNNImputer: admit = `_imp_check` (the door's own refusals, on the shared
     family context), the door's words, the `family_xn_loc_flags` arms and the
-    image's lean fit probe; an n_neighbors the door refuses only at transform
-    (after its fit) answers False; pack = `_imp_fit`'s fields (`_valid`,
+    image's lean fit probe; an n_neighbors below 1 fits and is refused at
+    transform, as the door; pack = `_imp_fit`'s fields (`_valid`,
     `_miss_cols`, `_fit_X` as a new Array, `n_features_in_`).
     SVGP: admit = the door's words (`_svgp_gamma`, the variances, jitter,
-    n_inducing, `family_svc_xn_old_items`); caller-given inducing_points
-    answer False (the door keeps them); pack = `_svgp_fit`'s fields.
+    n_inducing, `family_svc_xn_old_items`); caller-given inducing_points are
+    admitted once and pinned with the plan (words [7..9]); pack = `_svgp_fit`'s fields.
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
     estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
     length).
@@ -74,6 +76,9 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_input_unpack import admit_x, admit_c_view, admitted_dtype, admitted_storage_native
 from bindings.classical_arrays_door import classical_address
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.admitted_family_door import admit_family
+from bindings.neighbors_ann_native_door import ann_keep_array
 from bindings.classical_labels_door import labels_cast
 from bindings.family_common_pack import family_field
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
@@ -88,10 +93,11 @@ from bindings.svc_common_pack import svc_scalar_array
 from bindings.neighbors_native_unpack import _pcs_int, _pcs_real, _pcs_hash
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.pcs_native_boundary_unpack import pcs_seed_unpack
+from providers.python.pcs_rng_pyapi_pack import pcs_seed
 from bindings.pcs_native_boundary_pack import pcs_array
 from bindings.neighbors_semi_native_door import (
     _achi2_interval_unpack, _semi_kfeat_flags, _semi_eq, _semi_int, _semi_float, _semi_truth, _semi_class_array,
-    _lp_alpha_f32,
+    _lp_alpha_f32, _semi_seed,
 )
 from bindings.neighbors_lp_query_unpack import lp_dense_available
 from bindings.labels_descriptor_boundary_door import labels_scope
@@ -109,6 +115,7 @@ from bindings.decomp_device_route_door import decomp_route_expected_vendor
 from bindings.decomp_scalar_admission_unpack import decomp_scalar_repr
 from bindings.decomp_truth_boundary_unpack import decomp_truth
 from core.kpca_native_api import KPCA_NATIVE_COUNT
+from core.kpca_native_plan import KPCA_PRECOMPUTED
 from x_decomp.descriptor_schema import XD_OPERATION_COUNT
 from x_decomp.kpca_descriptor_boundary_run import kpca_near_driver, kpca_decomp_driver, kpca_decomp_reduction, kpca_resident
 from bindings.svc_common_unpack import svc_truthy
@@ -159,16 +166,29 @@ def _image_word(module: PythonObject, name: String, b: PythonObject) raises -> P
     return py_call(reader)
 
 
-def _route(model: PythonObject, context: PythonObject, b: PythonObject, mut owner: MemberOwner) raises -> Bool:
+def _no_accelerator(image: String, word: String) raises:
+    """An image whose vendor read-back names no accelerator (`checks/vendor.mojo`
+    COMPILED_VENDOR 'none': a device image compiled with no GPU target). It
+    publishes no member entry and cannot run a kernel anywhere; the loader
+    (python/mojolearn/_backend.py, the vendor read-back check) refuses to
+    import it, so no estimator's doors serve it either. Raised in the loader's
+    words (lane mf-nbr6: the admission's former False fed the door fallback)."""
+    raise Error("ImportError: mojolearn: " + image + " was compiled with NO accelerator target (its vendor "
+        + "read-back says '" + word + "'); it cannot run a kernel anywhere. Rebuild it on a box with the GPU present.")
+
+
+def _route(model: PythonObject, context: PythonObject, b: PythonObject, mut owner: MemberOwner) raises:
     """The route of the image the estimator's own doors call: its x_neighbors
-    native operations entry and the image's (mode, vendor) words. False: a
-    device image built with no GPU vendor (it publishes no member entry)."""
+    native operations entry and the image's (mode, vendor) words. A device
+    image built with no GPU vendor is refused in the loader's words
+    (`_no_accelerator`)."""
     var binding = estimator_binding(model, "_mojolearn_x_neighbors", context)
     var module = xn_module(binding)
     var mode = Int(py=_image_word(module, "x_neighbors_numeric_mode", b))
-    var vendor = device_vendor_code(String(_image_word(module, "x_neighbors_vendor", b)))
+    var word = String(_image_word(module, "x_neighbors_vendor", b))
+    var vendor = device_vendor_code(word)
     if vendor < 0:
-        return False
+        _no_accelerator("_mojolearn_x_neighbors", word)
     var admitted = xn_admit(binding)
     var connection = NcConnection(admitted)
     var route = DeviceRoute(DEVICE_CPU if vendor == 0 else DEVICE_GPU)
@@ -180,7 +200,6 @@ def _route(model: PythonObject, context: PythonObject, b: PythonObject, mut owne
     # The image's capability words (the connection's cached probe).
     owner.plan.params = [1.0 if connection.fused else 0.0, 1.0 if connection.wide else 0.0]
     _ = connection^
-    return True
 
 
 def _family_context() raises -> PythonObject:
@@ -231,9 +250,10 @@ def _ocsvm_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     mut owner: MemberOwner) raises -> Bool:
     """`oc_fit_unpack`'s parameter checks and words, in its order, read with
     the door's own helpers on the shared family context; the solve and the
-    query path the door would pick for this image. False (not a member, the
-    caller keeps the estimator's doors): a precomputed kernel (its queries
-    index the Gram columns), or an image that publishes no member entry."""
+    query path the door would pick for this image. A precomputed kernel
+    (lane mf-nbr6) is word [13]: `oc_fit_unpack` reads no degree, coef0,
+    gamma or resident probe for it and solves on X as the Gram matrix; its
+    queries take the support columns (OC_QUERY_GRAM_PRECOMPUTED)."""
     var family = _family_context()
     var kernel = family_field(fields, "kernel")
     if Bool(py=py_call(b.callable, kernel)):
@@ -245,7 +265,15 @@ def _ocsvm_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     if not (0.0 < nu and nu <= 1.0):
         raise Error("nu must be in (0, 1]")
     if oc_precomputed(kernel, family):
-        return False
+        # `oc_fit_unpack`'s precomputed reads: max_iter and tol only, the Gram solve.
+        var cap = _oc_int(family_field(fields, "max_iter"), family)
+        var tolerance = _oc_float(family_field(fields, "tol"), family)
+        _route(model, context, b, owner)
+        var gram_words: List[Float64] = [Float64(XNEIGHBORS_KIND_OCSVM), 0.0, nu, 0.0, 0.0,
+            Float64(OC_GAMMA_VALUE), 0.0, Float64(10000000 if cap < 0 else cap), tolerance, Float64(OC_SOLVE_GRAM),
+            0.0, 0.0, 1.0 if svc_truthy(family["family_svc_xn_old_items"]) else 0.0, 1.0]
+        owner.plan.params = gram_words^
+        return True
     var degree = _oc_int(family_field(fields, "degree"), family)
     var coef0 = _oc_float(family_field(fields, "coef0"), family)
     var gamma = family_field(fields, "gamma")
@@ -260,8 +288,7 @@ def _ocsvm_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     var max_iter = _oc_int(family_field(fields, "max_iter"), family)
     var tol = _oc_float(family_field(fields, "tol"), family)
     var code = _oc_kernel_code(kernel, family)
-    if not _route(model, context, b, owner):
-        return False
+    _route(model, context, b, owner)
     var admitted = owner.pins[1]
     var connection = OcConnection(admitted)
     # The door's resident probe, once per member (the fit asks it per call).
@@ -287,7 +314,7 @@ def _ocsvm_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     var old_items = svc_truthy(family["family_svc_xn_old_items"])
     var words: List[Float64] = [Float64(XNEIGHBORS_KIND_OCSVM), Float64(code), nu, Float64(degree), coef0,
         Float64(gamma_mode), gamma_value, Float64(10000000 if max_iter < 0 else max_iter), tol, Float64(solve),
-        1.0 if fast else 0.0, 1.0 if fused_labels else 0.0, 1.0 if old_items else 0.0]
+        1.0 if fast else 0.0, 1.0 if fused_labels else 0.0, 1.0 if old_items else 0.0, 0.0]
     owner.plan.params = words^
     owner.pins = Python.tuple(owner.pins, connection.provider, connection.resident_provider)
     _ = connection^
@@ -311,8 +338,10 @@ def _kpca_admit(model: PythonObject, fields: PythonObject, b: PythonObject, mut 
     """`kpca_fit`'s checks and words, in its order, with the door's own
     helpers on KernelPCA's own context, and its resolved decomposition route
     (`_kpca_route`: the neighbors connection -> `route.entry`, the
-    eigensolver -> `route.second` / `route.third`). False: a precomputed
-    kernel, or a route whose vendor publishes no member entry."""
+    eigensolver -> `route.second` / `route.third`). A precomputed kernel
+    (lane mf-nbr6) is the kernel word KPCA_PRECOMPUTED with degree 0 and
+    coef0 0, as `kpca_fit` builds its options; a route whose vendor word names
+    no accelerator is refused in the loader's words."""
     var kcontext = _kpca_context()
     var kernel = _kp_field(fields, "kernel")
     if Bool(py=py_call(b.callable, kernel)):
@@ -326,8 +355,6 @@ def _kpca_admit(model: PythonObject, fields: PythonObject, b: PythonObject, mut 
             + "pre-image map that inverse_transform needs); construct KernelPCA with fit_inverse_transform=False")
     if decomp_truth(_kp_field(fields, "kernel_params"), kcontext):
         raise Error("NotImplementedError: KernelPCA: kernel_params is not implemented")
-    if precomputed:
-        return False
     var gamma_source = _kp_field(fields, "gamma")
     var gamma_given = gamma_source is not None
     var gamma = _kp_float(gamma_source, kcontext) if gamma_given else 0.0
@@ -339,14 +366,16 @@ def _kpca_admit(model: PythonObject, fields: PythonObject, b: PythonObject, mut 
     var requested_source = _kp_field(fields, "n_components")
     var requested = -1 if requested_source is None else _kp_int(requested_source, kcontext)
     var auto = _kp_name(_kp_field(fields, "eigen_solver"), "auto", kcontext)
-    var code = _kp_kind(kernel, kcontext)
-    var degree = _kp_int(_kp_field(fields, "degree"), kcontext)
-    var coef0 = _kp_float(_kp_field(fields, "coef0"), kcontext)
+    # A precomputed fit never converts its ignored degree / coef0 fields (`kpca_fit`).
+    var code = KPCA_PRECOMPUTED if precomputed else _kp_kind(kernel, kcontext)
+    var degree = 0 if precomputed else _kp_int(_kp_field(fields, "degree"), kcontext)
+    var coef0 = 0.0 if precomputed else _kp_float(_kp_field(fields, "coef0"), kcontext)
     var remove_zero = decomp_truth(_kp_field(fields, "remove_zero_eig"), kcontext)
     var old_items = decomp_truth(kcontext["kpca_old_items"], kcontext)
-    var vendor = device_vendor_code(decomp_route_expected_vendor(decomp_route.device, kcontext))
+    var vendor_word = decomp_route_expected_vendor(decomp_route.device, kcontext)
+    var vendor = device_vendor_code(vendor_word)
     if vendor < 0:
-        return False
+        _no_accelerator("the KernelPCA decomposition image", vendor_word)
     var route = DeviceRoute(decomp_route.device)
     route.mode = decomp_route.mode
     route.vendor = vendor
@@ -369,20 +398,18 @@ def _kpca_admit(model: PythonObject, fields: PythonObject, b: PythonObject, mut 
 def _pcs_admit(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     mut owner: MemberOwner) raises -> Bool:
     """The door's parameter reads (`_pcs_int`, `_pcs_real`, `pcs_options`)
-    and the seed word of an exact int `random_state` (`pcs_seed_unpack`).
-    False: a RandomState or None random_state (the door draws a new seed from
-    it per fit, in Python), or an image that publishes no member entry."""
+    and the seed word (`pcs_seed_unpack`) of the int the door's own seed
+    resolution gives (`pcs_seed`: an exact int as given; a RandomState or None
+    draws ONE native word through NumPy's BitGenerator capsule, no Python
+    method runs). Lane mf-nbr6: that draw is made here, once per admitted
+    member (the door makes it at its fit), and is data of the plan."""
     var degree = _pcs_int(family_field(fields, "degree"), "degree")
     var components = _pcs_int(family_field(fields, "n_components"), "n_components")
     _ = pcs_options(degree, components)
     var coef0 = _pcs_real(family_field(fields, "coef0"), "coef0")
     var gamma = _pcs_real(family_field(fields, "gamma"), "gamma")
-    var seed = family_field(fields, "random_state")
-    if py_type(seed) is not b.int:
-        return False
-    var word = pcs_seed_unpack(seed)
-    if not _route(model, context, b, owner):
-        return False
+    var word = pcs_seed_unpack(pcs_seed(family_field(fields, "random_state"), _family_context()))
+    _route(model, context, b, owner)
     # The door reads this switch per transform; the environment is the same place.
     var old_items = getenv("MOJOLEARN_XN_OLD_ITEMS") == "1"
     var words: List[Float64] = [Float64(XNEIGHBORS_KIND_PCS), Float64(degree), Float64(components), gamma, coef0,
@@ -398,8 +425,7 @@ def _achi2_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     (`_semi_kfeat_flags` bit 1, on the shared family context)."""
     var steps = Int(py=py_call(b.int, family_field(fields, "sample_steps")))
     var interval = _achi2_interval_unpack(fields)
-    if not _route(model, context, b, owner):
-        return False
+    _route(model, context, b, owner)
     var scan = (_semi_kfeat_flags(owner.pins[1], _family_context()) & 1) != 0
     var words: List[Float64] = [Float64(XNEIGHBORS_KIND_ACHI2), Float64(steps), interval[0],
         1.0 if interval[1] else 0.0, 1.0 if scan else 0.0]
@@ -411,22 +437,20 @@ def _schi2_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     mut owner: MemberOwner) raises -> Bool:
     """The door's words: n_components (`int`, read at fit), skewedness
     (`float`, read at transform; read here once), the seed word (the low 32
-    bits of an exact int random_state, as `_schi2_fit`). False: a RandomState
-    or None random_state (the door draws a seed per fit from it), an image
-    whose transform takes the FAST lazy-weights path (`_semi_kfeat_flags` bit
-    4; Apple `fast` is paused and keeps its door), or an image that publishes
-    no member entry."""
+    bits of the int `_semi_seed` resolves, as `_schi2_fit`: an exact int as
+    given; a RandomState or None gives ONE native draw, made here once per
+    admitted member, lane mf-nbr6), and the image's one-call transform over
+    the stored weights (`_semi_kfeat_flags` bit 4, SCHI2_LAZYW: word [4], the
+    member's transform takes the same `schi2_lazy_transform` route)."""
+    var family = _family_context()
     var components = Int(py=py_call(b.int, family_field(fields, "n_components")))
     var skew = Float64(py=py_call(b.float, family_field(fields, "skewedness")))
-    var seed = family_field(fields, "random_state")
-    if not family_is_int(seed):
-        return False
+    var seed = _semi_seed(family_field(fields, "random_state"), family)
     var word = Int(py=py_call(native_loaded_module("operator").and_, seed, PythonObject(0xFFFFFFFF)))
-    if not _route(model, context, b, owner):
-        return False
-    if (_semi_kfeat_flags(owner.pins[1], _family_context()) & 4) != 0:
-        return False
-    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_SCHI2), Float64(components), skew, Float64(word)]
+    _route(model, context, b, owner)
+    var lazy = (_semi_kfeat_flags(owner.pins[1], family) & 4) != 0
+    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_SCHI2), Float64(components), skew, Float64(word),
+        1.0 if lazy else 0.0]
     owner.plan.params = words^
     return True
 
@@ -439,10 +463,9 @@ def _imputer_admit(model: PythonObject, fields: PythonObject, context: PythonObj
     the door reads them, the image's lean fit entry."""
     var family = _family_context()
     _imp_check(fields, family)
+    # An n_neighbors below 1: the door's fit takes it and its transform refuses it
+    # (`local_check_n_neighbors`); the member does the same (lane mf-nbr6).
     var k = _loc_int(family_field(fields, "n_neighbors"))
-    if k < 1:
-        # The door's fit takes it and its transform refuses it: keep the door.
-        return False
     var distance = _loc_eq(family_field(fields, "weights"), PythonObject("distance"))
     var missing = _imp_missing(fields, 1)
     var keep_empty = _loc_truth(family_field(fields, "keep_empty_features"))
@@ -450,8 +473,7 @@ def _imputer_admit(model: PythonObject, fields: PythonObject, context: PythonObj
     var flags = _loc_flags()
     var uncompact = _flag_word(flags, "uncompact_impute")
     var old_items = _flag_word(flags, "old_items")
-    if not _route(model, context, b, owner):
-        return False
+    _route(model, context, b, owner)
     var lean = False
     var probe = py_call(b.getattr, xn_module(owner.pins[0]), PythonObject("x_neighbors_nc_fit_lean"), PythonObject(None))
     if probe is not None:
@@ -468,21 +490,36 @@ def _svgp_admit(model: PythonObject, fields: PythonObject, context: PythonObject
     """`_svgp_fit` / `_svgp_query`'s words, read with the door's own helpers:
     n_inducing (`int`), gamma (`_svgp_gamma`, with its zero-lengthscale
     refusal), kernel_variance, noise_variance, jitter, and the old-items arm
-    of the shared family context. False: caller-given inducing_points (the
-    door admits them per fit), or an image that publishes no member entry."""
-    if family_field(fields, "inducing_points") is not None:
-        return False
+    of the shared family context. Caller-given inducing_points (lane
+    mf-nbr6) are DATA: admitted once here as the door's fit admits them
+    (`admit_family(..., "inducing_points", dense=True)`, C-order float32),
+    pinned with the plan, and handed to the fit by address (words [7] the
+    address, [8] rows, [9] columns; [7] 0: the rows are picked from X)."""
     var inducing = Int(py=py_call(b.int, family_field(fields, "n_inducing")))
     var gamma = _svgp_gamma(model)
     var kernel_variance = _graph_float_of(model, "kernel_variance")
     var noise_variance = _graph_float_of(model, "noise_variance")
     var jitter = _graph_float_of(model, "jitter")
-    var old_items = 1.0 if Bool(py=py_call(b.bool, _family_context()["family_svc_xn_old_items"])) else 0.0
-    if not _route(model, context, b, owner):
-        return False
+    var family = _family_context()
+    var old_items = 1.0 if Bool(py=py_call(b.bool, family["family_svc_xn_old_items"])) else 0.0
+    var given = family_field(fields, "inducing_points")
+    var points = PythonObject(None)
+    var address = 0
+    var given_rows = 0
+    var given_cols = 0
+    if given is not None:
+        classical_connect_numpy(family)
+        points = admit_family(given, 2, "inducing_points", family, dense=True).array
+        address = Int(py=classical_address(points))
+        given_rows = Int(py=points.shape[0])
+        given_cols = Int(py=points.shape[1])
+    _route(model, context, b, owner)
     var words: List[Float64] = [Float64(XNEIGHBORS_KIND_SVGP), Float64(inducing), gamma, kernel_variance,
-        noise_variance, jitter, old_items]
+        noise_variance, jitter, old_items, Float64(address), Float64(given_rows), Float64(given_cols)]
     owner.plan.params = words^
+    if given is not None:
+        # The admitted points stay alive with the plan (the fit reads them by address).
+        owner.pins = Python.tuple(owner.pins[0], owner.pins[1], owner.pins[2], points)
     return True
 
 
@@ -560,8 +597,7 @@ def _lp_admit(model: PythonObject, fields: PythonObject, kind: Int, context: Pyt
     var tol = _semi_float(family_field(fields, "tol"))
     var max_iter = _semi_int(family_field(fields, "max_iter"))
     var alpha = _lp_alpha_f32(fields, spreading)
-    if not _route(model, context, b, owner):
-        return False
+    _route(model, context, b, owner)
     var binding = owner.pins[0]
     var raw = False
     if not knn:
@@ -580,7 +616,10 @@ def _lp_admit(model: PythonObject, fields: PythonObject, kind: Int, context: Pyt
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: its image publishes no member entry."""
+    from the unfitted estimator. False only for LabelPropagation /
+    LabelSpreading whose labels are deferred (`_lp_admit`: the caller
+    completes the plan after its encode); every other setting is a member or
+    a native refusal (lane mf-nbr6)."""
     if kind == XNEIGHBORS_KIND_OCSVM:
         return _ocsvm_admit(model, fields, context, b, owner)
     if kind == XNEIGHBORS_KIND_KERNEL_PCA:
@@ -602,8 +641,7 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     if kind == XNEIGHBORS_KIND_LOF:
         _lof_admit(fields, context, b, owner)
         var lof_words = owner.plan.params.copy()
-        if not _route(model, context, b, owner):
-            return False
+        _route(model, context, b, owner)
         owner.plan.params = lof_words^
         return True
     # The estimator's own parameter checks, in its fit's order.
@@ -630,8 +668,7 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     if threshold is not None:
         shrink = Float64(py=py_call(b.float, threshold))
     # The image the estimator's own fit and predict call, and its words.
-    if not _route(model, context, b, owner):
-        return False
+    _route(model, context, b, owner)
     var words: List[Float64] = [Float64(kind), 0.0 if euclidean else 1.0, Float64(priors_kind), shrink,
         owner.plan.params[0], owner.plan.params[1]]
     if priors_kind == NC_PRIORS_GIVEN:
@@ -840,7 +877,20 @@ def _ocsvm_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, s
 
 
 def _ocsvm_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan) raises -> Int:
-    var vectors = _f32_block(fields, "support_vectors_", 2, context)
+    # A precomputed kernel (word [13]) keeps no support vectors (the door's
+    # `support_vectors_` is supports x 0): its width is `n_features_in_`, the
+    # fitted Gram's columns, and the vectors block is not imported.
+    var precomputed = len(plan.params) > 13 and plan.params[13] != 0.0
+    var vectors = PythonObject(None)
+    var width = 0
+    if precomputed:
+        var features_source = py_get(fields, PythonObject("n_features_in_"))
+        if features_source is None:
+            raise Error("NotFittedError: this member is not fitted yet")
+        width = Int(py=py_call(b.int, features_source))
+    else:
+        vectors = _f32_block(fields, "support_vectors_", 2, context)
+        width = Int(py=vectors.shape[1])
     var dual = _f32_block(fields, "dual_coef_", 2, context)
     var support_source = py_get(fields, PythonObject("support_"))
     var gamma_source = py_get(fields, PythonObject("_gamma"))
@@ -855,12 +905,14 @@ def _ocsvm_state(fields: PythonObject, context: PythonObject, b: PythonObject, p
         Int(py=classical_address(support)), "<i4", supports, context)
     var scalars: List[Float64] = [Float64(py=py_call(b.float, gamma_source)),
         Float64(py=py_call(b.float, offset_source)), Float64(Int(py=py_call(b.int, iterations_source))),
-        Float64(Int(py=vectors.shape[1]))]
+        Float64(width)]
     var call = member_new(plan)
     try:
-        call.block = OC_BLOCK_VECTORS
-        call.x = MemberMatrix(Int(py=classical_address(vectors)), Int(py=vectors.shape[0]), Int(py=vectors.shape[1]))
-        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if not precomputed:
+            call.block = OC_BLOCK_VECTORS
+            call.x = MemberMatrix(Int(py=classical_address(vectors)), Int(py=vectors.shape[0]),
+                Int(py=vectors.shape[1]))
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = OC_BLOCK_DUAL
         call.x = MemberMatrix(Int(py=classical_address(dual)), 1, Int(py=dual.size))
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
@@ -1174,6 +1226,11 @@ def _svgp_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, st
     call.block = SV_BLOCK_Z
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var z = _publish_block(call, "<f4", context, 4, False)
+    var given = py_get(fields, PythonObject("inducing_points"), PythonObject(None))
+    if given is not None and len(plan.params) > 7 and plan.params[7] != 0.0:
+        # The door's `ann_keep_array`: the caller's own C-order float32 Array
+        # itself, else the admitted copy (lane mf-nbr6).
+        z = ann_keep_array(given, z, context)
     call.block = SV_BLOCK_ALPHA
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var alpha = _publish_block(call, "<f4", context, 4, True)

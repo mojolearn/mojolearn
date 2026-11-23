@@ -10,8 +10,8 @@ BINARY / MULTICLASS`, core/qn_single_fit.mojo `QnSingleFitPlan.run` for
 LinearSVR) through the entries of the `DeviceRoute` the estimators' own doors
 resolve (bindings/linear_svc_boundary_unpack.mojo `linear_svc_route`):
 `entry` the `linear_svc_native_api_v1` driver of the estimator's device;
-`flags` its LINEAR_SVC_ROUTE_* words (a caller admits only a route with both
-bits); `fifth` the x_metrics program entry (the estimator's own score program, core/linear_score_run.mojo `member_r2_score`) of the route's tier and device
+`flags` its LINEAR_SVC_ROUTE_* words (not read by the admission since lane
+mf-lin6: the binary class-code query runs in every image); `fifth` the x_metrics program entry (the estimator's own score program, core/linear_score_run.mojo `member_r2_score`) of the route's tier and device
 (LinearSVR score; without it score is not offered). No kernel is touched.
 
 Kinds (the second word of each class's `_mojolearn_member`): 0 LinearSVC,

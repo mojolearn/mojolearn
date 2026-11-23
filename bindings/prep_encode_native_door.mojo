@@ -38,7 +38,7 @@ from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT,
     imputer_fit_stage, imputer_transform_stage)
 from bindings.prep_encode_kbins_run import (
-    KBinsFit, KBinsApply, KBinsInverse, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED,
+    KBinsFit, KBinsApply, KBinsInverse, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED, KB_RNG_WORDS,
     enc_weights_stage, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage, enc_seed_words)
 from bindings.prep_encode_cats_run import (
     CatFit, CatFitPlan, CatBlock, InfrequentFit, CAT_FIT_UNIQUE, CAT_FIT_SCAN, CAT_FIT_PACK_SORT,
@@ -519,6 +519,45 @@ def _imputer_transform(model: PythonObject, values: PythonObject, context: Pytho
 
 
 # ---------------------------------------------------------------- KBinsDiscretizer
+@fieldwise_init
+struct KbinsSample(ImplicitlyCopyable, Movable):
+    """KBinsDiscretizer's subsample settings as words: `rows` (-1: None),
+    the uint64 seed's low / high 32-bit words, and `rng`: random_state is a
+    numpy RandomState (its draws are its own Python methods: refused at the
+    draw, in the words the door's int() gave)."""
+    var rows: Int
+    var lo: Int
+    var hi: Int
+    var rng: Bool
+
+
+def kbins_sample_words(fields: PythonObject, context: PythonObject) raises -> KbinsSample:
+    """UNPACK of `subsample` and `random_state` (lane mf-ens6), one body for
+    the door's `_kbins_fit` and the member's admission. scikit-learn refuses a
+    subsample that is not an integer >= 1 and a random_state that is not None,
+    an integer or a RandomState (sklearn/preprocessing/_discretization.py
+    KBinsDiscretizer._parameter_constraints: "subsample":
+    [Interval(Integral, 1, None, closed="left"), None], "random_state":
+    ["random_state"]): refused here in its InvalidParameterError words."""
+    var b = native_loaded_module("builtins")
+    var subsample = fields["subsample"]
+    if subsample is None:
+        return KbinsSample(-1, 0, 0, False)
+    if not _int_like(subsample, context) or Int(py=py_call_typed(b.int, subsample)) < 1:
+        raise Error("ValueError: The 'subsample' parameter of KBinsDiscretizer must be an int in the range "
+                    + "[1, inf) or None. Got " + _repr(subsample) + " instead.")
+    var rows = Int(py=py_call_typed(b.int, subsample))
+    var state = fields["random_state"]
+    if state is not None and not _int_like(state, context):
+        if String(py=py_type(state).__name__) == "RandomState":
+            return KbinsSample(rows, 0, 0, True)
+        raise Error("ValueError: The 'random_state' parameter of KBinsDiscretizer must be an int in the range "
+                    + "[0, 4294967295], an instance of 'numpy.random.mtrand.RandomState' or None. Got "
+                    + _repr(state) + " instead.")
+    var seed = _seed64(state)
+    return KbinsSample(rows, seed[0], seed[1], False)
+
+
 def _kbins_strategy(fields: PythonObject) raises -> Int:
     var strategy = fields["strategy"]
     var name = String(strategy) if _is_str(strategy) else String("")
@@ -598,7 +637,6 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
     # UNPACK: the parameters, read once into the typed request; the route's
     # image and capabilities; X and the weights as owners of the program.
     var b = native_loaded_module("builtins")
-    var operator = native_loaded_module("operator")
     var fields = py_fields(model)
     var encode = fields["encode"]
     var encode_text = String(encode) if _is_str(encode) else String("")
@@ -618,17 +656,18 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
         var checked = _check_weights(weight_source, n, "KBinsDiscretizer", mode, entries, caps, context)
         weights = checked[0]
         positive = checked[1]
-    var subsample = fields["subsample"]
-    var resample = subsample is not None and Bool(py=py_call(operator.gt, PythonObject(n), subsample))
+    var sample = kbins_sample_words(fields, context)
+    var resample = sample.rows >= 0 and n > sample.rows
     var draw = KB_DRAW_NONE
     var draws = 0
     var seed_lo = 0
     var seed_hi = 0
     if resample:
-        var seed = _seed64(fields["random_state"])
-        seed_lo = seed[0]
-        seed_hi = seed[1]
-        draws = Int(py=py_call_typed(b.int, subsample))
+        if sample.rng:
+            raise Error(KB_RNG_WORDS)
+        seed_lo = sample.lo
+        seed_hi = sample.hi
+        draws = sample.rows
         # a weighted resample with replacement is drawn in the fit's program,
         # and the edges of its rows are then unweighted
         draw = KB_DRAW_WEIGHTED if given else KB_DRAW_PLAIN

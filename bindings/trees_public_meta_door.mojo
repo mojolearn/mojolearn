@@ -118,6 +118,7 @@ from bindings.classical_labels_door import _label_list, classical_score_from_cod
 from bindings.member_owner_unpack import member_mark
 from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_marker_index
 from core.xneighbors_member import LP_MARKER_WORD
+from core.ensemble_member import META_CAL_BINARY_MARKER_WORDS
 from bindings.p3_labels_metrics_native_door import p3_interleave_columns
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
@@ -3362,12 +3363,13 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     # given, so those members get the marker's code in their marker word (their classes_ exclude -1; the RUN
     # leaves it out of their held classes); cross_val_predict (ensemble=False's folds) encodes y first, so
     # its fold members read -1 as one more class. They are admitted over the codes (an empty label list:
-    # these kinds read no class_weight). Two classes with ensemble=False keep the door units: scikit-learn's
-    # own fit then reads a column label_binarize does not make (or its predict refuses the one-class fit).
+    # these kinds read no class_weight). Two classes with ensemble=False: scikit-learn's own fit fails there
+    # (core/ensemble_member.mojo META_CAL_BINARY_MARKER_WORDS cites the line), raised natively in its words
+    # (lane mf-ens6; the door's fold units kept it before).
     var marker = _cal_marker(base, classes, context, b)
     if marker >= 0:
         if not ensemble and k == 2:
-            return _CAL_NOT_MEMBER
+            raise Error(META_CAL_BINARY_MARKER_WORDS)
         set.labels = Python.list()
     var markers = List[Int]()
     var codes_address = trees_address(codes)

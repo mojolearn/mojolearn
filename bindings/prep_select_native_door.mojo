@@ -353,8 +353,8 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             member.y = classical_check_y(y, n, classical_estimator_name(estimator), base.member_context)
     except:
         return member^
-    # The classifier adapter over more than two classes: its fit door's refusal, raised by its first fit
-    # (no elimination round fits a Gbdt kind first: `rfe_member_source`).
+    # The classifier adapter over more than two classes: its fit door's refusal, raised before the first
+    # round fits (since lane mf-imp6 the elimination rounds fit Gbdt kinds and read their importances).
     if member.labels is not None:
         gbdt_member_label_check(base.owner.plan, len(member.labels))
     if has_params:

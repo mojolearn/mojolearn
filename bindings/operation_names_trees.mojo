@@ -131,6 +131,9 @@ comptime TREES_OPN_TREES_META_PREDICT = 112
 comptime TREES_OPN_TREES_META_PREDICT_PROBA = 113
 comptime TREES_OPN_TREES_META_SCORE = 114
 comptime TREES_OPN_TREES_META_TRANSFORM = 115
+# lane mf-imp6: `feature_importances_` of GradientBoosting, its subclasses and
+# the adapters, after the chain's groups (routed beside the GBDT group).
+comptime TREES_OPN_TREES_GBDT_FEATURE_IMPORTANCES = 116
 
 # The first code of each group and its end (exclusive), in chain order.
 comptime TREES_FIRST_PUBLIC_IFOREST = 8
@@ -158,7 +161,7 @@ comptime TREES_FIRST_GBDT = 91
 comptime TREES_END_GBDT = 110
 comptime TREES_FIRST_META = 110
 comptime TREES_END_META = 116
-comptime TREES_COUNT = 116
+comptime TREES_COUNT = 117
 
 
 def operation_names_trees(mut names: List[String], mut leaves: List[Int]):
@@ -395,3 +398,5 @@ def operation_names_trees(mut names: List[String], mut leaves: List[Int]):
     leaves.append(TREES_OPN_TREES_META_SCORE)
     names.append("trees_meta_transform")
     leaves.append(TREES_OPN_TREES_META_TRANSFORM)
+    names.append("trees_gbdt_feature_importances")
+    leaves.append(TREES_OPN_TREES_GBDT_FEATURE_IMPORTANCES)

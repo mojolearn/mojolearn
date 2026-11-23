@@ -107,11 +107,28 @@ from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE,
-    MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
+    MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_BLOCK_FEATURE_IMPORTANCES,
 )
+from bindings.gbdt_importances_pack import GBDT_IMPORTANCES_FIELD, gbdt_importances_store
 
 
-comptime _ADAPTER_COPIED = 5
+comptime _ADAPTER_COPIED = 6
+
+
+def _importances_pack(own: PythonObject, plan: MemberPlan, state: Int, run: PythonObject) raises:
+    """`_feature_importances_` from the state's importance block (lane
+    mf-imp6), as the fit doors' PACK stores it; None for a state without one."""
+    var call = MemberCall(plan.route, state)
+    call.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var n = call.dst.rows * call.dst.cols
+    if n == 0:
+        py_setitem(own, PythonObject(GBDT_IMPORTANCES_FIELD), PythonObject(None))
+        return
+    var values = List[Float32](length=n, fill=Float32(0.0))
+    unsafe_memcpy(dest=values.unsafe_ptr(), src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=call.dst.data),
+                  count=n)
+    gbdt_importances_store(own, values, run)
 
 
 def _adapter_name(kind: Int) -> String:
@@ -675,10 +692,12 @@ def gbdt_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
         return
     if plan.kind == 3:
         _text_model_pack(model, plan, state, PythonObject(0))
+        _importances_pack(py_fields(model), plan, state, trees_route_context(model, context))
         return
     if plan.kind == 4:
         # OrderedRMSE: its fit door's PACK (`ordered_rmse_fit`: best_iteration_ None).
         _text_model_pack(model, plan, state, PythonObject(None))
+        _importances_pack(py_fields(model), plan, state, trees_route_context(model, context))
         return
     if plan.kind == 5:
         raise Error("AttributeError: 'HostGBDT' object has no attribute 'fit'")
@@ -722,8 +741,9 @@ def _adapter_pack(model: PythonObject, context: PythonObject, b: PythonObject, p
     py_setitem(own, nk[].k_numeric_mode_, py_item(learner_fields, nk[].k_numeric_mode))
     py_setitem(own, nk[].k_n_features_in_, py_item(learner_fields, nk[].k_n_features_in_))
     py_setitem(own, nk[].k_model_, py_item(learner_fields, nk[].k_model_))
-    var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_")
-    for i in range(_ADAPTER_COPIED):  # driver-loop: over fixed call structure, small-loop(copied): the five learner attributes
+    var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_",
+                              GBDT_IMPORTANCES_FIELD)
+    for i in range(_ADAPTER_COPIED):  # driver-loop: over fixed call structure, small-loop(copied): the six learner attributes
         py_setitem(own, copied[i], learner_fields[copied[i]])
     if plan.kind == 0:
         var kind = adapter_label_kind(labels, "y", native)
@@ -797,6 +817,7 @@ def _learner_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, 
     py_setitem(own, nk[].k_n_classes_, PythonObject(classes) if classes > 0 else PythonObject(None))
     py_setitem(own, nk[].k_learning_rate_, PythonObject(rate))
     py_setitem(own, nk[].k_boosting_type_, PythonObject("Ordered" if ordered else "Plain"))
+    _importances_pack(own, plan, state, run)
 
 
 def gbdt_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
@@ -837,6 +858,11 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
     var test_view = PythonObject(None)
     if test_curve is not None:
         test_view = classical_view(test_curve, context, "gbdt test loss curve")
+    # lane mf-imp6: the fitted `feature_importances_` (float64), when held
+    var imp_held = py_get(own, PythonObject(GBDT_IMPORTANCES_FIELD))
+    var imp_view = PythonObject(None)
+    if imp_held is not None:
+        imp_view = classical_view(imp_held, context, "feature_importances_")
     var classes_source = py_get(own, nk[].k_n_classes_)
     var boosting = py_get(own, nk[].k_boosting_type_)
     var best_source = py_get(own, nk[].k_best_iteration_)
@@ -870,6 +896,10 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
             call.block = MEMBER_BLOCK_FAMILY + 3
             call.x = MemberMatrix(Int(py=classical_address(test_view)), 1, Int(py=test_view.size), MEMBER_F64)
             _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if imp_view is not None:
+            call.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
+            call.x = MemberMatrix(Int(py=classical_address(imp_view)), 1, Int(py=imp_view.size), MEMBER_F64)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE
@@ -881,6 +911,7 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
     _ = len(no_curve)
     _ = map_view
     _ = test_view
+    _ = imp_view
     _ = len(packed)
     _ = len(scalars)
     _ = text

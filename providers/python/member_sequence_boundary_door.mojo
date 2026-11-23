@@ -8,10 +8,13 @@ UNPACK / PACK only (GIL held, once per member estimator, never per fold):
     with PyTorch's defaults), its route through the sequence resolver
     (`xseq_route`), the model and output-helper entries with their
     providers' workspaces, the R^2 entry of the route's metrics image for a
-    regressor, and the NEW words of core/sequence_member.mojo. A model with
-    an `lr_schedule` is NOT admitted (False: the caller keeps the
-    estimator's own path; its rate series runs on the optimizer schedule
-    owner, a Python boundary door, and depends on the fold's row count).
+    regressor, and the NEW words of core/sequence_member.mojo. A built-in
+    `lr_schedule` (DATA: its class and settings) is admitted as the door's
+    `opt_schedule` admits it and read once into the spec words; the member's
+    fit runs its native series over the fold's own step count (lane
+    mf-ens6). A schedule that is no built-in (a Python callback) is refused
+    natively by `opt_schedule` in the door's words, which name the built-in
+    native schedules.
   * `sequence_member_pack`: the fitted attributes the estimator's own fit
     writes (`params_` read-only, `loss_curve_`, `n_iter_`, `n_timesteps_`,
     `n_features_in_`, `n_outputs_`, `_y_1d` for a regressor); the stale
@@ -41,18 +44,27 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from sequence.xseq_neural_run import xseq_run_copy_f32
+from bindings.optimizer_admission_door import opt_schedule
+from bindings.optimizer_schedule_native_door import schedule_kind
+from bindings.optimizer_public_door import schedule_spec_admitted
 
 
 def sequence_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: a given `lr_schedule` (the fallback
-    rule) or a kind that is not the class's task."""
+    from the unfitted estimator. False: a kind that is not the class's task."""
     var nk = xseq_keys()
     if Int(py=_attr(py_type(model), "_TASK")) != kind:
         return False
-    if py_get(fields, nk[].k_lr_schedule) is not None:
-        return False
+    # The door's `_rnn_rates` admission of a given schedule, read once.
+    var lr_schedule = py_get(fields, nk[].k_lr_schedule)
+    var sched_words = List[Float64](length=10, fill=0.0)
+    if lr_schedule is not None:
+        var optimizer_context = py_item(context, nk[].k_optimizer_context)
+        opt_schedule(lr_schedule, optimizer_context)
+        var spec = schedule_spec_admitted(lr_schedule)
+        sched_words = [1.0, Float64(schedule_kind(lr_schedule, optimizer_context)), Float64(spec.kind),
+            Float64(spec.a), Float64(spec.b), Float64(spec.c), spec.f0, spec.f1, spec.f2, spec.f3]
     var cell = _rnn_cell(model, fields)
     var optimizer = _rnn_optimizer(py_get(fields, nk[].k_optimizer), py_get(fields, nk[].k_optimizer_options), context)
     var held = xseq_route(model, fields, context)
@@ -91,6 +103,8 @@ def sequence_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         optimizer.floats[5],
         Float64(Int(seed & 0xFFFFFFFF)), Float64(Int(seed >> 32)), 1.0 if fresh else 0.0,
     ]
+    for i in range(len(sched_words)):  # small-loop(the ten schedule words)
+        words.append(sched_words[i])
     owner.plan.params = words^
     owner.pins = Python.tuple(held.owner, model_provider, output_provider, held.metrics)
     return True

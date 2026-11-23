@@ -25,15 +25,16 @@ ROUTE SLOTS (filled by providers/python/member_forecast_seq_boundary_door.mojo):
     `route.entry`, the door's `route.glue`).
 
 MEMBER_OP_NEW parameters (Float64 words):
-  ETS, 11 words: [0] kind 1; [1] season_length m; [2] error (0 A, 1 M);
+  ETS, 14 words: [0] kind 1; [1] season_length m; [2] error (0 A, 1 M);
   [3] trend (0 N, 1 A); [4] season of the spec (0 N, 1 A, 2 M); [5] damped
   (0 / 1); [6] fixed-setting mask (1 alpha, 2 beta, 4 phi, 8 gamma); [7]
-  alpha; [8] beta; [9] phi; [10] gamma (0 when free). A spec that may need
-  positive data (error or season M) is admitted only on a CPU route beside
-  a GPU set (route `flags` 1), where the positivity scans are the host's
-  (`host_all_finite_f32`, `family_min_f32`, as the door there); on every
-  other route the estimator's own fit scans through the base binding's
-  Python entry `all_finite_f32`, so the caller keeps the estimator's path.
+  alpha; [8] beta; [9] phi; [10] gamma (0 when free); [11] 1: the FAST
+  stop is set (`_fast_stall`); [12] its iteration word; [13] its relative
+  drop (appended to the glue's words and floats, as the door's predict
+  does). A spec that needs positive data (error or season M) scans the
+  stored host series on every route (`host_all_finite_f32`, then
+  `family_min_f32` above zero: the door's host form; the answer is a truth
+  value, the same on every route; lane mf-ens6).
   theta, 8 words: [0] kind 0; [1] season_length; [2] model code (-1 auto
   selection, 0 STM, 1 OTM, 2 DSTM, 3 DOTM: the estimator's `model` mapped by
   the connected code table); [3] decomposition (1 additive, 0
@@ -95,7 +96,7 @@ comptime _INDEX_SPAN = 16777216
 comptime _KIND_THETA = 0
 comptime _KIND_ETS = 1
 comptime _THETA_WORDS = 8
-comptime _ETS_WORDS = 11
+comptime _ETS_WORDS = 14
 comptime _ETS_INFO = 10
 comptime _SCALAR_WORDS = 4
 comptime _THETA_INFO = 8
@@ -250,9 +251,6 @@ def _ets_checks(slot: _SlotP, call: _CallP, n: Int, size: Int) raises -> Int:
     var m = Int(w[1])
     var s = forecast_run_ets_season(spec, n, m)
     if forecast_run_ets_needs_positive(spec, s):
-        if (call[].route.flags & 1) == 0:
-            raise Error("member ABI: an ETS member scans positive data only on a CPU route; the estimator's "
-                + "own fit runs this check")
         var words = _F32P(unsafe_from_address=Int(slot[].series.unsafe_ptr()))
         var positive = host_all_finite_f32(words, size)
         if positive:
@@ -363,6 +361,10 @@ def _ets_run(slot: _SlotP, call: _CallP, h: Int) raises:
     var states = List[Float32](length=batch * m, fill=0.0)
     var words: List[Int] = [batch, slot[].n, h, Int(w[2]), Int(w[3]), Int(w[5]), Int(w[6]), slot[].letter, m]
     var floats: List[Float64] = [w[7], w[8], w[9], w[10]]
+    if w[11] != 0.0:
+        # The FAST stop's quality sweep, as the door's `_ets_predict` appends it.
+        words.append(Int(w[12]))
+        floats.append(w[13])
     forecast_run_ets(call[].route.entry, Int(slot[].series.unsafe_ptr()), Int(forecast.unsafe_ptr()),
         Int(info.unsafe_ptr()), Int(states.unsafe_ptr()), words, floats)
     slot[].info = info^
@@ -480,9 +482,10 @@ def _new(call: _CallP) raises:
     elif w[0] == Float64(_KIND_ETS):
         count = _ETS_WORDS
         if call[].param_count != count:
-            raise Error("member ABI: an ETS member takes eleven parameters")
+            raise Error("member ABI: an ETS member takes fourteen parameters")
         if (w[1] < 1.0 or (w[2] != 0.0 and w[2] != 1.0) or (w[3] != 0.0 and w[3] != 1.0) or w[4] < 0.0
-                or w[4] > 2.0 or (w[5] != 0.0 and w[5] != 1.0) or w[6] < 0.0 or w[6] > 15.0):
+                or w[4] > 2.0 or (w[5] != 0.0 and w[5] != 1.0) or w[6] < 0.0 or w[6] > 15.0
+                or (w[11] != 0.0 and w[11] != 1.0)):
             raise Error("member ABI: an ETS member's season, letter, damped or mask word is out of range")
     else:
         raise Error("member ABI: unknown forecaster member kind")

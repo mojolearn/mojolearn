@@ -15,7 +15,7 @@ from gbdt.fit_request import (
     GbdtFitArgs, GbdtFitOutcome, GBDT_ENTRY_ABI, XG_OP_COUNT, XG_CAPS, XG_NUMERIC_MODE, XG_FIT, XG_FIT_ROWMAJOR,
     XG_OUTCOME_SIZES, XG_OUTCOME_COPY, XG_OUTCOME_FREE, XG_MODEL_DIM, XG_CAP_ROW_MAJOR, gbdt_string_at,
     XG_PREDICT, XG_PREDICT_MULTI, XG_BINARY, XG_SIGMOID_PAIR, XG_RESIDENT_PREPARE, XG_RESIDENT_PREDICT,
-    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT,
+    XG_CAP_RESIDENT, XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT, XG_IMPORTANCES,
 )
 
 
@@ -114,6 +114,27 @@ def xg_resident_predict(entry: EntryRef, handle: Int, x: Int, n_rows: Int, dst: 
     var p: Array[Int, 4] = [handle, n_rows, mode, 1 if row_major else 0]
     var f: Array[Float64, 4] = [0.0, 0.0, 0.0, 0.0]
     return entry_ref_call(entry, entry_ref_op(entry, XG_RESIDENT_PREDICT), a, p, f)
+
+
+def xg_importances(entry: EntryRef, text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool,
+                   weights: Int, n_weights: Int) raises -> List[Float32]:
+    """`feature_importances_` of the model `text` fitted on the `n_rows` x
+    `n_input` float32 rows at `x` (C order when `row_major`; the fit's own
+    block, categorical columns as its dense codes) with `n_weights` (0 or
+    n_rows) float32 sample weights at `weights`: n_input float32 (lane
+    mf-imp6; the image computes it on its own column). The caller keeps its
+    buffers alive until this returns."""
+    var dst = List[Float32](length=max(n_input, 1), fill=Float32(0.0))
+    var a: Array[Int, 4] = [Int(text.unsafe_ptr()), x, weights, Int(dst.unsafe_ptr())]
+    var p: Array[Int, 5] = [text.byte_length(), n_rows, n_input, 1 if row_major else 0, n_weights]
+    var f: Array[Float64, 5] = [0.0, 0.0, 0.0, 0.0, 0.0]
+    var wrote = entry_ref_call(entry, entry_ref_op(entry, XG_IMPORTANCES), a, p, f)
+    _ = text  # the image read the text through its address
+    if wrote != n_input:
+        raise Error("gbdt importances: the image wrote " + String(wrote) + " values for " + String(n_input)
+                    + " columns")
+    dst.resize(n_input, Float32(0.0))
+    return dst^
 
 
 def _xg_outcome_text(entry: EntryRef, handle: Int) raises -> String:

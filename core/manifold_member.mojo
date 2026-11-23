@@ -14,7 +14,7 @@ same entries on the same words: the bits are the door's.
 
 Kinds: 0 UMAP (the only one; TSNE is family 42 and not a member).
 
-MEMBER_OP_NEW parameters (20 Float64 words):
+MEMBER_OP_NEW parameters (33 Float64 words):
   [0] kind (0)
   [1] n_neighbors  [2] n_components  [3] n_epochs (0: None)  [4] min_dist
   [5] spread  [6] set_op_mix_ratio  [7] local_connectivity  [8] seed
@@ -29,10 +29,17 @@ MEMBER_OP_NEW parameters (20 Float64 words):
   [18] target_weight
   [19] the numeric-mode word of the settings (0 fast, 1 identical; the
       fitted mode the transform compares, written by the PACK)
-The admission (providers/python/member_manifold_boundary_door.mojo) answers
-False for init 'random' / 'pca' / an array (their starts need the x_decomp
-kit images and, for an array, an n-shaped input per fit) and for integer
-settings that a Float64 word does not hold exactly.
+  [20] init (lane mf-nbr6): 0 'spectral', 1 'random', 2 'pca', 3 an array
+  [21] the array: the address of the admitted float32 matrix (pinned by the
+      plan), [22] its rows, [23] its columns (checked against (n,
+      n_components) at fit in the door's words, then its finite test)
+  [24 .. 26] 'random' / 'pca': the 'identical' x_decomp image's capability,
+      ordered-LLE and key words (its entry is `route.second`); [27 .. 29]
+      the default mode's x_decomp image (its entry is `route.third`), the
+      two images the door's `_umap_initial` runs the start on
+  [30] n_neighbors, [31] n_epochs, [32] the seed as their exact int64 bits
+      (`bitcast`; words 1, 3 and 8 hold the same values rounded to Float64,
+      so an integer at or above 2**53 is carried exactly)
 
 Views (all host, dense row-major; a device-home view, a row or column index
 and a sample weight are refused in words): X float32 rows x features. y
@@ -89,10 +96,20 @@ from x_ann.mani_umap_run import (
     umap_check_input, umap_check_neighbors, umap_check_spectral_samples, umap_continuous_target_dims,
     umap_legacy_abi, umap_check_embedding, umap_check_transform_state, umap_check_transform_input,
     umap_transform_reuses_fit, umap_check_transform_output,
+    umap_init_shape_matches, umap_init_shape_refusal, umap_check_init_finite,
 )
+from std.memory import bitcast
+from bindings.mani_kit_run import MRun, MImage
+from bindings.mani_umap_init_run import umap_random_start_run, umap_pca_start_run
 
 comptime MANIFOLD_KIND_UMAP = 0
-comptime MANIFOLD_PARAM_COUNT = 20
+comptime MANIFOLD_PARAM_COUNT = 33
+comptime MANIFOLD_INIT_SPECTRAL = 0
+comptime MANIFOLD_INIT_RANDOM = 1
+comptime MANIFOLD_INIT_PCA = 2
+comptime MANIFOLD_INIT_ARRAY = 3
+comptime MF_INIT_WORD = 20
+comptime MF_EXACT_WORD = 30
 comptime MF_BLOCK_ROWS = MEMBER_BLOCK_FAMILY
 comptime MF_BLOCK_EMBEDDING = MEMBER_BLOCK_FAMILY + 1
 
@@ -174,7 +191,7 @@ def _mint(words: _F64P, count: Int) raises -> Int:
         slot[].live = True
         slot[].fitted = False
         var params = List[Float64](length=count, fill=0.0)
-        for i in range(count):  # small-loop(params: the twenty NEW words)
+        for i in range(count):  # small-loop(params: the thirty-three NEW words)
             params[i] = words[i]
         slot[].params = params^
         slot[].rows_addr = 0
@@ -223,15 +240,65 @@ def _dense(view: MemberMatrix, what: String) raises:
         raise Error("TypeError: a UMAP member reads " + what + " as a dense host float32 view")
 
 
+def _exact(slot: _SlotPtr, index: Int) -> Int:
+    """An integer setting's exact int64 bits (words 30 .. 32)."""
+    return Int(bitcast[DType.int64](slot[].params[MF_EXACT_WORD + index]))
+
+
 def _config(slot: _SlotPtr) -> UmapConfigWords:
-    """The door's `_umap_config_words`, from the NEW words 1 .. 15."""
+    """The door's `_umap_config_words`, from the NEW words 1 .. 15 (n_neighbors,
+    n_epochs and the seed from their exact words 30 .. 32)."""
     ref w = slot[].params
-    return UmapConfigWords(Int(w[1]), Int(w[2]), Int(w[3]), w[4], w[5], w[6], w[7], Int(w[8]), w[9], w[10],
-        Int(w[11]), Int(w[12]), w[13], w[14], w[15])
+    return UmapConfigWords(_exact(slot, 0), Int(w[2]), _exact(slot, 1), w[4], w[5], w[6], w[7], _exact(slot, 2),
+        w[9], w[10], Int(w[11]), Int(w[12]), w[13], w[14], w[15])
+
+
+def _start(slot: _SlotPtr, call: _CallPtr, n: Int, nc: Int, mut words: List[Float32]) raises -> Int:
+    """The door's `_umap_initial` (bindings/mani_umap_native_door.mojo): 0 for
+    'spectral'; 'random' / 'pca' run the start on the two x_decomp images
+    (`route.second` the 'identical' one, `route.third` the default mode's)
+    into `words` (the door's `mk_out2` host copy) and answer its address; an
+    array is the pinned matrix, after the door's shape refusal and finite
+    test (lane mf-nbr6)."""
+    var code = Int(slot[].params[MF_INIT_WORD])
+    if code == MANIFOLD_INIT_SPECTRAL:
+        return 0
+    if code == MANIFOLD_INIT_ARRAY:
+        var address = Int(slot[].params[MF_INIT_WORD + 1])
+        var rows = Int(slot[].params[MF_INIT_WORD + 2])
+        var cols = Int(slot[].params[MF_INIT_WORD + 3])
+        if not umap_init_shape_matches(rows, cols, n, nc):
+            var refusal = umap_init_shape_refusal("(" + String(rows) + ", " + String(cols) + ")", n, nc)
+            raise refusal^
+        umap_check_init_finite(address, rows * cols)
+        return address
+    if not call[].route.has_second or not call[].route.has_third:
+        raise Error("member ABI: a UMAP member's random or pca start needs the route's x_decomp images "
+            + "(second, third)")
+    ref w = slot[].params
+    var seed_word = _exact(slot, 2) & 0xFFFFFFFF
+    var run = MRun()
+    try:
+        var k = run.image(MImage(call[].route.second, Int(w[MF_INIT_WORD + 6]), Int(w[MF_INIT_WORD + 4]),
+            w[MF_INIT_WORD + 5] != 0.0, -1))
+        var start = -1
+        if code == MANIFOLD_INIT_RANDOM:
+            start = umap_random_start_run(run, k, n, nc, seed_word)
+        else:
+            var hk = run.image(MImage(call[].route.third, Int(w[MF_INIT_WORD + 9]), Int(w[MF_INIT_WORD + 7]),
+                w[MF_INIT_WORD + 8] != 0.0, -1))
+            start = umap_pca_start_run(run, k, hk, call[].x.data, call[].x.rows, call[].x.cols, 2, n, nc, seed_word)
+        var count = n * nc
+        words = List[Float32](length=max(count, 1), fill=Float32(0.0))
+        if count > 0:
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=run.addr(start)), count=count)
+    finally:
+        run.close()
+    return Int(words.unsafe_ptr())
 
 
 def _fit(slot: _SlotPtr, call: _CallPtr) raises:
-    """`_umap_fit` with a spectral start: the door's checks in its order,
+    """`_umap_fit`: the door's checks in its order, its start (`_start`),
     then the legacy or extended fit entry into the slot's embedding."""
     _whole(call)
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
@@ -249,7 +316,11 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("ValueError: the embedding buffer holds " + String(nc) + " components per row of X")
     umap_check_input(call[].x.data, n * d)
     umap_check_neighbors(cfg.n_neighbors, n)
-    umap_check_spectral_samples(False, n, nc)
+    # The start (lane mf-nbr6): `_umap_initial`, then the spectral-sample check with its answer.
+    var start_words = List[Float32]()
+    var start = _start(slot, call, n, nc, start_words)
+    var initial = Int(slot[].params[MF_INIT_WORD]) != MANIFOLD_INIT_SPECTRAL
+    umap_check_spectral_samples(initial, n, nc)
     var has_target = call[].y.rows > 0
     var target = UmapTargetWords.none()
     if has_target:
@@ -267,10 +338,11 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     var embedding_address = Int(embedding.unsafe_ptr())
     var entry = call[].route.entry.call
     var columns = 0
-    if umap_legacy_abi(False, has_target, cfg.default_extras(), nc):
+    if umap_legacy_abi(initial, has_target, cfg.default_extras(), nc):
         columns = umap_fit_call(entry, call[].x.data, embedding_address, n, d, cfg, not cfg.legacy_rates())
     else:
-        columns = umap_fit_ex_call(entry, call[].x.data, embedding_address, 0, n, d, cfg, target)
+        columns = umap_fit_ex_call(entry, call[].x.data, embedding_address, start, n, d, cfg, target)
+    _ = len(start_words)   # the start's words stay alive through the fit call above
     umap_check_embedding(columns == nc, embedding_address, n * nc)
     # Borrow, never copy (LIFETIME in the module docstring). A copy a
     # previous import or export left in the slot is dropped.
@@ -409,8 +481,9 @@ def _manifold_member(operation: Int, address: Int) raises -> Int:
         return _CAPABILITIES | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR
     if operation == MEMBER_OP_NEW:
         if call[].param_count != MANIFOLD_PARAM_COUNT or not call[].params:
-            raise Error("member ABI: a UMAP member takes twenty parameters (kind, the eleven config words, "
-                + "the four extras words, target metric, target_n_neighbors, target_weight, mode)")
+            raise Error("member ABI: a UMAP member takes thirty-three parameters (kind, the eleven config words, "
+                + "the four extras words, target metric, target_n_neighbors, target_weight, mode, the init words, "
+                + "the exact integer words)")
         var words = _F64P(unsafe_from_address=call[].params)
         if words[0] != Float64(MANIFOLD_KIND_UMAP):
             raise Error("member ABI: unknown Manifold member kind")
@@ -428,7 +501,7 @@ def _manifold_member(operation: Int, address: Int) raises -> Int:
             components = Int(_SlotPtr(unsafe_from_address=_lookup(call[].state, False))[].params[2])
         else:
             if call[].param_count != MANIFOLD_PARAM_COUNT or not call[].params:
-                raise Error("member ABI: a UMAP member takes twenty parameters")
+                raise Error("member ABI: a UMAP member takes thirty-three parameters")
             components = Int(_F64P(unsafe_from_address=call[].params)[2])
         if call[].flags != 0 and call[].flags != MEMBER_OP_TRANSFORM:
             member_unsupported("UMAP", call[].flags)

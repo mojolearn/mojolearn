@@ -86,15 +86,16 @@ MEMBER_OP_NEW parameters, SimpleImputer (Float64 words, 10): [0] kind 7,
 statistics 0 / 1 (`x_prep_idn_fam` & IDN_STATS_BLOCKED), [6] fill_value
 (constant; 0 for None), [7] keep_empty_features 0 / 1, [8] add_indicator
 0 / 1, [9] R3 work region 0 / 1. Output width = kept + indicator columns.
-MEMBER_OP_NEW parameters, KBinsDiscretizer (Float64 words, 10 + c): [0] kind
+MEMBER_OP_NEW parameters, KBinsDiscretizer (Float64 words, 11 + c): [0] kind
 8, [1] encode 0 'onehot', 1 'onehot-dense', 2 'ordinal', [2] strategy 0
 'uniform', 3 'kmeans', quantile by quantile_method 1 averaged_inverted_cdf,
 2 linear, 4 inverted_cdf, 5 closest_observation, 6
 interpolated_inverted_cdf, 7 hazen, 8 weibull, 9 median_unbiased, 10
 normal_unbiased, [3] subsample (-1 None), [4] / [5] the uint64 random_state
 low / high 32-bit words, [6] blocked column statistics 0 / 1, [7] R3 work
-region 0 / 1, [8] c: 0 = one n_bins for every column in [9], else c
-per-column n_bins in [10 .. 10 + c). sample_weight (MEMBER_CAN_SAMPLE_WEIGHT,
+region 0 / 1, [8] c: 0 = one n_bins for every column in [9], [10] 1:
+random_state is a RandomState (refused at the draw in the door's words,
+`KB_RNG_WORDS`), else c per-column n_bins in [11 .. 11 + c). sample_weight (MEMBER_CAN_SAMPLE_WEIGHT,
 this kind only): a dense host float32 vector, one weight per row of X (of
 the whole X with a row index). Transform: ordinal codes (features columns)
 or one-hot blocks (sum of n_bins_ columns), float32; inverse_transform: the
@@ -223,7 +224,7 @@ from core.preprocessing_program import prep_program_stage as _stage
 from bindings.prep_encode_prog_run import EncProgram
 from bindings.prep_encode_kbins_run import (
     KBinsFit, KBinsApply, KBinsInverse, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage,
-    enc_weights_stage, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED,
+    enc_weights_stage, KB_DRAW_NONE, KB_DRAW_PLAIN, KB_DRAW_WEIGHTED, KB_RNG_WORDS,
 )
 from bindings.prep_encode_spline_run import (
     SplineFit, SplineApply, spline_fit_stage, spline_transform_stage, spline_features,
@@ -275,7 +276,7 @@ comptime PREP_KIND_IMPUTER = 7
 comptime PREP_IMPUTER_PARAM_COUNT = 10
 comptime PREP_KIND_KBINS = 8
 #: KBinsDiscretizer's fixed words; `words[8]` per-column n_bins words follow.
-comptime PREP_KBINS_HEADER = 10
+comptime PREP_KBINS_HEADER = 11
 #: KBinsDiscretizer's encode codes.
 comptime PREP_KBINS_ONEHOT = 0
 comptime PREP_KBINS_ONEHOT_DENSE = 1
@@ -1473,6 +1474,8 @@ def _fit_kbins(slot: _Slot, call: _Call) raises:
     var draw = KB_DRAW_NONE
     var draws = 0
     if resample:
+        if w[10] != 0.0:
+            raise Error(KB_RNG_WORDS)
         draws = subsample
         # a weighted resample with replacement is drawn in the fit's program,
         # and the edges of its rows are then unweighted

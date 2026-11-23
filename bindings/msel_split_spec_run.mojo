@@ -136,6 +136,11 @@ struct MselSplitSpec(Copyable, Movable, Defaultable):
     var listed_test: List[List[Int64]]
     var int_cv: Bool
     var rows_helpers: EntryRef
+    #: TimeSeriesSplit (lane mf-lin6, a strict reader): a max_train_size the
+    #: door could not read, and its words; raised at fit after the plan's own
+    #: refusals and only when the plan makes a split, as the door does.
+    var max_train_unread: Bool
+    var max_train_refusal: String
 
     def __init__(out self):
         self.kind = MSEL_SPEC_NONE
@@ -160,6 +165,8 @@ struct MselSplitSpec(Copyable, Movable, Defaultable):
         self.listed_test = List[List[Int64]]()
         self.int_cv = False
         self.rows_helpers = entry_ref_unresolved()
+        self.max_train_unread = False
+        self.max_train_refusal = String("")
 
 
 struct MselGroupCodes(Movable):
@@ -382,8 +389,12 @@ def msel_spec_sides(spec: MselSplitSpec, n: Int, codes: Int, classes: Int,
         _take(route, msel_plan_strat_group(route, n, labels, MSEL_LABELS_SORTED, groups.view(), spec.k, spec.shuffle,
                                            spec.seed), sides, codes, n, classes)
     elif kind == MSEL_SPEC_TIME_SERIES:
-        _take(route, msel_plan_time_series(n, spec.k, spec.ts, spec.has_ts, spec.gap, spec.max_train), sides, codes,
-              n, classes)
+        var plan = msel_plan_time_series(n, spec.k, spec.ts, spec.has_ts, spec.gap, spec.max_train)
+        if spec.max_train_unread and plan.splits() > 0:
+            # The door's order (`msel_time_series_split`): the plan's refusals
+            # first, then an unreadable max_train_size, only for a split.
+            raise Error(spec.max_train_refusal)
+        _take(route, plan^, sides, codes, n, classes)
     elif kind == MSEL_SPEC_LOO:
         _take(route, msel_plan_leave_one_out(n), sides, codes, n, classes)
     elif kind == MSEL_SPEC_LPO:

@@ -324,6 +324,13 @@ comptime META_BLOCK_OOB = MEMBER_BLOCK_FAMILY + 4
 #: The entry's settings words of each unit kind.
 comptime META_OVR_DECISION = 0          # the base has decision_function (1.0)
 comptime META_OVR_WORDS = 1
+#: CalibratedClassifierCV(ensemble=False) over a LabelPropagation / LabelSpreading base whose y holds the
+#: unlabeled -1 and one class (two labels): scikit-learn's own fit fails (lane mf-ens6). calibration.py
+#: `_fit_calibrator`: `Y = label_binarize(y, classes=classes)` makes ONE column for two classes, the base's
+#: classes_ exclude -1, so `pos_class_indices` is [1] and `calibrator.fit(this_pred, Y[:, class_idx], ...)`
+#: indexes column 1 of a one-column array: NumPy's IndexError, in its words. Raised natively by the meta door
+#: (`_cal_native`) and THE CALIBRATED KIND's admission (`_admit_cal_base`).
+comptime META_CAL_BINARY_MARKER_WORDS = "IndexError: index 1 is out of bounds for axis 1 with size 1"
 comptime META_CAL_SIGMOID = 0           # method='sigmoid' (1.0), else isotonic
 comptime META_CAL_ENSEMBLE = 1          # ensemble=True (1.0)
 comptime META_CAL_DECISION = 2          # the base has decision_function (1.0)

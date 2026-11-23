@@ -35,7 +35,7 @@ from bindings.prep_keys_unpack import prep_keys
 from bindings.prep_classify_prog_door import f32_input
 from bindings.prep_classify_common_door import (
     cls_mode, cls_float, cls_repr, blocked, float_list, check_priors, classical_shared, cls_da_mode,
-    da_shrinkage, da_check_estimator_shrinkage, da_solver_is,
+    da_shrinkage, da_check_estimator_shrinkage, da_solver_is, lda_n_components,
 )
 from bindings.prep_classify_prog_run import CLS_LDA_SVD, CLS_LDA_LSQR, CLS_LDA_EIGEN
 from bindings.prep_lda_admission_door import lda_native_context
@@ -64,8 +64,9 @@ def _kind_name(kind: Int) -> String:
 def discriminant_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: this class has no member entry, or
-    its settings stay on its door."""
+    from the unfitted estimator. False: this class has no member entry
+    (an unpublished kind; every published setting is a member route or the
+    door's refusal in its words since lane mf-lin6)."""
     if not discriminant_kind_published(kind):
         return False
     var nk = prep_keys()
@@ -92,12 +93,8 @@ def discriminant_member_admit(model: PythonObject, fields: PythonObject, kind: I
     var shr = da_shrinkage(py_item(fields, nk[].k_shrinkage), checks)
     var sixth = -1.0
     if lda:
-        var nc = py_item(fields, nk[].k_n_components)
-        if nc is not None:
-            var asked = Int(py=py_call(native_loaded_module("builtins").int, nc))
-            if asked < 1:
-                return False
-            sixth = Float64(asked)
+        # None: -1; below 1: scikit-learn's own refusal (lane mf-lin6, `lda_n_components`).
+        sixth = Float64(lda_n_components(py_item(fields, nk[].k_n_components)))
     elif not eigen:
         sixth = cls_float(py_item(fields, nk[].k_reg_param))
     else:

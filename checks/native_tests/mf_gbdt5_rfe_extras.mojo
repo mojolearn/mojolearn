@@ -19,18 +19,23 @@ Cases (one row each, run across the host cores by `check_cases`):
     order the held-out X is the caller's own block; with nothing given no view is set; `member_fit_extras_clear`
     empties them all. Fail-proof: drop `width = count` (the held-out X stays 5 wide), or set `call.pairs` with
     `extras.rows` rows.
-  3 the no-importance refusal of a Gbdt kind (`rfe_member_source`, MEMBER_FAMILY_GBDT, a mask with neither
-    MEMBER_CAN_COEF nor MEMBER_CAN_IMPORTANCES): 'auto' gives RFE_NO_IMPORTANCES, 'coef_' and
-    'feature_importances_' scikit-learn's attrgetter words with the class name; a kind of another family with
-    neither block keeps the estimator's own doors (block 0, no words). Fail-proof: drop MEMBER_FAMILY_GBDT from
-    the family test in `rfe_member_source`.
+  3 the importance source of a Gbdt kind (`rfe_member_source`, MEMBER_FAMILY_GBDT; lane mf-imp6: the kind
+    carries MEMBER_CAN_IMPORTANCES): 'auto' takes MEMBER_BLOCK_FEATURE_IMPORTANCES as given, the named
+    'feature_importances_' that block squared, 'coef_' scikit-learn's attrgetter words with the class name; a
+    Gbdt mask without the bit no longer answers RFE_NO_IMPORTANCES; a kind of another family with neither block
+    keeps the estimator's own doors (block 0, no words). Fail-proof: drop the `family == MEMBER_FAMILY_GBDT and
+    getter == "coef_"` test in `rfe_member_source` (coef_ gets no words), or put MEMBER_FAMILY_GBDT back in the
+    no-importance family test ('bare gbdt' gets RFE_NO_IMPORTANCES).
 The end-to-end fits (RFE's final fit over a Gbdt member with eval_set, weights, group_id and pairs against the
 estimator's own fit on the same columns) need the gbdt image, so they are Python tests
 (python/mojolearn/tests/test_rfe_gbdt_fit_params.py).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
-from core.member_abi import MemberCall, MemberMatrix, MEMBER_F32, MEMBER_I32, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT
+from core.member_abi import (
+    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_I32, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORTANCES,
+    MEMBER_BLOCK_FEATURE_IMPORTANCES,
+)
 from core.device_route import DeviceRoute, DEVICE_CPU
 from core.member_families import MEMBER_FAMILY_GBDT, MEMBER_FAMILY_LINEAR
 from core.member_set_run import MemberFitExtras, member_eval_columns, member_fit_extras_apply, member_fit_extras_clear
@@ -182,15 +187,22 @@ def check_extras_views() raises:
 
 
 def check_gbdt_refusal() raises:
-    var mask = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT
+    # lane mf-imp6: a Gbdt kind exports its feature importances (MEMBER_CAN_IMPORTANCES), so 'auto' and
+    # 'feature_importances_' read that block; only 'coef_' is refused, in attrgetter's words.
+    var mask = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORTANCES
     var auto = rfe_member_source(MEMBER_FAMILY_GBDT, mask, "auto", "GradientBoostingRegressor")
-    require(auto.block == 0 and auto.refusal == String(RFE_NO_IMPORTANCES), "auto: " + auto.refusal)
+    require(auto.block == MEMBER_BLOCK_FEATURE_IMPORTANCES and not auto.squared and auto.refusal.byte_length() == 0,
+            "auto: " + auto.refusal)
     var coef = rfe_member_source(MEMBER_FAMILY_GBDT, mask, "coef_", "GradientBoosting")
-    require(coef.refusal == "AttributeError: 'GradientBoosting' object has no attribute 'coef_'", "coef_: " + coef.refusal)
+    require(coef.block == 0 and coef.refusal == "AttributeError: 'GradientBoosting' object has no attribute 'coef_'",
+            "coef_: " + coef.refusal)
     var named = rfe_member_source(MEMBER_FAMILY_GBDT, mask, "feature_importances_", "GradientBoostingClassifier")
-    require(named.refusal == "AttributeError: 'GradientBoostingClassifier' object has no attribute 'feature_importances_'",
+    require(named.block == MEMBER_BLOCK_FEATURE_IMPORTANCES and named.squared and named.refusal.byte_length() == 0,
             "feature_importances_: " + named.refusal)
-    var other = rfe_member_source(MEMBER_FAMILY_LINEAR, mask, "auto", "")
+    # RFE_NO_IMPORTANCES is no longer a Gbdt answer: a Gbdt mask without the bit keeps its doors
+    var bare = rfe_member_source(MEMBER_FAMILY_GBDT, MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, "auto", "GradientBoosting")
+    require(bare.block == 0 and bare.refusal != String(RFE_NO_IMPORTANCES), "bare gbdt: " + bare.refusal)
+    var other = rfe_member_source(MEMBER_FAMILY_LINEAR, MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, "auto", "")
     require(other.block == 0 and other.refusal.byte_length() == 0, "another family keeps its doors")
 
 

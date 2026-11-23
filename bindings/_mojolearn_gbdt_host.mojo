@@ -102,6 +102,7 @@ from gbdt.mojolearn_gbdt_host_run import (
     gbdt_predict_multi_run,
 )
 from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, gbdt_entry_releases, GbdtImage
+from core.gbdt_importance import gbdt_feature_importances_host
 from core.native_descriptor_call import native_descriptor_report
 from core.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
 
@@ -431,6 +432,17 @@ struct _GbdtHostImage(GbdtImage):
                          random_seed: Int) raises -> String:
         return gbdt_fit_two_level_feature_freq_native(x, y, weights, sources, n_rows, n_features, n_weights,
             n_sources, learning_rate, l2_leaf_reg)
+
+    @staticmethod
+    def importances(text: String, x: Int, n_rows: Int, n_input: Int, row_major: Bool, weights: Int,
+                    n_weights: Int, dst: Int) raises -> Int:
+        # XG_IMPORTANCES (lane mf-imp6): the host column, the same bodies and
+        # fold order as the device column (core/gbdt_importance.mojo).
+        var values = gbdt_feature_importances_host(text, x, n_rows, n_input, row_major, weights, n_weights)
+        var into = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst)
+        for c in range(len(values)):  # small-loop(one word per input column: the result copy)
+            into[c] = values[c]
+        return len(values)
 
 
 def gbdt_host_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

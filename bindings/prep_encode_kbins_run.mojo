@@ -46,6 +46,10 @@ comptime KB_UNIFORM = 0
 comptime KB_AVERAGED = 1
 comptime KB_KMEANS = 3
 # `KBinsFit.draw`
+# A RandomState random_state at the subsample draw (lane mf-ens6): the words
+# the door's int(random_state) gave, plus the native alternative.
+comptime KB_RNG_WORDS = ("TypeError: int() argument must be a string, a bytes-like object or a real number, "
+    + "not 'RandomState'; pass an integer random_state")
 comptime KB_DRAW_NONE = 0
 comptime KB_DRAW_PLAIN = 1
 comptime KB_DRAW_WEIGHTED = 2

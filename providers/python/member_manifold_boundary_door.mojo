@@ -13,9 +13,11 @@ not a member (no transform of new rows).
     `route.mode` / `route.vendor` = the key's words; the 20 NEW words. The
     target settings are read without raising (the door checks them only
     when y is given): one the door refuses becomes target word -1 and a fit
-    with y falls back to the door. False (the caller keeps the door): init
-    other than 'spectral', an integer setting a Float64 word does not hold
-    exactly (>= 2**53).
+    with y falls back to the door. Every init is a member (lane mf-nbr6):
+    'random' / 'pca' carry the two x_decomp images the door's
+    `_umap_initial` runs the start on (`route.second` / `route.third` and
+    their words), an array is admitted once and pinned with the plan; the
+    integer settings travel as exact int64 bits too (words 30 .. 32).
   * `manifold_member_pack` (PACK): the attributes `_umap_fit` and
     `manifold_finish` write: `embedding_`, `n_features_in_`,
     `input_copied_` (False: the member reads the caller's admitted view),
@@ -44,7 +46,13 @@ from bindings.umap_parameters_native_door import (
 )
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.entry_table import EntryRef, entry_ref_word
-from core.manifold_member import MANIFOLD_KIND_UMAP, MF_BLOCK_ROWS, MF_BLOCK_EMBEDDING
+from core.manifold_member import (
+    MANIFOLD_KIND_UMAP, MF_BLOCK_ROWS, MF_BLOCK_EMBEDDING, MANIFOLD_INIT_SPECTRAL, MANIFOLD_INIT_RANDOM,
+    MANIFOLD_INIT_PCA, MANIFOLD_INIT_ARRAY, MF_EXACT_WORD,
+)
+from std.memory import bitcast
+from bindings.mani_kit_run import MRun
+from bindings.mani_kit_door import mk_image
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_IMPORT_DONE,
@@ -103,7 +111,8 @@ def _target_words(fields: PythonObject, context: PythonObject, b: PythonObject) 
 def manifold_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: the caller keeps the door."""
+    from the unfitted estimator. Always True: every setting is a member or a
+    refusal in the door's words (lane mf-nbr6)."""
     if kind != MANIFOLD_KIND_UMAP:
         raise Error("ValueError: mojolearn: Manifold member kind " + String(kind) + " is not published")
     # Operation-local, as the door's (bindings/manifold_native_pack.mojo):
@@ -114,13 +123,15 @@ def manifold_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     var config = validated[0]
     var extras = validated[1]
     var init = py_get(fields, "init")
-    if not umap_is_string(init) or String(py=init) != "spectral":
-        return False
+    var init_code = MANIFOLD_INIT_ARRAY
+    if umap_is_string(init):
+        var name = String(py=init)
+        init_code = (MANIFOLD_INIT_SPECTRAL if name == "spectral" else MANIFOLD_INIT_RANDOM if name == "random"
+                     else MANIFOLD_INIT_PCA)
+    # n_neighbors, n_epochs and the seed may exceed 2**53: their exact bits travel in words 30 .. 32.
     var neighbors = Int(py=config[0])
     var epochs = Int(py=config[2])
     var seed = Int(py=config[7])
-    if neighbors >= _EXACT or epochs >= _EXACT or seed >= _EXACT:
-        return False
     var settings = _mode_word(fields, context, b)
     var mode_object = settings[0]
     var mode = settings[1]
@@ -134,8 +145,40 @@ def manifold_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     route.mode = key.mode
     route.vendor = key.vendor
     route.entry = EntryRef(umap_ops_entry(key), entry_ref_word(key.mode, key.vendor, UMAP_OPERATION_COUNT))
+    var init_words = List[Float64](length=10, fill=0.0)
+    init_words[0] = Float64(init_code)
+    var start = PythonObject(None)
+    var images = PythonObject(None)
+    if init_code == MANIFOLD_INIT_ARRAY:
+        # The door admits the array at its fit (`_umap_initial`); here once, pinned with the plan.
+        start = admit_x(init, 2, "init", local, finite=False)   # finite: the fit's own test, in the door's words
+        init_words[1] = Float64(Int(py=classical_address(start)))
+        init_words[2] = Float64(Int(py=start.shape[0]))
+        init_words[3] = Float64(Int(py=start.shape[1]))
+    elif init_code != MANIFOLD_INIT_SPECTRAL:
+        # `_umap_initial`'s two images: the 'identical' x_decomp binding and the default mode's.
+        var default_mode = py_item(py_item(context, "backend_fields"), "_DEFAULT_MODE")
+        var identical = estimator_binding_routed(model, PythonObject("identical"), "_mojolearn_x_decomp", local)
+        var helper = estimator_binding_routed(model, default_mode, "_mojolearn_x_decomp", local)
+        var run = MRun()
+        try:
+            var k = mk_image(run, "identical", identical, local)
+            var hk = mk_image(run, String(py=py_call(b.str, default_mode)), helper, local)
+            init_words[4] = Float64(run.images[k].capabilities())
+            init_words[5] = 1.0 if run.images[k].lle_ordered else 0.0
+            init_words[6] = Float64(run.images[k].key)
+            init_words[7] = Float64(run.images[hk].capabilities())
+            init_words[8] = 1.0 if run.images[hk].lle_ordered else 0.0
+            init_words[9] = Float64(run.images[hk].key)
+            route.second = run.images[k].entry
+            route.third = run.images[hk].entry
+            route.has_second = True
+            route.has_third = True
+        finally:
+            run.close()
+        images = Python.tuple(identical, helper)
     owner.plan.route = route
-    owner.pins = Python.tuple(binding)
+    owner.pins = Python.tuple(binding, start, images)
     var target = _target_words(fields, local, b)
     var words: List[Float64] = [Float64(MANIFOLD_KIND_UMAP)]
     for i in range(11):  # small-loop(config: the door's eleven validated words)
@@ -146,6 +189,11 @@ def manifold_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     words.append(target[1])
     words.append(target[2])
     words.append(Float64(umap_mode_code(mode)))
+    for i in range(10):  # small-loop(init: the ten start words)
+        words.append(init_words[i])
+    words.append(bitcast[DType.float64](Int64(neighbors)))
+    words.append(bitcast[DType.float64](Int64(epochs)))
+    words.append(bitcast[DType.float64](Int64(seed)))
     owner.plan.params = words^
     _ = local
     return True
@@ -153,11 +201,15 @@ def manifold_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
 
 def _config_tuple(plan: MemberPlan) raises -> PythonObject:
     """The door's `tuple(config) + tuple(extras)` from the NEW words 1 .. 15
-    (ints where the door's are ints: the counts, the seed, the metric code)."""
+    (ints where the door's are ints: the counts, the seed, the metric code;
+    n_neighbors, n_epochs and the seed from their exact words 30 .. 32)."""
     var items = Python.list()
     for i in range(1, 16):  # small-loop(config: the fifteen validated words)
         var word = plan.params[i]
-        if i == 1 or i == 2 or i == 3 or i == 8 or i == 11 or i == 12:
+        var exact = 0 if i == 1 else (1 if i == 3 else (2 if i == 8 else -1))
+        if exact >= 0:
+            _ = py_call(items.append, PythonObject(Int(bitcast[DType.int64](plan.params[MF_EXACT_WORD + exact]))))
+        elif i == 2 or i == 11 or i == 12:
             _ = py_call(items.append, PythonObject(Int(word)))
         else:
             _ = py_call(items.append, PythonObject(word))

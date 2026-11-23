@@ -103,8 +103,12 @@ Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
   4 `MEMBER_BLOCK_FAMILY + 3` float64 1 x iterations: the held-out loss
     curve (`test_loss_curve_`, lane mf-left4), 0 rows for a fit without an
     eval set (None)
+  5 `MEMBER_BLOCK_FEATURE_IMPORTANCES` float32 1 x features: the fit's
+    `feature_importances_` (lane mf-imp6: `xg_importances` on the block the
+    fit read, core/gbdt_importance.mojo), 0 rows for an imported model saved
+    without them; an import takes float32 or the public float64 vector
 An import needs blocks 0 to 2 (and 3 for a CTR model, before the scalars;
-4 is optional); the block that carries MEMBER_IMPORT_DONE comes last.
+4 and 5 are optional); the block that carries MEMBER_IMPORT_DONE comes last.
 
 LIFETIME: the state owns everything it reads after FIT (the model text and
 the curves); it keeps no pointer into a fit buffer (no MEMBER_BORROWS_FIT).
@@ -123,7 +127,7 @@ from core.gbdt_entry_table import gbdt_vendor_word
 from gbdt.fit_request import GbdtFitArgs, gbdt_string_at
 from gbdt.fit_calls import (
     xg_row_major, xg_model_dim, xg_fit, xg_resident, xg_resident_prepare, xg_resident_predict, xg_predict,
-    xg_predict_multi, xg_sigmoid_pair, xg_binary, xg_feature_freq_fit, xg_ordered_fit,
+    xg_predict_multi, xg_sigmoid_pair, xg_binary, xg_feature_freq_fit, xg_ordered_fit, xg_importances,
 )
 from gbdt.trees_gbdt_run import gbdt_text_has_ctr
 from gbdt.trees_gbdt_fit_run import (
@@ -150,7 +154,7 @@ from core.member_abi import (
     MEMBER_OP_SCORE,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_HOME_DEVICE, MEMBER_GIL_FREE, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE,
-    MEMBER_CAN_CLASSIFIER,
+    MEMBER_CAN_CLASSIFIER, MEMBER_CAN_IMPORTANCES, MEMBER_BLOCK_FEATURE_IMPORTANCES,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -174,7 +178,7 @@ comptime _KIND_HOST = 5
 comptime _ORDERED_NO_PERMUTATION = "TypeError: OrderedRMSE.fit() missing 1 required keyword-only argument: 'permutation'"
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
-comptime _BLOCKS = 5
+comptime _BLOCKS = 6
 comptime _SCALARS = 9
 #: the image's predict modes (bindings/trees_public_gbdt_door.mojo `_PREDICT_*`)
 comptime _PREDICT_RAW = 0
@@ -226,6 +230,9 @@ struct GbdtMemberSlot(Copyable, Movable, Defaultable):
     # estimator's `test_loss_curve_`; `has_test` False: None.
     var test: List[Float64]
     var has_test: Bool
+    # `feature_importances_` (lane mf-imp6: float32 per input column, the
+    # fit's xg_importances; empty for an imported model saved without them).
+    var imp: List[Float32]
     # Kind 3 (lane mf-meta5): the FeatureFreq fit's source columns and settings.
     var ff_sources: List[Int]
     var ff_rate: Float64
@@ -263,6 +270,7 @@ struct GbdtMemberSlot(Copyable, Movable, Defaultable):
         self.cat_map = List[UInt64]()
         self.test = List[Float64]()
         self.has_test = False
+        self.imp = List[Float32]()
         self.ff_sources = List[Int]()
         self.ff_rate = 0.0
         self.ff_l2 = 0.0
@@ -316,6 +324,7 @@ def _clear[I: GbdtMemberImage](slot: _SlotPtr):
     slot[].cat_map = List[UInt64]()
     slot[].test = List[Float64]()
     slot[].has_test = False
+    slot[].imp = List[Float32]()
     slot[].features = 0
     slot[].dim = 0
     slot[].classes = 0
@@ -1055,7 +1064,11 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     var args = GbdtFitArgs(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), ex_addr, ey_addr,
                            fit_ints^, fit_floats^, fit_bad^, fit_strs^)
     var outcome = xg_fit(entry, row_major, args)
-    _ = len(scratch)  # the column-major copy lives until the fit returned
+    # `feature_importances_` (lane mf-imp6): the door's RUN on the same block
+    # the fit read (its layout, the categorical columns as their codes, the
+    # fit's weights), on the route's column.
+    var imp = xg_importances(entry, outcome.text, x_addr, rows, cols, row_major, w_addr, n_weights)
+    _ = len(scratch)  # the column-major copy lives until the fit and the importances returned
     _ = len(codes)  # the classifier's float32 targets (or the column-major y) too
     _ = len(flags)
     _ = len(sizes)
@@ -1076,6 +1089,7 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
         dim = xg_model_dim(entry, outcome.text)
     _clear[I](slot)
     swap(slot[].cat_map, fitted_map)
+    swap(slot[].imp, imp)
     slot[].bias = gbdt_bias_of(outcome.text)
     swap(slot[].text, outcome.text)  # by swap: `outcome` is read after (moving a field out of it is refused)
     swap(slot[].learn, outcome.learn)
@@ -1129,9 +1143,11 @@ def _fit_feature_freq[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises
     var entry = entry_ref_gil_free(call[].route.entry)
     var text = xg_feature_freq_fit(entry, Int(xcm.unsafe_ptr()), call[].y.data, w_addr, Int(src.unsafe_ptr()), rows,
                                    cols, n_weights, len(src), slot[].ff_rate, slot[].ff_l2, slot[].ff_seed)
-    _ = len(xcm)  # the column-major copy lives until the fit returned
+    var imp = xg_importances(entry, text, Int(xcm.unsafe_ptr()), rows, cols, False, w_addr, n_weights)
+    _ = len(xcm)  # the column-major copy lives until the fit and the importances returned
     _ = len(src)
     _clear[I](slot)
+    swap(slot[].imp, imp)
     slot[].text = text^
     slot[].learn = List[Float64]()
     slot[].has_test = False
@@ -1190,9 +1206,11 @@ def _fit_ordered[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     var text = xg_ordered_fit(entry, Int(xcm.unsafe_ptr()), call[].y.data, w_addr, Int(order.unsafe_ptr()), rows,
                               cols, n_weights, slot[].od_trees, slot[].od_depth, slot[].od_border, slot[].od_rate,
                               slot[].od_l2)
-    _ = len(xcm)  # the column-major copy lives until the fit returned
+    var imp = xg_importances(entry, text, Int(xcm.unsafe_ptr()), rows, cols, False, w_addr, n_weights)
+    _ = len(xcm)  # the column-major copy lives until the fit and the importances returned
     _ = len(order)
     _clear[I](slot)
+    swap(slot[].imp, imp)
     slot[].text = text^
     slot[].learn = List[Float64]()
     slot[].has_test = False
@@ -1527,7 +1545,9 @@ def _proba(slot: _SlotPtr, call: _CallPtr) raises:
 
 def _block_of(index: Int) raises -> Int:
     if index < 0 or index >= _BLOCKS:
-        raise Error("member ABI: a Gbdt member has five fitted blocks")
+        raise Error("member ABI: a Gbdt member has six fitted blocks")
+    if index == 5:
+        return MEMBER_BLOCK_FEATURE_IMPORTANCES
     if index == 4:
         return MEMBER_BLOCK_FAMILY + 3
     if index == 3:
@@ -1561,6 +1581,11 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         # an eval set (`test_loss_curve_` None), else one row of its values.
         call[].dst = MemberMatrix(Int(slot[].test.unsafe_ptr()), 1 if slot[].has_test else 0, len(slot[].test),
                                   MEMBER_F64)
+    elif block == MEMBER_BLOCK_FEATURE_IMPORTANCES:
+        # `feature_importances_` (lane mf-imp6): float32 1 x features; no
+        # rows for an imported model saved without them.
+        var n = len(slot[].imp)
+        call[].dst = MemberMatrix(Int(slot[].imp.unsafe_ptr()), 1 if n > 0 else 0, n, MEMBER_F32)
     elif block == MEMBER_BLOCK_SCALARS:
         slot[].x_scalars = [Float64(slot[].features), Float64(slot[].dim), Float64(slot[].classes), slot[].bias,
                             Float64(slot[].best_iteration), 1.0 if slot[].stopped_early else 0.0, slot[].rate,
@@ -1606,6 +1631,20 @@ def _import[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
             _dense(view, MEMBER_F64, "a fitted block")
             unsafe_memcpy(dest=slot[].test.unsafe_ptr(), src=_F64P(unsafe_from_address=view.data),
                           count=view.rows * view.cols)
+    elif block == MEMBER_BLOCK_FEATURE_IMPORTANCES:
+        # `feature_importances_` (optional; lane mf-imp6): float32, or the
+        # public float64 vector (an exact widening of float32, narrowed back
+        # exactly).
+        var n = view.rows * view.cols
+        slot[].imp = List[Float32](length=n, fill=Float32(0.0))
+        if n > 0:
+            if view.dense_host(MEMBER_F64):
+                var src = _F64P(unsafe_from_address=view.data)
+                for c in range(n):  # small-loop(one word per input column: the import narrowing)
+                    slot[].imp[c] = Float32(src[c])
+            else:
+                _dense(view, MEMBER_F32, "a fitted block")
+                unsafe_memcpy(dest=slot[].imp.unsafe_ptr(), src=_F32P(unsafe_from_address=view.data), count=n)
     elif block == MEMBER_BLOCK_SCALARS:
         _dense(view, MEMBER_F64, "a fitted block")
         if view.rows * view.cols != _SCALARS:
@@ -1635,6 +1674,9 @@ def _import[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     slot[].ordered = slot[].x_scalars[8] != 0.0
     if slot[].features < 1 or slot[].dim < 1:
         raise Error("member ABI: a fitted Gbdt state needs its features and model dimension")
+    if len(slot[].imp) != 0 and len(slot[].imp) != slot[].features:
+        raise Error("member ABI: the Gbdt feature importances block holds " + String(len(slot[].imp))
+                    + " values for " + String(slot[].features) + " features")
     if slot[].kind != _KIND_BOOSTER and slot[].kind != _KIND_HOST and slot[].dim != 1:
         raise Error("member ABI: a " + _name(slot[].kind) + " state has one model dimension")
     if gbdt_text_has_ctr(slot[].text) and len(slot[].cat_map) == 0:
@@ -1663,8 +1705,12 @@ def _capabilities(kind: Int, loss: String) -> Int:
     # `gbdt_binary_native` touches no CPython; its device context is
     # `process_ctx`, own lock, as XG_SIGMOID_PAIR's), the same store and the
     # same resident registry; their own work is host loops over plain words.
+    # MEMBER_CAN_IMPORTANCES (lane mf-imp6): every fitting kind computes
+    # `feature_importances_` at FIT (MEMBER_BLOCK_FEATURE_IMPORTANCES), so RFE
+    # reads it (bindings/prep_select_run.mojo `rfe_member_source`). HostGBDT
+    # (predict-only) exports it when its file carried it, without the bit.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-                | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE)
+                | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE | MEMBER_CAN_IMPORTANCES)
     if kind == _KIND_CLASSIFIER:
         return mask | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER
     if kind == _KIND_REGRESSOR or kind == _KIND_FEATURE_FREQ or kind == _KIND_ORDERED:

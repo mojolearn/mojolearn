@@ -69,6 +69,7 @@ from bindings.py_balanced import py_item
 
 
 from bindings.dict_learning_native_unpack import (
+    DL_CALLBACK_WORDS,
     _check_algos,
     _coder_check,
     _coder_dictionary,
@@ -109,7 +110,7 @@ def dictionary_learning_fit(model: PythonObject, args: PythonObject, project: Bo
     py_setitem(fields, nk[].k_numeric_mode_, mode)
     _check_algos(py_item(fields, nk[].k_fit_algorithm), py_item(fields, nk[].k_transform_algorithm))
     if py_get(fields, nk[].k_callback) is not None:
-        raise Error("NotImplementedError: callback is not carried")
+        raise Error(String(DL_CALLBACK_WORDS))
     var entries = decomp_entries_routed(model, fields, mode, context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
@@ -153,7 +154,7 @@ def minibatch_dictionary_fit(model: PythonObject, args: PythonObject, project: B
     py_setitem(fields, nk[].k_numeric_mode_, mode)
     _check_algos(py_item(fields, nk[].k_fit_algorithm), py_item(fields, nk[].k_transform_algorithm))
     if py_get(fields, nk[].k_callback) is not None:
-        raise Error("NotImplementedError: callback is not carried")
+        raise Error(String(DL_CALLBACK_WORDS))
     var entries = decomp_entries_routed(model, fields, mode, context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)

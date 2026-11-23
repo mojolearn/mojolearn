@@ -16,18 +16,34 @@ solver image's `hierarchy_solver_native_api_v1` entry (`AggloSolverDriver`,
 cuML's single-linkage Boruvka fit, the class's own solver route). No other
 route slot is read. No kernel is touched.
 
-Kind (MEMBER_OP_NEW word [0]): 0 AgglomerativeClustering in the form that
-has a predict and fits on the solver route: linkage='single', metric
-'euclidean' or 'l2', no connectivity matrix (None or 'pairwise'), no
-distance_threshold, compute_distances=False, prediction_data=True. Every
-other instance is not a member (no predict, or the x_cluster tree route):
-the caller's admit answers False and the class keeps its own doors.
+Kind (MEMBER_OP_NEW word [0]): 0 AgglomerativeClustering, every setting
+its fit admits (lane mf-clu6). The class's two numerical owners are kept as
+the class picks them (`AggloOptions.solver_route`): the solver route
+(single linkage, euclidean, no connectivity matrix, no distance_threshold,
+compute_distances=False: cuML's Boruvka fit, `route.second`) and the
+x_cluster tree route (`_agglo_x`: every linkage and metric, a connectivity
+matrix, a threshold, the per-merge distances: `route.third`, the x_cluster
+image's `hierarchy_cluster_native_api_v1` entry, and for metric='cosine'
+`route.fourth`, the x_neighbors image's entry for the zero-row test). A
+fit with prediction_data=False, or a tree route whose linkage/metric has no
+predict (`agglo_x_predicts`), keeps no reference rows: its predict is the
+class's own refusal.
 
-MEMBER_OP_NEW parameters (Float64 words, 3): [0] 0, [1] n_clusters,
-[2] 1 when the process may build the MST without the dense graph past the
-pairwise row bound (`MOJOLEARN_NUMERIC_MODE=fast` on Apple, read by the
-caller's UNPACK exactly as the class's `_fast_mst`; the 64-feature bound
-is applied here), else 0.
+MEMBER_OP_NEW parameters (Float64 words, 17 + data): [0] 0, [1] n_clusters
+(0 when None), [2] 1 when the process may build the MST without the dense
+graph past the pairwise row bound (`MOJOLEARN_NUMERIC_MODE=fast` on Apple,
+read by the caller's UNPACK exactly as the class's `_fast_mst`; the
+64-feature bound is applied here), else 0, [3] linkage code, [4] metric
+code, [5] constrained (a connectivity matrix), [6] has distance_threshold,
+[7] compute_distances, [8] prediction_data, [9] full-tree mode, [10] the
+threshold, [11] n_clusters given, [12] the connectivity matrix's side (> 0;
+-1 not square; 0 unread), [13] its float32 word count, [14] its edge count,
+[15] its edge mode (1 dense, 2 sparse COO triples), [16] the byte count of
+the refusal its admission raised (0: none); then the float32 words packed
+two per word (core/cluster_member_words.mojo), then the refusal's bytes. The
+matrix is read once at UNPACK; its refusals (a callable included: the class
+never calls it) and its shape check against X are raised at fit, where the
+class's `_agglo_x` makes them.
 A clusterer, not a classifier: `y` is not read, `classes` is 0.
 
 Views: X dense row-major host float32, BORROWED (never copied at fit): the
@@ -47,11 +63,14 @@ MEMBER_OP_PREDICT` writes the training labels in the fit call
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
 0 `MEMBER_BLOCK_FAMILY` int32 1 x rows, the training labels;
-1 `MEMBER_BLOCK_FAMILY + 1` int32 (rows - 1) x 2, the merge tree
+1 `MEMBER_BLOCK_FAMILY + 1` int32 merges x 2, the merge tree
 (`children_`; empty after an import that did not give it);
-2 `MEMBER_BLOCK_FAMILY + 2` float32 rows x features, the reference rows;
+2 `MEMBER_BLOCK_FAMILY + 2` float32 rows x features, the reference rows
+(0 x features when the fit keeps none);
 3 `MEMBER_BLOCK_SCALARS` float64 [n_clusters_, n_boruvka_rounds_,
-n_connected_components_].
+n_connected_components_];
+4 `MEMBER_BLOCK_FAMILY + 3` float32 1 x merges, the per-merge distances
+(export only; empty unless the tree route computed them).
 An import needs blocks 0, 2 and 3.
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks: a
@@ -65,11 +84,19 @@ from std.memory import unsafe_memcpy
 from std.sys.info import size_of
 from cluster.cfb_agglo_run import (
     agglo_check_solver_rows, agglo_check_solver_clusters, agglo_solver_request, agglo_check_reference_width,
+    agglo_check_tree_rows, agglo_check_precomputed, agglo_checks_zero_rows, agglo_check_zero_rows,
+    agglo_zero_rows_request, agglo_check_requested_clusters, agglo_cluster_request, agglo_publishes_distances,
+    agglo_cut_counts, agglo_fitted_clusters, agglo_x_predicts,
 )
 from core.agglo_native_api import (
     AggloSolverDriver, AggloSolverScratch, agglo_reference_request, agglo_query_request, agglo_resident_query,
+    AggloClusterDriver, AggloClusterScratch, AggloZeroRowsDriver, AggloZeroRowsScratch,
 )
-from core.agglo_native_state import AGGLO_PAIRWISE_MAX_ROWS
+from core.agglo_native_state import AGGLO_PAIRWISE_MAX_ROWS, AggloOptions, agglo_tree_plan, agglo_predicts
+from core.cluster_member_words import (
+    member_words_f32_slots, member_words_byte_slots, member_words_take_f32, member_words_take_text,
+)
+from core.neighbors_native_driver import XnDriver
 from core.dbscan_native_api import DBSCANNativeDriver, DBSCAN_CAP_RESIDENT
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
@@ -92,7 +119,9 @@ comptime _KIND_AGGLO = 0
 comptime _BLOCK_LABELS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_CHILDREN = MEMBER_BLOCK_FAMILY + 1
 comptime _BLOCK_REFS = MEMBER_BLOCK_FAMILY + 2
+comptime _BLOCK_DISTANCES = MEMBER_BLOCK_FAMILY + 3
 comptime _SCALARS = 3
+comptime _HEADER = 17
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -102,6 +131,24 @@ struct HierarchyMemberSlot(Copyable, Movable, Defaultable):
     var live: Bool
     var clusters: Int
     var fast_mst: Bool
+    # The class's settings (NEW words 3-11) and its connectivity matrix as
+    # read at UNPACK (words 12-16 and the data behind them).
+    var linkage: Int
+    var metric: Int
+    var constrained: Bool
+    var has_threshold: Bool
+    var compute_distances: Bool
+    var prediction_data: Bool
+    var full_tree: Int
+    var threshold: Float64
+    var has_clusters: Bool
+    var conn_side: Int
+    var conn_edges: Int
+    var conn_mode: Int
+    var conn_words: List[Float32]
+    var conn_error: String
+    # Whether the fitted state keeps reference rows (predict is served).
+    var predicting: Bool
     var fitted: Bool
     var rows: Int
     var features: Int
@@ -113,6 +160,7 @@ struct HierarchyMemberSlot(Copyable, Movable, Defaultable):
     var handle: Int
     var labels: List[Int32]
     var children: List[Int32]
+    var distances: List[Float32]
     var scalars: List[Float64]
 
     def __init__(out self):
@@ -120,6 +168,21 @@ struct HierarchyMemberSlot(Copyable, Movable, Defaultable):
         self.live = False
         self.clusters = 0
         self.fast_mst = False
+        self.linkage = 3
+        self.metric = -1
+        self.constrained = False
+        self.has_threshold = False
+        self.compute_distances = False
+        self.prediction_data = True
+        self.full_tree = 0
+        self.threshold = 0.0
+        self.has_clusters = True
+        self.conn_side = 0
+        self.conn_edges = 0
+        self.conn_mode = 0
+        self.conn_words = List[Float32]()
+        self.conn_error = String("")
+        self.predicting = False
         self.fitted = False
         self.rows = 0
         self.features = 0
@@ -128,16 +191,23 @@ struct HierarchyMemberSlot(Copyable, Movable, Defaultable):
         self.handle = -1
         self.labels = List[Int32]()
         self.children = List[Int32]()
+        self.distances = List[Float32]()
         self.scalars = List[Float64]()
+
+    def options(self) -> AggloOptions:
+        return AggloOptions(self.linkage, self.metric, self.constrained, self.has_threshold,
+            self.compute_distances, self.prediction_data, self.full_tree)
 
     def clear(mut self):
         self.fitted = False
+        self.predicting = False
         self.rows = 0
         self.features = 0
         self.borrowed = 0
         self.refs = List[Float32]()
         self.labels = List[Int32]()
         self.children = List[Int32]()
+        self.distances = List[Float32]()
         self.scalars = List[Float64]()
 
     def reference_address(self) -> Int:
@@ -193,6 +263,22 @@ def _mint(words: _Words) raises -> Int:
         slot[].live = True
         slot[].clusters = Int(words[1])
         slot[].fast_mst = words[2] != 0.0
+        slot[].linkage = Int(words[3])
+        slot[].metric = Int(words[4])
+        slot[].constrained = words[5] != 0.0
+        slot[].has_threshold = words[6] != 0.0
+        slot[].compute_distances = words[7] != 0.0
+        slot[].prediction_data = words[8] != 0.0
+        slot[].full_tree = Int(words[9])
+        slot[].threshold = words[10]
+        slot[].has_clusters = words[11] != 0.0
+        slot[].conn_side = Int(words[12])
+        var conn_count = Int(words[13])
+        slot[].conn_edges = Int(words[14])
+        slot[].conn_mode = Int(words[15])
+        slot[].conn_words = member_words_take_f32(Int(words), _HEADER, conn_count)
+        slot[].conn_error = member_words_take_text(Int(words), _HEADER + member_words_f32_slots(conn_count),
+            Int(words[16]))
         slot[].clear()
         slot[].handle = -1
         return slot[].generation * _INDEX_SPAN + index + 1
@@ -255,18 +341,30 @@ def _labels_out(call: _Call, rows: Int) raises:
 
 
 def _fit(slot: _Slot, call: _Call) raises:
-    """The class's solver route (`_agglo_legacy`): its row and cluster
-    checks, one solver call on the borrowed X."""
+    """`_agglo_fit`: the class's route predicate picks its owner, the solver
+    route (`_agglo_legacy`) or the x_cluster tree route (`_agglo_x`), both on
+    the borrowed X."""
     _whole_x(call)
     if call[].weights.rows > 0:
         raise Error("TypeError: AgglomerativeClustering takes no sample_weight")
     var output = call[].fit_output
     var rows = call[].x.rows
-    var d = call[].x.cols
     if output == MEMBER_OP_PREDICT:
         _labels_out(call, rows)
     elif output != 0:
         member_unsupported(_EST, output)
+    if slot[].options().solver_route():
+        _fit_solver(slot, call)
+    else:
+        _fit_tree(slot, call)
+    if output == MEMBER_OP_PREDICT:
+        unsafe_memcpy(dest=_I32P(unsafe_from_address=call[].dst.data), src=slot[].labels.unsafe_ptr(), count=rows)
+
+
+def _fit_solver(slot: _Slot, call: _Call) raises:
+    """`_agglo_legacy`: its row and cluster checks, one solver call."""
+    var rows = call[].x.rows
+    var d = call[].x.cols
     if not call[].route.has_second:
         raise Error("member ABI: an AgglomerativeClustering member's route holds no solver entry")
     agglo_check_solver_rows(rows, d, rows > AGGLO_PAIRWISE_MAX_ROWS and slot[].fast_mst and d <= 64)
@@ -284,17 +382,95 @@ def _fit(slot: _Slot, call: _Call) raises:
     slot[].scalars = scalars^
     slot[].rows = rows
     slot[].features = d
-    slot[].borrowed = call[].x.data
+    slot[].predicting = slot[].prediction_data
+    slot[].borrowed = call[].x.data if slot[].predicting else 0
     slot[].fitted = True
-    if output == MEMBER_OP_PREDICT:
-        unsafe_memcpy(dest=_I32P(unsafe_from_address=call[].dst.data), src=slot[].labels.unsafe_ptr(), count=rows)
+
+
+def _connectivity_check(slot: _Slot, rows: Int) raises:
+    """`hierarchy_connectivity`'s refusals, in its order, for the matrix read
+    at UNPACK: the shape against X (a sparse matrix's shape is read before
+    its storage), then what its admission refused."""
+    if slot[].conn_side < 0 or (slot[].conn_side > 0 and slot[].conn_side != rows):
+        raise Error("Wrong shape for connectivity matrix when X has " + String(rows) + " samples")
+    if slot[].conn_error.byte_length() > 0:
+        raise Error(slot[].conn_error)
+    if slot[].conn_side != rows:
+        raise Error("Wrong shape for connectivity matrix when X has " + String(rows) + " samples")
+
+
+def _fit_tree(slot: _Slot, call: _Call) raises:
+    """`_agglo_x`: the x_cluster route's checks in its order, one cluster fit
+    (`route.third`), the zero-row test for cosine on `route.fourth`."""
+    var n = call[].x.rows
+    var d = call[].x.cols
+    var options = slot[].options()
+    if not call[].route.has_third:
+        raise Error("member ABI: an AgglomerativeClustering member's route holds no x_cluster entry")
+    agglo_check_tree_rows(n)
+    agglo_check_precomputed(options.metric, n, d)
+    if agglo_checks_zero_rows(options.metric):
+        agglo_check_zero_rows(d == 0)
+        if not call[].route.has_fourth:
+            raise Error("member ABI: an AgglomerativeClustering member's route holds no x_neighbors entry")
+        var zrow = AggloZeroRowsScratch(n)
+        AggloZeroRowsDriver(XnDriver(call[].route.fourth.call)).run(
+            agglo_zero_rows_request(call[].x.data, zrow.address(), n, d))
+        agglo_check_zero_rows(zrow.any_zero())
+        _ = zrow^
+    var requested = 0
+    if slot[].has_clusters:
+        requested = slot[].clusters
+        agglo_check_requested_clusters(requested, n)
+    var plan = agglo_tree_plan(options, n, requested)
+    var merges = plan.merges
+    var conn_address = 0
+    var conn_count = 0
+    var edges = 0
+    var edge_mode = 0
+    if options.constrained:
+        _connectivity_check(slot, n)
+        conn_count = len(slot[].conn_words)
+        conn_address = Int(slot[].conn_words.unsafe_ptr()) if conn_count > 0 else 0
+        edges = slot[].conn_edges
+        edge_mode = slot[].conn_mode
+    var threshold = slot[].threshold if options.has_threshold else Float64(0)
+    _release_resident(slot, call)
+    slot[].clear()
+    slot[].children = List[Int32](length=merges * 2, fill=0)
+    slot[].labels = List[Int32](length=n, fill=0)
+    slot[].distances = List[Float32](length=merges, fill=0.0)
+    var scratch = AggloClusterScratch()
+    var request = agglo_cluster_request(call[].x.data, conn_address, Int(slot[].children.unsafe_ptr()),
+        Int(slot[].labels.unsafe_ptr()), Int(slot[].distances.unsafe_ptr()), scratch.address(), n * d, conn_count,
+        n, d, options, edges, plan, edge_mode, threshold)
+    AggloClusterDriver(call[].route.third.call).fit(request)
+    _ = len(slot[].conn_words)  # the edge words the fit read stay alive through it
+    var components = scratch.components()
+    var cut_clusters = scratch.clusters() if agglo_cut_counts(options, plan) else 0
+    _ = scratch^
+    if not agglo_publishes_distances(options):
+        slot[].distances = List[Float32]()
+    var clusters = agglo_fitted_clusters(options, plan, cut_clusters, requested)
+    # n_boruvka_rounds_ is -1 on this route, as `_agglo_x` publishes it.
+    var scalars: List[Float64] = [Float64(clusters), -1.0, Float64(components)]
+    slot[].scalars = scalars^
+    slot[].rows = n
+    slot[].features = d
+    slot[].predicting = agglo_x_predicts(options)
+    slot[].borrowed = call[].x.data if slot[].predicting else 0
+    slot[].fitted = True
 
 
 def _predict(slot: _Slot, call: _Call) raises:
     """`_agglo_predict`: the label of each query's nearest reference row, on
     the resident copy of a GPU image (minted once per fitted state), else
     the host query with the class's per-query scratch."""
-    if not slot[].fitted:
+    if slot[].fitted and not agglo_predicts(slot[].linkage, slot[].metric):
+        # `_agglo_predict`'s first refusal, in its words.
+        raise Error("NotImplementedError: mojolearn AgglomerativeClustering.predict: only single linkage under"
+            + " the euclidean metric has a predict rule (DEVIATION 2740)")
+    if not slot[].fitted or not slot[].predicting:
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not stored. Fit with"
             + " AgglomerativeClustering(prediction_data=True)")
     _whole_x(call)
@@ -346,19 +522,28 @@ def _export(slot: _Slot, call: _Call) raises:
         return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
-        if block < 0 or block > 3:
-            raise Error("member ABI: an AgglomerativeClustering member has four fitted blocks")
-        block = MEMBER_BLOCK_SCALARS if block == 3 else MEMBER_BLOCK_FAMILY + block
+        if block < 0 or block > 4:
+            raise Error("member ABI: an AgglomerativeClustering member has five fitted blocks")
+        block = MEMBER_BLOCK_SCALARS if block == 3 else (_BLOCK_DISTANCES if block == 4 else MEMBER_BLOCK_FAMILY + block)
     if block == _BLOCK_LABELS:
         call[].dst = _i32_view(slot[].labels, 1, len(slot[].labels))
     elif block == _BLOCK_CHILDREN:
         call[].dst = _i32_view(slot[].children, len(slot[].children) // 2, 2)
     elif block == _BLOCK_REFS:
         _own_refs(slot)
-        var count = slot[].rows * slot[].features
-        call[].dst = MemberMatrix(Int(slot[].refs.unsafe_ptr()) if count > 0 else 0, slot[].rows, slot[].features)
+        if not slot[].predicting:
+            # No reference rows kept (the class publishes `_fit_X` None).
+            call[].dst = MemberMatrix(0, 0, slot[].features)
+        else:
+            var count = slot[].rows * slot[].features
+            call[].dst = MemberMatrix(Int(slot[].refs.unsafe_ptr()) if count > 0 else 0, slot[].rows,
+                slot[].features)
     elif block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, _SCALARS, MEMBER_F64)
+    elif block == _BLOCK_DISTANCES:
+        var merges = len(slot[].distances)
+        call[].dst = MemberMatrix(Int(slot[].distances.unsafe_ptr()) if merges > 0 else 0, 1 if merges > 0 else 0,
+            merges)
     else:
         raise Error("member ABI: an AgglomerativeClustering member has no fitted block " + String(block))
     call[].block = block
@@ -412,6 +597,7 @@ def _import(slot: _Slot, call: _Call) raises:
             or len(slot[].refs) != slot[].rows * slot[].features or len(slot[].scalars) != _SCALARS):
         raise Error("member ABI: a fitted AgglomerativeClustering state needs its labels, reference rows and"
             + " scalars blocks")
+    slot[].predicting = True
     slot[].fitted = True
 
 
@@ -425,12 +611,17 @@ def _hierarchy_member(operation: Int, address: Int) raises -> Int:
         # MEMBER_EXPORT_OWN, copied them.
         return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_BORROWS_FIT
     if operation == MEMBER_OP_NEW:
-        if not call[].params or call[].param_count != 3:
-            raise Error("member ABI: an AgglomerativeClustering member takes three parameter words (kind,"
-                + " n_clusters, fast_mst)")
+        if not call[].params or call[].param_count < 1:
+            raise Error("member ABI: a hierarchy member's first parameter word is its kind")
         var words = _Words(unsafe_from_address=call[].params)
         if Int(words[0]) != _KIND_AGGLO:
             raise Error("member ABI: hierarchy member kind " + String(Int(words[0])) + " is not published")
+        if call[].param_count < _HEADER or call[].param_count != (_HEADER
+                + member_words_f32_slots(Int(words[13])) + member_words_byte_slots(Int(words[16]))):
+            raise Error("member ABI: an AgglomerativeClustering member takes seventeen parameter words (kind,"
+                + " n_clusters, fast_mst, linkage, metric, constrained, has_threshold, compute_distances,"
+                + " prediction_data, full_tree, threshold, has_clusters, and the connectivity side, word count,"
+                + " edges, mode and refusal length), then the connectivity words and the refusal's bytes")
         call[].state = _mint(words)
         return 0
     if operation == MEMBER_OP_FREE:

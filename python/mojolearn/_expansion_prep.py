@@ -2853,7 +2853,7 @@ class SelectKBest(_SelectorMixin):
     _mojolearn_device = True
     #: The member ABI mark (family 36 Select, kind 1): model selection and the
     #: meta-estimators run this class through its native member entry
-    #: (core/select_member.mojo); the mutual-information scores keep the door.
+    #: (core/select_member.mojo), every score function included.
     _mojolearn_member = (36, 1)
 
     def __init__(self, score_func=f_classif, *, k=10, device=None):

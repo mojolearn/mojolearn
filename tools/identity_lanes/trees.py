@@ -388,6 +388,27 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("predict"), "trees-gbdt-multirmse")
 
 
+@lane("trees-gbdt-importances")
+def _(ml, X, yc, yr, Xh=None):
+    """GradientBoosting `feature_importances_` (lane mf-imp6: core/gbdt_importance.mojo on the host column,
+    gbdt/gpu_importance.mojo on a GPU, the same bodies and fold order), light: 8 SymmetricTree trees (RMSE),
+    the same on fixture-derived sample weights (the exact integer leaf weights), 8 Depthwise trees (the
+    non-symmetric descent), and the classifier adapter (its learner's importances). The digest covers the
+    importances' bytes beside each model's predictions."""
+    w = np.array([(1.0, 2.5, 0.5, 0.75)[i % 4] for i in range(len(X))], dtype=np.float32)
+    sym = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4).fit(X, yr)
+    weighted = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4).fit(X, yr, sample_weight=w)
+    depthwise = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, grow_policy="Depthwise").fit(X, yr)
+    clf = ml.GradientBoostingClassifier(n_estimators=8, max_depth=4).fit(X, yc)
+    return _fit(dict(sym=_h(sym.feature_importances_), weighted=_h(weighted.feature_importances_),
+                     depthwise=_h(depthwise.feature_importances_), clf=_h(clf.feature_importances_),
+                     predict=_h(sym.predict(X))),
+                sym, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict"), "trees-gbdt-importances")
+
+
 @lane("trees-shap-tree")
 def _(ml, X, yc, yr, Xh=None):
     """Exact TreeSHAP over a classifier forest (three outputs) and a DART model."""

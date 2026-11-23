@@ -59,7 +59,10 @@ from bindings.operation_names_trees import (
     TREES_END_PUBLIC_GBDT_MODEL, TREES_END_PUBLIC_META, TREES_END_EXPLAINER, TREES_FIRST_IFOREST, TREES_END_IFOREST,
     TREES_FIRST_PUBLIC_BOOST, TREES_END_PUBLIC_BOOST, TREES_FIRST_BOOST, TREES_END_BOOST, TREES_FIRST_GBDT,
     TREES_END_GBDT, TREES_FIRST_META, TREES_END_META, TREES_OPN_TREES_EXPLAINER_INIT,
+    TREES_OPN_TREES_GBDT_FEATURE_IMPORTANCES,
 )
+from bindings.gbdt_importances_pack import gbdt_importances_read
+from bindings.py_balanced import py_fields as _imp_fields
 
 
 def trees_public_operation(model: PythonObject, operation: Int, name: String, args: PythonObject,
@@ -171,6 +174,9 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
         return boost_operation(model, name, args, context)
     if operation == TREES_OPN_TREES_GBDT_ADAPTER_SCORE:
         return gbdt_adapter_score(model, args, context)
+    if operation == TREES_OPN_TREES_GBDT_FEATURE_IMPORTANCES:
+        # lane mf-imp6: the stored importances (fresh float64), or NotFittedError
+        return gbdt_importances_read(model, _imp_fields(model), context)
     if operation == TREES_OPN_TREES_GBDT_ADAPTER_SET_PARAMS or (operation >= TREES_FIRST_GBDT and operation < TREES_END_GBDT):
         # `trees_gbdt_adapter_set_params` without a fixed owner reached the
         # GBDT chain by its prefix and was refused there.
