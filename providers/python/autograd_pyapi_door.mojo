@@ -87,7 +87,8 @@ def model_admit_addresses(addrs: PythonObject, target: Int, codes_ready: Bool = 
     sources.append(captured_x.value() if captured_x else cast_in_of(addrs[0], "X"))
     sources.append(CastIn.f32_c(0, 1, 1) if codes_ready else cast_in_of(addrs[1], "y"))
     for i in range(2, n):  # driver-loop: admit stable addresses once, descriptors handled below
-        if i < 8 or i > 10:
+        # (n == 9: the fit's ninth address is the sequence lengths, lane seq-blocks-3)
+        if i < 8 or i > 10 or n == 9:
             addresses[i] = Int(py=addrs[i])
     if n == 13:
         sources.append(cast_in_of(addrs[8], "validation X"))

@@ -18,7 +18,8 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "silu": 32, "gelu": 33, "softplus": 34, "rms_norm": 35, "rotary": 36, "multiply": 37,
           "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
           "selective_scan": 42, "ssd_scan": 43, "trapezoid_scan": 44,
-          "lm_head": 45}  # lm_head (lane neural-blocks-3-lm)
+          "lm_head": 45,
+          "batch_norm1d": 46, "batch_norm2d": 46}  # lm_head (lane neural-blocks-3-lm)
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -411,18 +412,78 @@ class Sequential(_CheckMixin):
         """Append an LSTM layer over ``(length, features)`` samples from a
         zero state; the output is every step's hidden state,
         ``(length, hidden_size)``. Weights follow PyTorch's ``nn.LSTM``
-        layout and gate order."""
+        layout and gate order. With ``lengths`` given to :meth:`fit` and
+        :meth:`predict`, a sample's steps past its length do not change its
+        state, and the output there repeats its state at its last valid
+        step.
+
+        Example: classify variable-length sequences of 3 features padded to
+        20 steps by each one's final state::
+
+            model = (mojolearn.Sequential(input_shape=(20, 3)).lstm(32)
+                     .narrow(0, 19, 1).flatten().linear(2)
+                     .compile(loss="cross_entropy"))
+            model.fit(X, y, lengths=lengths)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def gru(self, hidden_size):
         """Append a GRU layer over ``(length, features)`` samples from a zero
-        state; the output is every step's hidden state."""
+        state; the output is every step's hidden state. Weights follow
+        PyTorch's ``nn.GRU`` layout and gate order. ``lengths`` work as for
+        :meth:`lstm`."""
         return _SEQUENTIAL_ENTRY(self, "add", ("gru", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def rnn(self, hidden_size):
         """Append a tanh recurrent layer over ``(length, features)`` samples
-        from a zero state; the output is every step's hidden state."""
+        from a zero state; the output is every step's hidden state.
+        ``lengths`` work as for :meth:`lstm`."""
         return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def batch_norm1d(self, num_features, eps=1e-5, momentum=0.1):
+        """Append batch normalization over the channels of ``(channels,)`` or
+        ``(channels, length)`` samples, as PyTorch's ``nn.BatchNorm1d``.
+
+        During :meth:`fit` each channel is normalized with the mean and
+        (biased) variance of the batch over its rows and positions, and the
+        running statistics are updated as
+        ``running = (1 - momentum) * running + momentum * batch`` (the
+        variance unbiased). :meth:`predict` and validation normalize with the
+        running statistics. Then a learned per-channel ``weight`` (initially
+        1) and ``bias`` (initially 0) are applied. The running statistics are
+        saved with the model (``params_``, :meth:`state_dict`, checkpoints)
+        and are never changed by the optimizer.
+
+        Parameters
+        ----------
+        num_features : int
+            The number of channels, the first axis of each sample.
+        eps : float, default 1e-5
+            Added to the variance before its square root.
+        momentum : float, default 0.1
+            Weight of the batch statistics in the running update, in [0, 1].
+
+        Example::
+
+            model = (mojolearn.Sequential(input_shape=(3, 64))
+                     .conv1d(16, 5, padding=2).batch_norm1d(16).relu()
+                     .adaptive_avg_pool1d(1).flatten().linear(2))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("batch_norm1d", (num_features, eps, momentum), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def batch_norm2d(self, num_features, eps=1e-5, momentum=0.1):
+        """Append batch normalization over the channels of
+        ``(channels, height, width)`` samples, as PyTorch's
+        ``nn.BatchNorm2d``: :meth:`batch_norm1d` with the statistics taken
+        over the rows and both spatial axes.
+
+        Example::
+
+            model = (mojolearn.Sequential(input_shape=(1, 28, 28))
+                     .conv2d(8, 3, padding=1).batch_norm2d(8).relu()
+                     .flatten().linear(10))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("batch_norm2d", (num_features, eps, momentum), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def selective_scan(self, d_state=16):
         """Append Mamba's selective state-space scan over ``(length,
@@ -613,7 +674,7 @@ class Sequential(_CheckMixin):
 
     # ------------------------------------------------------------ training
     def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
-            validation_data=None, restore_best_weights=False):
+            validation_data=None, restore_best_weights=False, lengths=None):
         """Train the model.
 
         Parameters
@@ -659,6 +720,15 @@ class Sequential(_CheckMixin):
             ``best_epoch_`` names the best absolute epoch and
             ``validation_loss_curve_`` keeps every validation loss from
             this call. Resuming continues from the retained epoch.
+        lengths : array-like of int of shape (n_samples,) or None, default None
+            For models with recurrent layers (:meth:`lstm`, :meth:`gru`,
+            :meth:`rnn`): each sample's number of valid steps, from 1 to the
+            padded length of the sequence axis. Steps past a sample's length
+            are padding: their values are ignored, they do not change the
+            recurrent state, and the recurrent layers' outputs there repeat
+            the state at the sample's last valid step, so the last step holds
+            each sample's final state. None treats every step as valid. Not combined with
+            ``validation_data``.
 
         Returns
         -------
@@ -666,7 +736,7 @@ class Sequential(_CheckMixin):
             The fitted model, with ``params_``, ``loss_curve_``, ``n_iter_``
             and ``n_features_in_`` set (and ``classes_`` for classifiers).
         """
-        return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights, lengths), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ weight import
 
@@ -957,7 +1027,7 @@ class Sequential(_CheckMixin):
             if name not in ("numeric_mode", "device", "input_shape", "_layers", "_options"):
                 target[name] = value
 
-    def predict(self, X):
+    def predict(self, X, lengths=None):
         """Predict with the fitted model.
 
         Parameters
@@ -965,6 +1035,10 @@ class Sequential(_CheckMixin):
         X : array-like of shape (n_samples, n_features)
             Inputs: a bool, integer, float16, float32 or float64 array in
             any memory layout, used as float32.
+        lengths : array-like of int of shape (n_samples,) or None, default None
+            For models with recurrent layers (:meth:`lstm`, :meth:`gru`,
+            :meth:`rnn`): each sample's number of valid steps, as in
+            :meth:`fit`. None treats every step as valid.
 
         Returns
         -------
@@ -974,9 +1048,9 @@ class Sequential(_CheckMixin):
             ``bce_with_logits`` models, the predicted class labels
             (n_samples,).
         """
-        return _SEQUENTIAL_ENTRY(self, "predict", (X,), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "predict", (X, lengths), _SEQUENTIAL_CONTEXT)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, lengths=None):
         """Class probabilities of a ``cross_entropy`` or ``bce_with_logits`` model.
 
         Parameters
@@ -984,13 +1058,21 @@ class Sequential(_CheckMixin):
         X : array-like of shape (n_samples, n_features)
             Inputs: a bool, integer, float16, float32 or float64 array in
             any memory layout, used as float32.
+        lengths : array-like of int of shape (n_samples,) or None, default None
+            For models with recurrent layers (:meth:`lstm`, :meth:`gru`,
+            :meth:`rnn`): each sample's number of valid steps, from 1 to the
+            padded length of the sequence axis. Steps past a sample's length
+            are padding: their values are ignored, they do not change the
+            recurrent state, and the recurrent layers' outputs there repeat
+            the state at the sample's last valid step, so the last step holds
+            each sample's final state. None treats every step as valid.
 
         Returns
         -------
         ndarray of float32, shape (n_samples, n_classes)
             Each row sums to one; columns follow ``classes_``.
         """
-        return _SEQUENTIAL_ENTRY(self, "predict_proba", (X,), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "predict_proba", (X, lengths), _SEQUENTIAL_CONTEXT)
 
 
 # Package-import ABI connection. No model operation calls this setup again.
@@ -1005,7 +1087,7 @@ _SEQUENTIAL_CONTEXT = {
                     "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
                     "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
                     "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
-                    "selective_scan", "", "", "lm_head"),
+                    "selective_scan", "", "", "lm_head", "batch_norm"),
 }
 
 

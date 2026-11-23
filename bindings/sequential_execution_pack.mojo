@@ -16,6 +16,19 @@ from bindings.py_optional import py_present
 from bindings.sequential_keys_unpack import sequential_keys
 from bindings.sequential_route_door import sequential_route_entries
 from bindings.py_balanced import py_item
+from bindings.admitted_sequence_door import admit_nd_f32
+
+
+def _sequential_lengths(source: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """The `lengths` argument (lane seq-blocks-3): None stays None, else one C-ordered float32 vector of n
+    values (the one admission cast); the values are checked natively (autograd/model.mojo
+    model_lengths_check: whole numbers from 1 to the padded sequence length)."""
+    if source is None:
+        return source
+    var a = sequential_input(source, context)
+    if Int(py=a.ndim) != 1 or Int(py=a.shape[0]) != n:
+        raise Error("ValueError: lengths must be a vector of one length per sample (" + String(n) + ")")
+    return admit_nd_f32(a, "lengths", False, context)
 
 
 def sequential_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -64,6 +77,9 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         raise Error("call compile before fit")
     var validation = args[7]
     var restore_best = Bool(py=args[8])
+    var lengths_source = args[9] if len(args) > 9 else PythonObject(None)
+    if lengths_source is not None and validation is not None:
+        raise Error("ValueError: validation_data with lengths is not supported")
     if restore_best and validation is None:
         raise Error("restore_best_weights requires validation_data")
     var seed = args[5]
@@ -146,6 +162,10 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var addresses = Python.list(xd, yd, sequential_address(params), sequential_address(curve),
         sequential_address(moment), sequential_address(variance), sequential_address(state),
         PythonObject(0) if not previous else sequential_address(previous.value()))
+    var lengths = _sequential_lengths(lengths_source, n, context)
+    if lengths is not None:
+        # the ninth address (autograd/model_execution.mojo model_fit_native)
+        _ = py_call(addresses.append, sequential_address(lengths))
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     _ = state  # keep the Python object alive through the native call above
@@ -228,6 +248,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     _ = previous^
     _ = vx^
     _ = vy^
+    _ = lengths^
     py_setitem(fields, nk[].k_params_, params)
     py_setitem(fields, nk[].k_n_iter_, n_iter)
     if validation is not None:
@@ -267,6 +288,12 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
 def sequential_forward(mut mods: NativeModules, model: PythonObject, source: PythonObject, transform: Int,
                        width: PythonObject, entries: PythonObject, context: PythonObject,
                        classes: PythonObject) raises -> PythonObject:
+    return sequential_forward(mods, model, source, transform, width, entries, context, classes, PythonObject(None))
+
+
+def sequential_forward(mut mods: NativeModules, model: PythonObject, source: PythonObject, transform: Int,
+                       width: PythonObject, entries: PythonObject, context: PythonObject,
+                       classes: PythonObject, lengths_source: PythonObject) raises -> PythonObject:
     var nk = sequential_keys()
     var fields = sequential_fields(model)
     if not py_contains(fields, nk[].k_params_):
@@ -294,12 +321,15 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
     ref native_table = description[].scalars
     var sources: List[CastIn] = [x_snapshot.source]
     var provider = py_item(entries, nk[].k_native_model_provider)
+    var lengths = _sequential_lengths(lengths_source, x_snapshot.source.rows, context)
     var out: PythonObject
     if classes is not None:
         # the labels of a classifier, in classes_' dtype
         out = sequential_array(mods, Python.tuple(x_snapshot.source.rows), classes.dtype, context)
         var addresses: List[Int] = [0, Int(py=sequential_address(params)),
                                     Int(py=sequential_address(classes)), Int(py=sequential_address(out))]
+        if lengths is not None:
+            addresses.append(Int(py=sequential_address(lengths)))
         var options: List[Int] = [x_snapshot.source.rows, 4096, transform, Int(py=classes.shape[0]), Int(py=classes.dtype.itemsize)]
         var words = model_descriptor_words(native_program, options, sources)
         _ = neural_descriptor_execute(provider, MODEL_PREDICT_LABELS, addresses, words, native_table)
@@ -308,10 +338,13 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
         _ = params  # keep the Python object alive through the native call above
         _ = x^
         _ = params^
+        _ = lengths^
         return out
     var output_width = py_item(fields, nk[].k_n_outputs_) if width is None else width
     out = sequential_array(mods, Python.tuple(x_snapshot.source.rows, output_width), py_item(context, nk[].k_float32), context)
     var addresses: List[Int] = [0, Int(py=sequential_address(params)), Int(py=sequential_address(out))]
+    if lengths is not None:
+        addresses.append(Int(py=sequential_address(lengths)))
     var options: List[Int] = [x_snapshot.source.rows, 4096, transform]
     var words = model_descriptor_words(native_program, options, sources)
     _ = neural_descriptor_execute(provider, MODEL_PREDICT, addresses, words, native_table)
@@ -319,11 +352,12 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
     _ = description_owner^
     _ = x^
     _ = params^
+    _ = lengths^
     return out
 
 
 def sequential_predict(mut mods: NativeModules, model: PythonObject, source: PythonObject, probabilities: Bool,
-                       context: PythonObject) raises -> PythonObject:
+                       context: PythonObject, lengths: PythonObject) raises -> PythonObject:
     var nk = sequential_keys()
     var fields = sequential_fields(model)
     var saved_loss = py_get(fields, nk[].k__fit_loss)
@@ -333,16 +367,19 @@ def sequential_predict(mut mods: NativeModules, model: PythonObject, source: Pyt
     var classifier = loss == "cross_entropy" or loss == "bce_with_logits"
     if probabilities:
         if loss == "cross_entropy":
-            return sequential_forward(mods, model, source, 1, PythonObject(None), entries, context)
+            return sequential_forward(mods, model, source, 1, PythonObject(None), entries, context, PythonObject(None),
+                                      lengths)
         if loss == "bce_with_logits":
-            return sequential_forward(mods, model, source, 3, PythonObject(2), entries, context)
+            return sequential_forward(mods, model, source, 3, PythonObject(2), entries, context, PythonObject(None),
+                                      lengths)
         raise Error("predict_proba needs a model fitted with cross_entropy or bce_with_logits")
     if classifier:
         # one entry: the argmax (threshold) codes stay on the device and are
         # gathered there into the labels (`model_predict_labels`)
         return sequential_forward(mods, model, source, 4 if loss == "cross_entropy" else 5, PythonObject(1), entries,
-                                  context, py_item(fields, nk[].k_classes_))
-    var result = sequential_forward(mods, model, source, 0, PythonObject(None), entries, context)
+                                  context, py_item(fields, nk[].k_classes_), lengths)
+    var result = sequential_forward(mods, model, source, 0, PythonObject(None), entries, context, PythonObject(None),
+                                    lengths)
     if Bool(py=py_get(fields, nk[].k__y_1d, False)):
         # A one-output model is already contiguous. The native ndarray
         # constructor changes only its ABI rank, preserving the returned words.

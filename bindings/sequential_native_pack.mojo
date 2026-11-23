@@ -87,7 +87,8 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         elif operation == SEQUENTIAL_OPN_FIT:
             result = sequential_fit(mods, model, args, context)
         elif operation == SEQUENTIAL_OPN_PREDICT or operation == SEQUENTIAL_OPN_PREDICT_PROBA:
-            result = sequential_predict(mods, model, args[0], operation == SEQUENTIAL_OPN_PREDICT_PROBA, context)
+            result = sequential_predict(mods, model, args[0], operation == SEQUENTIAL_OPN_PREDICT_PROBA, context,
+                                        args[1] if len(args) > 1 else PythonObject(None))
         elif operation == SEQUENTIAL_OPN_FORWARD:
             result = sequential_forward(mods, model, args[0], Int(py=args[1]), args[2], sequential_entries(model, context), context)
         elif operation == SEQUENTIAL_OPN_TARGETS:

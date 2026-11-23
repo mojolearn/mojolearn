@@ -35,14 +35,15 @@ from autograd.fold import fold_partials
 from autograd.ops import AXIS_ROWS
 from autograd.rankn_conv_ops import (
     OP_RNV_IM2COL, OP_RNV_CONV_OUT, OP_RNV_MAXPOOL_FWD, OP_RNV_AVGPOOL_FWD,
+    OP_RNV_BN_PREP, OP_RNV_BN_SUM, OP_RNV_BN_MEAN, OP_RNV_BN_SQ, OP_RNV_BN_VAR, OP_RNV_BN_APPLY,
 )
 from autograd.rules_conv2d import (
-    RN_CONV2D, RN_MAXPOOL2D, RN_AVGPOOL2D, rn_conv_gemm, rn_conv_group_gemm, rn_conv_group_words,
+    RN_CONV2D, RN_MAXPOOL2D, RN_AVGPOOL2D, RN_BATCH_NORM, rn_conv_gemm, rn_conv_group_gemm, rn_conv_group_words,
     RNG_FWD, RNG_DW, RNG_DCOLS,
 )
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr
-from x_cnn.ops import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW
+from x_cnn.ops import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW, BN_SLOTS, bn_fold_blocks
 
 
 def _shape4(a: Int, b: Int, c: Int, d: Int) -> ShapeN:
@@ -412,3 +413,93 @@ def rankn_avg_pool1d[E: Exec](
     var y4 = _avg_pool(tape, ex, x4, sx, _pool_block_1d(sx, kernel_size, stride, padding))
     var sy = tape.shape_of(y4)
     return tape.view_nd(ex, y4, _shape3(sy.d[0], sy.d[1], sy.d[3]))
+
+
+def rankn_batch_norm[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, gamma: Tensor, beta: Tensor, running: FP, eps: Float32,
+    momentum: Float32, train: Bool,
+) raises -> Tensor:
+    """Batch normalization over the channel axis of x (N, C, ...): every channel's values over the
+    batch and the remaining axes are normalized, then scaled by gamma and shifted by beta (C each).
+
+    Training (`train`): the batch's mean and biased variance normalize, and the running
+    statistics `running` ([mean C | var C], executor storage) take PyTorch's update
+    r = (1 - momentum) r + momentum stat, the variance unbiased. Otherwise the running
+    statistics normalize. x_cnn's BatchNorm bodies (autograd/rankn_conv_ops.mojo
+    OP_RNV_BN_*): launches, training 6 (prep, block sums, mean, block squares, variance with
+    the running update, apply), eval 2 (prep with the running statistics, apply); the
+    backward 3 (block reductions, their totals with d gamma and d beta, dx). Recorded as
+    RN_BATCH_NORM (autograd/rules_conv2d.mojo)."""
+    var s = tape.shape_of(x)
+    if s.ndim < 2:
+        raise Error("batch norm: x must be (N, C, ...)")
+    var N = s.d[0]
+    var C = s.d[1]
+    var count = s.count()
+    var HW = count // (N * C)
+    if tape.rows(gamma) * tape.cols(gamma) != C or tape.rows(beta) * tape.cols(beta) != C:
+        raise Error("batch norm: gamma and beta must hold one value per channel")
+    if train and N * HW < 2:
+        raise Error("batch norm: training needs more than one value per channel")
+    var words: List[Int] = [N, C, HW]
+    var desc = tape.descriptor(ex, words)
+    var xv = tape.value_of(ex, x)
+    var aux = tape.reserve(ex, 2 + BN_SLOTS * C)
+    var pr = Args()
+    pr.p0 = tape.value_of(ex, gamma)
+    pr.p1 = aux
+    pr.p2 = running
+    pr.p4 = tape.value_of(ex, beta)
+    pr.p11 = desc
+    pr.f0 = eps
+    pr.f1 = momentum
+    pr.i0 = 0 if train else 1
+    ex.launch[OP_RNV_BN_PREP](pr, C)
+    var NB = bn_fold_blocks(N * HW)
+    var part = tape.reserve(ex, 2 * C * NB)
+    if train:
+        var a = Args()
+        a.p0 = xv
+        a.p1 = part
+        a.p11 = desc
+        ex.launch[OP_RNV_BN_SUM](a, C * NB)
+        var m = Args()
+        m.p0 = part
+        m.p1 = aux
+        m.p11 = desc
+        ex.launch[OP_RNV_BN_MEAN](m, C)
+        var q = Args()
+        q.p0 = xv
+        q.p1 = part
+        q.p2 = aux
+        q.p11 = desc
+        ex.launch[OP_RNV_BN_SQ](q, C * NB)
+        var v = Args()
+        v.p0 = part
+        v.p1 = aux
+        v.p2 = running
+        v.p11 = desc
+        ex.launch[OP_RNV_BN_VAR](v, C)
+    var out = tape.reserve(ex, count)
+    var ap = Args()
+    ap.p0 = xv
+    ap.p1 = aux
+    ap.p2 = out
+    ap.p11 = desc
+    ex.launch[OP_RNV_BN_APPLY](ap, count)
+    var rec = tape.is_recording()
+    var saved = Args()
+    saved.p0 = xv
+    saved.p1 = aux
+    saved.p2 = part
+    saved.p11 = desc
+    saved.i0 = count
+    saved.i1 = C * NB
+    saved.i2 = C
+    saved.i3 = 1 if train else 0
+    saved.i5 = 1 if rec and tape.requires_grad(x) else 0
+    saved.i6 = 1 if rec and tape.requires_grad(gamma) else 0
+    saved.i7 = 1 if rec and tape.requires_grad(beta) else 0
+    var inputs: List[Tensor] = [x, gamma, beta]
+    return tape.custom_nd(ex, inputs, out, s, RN_BATCH_NORM, saved)
+

@@ -49,6 +49,11 @@ EXISTING backward rule; no kernel is written or edited here:
                                  before the layer and runs graph_lm_head_v2 (the fused  115 (lm_head_v2)
                                  head + loss, no logits); weight (vocab, features)
                                  (lane neural-blocks-3-lm, 2026-11-22)
+  46    batch_norm (channels,    rankn_batch_norm (autograd/rankn_conv.mojo) over x_cnn's  Conv2dRules 179
+        momentum bits, dims;     BatchNorm bodies (lane seq-blocks-3): weight, bias,
+        f eps)                   running_mean, running_var; the running statistics are
+                                 state the optimizer never updates (autograd/model.mojo
+                                 model_fit_state restores them around each step)
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -63,6 +68,7 @@ its monolith agree to the fold order of their kernels, not bit for bit
 """
 from std.collections import Array
 from std.math import isfinite
+from std.memory import bitcast
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_SEQ_IOTA, OP_FILL, CELL_RNN_TANH, CELL_LSTM, CELL_GRU, gates_of
 from checks.numerics import ftz, identical_div, identical_sqrt
@@ -83,6 +89,7 @@ from autograd.rules_step_ops import StepOpRules
 from autograd.import_api import ImportRules, imp_unary, imp_binary, imp_where, imp_gather_nd
 from autograd.import_ops import IMP_SILU, IMP_GELU_ERF, IMP_GELU_TANH, IMP_SOFTPLUS, IMP_GT, IMP_GE, IMP_OR
 from autograd.rules_recurrent import RecurrentRules, RNN_LINEAR, RNN_LAYER, RNN_LAST_STEP, rnn_scan_op
+from autograd.rankn_conv import rankn_batch_norm
 from autograd.ssm_primitives import SsmRules, SSM_TAG_FIRST, SSM_TAG_LAST, graph_selective_scan
 from autograd.ssm_ops import ssm_m1_states_supported
 # Mamba-2 (lane neural-blocks-3)
@@ -105,8 +112,11 @@ comptime LAYER_SELECTIVE_SCAN = 42
 comptime LAYER_SSD_SCAN = 43
 comptime LAYER_TRAPEZOID_SCAN = 44
 comptime LAYER_LM_HEAD = 45
+#: batch_norm1d / batch_norm2d (lane seq-blocks-3; 42 before the merge with neural-blocks-3, never released): a0
+#: channels, a1 the momentum's float32 bits, a2 1 or 2 (the public name's dims); f eps
+comptime LAYER_BATCH_NORM = 46
 comptime BLOCK_FIRST = 32
-comptime BLOCK_LAST = 45
+comptime BLOCK_LAST = 46
 
 #: block_init_bounds' marker for Mamba's S4D-real init of A_log: row d holds log(1), .., log(state)
 comptime BLOCK_INIT_S4D = Float32(-1.0e9)
@@ -147,6 +157,20 @@ def _cell(which: Int) raises -> Int:
     if c < 0:
         raise Error("recurrent: the cell must be rnn, lstm or gru")
     return c
+
+
+def bn_momentum(xargs: List[Int], i: Int) -> Float32:
+    """A batch-norm layer's momentum: its a1 holds the float32's bits."""
+    return bitcast[DType.float32](Int32(_x(xargs, i, 1)))
+
+
+def bn_state(code: Int, xargs: List[Int], i: Int) -> Tuple[Int, Int]:
+    """(offset from the layer's parameter offset, words) of the layer's running statistics, state the
+    optimizer does not update; (0, 0) for a layer without any."""
+    if code == LAYER_BATCH_NORM:
+        var c = _x(xargs, i, 0)
+        return (2 * c, 2 * c)
+    return (0, 0)
 
 
 def _heads(xargs: List[Int], i: Int) -> Tuple[Int, Int]:
@@ -226,6 +250,23 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         rd.append(cur.d[0])
         rd.append(a0)
         return rn_shape(rd, name + " (Recurrent)")
+    if code == LAYER_BATCH_NORM:
+        var dims = _x(xargs, i, 2)
+        if dims == 1 and cur.ndim > 2:
+            raise Error(name + " (BatchNorm1d): the input must be (channels,) or (channels, length)")
+        if dims == 2 and cur.ndim != 3:
+            raise Error(name + " (BatchNorm2d): the input must be (channels, height, width)")
+        if dims != 1 and dims != 2:
+            raise Error(name + " (BatchNorm): dims must be 1 or 2")
+        if a0 < 1 or cur.d[0] != a0:
+            raise Error(name + " (BatchNorm): num_features must equal the input's channels ("
+                        + String(cur.d[0]) + ")")
+        var m = bn_momentum(xargs, i)
+        if not (m >= Float32(0) and m <= Float32(1)):
+            raise Error(name + " (BatchNorm): momentum must be in [0, 1]")
+        if not (f > Float32(0)) or not isfinite(f):
+            raise Error(name + " (BatchNorm): eps must be positive")
+        return cur
     if code == LAYER_SELECTIVE_SCAN:
         if cur.ndim != 2:
             raise Error(name + " (SelectiveScan): the input must be (length, features)")
@@ -310,6 +351,10 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         out.append(gh * hsz)       # weight_hh (gates * hidden, hidden)
         out.append(gh)             # bias_ih
         out.append(gh)             # bias_hh
+    elif code == LAYER_BATCH_NORM:
+        var c = _x(xargs, i, 0)
+        for _ in range(4):  # small-loop(4: weight, bias, running_mean, running_var)
+            out.append(c)
     elif code == LAYER_SELECTIVE_SCAN:
         var dim = _scan_dim(xargs, i, cur)
         out.append(dim * _x(xargs, i, 0))  # A_log (dim, state)
@@ -343,6 +388,11 @@ def block_param_names(code: Int) -> List[String]:
         out.append(".weight_hh")
         out.append(".bias_ih")
         out.append(".bias_hh")
+    elif code == LAYER_BATCH_NORM:
+        out.append(".weight")
+        out.append(".bias")
+        out.append(".running_mean")
+        out.append(".running_var")
     elif code == LAYER_SELECTIVE_SCAN:
         out.append(".A_log")
         out.append(".D")
@@ -395,6 +445,12 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         var b = ftz(identical_div(Float32(1), identical_sqrt(Float32(_x(xargs, i, 0)))))
         for _ in range(4):  # small-loop(4: the layer's parameter tensors)
             out.append(b)
+    elif code == LAYER_BATCH_NORM:
+        # PyTorch's: weight 1, bias 0, running_mean 0, running_var 1 (constant fills)
+        out.append(Float32(-2))
+        out.append(Float32(-1))
+        out.append(Float32(-1))
+        out.append(Float32(-2))
     elif code == LAYER_SELECTIVE_SCAN:
         # Mamba's init: A_log[d, n] = log(n + 1) (S4D-real), D = 1
         out.append(BLOCK_INIT_S4D)
@@ -491,13 +547,35 @@ def block_attention[E: Exec](
 
 def block_recurrent[E: Exec](
     mut tape: Tape, mut ex: E, h: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
-    B: Int, T: Int, F: Int, Hs: Int, cell: Int,
+    B: Int, T: Int, F: Int, Hs: Int, cell: Int, lengths: Optional[FP] = None,
 ) raises -> Tensor:
-    """One recurrent layer over h (B, T, F) from a zero state: (B, T, hidden), every step's state."""
+    """One recurrent layer over h (B, T, F) from a zero state: (B, T, hidden), every step's state.
+
+    With `lengths` (B float32 row lengths on the executor; lane seq-blocks-3) a row's padded steps
+    (at or past its length) are packed-sequence steps: their inputs are replaced by +0.0 (a select on
+    the executor, so no value of theirs, not even inf or NaN, reaches a product) and the cell's length
+    mask carries the state through them (rnn_scan_op); their outputs repeat the state at the row's
+    last valid step."""
+    var src = h
+    if lengths:
+        # cond (B, T, 1): position >= length, from device iota positions (no host loop over rows)
+        var pos = tape.reserve(ex, T)
+        var ia = Args()
+        ia.p0 = pos
+        ex.launch[OP_SEQ_IOTA](ia, T)
+        var row = tape.variable(ex, pos, 1, T, False)
+        var lens = tape.variable(ex, lengths.value(), B, 1, False)
+        var cond = imp_binary(tape, ex, row, lens, IMP_GE)
+        var c3: List[Int] = [B, T, 1]
+        cond = tape.view_nd(ex, cond, _sh(c3))
+        var zp = tape.reserve(ex, 1)
+        _fill(ex, zp, 1, Float32(0))
+        var zero = tape.variable(ex, zp, 1, 1, False)
+        src = imp_where(tape, ex, cond, zero, h)
     var tp: List[Int] = [1, 0, 2]
-    var xt = tape.permute(ex, h, tp)
+    var xt = tape.permute(ex, src, tp)
     var tm = tape.view_nd(ex, xt, ShapeN.matrix(T * B, F))
-    var y = rnn_scan_op(tape, ex, tm, w_ih, w_hh, b_ih, b_hh, cell, T, B)
+    var y = rnn_scan_op(tape, ex, tm, w_ih, w_hh, b_ih, b_hh, cell, T, B, lengths)
     var y3: List[Int] = [T, B, Hs]
     var yt = tape.view_nd(ex, y, _sh(y3))
     return tape.permute(ex, yt, tp)
@@ -505,10 +583,10 @@ def block_recurrent[E: Exec](
 
 def block_forward[E: Exec](
     mut tape: Tape, mut ex: E, code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN,
-    P: FP, Gr: FP, off: Int, h: Tensor, other: Optional[Tensor], train: Bool,
+    P: FP, Gr: FP, off: Int, h: Tensor, other: Optional[Tensor], train: Bool, lengths: Optional[FP] = None,
 ) raises -> Tensor:
     """Record block layer i on the tape from h (B,) + cur; `other` is the earlier output a multiply
-    layer reads."""
+    layer reads; `lengths` the batch rows' sequence lengths a recurrent layer reads (None: none)."""
     var B = tape.rows(h) * tape.cols(h) // cur.count()
     var a0 = _x(xargs, i, 0)
     var a1 = _x(xargs, i, 1)
@@ -557,7 +635,21 @@ def block_forward[E: Exec](
         var w_hh = _p(tape, ex, P, Gr, off + gh * F, gh, a0, train)
         var b_ih = _p(tape, ex, P, Gr, off + gh * F + gh * a0, 1, gh, train)
         var b_hh = _p(tape, ex, P, Gr, off + gh * F + gh * a0 + gh, 1, gh, train)
-        return block_recurrent(tape, ex, h, w_ih, w_hh, b_ih, b_hh, B, T, F, a0, cell)
+        return block_recurrent(tape, ex, h, w_ih, w_hh, b_ih, b_hh, B, T, F, a0, cell, lengths)
+    if code == LAYER_BATCH_NORM:
+        # (B, C, rest): the channel axis is the sample's first; running statistics after weight and bias
+        var gamma = _p(tape, ex, P, Gr, off, 1, a0, train)
+        var beta = _p(tape, ex, P, Gr, off + a0, 1, a0, train)
+        var bd = rn_dims(cur)
+        var xd = List[Int]()
+        xd.append(B)
+        xd.append(a0)
+        var rest = 1
+        for k in range(1, len(bd)):  # small-loop(ndim: the sample rank, at most 3): shape metadata, no data
+            rest *= bd[k]
+        xd.append(rest)
+        var x3 = tape.view_nd(ex, h, _sh(xd))
+        return rankn_batch_norm(tape, ex, x3, gamma, beta, P + off + 2 * a0, f, bn_momentum(xargs, i), train)
     if code == LAYER_SELECTIVE_SCAN:
         var dim = _scan_dim(xargs, i, cur)
         var u = rankn_narrow(tape, ex, h, 2, 0, dim)
@@ -696,6 +788,8 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
             out.append(cur.d[1])
         elif slot == 1:
             out.append(hsz)
+    elif code == LAYER_BATCH_NORM:
+        out.append(_x(xargs, i, 0))
     elif code == LAYER_SELECTIVE_SCAN:
         var dim = _scan_dim(xargs, i, cur)
         out.append(dim)

@@ -9,6 +9,10 @@ CLASSICAL_SEQUENCE = frozenset(('sequence-autoarima', 'sequence-stl', 'sequence-
 # (tools/identity_lanes/sequence.py): 64 rows, seconds, so routine `verify`
 # covers the tape while full neural training stays opt-in.
 ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
+                          # lane seq-blocks-3: the sequence-block baselines, one seeded step on 32 sequences
+                          'sequence-blocks-cnn1d', 'sequence-blocks-resnet1d', 'sequence-blocks-inceptiontime',
+                          'sequence-blocks-gru-lengths', 'sequence-blocks-lstm-lengths',
+
                           # lane neural-blocks-3: composed models, one seeded step each
                           'sequence-composed-transformer', 'sequence-composed-mamba1',
                           'sequence-composed-mamba2', 'sequence-composed-mamba3',

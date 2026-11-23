@@ -3,6 +3,7 @@
 # The PACK half of the former `bindings/sequential_description.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/sequential_description_unpack.mojo`.
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
+from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.sequential_admission_door import sequential_integer, sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_fields, py_setitem, py_type
@@ -275,6 +276,20 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         a0 = PythonObject(hidden)
         a1 = PythonObject(cell)
         args = Python.list(hidden, cell, 0, 0, 0, 0)
+    elif kind == "batch_norm1d" or kind == "batch_norm2d":
+        # lane seq-blocks-3 (autograd/model_blocks.mojo LAYER_BATCH_NORM): a1 carries the momentum's float32 bits
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("num_features", "eps", "momentum"),
+                                 Python.tuple(None, 1e-5, 0.1), 1)
+        var channels = _positive(options[0], "num_features", 1, context)
+        if not Bool(py=options[1] > PythonObject(0)):
+            raise Error("eps must be positive")
+        if not (Bool(py=options[2] >= PythonObject(0)) and Bool(py=options[2] <= PythonObject(1))):
+            raise Error("momentum must be in [0, 1]")
+        f = py_call(b.float, options[1])
+        var bits = Int(bitcast[DType.int32](Float32(Float64(py=py_call(b.float, options[2])))))
+        a0 = PythonObject(channels)
+        a1 = PythonObject(bits)
+        args = Python.list(channels, bits, 1 if kind == "batch_norm1d" else 2, 0, 0, 0)
     elif kind == "gated":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("gate", "up"),
                                  Python.tuple(None, None), 2)

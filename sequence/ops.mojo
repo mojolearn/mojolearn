@@ -181,6 +181,8 @@ comptime OP_ETS_LIK = 56
 comptime OP_ETS_INIT = 57
 comptime OP_CELL_FWD_H = 58
 comptime OP_CELL_BWD_H = 59
+#: op_cell_bwd_h with the sequence-length mask (lane seq-blocks-3): one launch a backward step with lengths
+comptime OP_CELL_BWD_H_MASK = 88
 comptime OP_GEMM_EPI = 60
 comptime OP_COLSUM_DIV = 61
 comptime OP_GEMM_EPI_TAIL = 62
@@ -589,6 +591,9 @@ def op_colsum(t: Int, a: Args):
     st(a.p1, t, acc)
 
 
+comptime SEQ_LENGTHS_SABOTAGE_MASK = is_defined["MOJOLEARN_SEQ_BLOCKS_SABOTAGE_MASK"]()
+
+
 def op_cell_fwd(t: Int, a: Args):
     """One time step of the cell for element t = b*H + u.
     p0 GX [B, G*H] (input projection + b_ih), p1 GH [B, G*H] (h @ W_hh^T +
@@ -605,7 +610,11 @@ def op_cell_fwd(t: Int, a: Args):
     var b = t // H
     var u = t - b * H
     var row = b * G * H
-    if a.i9 != 0 and Float32(a.i8) >= ld(a.p10, b):
+    var past = Float32(a.i8) >= ld(a.p10, b) if a.i9 != 0 else False
+    comptime if SEQ_LENGTHS_SABOTAGE_MASK:
+        # the sabotage arm (lane seq-blocks-3, test builds only): off by one, a row's own last step is masked
+        past = a.i9 != 0 and Float32(a.i8 + 1) >= ld(a.p10, b)
+    if past:
         st(a.p5, t, ld(a.p3, t))
         if cell == CELL_LSTM:
             st(a.p6, t, ld(a.p4, t))
@@ -761,6 +770,14 @@ def op_cell_bwd_h(t: Int, a: Args):
     chain (autograd/rules_recurrent.mojo _layer_bwd); element t reads and
     writes only index t of both buffers, so the cell reads the same +0.0
     words: the same bits. The scan's first step repeats its own zero stores."""
+    _cell_bwd_recurrent(t, a)
+    op_cell_bwd(t, a)
+
+
+@always_inline
+def _cell_bwd_recurrent(t: Int, a: Args):
+    """op_cell_bwd_h's first part: dh[t] += dGH_{s+1} W_hh (p11) from the direct part, or at i3 = 0 the
+    zeros of dh[t] and dc[t]."""
     if a.i3 != 0:
         var H = a.i2
         var GH = gates_of(a.i0) * H
@@ -771,7 +788,29 @@ def op_cell_bwd_h(t: Int, a: Args):
     else:
         st(a.p5, t, Float32(0.0))
         st(a.p7, t, Float32(0.0))
-    op_cell_bwd(t, a)
+
+
+@always_inline
+def op_cell_bwd_h_lens(t: Int, a: Args, lens: FP):
+    """`op_cell_bwd_h` with the sequence-length mask (lane seq-blocks-3): the same recurrent product from W_hh
+    (p11), then `op_cell_bwd` with p11 the rows' lengths `lens` and i9 = 1 (i8 the step). The two parts are
+    op_cell_bwd_h's own bodies, so a step of a row inside its length is that step's words, and a step past it
+    is op_cell_bwd's pass-through."""
+    _cell_bwd_recurrent(t, a)
+    var m = a
+    m.p11 = lens
+    m.i9 = 1
+    op_cell_bwd(t, m)
+
+
+def op_cell_bwd_h_mask(t: Int, a: Args):
+    """ONE LAUNCH a backward step with sequence lengths (OP_CELL_BWD_H_MASK, lane seq-blocks-3): op_cell_bwd_h's
+    Args with p4 (c_t, always c_prev's next row block: p3 + B H) holding the rows' lengths instead, i8 the step.
+    It was two launches a step (OP_GEMM, then OP_CELL_BWD with the mask), the same fold (gemm_dot from the direct
+    part is op_gemm's accumulate) and the same cell: the same words."""
+    var m = a
+    m.p4 = a.p3 + a.i1 * a.i2
+    op_cell_bwd_h_lens(t, m, a.p4)
 
 
 def op_gather_seq(t: Int, a: Args):

@@ -48,11 +48,13 @@ def model_fit_native[E: Exec](
     codes_dev: Int = 0, n_classes: Int = 0,
 ) raises -> Int:
     var validated = len(addrs) == 13 and len(ip) == 16
-    var stateful = (len(addrs) == FIT_ADDRS_STATE and len(ip) == FIT_INTS_STATE) or validated
+    # lane seq-blocks-3: a ninth address after the training state holds N float32 sequence lengths (0: none)
+    var with_lengths = len(addrs) == FIT_ADDRS_STATE + 1 and len(ip) == FIT_INTS_STATE
+    var stateful = (len(addrs) == FIT_ADDRS_STATE and len(ip) == FIT_INTS_STATE) or validated or with_lengths
     var plain = len(addrs) == FIT_ADDRS and len(ip) == FIT_INTS
     if not (stateful or plain) or len(fp) < FIT_FLOATS + 1:
         raise Error("model_fit: requires 4 addresses and 14 integer parameters (or 8 and 15 with the "
-                    + "training state) and 9 floats plus one per layer")
+                    + "training state, 9 with sequence lengths) and 9 floats plus one per layer")
     var spec = parse_model(prog, model_float_words(fp, FIT_FLOATS))
     var N = ip[0]
     var opt = OptConfig(ip[3], ip[4], Float32(fp[1]), Float32(fp[2]), Float32(fp[3]), Float32(fp[4]), Float32(fp[5]))
@@ -89,10 +91,13 @@ def model_fit_native[E: Exec](
         if resume and Int(state[FS_EPOCH]) > 0:
             prev = model_fptr(addrs[7], "earlier loss_curve")
         var y = CastIn.f32_c(0, 1, 1) if codes_dev != 0 else sources[1]
+        var lengths = Optional[FP]()
+        if with_lengths and addrs[8] != 0:
+            lengths = Optional[FP](model_fptr(addrs[8], "lengths"))
         _ = model_fit_state(ex, spec, cfg, sources[0], y, N,
                             model_fptr(addrs[2], "params"), model_fptr(addrs[3], "loss_curve"),
                             model_fptr(addrs[4], "m"), model_fptr(addrs[5], "v"), state, prev, resume, validation,
-                            codes_dev)
+                            codes_dev, lengths)
         n_iter = Int(state[FS_EPOCH])
     else:
         if codes_dev != 0:
@@ -109,22 +114,29 @@ def model_predict_native[E: Exec](
     mut ex: E, addrs: List[Int], source: CastIn, prog: List[Int], table: List[Float64], ip: List[Int],
     labels: Bool = False,
 ) raises -> Int:
+    # lane seq-blocks-3: one more trailing address holds N float32 sequence lengths (0: none)
+    var base = 4 if labels else 3
     if labels:
-        if len(addrs) != 4 or len(ip) != 5:
-            raise Error("model_predict_labels: requires 4 addresses and [N, chunk, transform, k, item size]")
+        if (len(addrs) != 4 and len(addrs) != 5) or len(ip) != 5:
+            raise Error("model_predict_labels: requires 4 addresses (5 with sequence lengths) and "
+                        + "[N, chunk, transform, k, item size]")
         if ip[2] != 4 and ip[2] != 5:
             raise Error("model_predict_labels: transform must be 4 (argmax) or 5 (threshold)")
-    elif len(addrs) != 3 or len(ip) != 3:
-        raise Error("model_predict: requires 3 addresses and 3 integer parameters")
+    elif (len(addrs) != 3 and len(addrs) != 4) or len(ip) != 3:
+        raise Error("model_predict: requires 3 addresses (4 with sequence lengths) and 3 integer parameters")
+    var lengths = Optional[FP]()
+    if len(addrs) == base + 1 and addrs[base] != 0:
+        lengths = Optional[FP](model_fptr(addrs[base], "lengths"))
     var spec = parse_model(prog, model_float_words(table))
     var n = ip[0]
     if labels:
         if addrs[2] == 0 or addrs[3] == 0:
             raise Error("model_gather_labels: null buffer address")
         model_predict(ex, spec, source, n, model_fptr(addrs[1], "params"),
-                      FP(unsafe_from_address=addrs[3]), ip[1], ip[2], addrs[2], ip[3], ip[4])
+                      FP(unsafe_from_address=addrs[3]), ip[1], ip[2], addrs[2], ip[3], ip[4], lengths)
         return n
-    model_predict(ex, spec, source, n, model_fptr(addrs[1], "params"), model_fptr(addrs[2], "out"), ip[1], ip[2])
+    model_predict(ex, spec, source, n, model_fptr(addrs[1], "params"), model_fptr(addrs[2], "out"), ip[1], ip[2],
+                  0, 0, 0, lengths)
     if ip[2] == 3:
         return n * 2
     if ip[2] == 4 or ip[2] == 5:
