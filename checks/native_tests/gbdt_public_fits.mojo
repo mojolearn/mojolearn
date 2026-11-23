@@ -1171,9 +1171,10 @@ def _twice[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises -> G
 
 def _twice_text[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises -> GbdtFitOutcome:
     """Two fits of a model with CTR columns: the same model text, learn and
-    held-out curves. No `predict(X)`: the host reader refuses a model with
-    `ctr_table` records (raw categorical input is expanded by HostGBDT), so
-    `_twice` cannot take one (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)."""
+    held-out curves, no `predict(X)` (lane gbdt-cpu-rest-4-cat-ns,
+    2026-11-23). Since lane gbdt-units-6 the host predict expands CTR
+    columns (`gbdt_host_predict_ctr_into`), so `_twice` takes CTR models
+    too; this form stays for the units that compare curves."""
     var a = fit[I](o, inp)
     var b = fit[I](o, inp)
     require(a.text == b.text, "two host fits returned different bytes: " + what)
