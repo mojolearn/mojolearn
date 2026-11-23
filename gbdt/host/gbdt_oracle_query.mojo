@@ -7,9 +7,10 @@ statement in plain loops, for `gbdt/host/gbdt_oracle_losses.mojo`'s
 symmetric fit.
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
-module that defines a kernel. Unit row weights only: the host binding refuses
-`sample_weight`, so every `weight` below is 1.0 and every `t * w` is `t * 1.0`,
-the same float32 multiply the device performs.
+module that defines a kernel. Row weights (lane gbdt-cpu-rest, 2026-11-23):
+the fit's `sample_weight` in row order, the device's `has_weights` arm; an
+empty list is its unit arm (every `weight` 1.0). The per-row math is the
+device's own bodies (`gbdt/targets/query_bodies.mojo`).
 
 WHAT IS RESTATED, IN THE DEVICE'S ORDER
 
@@ -35,6 +36,7 @@ tools/identity_break.py on the gbdt-query-rmse lane is the measurement.
 """
 
 from checks.numerics import ftz
+from gbdt.targets.query_bodies import query_mean_step, query_rmse_der, query_rmse_score
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.host.gbdt_oracle import (
@@ -92,9 +94,13 @@ def query_ids(group_sizes: List[Int], n_rows: Int) -> List[Int]:
 
 
 def query_means(
-    mse_der: List[Float32], offsets: List[Int], group_sizes: List[Int]
+    mse_der: List[Float32],
+    offsets: List[Int],
+    group_sizes: List[Int],
+    weights: List[Float32] = List[Float32](),
 ) -> List[Float32]:
-    """`compute_group_means_kernel` at unit weights."""
+    """`compute_group_means_kernel`: `weights` (row order) is its
+    `has_weights` arm, empty its unit weight."""
     var means = List[Float32](length=len(group_sizes), fill=Float32(0.0))
     # THE SPLIT (lane gbdt-host-par): the unit is one QUERY, the kernel's
     # block: its 32 lanes' strided sums ascending and their halving tree
@@ -106,8 +112,11 @@ def query_means(
     var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
     var sz_p = rebind[GbdtIntPtr](group_sizes.unsafe_ptr())
     var means_p = rebind[HostF32Ptr](means.unsafe_ptr())
+    var has_weights = len(weights) > 0
+    # an empty `weights` is never read (`has_weights` guards it)
+    var w_p = rebind[HostF32Ptr](weights.unsafe_ptr())
 
-    def query_folds(unit: Int) {imm units, imm n_queries, imm der_p, imm off_p, imm sz_p, imm means_p}:
+    def query_folds(unit: Int) {imm units, imm n_queries, imm der_p, imm off_p, imm sz_p, imm means_p, imm has_weights, imm w_p}:
         var line_t = List[Float32](length=GBDT_QUERY_LANES, fill=Float32(0.0))
         var line_w = List[Float32](length=GBDT_QUERY_LANES, fill=Float32(0.0))
         var q = unit
@@ -119,8 +128,11 @@ def query_means(
                 var sum_w = Float32(0.0)
                 var i = lane
                 while i < size:
-                    sum_t = sum_t + der_p[base + i] * Float32(1.0)
-                    sum_w = sum_w + Float32(1.0)
+                    var w = Float32(1.0)
+                    if has_weights:
+                        w = w_p[base + i]
+                    sum_t = query_mean_step(der_p[base + i], w, sum_t)
+                    sum_w = sum_w + w
                     i += GBDT_QUERY_LANES
                 line_t[lane] = sum_t
                 line_w[lane] = sum_w
@@ -140,6 +152,7 @@ def query_means(
     _ = len(mse_der)
     _ = len(offsets)
     _ = len(group_sizes)
+    _ = len(weights)
     return means^
 
 
@@ -184,13 +197,14 @@ def query_rmse_search_pass(
     mut stats: List[Float32],
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
+    weights: List[Float32] = List[Float32](),
 ):
     """`launch_approximate_query_rmse[False]` with the value and the
-    magnitudes: planes `[1, der]` in row order."""
+    magnitudes: planes `[w, der]` in row order (`weights` empty: unit)."""
     var offsets = query_offsets(group_sizes)
     var qids = query_ids(group_sizes, n_rows)
     var mse_der = query_residuals(targets, cursor, List[Int](), False, n_rows)
-    var means = query_means(mse_der, offsets, group_sizes)
+    var means = query_means(mse_der, offsets, group_sizes, weights)
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
     # one 256-thread device block owns its rows' two planes and its three
@@ -202,8 +216,11 @@ def query_rmse_search_pass(
     var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
     var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
+    var has_weights = len(weights) > 0
+    # an empty `weights` is never read (`has_weights` guards it)
+    var w_p = rebind[HostF32Ptr](weights.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm der_p, imm means_p, imm qids_p, imm stats_p, imm fv_p, imm mag_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm der_p, imm means_p, imm qids_p, imm stats_p, imm fv_p, imm mag_p, imm has_weights, imm w_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
@@ -217,13 +234,14 @@ def query_rmse_search_pass(
                 s_g[t] = Float32(0.0)
                 if i < n_rows:
                     var weight = Float32(1.0)
+                    if has_weights:
+                        weight = w_p[i]
                     var val = der_p[i]
                     var mean = means_p[qids_p[i]]
-                    var direction = val - mean
-                    var der = ftz(weight * direction)
+                    var der = query_rmse_der(val, mean, weight)
                     stats_p[i] = weight
                     stats_p[n_rows + i] = der
-                    s_score[t] = -weight * (val - mean) * (val - mean)
+                    s_score[t] = query_rmse_score(val, mean, weight)
                     s_w[t] = abs(weight)
                     s_g[t] = abs(der)
             fv_p[b] = _halving_fold(s_score)
@@ -238,10 +256,15 @@ def query_rmse_search_pass(
     _ = len(stats)
     _ = len(fv_partials)
     _ = len(mag_partials)
+    _ = len(weights)
 
 
 def query_rmse_value(
-    targets: List[Float32], cursor: List[Float32], group_sizes: List[Int], n_rows: Int
+    targets: List[Float32],
+    cursor: List[Float32],
+    group_sizes: List[Int],
+    n_rows: Int,
+    weights: List[Float32] = List[Float32](),
 ) -> List[Float32]:
     """The final learn-loss pass's per-block score partials (the caller folds
     them with `_deterministic_sum_lanes`, as the device's
@@ -250,7 +273,7 @@ def query_rmse_value(
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv = List[Float32](length=blocks, fill=Float32(0.0))
     var mags = List[Float32](length=2 * blocks, fill=Float32(0.0))
-    query_rmse_search_pass(targets, cursor, group_sizes, n_rows, stats, fv, mags)
+    query_rmse_search_pass(targets, cursor, group_sizes, n_rows, stats, fv, mags, weights)
     return fv^
 
 
@@ -266,11 +289,13 @@ def query_rmse_eval(
     mut value: Float64,
     mut gradient: List[Float64],
     mut cached_der2: List[Float64],
+    weights: List[Float32] = List[Float32](),
 ):
     """`BinOptimizedOracle.write_value_and_first_derivatives`' querywise arm:
     the point is bin-ordered (`g_cursor[pos]` is row `row_index[pos]`), the
     targets stay in row order, the inverse of `row_index` reads the point
-    back, and the planes `[der, 1]` land at each row's bin position. Then
+    back, and the planes `[der, w]` land at each row's bin position (`weights`
+    in row order, empty: unit). Then
     the per-leaf partition stats, the Hessian plus lambda and the host
     Float32 fold of the value partials, as `_loss_eval`."""
     var inverse = List[Int](length=n_rows, fill=0)
@@ -278,7 +303,7 @@ def query_rmse_eval(
     var offsets = query_offsets(group_sizes)
     var qids = query_ids(group_sizes, n_rows)
     var mse_der = query_residuals(targets, g_cursor, inverse, True, n_rows)
-    var means = query_means(mse_der, offsets, group_sizes)
+    var means = query_means(mse_der, offsets, group_sizes, weights)
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var fv = List[Float32](length=blocks, fill=Float32(0.0))
@@ -292,8 +317,11 @@ def query_rmse_eval(
     var inv_p = rebind[GbdtIntPtr](inverse.unsafe_ptr())
     var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
     var fv_p = rebind[HostF32Ptr](fv.unsafe_ptr())
+    var has_weights = len(weights) > 0
+    # an empty `weights` is never read (`has_weights` guards it)
+    var w_p = rebind[HostF32Ptr](weights.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm der_p, imm means_p, imm qids_p, imm inv_p, imm stats_p, imm fv_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm der_p, imm means_p, imm qids_p, imm inv_p, imm stats_p, imm fv_p, imm has_weights, imm w_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var b = unit
         while b < blocks:
@@ -303,13 +331,14 @@ def query_rmse_eval(
                 s_score[t] = Float32(0.0)
                 if i < n_rows:
                     var weight = Float32(1.0)
+                    if has_weights:
+                        weight = w_p[i]
                     var val = der_p[i]
                     var mean = means_p[qids_p[i]]
-                    var direction = val - mean
                     var dst = inv_p[i]
-                    stats_p[dst] = ftz(weight * direction)
+                    stats_p[dst] = query_rmse_der(val, mean, weight)
                     stats_p[n_rows + dst] = weight
-                    s_score[t] = -weight * (val - mean) * (val - mean)
+                    s_score[t] = query_rmse_score(val, mean, weight)
             fv_p[b] = _halving_fold(s_score)
             b += units
 
@@ -318,6 +347,7 @@ def query_rmse_eval(
     _ = len(means)
     _ = len(qids)
     _ = len(inverse)
+    _ = len(weights)
     gradient.clear()
     cached_der2.clear()
     # the leaves' two sums (`compute_partition_stats`): the (leaf, plane)

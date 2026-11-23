@@ -62,7 +62,7 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
-from std.math import fma
+from gbdt.targets.query_bodies import query_mean_step, query_rmse_der, query_rmse_score
 from gbdt.apple_fast_tree_experiments import AFT_N12
 from gbdt.data.group_layout import device_group_layout
 from gbdt.gpu_data.kernel.query_helper import (
@@ -234,8 +234,8 @@ def query_rmse_kernel[estimation: Bool](
         query_mean = query_means.unsafe_load(Int(qids.unsafe_load(i)))
         if has_weights != Int32(0):
             weight = weights.unsafe_load(i)
-    var direction = val - query_mean
-    var der = ftz(weight * direction)
+    # the bodies the host column calls (gbdt/targets/query_bodies.mojo)
+    var der = query_rmse_der(val, query_mean, weight)
 
     if in_range:
         comptime if estimation:
@@ -252,7 +252,7 @@ def query_rmse_kernel[estimation: Bool](
     if compute_fv != Int32(0):
         var score = Float32(0.0)
         if in_range:
-            score = -weight * (val - query_mean) * (val - query_mean)
+            score = query_rmse_score(val, query_mean, weight)
         var total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)
@@ -388,7 +388,7 @@ def aft_query_mean_kernel(
         var w = Float32(1.0)
         if has_weights != Int32(0):
             w = weights.unsafe_load(begin + row)
-        sum_target = fma(target.unsafe_load(begin + row), w, sum_target)
+        sum_target = query_mean_step(target.unsafe_load(begin + row), w, sum_target)
         sum_weight += w
         row += AFT_QUERY_MEAN_THREADS
     var total = pinned_block_sum[block_size=AFT_QUERY_MEAN_THREADS](sum_target)

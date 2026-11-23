@@ -145,8 +145,20 @@ def gbdt_ranking_pointwise_host_fit(
     second_order: Bool,
     cosine_score: Bool,
     random_strength: Float32,
+    weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostModel:
-    """Fit grouped targets on numeric columns using pointwise tree search."""
+    """Fit grouped targets on numeric columns using pointwise tree search.
+
+    `weights` (row order, empty: unit) are the sample weights, the device's
+    one `weights` column (lane gbdt-cpu-rest, 2026-11-23), read exactly as
+    the greedy grouped fit (`gbdt_oracle_losses.mojo::
+    gbdt_losses_host_fit`) reads them: YetiRank's `has_weights` arm,
+    PairLogit's generated pairs' weights (a caller's pairs keep their own),
+    QueryRMSE's weighted query means, and the leaf weights of the shared
+    grouped estimator."""
+    var has_weights = len(weights) > 0
+    if has_weights and len(weights) != n_rows:
+        raise Error("weights size mismatch")
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features or len(y) != n_rows:
@@ -179,7 +191,7 @@ def gbdt_ranking_pointwise_host_fit(
     var loss_norm = Float64(n_rows)
     if loss.objective == GBDT_OBJ_PAIR_LOGIT:
         if IDN_PAIRLOGIT_GROUP and len(pair_winners) == 0:
-            var hp = host_pair_groups(sizes_u32, y, List[Float32](), n_rows)
+            var hp = host_pair_groups(sizes_u32, y, weights, n_rows)
             loss_norm = hp.total_weight()
             pairs = Optional(hp^)
         else:
@@ -191,7 +203,7 @@ def gbdt_ranking_pointwise_host_fit(
                 )
             else:
                 ordered = order_pairs_by_winner(
-                    generate_pairs(sizes_u32, y, List[Float32]()), sizes_u32, n_rows
+                    generate_pairs(sizes_u32, y, weights), sizes_u32, n_rows
                 )
             var hp = host_pairs(ordered.winners, ordered.losers, ordered.weights, n_rows)
             loss_norm = hp.total_weight()
@@ -268,7 +280,7 @@ def gbdt_ranking_pointwise_host_fit(
     for iteration in range(params.n_estimators):
         if loss.objective == GBDT_OBJ_YETI_RANK:
             yeti_rank_search_pass(
-                y, List[Float32](), False, cursor, group_sizes,
+                y, weights, has_weights, cursor, group_sizes,
                 yeti_tasks.value(), yeti_rand.next_uniform_l(), 10,
                 Float32(0.85), n_rows, stats, fv_part, mag_part,
             )
@@ -278,7 +290,7 @@ def gbdt_ranking_pointwise_host_fit(
                 second_order,
             )
         else:
-            query_rmse_search_pass(y, cursor, group_sizes, n_rows, stats, fv_part, mag_part)
+            query_rmse_search_pass(y, cursor, group_sizes, n_rows, stats, fv_part, mag_part, weights)
         var fv = _deterministic_sum_lanes(fv_part, 1, fv_blocks)[0]
         var tree_seed = noise_rand.next_uniform_l()
         var score_std_dev = Float32(0)
@@ -321,7 +333,7 @@ def gbdt_ranking_pointwise_host_fit(
         var estimated = _estimate_leaves_for_loss(
             loss, y, cursor, partition.row_index, partition.offsets,
             partition.sizes, n_rows, params.l2_leaf_reg, group_sizes, pairs,
-            yeti_tasks, yeti_seed,
+            yeti_tasks, yeti_seed, weights,
         )
         if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
             _zero_average_host(estimated)
@@ -348,7 +360,7 @@ def gbdt_ranking_pointwise_host_fit(
         var last = pair_logit_value(pairs.value(), cursor)
         losses.append(-Float64(_deterministic_sum_lanes(last, 1, len(last))[0]) / loss_norm)
     else:
-        var last = query_rmse_value(y, cursor, group_sizes, n_rows)
+        var last = query_rmse_value(y, cursor, group_sizes, n_rows, weights)
         losses.append(-Float64(_deterministic_sum_lanes(last, 1, len(last))[0]) / loss_norm)
     return GbdtHostModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),

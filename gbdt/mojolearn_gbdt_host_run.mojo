@@ -1153,9 +1153,12 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # restated), the multi-output losses, QueryRMSE (its weighted query
     # means), the pointwise searcher's grouped arm, and Exact leaves (the
     # weighted quantile), each by name below or in its owner.
+    # lane gbdt-cpu-rest (2026-11-23): QueryRMSE's weighted query means
+    # (gbdt/host/gbdt_oracle_query.mojo, the device's bodies in
+    # gbdt/targets/query_bodies.mojo) and the grouped pointwise searcher
+    # (gbdt_oracle_pointwise_rank.mojo) read them as the greedy grouped fit
     var sample_weights_ok = n_weights != 0 and n_flags == 0 and not is_multi and (
-        loss == String("Logloss") or is_rmse
-        or (is_pointwise and not use_pointwise and pw_objective != GBDT_OBJ_QUERY_RMSE)
+        loss == String("Logloss") or is_rmse or is_pointwise
     )
     if n_weights != 0 and not sample_weights_ok:
         _refuse(
@@ -1386,11 +1389,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             leaf_method, leaf_iterations, bootstrap_type,
             Float32(params.f(19)), Float32(params.f(18)),
         )
-        if n_weights != 0 and pw_loss.method == GBDT_LEAF_EXACT:
-            _refuse(
-                "sample_weight with Exact leaves (the weighted quantile of"
-                " compute_exact_approx is not restated on the host)"
-            )
     # the symmetric stochastic arm's bootstrap, `train`'s resolution
     # (`gbdt/train.mojo`), the Ordered arm's words above
     var sym_boot_kind = -1
@@ -1513,7 +1511,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 or score_function == GBDT_HOST_SCORE_NEWTON_L2,
                 score_function == GBDT_HOST_SCORE_COSINE
                 or score_function == GBDT_HOST_SCORE_NEWTON_COSINE,
-                random_strength,
+                random_strength, row_weights,
             )
         else:
             pw_model = gbdt_losses_host_fit(

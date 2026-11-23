@@ -701,7 +701,7 @@ def _walker_estimate(
     elif loss.objective == GBDT_OBJ_QUERY_RMSE:
         query_rmse_eval(
             targets_rows, g_cursor, row_index, group_sizes, offsets, sizes,
-            n_rows, lambda_reg, cur_value, cur_grad, cached_der2,
+            n_rows, lambda_reg, cur_value, cur_grad, cached_der2, row_weights,
         )
     else:
         _loss_eval(
@@ -744,7 +744,7 @@ def _walker_estimate(
                 query_rmse_eval(
                     targets_rows, g_cursor, row_index, group_sizes, offsets,
                     sizes, n_rows, lambda_reg, next_value, next_grad,
-                    cached_der2,
+                    cached_der2, row_weights,
                 )
             else:
                 _loss_eval(
@@ -878,10 +878,13 @@ def _exact_estimate(
     sizes: List[Int],
     weights_cpu: List[Float64],
     n_rows: Int,
+    g_weights: List[Float32] = List[Float32](),
 ) raises -> List[Float32]:
     """`BinOptimizedOracle.estimate_exact` (`pointwise_oracle.mojo:433-503`)
-    over `compute_exact_approx` (`leaves_estimation_helper.mojo`), unit row
-    weights: the residual, the MAPE quotient, the stable sort of each leaf
+    over `compute_exact_approx` (`leaves_estimation_helper.mojo`): the
+    residual and its weight (`compute_exact_value_kernel`: the row weight in
+    bin order, `g_weights`, or 1.0 when it is empty; lane gbdt-cpu-rest
+    2026-11-23), the MAPE quotient `w / max(1, |r|)`, the stable sort of each leaf
     on bits [10, 32) of the sortable key, the prefix weights, the need
     weights and the binary search, then `RegularizeImpl`."""
     var n_leaves = len(sizes)
@@ -893,6 +896,9 @@ def _exact_estimate(
         )
     var residuals = List[Float32](length=n_rows, fill=Float32(0.0))
     var weights = List[Float32](length=n_rows, fill=Float32(1.0))
+    var has_weights = len(g_weights) > 0
+    # an empty `g_weights` is never read (`has_weights` guards it)
+    var gw_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
     # THE SPLITS (lane gbdt-host-par). The residual and the MAPE quotient
     # are one statement per position (`_gbdt_units` ranges). The sort's and
     # the need-weights' unit is one LEAF: the device's segmented sort orders
@@ -905,17 +911,22 @@ def _exact_estimate(
     var res_p = rebind[HostF32Ptr](residuals.unsafe_ptr())
     var w_p = rebind[HostF32Ptr](weights.unsafe_ptr())
 
-    def residual_rows(unit: Int) {imm r_chunk, imm n_rows, imm is_mape, imm gt_p, imm gc_p, imm res_p, imm w_p}:
+    def residual_rows(unit: Int) {imm r_chunk, imm n_rows, imm is_mape, imm has_weights, imm gt_p, imm gc_p, imm gw_p, imm res_p, imm w_p}:
         for pos in range(unit * r_chunk, min(n_rows, (unit + 1) * r_chunk)):
             var r = ftz(gt_p[pos] - gc_p[pos])
             res_p[pos] = r
+            var w = Float32(1.0)
+            if has_weights:
+                w = gw_p[pos]
             if is_mape:
                 var delta = max(Float32(1.0), abs(r))
-                w_p[pos] = ftz(Float32(1.0) / delta)
+                w = ftz(w / delta)
+            w_p[pos] = w
 
     host_parallelize(residual_rows, r_units)
     _ = len(g_target)
     _ = len(g_cursor)
+    _ = len(g_weights)
     var ordered_targets = List[Float32](length=n_rows, fill=Float32(0.0))
     var ordered_weights = List[Float32](length=n_rows, fill=Float32(0.0))
     var flags = List[Bool](length=n_rows, fill=False)
@@ -1070,13 +1081,9 @@ def _estimate_leaves_for_loss(
         for leaf in range(n_leaves):
             weights_cpu.append(Float64(sizes[leaf]))
     if loss.method == GBDT_LEAF_EXACT:
-        if has_weights:
-            raise Error(
-                "the Exact leaf estimator is restated at unit row weights"
-                " only (sample_weight with Exact leaves)"
-            )
         return _exact_estimate(
-            loss, g_target, g_cursor, offsets, sizes, weights_cpu, n_rows
+            loss, g_target, g_cursor, offsets, sizes, weights_cpu, n_rows,
+            g_weights,
         )
     var row_weights = List[Float32]()
     if loss.objective != GBDT_OBJ_PAIR_LOGIT:
@@ -1118,17 +1125,11 @@ def gbdt_losses_host_fit(
     through its own `has_weights` arm; PairLogit through the generated
     pairs' weights (`generate_pairs` / the group layout, as `train` builds
     them; a caller's pairs keep their own weights, the device replaces the
-    row weights with the pair row weights). QueryRMSE's weighted query
-    means are not restated and refuse."""
+    row weights with the pair row weights); QueryRMSE through its weighted
+    query means (`gbdt_oracle_query.mojo`, lane gbdt-cpu-rest)."""
     var has_weights = len(weights) > 0
     if has_weights and len(weights) != n_rows:
         raise Error("weights size mismatch")
-    if has_weights and loss.objective == GBDT_OBJ_QUERY_RMSE:
-        raise Error(
-            "no CPU implementation of _mojolearn_gbdt.gbdt_fit for"
-            " sample_weight with loss='QueryRMSE' (the weighted query means"
-            " are not restated on the host)"
-        )
     if (
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
@@ -1252,7 +1253,7 @@ def gbdt_losses_host_fit(
             )
         elif loss.objective == GBDT_OBJ_QUERY_RMSE:
             query_rmse_search_pass(
-                y, cursor, group_sizes, n_rows, stats, fv_part, mag_part
+                y, cursor, group_sizes, n_rows, stats, fv_part, mag_part, weights
             )
         else:
             _loss_search_pass(
@@ -1467,7 +1468,7 @@ def gbdt_losses_host_fit(
             -Float64(_deterministic_sum_lanes(p_fv, 1, len(p_fv))[0]) / loss_norm
         )
     elif loss.objective == GBDT_OBJ_QUERY_RMSE:
-        var q_fv = query_rmse_value(y, cursor, group_sizes, n_rows)
+        var q_fv = query_rmse_value(y, cursor, group_sizes, n_rows, weights)
         losses.append(
             -Float64(_deterministic_sum_lanes(q_fv, 1, len(q_fv))[0]) / Float64(n_rows)
         )
