@@ -937,6 +937,12 @@ EXAMPLES = {
         ["conv1d", 8, 3, {"padding": 1}], ["silu"], ["conv1d", 8, 3, {"padding": 1}], ["residual", 1],
         ["flatten"], ["linear", 1]]),
 }
+# nn-norms begin: group norm (4 groups) and instance norm (affine, tracked running statistics) in a residual stack
+EXAMPLES["seq-norms"] = _seq((4, 8), [
+    ["conv1d", 8, 3, {"padding": 1}], ["group_norm", 4, 8], ["silu"],
+    ["conv1d", 8, 3, {"padding": 1}], ["instance_norm1d", 8, {"affine": True, "track_running_stats": True}],
+    ["silu"], ["residual", 2], ["flatten"], ["linear", 1]])
+# nn-norms end
 
 
 def load_recipe(name):
