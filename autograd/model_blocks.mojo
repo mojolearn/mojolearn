@@ -398,6 +398,7 @@ def block_param_names(code: Int) -> List[String]:
         out.append(".D")
     elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
         out.append(".A_log")
+        out.append(".D")
     elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
         out.append(".D")
     # lm_head (lane neural-blocks-3-lm)
@@ -458,6 +459,7 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_SSD_SCAN:
         # Mamba-2 (lane neural-blocks-3): A_log[h] = log(h + 1), so A spans -1 .. -heads; D = 1
         out.append(BLOCK_INIT_S4D)
+        out.append(Float32(-2))
     elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3): D = 1
         out.append(Float32(-2))
     # lm_head (lane neural-blocks-3-lm): PyTorch's Linear init, uniform in [-1/sqrt(features), 1/sqrt(features)]

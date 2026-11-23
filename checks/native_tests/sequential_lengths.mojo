@@ -36,7 +36,7 @@ from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN
 from autograd.model import LOSS_CROSS_ENTROPY, LOSS_MSE, OUT_ARGMAX, OUT_RAW, TARGET_CODES, TARGET_DENSE
 from checks.native_tests.sequence_port_common import normal, u01
 from checks.native_tests.training_sequential_common import SeqModel, codes_as_words, L_FLATTEN, L_LINEAR
-from checks.native_tests.runner import CPU_COLUMN_BUILD
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD
 from core.host_parallel import host_parallelize
 
 comptime L_NARROW = 38
