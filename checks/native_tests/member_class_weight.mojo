@@ -19,8 +19,10 @@ Cases (one row each, run across the host cores by `check_cases`):
   1 balanced rows: `member_cw_rows` equals the hand rows, with and without sample weights.  Fail-proof: drop the
     `s *` product or narrow the ratio in float64 order (`Float32(n) / Float32(k * count)`).
   2 every class weight 1 (a dict of ones): the sample weights' own address, or n ones.  Fail-proof: return a copy.
-  3 refusals: a pending dict (no labels) and an absent class raise their words; a K that is not the fit's class
-    count is refused.  Fail-proof: drop the `params[start + 2]` test in `member_cw_dict_ready`.
+  3 refusals: a pending dict (no labels) raises its words; an absent class is accepted while every class is
+    named and refused once one is not (scikit-learn 1.9.1's rule); a K that is not the fit's class count is
+    refused.  Fail-proof: drop the `params[start + 2]` test in `member_cw_dict_ready`, or drop its unweighted
+    count (the all-named table then raises).
   4 the fold subset: a 3-class table narrowed to classes {0, 2}: two entries, their weights; a named class 1 the
     fold lacks marks the tail absent, an unnamed one does not.  Fail-proof: skip the absent marking.
   5 the keyed tail: keys {1.0: 2.0, 3.0: 0.5} over a step's classes [1, 2, 3] give weights [2, 1, 0.5] and named
@@ -219,6 +221,10 @@ def check_refusals() raises:
     member_cw_table_words(table, 1, values, named)
     _raises("class count", "entries for 3 classes", table, 1, 3)
     table[1 + 2] = 1.0  # absent
+    # Every class named: an absent key is ignored (scikit-learn 1.9.1 compute_class_weight;
+    # core/class_weight_plan.mojo `class_weight_dict_refused`).
+    member_cw_dict_ready(table, 1, 2, ABSENT)
+    table[1 + 3 + 2 * 1 + 1] = 0.0  # class 1 unnamed: the absent key is refused
     _raises("absent", ABSENT, table, 1, 2)
 
 

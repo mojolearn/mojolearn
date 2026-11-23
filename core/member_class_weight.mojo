@@ -24,7 +24,9 @@ Now:
     classes it holds, xtrees/trees_calibrated_fit_run.mojo
     `cal_fold_classes_run`) narrows the table to those classes
     (`member_cw_subset`); a named class the fit does not hold is the
-    refusal the estimator's own fit raises for a key absent from its y.
+    refusal the estimator's own fit raises for a key absent from its y,
+    when the narrowed table also leaves a class unweighted
+    (core/class_weight_plan.mojo `class_weight_dict_refused`).
   * a dict whose labels are the target's own numeric VALUES, known only in
     RUN (an IterativeImputer classifier step: its classes are the step's
     distinct values, x_prep/iterimp_run.mojo `iterimp_class_values`) is
@@ -71,7 +73,7 @@ THE FAMILY STEPS (each the door's, read from it):
 Bits: the same words in the same order as each door; nothing kept serial.
 """
 from core.array_helpers_impl import class_ratio_f64
-from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan
+from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan, class_weight_dict_refused
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.member_abi import MemberPlan, MEMBER_I32, MEMBER_I64, MEMBER_F32
@@ -282,7 +284,15 @@ def member_cw_dict_ready(params: List[Float64], start: Int, classes: Int, absent
         raise Error("TypeError: mojolearn: a member with a class_weight dict is fitted only by a caller that "
             + "hands over its labels")
     if params[start + 2] != 0.0:
-        raise Error(absent)
+        # A key the fit's rows lack is refused only when the table also
+        # leaves a class unweighted (`class_weight_dict_refused`, the door's
+        # rule; scikit-learn 1.9.1 compute_class_weight).
+        var unweighted = 0
+        for c in range(k):  # driver-loop: over the table's classes (the named words)
+            if params[start + MEMBER_CW_HEAD + MEMBER_CW_PER_CLASS * c + 1] == 0.0:
+                unweighted += 1
+        if class_weight_dict_refused(1, unweighted):
+            raise Error(absent)
     if k != classes:
         raise Error("member ABI: the class_weight table has " + String(k) + " entries for " + String(classes)
             + " classes")

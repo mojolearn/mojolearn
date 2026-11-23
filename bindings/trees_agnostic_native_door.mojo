@@ -36,6 +36,8 @@ from core.member_abi import (
 )
 from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.trees_public_inputs_door import trees_table, trees_address, trees_reshape, trees_cast
+from bindings.metrics_native_support_door import metric_is_real
+from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, classical_view
 # TOMBSTONE: trees_view / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
@@ -647,11 +649,32 @@ def _label_snapshot(fields: PythonObject, classes: Int, context: PythonObject, m
     if given is None:
         return PythonObject(None)
     var table = PythonObject(None)
-    try:
-        table = _snapshot(given, "<f4", 1, "classes_", context, Python.dict())
-    except:
-        em.refusal = String(_LABELS_REFUSAL)
-        return PythonObject(None)
+    # A fitted classifier's `classes_` is the label encoder's Python class list (bindings/classical_labels_door.mojo
+    # classical_encode_labels), not a buffer, so `_snapshot` refused every one of them, numeric labels included
+    # (lane mf-gate-fix-e, 2026-11-23: a hard vote fitted on float labels was refused). A list is read element by
+    # element (classes-sized, once per values call), each class a real number (int, float, bool, a NumPy scalar)
+    # cast to float32 as the door's `_evaluate` cast the labels its predict answered; any other class (str, an
+    # object) is the refusal. An array `classes_` keeps the one snapshot cast.
+    var b = _b()
+    var listed = classifier_label_list(given, context)
+    if py_type(listed) is b.list or py_type(listed) is b.tuple:
+        var k = len(listed)
+        table = admitted_vector(k, "<f4", context)
+        var dst = _F32(unsafe_from_address=trees_address(table))
+        for i in range(k):  # driver-loop: over the k class labels (classes-sized, once per values call)
+            var c = listed[i]
+            if not metric_is_real(c, context):
+                em.refusal = String(_LABELS_REFUSAL)
+                return PythonObject(None)
+            dst[i] = Float32(Float64(py=py_call(b.float, c)))
+        _ = table  # keep the Array alive through the writes above
+        _ = listed
+    else:
+        try:
+            table = _snapshot(given, "<f4", 1, "classes_", context, Python.dict())
+        except:
+            em.refusal = String(_LABELS_REFUSAL)
+            return PythonObject(None)
     var count = Int(py=table.size)
     if count < 1 or (classes > 0 and count != classes):
         return PythonObject(None)

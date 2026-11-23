@@ -216,7 +216,7 @@ class _Former(ml.IterativeImputer if ml is not None else object):
                 pos = pr.work(dk)
                 mcode = {"ascending": 0, "descending": 1, "roman": 2, "arabic": 3}[self.imputation_order]
                 pr.stage("c2_ii_pos", dk, missd, dk, mcode, pos)
-                pr.stage("c2_ii_ord", dk, missd, dk, pos, R, ordw, lens)
+                pr.stage("c2_ii_ord", dk, missd, dk, pos, R, ordw, lens, 1 if self.skip_complete else 0)
         pr.run(mode)
         scale = pr.values(sc, 1)[0]
         if scale == _INF:

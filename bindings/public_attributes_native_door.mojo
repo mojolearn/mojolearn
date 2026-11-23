@@ -355,7 +355,31 @@ def _property(mut mods: NativeModules, model: PythonObject, name: PythonObject, 
             raise Error("TypeError: SVM coefficient property requires its compiled owner")
         if neural_descriptor_entry(entry.__self__, "classical_native_call", False) is not entry:
             raise Error("TypeError: SVM coefficient property owner changed after connection")
-        return py_call(entry, model, PythonObject("family_svc_svc_coef" if kind == "svm_svc_coef" else "family_svc_svr_coef"), Python.tuple(None), owner[1])
+        # The owner's refusals are Python exceptions in words (AttributeError
+        # for kernel != 'linear' or an unfitted machine). `py_call` turned
+        # them into class-less text, which this door then raised as
+        # TypeError, so `hasattr(SVC(kernel='rbf').fit(...), "coef_")` raised
+        # instead of answering False (scikit-learn's SVC.coef_ raises
+        # AttributeError; gate 3e2fb6b0f0, test_member_class_weight
+        # [balanced-svk]). Call the entry directly and hand a failure on as
+        # "<class>: <text>", which every attribute door maps back to the same
+        # class (bindings/fitted_digest_property_pack.mojo does the same).
+        var args = Python.tuple(model, PythonObject("family_svc_svc_coef" if kind == "svm_svc_coef" else "family_svc_svr_coef"),
+                                Python.tuple(None), owner[1])
+        ref cpy = Python().cpython()
+        var result = cpy.PyObject_Call(entry._obj_ptr, args._obj_ptr, PyObjectPtr())
+        _ = args  # the argument tuple (and the model it holds) lives through the call
+        if result:
+            return PythonObject(from_owned=result)
+        var triple = cpy.PyErr_FetchTriple()
+        var failed_kind = PythonObject(from_owned=triple[0]) if triple[0] else PythonObject(None)
+        var failed_value = PythonObject(from_owned=triple[1]) if triple[1] else PythonObject(None)
+        var failed_traceback = PythonObject(from_owned=triple[2]) if triple[2] else PythonObject(None)
+        _ = failed_traceback
+        if failed_kind is None:
+            raise Error("SystemError: SVM coef_ failed without setting an exception")
+        var text = String("") if failed_value is None else String(py=py_call(mods.module("builtins").str, failed_value))
+        raise Error(String(py=failed_kind.__name__) + ": " + text)
     # "bagging_estimators" (Bagging estimators_) is a native_property_recipes
     # entry connected by python/mojolearn/_native_public_attributes.py: the
     # tree owner's own "trees_bagging_members" operation, the one the
