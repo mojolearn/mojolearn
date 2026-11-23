@@ -156,6 +156,9 @@ struct GbdtOpts(Copyable, Movable):
     #: GreedyLogSum borders, `fold_len_multiplier` 2.0 as its float64 bits,
     #: `fold_permutation_block` unset), as `gbdt_fit_options` builds them
     var boosting_type: String
+    #: the largest feature combination (lane gbdt-cpu-rest-4-cat,
+    #: 2026-11-23); 1 builds none, as every unit before it fitted
+    var max_ctr_complexity: Int
 
     def __init__(out self, loss: String, n_estimators: Int, max_depth: Int = 6):
         self.loss = loss
@@ -190,6 +193,7 @@ struct GbdtOpts(Copyable, Movable):
         self.min_child_hessian = UNSET
         self.feature_fraction = 1.0
         self.boosting_type = "Plain"
+        self.max_ctr_complexity = 1
 
     def deterministic(mut self):
         """The tests' pinned configuration: `bootstrap_type='No'`, `random_strength=0`."""
@@ -427,7 +431,7 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     s.i(_grow_code(o.grow_policy))
     s.i(o.max_leaves)
     s.i(o.min_data_in_leaf)
-    s.i(1)  # max_ctr_complexity: no feature combinations
+    s.i(o.max_ctr_complexity)  # 1: no feature combinations
     s.i(len(o.class_weights))
     for w in o.class_weights:  # small-loop(the class_weights argument)
         s.f(w)
