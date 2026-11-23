@@ -23,9 +23,9 @@ xtrees/agnostic_values_run.mojo over the x_trees glue entry of this image, the m
 shap package; here the reference is the exact Shapley value of the same game (KernelExplainer with every coalition
 enumerated, M <= 6, is exact): v(S) = the background mean of the model on x_S over the background's other
 features (the logit link applied to that mean for link 'logit'). Each RUN also runs with its chunks on the host
-workers and must give the serial words exactly. The logit case's model is a binary RandomForestClassifier, not the
-original's DARTClassifier: a DART classifier's fit and predict_proba have no typed entry a Mojo check can call yet
-(the DART rounds run inside bindings/trees_dart_rounds_run.mojo over a session the binding opens).
+workers and must give the serial words exactly. The logit case runs the original's DARTClassifier (fitted through
+bm_rest_boost_fits.mojo over the product's DART round RUN, predict_proba as the door's `dart_predict_proba`) and a
+binary RandomForestClassifier beside it.
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
@@ -39,7 +39,8 @@ from core.trees_entry_table import TreesEntryKey
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.native_tests.testsuite_cases import assert_same_words
 from xtrees.glue_runs import publish_x_trees_glue
-from xtrees.glue_calls import xt_ref
+from xtrees.glue_calls import xt_ref, xt_stack_w64, xt_softmax_rows
+from checks.native_tests.bm_rest_boost_fits import DartSpec, DartModel, dart_fit, dart_raw, publish_host_images, trees_key
 from xtrees.agnostic_values_run import (
     AgnModel, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run, AGN_SW_IDN_SYN_POOL,
 )
@@ -53,6 +54,7 @@ comptime TREES = 5
 
 comptime SHAP_DIR = "checks/native_tests/fixtures/trees_shap/"
 comptime _FOREST = MutPointer[Forest, MutUntrackedOrigin]
+comptime _DART = MutPointer[DartModel, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -239,6 +241,73 @@ struct _ForestModel(AgnModel):
         return Self(self.forest, self.x, self.n, self.d, self.k, self.parallel)
 
 
+def _dart_proba32(m: Int, x: List[Float32], n: Int) raises -> List[Float32]:
+    """Binary DARTClassifier.predict_proba as the explainer reads it: the door's `dart_predict_proba` (softmax
+    over the rows [0, raw], `xt_stack_w64` + `xt_softmax_rows`) on the helper's native raw score, narrowed to
+    float32 (the door's `_evaluate` cast)."""
+    var raw = dart_raw(_DART(unsafe_from_address=m)[], x, n)
+    var acc = List[Float64](length=max(2 * n, 1), fill=0.0)
+    var zero = List[Float64](length=max(n, 1), fill=0.0)
+    var glue = xt_ref(trees_key())
+    var addrs: List[Int] = [Int(acc.unsafe_ptr()), Int(zero.unsafe_ptr()), Int(raw.unsafe_ptr())]
+    _ = xt_stack_w64(glue, addrs, n)
+    _ = xt_softmax_rows(glue, Int(acc.unsafe_ptr()), n, 2)
+    _ = len(raw)  # read through its address by the stack above
+    _ = len(zero)
+    var out = List[Float32](length=max(2 * n, 1), fill=Float32(0))
+    for i in range(2 * n):  # small-loop(one prediction block, narrowed)
+        out[i] = Float32(acc[i])
+    return out^
+
+
+struct _DartEval(AgnModel):
+    """The explained model of the DART arm: a binary DART classifier fitted here (`model`: the address of the
+    check's `DartModel`), predict_proba through `_dart_proba32`; `x` the explained rows."""
+    var model: Int
+    var x: List[Float32]
+    var n: Int
+    var d: Int
+    var parallel: Bool
+    var fx: List[Float32]
+    var syn: List[Float32]
+    var out: List[Float32]
+
+    def __init__(out self, model: Int, x: List[Float32], n: Int, d: Int, parallel: Bool):
+        self.model = model
+        self.x = x.copy()
+        self.n = n
+        self.d = d
+        self.parallel = parallel
+        self.fx = List[Float32]()
+        self.syn = List[Float32]()
+        self.out = List[Float32]()
+
+    def explained(mut self) raises -> Int:
+        self.fx = _dart_proba32(self.model, self.x, self.n)
+        return Int(self.fx.unsafe_ptr())
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        if len(self.syn) != count:
+            self.syn = List[Float32](length=count, fill=Float32(0))
+        return Int(self.syn.unsafe_ptr())
+
+    def rows(mut self, n: Int) raises -> Int:
+        if n * self.d == len(self.syn):
+            self.out = _dart_proba32(self.model, self.syn, n)
+        else:
+            var front = List[Float32](length=n * self.d, fill=Float32(0))
+            for i in range(n * self.d):  # small-loop(the delta prefix; never on the identical CPU column)
+                front[i] = self.syn[i]
+            self.out = _dart_proba32(self.model, front, n)
+        return Int(self.out.unsafe_ptr())
+
+    def workers(self) -> Int:
+        return host_predict_workers() if self.parallel else 1
+
+    def worker(self) raises -> Self:
+        return Self(self.model, self.x, self.n, self.d, self.parallel)
+
+
 struct _Shap(Movable):
     var phi: List[Float64]
     var ev: List[Float64]
@@ -258,18 +327,29 @@ def _expected(glue: EntryRef, fp: Int, bg: List[Float32], nb: Int, d: Int, k: In
     return ev^
 
 
-def _kernel(glue: EntryRef, fp: Int, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int, k: Int,
-            logit: Bool, parallel: Bool) raises -> _Shap:
-    """`KernelExplainer(m, bg, link).shap_values(x)` with nsamples 'auto' (2 M + 2048, capped at 2^M - 2)."""
-    var ev = _expected(glue, fp, bg, nb, d, k, logit)
+def _kernel_of[M: AgnModel](glue: EntryRef, mut on_bg: M, mut model: M, x: List[Float32], bg: List[Float32], n: Int,
+                            nb: Int, d: Int, k: Int, logit: Bool) raises -> _Shap:
+    """`KernelExplainer(m, bg, link).shap_values(x)` with nsamples 'auto' (2 M + 2048, capped at 2^M - 2): `on_bg`
+    evaluates the model on the background (the construction), `model` on the explained rows."""
+    var ev = List[Float64](length=k, fill=0.0)
+    agn_expected_run(glue, on_bg.explained(), nb, k, logit, Int(ev.unsafe_ptr()))
     var phi = List[Float64](length=n * d * k, fill=0.0)
     var req = AgnRequest(Int(x.unsafe_ptr()), Int(bg.unsafe_ptr()), Int(phi.unsafe_ptr()), n, nb, d, k, 0,
                          AGN_SW_IDN_SYN_POOL, False, True)
-    var model = _ForestModel(fp, x, n, d, k, parallel)
     agn_kernel_values_run(glue, req, 2 * d + 2048, Int(ev.unsafe_ptr()), logit, model)
-    _ = model^
     _ = req^
     return _Shap(phi^, ev^)
+
+
+def _kernel(glue: EntryRef, fp: Int, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int, k: Int,
+            logit: Bool, parallel: Bool) raises -> _Shap:
+    """`_kernel_of` over the host forest at `fp`."""
+    var on_bg = _ForestModel(fp, bg, nb, d, k, False)
+    var model = _ForestModel(fp, x, n, d, k, parallel)
+    var r = _kernel_of(glue, on_bg, model, x, bg, n, nb, d, k, logit)
+    _ = on_bg^
+    _ = model^
+    return r^
 
 
 def _permutation(glue: EntryRef, fp: Int, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int, k: Int,
@@ -302,8 +382,18 @@ def _shapley_weights(d: Int) -> List[Float64]:
 
 
 def _exact(fp: Int, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int, k: Int, logit: Bool) raises -> List[Float64]:
+    """`_exact_of` over the host forest at `fp`."""
+    var model = _ForestModel(fp, x, n, d, k, True)
+    var out = _exact_of(model, x, bg, n, nb, d, k, logit)
+    _ = model^
+    return out^
+
+
+def _exact_of[M: AgnModel](model: M, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int, k: Int,
+                           logit: Bool) raises -> List[Float64]:
     """The exact Shapley values (n x d x k) of v(S) = mean_b f(x_S, bg_b on the other features), linked when
-    `logit`: every subset of the d features, the model on all of them at once per row; rows across the cores."""
+    `logit`: every subset of the d features, the model (a worker evaluator of `model` per row) on all of them at
+    once per row; rows across the cores."""
     var out = List[Float64](length=n * d * k, fill=0.0)
     var weights = _shapley_weights(d)
     var op = out.unsafe_ptr()
@@ -311,14 +401,15 @@ def _exact(fp: Int, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int
     var xp = x.unsafe_ptr()
     var bp = bg.unsafe_ptr()
 
-    def row(r: Int) raises {imm fp, imm op, imm wp, imm xp, imm bp, imm nb, imm d, imm k, imm logit}:
+    def row(r: Int) raises {imm model, imm op, imm wp, imm xp, imm bp, imm nb, imm d, imm k, imm logit}:
         var S = 1 << d
-        var z = List[Float32](length=S * nb * d, fill=Float32(0))
+        var mine = model.worker()
+        var z = _F32P(unsafe_from_address=mine.synthetic(S * nb * d, True))
         for s in range(S):  # small-loop(oracle: every feature subset)
             for b in range(nb):  # small-loop(oracle: the background rows)
                 for j in range(d):  # small-loop(oracle: one synthetic row)
                     z[(s * nb + b) * d + j] = xp[r * d + j] if ((s >> j) & 1) == 1 else bp[b * d + j]
-        var y = predict(_FOREST(unsafe_from_address=fp)[], z, S * nb)
+        var y = _F32P(unsafe_from_address=mine.rows(S * nb))
         var v = List[Float64](length=S * k, fill=0.0)
         for s in range(S):  # small-loop(oracle: the game's values)
             for c in range(k):  # small-loop(oracle: the outputs)
@@ -339,6 +430,7 @@ def _exact(fp: Int, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int
                 for j in range(d):  # small-loop(the features outside S)
                     if ((s >> j) & 1) == 0:
                         op[(r * d + j) * k + c] += wp[size] * (v[(s | (1 << j)) * k + c] - v[s * k + c])
+        _ = mine^  # z and y are its buffers
 
     check_cases("shapley oracle", n, row)
     _ = weights^
@@ -446,10 +538,11 @@ def test_permutation_explainer() raises:
 
 
 def test_kernel_explainer_logit() raises:
-    """test_kernel_explainer_logit, with a binary RandomForestClassifier(20, max_depth=4, min_samples_leaf=30,
-    random_state=0) in place of the DARTClassifier (module note) on `_clf(n_classes=2)[:, :6]`, background Xa[:20],
-    explained Xb[:4], link 'logit': phi equals the exact Shapley values of the linked game (rtol 1e-6, atol 1e-6)
-    and is additive in log-odds (atol 1e-5)."""
+    """test_kernel_explainer_logit: DARTClassifier(n_estimators=20, random_state=0) (the original's model, through
+    bm_rest_boost_fits.mojo `dart_fit` over the product's DART round RUN) and a binary
+    RandomForestClassifier(20, max_depth=4, min_samples_leaf=30, random_state=0), each on `_clf(n_classes=2)[:, :6]`,
+    background Xa[:20], explained Xb[:4], link 'logit': phi equals the exact Shapley values of the linked game
+    (rtol 1e-6, atol 1e-6) and is additive in log-odds (atol 1e-5)."""
     var glue = _glue()
     var xa = fixture_f32(SHAP_DIR + "clf2-xa.f32", NA * D)
     var xb = fixture_f32(SHAP_DIR + "clf2-xb.f32", 450 * D)
@@ -469,6 +562,33 @@ def test_kernel_explainer_logit() raises:
     _close(serial.phi, exact, 1e-6, 1e-6, "logit kernel shap vs exact Shapley")
     var p = predict(forest, x, 4)
     _additive(serial, p, 4, 6, 2, True, 0.0, 1e-5, "logit kernel shap additivity")
+
+    # The DART arm: the original test's model.
+    publish_host_images()
+    var xa6 = _cols(xa, NA, D, 6)
+    var codes = List[Float32](length=NA, fill=Float32(0))
+    for i in range(NA):  # small-loop(fixture: the class codes as the fit's float32 targets)
+        codes[i] = Float32(ya[i])
+    var dart = dart_fit(DartSpec(20, 0), xa6, NA, 6, codes, 1, 1)
+    var dp = Int(MutPointer(to=dart))
+    var dbg = _DartEval(dp, bg, 20, 6, False)
+    var dserial_m = _DartEval(dp, x, 4, 6, False)
+    var dserial = _kernel_of(glue, dbg, dserial_m, x, bg, 4, 20, 6, 2, True)
+    var dbg2 = _DartEval(dp, bg, 20, 6, False)
+    var dspread_m = _DartEval(dp, x, 4, 6, True)
+    var dspread = _kernel_of(glue, dbg2, dspread_m, x, bg, 4, 20, 6, 2, True)
+    assert_same_words(dspread.phi, dserial.phi, "DART logit kernel shap: chunks on the workers vs in order")
+    var dexact = _exact_of(dspread_m, x, bg, 4, 20, 6, 2, True)
+    _close(dserial.phi, dexact, 1e-6, 1e-6, "DART logit kernel shap vs exact Shapley")
+    var pd = _dart_proba32(dp, x, 4)
+    _additive(dserial, pd, 4, 6, 2, True, 0.0, 1e-5, "DART logit kernel shap additivity")
+    _ = dbg^
+    _ = dbg2^
+    _ = dserial_m^
+    _ = dspread_m^
+    _ = dart^
+    _ = xa6^
+    _ = codes^
     _ = forest^
     _ = xa^
     _ = xb^
