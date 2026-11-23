@@ -25,7 +25,9 @@ from std.math import min, max
 from core.entry_table import EntryRef
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_workers
-from core.member_abi import MemberRef, MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of
+from core.member_abi import MemberRef, MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, MEMBER_F64
+from core.hotpath_impl import cast_elements, HP_F32, HP_F64
+from core.admitted_cast_elements import admitted_cast_elements
 from xtrees.trees_agnostic_native_run import _chunk
 from xtrees.glue_calls import (
     xt_kshap_schedule, xt_kshap_synth, xt_kshap_solve, xt_kshap_means, xt_kshap_solve_ey, xt_kshap_solve_model,
@@ -79,7 +81,14 @@ struct AgnMember(AgnModel):
     """THE NATIVE MODEL HANDLE: one held member state of the explained estimator and the member operation of the
     explained method. `plan` is the address of the caller's `MemberPlan` and `refused` of one Int word; both
     outlive the RUN (the caller's UNPACK holds them). A member refusal writes 1 to `refused` and raises the
-    member's words: the caller then answers through the model's own door, which raises its own words."""
+    member's words: the caller then answers through the model's own door, which raises its own words.
+    `wide` (lane mf-shaprfe, 2026-11-23): the member writes the operation's output as float64 (the predict_proba
+    of LogisticRegression, SVC, DART and GP classifiers, the naive Bayes and discriminant members on a
+    float64-proba route): it writes into a float64 buffer of the chunk and the RUN reads that narrowed to
+    float32, the conversion the door's `_evaluate` made of the public float64 output (core/hotpath_impl.mojo
+    `cast_elements`, element by element, so no bit differs from the door's). `host`: the glue image is the CPU
+    column (the request's `host`). Before, such a class was
+    evaluated through the door, serially with the GIL held."""
     var member: MemberRef
     var plan: Int
     var state: Int
@@ -90,13 +99,16 @@ struct AgnMember(AgnModel):
     var k: Int
     var parallel: Bool
     var refused: Int
+    var wide: Bool
+    var host: Bool
     var call: MemberCall
     var fx: List[Float32]
     var syn: List[Float32]
     var out: List[Float32]
+    var wide_out: List[Float64]
 
     def __init__(out self, member: MemberRef, plan: Int, state: Int, operation: Int, x: Int, n: Int, d: Int, k: Int,
-                 parallel: Bool, refused: Int) raises:
+                 parallel: Bool, refused: Int, wide: Bool, host: Bool) raises:
         self.member = member
         self.plan = plan
         self.state = state
@@ -107,10 +119,13 @@ struct AgnMember(AgnModel):
         self.k = k
         self.parallel = parallel
         self.refused = refused
+        self.wide = wide
+        self.host = host
         self.call = member_call_of(MutPointer[MemberPlan, MutUntrackedOrigin](unsafe_from_address=plan)[], state)
         self.fx = List[Float32]()
         self.syn = List[Float32]()
         self.out = List[Float32]()
+        self.wide_out = List[Float64]()
 
     def _run(mut self, x: Int, n: Int, dst: Int) raises:
         var d = self.d
@@ -118,9 +133,25 @@ struct AgnMember(AgnModel):
         var member = self.member
         var operation = self.operation
         self.call.x = MemberMatrix(x, n, d)
-        self.call.dst = MemberMatrix(dst, n, k)
+        if not self.wide:
+            self.call.dst = MemberMatrix(dst, n, k)
+        else:
+            if len(self.wide_out) < n * k:
+                self.wide_out = List[Float64]()
+                # Unfilled: the member writes every cell of dst before the narrowing reads it.
+                self.wide_out = List[Float64](unsafe_uninit_length=n * k)
+            self.call.dst = MemberMatrix(Int(self.wide_out.unsafe_ptr()), n, k, MEMBER_F64)
         try:
             _ = member_call(member, operation, self.call)
+            if self.wide:
+                var src = Int(self.wide_out.unsafe_ptr())
+                # The CPU column's serial chunk across the host's cores, as the door's cast did; a parallel
+                # worker's chunk (the workers are the split) and a GPU image's (no host threads in a GPU
+                # binding) on the calling thread.
+                var bad = (admitted_cast_elements(src, HP_F64, dst, HP_F32, n * k) if self.host and not self.parallel
+                           else cast_elements(src, HP_F64, dst, HP_F32, n * k))
+                if bad != 0:
+                    raise Error("ValueError: the explained model output is not representable as float32")
         except problem:
             if self.refused != 0:
                 _INT(unsafe_from_address=self.refused)[] = 1
@@ -162,7 +193,7 @@ struct AgnMember(AgnModel):
 
     def worker(self) raises -> Self:
         return Self(self.member, self.plan, self.state, self.operation, self.x, self.n, self.d, self.k,
-                    self.parallel, self.refused)
+                    self.parallel, self.refused, self.wide, self.host)
 
 
 struct AgnRequest(Copyable, Movable):

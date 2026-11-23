@@ -25,7 +25,7 @@ from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
     member_call, member_call_of, member_outputs_of,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
-    MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_DTYPE_UNSAID,
+    MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_F64, MEMBER_DTYPE_UNSAID,
 )
 from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.trees_public_inputs_door import trees_table, trees_address, trees_reshape, trees_cast
@@ -338,10 +338,14 @@ struct _Member(Movable):
     # runs with the GIL held. `parallel`: `MEMBER_GIL_FREE` itself, the chunks may run on parallel workers.
     var gil_free: Bool
     var parallel: Bool
+    # The member writes the explained operation's output as float64 (a classifier's predict_proba on most
+    # families): the RUN narrows each chunk's words to float32 as `_evaluate` narrows the public output.
+    var wide: Bool
 
     def __init__(out self):
         self.gil_free = False
         self.parallel = False
+        self.wide = False
         self.native = False
         self.held = MemberHeld()
         self.operation = MEMBER_OP_PREDICT
@@ -362,7 +366,7 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
     construction recorded. Anything else (no mark, a classifier explained
     through predict, whose member predict writes codes, an admission or
     import the family refuses, another width, an element type other than
-    float32, a classifier member that does not say its element type) leaves
+    float32 or float64, a classifier member that does not say its element type) leaves
     `em` closed: the fallback rule, the model's own door then answers or
     raises its own words. Never raises.
 
@@ -418,7 +422,10 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
                 parallel = (kind_mask & MEMBER_GIL_FREE) != 0
         except:
             cols = -1
-        var served = cols == s.k and dtype == MEMBER_F32
+        # float64 too (lane mf-shaprfe, 2026-11-23): LogisticRegression, SVC, the DART, GP and (on some routes)
+        # GBDT classifiers and the naive Bayes / discriminant members on a float64-proba route write their
+        # predict_proba as float64; they went through `_DoorModel` (serial, GIL held) before.
+        var served = cols == s.k and (dtype == MEMBER_F32 or dtype == MEMBER_F64)
         if served and not tests:
             served = (trees_finite_f32(trees_address(x), n * s.d)
                       and trees_finite_f32(trees_address(s.bg), s.nb * s.d))
@@ -431,6 +438,7 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
         em.operation = operation
         em.gil_free = gil_free
         em.parallel = parallel
+        em.wide = dtype == MEMBER_F64
         em.native = True
     except:
         return
@@ -439,7 +447,16 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
 struct _DoorModel(AgnModel):
     """The explained estimator through its own compiled door (`_evaluate`), for a class with no member entry
     that serves the call, for the device forest route's one call on the explained rows, and for the call again
-    after a member refusal. Serial, with the GIL held: the one place the RUN's model reaches Python objects."""
+    after a member refusal. Serial, with the GIL held: the one place the RUN's model reaches Python objects.
+
+    WHO STILL COMES HERE (lane mf-shaprfe, 2026-11-23; every float32 and float64 member output is served):
+    the connected classes with no member entry (the meta-estimators AdaBoost*, Bagging*, MultiOutput*,
+    OneVsRestClassifier, Stacking*, Voting*, and CategoricalNB, whose kind is not published); a classifier
+    without predict_proba explained through predict (LinearSVC, RidgeClassifier, PassiveAggressiveClassifier,
+    Perceptron, SGDClassifier with a hinge loss, SVC(probability=False), NearestCentroid): its public predict
+    answers LABELS and its member writes CODES, and mapping codes to labels per synthetic row would be a host
+    loop over rows; a member output of another width or element type; the device forest route's one call;
+    the call again after a member refusal."""
     var model: PythonObject
     var method: String
     var context: PythonObject
@@ -578,7 +595,7 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, context: Pytho
         var plan_addr = Int(MutPointer(to=em.held.plan))
         var member = em.held.plan.member
         var handle = AgnMember(member, plan_addr, em.held.state, em.operation, req.x, n, d, k, em.parallel,
-                               Int(refused.unsafe_ptr()))
+                               Int(refused.unsafe_ptr()), em.wide, req.host)
         try:
             if em.gil_free:
                 var py = Python()
@@ -718,7 +735,7 @@ def _permutation_values_over(fields: PythonObject, args: PythonObject, context: 
         var plan_addr = Int(MutPointer(to=em.held.plan))
         var member = em.held.plan.member
         var handle = AgnMember(member, plan_addr, em.held.state, em.operation, req.x, n, d, k, em.parallel,
-                               Int(refused.unsafe_ptr()))
+                               Int(refused.unsafe_ptr()), em.wide, req.host)
         try:
             if em.gil_free:
                 var py = Python()
