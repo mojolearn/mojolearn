@@ -1,0 +1,24 @@
+diff --git a/gbdt/host/gbdt_oracle_ordered.mojo b/gbdt/host/gbdt_oracle_ordered.mojo
+index b3be8926ae..ea0f0e58fe 100644
+--- a/gbdt/host/gbdt_oracle_ordered.mojo
++++ b/gbdt/host/gbdt_oracle_ordered.mojo
+@@ -1829,7 +1829,9 @@ def _plain_dims_range[
+             var wr = max(part_stats[3 * (leaf * stripe)] - wl, Float32(0))
+             var total_left = Float32(0)
+             var total_part = Float32(0)
+-            for d in range(dim_count):
++            # SABOTAGE (coverage-gbdt-host_pw_first_dim_only): the old
++            # defect, the first approx dimension alone and no pinned class
++            for d in range(1):
+                 var fold = 2 * d
+                 var base = (leaf * fold_count + fold) * hist_line * 2 + 2 * b
+                 add_dim_leaves[score_function](
+@@ -1837,7 +1839,7 @@ def _plain_dims_range[
+                     part_stats[3 * (leaf * stripe + fold) + 1],
+                     total_left, total_part,
+                 )
+-            if pinned_class:
++            if pinned_class and False:
+                 add_pinned_class_leaves[score_function](
+                     calcer, wl, wr, total_left, total_part
+                 )
