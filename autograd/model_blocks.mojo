@@ -701,7 +701,8 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
         out.append(dim)
         if slot == 0:
             out.append(_x(xargs, i, 0))
-    elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
+    elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3): A_log and D, (heads,) each
+        out.append(_x(xargs, i, 0))
     elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
         out.append(_x(xargs, i, 0))
     # lm_head (lane neural-blocks-3-lm): (vocab, features) in both layouts (PyTorch's Linear weight)
