@@ -169,11 +169,23 @@ def _sort_rank_from_perm_kernel(idx: U32P, rank: I32P, cnt: Int32):
 def _sort_scatter_kernel(
     rows: I32P, cols: I32P, data: F32P, rank: I32P, o_rows: I32P, o_cols: I32P, o_data: F32P, cnt: Int32
 ):
+    # Each edge leaves the sort as (lo, hi), through the bodies its key is
+    # built from (`edge_lo` / `edge_hi`), which is the orientation the host
+    # column's MST carries (`host_prim_mst` unpacks lo and hi from the same
+    # key). Boruvka's own orientation (`src` = the vertex that added the
+    # edge) depends on the round structure, which the host walk does not
+    # have: kept, the dendrogram children (`find(src)`, `find(dst)`) came out
+    # swapped in about a third of the rows between device="cpu" and the GPU
+    # (r4-proving, 2026-11-23, wheel 7273ee10fc11 on the L40S: 374 of 999
+    # rows, every one a swap). Bits change on the device column only; it now
+    # equals the host column.
     var i = _gid()
     if i < Int(cnt):
         var p = Int(rank[i])
-        o_rows[p] = rows[i]
-        o_cols[p] = cols[i]
+        var u = rows[i]
+        var v = cols[i]
+        o_rows[p] = edge_lo(u, v)
+        o_cols[p] = edge_hi(u, v)
         o_data[p] = data[i]
 
 
@@ -193,8 +205,10 @@ def coo_sort_by_weight_device(
     nnz: Int,
     sabotage: Int32,
 ) raises:
-    """`coo_sort_by_weight`'s order, in place, on the device."""
-    if nnz <= 1:
+    """`coo_sort_by_weight`'s order, in place, on the device, every edge
+    oriented (lo, hi). One edge still passes through the scatter: its
+    orientation is part of the output."""
+    if nnz < 1:
         return
     var keys = ctx.enqueue_create_buffer[DType.uint64](nnz)
     var rank = ctx.enqueue_create_buffer[DType.int32](nnz)

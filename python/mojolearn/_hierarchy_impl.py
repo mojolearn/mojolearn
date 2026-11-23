@@ -95,8 +95,9 @@ PAIRWISE_MAX_ROWS = 46340
 #
 # labels_ on the Boruvka route: roots are labeled by descending position in the
 # children array (`extract_flattened_clusters`), cuVS's numbering, not
-# scikit-learn's. children_ there is in Boruvka's orientation (`src` is the
-# vertex that added the edge); scikit-learn's mergesort on `mst.data` keeps
+# scikit-learn's. children_ there is `(find(lo), find(hi))` of each sorted MST
+# edge (lo < hi, the same on the GPU and the CPU column; Boruvka's own
+# orientation is dropped by the sort); scikit-learn's mergesort on `mst.data` keeps
 # scipy's coo order and this sort is the total order
 # `(weight_key, min(u,v), max(u,v))` (DEVIATIONS 620 and 621), so rows agree as
 # unordered pairs only when the MST is tie-free. n_connected_components_ is the

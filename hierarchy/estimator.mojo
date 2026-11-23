@@ -111,8 +111,9 @@ def linkage_fit_host(
 
     `x_ptr` is `n_rows x n_cols` float32, row-major.
     `children_ptr` receives `(n_rows - 1) * 2` Int32 -- the dendrogram, one
-    merge per row, in cuVS's orientation (`src` is the vertex that added the
-    edge; see the lane README's honesty note about scikit-learn's rows).
+    merge per row, `(find(lo), find(hi))` of each sorted MST edge (lo < hi:
+    the host column's rows, not Boruvka's `src` orientation; see the lane
+    README's honesty note about scikit-learn's rows).
     `labels_ptr` receives `n_rows` Int32 in `0..n_clusters-1`, numbered by
     cuVS's `extract_flattened_clusters` (descending root index), which is NOT
     scikit-learn's numbering.
