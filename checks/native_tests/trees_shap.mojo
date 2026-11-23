@@ -42,7 +42,7 @@ from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixtur
 from checks.native_tests.py2mojo_forest_fits import RfSpec, Forest, rf_fit, predict
 from xtrees.shap import shap_path_width
 from xtrees.shap_host import shap_prepare, tree_shap_values
-from std.math import log
+from std.math import log, exp
 from core.entry_table import EntryRef
 from core.host_predict_threads import host_predict_workers
 from core.trees_entry_table import TreesEntryKey
@@ -53,9 +53,10 @@ from xtrees.glue_calls import xt_ref, xt_stack_w64, xt_softmax_rows
 from checks.native_tests.bm_rest_boost_fits import DartSpec, DartModel, dart_fit, dart_raw, publish_host_images, trees_key
 from xtrees.agnostic_values_run import (
     AgnModel, AgnMember, AgnMeta, AgnMetaPlan, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
-    agn_labels_run, AGN_SW_IDN_SYN_POOL, AGN_META_SOFT,
+    agn_labels_run, AGN_SW_IDN_SYN_POOL, AGN_META_SOFT, AGN_META_REGRESS, AGN_META_HARD, AGN_META_BAG,
+    AGN_META_STACK, AGN_META_OVR, AGN_META_CALIBRATED, AGN_META_ADA, AGN_META_COLUMNS,
 )
-from xtrees.trees_meta_vote_run import VoteMember
+from xtrees.trees_meta_vote_run import VoteMember, CalPair, CalFit, STACK_PROBA, ada_classifier_run, ADA_PROBA
 from core.entry_table import entry_ref_word
 from core.device_route import DeviceRoute
 from core.member_families import MEMBER_FAMILY_NAIVE_BAYES
@@ -69,7 +70,7 @@ from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_call_of, member_new, member_free,
     member_kind_capabilities, MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS, MEMBER_OP_PREDICT_PROBA,
-    MEMBER_F64, MEMBER_F32, MEMBER_I32, MEMBER_GIL_FREE, MEMBER_OP_PREDICT,
+    MEMBER_F64, MEMBER_F32, MEMBER_I32, MEMBER_GIL_FREE, MEMBER_OP_PREDICT, MEMBER_OP_DECISION, MEMBER_I64,
 )
 from glm.host.logistic_native_host import qn_host_native_v1
 
@@ -1312,6 +1313,452 @@ def test_agnostic_vote() raises:
     _ = x^
     _ = xa^
     _ = xb^
+
+
+# ---------------------------------------------------------------- lane mf-shap3 (2026-11-23): every meta-estimator kind
+# `AgnMeta` (xtrees/agnostic_values_run.mojo) over fitted binary LogisticRegression members (`_meta_fixture`: two
+# members on rows [0, 200) and [200, 400) of `_clf(n_classes=2)[:, :4]`, one on columns [0, 2] of the first rows,
+# and a final estimator on the first rows' stacked probabilities). Each test: the handle's outputs on Xb[:4] equal
+# an oracle written out here from the members' own outputs (direct member calls; `rtol` 0 = word for word), Kernel
+# SHAP with the chunks on the workers gives the serial words, Kernel SHAP equals the exact Shapley values of the
+# oracle's game (rtol 1e-5, atol 1e-6) and is additive, and Permutation SHAP is additive (`_check_meta`). The
+# regressor-shaped kinds (REGRESS, COLUMNS) take the members' decision_function as their prediction: the RUN folds
+# a member's float32 column whatever its operation. Fail-proof edits (each makes its test fail):
+#   HARD          `vote_codes_run(..., False, ...)` -> `True` in AgnMeta._run (a soft fold over codes).
+#   BAG           `self.plan.features[j] == 0` -> `!= 0` in AgnMeta._bag (member 0 reads the wrong columns).
+#   STACK         `n * width` -> `n` in AgnMeta._stack's meta narrowing (half the meta features unwritten).
+#   OVR           `at >= 0` -> `at > 0` in AgnMeta._ovr (the positive column is never gathered: p = 0).
+#   CALIBRATED    `n * classes` -> `n` in the CALIBRATED narrowing of AgnMeta._run (the second column unwritten).
+#   ADA           `ADA_PROBA` -> `ADA_DECISION` in AgnMeta._ada.
+#   REGRESS       `agn_narrow(at, ...)` -> `agn_narrow(at + 8, ...)` in the vote fold of AgnMeta._run.
+#   COLUMNS       `n * k` -> `n` in the COLUMNS narrowing of AgnMeta._run.
+comptime META_ROWS = 4
+comptime META_BG = 20
+
+
+struct _Meta3(Movable):
+    """The fitted members and rows of the mf-shap3 meta tests."""
+    var m0: _Lr
+    var m1: _Lr
+    var sub: _Lr
+    var last: _Lr
+    var x: List[Float32]
+    var bg: List[Float32]
+    var cc: List[Int32]
+    var cols02: List[Int32]
+
+    def __init__(out self, var m0: _Lr, var m1: _Lr, var sub: _Lr, var last: _Lr, var x: List[Float32],
+                 var bg: List[Float32]):
+        self.m0 = m0^
+        self.m1 = m1^
+        self.sub = sub^
+        self.last = last^
+        self.x = x^
+        self.bg = bg^
+        self.cc = [0, 1]
+        self.cols02 = [0, 2]
+
+
+def _outs(f: _Lr, operation: Int) raises -> Tuple[Int, Int]:
+    """(columns, element type) the fitted member writes for `operation`."""
+    var asked = member_call_of(f.plan, f.state)
+    asked.flags = operation
+    _ = member_call(f.plan.member, MEMBER_OP_OUTPUTS, asked)
+    return (asked.out_cols, asked.out_dtype)
+
+
+def _call_f32(f: _Lr, operation: Int, src: Int, n: Int, d: Int) raises -> List[Float32]:
+    """The member's `operation` on `n` rows of `d` features, as float32 (a float64 answer narrowed word by word,
+    the door's admission of it)."""
+    var o = _outs(f, operation)
+    var cols = o[0]
+    var call = member_call_of(f.plan, f.state)
+    call.x = MemberMatrix(src, n, d)
+    var words = List[Float32](length=max(1, n * cols), fill=Float32(0))
+    if o[1] == MEMBER_F64:
+        var wide = List[Float64](length=max(1, n * cols), fill=0.0)
+        call.dst = MemberMatrix(Int(wide.unsafe_ptr()), n, cols, MEMBER_F64)
+        _ = member_call(f.plan.member, operation, call)
+        for i in range(n * cols):  # small-loop(oracle: the float32 narrowing, word by word)
+            words[i] = wide[i].cast[DType.float32]()
+        _ = wide^
+        return words^
+    call.dst = MemberMatrix(Int(words.unsafe_ptr()), n, cols, MEMBER_F32)
+    _ = member_call(f.plan.member, operation, call)
+    return words^
+
+
+def _call_codes(f: _Lr, src: Int, n: Int, d: Int) raises -> List[Int32]:
+    """The member's predict codes (int64 narrowed)."""
+    var o = _outs(f, MEMBER_OP_PREDICT)
+    var call = member_call_of(f.plan, f.state)
+    call.x = MemberMatrix(src, n, d)
+    var codes = List[Int32](length=max(1, n), fill=Int32(0))
+    if o[1] == MEMBER_I64:
+        var wide = List[Int64](length=max(1, n), fill=Int64(0))
+        call.dst = MemberMatrix(Int(wide.unsafe_ptr()), n, 1, MEMBER_I64)
+        _ = member_call(f.plan.member, MEMBER_OP_PREDICT, call)
+        for i in range(n):  # small-loop(oracle: one narrowing pass)
+            codes[i] = Int32(wide[i])
+        _ = wide^
+        return codes^
+    call.dst = MemberMatrix(Int(codes.unsafe_ptr()), n, 1, MEMBER_I32)
+    _ = member_call(f.plan.member, MEMBER_OP_PREDICT, call)
+    return codes^
+
+
+def _vm(f: _Lr, operation: Int, class_cols: Int, weight: Float64) raises -> VoteMember:
+    """The fitted member as the door's `_meta_take` hands it to the RUN (`f` held unmoved while it is used)."""
+    var o = _outs(f, operation)
+    return VoteMember(Int(UnsafePointer(to=f.plan)), f.state, operation, o[0], o[1], class_cols, weight)
+
+
+def _meta_fixture() raises -> _Meta3:
+    var xa = fixture_f32(SHAP_DIR + "clf2-xa.f32", NA * D)
+    var xb = fixture_f32(SHAP_DIR + "clf2-xb.f32", 450 * D)
+    var ya = fixture_i32(SHAP_DIR + "clf2-ya.i32", NA)
+    var all_x = _cols(xa, 2 * LR_FIT_ROWS, D, LR_D)
+    var first_x = List[Float32](length=LR_FIT_ROWS * LR_D, fill=Float32(0))
+    var second_x = List[Float32](length=LR_FIT_ROWS * LR_D, fill=Float32(0))
+    var sub_x = List[Float32](length=LR_FIT_ROWS * 2, fill=Float32(0))
+    for i in range(LR_FIT_ROWS * LR_D):  # small-loop(fixture: the two members' rows)
+        first_x[i] = all_x[i]
+        second_x[i] = all_x[LR_FIT_ROWS * LR_D + i]
+    for i in range(LR_FIT_ROWS):  # small-loop(fixture: columns 0 and 2 of the first rows)
+        sub_x[2 * i] = first_x[i * LR_D]
+        sub_x[2 * i + 1] = first_x[i * LR_D + 2]
+    var first_y = List[Int32](length=LR_FIT_ROWS, fill=Int32(0))
+    var second_y = List[Int32](length=LR_FIT_ROWS, fill=Int32(0))
+    for i in range(LR_FIT_ROWS):  # small-loop(fixture: the members' codes)
+        first_y[i] = ya[i]
+        second_y[i] = ya[LR_FIT_ROWS + i]
+    var m0 = _lr_fit(first_x, first_y, LR_FIT_ROWS, LR_D)
+    var m1 = _lr_fit(second_x, second_y, LR_FIT_ROWS, LR_D)
+    var sub = _lr_fit(sub_x, first_y, LR_FIT_ROWS, 2)
+    # The final estimator's rows: the first rows' stacked probabilities of code 1 (`_StackingBase` with
+    # stack_method predict_proba and two classes keeps the second column).
+    var p0 = _call_f32(m0, MEMBER_OP_PREDICT_PROBA, Int(first_x.unsafe_ptr()), LR_FIT_ROWS, LR_D)
+    var p1 = _call_f32(m1, MEMBER_OP_PREDICT_PROBA, Int(first_x.unsafe_ptr()), LR_FIT_ROWS, LR_D)
+    var meta_x = List[Float32](length=LR_FIT_ROWS * 2, fill=Float32(0))
+    for i in range(LR_FIT_ROWS):  # small-loop(fixture: the stacked meta features)
+        meta_x[2 * i] = p0[2 * i + 1]
+        meta_x[2 * i + 1] = p1[2 * i + 1]
+    var last = _lr_fit(meta_x, first_y, LR_FIT_ROWS, 2)
+    var bg = _cols(xa, META_BG, D, LR_D)
+    var x = _cols(xb, META_ROWS, D, LR_D)
+    _ = all_x^
+    _ = first_x^
+    _ = second_x^
+    _ = sub_x^
+    _ = first_y^
+    _ = second_y^
+    _ = p0^
+    _ = p1^
+    _ = meta_x^
+    _ = xa^
+    _ = xb^
+    _ = ya^
+    return _Meta3(m0^, m1^, sub^, last^, x^, bg^)
+
+
+def _meta_free(mut f: _Meta3):
+    _lr_free(f.m0)
+    _lr_free(f.m1)
+    _lr_free(f.sub)
+    _lr_free(f.last)
+
+
+comptime _REF_HARD = 0
+comptime _REF_BAG = 1
+comptime _REF_STACK = 2
+comptime _REF_OVR = 3
+comptime _REF_CAL = 4
+comptime _REF_ADA = 5
+comptime _REF_REGRESS = 6
+comptime _REF_COLUMNS = 7
+comptime _CAL_A = -1.3
+comptime _CAL_B = 0.2
+
+
+struct _MetaRef(AgnModel):
+    """The oracle of one meta kind (`_REF_*`) over the fixture's members (`fp`: the address of the `_Meta3`, held
+    unmoved): their outputs by direct member calls, then the public operation's formula written out here (ADA: the
+    RUN `ada_classifier_run` over the members' own codes, as meta_runs_gil_free.mojo proves the meta RUNs)."""
+    var kind: Int
+    var fp: Int
+    var x: List[Float32]
+    var n: Int
+    var k: Int
+    var glue: EntryRef
+    var fx: List[Float32]
+    var syn: List[Float32]
+    var out: List[Float32]
+
+    def __init__(out self, kind: Int, fp: Int, x: List[Float32], n: Int, k: Int, glue: EntryRef):
+        self.kind = kind
+        self.fp = fp
+        self.x = x.copy()
+        self.n = n
+        self.k = k
+        self.glue = glue
+        self.fx = List[Float32]()
+        self.syn = List[Float32]()
+        self.out = List[Float32]()
+
+    def answer(self, src: Int, n: Int) raises -> List[Float32]:
+        var f = MutPointer[_Meta3, MutUntrackedOrigin](unsafe_from_address=self.fp)
+        var d = LR_D
+        var words = List[Float32](length=max(1, n * self.k), fill=Float32(0))
+        if self.kind == _REF_HARD:
+            var labels: List[Float32] = [-1.5, 4.0]
+            var c0 = _call_codes(f[].m0, src, n, d)
+            var c1 = _call_codes(f[].m1, src, n, d)
+            for i in range(n):  # small-loop(oracle: the weighted hard vote, weights 1 and 2)
+                var zero = (1.0 if c0[i] == 0 else 0.0) + (2.0 if c1[i] == 0 else 0.0)
+                var one = (1.0 if c0[i] == 1 else 0.0) + (2.0 if c1[i] == 1 else 0.0)
+                words[i] = labels[0] if zero >= one else labels[1]
+            return words^
+        if self.kind == _REF_BAG:
+            var rows = List[Float32](length=max(1, n * 2), fill=Float32(0))
+            var xs = _F32P(unsafe_from_address=src)
+            for i in range(n):  # small-loop(oracle: member 0's columns 0 and 2)
+                rows[2 * i] = xs[i * d]
+                rows[2 * i + 1] = xs[i * d + 2]
+            var p0 = _call_f32(f[].sub, MEMBER_OP_PREDICT_PROBA, Int(rows.unsafe_ptr()), n, 2)
+            var p1 = _call_f32(f[].m1, MEMBER_OP_PREDICT_PROBA, src, n, d)
+            for i in range(n * 2):  # small-loop(oracle: the mean of the two members' probabilities)
+                words[i] = ((Float64(p0[i]) + Float64(p1[i])) / 2.0).cast[DType.float32]()
+            _ = rows^
+            return words^
+        if self.kind == _REF_STACK:
+            var p0 = _call_f32(f[].m0, MEMBER_OP_PREDICT_PROBA, src, n, d)
+            var p1 = _call_f32(f[].m1, MEMBER_OP_PREDICT_PROBA, src, n, d)
+            var meta = List[Float32](length=max(1, n * 2), fill=Float32(0))
+            for i in range(n):  # small-loop(oracle: the stacked probabilities of code 1)
+                meta[2 * i] = p0[2 * i + 1]
+                meta[2 * i + 1] = p1[2 * i + 1]
+            var got = _call_f32(f[].last, MEMBER_OP_PREDICT_PROBA, Int(meta.unsafe_ptr()), n, 2)
+            _ = meta^
+            return got^
+        if self.kind == _REF_OVR:
+            var p = _call_f32(f[].m0, MEMBER_OP_PREDICT_PROBA, src, n, d)
+            for i in range(n):  # small-loop(oracle: the rows (1 - p, p) of the positive column)
+                words[2 * i] = (1.0 - Float64(p[2 * i + 1])).cast[DType.float32]()
+                words[2 * i + 1] = p[2 * i + 1]
+            return words^
+        if self.kind == _REF_CAL:
+            var s = _call_f32(f[].m0, MEMBER_OP_DECISION, src, n, d)
+            for i in range(n):  # small-loop(oracle: Platt's sigmoid expit(-(a s + b)) and its complement)
+                var c = 1.0 / (1.0 + exp(_CAL_A * Float64(s[i]) + _CAL_B))
+                words[2 * i] = (1.0 - c).cast[DType.float32]()
+                words[2 * i + 1] = c.cast[DType.float32]()
+            return words^
+        if self.kind == _REF_ADA:
+            var c0 = _call_codes(f[].m0, src, n, d)
+            var c1 = _call_codes(f[].m1, src, n, d)
+            var codes: List[Int] = [Int(c0.unsafe_ptr()), Int(c1.unsafe_ptr())]
+            var alphas: List[Float64] = [0.7, 0.4]
+            var acc = List[Float64](length=max(1, n * 2), fill=0.0)
+            var pairs = List[Float64](length=max(1, n * 2), fill=0.0)
+            ada_classifier_run(self.glue, codes, alphas, n, 2, Int(acc.unsafe_ptr()), ADA_PROBA, Int(pairs.unsafe_ptr()))
+            for i in range(n * 2):  # small-loop(oracle: the float32 narrowing)
+                words[i] = pairs[i].cast[DType.float32]()
+            _ = c0^
+            _ = c1^
+            _ = acc^
+            return words^
+        var d0 = _call_f32(f[].m0, MEMBER_OP_DECISION, src, n, d)
+        var d1 = _call_f32(f[].m1, MEMBER_OP_DECISION, src, n, d)
+        if self.kind == _REF_REGRESS:
+            for i in range(n):  # small-loop(oracle: the weighted mean, weights 1 and 2)
+                words[i] = ((Float64(d0[i]) + 2.0 * Float64(d1[i])) / 3.0).cast[DType.float32]()
+            return words^
+        for i in range(n):  # small-loop(oracle: each member's prediction at its column)
+            words[2 * i] = d0[i]
+            words[2 * i + 1] = d1[i]
+        return words^
+
+    def explained(mut self) raises -> Int:
+        self.fx = self.answer(Int(self.x.unsafe_ptr()), self.n)
+        return Int(self.fx.unsafe_ptr())
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        if len(self.syn) != count:
+            self.syn = List[Float32](length=count, fill=Float32(0))
+        return Int(self.syn.unsafe_ptr())
+
+    def rows(mut self, n: Int) raises -> Int:
+        self.out = self.answer(Int(self.syn.unsafe_ptr()), n)
+        return Int(self.out.unsafe_ptr())
+
+    def workers(self) -> Int:
+        return 1
+
+    def worker(self) raises -> Self:
+        return Self(self.kind, self.fp, self.x, self.n, self.k, self.glue)
+
+
+def _check_meta(what: String, glue: EntryRef, plan: AgnMetaPlan, kind: Int, fp: Int, rtol: Float64) raises:
+    """`AgnMeta` over `plan` against the oracle `_MetaRef(kind)` (see the section comment)."""
+    var f = MutPointer[_Meta3, MutUntrackedOrigin](unsafe_from_address=fp)
+    var x = f[].x.copy()
+    var bg = f[].bg.copy()
+    var k = plan.k
+    var ref_m = _MetaRef(kind, fp, x, META_ROWS, k, glue)
+    var want = ref_m.answer(Int(x.unsafe_ptr()), META_ROWS)
+    var m_bg = AgnMeta(plan, Int(bg.unsafe_ptr()), META_BG, LR_D, False, True, glue)
+    var m = AgnMeta(plan, Int(x.unsafe_ptr()), META_ROWS, LR_D, False, True, glue)
+    var got = _F32P(unsafe_from_address=m.explained())
+    for i in range(META_ROWS * k):  # small-loop(oracle: every output word)
+        var ok = got[i] == want[i] if rtol == 0.0 else (
+            abs(Float64(got[i]) - Float64(want[i])) <= rtol * abs(Float64(want[i])) + 1e-7)
+        require(ok, what + " output " + String(i) + ": handle " + String(got[i]) + ", oracle " + String(want[i]))
+    var serial = _kernel_of(glue, m_bg, m, x, bg, META_ROWS, META_BG, LR_D, k, False)
+    var w_bg = AgnMeta(plan, Int(bg.unsafe_ptr()), META_BG, LR_D, True, True, glue)
+    var w = AgnMeta(plan, Int(x.unsafe_ptr()), META_ROWS, LR_D, True, True, glue)
+    var spread = _kernel_of(glue, w_bg, w, x, bg, META_ROWS, META_BG, LR_D, k, False)
+    assert_same_words(spread.phi, serial.phi, what + " kernel shap: chunks on the workers vs in order")
+    var exact = _exact_serial(ref_m, x, bg, META_ROWS, META_BG, LR_D, k)
+    _close(serial.phi, exact, 1e-5, 1e-6, what + " kernel shap vs the exact Shapley values of the oracle")
+    _additive(serial, want, META_ROWS, LR_D, k, False, 0.0, 1e-5, what + " kernel shap additivity")
+    var p_bg = AgnMeta(plan, Int(bg.unsafe_ptr()), META_BG, LR_D, True, True, glue)
+    var p = AgnMeta(plan, Int(x.unsafe_ptr()), META_ROWS, LR_D, True, True, glue)
+    var perm = _perm_of(glue, p_bg, p, x, bg, META_ROWS, META_BG, LR_D, k, 0)
+    _additive(perm, want, META_ROWS, LR_D, k, False, 0.0, 1e-5, what + " permutation shap additivity")
+    _ = m_bg^
+    _ = m^
+    _ = w_bg^
+    _ = w^
+    _ = p_bg^
+    _ = p^
+    _ = ref_m^
+    _ = want^
+    _ = x^
+    _ = bg^
+
+
+def test_agnostic_meta_hard_vote() raises:
+    """VotingClassifier(voting='hard', weights=[1, 2]).predict, classes_ [-1.5, 4.0] as float32 labels."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var labels: List[Float32] = [-1.5, 4.0]
+    var plan = AgnMetaPlan(AGN_META_HARD)
+    plan.members.append(_vm(f.m0, MEMBER_OP_PREDICT, 0, 1.0))
+    plan.members.append(_vm(f.m1, MEMBER_OP_PREDICT, 0, 2.0))
+    plan.classes = 2
+    plan.k = 1
+    plan.labels = Int(labels.unsafe_ptr())
+    plan.n_labels = 2
+    _check_meta("hard vote", glue, plan, _REF_HARD, Int(UnsafePointer(to=f)), 0.0)
+    _ = plan^
+    _ = labels^
+    _meta_free(f)
+
+
+def test_agnostic_meta_bagging() raises:
+    """BaggingClassifier.predict_proba: member 0 on features [0, 2] (gathered in the RUN), member 1 on every
+    feature (the rows themselves)."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var plan = AgnMetaPlan(AGN_META_BAG)
+    plan.members.append(_vm(f.sub, MEMBER_OP_PREDICT_PROBA, Int(f.cc.unsafe_ptr()), 1.0))
+    plan.members.append(_vm(f.m1, MEMBER_OP_PREDICT_PROBA, Int(f.cc.unsafe_ptr()), 1.0))
+    plan.features = [Int(f.cols02.unsafe_ptr()), 0]
+    plan.widths = [2, LR_D]
+    plan.classifier = True
+    plan.classes = 2
+    plan.k = 2
+    _check_meta("bagging", glue, plan, _REF_BAG, Int(UnsafePointer(to=f)), 1e-7)
+    _ = plan^
+    _meta_free(f)
+
+
+def test_agnostic_meta_stacking() raises:
+    """StackingClassifier(stack_method='predict_proba').predict_proba: the two members' probabilities of code 1
+    as the meta features, the final LogisticRegression's predict_proba on them (word for word)."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var plan = AgnMetaPlan(AGN_META_STACK)
+    plan.members.append(_vm(f.m0, MEMBER_OP_PREDICT_PROBA, 0, 1.0))
+    plan.members.append(_vm(f.m1, MEMBER_OP_PREDICT_PROBA, 0, 1.0))
+    plan.stack_kinds = [STACK_PROBA, STACK_PROBA]
+    plan.classes = 2
+    plan.binary = True
+    plan.meta_width = 2
+    plan.final_est.append(_vm(f.last, MEMBER_OP_PREDICT_PROBA, Int(f.cc.unsafe_ptr()), 1.0))
+    plan.classifier = True
+    plan.k = 2
+    _check_meta("stacking", glue, plan, _REF_STACK, Int(UnsafePointer(to=f)), 0.0)
+    _ = plan^
+    _meta_free(f)
+
+
+def test_agnostic_meta_ovr() raises:
+    """OneVsRestClassifier.predict_proba with two classes: (1 - p, p) of its first member's column of code 1."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var plan = AgnMetaPlan(AGN_META_OVR)
+    plan.members.append(_vm(f.m0, MEMBER_OP_PREDICT_PROBA, 0, 1.0))
+    plan.at = [1]
+    plan.classes = 2
+    plan.k = 2
+    _check_meta("one-vs-rest", glue, plan, _REF_OVR, Int(UnsafePointer(to=f)), 1e-6)
+    _ = plan^
+    _meta_free(f)
+
+
+def test_agnostic_meta_calibrated() raises:
+    """CalibratedClassifierCV(method='sigmoid').predict_proba with one pair: its member's decision_function
+    through Platt's sigmoid (a, b fixed here), the rows (1 - c, c)."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var plan = AgnMetaPlan(AGN_META_CALIBRATED)
+    plan.members.append(_vm(f.m0, MEMBER_OP_DECISION, 0, 1.0))
+    require(plan.members[0].cols == 1, "LogisticRegression's binary decision_function is no longer one column")
+    plan.pairs.append(CalPair(0, 0, 0, 0, 1))
+    plan.cals.append(CalFit(False, _CAL_A, _CAL_B, 0, 0, 0))
+    plan.classes = 2
+    plan.k = 2
+    _check_meta("calibrated", glue, plan, _REF_CAL, Int(UnsafePointer(to=f)), 1e-6)
+    _ = plan^
+    _meta_free(f)
+
+
+def test_agnostic_meta_adaboost() raises:
+    """AdaBoostClassifier.predict_proba (two classes, weights 0.7 and 0.4): the members' codes through
+    `ada_classifier_run`."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var plan = AgnMetaPlan(AGN_META_ADA)
+    plan.members.append(_vm(f.m0, MEMBER_OP_PREDICT, 0, 1.0))
+    plan.members.append(_vm(f.m1, MEMBER_OP_PREDICT, 0, 1.0))
+    plan.alphas = [0.7, 0.4]
+    plan.classifier = True
+    plan.classes = 2
+    plan.k = 2
+    _check_meta("adaboost", glue, plan, _REF_ADA, Int(UnsafePointer(to=f)), 0.0)
+    _ = plan^
+    _meta_free(f)
+
+
+def test_agnostic_meta_regressor_shapes() raises:
+    """The regressor-shaped kinds over the members' decision_function columns: VotingRegressor (weights 1 and
+    2) and MultiOutputRegressor (member j at column j, word for word)."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var plan = AgnMetaPlan(AGN_META_REGRESS)
+    plan.members.append(_vm(f.m0, MEMBER_OP_DECISION, 0, 1.0))
+    plan.members.append(_vm(f.m1, MEMBER_OP_DECISION, 0, 2.0))
+    plan.k = 1
+    _check_meta("vote regressor", glue, plan, _REF_REGRESS, Int(UnsafePointer(to=f)), 1e-6)
+    var cols = AgnMetaPlan(AGN_META_COLUMNS)
+    cols.members.append(_vm(f.m0, MEMBER_OP_DECISION, 0, 1.0))
+    cols.members.append(_vm(f.m1, MEMBER_OP_DECISION, 0, 1.0))
+    cols.k = 2
+    _check_meta("multi-output columns", glue, cols, _REF_COLUMNS, Int(UnsafePointer(to=f)), 0.0)
+    _ = plan^
+    _ = cols^
+    _meta_free(f)
 
 
 def main() raises:
