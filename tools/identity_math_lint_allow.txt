@@ -33,6 +33,7 @@ gbdt/lapack/linear_system.mojo:solve_linear_system_cholesky:sqrt  # SAFE-EXACT: 
 gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:compute_target_std_dev:sqrt  # SAFE-EXACT: host Float64 sqrt of host-read sums after synchronize; IEEE correctly rounded
 gbdt/methods/ordered_boosting.mojo:fit_ordered:sqrt  # SAFE-EXACT: host Float64 score_std sqrt of host-read h_sums; mult via portable ordered_model_length_mult; IEEE correctly rounded
 gbdt/methods/random_score_helper.mojo:compute_std_dev:sqrt  # SAFE-EXACT: host Float64 sqrt of the downloaded sum (IEEE correctly rounded on every host); not device code (fb13 lead review)
+gbdt/methods/random_score_helper.mojo:compute_score_std_dev_planes:sqrt  # SAFE-EXACT: host Float64 sqrt of the downloaded sum, as compute_std_dev above (IEEE correctly rounded on every host); not device code (lane gbdt-pw-multiclass; nn-integrate)
 gbdt/targets/pointwise_bodies.mojo:routed_exp:exp  # SAFE-FAST: routed_exp: raw exp only after comptime IDENTICAL arm returns identical_exp (pointwise_bodies.mojo:56)
 gbdt/targets/pointwise_bodies.mojo:routed_log:log  # SAFE-FAST: routed_log: raw log only after comptime IDENTICAL arm returns identical_log (pointwise_bodies.mojo:78)
 gemm/afn_apple_fast.mojo:_afn_epilogue:erf  # SAFE-FAST: same AFN_GEMM_APPLE gate (afn_apple_fast.mojo:105)
