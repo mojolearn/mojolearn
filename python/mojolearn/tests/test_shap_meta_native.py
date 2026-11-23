@@ -141,6 +141,7 @@ def test_non_finite_rows_are_refused_in_words():
 
 def test_non_numeric_labels_are_refused_in_words():
     X, y = _clf(2)
-    m = ml.LinearSVC(random_state=0).fit(X, np.array(["no", "yes"])[y])
+    # mojolearn's LinearSVC is cuML's deterministic quasi-Newton machine (svm.py), which has no random_state.
+    m = ml.LinearSVC().fit(X, np.array(["no", "yes"])[y])
     with pytest.raises(TypeError, match="not numeric"):
         ml.KernelExplainer(m, X[:12])
