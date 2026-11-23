@@ -336,17 +336,29 @@ comptime META_ADA_DT_RANDOM = 11         # 1.0: a DecisionTree splitter='random'
                                         # extra-trees forest (lane mf-split4; `ada_fit_run`'s tree_base word 1)
 comptime META_ADA_WORDS = 12
 #: THE SEARCH KIND's fitted words (float64, export / import): [best index,
-#: folds, best score, candidates m, train flag, sampler seed], then m x folds test scores
-#: (candidate-major), m means, m deviations, m ranks, and with the train
-#: flag m x folds train scores and m train means.
+#: folds, best score, candidates m, train flag, sampler seed, tables S,
+#: refitted (1.0)], then PER SCORER TABLE (S >= 1, in the scorers' order;
+#: lane mf-search4b) m x folds test scores (candidate-major), m means, m
+#: deviations, m ranks, and with the train flag m x folds train scores and
+#: m train means. The best index and score are the refit scorer's.
 comptime META_BLOCK_SEARCH = MEMBER_BLOCK_FAMILY + 7
-#: THE SEARCH KIND's settings words.
-comptime META_SEARCH_SCORING = 0        # core/msel_search_run.mojo SEARCH_SCORE_MEMBER / SEARCH_SCORE_ACCURACY
+comptime META_SEARCH_HEAD = 8
+#: THE SEARCH KIND's settings words: the fixed head, then `META_SEARCH_COUNT`
+#: scorer codes (a multi-metric `scoring` in its name order; none: the one
+#: `META_SEARCH_SCORING`).
+comptime META_SEARCH_SCORING = 0        # core/msel_search_run.mojo SEARCH_SCORE_MEMBER / a scorer code
 comptime META_SEARCH_TOLERATE = 1       # a numeric error_score (1.0)
 comptime META_SEARCH_ERROR = 2          # its value
 comptime META_SEARCH_TRAIN = 3          # return_train_score (1.0)
 comptime META_SEARCH_SEED = 4           # the sampler's seed the PACK re-draws the candidates with (-1: a grid)
-comptime META_SEARCH_WORDS = 5
+comptime META_SEARCH_REFIT = 5          # 1.0: refit the best (refit=True or a scorer name); 0.0: refit=False
+comptime META_SEARCH_REFIT_SCORER = 6   # the index among the codes whose table chooses the best (refit=<name>)
+comptime META_SEARCH_COUNT = 7          # the number of scorer codes that follow (0: one scorer)
+comptime META_SEARCH_WORDS = 8          # the head; then `count` codes, then one positive word per scorer
+#: THE SEARCH KIND's positive class words (lane mf-search4b item 3) follow
+#: the scorer codes: one per scorer (the one `META_SEARCH_SCORING`, or each
+#: code), the class code of the scorer's pos_label among the fit's labels,
+#: read at UNPACK (-1: the scorer reads no positive label).
 #: THE MULTI-OUTPUT KIND's settings words: [0] reserved.
 comptime META_MULTI_WORDS = 1
 #: THE CLASS-WEIGHT TAIL of a tree base (lane mf-split4): appended after a
@@ -1114,10 +1126,14 @@ def _new(call: _CallPtr) raises:
                                        or (slot[].folds < 2 and user_folds == 0)):
             raise Error("member ABI: a stacking member needs its members, its final estimator and cv >= 2")
         if _search_kind(kind):
-            if (len(slot[].words) != META_SEARCH_WORDS or len(slot[].masks) != len(slot[].plans)
-                    or slot[].folds < 2):
+            var count = Int(slot[].words[META_SEARCH_COUNT]) if len(slot[].words) >= META_SEARCH_WORDS else -1
+            if (count < 0 or len(slot[].words) != META_SEARCH_WORDS + count + max(count, 1)
+                    or len(slot[].masks) != len(slot[].plans) or (slot[].folds < 2 and user_folds == 0)
+                    or (count > 0 and (slot[].words[META_SEARCH_REFIT_SCORER] < 0.0
+                                       or Int(slot[].words[META_SEARCH_REFIT_SCORER]) >= count))):
                 raise Error("member ABI: a search member needs its candidates, one mask each, its "
-                            + String(META_SEARCH_WORDS) + " settings words and cv >= 2")
+                            + String(META_SEARCH_WORDS) + " settings words, its scorer codes and positive "
+                            + "words, a refit scorer among them and cv >= 2")
             slot[].base_plans = slot[].plans.copy()
             slot[].base_masks = slot[].masks.copy()
         elif _unit_kind(kind):
@@ -3006,14 +3022,35 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     plan.tolerate = slot[].words[META_SEARCH_TOLERATE] != 0.0
     plan.error_value = slot[].words[META_SEARCH_ERROR]
     plan.return_train = slot[].words[META_SEARCH_TRAIN] != 0.0
-    plan.refit = True
+    # MULTI-METRIC, refit=<name> and refit=False (lane mf-search4b item 1):
+    # the scorer codes in the caller's name order, the refit scorer's index,
+    # the refit word; then one positive class word per scorer (item 3).
+    var count = Int(slot[].words[META_SEARCH_COUNT])
+    for j in range(count):  # small-loop(the multi-metric scorer codes)
+        plan.scorers.append(Int(slot[].words[META_SEARCH_WORDS + j]))
+    plan.refit_scorer = Int(slot[].words[META_SEARCH_REFIT_SCORER]) if count > 0 else 0
+    plan.refit = slot[].words[META_SEARCH_REFIT] != 0.0
+    for j in range(max(count, 1)):  # small-loop(one positive class word per scorer)
+        plan.positives.append(Int(slot[].words[META_SEARCH_WORDS + count + j]))
     plan.cap = slot[].cap
+    # THE SPLITTER CV and a user's index list (lane mf-search4b item 6): the
+    # folds of this fit's rows, as Stacking's and Calibrated's (`_split_folds`;
+    # the user's are the entry's typed folds), handed to the RUN.
+    if slot[].split_kind != META_SPLIT_NONE:
+        _split_folds(slot, call[].x.rows, call[].y.data if k > 0 else 0, k)
+    if len(slot[].fold_test) > 0:
+        # Views of the slot's int32 sides (kept alive by the slot through the
+        # RUN), checked as the door checks a split's rows.
+        _user_folds(slot, call[].x.rows, plan.fold_train_at, plan.fold_train_n, plan.fold_test_at,
+                    plan.fold_test_n, False)
     var res = msel_search_run(plan)
     var best = slot[].base_plans[res.best].copy()
     best.classes = k
     best.class_counts = plan.class_counts.copy()
     slot[].plans = [best.copy()]
     slot[].masks = [slot[].base_masks[res.best]]
+    # refit=False: no refitted best (state 0: `_nested_outputs` skips it,
+    # `_forward_best` refuses, the PACK writes no best_estimator_).
     slot[].states = [res.best_state]
     for i in range(len(res.notices)):  # driver-loop: over the units' fit notices, in unit order
         slot[].notice_owner.append(0)
@@ -3022,28 +3059,32 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].out_classes = plan.class_counts.copy()
     var m = len(res.means)
     var folds = res.n_splits
-    var w = List[Float64](capacity=6 + m * (2 * folds + 4))
+    var tables = len(res.scorer_means)
+    var w = List[Float64](capacity=META_SEARCH_HEAD + tables * m * (2 * folds + 4))
     w.append(Float64(res.best))
     w.append(Float64(folds))
     w.append(res.best_score)
     w.append(Float64(m))
     w.append(1.0 if plan.return_train else 0.0)
     w.append(slot[].words[META_SEARCH_SEED])
-    for c in range(m):  # driver-loop: over the candidates (their test scores)
-        for f in range(folds):  # small-loop(one candidate's folds)
-            w.append(res.test[c][f])
-    for c in range(m):  # driver-loop: over the candidates (their means)
-        w.append(res.means[c])
-    for c in range(m):  # driver-loop: over the candidates (their deviations)
-        w.append(res.stds[c])
-    for c in range(m):  # driver-loop: over the candidates (their ranks)
-        w.append(Float64(res.ranks[c]))
-    if plan.return_train:
-        for c in range(m):  # driver-loop: over the candidates (their train scores)
+    w.append(Float64(tables))
+    w.append(1.0 if plan.refit else 0.0)
+    for j in range(tables):  # driver-loop: over the scorers (one table each, in their order)
+        for c in range(m):  # driver-loop: over the candidates (their test scores)
             for f in range(folds):  # small-loop(one candidate's folds)
-                w.append(res.train[c][f])
-        for c in range(m):  # driver-loop: over the candidates (their train means)
-            w.append(res.train_means[c])
+                w.append(res.scorer_test[j][c][f])
+        for c in range(m):  # driver-loop: over the candidates (their means)
+            w.append(res.scorer_means[j][c])
+        for c in range(m):  # driver-loop: over the candidates (their deviations)
+            w.append(res.scorer_stds[j][c])
+        for c in range(m):  # driver-loop: over the candidates (their ranks)
+            w.append(Float64(res.scorer_ranks[j][c]))
+        if plan.return_train:
+            for c in range(m):  # driver-loop: over the candidates (their train scores)
+                for f in range(folds):  # small-loop(one candidate's folds)
+                    w.append(res.scorer_train[j][c][f])
+            for c in range(m):  # driver-loop: over the candidates (their train means)
+                w.append(res.scorer_train_means[j][c])
     slot[].search_words = w^
 
 
@@ -3051,6 +3092,11 @@ def _forward_best(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     """THE SEARCH KIND's predict / predict_proba / decision_function / score:
     the refitted best's own call (the door's `best_estimator_` delegation),
     on the caller's views."""
+    if len(slot[].states) != 1 or slot[].states[0] == 0:
+        # refit=False (lane mf-search4b): scikit-learn's `_check_refit` words.
+        raise Error("AttributeError: This " + _name(slot[].kind) + " instance was initialized with `refit=False`. "
+                    + "The operation is available only after refitting on the best parameters. You can refit an "
+                    + "estimator manually using the `best_params_` attribute")
     var plan = slot[].plans[0].copy()
     var inner = member_call_of(plan, slot[].states[0])
     inner.x = call[].x
@@ -3069,7 +3115,7 @@ def _import_search(slot: _SlotPtr, words: _F64P, count: Int) raises:
     """IMPORT `META_BLOCK_SEARCH` (`_fit_search`'s layout), after
     `META_BLOCK_NESTED`: the best candidate's plan becomes the one nested
     plan."""
-    if count < 6:
+    if count < META_SEARCH_HEAD:
         raise Error("member ABI: a search member's words are malformed")
     var best = Int(words[0])
     if best < 0 or best >= len(slot[].base_plans):

@@ -22,12 +22,17 @@ the scorer's `_scorer_response` does). The scorers of `_BINARY_PROBA`
 ('roc_auc', 'neg_log_loss') read `predict_proba[:, 1]` of a two-class
 member; the RUN hands that one column.
 
+THE BINARY LABEL SCORERS (lane mf-search4b): 'f1', 'precision', 'recall'
+and 'jaccard' (average 'binary', pos_label=1) read their positive label as
+a CLASS CODE the UNPACK maps from the label value (the search plan's
+`positives`), through bindings/mcls_classify_run.mojo `label_binary_run`.
+
 Not served here (the search keeps its units for them, with the reason):
-every scorer whose value depends on a label VALUE the RUN never sees (it
-holds class codes only): 'f1', 'precision', 'recall', 'jaccard' (average
-'binary' with pos_label=1), 'average_precision' (pos_label=1),
-'neg_brier_score' (pos_label by the label set); 'top_k_accuracy'; the
-clustering scores.
+'average_precision' and 'neg_brier_score' (no typed program builder: their
+programs are assembled inside their doors over pins), 'top_k_accuracy' (no
+typed builder; its door ranks the scores in Python-held arrays), the
+clustering scores (no member response: they score labels against labels
+of a clusterer, which no search member serves).
 """
 from bindings.arena_prog_run import MetricRoute
 from bindings.metrics_reg_run import (
@@ -35,7 +40,7 @@ from bindings.metrics_reg_run import (
     REG_EXPLAINED_VARIANCE, REG_MAX_ERROR, REG_POISSON, REG_GAMMA, REG_D2_ABSOLUTE,
 )
 from bindings.mcls_classify_run import (
-    label_metric_run, log_loss_run, LBL_JACCARD, LBL_BALANCED, LBL_PRECISION, LBL_RECALL, LBL_F1, LBL_MCC,
+    label_metric_run, label_binary_run, log_loss_run, LBL_JACCARD, LBL_BALANCED, LBL_PRECISION, LBL_RECALL, LBL_F1, LBL_MCC,
     LBL_MICRO, LBL_MACRO, LBL_WEIGHTED,
 )
 from bindings.mcls_ranking_run import roc_auc_run, ROC_BINARY, ROC_OVR, ROC_OVR_WEIGHTED, ROC_OVO, ROC_OVO_WEIGHTED
@@ -54,6 +59,7 @@ comptime _F_REG = 1
 comptime _F_LABEL = 2
 comptime _F_LOG_LOSS = 3
 comptime _F_ROC = 4
+comptime _F_BINARY = 5
 
 
 @fieldwise_init
@@ -106,6 +112,11 @@ def _table() -> List[MselScorer]:
     t.append(MselScorer("roc_auc_ovo", _F_ROC, ROC_OVO, 0, 1.0, MEMBER_OP_PREDICT_PROBA))
     t.append(MselScorer("roc_auc_ovr_weighted", _F_ROC, ROC_OVR_WEIGHTED, 0, 1.0, MEMBER_OP_PREDICT_PROBA))
     t.append(MselScorer("roc_auc_ovo_weighted", _F_ROC, ROC_OVO_WEIGHTED, 0, 1.0, MEMBER_OP_PREDICT_PROBA))
+    # lane mf-search4b: average='binary', pos_label=1 (appended: earlier codes unchanged)
+    t.append(MselScorer("precision", _F_BINARY, LBL_PRECISION, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("recall", _F_BINARY, LBL_RECALL, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("f1", _F_BINARY, LBL_F1, 0, 1.0, MEMBER_OP_PREDICT))
+    t.append(MselScorer("jaccard", _F_BINARY, LBL_JACCARD, 0, 1.0, MEMBER_OP_PREDICT))
     return t^
 
 
@@ -149,6 +160,12 @@ def msel_scorer_code(name: String, has_decision: Bool) -> Int:
     return -1
 
 
+def msel_scorer_positive(row: MselScorer) -> Bool:
+    """True for a scorer that reads a positive label (its pos_label=1, mapped
+    to a class code at UNPACK)."""
+    return row.family == _F_BINARY
+
+
 def msel_scorer_regression(row: MselScorer) -> Bool:
     """True for a scorer over a regressor's float32 predictions."""
     return row.family == _F_REG
@@ -162,18 +179,21 @@ def msel_scorer_binary_column(row: MselScorer) -> Bool:
 
 
 def msel_scorer_value(route: MetricRoute, row: MselScorer, truth: Int, response: Int, count: Int, classes: Int,
-                      cols: Int) raises -> Float64:
+                      cols: Int, positive: Int) raises -> Float64:
     """The scorer's value on one fold side: `truth` (count int32 class codes
     in 0 .. classes-1, or count float32 targets for a regression scorer),
     `response` the member's answer as the RUN placed it (count int32 codes,
     or count x `cols` float32 words: predictions, probabilities or decision
-    values; one column after the `_BINARY_PROBA` column pick). The
+    values; one column after the `_BINARY_PROBA` column pick), `positive`
+    the class code of a binary scorer's pos_label (-1 for the others). The
     metric's refusals raise its words (the caller's error rule applies)."""
     if row.family == _F_ACCURACY:
         return label_accuracy_value(route, truth, response, count, classes)
     var value: Float64
     if row.family == _F_REG:
         value = reg_metric_run(route, row.metric, truth, response, count)
+    elif row.family == _F_BINARY:
+        value = label_binary_run(route, row.metric, truth, response, count, classes, positive)
     elif row.family == _F_LABEL:
         value = label_metric_run(route, row.metric, row.avg, truth, response, count, classes)
     elif row.family == _F_LOG_LOSS:

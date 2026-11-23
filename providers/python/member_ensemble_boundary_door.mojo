@@ -114,7 +114,7 @@ from core.ensemble_member import (
 )
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
-from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_regression
+from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive
 from bindings.msel_scorer_native_door import msel_scorer_response
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.metrics_keys_unpack import metrics_keys
@@ -2411,31 +2411,96 @@ def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonOb
     return out
 
 
+def _scoring_many(scoring: PythonObject, context: PythonObject, b: PythonObject) raises -> Bool:
+    """True for a multi-metric `scoring` (a list, tuple or set of names, or
+    one of the native mapping types), as bindings/msel_cv_door.mojo
+    `msel_scorers` tells them apart. Lane mf-search4b item 5: these never
+    reach `msel_get_scorer` (which refuses them as scorer objects)."""
+    var kind = py_type(scoring)
+    if kind is b.list or kind is b.tuple or kind is b.set:
+        return True
+    var mappings = context["mapping_types"]
+    for i in range(len(mappings)):  # driver-loop: fixed native dict/OrderedDict/defaultdict types
+        if kind is mappings[i]:
+            return True
+    return False
+
+
+def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject) raises -> String:
+    """UNPACK: the table name of ONE scorer value: a str is itself (an
+    unknown name raises `msel_get_scorer`'s words); a scorer object is
+    admitted by `msel_get_scorer` (a Python callback raises the door's
+    words) and read back to the name the scorer table holds it under (the
+    object `get_scorer(name)` answers). "": a native scorer no table name
+    holds (make_scorer's own; the door scores it)."""
+    var got = msel_get_scorer(scorer, context)
+    if py_type(scorer) is b.str:
+        return String(py=scorer)
+    var table = context["family_msel_scorers"]
+    var items = py_call(b.list, py_call(table.items))
+    for i in range(len(items)):  # driver-loop: over the scorer table (a fixed table, once per admission)
+        if items[i][1] is got:
+            return String(py=items[i][0])
+    return String("")
+
+
 def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
                   mut owner: MemberOwner, done: _Done, prepared: PythonObject, labels: PythonObject) raises -> Bool:
     """UNPACK of THE SEARCH KIND (core/ensemble_member.mojo): every
     candidate (the base's clone with the candidate's parameters set) admitted
     as a member with those words, read as `msel_search_fit` reads the
-    search's settings. Answers False (the door's fit keeps the search) for an
-    int cv it cannot take (a splitter, an index list), a named scorer the
-    typed RUN does not serve (core/msel_scorer_run.mojo) or several scorers
-    (the kind's words carry one), refit other than True, the search's
-    own `device`, and any candidate with no serving member. A Python scorer
-    callback is refused in the door's words."""
+    search's settings: the scorer LIST (one scorer, or a multi-metric list /
+    dict in its name order: codes, responses, positive class codes) and the
+    refit word (True, False or a scorer name; lane mf-search4b items 1, 3),
+    an int cv, one of our KFold / StratifiedKFold splitters or a user's
+    index list (item 6). Answers False (the door's fit keeps the search) for
+    a scorer the typed RUN does not serve (core/msel_scorer_run.mojo), a
+    binary scorer whose pos_label is not one of the labels, the search's own
+    `device`, another of our splitters, and any candidate with no serving
+    member. A Python scorer, refit or cv callback is refused in the door's
+    words."""
     var scoring_in = py_get(fields, "scoring")
-    var scoring = 0
-    if scoring_in is not None:
-        if py_type(scoring_in) is not b.str:
-            # A scorer object: the door's admission words for a Python
-            # callback; a native scorer object keeps the door.
-            _ = msel_get_scorer(scoring_in, context)
-            return False
-        # a named scorer: its code is read below, with the base's response
-        # method (lane mf-metric4, core/msel_scorer_run.mojo)
-        scoring = -1
+    # THE SCORERS: (name, scorer value as given) in the caller's order; an
+    # empty list: scoring=None (the member's own score).
+    var many = scoring_in is not None and _scoring_many(scoring_in, context, b)
+    var keys = List[String]()
+    var givens = Python.list()
+    if many:
+        # the door's admission (bindings/msel_cv_door.mojo `msel_scorers`:
+        # exact str names / keys, in their order) and its words
+        var mapping = not (py_type(scoring_in) is b.list or py_type(scoring_in) is b.tuple
+                           or py_type(scoring_in) is b.set)
+        var names = py_call(b.list, scoring_in)
+        for i in range(len(names)):  # driver-loop: over the scorer names (once per admission)
+            if py_type(names[i]) is not b.str:
+                if mapping:
+                    raise Error("TypeError: multiple scoring keys must be exact strings")
+                raise Error("TypeError: multiple scoring names must be exact strings")
+            var repeated = False
+            for j in range(len(keys)):  # small-loop(the names so far: the door's dict keeps one of each)
+                repeated = repeated or keys[j] == String(py=names[i])
+            if repeated:
+                continue
+            keys.append(String(py=names[i]))
+            _ = py_call(givens.append, scoring_in[names[i]] if mapping else names[i])
+        if len(keys) == 0:
+            return False  # the door's own words for an empty scoring
+    elif scoring_in is not None:
+        keys.append(String(""))
+        _ = py_call(givens.append, scoring_in)
     var refit = py_get(fields, "refit")
-    if refit is None or py_type(refit) is not b.bool or not Bool(py=refit):
-        return False
+    if refit is None or (py_type(refit) is not b.bool and py_type(refit) is not b.str):
+        return False  # the door raises its words for a refit callback
+    var refit_false = py_type(refit) is b.bool and not Bool(py=refit)
+    var refit_scorer = 0
+    if many and not refit_false:
+        refit_scorer = -1
+        if py_type(refit) is b.str:
+            for j in range(len(keys)):  # small-loop(the scorer names)
+                if keys[j] == String(py=refit):
+                    refit_scorer = j
+        if refit_scorer < 0:
+            raise Error("For multi-metric scoring, refit must be False or a scorer key.")
     var device = py_get(fields, "device")
     if device is not None:
         return False
@@ -2443,9 +2508,25 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     # A user's own splitter object: refused here in the search door's words
     # (lane mf-split4b; never called, `_refuse_cv_callback`).
     _refuse_cv_callback(cv, context, b, _SEARCH_CV_CALLBACK_WORDS, True)
-    var folds = 5 if cv is None else _int_word(cv, b)
-    if folds < 2:
-        return False
+    var fold_train = List[List[Int32]]()
+    var fold_test = List[List[Int32]]()
+    var split = _Split()
+    var folds = 0
+    if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
+        # A user's index list: its folds read ONCE into typed int32 rows,
+        # checked against the fit's rows by the kind (as Stacking's).
+        if not _user_folds(cv, b, fold_train, fold_test):
+            return False
+        folds = len(fold_test)
+    elif cv is not None and py_type(cv) is not b.int and not msel_is_integral(cv, context):
+        # One of our splitters, typed words; each fit splits its own rows.
+        if not _split_words(cv, True, context, b, split):
+            return False
+        folds = split.k
+    else:
+        folds = 5 if cv is None else _int_word(cv, b)
+        if folds < 2:
+            return False
     var error_score = py_get(fields, "error_score")
     var tolerate = 0.0
     var error_value = 0.0
@@ -2478,40 +2559,62 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
     else:
         classifier = Bool(py=base_plan["classifier"])
-    # THE SCORER (lane mf-metric4): a name the typed search RUN serves
-    # (core/msel_scorer_run.mojo `msel_scorer_code`), with the response its
-    # scorer reads off the base's class (`msel_scorer_response`, the
-    # scorer's own rule: 'roc_auc' takes decision_function when the class
-    # has it); any other name keeps the door.
-    var response = MEMBER_OP_PREDICT
-    if scoring < 0:
-        var scorer = msel_get_scorer(scoring_in, context)
-        var method = String(py=msel_scorer_response(scorer, base_plan, context))
-        scoring = msel_scorer_code(String(py=scoring_in), method == "decision_function")
-        if scoring < 0:
-            return False
-        var row = msel_scorer_row(scoring)
-        if msel_scorer_regression(row) == classifier:
-            return False
-        response = row.op
+    if split.kind == META_SPLIT_STRATIFIED and not classifier:
+        return False  # the splitter's door refuses continuous y in its words
+    # THE SCORERS (lanes mf-metric4, mf-search4b): each a name the typed
+    # search RUN serves (core/msel_scorer_run.mojo `msel_scorer_code`), with
+    # the response its scorer reads off the base's class
+    # (`msel_scorer_response`, the scorer's own rule: 'roc_auc' takes
+    # decision_function when the class has it) and, for a binary label
+    # scorer, its pos_label=1 as the class code among the fit's labels; any
+    # other scorer keeps the door.
+    var codes = List[Int]()
+    var positives = List[Int]()
+    var responses = List[Int]()
     var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
     if classifier:
         needs |= MEMBER_CAN_CLASSIFIER
-    if scoring == 0:
+    if len(keys) == 0:
         needs |= MEMBER_CAN_SCORE
-    elif response == MEMBER_OP_PREDICT_PROBA:
-        needs |= MEMBER_CAN_PREDICT_PROBA
-    elif response == MEMBER_OP_DECISION:
-        needs |= MEMBER_CAN_DECISION
+        positives.append(-1)
+    for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
+        var name = _scorer_name(givens[j], context, b)
+        if len(name) == 0:
+            return False  # a native scorer the table does not name (make_scorer's)
+        var scorer = msel_get_scorer(givens[j], context)
+        var method = String(py=msel_scorer_response(scorer, base_plan, context))
+        var code = msel_scorer_code(name, method == "decision_function")
+        if code < 0:
+            return False
+        var row = msel_scorer_row(code)
+        if msel_scorer_regression(row) == classifier:
+            return False
+        var positive = -1
+        if msel_scorer_positive(row):
+            positive = _positive_code(labels, b)
+            if positive < 0:
+                return False  # pos_label=1 is not one of the labels: the door's words per fold
+        codes.append(code)
+        positives.append(positive)
+        var seen = False
+        for o in range(len(responses)):  # small-loop(the distinct responses, at most three)
+            seen = seen or responses[o] == row.op
+        if not seen:
+            responses.append(row.op)
+        if row.op == MEMBER_OP_PREDICT_PROBA:
+            needs |= MEMBER_CAN_PREDICT_PROBA
+        elif row.op == MEMBER_OP_DECISION:
+            needs |= MEMBER_CAN_DECISION
     var nested = _Nested()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
         if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
             return False
-    for c in range(len(nested.plans)):  # driver-loop: over the candidates (their predict's element type)
+    for c in range(len(nested.plans)):  # driver-loop: over the candidates (their responses' element types)
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
-        if multi and scoring != 0:
-            return False  # a multi-output target is scored by the member itself
-        if scoring != 0:
+        if multi and (len(codes) > 0 or split.kind == META_SPLIT_STRATIFIED):
+            return False  # a multi-output target is scored by the member itself, folded by KFold
+        for o in range(len(responses)):  # small-loop(the distinct responses)
+            var response = responses[o]
             var probe = nested.plans[c].copy()
             probe.classes = 2 if classifier else 0
             var labels_out = response == MEMBER_OP_PREDICT and classifier
@@ -2520,7 +2623,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 return False  # a member whose predict is not class codes
             if not labels_out and dtype != MEMBER_F32 and dtype != MEMBER_F64:
                 return False  # a response the scorer's metric does not read
-    var words: List[Float64] = [Float64(scoring), tolerate, error_value, 1.0 if return_train else 0.0, Float64(seed)]
+    # The settings words (core/ensemble_member.mojo META_SEARCH_*): the head,
+    # the multi-metric codes, one positive word per scorer.
+    var one = codes[0] if len(codes) == 1 and not many else 0
+    var count = len(codes) if many else 0
+    var words: List[Float64] = [Float64(one), tolerate, error_value, 1.0 if return_train else 0.0, Float64(seed),
+                                0.0 if refit_false else 1.0, Float64(refit_scorer), Float64(count)]
+    for j in range(count):  # small-loop(the multi-metric scorer codes)
+        words.append(Float64(codes[j]))
+    for j in range(len(positives)):  # small-loop(one positive word per scorer)
+        words.append(Float64(positives[j]))
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
     # The META entry and its glue run on an x_trees image: the search's own
     # context is model selection's, so the image is the one the meta classes'
@@ -2532,9 +2644,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     if trees_context is None:
         return False
     if not _finish(fields, trees_context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
-                   List[List[Int32]](), List[List[Int32]]()):
+                   fold_train^, fold_test^):
         return False
-    if scoring != 0:
+    _finish_split(owner, split)
+    if len(codes) > 0:
         # THE NATIVE METRIC RUN's route (bindings/arena_prog_run.mojo
         # `metric_inputs_run`): the default-mode x_metrics runner, its
         # connection pinned with the plan entry.
@@ -2549,15 +2662,32 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     return True
 
 
+def _positive_code(labels: PythonObject, b: PythonObject) raises -> Int:
+    """UNPACK: the class code of pos_label=1 among the fit's labels (the
+    sorted labels the codes index; equality as scikit-learn's
+    `_check_set_wise_labels` compares). -1: no labels known, or 1 is not
+    one of them."""
+    if labels is None:
+        return -1
+    var items = py_call(b.list, labels)
+    var eq = native_loaded_module("operator").eq
+    for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
+        if Bool(py=py_call(b.bool, py_call(eq, items[i], PythonObject(1)))):
+            return i
+    return -1
+
+
 def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
                  plan: MemberPlan, state: Int, labels: PythonObject, mut jobs: _PackJobs) raises:
     """PACK of THE SEARCH KIND: the attributes `msel_search_fit` writes
-    (`cv_results_` with `params`, `param_<name>`, `split<i>_test_score`,
-    `mean_test_score`, `std_test_score`, `rank_test_score` and
-    `mean_train_score`; `n_splits_`, `multimetric_`, `best_index_`,
-    `best_score_`, `best_params_`, `best_estimator_` (the best candidate's
-    clone holding the refit state), `scorer_`), then the units' fit notices
-    with the best estimator's context."""
+    (`cv_results_` with `params`, `param_<name>`, and per scorer
+    `split<i>_test_score`, `mean_test_score`, `std_test_score`,
+    `rank_test_score` and `mean_train_score`, suffixed `_<name>` for a
+    multi-metric scoring (lane mf-search4b); `n_splits_`, `multimetric_`;
+    `best_index_`, `best_score_`, `best_params_` unless a multi-metric
+    search has refit=False; `best_estimator_` (the best candidate's clone
+    holding the refit state) and `scorer_` unless refit=False), then the
+    units' fit notices with the best estimator's (or the base's) context."""
     var nested = meta_state_plans(state)
     var handles = _export_i64(plan, state, META_BLOCK_NESTED)
     if len(nested) != 1 or len(handles) != 1:
@@ -2565,7 +2695,7 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
     var view = _export_view(plan, state, META_BLOCK_SEARCH)
     var words = _F64P(unsafe_from_address=view.dst.data)
     var count = view.dst.rows * view.dst.cols
-    if count < 6:
+    if count < 8:
         raise Error("RuntimeError: mojolearn: the search member state has no tables")
     var best = Int(words[0])
     var folds = Int(words[1])
@@ -2573,25 +2703,29 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
     var m = Int(words[3])
     var train = words[4] != 0.0
     var seed = Int(words[5])
+    var tables = Int(words[6])
+    var refitted = words[7] != 0.0
     var candidates = _search_candidates(model, fields, seed, False, context)
     if len(candidates) != m or best < 0 or best >= m:
         raise Error("RuntimeError: mojolearn: the search's candidates changed since its admission")
-    var at = 6
-    var test = List[List[Float64]](capacity=m)
-    for c in range(m):  # driver-loop: over the candidates (their fold scores)
-        var row = List[Float64](capacity=folds)
-        for f in range(folds):  # small-loop(one candidate's folds)
-            row.append(words[at + c * folds + f])
-        test.append(row^)
-    at += m * folds
-    var means = List[Float64](capacity=m)
-    var stds = List[Float64](capacity=m)
-    var ranks = List[Int](capacity=m)
-    for c in range(m):  # driver-loop: over the candidates (their tables)
-        means.append(words[at + c])
-        stds.append(words[at + m + c])
-        ranks.append(Int(words[at + 2 * m + c]))
-    at += 3 * m
+    var scoring_in = py_get(fields, "scoring")
+    var many = scoring_in is not None and _scoring_many(scoring_in, context, b)
+    # The scorer names in the admission's order (its dict keeps one of each).
+    var names = List[String]()
+    if many:
+        var given = py_call(b.list, scoring_in)
+        for i in range(len(given)):  # driver-loop: over the scorer names (once per pack)
+            var name = String(py=given[i])
+            var repeated = False
+            for j in range(len(names)):  # small-loop(the names so far)
+                repeated = repeated or names[j] == name
+            if not repeated:
+                names.append(name)
+    if (len(names) if many else 1) != tables:
+        raise Error("RuntimeError: mojolearn: the search's scorers changed since its admission")
+    var per = m * (2 * folds + 4) if train else m * (folds + 3)
+    if count != 8 + tables * per:
+        raise Error("RuntimeError: mojolearn: the search member state's tables are malformed")
     var results = Python.dict()
     py_setitem(results, "params", candidates)
     var itertools = native_loaded_module("itertools")
@@ -2600,42 +2734,70 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
         var getter = py_call(native_loaded_module("operator").methodcaller, PythonObject("get"), keys[i])
         py_setitem(results, py_call(b.str.__add__, PythonObject("param_"), py_call(b.str, keys[i])),
                    py_call(b.list, py_call(b.map, getter, candidates)))
-    for f in range(folds):  # driver-loop: over the folds (one column each)
-        var column = List[Float64](capacity=m)
-        for c in range(m):  # small-loop(one fold's candidates)
-            column.append(test[c][f])
-        py_setitem(results, PythonObject("split" + String(f) + "_test_score"), msel_f64_list(column, context))
-    py_setitem(results, PythonObject("mean_test_score"), msel_f64_list(means, context))
-    py_setitem(results, PythonObject("std_test_score"), msel_f64_list(stds, context))
-    py_setitem(results, PythonObject("rank_test_score"), msel_i32_list(ranks, context))
-    if train:
-        var train_means = List[Float64](capacity=m)
-        for c in range(m):  # driver-loop: over the candidates (their train means)
-            train_means.append(words[at + m * folds + c])
-        py_setitem(results, PythonObject("mean_train_score"), msel_f64_list(train_means, context))
-    # The best estimator: the best candidate's clone holding the refit state.
-    var base = py_get(fields, "estimator")
-    var clone = msel_native_clone(base, context)
-    _ = msel_native_set_params(clone, msel_clone_parameter(candidates[best], context), context)
-    var clone_plan = prep_estimator_plan(clone, context)
-    var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
-    var clone_context = clone_plan["context"]
-    _pack_into(clone, clone_fields, clone_context, b, nested[0], handles[0], labels, jobs)
+    for j in range(tables):  # driver-loop: over the scorers (one table each, in their order)
+        var suffix = String("_") + names[j] if many else String("")
+        var at = 8 + j * per
+        for f in range(folds):  # driver-loop: over the folds (one column each)
+            var column = List[Float64](capacity=m)
+            for c in range(m):  # small-loop(one fold's candidates)
+                column.append(words[at + c * folds + f])
+            py_setitem(results, PythonObject("split" + String(f) + "_test_score" + suffix),
+                       msel_f64_list(column, context))
+        at += m * folds
+        var means = List[Float64](capacity=m)
+        var stds = List[Float64](capacity=m)
+        var ranks = List[Int](capacity=m)
+        for c in range(m):  # driver-loop: over the candidates (their tables)
+            means.append(words[at + c])
+            stds.append(words[at + m + c])
+            ranks.append(Int(words[at + 2 * m + c]))
+        at += 3 * m
+        py_setitem(results, PythonObject("mean_test_score" + suffix), msel_f64_list(means, context))
+        py_setitem(results, PythonObject("std_test_score" + suffix), msel_f64_list(stds, context))
+        py_setitem(results, PythonObject("rank_test_score" + suffix), msel_i32_list(ranks, context))
+        if train:
+            var train_means = List[Float64](capacity=m)
+            for c in range(m):  # driver-loop: over the candidates (their train means)
+                train_means.append(words[at + m * folds + c])
+            py_setitem(results, PythonObject("mean_train_score" + suffix), msel_f64_list(train_means, context))
     var updates = Python.dict()
     py_setitem(updates, "cv_results_", results)
     py_setitem(updates, "n_splits_", PythonObject(folds))
-    py_setitem(updates, "multimetric_", PythonObject(False))
-    py_setitem(updates, "best_index_", PythonObject(best))
-    py_setitem(updates, "best_score_", PythonObject(best_score))
-    py_setitem(updates, "best_params_", candidates[best])
-    py_setitem(updates, "best_estimator_", clone)
-    py_setitem(updates, "scorer_", msel_get_scorer(py_get(fields, "scoring"), context))
+    py_setitem(updates, "multimetric_", PythonObject(many))
+    if refitted or not many:
+        py_setitem(updates, "best_index_", PythonObject(best))
+        py_setitem(updates, "best_score_", PythonObject(best_score))
+        py_setitem(updates, "best_params_", candidates[best])
+    var base = py_get(fields, "estimator")
+    var notice_context = prep_estimator_plan(base, context)["context"]
+    if refitted:
+        if handles[0] == 0:
+            raise Error("RuntimeError: mojolearn: the search member state holds no refitted best")
+        # The best estimator: the best candidate's clone holding the refit state.
+        var clone = msel_native_clone(base, context)
+        _ = msel_native_set_params(clone, msel_clone_parameter(candidates[best], context), context)
+        var clone_plan = prep_estimator_plan(clone, context)
+        var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
+        notice_context = clone_plan["context"]
+        _pack_into(clone, clone_fields, notice_context, b, nested[0], handles[0], labels, jobs)
+        py_setitem(updates, "best_estimator_", clone)
+        if many:
+            # the door's `scorer_`: the dict of the native scorer records
+            var scorers = Python.dict()
+            var mapping = not (py_type(scoring_in) is b.list or py_type(scoring_in) is b.tuple
+                               or py_type(scoring_in) is b.set)
+            for j in range(len(names)):  # small-loop(the scorer names)
+                var key = PythonObject(names[j])
+                py_setitem(scorers, key, msel_get_scorer(scoring_in[key] if mapping else key, context))
+            py_setitem(updates, "scorer_", scorers)
+        else:
+            py_setitem(updates, "scorer_", msel_get_scorer(scoring_in, context))
     msel_search_update(fields, updates, context)
     var owners = List[Int]()
     var notices = List[List[Float64]]()
     meta_state_notices(state, owners, notices)
     for i in range(len(owners)):  # driver-loop: over the units' notices (a few warnings each)
-        member_fit_notices_raise(notices[i], clone_context)
+        member_fit_notices_raise(notices[i], notice_context)
 
 
 def _search_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan,
@@ -2658,7 +2820,8 @@ def _search_state(fields: PythonObject, context: PythonObject, b: PythonObject, 
         block.x = MemberMatrix(Int(handles.unsafe_ptr()), 1, 1, MEMBER_I64)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, block)
         handles = List[Int64]()  # the search state owns it now
-        var words: List[Float64] = [Float64(Int(py=index)), 0.0, 0.0, 0.0, 0.0, -1.0]
+        # the META_BLOCK_SEARCH head (no tables: an imported search is not refitted here)
+        var words: List[Float64] = [Float64(Int(py=index)), 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0]
         var search = MemberCall(plan.route, call.state)
         search.block = META_BLOCK_SEARCH
         search.x = MemberMatrix(Int(words.unsafe_ptr()), 1, len(words), MEMBER_F64)
