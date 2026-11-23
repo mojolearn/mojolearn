@@ -71,6 +71,7 @@ from gbdt.host.gbdt_oracle_multiclass import (
     GBDT_OBJ_MULTIRMSE,
     gbdt_multi_host_fit,
     gbdt_multi_host_model_text,
+    gbdt_multi_host_model_text_ctr,
 )
 from gbdt.host.gbdt_oracle_rmse import (
     GbdtRmseHostFit,
@@ -83,6 +84,8 @@ from gbdt.host.gbdt_oracle_depthwise import (
     GBDT_HOST_SCORE_NEWTON_COSINE,
     GBDT_HOST_SCORE_NEWTON_L2,
     GbdtHostTreeParams,
+    gbdt_ctr_host_fit_non_symmetric,
+    gbdt_ctr_host_ns_model_text,
     gbdt_host_fit_non_symmetric,
     gbdt_host_ns_model_text,
 )
@@ -178,9 +181,10 @@ def _refuse(what: String) raises:
         " weights on numeric columns outside the multi-output losses,"
         " QueryRMSE and Exact leaves; an eval set and the overfitting"
         " detector with Logloss and RMSE on every tree shape and on the"
-        " Ordered arm; the pointwise searcher on every one-output loss with"
-        " its options and columns; one-hot and CTR"
-        " categorical columns under SymmetricTree with Logloss or RMSE), see"
+        " Ordered and pointwise-searcher arms; the pointwise searcher on every"
+        " one-output loss with its options and columns; one-hot and CTR"
+        " categorical columns on every tree shape and loss but the grouped"
+        " ones), see"
         " gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it"
     )
 
@@ -1575,8 +1579,45 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "class_weights takes 2 entries for loss '" + loss + "', got "
             + String(n_class_weights)
         )
-    if n_flags != 0 and (grow_code != 0 or is_pointwise or is_multi):
-        _refuse("cat_features or one_hot_features outside SymmetricTree with Logloss or RMSE")
+    # lane gbdt-cpu-rest-4-cat (2026-11-23): what `train` refuses with a
+    # categorical or one-hot column, in its words and its order (the
+    # MultiRMSE check, then the grouped losses' cat_features loop, then
+    # their one_hot loop); every other loss trains them below
+    var flags = gbdt_host_load_u32(cp, n_flags)
+    var any_cat_flag = False
+    var any_one_hot_flag = False
+    for f in range(n_flags):  # small-loop(n_flags: per-feature option flags): option validation, reads no data
+        if (flags[f] & UInt32(1)) != UInt32(0):
+            any_cat_flag = True
+        if (flags[f] & UInt32(2)) != UInt32(0):
+            any_one_hot_flag = True
+    if is_multi_rmse and any_cat_flag:
+        raise Error(
+            "loss='MultiRMSE' with cat_features is not carried here:"
+            " the CTR target binarization reads one target per row"
+        )
+    if pw_grouped and any_cat_flag:
+        raise Error(
+            "loss='" + loss + "' with cat_features is not implemented"
+            " here: the reference shuffles whole queries for its CTR"
+            " permutations (permutation.cpp:9-11,"
+            " GenerateQueryDocsOrder), which this implementation does"
+            " not restate"
+        )
+    if pw_grouped and any_one_hot_flag:
+        raise Error(
+            "loss='" + loss + "' with one_hot_features is not implemented"
+            " here"
+        )
+    # lane gbdt-cpu-rest-4-cat (2026-11-23): every other categorical or
+    # one-hot fit trains on the host now, through the one categorical
+    # prelude (gbdt_oracle_ctr.mojo::gbdt_ctr_host_prelude): SymmetricTree
+    # with the pointwise losses (gbdt_oracle_losses.mojo) and with
+    # MultiClass, MultiClassOneVsAll and MultiRMSE's one-hot columns
+    # (gbdt_oracle_multiclass.mojo), every permutation and the tree CTRs;
+    # Depthwise and Lossguide with Logloss, RMSE and the pointwise losses
+    # (gbdt_oracle_depthwise.mojo, sub-lane gbdt-cpu-rest-4-cat-ns). The
+    # by-name refusal is deleted.
     # the HELD-OUT arm (lane/close-no-cpu-path-gbdt, 2026-09-20): their
     # `testCursor`, held-out curve, overfitting detector and
     # `ShrinkToBestIteration`, restated in gbdt/host/gbdt_oracle_eval.mojo
@@ -1668,9 +1709,13 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # each tree's features for every loss and both policies
     # (`_sample_tree_folds`, the device's `feature_sampling.mojo`); the
     # symmetric loop does not restate the sampling
-    if feature_fraction < 1.0 and n_flags != 0:
-        # `train`'s words (gbdt/train.mojo)
+    if feature_fraction < 1.0 and any_cat_flag:
+        # `train`'s words (gbdt/train.mojo), its cat_features loop first
         raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+    if feature_fraction < 1.0 and any_one_hot_flag:
+        # and its one_hot loop (lane gbdt-cpu-rest-4-cat: this was the
+        # categorical sentence for a one-hot column)
+        raise Error("feature_fraction<1 supports numeric features only; one_hot input refused")
     # and the numeric symmetric Logloss / RMSE loop (gbdt_host_boost, the
     # same two helpers), and the symmetric pointwise losses, grouped ones
     # included (gbdt_losses_host_fit, the same statements; lane
@@ -1879,7 +1924,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         elif bootstrap_type == String("Poisson"):
             sym_boot_kind = GBDT_BOOT_POISSON
             sym_boot_param = sym_subsample if sym_subsample >= Float32(0.0) else Float32(0.66)
-    var flags = gbdt_host_load_u32(cp, n_flags)
     var x_address = params.x
     var y_address = params.y
     _ = xp
@@ -1950,14 +1994,20 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             od_kind, od.auto_stop_p_value, od.iterations_wait,
             use_best_model, best_model_min_trees,
         )
+        # lane gbdt-cpu-rest-4-cat (2026-11-23): categorical and one-hot
+        # columns (`flags`), `train`'s CTR options with them
         var multi_fit = gbdt_multi_host_fit(
             x, y, n_rows, n_features, p,
             multi_objective,
             class_weights, multi_ev^, sym_boot_kind, sym_boot_param,
             random_strength, target_dim, row_weights, feature_fraction,
             score_function,
+            flags, permutation_count, ctr_permutation_id, max_ctr_complexity,
         )
-        text = gbdt_multi_host_model_text(multi_fit.model)
+        if len(flags) != 0:
+            text = gbdt_multi_host_model_text_ctr(multi_fit)
+        else:
+            text = gbdt_multi_host_model_text(multi_fit.model)
         losses = multi_fit.model.losses.copy()
         best_iteration = multi_fit.eval.best_iteration
         stopped_early = multi_fit.eval.stopped_early
@@ -2005,6 +2055,25 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 od_kind, od.auto_stop_p_value, od.iterations_wait,
                 use_best_model, best_model_min_trees,
             )
+            if len(flags) != 0:
+                # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): cat_features and
+                # one_hot_features columns on the non-symmetric driver, the
+                # symmetric categorical fit's prelude and every permutation
+                # (gbdt_oracle_depthwise.mojo::gbdt_ctr_host_fit_non_symmetric)
+                var pw_cat = gbdt_ctr_host_fit_non_symmetric(
+                    x, y, n_rows, n_features, pw_tp, flags, permutation_count,
+                    ctr_permutation_id, pw_ev^, max_ctr_complexity, pw_start,
+                    row_weights,
+                )
+                text = gbdt_text_with_bias(
+                    gbdt_ctr_host_ns_model_text(pw_cat),
+                    len(pw_cat.model.losses), pw_start,
+                )
+                losses = pw_cat.model.losses.copy()
+                best_iteration = pw_cat.model.best_iteration
+                stopped_early = pw_cat.model.stopped_early
+                test_losses = pw_cat.model.test_losses.copy()
+                return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
             var pw_ns = gbdt_host_fit_non_symmetric(
                 x, y, n_rows, n_features, pw_tp, pw_ev^, pw_start, row_weights
             )
@@ -2025,17 +2094,28 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 od_kind, od.auto_stop_p_value, od.iterations_wait,
                 use_best_model, best_model_min_trees,
             )
+            # lane gbdt-cpu-rest-4-cat (2026-11-23): categorical and one-hot
+            # columns (`flags`), `train`'s CTR options with them; the
+            # model text through the CTR writer and its `bias` record
             var pw_fit = gbdt_losses_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, pw_sym_ev^,
                 host_group_sizes, host_pair_winners, host_pair_losers,
                 host_pair_weights, pw_start, random_strength, row_weights,
-                feature_fraction, score_function,
+                feature_fraction, score_function, flags, permutation_count,
+                ctr_permutation_id, max_ctr_complexity,
             )
-            losses = pw_fit.model.losses.copy()
-            best_iteration = pw_fit.eval.best_iteration
-            stopped_early = pw_fit.eval.stopped_early
-            test_losses = pw_fit.eval.test_losses.copy()
-            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_fit.model^, pw_start))
+            losses = pw_fit.fit.model.losses.copy()
+            best_iteration = pw_fit.fit.eval.best_iteration
+            stopped_early = pw_fit.fit.eval.stopped_early
+            test_losses = pw_fit.fit.eval.test_losses.copy()
+            if len(flags) != 0:
+                text = gbdt_text_with_bias(
+                    gbdt_ctr_host_model_text(pw_fit), len(losses), pw_start
+                )
+            else:
+                text = gbdt_rmse_host_model_text(
+                    GbdtRmseHostFit(pw_fit.fit.model^, pw_start)
+                )
             return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
         # the grouped pointwise searcher (gbdt_oracle_pointwise_rank.mojo)
         var pw_model = gbdt_ranking_pointwise_host_fit(
@@ -2176,16 +2256,35 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             od_kind, od.auto_stop_p_value, od.iterations_wait,
             use_best_model, best_model_min_trees,
         )
-        var ns_model = gbdt_host_fit_non_symmetric(
-            x, y, n_rows, n_features, tp, ev^, ns_start, row_weights
-        )
-        text = gbdt_text_with_bias(
-            gbdt_host_ns_model_text(ns_model), len(ns_model.losses), ns_start
-        )
-        losses = ns_model.losses.copy()
-        best_iteration = ns_model.best_iteration
-        stopped_early = ns_model.stopped_early
-        test_losses = ns_model.test_losses.copy()
+        if len(flags) != 0:
+            # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): Logloss and RMSE with
+            # cat_features and one_hot_features columns on the non-symmetric
+            # driver (gbdt_oracle_depthwise.mojo::
+            # gbdt_ctr_host_fit_non_symmetric)
+            var cat_ns = gbdt_ctr_host_fit_non_symmetric(
+                x, y, n_rows, n_features, tp, flags, permutation_count,
+                ctr_permutation_id, ev^, max_ctr_complexity, ns_start,
+                row_weights,
+            )
+            text = gbdt_text_with_bias(
+                gbdt_ctr_host_ns_model_text(cat_ns), len(cat_ns.model.losses),
+                ns_start,
+            )
+            losses = cat_ns.model.losses.copy()
+            best_iteration = cat_ns.model.best_iteration
+            stopped_early = cat_ns.model.stopped_early
+            test_losses = cat_ns.model.test_losses.copy()
+        else:
+            var ns_model = gbdt_host_fit_non_symmetric(
+                x, y, n_rows, n_features, tp, ev^, ns_start, row_weights
+            )
+            text = gbdt_text_with_bias(
+                gbdt_host_ns_model_text(ns_model), len(ns_model.losses), ns_start
+            )
+            losses = ns_model.losses.copy()
+            best_iteration = ns_model.best_iteration
+            stopped_early = ns_model.stopped_early
+            test_losses = ns_model.test_losses.copy()
 
     return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
 

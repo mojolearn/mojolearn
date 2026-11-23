@@ -1,8 +1,8 @@
 diff --git a/gbdt/host/gbdt_oracle_depthwise.mojo b/gbdt/host/gbdt_oracle_depthwise.mojo
-index 4a8566df46..99e50a5286 100644
+index f1df6e2220..2160346e67 100644
 --- a/gbdt/host/gbdt_oracle_depthwise.mojo
 +++ b/gbdt/host/gbdt_oracle_depthwise.mojo
-@@ -1140,6 +1140,16 @@ def _ns_partition(
+@@ -1175,6 +1175,16 @@ def _ns_partition(
  # ===========================================================================
  
  
@@ -19,11 +19,11 @@ index 4a8566df46..99e50a5286 100644
  def gbdt_host_fit_non_symmetric(
      x_colmajor: List[Float32],
      y: List[Float32],
-@@ -1368,6 +1378,7 @@ def gbdt_host_fit_non_symmetric(
-                 + " values for a non-symmetric tree of " + String(n_bins) + " bins"
-             )
-         var scaled = rescaled_leaves(estimated, lr)
-+        _sabotage_leaf_ulp(scaled)
-         apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_bins)
-         for i in range(len(tree.node_feature)):
-             node_feature.append(tree.node_feature[i])
+@@ -1498,6 +1508,7 @@ def _ns_fit_core(
+                     + " values for a non-symmetric tree of " + String(n_bins) + " bins"
+                 )
+             var scaled = rescaled_leaves(estimated, lr)
++            _sabotage_leaf_ulp(scaled)
+             apply_scaled_leaves_host(cursors[p], scaled, row_index, offsets, sizes, n_bins)
+             # the EXPORTED ensemble is the estimation permutation's
+             if p == est_p:

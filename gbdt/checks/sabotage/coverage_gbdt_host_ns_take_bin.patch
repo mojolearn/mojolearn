@@ -1,0 +1,16 @@
+diff --git a/gbdt/host/gbdt_oracle_depthwise.mojo b/gbdt/host/gbdt_oracle_depthwise.mojo
+index f1df6e2220..cf8b9911ca 100644
+--- a/gbdt/host/gbdt_oracle_depthwise.mojo
++++ b/gbdt/host/gbdt_oracle_depthwise.mojo
+@@ -1020,8 +1020,10 @@ def _ns_bins_range(
+         var stop = False
+         while not stop:
+             var feature_val = (cindex[node_word[node] + r] >> node_shift[node]) & node_mask[node]
++            # SABOTAGE (coverage-gbdt-host_ns_take_bin): a one-hot node walks
++            # `>` instead of `==` (its TakeBin flag dropped)
+             var split = ns_node_goes_right(
+-                feature_val, UInt32(node_bin[node]), node_take_bin[node] != 0
++                feature_val, UInt32(node_bin[node]), False
+             )
+             stop = ns_walk_step(split, node_left[node], node_right[node], bin, node)
+         bins[r] = bin

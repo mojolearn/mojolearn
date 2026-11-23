@@ -164,6 +164,9 @@ struct GbdtOpts(Copyable, Movable):
     var loss_delta: Float64
     var od_pvalue: Float64
     var border_type: String
+    #: the largest feature combination (lane gbdt-cpu-rest-4-cat,
+    #: 2026-11-23); 1 builds none, as every unit before it fitted
+    var max_ctr_complexity: Int
 
     def __init__(out self, loss: String, n_estimators: Int, max_depth: Int = 6):
         self.loss = loss
@@ -203,6 +206,7 @@ struct GbdtOpts(Copyable, Movable):
         self.loss_delta = UNSET
         self.od_pvalue = UNSET
         self.border_type = ""
+        self.max_ctr_complexity = 1
 
     def deterministic(mut self):
         """The tests' pinned configuration: `bootstrap_type='No'`, `random_strength=0`."""
@@ -440,7 +444,7 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     s.i(_grow_code(o.grow_policy))
     s.i(o.max_leaves)
     s.i(o.min_data_in_leaf)
-    s.i(1)  # max_ctr_complexity: no feature combinations
+    s.i(o.max_ctr_complexity)  # 1: no feature combinations
     s.i(len(o.class_weights))
     for w in o.class_weights:  # small-loop(the class_weights argument)
         s.f(w)
@@ -1142,6 +1146,19 @@ def _twice[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises -> G
     return a^
 
 
+def _twice_text[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises -> GbdtFitOutcome:
+    """Two fits of a model with CTR columns: the same model text, learn and
+    held-out curves. No `predict(X)`: the host reader refuses a model with
+    `ctr_table` records (raw categorical input is expanded by HostGBDT), so
+    `_twice` cannot take one (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)."""
+    var a = fit[I](o, inp)
+    var b = fit[I](o, inp)
+    require(a.text == b.text, "two host fits returned different bytes: " + what)
+    require(same_f64(a.learn, b.learn) and same_f64(a.test, b.test),
+            "two host fits returned different curves: " + what)
+    return a^
+
+
 def _e3() raises -> GbdtInputs:
     return _fixed("e3-x.f32", 600, 6, "e3-yc.f32")
 
@@ -1216,8 +1233,132 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_symmetric_rest[I]()
     elif unit == 26:
         host_nonsym_rest[I]()
-    else:
+    elif unit == 22:
         host_ordered_weights[I]()
+    elif unit == 23:
+        host_cat_rest[I]()
+    else:
+        raise Error("gbdt host unit " + String(unit) + " has no body on this branch")
+
+
+def _cat_rest_inputs(yname: String) raises -> GbdtInputs:
+    """e3's six float columns, then three coded columns (lane
+    gbdt-cpu-rest-4-cat): 6 holds five categories (a CTR column under
+    cat_features, above one_hot_max_size 2), 7 holds two (one-hot under
+    cat_features), 8 holds four codes (a plain one_hot_features column).
+    Rows 0 to 4 carry every code, so each column is densely coded."""
+    var x = load_f32("e3-x.f32", 3600)
+    var extra = List[Float32](length=1800, fill=Float32(0))
+    for r in range(600):  # small-loop(three appended columns)
+        var a = abs(x[r])
+        var b = x[600 + r]
+        var c5 = Int(a * Float32(7.0)) % 5
+        var c2 = 1 if b > Float32(0.0) else 0
+        var c4 = Int(abs(b) * Float32(5.0)) % 4
+        if r < 5:
+            c5 = r
+            c2 = r % 2
+            c4 = r % 4
+        extra[r] = Float32(c5)
+        extra[600 + r] = Float32(c2)
+        extra[1200 + r] = Float32(c4)
+    for r in range(1800):  # small-loop(the appended columns into the fixture)
+        x.append(extra[r])
+    return GbdtInputs(x^, 600, 9, load_f32(yname, 600))
+
+
+def _cat_rest_opts(loss: String) -> GbdtOpts:
+    """A SymmetricTree fit at rate 0.1 with every work-changing option set."""
+    var o = GbdtOpts(loss, 6, 3)
+    o.learning_rate = 0.1
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = "Cosine"
+    o.deterministic()
+    return o^
+
+
+def host_cat_rest[I: GbdtImage]() raises:
+    """Categorical and one-hot columns on the SymmetricTree fits the host
+    refused by name until lane gbdt-cpu-rest-4-cat (2026-11-23), each fit
+    twice to the same bytes: Quantile with a CTR, a one-hot and a plain
+    one_hot_features column (four permutations; the columns move the
+    model), CrossEntropy with feature combinations (max_ctr_complexity 2),
+    MultiClass with CTR and one-hot columns and an eval set under the Iter
+    detector, MultiClassOneVsAll with sample weights and feature
+    combinations. Then `train`'s refusals in its words: QueryRMSE with
+    cat_features, YetiRank with one_hot_features, feature_fraction below 1
+    with a one_hot_features column. The categorical fits compare text and
+    curves (`_twice_text`: the host reader refuses a model with CTR tables).
+    Last, the Depthwise and Lossguide units of sub-lane
+    gbdt-cpu-rest-4-cat-ns (`host_cat_rest_ns`)."""
+    var reg = _cat_rest_inputs("e3-yr.f32")
+    var q = _cat_rest_opts("Quantile")
+    q.leaf_method = "Gradient"
+    q.leaf_iterations = 1
+    var mq0 = _twice[I](q, reg, "symmetric Quantile, numeric columns")
+    var qc = q.copy()
+    qc.cat_features = [6, 7]
+    qc.one_hot_features = [8]
+    var mq = _twice_text[I](qc, reg, "symmetric Quantile with CTR and one-hot columns")
+    require(mq.text != mq0.text, "symmetric Quantile: the categorical columns had no model effect")
+    require("ctr_table " in mq.text, "symmetric Quantile: no CTR table in the model text")
+    var clf = _cat_rest_inputs("e3-yc.f32")
+    var ce = _cat_rest_opts("CrossEntropy")
+    ce.cat_features = [6]
+    ce.max_ctr_complexity = 2
+    _ = _twice_text[I](ce, clf, "symmetric CrossEntropy with feature combinations")
+    var mc3 = _cat_rest_inputs("e3-y3.f32")
+    mc3.eval_x = mc3.x.copy()
+    mc3.eval_y = mc3.y.copy()
+    var mc = _cat_rest_opts("MultiClass")
+    mc.n_estimators = 10
+    mc.cat_features = [6, 7]
+    mc.od_type = "Iter"
+    mc.od_wait = 2
+    var mm = _twice_text[I](mc, mc3, "MultiClass with CTR and one-hot columns and an eval set")
+    require(len(mm.test) > 0, "categorical MultiClass: no held-out curve")
+    require("ctr_table " in mm.text, "categorical MultiClass: no CTR table in the model text")
+    var ova_in = _cat_rest_inputs("e3-y3.f32")
+    ova_in.weights = List[Float32](length=600, fill=Float32(0))
+    for r in range(600):  # small-loop(np.linspace(.5, 1.5, 600, dtype=float32))
+        ova_in.weights[r] = Float32(0.5 + Float64(r) / 599.0)
+    var ova = _cat_rest_opts("MultiClassOneVsAll")
+    ova.cat_features = [6]
+    ova.one_hot_features = [8]
+    ova.max_ctr_complexity = 2
+    _ = _twice_text[I](ova, ova_in, "weighted MultiClassOneVsAll with feature combinations")
+    # `train`'s refusals, its words, on both columns
+    var grouped = _cat_rest_inputs("e3-yr.f32")
+    grouped.group_sizes = List[UInt32](length=60, fill=UInt32(10))
+    var qr = _cat_rest_opts("QueryRMSE")
+    qr.cat_features = [6]
+    var refused = String("")
+    try:
+        _ = fit[I](qr, grouped)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, "with cat_features is not implemented here", "QueryRMSE with cat_features")
+    var yr = _cat_rest_opts("YetiRank")
+    yr.one_hot_features = [8]
+    refused = String("")
+    try:
+        _ = fit[I](yr, grouped)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, "with one_hot_features is not implemented", "YetiRank with one_hot_features")
+    var ff = _cat_rest_opts("RMSE")
+    ff.boost_from_average = 0
+    ff.leaf_iterations = 1
+    ff.one_hot_features = [8]
+    ff.feature_fraction = 0.5
+    refused = String("")
+    try:
+        _ = fit[I](ff, reg)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, "one_hot input refused", "feature_fraction with a one_hot_features column")
+    host_cat_rest_ns[I]()
 
 
 def _ns_opts(loss: String, policy: String, score: String) -> GbdtOpts:
@@ -1812,9 +1953,93 @@ def host_rest_gaps[I: GbdtImage]() raises:
     cat.boost_from_average = 0
     cat.leaf_iterations = 1
     cat.cat_features = [6]
-    var mcat = _twice[I](cat, cat_in, "RMSE with NaN beside a CTR column")
+    # (`_twice_text`: the host reader refuses a CTR model's predict, lane
+    # gbdt-cpu-rest-4-cat-ns)
+    var mcat = _twice_text[I](cat, cat_in, "RMSE with NaN beside a CTR column")
     require(len(mcat.text) > 0, "NaN beside CTR: empty model text")
 
+
+
+def _cat_ns_inputs(yname: String) raises -> GbdtInputs:
+    """e3's six float columns, then its three class codes (column 6: a CTR
+    column under cat_features, three categories above one_hot_max_size 2)
+    and code 2 against the rest (column 7: a one-hot column under
+    cat_features, or one_hot_features)."""
+    var x = load_f32("e3-x.f32", 3600)
+    var codes = load_f32("e3-y3.f32", 600)
+    for r in range(600):  # small-loop(one appended column)
+        x.append(codes[r])
+    for r in range(600):  # small-loop(one appended column)
+        x.append(Float32(1.0) if codes[r] == Float32(2.0) else Float32(0.0))
+    return GbdtInputs(x^, 600, 8, load_f32(yname, 600))
+
+
+def host_cat_rest_ns[I: GbdtImage]() raises:
+    """Depthwise and Lossguide over categorical columns, Plain boosting,
+    which the host refused by name until lane gbdt-cpu-rest-4-cat-ns
+    (2026-11-23), each fit twice to the same bytes: Depthwise Logloss over a
+    CTR column, Lossguide RMSE over a one-hot and a CTR column with sample
+    weights, Depthwise Quantile over a CTR column with an eval set, Lossguide
+    CrossEntropy over a one_hot_features column; and max_ctr_complexity 2
+    under Depthwise refused in `fit_with_test`'s words."""
+    var clf = _cat_ns_inputs("e3-yc.f32")
+    var dl = GbdtOpts("Logloss", 4, 3)
+    dl.deterministic()
+    dl.learning_rate = 0.1
+    dl.grow_policy = "Depthwise"
+    dl.cat_features = [6]
+    var mdl = _twice_text[I](dl, clf, "Depthwise Logloss over a CTR column")
+    require("\nntree 0 " in mdl.text, "Depthwise Logloss CTR: non-symmetric model text")
+    require("\nctr_table " in mdl.text, "Depthwise Logloss CTR: no ctr_table record")
+    var reg = _cat_ns_inputs("e3-yr.f32")
+    reg.weights = List[Float32](length=600, fill=Float32(0))
+    for r in range(600):  # small-loop(np.linspace(.5, 1.5, 600, dtype=float32))
+        reg.weights[r] = Float32(0.5 + Float64(r) / 599.0)
+    var lr = GbdtOpts("RMSE", 4, 4)
+    lr.deterministic()
+    lr.learning_rate = 0.1
+    lr.grow_policy = "Lossguide"
+    lr.max_leaves = 8
+    lr.cat_features = [6, 7]
+    var mlr = _twice_text[I](lr, reg, "weighted Lossguide RMSE over a one-hot and a CTR column")
+    require(" type cat " in mlr.text and " type ctr " in mlr.text,
+            "Lossguide RMSE: the one-hot and CTR feature records")
+    require(all_finite_f64(mlr.learn), "Lossguide RMSE CTR: nonfinite learn curve")
+    var qin = _cat_ns_inputs("e3-yr.f32")
+    qin.eval_x = qin.x.copy()
+    qin.eval_y = qin.y.copy()
+    var q = GbdtOpts("Quantile", 4, 3)
+    q.deterministic()
+    q.learning_rate = 0.1
+    q.grow_policy = "Depthwise"
+    q.cat_features = [6]
+    var mq = _twice_text[I](q, qin, "Depthwise Quantile over a CTR column with an eval set")
+    require(len(mq.test) > 0, "Depthwise Quantile CTR: no held-out curve")
+    var ce = GbdtOpts("CrossEntropy", 4, 4)
+    ce.deterministic()
+    ce.learning_rate = 0.1
+    ce.grow_policy = "Lossguide"
+    ce.max_leaves = 8
+    ce.one_hot_features = [7]
+    var mce = _twice[I](ce, clf, "Lossguide CrossEntropy over a one_hot_features column")
+    require(" type cat " in mce.text, "Lossguide CrossEntropy: no one-hot feature record")
+    var bad = GbdtOpts("Logloss", 2, 3)
+    bad.deterministic()
+    bad.grow_policy = "Depthwise"
+    bad.cat_features = [6]
+    bad.max_ctr_complexity = 2
+    var refused = False
+    try:
+        _ = fit[I](bad, clf)
+    except error:
+        require_fails_with(
+            String(error),
+            "max_ctr_complexity above 1 (feature combinations) is implemented"
+            " for grow_policy='SymmetricTree'; got Depthwise",
+            "max_ctr_complexity 2 under Depthwise",
+        )
+        refused = True
+    require(refused, "max_ctr_complexity 2 under Depthwise was silently accepted")
 
 def host_losses[I: GbdtImage](case_index: Int) raises:
     """`test_the_five_configurations_fit_on_the_host_when_built`."""

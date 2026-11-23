@@ -1,0 +1,13 @@
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+index 576068493d..13bb02421d 100644
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -5541,7 +5541,7 @@ def fit_with_test(
+                 # (`doc_parallel_boosting.h:526-528`); the others exist to
+                 # carry their own cursors forward and their weak models are
+                 # never read, so they are not accumulated.
+-                if p == est_p:
++                if p == learn_p:
+                     leaf_values.clear()
+                     # driver-loop: over the leaf values (leaves x approx_dim)
+                     for i in range(len(pv)):

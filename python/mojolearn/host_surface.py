@@ -825,6 +825,9 @@ TRAINING_LANE_NAMES = {
     # lane gbdt-cpu-rest-4-pwl (2026-11-23)
     "gbdt-pointwise-rest": "gradient boosting on the pointwise searcher with every one-output loss, boost_from_average resolved, border types, IncToDec and categorical columns",
     "gbdt-symmetric-rest": "gradient boosting on symmetric trees with the L2, NewtonL2 and NewtonCosine scores, Gradient leaves, boost_from_average on Logloss and CrossEntropy (Plain and Ordered) and class weights on a pointwise loss",
+    "gbdt-cat-rest": "gradient boosting with categorical and one-hot columns on the pointwise losses and the multiclass family",
+    # lane gbdt-cpu-rest-4-cat-ns (2026-11-23)
+    "gbdt-cat-nonsym": "gradient boosting with Depthwise and Lossguide trees on CTR and one-hot categorical columns",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1643,10 +1646,17 @@ ADAPTED_MODULES = {
 #: scores on the multi-output losses, boost_from_average outside `train`'s
 #: list (Plain SymmetricTree and Ordered), class weights with RMSE, the
 #: grouped losses and MultiRMSE, score codes without a calcer.
+#: Lane gbdt-cpu-rest-4-cat (2026-11-23): categorical and one-hot columns
+#: on every Plain fit the device trains: the SymmetricTree pointwise losses
+#: and the multiclass family (MultiRMSE over one_hot_features), every
+#: permutation and the tree CTRs, and Depthwise / Lossguide with Logloss,
+#: RMSE and the pointwise losses (sub-lane -ns), weights and eval sets
+#: included, through the one categorical prelude. Refused on BOTH columns
+#: in `train`'s words, so not CPU gaps: MultiRMSE with cat_features, the
+#: grouped losses with cat_features or one_hot_features, feature_fraction
+#: below 1 with either, feature combinations under Depthwise / Lossguide.
+#: The clause is deleted; NO_CPU_PATH is not empty, so the mechanism stays.
 NO_CPU_PATH = (
-    "gradient boosting training with a categorical or one-hot column "
-    "outside SymmetricTree with Logloss or RMSE and Plain boosting: the "
-    "categorical owners do not implement those combinations",
 
     "gradient boosting training at a (loss, grow_policy, score_function, "
     "leaf_estimation_method, bootstrap_type) combination outside the ones "
@@ -3012,6 +3022,13 @@ FAMILIES = (
             # lane gbdt-cpu-rest-4-sym (2026-11-23): the greedy SymmetricTree
             # scores, leaves and starts and the Ordered boost_from_average
             "gbdt-symmetric-rest",
+            # lane gbdt-cpu-rest-4-cat (2026-11-23): categorical columns on
+            # the symmetric pointwise losses and the multiclass family
+            "gbdt-cat-rest",
+            # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): Depthwise and
+            # Lossguide over CTR and one-hot columns
+            # (gbdt_oracle_depthwise.mojo::gbdt_ctr_host_fit_non_symmetric)
+            "gbdt-cat-nonsym",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4226,6 +4243,10 @@ PUBLIC_PENDING_LANES = {
     "gbdt-nonsym-rest": "no reference",
     "gbdt-pointwise-rest": "no reference",
     "gbdt-symmetric-rest": "no reference",
+    # lane gbdt-cpu-rest-4-cat (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-cat-rest": "no reference",
+    # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-cat-nonsym": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
