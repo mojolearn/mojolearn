@@ -184,12 +184,13 @@ def _ordered_gather_kernel(
         out_b.unsafe_store(i, bins.unsafe_load(row))
 
 
-def _ordered_apply_kernel[PERMUTATION_BINS: Bool = False](
+def _ordered_apply_kernel[PERMUTATION_BINS: Bool = False, RESCALE: Bool = False](
     permutation: MutPointer[UInt32, MutAnyOrigin],
     bins: MutPointer[UInt32, MutAnyOrigin],
     leaves: MutPointer[Float32, MutAnyOrigin],
     cursor: MutPointer[Float32, MutAnyOrigin],
     size_in: Int32,
+    rate: Float32,
 ):
     var size = Int(size_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -206,8 +207,16 @@ def _ordered_apply_kernel[PERMUTATION_BINS: Bool = False](
         # `identical_mul_add(leaf, rate, cursor)`, kept since 0.8.19 only to
         # hold its bits, so the Ordered learn cursor sat off the model it
         # trained (the defect fb11 fixed for the other fits). Bits change on
-        # every Ordered lane, every column together.
-        cursor.unsafe_store(i, cursor.unsafe_load(i) + leaves.unsafe_load(leaf))
+        # every Ordered lane, every column together. RESCALE: LEAVES are the
+        # raw leaves still (the one-step device path, whose leaves never
+        # leave the device): the same `rescaled_leaf` body here, then the
+        # same plain add, in this one launch (no rescale launch before it).
+        comptime if RESCALE:
+            cursor.unsafe_store(
+                i, cursor.unsafe_load(i) + rescaled_leaf(leaves.unsafe_load(leaf), rate)
+            )
+        else:
+            cursor.unsafe_store(i, cursor.unsafe_load(i) + leaves.unsafe_load(leaf))
 
 
 def ordered_estimate_and_apply(
@@ -255,7 +264,7 @@ def ordered_estimate_and_apply(
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_function[_ordered_apply_kernel[False]](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
-        cursor.unsafe_ptr(), Int32(apply_size),
+        cursor.unsafe_ptr(), Int32(apply_size), rate,
         grid_dim=((apply_size + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
     ctx.synchronize()

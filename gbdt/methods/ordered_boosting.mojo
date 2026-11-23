@@ -1610,7 +1610,7 @@ def _ordered_estimate_task(
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_function[_ordered_apply_kernel[False]](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
-        cursor.unsafe_ptr(), Int32(apply_size),
+        cursor.unsafe_ptr(), Int32(apply_size), opts.learning_rate,
         grid_dim=(_grid(apply_size), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
     )
     ctx.synchronize()
@@ -1758,18 +1758,22 @@ def _ordered_estimate_complete(
         ref d_est = est_ws[0].d_est
         trace.record_device(ctx, tag, d_est, n_leaves)
         est_times.begin(ctx)
-        # the model's rescale on the device, in place, BEFORE the apply: the
-        # cursor adds the rescaled leaves the model stores (lane
-        # gbdt-leaf-body; was after it, the apply fusing the rescale)
-        enqueue_scale_in_place(ctx, d_est, n_leaves, opts.learning_rate)
-        ctx.enqueue_function[_ordered_apply_kernel[False]](
+        # ONE launch per task, as before (lane gbdt-leaf-body): the apply
+        # forms `rescaled_leaf` of the raw leaf in the kernel and adds it,
+        # the statements the model's rescale below takes
+        ctx.enqueue_function[_ordered_apply_kernel[False, True]](
             permutation.unsafe_ptr(), bins.unsafe_ptr(), d_est.unsafe_ptr(),
             cursor.unsafe_ptr(), Int32(pending.apply_size),
+            opts.learning_rate,
             grid_dim=(_grid(pending.apply_size), 1, 1),
             block_dim=(ORDERED_BLOCK, 1, 1),
         )
         if want_leaves:
-            # the host model receives the rescaled leaves as they are
+            # the model's rescale on the device, in place, after the apply
+            # read the raw leaves (lane cpu4-gbdt): the same `rescaled_leaf`
+            # body (`scale_in_place_kernel`), so the host model receives
+            # the leaves the cursor added
+            enqueue_scale_in_place(ctx, d_est, n_leaves, opts.learning_rate)
             ctx.enqueue_copy(
                 dst_ptr=est_ws[0].h_est.unsafe_ptr(), src_buf=d_est
             )
@@ -1790,7 +1794,7 @@ def _ordered_estimate_complete(
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
     ctx.enqueue_function[_ordered_apply_kernel[False]](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
-        cursor.unsafe_ptr(), Int32(pending.apply_size),
+        cursor.unsafe_ptr(), Int32(pending.apply_size), opts.learning_rate,
         grid_dim=(_grid(pending.apply_size), 1, 1),
         block_dim=(ORDERED_BLOCK, 1, 1),
     )

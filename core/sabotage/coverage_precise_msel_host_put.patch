@@ -1,8 +1,8 @@
 diff --git a/core/msel_host.mojo b/core/msel_host.mojo
-index eef50f19ca..64fa5434fc 100644
+index d0e6a6295e..e339f1bcda 100644
 --- a/core/msel_host.mojo
 +++ b/core/msel_host.mojo
-@@ -95,7 +95,8 @@ struct MselHostStore(Defaultable, Movable):
+@@ -139,7 +139,8 @@ struct MselHostStore(Defaultable, Movable):
              raise Error("msel store: put needs at least one byte at a non-null address")
          var buf = List[UInt8](unsafe_uninit_length=n)
          unsafe_memcpy(dest=buf.unsafe_ptr(), src=_U8(unsafe_from_address=src_addr), count=n)
@@ -10,5 +10,5 @@ index eef50f19ca..64fa5434fc 100644
 +        buf[0] = buf[0] ^ UInt8(1)  # SABOTAGE (coverage-precise-core-msel_host_put): the stored copy's first byte has its low bit flipped
 +        return self._insert(buf^, n)  # SABOTAGE (coverage-precise-core-msel_host_put): the faulted copy is what the store keeps
  
-     def alloc(mut self, n: Int) raises -> Int:
+     def alloc(self, n: Int) raises -> Int:
          if n < 1:
