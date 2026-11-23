@@ -18,11 +18,13 @@ from bindings.sequential_model_file_door import (
 from sequence.sequential_checkpoint_run import _quote
 from bindings.sequential_keys_unpack import sequential_keys
 from bindings.py_balanced import py_item
-from autograd.model import FIT_STATE_WORDS
+from autograd.model import FIT_STATE_WORDS, parse_model
+from autograd.model_execution import model_float_words
+from autograd.model_verify import model_input_id_range
 from autograd.nn_optim import NN_SCHED_ARGS
 
 
-def _report_array(value: PythonObject, name: String, input: Bool, entries: PythonObject) raises -> String:
+def _report_array(value: PythonObject, name: String, input: Bool, entries: PythonObject, id_range: Int = 0) raises -> String:
     var nk = sequential_keys()
     var result = "{\"name\":" + _quote(name) + ",\"shape\":["
     for k in range(len(value.shape)):  # driver-loop: over verification array shape metadata
@@ -32,19 +34,24 @@ def _report_array(value: PythonObject, name: String, input: Bool, entries: Pytho
     result += "]"
     if input:
         result += ",\"dtype\":\"float32\""
+        if id_range > 0:
+            # the seeded values are ids in [0, id_range) (verify-model replays them from this field)
+            result += ",\"id_range\":" + String(id_range)
     var digest = sequential_file_digest(entries, Int(py=sequential_address(value)), Int(py=value.nbytes))
     _ = value  # the digested buffer stays owned through the native call
     return result + ",\"digest\":" + _quote(digest) + "}"
 
 
-def _sidecar(mut mods: NativeModules, model: PythonObject, path: PythonObject, entries: PythonObject, context: PythonObject) raises:
+def _sidecar(mut mods: NativeModules, model: PythonObject, path: PythonObject, entries: PythonObject, context: PythonObject,
+             id_range: Int) raises:
     var nk = sequential_keys()
     var fields = sequential_fields(model)
     var x = sequential_array(mods, Python.tuple(16, py_item(fields, nk[].k_n_features_in_)), py_item(context, nk[].k_float32), context)
-    _ = sequential_file_fill(entries, Int(py=sequential_address(x)), Int(py=x.size), 0, 0)
+    # a model whose first layer reads ids (an embedding) is probed with ids in its range, never floats
+    _ = sequential_file_fill(entries, Int(py=sequential_address(x)), Int(py=x.size), 0, 0, id_range)
     mods.released()
     var output = sequential_forward(mods, model, x, 0, PythonObject(None), entries, context)
-    var input_json = _report_array(x, "X", True, entries)
+    var input_json = _report_array(x, "X", True, entries, id_range)
     mods.released()
     var output_json = _report_array(output, "output", False, entries)
     mods.released()
@@ -119,6 +126,8 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
     var description_owner = sequential_native_description(mods, model, py_item(fields, nk[].k_n_features_in_), sample)
     var description = description_owner.downcast_value_ptr[SequentialDescription]()
     var program = description[].program.copy()
+    # the ids the model's first layer reads (0: it reads values), for the verify report's seeded probe
+    var id_range = model_input_id_range(parse_model(program, model_float_words(description[].scalars)))
     for k in range(len(description[].scalars)):  # driver-loop: over layer scalar options
         fp.append(description[].scalars[k])
     # lane nn-optim: the schedule's argument words after the layers' (autograd/model_checkpoint.mojo record v2)
@@ -132,7 +141,7 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
     var normalized = native_path(path)
     _ = sequential_file_save(entries, String(normalized), buffers, program, ip, fp, class_words)
     mods.released()
-    _sidecar(mods, model, normalized, entries, context)
+    _sidecar(mods, model, normalized, entries, context, id_range)
     _ = fields^
     _ = classes^
     return PythonObject(None)

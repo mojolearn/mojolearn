@@ -103,9 +103,9 @@ def test_seeded_inputs_are_exact_and_repeatable():
     a = np.empty((7, 9), np.float32)
     b = np.empty((7, 9), np.float32)
     c = np.empty((7, 9), np.float32)
-    _b().verify_fill(a.ctypes.data, a.size, 0, 0)
-    _b().verify_fill(b.ctypes.data, b.size, 0, 0)
-    _b().verify_fill(c.ctypes.data, c.size, 0, 1)
+    _b().verify_fill(a.ctypes.data, a.size, 0, 0, 0)
+    _b().verify_fill(b.ctypes.data, b.size, 0, 0, 0)
+    _b().verify_fill(c.ctypes.data, c.size, 0, 1, 0)
     assert a.tobytes() == b.tobytes()
     assert a.tobytes() != c.tobytes()
     assert a.min() >= -1.0 and a.max() < 1.0

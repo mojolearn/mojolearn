@@ -70,9 +70,11 @@ def _digest(b, a, name):
     return str(b.verify_digest(a.ctypes.data, a.nbytes))  # verification: verification digest of a host array after the run
 
 
-def _seeded(b, shapes, seed, kinds=None):
+def _seeded(b, shapes, seed, kinds=None, id_range=0):
     """Seeded inputs, one per model input. An input that holds token ids (a program input kind 1) gets
-    int32 zeros: every id table has row 0, and the report only needs a deterministic, valid input."""
+    int32 zeros: every id table has row 0, and the report only needs a deterministic, valid input.
+    ``id_range`` n > 0 (a Sequential model whose first layer reads ids, an embedding): Mojo writes seeded
+    ids in [0, n) as float32, the probe the save's report made (autograd/model_verify.mojo verify_fill)."""
     np = _np()
     arrays = []
     for k, shape in enumerate(shapes):  # glue: one buffer per model input
@@ -81,9 +83,20 @@ def _seeded(b, shapes, seed, kinds=None):
             continue
         a = np.empty(tuple(shape), dtype=np.float32)
         # Mojo writes the seeded values (input k is Philox stream k)
-        b.verify_fill(a.ctypes.data, a.size, int(seed), k)  # verification: verification inputs made before the run
+        b.verify_fill(a.ctypes.data, a.size, int(seed), k, int(id_range))  # verification: verification inputs made before the run
         arrays.append(a)
     return arrays
+
+
+def _sequential_id_range(model, exp_in):
+    """The id range of a Sequential model's seeded input: the expected report's (the save wrote it beside
+    its input), else n when the model's first layer is an embedding of n ids (its first argument), else 0."""
+    if exp_in and "id_range" in exp_in[0]:
+        return int(exp_in[0]["id_range"])
+    layers = model.layers
+    if layers and layers[0][0] == "embedding":
+        return int(layers[0][1][0])
+    return 0
 
 
 def _install(numeric_mode):
@@ -195,7 +208,8 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
         model = Sequential.load(path, numeric_mode=numeric_mode)
         if inputs is None:
             rows = int(exp_in[0]["shape"][0]) if exp_in else SEQUENTIAL_ROWS
-            arrays, names_in, source = _seeded(b, [(rows, model.n_features_in_)], seed), ["X"], "seeded"
+            id_range = _sequential_id_range(model, exp_in)
+            arrays, names_in, source = _seeded(b, [(rows, model.n_features_in_)], seed, id_range=id_range), ["X"], "seeded"
         else:
             names_in, arrays = _load_inputs(inputs, exp_names_in, 1)
             source = "file"

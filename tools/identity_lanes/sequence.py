@@ -532,7 +532,7 @@ def _sequence_tape_digest(B, a):
 def _sequence_tape_seeded(B, shape, seed, stream):
     a = np.empty(shape, dtype=np.float32)
     # cpu-route: verification inputs made in Mojo before the run
-    B.verify_fill(a.ctypes.data, a.size, seed, stream)
+    B.verify_fill(a.ctypes.data, a.size, seed, stream, 0)
     return a
 
 

@@ -14,7 +14,9 @@ on another. Python formats the report; every number in it comes from here
   verify_file_sha256         SHA-256 of a whole file (FIPS 180-4), 64 hex digits
   verify_model_info          the kind of a model file and its description hash
   verify_fill                the seeded inputs of a report, Philox4x32-10
-                             (core/philox.mojo) per element
+                             (core/philox.mojo) per element: values in
+                             [-1, 1), or ids in [0, n) for a model whose first
+                             layer reads ids (model_input_id_range)
 
 All of it is host side: a report is computed over files and over the host
 arrays a run returned, after the run (cpu-route: verification digests over
@@ -25,6 +27,8 @@ from core.philox import philox4x32_10
 from core.sha256 import sha256_hex
 from sequence.ops import FP
 from autograd.model_checkpoint import _seq_record
+from autograd.model import ModelSpec
+from autograd.model_blocks import block_input_id_range, is_block
 from training.checkpoint import (
     CKPT_SECTION_PROGRAM, CKPT_SECTION_SEQUENTIAL, read_checkpoint_unchecked,
 )
@@ -138,14 +142,27 @@ def verify_program_info(ext_ints: List[Int64], ext_floats: List[Float32]) -> Tup
 
 # ---------------------------------------------------------------- seeded inputs
 
-def verify_fill(addr: Int, count: Int, s: Int, st: Int) raises -> Int:
+def model_input_id_range(spec: ModelSpec) -> Int:
+    """n when the model's input values must be integer ids in [0, n) (its
+    first layer reads ids: autograd/model_blocks.mojo block_input_id_range),
+    else 0. The seeded probe of the model's report is made in that range."""
+    if spec.n_layers() < 1 or not is_block(spec.kinds[0]):
+        return 0
+    return block_input_id_range(spec.kinds[0], spec.xargs, 0)
+
+
+def verify_fill(addr: Int, count: Int, s: Int, st: Int, id_range: Int = 0) raises -> Int:
     """Fill `n` float32 values at `addr` with the report's seeded inputs:
     value i of input `stream` is Philox4x32-10 at counter (i low, i high,
     stream, 0) under key `seed`, its first word's top 24 bits u, as
-    u * 2^-23 - 1 in [-1, 1). Every step is exact in float32, so the values
-    are the same bits on every install."""
+    u * 2^-23 - 1 in [-1, 1). With `id_range` n > 0 (a model whose input is
+    ids, model_input_id_range) value i is the id (u * n) >> 24 in [0, n),
+    stored as its float32 (exact: n < 2^24). Every step is exact in float32
+    or in integers, so the values are the same bits on every install."""
     if count < 0 or s < 0 or st < 0 or st > 0xFFFFFFFF:
         raise Error("mojolearn: verify_fill takes n >= 0, seed >= 0 and a stream below 2^32")
+    if id_range < 0 or id_range >= 0x1000000:
+        raise Error("mojolearn: verify_fill takes an id range in [0, 2^24)")
     if count == 0:
         return 0
     var p = FP(unsafe_from_address=addr)
@@ -159,5 +176,8 @@ def verify_fill(addr: Int, count: Int, s: Int, st: Int) raises -> Int:
         )
         var r = philox4x32_10(ctr, key)
         var u = r[0] >> 8
-        p[i] = Float32(Int(u)) * step - Float32(1.0)
+        if id_range > 0:
+            p[i] = Float32((Int(u) * id_range) >> 24)
+        else:
+            p[i] = Float32(Int(u)) * step - Float32(1.0)
     return count

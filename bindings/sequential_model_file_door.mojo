@@ -87,9 +87,12 @@ def sequential_file_digest(entries: PythonObject, address: Int, nbytes: Int) rai
     return _file_text(text, 0, count)
 
 
-def sequential_file_fill(entries: PythonObject, address: Int, count: Int, seed: Int, stream: Int) raises -> Int:
+def sequential_file_fill(entries: PythonObject, address: Int, count: Int, seed: Int, stream: Int,
+                         id_range: Int) raises -> Int:
+    """The seeded probe: `count` float32 values at `address`, in [-1, 1), or
+    ids in [0, id_range) when id_range > 0 (autograd/model_verify.mojo verify_fill)."""
     var addresses: List[Int] = [address]
-    var ints: List[Int] = [count, seed, stream]
+    var ints: List[Int] = [count, seed, stream, id_range]
     var floats = List[Float64]()
     return _file_call(entries, MODEL_VERIFY_FILL, addresses, ints, floats)
 

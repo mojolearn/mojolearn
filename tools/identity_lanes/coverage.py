@@ -311,7 +311,7 @@ def _(ml, X, yc, yr, Xh=None):
     for k, shape in enumerate(((6, 8), (1, 8), (8, 1), (1, 1))):  # glue: four seeded weight buffers
         a = np.empty(shape, dtype=np.float32)
         # cpu-route: verification inputs made in Mojo before the run
-        B.verify_fill(a.ctypes.data, a.size, 21, k)
+        B.verify_fill(a.ctypes.data, a.size, 21, k, 0)
         init.append(a)
     with tempfile.TemporaryDirectory(prefix="ib-program-save-") as tmp:
         path = os.path.join(tmp, "net.mlprog")
