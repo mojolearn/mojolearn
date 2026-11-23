@@ -383,17 +383,16 @@ def _gbdt_fit_pointwise_arm(
     var random_strength = Float32(params.f(25))
     var border_build_max_samples = params.i(27)
     var boost_from_average = params.i(30)
-    var grow_code = params.i(31)
     var max_leaves = params.i(32)
     var min_data_in_leaf = params.i(33)
 
     # lane gbdt-cpu-rest-2 (2026-11-23): RMSE too, the loss's own target
     # kernel and the shared estimator (gbdt_oracle_pointwise.mojo)
     var pw_is_rmse = loss == String("RMSE")
+    # (grow_policy: the fit refused a non-symmetric policy before this arm,
+    # in `train`'s words; lane gbdt-cpu-rest-4-ns)
     if loss != String("Logloss") and not pw_is_rmse:
         _refuse_pointwise("loss='" + loss + "'")
-    if grow_code != 0:
-        _refuse_pointwise("grow_policy code " + String(grow_code))
     # lane gbdt-rest-3 (2026-11-23): the four score functions the public
     # API admits (SolarL2, LOOL2 and SatL2 are refused by the public API
     # itself, python/mojolearn/ensemble.py `_UNSUPPORTED_SCORE_FUNCTIONS`),
@@ -989,6 +988,16 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         raise Error(
             "gbdt_fit: grow_policy code must be 0 (SymmetricTree), 1"
             " (Depthwise) or 2 (Lossguide), got " + String(grow_code)
+        )
+    if grow_code != 0 and params.i(26) != 0:
+        # lane gbdt-cpu-rest-4-ns (2026-11-23): not a CPU gap; `train`
+        # refuses it first, in these words (gbdt/train.mojo), on every column
+        raise Error(
+            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher, an"
+            " OBLIVIOUS searcher; grow_policy="
+            + String("Depthwise" if grow_code == 1 else "Lossguide")
+            + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only"
+            " (pointwise_non_symmetric.cpp:5-29)"
         )
     var min_split_gain = Float64(-1)
     if len(params) >= fixed_and_weights + 1:
