@@ -4,7 +4,7 @@
 from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from bindings.native_loaded_module_door import native_loaded_module
 from std.os import getenv
-from bindings.x_prep_native_owner_run import xprep_r3, XprepInput, XprepRunInput, XprepRoute, XprepCaps, xprep_execute, xprep_release
+from bindings.x_prep_native_owner_run import xprep_r3, XprepInput, XprepRunInput, XprepRoute, XprepCaps, xprep_execute, xprep_release, XPREP_OWNER_NATIVE
 from std.time import perf_counter_ns
 from std.memory import ArcPointer
 from std.python import Python, PythonObject
@@ -327,8 +327,17 @@ def xprep_run_records(storage: PythonObject, host: Int, scratch: Int, output: Py
             var offset = item.offset
             var words = item.words
             if item.owner < 0:
-                # a program-owned parameter list: copied into the arena
-                run_inputs.append(XprepRunInput(offset, words, item.address, -1, False, 0, False, 0, 0, 0))
+                # a program-owned parameter list: copied into the arena; a
+                # typed RUN's native buffer (XPREP_OWNER_NATIVE) as large as
+                # a direct caller put goes on the device the same way
+                var native_put = (item.owner == XPREP_OWNER_NATIVE and ranges and dev_put_on
+                                  and words >= 1048576)
+                if native_put:
+                    for j in range(len(inout_ranges) // 2):  # driver-loop: over the program's in-out input ranges
+                        if inout_ranges[2 * j] == offset and inout_ranges[2 * j + 1] == offset + words:
+                            native_put = False
+                run_inputs.append(XprepRunInput(offset, words, item.address, -1, native_put,
+                                                words if native_put else 0, False, 0, 0, 0))
                 continue
             var record = owners[item.owner]
             var rows = Int(py=record[0]) == 1

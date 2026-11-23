@@ -1,18 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # The native owner of IterativeImputer (dispatched by bindings/prep_owner_native.mojo).
-# fit, fit_transform and transform are each one call here. The owner checks the
-# parameters, fits the initial SimpleImputer through the encode owner's native
-# SimpleImputer (bindings/prep_encode_native_door.mojo), and builds the x_prep programs
-# the Python `_Prog` built (the same stages, operands and arena order, so the same
-# bits): the statistics and imputation-order program, the n_nearest_features draw
-# program, the one program of rounds for the built-in Bayesian ridge, and
-# `_with_indicator`. A user estimator keeps the reference's rounds: it is cloned,
-# fitted and asked to predict once per (round, feature) step with the float32
-# blocks the gather programs produce, and its predictions are scattered back by
-# one program. The clone, fit and predict are the compiled operations of the
-# estimator's connected native plan (bindings/prep_native_estimator.mojo); its
-# Python fit, predict, get_params or constructor is never called.
-from std.math import isfinite
+# fit, fit_transform and transform are each one call here: UNPACK (the
+# parameter refusals, the selection, X, the initial SimpleImputer's words and,
+# for transform, the fitted fields and the addresses of the fitted vectors),
+# the typed RUN (x_prep/iterimp_run.mojo `iterimp_fit` / `iterimp_transform`:
+# the initial fill, the statistics and orders, the n_nearest_features draws,
+# every round of the built-in Bayesian ridge in one program, the indicator),
+# then PACK (the fitted attributes, read from the arenas the runner holds).
+# A user estimator keeps the reference's rounds after the typed prologue
+# (`iterimp_prepare`): it is cloned, fitted and asked to predict once per
+# (round, feature) step with the float32 blocks the gather programs produce,
+# and its predictions are scattered back by one program. The clone, fit and
+# predict are the compiled operations of the estimator's connected native plan
+# (bindings/prep_native_estimator.mojo); its Python fit, predict, get_params or
+# constructor is never called.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -23,54 +24,39 @@ from bindings.classical_arrays_door import classical_dtype_str, classical_addres
 from bindings.scaler_native_door import _ptr
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries, scaler_entries
-from bindings.x_prep_native_owner_door import xprep_values
+from bindings.x_prep_native_owner_door import xprep_values, xprep_storage, xprep_run_records
+from bindings.x_prep_native_owner_run import XprepInput, XprepCaps, XPREP_OWNER_NATIVE, xprep_r3
 from bindings.user_objects_native_door import user_objects_call
 from bindings.native_array_storage_door import native_array_unfilled
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
-from bindings.prep_stateless_native_door import _int_like, _repr, _name
+from bindings.prep_stateless_native_door import _int_like, _repr, _name, _fam
 from bindings.prep_native_estimator_door import prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has
-from bindings.prep_encode_prog_run import enc_ii_rows
+from bindings.prep_encode_prog_run import EncProgram, enc_ii_rows
+from bindings.prep_encode_imputer_run import (
+    ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT)
 from bindings.prep_encode_native_door import (
-    EncProg, _cs, _mark_missing, _imputer_fit, _imputer_transform, _precheck, _default_mode, _word, _iword,
-    _take1, _take2, _seed64, _seed_words, _truth, _float, _is_str, _check_width, _int_list, _index_list)
+    EncProg, enc_caps, IDN_STATS_BLOCKED, _precheck, _mark_missing, _missing_mark, _qselect, _real_like, _fitted_flat,
+    _imputer_transform, _default_mode, _word, _take1, _take2, _seed64, _truth, _float, _is_str,
+    _check_width, _int_list, _index_list)
 from bindings.prep_owner_route_unpack import prep_route_context
 from bindings.prep_keys_unpack import (
     prep_keys,
     PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_TRANSFORM,
 )
 from bindings.py_balanced import py_item
+from x_prep.iterimp_run import (
+    IterImpRunner, IterImpFit, IterImpFitted, IterImpApply, IterImpStep, iterimp_fit, iterimp_prepare,
+    iterimp_transform, iterimp_indicator, II_NONE, II_ASCENDING, II_DESCENDING, II_ROMAN, II_ARABIC, II_RANDOM)
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
 
-# x_prep stage codes (_expansion_prep._OPS).
-comptime OP_COL_STATS = 1
-comptime OP_EIGH = 18
-comptime OP_II_MEAN = 53
-comptime OP_II_GRAM = 54
-comptime OP_II_SUB = 55
-comptime OP_II_BR = 56
-comptime OP_II_PREDICT = 57
-comptime OP_II_SNAPSHOT = 58
+# x_prep stage codes (_expansion_prep._OPS) of the user-estimator route.
 comptime OP_II_CONV = 59
 comptime OP_NAN_MASK = 60
-comptime OP_II_SIGMA = 99
-comptime OP_II_POST = 100
 comptime OP_II_ROWABS = 107
 comptime OP_II_GATHER = 138
 comptime OP_II_SCATTER = 139
-comptime OP_HCAT = 140
-comptime OP_ABSCORR_CELL = 211
-comptime OP_ABSCORR_NORM = 212
-comptime OP_F2_WPICK = 234
-comptime OP_C2_II_MISS = 258
-comptime OP_C2_II_POS = 259
-comptime OP_C2_II_ORD = 260
-comptime OP_C2_II_RAND = 261
-comptime OP_C2_COLMAX = 262
-
-comptime NONE = -1
-comptime GOLDEN: UInt64 = 0x9E3779B97F4A7C15
 
 
 # ---------------------------------------------------------------- small helpers
@@ -87,23 +73,6 @@ def _u64_of(value: PythonObject) raises -> UInt64:
 def _u64_obj(value: UInt64) raises -> PythonObject:
     # The 64-bit word as a nonnegative Python int.
     return py_call(_b().int, PythonObject(String(value)))
-
-
-def _seed_put(mut p: EncProg, value: UInt64, context: PythonObject) raises -> Int:
-    # `_seed_words(pr, seed)`: the low and high words as signed int32.
-    return p.put_ints(_seed_words(Int(value & 0xFFFFFFFF), Int(value >> 32)), context)
-
-
-def _ones(nbl: List[Int], dk: Int) -> List[Float64]:
-    # `[1 if a in nbl else 0 for a in range(dk)]`
-    var out = List[Float64]()
-    for a in range(dk):  # driver-loop: over the kept features (one step's neighbour mask)
-        var hit = 0.0
-        for i in range(len(nbl)):  # driver-loop: over one step's drawn features
-            if nbl[i] == a:
-                hit = 1.0
-        out.append(hit)
-    return out^
 
 
 def _floats_of(values: List[Int]) -> List[Float64]:
@@ -235,26 +204,6 @@ def _per_bound(v: PythonObject, d: Int) raises -> List[Float64]:
     return out^
 
 
-def _bounds_k(model: PythonObject, d: Int, keep: List[Int]) raises -> List[Float64]:
-    var nk = prep_keys()
-    # `_bounds(d)` interleaved (zip stops at the shorter), then the kept columns'.
-    var fields = py_fields(model)
-    var lo = _per_bound(py_item(fields, nk[].k_min_value), d)
-    var hi = _per_bound(py_item(fields, nk[].k_max_value), d)
-    var bounds = List[Float64]()
-    for i in range(min(len(lo), len(hi))):  # driver-loop: over the per-column bound pairs
-        bounds.append(lo[i])
-        bounds.append(hi[i])
-    var out = List[Float64]()
-    for c in range(len(keep)):  # driver-loop: over the kept columns
-        for h in range(2):  # small-loop(h: the lower and upper bound)
-            var at = 2 * keep[c] + h
-            if at >= len(bounds):
-                raise Error("IndexError: list index out of range")
-            out.append(bounds[at])
-    return out^
-
-
 def _float_list(values: List[Float64]) raises -> PythonObject:
     var out = Python.list()
     for i in range(len(values)):  # driver-loop: over fitted per-column bounds
@@ -270,108 +219,6 @@ def _bounds_of(model: PythonObject) raises -> List[Float64]:
     for i in range(len(items)):  # driver-loop: over fitted per-column bounds
         out.append(_float(items[i]))
     return out^
-
-
-# ---------------------------------------------------------------- the draws
-struct _Draws(Movable):
-    """`_NeighbourDraws`: every (round, feature) step's n_nearest_features
-    draw, handed out in fit order; each hand-out moves the stream past the
-    words the steps taken so far own (k per step)."""
-    var lists: List[List[Int]]
-    var at: Int
-    var k: Int
-    var start: UInt64
-    var on: Bool
-
-    def __init__(out self):
-        self.lists = List[List[Int]]()
-        self.at = 0
-        self.k = 0
-        self.start = 0
-        self.on = False
-
-    def next(mut self, mut rng: UInt64) -> List[Int]:
-        var out = self.lists[self.at].copy()
-        self.at += 1
-        rng = self.start + UInt64(self.at) * UInt64(self.k) * GOLDEN
-        return out^
-
-
-def _neighbours(xf: PythonObject, n: Int, dk: Int, entries: PythonObject, js: List[Int], k: Int, rng: UInt64,
-                context: PythonObject) raises -> List[List[Int]]:
-    """`_neighbours_device`: the |corr| matrix on the device and one thread per
-    step drawing its k features (f2_wpick, step c takes splitmix64 words
-    c*k .. c*k + k - 1 of the stream). Returns each step's ascending picks."""
-    var p = EncProg()
-    var fo = p.put(xf, n * dk)
-    var mz = p.alloc(n * dk)
-    var means = p.alloc(dk)
-    var cnt = p.alloc(1)
-    var g = p.alloc(dk * dk)
-    var flag = p.alloc(1)
-    _stage(p.prog.program, OP_II_MEAN, dk, fo, n, dk, mz, 0, means, cnt, flag)
-    _stage(p.prog.program, OP_II_GRAM, dk * dk, fo, n, dk, mz, 0, means, g, flag)
-    var m = p.alloc(dk * dk)
-    _stage(p.prog.program, OP_ABSCORR_CELL, dk * dk, g, dk, m)
-    _stage(p.prog.program, OP_ABSCORR_NORM, dk, m, dk)
-    var calls = len(js)
-    var fl = p.work(calls * dk)
-    var out = p.alloc(calls * (k + 1))
-    var jo = p.put_ints(js, context)
-    var so = _seed_put(p, rng, context)
-    _stage(p.prog.program, OP_F2_WPICK, calls, m, dk, jo, k, so, fl, out)
-    var ran = p.run(entries, context)
-    var lists = List[List[Int]]()
-    for c in range(calls):  # driver-loop: one feature list per step
-        var got = _iword(ran, out + c * (k + 1) + k)
-        if got < k:
-            raise Error("mojolearn: IterativeImputer: no feature left to draw")
-        var picks = List[Int]()
-        for i in range(got):  # driver-loop: over one step's drawn features
-            picks.append(_iword(ran, out + c * (k + 1) + i))
-        lists.append(picks^)
-    return lists^
-
-
-# ---------------------------------------------------------------- shared programs
-def _prepare(mut p: EncProg, values: PythonObject, xf: PythonObject, keep: List[Int], bounds: List[Float64],
-             missing: PythonObject, context: PythonObject) raises -> Tuple[Int, Int, Int]:
-    """`_prepare(pr, arr, Xf, inout=True)`: the filled block (rewritten in
-    place and read back), its missing mask, the per-column bounds."""
-    var n = Int(py=values[3])
-    var d = Int(py=values[4])
-    var dk = len(keep)
-    var xo = _mark_missing(p, p.put_x(values), n * d, missing, context)
-    var fo = p.put_inout(xf, n * dk)
-    var ko = p.put_floats(_floats_of(keep), context)
-    var mo = p.alloc(n * dk)
-    _stage(p.prog.program, OP_NAN_MASK, n * dk, xo, n, d, ko, dk, mo)
-    var bo = p.put_floats(bounds, context)
-    return (fo, mo, bo)
-
-
-def _with_indicator(model: PythonObject, values: PythonObject, xt: PythonObject, dk: Int,
-                    context: PythonObject) raises -> PythonObject:
-    """`_with_indicator`: Xt, then MissingIndicator's columns (add_indicator)."""
-    var nk = prep_keys()
-    var fields = py_fields(model)
-    var indicator = _index_list(py_item(fields, nk[].k__indicator))
-    var m = len(indicator)
-    if m == 0:
-        return xt
-    var n = Int(py=values[3])
-    var d = Int(py=values[4])
-    var entries = _entries(py_item(fields, nk[].k_numeric_mode_), context)
-    var p = EncProg()
-    var xo = _mark_missing(p, p.put_x(values), n * d, py_item(fields, nk[].k_missing_values), context)
-    var mo = p.alloc(n * m)
-    var io = p.put_floats(_floats_of(indicator), context)
-    _stage(p.prog.program, OP_NAN_MASK, n * m, xo, n, d, io, m, mo)
-    var to = p.put(xt, n * dk)
-    var hc = p.output(n * (dk + m), entries)
-    _stage(p.prog.program, OP_HCAT, n * (dk + m), to, dk, mo, m, hc)
-    var ran = p.run(entries, context)
-    return _take2(ran, hc, n, dk + m, context)
 
 
 def _mask_arr(values: PythonObject, keep: List[Int], missing: PythonObject, entries: PythonObject,
@@ -558,13 +405,81 @@ def _nbl_of(value: PythonObject) raises -> List[Int]:
     return _index_list(value)
 
 
-# ---------------------------------------------------------------- fit
-def _initial(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`SimpleImputer(missing_values, strategy=initial_strategy, fill_value,
-    keep_empty_features).fit(arr)`, run by the encode owner's native fit."""
+# ---------------------------------------------------------------- the runner
+struct _DoorRunner(IterImpRunner):
+    """The RUN's programs over the x_prep transport of the operation's image
+    (`xprep_run_records`: UNPACK of X's record, the typed run with the GIL
+    released, cleanup). Owner 0 is X as `xprep_values` converted it; a
+    RUN-held or door-held native buffer (owner k >= 1) is an
+    XPREP_OWNER_NATIVE record at `seconds[k - 1]`. Each arena (and output
+    store) is held until `release` or the runner's end; PACK reads them
+    with `_take1` / `_take2` (`ran`)."""
+    var owners: List[PythonObject]
+    var entries: PythonObject
+    var context: PythonObject
+    var caps: XprepCaps
+    var held: List[PythonObject]
+    var addresses: List[Int]
+
+    def __init__(out self, values: PythonObject, entries: PythonObject, context: PythonObject, caps: XprepCaps):
+        self.owners = List[PythonObject]()
+        self.owners.append(values)
+        self.entries = entries
+        self.context = context
+        self.caps = caps
+        self.held = List[PythonObject]()
+        self.addresses = List[Int]()
+
+    def run(mut self, mut prog: EncProgram, seconds: List[Int]) raises -> Int:
+        prog.check_bound()
+        var host = prog.host
+        var scratch = prog.scratch_size
+        var out_words = prog.out_words
+        var device_scratch = scratch > 0 and (self.caps.has_out or self.caps.has_scratch)
+        var arena = xprep_storage(host + (0 if device_scratch else scratch), self.context)
+        var store = xprep_storage(out_words, self.context) if out_words > 0 else PythonObject(None)
+        var records = List[XprepInput](capacity=len(prog.inputs))
+        for i in range(len(prog.inputs)):  # driver-loop: over the program's input records
+            var record = prog.inputs[i]
+            if record.owner >= 1:
+                records.append(XprepInput(record.offset, record.words, seconds[record.owner - 1], XPREP_OWNER_NATIVE))
+            else:
+                records.append(record)
+        xprep_run_records(arena, host, scratch, store, out_words, prog.stage_words(), records, self.owners,
+                          self.entries, self.context, out_words, prog.inout_ranges, self.caps)
+        self.held.append(Python.tuple(arena, store))
+        self.addresses.append(Int(py=arena[1]))
+        return len(self.held) - 1
+
+    def words(self, handle: Int) -> Int:
+        return self.addresses[handle]
+
+    def release(mut self, handle: Int):
+        self.held[handle] = PythonObject(None)
+        self.addresses[handle] = 0
+
+
+def _f32_array(values: List[Float32], context: PythonObject) raises -> PythonObject:
+    # A fitted float32 vector (`_Prog.get(off, count)`) from the RUN's copy.
+    var nk = prep_keys()
+    var out = classical_typed(Python.tuple(len(values)), "<f4", py_item(context, nk[].k_output_context))
+    if len(values) > 0:
+        unsafe_memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(out))),
+                      src=F32P(unsafe_from_address=Int(values.unsafe_ptr())), count=len(values))
+    _ = values  # the RUN's copy stays alive through the native copy above
+    return out
+
+
+# ---------------------------------------------------------------- fit: UNPACK
+def _initial(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The initial `SimpleImputer(missing_values, strategy=initial_strategy,
+    fill_value, keep_empty_features)`: a fresh instance holding
+    SimpleImputer.__init__'s six parameters and this estimator's `device`
+    (None for an instance saved before the parameter existed), its route
+    resolved for this operation's context, its parameter refusals raised.
+    The RUN fits it; PACK stores its fitted fields."""
     var nk = prep_keys()
     var fields = py_fields(model)
-    # a fresh instance holding SimpleImputer.__init__'s six parameters
     var cls = py_item(py_item(context, nk[].k_prep_owner_classes), nk[].k_SimpleImputer)
     var imputer = py_call(_b().object.__new__, cls)
     var own = py_fields(imputer)
@@ -574,258 +489,235 @@ def _initial(model: PythonObject, values: PythonObject, context: PythonObject) r
     py_setitem(own, nk[].k_copy, PythonObject(True))
     py_setitem(own, nk[].k_add_indicator, PythonObject(False))
     py_setitem(own, nk[].k_keep_empty_features, py_item(fields, nk[].k_keep_empty_features))
-    # The initial imputer takes this estimator's `device` (None for an
-    # instance saved before the parameter existed), so `initial_imputer_`
-    # used on its own runs where its owner ran. Its route is resolved here,
-    # once per fit, for the context this operation runs in: the imputer's
-    # fit and transform below (and this estimator's later transforms) then
-    # read the selection and the run capabilities from that route (one
-    # record read each) where they made the full selection and the by-name
-    # reads. Nothing below reads `device`.
     py_setitem(own, nk[].k_device, py_get(fields, nk[].k_device))
     _ = prep_route_context(imputer, context)
     _precheck(imputer, "simple_imputer", context)
-    _imputer_fit(imputer, values, context)
     return imputer
 
 
-def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+def _initial_request(imputer: PythonObject, n: Int, d: Int, mode: PythonObject, entries: PythonObject,
+                     context: PythonObject) raises -> ImputerFit:
+    # `_imputer_fit`'s UNPACK of the initial imputer's parameters (X is owner 0).
+    var fields = py_fields(imputer)
+    var strategy_field = fields["strategy"]
+    var name = String(strategy_field) if _is_str(strategy_field) else String("")
+    var strategy = IMP_MEAN
+    if name == "median":
+        strategy = IMP_MEDIAN
+    elif name == "most_frequent":
+        strategy = IMP_MOST_FREQUENT
+    elif name == "constant":
+        strategy = IMP_CONSTANT
+    elif name != "mean":
+        raise Error("mojolearn: SimpleImputer strategy " + _repr(strategy_field) + " is not valid")
+    var konst = strategy == IMP_CONSTANT
+    var fill_value = fields["fill_value"]
+    if konst and fill_value is not None and not _real_like(fill_value, context):
+        raise Error("TypeError: mojolearn: SimpleImputer fill_value must be numeric")
+    var mark = _missing_mark(fields["missing_values"])
+    var fill = 0.0
+    if konst and fill_value is not None:
+        fill = _float(fill_value)
+    return ImputerFit(n, d, 0, mark[0], mark[1], strategy,
+                      strategy == IMP_MEDIAN and _qselect(mode, entries, context),
+                      (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0, fill, _truth(fields["keep_empty_features"]))
+
+
+def _order_code(fields: PythonObject) raises -> Int:
     var nk = prep_keys()
-    _refuse(model, context)
+    var name = String(py_item(fields, nk[].k_imputation_order))  # admitted by `_refuse`
+    if name == "descending":
+        return II_DESCENDING
+    if name == "roman":
+        return II_ROMAN
+    if name == "arabic":
+        return II_ARABIC
+    if name == "random":
+        return II_RANDOM
+    return II_ASCENDING
+
+
+def _fit_request(model: PythonObject, values: PythonObject, init: ImputerFit, mode: PythonObject,
+                 entries: PythonObject, caps: XprepCaps) raises -> IterImpFit:
+    # UNPACK: this estimator's parameters, read once into the typed request.
+    var nk = prep_keys()
     var b = _b()
     var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var mark = _missing_mark(py_item(fields, nk[].k_missing_values))
+    var nnf_field = py_item(fields, nk[].k_n_nearest_features)
+    var nnf = II_NONE if nnf_field is None else Int(py=py_call(b.int, nnf_field))
+    return IterImpFit(init.copy(), n, d, mark[0], mark[1], (_fam(mode, entries) & IDN_STATS_BLOCKED) != 0,
+                      xprep_r3("work"), caps.has_out, _order_code(fields),
+                      _truth(py_item(fields, nk[].k_skip_complete)), _truth(py_item(fields, nk[].k_sample_posterior)),
+                      _truth(py_item(fields, nk[].k_add_indicator)), Int(py=py_call(b.int, py_item(fields, nk[].k_max_iter))),
+                      nnf, _float(py_item(fields, nk[].k_tol)), _u64_of(py_item(fields, nk[].k_random_state)),
+                      _per_bound(py_item(fields, nk[].k_min_value), d), _per_bound(py_item(fields, nk[].k_max_value), d))
+
+
+# ---------------------------------------------------------------- fit: PACK
+def _pack_initial(model: PythonObject, imputer: PythonObject, fitted: IterImpFitted, mode: PythonObject, d: Int,
+                  context: PythonObject) raises:
+    """The initial imputer's fitted fields (`_imputer_fit`'s PACK: one object
+    for statistics_ and _fill when they are the same values), then this
+    estimator's fields that the prologue decided."""
+    var nk = prep_keys()
+    var own = py_fields(imputer)
+    var statistics = _f32_array(fitted.statistics, context)
+    py_setitem(own, "statistics_", statistics)
+    py_setitem(own, "_fill", statistics if fitted.shared else _f32_array(fitted.fill, context))
+    py_setitem(own, "_keep", _int_list(fitted.keep))
+    py_setitem(own, "_indicator", _int_list(List[Int]()))
+    py_setitem(own, "numeric_mode_", mode)
+    py_setitem(own, "n_features_in_", d)
+    var fields = py_fields(model)
+    py_setitem(fields, nk[].k_initial_imputer_, imputer)
+    py_setitem(fields, nk[].k__keep, _int_list(fitted.keep))
+    py_setitem(fields, nk[].k__bounds_k, _float_list(fitted.bounds))
+    py_setitem(fields, nk[].k__indicator, _int_list(fitted.indicator))
+    py_setitem(fields, nk[].k_n_features_with_missing_, PythonObject(fitted.n_missing))
+    py_setitem(fields, nk[].k_numeric_mode_, mode)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+
+
+def _nbl_obj(has: Bool, nbl: List[Int]) raises -> PythonObject:
+    if not has:
+        return PythonObject(None)
+    return _int_list(nbl)
+
+
+def _xt_address(xt: PythonObject, words: Int) raises -> Int:
+    # The (n, dk) float32 block's first word (an empty block is read by no record).
+    return Int(py=classical_address(xt)) if words > 0 else 0
+
+
+# ---------------------------------------------------------------- fit
+def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = prep_keys()
+    # UNPACK: the refusals, the selection (ONCE per operation: every program
+    # of the rounds runs on it), X, the initial imputer and the request.
+    _refuse(model, context)
+    var fields = py_fields(model)
     var mode = _default_mode(context)
-    # Selected ONCE per operation and passed to every program of the
-    # imputation rounds (was selected again by each take, put and stop of
-    # every round and feature). An estimator whose device route holds the
-    # selection for this context answers from it.
     var entries = scaler_entries(model, mode, context)
+    var caps = enc_caps(model, entries)
     var values = xprep_values(x, entries, context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    var rng = _u64_of(py_item(fields, nk[].k_random_state))
-    var post_step = 0
+    var imputer = _initial(model, context)
+    var request = _fit_request(model, values, _initial_request(imputer, n, d, mode, entries, context), mode,
+                               entries, caps)
+    var runner = _DoorRunner(values, entries, context, caps)
+    var estimator = py_item(fields, nk[].k_estimator)
+    if estimator is None:
+        # RUN: the built-in Bayesian ridge, every program typed (x_prep/iterimp_run.mojo)
+        var fitted = iterimp_fit(runner, request)
+        # PACK
+        _pack_initial(model, imputer, fitted, mode, d, context)
+        var dk = len(fitted.keep)
+        var got = runner.held[fitted.rounds]
+        py_setitem(fields, nk[].k_n_iter_, PythonObject(fitted.n_iter))
+        var sequence = Python.list()
+        for s in range(len(fitted.seq_j)):  # driver-loop: fitted imputation sequence views (finished imputation steps)
+            _ = py_call(sequence.append, Python.tuple(fitted.seq_j[s], _take1(got, fitted.seq_coef[s], dk, context),
+                                                      _take1(got, fitted.seq_inter[s], 1, context)))
+        py_setitem(fields, nk[].k_imputation_sequence_, sequence)
+        var post = Python.list()
+        for s in range(len(fitted.post_sig)):  # driver-loop: fitted posterior views (finished imputation steps)
+            var side = fitted.post_side[s]
+            _ = py_call(post.append, Python.tuple(_nbl_obj(fitted.post_has_nbl[s], fitted.post_nbl[s]),
+                                                  _take1(got, fitted.post_sig[s], side * side, context),
+                                                  _take1(got, fitted.post_al[s], 2, context),
+                                                  _take1(got, fitted.post_means[s], dk, context)))
+        py_setitem(fields, nk[].k__posterior, post)
+        py_setitem(fields, nk[].k__rng, _u64_obj(fitted.rng))
+        py_setitem(fields, nk[].k__post_step, PythonObject(fitted.post_step))
+        return _take2(runner.held[fitted.out_handle], fitted.out_offset, n, fitted.cols, context)
+    # A supplied estimator: the typed prologue (programs 1 to 4), then the
+    # reference's rounds over copies of the user estimator (its native plan)
+    var fitted = IterImpFitted()
+    var plan = iterimp_prepare(runner, request, fitted)
+    _pack_initial(model, imputer, fitted, mode, d, context)
+    var keep = fitted.keep.copy()
+    var dk = len(keep)
+    var bounds = fitted.bounds.copy()
+    var posterior = request.posterior
+    var rng = plan.rng
+    var mask = _mask_arr(values, keep, py_item(fields, nk[].k_missing_values), entries, context)
+    var xt = _take2(runner.held[plan.xf_handle], plan.xf_offset, n, dk, context)
+    runner.release(plan.xf_handle)
+    var seq = Python.list()
+    var done = 0
+    for r in range(len(plan.orders)):  # api-bound-loop: over the imputation rounds of the user-supplied estimator object (public type: a Mojolearn estimator); one clone and one fit of its native plan per feature each, through the Python object
+        var check = not posterior and len(plan.orders[r]) > 0
+        var prev = xt
+        for i in range(len(plan.orders[r])):  # api-bound-loop: over the round's features; one clone and one fit of the user-supplied estimator object's native plan each
+            var j = plan.orders[r][i]
+            var nbl = plan.draws.next(rng) if plan.draws.on else _others(dk, j)
+            var est = prep_estimator_clone(estimator, context)
+            var took = _ii_take(xt, mask, n, dk, j, nbl, entries, True, context)
+            _ = prep_estimator_call(est, "fit", Python.tuple(took.xo, took.yo), context)
+            _ = py_call(seq.append, Python.tuple(j, _int_list(nbl), est))
+            xt = _ii_put(xt, took.xm, took.rows, took.m, n, dk, j, est, posterior, bounds, entries, rng, context)
+        done = r + 1
+        if check and _ii_stop(xt, prev, n, dk, plan.tol, entries, context):
+            break
     py_setitem(fields, nk[].k__rng, _u64_obj(rng))
     py_setitem(fields, nk[].k__post_step, PythonObject(0))
-    var imputer = _initial(model, values, context)
-    py_setitem(fields, nk[].k_initial_imputer_, imputer)
-    var xf = _imputer_transform(imputer, values, context)
-    var keep = _index_list(py_item(py_fields(imputer), nk[].k__keep))
-    py_setitem(fields, nk[].k__keep, py_call(b.list, py_item(py_fields(imputer), nk[].k__keep)))
-    var dk = len(keep)
-    var bounds = _bounds_k(model, d, keep)
-    py_setitem(fields, nk[].k__bounds_k, _float_list(bounds))
-    var missing = py_item(fields, nk[].k_missing_values)
-    var order_name = String(py_item(fields, nk[].k_imputation_order))
-    var skip = _truth(py_item(fields, nk[].k_skip_complete))
-    var posterior = _truth(py_item(fields, nk[].k_sample_posterior))
-    # the statistics, the scale and the imputation orders: one program
-    var p = EncProg()
-    var xo = _mark_missing(p, p.put_x(values), n * d, missing, context)
-    var st = p.alloc(6 * d)
-    _cs(p, mode, entries, xo, n, d, st)
-    var rounds = Int(py=py_call(b.int, py_item(fields, nk[].k_max_iter)))
-    var R = max(rounds, 1)
-    var ordw = p.alloc(max(R * dk, 1))
-    var lens = p.alloc(R)
-    var sc = p.alloc(1)
-    _stage(p.prog.program, OP_C2_COLMAX, 1, st + 5 * d, d, sc)
-    if dk > 0:
-        var missd = p.work(dk)
-        var ko = p.put_ints(keep, context)
-        _stage(p.prog.program, OP_C2_II_MISS, dk, st, ko, n, missd)
-        if order_name == "random":
-            var so = _seed_put(p, rng, context)
-            _stage(p.prog.program, OP_C2_II_RAND, R, missd, dk, 1 if skip else 0, so, ordw, lens)
-        else:
-            var pos = p.work(dk)
-            var mcode = 0
-            if order_name == "descending":
-                mcode = 1
-            elif order_name == "roman":
-                mcode = 2
-            elif order_name == "arabic":
-                mcode = 3
-            _stage(p.prog.program, OP_C2_II_POS, dk, missd, dk, mcode, pos)
-            _stage(p.prog.program, OP_C2_II_ORD, dk, missd, dk, pos, R, ordw, lens)
-    var ran = p.run(entries, context)
-    var scale = Float64(_word(ran, sc))
-    if not isfinite(scale) and scale == scale and scale > 0.0:
-        raise Error("Input X contains infinity or a value too large for dtype('float64').")
-    var indicator = List[Int]()
-    if _truth(py_item(fields, nk[].k_add_indicator)):
-        for j in range(d):  # driver-loop: over the per-column non-missing counts (feature metadata)
-            if Int(_word(ran, st + j)) < n:
-                indicator.append(j)
-    py_setitem(fields, nk[].k__indicator, _int_list(indicator))
-    var ln = List[Int]()
-    for r in range(R):  # driver-loop: over the imputation rounds
-        ln.append(_iword(ran, lens + r) if dk > 0 else 0)
-    var orders = List[List[Int]]()
-    var any_order = False
-    var total_steps = 0
-    for r in range(rounds):  # driver-loop: the device's orders as control lists (imputation rounds)
-        var order = List[Int]()
-        for i in range(ln[r]):  # driver-loop: over one round's feature order
-            order.append(_iword(ran, ordw + r * dk + i))
-        any_order = any_order or len(order) > 0
-        total_steps += len(order)
-        orders.append(order^)
-    py_setitem(fields, nk[].k_n_features_with_missing_, PythonObject(ln[0]))
-    if order_name == "random":
-        var m = ln[0] if skip else dk
-        rng = rng + UInt64(rounds) * UInt64(max(m - 1, 0)) * GOLDEN
-        py_setitem(fields, nk[].k__rng, _u64_obj(rng))
-    py_setitem(fields, nk[].k_numeric_mode_, mode)
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    _ = ran^
-    # the n_nearest_features draws, every step up front in one program
-    var draws = _Draws()
-    var nnf = py_item(fields, nk[].k_n_nearest_features)
-    if nnf is not None and Int(py=py_call(b.int, nnf)) < dk:
-        draws.on = True
-        draws.k = Int(py=py_call(b.int, nnf))
-        draws.start = rng
-        var js = List[Int]()
-        for r in range(len(orders)):  # driver-loop: the (round, feature) step list
-            for i in range(len(orders[r])):  # driver-loop: over one round's feature order
-                js.append(orders[r][i])
-        if len(js) > 0:
-            draws.lists = _neighbours(xf, n, dk, entries, js, draws.k, rng, context)
-    var tol = _float(py_item(fields, nk[].k_tol)) * scale
-    var estimator = py_item(fields, nk[].k_estimator)
-    if estimator is not None:
-        # the reference's rounds over copies of the user estimator
-        var mask = _mask_arr(values, keep, missing, entries, context)
-        var xt = xf
-        var seq = Python.list()
-        var done = 0
-        for r in range(len(orders)):  # api-bound-loop: over the imputation rounds of the user-supplied estimator object (public type: a Mojolearn estimator); one clone and one fit of its native plan per feature each, through the Python object
-            var check = not posterior and len(orders[r]) > 0
-            var prev = xt
-            for i in range(len(orders[r])):  # api-bound-loop: over the round's features; one clone and one fit of the user-supplied estimator object's native plan each
-                var j = orders[r][i]
-                var nbl = draws.next(rng) if draws.on else _others(dk, j)
-                var est = prep_estimator_clone(estimator, context)
-                var took = _ii_take(xt, mask, n, dk, j, nbl, entries, True, context)
-                _ = prep_estimator_call(est, "fit", Python.tuple(took.xo, took.yo), context)
-                _ = py_call(seq.append, Python.tuple(j, _int_list(nbl), est))
-                xt = _ii_put(xt, took.xm, took.rows, took.m, n, dk, j, est, posterior, bounds, entries, rng, context)
-            done = r + 1
-            if check and _ii_stop(xt, prev, n, dk, tol, entries, context):
-                break
-        py_setitem(fields, nk[].k__rng, _u64_obj(rng))
-        py_setitem(fields, nk[].k_n_iter_, PythonObject(done if any_order else min(1, len(orders))))
-        py_setitem(fields, nk[].k_imputation_sequence_, seq)
-        return _with_indicator(model, values, xt, dk, context)
-    # the built-in Bayesian ridge: every round in one program
-    var q = EncProg()
-    var prep = _prepare(q, values, xf, keep, bounds, missing, context)
-    var fo = prep[0]
-    var mo = prep[1]
-    var bo = prep[2]
-    var to = q.put_floats(_one(tol), context)
-    var flag = q.alloc(1)
-    var niter = q.alloc(1)
-    var prev = q.alloc(n * dk)
-    var cnt = q.alloc(1)
-    var g = q.alloc(dk * dk)
-    var p1 = max(dk - 1, 1)
-    var gs = q.alloc(p1 * p1)
-    var eig = q.alloc(p1)
-    var vec = q.alloc(p1 * p1)
-    var w = q.alloc(p1)
-    var seq_j = List[Int]()
-    var seq_coef = List[Int]()
-    var seq_inter = List[Int]()
-    var post_nbl = Python.list()
-    var post_sig = List[Int]()
-    var post_al = List[Int]()
-    var post_means = List[Int]()
-    var post_pp = List[Int]()
-    var seed = Int(rng & 0x7FFFFFFF)
-    var conv = not posterior
-    var rowabs = -1
-    for r in range(rounds):  # driver-loop: drives the device imputation rounds (imputation rounds)
-        if len(orders[r]) > 0 and conv:
-            _stage(q.prog.program, OP_II_SNAPSHOT, n * dk, fo, prev, flag)
-        for i in range(len(orders[r])):  # driver-loop: drives one device regression per feature (per-round feature order)
-            var j = orders[r][i]
-            var coef = q.alloc(dk)
-            var inter = q.alloc(1)
-            var means = q.alloc(dk)
-            var nb1 = 0
-            var pp = dk - 1
-            var nbl_obj = PythonObject(None)
-            if draws.on:
-                var nbl = draws.next(rng)
-                nb1 = q.put_floats(_ones(nbl, dk), context) + 1
-                pp = len(nbl)
-                nbl_obj = _int_list(nbl)
-            var al = q.alloc(2) if posterior else -1
-            seq_j.append(j)
-            seq_coef.append(coef)
-            seq_inter.append(inter)
-            _stage(q.prog.program, OP_II_MEAN, dk, fo, n, dk, mo, j, means, cnt, flag)
-            _stage(q.prog.program, OP_II_GRAM, dk * dk, fo, n, dk, mo, j, means, g, flag)
-            if pp > 0:
-                _stage(q.prog.program, OP_II_SUB, 1, g, dk, j, gs, flag, nb1)
-                _stage(q.prog.program, OP_EIGH, 1, gs, pp, 0, eig, vec, 1)  # q[5]=1: cyclic eigh_unit, not round-robin
-            _stage(q.prog.program, OP_II_BR, 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w, nb1, al + 1)
-            if posterior:
-                var sig = q.alloc(max(pp, 1) * max(pp, 1))
-                _stage(q.prog.program, OP_II_SIGMA, pp * pp, eig, vec, pp, al, sig, flag)
-                var key_words = List[Int]()
-                key_words.append(seed)
-                key_words.append(post_step)
-                var key = q.put_ints(key_words, context)
-                post_step += 1
-                _stage(q.prog.program, OP_II_POST, n, fo, n, dk, mo, j, coef, inter, bo, flag, means, sig, al, nb1, key)
-                _ = py_call(post_nbl.append, nbl_obj)
-                post_sig.append(sig)
-                post_al.append(al)
-                post_means.append(means)
-                post_pp.append(pp)
-            else:
-                _stage(q.prog.program, OP_II_PREDICT, n, fo, n, dk, mo, j, coef, inter, bo, flag)
-        if len(orders[r]) > 0 and conv:
-            if rowabs < 0:
-                rowabs = q.alloc(n)
-            _stage(q.prog.program, OP_II_ROWABS, n, fo, prev, dk, rowabs, flag)
-            _stage(q.prog.program, OP_II_CONV, 1, fo, prev, n * dk, to, flag, niter, dk, rowabs + 1)
-    var got = q.run(entries, context)
-    var done = 0
-    if any_order:
-        done = Int(_word(got, niter)) if conv else rounds
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(done if any_order else min(1, rounds)))
-    var steps = 0
-    for r in range(min(done, len(orders))):  # driver-loop: count of finished imputation steps (imputation rounds)
-        steps += len(orders[r])
-    var sequence = Python.list()
-    for s in range(min(steps, len(seq_j))):  # driver-loop: fitted imputation sequence views (finished imputation steps)
-        _ = py_call(sequence.append, Python.tuple(seq_j[s], _take1(got, seq_coef[s], dk, context),
-                                                  _take1(got, seq_inter[s], 1, context)))
-    py_setitem(fields, nk[].k_imputation_sequence_, sequence)
-    var post = Python.list()
-    for s in range(min(steps, len(post_sig))):  # driver-loop: fitted posterior views (finished imputation steps)
-        var side = max(post_pp[s], 1)
-        _ = py_call(post.append, Python.tuple(post_nbl[s], _take1(got, post_sig[s], side * side, context),
-                                              _take1(got, post_al[s], 2, context), _take1(got, post_means[s], dk, context)))
-    py_setitem(fields, nk[].k__posterior, post)
-    py_setitem(fields, nk[].k__rng, _u64_obj(rng))
-    py_setitem(fields, nk[].k__post_step, PythonObject(post_step))
-    var xt = _take2(got, fo, n, dk, context)
-    return _with_indicator(model, values, xt, dk, context)
+    py_setitem(fields, nk[].k_n_iter_, PythonObject(done if plan.any_order else min(1, len(plan.orders))))
+    py_setitem(fields, nk[].k_imputation_sequence_, seq)
+    if len(fitted.indicator) == 0:
+        return xt
+    var made = iterimp_indicator(runner, n, d, dk, request.mark, request.missing, fitted.indicator,
+                                 _xt_address(xt, n * dk), request.work_on, request.region)
+    _ = xt  # the block the indicator program read stays alive past it
+    return _take2(runner.held[made[0]], made[1], n, dk + len(fitted.indicator), context)
 
 
 # ---------------------------------------------------------------- transform
+def _steps(sequence: PythonObject, posts: PythonObject, posterior: Bool) raises -> List[IterImpStep]:
+    """UNPACK of the fitted steps: each step's feature and the addresses of its
+    coef and intercept vectors (and, with sample_posterior, its neighbour list
+    and the addresses and sizes of its sigma, alpha and means). The door
+    keeps `sequence` and `posts` alive through the RUN."""
+    var out_steps = List[IterImpStep]()
+    for s in range(len(sequence)):  # driver-loop: over the fitted imputation steps (one record read each)
+        var step = sequence[s]
+        var has = False
+        var nbl = List[Int]()
+        var sig = 0
+        var sig_words = 0
+        var al = 0
+        var al_words = 0
+        var means = 0
+        var means_words = 0
+        if posterior:
+            var post = posts[s]
+            if post[0] is not None:
+                has = True
+                nbl = _nbl_of(post[0])
+            sig_words = Int(py=post[1].size)
+            al_words = Int(py=post[2].size)
+            means_words = Int(py=post[3].size)
+            sig = Int(py=classical_address(post[1])) if sig_words > 0 else 0
+            al = Int(py=classical_address(post[2])) if al_words > 0 else 0
+            means = Int(py=classical_address(post[3])) if means_words > 0 else 0
+        out_steps.append(IterImpStep(Int(py=step[0]), Int(py=classical_address(step[1])),
+                                     Int(py=classical_address(step[2])), has, nbl^, sig, sig_words, al, al_words,
+                                     means, means_words))
+    return out_steps^
+
+
 def _transform(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = prep_keys()
+    # UNPACK
     var fields = py_fields(model)
     if not py_contains(fields, nk[].k_imputation_sequence_):
         raise Error("RuntimeError: mojolearn: this IterativeImputer instance is not fitted yet")
     var mode = py_item(fields, nk[].k_numeric_mode_)
     var entries = scaler_entries(model, mode, context)  # once per operation; passed to every round's programs
+    var caps = enc_caps(model, entries)
     var values = xprep_values(x, entries, context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -836,12 +728,15 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
     var imputer = py_item(fields, nk[].k_initial_imputer_)
     if not py_contains(py_fields(imputer), nk[].k_n_features_in_):
         raise Error("RuntimeError: mojolearn: this " + _name(imputer) + " instance is not fitted yet")
-    # `initial_imputer_.transform(arr)`: X as converted above
-    var xf = _imputer_transform(imputer, values, context)
     var posterior = _truth(py_item(fields, nk[].k_sample_posterior))
     var rng = _u64_of(py_item(fields, nk[].k__rng))
     var sequence = py_item(fields, nk[].k_imputation_sequence_)
+    var indicator = _index_list(py_item(fields, nk[].k__indicator))
+    var mark = _missing_mark(py_item(fields, nk[].k_missing_values))
+    var runner = _DoorRunner(values, entries, context, caps)
     if py_item(fields, nk[].k_estimator) is not None:
+        # `initial_imputer_.transform(arr)`: X as converted above
+        var xf = _imputer_transform(imputer, values, context)
         # The mask runs in the process mode (as the Python ran it): the
         # operation's selection when that is the fitted mode's object, else
         # its own selection, once.
@@ -855,45 +750,33 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
             var took = _ii_take(xt, mask, n, dk, j, _nbl_of(step[1]), entries, False, context)
             xt = _ii_put(xt, took.xm, took.rows, took.m, n, dk, j, step[2], posterior, bounds, entries, rng, context)
         py_setitem(fields, nk[].k__rng, _u64_obj(rng))
-        return _with_indicator(model, values, xt, dk, context)
-    var p = EncProg()
-    var prep = _prepare(p, values, xf, keep, bounds, py_item(fields, nk[].k_missing_values), context)
-    var fo = prep[0]
-    var mo = prep[1]
-    var bo = prep[2]
-    var seed = Int(rng & 0x7FFFFFFF)
-    var post_step = Int(py=py_call(_b().int, py_item(fields, nk[].k__post_step)))
+        if len(indicator) == 0:
+            return xt
+        var made = iterimp_indicator(runner, n, d, dk, mark[0], mark[1], indicator, _xt_address(xt, n * dk),
+                                     xprep_r3("work"), caps.has_out)
+        _ = xt  # the block the indicator program read stays alive past it
+        return _take2(runner.held[made[0]], made[1], n, dk + len(indicator), context)
+    # The initial imputer's transform words (`_imputer_transform`'s UNPACK)
+    var own = py_fields(imputer)
+    _check_width(imputer, d)
+    var init_mark = _missing_mark(own["missing_values"])
+    var fill = _fitted_flat(imputer, "_fill", own["_fill"], context)
+    var fill_words = Int(py=fill[2])
+    var init = ImputerApply(n, d, 0, init_mark[0], init_mark[1], 1, fill_words, _index_list(own["_keep"]),
+                            _index_list(own["_indicator"]))
     var posts = py_item(fields, nk[].k__posterior) if posterior else PythonObject(None)
-    for s in range(len(sequence)):  # driver-loop: drives one device regression per step (fitted imputation steps)
-        var step = sequence[s]
-        var j = Int(py=step[0])
-        var coef = step[1]
-        var inter = step[2]
-        var co = p.put(coef, dk)
-        var io = p.put(inter, 1)
-        if posterior:
-            var post = posts[s]
-            var nb1 = 0
-            if post[0] is not None:
-                nb1 = p.put_floats(_ones(_nbl_of(post[0]), dk), context) + 1
-            var key_words = List[Int]()
-            key_words.append(seed)
-            key_words.append(post_step)
-            var key = p.put_ints(key_words, context)
-            post_step += 1
-            var sig = post[1]
-            var al = post[2]
-            var means = post[3]
-            var mo2 = p.put(means, Int(py=means.size))
-            var so2 = p.put(sig, Int(py=sig.size))
-            var ao2 = p.put(al, Int(py=al.size))
-            _stage(p.prog.program, OP_II_POST, n, fo, n, dk, mo, j, co, io, bo, NONE, mo2, so2, ao2, nb1, key)
-        else:
-            _stage(p.prog.program, OP_II_PREDICT, n, fo, n, dk, mo, j, co, io, bo, NONE)
-    var ran = p.run(entries, context)
-    py_setitem(fields, nk[].k__post_step, PythonObject(post_step))
-    var xt = _take2(ran, fo, n, dk, context)
-    return _with_indicator(model, values, xt, dk, context)
+    var request = IterImpApply(init^, Int(py=classical_address(fill[1])), n, d, mark[0], mark[1], xprep_r3("work"),
+                               caps.has_out, keep^, bounds^, indicator^, posterior, Int(rng & 0x7FFFFFFF),
+                               Int(py=py_call(_b().int, py_item(fields, nk[].k__post_step))),
+                               _steps(sequence, posts, posterior))
+    # RUN (x_prep/iterimp_run.mojo)
+    var applied = iterimp_transform(runner, request)
+    _ = fill  # the fitted fill vector the RUN read stays alive past it
+    _ = sequence  # and the fitted steps' vectors
+    _ = posts
+    # PACK
+    py_setitem(fields, nk[].k__post_step, PythonObject(applied.post_step))
+    return _take2(runner.held[applied.out_handle], applied.out_offset, n, applied.cols, context)
 
 
 # ---------------------------------------------------------------- the door
