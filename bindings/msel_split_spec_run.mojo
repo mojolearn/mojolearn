@@ -31,6 +31,7 @@ from std.builtin.sort import sort
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.entry_table import EntryRef, entry_ref_unresolved
 from bindings.msel_split_plan_run import (
     MselSeed, MselSplitRoute, MselSplitPlan, MselCodes, MselSizeWord, msel_size_none, msel_split_route_none,
     msel_split_fill, msel_code_counts, MSEL_LABELS_SORTED, msel_plan_kfold, msel_plan_stratified,
@@ -61,6 +62,9 @@ comptime MSEL_SPEC_GROUP_SHUFFLE = 12
 comptime MSEL_SPEC_STRATIFIED_SHUFFLE = 13
 comptime MSEL_SPEC_REPEATED_KFOLD = 14
 comptime MSEL_SPEC_REPEATED_STRATIFIED_KFOLD = 15
+#: A user's (train, test) index pairs (a list, or an `_IterableCV`'s stored
+#: pairs; the door's `_IterableCV` code), read once at UNPACK.
+comptime MSEL_SPEC_LISTED = 16
 
 comptime _CHUNK = 64
 comptime _INDEX_SPAN = 16777216
@@ -92,7 +96,11 @@ struct MselSplitSpec(Copyable, Movable, Defaultable):
     as sorted-order codes (`folds`, `fold_classes` of them) and the codes it
     splits on (`wants`: every fold value but -1). `route`: the entries the
     splitters call (pinned by the admission); `sabotage`: the door's
-    dormant negative control word."""
+    dormant negative control word. LISTED: the user's pairs (`listed_train`,
+    `listed_test`, int64 rows as given). `int_cv`: the spec stands for an
+    integer cv (an unshuffled KFold of `k` folds; its caller applies its own
+    integer rules first). `rows_helpers`: the caller's base helper table
+    (an x_linear CV member's, for its fold-id and role passes)."""
 
     var kind: Int
     var k: Int
@@ -112,6 +120,10 @@ struct MselSplitSpec(Copyable, Movable, Defaultable):
     var wants: List[Int]
     var route: MselSplitRoute
     var sabotage: Bool
+    var listed_train: List[List[Int64]]
+    var listed_test: List[List[Int64]]
+    var int_cv: Bool
+    var rows_helpers: EntryRef
 
     def __init__(out self):
         self.kind = MSEL_SPEC_NONE
@@ -132,6 +144,10 @@ struct MselSplitSpec(Copyable, Movable, Defaultable):
         self.wants = List[Int]()
         self.route = msel_split_route_none()
         self.sabotage = False
+        self.listed_train = List[List[Int64]]()
+        self.listed_test = List[List[Int64]]()
+        self.int_cv = False
+        self.rows_helpers = entry_ref_unresolved()
 
 
 struct MselGroupCodes(Movable):
@@ -405,6 +421,10 @@ def msel_spec_sides(spec: MselSplitSpec, n: Int, codes: Int, classes: Int,
         for r in range(spec.repeats):  # driver-loop: over repeats (one plan and one fill each, as the door)
             _take(route, msel_plan_repeat(route, n, labels, MSEL_LABELS_SORTED, spec.k, stratified, spec.seed, r),
                   sides, codes, n, classes)
+    elif kind == MSEL_SPEC_LISTED:
+        for s in range(len(spec.listed_test)):  # driver-loop: over the user's pairs (copies; the caller checks them)
+            sides.train.append(spec.listed_train[s].copy())
+            sides.test.append(spec.listed_test[s].copy())
     else:
         raise Error("RuntimeError: mojolearn: a splitter spec of unknown kind " + String(kind))
     _ = len(groups.codes)  # the plans and fills read the group codes through their address

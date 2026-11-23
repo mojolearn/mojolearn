@@ -50,6 +50,8 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_arrays_door import classical_wrap_array
 from bindings.classical_warnings_unpack import classical_warning
 from bindings.prep_native_estimator_door import prep_native_context, prep_native_split
+from bindings.msel_split_unpack import msel_split_route, msel_split_finish
+from bindings.msel_split_plan_run import MselSplitPlan, MselSeed, msel_plan_kfold
 from bindings.msel_inputs_unpack import msel_admit
 from bindings.admitted_input_unpack import admit_weight_words, admitted_vector, admitted_storage_native, admit_ids
 from bindings.py_optional import py_or_none, py_present
@@ -154,42 +156,20 @@ def _xl_cv_splits(cv: PythonObject, x_source: PythonObject, y_source: PythonObje
 
 
 def _xl_default_folds(n: Int, k: Int, context: PythonObject) raises -> PythonObject:
-    """`KFold(n_splits=k).split(...)` unshuffled: contiguous folds by the
-    core helpers (`fold_ids` with no codes, `select_fold_i64`)."""
-    var fold_store = admitted_vector(n, "<i4", context)
-    var fold_counts = admitted_vector(k, "<i8", context)
-    var class_counts = admitted_vector(1, "<i8", context)
-    _ = py_call_typed(_xl_helper(context, "fold_ids"), PythonObject(0), PythonObject(n), PythonObject(0), PythonObject(k),
-                      PythonObject(labels_address(class_counts)), PythonObject(labels_address(fold_store)),
-                      PythonObject(labels_address(fold_counts)))
-    _ = class_counts  # keep the Python object alive through the native call above
-    _ = fold_store  # keep the Python object alive through the native call above
-    _ = fold_counts  # keep the Python object alive through the native call above
-    var select = _xl_helper(context, "select_fold_i64")
-    var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=labels_address(fold_counts))
-    _ = fold_counts  # keep the Python object alive through the native call above
-    var out = Python.list()
-    for fold in range(k):  # driver-loop: over the cv folds
-        var size = Int(counts[fold])
-        _ = fold_counts  # keep the Python object alive through the native call above
-        var test = admitted_vector(size, "<i8", context)
-        var train = admitted_vector(n - size, "<i8", context)
-        var scratch = admitted_vector(n, "<i8", context)
-        var got = _int(py_call_typed(select, PythonObject(labels_address(fold_store)), PythonObject(n), PythonObject(fold),
-                                     PythonObject(labels_address(test) if size > 0 else labels_address(scratch)),
-                                     PythonObject(labels_address(train) if n - size > 0 else labels_address(scratch))))
-        _ = fold_store  # keep the Python object alive through the native call above
-        _ = test  # keep the Python object alive through the native call above
-        _ = scratch  # keep the Python object alive through the native call above
-        _ = train  # keep the Python object alive through the native call above
-        if got != size:
-            raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with fold_ids")
-        _ = scratch  # keep the Python object alive through the native calls above
-        _ = train  # keep the Python object alive through the native calls above
-        _ = test  # keep the Python object alive through the native calls above
-        _ = fold_store  # keep the Python object alive through the native calls above
-        _ = py_call(out.append, Python.tuple(train, test))
-    return out
+    """`KFold(n_splits=k).split(...)` unshuffled, by the splitters' own plan
+    and fill (lane mf-split5: bindings/msel_split_plan_run.mojo
+    `msel_plan_kfold`, ONE body with the public KFold door and with an
+    x_linear CV member's integer cv; before, this door called the base
+    binding's `fold_ids` and one `select_fold_i64` per fold by name: the
+    same contiguous folds, the same rows). A list of (train, test) int64
+    Arrays."""
+    var native = prep_native_context(context)
+    var pin = msel_split_route(native, False, False)
+    var route = pin.route
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_kfold(route, n, k, False, MselSeed(0, False), False)
+    return msel_split_finish(pin, plan, native)
 
 
 def _xl_kfold_ids_f32(n: Int, k: PythonObject, context: PythonObject) raises -> PythonObject:

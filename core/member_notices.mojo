@@ -39,6 +39,13 @@ comptime MEMBER_NOTICE_PLS_RESIDUAL = 4
 #: bindings/msel_split_plan_run.mojo `msel_plan_stratified`): the least
 #: populated class holds fewer rows than n_splits (a = its rows, b = n_splits).
 comptime MEMBER_NOTICE_SPLIT_LEAST = 5
+#: RidgeCV's split path (lane mf-split5, core/xlinear_member.mojo): a cv
+#: split with fewer than two test rows, whose R^2 scikit-learn leaves
+#: undefined with an UndefinedMetricWarning (no operands). Code 20 so that it
+#: cannot collide with the metric notices lane mf-score5 numbers from 6; when
+#: that lane adds the same "R^2 with fewer than two samples" notice, the merge
+#: keeps one code.
+comptime MEMBER_NOTICE_R2_FEW = 20
 
 
 def member_notice_add(mut words: List[Float64], code: Int, a: Float64 = 0.0, b: Float64 = 0.0):

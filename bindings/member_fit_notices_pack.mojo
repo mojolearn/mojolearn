@@ -16,8 +16,9 @@ from bindings.py_balanced import py_call
 from bindings.rf_fit_notices_pack import rf_fit_notices_word
 from core.member_notices import (
     MEMBER_NOTICE_WORDS, MEMBER_NOTICE_FOREST, MEMBER_NOTICE_NYSTROEM_COMPONENTS, MEMBER_NOTICE_GP_RIDGE,
-    MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST,
+    MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST, MEMBER_NOTICE_R2_FEW,
 )
+from bindings.py_balanced import py_get
 
 
 def _gp_ridge_notices(start: Float64, used: Float64, context: PythonObject) raises:
@@ -65,5 +66,18 @@ def member_fit_notices_raise(words: List[Float64], context: PythonObject) raises
             metric_warn("The least populated class in y has only " + String(Int(a)) + " members, which is less "
                         + "than n_splits=" + String(Int(b)) + ".",
                         native_loaded_module("builtins").UserWarning, context, 2)
+        elif code == MEMBER_NOTICE_R2_FEW:
+            # RidgeCV's split path (bindings/x_linear_cv_pack.mojo
+            # `xl_ridge_cv_splits_finish` -> `_xl_undefined_warning`):
+            # scikit-learn's UndefinedMetricWarning when sklearn.exceptions is
+            # loaded, else the x_linear context's own category.
+            var category = py_get(context, "xl_undefined_warning")
+            var sk = py_call(native_loaded_module("sys").modules.get, PythonObject("sklearn.exceptions"))
+            if sk is not None:
+                category = py_call(native_loaded_module("builtins").getattr, sk, PythonObject("UndefinedMetricWarning"),
+                                   category)
+            if category is None:
+                category = native_loaded_module("builtins").UserWarning
+            metric_warn("R^2 score is not well-defined with less than two samples.", category, context, 2)
         else:
             raise Error("member ABI: unknown fit notice code " + String(code))
