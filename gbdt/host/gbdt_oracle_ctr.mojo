@@ -143,6 +143,7 @@ from gbdt.host.gbdt_oracle import (
     gbdt_f64_token,
     gbdt_host_boost,
     gbdt_host_grid,
+    gbdt_onehot_max_code,
 )
 from gbdt.host.gbdt_oracle_eval import GbdtHostEval
 from gbdt.host.gbdt_oracle_tree_ctr import GbdtTreeCtrHost
@@ -291,36 +292,12 @@ def _ctr_copy_into(
     _ = len(dst)
 
 
-def _ctr_max_code_range(col: HostF32Ptr, lo: Int, hi: Int) -> Int:
-    var maxc = 0
-    for r in range(lo, hi):
-        var code = Int(col[r])
-        if code > maxc:
-            maxc = code
-    return maxc
-
-
 def _ctr_max_code(col: List[Float32]) -> Int:
-    """The largest `Int(value)` of a column, 0 at least (an integer
-    maximum: any grouping). One maximum a task over a contiguous row
-    range, then the maximum of those."""
-    var n = len(col)
-    var units = _gbdt_units(n, 2 * n)
-    var chunk = host_predict_chunk(n, units)
-    var best = List[Int](length=max(units, 1), fill=0)
-    var col_p = rebind[HostF32Ptr](col.unsafe_ptr())
-    var best_p = rebind[GbdtIntPtr](best.unsafe_ptr())
-
-    def rows(unit: Int) {imm chunk, imm n, imm col_p, imm best_p}:
-        best_p[unit] = _ctr_max_code_range(
-            col_p, min(n, unit * chunk), min(n, (unit + 1) * chunk)
-        )
-
-    host_parallelize(rows, units)
-    var maxc = 0
-    for u in range(len(best)):  # driver-loop: over the tasks' maxima
-        if best[u] > maxc:
-            maxc = best[u]
+    """The column's one-hot cardinality scan: the one body
+    (`gbdt_oracle.mojo::gbdt_onehot_max_code`, the device's
+    `onehot_column_max_code`; lane gbdt-rest-3 deleted this file's copy of
+    its range loop, which read `Int(NaN)`)."""
+    var maxc = gbdt_onehot_max_code(rebind[HostF32Ptr](col.unsafe_ptr()), len(col))
     _ = len(col)
     return maxc
 

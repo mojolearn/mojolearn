@@ -15,7 +15,7 @@ from std.math import isfinite
 from std.memory import bitcast
 
 from core.hostptr import read_f32
-from core.host_finite_scan import host_any_nan_f32, host_copy_f32_any_nan
+from core.host_finite_scan import host_copy_f32_any_nan
 from checks.numerics import ftz, identical_sigmoid
 from checks.soft_f64 import (
     SF64_ONE,
@@ -497,10 +497,10 @@ def gbdt_host_read_f32_nan(addr: Int, n: Int, mut has_nan: Bool) raises -> List[
     return values^
 
 
-def gbdt_host_has_nan_ptr(xs: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> Bool:
-    """True when any of the `n` values at `xs` is NaN (tested on bits)."""
-    # parallel: the one host any-NaN scan (was a serial `v != v` loop)
-    return host_any_nan_f32(xs, n)
+# Lane gbdt-rest-3 (2026-11-23): `gbdt_host_has_nan_ptr` is deleted; its one
+# caller, the host runner's by-name refusal of a NaN in a one_hot_features
+# column, is gone (the one-hot scan skips a NaN as the device's does, and
+# the binarize refuses it in `train`'s words on both columns).
 
 
 def gbdt_host_eval_const(ey: List[Float32], n_eval_rows: Int) -> Bool:

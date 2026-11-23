@@ -3748,6 +3748,51 @@ def _partition_for_tree(
     )
 
 
+def _onehot_code_range(col: HostF32Ptr, lo: Int, hi: Int) -> Int:
+    """`cat_code_scan_kernel`'s lenient arm (`gbdt/data/cat_code_scan.mojo`,
+    `onehot_column_max_code`) over the rows `[lo, hi)`: the largest
+    `Int(v)` of the non-negative values, 0 at least; a NaN or a negative
+    value never raises it, and a value at or past 2^31 (or +inf) is
+    2^31 - 1, which the 255-category limit refuses."""
+    var maxc = 0
+    for r in range(lo, hi):
+        var v = col[r]
+        if v >= Float32(0.0):
+            var code = 2147483647
+            if v < Float32(2147483648.0):
+                code = Int(v)
+            if code > maxc:
+                maxc = code
+    return maxc
+
+
+def gbdt_onehot_max_code(col: HostF32Ptr, n: Int) -> Int:
+    """The one-hot cardinality scan of one column of `n` rows, the device's
+    `onehot_column_max_code` (an integer maximum: any grouping). One maximum
+    a task over a contiguous row range, then the maximum of those. Lane
+    gbdt-rest-3 (2026-11-23): the one body of the one-hot grid here and of
+    gbdt_oracle_ctr.mojo (whose `_ctr_max_code` it replaces); `Int(NaN)`
+    had no defined value on either, so a NaN in a one_hot_features column
+    was refused by name."""
+    var units = _gbdt_units(n, 2 * n)
+    var chunk = host_predict_chunk(n, units)
+    var best = List[Int](length=max(units, 1), fill=0)
+    var best_p = rebind[GbdtIntPtr](best.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm col, imm best_p}:
+        best_p[unit] = _onehot_code_range(
+            col, min(n, unit * chunk), min(n, (unit + 1) * chunk)
+        )
+
+    host_parallelize(rows, units)
+    var maxc = 0
+    for u in range(len(best)):  # driver-loop: over the tasks' maxima
+        if best[u] > maxc:
+            maxc = best[u]
+    _ = len(best)
+    return maxc
+
+
 def gbdt_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -3839,11 +3884,9 @@ def gbdt_host_fit_eval(
             if not one_hot_in[f]:
                 continue
             one_hot[f] = True
-            var maxc = 0
-            for r in range(n_rows):
-                var c = Int(x_colmajor[f * n_rows + r])
-                if c > maxc:
-                    maxc = c
+            var maxc = gbdt_onehot_max_code(
+                rebind[HostF32Ptr](x_colmajor.unsafe_ptr()) + f * n_rows, n_rows
+            )
             if maxc > 254:
                 raise Error("one-hot feature " + String(f) + " has more than 255 categories")
             var bs = List[Float32]()
