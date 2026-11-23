@@ -92,6 +92,7 @@ workers; the fold waves hold at most one gathered train block per worker.
 """
 from std.sys.info import size_of
 from bindings.native_unit_os_threads_run import native_unit_cores
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.device_route import DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.member_abi import (
@@ -1133,3 +1134,13 @@ def ensemble_member_publish(mode: Int, vendor: Int, publisher: Int) raises:
     if vendor < 0:
         return
     member_publish[MEMBER_FAMILY_ENSEMBLE](mode, vendor, publisher, ensemble_member_v2)
+
+
+def ensemble_member_publish_image(vendor_word: Int) raises:
+    """The one publication line of an x_trees image's module initialization,
+    after its glue table: the image's tier and the vendor word of its glue
+    table key (`x_trees_glue_vendor`; -1 publishes nothing)."""
+    if vendor_word < 0:
+        return
+    var store = _STORE.get_or_create_ptr()
+    ensemble_member_publish(Int(GLOBAL_NUMERIC_MODE), vendor_word, Int(store))

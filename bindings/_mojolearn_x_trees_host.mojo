@@ -17,6 +17,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.glue_runs import publish_x_trees_glue
 from xtrees.dart_runs_host import publish_x_trees_dart_host
 from core.dart_member import dart_member_publish_image
+from core.ensemble_member import ensemble_member_publish_image
 from providers.python.xtrees_api_pyapi_door import register, tree_shap_cache_create_args, tree_shap_cache_values_args
 from xtrees import shap_host as shap_cpu
 from xtrees.shap_host import shap_prepare, tree_shap_values
@@ -155,6 +156,8 @@ def build__mojolearn_x_trees_host() -> PythonObject:
         # The DART entry, the GPU binding's host twin (xtrees/dart_runs_host.mojo).
         publish_x_trees_dart_host(0)
         dart_member_publish_image(0)
+        # The META member kind (Voting / Stacking as members), lane mf-meta3.
+        ensemble_member_publish_image(0)
         # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         return m.finalize()

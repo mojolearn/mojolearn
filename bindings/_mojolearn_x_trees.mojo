@@ -13,6 +13,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.glue_runs import publish_x_trees_glue, x_trees_glue_vendor
 from xtrees.dart_runs_device import publish_x_trees_dart_device
 from core.dart_member import dart_member_publish_image
+from core.ensemble_member import ensemble_member_publish_image
 from providers.python.xtrees_api_pyapi_door import register, tree_shap_cache_values_args
 from xtrees import shap_device as shap_dev
 from xtrees.shap_device import shap_prepare, shap_prepare_retain, tree_shap_values
@@ -142,6 +143,8 @@ def build__mojolearn_x_trees() -> PythonObject:
         # The DART entry (round under DART_DEVICE, predict and kept forest always).
         publish_x_trees_dart_device(x_trees_glue_vendor(COMPILED_VENDOR))
         dart_member_publish_image(x_trees_glue_vendor(COMPILED_VENDOR))
+        # The META member kind (Voting / Stacking as members), lane mf-meta3.
+        ensemble_member_publish_image(x_trees_glue_vendor(COMPILED_VENDOR))
         # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         return m.finalize()
