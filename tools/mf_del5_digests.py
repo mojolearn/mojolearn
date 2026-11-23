@@ -50,7 +50,8 @@ RULE cases this lane moved off the doors.
     change of wording is a defect to send back).
   * rfe_gb_cat_outside: RFE(GradientBoosting(cat_features=[9])).fit(X, t, eval_set=...) on 6 columns: the fit
     door's `_cat_slots` words both times (EXPECTED equal words).
-  * host_late: a fresh process that loads model_selection first and touches HostForest / HostGBDT after: their
+  * host_late: model_selection loaded, then HostForest / HostGBDT touched (a pool worker may have loaded them
+    already; for the late-import case proper call `_cal5(("cal5", "host_late"))` in a fresh interpreter): their
     member plans are registered at their import (EXPECTED after: True / True; before: whatever the rescan gave).
 
 Configurations are independent: one process each across the host cores.
