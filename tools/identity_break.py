@@ -425,6 +425,8 @@ sampler, a solver, a metric, a reduction).
       gbdt-weighted-rest gbdt-weighted-special gbdt-shape-gaps gbdt-rest-gaps
       gbdt-pointwise-arms
       gbdt-ordered-weights (sample and class weights under Ordered boosting)
+      gbdt-cat-rest (categorical and one-hot columns on the SymmetricTree
+               pointwise losses and the multiclass family)
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -4978,6 +4980,81 @@ def _(ml, X, yc, yr, Xh=None):
         ("rmse_ctr_ordered_bernoulli", "RMSE", _GBDT_CAT_CTR,
          dict(ordered, bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
     ])
+
+
+@lane("gbdt-cat-rest")
+def _(ml, X, yc, yr, Xh=None):
+    """Categorical and one-hot columns on the SymmetricTree fits the CPU
+    column refused by name until lane gbdt-cpu-rest-4-cat (2026-11-23), now
+    trained by the host owners (gbdt_oracle_losses.mojo and
+    gbdt_oracle_multiclass.mojo through gbdt_oracle_ctr.mojo's prelude):
+    Quantile over CTR and one-hot columns at CatBoost's stochastic defaults
+    and with feature combinations (max_ctr_complexity 2), weighted MAE
+    (Exact leaves), CrossEntropy with combinations, Poisson over a one-hot
+    column, MultiClass over CTR and one-hot columns and with combinations,
+    MultiClassOneVsAll with an eval set (Iter) and weighted under
+    Bernoulli, and MultiRMSE over a one_hot_features column. Every fit at
+    rate 0.1 with every work-changing option set; each hashes its
+    predictions (the probabilities for the classifiers) and its digest,
+    the held-out fit also its test-loss curve and stop."""
+    rows = min(_GBDT_CAT_ROWS, X.shape[0])
+    Xc = _gbdt_cat_x(X[:rows])
+    yq, ycl = yr[:rows], yc[:rows]
+    y3 = _rank_codes(yq, [1.0 / 3.0, 2.0 / 3.0]).astype(np.float32)
+    yce = (np.float32(0.25) + np.float32(0.5) * ycl).astype(np.float32)
+    ypo = np.floor(np.abs(yq) * np.float32(3.0)).astype(np.float32)
+    ymr = np.ascontiguousarray(np.stack([yq, ycl], axis=1).astype(np.float32))
+    w = _hw((rows,), "gbdt-cat-rest:sample_weight", 0.25, 4.0)
+    base = dict(n_estimators=12, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
+                border_count=128, boosting_type="Plain", random_state=7, score_function="Cosine",
+                max_ctr_complexity=1)
+    quantile = dict(loss="Quantile", leaf_estimation_method="Gradient", leaf_estimation_iterations=1)
+    parts, first = {}, None
+    for name, (cols, cats), yf, wf, proba, options in [
+        ("quantile_all_defaults", _GBDT_CAT_ALL, yq, None, False, dict(quantile, **_GBDT_CAT_DEFAULTS)),
+        ("quantile_mcc2", _GBDT_CAT_MCC2, yq, None, False,
+         dict(quantile, max_ctr_complexity=2, **_GBDT_CAT_PLAIN)),
+        ("mae_ctr_weighted", _GBDT_CAT_CTR, yq, w, False, dict(loss="MAE", **_GBDT_CAT_PLAIN)),
+        ("crossentropy_mcc2_defaults", _GBDT_CAT_MCC2, yce, None, False,
+         dict(loss="CrossEntropy", max_ctr_complexity=2, **_GBDT_CAT_DEFAULTS)),
+        ("poisson_onehot", _GBDT_CAT_ONEHOT, ypo, None, False, dict(loss="Poisson", **_GBDT_CAT_PLAIN)),
+        ("multiclass_all", _GBDT_CAT_ALL, y3, None, True,
+         dict(loss="MultiClass", leaf_estimation_iterations=1, **_GBDT_CAT_PLAIN)),
+        ("multiclass_mcc2_defaults", _GBDT_CAT_MCC2, y3, None, True,
+         dict(loss="MultiClass", leaf_estimation_iterations=1, max_ctr_complexity=2, **_GBDT_CAT_DEFAULTS)),
+        ("ova_all_weighted_bernoulli", _GBDT_CAT_ALL, y3, w, True,
+         dict(loss="MultiClassOneVsAll", leaf_estimation_iterations=1, bootstrap_type="Bernoulli",
+              subsample=0.7, random_strength=0.0)),
+    ]:
+        kw = dict(base, cat_features=list(cats))
+        kw.update(options)
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        m = ml.GradientBoosting(**kw).fit(Xs, yf, sample_weight=wf)
+        parts[name] = _h(m.predict_proba(Xs) if proba else m.predict(Xs))
+        parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
+        first = first if first is not None else m
+    # MultiRMSE over a one_hot_features column (cat_features refuses on
+    # both columns, in `train`'s words)
+    cols, _ = _GBDT_CAT_ONEHOT
+    Xs = np.ascontiguousarray(Xc[:, cols])
+    mr = ml.GradientBoosting(**dict(base, loss="MultiRMSE", one_hot_features=[0], boost_from_average=False,
+                                    leaf_estimation_iterations=1, **_GBDT_CAT_PLAIN)).fit(Xs, ymr)
+    parts["multirmse_one_hot_features"] = _h(mr.predict(Xs))
+    parts["multirmse_one_hot_features:digest"] = _h(np.frombuffer(str(mr.digest_).encode(), dtype=np.uint8))
+    # the held-out fit: the curve, the detector's stop and the shrink
+    Xe = np.ascontiguousarray(_gbdt_cat_xh(Xh[:rows])[:, _GBDT_CAT_CTR[0]])
+    ye3 = _rank_codes(labels_for(Xh, HELDOUT_SEED)[1][:rows], [1.0 / 3.0, 2.0 / 3.0]).astype(np.float32)
+    cols, cats = _GBDT_CAT_CTR
+    Xs = np.ascontiguousarray(Xc[:, cols])
+    ev = ml.GradientBoosting(**dict(base, loss="MultiClassOneVsAll", cat_features=list(cats),
+                                    leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
+                                    od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3,
+                                    **_GBDT_CAT_PLAIN)).fit(Xs, y3, eval_set=(Xe, ye3))
+    parts["ova_ctr_eval"] = _h(ev.predict_proba(Xs))
+    parts["ova_ctr_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+    parts["ova_ctr_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                ev.best_iteration_], dtype=np.int64))
+    return _fit(parts, first, lambda e: (e.predict(_gbdt_cat_xh(Xh)),))
 
 
 @lane("gbdt-nan-modes")
@@ -9789,7 +9866,9 @@ _batch_decl(_rows_calls("predict", "predict_proba", sl=_GBDT_BATCH_ROWS, prep=_g
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
 _batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 _batch_decl(_rows_calls("predict", sl=_GBDT_BATCH_ROWS, prep=_gbdt_cat_xh),
-            "gbdt-cat-rmse", "gbdt-cat-bootstrap", "gbdt-cat-noise", "gbdt-cat-ordered")
+            "gbdt-cat-rmse", "gbdt-cat-bootstrap", "gbdt-cat-noise", "gbdt-cat-ordered",
+            # lane gbdt-cpu-rest-4-cat (2026-11-23)
+            "gbdt-cat-rest")
 _batch_decl(_rows_calls("predict"),
             "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs")
 _batch_decl(_rows_calls("predict"),
