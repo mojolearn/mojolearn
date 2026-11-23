@@ -935,11 +935,12 @@ def feature_fraction[I: GbdtImage](unit: Int) raises:
                 inp.eval_x.append(inp.x[j * 256 + r])
         for r in range(32):  # small-loop(the 32 eval targets)
             inp.eval_y.append(inp.y[r])
-        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
-            # the host binding has no eval set outside SymmetricTree Logloss: its refusal by name
-            _refuses[I](o, inp, "a Lossguide fit with an eval set")
-            return
-        var m = fit[I](o, inp)
+        # both columns fit it: the host binding trains an eval set and sample
+        # weights on Lossguide since lane gbdt-gaps (2026-11-23), through the
+        # bodies the device calls, so the host row asserts what the device
+        # row does (it refused by name until then), and fits twice to the
+        # same bytes
+        var m = _twice[I](o, inp, "weighted Lossguide eval-set fit")
         require(all_finite_f32(predict(m.text, inp.x, 256)), "weighted feature_fraction fit: nonfinite predict")
         require(len(m.test) > 0, "weighted feature_fraction fit: no test loss curve")
         return
