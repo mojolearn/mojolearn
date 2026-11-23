@@ -118,11 +118,12 @@ struct MemberSetRun(Movable):
     # reads the classes; default False): a caller whose units are
     # independent cv folds (CalibratedClassifierCV) has read every unit's
     # classes itself (xtrees/trees_calibrated_fit_run.mojo
-    # `cal_fold_classes_run`: a fold that lacks a class is re-coded onto the
-    # classes it holds) and marked in `uncovered[u]` the units it leaves to
-    # their doors; the set then makes NO class-cover pass and fits every
-    # other unit. False: the set's own cover pass, and one lacking unit fails
-    # the whole set before any fit (every other caller).
+    # `cal_fold_classes_run`: a fold that lacks a class, one class included,
+    # is re-coded onto the classes it holds); the set then makes NO
+    # class-cover pass and fits every unit (lane mf-cal3: no unit is left to
+    # a door, so nothing is marked `uncovered` and the workers and turns no
+    # longer skip one). False: the set's own cover pass, and one lacking unit
+    # fails the whole set before any fit (every other caller).
     var skip_lacking: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
@@ -504,10 +505,6 @@ def _member_set_lane(address: Int, lane: Int):
     var i = lane
     while i < count:  # driver-loop: over this worker's members
         var u = run[].parallel[i]
-        if run[].uncovered[u] != UInt8(0):
-            # skip_lacking: this unit's rows lack a class; its caller's door fits it
-            i += run[].workers
-            continue
         try:
             _member_set_unit(address, u, run[].workers <= 1)
         except error:
@@ -569,8 +566,6 @@ def member_set_turn(mut run: MemberSetRun, u: Int):
     worker member when its trace earns `MEMBER_GIL_FREE`. The caller holds
     or releases the GIL around the call as `gil_free[u]` says. Never raises:
     a failure records its words."""
-    if run.uncovered[u] != UInt8(0):
-        return  # skip_lacking: this unit's rows lack a class; its caller's door fits it
     var address = Int(UnsafePointer(to=run))
     try:
         _member_set_unit(address, u, True)

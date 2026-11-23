@@ -18,15 +18,20 @@ and returns the pins after it):
   * THE FOLD CLASSES (lane mf-cal2, 2026-11-23; `cal_fold_classes_run`): one
     pass per fold over the codes of its train rows (the folds across the
     host cores). A fold that holds every class is fitted as admitted. A fold
-    that lacks some (two or more present) is fitted, as scikit-learn fits
-    it, on the classes it holds: its member is re-coded onto them (fold
-    code c is the ensemble code `fold_classes[f][c]`, ascending: the
-    classes_ its own fit door encoded) with that class count, and its
-    scores are scattered into the ensemble's columns at those codes (the
-    door's `_sub_cols`). A fold holding one class is left to its door unit
-    (`uncovered[f]`: a native member fits two or more; its fit door raises
-    or fits in the estimator's own words). The set's own class-cover pass
-    is not made (`skip_lacking`).
+    that lacks some is fitted, as scikit-learn fits it
+    (calibration.py `_fit_classifier_calibrator_pair`: `estimator.fit` on
+    the fold's train rows, whatever classes they hold), on the classes it
+    holds: its member is re-coded onto them (fold code c is the ensemble
+    code `fold_classes[f][c]`, ascending: the classes_ its own fit door
+    encoded) with that class count, and its scores are scattered into the
+    ensemble's columns at those codes (the door's `_sub_cols`). Since lane
+    mf-cal3 that includes a fold holding ONE class: its member's fit is
+    given one class, as the estimator's own fit is, and decides as it
+    does: the families that refuse one class raise their fit door's words
+    (the set records them; the door raises the first in fold order, as
+    scikit-learn's fold loop raises the first), the families that fit one
+    class (naive Bayes, k-NN, ...) fit it and are scored like any re-coded
+    fold. The set's own class-cover pass is not made (`skip_lacking`).
   * the set's fits (core/member_set_run.mojo: the worker members in
     parallel on the host cores, one at a time when a member's route is a
     GPU, then the other members' turns on this thread);
@@ -37,7 +42,7 @@ and returns the pins after it):
     member's scores through ONE member call on its fitted state
     (decision_function when the estimator has one, else predict_proba; a
     float64 answer rounded to float32 word by word, as the door's
-    admission of the member's output rounded it: `_member_f32`), then the
+    admission of the member's output rounded it: `member_f32_block`), then the
     column picks of the door's `_cal_scores`: binary (k = 2) one column
     (one-column output, else the positive column: code 1, the member's
     classes being the codes 0 .. k-1 the set packed), else every column
@@ -60,11 +65,15 @@ its rows over the host cores itself, and the glue ops run on the x_trees
 image's device on a GPU install (the door gated them one fold at a time
 before this split for the same reason). The fits are the parallel units.
 
-A fold member whose call refuses (its kind refuses a non-finite row, or does
-not say its element type) is returned by index, and a failing fit returns
-`CAL_FIT_FAILED` with every state released; nothing is published: the
-door releases the set and takes its door path for every fold (the fallback
-rule), which raises the estimator's own words.
+A fold member whose scoring call refuses raises its own words out of the
+RUN (lane mf-cal3: no door path is left to raise them), and a failing fit
+returns `CAL_FIT_FAILED` with every state released and the failing members'
+words in the set's `errors`; nothing is published and the door raises the
+first failing fold's words (bindings/trees_public_meta_door.mojo
+`_cal_native`). An answer of an element type or width the door's
+`_cal_scores` does not read is a member ABI defect and raises a
+RuntimeError (no family answers one: proba and decision are float words,
+one column per class, or one for a two-class decision).
 
 Same programs over the same words in the same order as the door before this
 split: no bits change (tools/mf_cal_digests.py proves it on the CPU column),
@@ -83,7 +92,7 @@ from core.member_set_run import (
     member_set_run_release, MEMBER_SET_WORKER,
 )
 from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
-from xtrees.trees_meta_vote_run import VoteMember, VoteRows, _member_f32
+from xtrees.trees_meta_vote_run import VoteMember, VoteRows, member_f32_block
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_gather_f32, xt_gather_i32, xt_scatter, xt_transpose_f64,
     xt_indicator_codes, xt_platt_fit, xt_isotonic_fit, xt_iota_i32,
@@ -92,10 +101,10 @@ from xtrees.glue_calls import (
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 
-#: `calibrated_fit_scores_run` returns this when every native fold answered.
+#: `calibrated_fit_run` returns this when every fold was fitted and scored.
 comptime CAL_ALL_ANSWERED = -1
 #: `calibrated_fit_run` returns this when a member's fit failed (every state
-#: released; the door's fallback rule).
+#: released; the failing members' words in the set's `errors`).
 comptime CAL_FIT_FAILED = -2
 
 
@@ -160,24 +169,20 @@ struct CalFitPlan(Movable):
 struct CalFitOut(Movable):
     """What the RUN wrote. Calibrator j: Platt (`isotonic[j]` False: `a[j]`,
     `b[j]`) or isotonic (`m[j]` knots, `knots_x[j]` / `knots_y[j]`, float64).
-    Per fold: `native[f]` (its pair was made here; False: its door unit makes
-    it) and its calibrators `first[f] .. first[f] + count[f]` (ensemble).
+    Per fold: its calibrators `first[f] .. first[f] + count[f]` (ensemble).
     ensemble=False: `scores`, the out-of-fold block (n x c float64, c = 1 for
-    two classes, else k), and, when `final_ready`, the final calibrators
-    `final_first .. final_first + final_count`; not ready when a fold was
-    left to its door: the door places that fold's scores into `scores` and
-    calls `cal_calibrators_run` itself."""
+    two classes, else k), and the final calibrators `final_first ..
+    final_first + final_count`. (Lane mf-cal3 removed `native[f]` and
+    `final_ready`: every fold is the RUN's now, none is left to a door.)"""
     var isotonic: List[Bool]
     var a: List[Float64]
     var b: List[Float64]
     var m: List[Int]
     var knots_x: List[List[Float64]]
     var knots_y: List[List[Float64]]
-    var native: List[Bool]
     var first: List[Int]
     var count: List[Int]
     var scores: List[Float64]
-    var final_ready: Bool
     var final_first: Int
     var final_count: Int
 
@@ -188,11 +193,9 @@ struct CalFitOut(Movable):
         self.m = List[Int]()
         self.knots_x = List[List[Float64]]()
         self.knots_y = List[List[Float64]]()
-        self.native = List[Bool]()
         self.first = List[Int]()
         self.count = List[Int]()
         self.scores = List[Float64]()
-        self.final_ready = False
         self.final_first = 0
         self.final_count = 0
 
@@ -282,10 +285,12 @@ def cal_fold_classes_run(mut run: MemberSetRun, mut plan: CalFitPlan):
     the classes each fold's train rows hold (the folds across the host
     cores, one pass over its codes each: the pass the set's class-cover rule
     made, which `skip_lacking` now leaves out), then per fold: every class,
-    nothing; two or more but not all, `fold_classes[f]` and the re-coded
+    nothing; one or more but not all, `fold_classes[f]` and the re-coded
     `fold_codes[f]` (written across the host cores, one fold per task), the
-    unit's target and class count pointed at them; one class,
-    `uncovered[f]` (its door unit). Never raises."""
+    unit's target and class count pointed at them (one class: its fit
+    decides, as the estimator's own fit does; module note). Every fold's
+    train rows are non-empty (the door's UNPACK refuses an empty fold
+    before the RUN). Never raises."""
     var folds = plan.folds()
     var k = plan.k
     var n = plan.n
@@ -322,11 +327,8 @@ def cal_fold_classes_run(mut run: MemberSetRun, mut plan: CalFitPlan):
                 maps[f * k + c] = Int32(len(present))
                 present.append(Int32(c))
         var held = len(present)
-        if held == k:
-            continue
-        if held < 2:
-            run.uncovered[f] = UInt8(1)  # one class: its door unit (a native member fits two or more)
-            continue
+        if held == k or held == 0:
+            continue  # every class (held 0: no train rows, which UNPACK refuses before the RUN)
         plan.fold_classes[f] = present^
         plan.fold_codes[f] = List[Int32](length=n, fill=Int32(0))
         var at = Int(plan.fold_codes[f].unsafe_ptr())
@@ -363,11 +365,13 @@ def cal_fold_classes_run(mut run: MemberSetRun, mut plan: CalFitPlan):
 
 
 def _cal_fold_scores(glue: EntryRef, mut run: MemberSetRun, plan: CalFitPlan, f: Int, iota: Int, xte: Int,
-                     nte: Int, class_cols: Int, mut s: List[Float64]) raises -> Bool:
+                     nte: Int, class_cols: Int, mut s: List[Float64]) raises:
     """Fold f's float64 nte x c scores (the door's `_cal_scores`) from ONE
     call of its fitted member over its test rows at `xte`, into `s` (zero,
-    nte x c). False when the member does not serve the call (no float
-    answer, a width other than the door's, or a refusal)."""
+    nte x c). A refusal of the call raises the member's own words; an
+    answer the door's `_cal_scores` does not read (no float words, a width
+    other than one per class or one for a two-class decision) raises a
+    RuntimeError (a member ABI defect: no family answers one)."""
     var k = plan.k
     var call = member_call_of(run.plans[f], run.states[f])
     var cols = member_outputs_of(run.plans[f], call, plan.operation)
@@ -379,26 +383,25 @@ def _cal_fold_scores(glue: EntryRef, mut run: MemberSetRun, plan: CalFitPlan, f:
     if len(plan.fold_classes[f]) > 0:
         ks = len(plan.fold_classes[f])
         class_at = Int(plan.fold_classes[f].unsafe_ptr())
-    # A classifier that does not say its element type is not served (the
-    # door's `member_held_open` rule); the door's widths: predict_proba one
-    # column per class, k > 2 one column per class, but for a two-class
-    # member's one-column decision: its positive class's (its second code's)
-    # column alone.
-    if dtype != MEMBER_F32 and dtype != MEMBER_F64:
-        return False
-    if cols < 1 or (plan.operation == MEMBER_OP_PREDICT_PROBA and cols != ks):
-        return False
-    if k > 2:
+    # The door's widths: predict_proba one column per class, k > 2 one
+    # column per class, but for a two-class member's one-column decision:
+    # its positive class's (its second code's) column alone. Float words
+    # only (proba and decision answer float32 or float64 in every family).
+    var unread = dtype != MEMBER_F32 and dtype != MEMBER_F64
+    unread = unread or cols < 1 or (plan.operation == MEMBER_OP_PREDICT_PROBA and cols != ks)
+    if k > 2 and not unread:
         if cols == 1 and ks == 2 and plan.operation == MEMBER_OP_DECISION:
             class_at += 4
             ks = 1
         elif cols != ks:
-            return False
+            unread = True
+    if unread:
+        raise Error("RuntimeError: mojolearn: CalibratedClassifierCV: fold " + String(f) + "'s member answered "
+                    + String(cols) + " columns of element type " + String(dtype) + " for " + String(ks)
+                    + " classes (member ABI)")
     var keep = List[List[Float32]]()
     var member = VoteMember(Int(run.plans.unsafe_ptr() + f), run.states[f], plan.operation, cols, dtype, 0, 1.0)
-    var blk = _member_f32(member, VoteRows(xte, nte, plan.d), keep)
-    if blk == 0:
-        return False
+    var blk = member_f32_block(member, VoteRows(xte, nte, plan.d), keep)
     var acc = Int(s.unsafe_ptr())
     if k == 2:
         if cols == 1:
@@ -417,15 +420,13 @@ def _cal_fold_scores(glue: EntryRef, mut run: MemberSetRun, plan: CalFitPlan, f:
     _ = len(keep)  # the native block is read through the ops above
     _ = len(s)
     _ = len(plan.fold_classes[f])  # read through `class_at` above
-    return True
 
 
 def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFitPlan,
-                              mut res: CalFitOut) raises -> Int:
-    """RUN after the set's fits (module note): every native fold's scores
-    and calibrators (ensemble) or placed scores and the final calibrators
-    (ensemble=False). Returns CAL_ALL_ANSWERED, or the first fold whose
-    member did not serve its call (nothing then is to be published)."""
+                              mut res: CalFitOut) raises:
+    """RUN after the set's fits (module note): every fold's scores and
+    calibrators (ensemble) or placed scores and the final calibrators
+    (ensemble=False). A fold member's refused call raises its words."""
     var n = plan.n
     var d = plan.d
     var k = plan.k
@@ -445,14 +446,9 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
     _ = xt_iota_i32(glue, Int(class_cols.unsafe_ptr()), k)
     if not plan.ensemble:
         res.scores = List[Float64](length=n * c, fill=0.0)
-    var all_native = True
     for f in range(folds):  # driver-loop: over the cv folds, in fold order (serial by rule: module note)
-        res.native.append(False)
         res.first.append(res.calibrators())
         res.count.append(0)
-        if run.uncovered[f] != UInt8(0) or run.states[f] == 0:
-            all_native = False  # this fold's train rows lack a class: its door unit
-            continue
         var te = plan.test_rows[f]
         var nte = plan.test_counts[f]
         var xte = List[Float32](length=nte * d, fill=0.0)
@@ -462,9 +458,8 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
         else:
             _ = xt_gather_f32(glue, plan.x, te, Int(cols.unsafe_ptr()), Int(xte.unsafe_ptr()), n, d, nte, d)
         var s = List[Float64](length=nte * c, fill=0.0)
-        if not _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()), Int(xte.unsafe_ptr()), nte,
-                                Int(class_cols.unsafe_ptr()), s):
-            return f
+        _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()), Int(xte.unsafe_ptr()), nte,
+                         Int(class_cols.unsafe_ptr()), s)
         _ = len(xte)
         if plan.ensemble:
             var codes_te = List[Int32](length=nte, fill=Int32(0))
@@ -481,16 +476,13 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
             _ = xt_scatter(glue, Int(res.scores.unsafe_ptr()), Int(s32.unsafe_ptr()), te, n, c, nte, c, 0)
             _ = len(s32)
         _ = len(s)
-        res.native[f] = True
-    if not plan.ensemble and all_native:
+    if not plan.ensemble:
         res.final_first = res.calibrators()
         cal_calibrators_run(glue, Int(res.scores.unsafe_ptr()), n, c, plan.codes, plan.sigmoid, res)
         res.final_count = res.calibrators() - res.final_first
-        res.final_ready = True
     _ = len(cols)
     _ = len(iota)
     _ = len(class_cols)
-    return CAL_ALL_ANSWERED
 
 
 def calibrated_fit_run(glue: EntryRef, mut run: MemberSetRun, mut plan: CalFitPlan, mut res: CalFitOut) raises -> Int:
@@ -501,8 +493,10 @@ def calibrated_fit_run(glue: EntryRef, mut run: MemberSetRun, mut plan: CalFitPl
     every member is MEMBER_SET_WORKER or MEMBER_SET_TURN_RELEASED), else
     held; a Mojo test or another RUN calls it with no GIL. Returns
     CAL_ALL_ANSWERED with the fitted states left in `run` for the caller's
-    PACK (or `member_set_run_release`); CAL_FIT_FAILED (states released) or
-    the fold whose member did not serve its call: nothing to publish."""
+    PACK (or `member_set_run_release`); CAL_FIT_FAILED with the states
+    released and the failing members' words in `run.errors` (the first in
+    fold order, `member_set_first_failure`, is the one to raise). A refused
+    scoring call raises its member's words (the caller releases the set)."""
     cal_fold_classes_run(run, plan)
     var turns = member_set_prepare(run)
     _ = member_set_fit_free(run)  # skip_lacking: no cover pass, so it cannot answer False
@@ -513,4 +507,5 @@ def calibrated_fit_run(glue: EntryRef, mut run: MemberSetRun, mut plan: CalFitPl
     if member_set_first_failure(run) >= 0:
         member_set_run_release(run)
         return CAL_FIT_FAILED
-    return calibrated_fit_scores_run(glue, run, plan, res)
+    calibrated_fit_scores_run(glue, run, plan, res)
+    return CAL_ALL_ANSWERED
