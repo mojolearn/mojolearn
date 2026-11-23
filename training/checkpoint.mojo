@@ -110,11 +110,16 @@ from core.sha256 import sha256_hex
 # (`TRAINING_LOOP_PLAN.md` section 12 item 9) should need no change here.
 # That is a prediction and it has not been tried.
 
-comptime CKPT_FORMAT_VERSION: UInt32 = 1
+# Format version 2 (lane nn-fix-4, 2026-11-23): a layout entry's tensor name is LENGTH-PREFIXED (u32 byte
+# count, then the bytes, no NUL, no padding), so a name of any length is stored: version 1's 16-byte NUL-padded
+# field refused `l0.in_proj_weight` (17 bytes) at save, so a model with multihead_attention could not be saved.
+# ONE format: a version-1 file is refused by name (CKPT_REFUSE_VERSION), no reader for it (no users yet).
+comptime CKPT_FORMAT_VERSION: UInt32 = 2
 comptime CKPT_HEADER_BYTES = 64
 comptime CKPT_DESCRIPTOR_BYTES = 64
-comptime CKPT_LAYOUT_ENTRY_BYTES = 32
-comptime CKPT_NAME_BYTES = 16
+#: a layout entry's fixed bytes: param_id, offset, count (u32 each), the flag and three reserved bytes, the
+#: name's byte count (u32); the name's bytes follow
+comptime CKPT_LAYOUT_FIXED_BYTES = 20
 comptime CKPT_TRAILER_BYTES = 16
 comptime CKPT_N_ARRAYS: UInt32 = 3
 """param, then `m`, then `v`. The ORDER is part of the specification: `h_all`
@@ -141,9 +146,10 @@ comptime NAME_CHARS = "-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqr
 
 Deliberately narrow. A name is a token that has to survive a filename, a shell
 argument and a `xxd` dump, and every one of `embed`, `norm1_w`, `w_q`, `w_k`,
-`w_v`, `w_o`, `norm2_w`, `w_gate`, `w_up`, `w_down`, `lm_head` fits in fifteen
-bytes of it with room to spare. The WRITER and the READER share this one
-definition, so a name that can be written can be read."""
+`w_v`, `w_o`, `norm2_w`, `w_gate`, `w_up`, `w_down`, `lm_head` is a token
+of it. The field takes the name's own length (format version 2). The WRITER
+and the READER share this one definition, so a name that can be written can be
+read."""
 
 
 # ---- the section kinds (header word at offset 52, formerly reserved0).
@@ -198,25 +204,34 @@ comptime CKPT_REFUSE_CONTENT_HASH = "CKPT_REFUSE_CONTENT_HASH"
 comptime CKPT_REFUSE_STATE = "CKPT_REFUSE_STATE"
 
 
-def checkpoint_payload_begin(j_count: Int) -> Int:
+def checkpoint_layout_entry_bytes(name: String) -> Int:
+    """One layout entry's bytes: CKPT_LAYOUT_FIXED_BYTES plus the name's."""
+    return CKPT_LAYOUT_FIXED_BYTES + name.byte_length()
+
+
+def checkpoint_layout_bytes(names: List[String]) -> Int:
+    """The layout table's bytes (the header's layout_bytes field)."""
+    var total = 0
+    for k in range(len(names)):  # driver-loop: over tensor names
+        total += checkpoint_layout_entry_bytes(names[k])
+    return total
+
+
+def checkpoint_payload_begin(layout_bytes: Int) -> Int:
     """Byte offset of the first parameter element."""
-    return (
-        CKPT_HEADER_BYTES
-        + CKPT_DESCRIPTOR_BYTES
-        + CKPT_LAYOUT_ENTRY_BYTES * j_count
-    )
+    return CKPT_HEADER_BYTES + CKPT_DESCRIPTOR_BYTES + layout_bytes
 
 
-def checkpoint_file_bytes(j_count: Int, n_total: Int) -> Int:
-    """The ONE formula. `64 + 64 + 32*J + 12*n + 16`.
+def checkpoint_file_bytes(layout_bytes: Int, n_total: Int) -> Int:
+    """The ONE formula. `64 + 64 + layout_bytes + 12*n + 16`, layout_bytes =
+    sum over tensors of (20 + the name's bytes).
 
-    At `J = 11, n_total = 13376` this is 161008. A file of any other length
-    for that shape is refused before a single float is read, and the four
-    redundant size fields in the header exist so that this can be computed
-    from the header alone.
+    A file of any other length for its header's shape is refused before a
+    single float is read, and the redundant size fields in the header exist so
+    that this can be computed from the header alone.
     """
     return (
-        checkpoint_payload_begin(j_count)
+        checkpoint_payload_begin(layout_bytes)
         + Int(CKPT_N_ARRAYS) * n_total * 4
         + CKPT_TRAILER_BYTES
     )
@@ -327,8 +342,8 @@ def _name_char(c: Int) raises -> String:
     `String(NAME_CHARS[byte=i])` is `core/identity_trace.mojo::_hex16`'s
     proven spelling on a table. `chr()` is NOT used: it appears nowhere in
     this repository, and this lane cannot compile, so an unproven builtin is a
-    risk with no upside. A linear scan of sixty-five characters, sixteen times
-    per tensor, eleven tensors, is not a cost worth an index trick that
+    risk with no upside. A linear scan of sixty-five characters, once per name
+    byte, is not a cost worth an index trick that
     `[[mojo-string-not-indexable]]` would make unreadable anyway.
     """
     var t = String(NAME_CHARS)
@@ -348,7 +363,8 @@ def _name_char(c: Int) raises -> String:
 
 
 def _put_name(mut out: List[UInt8], name: String) raises:
-    """Sixteen bytes: the name, then NUL padding to the full width."""
+    """The name's byte count (u32), then its bytes: no terminator, no padding,
+    no width (format version 2)."""
     # A LOCAL COPY before `as_bytes()`. `train_loop.mojo::env_int` takes the
     # same route (`var s = env_str(name); var b = s.as_bytes()`), and a Span
     # over a borrowed argument is one more origin question this lane cannot
@@ -356,67 +372,37 @@ def _put_name(mut out: List[UInt8], name: String) raises:
     var s = String(name)
     var b = s.as_bytes()
     var n = len(b)
-    if n < 1 or n > CKPT_NAME_BYTES - 1:
+    if n < 1:
         raise Error(
             String(CKPT_REFUSE_STATE)
-            + ": tensor name '"
-            + name
-            + "' is "
-            + String(n)
-            + " bytes and the field holds 1 to "
-            + String(CKPT_NAME_BYTES - 1)
-            + " plus a NUL terminator. Refused at SAVE time on purpose:"
+            + ": a tensor name is empty. Refused at SAVE time on purpose:"
             + " discovering it at LOAD time on another continent is worse."
         )
+    _put_u32(out, UInt32(n))
     for i in range(n):
         # Validated through the SAME function the reader uses, so a name that
         # can be written can be read.
         _ = _name_char(Int(b[i]))
         out.append(b[i])
-    for _ in range(CKPT_NAME_BYTES - n):
-        out.append(UInt8(0))
     # `[[mojo-buffer-freed-at-last-use]]`: `b` views `s`, so `s` has to
     # outlive the loop that read through it.
     _ = s
 
 
-def _get_name(b: List[UInt8], at: Int) raises -> String:
-    """A NUL-padded name back out of sixteen bytes.
-
-    Refuses a field that is not NUL TERMINATED and refuses one whose padding
-    is not all zero. **Trailing junk after the NUL is a writer that disagrees
-    with this format**, and accepting it is how two versions coexist silently.
-    """
-    var out = String("")
-    var term = -1
-    for i in range(CKPT_NAME_BYTES):
-        if Int(b[at + i]) == 0:
-            term = i
-            break
-        out += _name_char(Int(b[at + i]))
-    if term < 0:
-        raise Error(
-            String(CKPT_REFUSE_LAYOUT)
-            + ": a 16-byte tensor-name field has no NUL terminator, so the"
-            + " name runs into the next field. The file was not written by"
-            + " this format."
-        )
-    if term == 0:
+def _get_name(b: List[UInt8], at: Int, count: Int) raises -> String:
+    """The `count` name bytes at `at` (the caller has read the u32 count and
+    checked the bytes lie inside the layout table). Every byte is checked
+    against the charset; an empty name is refused."""
+    if count < 1:
         raise Error(
             String(CKPT_REFUSE_LAYOUT)
             + ": a tensor-name field is EMPTY. Every tensor is named; an"
             + " unnamed one cannot be reported by name in a shape refusal,"
             + " which is the whole reason the field exists."
         )
-    for k in range(term, CKPT_NAME_BYTES):
-        if Int(b[at + k]) != 0:
-            raise Error(
-                String(CKPT_REFUSE_LAYOUT)
-                + ": the padding after a tensor name is not all zero (byte "
-                + String(k)
-                + " of the field). Junk after the NUL is a writer that"
-                + " disagrees with this format."
-            )
+    var out = String("")
+    for i in range(count):  # driver-loop: over the name's bytes
+        out += _name_char(Int(b[at + i]))
     return out^
 
 
@@ -724,6 +710,7 @@ def _save_checkpoint(path: String, ck: Checkpoint, want_sha: Bool) raises -> Tup
 
     var j = ck.j_count()
     var n = ck.n_total()
+    var layout_b = checkpoint_layout_bytes(ck.names)
     var body = List[UInt8]()
 
     # ---- header, 64 bytes ------------------------------------------------
@@ -738,7 +725,7 @@ def _save_checkpoint(path: String, ck: Checkpoint, want_sha: Bool) raises -> Tup
     _put_u32(body, CKPT_FORMAT_VERSION)
     _put_u32(body, UInt32(CKPT_HEADER_BYTES))
     _put_u32(body, UInt32(CKPT_DESCRIPTOR_BYTES))
-    _put_u32(body, UInt32(CKPT_LAYOUT_ENTRY_BYTES * j))
+    _put_u32(body, UInt32(layout_b))
     _put_u32(body, UInt32(Int(CKPT_N_ARRAYS) * n * 4))
     _put_u32(body, UInt32(CKPT_TRAILER_BYTES))
     _put_u32(body, UInt32(j))
@@ -769,7 +756,7 @@ def _save_checkpoint(path: String, ck: Checkpoint, want_sha: Bool) raises -> Tup
     _put_u32(body, UInt32(0))  # reserved0
     _put_u32(body, UInt32(0))  # reserved1
 
-    # ---- layout table, 32 bytes per tensor -------------------------------
+    # ---- layout table, 20 bytes plus the name's per tensor ---------------
     # ASCENDING param_id, and `param_id` IS the index. DEVIATION 1550: this
     # order is part of the checkpoint hash specification and changing it
     # invalidates every digest this profile has ever produced.
@@ -784,12 +771,12 @@ def _save_checkpoint(path: String, ck: Checkpoint, want_sha: Bool) raises -> Tup
         _put_name(body, ck.names[k])
 
     var payload_at = len(body)
-    if payload_at != checkpoint_payload_begin(j):
+    if payload_at != checkpoint_payload_begin(layout_b):
         raise Error(
             String("checkpoint: the writer produced a header of ")
             + String(payload_at)
             + " bytes and the formula says "
-            + String(checkpoint_payload_begin(j))
+            + String(checkpoint_payload_begin(layout_b))
             + ". This is a defect in checkpoint.mojo, caught before the file"
             + " reached disk."
         )
@@ -828,7 +815,7 @@ def _save_checkpoint(path: String, ck: Checkpoint, want_sha: Bool) raises -> Tup
     var h_file = _fold_bytes(body, 0, len(body), FNV_OFFSET)
     _put_u64(body, h_file)
 
-    var want = checkpoint_file_bytes(j, n) + ext_b
+    var want = checkpoint_file_bytes(layout_b, n) + ext_b
     if len(body) != want:
         raise Error(
             String("checkpoint: the writer produced ")
@@ -952,8 +939,10 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
             + " and this reader is version "
             + String(Int(CKPT_FORMAT_VERSION))
             + ". **There is no migration path and there is not meant to be"
-            + " one.** A v2 file read by a v1 reader is field-shifted garbage"
-            + " that still has plausible float values in it."
+            + " one** (version 1 held 16-byte tensor names; save the model"
+            + " again). A file of another version read by this reader is"
+            + " field-shifted garbage that still has plausible float values"
+            + " in it."
         )
 
     # ---- 4. the fixed fields and the size arithmetic ---------------------
@@ -1023,17 +1012,17 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
             + " hashes to the FNV offset basis on every machine, which is"
             + " three vendors agreeing about nothing."
         )
-    if layout_b != CKPT_LAYOUT_ENTRY_BYTES * j:
+    # each entry is 20 bytes plus a name of at least one byte; the names' own counts are checked against
+    # this total entry by entry below (step 7), and the length check (step 5) bounds it by the file
+    if layout_b < (CKPT_LAYOUT_FIXED_BYTES + 1) * j:
         raise Error(
             String(CKPT_REFUSE_HEADER)
             + ": layout_bytes is "
             + String(layout_b)
-            + " and "
-            + String(CKPT_LAYOUT_ENTRY_BYTES)
-            + " * j_count ("
+            + " and j_count ("
             + String(j)
-            + ") is "
-            + String(CKPT_LAYOUT_ENTRY_BYTES * j)
+            + ") entries take at least "
+            + String((CKPT_LAYOUT_FIXED_BYTES + 1) * j)
         )
     if payload_b != Int(CKPT_N_ARRAYS) * n * 4:
         raise Error(
@@ -1077,7 +1066,7 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
 
     # ---- 5. the length, now that the shape is known ----------------------
     var ext_bytes = res1
-    var want = checkpoint_file_bytes(j, n) + ext_bytes
+    var want = checkpoint_file_bytes(layout_b, n) + ext_bytes
     if size < want:
         raise Error(
             String(CKPT_REFUSE_TRUNCATED)
@@ -1155,8 +1144,18 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
 
     ck.offsets.append(0)
     var at = CKPT_HEADER_BYTES + CKPT_DESCRIPTOR_BYTES
+    var layout_end = at + layout_b
     var acc = 0
     for k in range(j):
+        if at + CKPT_LAYOUT_FIXED_BYTES > layout_end:
+            raise Error(
+                String(CKPT_REFUSE_LAYOUT)
+                + ": layout entry "
+                + String(k)
+                + " runs past the layout table's "
+                + String(layout_b)
+                + " bytes."
+            )
         var pid = Int(_get_u32(raw, at))
         var off = Int(_get_u32(raw, at + 4))
         var cnt = Int(_get_u32(raw, at + 8))
@@ -1164,7 +1163,19 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
         var r0 = Int(raw[at + 13])
         var r1 = Int(raw[at + 14])
         var r2 = Int(raw[at + 15])
-        var nm = _get_name(raw, at + 16)
+        var name_b = Int(_get_u32(raw, at + 16))
+        if at + CKPT_LAYOUT_FIXED_BYTES + name_b > layout_end:
+            raise Error(
+                String(CKPT_REFUSE_LAYOUT)
+                + ": layout entry "
+                + String(k)
+                + "'s name of "
+                + String(name_b)
+                + " bytes runs past the layout table's "
+                + String(layout_b)
+                + " bytes."
+            )
+        var nm = _get_name(raw, at + CKPT_LAYOUT_FIXED_BYTES, name_b)
         if pid != k:
             raise Error(
                 String(CKPT_REFUSE_LAYOUT)
@@ -1230,7 +1241,16 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
         ck.offsets.append(acc)
         ck.names.append(nm^)
         ck.buf_initialized.append(flag == 1)
-        at += CKPT_LAYOUT_ENTRY_BYTES
+        at += CKPT_LAYOUT_FIXED_BYTES + name_b
+    if at != layout_end:
+        raise Error(
+            String(CKPT_REFUSE_LAYOUT)
+            + ": the layout entries end at byte "
+            + String(at)
+            + " and the header's layout_bytes end the table at "
+            + String(layout_end)
+            + "."
+        )
     if acc != n:
         raise Error(
             String(CKPT_REFUSE_LAYOUT)
@@ -1242,7 +1262,7 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
         )
 
     # ---- 8. the payload, and only now ------------------------------------
-    var payload_at = checkpoint_payload_begin(j)
+    var payload_at = checkpoint_payload_begin(layout_b)
     var p = payload_at
     for _ in range(n):
         ck.param.append(_get_f32(raw, p))
@@ -1407,7 +1427,7 @@ def load_checkpoint(
 # A bare `cmp -l a.bin b.bin` is the same verdict with less of an address.
 
 
-def _section_of(offset: Int, j: Int, n: Int, ext: Int = 0) -> String:
+def _section_of(offset: Int, layout_b: Int, n: Int, ext: Int = 0) -> String:
     """Which part of the format a byte offset lands in.
 
     A difference in the DESCRIPTOR (two legs launched with different
@@ -1423,7 +1443,7 @@ def _section_of(offset: Int, j: Int, n: Int, ext: Int = 0) -> String:
             " were NOT launched with the same configuration, which makes the"
             " comparison meaningless rather than divergent."
         )
-    var payload_at = checkpoint_payload_begin(j)
+    var payload_at = checkpoint_payload_begin(layout_b)
     if offset < payload_at:
         return String("layout table (param_id/offset/count/flag/name)")
     if offset < payload_at + n * 4:
@@ -1489,11 +1509,11 @@ def compare_checkpoint_files(path_a: String, path_b: String) raises -> String:
 
     # The section report needs a shape. Take it from A's header when A has
     # one; a length mismatch is reported either way.
-    var j = 0
+    var layout_b = 0
     var n = 0
     var ext = 0
     if na >= CKPT_HEADER_BYTES:
-        j = Int(_get_u32(a, 32))
+        layout_b = Int(_get_u32(a, 20))
         n = Int(_get_u32(a, 36))
         ext = Int(_get_u32(a, 56))
 
@@ -1535,7 +1555,7 @@ def compare_checkpoint_files(path_a: String, path_b: String) raises -> String:
         + " vs "
         + String(bv)
         + "\n  section: "
-        + _section_of(first, j, n, ext)
+        + _section_of(first, layout_b, n, ext)
     )
     if na >= CKPT_HEADER_BYTES + 16:
         report += (

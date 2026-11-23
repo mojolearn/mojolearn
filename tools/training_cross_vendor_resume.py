@@ -26,8 +26,12 @@ NAMES = ('embed', 'norm1_w', 'w_q', 'w_k', 'w_v', 'w_o', 'norm2_w',
          'w_gate', 'w_up', 'w_down', 'lm_head')
 COUNTS = (2048, 32, 1024, 512, 512, 1024, 32, 2048, 2048, 2048, 2048)
 TOTAL = 13376
-FILE_BYTES = 161008
-PAYLOAD_AT = 480
+# training/checkpoint.mojo format version 2: a layout entry is 20 bytes plus its name (u32 byte count, then the
+# bytes; lane nn-fix-4, 2026-11-23: version 1's 16-byte NUL-padded name field is gone)
+FORMAT_VERSION = 2
+LAYOUT_BYTES = sum(20 + len(name.encode()) for name in NAMES)
+PAYLOAD_AT = 128 + LAYOUT_BYTES
+FILE_BYTES = PAYLOAD_AT + 3 * TOTAL * 4 + 16
 MASK64 = (1 << 64) - 1
 HEX16 = re.compile(r'[0-9a-f]{16}\Z')
 SOURCE_DIRS = ('checks', 'core', 'gemm', 'embedding', 'transformer', 'mamba', 'training')
@@ -222,7 +226,9 @@ def checkpoint(path):
     path = Path(path)
     data = bounded_checkpoint_bytes(path)
     require(data[:8] == b'MLCKPT01', f'{path}: bad magic')
-    expected_header = {8: 1, 12: 64, 16: 64, 20: 352, 24: 3 * TOTAL * 4,
+    require(u32(data, 8) == FORMAT_VERSION,
+            f'{path}: checkpoint format version {u32(data, 8)}; this tool reads version {FORMAT_VERSION} only')
+    expected_header = {8: FORMAT_VERSION, 12: 64, 16: 64, 20: LAYOUT_BYTES, 24: 3 * TOTAL * 4,
                        28: 16, 32: 11, 36: TOTAL, 40: 3, 44: 32,
                        52: 0, 56: 0, 60: 0}
     for offset, expected in expected_header.items():
@@ -236,15 +242,19 @@ def checkpoint(path):
         require(u32(data, offset) == expected, f'{path}: fixed descriptor mismatch at byte {offset}')
     begin = 0
     flags = []
-    for index, (name, count) in enumerate(zip(NAMES, COUNTS)):
-        entry = data[128 + index * 32:160 + index * 32]
+    at = 128
+    for index, (name, count) in enumerate(zip(NAMES, COUNTS)):  # glue: the 11 fixed layout entries, metadata only
+        word = name.encode()
+        entry = data[at:at + 20 + len(word)]
         require(struct.unpack_from('<III', entry) == (index, begin, count),
                 f'{path}: layout mismatch for {name}')
         require(entry[12] in (0, 1) and entry[13:16] == b'\0' * 3,
                 f'{path}: flag/reserved mismatch for {name}')
-        require(entry[16:32] == name.encode().ljust(16, b'\0'), f'{path}: name mismatch for {name}')
+        require(struct.unpack_from('<I', entry, 16)[0] == len(word) and entry[20:] == word,
+                f'{path}: name mismatch for {name}')
         flags.append(entry[12])
         begin += count
+        at += 20 + len(word)
     payload = data[PAYLOAD_AT:-16]
     for index, (word,) in enumerate(struct.iter_unpack('<I', payload)):
         require((word & 0x7f800000) != 0x7f800000, f'{path}: nonfinite state word {index}')
