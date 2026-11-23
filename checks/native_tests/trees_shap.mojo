@@ -52,9 +52,16 @@ from xtrees.glue_runs import publish_x_trees_glue
 from xtrees.glue_calls import xt_ref, xt_stack_w64, xt_softmax_rows
 from checks.native_tests.bm_rest_boost_fits import DartSpec, DartModel, dart_fit, dart_raw, publish_host_images, trees_key
 from xtrees.agnostic_values_run import (
-    AgnModel, AgnMember, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
-    AGN_SW_IDN_SYN_POOL,
+    AgnModel, AgnMember, AgnVote, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
+    agn_labels_run, AGN_SW_IDN_SYN_POOL, AGN_VOTE_SOFT,
 )
+from xtrees.trees_meta_vote_run import VoteMember
+from core.entry_table import entry_ref_word
+from core.device_route import DeviceRoute
+from core.member_families import MEMBER_FAMILY_NAIVE_BAYES
+from core.naive_bayes_member import naive_bayes_member_v2, NB_KIND_GAUSSIAN, NB_KIND_CATEGORICAL
+from x_prep.transport_host import x_prep_transport_host_v1
+from x_prep.transport_abi import XP_OP_COUNT
 from core.device_route import DEVICE_CPU
 from core.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
@@ -62,7 +69,7 @@ from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_call_of, member_new, member_free,
     member_kind_capabilities, MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS, MEMBER_OP_PREDICT_PROBA,
-    MEMBER_F64, MEMBER_I32, MEMBER_GIL_FREE,
+    MEMBER_F64, MEMBER_F32, MEMBER_I32, MEMBER_GIL_FREE, MEMBER_OP_PREDICT,
 )
 from glm.host.logistic_native_host import qn_host_native_v1
 
@@ -742,11 +749,12 @@ struct _WideRef(AgnModel):
         return Self(self.plan, self.state, self.x, self.n, self.d, self.k, self.parallel)
 
 
-def _handle(f: _Lr, plan_at: Int, x: List[Float32], n: Int, parallel: Bool, refused: List[Int]) raises -> AgnMember:
+def _handle(glue: EntryRef, f: _Lr, plan_at: Int, x: List[Float32], n: Int, parallel: Bool,
+            refused: List[Int]) raises -> AgnMember:
     """The door's native model handle over the fitted member (`_member_open`: predict_proba, float64); `plan_at`
     the address of `f.plan`."""
     return AgnMember(f.plan.member, plan_at, f.state, MEMBER_OP_PREDICT_PROBA,
-                     Int(x.unsafe_ptr()), n, LR_D, 2, parallel, Int(refused.unsafe_ptr()), True, True)
+                     Int(x.unsafe_ptr()), n, LR_D, 2, parallel, Int(refused.unsafe_ptr()), True, True, glue, 0, 0)
 
 
 def _lr_permutation[M: AgnModel](glue: EntryRef, mut on_bg: M, mut model: M, x: List[Float32], bg: List[Float32],
@@ -792,11 +800,11 @@ def test_agnostic_logistic_member() raises:
         var ref_bg = _WideRef(plan_at, lr.state, bg, 20, LR_D, 2, False)
         var ref_m = _WideRef(plan_at, lr.state, x, 4, LR_D, 2, False)
         var want = _kernel_of(glue, ref_bg, ref_m, x, bg, 4, 20, LR_D, 2, linked)
-        var h_bg = _handle(lr, plan_at, bg, 20, False, refused)
-        var h_serial = _handle(lr, plan_at, x, 4, False, refused)
+        var h_bg = _handle(glue, lr, plan_at, bg, 20, False, refused)
+        var h_serial = _handle(glue, lr, plan_at, x, 4, False, refused)
         var serial = _kernel_of(glue, h_bg, h_serial, x, bg, 4, 20, LR_D, 2, linked)
-        var h_bg2 = _handle(lr, plan_at, bg, 20, True, refused)
-        var h_spread = _handle(lr, plan_at, x, 4, True, refused)
+        var h_bg2 = _handle(glue, lr, plan_at, bg, 20, True, refused)
+        var h_spread = _handle(glue, lr, plan_at, x, 4, True, refused)
         var spread = _kernel_of(glue, h_bg2, h_spread, x, bg, 4, 20, LR_D, 2, linked)
         assert_same_words(serial.ev, want.ev, label + ": expected value, handle vs reference")
         assert_same_words(serial.phi, want.phi, label + ": handle vs reference evaluator")
@@ -814,11 +822,11 @@ def test_agnostic_logistic_member() raises:
     var pref_bg = _WideRef(plan_at, lr.state, bg, 20, LR_D, 2, False)
     var pref_m = _WideRef(plan_at, lr.state, x, 4, LR_D, 2, False)
     var pwant = _lr_permutation(glue, pref_bg, pref_m, x, bg, 4, 20, 0)
-    var p_bg = _handle(lr, plan_at, bg, 20, False, refused)
-    var p_serial = _handle(lr, plan_at, x, 4, False, refused)
+    var p_bg = _handle(glue, lr, plan_at, bg, 20, False, refused)
+    var p_serial = _handle(glue, lr, plan_at, x, 4, False, refused)
     var pserial = _lr_permutation(glue, p_bg, p_serial, x, bg, 4, 20, 0)
-    var p_bg2 = _handle(lr, plan_at, bg, 20, True, refused)
-    var p_spread = _handle(lr, plan_at, x, 4, True, refused)
+    var p_bg2 = _handle(glue, lr, plan_at, bg, 20, True, refused)
+    var p_spread = _handle(glue, lr, plan_at, x, 4, True, refused)
     var pspread = _lr_permutation(glue, p_bg2, p_spread, x, bg, 4, 20, 0)
     assert_same_words(pserial.phi, pwant.phi, "logistic member permutation shap: handle vs reference evaluator")
     assert_same_words(pspread.phi, pserial.phi, "logistic member permutation shap: chunks on the workers vs in order")
@@ -835,6 +843,485 @@ def test_agnostic_logistic_member() raises:
     _ = refused^
     _ = fit_x^
     _ = codes^
+    _ = bg^
+    _ = x^
+    _ = xa^
+    _ = xb^
+
+
+# ---------------------------------------------------------------- lane mf-shap2 (2026-11-23): the new served kinds
+# THE LABEL MAP (`test_agn_labels_run`): `agn_labels_run` against an exact host oracle (dst[i] = labels[codes[i]]),
+# split across the host's tasks and in one gather alike, and its refusal of a code outside the table. Fail-proof
+# edit: `codes + 4 * r0` to `codes + 4 * r0 + 4` in its task (the split differs from the oracle).
+# A CLASSIFIER EXPLAINED THROUGH PREDICT (`test_agnostic_label_member`): a binary GaussianNB member (its predict
+# writes int32 codes) explained through `AgnMember`'s label route with labels [-1.5, 4.0]; the reference evaluator
+# maps the member's codes on the host. Kernel and Permutation SHAP equal the reference words exactly; Kernel SHAP
+# equals the exact Shapley values (M = 4: every coalition) and is additive. Fail-proof edit: pass
+# `self.n_labels - 1` as the table length in `AgnMember._run` (the gather refuses code 1).
+# CategoricalNB (`test_agnostic_categorical_member`): the kind-4 member fitted here, its float32 predict_proba
+# through `AgnMember`: Kernel and Permutation SHAP equal the reference evaluator's words, exact Shapley, additive.
+# Fail-proof edit: `NB_KIND_CATEGORICAL` to `NB_KIND_COMPLEMENT` in `naive_bayes_kind_published` (the member
+# refuses kind 4: "is not published"); its fitted state is proven word for word in prep_naive_bayes.mojo
+# `test_categorical_member`.
+# A SOFT VOTE (`test_agnostic_vote`): two LogisticRegression members (weights 1 and 2) folded by `AgnVote` over
+# `vote_soft_run`: its outputs equal the hand formula (rtol 1e-6), Kernel SHAP equals the exact Shapley values of
+# the hand formula's game (rtol 1e-5, atol 1e-6), the chunks on the workers give the serial words, and Permutation
+# SHAP is additive. Fail-proof edit: `n * width` to `n` in `AgnVote._run`'s narrowing (the second class column is
+# garbage).
+
+
+def test_agn_labels_run() raises:
+    var glue = _glue()
+    var n = 1 << 20
+    var table: List[Float32] = [-1.5, 4.0, 7.25]
+    var codes = List[Int32](length=n, fill=Int32(0))
+    for i in range(n):  # small-loop(fixture: codes cycling through the table)
+        codes[i] = Int32((i * 7 + i // 3) % 3)
+    var split = List[Float32](length=n, fill=Float32(0))
+    var whole = List[Float32](length=n, fill=Float32(0))
+    agn_labels_run(glue, Int(table.unsafe_ptr()), 3, Int(codes.unsafe_ptr()), n, Int(split.unsafe_ptr()), True)
+    agn_labels_run(glue, Int(table.unsafe_ptr()), 3, Int(codes.unsafe_ptr()), n, Int(whole.unsafe_ptr()), False)
+    for i in range(n):  # small-loop(oracle: every row)
+        var want = table[Int(codes[i])]
+        require(split[i] == want and whole[i] == want, "label map row " + String(i) + ": split " + String(split[i])
+            + ", one gather " + String(whole[i]) + ", oracle " + String(want))
+    codes[n - 1] = 3
+    var refused = False
+    try:
+        agn_labels_run(glue, Int(table.unsafe_ptr()), 3, Int(codes.unsafe_ptr()), n, Int(split.unsafe_ptr()), True)
+    except e:
+        refused = "out of range" in String(e)
+    require(refused, "the label map took a code outside its table")
+    _ = table^
+    _ = codes^
+    _ = split^
+    _ = whole^
+
+
+def _nb_route() -> DeviceRoute:
+    """The host x_prep image's route for the naive Bayes members (no route flags: float32 probabilities)."""
+    var mode = Int(GLOBAL_NUMERIC_MODE)
+    var route = DeviceRoute(DEVICE_CPU)
+    route.mode = mode
+    route.vendor = 0
+    route.entry = EntryRef(x_prep_transport_host_v1, entry_ref_word(mode, 0, XP_OP_COUNT))
+    route.flags = 0
+    return route
+
+
+def _nb_fit(var params: List[Float64], x: List[Float32], codes: List[Int32], n: Int, d: Int, k: Int) raises -> _Lr:
+    """A naive Bayes member (`params`: its NEW words) fitted on n rows of d features and k class codes."""
+    var plan = MemberPlan()
+    plan.route = _nb_route()
+    plan.family = MEMBER_FAMILY_NAIVE_BAYES
+    plan.kind = Int(params[0])
+    plan.member = MemberRef(EntryRef(naive_bayes_member_v2, 0), 0)
+    var probe = MemberCall(plan.route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    plan.params = params^
+    plan.classes = k
+    var call = member_new(plan)
+    call.x = MemberMatrix(Int(x.unsafe_ptr()), n, d)
+    call.y = MemberMatrix(Int(codes.unsafe_ptr()), n, 1, MEMBER_I32)
+    call.classes = k
+    try:
+        _ = member_call(plan.member, MEMBER_OP_FIT, call)
+    except e:
+        member_free(plan, call)
+        raise e^
+    _ = len(x)
+    _ = len(codes)
+    var state = call.state
+    return _Lr(plan^, state)
+
+
+struct _OpRef(AgnModel):
+    """A reference evaluator: the member's `operation` on the rows. `labels` empty: its float32 output (k columns);
+    else its int32 codes mapped to `labels` on the host (k is 1)."""
+    var plan: Int
+    var state: Int
+    var operation: Int
+    var labels: List[Float32]
+    var x: List[Float32]
+    var n: Int
+    var d: Int
+    var k: Int
+    var fx: List[Float32]
+    var syn: List[Float32]
+    var out: List[Float32]
+
+    def __init__(out self, plan: Int, state: Int, operation: Int, labels: List[Float32], x: List[Float32], n: Int,
+                 d: Int, k: Int):
+        self.plan = plan
+        self.state = state
+        self.operation = operation
+        self.labels = labels.copy()
+        self.x = x.copy()
+        self.n = n
+        self.d = d
+        self.k = k
+        self.fx = List[Float32]()
+        self.syn = List[Float32]()
+        self.out = List[Float32]()
+
+    def answer(self, src: Int, n: Int) raises -> List[Float32]:
+        var plan = MutPointer[MemberPlan, MutUntrackedOrigin](unsafe_from_address=self.plan)
+        var call = member_call_of(plan[], self.state)
+        call.x = MemberMatrix(src, n, self.d)
+        var words = List[Float32](length=max(n * self.k, 1), fill=Float32(0))
+        if len(self.labels) == 0:
+            call.dst = MemberMatrix(Int(words.unsafe_ptr()), n, self.k, MEMBER_F32)
+            _ = member_call(plan[].member, self.operation, call)
+            return words^
+        var codes = List[Int32](length=max(n, 1), fill=Int32(0))
+        call.dst = MemberMatrix(Int(codes.unsafe_ptr()), n, 1, MEMBER_I32)
+        _ = member_call(plan[].member, self.operation, call)
+        for i in range(n):  # small-loop(oracle: the host label map)
+            words[i] = self.labels[Int(codes[i])]
+        return words^
+
+    def explained(mut self) raises -> Int:
+        self.fx = self.answer(Int(self.x.unsafe_ptr()), self.n)
+        return Int(self.fx.unsafe_ptr())
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        if len(self.syn) != count:
+            self.syn = List[Float32](length=count, fill=Float32(0))
+        return Int(self.syn.unsafe_ptr())
+
+    def rows(mut self, n: Int) raises -> Int:
+        self.out = self.answer(Int(self.syn.unsafe_ptr()), n)
+        return Int(self.out.unsafe_ptr())
+
+    def workers(self) -> Int:
+        return 1
+
+    def worker(self) raises -> Self:
+        return Self(self.plan, self.state, self.operation, self.labels, self.x, self.n, self.d, self.k)
+
+
+def _exact_serial[M: AgnModel](mut model: M, x: List[Float32], bg: List[Float32], n: Int, nb: Int, d: Int,
+                               k: Int) raises -> List[Float64]:
+    """`_exact_of` (identity link) with the rows in order on this thread: for a member kind that is not traced for
+    parallel workers (the naive Bayes members are `MEMBER_GIL_DOOR`)."""
+    var out = List[Float64](length=n * d * k, fill=0.0)
+    var weights = _shapley_weights(d)
+    var S = 1 << d
+    for r in range(n):  # small-loop(oracle: the explained rows, in order)
+        var z = _F32P(unsafe_from_address=model.synthetic(S * nb * d, True))
+        for s in range(S):  # small-loop(oracle: every feature subset)
+            for b in range(nb):  # small-loop(oracle: the background rows)
+                for j in range(d):  # small-loop(oracle: one synthetic row)
+                    z[(s * nb + b) * d + j] = x[r * d + j] if ((s >> j) & 1) == 1 else bg[b * d + j]
+        var y = _F32P(unsafe_from_address=model.rows(S * nb))
+        var v = List[Float64](length=S * k, fill=0.0)
+        for s in range(S):  # small-loop(oracle: the game's values)
+            for c in range(k):  # small-loop(oracle: the outputs)
+                var acc = 0.0
+                for b in range(nb):  # small-loop(oracle: the background mean)
+                    acc += Float64(y[(s * nb + b) * k + c])
+                v[s * k + c] = acc / Float64(nb)
+        for c in range(k):  # small-loop(oracle: the outputs)
+            for s in range(S):  # small-loop(oracle: the Shapley sum)
+                var size = 0
+                for j in range(d):  # small-loop(|S|)
+                    size += (s >> j) & 1
+                for j in range(d):  # small-loop(the features outside S)
+                    if ((s >> j) & 1) == 0:
+                        out[(r * d + j) * k + c] += weights[size] * (v[(s | (1 << j)) * k + c] - v[s * k + c])
+    return out^
+
+
+def _perm_of[M: AgnModel](glue: EntryRef, mut on_bg: M, mut model: M, x: List[Float32], bg: List[Float32], n: Int,
+                          nb: Int, d: Int, k: Int, seed: Int) raises -> _Shap:
+    """`PermutationExplainer(m, bg, random_state=seed).shap_values(x, npermutations=40)` over `model`."""
+    var ev = List[Float64](length=k, fill=0.0)
+    agn_expected_run(glue, on_bg.explained(), nb, k, False, Int(ev.unsafe_ptr()))
+    var phi = List[Float64](length=n * d * k, fill=0.0)
+    var req = AgnRequest(Int(x.unsafe_ptr()), Int(bg.unsafe_ptr()), Int(phi.unsafe_ptr()), n, nb, d, k, seed,
+                         AGN_SW_IDN_SYN_POOL, False, True)
+    agn_permutation_values_run(glue, req, 40, 0, 0, model)
+    _ = req^
+    return _Shap(phi^, ev^)
+
+
+def test_agnostic_label_member() raises:
+    """A binary GaussianNB member on `_clf(n_classes=2)[:LR_FIT_ROWS, :4]`, background Xa[:20], explained Xb[:4],
+    explained through predict: its int32 codes mapped to labels [-1.5, 4.0] by the RUN's glue gather."""
+    var glue = _glue()
+    var xa = fixture_f32(SHAP_DIR + "clf2-xa.f32", NA * D)
+    var xb = fixture_f32(SHAP_DIR + "clf2-xb.f32", 450 * D)
+    var ya = fixture_i32(SHAP_DIR + "clf2-ya.i32", NA)
+    var codes = List[Int32](length=LR_FIT_ROWS, fill=Int32(0))
+    for i in range(LR_FIT_ROWS):  # small-loop(fixture: the fit rows' class codes)
+        codes[i] = ya[i]
+    var fit_x = _cols(xa, LR_FIT_ROWS, D, LR_D)
+    var gnb_words: List[Float64] = [Float64(NB_KIND_GAUSSIAN), 1e-9, 0.0, 0.0, 0.0]
+    var gnb = _nb_fit(gnb_words^, fit_x, codes, LR_FIT_ROWS, LR_D, 2)
+    var asked = member_call_of(gnb.plan, gnb.state)
+    asked.flags = MEMBER_OP_PREDICT
+    _ = member_call(gnb.plan.member, MEMBER_OP_OUTPUTS, asked)
+    require(asked.out_dtype == MEMBER_I32 and asked.out_cols == 1,
+            "GaussianNB's member predict no longer writes one int32 code per row: this check no longer covers the "
+            + "label route")
+    var labels: List[Float32] = [-1.5, 4.0]
+    var bg = _cols(xa, 20, D, LR_D)
+    var x = _cols(xb, 4, D, LR_D)
+    var refused = List[Int](length=1, fill=0)
+    var plan_at = Int(UnsafePointer(to=gnb.plan))
+    var lab_at = Int(labels.unsafe_ptr())
+    var ref_bg = _OpRef(plan_at, gnb.state, MEMBER_OP_PREDICT, labels, bg, 20, LR_D, 1)
+    var ref_m = _OpRef(plan_at, gnb.state, MEMBER_OP_PREDICT, labels, x, 4, LR_D, 1)
+    var want = _kernel_of(glue, ref_bg, ref_m, x, bg, 4, 20, LR_D, 1, False)
+    var h_bg = AgnMember(gnb.plan.member, plan_at, gnb.state, MEMBER_OP_PREDICT, Int(bg.unsafe_ptr()), 20, LR_D, 1,
+                         False, Int(refused.unsafe_ptr()), False, True, glue, lab_at, 2)
+    var h = AgnMember(gnb.plan.member, plan_at, gnb.state, MEMBER_OP_PREDICT, Int(x.unsafe_ptr()), 4, LR_D, 1,
+                      False, Int(refused.unsafe_ptr()), False, True, glue, lab_at, 2)
+    var got = _kernel_of(glue, h_bg, h, x, bg, 4, 20, LR_D, 1, False)
+    assert_same_words(got.ev, want.ev, "label member kernel shap: expected value, handle vs reference")
+    assert_same_words(got.phi, want.phi, "label member kernel shap: handle vs reference evaluator")
+    var exact = _exact_serial(ref_m, x, bg, 4, 20, LR_D, 1)
+    _close(got.phi, exact, 1e-6, 1e-6, "label member kernel shap vs exact Shapley")
+    var f = ref_m.answer(Int(x.unsafe_ptr()), 4)
+    _additive(got, f, 4, LR_D, 1, False, 0.0, 1e-5, "label member kernel shap additivity")
+    var p_ref_bg = _OpRef(plan_at, gnb.state, MEMBER_OP_PREDICT, labels, bg, 20, LR_D, 1)
+    var p_ref_m = _OpRef(plan_at, gnb.state, MEMBER_OP_PREDICT, labels, x, 4, LR_D, 1)
+    var pwant = _perm_of(glue, p_ref_bg, p_ref_m, x, bg, 4, 20, LR_D, 1, 0)
+    var p_bg = AgnMember(gnb.plan.member, plan_at, gnb.state, MEMBER_OP_PREDICT, Int(bg.unsafe_ptr()), 20, LR_D, 1,
+                         False, Int(refused.unsafe_ptr()), False, True, glue, lab_at, 2)
+    var p_h = AgnMember(gnb.plan.member, plan_at, gnb.state, MEMBER_OP_PREDICT, Int(x.unsafe_ptr()), 4, LR_D, 1,
+                        False, Int(refused.unsafe_ptr()), False, True, glue, lab_at, 2)
+    var pgot = _perm_of(glue, p_bg, p_h, x, bg, 4, 20, LR_D, 1, 0)
+    assert_same_words(pgot.phi, pwant.phi, "label member permutation shap: handle vs reference evaluator")
+    _additive(pgot, f, 4, LR_D, 1, False, 0.0, 1e-5, "label member permutation shap additivity")
+    require(refused[0] == 0, "the label member refused a chunk")
+    _ = h_bg^
+    _ = h^
+    _ = p_bg^
+    _ = p_h^
+    _ = ref_bg^
+    _ = ref_m^
+    _ = p_ref_bg^
+    _ = p_ref_m^
+    _lr_free(gnb)
+    _ = labels^
+    _ = refused^
+    _ = fit_x^
+    _ = codes^
+    _ = bg^
+    _ = x^
+    _ = xa^
+    _ = xb^
+
+
+comptime NBX_DIR = "checks/native_tests/fixtures/prep_nbx/"
+
+
+def test_agnostic_categorical_member() raises:
+    """CategoricalNB(alpha=0.5) as the kind-4 member on the `cat` fixture (500 x 4 categories, three classes),
+    background X[:20], explained X[20:24] (training rows: every category is inside the fitted range), its
+    float32 predict_proba through `AgnMember`."""
+    var glue = _glue()
+    var n = 500
+    var d = 4
+    var k = 3
+    var xs = fixture_f32(NBX_DIR + "cat-x.f32", n * d)
+    var ys = fixture_i32(NBX_DIR + "cat-y.i32", n)
+    var cat_words: List[Float64] = [Float64(NB_KIND_CATEGORICAL), 0.5, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+    var cat = _nb_fit(cat_words^, xs, ys, n, d, k)
+    var bg = _cols(xs, 20, d, d)
+    var x = List[Float32](length=4 * d, fill=Float32(0))
+    for i in range(4 * d):  # small-loop(fixture: X[20:24])
+        x[i] = xs[20 * d + i]
+    var refused = List[Int](length=1, fill=0)
+    var none = List[Float32]()
+    var plan_at = Int(UnsafePointer(to=cat.plan))
+    var ref_bg = _OpRef(plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, none, bg, 20, d, k)
+    var ref_m = _OpRef(plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, none, x, 4, d, k)
+    var want = _kernel_of(glue, ref_bg, ref_m, x, bg, 4, 20, d, k, False)
+    var h_bg = AgnMember(cat.plan.member, plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, Int(bg.unsafe_ptr()), 20, d, k,
+                         False, Int(refused.unsafe_ptr()), False, True, glue, 0, 0)
+    var h = AgnMember(cat.plan.member, plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, Int(x.unsafe_ptr()), 4, d, k,
+                      False, Int(refused.unsafe_ptr()), False, True, glue, 0, 0)
+    var got = _kernel_of(glue, h_bg, h, x, bg, 4, 20, d, k, False)
+    assert_same_words(got.ev, want.ev, "categorical member kernel shap: expected value, handle vs reference")
+    assert_same_words(got.phi, want.phi, "categorical member kernel shap: handle vs reference evaluator")
+    var exact = _exact_serial(ref_m, x, bg, 4, 20, d, k)
+    _close(got.phi, exact, 1e-6, 1e-6, "categorical member kernel shap vs exact Shapley")
+    var f = ref_m.answer(Int(x.unsafe_ptr()), 4)
+    _additive(got, f, 4, d, k, False, 0.0, 1e-5, "categorical member kernel shap additivity")
+    var p_ref_bg = _OpRef(plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, none, bg, 20, d, k)
+    var p_ref_m = _OpRef(plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, none, x, 4, d, k)
+    var pwant = _perm_of(glue, p_ref_bg, p_ref_m, x, bg, 4, 20, d, k, 0)
+    var p_bg = AgnMember(cat.plan.member, plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, Int(bg.unsafe_ptr()), 20, d, k,
+                         False, Int(refused.unsafe_ptr()), False, True, glue, 0, 0)
+    var p_h = AgnMember(cat.plan.member, plan_at, cat.state, MEMBER_OP_PREDICT_PROBA, Int(x.unsafe_ptr()), 4, d, k,
+                        False, Int(refused.unsafe_ptr()), False, True, glue, 0, 0)
+    var pgot = _perm_of(glue, p_bg, p_h, x, bg, 4, 20, d, k, 0)
+    assert_same_words(pgot.phi, pwant.phi, "categorical member permutation shap: handle vs reference evaluator")
+    _additive(pgot, f, 4, d, k, False, 0.0, 1e-5, "categorical member permutation shap additivity")
+    require(refused[0] == 0, "the categorical member refused a chunk")
+    _ = h_bg^
+    _ = h^
+    _ = p_bg^
+    _ = p_h^
+    _ = ref_bg^
+    _ = ref_m^
+    _ = p_ref_bg^
+    _ = p_ref_m^
+    _lr_free(cat)
+    _ = none^
+    _ = refused^
+    _ = bg^
+    _ = x^
+    _ = xs^
+    _ = ys^
+
+
+struct _VoteRef(AgnModel):
+    """The hand formula of VotingClassifier(voting='soft', weights=[w0, w1]).predict_proba over two members:
+    (w0 f32(p0) + w1 f32(p1)) / (w0 + w1) in float64, narrowed to float32. `plans` the members' plan addresses."""
+    var p0: Int
+    var s0: Int
+    var p1: Int
+    var s1: Int
+    var w0: Float64
+    var w1: Float64
+    var x: List[Float32]
+    var n: Int
+    var d: Int
+    var fx: List[Float32]
+    var syn: List[Float32]
+    var out: List[Float32]
+
+    def __init__(out self, p0: Int, s0: Int, p1: Int, s1: Int, w0: Float64, w1: Float64, x: List[Float32], n: Int,
+                 d: Int):
+        self.p0 = p0
+        self.s0 = s0
+        self.p1 = p1
+        self.s1 = s1
+        self.w0 = w0
+        self.w1 = w1
+        self.x = x.copy()
+        self.n = n
+        self.d = d
+        self.fx = List[Float32]()
+        self.syn = List[Float32]()
+        self.out = List[Float32]()
+
+    def _member(self, plan_at: Int, state: Int, src: Int, n: Int) raises -> List[Float64]:
+        var plan = MutPointer[MemberPlan, MutUntrackedOrigin](unsafe_from_address=plan_at)
+        var wide = List[Float64](length=max(n * 2, 1), fill=0.0)
+        var call = member_call_of(plan[], state)
+        call.x = MemberMatrix(src, n, self.d)
+        call.dst = MemberMatrix(Int(wide.unsafe_ptr()), n, 2, MEMBER_F64)
+        _ = member_call(plan[].member, MEMBER_OP_PREDICT_PROBA, call)
+        return wide^
+
+    def answer(self, src: Int, n: Int) raises -> List[Float32]:
+        var a = self._member(self.p0, self.s0, src, n)
+        var b = self._member(self.p1, self.s1, src, n)
+        var words = List[Float32](length=max(n * 2, 1), fill=Float32(0))
+        for i in range(n * 2):  # small-loop(oracle: the soft vote, word by word)
+            var acc = self.w0 * Float64(a[i].cast[DType.float32]()) + self.w1 * Float64(b[i].cast[DType.float32]())
+            words[i] = (acc / (self.w0 + self.w1)).cast[DType.float32]()
+        return words^
+
+    def explained(mut self) raises -> Int:
+        self.fx = self.answer(Int(self.x.unsafe_ptr()), self.n)
+        return Int(self.fx.unsafe_ptr())
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        if len(self.syn) != count:
+            self.syn = List[Float32](length=count, fill=Float32(0))
+        return Int(self.syn.unsafe_ptr())
+
+    def rows(mut self, n: Int) raises -> Int:
+        self.out = self.answer(Int(self.syn.unsafe_ptr()), n)
+        return Int(self.out.unsafe_ptr())
+
+    def workers(self) -> Int:
+        return 1
+
+    def worker(self) raises -> Self:
+        return Self(self.p0, self.s0, self.p1, self.s1, self.w0, self.w1, self.x, self.n, self.d)
+
+
+def test_agnostic_vote() raises:
+    """VotingClassifier(voting='soft', weights=[1, 2]) over two LogisticRegression members (fitted on rows
+    [0, 200) and [200, 400) of `_clf(n_classes=2)[:, :4]`), background Xa[:20], explained Xb[:4], through
+    `AgnVote`."""
+    var glue = _glue()
+    var xa = fixture_f32(SHAP_DIR + "clf2-xa.f32", NA * D)
+    var xb = fixture_f32(SHAP_DIR + "clf2-xb.f32", 450 * D)
+    var ya = fixture_i32(SHAP_DIR + "clf2-ya.i32", NA)
+    var all_x = _cols(xa, 2 * LR_FIT_ROWS, D, LR_D)
+    var first_x = List[Float32](length=LR_FIT_ROWS * LR_D, fill=Float32(0))
+    var second_x = List[Float32](length=LR_FIT_ROWS * LR_D, fill=Float32(0))
+    for i in range(LR_FIT_ROWS * LR_D):  # small-loop(fixture: the two members' rows)
+        first_x[i] = all_x[i]
+        second_x[i] = all_x[LR_FIT_ROWS * LR_D + i]
+    var first_y = List[Int32](length=LR_FIT_ROWS, fill=Int32(0))
+    var second_y = List[Int32](length=LR_FIT_ROWS, fill=Int32(0))
+    for i in range(LR_FIT_ROWS):  # small-loop(fixture: the two members' codes)
+        first_y[i] = ya[i]
+        second_y[i] = ya[LR_FIT_ROWS + i]
+    var m0 = _lr_fit(first_x, first_y, LR_FIT_ROWS, LR_D)
+    var m1 = _lr_fit(second_x, second_y, LR_FIT_ROWS, LR_D)
+    var p0 = Int(UnsafePointer(to=m0.plan))
+    var p1 = Int(UnsafePointer(to=m1.plan))
+    var class_cols: List[Int32] = [0, 1]
+    var cc = Int(class_cols.unsafe_ptr())
+    var members = List[VoteMember]()
+    members.append(VoteMember(p0, m0.state, MEMBER_OP_PREDICT_PROBA, 2, MEMBER_F64, cc, 1.0))
+    members.append(VoteMember(p1, m1.state, MEMBER_OP_PREDICT_PROBA, 2, MEMBER_F64, cc, 2.0))
+    var bg = _cols(xa, 20, D, LR_D)
+    var x = _cols(xb, 4, D, LR_D)
+    var refused = List[Int](length=1, fill=0)
+    var ref_m = _VoteRef(p0, m0.state, p1, m1.state, 1.0, 2.0, x, 4, LR_D)
+    var v_bg = AgnVote(members, AGN_VOTE_SOFT, Int(bg.unsafe_ptr()), 20, LR_D, 2, False, True,
+                       Int(refused.unsafe_ptr()), glue)
+    var v = AgnVote(members, AGN_VOTE_SOFT, Int(x.unsafe_ptr()), 4, LR_D, 2, False, True,
+                    Int(refused.unsafe_ptr()), glue)
+    var hand = ref_m.answer(Int(x.unsafe_ptr()), 4)
+    var folded = _F32P(unsafe_from_address=v.explained())
+    for i in range(8):  # small-loop(oracle: the explained rows' vote)
+        require(abs(Float64(folded[i]) - Float64(hand[i])) <= 1e-6 * abs(Float64(hand[i])) + 1e-7,
+                "vote output " + String(i) + ": fold " + String(folded[i]) + ", hand formula " + String(hand[i]))
+    var serial = _kernel_of(glue, v_bg, v, x, bg, 4, 20, LR_D, 2, False)
+    var w_bg = AgnVote(members, AGN_VOTE_SOFT, Int(bg.unsafe_ptr()), 20, LR_D, 2, True, True,
+                       Int(refused.unsafe_ptr()), glue)
+    var w = AgnVote(members, AGN_VOTE_SOFT, Int(x.unsafe_ptr()), 4, LR_D, 2, True, True,
+                    Int(refused.unsafe_ptr()), glue)
+    var spread = _kernel_of(glue, w_bg, w, x, bg, 4, 20, LR_D, 2, False)
+    assert_same_words(spread.phi, serial.phi, "vote kernel shap: chunks on the workers vs in order")
+    var exact = _exact_serial(ref_m, x, bg, 4, 20, LR_D, 2)
+    _close(serial.phi, exact, 1e-5, 1e-6, "vote kernel shap vs the exact Shapley values of the hand formula")
+    _additive(serial, hand, 4, LR_D, 2, False, 0.0, 1e-5, "vote kernel shap additivity")
+    var q_bg = AgnVote(members, AGN_VOTE_SOFT, Int(bg.unsafe_ptr()), 20, LR_D, 2, True, True,
+                       Int(refused.unsafe_ptr()), glue)
+    var q = AgnVote(members, AGN_VOTE_SOFT, Int(x.unsafe_ptr()), 4, LR_D, 2, True, True,
+                    Int(refused.unsafe_ptr()), glue)
+    var perm = _perm_of(glue, q_bg, q, x, bg, 4, 20, LR_D, 2, 0)
+    _additive(perm, hand, 4, LR_D, 2, False, 0.0, 1e-5, "vote permutation shap additivity")
+    require(refused[0] == 0, "a vote member refused a chunk")
+    _ = v_bg^
+    _ = v^
+    _ = w_bg^
+    _ = w^
+    _ = q_bg^
+    _ = q^
+    _ = ref_m^
+    _ = members^
+    _ = class_cols^
+    _lr_free(m0)
+    _lr_free(m1)
+    _ = refused^
+    _ = all_x^
+    _ = first_x^
+    _ = second_x^
+    _ = first_y^
+    _ = second_y^
     _ = bg^
     _ = x^
     _ = xa^

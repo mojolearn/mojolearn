@@ -44,6 +44,21 @@ from checks.native_tests.prep_nb_bm_host import (
 )
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.device_route import DeviceRoute, DEVICE_CPU
+from core.entry_table import EntryRef, entry_ref_word
+from core.member_abi import (
+    MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_call_of, member_new, member_free,
+    MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_EXPORT,
+    MEMBER_OP_IMPORT, MEMBER_OP_OUTPUTS, MEMBER_I32, MEMBER_F32, MEMBER_F64, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE,
+)
+from core.member_families import MEMBER_FAMILY_NAIVE_BAYES
+from core.naive_bayes_member import (
+    naive_bayes_member_v2, NB_KIND_CATEGORICAL, NB_BLOCK_LOG_PROB, NB_BLOCK_LOG_PRIOR, NB_BLOCK_FEATURE_COUNT,
+    NB_BLOCK_CLASS_COUNT, NB_BLOCK_CATEGORIES,
+)
+from x_prep.transport_host import x_prep_transport_host_v1
+from x_prep.transport_abi import XP_OP_COUNT
 
 comptime NB_N = 600
 comptime NB_D = 6
@@ -378,6 +393,211 @@ def partial_unit(unit: Int) raises:
 
 def test_nb_partial_fit() raises:
     check_cases("nb_partial_fit", 10, partial_unit)
+
+
+# ---- CategoricalNB as a NaiveBayes MEMBER (lane mf-shap2, 2026-11-23): core/naive_bayes_member.mojo kind 4 ----
+# The member's fit, export, import, predict and predict_proba on the host x_prep image's transport route, against the
+# same programs run directly (`cat_fit`, `cat_proba` of prep_nb_bm_host.mojo: the door's `_cat_fit_programs` and
+# `_base_scores`): every fitted block and every output word equal, and the door's range refusal in its words.
+# Cases: the `cat` fixture (alpha 0.5) on both routes; the weighted `wcat` fixture with min_categories=[2, 7, 5]
+# (blocked) and min_categories=6 (blocks off). Fail-proof edits: `>=` to `>` in `_cat_refusals` (the refusal case
+# fails: "no refusal"); CLS_PRIOR_FIT to CLS_PRIOR_UNIFORM in `_fit_categorical` (class_log_prior_ differs);
+# drop the `cat_blocked` argument of `_score` (the blocked case's proba words differ or the refusal is missed).
+
+
+def nb_member_route() -> DeviceRoute:
+    """The host x_prep image's route for the naive Bayes members: the transport in `entry`, no route flags (no
+    device store, float32 probabilities)."""
+    var mode = Int(GLOBAL_NUMERIC_MODE)
+    var route = DeviceRoute(DEVICE_CPU)
+    route.mode = mode
+    route.vendor = 0
+    route.entry = EntryRef(x_prep_transport_host_v1, entry_ref_word(mode, 0, XP_OP_COUNT))
+    route.flags = 0
+    return route
+
+
+def cat_member_plan(alpha: Float64, blocked: Bool, min_mode: Int, min_value: Int, mins: List[Int],
+                    K: Int) raises -> MemberPlan:
+    """A CategoricalNB member plan (fit_prior=True, no class_prior, the R3 work region off: `cat_fit`'s
+    programs) with min_categories None (0), one integer (1) or a list (2)."""
+    var plan = MemberPlan()
+    plan.route = nb_member_route()
+    plan.family = MEMBER_FAMILY_NAIVE_BAYES
+    plan.kind = NB_KIND_CATEGORICAL
+    plan.member = MemberRef(EntryRef(naive_bayes_member_v2, 0), 0)
+    var probe = MemberCall(plan.route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    var words: List[Float64] = [Float64(NB_KIND_CATEGORICAL), alpha, 1.0 if blocked else 0.0, 0.0, 0.0, 1.0,
+                                Float64(min_mode), Float64(min_value), Float64(len(mins) if min_mode == 2 else 0)]
+    if min_mode == 2:
+        for j in range(len(mins)):  # small-loop(params: the min_categories list)
+            words.append(Float64(mins[j]))
+    plan.params = words^
+    plan.classes = K
+    return plan^
+
+
+def member_block_words(plan: MemberPlan, mut call: MemberCall, block: Int) raises -> List[Float64]:
+    """One exported block of the state as float64 words (float32 blocks widened exactly)."""
+    call.block = block
+    call.flags = 0
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var view = call.dst
+    var out = List[Float64](capacity=view.rows * view.cols)
+    if view.dtype == MEMBER_F64:
+        var p = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=view.data)
+        for i in range(view.rows * view.cols):  # small-loop(oracle: one exported block)
+            out.append(p[i])
+    else:
+        var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=view.data)
+        for i in range(view.rows * view.cols):  # small-loop(oracle: one exported block)
+            out.append(Float64(p[i]))
+    return out^
+
+
+def same_f32(got: List[Float64], want: List[Float32], label: String) raises:
+    require(len(got) == len(want), label + ": " + String(len(got)) + " words, oracle " + String(len(want)))
+    for i in range(len(want)):  # small-loop(oracle: one block)
+        require(got[i] == Float64(want[i]), label + " word " + String(i) + ": " + String(got[i]) + " vs "
+            + String(want[i]))
+
+
+def member_scores(plan: MemberPlan, state: Int, xh: List[Float32], n: Int, d: Int, K: Int) raises -> NbProba:
+    """The member's predict_proba (float32: no float64-proba route flag) and predict (int32 codes) on xh."""
+    var call = member_call_of(plan, state)
+    var proba = List[Float32](length=n * K, fill=Float32(0))
+    var codes = List[Int32](length=n, fill=Int32(0))
+    call.x = MemberMatrix(Int(xh.unsafe_ptr()), n, d)
+    call.dst = MemberMatrix(Int(proba.unsafe_ptr()), n, K, MEMBER_F32)
+    _ = member_call(plan.member, MEMBER_OP_PREDICT_PROBA, call)
+    call.dst = MemberMatrix(Int(codes.unsafe_ptr()), n, 1, MEMBER_I32)
+    _ = member_call(plan.member, MEMBER_OP_PREDICT, call)
+    _ = len(xh)  # read through both calls
+    return NbProba(proba^, codes^)
+
+
+def categorical_member_unit(unit: Int) raises:
+    var weighted = unit >= 2
+    var n = 500
+    var d = 3 if weighted else 4
+    var K = NB_K
+    var blocked = unit == 0 or unit == 2
+    var alpha = 1.0 if weighted else 0.5
+    var min_mode = 0
+    var mins = List[Int]()
+    if unit == 2:
+        min_mode = 2
+        mins = [2, 7, 5]
+    elif unit == 3:
+        min_mode = 1
+        mins = List[Int](length=d, fill=6)
+    var label = "categorical member " + String(unit) + " blocked " + String(blocked)
+    var tag = String("wcat") if weighted else String("cat")
+    var x = nbx_f32(tag + "-x.f32", n * d)
+    var y = nbx_i32(tag + "-y.i32", n)
+    var w = nbx_f32("wcat-w.f32", n) if weighted else List[Float32]()
+    var nh = 50 if weighted else 100
+    var xh = take_rows(x, d, 0, 50) if weighted else nbx_f32("cat-xh.f32", 100 * d)
+    var want = cat_fit(cat_empty(), x, y, w, d, K, alpha, min_mode != 0, mins, False, blocked)
+    var plan = cat_member_plan(alpha, blocked, min_mode, 6, mins, K)
+    var call = member_new(plan)
+    try:
+        call.x = MemberMatrix(Int(x.unsafe_ptr()), n, d)
+        call.y = MemberMatrix(Int(y.unsafe_ptr()), n, 1, MEMBER_I32)
+        if weighted:
+            call.weights = MemberMatrix(Int(w.unsafe_ptr()), n, 1)
+        call.classes = K
+        _ = member_call(plan.member, MEMBER_OP_FIT, call)
+        _ = len(x)
+        _ = len(y)
+        _ = len(w)
+        # the fitted blocks, word for word
+        same_f32(member_block_words(plan, call, NB_BLOCK_LOG_PROB), want.flp, label + ": _flp")
+        same_f32(member_block_words(plan, call, NB_BLOCK_FEATURE_COUNT), want.cc, label + ": _cc")
+        same_f32(member_block_words(plan, call, NB_BLOCK_LOG_PRIOR), want.clp, label + ": class_log_prior_")
+        same_f32(member_block_words(plan, call, NB_BLOCK_CLASS_COUNT), want.cnt, label + ": class_count_")
+        var cats = member_block_words(plan, call, NB_BLOCK_CATEGORIES)
+        require(len(cats) == d, label + ": n_categories_ has " + String(len(cats)) + " words")
+        for j in range(d):  # small-loop(oracle: the features' category counts)
+            require(Int(cats[j]) == want.ncat[j], label + ": n_categories_[" + String(j) + "]")
+        var scalars = member_block_words(plan, call, MEMBER_BLOCK_SCALARS)
+        require(len(scalars) == 3 and Int(scalars[0]) == d and Int(scalars[1]) == K and Int(scalars[2]) == want.cmax,
+                label + ": the scalars block is not [d, K, cmax]")
+        # the outputs, word for word, against the scoring program run directly
+        var oracle = cat_proba(want, xh, nh, d, K, blocked)
+        var got = member_scores(plan, call.state, xh, nh, d, K)
+        same_f32(widen(got.proba), oracle.proba, label + ": predict_proba")
+        for i in range(nh):  # small-loop(oracle: the codes)
+            require(got.codes[i] == oracle.codes[i], label + ": predict code of row " + String(i))
+        var asked = member_call_of(plan, call.state)
+        asked.flags = MEMBER_OP_PREDICT_PROBA
+        _ = member_call(plan.member, MEMBER_OP_OUTPUTS, asked)
+        require(asked.out_cols == K and asked.out_dtype == MEMBER_F32, label + ": predict_proba OUTPUTS")
+        # a state imported from the exported blocks (what a held member of the explainers is) answers the same
+        var copy = member_new(plan)
+        try:
+            var flp = want.flp.copy()
+            var cc = want.cc.copy()
+            var clp = want.clp.copy()
+            var cnt = want.cnt.copy()
+            var ncat = List[Float64](capacity=d)
+            for j in range(d):  # small-loop(params: the category counts)
+                ncat.append(Float64(want.ncat[j]))
+            var head: List[Float64] = [Float64(d), Float64(K), Float64(want.cmax)]
+            copy.flags = 0
+            copy.block = NB_BLOCK_LOG_PROB
+            copy.x = MemberMatrix(Int(flp.unsafe_ptr()), d * K, want.cmax)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, copy)
+            copy.block = NB_BLOCK_FEATURE_COUNT
+            copy.x = MemberMatrix(Int(cc.unsafe_ptr()), d * K, want.cmax)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, copy)
+            copy.block = NB_BLOCK_LOG_PRIOR
+            copy.x = MemberMatrix(Int(clp.unsafe_ptr()), 1, K)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, copy)
+            copy.block = NB_BLOCK_CLASS_COUNT
+            copy.x = MemberMatrix(Int(cnt.unsafe_ptr()), 1, K)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, copy)
+            copy.block = NB_BLOCK_CATEGORIES
+            copy.x = MemberMatrix(Int(ncat.unsafe_ptr()), 1, d, MEMBER_F64)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, copy)
+            copy.block = MEMBER_BLOCK_SCALARS
+            copy.x = MemberMatrix(Int(head.unsafe_ptr()), 1, 3, MEMBER_F64)
+            copy.flags = MEMBER_IMPORT_DONE
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, copy)
+            _ = len(flp)
+            _ = len(cc)
+            _ = len(clp)
+            _ = len(cnt)
+            _ = len(ncat)
+            _ = len(head)
+            var again = member_scores(plan, copy.state, xh, nh, d, K)
+            same_f32(widen(again.proba), oracle.proba, label + ": predict_proba of the imported state")
+        finally:
+            member_free(plan, copy)
+        # the door's refusal of a category index outside the fitted range, before any output is written
+        var bad = xh.copy()
+        bad[0] = Float32(want.ncat[0])
+        var refused = False
+        try:
+            _ = member_scores(plan, call.state, bad, nh, d, K)
+        except e:
+            refused = "outside the fitted range" in String(e)
+        require(refused, label + ": no refusal of category " + String(want.ncat[0]) + " in feature 0")
+        _ = len(xh)
+    finally:
+        member_free(plan, call)
+
+
+def widen(words: List[Float32]) -> List[Float64]:
+    var out = List[Float64](capacity=len(words))
+    for i in range(len(words)):  # small-loop(oracle: one answer)
+        out.append(Float64(words[i]))
+    return out^
+
+
+def test_categorical_member() raises:
+    check_cases("categorical_nb_member", 4, categorical_member_unit)
 
 
 def main() raises:
