@@ -1187,7 +1187,7 @@ def _rfe_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: Pyth
     var est = _rfe_estimator(s.model)
     if len(em.select) > 0 and len(em.select) <= s.d:
         _member_open(em, s, est, x, n, context)
-    if not em.native and len(em.refusal) == 0:
+    if not em.native and em.refusal.byte_length() == 0:
         em.refusal = ("TypeError: the explained " + name + "'s fitted estimator (" + String(py_type(est).__name__)
                       + ") has no native member that serves its " + s.method + " over the selected columns")
 
@@ -1235,16 +1235,16 @@ def _open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonOb
         _rfe_open(em, s, x, n, context)
     else:
         _member_open(em, s, s.model, x, n, context)
-        if not em.native and len(em.refusal) == 0:
+        if not em.native and em.refusal.byte_length() == 0:
             var inner = _batched_member(s.model, context)
             if inner is not None:
                 _member_open(em, s, inner, x, n, context)
             else:
                 _meta_open(em, s, x, n, context)
-        if (not em.native and not em.meta and len(em.refusal) == 0
+        if (not em.native and not em.meta and em.refusal.byte_length() == 0
                 and not prep_estimator_has(s.model, s.method, context)):
             em.refusal = "TypeError: the explained mojolearn estimator has no native " + s.method
-    if len(em.refusal) > 0:
+    if em.refusal.byte_length() > 0:
         raise Error(em.refusal)
 
 

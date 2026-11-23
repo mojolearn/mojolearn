@@ -308,7 +308,7 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
         var name = (classical_estimator_name(estimator)
                     if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT else String(""))
         var source = rfe_member_source(family, mask, getter, name)
-        if len(source.refusal) > 0:
+        if source.refusal.byte_length() > 0:
             refusal = source.refusal.copy()
         elif source.block == 0:
             return member^
@@ -321,7 +321,7 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
         member.gil_free = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
     except:
         return member^
-    if len(refusal) > 0:
+    if refusal.byte_length() > 0:
         raise Error(refusal)
     member.y_address = Int(py=classical_address(member.y))
     member.owner = owner^

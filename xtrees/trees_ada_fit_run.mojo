@@ -224,8 +224,11 @@ def ada_release_members(plan: MemberPlan, mut states: List[Int]):
     """Free every kept member state (non-raising: error paths and the PACK)."""
     for i in range(len(states)):  # small-loop(kept rounds: at most n_estimators states, error path only)
         if states[i] != 0:
-            var call = member_call_of(plan, states[i])
-            member_free(plan, call)
+            try:
+                var call = member_call_of(plan, states[i])
+                member_free(plan, call)
+            except:
+                pass  # non-raising release: a state whose call cannot be rebuilt is left to the process
     states = List[Int]()
 
 

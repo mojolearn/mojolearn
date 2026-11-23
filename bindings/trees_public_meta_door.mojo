@@ -76,7 +76,7 @@ from xtrees.trees_forest_run import (
 )
 from bindings.trees_public_boost_door import (
     _mode, _xt, _xr, _x_f32, _as_array, _arange, _class_major, _gather, _gather_codes,
-    _gather_vec, _argmax, _scale, _member_codes,
+    _gather_vec, _argmax, _member_codes,
 )
 from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
@@ -144,7 +144,7 @@ from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_scatter, xt_device_folds, xt_transpose_f64,
     xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows, xt_platt_fit,
     xt_isotonic_fit, xt_platt_apply_strided, xt_isotonic_predict_strided, xt_complement_pairs,
-    xt_ovr_assemble, xt_calibrated_proba,
+    xt_ovr_assemble, xt_calibrated_proba, xt_scale,
 )
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
@@ -3433,10 +3433,10 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         _ = plan.folds()  # its fold classes were read for the words above
         raise Error(failure)
     # PACK
-    var classes = py_call(b.list, py_call(b.range, PythonObject(k)))
+    var code_list = py_call(b.list, py_call(b.range, PythonObject(k)))
     try:
         for u in range(units):  # driver-loop: over the members (publication)
-            var labels = classes
+            var labels = code_list
             if u < folds and len(plan.fold_classes[u]) > 0:
                 # a re-coded fold: fold code c is the ensemble code fold_classes[u][c]
                 labels = Python.list()
@@ -3742,6 +3742,14 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
     _ = Xa  # the rows are read through RUN
     _ = got.keep  # the members' blocks, class codes and knots are read through RUN
     return trees_reshape(acc, Python.tuple(n, k), context)
+
+
+def _scale(xt: PythonObject, acc: PythonObject, divisor: Float64) raises:
+    # The mean over the calibrated pairs (moved here from trees_public_boost_door when lane mf-oob3 deleted its
+    # other users there; this is its one caller).
+    var glue = _xr(xt)
+    _ = xt_scale(glue, trees_address(acc), Int(py=acc.size), divisor)
+    _ = acc
 
 
 def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
