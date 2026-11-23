@@ -118,7 +118,8 @@ from core.member_abi import (
     MEMBER_CAN_SCOPE, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE,
     MEMBER_GIL_DOOR,
 )
-from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
+from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE
+from bindings.member_owner_unpack import member_mark
 from core.member_notices import member_notices_take
 
 #: Default ON. `-D MOJOLEARN_MEMBER_SET_OFF` makes `member_set_admit` answer
@@ -218,6 +219,14 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     # class_weight dict is read over them (keyed by codes, as that door
     # reads it) and no classifier admission of a set falls back for it.
     var deferred = Python.list() if set.labels is None else set.labels
+    # A META member (lane mf-split4) is handed the labels of the codes it is
+    # fitted on (the caller's, else the codes 0 .. classes-1 themselves): its
+    # admission hands each nested estimator the labels ITS fit sees, so a
+    # nested class_weight table is filled as this function fills a leaf's.
+    # Read only for a classifier set whose caller holds no labels: one mark
+    # read and one small list per such META admission.
+    if classes > 0 and set.labels is None and member_mark(plan, b).family == MEMBER_FAMILY_ENSEMBLE:
+        deferred = py_call(b.list, py_call(b.range, PythonObject(classes)))
     var owner = member_admit_serving_labeled(estimator, fields, plan, member_context, b, needs,
                                              deferred if classes > 0 else PythonObject(None))
     if not owner.published:

@@ -6,8 +6,14 @@ and (lane mf-meta3b, THE UNIT KINDS) OneVsRestClassifier,
 CalibratedClassifierCV, BaggingClassifier and BaggingRegressor
 (python/mojolearn/_expansion_trees.py `_mojolearn_member = (39, kind)`), and
 (lane mf-ada4, THE ADABOOST KIND) AdaBoostClassifier and AdaBoostRegressor
-(`_admit_ada` / `_ada_pack` / `_ada_state`; their door keeps an estimator
-whose base is a random-splitter DecisionTree or carries a class_weight).
+(`_admit_ada` / `_ada_pack` / `_ada_state`; a base's class_weight is the
+kind's class-weight tail since lane mf-split4).
+THE LABELS (lane mf-split4): a FIT caller's labels of the codes it fits on
+(`MemberOwner.labels`, bindings/member_boundary_door.mojo
+`member_admit_labeled`) walk down the admission: each nested estimator gets
+the labels its own fit sees (`_child_labels`), and a nested classifier's
+class_weight table is read over them (`_admit_nested`), as
+`member_set_admit` reads a leaf's.
 Since lane mf-search4 also GridSearchCV / RandomizedSearchCV (THE SEARCH
 KIND, mark (39, 10): `_admit_search` / `_search_pack` / `_search_state`;
 the candidates and their clones are read once per admission and kept by
@@ -63,6 +69,8 @@ from bindings.member_leaf_boundary_door import (
     member_leaf_admit_serving, member_leaf_pack, member_leaf_pack_labeled, member_leaf_state,
 )
 from bindings.member_owner_unpack import MemberOwner, member_labels_take, member_labels_hold, member_mark
+from bindings.member_class_weight_unpack import member_cw_fill
+from bindings.class_weight_boundary_unpack import class_weight_dictionary_values, CLASS_WEIGHT_TREES
 from bindings.meta_plan_capsule_pack import meta_plan_capsule
 from bindings.prep_native_estimator_door import prep_estimator_plan, prep_estimator_clone, prep_estimator_has
 from bindings.py_balanced import py_call, py_get, py_item, py_setattr, py_setitem, py_type, py_contains, py_fields
@@ -239,12 +247,41 @@ struct _Nested(Movable):
         self.pins = Python.list()
 
 
+def _child_labels(kind: Int, labels: PythonObject, b: PythonObject) raises -> PythonObject:
+    """THE LABELS A NESTED ESTIMATOR'S FIT SEES (lane mf-split4), from the
+    labels `labels` of the codes the meta-estimator itself is fitted on
+    (None or empty: none known), as scikit-learn's fits hand them on: a
+    Voting, Stacking or Bagging classifier fits its members (and a stack its
+    final estimator) on the label encoder's codes 0 .. k-1; OneVsRest fits
+    each base on its indicator column, the labels 0 and 1; AdaBoost's door
+    reads its base's class_weight over its own label encoder's codes
+    (`ada_fit`: `trees_class_rows_only` over `trees_encode_labels(codes)`),
+    so its labels are the codes too; Calibrated and a search fit theirs on
+    y as given, the same labels. A
+    MultiOutput base sees one column per output (its labels differ per
+    output: none here), a regressor none. A nested class_weight dict is read
+    over these (`_admit_nested`), as the member's own fit door reads it."""
+    if not _classifier(kind) or _multi(kind):
+        return PythonObject(None)
+    if kind == META_OVR:
+        return py_call(b.list, py_call(b.range, PythonObject(2)))
+    if labels is None or len(labels) == 0:
+        return PythonObject(None)
+    if kind == META_CALIBRATED or _search(kind):
+        return labels
+    return py_call(b.list, py_call(b.range, PythonObject(len(labels))))
+
+
 def _admit_nested(done: _Done, mut nested: _Nested, est: PythonObject, classifier: Bool, needs: Int,
-                  context: PythonObject, b: PythonObject) raises -> Bool:
+                  context: PythonObject, b: PythonObject, labels: PythonObject) raises -> Bool:
     """One nested estimator through the LEAF dispatch, with the kind-exact
     mask (one state minted, asked, released); a nested META estimator from
     the work-list's admitted table `done` (lane mf-meta3c: admitted before
-    this one, no recursion). False: not served."""
+    this one, no recursion). False: not served. `labels`: the labels the
+    nested estimator's fit sees (`_child_labels`; None: none known): a
+    leaf classifier's class_weight dict table is read over them here, as
+    `member_set_admit` reads a leaf's (lane mf-split4); a value or a dict
+    its estimator refuses is not served (its door raises the words)."""
     var plan = prep_estimator_plan(est, context)
     if plan is None or py_get(plan, "member") is None:
         return False
@@ -267,6 +304,12 @@ def _admit_nested(done: _Done, mut nested: _Nested, est: PythonObject, classifie
     var owner = member_leaf_admit_serving(est, fields, plan, plan["context"], b, needs)
     if not owner.published:
         return False
+    if classifier and labels is not None and (needs & MEMBER_CAN_FIT) != 0:
+        try:
+            if not member_cw_fill(owner, est, fields, labels, plan["context"], b):
+                return False
+        except:
+            return False  # a class_weight its estimator refuses: the door raises its words
     var mask = 0
     try:
         mask = member_kind_capabilities(owner.plan)
@@ -394,7 +437,12 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     (reverse pre-order), each through `_admit_one` with the table of those
     already admitted (`_Done`), which `_admit_nested` reads for a nested
     meta-estimator; the outermost last, into `owner`. A nested one that is
-    not served leaves its parents unserved (their doors keep them)."""
+    not served leaves its parents unserved (their doors keep them).
+
+    THE LABELS (lane mf-split4): `owner.labels`, the caller's labels of the
+    codes this meta-estimator is fitted on, walk down with the work-list:
+    each nested meta-estimator gets the labels its parent's fit hands it
+    (`_child_labels`), and each admission hands its leaves theirs."""
     if kind < META_VOTE_CLASSIFIER or kind > META_KIND_LAST:
         return False
     var done = _Done()
@@ -402,24 +450,30 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     var order = Python.list()
     var order_fields = Python.list()
     var order_context = Python.list()
+    var order_labels = Python.list()
     var order_kinds = List[Int]()
     var pending = Python.list(model)
     var pending_fields = Python.list(fields)
     var pending_context = Python.list(context)
+    var pending_labels = Python.list(owner.labels)
     var pending_kinds: List[Int] = [kind]
     while len(pending_kinds) > 0:  # driver-loop: over the pending meta-estimators (the work-list, no recursion)
         var at = len(pending_kinds) - 1
         var est = pending[at]
         var est_fields = pending_fields[at]
         var est_context = pending_context[at]
+        var est_labels = pending_labels[at]
         var est_kind = pending_kinds.pop()
         _ = py_call(pending.pop)
         _ = py_call(pending_fields.pop)
         _ = py_call(pending_context.pop)
+        _ = py_call(pending_labels.pop)
         _ = py_call(order.append, est)
         _ = py_call(order_fields.append, est_fields)
         _ = py_call(order_context.append, est_context)
+        _ = py_call(order_labels.append, est_labels)
         order_kinds.append(est_kind)
+        var child_labels = _child_labels(est_kind, est_labels, b)
         if len(order_kinds) > _NESTED_META_MAX:
             return False
         var children = _meta_children(est, est_fields, est_kind, est_context, b, prepared)
@@ -443,6 +497,7 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
             _ = py_call(pending.append, child)
             _ = py_call(pending_fields.append, py_call(child_plan["fields_get"], child, py_type(child)))
             _ = py_call(pending_context.append, child_plan["context"])
+            _ = py_call(pending_labels.append, child_labels)
             pending_kinds.append(mark.kind)
     var i = len(order_kinds) - 1
     while i >= 1:  # driver-loop: over the nested meta-estimators, deepest first (admission, once each)
@@ -451,7 +506,8 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         sub.plan.kind = order_kinds[i]
         var served = False
         try:
-            served = _admit_one(order[i], order_fields[i], order_kinds[i], order_context[i], b, sub, done, prepared)
+            served = _admit_one(order[i], order_fields[i], order_kinds[i], order_context[i], b, sub, done, prepared,
+                                order_labels[i])
             if served:
                 sub.plan.member = member_resolve_family(MEMBER_FAMILY_ENSEMBLE, sub.plan.route)
                 var mask = member_kind_capabilities(sub.plan)
@@ -462,22 +518,25 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         except:
             served = False  # not served: its parents look it up and keep their doors
         i -= 1
-    return _admit_one(model, fields, kind, context, b, owner, done, prepared)
+    return _admit_one(model, fields, kind, context, b, owner, done, prepared, owner.labels)
 
 
 def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
-    b: PythonObject, mut owner: MemberOwner, done: _Done, prepared: PythonObject) raises -> Bool:
+    b: PythonObject, mut owner: MemberOwner, done: _Done, prepared: PythonObject,
+    labels: PythonObject) raises -> Bool:
     """One meta-estimator's admission (the body `ensemble_member_admit`'s
     work-list runs per meta-estimator): its nested meta-estimators are in
-    `done`, a search's candidates in `prepared`."""
+    `done`, a search's candidates in `prepared`; `labels` the labels of the
+    codes it is fitted on (THE LABELS, lane mf-split4)."""
+    var child = _child_labels(kind, labels, b)
     if _search(kind):
-        return _admit_search(model, fields, context, b, owner, done, prepared)
+        return _admit_search(model, fields, context, b, owner, done, prepared, child)
     if _multi(kind):
         return _admit_multi(fields, kind, context, b, owner, done)
     if _ada(kind):
-        return _admit_ada(fields, kind, context, b, owner)
+        return _admit_ada(fields, kind, context, b, child, owner)
     if _unit(kind):
-        return _admit_unit(model, fields, kind, context, b, owner, done)
+        return _admit_unit(model, fields, kind, context, b, owner, done, child)
     var classifier = _classifier(kind)
     var active = _active(fields, b)
     if not active.ok:
@@ -515,7 +574,7 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
                 weights.append(Float64(py=py_call(b.float, items[i])))
         var needs = base_needs | (MEMBER_CAN_PREDICT_PROBA if flag != 0.0 else 0)
         for i in range(m):  # driver-loop: over the voting members (admission, once each)
-            if not _admit_nested(done, nested, active.ests[i], classifier, needs, context, b):
+            if not _admit_nested(done, nested, active.ests[i], classifier, needs, context, b, child):
                 return False
     else:
         var cv = py_get(fields, "cv")
@@ -542,7 +601,8 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
             if method < 0:
                 return False
             stack_kinds.append(method)
-            if not _admit_nested(done, nested, active.ests[i], classifier, base_needs | _stack_need(method), context, b):
+            if not _admit_nested(done, nested, active.ests[i], classifier, base_needs | _stack_need(method), context, b,
+                                 child):
                 return False
         var final = py_get(fields, "final_estimator")
         if final is None:
@@ -552,7 +612,7 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
             final = py_get(defaults, "LogisticRegression" if classifier else "Ridge")
             if final is None:
                 return False
-        if not _admit_nested(done, nested, final, classifier, base_needs, context, b):
+        if not _admit_nested(done, nested, final, classifier, base_needs, context, b, child):
             return False
     return _finish(fields, context, b, owner, nested, kind, flag, folds, weights^, stack_kinds^, List[Float64](),
                    fold_train^, fold_test^)
@@ -1164,6 +1224,87 @@ def _batched_forest(fields: PythonObject, template: PythonObject, classifier: Bo
     return forest
 
 
+def _admit_caller_rows(mut nested: _Nested, est: PythonObject, classifier: Bool, needs: Int, context: PythonObject,
+                       b: PythonObject) raises -> Bool:
+    """A tree, forest or extra-trees estimator whose class_weight row weights
+    its META caller computes (lane mf-split4; as `_admit_ada` admits its
+    base): `forest_member_admit_common(..., caller_rows=True)`, the
+    kind-exact mask checked as `_admit_nested` checks it. False: not served
+    (a random-splitter tree, another family, a refused configuration)."""
+    var plan = prep_estimator_plan(est, context)
+    if plan is None or py_get(plan, "member") is None:
+        return False
+    var family = member_mark(plan, b).family
+    var prefix = String("dt_")
+    if family == MEMBER_FAMILY_FOREST:
+        prefix = String("rf_")
+    elif family == MEMBER_FAMILY_EXTRA_TREES:
+        prefix = String("et_")
+    elif family != MEMBER_FAMILY_TREE:
+        return False
+    var sub = MemberOwner()
+    sub.plan.family = family
+    sub.plan.kind = 0 if classifier else 1
+    var mask = 0
+    try:
+        if not forest_member_admit_common(est, sub.plan.kind, prefix, plan["context"], sub, True):
+            return False
+        sub.plan.member = member_resolve_family(family, sub.plan.route)
+        if not sub.plan.member.has(needs):
+            return False
+        mask = member_kind_capabilities(sub.plan)
+    except:
+        return False  # its own refusal: the door raises the estimator's words
+    if (mask & needs) != needs or ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
+        return False
+    nested.plans.append(sub.plan.copy())
+    nested.masks.append(mask)
+    _ = py_call(nested.pins.append, sub.pins)
+    return True
+
+
+def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: PythonObject, b: PythonObject,
+                   mut words: List[Float64]) raises -> Bool:
+    """UNPACK of a tree base's class_weight (lane mf-split4), appended as the
+    kind's class-weight tail (core/ensemble_member.mojo META_CW_*): [mode,
+    K, all-one, the K dict weights]. None: mode 0. 'balanced': mode 1 (the
+    FIT computes the ratios from its codes). A dict: mode 2, its weights
+    over `labels` (the labels of the codes the trees are fitted on, in code
+    order) read with the forest door's own admission
+    (`class_weight_dictionary_values[CLASS_WEIGHT_TREES]`, as
+    `trees_class_weight_rows` reads it); K = -1 when no labels are known (a
+    state for import or predict only: its FIT refuses). False (the door
+    keeps the estimator and raises its words) for a value or a dict the
+    forest door refuses."""
+    if class_weight is None:
+        words.append(0.0)
+        words.append(0.0)
+        words.append(0.0)
+        return True
+    if py_type(class_weight) is b.str:
+        if String(class_weight) != "balanced":
+            return False
+        words.append(1.0)
+        words.append(0.0)
+        words.append(0.0)
+        return True
+    if labels is None or len(labels) == 0:
+        words.append(2.0)
+        words.append(-1.0)
+        words.append(0.0)
+        return True
+    try:
+        var inputs = class_weight_dictionary_values[CLASS_WEIGHT_TREES](class_weight, labels, context)
+        words.append(2.0)
+        words.append(Float64(len(inputs.values)))
+        words.append(1.0 if inputs.all_one else 0.0)
+        for c in range(len(inputs.values)):  # driver-loop: over the classes (one weight each, UNPACK once)
+            words.append(inputs.values[c])
+    except:
+        return False
+    return True
+
+
 def _cal_base(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """CalibratedClassifierCV's base: its estimator, else a clone of the
     default LinearSVC (`_calibrated_fit`)."""
@@ -1177,7 +1318,7 @@ def _cal_base(fields: PythonObject, context: PythonObject) raises -> PythonObjec
 
 
 def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject, b: PythonObject,
-                mut owner: MemberOwner, done: _Done) raises -> Bool:
+                mut owner: MemberOwner, done: _Done, labels: PythonObject) raises -> Bool:
     """UNPACK of a unit kind (core/ensemble_member.mojo, THE UNIT KINDS):
     the base admitted once through the LEAF dispatch with the bits the
     door's operations need, the settings words read as the door's fit reads
@@ -1205,7 +1346,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
             return False
         var decision = prep_estimator_has(base, "decision_function", context)
         var needs = base_needs | (MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA)
-        if not _admit_nested(done, nested, base, True, needs, context, b):
+        if not _admit_nested(done, nested, base, True, needs, context, b, labels):
             return False
         words.append(1.0 if decision else 0.0)
     elif kind == META_CALIBRATED:
@@ -1243,7 +1384,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
                 return False
         var decision = prep_estimator_has(base, "decision_function", context)
         var needs = base_needs | (MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA)
-        if not _admit_nested(done, nested, base, True, needs, context, b):
+        if not _admit_nested(done, nested, base, True, needs, context, b, labels):
             return False
         words.append(1.0 if sigmoid else 0.0)
         words.append(1.0 if whole else 0.0)
@@ -1283,7 +1424,24 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         if template is None:
             return False
         var needs = base_needs | (MEMBER_CAN_PREDICT_PROBA if classifier else 0)
-        if not _admit_nested(done, nested, template, classifier, needs, context, b):
+        # A CLASS_WEIGHT ON THE TREE (lane mf-split4): the batched route's
+        # forest carries it (`_bagging_fit_batched` copies it) and the kind
+        # hands that forest its class_weight row weights (core/
+        # ensemble_member.mojo `_tree_class_rows`, the forest door's own
+        # rows), so both plans are admitted with the caller's rows
+        # (`forest_member_admit_common(..., caller_rows=True)`). The table
+        # is read over the codes the forest is fitted on (`labels`: the
+        # Bagging's codes 0 .. k-1, `_child_labels`). A configuration that
+        # can never take the batched route keeps the door (its per-member
+        # fits read each draw's own classes).
+        var weighted = classifier and py_get(py_fields(template), "class_weight") is not None
+        var batched = _may_be_batched(fields, template, context, b, words)
+        if weighted and not batched:
+            return False
+        if weighted:
+            if not _admit_caller_rows(nested, template, classifier, needs, context, b):
+                return False
+        elif not _admit_nested(done, nested, template, classifier, needs, context, b, labels):
             return False
         var family = nested.plans[0].family
         if family != MEMBER_FAMILY_TREE and family != MEMBER_FAMILY_FOREST and family != MEMBER_FAMILY_EXTRA_TREES:
@@ -1291,17 +1449,29 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         # THE BATCHED ROUTE (lane mf-meta3c): a configuration whose fit may
         # take it carries the batched forest as the entry's second plan; the
         # kind decides per fit, from the weights and X's shape, as the door.
-        if _may_be_batched(fields, template, context, b, words):
+        var forest = PythonObject(None)
+        if batched:
             var image_bins = not classifier and py_get(py_fields(template), "n_bins") is None
-            var forest = _batched_forest(fields, template, classifier, count, seed, _truthy(bootstrap, b),
-                                         PythonObject(1.0), image_bins, 0, context, b)
-            if not _admit_nested(done, nested, forest, classifier, needs, context, b):
+            forest = _batched_forest(fields, template, classifier, count, seed, _truthy(bootstrap, b),
+                                     PythonObject(1.0), image_bins, 0, context, b)
+            if weighted:
+                if not _admit_caller_rows(nested, forest, classifier, needs, context, b):
+                    return False
+            elif not _admit_nested(done, nested, forest, classifier, needs, context, b, labels):
                 return False
             words.append(1.0)
             words.append(1.0 if image_bins else 0.0)
         else:
             words.append(0.0)
             words.append(0.0)
+        # META_BAG_CW: the batched forest's class_weight tail.
+        var cw = PythonObject(None)
+        var cw_context = context
+        if weighted:
+            cw = py_get(py_fields(forest), "class_weight")
+            cw_context = prep_estimator_plan(forest, context)["context"]  # the forest door's context
+        if not _tree_cw_words(cw, labels, cw_context, b, words):
+            return False
     return _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
                    List[List[Int32]](), List[List[Int32]]())
 
@@ -1728,7 +1898,7 @@ def _ada_template(fields: PythonObject, classifier: Bool, context: PythonObject,
     return _bag_template(fields, _ada_base(fields, classifier, context, b), classifier, context, b)
 
 
-def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: PythonObject,
+def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: PythonObject, labels: PythonObject,
                mut owner: MemberOwner) raises -> Bool:
     """UNPACK of THE ADABOOST KIND (core/ensemble_member.mojo): the door's
     `ada_fit` UNPACK minus X and y, read once per admission. `_ada_validate`
@@ -1744,8 +1914,10 @@ def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: Python
     algorithm, loss, n_estimators, learning_rate or random_state the door
     refuses; a base that is not a tree, forest or extra-trees member or
     names another device; a DecisionTree splitter='random' base (its inner
-    forest is the door's); a class_weight on the base (its rows read the
-    public labels, which a member fit never sees)."""
+    forest is the door's); a class_weight value the forest door refuses.
+    A class_weight on the base (lane mf-split4) is the kind's class-weight
+    tail (`_tree_cw_words` over `labels`, the codes the door's rows read):
+    its FIT hands `ada_fit_run` the rows, as the door does."""
     var classifier = kind == META_ADA_CLASSIFIER
     var loss_code = 0
     if classifier:
@@ -1810,11 +1982,17 @@ def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: Python
     var fk = forest_kind(probe, run)
     var refreshed = forest_refresh(probe, fk, run)
     var config = forest_config(refreshed, py_item(refreshed, PythonObject("_cfg")), fk, not classifier, run)
+    # The class_weight the base's own fit door reads (the door's `_ada_native`
+    # / `_ada_members`): ExtraTrees' from its derived configuration,
+    # RandomForest's / DecisionTree's field.
+    var class_weight = PythonObject(None)
     if classifier:
         var cfg = py_get(refreshed, "_cfg")
-        if config.class_weighted or py_get(refreshed, "class_weight") is not None or (
-                cfg is not None and py_type(cfg) is b.dict and py_get(cfg, "class_weight") is not None):
-            return False
+        if fk.startswith("et_"):
+            if cfg is not None and py_type(cfg) is b.dict:
+                class_weight = py_get(cfg, "class_weight")
+        else:
+            class_weight = py_get(refreshed, "class_weight")
     var mask = 0
     try:
         mask = member_kind_capabilities(sub.plan)
@@ -1856,6 +2034,8 @@ def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: Python
     words.append(Float64(config.poisson))        # META_ADA_POISSON
     words.append(Float64(config.gamma))          # META_ADA_GAMMA
     words.append(Float64(config.inverse_gaussian))  # META_ADA_INVERSE_GAUSSIAN
+    if not _tree_cw_words(class_weight, labels, probe_context, b, words):  # META_CW_* after META_ADA_WORDS
+        return False
     var nested = _Nested()
     nested.plans.append(sub.plan.copy())
     nested.masks.append(mask)
@@ -2038,7 +2218,7 @@ def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonOb
 
 
 def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
-                  mut owner: MemberOwner, done: _Done, prepared: PythonObject) raises -> Bool:
+                  mut owner: MemberOwner, done: _Done, prepared: PythonObject, labels: PythonObject) raises -> Bool:
     """UNPACK of THE SEARCH KIND (core/ensemble_member.mojo): every
     candidate (the base's clone with the candidate's parameters set) admitted
     as a member with those words, read as `msel_search_fit` reads the
@@ -2109,7 +2289,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         needs |= MEMBER_CAN_SCORE
     var nested = _Nested()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
-        if not _admit_nested(done, nested, clones[c], classifier, needs, context, b):
+        if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
             return False
     for c in range(len(nested.plans)):  # driver-loop: over the candidates (their predict's element type)
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
@@ -2302,7 +2482,9 @@ def _admit_multi(fields: PythonObject, kind: Int, context: PythonObject, b: Pyth
     if classifier:
         needs |= MEMBER_CAN_CLASSIFIER
     var nested = _Nested()
-    if not _admit_nested(done, nested, base, classifier, needs, context, b):
+    # One base for every output, whose labels differ per output: a
+    # class_weight dict stays pending (its FIT refuses; the door fits it).
+    if not _admit_nested(done, nested, base, classifier, needs, context, b, PythonObject(None)):
         return False
     var words: List[Float64] = [0.0]
     return _finish(fields, context, b, owner, nested, kind, 0.0, 0, List[Float64](), List[Int](), words^,

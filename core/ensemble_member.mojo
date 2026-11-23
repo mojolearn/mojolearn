@@ -215,6 +215,12 @@ from core.member_families import (
     MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_GP, MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES,
 )
 from core.member_notices import member_notices_take
+from core.array_helpers_impl import class_ratio_f64
+from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan
+from core.label_weights_native_api import (
+    LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS,
+)
+from xtrees.label_weights_native import label_weights_native_v1
 from core.member_set_run import (
     MemberSetRun, member_set_fit, member_set_run_release, member_set_first_failure,
     MEMBER_SET_WORKER, MEMBER_SET_TURN_RELEASED, MEMBER_SET_TURN_HELD,
@@ -333,6 +339,20 @@ comptime META_SEARCH_SEED = 4           # the sampler's seed the PACK re-draws t
 comptime META_SEARCH_WORDS = 5
 #: THE MULTI-OUTPUT KIND's settings words: [0] reserved.
 comptime META_MULTI_WORDS = 1
+#: THE CLASS-WEIGHT TAIL of a tree base (lane mf-split4): appended after a
+#: Bagging's META_BAG_WORDS (its batched forest's class_weight) and an
+#: AdaBoost's META_ADA_WORDS (its base's): [mode, K, all-one, K weights].
+#: Mode META_CW_NONE, META_CW_BALANCED (the FIT computes the ratios from its
+#: codes) or META_CW_DICT (the dict's weights over the codes' labels, read at
+#: UNPACK with the forest door's admission; K = -1: no labels were known, the
+#: FIT refuses).
+comptime META_CW_MODE = 0
+comptime META_CW_K = 1
+comptime META_CW_ALL_ONE = 2
+comptime META_CW_HEAD = 3
+comptime META_CW_NONE = 0
+comptime META_CW_BALANCED = 1
+comptime META_CW_DICT = 2
 
 comptime _CALIB_FAST_HOST_FOLDS = is_defined["MOJOLEARN_CALIB_FAST_HOST_FOLDS"]()
 
@@ -1033,6 +1053,11 @@ def _new(call: _CallPtr) raises:
                 need = META_ADA_WORDS
             elif _multi_kind(kind):
                 need = META_MULTI_WORDS
+            # A Bagging or AdaBoost entry may carry its tree's class-weight
+            # tail after its settings words (META_CW_*, lane mf-split4; none:
+            # no class_weight).
+            if (_bag_kind(kind) or _ada_kind(kind)) and len(slot[].words) >= need + META_CW_HEAD:
+                need += META_CW_HEAD + max(Int(slot[].words[need + META_CW_K]), 0)
             # A Bagging entry may hold a second plan: its batched forest.
             var plans = 1
             if _bag_kind(kind) and len(slot[].words) == need and slot[].words[META_BAG_BATCHED] != 0.0:
@@ -1785,6 +1810,69 @@ def _seed_words(mut plan: MemberPlan, seed: Int) raises:
     plan.params[ADA_MEMBER_SEED_WORD + 2] = 0.0
 
 
+def _cw_mode(words: List[Float64], at: Int) -> Int:
+    """The class-weight tail's mode at `at` (META_CW_NONE when absent)."""
+    if len(words) < at + META_CW_HEAD:
+        return META_CW_NONE
+    return Int(words[at + META_CW_MODE])
+
+
+def _tree_class_rows(words: List[Float64], at: Int, codes: Int, n: Int, k: Int, mut rows: List[Float32]) raises -> Int:
+    """FIT: the float32 class_weight row weights of a tree, forest or
+    extra-trees fit over the int32 codes `codes` (n rows, k classes) from
+    the class-weight tail at `at` (META_CW_*), the forest door's own rows
+    (bindings/class_weight_rows_boundary_pack.mojo
+    `class_weight_rows_admitted[CLASS_WEIGHT_TREES]`, as
+    bindings/trees_public_inputs_door.mojo `trees_class_rows_only` calls it):
+    for 'balanced' the class counts (LABEL_WEIGHTS_COUNTS), widened to
+    int64, and scikit-learn's ratios (`class_ratio_f64`, mode 0); for a dict
+    the weights read at UNPACK; then the per-class float32 plan
+    (`class_weight_rows_plan`) and the row gather (LABEL_WEIGHTS_ROWS), with
+    the x_trees image's own label-weights kernels (the descriptor the door
+    reaches through its provider: `label_weights_native_v1`). Answers the
+    rows' address (in `rows`), or 0 when every class weight is 1 (the door
+    then hands the fit no weights). No Python."""
+    var mode = _cw_mode(words, at)
+    if mode == META_CW_NONE:
+        return 0
+    var driver = LabelWeightsDriver(label_weights_native_v1)
+    var inputs = ClassWeightInputs()
+    var balanced = mode == META_CW_BALANCED
+    if balanced:
+        var counts = List[Int32](length=max(k, 1), fill=Int32(0))
+        _ = driver.run(LABEL_WEIGHTS_COUNTS, LabelWeightsRequest(codes if n > 0 else 0, Int(counts.unsafe_ptr()), 0,
+                                                                  n, k))
+        var wide = List[Int64](length=max(k, 1), fill=Int64(0))
+        for c in range(k):  # small-loop(k class counts widened to int64, as the door's cast)
+            wide[c] = Int64(counts[c])
+        inputs.values = List[Float64](length=k, fill=0.0)
+        if k > 0 and class_ratio_f64(_I64P(unsafe_from_address=Int(wide.unsafe_ptr())),
+                                     _F64P(unsafe_from_address=Int(inputs.values.unsafe_ptr())), k, n, 0) != 0:
+            raise Error("ZeroDivisionError: division by zero")
+        _ = len(counts)
+        _ = len(wide)
+    else:
+        var table = Int(words[at + META_CW_K])
+        if table < 0:
+            raise Error("TypeError: mojolearn: a member whose tree has a class_weight dict is fitted only by a "
+                        + "caller that hands over its labels")
+        if table != k:
+            raise Error("member ABI: the class_weight table has " + String(table) + " entries for " + String(k)
+                        + " classes")
+        for c in range(k):  # small-loop(the k dict weights read at UNPACK)
+            inputs.values.append(words[at + META_CW_HEAD + c])
+        inputs.all_one = words[at + META_CW_ALL_ONE] != 0.0
+    var plan = class_weight_rows_plan(inputs, balanced)
+    if plan.all_one:
+        return 0
+    rows = List[Float32](length=max(n, 1), fill=0.0)
+    if n > 0:
+        _ = driver.run(LABEL_WEIGHTS_ROWS, LabelWeightsRequest(codes, Int(plan.words.unsafe_ptr()),
+                                                               Int(rows.unsafe_ptr()), n, k))
+    _ = len(plan.words)  # the gather above read the plan's words through their address
+    return Int(rows.unsafe_ptr())
+
+
 def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     """`_bagging_fit_bags`' per-member route as ONE set: unit u's draws
     (`xt_sample_indices`, streams 2u and 2u + 1) and seed `_sub_seed(seed,
@@ -1814,6 +1902,12 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
             and (bootstrap or n_rows == n)):
         _fit_bag_batched(slot, call, k, n_rows, bootstrap)
         return
+    if _cw_mode(slot[].words, META_BAG_WORDS) != META_CW_NONE:
+        # The per-member fits of a tree with a class_weight read each draw's
+        # own classes in the tree's fit door: the caller's door fits them
+        # (this refusal fails the set, and its caller's loop runs).
+        raise Error("NotImplementedError: mojolearn: a Bagging member whose tree has a class_weight fits its "
+                    + "per-member route through its door")
     _expand(slot, count)
     slot[].unit_rows = List[List[Int32]](capacity=count)
     slot[].unit_cols = List[List[Int32]](capacity=count)
@@ -1919,12 +2013,19 @@ def _fit_bag_batched(slot: _SlotPtr, call: _CallPtr, k: Int, n_rows: Int, bootst
         _slot_words_int(plan, FOREST_RF_SLOT_BINS, bins)
     slot[].plans = [plan^]
     slot[].masks = [slot[].base_masks[1]]
+    # The tree's class_weight (lane mf-split4): the forest's row weights over
+    # the codes, as the forest door computes them for its own fit (0: none).
+    var cw_rows = List[Float32]()
+    var cw = 0
+    if k > 0:
+        cw = _tree_class_rows(slot[].words, META_BAG_WORDS, call[].y.data, n, k, cw_rows)
     var run = _set_of(slot, call[].x.data, n, call[].x.cols, MEMBER_I32 if k > 0 else MEMBER_F32)
-    _add(slot, run, 0, k, call[].y.data, 0, 0, 0)
+    _add(slot, run, 0, k, call[].y.data, cw, 0, 0)
     member_set_fit(run)
     slot[].states = List[Int](length=1, fill=0)
     _keep_states(slot, run, 0)
     member_set_run_release(run)
+    _ = len(cw_rows)  # the fit (and a borrowing state, until its release above) read the rows through `cw`
     slot[].batched = True
     slot[].batch_fraction = fraction
     slot[].batch_bins = bins
@@ -2229,6 +2330,25 @@ def _fit_ada(slot: _SlotPtr, call: _CallPtr) raises:
         # the members' image (the door's `trees_stage_native`, m > 1).
         if plan.rounds > 1:
             staged = _stage_whole(base, x, n, d)
+    # The base's class_weight (lane mf-split4): its row weights over the
+    # codes, as the door's `trees_class_rows_only` (0: every weight 1, no
+    # rows), multiplied into each host round's weights by the x_trees
+    # image's label-weights kernel (the door's driver; a device round reads
+    # the rows itself).
+    var cw_rows = List[Float32]()
+    if classifier:
+        var cw = 0
+        try:
+            cw = _tree_class_rows(words, META_ADA_WORDS, y, n, k, cw_rows)
+        except error:
+            if staged:
+                xf_unstage_input(entry_ref_gil_free(base.route.entry))
+            _ada_close_session(slot)
+            raise error^
+        if cw != 0:
+            plan.class_rows = cw
+            if not plan.device_rounds:
+                plan.multiply = LabelWeightsDriver(label_weights_native_v1)
     var result = AdaFitResult()
     try:
         result = ada_fit_run(plan)
@@ -2236,6 +2356,7 @@ def _fit_ada(slot: _SlotPtr, call: _CallPtr) raises:
         if staged:
             xf_unstage_input(entry_ref_gil_free(base.route.entry))
     _ = len(weights)  # RUN rescaled the weights in place through their address
+    _ = len(cw_rows)  # RUN read the class rows through `plan.class_rows`
     var states = List[Int]()
     try:
         if result.members:

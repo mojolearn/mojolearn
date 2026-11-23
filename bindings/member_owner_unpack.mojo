@@ -21,11 +21,17 @@ struct MemberOwner(Movable):
     var plan: MemberPlan
     var pins: PythonObject
     var published: Bool
+    # The FIT caller's class labels in code order, set before a META
+    # family's admission reads them (lane mf-split4,
+    # bindings/member_boundary_door.mojo `member_admit_labeled`); None (or
+    # an empty list): none known. A leaf family's admission never reads it.
+    var labels: PythonObject
 
     def __init__(out self):
         self.plan = MemberPlan()
         self.pins = PythonObject(None)
         self.published = False
+        self.labels = PythonObject(None)
 
 
 @fieldwise_init
