@@ -25,6 +25,10 @@ random_state=0, on csam's labels (classifiers) or y (regressors):
  10 etr   estimator=ExtraTreesRegressor(n_estimators=5, max_depth=3)
  11 dtp   estimator=DecisionTreeRegressor(max_depth=3, criterion='poisson')
  12 dtneg the same on y - 0.5: the drawn targets hold negatives, the door's Poisson refusal words
+THE DATA SESSION WITHOUT THE GIL (lane mf-ada2): the default bases through a host data session opened on the
+GIL-free marked entry, in a process with no Python (the session registry's own lock):
+ 13 csess  csam's fit with the session: csam's values (the session fit and the plain column-major fit, one body)
+ 14 rsess  rlin's fit with the session: rlin's values (the session row gather and RUN's gather, the same bytes)
 The class_weight rows are 'balanced' (n / (k * count) in float64, one float32 word per class, gathered per row: the
 door's `class_weight_plan`).
 
@@ -33,7 +37,9 @@ restored): in xtrees/trees_ada_fit_run.mojo `ada_fit_run`, the stream `it` of `x
 fails rlin / rsq / rexp ("estimator_weights_ ... differ": other rows drawn every round); `plan.rate` passed to
 `xt_samme_step` as `2.0 * plan.rate` fails csam ("estimator_weights_"); `ADA_STEP_WORSE = 3.0` fails case 5
 ("did not refuse"); `_member_seed` writing `Int64(s + 1)` fails 6-11 (every member another seed); the member
-route's `w_addr` always `w32` (the class rows dropped) fails 6-8; the `_target_check` call removed fails 12.
+route's `w_addr` always `w32` (the class rows dropped) fails 6-8; the `_target_check` call removed fails 12; in
+core/mojolearn_rf_host_run.mojo `rf_host_session_lease` returning the session's X with its column count set to 0
+fails 13-14 (the shape refusal).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, fixture_i32, assert_same_words
@@ -49,7 +55,7 @@ from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBE
 comptime ADA_DIR = "checks/native_tests/fixtures/trees_ada/"
 comptime ADA_N = 120
 comptime ADA_D = 4
-comptime ADA_CASES = 13
+comptime ADA_CASES = 15
 comptime POISSON = "criterion='poisson' requires y >= 0 with a positive sum"
 comptime WORSE = "BaseClassifier in AdaBoostClassifier ensemble is worse than random, ensemble can not be fit."
 
@@ -151,6 +157,19 @@ def _member_case(unit: Int, x: List[Float32]) raises:
 
 def run_case(unit: Int) raises:
     var x = fixture_f32(ADA_DIR + "ada-x.f32", ADA_N * ADA_D)
+    if unit == 13:
+        var m = ada_fit(AdaSpec(True, 25, 0), x, ADA_N, ADA_D, _labels(x, 0), 2, List[Float32](), True)
+        _state("csam", m.alphas, m.errors)
+        assert_same_words[DType.int32](ada_predict_codes(m, x, ADA_N), fixture_i32(ADA_DIR + "csam-pred.i32", ADA_N),
+                                       "csess: predict")
+        return
+    if unit == 14:
+        var y = fixture_f32(ADA_DIR + "ada-y.f32", ADA_N)
+        var m = ada_fit(AdaSpec(False, 25, 0), x, ADA_N, ADA_D, List[Int32](), 0, y, True)
+        _state("rlin", m.alphas, m.errors)
+        assert_same_words[DType.float32](ada_predict_values(m, x, ADA_N), fixture_f32(ADA_DIR + "rlin-pred.f32", ADA_N),
+                                         "rsess: predict")
+        return
     if unit >= 6:
         _member_case(unit, x)
         return

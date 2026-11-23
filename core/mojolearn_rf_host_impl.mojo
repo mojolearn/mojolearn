@@ -148,7 +148,7 @@ def rf_host_session_rows_x(
     for c in range(n_cols):
         for i in range(n_rows):
             x[c * n_rows + i] = sp[c * src_rows + Int(rp[i])]
-    _ = src_x[].__len__()  # `sp` read the leased X above
+    _ = len(src_x[])  # `sp` read the leased X above
     return x^
 
 

@@ -7,9 +7,10 @@ builds for a default base, AdaBoostClassifier's DecisionTreeClassifier(max_depth
 DecisionTreeRegressor(max_depth=3): the base's configuration (checks/native_tests/py2mojo_forest_fits.mojo
 `RfSpec.decision_tree` + `rf_config`, the door's `_rf_config` slots), the RF host image's forest entry and caps,
 the uniform starting weights 1 / n (the door's `_normalized_weights` of sample_weight=None), the class codes or
-targets, and NO data session (a process with no Python publishes the host image without sessions,
-core/mojolearn_rf_host_run.mojo `RfHostNoSessions`): the classifier takes RUN's column-major fit, the regressor its
-column-major row gather, the bodies the host sessions run. Then `ada_fit_run`, and each kept round's export copied
+targets, and either no data session (the classifier takes RUN's column-major fit, the regressor its column-major row
+gather, the bodies the host sessions run) or, with `session` (lane mf-ada2), a data session opened on the host image
+through the GIL-free marked entry as the door's `_member_session` opens it (the classifier's column-major X, the
+regressor's row-major X): the session registry has its own lock, so a process with no Python serves it. Then `ada_fit_run`, and each kept round's export copied
 out of the image (what the door's PACK `forest_export_handle` copies). `ada_predict_codes` / `ada_predict_values`
 are the public predicts' RUNs (`ada_classifier_run` ADA_CODES, `ada_regressor_run`) over the members' host
 predictions (`predict`, the STRICT route the members' doors take on the host column).
@@ -26,7 +27,7 @@ Call `publish_host_images()` (checks/native_tests/bm_rest_boost_fits.mojo) and `
 """
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.entry_table import EntryRef
+from core.entry_table import EntryRef, entry_ref_gil_free
 from core.device_route import DeviceRoute, DEVICE_CPU
 from core.member_abi import (
     MemberPlan, MemberMatrix, member_resolve_family, member_call, member_call_of, MEMBER_OP_PREDICT, MEMBER_F32,
@@ -39,7 +40,9 @@ from core.extra_trees_member import extra_trees_member_publish_image
 from core.label_weights_native_api import LabelWeightsDriver
 from xtrees.label_weights_native import label_weights_native_v1
 from bindings.forest_config_run import ForestConfig, forest_target_need
-from core.forest_calls import xf_ref, xf_caps, xf_export_sizes, xf_export_into, xf_export_release
+from core.forest_calls import (
+    xf_ref, xf_caps, xf_export_sizes, xf_export_into, xf_export_release, xf_session_open, xf_session_close,
+)
 from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF, FOREST_TABLE_ET
 from xtrees.glue_calls import xt_ref
 from xtrees.trees_forest_run import forest_export_counts
@@ -117,28 +120,40 @@ def _export(forest: EntryRef, handle: Int, d: Int) raises -> Forest:
 
 
 def ada_fit(s: AdaSpec, x: List[Float32], n: Int, d: Int, codes: List[Int32], k: Int,
-            y: List[Float32]) raises -> AdaModel:
+            y: List[Float32], session: Bool = False) raises -> AdaModel:
     """`AdaBoost*(n_estimators, random_state=seed[, loss]).fit(X, y)` with sample_weight=None on the host
     images: `codes` the int32 class codes 0..k-1 (classifier) or `y` the float32 targets (regressor)."""
     var key = trees_key()
     var glue = xt_ref(key)
-    var forest = xf_ref(ForestEntryKey(FOREST_TABLE_RF, key.copy()))
+    var forest = entry_ref_gil_free(xf_ref(ForestEntryKey(FOREST_TABLE_RF, key.copy())))
     var caps = xf_caps(forest)
+    var xcm = List[Float32]()
+    if s.classifier:
+        xcm = column_major(x, n, d)
+    var handle = 0
+    if session:
+        if s.classifier:
+            handle = xf_session_open(forest, Int(xcm.unsafe_ptr()), n, d, False, False)
+        else:
+            handle = xf_session_open(forest, Int(x.unsafe_ptr()), n, d, True, False)
     var plan = AdaFitPlan(s.classifier, n, d, k if s.classifier else 0, s.n_estimators, s.rate, s.seed,
-                          rf_config(RfSpec.decision_tree(s.classifier, s.max_depth)), glue, forest, caps, 0)
+                          rf_config(RfSpec.decision_tree(s.classifier, s.max_depth)), glue, forest, caps, handle)
     plan.squared = RF_SQUARED
     plan.loss = s.loss
     plan.x = Int(x.unsafe_ptr())
     var w = List[Float64](length=n, fill=1.0 / Float64(n))
     plan.weights = Int(w.unsafe_ptr())
-    var xcm = List[Float32]()
     if s.classifier:
-        xcm = column_major(x, n, d)
         plan.xcm = Int(xcm.unsafe_ptr())
         plan.codes = Int(codes.unsafe_ptr())
     else:
         plan.y = Int(y.unsafe_ptr())
-    var result = ada_fit_run(plan)
+    var result = AdaFitResult()
+    try:
+        result = ada_fit_run(plan)
+    finally:
+        if handle > 0:
+            xf_session_close(forest, handle)
     _ = len(x)  # RUN read these words through their addresses
     _ = len(w)
     _ = len(xcm)
