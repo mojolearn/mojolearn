@@ -67,7 +67,7 @@ from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
     check_weights_f32, mul_f32,
-    samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
+    samme_step, r2_step, weighted_median, apply_trees, leaf_newton_rows, tree_score_add, uniform,
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
     bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba, class_counts, remap_cols, positive_codes,
@@ -405,59 +405,9 @@ def apply_binding(offsets: PythonObject, colid: PythonObject, quesval: PythonObj
     return PythonObject(result)
 
 
-def gradients_binding(
-    score: PythonObject, y: PythonObject, g: PythonObject, h: PythonObject, target: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, kind (0 l2, 1 binary logloss, 2 multiclass softmax)] or,
-    with kind 2, [n, 2, k] with every buffer class-major (k * n)."""
-    if len(params) != 2 and len(params) != 3:
-        raise Error("x_trees_gradients: params must hold 2 values (3 for multiclass), got " + String(len(params)))
-    var n = _count(_i(params, 0), "x_trees_gradients")
-    var kind = _i(params, 1)
-    if kind != 0 and kind != 1 and kind != 2:
-        raise Error("x_trees_gradients: kind must be 0 (l2), 1 (binary) or 2 (multiclass)")
-    var k = 1
-    if kind == 2:
-        _need(params, 3, "x_trees_gradients")
-        k = _i(params, 2)
-        if k < 2:
-            raise Error("x_trees_gradients: multiclass needs k >= 2")
-    elif len(params) != 2:
-        raise Error("x_trees_gradients: only multiclass takes k")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.gradients_device(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)),
-                                       f64_ptr(Int(py=h)), f32_ptr(Int(py=target)), k)
-        else:
-            gradients(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)),
-                      f32_ptr(Int(py=target)), k)
-    return PythonObject(n)
-
-
-def leaf_newton_binding(
-    nodes: PythonObject, g: PythonObject, h: PythonObject, values: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, n_nodes, reg_lambda] or [n, n_nodes, reg_lambda, lambda_l1, max_delta_step]."""
-    if len(params) != 3 and len(params) != 5:
-        raise Error("x_trees_leaf_newton: params must hold 3 or 5 values, got " + String(len(params)))
-    var n = _count(_i(params, 0), "x_trees_leaf_newton")
-    var n_nodes = _i(params, 1)
-    if n_nodes < 1:
-        raise Error("x_trees_leaf_newton: need n_nodes >= 1")
-    var l1: Float64 = 0.0
-    var mds: Float64 = 0.0
-    if len(params) == 5:
-        l1 = _f(params, 3)
-        mds = _f(params, 4)
-    comptime if XTREES_DEVICE_OPS:
-        var np = i32_ptr(Int(py=nodes))
-        boost_dev.leaf_newton_device(np, np, False, n, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes,
-                                     _f(params, 2), l1, mds, f32_ptr(Int(py=values)))
-    else:
-        leaf_newton(i32_ptr(Int(py=nodes)), f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes, _f(params, 2),
-                    f32_ptr(Int(py=values)), l1, mds)
-    return PythonObject(n_nodes)
+# TOMBSTONE: x_trees_gradients and x_trees_leaf_newton (uncalled bindings: no Python, native-table or test
+# caller) deleted 2026-11-23 by lane/verify-gaps with their only bodies (xtrees/ops.mojo gradients and
+# leaf_newton, xtrees/ops_device_boost.mojo gradients_device); code recoverable at aecad68fb8.
 
 
 def leaf_newton_rows_binding(
@@ -473,7 +423,7 @@ def leaf_newton_rows_binding(
     if n_nodes < 1:
         raise Error("x_trees_leaf_newton_rows: need n_nodes >= 1")
     comptime if XTREES_DEVICE_OPS:
-        boost_dev.leaf_newton_device(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=rows)), True, m, f64_ptr(Int(py=g)),
+        boost_dev.leaf_newton_device(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=rows)), m, f64_ptr(Int(py=g)),
                                      f64_ptr(Int(py=h)), n, n_nodes, _f(params, 3), _f(params, 4), _f(params, 5),
                                      f32_ptr(Int(py=values)))
         return PythonObject(n_nodes)
@@ -1167,8 +1117,6 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[r2_step_binding]("x_trees_r2_step")
     m.def_function[weighted_median_binding]("x_trees_weighted_median")
     m.def_function[apply_binding]("x_trees_apply")
-    m.def_function[gradients_binding]("x_trees_gradients")
-    m.def_function[leaf_newton_binding]("x_trees_leaf_newton")
     m.def_function[leaf_newton_rows_binding]("x_trees_leaf_newton_rows")
     m.def_function[tree_score_add_binding]("x_trees_tree_score_add")
     m.def_function[uniform_binding]("x_trees_uniform")

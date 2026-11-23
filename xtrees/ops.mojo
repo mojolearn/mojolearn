@@ -718,56 +718,6 @@ def tree_shape(left: MutPointer[Int32, MutUntrackedOrigin], cnt: Int, res: MutPo
     res[unsafe_offset=1] = Int32(leaves)
 
 
-def gradients(
-    score: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Float32, MutUntrackedOrigin], n: Int,
-    kind: Int, g: MutPointer[Float64, MutUntrackedOrigin], h: MutPointer[Float64, MutUntrackedOrigin],
-    target: MutPointer[Float32, MutUntrackedOrigin], k: Int = 1,
-):
-    """LightGBM's objective gradients (regression_objective.hpp L2: g = s - y,
-    h = 1; binary_objective.hpp with sigmoid 1: p = 1 / (1 + exp(-s)),
-    g = p - y, h = p (1 - p); multiclass_objective.hpp MulticlassSoftmax,
-    kind 2: p = softmax over the row's k scores, g = p - [y == c],
-    h = (k / (k - 1)) p (1 - p)). target = -g as float32, the tree's fit
-    target. kind 2 is CLASS-MAJOR: score, g, h and target at [c * n + i]."""
-    if kind == 2:
-        var factor = Float64(k) / (Float64(k) - 1.0)
-        var rec = List[Float64](length=k, fill=0.0)
-        for i in range(n):
-            # Common::Softmax: the max, exp(x - max), the sum in class order.
-            var m = score[unsafe_offset=i]
-            for c in range(1, k):
-                if score[unsafe_offset=c * n + i] > m:
-                    m = score[unsafe_offset=c * n + i]
-            var s: Float64 = 0.0
-            for c in range(k):
-                var e = identical_exp64(score[unsafe_offset=c * n + i] - m)
-                rec[c] = e
-                s = s + e
-            var yi = Int(y[unsafe_offset=i])
-            for c in range(k):
-                var p = rec[c] / s
-                var gi = p - 1.0 if yi == c else p
-                g[unsafe_offset=c * n + i] = gi
-                h[unsafe_offset=c * n + i] = identical_mul64(identical_mul64(factor, p), 1.0 - p)
-                target[unsafe_offset=c * n + i] = Float32(-gi)
-        return
-    for i in range(n):
-        var s = score[unsafe_offset=i]
-        var yi = Float64(y[unsafe_offset=i])
-        var gi: Float64
-        var hi: Float64
-        if kind == 0:
-            gi = s - yi
-            hi = 1.0
-        else:
-            var p = 1.0 / (1.0 + identical_exp64(-s))
-            gi = p - yi
-            hi = identical_mul64(p, 1.0 - p)
-        g[unsafe_offset=i] = gi
-        h[unsafe_offset=i] = hi
-        target[unsafe_offset=i] = Float32(-gi)
-
-
 def _newton_values(
     sg: List[Float64], sh: List[Float64], n_nodes: Int, reg_lambda: Float64, l1: Float64,
     max_delta_step: Float64, values: MutPointer[Float32, MutUntrackedOrigin],
@@ -793,11 +743,11 @@ def _newton_values(
 
 
 def leaf_sums(
-    nodes: MutPointer[Int32, MutUntrackedOrigin], rows: MutPointer[Int32, MutUntrackedOrigin], use_rows: Bool,
+    nodes: MutPointer[Int32, MutUntrackedOrigin], rows: MutPointer[Int32, MutUntrackedOrigin],
     m: Int, g: MutPointer[Float64, MutUntrackedOrigin], h: MutPointer[Float64, MutUntrackedOrigin], n_nodes: Int,
 ) -> List[Float64]:
     """The per-leaf g / h sums (cpu2-l5-trees, xtrees/fold_order.mojo's
-    order): list positions r in [0, m) (row i = rows[r], or r) fall in chunks
+    order): list positions r in [0, m) (row i = rows[r]) fall in chunks
     of `fold_chunk_size(m, 2 n_nodes)`; a chunk's partial for node k adds its
     rows of that node in position order from +0.0; the partials fold by the
     pairwise tree. Returns 2 n_nodes words: [sum g, sum h] per node. The
@@ -810,7 +760,7 @@ def leaf_sums(
     var p = List[Float64](length=nc * w, fill=0.0)
     for c in range(nc):
         for r in range(c * cs, min((c + 1) * cs, m)):
-            var i = Int(rows[unsafe_offset=r]) if use_rows else r
+            var i = Int(rows[unsafe_offset=r])
             var k = Int(nodes[unsafe_offset=i])
             p[c * w + 2 * k] = p[c * w + 2 * k] + g[unsafe_offset=i]
             p[c * w + 2 * k + 1] = p[c * w + 2 * k + 1] + h[unsafe_offset=i]
@@ -830,21 +780,6 @@ def _newton_values_rec(
     _newton_values(sg, sh, n_nodes, reg_lambda, l1, max_delta_step, values)
 
 
-def leaf_newton(
-    nodes: MutPointer[Int32, MutUntrackedOrigin], g: MutPointer[Float64, MutUntrackedOrigin],
-    h: MutPointer[Float64, MutUntrackedOrigin], n: Int, n_nodes: Int, reg_lambda: Float64,
-    values: MutPointer[Float32, MutUntrackedOrigin], l1: Float64 = 0.0, max_delta_step: Float64 = 0.0,
-) raises:
-    """values[node] = `_newton_values` of the sums over the rows in that leaf,
-    folded in `leaf_sums`' fixed order."""
-    for i in range(n):
-        var k = Int(nodes[unsafe_offset=i])
-        if k < 0 or k >= n_nodes:
-            raise Error("x_trees leaf_newton: node out of range")
-    var p = leaf_sums(nodes, nodes, False, n, g, h, n_nodes)
-    _newton_values_rec(p, n_nodes, reg_lambda, l1, max_delta_step, values)
-
-
 def leaf_newton_rows(
     nodes: MutPointer[Int32, MutUntrackedOrigin], rows: MutPointer[Int32, MutUntrackedOrigin], m: Int,
     g: MutPointer[Float64, MutUntrackedOrigin], h: MutPointer[Float64, MutUntrackedOrigin], n: Int,
@@ -861,7 +796,7 @@ def leaf_newton_rows(
         var k = Int(nodes[unsafe_offset=i])
         if k < 0 or k >= n_nodes:
             raise Error("x_trees leaf_newton_rows: node out of range")
-    var p = leaf_sums(nodes, rows, True, m, g, h, n_nodes)
+    var p = leaf_sums(nodes, rows, m, g, h, n_nodes)
     _newton_values_rec(p, n_nodes, reg_lambda, l1, max_delta_step, values)
 
 
