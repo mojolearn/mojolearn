@@ -159,7 +159,7 @@ def _tail(cats: List[Float64], hot: List[Float64]) -> List[Float64]:
 
 def check_cat_outside() raises:
     var inside: List[Float64] = [0.0, 4.0, 2.0]
-    var none: List[Float64] = []
+    var none = List[Float64]()
     require(gbdt_cat_outside_words(_tail(inside, none), 5) == "", "every index inside X")
     var edge: List[Float64] = [5.0]
     require(gbdt_cat_outside_words(_tail(edge, none), 5)
