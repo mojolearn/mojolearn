@@ -1,11 +1,13 @@
+diff --git a/x_ann/cagra_core.mojo b/x_ann/cagra_core.mojo
+index 39ed939b55..bc0c705993 100644
 --- a/x_ann/cagra_core.mojo
 +++ b/x_ann/cagra_core.mojo
-@@ -162,7 +162,7 @@
-     for w in range(words):
-         visited.unsafe_store(vbase + w, Int32(0))
-     for t in range(n_seeds):
--        var v = (t * n) // n_seeds
-+        var v = ((t * n) // n_seeds + 1) % n
-         var word = visited.unsafe_load(vbase + v // 32)
-         var bit = Int32(1) << Int32(v % 32)
-         if (word & bit) != 0:
+@@ -78,7 +78,7 @@ def cg_seed_node(t: Int, n: Int, n_seeds: Int, rs: Int) -> Int:
+     on the host; a repeated node is skipped by the visited set, as any
+     repeat is."""
+     if rs == 0:
+-        return (t * n) // n_seeds
++        return ((t * n) // n_seeds + 1) % n
+     var z = UInt64(rs) * UInt64(0x9E3779B97F4A7C15) + UInt64(t + 1) * UInt64(0xD1B54A32D192ED03)
+     z = (z ^ (z >> UInt64(30))) * UInt64(0xBF58476D1CE4E5B9)
+     z = (z ^ (z >> UInt64(27))) * UInt64(0x94D049BB133111EB)
