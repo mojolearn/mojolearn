@@ -146,6 +146,25 @@ class HostGBDT:
         """Name of the prediction engine, ``'sequential'``."""
         return _native_host_archive(self, _OP.host_tree_engine, (), _ARCHIVE_CONTEXT)
 
+    @property
+    def feature_importances_(self):
+        """The impurity-based feature importances of the saved model.
+
+        The values ``GradientBoosting.feature_importances_`` held when the
+        model was saved: one float64 per input feature, summing to 1.
+
+        Returns
+        -------
+        ndarray of shape (n_features_in_,)
+
+        Raises
+        ------
+        AttributeError
+            For a model built from its text rather than loaded from a file
+            written by ``GradientBoosting.save``.
+        """
+        return _native_host_archive(self, _OP.host_tree_importances, (), _ARCHIVE_CONTEXT)
+
     def model_sha256(self):
         """Return the SHA-256 hex digest of the model.
 

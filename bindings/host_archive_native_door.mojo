@@ -38,6 +38,7 @@ from core.host_finite_scan import host_finite_status
 from neighbors.neighbors_knn_run import knn_metric_code, knn_rbc_metric_code, knn_rbc_metric_resolve
 from umap.host_archive_native_run import _umap_whole, _umap_real
 from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
+from bindings.gbdt_importances_pack import GBDT_IMPORTANCES_FIELD, GBDT_IMPORTANCES_MEMBER
 from bindings.py_balanced import py_item
 
 
@@ -2650,6 +2651,20 @@ def host_archive_category_map(arrays: PythonObject, context: PythonObject) raise
     return _archive_exact(arrays, "category_map", "<i8", context)
 
 
+def host_archive_feature_importances(arrays: PythonObject, n_features: Int, context: PythonObject) raises -> PythonObject:
+    """The fit's `feature_importances_` saved with a gradient-boosting model
+    (lane mf-imp6: float64, one per input column), or None for a file
+    without the member. The ONE read for both loaders, as the category map's;
+    a member of another length is refused as corrupt."""
+    if not py_contains(arrays, PythonObject(GBDT_IMPORTANCES_MEMBER)):
+        return PythonObject(None)
+    var values = _archive_exact(arrays, GBDT_IMPORTANCES_MEMBER, "<f8", context)
+    if Int(py=values.size) != n_features:
+        raise Error("the saved feature importances hold " + String(Int(py=values.size)) + " values for "
+                    + String(n_features) + " features; the file is corrupt")
+    return values
+
+
 def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = host_tree_archive_keys()
     var estimator = _archive_string(arrays, "estimator", context)
@@ -2704,6 +2719,11 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
     var category_map = host_archive_category_map(arrays, context)
     if category_map is not None:
         py_setitem(fields, nk[].k_category_map_, category_map)
+    # lane mf-imp6: the fit's feature importances saved with the model
+    # (HostGBDT.feature_importances_); held only when the file has them.
+    var importances = host_archive_feature_importances(arrays, Int(py=py_item(state, nk[].k_n_input_features)), context)
+    if importances is not None:
+        py_setitem(fields, PythonObject(GBDT_IMPORTANCES_FIELD), importances)
     return model
 
 
@@ -2797,6 +2817,9 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     py_setitem(fields, nk[].k_loss_curve_, PythonObject(None))
     py_setitem(fields, nk[].k_test_loss_curve_, PythonObject(None))
     py_setitem(fields, nk[].k_category_map_, host_archive_category_map(arrays, context))
+    # lane mf-imp6: the fit's feature importances saved with the model (None without the member)
+    py_setitem(fields, PythonObject(GBDT_IMPORTANCES_FIELD),
+               host_archive_feature_importances(arrays, Int(py=py_item(fields, nk[].k_n_features_in_)), context))
     return model
 
 
