@@ -2731,9 +2731,14 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 if positive == -1:
                     return False  # labels of no kind the door's metrics read
             elif positive < 0 and len(py_call(b.list, labels)) == 2:
-                # 'average_precision' of two labels without 1: its column pick
-                # is the door scorer's response rule, which reads no absent label
-                return False
+                # 'average_precision' of two labels without 1 (lane mf-msel5):
+                # scikit-learn's scorer refuses pos_label=1 in
+                # `_get_response_values` before any metric; the RUN raises its
+                # words per side (msel_search_run `_scorer_side`, the labels'
+                # reprs). Labels of mixed or other kinds: the door.
+                positive = _absent_positive(labels, b)
+                if positive == -1:
+                    return False
         elif positive_kind == SCORER_POSITIVE_MARKS:
             # 'neg_brier_score': `_pos_label(None, ...)`'s label marks (lane mf-score5)
             if labels is None:

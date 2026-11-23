@@ -456,6 +456,18 @@ def _scorer_side(route: MetricRoute, cluster: EntryRef, label_words: List[String
     read it: a pick is a copy."""
     var pick = -1
     var negate = False
+    if msel_scorer_ap(row) and classes == 2 and (positive == SCORER_POSITIVE_ABSENT
+                                                 or positive == SCORER_POSITIVE_KIND):
+        # AP-ABSENT (lane mf-msel5): two labels and no label 1. scikit-learn's
+        # scorer asks `_get_response_values(..., pos_label=1)`, which refuses a
+        # pos_label not among the classifier's classes, printing them as a
+        # NumPy array: the labels' reprs, space-separated, in brackets.
+        var shown = String("[")
+        for i in range(len(label_words)):  # small-loop(the fit's two labels)
+            if i > 0:
+                shown += " "
+            shown += label_words[i]
+        raise Error("ValueError: pos_label=1 is not a valid label: It should be one of " + shown + "]")
     if msel_scorer_binary_column(row) and classes == 2 and cols == 2:
         pick = 1
         if msel_scorer_ap(row):
@@ -710,7 +722,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var marked = positives[j] == SCORER_POSITIVE_ABSENT or positives[j] == SCORER_POSITIVE_KIND
         if msel_scorer_positive(rows_of[j]) and not marked and (positives[j] < 0 or positives[j] >= k):
             raise Error("member ABI: a binary scorer needs its positive class code")
-        if msel_scorer_ap(rows_of[j]) and k == 2 and (positives[j] < 0 or positives[j] >= k):
+        if msel_scorer_ap(rows_of[j]) and k == 2 and not marked and (positives[j] < 0 or positives[j] >= k):
             raise Error("member ABI: 'average_precision' of a binary member needs its positive class code")
     # THE RESIDENT ROUTE (module note): per candidate where its sides' rows
     # are; the X blocks are gathered only for a candidate that reads none.
