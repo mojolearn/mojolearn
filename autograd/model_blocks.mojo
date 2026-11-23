@@ -96,6 +96,13 @@ from autograd.ssm_ops import ssm_m1_states_supported
 from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
+# nn-conv3d begin
+# the 3-D layers, codes 73 .. 76 (autograd/nn_conv3d_layers.mojo)
+from autograd.nn_conv3d_layers import (
+    is_conv3d_layer, conv3d_layer_shape, conv3d_layer_sizes, conv3d_layer_names, conv3d_layer_bounds,
+    conv3d_layer_dims, conv3d_layer_forward,
+)
+# nn-conv3d end
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -134,7 +141,13 @@ comptime _ARGS = 6
 
 
 def is_block(code: Int) -> Bool:
-    return code >= BLOCK_FIRST and code <= BLOCK_LAST
+    if code >= BLOCK_FIRST and code <= BLOCK_LAST:
+        return True
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return True
+    # nn-conv3d end
+    return False
 
 
 def _x(xargs: List[Int], i: Int, k: Int) -> Int:
@@ -317,6 +330,10 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         hd[cur.ndim - 1] = a0
         return rn_shape(hd, name + " (LMHead)")
     # end lm_head
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_shape(code, xargs, i, cur, name)
+    # nn-conv3d end
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -368,6 +385,10 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(_x(xargs, i, 0) * cur.cols())  # weight (vocab, features)
     # end lm_head
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_sizes(code, xargs, i, cur)
+    # nn-conv3d end
     return out^
 
 
@@ -405,6 +426,10 @@ def block_param_names(code: Int) -> List[String]:
     elif code == LAYER_LM_HEAD:
         out.append(".weight")
     # end lm_head
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_names(code)
+    # nn-conv3d end
     return out^
 
 
@@ -466,6 +491,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(ftz(identical_div(Float32(1), identical_sqrt(Float32(cur.cols())))))
     # end lm_head
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_bounds(code, xargs, i, cur)
+    # nn-conv3d end
     return out^
 
 
@@ -685,6 +714,10 @@ def block_forward[E: Exec](
         var w = _p(tape, ex, P, Gr, off, a0, cur.cols(), train)
         return graph_transformer_linear(tape, ex, h, w)
     # end lm_head
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_forward(tape, ex, code, xargs, i, cur, P, Gr, off, h, train)
+    # nn-conv3d end
     raise Error("model: unknown block code " + String(code))
 
 
@@ -806,6 +839,10 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
         out.append(_x(xargs, i, 0))
         out.append(cur.cols())
     # end lm_head
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_dims(code, xargs, i, cur, slot)
+    # nn-conv3d end
     return out^
 
 
