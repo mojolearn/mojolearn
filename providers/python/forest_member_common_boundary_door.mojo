@@ -12,21 +12,25 @@ these with the kind prefix its classes connect under ("dt_", "rf_", "et_").
     its route (the run context of its device, `trees_route_context`, and the
     forest entry of that context's image in `route.entry`); the parameter
     words of core/forest_member_run.mojo (word 10, the importance fit, left
-    at 0: a caller that reads importances sets it). Returns False, so the caller keeps
-    the estimator's own doors, for what the member does not publish:
-    DecisionTree splitter='random' (its inner Extra Trees forest),
-    `class_weight`, `oob_score`, and the deviance criteria of a regressor
-    (poisson, gamma, inverse_gaussian: their target check reads y).
+    at 0: a caller that reads importances sets it; word 11, the out-of-bag
+    fit, from the estimator's `oob_score`: lane mf-oob3). Returns False, so
+    the caller keeps the estimator's own doors, for what the member does not
+    publish: DecisionTree splitter='random' (its inner Extra Trees forest),
+    `class_weight`, and the deviance criteria of a regressor (poisson, gamma, inverse_gaussian:
+    their target check reads y).
     `caller_rows` (lane mf-ada2, AdaBoost's member rounds): the caller
     multiplies the class_weight row weights into the fit's row weights
     itself and runs the deviance criteria's target check on each fit's
     targets itself (xtrees/trees_ada_fit_run.mojo), so those two are
-    admitted; `oob_score` and splitter='random' still are not (the caller
-    admits a random-splitter tree's inner forest itself).
+    admitted; splitter='random' still is not (the caller admits a
+    random-splitter tree's inner forest itself).
   * `forest_member_pack_common` (PACK): the fitted attributes and model
     arrays the estimator's own fit writes, from the state's blocks, and
     `feature_importances_` when the state holds them (else removed, as the
-    estimator's fit removes it), and `classes_` / `n_classes_` of a
+    estimator's fit removes it), the out-of-bag outputs of a state fitted
+    with word 11 (`oob_decision_function_` or `oob_prediction_`, float64,
+    and `oob_score_`, as the estimator's oob fit writes them), and
+    `classes_` / `n_classes_` of a
     classifier: the caller's labels (`member_pack_labeled`) are TAKEN before
     the refresh (which clears the instance dictionary, the held key with it)
     and written after it, as the estimator's own fit writes them.
@@ -41,7 +45,7 @@ from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_fields
-from bindings.admitted_input_unpack import admitted_vector, classical_view, admitted_dtype
+from bindings.admitted_input_unpack import admitted_vector, admitted_array, classical_view, admitted_dtype
 from bindings.classical_arrays_door import classical_address
 from bindings.trees_public_inputs_door import trees_builtins, trees_table, trees_freeze, trees_address
 from bindings.trees_route_boundary_door import trees_route_context
@@ -51,6 +55,7 @@ from bindings.trees_public_forest_door import (
 )
 from bindings.forest_config_run import forest_target_need, FOREST_TARGET_ANY, FOREST_FEATURES_REFUSED
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
+from core.forest_member_run import FM_WORD_OOB, FM_HEAD, FM_BLOCK_OOB, FM_BLOCK_OOB_SCORE
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE,
@@ -98,7 +103,10 @@ def forest_member_admit_common(model: PythonObject, kind_word: Int, prefix: Stri
     var mode = forest_capture_mode(scratch, run)
     var engine = forest_prediction_engine(scratch, run)
     var config = forest_config(scratch, py_item(scratch, PythonObject("_cfg")), kind, not classifier, run)
-    if config.oob_score or (config.class_weighted and not caller_rows):
+    # `oob_score` (lane mf-oob3): word 11 below. Only the RF configuration
+    # reads it (`_rf_config`); an ExtraTrees `oob_score=True` reaches its own
+    # fit, which refuses it in its words, as before.
+    if config.class_weighted and not caller_rows:
         return False
     if not classifier and not caller_rows and forest_target_need(config) != FOREST_TARGET_ANY:
         return False
@@ -120,7 +128,7 @@ def forest_member_admit_common(model: PythonObject, kind_word: Int, prefix: Stri
     route.entry = forest_key(native)
     owner.plan.route = route
     var slots = len(config.ints)
-    var words = List[Float64](capacity=12 + 3 * slots)
+    var words = List[Float64](capacity=FM_HEAD + 3 * slots)
     words.append(0.0 if classifier else 1.0)
     words.append(1.0 if et else 0.0)
     words.append(Float64(config.criterion))
@@ -131,8 +139,9 @@ def forest_member_admit_common(model: PythonObject, kind_word: Int, prefix: Stri
     words.append(config.rows_fraction)
     words.append(1.0 if mode == "fast" else 0.0)
     words.append(1.0 if engine == "parallel_groves" else 0.0)
-    words.append(0.0)  # word 10: no importance fit unless the caller asks
-    words.append(Float64(slots))
+    words.append(0.0)  # word 10 (FM_WORD_IMPORTANCES): no importance fit unless the caller asks
+    words.append(1.0 if config.oob_score else 0.0)  # word 11 (FM_WORD_OOB): the estimator's oob_score
+    words.append(Float64(slots))  # word 12 (FM_WORD_SLOTS)
     for k in range(slots):  # driver-loop: over the configuration's parameter slots (about twenty)
         words.append(bitcast[DType.float64](Int64(config.ints[k])))
         words.append(config.floats[k])
@@ -201,6 +210,23 @@ def forest_member_pack_common(model: PythonObject, context: PythonObject, b: Pyt
         py_setitem(fields, "feature_importances_", importance)
     else:
         _ = py_call(fields.pop, PythonObject("feature_importances_"), PythonObject(None))
+    # The out-of-bag outputs (word 11), as `_rf_fit_classifier` /
+    # `_rf_fit_regressor` write them: a new float64 Array and the score as a
+    # Python float.
+    if len(plan.params) > FM_WORD_OOB and plan.params[FM_WORD_OOB] != 0.0:
+        call.block = FM_BLOCK_OOB
+        _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+        var rows = call.dst.rows
+        var cols = call.dst.cols
+        var oob = admitted_array(Python.tuple(rows, cols), "<f8", run) if classes > 0 else admitted_vector(
+            rows, "<f8", run)
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=trees_address(oob)),
+            src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=call.dst.data), count=8 * rows * cols)
+        call.block = FM_BLOCK_OOB_SCORE
+        _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+        var score = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)[0]
+        py_setitem(fields, "oob_decision_function_" if classes > 0 else "oob_prediction_", oob)
+        py_setitem(fields, "oob_score_", PythonObject(score))
     py_setitem(fields, "_mojolearn_fitted", True)
 
 

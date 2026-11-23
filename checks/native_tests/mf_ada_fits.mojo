@@ -21,6 +21,9 @@ RandomForest*, ExtraTrees* or DecisionTree* configuration, a random-splitter tre
 forest entry of its family as the route), the class_weight rows the caller passes (the door's
 `trees_class_rows_only`) multiplied in by the x_trees label weights kernels (`label_weights_native_v1`, what the
 door's driver calls), then `ada_fit_run` and the ensemble's predict over the kept states' own member predicts.
+With `oob` (lane mf-oob3: a RandomForest* base with oob_score=True) the plan's out-of-bag word is set, and each
+kept state's out-of-bag blocks (`FM_BLOCK_OOB`, `FM_BLOCK_OOB_SCORE`: what the door's PACK writes into its member's
+`oob_decision_function_` / `oob_prediction_` and `oob_score_`) are copied out before the states are freed.
 
 Call `publish_host_images()` (checks/native_tests/bm_rest_boost_fits.mojo) and `publish_host_members()` first. Each fit is serial by nature
 (each round's weights come from the last); callers run independent fits as case-table rows across the host cores.
@@ -30,9 +33,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.entry_table import EntryRef, entry_ref_gil_free
 from core.device_route import DeviceRoute, DEVICE_CPU
 from core.member_abi import (
-    MemberPlan, MemberMatrix, member_resolve_family, member_call, member_call_of, MEMBER_OP_PREDICT, MEMBER_F32,
-    MEMBER_I32,
+    MemberPlan, MemberMatrix, member_resolve_family, member_call, member_call_of, MEMBER_OP_PREDICT, MEMBER_OP_EXPORT,
+    MEMBER_F32, MEMBER_I32,
 )
+from core.forest_member_run import FM_HEAD, FM_WORD_OOB, FM_BLOCK_OOB, FM_BLOCK_OOB_SCORE
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 from core.tree_member import tree_member_publish_image
 from core.forest_member import forest_member_publish_image
@@ -49,6 +53,7 @@ from xtrees.trees_forest_run import forest_export_counts
 from xtrees.trees_ada_fit_run import AdaFitPlan, AdaFitResult, ada_fit_run, ada_release_handles, ada_release_members
 from xtrees.trees_meta_vote_run import ada_classifier_run, ada_regressor_run, ADA_CODES
 from checks.native_tests.bm_rest_boost_fits import trees_key
+from checks.native_tests.testsuite_cases import require
 from checks.native_tests.py2mojo_forest_fits import (
     RfSpec, rf_config, Forest, column_major, predict, argmax_rows, RF_SQUARED,
 )
@@ -222,12 +227,13 @@ def publish_host_members() raises:
     extra_trees_member_publish_image("cpu")
 
 
-def member_plan_of(config: ForestConfig, family: Int, classifier: Bool) raises -> MemberPlan:
-    """The plan `forest_member_admit_common` fills for a base of this configuration on the host column: words 0-11
+def member_plan_of(config: ForestConfig, family: Int, classifier: Bool, oob: Bool = False) raises -> MemberPlan:
+    """The plan `forest_member_admit_common` fills for a base of this configuration on the host column: words 0-12
     (kind, layout, criterion, the max_features form / count / fraction, the image bin flag, the ET rows fraction,
-    tier fast 0, engine groves 0, no importance fit, the slot count), then three words per slot; the route the CPU
-    forest entry of the family's table (RF for Tree and Forest, ET for ExtraTrees)."""
-    var words = List[Float64]()
+    tier fast 0, engine groves 0, no importance fit, the out-of-bag word `oob` (the estimator's oob_score), the slot
+    count), then three words per slot from `FM_HEAD`; the route the CPU forest entry of the family's table (RF for
+    Tree and Forest, ET for ExtraTrees)."""
+    var words = List[Float64](capacity=FM_HEAD + 3 * len(config.ints))
     words.append(0.0 if classifier else 1.0)
     words.append(1.0 if config.et else 0.0)
     words.append(Float64(config.criterion))
@@ -239,6 +245,7 @@ def member_plan_of(config: ForestConfig, family: Int, classifier: Bool) raises -
     words.append(0.0)
     words.append(0.0)
     words.append(0.0)
+    words.append(1.0 if oob else 0.0)
     var slots = len(config.ints)
     words.append(Float64(slots))
     for k in range(slots):  # small-loop(the configuration's parameter slots, once per plan)
@@ -254,6 +261,8 @@ def member_plan_of(config: ForestConfig, family: Int, classifier: Bool) raises -
     plan.family = family
     plan.kind = 0 if classifier else 1
     plan.route = route
+    require(len(words) == FM_HEAD + 3 * slots and words[FM_WORD_OOB] == (1.0 if oob else 0.0),
+            "member_plan_of: the words disagree with the forest member's layout")
     plan.params = words^
     plan.member = member_resolve_family(family, route)
     return plan^
@@ -266,6 +275,9 @@ struct AdaMemberModel(Movable):
     var errors: List[Float64]
     var codes: List[Int32]
     var values: List[Float32]
+    #: with `oob`: every kept member's out-of-bag output words, concatenated in round order, and its score
+    var oob: List[Float64]
+    var oob_scores: List[Float64]
 
     def __init__(out self, var alphas: List[Float64], var errors: List[Float64], var codes: List[Int32],
                  var values: List[Float32]):
@@ -273,17 +285,19 @@ struct AdaMemberModel(Movable):
         self.errors = errors^
         self.codes = codes^
         self.values = values^
+        self.oob = List[Float64]()
+        self.oob_scores = List[Float64]()
 
 
 def ada_member_fit(s: AdaSpec, var config: ForestConfig, family: Int, tree_base: Bool, x: List[Float32], n: Int,
                    d: Int, codes: List[Int32], k: Int, y: List[Float32],
-                   class_rows: List[Float32]) raises -> AdaMemberModel:
+                   class_rows: List[Float32], oob: Bool = False) raises -> AdaMemberModel:
     """`AdaBoost*(estimator=<base of `config`>, n_estimators, random_state=seed[, loss]).fit(X, y)` with
     sample_weight=None on the member route: `codes` 0..k-1 (classifier) or `y` (regressor); `class_rows` the
     base's class_weight row weights (empty: none); `tree_base` the base is a DecisionTree* (the steps' word; a
     random-splitter tree's `family` is its inner forest's, ExtraTrees). The deviance criteria check each round's
     drawn targets."""
-    var member_plan = member_plan_of(config, family, s.classifier)
+    var member_plan = member_plan_of(config, family, s.classifier, oob)
     var key = trees_key()
     var glue = xt_ref(key)
     var need = forest_target_need(config)
@@ -312,7 +326,20 @@ def ada_member_fit(s: AdaSpec, var config: ForestConfig, family: Int, tree_base:
     _ = len(class_rows)
     var out_codes = List[Int32]()
     var out_values = List[Float32]()
+    var oob_words = List[Float64]()
+    var oob_scores = List[Float64]()
     try:
+        if oob:
+            for j in range(len(result.handles)):  # small-loop(the kept states: their out-of-bag blocks)
+                var call = member_call_of(member_plan, result.handles[j])
+                call.block = FM_BLOCK_OOB
+                _ = member_call(member_plan.member, MEMBER_OP_EXPORT, call)
+                var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+                for i in range(call.dst.rows * call.dst.cols):  # small-loop(one member's out-of-bag words)
+                    oob_words.append(words[i])
+                call.block = FM_BLOCK_OOB_SCORE
+                _ = member_call(member_plan.member, MEMBER_OP_EXPORT, call)
+                oob_scores.append(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)[0])
         var blocks_i = List[List[Int32]]()
         var blocks_f = List[List[Float32]]()
         var addrs = List[Int]()
@@ -342,4 +369,7 @@ def ada_member_fit(s: AdaSpec, var config: ForestConfig, family: Int, tree_base:
         _ = len(x)
     finally:
         ada_release_members(member_plan, result.handles)
-    return AdaMemberModel(result.alphas.copy(), result.errors.copy(), out_codes^, out_values^)
+    var model = AdaMemberModel(result.alphas.copy(), result.errors.copy(), out_codes^, out_values^)
+    model.oob = oob_words^
+    model.oob_scores = oob_scores^
+    return model^

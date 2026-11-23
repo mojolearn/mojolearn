@@ -31,7 +31,9 @@ Three routes, the ones the door ran before:
   member rounds (`member_route`, lane mf-ada2): every other tree base
       (RandomForest*, ExtraTrees*, a DecisionTree* with splitter='random'
       (its inner one-tree ExtraTrees forest) or a regression criterion the
-      session does not fit). Each round's member is a NEW state of the
+      session does not fit; a RandomForest* with oob_score=True too, lane
+      mf-oob3: its member computes the out-of-bag outputs in every fit,
+      parameter word 11, and the door's PACK writes them). Each round's member is a NEW state of the
       base's native member (core/forest_member_run.mojo through
       core/member_abi.mojo; the door admits the base ONCE,
       `forest_member_admit_common` with the caller's class rows), differing
@@ -73,7 +75,7 @@ from core.forest_calls import (
     xf_snapshot_release,
 )
 from core.forest_fit_request import ForestFitArgs, XF_RESIDENT_RELEASE, XF_STRICT_RELEASE
-from core.forest_member_run import _argmax_rows
+from core.forest_member_run import _argmax_rows, FM_HEAD
 from core.label_weights_native_api import LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY
 from bindings.forest_config_run import (
     ForestConfig, forest_request, forest_target_need, forest_target_check, FOREST_TARGET_ANY, FOREST_TARGET_POISSON,
@@ -94,12 +96,12 @@ from xtrees.trees_boost_run import _sub_seed
 #: members of one fit differ only there (`_member_like`).
 comptime ADA_SEED_SLOT = 13
 #: The seed slot's three words in a forest member's MEMBER_OP_NEW parameters
-#: (core/forest_member_run.mojo: 12 head words, then three per slot: the
-#: int reading's Int64 bits, the float reading, the no-reading flag). Slot
-#: 13 is `random_state` in the ET layout too (`_et_config`), so one word
+#: (core/forest_member_run.mojo: `FM_HEAD` head words, then three per slot:
+#: the int reading's Int64 bits, the float reading, the no-reading flag).
+#: Slot 13 is `random_state` in the ET layout too (`_et_config`), so one word
 #: serves RandomForest, DecisionTree, ExtraTrees and a random-splitter
 #: tree's inner forest.
-comptime ADA_MEMBER_SEED_WORD = 12 + 3 * ADA_SEED_SLOT
+comptime ADA_MEMBER_SEED_WORD = FM_HEAD + 3 * ADA_SEED_SLOT
 
 #: The step's status words (`xt_samme_step` / `xt_r2_step` / XF_FIT_ADA_ROUND)
 #: (0.0: go on; 1.0: a perfect member, stop after keeping it; 2.0: worse than
