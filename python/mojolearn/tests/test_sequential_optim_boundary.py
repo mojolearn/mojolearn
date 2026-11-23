@@ -29,7 +29,7 @@ CONFIGS = [
     dict(optimizer="rmsprop", lr=0.005, momentum=0.5, schedule="multi_step", milestones=[1, 2]),
     dict(optimizer="adagrad", lr=0.1, lr_decay=0.01, initial_accumulator_value=0.1),
     dict(optimizer="adagrad", lr=0.1, schedule="cosine_warm_restarts", T_0=1, T_mult=2),
-    dict(optimizer="lamb", lr=0.02, schedule="one_cycle", total_steps=8),
+    dict(optimizer="lamb", lr=0.02, schedule="one_cycle", total_steps=8, cycle_momentum=False),
     dict(optimizer="lamb", lr=0.02, trust_clip=True, max_grad_norm=None, schedule="linear_warmup",
          warmup_steps=2, total_steps=8),
     dict(optimizer="adam", lr=0.01, schedule="reduce_on_plateau", factor=0.5, patience=0),
@@ -54,7 +54,7 @@ def test_defaults_follow_pytorch():
     assert o["f2"] == 0.99 and o["f7"] == 0.0 and o["eps"] == 1e-8
     o = _model().compile(optimizer="momentum")._options
     assert o["f1"] == 0.9
-    o = _model().compile(schedule="one_cycle", total_steps=10)._options
+    o = _model().compile(schedule="one_cycle", total_steps=10, cycle_momentum=False)._options
     assert tuple(o["sched_args"][:6]) == (10.0, 0.3, 25.0, 1e4, 0.0, 0.0)
 
 
@@ -71,8 +71,9 @@ def test_defaults_follow_pytorch():
     (dict(schedule="multi_step", milestones=[3, 2]), "milestones must be rising"),
     (dict(schedule="linear_warmup"), "linear_warmup needs total_steps"),
     (dict(schedule="linear_warmup", warmup_steps=5, total_steps=5), "warmup_steps must be"),
-    (dict(schedule="one_cycle"), "one_cycle needs total_steps"),
-    (dict(schedule="one_cycle", total_steps=4, anneal_strategy="exp"), "anneal_strategy must be"),
+    (dict(schedule="one_cycle", cycle_momentum=False), "one_cycle needs total_steps"),
+    (dict(schedule="one_cycle", total_steps=4), "cycle_momentum=True"),
+    (dict(schedule="one_cycle", total_steps=4, anneal_strategy="exp", cycle_momentum=False), "anneal_strategy must be"),
     (dict(schedule="reduce_on_plateau", factor=1.5), "factor must be in (0, 1)"),
     (dict(schedule="sometimes"), "schedule must name a supported Sequential schedule"),
 ])
@@ -83,7 +84,7 @@ def test_refusals_in_words(kw, message):
 
 def test_one_cycle_past_total_steps_is_refused_at_fit():
     x, y = _data()
-    m = _model().compile(optimizer="lamb", schedule="one_cycle", total_steps=3)
+    m = _model().compile(optimizer="lamb", schedule="one_cycle", total_steps=3, cycle_momentum=False)
     with pytest.raises(Exception, match="total_steps is 3"):
         m.fit(x, y, epochs=4, batch_size=32)
 

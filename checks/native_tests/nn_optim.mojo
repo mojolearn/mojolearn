@@ -290,10 +290,10 @@ def check_schedules() raises -> Int:
         var want = lr64 * _powi(0.5, (1 if e >= 2 else 0) + (1 if e >= 5 else 0) + (1 if e >= 6 else 0))
         _close("multi_step epoch " + String(e), Float64(got), want, 1e-6)
         n += 1
-    # cosine: T_max 7, eta_min 0.01; past T_max the rate stays at eta_min
+    # cosine: T_max 7, eta_min 0.01; PyTorch's closed form at every epoch, rising again past T_max (period 14)
     var ca = _args(7, 0.01)
-    for e in range(10):
-        var want = 0.01 + (lr64 - 0.01) * (1.0 + cos(_PI * Float64(min(e, 7)) / 7.0)) / 2.0
+    for e in range(30):
+        var want = 0.01 + (lr64 - 0.01) * (1.0 + cos(_PI * Float64(e) / 7.0)) / 2.0
         _close("cosine epoch " + String(e), Float64(nn_epoch_lr(NN_SCHED_COSINE, lr, ca, e)), want, 1e-6)
         n += 1
     # warm restarts: T_0 3, T_mult 2 (cycles of 3, 6, 12), eta_min 0.001

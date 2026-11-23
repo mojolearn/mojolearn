@@ -236,8 +236,14 @@ def nn_epoch_lr(sched: Int, lr: Float32, args: List[Float64], epoch: Int) raises
     """The per-epoch value of cosine and cosine_warm_restarts at zero-based
     epoch `epoch` (multi_step and plateau are autograd/model.mojo's)."""
     if sched == NN_SCHED_COSINE:
-        # torch CosineAnnealingLR's closed form; past T_max the rate stays at eta_min
-        return _cosine_value(lr, args[1], epoch, Int(args[0]))
+        # torch CosineAnnealingLR's closed form, eta_min + (lr - eta_min)(1 + cos(pi e / T_max)) / 2 at every
+        # epoch: past T_max it rises again (period 2 T_max; lane nn-integrate, 2026-11-23: it stayed at eta_min,
+        # which PyTorch does not do). cos(pi e / T) = cos(pi (2T - e) / T), so the table's 0..T covers it.
+        var period = Int(args[0])
+        var done = epoch % (2 * period)
+        if done > period:
+            done = 2 * period - done
+        return _cosine_value(lr, args[1], done, period)
     if sched == NN_SCHED_WARM_RESTARTS:
         # torch CosineAnnealingWarmRestarts at whole epochs: T_cur and T_i of the epoch's cycle
         var period = Int(args[0])

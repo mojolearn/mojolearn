@@ -19,7 +19,8 @@ compile's positional options (python/mojolearn/_x_sequence_model.py):
   27 milestones, 28 T_max, 29 eta_min, 30 T_0, 31 T_mult,
   32 warmup_steps, 33 total_steps, 34 pct_start, 35 anneal_strategy,
   36 div_factor, 37 final_div_factor, 38 three_phase,
-  39 factor, 40 patience, 41 threshold, 42 cooldown, 43 min_lr
+  39 factor, 40 patience, 41 threshold, 42 cooldown, 43 min_lr,
+  44 cycle_momentum (one_cycle)
   (lane nn-integrate, 2026-11-23: the five loss options sit before the optimizer's).
 """
 from std.python import Python, PythonObject
@@ -31,7 +32,7 @@ from autograd.nn_optim import (
     nn_optim_admit,
 )
 
-comptime NN_COMPILE_OPTIONS = 44
+comptime NN_COMPILE_OPTIONS = 45
 
 
 def _f(b: PythonObject, v: PythonObject) raises -> Float64:
@@ -116,6 +117,12 @@ def nn_optim_compile_words(
         args[0] = _f(b, options[32])
         args[1] = _need(b, options[33], "linear_warmup needs total_steps (optimizer steps)")
     elif schedule_code == NN_SCHED_ONE_CYCLE:
+        # lane nn-integrate (2026-11-23): PyTorch's OneCycleLR also cycles the momentum (or Adam's beta1)
+        # between 0.85 and 0.95 by default; this schedule cycles the learning rate only, so the default is
+        # refused in words rather than giving different results silently
+        if Bool(py=options[44]):
+            raise Error("ValueError: one_cycle with cycle_momentum=True (PyTorch's default) is not available: "
+                        + "this schedule cycles the learning rate only; pass cycle_momentum=False")
         var anneal = String(py=py_call(b.str, options[35]))
         if anneal != "cos" and anneal != "linear":
             raise Error("ValueError: anneal_strategy must be 'cos' or 'linear'")

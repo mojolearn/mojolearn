@@ -1616,7 +1616,7 @@ class Sequential(_CheckMixin):
                 milestones=None, T_max=None, eta_min=0.0, T_0=None, T_mult=1,
                 warmup_steps=0, total_steps=None, pct_start=0.3, anneal_strategy="cos",
                 div_factor=25.0, final_div_factor=1e4, three_phase=False,
-                factor=0.1, patience=10, threshold=1e-4, cooldown=0, min_lr=0.0):
+                factor=0.1, patience=10, threshold=1e-4, cooldown=0, min_lr=0.0, cycle_momentum=True):
         """Choose the loss, optimizer and learning-rate schedule.
 
         Parameters
@@ -1674,16 +1674,18 @@ class Sequential(_CheckMixin):
               ``milestones``.
             - ``'exponential'``: times ``gamma`` every epoch.
             - ``'cosine'``: ``eta_min + (lr - eta_min)(1 + cos(pi e /
-              T_max)) / 2`` at epoch ``e``; after ``T_max`` epochs the
-              rate stays at ``eta_min``.
+              T_max)) / 2`` at epoch ``e``, PyTorch's closed form: past
+              ``T_max`` epochs the rate rises again over the next
+              ``T_max``, a period of ``2 T_max``.
             - ``'cosine_warm_restarts'``: the same cosine over cycles of
               ``T_0`` epochs, each ``T_mult`` times the last.
             - ``'linear_warmup'``: per optimizer step, rises linearly to
               ``lr`` over ``warmup_steps`` steps, then falls linearly to 0
               at ``total_steps``.
             - ``'one_cycle'``: ``torch.optim.lr_scheduler.OneCycleLR`` per
-              optimizer step with ``max_lr=lr`` over ``total_steps`` steps
-              (the momentum is not cycled).
+              optimizer step with ``max_lr=lr`` over ``total_steps`` steps;
+              it cycles the learning rate only, so it needs
+              ``cycle_momentum=False``.
             - ``'reduce_on_plateau'``: ``ReduceLROnPlateau`` in ``'min'``
               mode on the validation loss when ``fit`` has
               ``validation_data``, else on the epoch's training loss.
@@ -1754,6 +1756,10 @@ class Sequential(_CheckMixin):
         pct_start, anneal_strategy, div_factor, final_div_factor, three_phase
             ``'one_cycle'``: as ``OneCycleLR`` (defaults 0.3, ``'cos'``, 25,
             1e4, False).
+        cycle_momentum : bool, default True
+            ``'one_cycle'``: PyTorch's default True also cycles the
+            momentum, which this schedule does not; pass False (True is
+            refused with that reason).
         factor, patience, threshold, cooldown, min_lr
             ``'reduce_on_plateau'``: as ``ReduceLROnPlateau`` (defaults 0.1,
             10, 1e-4 relative, 0, 0).
@@ -1771,7 +1777,7 @@ class Sequential(_CheckMixin):
         >>> model = model.compile(loss="smooth_l1", beta=0.5, reduction="sum")
         >>> model = model.compile(optimizer="rmsprop", lr=0.01, schedule="cosine", T_max=20)
         """
-        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change, reduction, pos_weight, beta, blank, zero_infinity, alpha, centered, lr_decay, initial_accumulator_value, max_grad_norm, trust_clip, always_adapt, milestones, T_max, eta_min, T_0, T_mult, warmup_steps, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase, factor, patience, threshold, cooldown, min_lr), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change, reduction, pos_weight, beta, blank, zero_infinity, alpha, centered, lr_decay, initial_accumulator_value, max_grad_norm, trust_clip, always_adapt, milestones, T_max, eta_min, T_0, T_mult, warmup_steps, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase, factor, patience, threshold, cooldown, min_lr, cycle_momentum), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
     def _program(self, n_features, sample=None):

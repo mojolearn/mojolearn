@@ -1045,7 +1045,7 @@ EXAMPLES = {
     # lane nn-optim begin: Sequential.compile's lamb with one_cycle, and rmsprop (centered) with cosine
     "seq-optim-lamb": _seq_compiled((8, 4), [["flatten"], ["linear", 16], ["tanh"], ["linear", 1]],
                                     {"loss": "mse", "optimizer": "lamb", "lr": 0.02, "schedule": "one_cycle",
-                                     "total_steps": 4}),
+                                     "total_steps": 4, "cycle_momentum": False}),
     "seq-optim-rmsprop": _seq_compiled((8, 4), [["flatten"], ["linear", 16], ["tanh"], ["linear", 1]],
                                        {"loss": "mse", "optimizer": "rmsprop", "lr": 0.01, "centered": True,
                                         "schedule": "cosine", "T_max": 2}),

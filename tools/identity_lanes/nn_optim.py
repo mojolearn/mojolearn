@@ -58,7 +58,8 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """lamb (global clip, weight decay; trust_clip) with one_cycle and with linear_warmup: twelve steps each."""
     x, y, xh = _nn_optim_data(X, yr, Xh)
-    a = _nn_optim_fit(ml, x, y, xh, 4, optimizer="lamb", lr=0.02, schedule="one_cycle", total_steps=12)
+    a = _nn_optim_fit(ml, x, y, xh, 4, optimizer="lamb", lr=0.02, schedule="one_cycle", total_steps=12,
+                      cycle_momentum=False)
     b = _nn_optim_fit(ml, x, y, xh, 4, optimizer="lamb", lr=0.02, trust_clip=True, max_grad_norm=None,
                       schedule="linear_warmup", warmup_steps=3, total_steps=12)
     parts = {"onecycle_" + k: v for k, v in _nn_optim_hash(a).items()}
