@@ -54,6 +54,8 @@ EXISTING backward rule; no kernel is written or edited here:
         f eps)                   running_mean, running_var; the running statistics are
                                  state the optimizer never updates (autograd/model.mojo
                                  model_fit_state restores them around each step)
+  77    log_softmax (a0 dim)     Tape.log_softmax along the axis (rn_softmax_along):    tape (LOG_SOFTMAX)
+                                 autograd/nn_log_softmax.mojo (lane nn-losses-2)
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -96,6 +98,10 @@ from autograd.ssm_ops import ssm_m1_states_supported
 from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
+# nn-losses-2 begin: code 77, log_softmax (autograd/nn_log_softmax.mojo); the CTC loss's rule (autograd/nn_ctc.mojo)
+from autograd.nn_log_softmax import is_nn_log_softmax, nn_log_softmax_shape, nn_log_softmax_forward
+from autograd.nn_ctc import NnCtcRules
+# nn-losses-2 end
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -134,6 +140,10 @@ comptime _ARGS = 6
 
 
 def is_block(code: Int) -> Bool:
+    # nn-losses-2 begin
+    if is_nn_log_softmax(code):
+        return True
+    # nn-losses-2 end
     return code >= BLOCK_FIRST and code <= BLOCK_LAST
 
 
@@ -317,6 +327,10 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         hd[cur.ndim - 1] = a0
         return rn_shape(hd, name + " (LMHead)")
     # end lm_head
+    # nn-losses-2 begin
+    if is_nn_log_softmax(code):
+        return nn_log_softmax_shape(code, a0, cur, name)
+    # nn-losses-2 end
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -685,6 +699,10 @@ def block_forward[E: Exec](
         var w = _p(tape, ex, P, Gr, off, a0, cur.cols(), train)
         return graph_transformer_linear(tape, ex, h, w)
     # end lm_head
+    # nn-losses-2 begin
+    if is_nn_log_softmax(code):
+        return nn_log_softmax_forward(tape, ex, a0, cur, h)
+    # nn-losses-2 end
     raise Error("model: unknown block code " + String(code))
 
 
@@ -718,6 +736,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         return tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST
 
     def supports(self, tag: Int) -> Bool:
+        # nn-losses-2 begin
+        if NnCtcRules.owns(tag):
+            return True
+        # nn-losses-2 end
         if Self._recurrent(tag):
             return True
         # lm_head (lane neural-blocks-3-lm): the fused head's tag, StepOpRules' own answers
@@ -728,6 +750,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # nn-losses-2 begin
+        if NnCtcRules.owns(tag):
+            return NnCtcRules().zeroed_destination(tag, saved, edge)
+        # nn-losses-2 end
         if Self._recurrent(tag):
             return RecurrentRules().zeroed_destination(tag, saved, edge)
         if tag == LM_HEAD_V2_TAG:
@@ -737,6 +763,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # nn-losses-2 begin
+        if NnCtcRules.owns(tag):
+            return NnCtcRules().writes_total(tag, saved, edge)
+        # nn-losses-2 end
         if Self._recurrent(tag):
             return RecurrentRules().writes_total(tag, saved, edge)
         if tag == LM_HEAD_V2_TAG:
@@ -749,6 +779,11 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
     ) raises:
+        # nn-losses-2 begin
+        if NnCtcRules.owns(tag):
+            NnCtcRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        # nn-losses-2 end
         if Self._recurrent(tag):
             RecurrentRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         elif tag == LM_HEAD_V2_TAG:

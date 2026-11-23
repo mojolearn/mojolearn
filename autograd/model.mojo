@@ -50,6 +50,11 @@ from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM, REDUCTION_BATCHMEAN, 
 from autograd.loss_ops import LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS
 from autograd.nn_losses import LS_SMOOTH_L1, LS_NLL, LS_KL_DIV
 # nn-losses end
+# nn-losses-2 begin
+from autograd.nn_log_softmax import is_nn_log_softmax, log_softmax_axis
+from autograd.nn_ctc import ctc_loss, ctc_blank_of, ctc_zero_infinity_of, ctc_admit, ctc_pack_targets
+from core.cast_in import CAST_KIND_FLOAT
+# nn-losses-2 end
 from autograd.ssm_ops import OP_SSM_S4D_INIT
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
@@ -161,9 +166,14 @@ comptime LOSS_L1 = 5             # torch.nn.L1Loss
 comptime LOSS_SMOOTH_L1 = 6      # torch.nn.SmoothL1Loss(beta): the loss scalar is beta
 comptime LOSS_NLL = 7            # torch.nn.NLLLoss on log-probabilities, class-code targets (one-hot on the executor)
 comptime LOSS_KL_DIV = 8         # torch.nn.KLDivLoss(log_target=False) on log-probabilities, dense targets
-comptime LOSS_LAST = LOSS_KL_DIV
 comptime LOSS_WORD_REDUCTION = 256
 # nn-losses end
+# nn-losses-2 begin: torch.nn.CTCLoss on (T, C) log-probabilities per sample (autograd/nn_ctc.mojo); the loss scalar
+# word is the blank index, or -1 - blank with zero_infinity (nn_ctc.ctc_blank_word); targets (N, S) labels plus the
+# fit's target lengths, packed once per fit into (N, 2 + S) rows [input length, target length, labels]
+comptime LOSS_CTC = 9
+comptime LOSS_LAST = LOSS_CTC
+# nn-losses-2 end
 
 comptime TARGET_DENSE = 0        # Y is (N, out) float32
 comptime TARGET_CODES = 1        # Y is N int32 class codes; one-hot built on the executor
@@ -605,6 +615,11 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
     # lm_head (lane neural-blocks-3-lm): a final lm_head gives every position's logits, (length, vocab) per
     # sample; the outputs are that sample flat (n_samples, length * vocab), in the layer's row-major order
     var head_last = s.kinds[len(s.kinds) - 1] == LAYER_LM_HEAD
+    # nn-losses-2 begin: a final log_softmax may give a sequence of log-probabilities per sample, (length, classes)
+    # for the ctc loss, flat like lm_head's; check_fit refuses every other loss on such an output
+    if is_nn_log_softmax(s.kinds[len(s.kinds) - 1]):
+        head_last = True
+    # nn-losses-2 end
     if head_last:
         s.out_width[len(s.out_width) - 1] = cur.count()
     elif cur.ndim != 1:
@@ -696,6 +711,18 @@ def check_fit(spec: ModelSpec, cfg: FitConfig, N: Int) raises:
         raise Error("model fit: nll and kl_div take log-probabilities; a final Softmax or Sigmoid gives "
                     + "probabilities")
     # nn-losses end
+    # nn-losses-2 begin
+    if cfg.loss == LOSS_CTC:
+        _ = model_ctc_dims(spec)
+        if cfg.target != TARGET_DENSE:
+            raise Error("model fit: ctc takes the label sequences as they are (no class labels)")
+        if cfg.reduction == REDUCTION_BATCHMEAN:
+            raise Error("model fit: ctc takes reduction='mean' or 'sum'")
+    elif model_sequence_output(spec):
+        raise Error("model fit: the model's output is a sequence of log-probabilities per sample (a final "
+                    + "log_softmax over (length, classes)); that output fits with loss='ctc'. For another loss, "
+                    + "flatten() before the last linear layer")
+    # nn-losses-2 end
     # lm_head (lane neural-blocks-3-lm)
     if cfg.loss == LOSS_TOKEN_CROSS_ENTROPY:
         if spec.version != SPEC2_VERSION or last != LAYER_LM_HEAD:
@@ -1132,6 +1159,12 @@ def _fit_loss[E: Exec](
         var i = spec.n_layers() - 1
         return block_lm_head_loss(tape, ex, spec.xargs, i, spec.in_shape[i], P, Gr, spec.param_off[i], y_out,
                                   target, train)
+    # nn-losses-2 begin
+    if cfg.loss == LOSS_CTC:
+        var dims = model_ctc_dims(spec)
+        return ctc_loss(tape, ex, y_out, target, dims[0], dims[1], ctc_blank_of(cfg.huber_delta), cfg.reduction,
+                        ctc_zero_infinity_of(cfg.huber_delta))
+    # nn-losses-2 end
     return model_loss(tape, ex, cfg, y_out, target)
 
 
@@ -1280,6 +1313,7 @@ def model_fit_state[E: Exec](
     mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
     Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
     validation: Optional[FitValidation] = None, codes_dev: Int = 0, lengths: Optional[FP] = None,
+    target_lengths: Optional[FP] = None,
 ) raises -> Int:
     """Train the model on X (N, n_inputs) and Y; returns the epochs run.
 
@@ -1368,9 +1402,42 @@ def model_fit_state[E: Exec](
     var token = cfg.loss == LOSS_TOKEN_CROSS_ENTROPY
     if token:
         TW = spec.in_shape[spec.n_layers() - 1].rows()
+    # nn-losses-2 begin: ctc's batch target is the packed (N, 2 + S) rows; Y is the (N, S) float32 labels, checked
+    # on the host with the target lengths (and the input lengths) before anything is uploaded
+    var ctc = cfg.loss == LOSS_CTC
+    var ctc_S = 0
+    if ctc:
+        var dims = model_ctc_dims(spec)
+        if validation:
+            raise Error("ValueError: model fit: validation_data with the ctc loss is not supported")
+        if not target_lengths:
+            raise Error("ValueError: model fit: the ctc loss needs target_lengths, one a sample")
+        if has_lens and spec.sample.d[0] != dims[0]:
+            raise Error("ValueError: model fit: with lengths, ctc needs one output step per input step ("
+                        + String(spec.sample.d[0]) + " input steps, " + String(dims[0]) + " output steps)")
+        if Y.rows != N or Y.kind != CAST_KIND_FLOAT or Y.itemsize != 4 or not Y.is_c_order():
+            raise Error("model fit: ctc targets must be the (n_samples, max target length) C-contiguous float32 labels")
+        ctc_S = Y.cols
+        ctc_admit(FP(unsafe_from_address=Y.addr), target_lengths.value(), lengths, N, ctc_S, dims[0], dims[1],
+                  ctc_blank_of(cfg.huber_delta))
+        TW = ctc_S + 2
+    elif target_lengths:
+        raise Error("ValueError: model fit: target_lengths apply to the ctc loss")
+    # nn-losses-2 end
     var dY = ex.alloc(N * TW)
     if token:
         _token_ids(ex, Y, N, TW, dY, "model fit: y")
+    # nn-losses-2 begin: the target rows, one pack launch once per fit
+    elif ctc:
+        var dLab = ex.alloc(N * ctc_S)
+        ex.upload(dLab, FP(unsafe_from_address=Y.addr), N * ctc_S)
+        var dTL = ex.alloc(N)
+        ex.upload(dTL, target_lengths.value(), N)
+        var in_lens = Optional[FP](dLen) if has_lens else Optional[FP]()
+        ctc_pack_targets(ex, dY, dLab, dTL, in_lens, N, ctc_S, model_ctc_dims(spec)[0])
+        ex.free(dLab)
+        ex.free(dTL)
+    # nn-losses-2 end
     elif cfg.target == TARGET_CODES or cfg.target == TARGET_CODE_VALUES:
         # the codes' int32 bits travel in float32 words (op_one_hot reads them)
         var dC: FP
@@ -1548,7 +1615,7 @@ def model_fit_state[E: Exec](
             # launch stores the batch's curve word mul(loss, B), the word
             # tape.scale stores; cross-entropy's loss is not a fold
             # output (a scale of one), so it keeps the two launches below
-            if cfg.loss != LOSS_CROSS_ENTROPY and not token:
+            if cfg.loss != LOSS_CROSS_ENTROPY and not token and not ctc:  # nn-losses-2: ctc's curve word is the scale below
                 tape.arm_fold_word(dloss + bi, model_curve_factor(cfg, B))
             var loss = _fit_loss(tape, ex, cfg, spec, P, Gr, out, target, True)
             var word_done = tape.disarm_fold_word(loss)
@@ -1660,6 +1727,30 @@ def model_fit_state[E: Exec](
     epoch_tape.release(ex)
     _ = word^
     return n_iter
+
+
+# nn-losses-2 begin
+def model_sequence_output(spec: ModelSpec) -> Bool:
+    """True when the model ends in a log_softmax whose per-sample output has more than one axis (a sequence of
+    log-probabilities, ctc's input)."""
+    var last = spec.n_layers() - 1
+    return spec.version == SPEC2_VERSION and is_nn_log_softmax(spec.kinds[last]) and spec.out_shape[last].ndim > 1
+
+
+def model_ctc_dims(spec: ModelSpec) raises -> Tuple[Int, Int]:
+    """(T, C) of a ctc model's output: a final log_softmax over the classes of (length, classes) samples."""
+    var last = spec.n_layers() - 1
+    if spec.version != SPEC2_VERSION or not is_nn_log_softmax(spec.kinds[last]) or spec.out_shape[last].ndim != 2:
+        raise Error("model fit: ctc takes (length, classes) log-probabilities per sample: end the model with "
+                    + "log_softmax() over (length, classes) samples")
+    var o = spec.out_shape[last]
+    if log_softmax_axis(spec.xargs[SPEC2_ARGS * last], o) != 1:
+        raise Error("model fit: ctc takes log-probabilities over the classes: the final log_softmax must be over the "
+                    + "last axis (dim=-1)")
+    if o.d[1] < 2:
+        raise Error("model fit: ctc needs at least two classes (the blank and one label)")
+    return (o.d[0], o.d[1])
+# nn-losses-2 end
 
 
 def model_lengths_check(spec: ModelSpec, lengths: FP, N: Int, operation: String) raises:
