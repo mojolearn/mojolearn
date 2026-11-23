@@ -1328,7 +1328,7 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill",
                        "sequence-device-tensor",
                        # lane verify-gaps (2026-11-23): the one-device shard drivers
-                       "forest-shard", "neighbors-reference-shard", "ivf-distributed",
+                       "forest-shard", "neighbors-reference-shard", "ivf-distributed", "x-ols-square", "kernel-ridge-wide",
                        # lane verify-coverage-owed (2026-10-21)
                        "mamba2-decode-session", "mamba3-decode-session", "training-chunked-lm-head",
                        "training-mlp-sessions", "samba-optimizer-state", "sequence-optimizer-state",

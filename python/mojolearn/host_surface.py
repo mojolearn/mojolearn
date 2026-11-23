@@ -1157,6 +1157,8 @@ TRAINING_LANE_NAMES = {
     "forest-shard": "the random forest classifier fitted in tree ranges and joined on one device",
     "neighbors-reference-shard": "the k-NN classifier's queries over a reference split in blocks on one device",
     "ivf-distributed": "the IVF-Flat index split into stored shards and searched on one device",
+    "x-ols-square": "linear regression on as many rows as features (the eigen least squares)",
+    "kernel-ridge-wide": "kernel ridge with the poly and sigmoid kernels past 64 features",
     # The GPU byte LM trainer's lanes (same branch): SmallByteLanguageModelTrainer,
     # stateless and on its resident session, whose single-device entries a
     # CPU-only install serves from the byte LM host binding's step, loss and
@@ -2121,7 +2123,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan", "logistic",
-            "dbscan-brute-l1", "kde-tophat-sqeuclidean", "kde-epanechnikov-l1",
+            "x-ols-square", "dbscan-brute-l1", "kde-tophat-sqeuclidean", "kde-epanechnikov-l1",
             "kde-exponential-chebyshev", "kde-linear-cosine", "kde-cosine-minkowski",
             "kde-weighted", "ols-no-intercept", "ols-weighted", "ridge-no-intercept",
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
@@ -2610,7 +2612,8 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("rbf-sampler", "kernel-ridge", "nystroem",
-                        "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian", "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian"),
+                        "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian", "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian",
+                        "kernel-ridge-wide"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("KernelRidge", "Nystroem", "RBFSampler"),
@@ -4482,6 +4485,8 @@ PUBLIC_PENDING_LANES = {
     "forest-shard": "unwatched",
     "neighbors-reference-shard": "unwatched",
     "ivf-distributed": "unwatched",
+    "x-ols-square": "unwatched",
+    "kernel-ridge-wide": "unwatched",
     # lane verify-coverage-owed (2026-10-21): the rows the audit left owed to
     # the migration lanes; no release record yet.
     "mamba2-decode-session": "unwatched",

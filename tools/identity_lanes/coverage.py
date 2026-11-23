@@ -1581,3 +1581,39 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "forest-shard", "neighbors-reference-shard", "ivf-distributed")
+
+
+# ---------------------------------------------------------------- shapes no default lane reaches (lane verify-gaps, 2026-11-23)
+# Every other lane fits the fixture's 16 features with thousands of rows, so two public routes stay unreached:
+# LinearRegression's eigen least squares (glm/impl/linalg/detail/lstsq.mojo lstsq_eig, taken when TSQR's
+# rows >= cols + 1 fails: core/linear_ols_run.mojo) and the kernel matrix's poly and sigmoid epilogues
+# (kernel_methods/checks/kernel_matrix.mojo, past KM_DOT_CELL_MAX_D = 64 features).
+
+@lane("x-ols-square")
+def _(ml, X, yc, yr, Xh=None):
+    """LinearRegression on a square block (16 rows, 16 features): TSQR needs
+    one row more than columns, so the fit takes the eigen least squares."""
+    d = _coverage_digester(ml)
+    m = ml.LinearRegression().fit(np.ascontiguousarray(X[:16]), np.ascontiguousarray(yr[:16]))
+    return _fit(dict(coef=d(np.asarray(m.coef_, dtype=np.float32)),
+                     predict=d(np.asarray(m.predict(X[:256]), dtype=np.float32))))
+
+
+@lane("kernel-ridge-wide")
+def _(ml, X, yc, yr, Xh=None):
+    """KernelRidge with the poly and sigmoid kernels on 80 features (the
+    fixture's 16 tiled five times), past the dot-cell bound, so the kernel
+    matrix takes polynomial_epilogue_kernel and tanh_epilogue_kernel."""
+    d = _coverage_digester(ml)
+    w = np.ascontiguousarray(np.tile(X[:512], (1, 5)))
+    q = np.ascontiguousarray(np.tile(X[512:768], (1, 5)))
+    parts = {}
+    for kernel in ("poly", "sigmoid"):
+        m = ml.KernelRidge(alpha=1.0, kernel=kernel, gamma=0.01, degree=3, coef0=1.0).fit(w, yr[:512])
+        parts[kernel] = d(np.asarray(m.predict(q), dtype=np.float32))
+    return _fit(parts)
+
+
+_batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "x-ols-square", "kernel-ridge-wide")
