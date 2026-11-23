@@ -372,7 +372,7 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
 
 
 # Bits of the resample binding's `resample_fast_defines()` mask (resample/estimator.mojo): FAST + Apple
-# candidate defines, default OFF: 32 CV_SLICE, 64 CV_TRUST_FOLDS, 128 GATHER_NARROW.
+# candidate defines, default OFF: 32 CV_SLICE (deleted 2026-11-23, always 0), 64 CV_TRUST_FOLDS, 128 GATHER_NARROW.
 
 
 def _fast_defines(numeric_mode=None):

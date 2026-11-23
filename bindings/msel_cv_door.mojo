@@ -73,7 +73,8 @@ from bindings.msel_scorer_native_door import msel_scorer_response, msel_scorer_p
 from core.member_abi import MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 
 #: model_selection's CV_FAST bits of the resample binding's define mask.
-comptime MSEL_CV_SLICE_BIT = 32
+# TOMBSTONE: MOJOLEARN_CV_FAST_SLICE (plumbing folded into the typed search RUN, rule 2026-11-22) deleted 2026-11-23 by lane/mf-msel5b; code recoverable at 6f0a3de6ed.
+# Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE.patch; record in docs/TOMBSTONES.md.
 comptime MSEL_CV_TRUST_FOLDS_BIT = 64
 
 
@@ -426,9 +427,6 @@ struct MselFoldRows(Movable):
     # DeviceRows is not handed to a second unit (two concurrent units could
     # materialize and write one host snapshot).
     var shared: Bool
-    # cross_val_score's FAST slice route (MSEL_CV_SLICE_BIT): [a, b) of each
-    # contiguous test fold, 2 words per fold; empty: every take gathers.
-    var ranges: List[Int]
     # MSEL_LC_TEST_REUSE: {address of a fold's test index object: (that
     # object, its X rows, its y rows, the y they were taken from)} for a
     # host fold set whose caller set `reuse_test`. Empty otherwise.
@@ -469,7 +467,6 @@ struct MselFoldRows(Movable):
         self.fold_mark = -1
         self.x_held = False
         self.shared = False
-        self.ranges = List[Int]()
         self.test_cache = Python.dict()
         self.reuse_test = False
         if not self.dev and msel_is_array(x, context):
@@ -569,14 +566,6 @@ struct MselFoldRows(Movable):
     def take(mut self, i: Int, y_in: PythonObject, context: PythonObject) raises -> PythonObject:
         """(X_train, y_train, X_test, y_test) of fold i; a `y_in` (a permuted
         y) stands in for the stored one."""
-        if len(self.ranges) > 0 and y_in is None:
-            # Views over contiguous rows, no gather (the slice route).
-            var a = self.ranges[2 * i]
-            var b = self.ranges[2 * i + 1]
-            var xs = _rows_outside(self.x, a, b, context)
-            var xv = _row_view(self.x, a, b, context)
-            self._hold_fold(xs, xv, context)
-            return Python.tuple(xs, _rows_outside(self.y, a, b, context), xv, _row_view(self.y, a, b, context))
         var pair = self.folds[i]
         var train = pair[0]
         var test = pair[1]
@@ -1058,7 +1047,7 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
     member's decision is the estimator's own shape (the door's RESPONSES note).
     CROSS_VAL_PREDICT (`run.method`): `predict` / `predict_proba` of each
     fold's test rows, placed the same way; no metric runs."""
-    if rows.dev or len(rows.ranges) != 0 or rows.reuse_test:
+    if rows.dev or rows.reuse_test:
         return False
     # A numeric error_score: a unit whose FIT failed takes the value in
     # every score, a side whose SCORE failed in that side's scores (the
@@ -1442,98 +1431,6 @@ def msel_cross_validate(args: PythonObject, context: PythonObject) raises -> Pyt
 # ---------------------------------------------------------------- cross_val_score
 
 
-def _row_view(arr: PythonObject, a: Int, b: Int, context: PythonObject) raises -> PythonObject:
-    """`_row_range_view(arr, a, b)`: rows [a, b) of a C-order Array as a
-    read-only view over the same memory (`arr` kept alive by `_base`)."""
-    var n = Int(py=arr.shape[0])
-    if a == 0 and b == n:
-        return arr
-    var bi = msel_b()
-    var per = Int(py=arr.size) // n
-    var item = Int(py=arr.itemsize)
-    var view = native_storage_allocate(py_type(arr))
-    py_setattr(view, "_store", arr._store)
-    py_setattr(view, "_base", arr)
-    py_setattr(view, "_pin", arr._pin)
-    py_setattr(view, "_mv", py_call(py_attr(arr._mv, "__getitem__"), py_call(bi.slice, PythonObject(a * per), PythonObject(b * per))))
-    py_setattr(view, "_addr", PythonObject(Int(py=arr._addr) + a * per * item))
-    py_setattr(view, "_readonly", PythonObject(True))
-    var shape = Python.list()
-    _ = py_call(shape.append, PythonObject(b - a))
-    var strides = Python.list()
-    var rank = Int(py=arr.ndim)
-    for k in range(1, rank):  # driver-loop: over array rank metadata
-        _ = py_call(shape.append, arr.shape[k])
-    var step = item
-    var steps = List[Int](length=rank, fill=0)
-    for k in range(rank):  # driver-loop: over array rank metadata
-        var axis = rank - 1 - k
-        steps[axis] = step
-        step *= Int(py=shape[axis])
-    for k in range(rank):  # driver-loop: over array rank metadata
-        _ = py_call(strides.append, PythonObject(steps[k]))
-    py_setattr(view, "shape", py_call(bi.tuple, shape))
-    py_setattr(view, "dtype", arr.dtype)
-    py_setattr(view, "ndim", PythonObject(rank))
-    py_setattr(view, "size", PythonObject((b - a) * per))
-    py_setattr(view, "itemsize", PythonObject(item))
-    py_setattr(view, "nbytes", PythonObject((b - a) * per * item))
-    py_setattr(view, "order", PythonObject("C"))
-    py_setattr(view, "strides", py_call(bi.tuple, strides))
-    return view
-
-
-def _rows_outside(arr: PythonObject, a: Int, b: Int, context: PythonObject) raises -> PythonObject:
-    """`_rows_outside`: rows [0, a) then [b, n), a view when one side is
-    empty, else one new Array filled by two memcpys."""
-    var n = Int(py=arr.shape[0])
-    if a == 0:
-        return _row_view(arr, b, n, context)
-    if b == n:
-        return _row_view(arr, 0, a, context)
-    var bi = msel_b()
-    var per = Int(py=arr.size) // n
-    var item = Int(py=arr.itemsize)
-    var shape = py_call(bi.list, arr.shape)
-    py_setitem(shape, PythonObject(0), PythonObject(n - (b - a)))
-    var out = family_array(py_call(bi.tuple, shape), String(py=arr.dtype), context)
-    var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=arr._addr))
-    var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
-    _ = out  # keep the Python object alive through the native call above
-    unsafe_memcpy(dest=dst, src=src, count=a * per * item)
-    _ = out  # keep the Python object alive through the native call above
-    unsafe_memcpy(dest=dst + a * per * item, src=src + b * per * item, count=(n - b) * per * item)
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _kfold_ranges(x: PythonObject, y: PythonObject, folds: PythonObject, context: PythonObject) raises -> List[Int]:
-    """`_kfold_ranges`: each fold's test block as (a, b) pairs, or an empty
-    list unless every fold is a contiguous block."""
-    var none = List[Int]()
-    var n = msel_n_samples(x, context)
-    if (not msel_is_array(y, context) or String(py=x.order) != "C" or String(py=y.order) != "C" or n < 2):
-        return none^
-    var ranges = List[Int]()
-    for i in range(len(folds)):  # driver-loop: over folds (two endpoints each)
-        var train = folds[i][0]
-        var test = folds[i][1]
-        var size = Int(py=test.size)
-        if size == 0 or Int(py=train.size) == 0:
-            return List[Int]()
-        var p = msel_p64(test)
-        _ = test  # keep the Python object alive through the native call above
-        var a = Int(p[0])
-        _ = test  # keep the Python object alive through the native call above
-        var b = Int(p[size - 1]) + 1
-        _ = test  # keep the Python object alive through the native call above
-        if b - a != size or Int(py=train.size) != n - size:
-            return List[Int]()
-        ranges.append(a)
-        ranges.append(b)
-    return ranges^
-
-
 def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cross_val_score(estimator, X, y, cv, scoring, groups, n_jobs, error_score)`."""
     var estimator = args[0]
@@ -1548,22 +1445,15 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
     var y = got[1]
     var folds = got[2]
     scoring = got[3]
-    var ranges = List[Int]()
-    var sliced = False
-    if msel_fast_on(MSEL_CV_SLICE_BIT, context) and msel_native_default_cv(cv, groups, context):
-        ranges = _kfold_ranges(x, y, folds, context)
-        sliced = len(ranges) > 0
-    if not sliced:
-        # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`); the
-        # MSEL_CV_SLICE_BIT route keeps its own row-range views.
-        var by = msel_cv_by_search(estimator, x, y, folds, scoring, args[6], PythonObject("raise"), False, False,
-                                   PythonObject(None), False, context)
-        if by is not None:
-            return by["test"][0]
+    # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`). The
+    # FAST + Apple slice route's row-range views are the RUN's own views of a
+    # side that is one run of rows (lane mf-msel5b; TOMBSTONE above).
+    var by = msel_cv_by_search(estimator, x, y, folds, scoring, args[6], PythonObject("raise"), False, False,
+                               PythonObject(None), False, context)
+    if by is not None:
+        return by["test"][0]
     var scores = List[Float64]()
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
-    if sliced:
-        rows.ranges = ranges^
     try:
         # The folds are units (msel_cv_units) on `jobs` threads; a fit error
         # raises, as the fold loop did.
