@@ -45,6 +45,10 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
             for j in range(len(suffixes)):  # small-loop(at most four tensors of a block layer)
                 _ = py_call(names.append, PythonObject(suffixes[j]))
             _ = py_call(result.append, Python.tuple(k, False, py_call(native_loaded_module("builtins").tuple, names)))
+        # nn-activations begin: prelu (code 50, autograd/nn_activations.mojo), its one tensor ".weight"
+        elif code == 50:
+            _ = py_call(result.append, Python.tuple(k, False, Python.tuple(PythonObject(".weight"))))
+        # nn-activations end
     return result
 
 

@@ -19,7 +19,12 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
           "selective_scan": 42, "ssd_scan": 43, "trapezoid_scan": 44,
           "lm_head": 45,
-          "batch_norm1d": 46, "batch_norm2d": 46}  # lm_head (lane neural-blocks-3-lm)
+          "batch_norm1d": 46, "batch_norm2d": 46,  # lm_head (lane neural-blocks-3-lm)
+          # nn-activations begin
+          "identity": 47, "leaky_relu": 48, "elu": 49, "prelu": 50, "mish": 51, "hardswish": 52,
+          "hardsigmoid": 53,
+          # nn-activations end
+          }
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -332,6 +337,110 @@ class Sequential(_CheckMixin):
     def softplus(self):
         """Append a softplus activation, ``log(1 + exp(x))``."""
         return _SEQUENTIAL_ENTRY(self, "add", ("softplus", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    # nn-activations begin
+    def identity(self):
+        """Append an identity layer, which returns its input unchanged
+        (PyTorch's ``nn.Identity``).
+
+        It is a placeholder: put it where a module may later be switched off,
+        or swapped for another, without changing the model's structure (the
+        layer indices, and so the names in :meth:`state_dict`, stay the same).
+        It has no parameters and no computation runs for it.
+
+        Example::
+
+            model = mojolearn.Sequential().linear(16).relu().identity().linear(1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("identity", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def leaky_relu(self, negative_slope=0.01):
+        """Append a leaky ReLU activation (PyTorch's ``nn.LeakyReLU``):
+        ``x`` where ``x >= 0``, else ``negative_slope * x``.
+
+        Parameters
+        ----------
+        negative_slope : float, default 0.01
+            The slope for negative inputs.
+
+        Example::
+
+            model = mojolearn.Sequential().linear(16).leaky_relu(0.1).linear(1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("leaky_relu", (negative_slope,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def elu(self, alpha=1.0):
+        """Append an ELU activation (PyTorch's ``nn.ELU``): ``x`` where
+        ``x >= 0``, else ``alpha * (exp(x) - 1)``.
+
+        Parameters
+        ----------
+        alpha : float, default 1.0
+            The value the output approaches for large negative inputs is
+            ``-alpha``.
+
+        Example::
+
+            model = mojolearn.Sequential().linear(16).elu().linear(1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("elu", (alpha,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def prelu(self, num_parameters=1, init=0.25):
+        """Append a PReLU activation with a learned slope (PyTorch's
+        ``nn.PReLU``): ``x`` where ``x >= 0``, else ``weight * x``.
+
+        Parameters
+        ----------
+        num_parameters : int, default 1
+            1 shares one slope across every element. Otherwise it must equal
+            the size of the first axis of each sample (the channels of
+            ``(channels, ...)`` samples, the features of ``(features,)``
+            samples), and each channel learns its own slope.
+        init : float, default 0.25
+            The initial value of every slope; it must be greater than -1.
+
+        The slopes are a parameter tensor ``weight`` of shape
+        ``(num_parameters,)`` in :attr:`params_` and :meth:`state_dict`, and
+        are trained with the other parameters.
+
+        Example::
+
+            model = mojolearn.Sequential(input_shape=(4, 16)).conv1d(8, 3, padding=1).prelu(8)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("prelu", (num_parameters, init), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def mish(self):
+        """Append a Mish activation (PyTorch's ``nn.Mish``):
+        ``x * tanh(softplus(x))``.
+
+        Example::
+
+            model = mojolearn.Sequential().linear(16).mish().linear(1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("mish", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def hardswish(self):
+        """Append a hard swish activation (PyTorch's ``nn.Hardswish``):
+        ``x * relu6(x + 3) / 6``, that is 0 for ``x <= -3``, ``x`` for
+        ``x >= 3`` and ``x * (x + 3) / 6`` between.
+
+        Example::
+
+            model = mojolearn.Sequential().linear(16).hardswish().linear(1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("hardswish", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def hardsigmoid(self):
+        """Append a hard sigmoid activation (PyTorch's ``nn.Hardsigmoid``):
+        ``relu6(x + 3) / 6``, that is 0 for ``x <= -3``, 1 for ``x >= 3`` and
+        ``x / 6 + 1 / 2`` between.
+
+        Example::
+
+            model = mojolearn.Sequential().linear(16).hardsigmoid().linear(1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("hardsigmoid", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+    # nn-activations end
 
     def rms_norm(self, eps=1e-6):
         """Append a root-mean-square normalization of the last axis with a
@@ -1087,7 +1196,11 @@ _SEQUENTIAL_CONTEXT = {
                     "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
                     "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
                     "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
-                    "selective_scan", "", "", "lm_head", "batch_norm"),
+                    "selective_scan", "", "", "lm_head", "batch_norm",
+                    # nn-activations begin
+                    "identity", "leaky_relu", "elu", "prelu", "mish", "hardswish", "hardsigmoid",
+                    # nn-activations end
+                    ),
 }
 
 

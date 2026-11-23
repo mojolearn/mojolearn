@@ -1153,6 +1153,121 @@ def identical_softplus(x: Float32) -> Float32:
     return x
 
 
+# nn-activations begin
+# THE ACTIVATION BODIES (lane nn-activations, 2026-11-23): one body each for the forward word and the
+# vector-Jacobian word of leaky_relu, elu, hardsigmoid, hardswish, mish and prelu, beside silu, softplus and
+# gelu above. Every caller runs these and nothing else: the import family's elementwise kinds
+# (autograd/import_ops.mojo imp_unary_value / imp_unary_vjp_value and the PReLU binary kind), hence the
+# Sequential layers 48 .. 53 (autograd/nn_activations.mojo), on the host column and every device. Each word
+# is a function of its own input word: no order to declare, the same bits on every executor. Products are
+# `identical_mul` and every result is flushed (`ftz`), as sequence/ops.mojo's `mul` / `add` / `sub` are, so
+# the import kinds' words are the words they had before the bodies moved here.
+#
+# `-D MOJOLEARN_NN_ACT_SABOTAGE` is the family's fault-injection arm (a test define, never a product build):
+# mish's derivative loses its `x sigmoid(x) (1 - t^2)` term, hardswish's loses its `x / 6` slope and PReLU's
+# weight gradient loses its factor x. checks/native_tests/nn_activations.mojo must FAIL under it.
+comptime NN_ACT_SABOTAGE = is_defined["MOJOLEARN_NN_ACT_SABOTAGE"]()
+
+
+@always_inline
+def _act_mul(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_mul(a, b))
+
+
+@always_inline
+def identical_leaky_relu(x: Float32, slope: Float32) -> Float32:
+    """`x` for x >= 0, else `slope * x` (PyTorch's LeakyReLU; PReLU with its learned slope)."""
+    if x >= Float32(0):
+        return x
+    return _act_mul(slope, x)
+
+
+@always_inline
+def identical_leaky_relu_vjp(g: Float32, x: Float32, slope: Float32) -> Float32:
+    """The input gradient of `identical_leaky_relu`: g for x > 0, else g * slope (PyTorch's rule at 0)."""
+    if x > Float32(0):
+        return g
+    return _act_mul(g, slope)
+
+
+@always_inline
+def identical_prelu_weight_vjp(g: Float32, x: Float32) -> Float32:
+    """One term of PReLU's slope gradient at an element: 0 for x > 0, else g * x (the terms of a shared or
+    per-channel slope are then added in the broadcast fold's fixed order)."""
+    if x > Float32(0):
+        return Float32(0)
+    comptime if NN_ACT_SABOTAGE:
+        return g
+    return _act_mul(g, x)
+
+
+@always_inline
+def identical_elu(x: Float32, alpha: Float32) -> Float32:
+    """`x` for x >= 0, else `alpha * (exp(x) - 1)` (PyTorch's ELU)."""
+    if x >= Float32(0):
+        return x
+    return _act_mul(alpha, ftz(ftz(identical_exp(x)) - Float32(1)))
+
+
+@always_inline
+def identical_elu_vjp(g: Float32, x: Float32, alpha: Float32) -> Float32:
+    """The input gradient of `identical_elu`: g for x > 0, else g * alpha * exp(x)."""
+    if x > Float32(0):
+        return g
+    return _act_mul(g, _act_mul(alpha, ftz(identical_exp(x))))
+
+
+@always_inline
+def identical_hardsigmoid(x: Float32, a: Float32, b: Float32) -> Float32:
+    """`clamp(a x + b, 0, 1)`; PyTorch's Hardsigmoid is a = 1/6, b = 1/2 (relu6(x + 3) / 6)."""
+    return ftz(identical_clamp(ftz(_act_mul(a, x) + b), Float32(0), Float32(1)))
+
+
+@always_inline
+def identical_hardsigmoid_vjp(g: Float32, x: Float32, a: Float32, b: Float32) -> Float32:
+    """g * a strictly inside the ramp (0 < a x + b < 1), else 0."""
+    var v = ftz(_act_mul(a, x) + b)
+    if v > Float32(0) and v < Float32(1):
+        return _act_mul(g, a)
+    return Float32(0)
+
+
+@always_inline
+def identical_hardswish(x: Float32, a: Float32, b: Float32) -> Float32:
+    """`x * clamp(a x + b, 0, 1)`; PyTorch's Hardswish is a = 1/6, b = 1/2 (x relu6(x + 3) / 6)."""
+    return _act_mul(x, ftz(identical_clamp(ftz(_act_mul(a, x) + b), Float32(0), Float32(1))))
+
+
+@always_inline
+def identical_hardswish_vjp(g: Float32, x: Float32, a: Float32, b: Float32) -> Float32:
+    """g * (h + a x) inside the ramp, with h = clamp(a x + b, 0, 1) ((2 x + 3) / 6 for PyTorch's a, b), else g * h."""
+    var v = ftz(_act_mul(a, x) + b)
+    var h = ftz(identical_clamp(v, Float32(0), Float32(1)))
+    if v > Float32(0) and v < Float32(1):
+        comptime if NN_ACT_SABOTAGE:
+            return _act_mul(g, h)
+        return _act_mul(g, ftz(h + _act_mul(x, a)))
+    return _act_mul(g, h)
+
+
+@always_inline
+def identical_mish(x: Float32) -> Float32:
+    """`x * tanh(softplus(x))` (PyTorch's Mish; softplus with its threshold 20)."""
+    return _act_mul(x, ftz(identical_tanh(ftz(identical_softplus(x)))))
+
+
+@always_inline
+def identical_mish_vjp(g: Float32, x: Float32) -> Float32:
+    """g * (t + x sigmoid(x) (1 - t^2)) with t = tanh(softplus(x)), PyTorch's mish_backward."""
+    var t = ftz(identical_tanh(ftz(identical_softplus(x))))
+    comptime if NN_ACT_SABOTAGE:
+        return _act_mul(g, t)
+    var s = ftz(identical_sigmoid(x))
+    var one_minus = ftz(Float32(1) - _act_mul(t, t))
+    return _act_mul(g, ftz(t + _act_mul(_act_mul(x, s), one_minus)))
+# nn-activations end
+
+
 
 
 comptime GELU_SQRT2_BITS: UInt32 = 0x3FB504F3

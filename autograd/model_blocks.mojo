@@ -54,6 +54,9 @@ EXISTING backward rule; no kernel is written or edited here:
         f eps)                   running_mean, running_var; the running statistics are
                                  state the optimizer never updates (autograd/model.mojo
                                  model_fit_state restores them around each step)
+  47-53 identity, leaky_relu, elu,  autograd/nn_activations.mojo (lane nn-activations,    ImportRules 192 /
+        prelu, mish, hardswish,     2026-11-23): imp_unary / imp_binary kinds over        193
+        hardsigmoid                 checks/numerics.mojo's activation bodies
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -96,6 +99,12 @@ from autograd.ssm_ops import ssm_m1_states_supported
 from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
+# nn-activations begin: codes 47..53, identity and the activations (autograd/nn_activations.mojo)
+from autograd.nn_activations import (
+    is_nn_activation, nn_act_shape, nn_act_param_sizes, nn_act_param_names, nn_act_init_bounds,
+    nn_act_tensor_dims, nn_act_forward,
+)
+# nn-activations end
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -134,6 +143,10 @@ comptime _ARGS = 6
 
 
 def is_block(code: Int) -> Bool:
+    # nn-activations begin
+    if is_nn_activation(code):
+        return True
+    # nn-activations end
     return code >= BLOCK_FIRST and code <= BLOCK_LAST
 
 
@@ -317,6 +330,10 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         hd[cur.ndim - 1] = a0
         return rn_shape(hd, name + " (LMHead)")
     # end lm_head
+    # nn-activations begin
+    if is_nn_activation(code):
+        return nn_act_shape(code, a0, a1, f, cur, name)
+    # nn-activations end
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -368,6 +385,10 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(_x(xargs, i, 0) * cur.cols())  # weight (vocab, features)
     # end lm_head
+    # nn-activations begin
+    elif is_nn_activation(code):
+        return nn_act_param_sizes(code, _x(xargs, i, 0))
+    # nn-activations end
     return out^
 
 
@@ -405,6 +426,10 @@ def block_param_names(code: Int) -> List[String]:
     elif code == LAYER_LM_HEAD:
         out.append(".weight")
     # end lm_head
+    # nn-activations begin
+    elif is_nn_activation(code):
+        return nn_act_param_names(code)
+    # nn-activations end
     return out^
 
 
@@ -466,6 +491,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(ftz(identical_div(Float32(1), identical_sqrt(Float32(cur.cols())))))
     # end lm_head
+    # nn-activations begin
+    elif is_nn_activation(code):
+        return nn_act_init_bounds(code, _x(xargs, i, 1))
+    # nn-activations end
     return out^
 
 
@@ -685,6 +714,10 @@ def block_forward[E: Exec](
         var w = _p(tape, ex, P, Gr, off, a0, cur.cols(), train)
         return graph_transformer_linear(tape, ex, h, w)
     # end lm_head
+    # nn-activations begin
+    if is_nn_activation(code):
+        return nn_act_forward(tape, ex, code, a0, f, cur, P, Gr, off, h, train)
+    # nn-activations end
     raise Error("model: unknown block code " + String(code))
 
 
@@ -806,6 +839,10 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
         out.append(_x(xargs, i, 0))
         out.append(cur.cols())
     # end lm_head
+    # nn-activations begin
+    elif is_nn_activation(code):
+        return nn_act_tensor_dims(code, _x(xargs, i, 0))
+    # nn-activations end
     return out^
 
 
