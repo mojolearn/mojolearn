@@ -17,6 +17,18 @@ skip the gather) -> predict / transform; in `_rfe_view` write the ranking before
 `_import_rfe` skip the kept columns -> the round trip refuses; (lane mf-meta5b) in `_export_forward` read
 `words[1]` as the index (or drop `call[].dst = inner.dst`) -> the forwarded coef_ words; drop its range check
 -> the past-the-end refusal.
+
+    test_rfe_kind_over_meta_base   (lane mf-del5b) THE RFE KIND over a META base, as a dotted
+                               importance_getter 'estimator_.coef_' admits it: the outer RFE's nested member
+                               is an inner RFE kind (n_features_to_select 8 >= d: no rounds, so its estimator_
+                               is LDA on every column it is given) and the outer plan entry carries THE
+                               FORWARDED EXPORT's hops [0, MEMBER_BLOCK_COEF] (`meta_plan_rfe`). The outer
+                               kind's META_BLOCK_RFE words equal the leaf RUN's (squared coef_ over the same
+                               blocks) and the RUN over the META base with the same hops (RFE's door's form)
+
+FAIL-PROOF (lane mf-del5b): in `_fit_rfe` drop `plan.hops = slot[].rfe_hops.copy()` (or in NEW drop the
+`rfe_hops` copy) -> the forwarded export reads no path and the outer fit refuses; in `meta_plan_rfe` drop
+`entry[].rfe_hops = hops^` -> the same.
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import require, fixture_f32, fixture_i32
@@ -79,9 +91,42 @@ def _lda() raises -> MemberPlan:
 
 def _words(block: Int, squared: Bool) -> List[Float64]:
     """THE RFE KIND's settings words for n_features_to_select NSEL and step STEP (the boundary's)."""
-    var w: List[Float64] = [Float64(RFE_SELECT_COUNT), 0.0, Float64(NSEL), 0.0, 0.0, Float64(STEP), Float64(block),
+    return _words_n(NSEL, block, squared)
+
+
+def _words_n(nsel: Int, block: Int, squared: Bool) -> List[Float64]:
+    """THE RFE KIND's settings words for n_features_to_select `nsel` and step STEP (the boundary's)."""
+    var w: List[Float64] = [Float64(RFE_SELECT_COUNT), 0.0, Float64(nsel), 0.0, 0.0, Float64(STEP), Float64(block),
                             1.0 if squared else 0.0, 0.0, 1.0, 0.0]
     return w^
+
+
+def _rfe_meta(handle: Int) raises -> MemberPlan:
+    """An RFE classifier kind's META plan over plan entry `handle` (the boundary's minted plan)."""
+    var meta = MemberPlan()
+    var route = DeviceRoute(DEVICE_CPU)
+    route.mode = Int(GLOBAL_NUMERIC_MODE)
+    route.vendor = 0
+    meta.route = route
+    meta.member = MemberRef(EntryRef(ensemble_member_v2, 0), 0)
+    var probe = MemberCall(meta.route)
+    meta.member.capabilities = member_call(meta.member, MEMBER_OP_CAPABILITIES, probe)
+    meta.family = MEMBER_FAMILY_ENSEMBLE
+    meta.params = [Float64(META_RFE_CLASSIFIER), Float64(handle), 0.0, 0.0, 0.0, 0.0]
+    meta.classes = K
+    return meta^
+
+
+def _rfe_kind_words(meta: MemberPlan, state: Int) raises -> List[Float64]:
+    """The fitted state's META_BLOCK_RFE words, copied out of its view."""
+    var view = member_call_of(meta, state)
+    view.block = META_BLOCK_RFE
+    _ = member_call(meta.member, MEMBER_OP_EXPORT, view)
+    var words = List[Float64](length=view.dst.rows * view.dst.cols, fill=0.0)
+    var src = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=view.dst.data)
+    for i in range(len(words)):  # small-loop(the kind's fitted words)
+        words[i] = src[i]
+    return words^
 
 
 def _predict(plan: MemberPlan, state: Int, x: Int, n: Int, d: Int) raises -> List[Int32]:
@@ -276,6 +321,76 @@ def test_rfe_kind_equals_run() raises:
         var w = MemberCall(want.final_plan.route, want.final_state)
         member_free(want.final_plan, w)
         meta_plan_release(handle)
+    _ = len(x)
+    _ = len(codes)
+
+
+def test_rfe_kind_over_meta_base() raises:
+    publish_x_trees_glue("cpu")
+    var x = fixture_f32(DIR + "lda-k3-x.f32", N * D)
+    var codes = fixture_i32(DIR + "lda-k3-y.i32", N)
+    var base = _lda()
+    var mask = member_kind_capabilities(base)
+    var source = rfe_member_source(MEMBER_FAMILY_DISCRIMINANT, mask, "auto", "")
+    var run = ClsRunPlan(_xprep_route().entry, False, False, False, False, False)
+    # The leaf RUN (RFE(LDA) with 'auto'): the support and ranking the forwarded path must reproduce.
+    var request = RfeFitPlan(base.copy(), run, True, Int(x.unsafe_ptr()), N, D, Int(codes.unsafe_ptr()), MEMBER_I32)
+    request.nsel = NSEL
+    request.step = STEP
+    request.block = source.block
+    request.squared = source.squared
+    var want = rfe_fit_run(request)
+    # The inner RFE kind (n_features_to_select 8: no round; estimator_ is LDA on every given column).
+    var inner_nested: List[MemberPlan] = [base.copy()]
+    var inner_masks: List[Int] = [mask]
+    var inner_handle = meta_plan_mint_with(inner_nested^, List[Float64](), List[Int](), inner_masks^,
+                                           _words_n(D, source.block, source.squared), List[List[Int32]](),
+                                           List[List[Int32]]())
+    meta_plan_rfe(inner_handle, run, String(""), List[Float64]())
+    var inner = _rfe_meta(inner_handle)
+    var inner_mask = member_kind_capabilities(inner)
+    # The outer RFE kind over it, as `_admit_rfe` mints it for 'estimator_.coef_'.
+    var hops: List[Float64] = [0.0, Float64(MEMBER_BLOCK_COEF)]
+    var outer_nested: List[MemberPlan] = [inner.copy()]
+    var outer_masks: List[Int] = [inner_mask]
+    var outer_handle = meta_plan_mint_with(outer_nested^, List[Float64](), List[Int](), outer_masks^,
+                                           _words(META_BLOCK_FORWARD, True), List[List[Int32]](),
+                                           List[List[Int32]]())
+    meta_plan_rfe(outer_handle, run, String(""), hops.copy())
+    var outer = _rfe_meta(outer_handle)
+    # The RUN over the META base with the same hops (RFE's door's `_rfe_native` form).
+    var door = RfeFitPlan(inner.copy(), run, True, Int(x.unsafe_ptr()), N, D, Int(codes.unsafe_ptr()), MEMBER_I32)
+    door.nsel = NSEL
+    door.step = STEP
+    door.block = META_BLOCK_FORWARD
+    door.squared = True
+    door.hops = hops.copy()
+    var via_door = rfe_fit_run(door)
+    var fitted = member_new(outer)
+    try:
+        fitted.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+        fitted.y = MemberMatrix(Int(codes.unsafe_ptr()), N, 1, MEMBER_I32)
+        fitted.classes = K
+        _ = member_call(outer.member, MEMBER_OP_FIT, fitted)
+        var words = _rfe_kind_words(outer, fitted.state)
+        require(len(words) == 2 + 2 * D + NSEL and Int(words[0]) == D and Int(words[1]) == NSEL,
+                "RFE kind over META: META_BLOCK_RFE is [d, k, support, ranking, columns]")
+        for j in range(D):  # small-loop(support and ranking, exact)
+            require(Float32(words[2 + j]) == want.support[j], "RFE kind over META: support_[" + String(j) + "]")
+            require(Float32(words[2 + D + j]) == want.ranking[j], "RFE kind over META: ranking_[" + String(j) + "]")
+            require(via_door.support[j] == want.support[j], "RFE RUN over META: support_[" + String(j) + "]")
+            require(via_door.ranking[j] == want.ranking[j], "RFE RUN over META: ranking_[" + String(j) + "]")
+        for j in range(NSEL):  # small-loop(the kept columns)
+            require(Int(words[2 + 2 * D + j]) == Int(want.columns[j]), "RFE kind over META: kept column " + String(j))
+    finally:
+        member_free(outer, fitted)
+        var w = MemberCall(want.final_plan.route, want.final_state)
+        member_free(want.final_plan, w)
+        var v = MemberCall(via_door.final_plan.route, via_door.final_state)
+        member_free(via_door.final_plan, v)
+        meta_plan_release(outer_handle)
+        meta_plan_release(inner_handle)
+    _ = len(hops)
     _ = len(x)
     _ = len(codes)
 
