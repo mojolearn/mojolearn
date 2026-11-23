@@ -459,7 +459,7 @@ def test_every_trainer_resolves_fp32_v1_under_the_default_and_refuses_fixed15_by
     # public class is constructed, not the private base)
     with pytest.raises(ValueError, match="params is empty"):
         T.AdamW([])
-    for where in ("mojolearn.SmallByteLanguageModelTrainer", "mojolearn.LanguageModelHostTrainer",
+    for where in ("mojolearn.SmallByteLanguageModelTrainer",
                   "mojolearn.AdamW", "mojolearn.SambaStack"):
         assert g.require_training(where) == "fp32_v1"
         with pytest.raises(NotImplementedError) as e:

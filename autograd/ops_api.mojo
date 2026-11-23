@@ -131,7 +131,8 @@ from autograd.rules_step_ops import StepOpRules
 from autograd.rules_recurrent import OPS_RNN_SCAN, rnn_scan_op
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
-from autograd.lm_head_v2_op import OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device
+from autograd.lm_head_v2_op import OPS_LM_HEAD_V2
+from autograd.lm_head_v2_graph import graph_lm_head_v2
 from autograd.small_mlp_op import (
     OPS_SMALL_MLP, SMALL_MLP_TAG, small_mlp_check, small_mlp_workspace_floats, small_mlp_forward_device,
 )
@@ -2033,36 +2034,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var rows = count // width
         if self.shapes[cslot].count() != rows:
             raise Error("ValueError: ops: lm_head_v2 takes one class code per hidden row")
-        lm_head_v2_check(rows, vocab, width)
-        var hp = self.tape.value_of(self.ex, x[0])
-        var wp = self.tape.value_of(self.ex, x[1])
-        var cp = self.tape.value_of(self.ex, x[2])
-        var targets = self.tape.reserve(self.ex, rows)
-        var maxima = self.tape.reserve(self.ex, rows)
-        var denom = self.tape.reserve(self.ex, rows)
-        var row_loss = self.tape.reserve(self.ex, rows)
-        var loss = self.tape.reserve(self.ex, 1)
-        comptime if Self.E.IS_DEVICE:
-            lm_head_v2_forward_device(rebind[DeviceExec](self.ex), hp, wp, cp, targets, maxima, denom, row_loss,
-                                      loss, rows, vocab, width)
-        else:
-            # the host arm (autograd/lm_head_v2_host.mojo) through the executor
-            var hb: List[FP] = [hp, wp, cp, targets, maxima, denom, row_loss, loss]
-            self.ex.lm_head_v2_host(False, hb, rows, vocab, width)
+        # lane neural-blocks-3-lm: the op's one recording (autograd/lm_head_v2_graph.mojo), shared with the
+        # Sequential lm_head layer's token cross-entropy
+        var rt = graph_lm_head_v2(self.tape, self.ex, x[0], x[1], x[2], rows, vocab, width)
         if not self.tape.is_recording():
-            var t = self.tape.variable(self.ex, loss, 1, 1, False)
-            return self._add(t, 0, False, 0)
-        var saved = Args()
-        saved.p0 = targets
-        saved.p1 = maxima
-        saved.p2 = denom
-        saved.i0 = rows
-        saved.i1 = vocab
-        saved.i2 = width
-        var rx = List[Tensor]()
-        rx.append(x[0])
-        rx.append(x[1])
-        var rt = self.tape.custom(self.ex, rx, loss, 1, 1, LM_HEAD_V2_TAG, saved)
+            return self._add(rt, 0, False, 0)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     def _small_mlp(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:

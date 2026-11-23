@@ -248,6 +248,21 @@ operation's math, on any column or in any kernel, is a defect.
   math, with a comment saying which body it departs from and why, and a check comparing it with the shared body's
   result to the stated tolerance or bits.
 - A body takes typed values and has no launch, allocation or Python in it, so it inlines into every caller.
+- **Fused kernels stay (Andrew, 2026-11-22).** A fused kernel exists for speed. It is never replaced by a composition
+  of separate layers, and no time is spent measuring such a replacement. Layers are added BESIDE the fused blocks so
+  people can compose their own models; a block keeps its fused kernels. What may be removed around a fused block is
+  duplicated plumbing (a second door, session, state layout, checkpoint path, training loop or inference twin that
+  runs the same kernels), with the same-kernels, same-outputs evidence and no measurement.
+- **Words (PyTorch's, which the field uses).** A MODULE is any composable unit, of any size: PyTorch's `nn.Module`;
+  a layer, a block and a whole model are all modules. A LAYER is an elementary module doing one operation
+  (PyTorch's own docs: "linear layers", "convolution layers", "normalization layers"): convolution, attention,
+  `ssd_scan`. A BLOCK is a module that groups layers, or one fused kernel, into a unit that is repeated:
+  `TransformerBlock`, `Mamba2Block`, `BasicBlock`. A CONTAINER is a module that holds modules: `Sequential`, the
+  residual and parallel containers. A MODEL is the top-level module a user assembles. An ESTIMATOR is a
+  scikit-learn-style object with fit and predict. An OP (operator) is a differentiable operation on the autograd
+  tape. A KERNEL is the compiled function that runs an op on the device or the host. Say "module" for the general
+  thing and "layer" only for an elementary one. Do not say "building blocks", "pieces", "presets" or "subparts" in
+  code, docs or reports.
 
 ### No refactor adds cost on a hot path (Andrew, 2026-11-11)
 

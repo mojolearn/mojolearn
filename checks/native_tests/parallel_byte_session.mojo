@@ -240,7 +240,7 @@ def fixture_require_split() raises:
     except problem:
         cases.append(text_of(problem))
     require(len(cases) == 4, "each of the four conditions refuses")
-    require(refused(cases[0], "requires ParallelByteLanguageModelTrainer"), "another schedule is refused by name")
+    require(refused(cases[0], "requires schedule='replica'"), "another schedule is refused by name")
     require(refused(cases[1], "devices=(d,)") and refused(cases[2], "pool_optimizer=False"),
             "more than one device or the pool optimizer is refused")
     require(refused(cases[3], "binding lacks shard_gradient"), "an unconnected table is refused")

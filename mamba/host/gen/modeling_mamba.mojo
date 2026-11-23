@@ -169,6 +169,8 @@ launches. FAST makes no identity claim (contract section 8's last sentence).
 from mamba.host.device_shim import host_launch, launch_count
 from std.memory import stack_allocation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.rms_norm_body import rms_sq_step, rms_rstd, rms_scale
+from autograd.kernels.mamba1_scan_body import m1_a_from_a_log
 from core.step_phase import step_count_sync
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -961,12 +963,10 @@ def mamba_rms_norm_kernel(gid_: Int,
     comptime if SAB_S1_FOLD_DESCENDING:
         for jj in range(dm):
             var jd = dm - 1 - jj
-            var xd = ftz(x.unsafe_load(t * dm + jd))
-            acc = ftz(identical_mul_add(xd, xd, acc))
+            acc = rms_sq_step(ftz(x.unsafe_load(t * dm + jd)), acc)
     else:
         for j in range(dm):
-            var xj = ftz(x.unsafe_load(t * dm + j))
-            acc = ftz(identical_mul_add(xj, xj, acc))
+            acc = rms_sq_step(ftz(x.unsafe_load(t * dm + j)), acc)
 
     comptime if SAB_BATCHINV_NORM_CHUNK_FROM_M:
         # SABOTAGE, and it is ADDITIVE rather than a third branch of the
@@ -1002,16 +1002,12 @@ def mamba_rms_norm_kernel(gid_: Int,
     # (DEVIATION 741) and NEVER the hardware rsqrt intrinsic (DEVIATION 746
     # RECORDED Metal's intrinsic as correctly rounded where the reference's
     # spelling is not -- being righter than the reference is not the goal).
-    var mean = ftz(identical_div(acc, Float32(dm)))
-    var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
+    var rstd = rms_rstd(acc, dm, RMS_EPS)  # RMSNorm's one body (core/rms_norm_body.mojo)
 
     # S3 and S4, both PRODUCT: `hidden * rstd` then `weight * hidden`, each
     # its own rounding, neither contractible into a neighboring add.
     for j in range(dm):
-        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
-        out_buf.unsafe_store(
-            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-        )
+        out_buf.unsafe_store(t * dm + j, rms_scale(x.unsafe_load(t * dm + j), rstd, weight.unsafe_load(j)))
 
 
 def mamba_rms_lane_kernel(gid_: Int,
@@ -1033,8 +1029,7 @@ def mamba_rms_lane_kernel(gid_: Int,
     var acc = Float32(0.0)
     var j = lane
     while j < dm:
-        var xj = ftz(x.unsafe_load(t * dm + j))
-        acc = ftz(identical_mul_add(xj, xj, acc))
+        acc = rms_sq_step(ftz(x.unsafe_load(t * dm + j)), acc)
         j += MAMBA_RMS_LANES
     part.unsafe_store(cell, acc)
 
@@ -1073,12 +1068,8 @@ def mamba_rms_out_kernel(gid_: Int,
         return
     var t = cell // dm
     var j = cell - t * dm
-    var mean = ftz(identical_div(sumsq.unsafe_load(t), Float32(dm)))
-    var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
-    var inner = ftz(identical_mul(ftz(x.unsafe_load(cell)), rstd))
-    out_buf.unsafe_store(
-        cell, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-    )
+    var rstd = rms_rstd(sumsq.unsafe_load(t), dm, RMS_EPS)
+    out_buf.unsafe_store(cell, rms_scale(x.unsafe_load(cell), rstd, weight.unsafe_load(j)))
 
 
 def mamba_rms_norm(
@@ -1150,7 +1141,7 @@ def _mamba_rms_tree_launches(
     var _l4_a5 = Int32(d_model)
     def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5}:
         mamba_rms_out_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5)
-    host_launch(_launch_4, launch_count((_grid(m * d_model), 1, 1), (MAMBA_TPB, 1, 1)), 59)
+    host_launch(_launch_4, launch_count((_grid(m * d_model), 1, 1), (MAMBA_TPB, 1, 1)), 0)
 
 
 # ===========================================================================
@@ -1169,7 +1160,8 @@ def mamba_a_from_a_log_kernel(gid_: Int,
     var i = gid_
     if i >= n:
         return
-    a_out.unsafe_store(i, -ftz(identical_exp(ftz(a_log.unsafe_load(i)))))
+    # S15 is the scan's one body (m1_a_from_a_log), shared with the generic op
+    a_out.unsafe_store(i, m1_a_from_a_log(a_log.unsafe_load(i)))
 
 
 # ===========================================================================
@@ -1868,7 +1860,7 @@ def mamba_mixer_forward(
         var _l10_a2 = Int32(di * D_STATE)
         def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2}:
             mamba_a_from_a_log_kernel(gid_, _l10_a0, _l10_a1, _l10_a2)
-        host_launch(_launch_10, launch_count((_grid(di * D_STATE), 1, 1), (MAMBA_TPB, 1, 1)), 33)
+        host_launch(_launch_10, launch_count((_grid(di * D_STATE), 1, 1), (MAMBA_TPB, 1, 1)), 0)
         _m1_stage_sync(ctx, trace)
         trace.record_device[DType.float32](
             ctx, prefix + ".A.out", stages.a_out, di * D_STATE

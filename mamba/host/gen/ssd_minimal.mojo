@@ -99,30 +99,39 @@ from mamba.checks.mamba2_fixture import (
     M2_D_STATE,
     M2_HEADDIM,
 )
+from autograd.kernels.mamba2_ssd_body import (
+    SAB_2712_UNBOUNDED,
+    SAB_SEGSUM_DESCENDING,
+    SAB_CHUNK_SIZE_128,
+    SAB_STATEPASS_MATRIX,
+    SAB_STATEPASS_UNFUSED,
+    SAB_PAIR_DT_B,
+    SAB_FOLD_SERIAL_ZERO_SEED,
+    IDN_M2_CB_LOWER,
+    m2_q_eff,
+    m2_fma_step,
+    m2_product,
+    m2_fold2,
+    m2_exp_step,
+    m2_sum,
+    m2_discretize_cell,
+    m2_chunk_cumsum_cell,
+    m2_seg_l_cell,
+    m2_cb_g_cell,
+    m2_ydiag_cell,
+    m2_decay_cell,
+    m2_cstate_cell,
+    m2_statepass_cell,
+    m2_yoff_y_cell,
+)
 
 
 # ===========================================================================
 # Sabotage arms (see header).
 # ===========================================================================
 
-comptime SAB_2712_UNBOUNDED = is_defined["MOJOLEARN_MAMBA_2712_UNBOUNDED"]()
-comptime SAB_SEGSUM_DESCENDING = is_defined[
-    "MOJOLEARN_MAMBA2_SABOTAGE_SEGSUM_DESCENDING"
-]()
-comptime SAB_CHUNK_SIZE_128 = is_defined[
-    "MOJOLEARN_MAMBA2_SABOTAGE_CHUNK_SIZE_128"
-]()
-comptime SAB_STATEPASS_MATRIX = is_defined[
-    "MOJOLEARN_MAMBA2_SABOTAGE_STATEPASS_MATRIX"
-]()
-comptime SAB_STATEPASS_UNFUSED = is_defined[
-    "MOJOLEARN_MAMBA2_SABOTAGE_STATEPASS_UNFUSED"
-]()
-comptime SAB_PAIR_DT_B = is_defined["MOJOLEARN_MAMBA2_SABOTAGE_PAIR_DT_B"]()
-comptime SAB_FOLD_SERIAL_ZERO_SEED = is_defined[
-    "MOJOLEARN_MAMBA2_SABOTAGE_FOLD_SERIAL_ZERO_SEED"
-]()
-
+# The forward sabotage arms (SAB_*), IDN_M2_CB_LOWER and m2_q_eff moved to autograd/kernels/mamba2_ssd_body.mojo
+# (2026-11-22, one body per operation: they are read inside the bodies); imported below.
 #: lane nr-mamba (2026-10-04, roadmap B9) IDN_M2_CB_LOWER (IDENTICAL, default
 #: ON): S12's G = C.B folds only j <= i and writes an explicit
 #: +0.0 above the diagonal (never leaves the cell unwritten: cb.G is a
@@ -132,12 +141,6 @@ comptime SAB_FOLD_SERIAL_ZERO_SEED = is_defined[
 #: together with the oracle (mamba/checks/mamba2_oracle.mojo, same define).
 # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (the IDENTICAL old-path umbrella; resident defaults kept, EXP:2438) folded here 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at dc4096f0f8.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch
-comptime IDN_M2_CB_LOWER = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # I08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    # TOMBSTONE: MOJOLEARN_IDN_M2_CB_LOWER_OFF (unmeasured old path beside the lower-triangle default) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at d9f1a09f89.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.expdel2-27-neural.patch
-)
 comptime SSD_ANY_SABOTAGE = (
     SAB_SEGSUM_DESCENDING
     or SAB_CHUNK_SIZE_128
@@ -162,16 +165,6 @@ def ssd_sabotage_name() -> String:
         return String("FOLD_SERIAL_ZERO_SEED")
     return String("none")
 
-
-def m2_q_eff() -> Int:
-    """THE chunk size the build runs. DEVIATION 783: Q is a profile
-    constant with `K_LEAF_MIN`'s standing -- every reduction boundary in
-    S11-S18 moves with it, so this function is the ONE site the
-    CHUNK_SIZE_128 arm may touch, and everything downstream (chunk counts,
-    stage shapes, fold boundaries) derives from its answer."""
-    comptime if SAB_CHUNK_SIZE_128:
-        return 128
-    return M2_CHUNK_SIZE
 
 
 def m2_n_chunks(t_work: Int) -> Int:
@@ -215,33 +208,8 @@ def m2_discretize_kernel(gid_: Int,
     nh_in: Int32,
     cd_in: Int32,
 ):
-    var bt = Int(bt_in)
-    var nh = Int(nh_in)
-    var cd = Int(cd_in)
     var cell = gid_
-    if cell >= bt * nh:
-        return
-    var t = cell // nh
-    var hh = cell - t * nh
-    var dtv = ftz(dt.unsafe_load(t * nh + hh))
-    # dA = dt * A: dt binds to A (789). PAIR_DT_B does not move this
-    # product -- the fused chain agrees about dA.
-    da.unsafe_store(
-        cell, ftz(identical_mul(dtv, ftz(a_out.unsafe_load(hh))))
-    )
-    for p in range(M2_HEADDIM):
-        var xv = ftz(xbc.unsafe_load(t * cd + hh * M2_HEADDIM + p))
-        comptime if SAB_PAIR_DT_B:
-            # SABOTAGE (789's falsifier): the fused chain keeps dt OUT of
-            # X_d (`chunk_state_ref`:1122 carries it as a separate einsum
-            # factor); the dt factors reappear bound to the B side in the
-            # Y_diag and chunk_state kernels below. ONE pairing decision
-            # moves, in all three of its sites at once.
-            xd.unsafe_store(cell * M2_HEADDIM + p, xv)
-        else:
-            xd.unsafe_store(
-                cell * M2_HEADDIM + p, ftz(identical_mul(xv, dtv))
-            )
+    m2_discretize_cell(cell, xd, da, xbc, dt, a_out, bt_in, nh_in, cd_in)
 
 
 # ===========================================================================
@@ -260,49 +228,8 @@ def m2_chunk_cumsum_kernel(gid_: Int,
     nc_in: Int32,
     q_in: Int32,
 ):
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = gid_
-    if cell >= b * nh * nc:
-        return
-    var bb = cell // (nh * nc)
-    var rem = cell - bb * nh * nc
-    var hh = rem // nc
-    var c = rem - hh * nc
-    var c0 = c * qv
-    var real = t_work - c0
-    if real > qv:
-        real = qv
-    var run = Float32(0.0)
-    for i in range(qv):
-        if i < real:
-            var v = ftz(da.unsafe_load(((bb * t_work) + (c0 + i)) * nh + hh))
-            comptime if SAB_SEGSUM_DESCENDING:
-                # SABOTAGE: rebuild THIS prefix by a descending fold --
-                # the fold order clause undone, one variable.
-                var acc = Float32(0.0)
-                var k = i
-                while k >= 0:
-                    acc = ftz(
-                        acc
-                        + ftz(
-                            da.unsafe_load(
-                                ((bb * t_work) + (c0 + k)) * nh + hh
-                            )
-                        )
-                    )
-                    k -= 1
-                run = acc
-            else:
-                if i == 0:
-                    run = v
-                else:
-                    run = ftz(run + v)
-        # else: COPY of the last real value, not an add.
-        dacs.unsafe_store(((bb * nh + hh) * nc + c) * qv + i, run)
+    m2_chunk_cumsum_cell(cell, dacs, da, b_in, t_in, nh_in, nc_in, q_in)
 
 
 # ===========================================================================
@@ -321,54 +248,8 @@ def m2_seg_l_kernel(gid_: Int,
     nc_in: Int32,
     q_in: Int32,
 ):
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = gid_
-    if cell >= b * nc * nh * qv:
-        return
-    var bb = cell // (nc * nh * qv)
-    var rem = cell - bb * nc * nh * qv
-    var c = rem // (nh * qv)
-    var rem2 = rem - c * nh * qv
-    var hh = rem2 // qv
-    var j = rem2 - hh * qv
-    var c0 = c * qv
-    var real = t_work - c0
-    if real > qv:
-        real = qv
-    var lbase = (((bb * nc + c) * nh + hh) * qv) * qv
-    # Above the diagonal: +0.0, STRUCTURAL -- written, never computed.
-    for i in range(j):
-        seg_l.unsafe_store(lbase + i * qv + j, Float32(0.0))
-    var acc = Float32(0.0)
-    seg_l.unsafe_store(lbase + j * qv + j, ftz(identical_exp(acc)))
-    for i in range(j + 1, qv):
-        if i < real:
-            comptime if SAB_SEGSUM_DESCENDING:
-                var a2 = Float32(0.0)
-                var k = i
-                while k > j:
-                    a2 = ftz(
-                        a2
-                        + ftz(
-                            da.unsafe_load(
-                                ((bb * t_work) + (c0 + k)) * nh + hh
-                            )
-                        )
-                    )
-                    k -= 1
-                acc = a2
-            else:
-                acc = ftz(
-                    acc
-                    + ftz(
-                        da.unsafe_load(((bb * t_work) + (c0 + i)) * nh + hh)
-                    )
-                )
-        seg_l.unsafe_store(lbase + i * qv + j, ftz(identical_exp(acc)))
+    m2_seg_l_cell(cell, seg_l, da, b_in, t_in, nh_in, nc_in, q_in)
 
 
 # ===========================================================================
@@ -389,48 +270,8 @@ def m2_cb_g_kernel(gid_: Int,
     nc_in: Int32,
     q_in: Int32,
 ):
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = gid_
-    if cell >= b * nc * qv * qv:
-        return
-    var bb = cell // (nc * qv * qv)
-    var rem = cell - bb * nc * qv * qv
-    var c = rem // (qv * qv)
-    var rem2 = rem - c * qv * qv
-    var i = rem2 // qv
-    var j = rem2 - i * qv
-    var c0 = c * qv
-    var real = t_work - c0
-    if real > qv:
-        real = qv
-    var acc = Float32(0.0)
-    var live = i < real and j < real
-    comptime if IDN_M2_CB_LOWER:
-        # B9: above the diagonal is never read; explicit +0.0 (below).
-        live = live and j <= i
-    if live:
-        var ti = bb * t_work + c0 + i
-        var tj = bb * t_work + c0 + j
-        for n in range(M2_D_STATE):
-            acc = ftz(
-                identical_mul_add(
-                    ftz(xbc.unsafe_load(ti * cd + di + M2_D_STATE + n)),  # C
-                    ftz(xbc.unsafe_load(tj * cd + di + n)),  # B
-                    acc,
-                )
-            )
-        acc = ftz(acc)
-    else:
-        # A padded row's B or C is exact +0.0 everywhere: the leaf is a
-        # fold of exact zeros from a +0.0 seed, which is +0.0 -- written
-        # directly, same bits as the fold (gemm section 9's argument).
-        acc = Float32(0.0)
-    cb_g.unsafe_store(((bb * nc + c) * qv + i) * qv + j, acc)
+    m2_cb_g_cell(cell, cb_g, xbc, b_in, t_in, di_in, cd_in, nc_in, q_in)
 
 
 # ===========================================================================
@@ -453,96 +294,8 @@ def m2_ydiag_kernel(gid_: Int,
     nc_in: Int32,
     q_in: Int32,
 ):
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = gid_
-    if cell >= b * t_work * nh * M2_HEADDIM:
-        return
-    var bb = cell // (t_work * nh * M2_HEADDIM)
-    var rem = cell - bb * t_work * nh * M2_HEADDIM
-    var t = rem // (nh * M2_HEADDIM)
-    var rem2 = rem - t * nh * M2_HEADDIM
-    var hh = rem2 // M2_HEADDIM
-    var p = rem2 - hh * M2_HEADDIM
-    var c = t // qv
-    var i = t - c * qv
-    var gbase = ((bb * nc + c) * qv + i) * qv
-    var lbase = (((bb * nc + c) * nh + hh) * qv) * qv + i * qv
-    # contract_leaf_size(k): k = 256 -> two leaves of 128; k = 128 (the
-    # CHUNK_SIZE_128 arm) -> ONE leaf of 128.
-    var leaf_len = qv
-    if qv > 128:
-        leaf_len = qv // 2
-
-    # Leaf partials: +0.0-seeded serial-ascending fma chains, one per leaf
-    # (oracle_leaf_partial's loop, in registers).
-    var leaf0 = Float32(0.0)
-    var leaf1 = Float32(0.0)
-    for jj in range(qv):
-        var m_ij: Float32
-        if jj <= i:
-            m_ij = ftz(
-                identical_mul(
-                    ftz(cb_g.unsafe_load(gbase + jj)),
-                    ftz(seg_l.unsafe_load(lbase + jj)),
-                )
-            )
-            comptime if SAB_PAIR_DT_B:
-                # SABOTAGE: the fused chain scales the CB block by dt[j]
-                # (dt bound to the B side) since X_d carries no dt.
-                m_ij = ftz(
-                    identical_mul(
-                        m_ij,
-                        ftz(
-                            dt.unsafe_load(
-                                ((bb * t_work) + (c * qv + jj)) * nh + hh
-                            )
-                        ),
-                    )
-                )
-        else:
-            # STRUCTURAL zero above the diagonal (DEVIATION 782): +0.0,
-            # never a computed product -- the oracle's zero-filled M.
-            m_ij = Float32(0.0)
-        # DEVIATION 2712 / 2713: X_d is [B, T, H, P] and this loop runs to
-        # Q, so rows c * Q + jj >= T are PAST the sequence. Their m_ij is the
-        # structural +0.0, and 0 x finite garbage is 0, which is why every
-        # CUDA and HIP run and every cold Metal run carried the same bits;
-        # 0 x NaN (Metal, warm process) is NaN, and the row past the last
-        # allocation is an unmapped page on the MI325X (the launch fault).
-        # A row past T contributes +0.0 x +0.0, the bits the record carries.
-        var xv = Float32(0.0)
-        # -D MOJOLEARN_MAMBA_2712_UNBOUNDED=1 restores the unbounded read: the
-        # poison gate's sabotage 1, which must fail (the band is NaN there).
-        if c * qv + jj < t_work or SAB_2712_UNBOUNDED:
-            xv = ftz(
-                xd.unsafe_load(
-                    (((bb * t_work) + (c * qv + jj)) * nh + hh) * M2_HEADDIM + p
-                )
-            )
-        comptime if SAB_FOLD_SERIAL_ZERO_SEED:
-            # SABOTAGE: one serial chain across the whole k = Q, the fold
-            # levels erased (the gemm lane's F5 alternative).
-            leaf0 = ftz(identical_mul_add(m_ij, xv, leaf0))
-        else:
-            if jj < leaf_len:
-                leaf0 = ftz(identical_mul_add(m_ij, xv, leaf0))
-            else:
-                leaf1 = ftz(identical_mul_add(m_ij, xv, leaf1))
-    var out: Float32
-    comptime if SAB_FOLD_SERIAL_ZERO_SEED:
-        out = ftz(leaf0)
-    else:
-        if leaf_len < qv:
-            # fold_balanced_tree at P = 2: one arithmetic node.
-            out = ftz(ftz(leaf0) + ftz(leaf1))
-        else:
-            # ONE leaf (k <= 128): no fold node exists.
-            out = ftz(leaf0)
-    ydiag.unsafe_store(cell, out)
+    m2_ydiag_cell(cell, ydiag, cb_g, seg_l, xd, dt, b_in, t_in, nh_in, nc_in, q_in)
 
 
 # ===========================================================================
@@ -557,15 +310,8 @@ def m2_decay_kernel(gid_: Int,
     n_in: Int32,  # B * H * C * Q
     q_in: Int32,
 ):
-    var n = Int(n_in)
-    var qv = Int(q_in)
     var cell = gid_
-    if cell >= n:
-        return
-    var row = cell // qv  # (b, h, c)
-    var last = ftz(dacs.unsafe_load(row * qv + (qv - 1)))
-    var d = ftz(last - ftz(dacs.unsafe_load(cell)))
-    decay.unsafe_store(cell, ftz(identical_exp(d)))
+    m2_decay_cell(cell, decay, dacs, n_in, q_in)
 
 
 # ===========================================================================
@@ -589,76 +335,8 @@ def m2_cstate_kernel(gid_: Int,
     nc_in: Int32,
     q_in: Int32,
 ):
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
-    comptime n_state = M2_D_STATE
     var cell = gid_
-    if cell >= b * nc * nh * M2_HEADDIM * n_state:
-        return
-    var bb = cell // (nc * nh * M2_HEADDIM * n_state)
-    var rem = cell - bb * nc * nh * M2_HEADDIM * n_state
-    var c = rem // (nh * M2_HEADDIM * n_state)
-    var rem2 = rem - c * nh * M2_HEADDIM * n_state
-    var hh = rem2 // (M2_HEADDIM * n_state)
-    var rem3 = rem2 - hh * M2_HEADDIM * n_state
-    var p = rem3 // n_state
-    var n = rem3 - p * n_state
-    var c0 = c * qv
-    var real = t_work - c0
-    if real > qv:
-        real = qv
-    # contract_leaf_size(k): see m2_ydiag_kernel.
-    var leaf_len = qv
-    if qv > 128:
-        leaf_len = qv // 2
-
-    var leaf0 = Float32(0.0)
-    var leaf1 = Float32(0.0)
-    for i in range(qv):
-        var bd: Float32
-        var xv: Float32
-        if i < real:
-            var ti = bb * t_work + c0 + i
-            var dec = ftz(
-                decay.unsafe_load(((bb * nh + hh) * nc + c) * qv + i)
-            )
-            bd = ftz(
-                identical_mul(ftz(xbc.unsafe_load(ti * cd + di + n)), dec)
-            )
-            comptime if SAB_PAIR_DT_B:
-                bd = ftz(
-                    identical_mul(bd, ftz(dt.unsafe_load(ti * nh + hh)))
-                )
-            xv = ftz(
-                xd.unsafe_load((ti * nh + hh) * M2_HEADDIM + p)
-            )
-        else:
-            # Padded row: B is exact +0.0, so B_decay is the +0.0 the
-            # oracle's zero-filled matrix holds, and the product below is
-            # an exact zero.
-            bd = Float32(0.0)
-            xv = Float32(0.0)
-        comptime if SAB_FOLD_SERIAL_ZERO_SEED:
-            leaf0 = ftz(identical_mul_add(xv, bd, leaf0))
-        else:
-            if i < leaf_len:
-                leaf0 = ftz(identical_mul_add(xv, bd, leaf0))
-            else:
-                leaf1 = ftz(identical_mul_add(xv, bd, leaf1))
-    var out: Float32
-    comptime if SAB_FOLD_SERIAL_ZERO_SEED:
-        out = ftz(leaf0)
-    else:
-        if leaf_len < qv:
-            out = ftz(ftz(leaf0) + ftz(leaf1))
-        else:
-            out = ftz(leaf0)
-    cstate.unsafe_store(cell, out)
+    m2_cstate_cell(cell, cstate, xbc, decay, xd, dt, b_in, t_in, nh_in, di_in, cd_in, nc_in, q_in)
 
 
 # ===========================================================================
@@ -786,10 +464,10 @@ def m2_discretize_cell_kernel(gid_: Int,
     var dtv = ftz(dt.unsafe_load(t * nh + hh))
     if p == 0:
         da.unsafe_store(
-            row, ftz(identical_mul(dtv, ftz(a_out.unsafe_load(hh))))
+            row, m2_product(dtv, ftz(a_out.unsafe_load(hh)))
         )
     var xv = ftz(xbc.unsafe_load(t * cd + hh * M2_HEADDIM + p))
-    xd.unsafe_store(cell, ftz(identical_mul(xv, dtv)))
+    xd.unsafe_store(cell, m2_product(xv, dtv))
 
 
 def m2_cb_g_tile_kernel(gid_: Int,
@@ -831,7 +509,7 @@ def m2_retained_gl_kernel(gid_: Int, retained: MutPointer[Float32,MutAnyOrigin],
     var bb = cell//(qv*qv*nh*nc)
     var value = Float32(0)
     if c*qv+i<Int(t_in) and j<=i:
-        value = ftz(identical_mul(ftz(cb_g[((bb*nc+c)*qv+i)*qv+j]),ftz(seg_l[cell])))
+        value = m2_product(ftz(cb_g[((bb*nc+c)*qv+i)*qv+j]),ftz(seg_l[cell]))
     retained[cell] = value
 
 
@@ -877,104 +555,8 @@ def m2_statepass_kernel(gid_: Int,
     q_in: Int32,
     n_completed_in: Int32,
 ):
-    var b = Int(b_in)
-    var nh = Int(nh_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
-    var n_completed = Int(n_completed_in)
-    comptime n_state = M2_D_STATE
-    var pn = M2_HEADDIM * n_state
     var cell = gid_
-    if cell >= b * nh * pn:
-        return
-    var bb = cell // (nh * pn)
-    var rem = cell - bb * nh * pn
-    var hh = rem // pn
-    var i = rem - hh * pn  # (p, n) flattened
-
-    var h = ftz(h_state.unsafe_load(cell))
-
-    comptime if SAB_STATEPASS_MATRIX:
-        # SABOTAGE (785's falsifier): ssd_minimal:64-69's decay-MATRIX
-        # contraction. Multi-chunk decays associate as exp(sum of logs)
-        # where the recurrence associates them as products of exps --
-        # different bits from three chunks up, or two with a nonzero
-        # initial state. states_cat[z]: z = 0 is the incoming h, z >= 1 is
-        # chunk z-1's cstate; v[z] = dacs_last of chunk z-1, v[0] = 0.
-        var boundary = h
-        for z in range(1, nc + 1):
-            # decay(z, c) = exp(sum_{k=c+1..z} v[k]); new = sum_c decay*state
-            var acc = Float32(0.0)
-            for cc in range(z + 1):
-                var s = Float32(0.0)
-                var k = cc + 1
-                while k <= z:
-                    s = ftz(
-                        s
-                        + ftz(
-                            dacs.unsafe_load(
-                                ((bb * nh + hh) * nc + (k - 1)) * qv
-                                + (qv - 1)
-                            )
-                        )
-                    )
-                    k += 1
-                var dec = ftz(identical_exp(s))
-                var sv: Float32
-                if cc == 0:
-                    sv = ftz(h_state.unsafe_load(cell))
-                else:
-                    sv = ftz(
-                        cstate.unsafe_load(
-                            (((bb * nc + (cc - 1)) * nh + hh) * pn) + i
-                        )
-                    )
-                acc = ftz(identical_mul_add(dec, sv, acc))
-            # the state ENTERING chunk z (z < nc) is new_states[z]... the
-            # ENTERING state for chunk c is the z = c row; z = nc is the
-            # final state.
-            if z <= nc - 1:
-                pass_states.unsafe_store(
-                    (((bb * nc + z) * nh + hh) * pn) + i, acc
-                )
-            if z == n_completed:
-                boundary = acc
-            if z == nc:
-                h_last.unsafe_store(cell, acc)
-        # chunk 0's entering state is the incoming h in this spelling too.
-        pass_states.unsafe_store(
-            (((bb * nc + 0) * nh + hh) * pn) + i, h
-        )
-        if n_completed > 0:
-            h_state.unsafe_store(cell, boundary)
-        return
-
-    var boundary = h
-    for c in range(nc):
-        pass_states.unsafe_store((((bb * nc + c) * nh + hh) * pn) + i, h)
-        var scale = ftz(
-            identical_exp(
-                ftz(
-                    dacs.unsafe_load(
-                        ((bb * nh + hh) * nc + c) * qv + (qv - 1)
-                    )
-                )
-            )
-        )
-        var cs = ftz(
-            cstate.unsafe_load((((bb * nc + c) * nh + hh) * pn) + i)
-        )
-        comptime if SAB_STATEPASS_UNFUSED:
-            # SABOTAGE: two roundings where the profile has one.
-            var prod = ftz(identical_mul(scale, h))
-            h = ftz(prod + cs)
-        else:
-            h = ftz(identical_mul_add(scale, h, cs))
-        if c == n_completed - 1:
-            boundary = h
-    h_last.unsafe_store(cell, h)
-    if n_completed > 0:
-        h_state.unsafe_store(cell, boundary)
+    m2_statepass_cell(cell, pass_states, h_last, h_state, cstate, dacs, b_in, nh_in, nc_in, q_in, n_completed_in)
 
 
 # ===========================================================================
@@ -1005,51 +587,8 @@ def m2_yoff_y_kernel(gid_: Int,
     nc_in: Int32,
     q_in: Int32,
 ):
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
-    comptime n_state = M2_D_STATE
-    var pn = M2_HEADDIM * n_state
     var cell = gid_
-    if cell >= b * t_work * nh * M2_HEADDIM:
-        return
-    var bb = cell // (t_work * nh * M2_HEADDIM)
-    var rem = cell - bb * t_work * nh * M2_HEADDIM
-    var t = rem // (nh * M2_HEADDIM)
-    var rem2 = rem - t * nh * M2_HEADDIM
-    var hh = rem2 // M2_HEADDIM
-    var p = rem2 - hh * M2_HEADDIM
-    var c = t // qv
-    var i = t - c * qv
-    var ti = bb * t_work + t
-
-    # C . h_prev over n: one serial ascending leaf (k = 128).
-    var acc = Float32(0.0)
-    for n in range(n_state):
-        acc = ftz(
-            identical_mul_add(
-                ftz(xbc.unsafe_load(ti * cd + di + n_state + n)),
-                ftz(
-                    pass_states.unsafe_load(
-                        (((bb * nc + c) * nh + hh) * pn) + p * n_state + n
-                    )
-                ),
-                acc,
-            )
-        )
-    acc = ftz(acc)
-    var sc = ftz(
-        identical_exp(
-            ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))
-        )
-    )
-    var yo = ftz(identical_mul(acc, sc))
-    yoff.unsafe_store(cell, yo)
-    y_out.unsafe_store(cell, ftz(ftz(ydiag.unsafe_load(cell)) + yo))
+    m2_yoff_y_cell(cell, yoff, y_out, ydiag, xbc, pass_states, dacs, b_in, t_in, nh_in, di_in, cd_in, nc_in, q_in)
 
 
 # lane nv-occupancy (2026-10-28): MOJOLEARN_IDN_SSD_OCCUPANCY's S18/S19 row
@@ -1141,7 +680,7 @@ def ssd_forward(
         var _l1_a7 = Int32(cd)
         def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7}:
             m2_discretize_cell_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7)
-        host_launch(_launch_1, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)), 31)
+        host_launch(_launch_1, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     else:
         var _l2_a0 = xd.unsafe_ptr()
         var _l2_a1 = da.unsafe_ptr()
@@ -1225,7 +764,7 @@ def ssd_forward(
                 var _l7_a7 = Int32(qv)
                 def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7}:
                     m2_retained_gl_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7)
-                host_launch(_launch_7, launch_count((_grid(cells),1,1), (MAMBA2_TPB,1,1)), 23)
+                host_launch(_launch_7, launch_count((_grid(cells),1,1), (MAMBA2_TPB,1,1)), 0)
                 var _l8_a0 = ydiag.unsafe_ptr()
                 var _l8_a1 = retained[0].unsafe_ptr()
                 var _l8_a2 = seg_l.unsafe_ptr()
@@ -1271,7 +810,7 @@ def ssd_forward(
     var _l11_a3 = Int32(qv)
     def _launch_11(gid_: Int) {imm _l11_a0, imm _l11_a1, imm _l11_a2, imm _l11_a3}:
         m2_decay_kernel(gid_, _l11_a0, _l11_a1, _l11_a2, _l11_a3)
-    host_launch(_launch_11, launch_count((_grid(b * nh * nc * qv), 1, 1), (MAMBA2_TPB, 1, 1)), 41)
+    host_launch(_launch_11, launch_count((_grid(b * nh * nc * qv), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
     if mma:
         afn_m2_cstate_mma(
             ctx, cstate, xbc_work, decay, xd, b, t_work, nh, di, cd, nc, qv

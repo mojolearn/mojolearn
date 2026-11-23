@@ -63,7 +63,7 @@ comptime L_AVGPOOL1D = 17
 comptime L_ADAPTIVE_AVGPOOL1D = 18
 comptime L_BRANCH = 19
 comptime L_CONCAT = 20
-comptime L_BATCH_NORM = 42
+comptime L_BATCH_NORM = 46
 comptime UNUSED = -2
 
 comptime _H = Float64(1.0) / Float64(64)

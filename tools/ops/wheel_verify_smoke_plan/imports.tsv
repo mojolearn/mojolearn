@@ -37,7 +37,6 @@ mojolearn.mamba	0	ok	0.3	85
 mojolearn.manifold	0	ok	0.3	69
 mojolearn.metrics	0	ok	0.4	76
 mojolearn.mixture	0	ok	0.4	73
-mojolearn.model_pool_training	0	ok	0.4	107
 mojolearn.model_selection	0	ok	0.3	66
 mojolearn.models	0	ok	0.5	82
 mojolearn.models.causal_lm	0	ok	0.5	85
@@ -51,7 +50,6 @@ mojolearn.naive_bayes	0	ok	0.4	68
 mojolearn.neighbors	0	ok	0.5	74
 mojolearn.neural_inference	0	ok	0.5	85
 mojolearn.neural_network	0	ok	0.4	70
-mojolearn.offload_training	0	ok	0.5	82
 mojolearn.ops	0	ok	0.4	84
 mojolearn.parallel_classical	0	ok	0.7	101
 mojolearn.parallel_ensemble	0	ok	0.8	124

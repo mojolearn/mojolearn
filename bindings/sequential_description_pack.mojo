@@ -164,8 +164,10 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         a0 = py_call(b.int, options[0])
         args = Python.list(a0, 0, 0, 0, 0, 0)
     elif kind == "concat":
-        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("sources"), Python.tuple(None), 1)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("sources", "axis"),
+                                 Python.tuple(None, 0), 1)
         var sources = py_call(b.tuple, options[0])
+        f = py_call(b.float, PythonObject(_positive(options[1], "axis", 0, context)))
         if len(sources) < 1 or len(sources) > 6:
             raise Error("sources must list 1 to 6 layers")
         args = Python.list()
@@ -238,6 +240,35 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         a0 = PythonObject(heads)
         a1 = PythonObject(kv)
         args = Python.list(heads, kv, 1 if Bool(py=options[2]) else 0, window, 1 if Bool(py=options[5]) else 0, 0)
+    elif kind == "selective_scan":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("d_state"), Python.tuple(16), 0)
+        var states = _positive(options[0], "d_state", 1, context)
+        if states != 4 and states != 8 and states != 16:
+            raise Error("d_state must be 4, 8 or 16")
+        a0 = PythonObject(states)
+        args = Python.list(states, 0, 0, 0, 0, 0)
+    elif kind == "ssd_scan":
+        # Mamba-2 (lane neural-blocks-3): the SSD core, one argument (the heads)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("heads"), Python.tuple(None), 1)
+        var heads = _positive(options[0], "heads", 1, context)
+        a0 = PythonObject(heads)
+        args = Python.list(heads, 0, 0, 0, 0, 0)
+    # Mamba-3 (lane neural-blocks-3-m3)
+    elif kind == "trapezoid_scan":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("heads", "d_state"),
+                                 Python.tuple(None, None), 2)
+        var t_heads = _positive(options[0], "heads", 1, context)
+        var t_states = _positive(options[1], "d_state", 1, context)
+        a0 = PythonObject(t_heads)
+        a1 = PythonObject(t_states)
+        args = Python.list(t_heads, t_states, 0, 0, 0, 0)
+    # lm_head (lane neural-blocks-3-lm)
+    elif kind == "lm_head":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("vocab"), Python.tuple(None), 1)
+        var vocab = _positive(options[0], "vocab", 2, context)
+        a0 = PythonObject(vocab)
+        args = Python.list(vocab, 0, 0, 0, 0, 0)
+    # end lm_head
     elif kind == "rnn" or kind == "lstm" or kind == "gru":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("hidden_size"), Python.tuple(None), 1)
         var hidden = _positive(options[0], "hidden_size", 1, context)
@@ -276,6 +307,10 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         return model
     elif len(supplied) != 0 or len(keywords) != 0:
         raise Error("TypeError: " + kind + " takes no arguments")
+    # lane neural-blocks-3 (2026-11-22): the native model reads the float argument as a Float32 (eps, p, theta,
+    # axis); the description holds that value, so a model saved and loaded (the file stores float32) has the
+    # same layer list and the same digest_ (before: layer_norm(1e-5) read back 9.999999747e-06, digest differed)
+    f = PythonObject(Float64(Float32(Float64(py=f))))
     sequential_append(mods, model, code, a0, a1, f, args)
     return model
 

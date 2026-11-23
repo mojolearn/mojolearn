@@ -949,7 +949,7 @@ LANE_TEXT = {
                   "torch._int_mm(a.to(dev), b.to(dev).t()), .float().cpu()"),
     "lm-infer": ("mojolearn.LanguageModelInference(parameters, shape=cfg).logits(ids) (CPU)",
                  "no_grad forward of the same transformers LlamaForCausalLM on the CPU"),
-    "lm-host-train-step": ("mojolearn.LanguageModelHostTrainer(parameters, shape=cfg).train_step(ids) (CPU)",
+    "lm-host-train-step": ("mojolearn.LanguageModelTrainer(parameters, shape=cfg, device='cpu').train_step(ids) (CPU)",
                            "the same transformers LlamaForCausalLM on the CPU; zero_grad; forward + "
                            "mean CE; backward; torch.optim.AdamW step; loss.item()"),
     "transformer-forward": ("mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
@@ -2312,10 +2312,18 @@ class OursLM(Ours):
             flat = np.ascontiguousarray(data["init"])
             if lane == "lm-infer":
                 self.model = ml.LanguageModelInference(flat, shape=cfg)
-            else:
+            elif hasattr(ml, "LanguageModelHostTrainer"):
+                # a prior wheel (0.8.66 and earlier): its CPU trainer class
                 self.model = ml.LanguageModelHostTrainer(flat, shape=cfg, lr=ADAMW["lr"],
                                                          betas=ADAMW["betas"], eps=ADAMW["eps"],
                                                          weight_decay=ADAMW["weight_decay"])
+            else:
+                # the current wheel: the same composed host step is LanguageModelTrainer(device="cpu")
+                # (lane neural-consolidate, 2026-11-22)
+                self.model = ml.LanguageModelTrainer(flat, shape=cfg, lr=ADAMW["lr"], betas=ADAMW["betas"],
+                                                     eps=ADAMW["eps"], weight_decay=ADAMW["weight_decay"],
+                                                     data_schedule={"fixture": "tools/bench_board_neural.py"},
+                                                     device="cpu")
             self.info = _ours_info(ml, getattr(sys.modules[type(self.model).__module__], "__file__",
                                                None), ml.numeric_mode(), "cpu")
             self.info.update(call=LANE_TEXT[lane][0], cls=type(self.model).__name__)
@@ -2351,8 +2359,11 @@ class OursLM(Ours):
             self.losses.append(float(res["loss"]))
             self.k += 1
         elif self.lane == "lm-host-train-step":
-            bits = self.model.train_step(np.ascontiguousarray(self.batches[self.k]))
-            self.losses.append(float(np.array([int(bits)], dtype=np.uint32).view(np.float32)[0]))
+            res = self.model.train_step(np.ascontiguousarray(self.batches[self.k]))
+            if isinstance(res, dict):
+                self.losses.append(float(res["loss"]))
+            else:  # a prior wheel's LanguageModelHostTrainer returns the loss's bits
+                self.losses.append(float(np.array([int(res)], dtype=np.uint32).view(np.float32)[0]))
             self.k += 1
         # Holding the previous call's logits in self.out while the next call runs is deliberate (lane
         # fx-harness-honest, 2026-11-18, on fx-transformer-forward's finding): it is what a user's loop

@@ -941,7 +941,7 @@ def cross_vendor_worker_init(args: PythonObject) raises -> PythonObject:
         trainer = py_call(c[].bi.object.__new__, c[].parallel_cls)
         var device = c[].bi.list()
         _ = py_call(device.append, args[6])
-        _ = parallel_byte_init(trainer, args[1], device, PythonObject(1), PythonObject(False))
+        _ = parallel_byte_init(trainer, args[1], device, PythonObject(1), PythonObject(False), PythonObject("replica"))
     var name = args[5] if Bool(py=args[5]) else PythonObject(transport_hostname())
     state.name = String(name)
     state.vendor = String(c[].vendor)

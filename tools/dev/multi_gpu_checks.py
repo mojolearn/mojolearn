@@ -62,7 +62,7 @@ WHAT THIS DOES NOT COVER (say it plainly):
   * the plain one-device estimator: both arms go through the driver. The removed par-* lanes held each driver to
     the plain fit; a driver that is wrong on one device and equally wrong on two passes here. The one-device
     driver against the plain estimator is the release verification's and the logical-shard gate's business;
-  * OffloadedByteLanguageModelTrainer (one device by design: the removed lane ran it on devices[:1]);
+  * ParallelByteLanguageModelTrainer(schedule='offload') (one device by design: the removed lane ran it on devices[:1]);
   * the Mojo-level `training/checks/*_parallel_check.mojo` programs (they need a source build on the box:
     tools/two_device_checks.sh runs them; the job script can call it as a second phase).
 
@@ -516,7 +516,7 @@ def _samba(max_norm):
     return recipe
 
 
-def _byte_lm(trainer_module, trainer_name):
+def _byte_lm(trainer_module, trainer_name, **options):
     def recipe(ml, np, fx, devices):
         import importlib
         cls = getattr(importlib.import_module(trainer_module), trainer_name)
@@ -533,7 +533,7 @@ def _byte_lm(trainer_module, trainer_name):
             named, data_schedule={"dataset": "multi_gpu_checks", "order": "sequential"}, shape=shape)
         ids = token_ids(np, fx["X"], 6 * shape.batch, shape.length + 1)
         losses = []
-        with cls(seed.state_dict(), devices=devices, logical_shards=2) as tr:
+        with cls(seed.state_dict(), devices=devices, logical_shards=2, **options) as tr:
             for step in range(3):
                 got = tr.train_step([ids[4 * step: 4 * step + 2], ids[4 * step + 2: 4 * step + 4]])
                 losses.append([float(v) for v in got["losses"]])
@@ -639,8 +639,9 @@ UNITS = (
     ("neural-samba-clip", "parallel_training", _samba(0.5), "none", "input", ROWS),
     ("byte-lm", "parallel_training", _byte_lm("mojolearn.parallel_training", "ParallelByteLanguageModelTrainer"),
      "none", "input", ROWS),
-    ("byte-lm-model-pool", "model_pool_training",
-     _byte_lm("mojolearn.model_pool_training", "PooledByteLanguageModelTrainer"), "none", "input", ROWS),
+    ("byte-lm-model-pool", "parallel_training",
+     _byte_lm("mojolearn.parallel_training", "ParallelByteLanguageModelTrainer", schedule="model_pool"),
+     "none", "input", ROWS),
     ("causal-lm", "models.parallel_causal_lm", _causal_lm, "none", "input", ROWS),
     ("distributed-program", "_distributed_program", _distributed_program, "none", "input", ROWS),
 )
@@ -655,7 +656,7 @@ RETIRED_PAR_LANES = {
     "par-boosting-reg": "boosting-reg",
     "par-border-types": "not covered: one fit per feature_border_type; boosting-clf covers the driver",
     "par-byte-lm": "byte-lm", "par-byte-lm-model-pool": "byte-lm-model-pool",
-    "par-byte-lm-offload": "not covered: OffloadedByteLanguageModelTrainer is one device by design",
+    "par-byte-lm-offload": "not covered: ParallelByteLanguageModelTrainer(schedule='offload') is one device by design",
     "par-causal-lm": "causal-lm", "par-cd": "lasso-cd", "par-cd-elasticnet": "elasticnet-cd",
     "par-cholesky": "cholesky", "par-cross-val": "cross-val", "par-dbscan": "dbscan",
     "par-feature-freq": "feature-freq", "par-forecast-arima": "arima-forecast",

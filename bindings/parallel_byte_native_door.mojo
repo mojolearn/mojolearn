@@ -93,9 +93,10 @@ struct ParallelByteBoundary(Defaultable, Movable):
     var char: PythonObject
     var index: PythonObject
     var vendor: String
-    # Import-time admitted trainer classes, one per schedule (replica,
-    # model_pool, offload); None until that module's class is admitted.
-    var classes: List[PythonObject]
+    # The import-time admitted trainer class; None until admitted. One class
+    # serves every schedule: the schedule is a constructor option, resolved
+    # once into the owner (lane neural-consolidate, 2026-11-22).
+    var cls: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -106,9 +107,7 @@ struct ParallelByteBoundary(Defaultable, Movable):
         self.char = PythonObject(None)
         self.index = PythonObject(None)
         self.vendor = String()
-        self.classes = List[PythonObject]()
-        for _ in range(3):  # driver-loop: over 3: replica, model_pool and offload schedules
-            self.classes.append(PythonObject(None))
+        self.cls = PythonObject(None)
 
 
 comptime PARALLEL_BYTE_BOUNDARY = SharedSlot[ParallelByteBoundary, "MojolearnParallelByteBoundaryV1"]
@@ -289,25 +288,18 @@ def _parallel_schedule_index(name: String) raises -> Int:
     raise Error("parallel: unknown byte-LM schedule " + name)
 
 
-def parallel_byte_admit_class(cls: PythonObject, name: String) raises:
-    """Import-time admission of one trainer class for one schedule: an exact
-    `type` whose hierarchy has no Python attribute, storage or finalizer
-    hooks. The replica class derives from object; the layer-pool and offload
-    classes derive directly from the admitted replica class."""
+def parallel_byte_admit_class(cls: PythonObject) raises:
+    """Import-time admission of the trainer class: an exact `type` deriving
+    from object whose namespace has no Python attribute, storage or finalizer
+    hooks."""
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     if p[].bi is None:
         raise Error("RuntimeError: parallel: ABI is not initialized")
-    var schedule = _parallel_schedule_index(name)
     if py_type(cls) is not p[].bi.type:
         raise Error("TypeError: parallel: trainer class must be an exact type")
     var bases = py_call(p[].bi.object.__getattribute__, cls, "__bases__")
-    if len(bases) != 1:
-        raise Error("TypeError: parallel: trainer class must have one base")
-    if schedule == PARALLEL_REPLICA:
-        if bases[0] is not p[].bi.object:
-            raise Error("TypeError: parallel: replica trainer class must derive from object")
-    elif p[].classes[PARALLEL_REPLICA] is None or bases[0] is not p[].classes[PARALLEL_REPLICA]:
-        raise Error("TypeError: parallel: schedule trainer class must derive from the admitted replica class")
+    if len(bases) != 1 or bases[0] is not p[].bi.object:
+        raise Error("TypeError: parallel: trainer class must derive from object")
     var forbidden: List[String] = ["__getattribute__", "__getattr__", "__setattr__", "__delattr__", "__del__", "__slots__", "_native"]
     var mro = py_call(p[].bi.object.__getattribute__, cls, "__mro__")
     for i in range(len(mro) - 1):  # driver-loop: over the admitted trainer class hierarchy (object excluded)
@@ -315,25 +307,20 @@ def parallel_byte_admit_class(cls: PythonObject, name: String) raises:
         for hook in forbidden:  # driver-loop: over forbidden: seven storage and lifecycle hook names
             if py_contains(namespace, PythonObject(hook)):
                 raise Error("TypeError: parallel: trainer class refuses Python storage or finalizer hook " + hook)
-    for i in range(3):  # small-loop(3: admitted schedule classes)
-        if i != schedule and p[].classes[i] is cls:
-            raise Error("TypeError: parallel: trainer class is admitted for another schedule")
     # A module reload admits its new class object in place of the old one.
-    p[].classes[schedule] = cls
+    p[].cls = cls
 
 
-def _parallel_class_schedule(cls: PythonObject) raises -> Int:
+def _parallel_admitted(cls: PythonObject) raises:
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
-    for i in range(3):  # small-loop(3: admitted schedule classes)
-        if p[].classes[i] is not None and p[].classes[i] is cls:
-            return i
-    raise Error("TypeError: parallel: trainer must be an exact admitted byte-LM trainer class")
+    if p[].cls is None or p[].cls is not cls:
+        raise Error("TypeError: parallel: trainer must be an exact admitted byte-LM trainer class")
 
 
 def _parallel_record(owner: PythonObject) raises -> PythonObject:
     """The exact native owner record of an admitted trainer instance."""
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
-    var schedule = _parallel_class_schedule(py_type(owner))
+    _parallel_admitted(py_type(owner))
     var nk = parallel_keys()
     var record = py_get(py_fields(owner), nk[].k__native)
     if record is None:
@@ -341,7 +328,7 @@ def _parallel_record(owner: PythonObject) raises -> PythonObject:
     var owner_id = Int(py=py_call(p[].bi.id, owner))
     try:
         var rec = record.downcast_value_ptr[ParallelByteOwner]()
-        if rec[].owner_id != owner_id or rec[].native.schedule != schedule:
+        if rec[].owner_id != owner_id:
             raise Error("foreign")
     except:
         raise Error("TypeError: parallel trainer storage does not belong to this trainer")
@@ -778,14 +765,17 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported:
 
 
 def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: PythonObject,
-                       logical_shards: PythonObject, pool_optimizer: PythonObject) raises -> PythonObject:
-    """Admit a byte-LM multi-device trainer. The owner's exact admitted class
-    selects the session: ParallelByteLanguageModelTrainer (resident
-    replicas), PooledByteLanguageModelTrainer (decoder layers owned by
-    devices) or OffloadedByteLanguageModelTrainer (one device, one decoder
-    layer resident at a time)."""
+                       logical_shards: PythonObject, pool_optimizer: PythonObject,
+                       schedule_name: PythonObject) raises -> PythonObject:
+    """Admit a byte-LM multi-device trainer. `schedule` selects the session,
+    once, for the owner's lifetime: "replica" (resident replicas),
+    "model_pool" (decoder layers owned by devices) or "offload" (one device,
+    one decoder layer resident at a time)."""
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
-    var schedule = _parallel_class_schedule(py_type(owner))
+    _parallel_admitted(py_type(owner))
+    if py_type(schedule_name) is not p[].bi.str:
+        raise Error("TypeError: schedule must be 'replica', 'model_pool' or 'offload'")
+    var schedule = _parallel_schedule_index(String(schedule_name))
     var count = _parallel_int(logical_shards, 1, 1024, "logical_shards")
     if py_type(devices) is not p[].bi.tuple and py_type(devices) is not p[].bi.list:
         raise Error("TypeError: devices must be a tuple or list of device indices")
@@ -801,11 +791,14 @@ def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: Python
             if device_ids[j] == id:
                 raise Error("devices must be distinct nonnegative integer indices")
         device_ids.append(id)
-    if py_type(pool_optimizer) is not p[].bi.bool:
-        raise Error("pool_optimizer must be bool")
-    var pooled = Bool(py=pool_optimizer)
+    # None: pooled optimizer state for replicas, none for the other schedules.
+    var pooled = schedule == PARALLEL_REPLICA
+    if pool_optimizer is not None:
+        if py_type(pool_optimizer) is not p[].bi.bool:
+            raise Error("pool_optimizer must be bool or None")
+        pooled = Bool(py=pool_optimizer)
     if schedule != PARALLEL_REPLICA and pooled:
-        raise Error("pool_optimizer belongs to ParallelByteLanguageModelTrainer")
+        raise Error("pool_optimizer applies to schedule='replica' only")
     if py_type(state) is not p[].bi.dict:
         raise Error("Byte-LM state must be a dict")
     var shape = _parallel_shape(state)
@@ -829,7 +822,7 @@ def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: Python
     # Replacing a previous record releases its session through the native
     # session value's deallocation, as reinitialization always did.
     py_setitem(fields, nk[].k__native, record)
-    py_setitem(fields, nk[].k_pool_optimizer, pool_optimizer)
+    py_setitem(fields, nk[].k_pool_optimizer, PythonObject(pooled))
     py_setitem(fields, nk[].k_devices, ids)
     py_setitem(fields, nk[].k_logical_shards, PythonObject(count))
     py_setitem(fields, nk[].k__shape, shape_object)
@@ -1098,25 +1091,25 @@ def parallel_byte_call(operation: Int, name: PythonObject, args: PythonObject) r
         parallel_byte_initialize(args[0], args[1], args[2], String(args[3]))
         return PythonObject(None)
     if operation == PARALLEL_BYTE_OPN_ADMIT_CLASS:
-        parallel_byte_admit_class(args[0], String(args[1]))
+        parallel_byte_admit_class(args[0])
         return PythonObject(None)
     if operation == PARALLEL_BYTE_OPN_INIT:
-        if len(args) != 5:
-            raise Error("TypeError: parallel init takes owner, state, devices, logical_shards, pool_optimizer")
-        return parallel_byte_init(args[0], args[1], args[2], args[3], args[4])
+        if len(args) != 6:
+            raise Error("TypeError: parallel init takes owner, state, devices, logical_shards, pool_optimizer, schedule")
+        return parallel_byte_init(args[0], args[1], args[2], args[3], args[4], args[5])
     var nk = parallel_keys()
     if operation == PARALLEL_BYTE_OPN_FROM_CHECKPOINT:
-        if len(args) != 4:
-            raise Error("TypeError: parallel from_checkpoint takes cls, checkpoint, devices, pool_optimizer")
+        if len(args) != 5:
+            raise Error("TypeError: parallel from_checkpoint takes cls, checkpoint, devices, pool_optimizer, schedule")
         var cls = args[0]
-        _ = _parallel_class_schedule(cls)
+        _parallel_admitted(cls)
         var checkpoint = args[1]
         if py_type(checkpoint) is not p[].bi.dict:
             raise Error("unsupported parallel checkpoint contract")
         if String(py_get(checkpoint, nk[].k_schema)) != "mojolearn.parallel-byte-lm.v1" or String(py_get(checkpoint, nk[].k_reduction)) != "ordered_sum":
             raise Error("unsupported parallel checkpoint contract")
         var restored = py_call(p[].bi.object.__new__, cls)
-        _ = parallel_byte_init(restored, py_item(checkpoint, nk[].k_state), args[2], py_item(checkpoint, nk[].k_logical_shards), args[3])
+        _ = parallel_byte_init(restored, py_item(checkpoint, nk[].k_state), args[2], py_item(checkpoint, nk[].k_logical_shards), args[3], args[4])
         return restored
     var owner = args[0]
     var record = _parallel_record(owner)
@@ -1170,7 +1163,7 @@ def parallel_byte_call(operation: Int, name: PythonObject, args: PythonObject) r
         return _parallel_ownership(owner)
     if operation == PARALLEL_BYTE_OPN_MODEL_OWNERSHIP:
         if rec[].native.schedule != PARALLEL_MODEL_POOL:
-            raise Error("model_ownership requires PooledByteLanguageModelTrainer")
+            raise Error("model_ownership requires schedule='model_pool'")
         return _parallel_ownership(owner)
     var n = rec[].native.n_total
     if operation == PARALLEL_BYTE_OPN_SHARD_GRADIENT or operation == PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD:

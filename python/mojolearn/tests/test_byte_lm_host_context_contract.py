@@ -39,13 +39,17 @@ def test_inference_owned_parameters_and_fresh_logits(threaded):
 def test_host_training_uses_same_owned_array_materializer():
     shape = _shape()
     source = np.zeros(shape.n_total, dtype='f4')
-    trainer = ml.LanguageModelHostTrainer(source, shape=shape)
+    # CPU training is LanguageModelTrainer(device="cpu") (the former
+    # LanguageModelHostTrainer's step, lane neural-consolidate 2026-11-22).
+    trainer = ml.LanguageModelTrainer(source, shape=shape, data_schedule={'test': 'host-context'},
+                                      device='cpu', resident=False, step_result='full')
     source.fill(7)
     assert not np.asarray(trainer.parameters_).any()
     result = trainer.train_step(np.array([[1, 3, 5, 7, 9]], dtype='i4'))
-    assert np.isfinite(float(result))
-    assert trainer.completed_steps == 1
-    for value in (trainer.parameters_, trainer.m_, trainer.v_, trainer.gradient_):
+    assert np.isfinite(float(result['loss']))
+    assert trainer.step_ == 1
+    state = trainer.export_state()
+    for value in (trainer.parameters_, state['m'], state['v'], result['flat_gradients']):
         assert type(value) is ml.Array
         assert np.asarray(value).shape == (shape.n_total,)
         assert np.isfinite(np.asarray(value)).all()

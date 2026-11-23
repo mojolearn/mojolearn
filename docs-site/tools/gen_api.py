@@ -61,7 +61,7 @@ FAMILIES = [
      ("mojolearn._byte_lm", "mojolearn.tokenizer", "mojolearn.language_model", "mojolearn.lm_corpus", "mojolearn.models"),
      {"tokenizer", "language_model", "lm_corpus", "models"}),
     ("multi_gpu", "Multi-GPU and cross-vendor training", "Ordered multi-GPU training, model pools, offloading and partitioned workloads.",
-     ("mojolearn.parallel", "mojolearn.offload_training", "mojolearn.model_pool_training", "mojolearn.cross_vendor"),
+     ("mojolearn.parallel", "mojolearn.cross_vendor"),
      {"parallel_classical", "parallel_ensemble", "parallel_forecasting", "parallel_gaussian_process",
       "parallel_graph", "parallel_ivf", "parallel_model_selection", "parallel_neighbors",
       "parallel_neighbors_reference", "parallel_preprocessing"}),

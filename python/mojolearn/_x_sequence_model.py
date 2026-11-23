@@ -17,8 +17,10 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "concat": 20, "residual_block": 0, "parallel": 0,
           "silu": 32, "gelu": 33, "softplus": 34, "rms_norm": 35, "rotary": 36, "multiply": 37,
           "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
-          "batch_norm1d": 42, "batch_norm2d": 42}
-_LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
+          "selective_scan": 42, "ssd_scan": 43, "trapezoid_scan": 44,
+          "lm_head": 45,
+          "batch_norm1d": 46, "batch_norm2d": 46}  # lm_head (lane neural-blocks-3-lm)
+_LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
 _OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD = 0, 1, 2, 3, 4, 5
@@ -263,11 +265,12 @@ class Sequential(_CheckMixin):
         from that point."""
         return _SEQUENTIAL_ENTRY(self, "add", ("branch", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def concat(self, sources):
+    def concat(self, sources, axis=0):
         """Append the outputs of the layers ``sources`` (1 to 6 layer
-        indices, -1 for the model input) joined along the first axis of
-        each sample (the channels). The other axes must agree."""
-        return _SEQUENTIAL_ENTRY(self, "add", ("concat", (sources,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+        indices, -1 for the model input) joined along sample axis ``axis``
+        (0: the first axis, the channels; 1 joins the features of
+        ``(length, features)`` samples). The other axes must agree."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("concat", (sources, axis), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def residual_block(self, body, shortcut=None):
         """Append a residual block: ``body(h) + shortcut(h)``, where ``h`` is
@@ -482,6 +485,110 @@ class Sequential(_CheckMixin):
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("batch_norm2d", (num_features, eps, momentum), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
+    def selective_scan(self, d_state=16):
+        """Append Mamba's selective state-space scan over ``(length,
+        features)`` samples whose features are ``[u | delta | B | C]``:
+        ``dim`` input channels ``u``, their ``dim`` step sizes ``delta``
+        (already positive, for example after ``softplus``), and the
+        ``d_state`` input and output projections ``B`` and ``C`` of each
+        position, so ``features = 2 * dim + 2 * d_state``. The output is
+        ``(length, dim)``: ``y + u * D`` with ``y[t] = C[t] . h[t]`` and
+        ``h[t] = exp(delta[t] * A) * h[t - 1] + delta[t] * B[t] * u[t]``
+        from ``h = 0``, where ``A = -exp(A_log)``. ``A_log``
+        ``(dim, d_state)`` and ``D`` ``(dim,)`` are learned, initialized as
+        in Mamba (``A_log[:, n] = log(n + 1)``, ``D = 1``).
+
+        Parameters
+        ----------
+        d_state : int, default 16
+            State size per channel: 4, 8 or 16.
+
+        Example: the core of a Mamba mixer over ``(length, 64)`` samples::
+
+            # u, delta, b, c: indices of the layers giving the four parts
+            model.concat([u, delta, b, c], axis=1).selective_scan(16)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("selective_scan", (d_state,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def ssd_scan(self, heads):
+        """Append Mamba-2's state-space dual scan over ``(length,
+        features)`` samples whose features are ``[x | B | C | dt]``:
+        ``heads`` groups of 64 input channels ``x``, the 128 input and
+        128 output projections ``B`` and ``C`` of each position (one group
+        shared by every head), and one step size ``dt`` per head (already
+        positive, for example after ``softplus``), so ``features = 65 *
+        heads + 256``. The output is ``(length, 64 * heads)``: per head
+        ``y[t] = C[t] . h[t] + D * x[t]`` with ``h[t] = exp(dt[t] * A) *
+        h[t - 1] + dt[t] * B[t] x[t]`` from ``h = 0``, where ``A =
+        -exp(A_log)``, computed by Mamba-2's chunked algorithm.
+        ``A_log`` and ``D`` (one value per head) are learned, initialized
+        to ``A_log = log(1), .., log(heads)`` and ``D = 1``.
+        Parameters
+        ----------
+        heads : int
+            Number of heads of 64 channels.
+
+        Example: the core of a two-head Mamba-2 mixer over ``(length,
+        386)`` samples::
+
+            model.ssd_scan(2)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("ssd_scan", (heads,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def trapezoid_scan(self, heads, d_state):
+        """Append Mamba-3's trapezoid state-space scan over ``(length,
+        features)`` samples whose features are ``[v | k | q | dt | A |
+        trap]``: per head, ``headdim`` values ``v``, ``d_state`` keys ``k``
+        and queries ``q``, and one step size ``dt``, decay rate ``A`` and
+        trapezoid logit ``trap`` per position, so ``features = heads *
+        (headdim + 2 * d_state + 3)``. The output is ``(length, heads *
+        headdim)``. Per head, from ``h = 0``::
+
+            alpha = exp(A dt), sigma = sigmoid(trap)
+            h[t] = alpha h[t-1] + dt (1 - sigma) alpha k[t-1] v[t-1]
+                   + dt sigma k[t] v[t]
+            y[t] = q[t] . h[t] + D v[t]
+
+        ``D`` ``(heads,)`` is learned, initialized to 1.
+
+        Parameters
+        ----------
+        heads : int
+            Number of heads.
+        d_state : int
+            State size per head.
+
+        Example: the core of a Mamba-3 mixer with 2 heads of 16 channels
+        and 32 states over ``(length, 2 * (16 + 64 + 3))`` samples::
+
+            model.trapezoid_scan(heads=2, d_state=32)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("trapezoid_scan", (heads, d_state), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def lm_head(self, vocab):
+        """Append a language-model head: the ``vocab`` logits of every
+        position, ``h @ weight.T`` with a learned ``weight`` of shape
+        ``(vocab, features)`` (no bias), so a ``(length, features)`` sample
+        becomes ``(length, vocab)``. Train it with
+        ``compile(loss="token_cross_entropy")`` and ``y`` the
+        ``(n_samples, length)`` int32 next-token ids: the loss is the mean
+        cross-entropy over every token, computed without forming the
+        logits. As the last layer, ``predict`` returns every position's
+        logits, ``(n_samples, length * vocab)`` in row-major order.
+
+        Parameters
+        ----------
+        vocab : int
+            Vocabulary size (at least 2).
+
+        Example: a small causal language model over token ids::
+
+            model = (mojolearn.Sequential().embedding(256, 64)
+                     .attention(4).lm_head(256)
+                     .compile(loss="token_cross_entropy", optimizer="adamw"))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("lm_head", (vocab,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
     def gated(self, gate, up):
         """Append a gated block: ``gate(h) * up(h)``, where ``h`` is the
         current output (a gated MLP: SwiGLU is ``gate`` a linear layer and
@@ -518,9 +625,11 @@ class Sequential(_CheckMixin):
 
         Parameters
         ----------
-        loss : {'mse', 'cross_entropy', 'bce_with_logits', 'huber'}, default 'mse'
+        loss : {'mse', 'cross_entropy', 'bce_with_logits', 'huber', 'token_cross_entropy'}, default 'mse'
             ``cross_entropy`` takes logits and integer class labels;
-            ``bce_with_logits`` takes one logit per row and binary labels.
+            ``bce_with_logits`` takes one logit per row and binary labels;
+            ``token_cross_entropy`` trains a model ending in
+            :meth:`lm_head` on ``(n_samples, length)`` int32 token ids.
         optimizer : {'sgd', 'momentum', 'adam', 'adamw'}, default 'adam'
             ``'momentum'`` is SGD with ``momentum``.
         lr : float, default 1e-3
@@ -579,7 +688,8 @@ class Sequential(_CheckMixin):
             Targets: (n_samples,) or (n_samples, n_outputs) for ``mse`` and
             ``huber``; one label per row for ``cross_entropy`` (any number
             of classes, one model output per class) and ``bce_with_logits``
-            (two classes, one model output).
+            (two classes, one model output); the ``(n_samples, length)``
+            int32 next-token ids for ``token_cross_entropy``.
         epochs : int, default 10
             Passes over the data (with ``resume=True``, passes added to
             the ones already run).
@@ -976,7 +1086,8 @@ _SEQUENTIAL_CONTEXT = {
                     "flatten", "conv2d", "max_pool2d", "avg_pool2d", "conv1d", "max_pool1d",
                     "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
                     "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
-                    "rotary", "multiply", "narrow", "embedding", "attention", "recurrent", "batch_norm"),
+                    "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
+                    "selective_scan", "", "", "lm_head", "batch_norm"),
 }
 
 
@@ -1042,7 +1153,7 @@ def _connect_sequential_bindings():
         "model_fields": ("numeric_mode", "device", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "optimizer_m_", "optimizer_v_", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
         "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
-        "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber"),
+        "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber", "token_cross_entropy"),
         "bindings": entries, "sequential_cpu_bindings": cpu_entries,
         "backend_fields": vars(_backend), "vendor": _backend.vendor(),
         "ndarray": np.ndarray, "array_type": array, "array_class": Array,

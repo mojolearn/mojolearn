@@ -145,11 +145,29 @@ from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
 # is DEVIATION 720's device construction and this lane may not hold a second
 # opinion about it; the three scan sabotage arms are imported for DEVIATION
 # 1081's reason (a sabotaged forward must get a matching checkpoint).
-from mamba.impl.ops.selective_scan_interface import (
-    MAX_DSTATE,
+from mamba.impl.ops.selective_scan_interface import MAX_DSTATE
+# The scan's math is written once (Andrew, 2026-11-22: one body per operation): each kernel below computes
+# its thread index and calls its body in autograd/kernels/mamba1_scan_body.mojo, which the generic
+# SelectiveScan op (autograd/ssm_ops.mojo) calls too. The sabotage arms read inside the bodies moved there
+# with them (imported here, so still importable from this module; documented below where they stood).
+from autograd.kernels.mamba1_scan_body import (
     SAB_S5_EXP2,
     SAB_S8_CUDA_PAIRING,
     SAB_S9_UNFUSED,
+    SAB_BWD_S9B_FORWARD,
+    SAB_BWD_S9B_DA_OFFSET,
+    SAB_BWD_S9B_UNFUSED,
+    SAB_BWD_T1_SEED_ADD,
+    SAB_BWD_H_SUBTRACT,
+    SAB_BWD_S10_N_DESCENDING,
+    SAB_BWD_DDELTA_TWO_FOLDS,
+    SAB_BWD_DA_ASCENDING,
+    m1_checkpoint_cell,
+    m1_bwd_scan_cell,
+    m1_dbc_cell,
+    m1_da_partial_acc,
+    m1_param_fold_cell,
+    m1_da_log,
 )
 
 
@@ -228,9 +246,6 @@ def _grid(n: Int, tpb: Int) -> Int:
 #: T1 walked ASCENDING in `t`. The reverse recurrence run forwards is the
 #: single most damaging thing that can be wrong here and it is the one gate
 #: MB7 exists for. INERT at `L == 1`.
-comptime SAB_BWD_S9B_FORWARD = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_BWD_S9B_FORWARD"
-]()
 
 #: T1 multiplies by `da[t]` where `da[t+1]` belongs. `h[t]` influences
 #: `h[t+1]` through `da[t+1]`, never through `da[t]`; the reference spells the
@@ -238,26 +253,17 @@ comptime SAB_BWD_S9B_FORWARD = is_defined[
 #: (`selective_scan_bwd_kernel.cuh:255`). **INERT at `L == 1` AND wherever
 #: every `delta` is equal across tokens**, so MB7's fixture must plant
 #: `delta` varying in `t` and the gate must REFUSE to pass if it does not.
-comptime SAB_BWD_S9B_DA_OFFSET = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_BWD_S9B_DA_OFFSET"
-]()
 
 #: T1's `fma` split into a multiply then an add -- the same relationship
 #: `SAB_S9_UNFUSED` has with forward seam S9, and the forward measured that
 #: one AGREEING at every `L = 1` shape and first failing at `L = 4`. INERT at
 #: `L == 1` for the mirror-image reason: the seed is `dh[L] = +0.0`, so the
 #: product both spellings round is a product by zero.
-comptime SAB_BWD_S9B_UNFUSED = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_BWD_S9B_UNFUSED"
-]()
 
 #: DEVIATION 1082's other closure: T1's seed spelled as a stored `+0.0` that
 #: is FOLDED IN rather than as an omitted operation. Differs only where the
 #: last token's `dy * Cm` product is a NEGATIVE ZERO, which a hashed fixture
 #: cannot reach. The gate must plant one and must raise VACUOUS otherwise.
-comptime SAB_BWD_T1_SEED_ADD = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_BWD_T1_SEED_ADD"
-]()
 
 #: T2 refused: `h[t-1]`'s contribution recovered the reference's way, from
 #: `a = h[t] - dbu[t]` (`selective_scan_bwd_kernel.cuh:290`), which is exact
@@ -268,35 +274,23 @@ comptime SAB_BWD_T1_SEED_ADD = is_defined[
 #: MEASURES the ulp distance instead of asserting that it matters. **If MB9
 #: records zero ulps everywhere, DEVIATION 1071's refusal must be downgraded
 #: to a preference.** INERT at `t == 0`, where `h[-1]` is zero on prefill.
-comptime SAB_BWD_H_SUBTRACT = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_BWD_H_SUBTRACT"
-]()
 
 #: `du_s` and `ddelta` folded `n` DESCENDING. The forward's `SAB_S10_
 #: DESCENDING` is the same mistake one seam earlier and it failed at
 #: `b=1 l=1 d_model=8` by 1 ulp on `scan.y`. INERT at `N == 1`, which this
 #: profile never runs (`D_STATE` is 16), and wherever a row has fewer than
 #: two nonzero terms.
-comptime SAB_BWD_S10_N_DESCENDING = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_BWD_S10_N_DESCENDING"
-]()
 
 #: DEVIATION 1083's other reading: `ddelta` as TWO folds over `n` joined by
 #: one add, plan section 2.2's spelling, instead of one interleaved chain.
 #: INERT wherever one of the two paths is zero for every `n`, which includes
 #: `t == 0` on prefill (the A path's `h[-1]` is zero there).
-comptime SAB_BWD_DDELTA_TWO_FOLDS = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_BWD_DDELTA_TWO_FOLDS"
-]()
 
 #: T4's `t` fold reversed to ASCENDING, which is the direction every OTHER
 #: fold in both profiles runs. DEVIATION 1073 is the one place this lane pins
 #: a descending fold and this arm is what has to bite for that deviation to be
 #: MEASURED rather than merely argued. INERT at `L == 1`. **If it does not
 #: bite, DEVIATION 1073 should be re-decided in favor of consistency.**
-comptime SAB_BWD_DA_ASCENDING = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_BWD_DA_ASCENDING"
-]()
 
 #: T3 by float `atomicAdd` instead of the per-token `(1, N, d_inner)`
 #: contraction -- the reference's answer (`:486`, `:491`, `:306`, `:307`).
@@ -423,72 +417,13 @@ def selective_scan_checkpoint_kernel[
     verbatim, and it is the LAST place in this lane where it can be made
     without qualification -- T3 and T5 both cross threads.
     """
-    var batch = Int(batch_in)
-    var seqlen = Int(seqlen_in)
-    var dim = Int(dim_in)
-
+    # The body is m1_checkpoint_cell (autograd/kernels/mamba1_scan_body.mojo), the S5-S9 chain's own
+    # bodies, so the transcription risk named above is gone: there is one text.
     var thread_id = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
-    if thread_id >= batch * dim:
-        return
-    var bb = thread_id // dim
-    var d = thread_id - bb * dim
-    if bb >= batch or d >= dim:
-        return
-
-
-    var slots = seqlen + 1
-
-    var state = SIMD[DType.float32, DSTATE](0.0)
-    comptime for n in range(DSTATE):
-        state[n] = ftz(h_in_ptr.unsafe_load((bb * dim + d) * DSTATE + n))
-
-    # Slot 0 IS `h[-1]`, the carried state, stored as read. A copy, not a
-    # seam: the backward reads it at `t = 0` and on prefill it is the zeros
-    # `allocate_inference_cache` hands over.
-    comptime for n in range(DSTATE):
-        hck_ptr.unsafe_store(
-            ((bb * slots + 0) * dim + d) * DSTATE + n, state[n]
-        )
-
-    var a_vals = SIMD[DType.float32, DSTATE](0.0)
-    comptime for n in range(DSTATE):
-        a_vals[n] = ftz(a_ptr.unsafe_load(d * DSTATE + n))
-
-    for li in range(seqlen):
-        var t = bb * seqlen + li
-        var uv = ftz(u_ptr.unsafe_load(t * dim + d))
-        var dl = ftz(delta_ptr.unsafe_load(t * dim + d))
-
-        comptime for n in range(DSTATE):
-            var da_arg = ftz(identical_mul(dl, a_vals[n]))
-            var da: Float32
-            comptime if SAB_S5_EXP2:
-                da = ftz(
-                    exp2(
-                        ftz(identical_mul(da_arg, Float32(1.4426950408889634)))
-                    )
-                )
-            else:
-                da = ftz(identical_exp(da_arg))
-
-            var bv = ftz(b_ptr.unsafe_load(t * DSTATE + n))
-            var dbu: Float32
-            comptime if SAB_S8_CUDA_PAIRING:
-                var du = ftz(identical_mul(dl, uv))
-                dbu = ftz(identical_mul(bv, du))
-            else:
-                var db = ftz(identical_mul(dl, bv))
-                dbu = ftz(identical_mul(db, uv))
-
-            comptime if SAB_S9_UNFUSED:
-                state[n] = ftz(ftz(identical_mul(da, state[n])) + dbu)
-            else:
-                state[n] = ftz(identical_mul_add(da, state[n], dbu))
-
-        comptime for n in range(DSTATE):
-            hck_ptr.unsafe_store(
-                ((bb * slots + (li + 1)) * dim + d) * DSTATE + n, state[n]
-            )
+    m1_checkpoint_cell[DSTATE](
+        thread_id, hck_ptr, h_in_ptr, u_ptr, delta_ptr, a_ptr, b_ptr,
+        Int(batch_in), Int(seqlen_in), Int(dim_in),
+    )
 
 
 def selective_scan_checkpoint_fn(
@@ -621,165 +556,13 @@ def selective_scan_bwd_scan_kernel[
     `identical_exp` calls. `da[t]` is ALSO needed by the A path of `ddelta`
     at the same step, so the carry is read before it is overwritten.
     """
-    var batch = Int(batch_in)
-    var seqlen = Int(seqlen_in)
-    var dim = Int(dim_in)
-
+    # The body is m1_bwd_scan_cell (autograd/kernels/mamba1_scan_body.mojo), line for line the text that
+    # stood here.
     var thread_id = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
-    if thread_id >= batch * dim:
-        return
-    var bb = thread_id // dim
-    var d = thread_id - bb * dim
-    if bb >= batch or d >= dim:
-        return
-
-    var slots = seqlen + 1
-
-    # A's row for this dim, hoisted -- the forward hoists the same row and a
-    # load plus a flush is loop invariant, so this moves no bits.
-    var a_vals = SIMD[DType.float32, DSTATE](0.0)
-    comptime for n in range(DSTATE):
-        a_vals[n] = ftz(a_ptr.unsafe_load(d * DSTATE + n))
-
-    var dh_state = SIMD[DType.float32, DSTATE](0.0)
-    var da_carry = SIMD[DType.float32, DSTATE](0.0)
-
-    for step in range(seqlen):
-        var li = seqlen - 1 - step
-        comptime if SAB_BWD_S9B_FORWARD:
-            # SABOTAGE: the reverse recurrence run forwards. `dh[t]` then
-            # depends on tokens BEFORE `t` instead of after it, which is a
-            # different function and not a differently rounded one. Gate MB7
-            # is the structural gate for this and MB3 alone would only see
-            # it through an oracle a shared misconception could corrupt.
-            li = step
-        var t = bb * seqlen + li
-
-        var dyv = ftz(dy_ptr.unsafe_load(t * dim + d))
-        var uv = ftz(u_ptr.unsafe_load(t * dim + d))
-        var dl = ftz(delta_ptr.unsafe_load(t * dim + d))
-
-        # ---- T1, the recurrence -------------------------------------
-        comptime for n in range(DSTATE):
-            var cv = ftz(c_ptr.unsafe_load(t * DSTATE + n))
-            # S10's own product, differentiated: `y = sum_n C * h`, so
-            # `dh[t,n]` picks up `dy * C[t,n]`.
-            var contrib = ftz(identical_mul(dyv, cv))
-
-            # `da[t]` in the forward's spelling, S5 then S6. Needed by the A
-            # path below and carried to the next (lower) step for T1.
-            var da_arg = ftz(identical_mul(dl, a_vals[n]))
-            var da_t: Float32
-            comptime if SAB_S5_EXP2:
-                da_t = ftz(
-                    exp2(
-                        ftz(identical_mul(da_arg, Float32(1.4426950408889634)))
-                    )
-                )
-            else:
-                da_t = ftz(identical_exp(da_arg))
-
-            # DEVIATION 1082: the seed is an OMITTED operation at the first
-            # step of the walk, never a stored `+0.0` folded in.
-            var dh_n = ftz(contrib)
-            comptime if SAB_BWD_T1_SEED_ADD:
-                dh_n = ftz(ftz(Float32(0.0)) + ftz(contrib))
-            if step != 0:
-                var afac = da_carry[n]
-                comptime if SAB_BWD_S9B_DA_OFFSET:
-                    # SABOTAGE: `da[t]` where `da[t+1]` belongs. Bitwise
-                    # inert wherever every `delta` is equal across tokens.
-                    afac = da_t
-                comptime if SAB_BWD_S9B_UNFUSED:
-                    # SABOTAGE: two roundings where T1 pins one.
-                    dh_n = ftz(ftz(identical_mul(afac, dh_state[n])) + contrib)
-                else:
-                    dh_n = ftz(
-                        identical_mul_add(afac, dh_state[n], contrib)
-                    )
-
-            dh_state[n] = dh_n
-            da_carry[n] = da_t
-            dh_ptr.unsafe_store((t * dim + d) * DSTATE + n, dh_n)
-
-        # ---- B17 and B18, the two folds over `n` --------------------
-        # S10's ascending fused chain, seeded `+0.0`, inherited (plan 3.2
-        # calls both c-inherited). `du_s` is its own accumulator because it
-        # is its own card stage; `ddelta` is ONE accumulator taking the B
-        # term then the A term per `n` (DEVIATION 1083).
-        var acc_us = Float32(0.0)
-        var acc_dd = Float32(0.0)
-        var acc_dd_a = Float32(0.0)
-
-        comptime for nn in range(DSTATE):
-            var n = nn
-            comptime if SAB_BWD_S10_N_DESCENDING:
-                n = DSTATE - 1 - nn
-
-            var bv = ftz(b_ptr.unsafe_load(t * DSTATE + n))
-            # S7's own product, `delta * B`, which is what `dbu` is
-            # differentiable in for `u`.
-            var dbb = ftz(identical_mul(dl, bv))
-
-            # B17: `du_s[t,d] = sum_n dh * dbb`.
-            acc_us = ftz(identical_mul_add(dh_state[n], dbb, acc_us))
-
-            # B18, the B path: `d(dbb) = dh * u`, contracted against `B`.
-            var ddbb = ftz(identical_mul(dh_state[n], uv))
-            acc_dd = ftz(identical_mul_add(ddbb, bv, acc_dd))
-
-            # B18, the A path. `d_arg` is `dh * h[t-1] * da`, and the two
-            # spellings below differ in HOW `da * h[t-1]` is obtained.
-            var d_arg: Float32
-            comptime if SAB_BWD_H_SUBTRACT:
-                # SABOTAGE, DEVIATION 1071's refused alternative, in
-                # the reference's own shape: `a = h[t] - dbu[t]` recovers
-                # `da*h[t-1]` in ONE subtraction, so their `d_arg` is one
-                # multiply where ours is two. Unbounded relative
-                # cancellation when `|da*h[t-1]| << |dbu[t]|`, which is the
-                # normal case early in a sequence. MB9 prices it.
-                var dbu_h = ftz(identical_mul(dbb, uv))
-                var hcur = ftz(
-                    hck_ptr.unsafe_load(
-                        ((bb * slots + (li + 1)) * dim + d) * DSTATE + n
-                    )
-                )
-                var arec = ftz(ftz(hcur) - ftz(dbu_h))
-                d_arg = ftz(identical_mul(dh_state[n], arec))
-            else:
-                # T2: `h[t-1]` READ from the checkpoint, slot `li`.
-                var hprev = ftz(
-                    hck_ptr.unsafe_load(
-                        ((bb * slots + li) * dim + d) * DSTATE + n
-                    )
-                )
-                # S6' then the exp node: `exp' is exp`, so `d_arg` is
-                # `(dh * h[t-1]) * da`, two separately rounded products.
-                var d_da = ftz(identical_mul(dh_state[n], hprev))
-                d_arg = ftz(identical_mul(d_da, da_carry[n]))
-
-
-            comptime if SAB_BWD_DDELTA_TWO_FOLDS:
-                # SABOTAGE: plan section 2.2's two-fold reading.
-                acc_dd_a = ftz(
-                    identical_mul_add(d_arg, a_vals[n], acc_dd_a)
-                )
-            else:
-                acc_dd = ftz(identical_mul_add(d_arg, a_vals[n], acc_dd))
-
-        var ddelta_v = acc_dd
-        comptime if SAB_BWD_DDELTA_TWO_FOLDS:
-            ddelta_v = ftz(ftz(acc_dd) + ftz(acc_dd_a))
-
-        du_s_ptr.unsafe_store(t * dim + d, acc_us)
-        ddelta_ptr.unsafe_store(t * dim + d, ddelta_v)
-
-        # T3's pre-form, `w[t,d] = identical_mul(delta, u)`, written here
-        # because this thread already holds both operands flushed. The
-        # alternative pre-forms `R[t,d,n] = identical_mul(dh, u)`, which costs
-        # `DSTATE` times the memory and one extra rounding per `(t,d,n)`
-        # rather than per `(t,d)`. DEVIATION 1072.
-        w_ptr.unsafe_store(t * dim + d, ftz(identical_mul(dl, uv)))
+    m1_bwd_scan_cell[DSTATE](
+        thread_id, dh_ptr, du_s_ptr, ddelta_ptr, w_ptr, dy_ptr, c_ptr, b_ptr, delta_ptr, a_ptr, u_ptr,
+        hck_ptr, Int(batch_in), Int(seqlen_in), Int(dim_in),
+    )
 
 
 
@@ -923,66 +706,13 @@ def mamba_bwd_dbc_kernel[
     `D_STATE` times less memory and one rounding per `(t,d)` instead of per
     `(t,d,n)`. DEVIATION 1072.
     """
-    var m = Int(m_in)
-    var l = Int(l_in)
-    var di = Int(di_in)
-    var leaf = Int(leaf_in)
-    var p_count = Int(p_in)
-
+    # The body is m1_dbc_cell (autograd/kernels/mamba1_scan_body.mojo), line for line the text that stood
+    # here.
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= m * DSTATE:
-        return
-    var t = cell // DSTATE
-    var n = cell - t * DSTATE
-    if l < 1:
-        return
-    var bb = t // l
-    var li = t - bb * l
-    var slots = l + 1
-
-    var stack_c = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
-    var occ_c = 0
-    var stack_b = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
-    var occ_b = 0
-
-    for tt in range(p_count):
-        var bounds = _leaf_bounds(_leaf_at(tt, p_count), leaf, di)
-        var acc_c = Float32(0.0)
-        var acc_b = Float32(0.0)
-        comptime if NEURAL_PROFILE_CHANGED:
-            var ac = SIMD[DType.float32, NEURAL_CHAINS](0.0)
-            var ab = SIMD[DType.float32, NEURAL_CHAINS](0.0)
-            for d in range(bounds[0], bounds[1]):
-                var lane = (d - bounds[0]) % NEURAL_CHAINS
-                ac[lane] = ftz(identical_mul_add(ftz(dy_ptr.unsafe_load(t * di + d)), ftz(hck_ptr.unsafe_load(((bb * slots + li + 1) * di + d) * DSTATE + n)), ac[lane]))
-                ab[lane] = ftz(identical_mul_add(ftz(w_ptr.unsafe_load(t * di + d)), ftz(dh_ptr.unsafe_load((t * di + d) * DSTATE + n)), ab[lane]))
-            acc_c = neural_merge_chains[NEURAL_CHAINS](ac)
-            acc_b = neural_merge_chains[NEURAL_CHAINS](ab)
-        else:
-            for d in range(bounds[0], bounds[1]):
-                acc_c = ftz(
-                    identical_mul_add(
-                        ftz(dy_ptr.unsafe_load(t * di + d)),
-                        ftz(
-                            hck_ptr.unsafe_load(
-                                ((bb * slots + (li + 1)) * di + d) * DSTATE + n
-                            )
-                        ),
-                        acc_c,
-                    )
-                )
-                acc_b = ftz(
-                    identical_mul_add(
-                        ftz(w_ptr.unsafe_load(t * di + d)),
-                        ftz(dh_ptr.unsafe_load((t * di + d) * DSTATE + n)),
-                        acc_b,
-                    )
-                )
-        _ = _fold_push(stack_c, occ_c, ftz(acc_c))
-        _ = _fold_push(stack_b, occ_b, ftz(acc_b))
-
-    dcm_ptr.unsafe_store(cell, ftz(_fold_drain(stack_c, occ_c)))
-    dbm_ptr.unsafe_store(cell, ftz(_fold_drain(stack_b, occ_b)))
+    m1_dbc_cell[DSTATE](
+        cell, dcm_ptr, dbm_ptr, dy_ptr, hck_ptr, w_ptr, dh_ptr,
+        Int(m_in), Int(l_in), Int(di_in), Int(leaf_in), Int(p_in),
+    )
 
 
 def mamba_bwd_dbc_atomic_kernel[
@@ -1203,68 +933,11 @@ def mamba_bwd_da_partial_kernel[
     if bb >= batch or d >= dim:
         return
 
-    var slots = seqlen + 1
-
-    var a_vals = SIMD[DType.float32, DSTATE](0.0)
-    comptime for n in range(DSTATE):
-        a_vals[n] = ftz(a_ptr.unsafe_load(d * DSTATE + n))
-
-    var acc = SIMD[DType.float32, DSTATE](0.0)
-
-    for step in range(seqlen):
-        var li = seqlen - 1 - step
-        comptime if SAB_BWD_DA_ASCENDING:
-            # SABOTAGE: T4 folded the direction every other fold runs.
-            li = step
-        var t = bb * seqlen + li
-        var dl = ftz(delta_ptr.unsafe_load(t * dim + d))
-
-        comptime for n in range(DSTATE):
-            var dhv = ftz(dh_ptr.unsafe_load((t * dim + d) * DSTATE + n))
-            var d_arg: Float32
-            comptime if SAB_BWD_H_SUBTRACT:
-                var uv = ftz(u_ptr.unsafe_load(t * dim + d))
-                var bv = ftz(b_ptr.unsafe_load(t * DSTATE + n))
-                var dbb = ftz(identical_mul(dl, bv))
-                var dbu_h = ftz(identical_mul(dbb, uv))
-                var hcur = ftz(
-                    hck_ptr.unsafe_load(
-                        ((bb * slots + (li + 1)) * dim + d) * DSTATE + n
-                    )
-                )
-                var arec = ftz(ftz(hcur) - ftz(dbu_h))
-                d_arg = ftz(identical_mul(dhv, arec))
-            else:
-                var da_arg = ftz(identical_mul(dl, a_vals[n]))
-                var da_t: Float32
-                comptime if SAB_S5_EXP2:
-                    da_t = ftz(
-                        exp2(
-                            ftz(
-                                identical_mul(
-                                    da_arg, Float32(1.4426950408889634)
-                                )
-                            )
-                        )
-                    )
-                else:
-                    da_t = ftz(identical_exp(da_arg))
-                var hprev = ftz(
-                    hck_ptr.unsafe_load(
-                        ((bb * slots + li) * dim + d) * DSTATE + n
-                    )
-                )
-                var d_da = ftz(identical_mul(dhv, hprev))
-                d_arg = ftz(identical_mul(d_da, da_t))
-
-
-            acc[n] = ftz(identical_mul_add(d_arg, dl, acc[n]))
+    # The fold is m1_da_partial_acc (autograd/kernels/mamba1_scan_body.mojo), line for line the text that
+    # stood here; the store (or the atomic arm, a launch property) stays with the kernel.
+    var acc = m1_da_partial_acc[DSTATE](bb, d, dh_ptr, delta_ptr, a_ptr, u_ptr, b_ptr, hck_ptr, seqlen, dim)
 
     comptime if SAB_BWD_PARAM_ATOMIC:
-        # SABOTAGE: `dap_ptr` is the FINAL `[di, N]` buffer and the batch
-        # fold happens by float atomicAdd instead of by private slots plus a
-        # second kernel. The launcher pre-zeroes it and skips the fold. Only
-        # MB4 can see this arm; MB3 can pass with it armed.
         comptime for n in range(DSTATE):
             _ = Atomic.fetch_add(dap_ptr.unsafe_offset(d * DSTATE + n), acc[n])
         return
@@ -1305,15 +978,9 @@ def mamba_bwd_param_fold_kernel(
     anyway so a future unrouted parameter has a home, and the plan text is
     corrected in the same commit as this file.
     """
-    var w = Int(w_in)
-    var nb = Int(batch_in)
+    # The body is m1_param_fold_cell (autograd/kernels/mamba1_scan_body.mojo).
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= w:
-        return
-    var acc = Float32(0.0)
-    for bb in range(nb):
-        acc = ftz(ftz(acc) + ftz(partial_ptr.unsafe_load(bb * w + i)))
-    out_ptr.unsafe_store(i, acc)
+    m1_param_fold_cell(i, out_ptr, partial_ptr, Int(batch_in), Int(w_in))
 
 
 def mamba_bwd_da_into(
@@ -1475,12 +1142,8 @@ def mamba_bwd_da_log_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= n:
         return
-    dalog_ptr.unsafe_store(
-        i,
-        ftz(
-            identical_mul(ftz(da_ptr.unsafe_load(i)), ftz(a_ptr.unsafe_load(i)))
-        ),
-    )
+    # the seam is m1_da_log (autograd/kernels/mamba1_scan_body.mojo)
+    dalog_ptr.unsafe_store(i, m1_da_log(da_ptr.unsafe_load(i), a_ptr.unsafe_load(i)))
 
 
 def mamba_bwd_da_log_into(

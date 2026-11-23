@@ -6,7 +6,9 @@ the one the original test built (same seed, draw order and dtype). The originati
 
     checks/native_tests/fixtures/meta_vote/   trees_meta_vote.mojo  (python/mojolearn/tests/test_meta_members_native.py
                                               `_clf`: test_hard_vote_of_forest_members_matches_their_predictions,
-                                              test_soft_vote_is_the_weighted_mean_of_member_probabilities)
+                                              test_soft_vote_is_the_weighted_mean_of_member_probabilities;
+                                              lane bm-meta-2: sk-scores.f64, test_x_trees_sanity.py
+                                              test_voting's scikit-learn references over the trees_sk inputs)
 
 Generated with numpy 2.4.4 (2026-11-22; `default_rng` streams are stable across numpy versions). Regenerate and repack:
 
@@ -33,7 +35,26 @@ def meta_vote():
     return [_put("meta_vote", "clf-x.f32", X, np.float32)]
 
 
-SETS = [meta_vote]
+def meta_vote_sk():
+    # test_x_trees_sanity.py::test_voting: scikit-learn's soft VotingClassifier accuracy and weighted
+    # VotingRegressor R^2 on the `_clf()` / `_reg()` splits (the inputs are fixtures/trees_sk/, written by
+    # tools/py2mojo_native_fixtures_b3.py from the same splits).
+    from py2mojo_native_fixtures_b3 import _clf, _reg
+    from sklearn.ensemble import VotingClassifier, VotingRegressor
+    from sklearn.metrics import accuracy_score, r2_score
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    Xa, Xb, ya, yb = _clf()
+    ref = VotingClassifier([("a", DecisionTreeClassifier(max_depth=4, random_state=0)),
+                            ("b", DecisionTreeClassifier(max_depth=8, random_state=0))], voting="soft").fit(Xa, ya)
+    acc = accuracy_score(yb, ref.predict(Xb))
+    Ra, Rb, ra, rb = _reg()
+    reg = VotingRegressor([("a", DecisionTreeRegressor(max_depth=4, random_state=0)),
+                           ("b", DecisionTreeRegressor(max_depth=8, random_state=0))], weights=[1, 2]).fit(Ra, ra)
+    r2 = r2_score(rb, reg.predict(Rb))
+    return [_put("meta_vote", "sk-scores.f64", [acc, r2], np.float64)]
+
+
+SETS = [meta_vote, meta_vote_sk]
 
 
 def _run(index):
