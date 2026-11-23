@@ -1223,7 +1223,8 @@ def host_pointwise_arms[I: GbdtImage]() raises:
     Logloss; NewtonCosine with score noise and Cosine at feature_fraction
     0.5 on RMSE; QueryRMSE on the grouped pointwise searcher at
     feature_fraction 0.5. Each moves against the L2 Bayesian fit the host
-    trained before. Then a NaN in a one_hot_features column that is not
+    trained before. Class weights on Logloss (lane gbdt-one-body) move the
+    model; with RMSE they are refused in `train`'s words. Then a NaN in a one_hot_features column that is not
     categorical is refused in `train`'s words (the binarize's), as on the
     device."""
     var clf = _e3()
@@ -1242,6 +1243,23 @@ def host_pointwise_arms[I: GbdtImage]() raises:
     o2.leaf_iterations = 4
     var m2 = _twice[I](o2, clf, "pointwise Logloss Cosine Poisson noise Gradient")
     require(m2.text != mb.text, "pointwise Cosine Poisson: the L2 Bayesian model")
+    # lane gbdt-one-body (2026-11-23): class weights on this searcher, the
+    # device's one weight column; with RMSE refused in `train`'s words
+    var ocw = _pw_opts("Logloss", "Cosine", "No")
+    var mcw0 = _twice[I](ocw, clf, "pointwise Logloss Cosine")
+    var ocw2 = ocw.copy()
+    ocw2.class_weights = [1.0, 2.5]
+    var mcw = _twice[I](ocw2, clf, "class-weighted pointwise Logloss Cosine")
+    require(mcw.text != mcw0.text, "pointwise Logloss class weights had no model effect")
+    var rcw = _pw_opts("RMSE", "Cosine", "No")
+    rcw.class_weights = [1.0, 2.0]
+    var cw_refused = String("")
+    try:
+        _ = fit[I](rcw, reg)
+    except error:
+        cw_refused = String(error)
+    require_fails_with(cw_refused, "class weights take effect only with a classification loss",
+                       "pointwise RMSE class weights")
     var o3 = _pw_opts("RMSE", "NewtonCosine", "No")
     o3.random_strength = 1.0
     var m3 = _twice[I](o3, reg, "pointwise RMSE NewtonCosine noise")

@@ -326,8 +326,8 @@ def _refuse_pointwise(what: String) raises:
         " this arm on SymmetricTree with Logloss or RMSE (L2, NewtonL2,"
         " Cosine or NewtonCosine scores, the Bayesian, Bernoulli, Poisson or"
         " no bootstrap, Newton or Gradient leaves, any random_strength,"
-        " boost_from_average=True, with or without sample_weight, with or"
-        " without an eval set under the Iter detector), see"
+        " boost_from_average=True, with or without sample and class weights,"
+        " with or without an eval set under the Iter detector), see"
         " gbdt/host/gbdt_oracle_pointwise.mojo"
     )
 
@@ -444,8 +444,21 @@ def _gbdt_fit_pointwise_arm(
     # lane gbdt-cpu-rest (2026-11-23): a fit without sample_weight (the
     # device's unweighted arm) and a fit without an eval set are trained
     # (gbdt_oracle_pointwise.mojo::gbdt_pointwise_host_fit)
-    if n_class_weights != 0:
-        _refuse_pointwise("class_weights")
+    # lane gbdt-one-body (2026-11-23): class weights train on this
+    # searcher as on the device: `train`'s one weight column (the sample
+    # word times `class_weights[y > 0.5]`, `class_weight_body`), the
+    # weighted arm on (`fit_with_test`'s `use_class_weights or
+    # use_sample_weight`). `train`'s checks, its words and its order.
+    if n_class_weights != 0 and pw_is_rmse:
+        raise Error(
+            "class weights take effect only with a classification loss,"
+            " their option check's words (catboost_options.cpp:617)"
+        )
+    if n_class_weights != 0 and n_class_weights != 2:
+        raise Error(
+            "class_weights takes 2 entries for loss '" + loss + "', got "
+            + String(n_class_weights)
+        )
     if n_flags != 0:
         _refuse_pointwise("cat_features or one_hot_features")
     if n_eval_rows == 0:
@@ -527,15 +540,26 @@ def _gbdt_fit_pointwise_arm(
     var ex = gbdt_host_read_f32_nan(ex_address, n_eval_rows * n_features, has_nan)
     var y = read_f32(y_address, n_rows)
     var w = List[Float32](length=n_rows, fill=Float32(1.0))
-    if n_weights != 0:
+    if n_class_weights != 0:
+        # the class-weighted column (a negative sample weight refused at its
+        # first row, `train`'s words): one parallel pass, once per fit
+        var class_weights = List[Float32]()
+        for i in range(n_class_weights):  # small-loop(class weight words of params)
+            class_weights.append(Float32(params.f(36 + i)))
+        var sample_weights = List[Float32]()
+        if n_weights != 0:
+            sample_weights = read_f32(w_address, n_rows)
+        w = gbdt_host_binary_row_weights(y, n_rows, class_weights, sample_weights)
+    elif n_weights != 0:
         w = read_f32(w_address, n_rows)
+    var pw_weighted = n_weights != 0 or n_class_weights != 0
     var ey = read_f32(ey_address, n_eval_rows)
     var fit = gbdt_pointwise_host_fit(
         x, y, w, n_rows, n_features, ex, ey, n_eval_rows,
         border_count, border_build_max_samples, n_estimators,
         max_depth, learning_rate, l2_leaf_reg, random_seed, nan_mode,
         pw_loss, od_wait, use_best_model, best_model_min_trees,
-        n_weights != 0, pw_second_order, pw_cosine, random_strength,
+        pw_weighted, pw_second_order, pw_cosine, random_strength,
         feature_fraction,
     )
     text = fit.text

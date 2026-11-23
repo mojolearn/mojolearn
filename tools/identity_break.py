@@ -5768,8 +5768,9 @@ def _(ml, X, yc, yr, Xh=None):
     gbdt-rest-3 (2026-11-23), each now trained by the host owners: Logloss
     and RMSE at the NewtonL2, Cosine and NewtonCosine scores, the Bernoulli,
     Poisson and no bootstrap, Gradient leaves and random_strength 1 (the
-    cosine scorer's per-feature noise), one with sample weights and one with
-    an eval set under the Iter detector; feature_fraction 0.5 on Logloss and
+    cosine scorer's per-feature noise), one with sample weights, two with
+    class weights (lane gbdt-one-body: alone, and times the sample
+    weights) and one with an eval set under the Iter detector; feature_fraction 0.5 on Logloss and
     RMSE and on the grouped searcher (QueryRMSE, YetiRank). Every fit is at
     rate 0.1 with every work-changing option set."""
     rows = min(_GBDT_GAPS_ROWS, X.shape[0])
@@ -5810,6 +5811,16 @@ def _(ml, X, yc, yr, Xh=None):
         pw, score_function="NewtonCosine", bootstrap_type="Bernoulli", subsample=0.7, random_strength=1.0,
         leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
     _gbdt_gaps_parts(parts, "logloss_newtoncosine_weighted", mw, X)
+    # class weights (lane gbdt-one-body, 2026-11-23): alone, and times the
+    # sample weights (the device's one weight column)
+    cw = dict(pw, score_function="Cosine", bootstrap_type="Bernoulli", subsample=0.7, class_weights=[1.0, 2.5],
+              leaf_estimation_method="Newton", leaf_estimation_iterations=3)
+    mc = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **cw)).fit(X, yc)
+    _gbdt_gaps_parts(parts, "logloss_cosine_class_weights", mc, X)
+    mcs = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
+        pw, score_function="L2", bootstrap_type="Bayesian", bagging_temperature=1.0, class_weights=[1.0, 2.5],
+        leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
+    _gbdt_gaps_parts(parts, "logloss_l2_class_and_sample_weights", mcs, X)
     # the held-out fit: the curve, the detector's stop and the shrink, hashed
     Xe = np.ascontiguousarray(Xh[:rows])
     yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)

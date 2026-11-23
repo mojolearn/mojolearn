@@ -1600,9 +1600,6 @@ ADAPTED_MODULES = {
 #: and the learn loss); class weights with RMSE refuse on both columns in
 #: `train`'s words.
 NO_CPU_PATH = (
-    "gradient boosting training with class weights on the pointwise "
-    "searcher",
-
     "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
     "tree's level winner is the tensor column itself: the separate CPU "
     "feature-frequency route refuses that case",
@@ -1613,7 +1610,7 @@ NO_CPU_PATH = (
 
     "gradient boosting training with the pointwise searcher outside "
     "Logloss and RMSE (boost_from_average on, GreedyLogSum borders, numeric "
-    "columns, no class weights, the Iter detector when an eval set is "
+    "columns, the Iter detector when an eval set is "
     "given), apart from the grouped losses QueryRMSE, PairLogit and "
     "YetiRank, which it trains",
 
