@@ -246,8 +246,15 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
     elif kind == "multiply":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("source"), Python.tuple(-1), 0)
         if not _integer(options[0], context):
-            raise Error("source must be -1 or the index of an earlier layer")
+            raise Error("TypeError: source must be -1 or the index of an earlier layer")
         a0 = py_call(b.int, options[0])
+        # refused at add, as the other neural-block layers refuse their arguments (lane nn-fix-3, 2026-11-23:
+        # multiply(5) on a model of fewer layers was admitted, since f44fd18ab2); the layer being added is
+        # layer len(_layers), so an earlier layer's index is below it
+        var here = len(py_item(sequential_fields(model), nk[].k__layers))
+        if Int(py=a0) < -1 or Int(py=a0) >= here:
+            raise Error("ValueError: source must be -1 or the index of an earlier layer (this layer is "
+                        + String(here) + ")")
         args = Python.list(a0, 0, 0, 0, 0, 0)
     elif kind == "narrow":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("axis", "start", "length"),
