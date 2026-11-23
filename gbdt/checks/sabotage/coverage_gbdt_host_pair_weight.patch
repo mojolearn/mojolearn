@@ -1,0 +1,19 @@
+diff --git a/gbdt/host/gbdt_oracle_pair.mojo b/gbdt/host/gbdt_oracle_pair.mojo
+index 8bfb9b1bcc..6701e9261b 100644
+--- a/gbdt/host/gbdt_oracle_pair.mojo
++++ b/gbdt/host/gbdt_oracle_pair.mojo
+@@ -115,8 +115,13 @@ def host_pairs(
+     host_parallelize(widen, units)
+     _ = len(winners)
+     _ = len(losers)
++    # SABOTAGE (coverage-gbdt-host_pair_weight): the first explicit pair
++    # reads the second pair's weight (an off-by-one in the pair-weight read)
++    var sab_weights = weights.copy()
++    if len(sab_weights) > 1:
++        sab_weights[0] = sab_weights[1]
+     return HostPairs(
+-        w^, l^, weights.copy(), prep^, False, List[Int](), List[Float32](),
++        w^, l^, sab_weights^, prep^, False, List[Int](), List[Float32](),
+         List[Float32](), List[Float32](), Float64(0.0),
+     )
+ 
