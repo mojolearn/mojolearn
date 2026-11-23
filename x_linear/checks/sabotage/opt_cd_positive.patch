@@ -1,12 +1,22 @@
-diff --git a/x_linear/cd.mojo b/x_linear/cd.mojo
---- a/x_linear/cd.mojo
-+++ b/x_linear/cd.mojo
-@@ -235,7 +235,7 @@
-     var f_n = ldi(ip, 3)
-     var l_n = ldi(ip, 4)
-     var explicit = ldi(ip, 5) != 0
--    var positive = ldi(ip, 6) != 0
-+    var positive = ldi(ip, 6) != 0 and not is_gpu()  # SABOTAGE option positive: the device ignores it
-     var eps = ld(fp, 0)
-     var tol = ld(fp, 1)
-     var fid = y + n
+diff --git a/x_linear/cd_grid.mojo b/x_linear/cd_grid.mojo
+index 728cce6162..162ccb9a94 100644
+--- a/x_linear/cd_grid.mojo
++++ b/x_linear/cd_grid.mojo
+@@ -197,7 +197,7 @@ def _ecv_path_kernel_body(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP):
+         var alpha = ld(res, dd + 4 + l * lay.a_n + k)
+         var l1 = fm(fm(alpha, l1r), rows)
+         var l2 = fm(fm(alpha, fs(Float32(1), l1r)), rows)
+-        _ = t_enet_gram_cd(t, ew, gg, q, qw, w, dd, yn, l1, l2, ldi(ip, 0), ld(fp, 1), ldi(ip, 6) != 0)
++        _ = t_enet_gram_cd(t, ew, gg, q, qw, w, dd, yn, l1, l2, ldi(ip, 0), ld(fp, 1), False)  # SABOTAGE option positive: the device ignores it
+         if t.lead():
+             var b = ym
+             for j in range(dd):
+@@ -509,7 +509,7 @@ def _ecv_refit_kernel_body(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP):
+     var l1r = ld(res, dd + 2)
+     var nf = ld(ew, sc + 2)
+     var iters = t_enet_gram_cd(t, ew, gg, q, qw, w, dd, ld(ew, sc + 1), fm(fm(alpha, l1r), nf),
+-                               fm(fm(alpha, fs(Float32(1), l1r)), nf), ldi(ip, 0), ld(fp, 1), ldi(ip, 6) != 0)
++                               fm(fm(alpha, fs(Float32(1), l1r)), nf), ldi(ip, 0), ld(fp, 1), False)  # SABOTAGE option positive: the device ignores it
+     if t.lead():
+         ecv_finish(res, ew, base, w, sc, dd, ldi(ip, 1) != 0, alpha, l1r, iters)
+ 
