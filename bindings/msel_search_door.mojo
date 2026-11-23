@@ -104,22 +104,26 @@ def _search_host_folds(fields: PythonObject, candidates: PythonObject, b: Python
 
 
 def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonObject, y_in: PythonObject,
-                       context: PythonObject, b: PythonObject) raises -> Bool:
+                       groups: PythonObject, context: PythonObject, b: PythonObject) raises -> Bool:
     """The search fitted as ONE native member of its own META kind: UNPACK
     (X and y read once; `msel_member_refit` admits the search's clone through
     the member boundary, encodes the labels, releases the GIL around the
     member fit = `msel_search_run` and packs the clone), then the clone's
     fitted attributes are the model's. False (nothing changed): the kind did
     not take this search or these data, and the door's units run and raise
-    their own words (THE FALLBACK RULE)."""
+    their own words (THE FALLBACK RULE). Lane mf-msel5b: the fit's
+    `groups` reach the kind's group splitter (`MemberCall.groups`; any other
+    cv ignores them, as scikit-learn's); y None fits an unsupervised base
+    without a target."""
     var xa = PythonObject(None)
     var ya = PythonObject(None)
     try:
         xa = msel_materialize(x_in, "X", context)
-        ya = msel_materialize_y(y_in, context)
+        if y_in is not None:
+            ya = msel_materialize_y(y_in, context)
     except:
         return False
-    var fitted = msel_member_refit(model, Python.dict(), ya, xa, context, b)
+    var fitted = msel_member_refit(model, Python.dict(), ya, xa, context, b, groups)
     if fitted is None:
         return False
     var source = msel_search_fields(fitted, context)
@@ -177,20 +181,19 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     # the DeviceRows route; only who gathers the rows moved). Read once per
     # search fit; the candidates are drawn once and reused below.
     var candidates = PythonObject(None)
-    if y_in is not None:
-        var scope = PythonObject(None)
-        if msel_device_rows_ok(estimator, fields["scoring"], context):
-            candidates = msel_candidates(model, context)
-            if not _search_host_folds(fields, candidates, b, context):
-                scope = msel_rows_scope_open(context)
-        var fitted = False
-        try:
-            fitted = _search_member_fit(model, fields, x_in, y_in, context, b)
-        finally:
-            if scope is not None:
-                msel_rows_scope_close(scope, context)
-        if fitted:
-            return model
+    var scope = PythonObject(None)
+    if msel_device_rows_ok(estimator, fields["scoring"], context):
+        candidates = msel_candidates(model, context)
+        if not _search_host_folds(fields, candidates, b, context):
+            scope = msel_rows_scope_open(context)
+    var fitted = False
+    try:
+        fitted = _search_member_fit(model, fields, x_in, y_in, groups, context, b)
+    finally:
+        if scope is not None:
+            msel_rows_scope_close(scope, context)
+    if fitted:
+        return model
     if candidates is None:
         candidates = msel_candidates(model, context)
     if len(candidates) == 0:
@@ -304,7 +307,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
         var best = PythonObject(None)
         # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
         if best_params is not None and yf is not None:
-            best = msel_member_refit(estimator, best_params, yf, xa, context, b)
+            best = msel_member_refit(estimator, best_params, yf, xa, context, b, PythonObject(None))
         if best is None:
             best = msel_clone(estimator, False, context)
             _set_params(best, best_params, context)

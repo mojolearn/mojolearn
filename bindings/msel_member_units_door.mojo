@@ -312,6 +312,10 @@ struct MselMemberRun(Movable):
     # empty: none), taken on the unit's worker after its fit, kept or freed,
     # and raised in unit order once publication is done (GIL held).
     var notices: List[List[Float64]]
+    # A search's own fit (lane mf-msel5b): the int32 codes of its `groups`
+    # (rows words, sorted-group order; 0: none), handed to the fit as
+    # `MemberCall.groups` for its group splitter.
+    var groups: Int
 
     def __init__(out self, x: Int, y: Int, rows: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int,
         return_train: Bool, keep: Bool):
@@ -334,6 +338,7 @@ struct MselMemberRun(Movable):
         self.held_y = List[List[Float32]]()
         self.refused = List[String]()
         self.notices = List[List[Float64]](length=n_units, fill=List[Float64]())
+        self.groups = 0
         self.fit_failed = List[UInt8](length=n_units, fill=UInt8(0))
         self.plans = List[MemberPlan]()
         self.folds = List[Int]()
@@ -458,17 +463,23 @@ def _side_set(run: MutPointer[MselMemberRun, MutUntrackedOrigin], mode: Int, sta
     words either way (float32 values or int32 class codes: `run.y_dtype`)."""
     var cols = run[].cols
     var y_dtype = run[].y_dtype
+    # A fit without a target (lane mf-msel5b: an unsupervised search's own
+    # fit, y=None): the call carries no y.
+    var has_y = run[].y != 0
     call.row_index = MemberMatrix()
     if mode == 0:
         call.x = MemberMatrix(run[].x + start * cols * 4, count, cols)
-        call.y = MemberMatrix(run[].y + start * 4, count, 1, y_dtype)
+        if has_y:
+            call.y = MemberMatrix(run[].y + start * 4, count, 1, y_dtype)
     elif mode == 1:
         call.x = MemberMatrix(run[].x, run[].rows, cols)
-        call.y = MemberMatrix(run[].y, run[].rows, 1, y_dtype)
+        if has_y:
+            call.y = MemberMatrix(run[].y, run[].rows, 1, y_dtype)
         call.row_index = MemberMatrix(index, count, 1, MEMBER_I64)
     else:
         call.x = MemberMatrix(gathered_x, count, cols)
-        call.y = MemberMatrix(gathered_y, count, 1, y_dtype)
+        if has_y:
+            call.y = MemberMatrix(gathered_y, count, 1, y_dtype)
 
 
 def _offered(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, op: Int, offer: Int,
@@ -599,6 +610,8 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
     var kept = False
     try:
         _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, x_train_at, y_train_at, call)
+        if run[].fit_only and run[].groups != 0:
+            call.groups = MemberMatrix(run[].groups, run[].rows, 1, MEMBER_I32)
         if run[].tolerate:
             try:
                 _offered(run, u, MEMBER_OP_FIT, train_offer, call)
@@ -688,11 +701,11 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
     folds: PythonObject, return_train: Bool, keep: Bool, workers_in: Int, context: PythonObject,
     b: PythonObject, responses: List[Int], tolerate: Bool) raises -> MselMemberScores:
     return _member_units(base, candidates, y, x, folds, return_train, keep, workers_in, context, b, responses,
-                         tolerate, False)
+                         tolerate, False, PythonObject(None))
 
 
 def msel_member_refit(base: PythonObject, parameters: PythonObject, y: PythonObject, x: PythonObject,
-    context: PythonObject, b: PythonObject) raises -> PythonObject:
+    context: PythonObject, b: PythonObject, groups: PythonObject) raises -> PythonObject:
     """A search's refit over the native member: a clone of `base` with
     `parameters` set, fitted ONCE on every row of X (a view: nothing is
     gathered or copied) with the GIL released, packed by its family's
@@ -700,10 +713,13 @@ def msel_member_refit(base: PythonObject, parameters: PythonObject, y: PythonObj
     (bindings/member_held_door.mojo), so a caller that uses the best
     estimator as a member imports nothing. None when this member, data or
     fit is not one the route runs: the caller then fits the estimator through
-    its own door, which raises its own exception (THE FALLBACK RULE)."""
+    its own door, which raises its own exception (THE FALLBACK RULE).
+    `groups` (lane mf-msel5b): a search's fit groups, read once and handed
+    to its fit (`MemberCall.groups`); None: none. y None: a fit without a
+    target (an unsupervised search)."""
     var none = List[Int]()
     var got = _member_units(base, Python.list(parameters), y, x, Python.list(PythonObject(None)), False, True, 1,
-                            context, b, none, False, True)
+                            context, b, none, False, True, groups)
     if not got.ran:
         return PythonObject(None)
     return got.estimators[0]
@@ -718,13 +734,14 @@ def msel_member_fit_in_place(model: PythonObject, y: PythonObject, x: PythonObje
     changed): the route did not take it (THE FALLBACK RULE)."""
     var none = List[Int]()
     var got = _member_units(model, PythonObject(None), y, x, Python.list(PythonObject(None)), False, True, 1,
-                            context, b, none, False, True)
+                            context, b, none, False, True, PythonObject(None))
     return got.ran
 
 
 def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject, x: PythonObject,
     folds: PythonObject, return_train: Bool, keep: Bool, workers_in: Int, context: PythonObject,
-    b: PythonObject, responses: List[Int], tolerate: Bool, fit_only: Bool) raises -> MselMemberScores:
+    b: PythonObject, responses: List[Int], tolerate: Bool, fit_only: Bool,
+    groups: PythonObject) raises -> MselMemberScores:
     """Run every (candidate, fold) unit over native members, or answer
     `ran == False` having changed nothing when this member, data or request
     is not one this route runs (module note). `keep`: one fitted estimator
@@ -737,9 +754,11 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     still publish; without it any failing unit publishes nothing."""
     var scores = MselMemberScores()
     var plan = msel_estimator_plan(base, context)
-    if py_get(plan, "member") is None or y is None:
+    # y None (lane mf-msel5b): a fit without a target, for a fit-only unit
+    # (an unsupervised search's own fit); any other request needs y.
+    if py_get(plan, "member") is None or (y is None and not fit_only):
         return scores^
-    if not msel_is_array(x, context) or not msel_is_array(y, context):
+    if not msel_is_array(x, context) or (y is not None and not msel_is_array(y, context)):
         return scores^
     if String(py=x.dtype) != "<f4" or Int(py=x.ndim) != 2 or String(py=x.order) != "C" or Int(py=x.size) == 0:
         return scores^
@@ -879,6 +898,8 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     var target = PythonObject(None)
     var labels = PythonObject(None)
     var classes = PythonObject(None)
+    if classifier and y is None:
+        return scores^  # a classifier fits class codes
     if classifier:
         # THE LABELS, ONCE PER OPERATION (module note, CLASSIFIER MEMBERS): the
         # int32 codes every unit reads through views, row numbers or gathers,
@@ -929,13 +950,27 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                 if not tolerate:
                     raise error^
                 run.refused[c] = String(error)
-    else:
+    elif y is not None:
         try:
             target = classical_check_y(y, rows, classical_estimator_name(base), member_context)
         except:
             return scores^
     _ = py_call(pins.append, target)
-    run.y = msel_addr(target)
+    run.y = 0 if target is None else msel_addr(target)
+    if groups is not None and fit_only:
+        # THE SEARCH'S GROUPS (lane mf-msel5b), once per fit: encoded by the
+        # one label encoder (code g is the g-th group in sorted order, the
+        # order the group splitters read), as long as X; else the door's
+        # splitter raises its own words.
+        try:
+            var encoded_groups = msel_encode(groups, context)
+            var group_codes = encoded_groups[1]
+            if Int(py=group_codes.size) != rows or String(py=group_codes.dtype) != "<i4":
+                return scores^
+            _ = py_call(pins.append, group_codes)
+            run.groups = msel_addr(group_codes)
+        except:
+            return scores^
     if fit_only:
         # The one unit's train side is every row of X: a view from row 0, no
         # index array; it holds every class by construction of the encode.

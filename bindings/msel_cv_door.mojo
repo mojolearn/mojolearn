@@ -1282,19 +1282,29 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     (`msel_member_fit_in_place`; the search's own resident scope opened as
     `msel_search_fit` opens it). PACK: a dict with `names` (the scorer
     names), `test` / `train` (per name, the folds' scores), `fit_time`,
-    `score_time` and, as asked, `estimator`, `indices`, `predictions`.
-    None: the kind did not take it (nothing was fitted; the caller's units
-    run and raise their own words)."""
-    if y_in is None or len(folds) == 0:
+    `score_time` and, as asked, `estimator`, `indices`, `predictions` (lane
+    mf-msel5b: the result the RUN wrote at every row, `placed`; or a
+    classifier's decoded labels, `placed` False, which the caller places).
+    y=None (lane mf-msel5b): an unsupervised base, fitted without a target
+    and scored by its own score. None: the kind did not take it (nothing
+    was fitted; the caller's units run and raise their own words)."""
+    if len(folds) == 0:
         return PythonObject(None)
     var b = msel_b()
     var xa = PythonObject(None)
     var ya = PythonObject(None)
     try:
         xa = msel_materialize(x_in, "X", context)
-        ya = msel_materialize_y(y_in, context)
+        if y_in is not None:
+            ya = msel_materialize_y(y_in, context)
     except:
         return PythonObject(None)
+    # THE RESULT BUFFER's shape words (lane mf-msel5b): the target's outputs
+    # (0: a 1-D y) and the rows; the kind's UNPACK places the Array in `holder`.
+    var outputs = 0
+    if ya is not None and Int(py=ya.ndim) == 2:
+        outputs = Int(py=ya.shape[1])
+    var holder = Python.list(PythonObject(None))
     var names = _tool_names(scoring, context)
     var grid = Python.dict()
     var keywords = Python.dict()
@@ -1305,7 +1315,8 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     py_setitem(keywords, "return_train_score", PythonObject(return_train))
     var search = family_call_kw(msel_cls("GridSearchCV", context), keywords, estimator, grid)
     var fields = msel_search_fields(search, context)
-    py_setitem(fields, "_msel_cv_tool", Python.tuple(PythonObject(keep), method, PythonObject(indices), folds))
+    py_setitem(fields, "_msel_cv_tool", Python.tuple(PythonObject(keep), method, PythonObject(indices), folds,
+                                                     holder, PythonObject(outputs), xa.shape[0]))
     # THE RESIDENT FOLD ROWS, as `msel_search_fit` reads them (the member's
     # own device; the carrier names no `device`).
     var scope = PythonObject(None)
@@ -1345,7 +1356,7 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     py_setitem(out, "names", name_list)
     py_setitem(out, "test", tests)
     py_setitem(out, "train", trains)
-    var keys: List[String] = ["fit_time", "score_time", "estimator", "indices", "predictions"]
+    var keys: List[String] = ["fit_time", "score_time", "estimator", "indices", "predictions", "placed"]
     for i in range(len(keys)):  # small-loop(the tool's result keys)
         var value = py_get(tool, keys[i])
         if value is not None:
@@ -1687,10 +1698,26 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
     var by = msel_cv_by_search(estimator, x, y, folds, PythonObject(None), args[5], PythonObject("raise"), False,
                                False, method, False, context)
     if by is not None:
+        # THE RESULT BUFFER (lane mf-msel5b): the RUN wrote every unit's
+        # response at its rows; nothing is placed again. A classifier's
+        # labels were decoded once for every row: an int64 / float64 Array
+        # of them is the result; other labels take the label placement over
+        # the identity rows (the old route's result types).
+        var pred = by["predictions"]
+        if Bool(py=py_call(msel_b().bool, by["placed"])):
+            return pred
+        if msel_is_array(pred, context) and Int(py=pred.ndim) == 1 and (String(py=pred.dtype) == "<i8"
+                                                                          or String(py=pred.dtype) == "<f8"):
+            return pred
+        var ident = msel_new(n, "<i8", context)
+        var words = msel_p64(ident)
+        for i in range(n):  # driver-loop: over the rows (the identity placement of decoded labels)
+            words[i] = Int64(i)
+        _ = ident  # written through the pointer above
         var host_rows = MselFoldRows(x, y, folds, False, context)
         var placed = PythonObject(None)
         try:
-            placed = _place(by["predictions"], tests, n, host_rows, context)
+            placed = _place(Python.list(pred), Python.list(ident), n, host_rows, context)
         finally:
             host_rows.close(context)
         return placed
