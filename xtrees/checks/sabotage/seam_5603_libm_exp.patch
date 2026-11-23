@@ -1,19 +1,21 @@
+diff --git a/xtrees/ops.mojo b/xtrees/ops.mojo
+index a918ad3889..aa7fc3dc5c 100644
 --- a/xtrees/ops.mojo
 +++ b/xtrees/ops.mojo
-@@ -36,6 +36,7 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
+@@ -37,6 +37,7 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
+ """
  from std.sys.compile import is_defined
- from core.host_parallel import host_parallelize
  from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
 +from std.math import exp
- from ensemble.host_layout import (
-     HOST_LAYOUT_BLOCK_ROWS, HOST_LAYOUT_SERIAL_CELLS, colmajor_from_rowmajor_f32,
- )
-@@ -374,7 +375,7 @@ def samme_step(
-     var s: Float64 = 0.0
+ from xtrees.fold_order import FOLD_CHUNK, fold_chunks, fold_chunk_size, fold_tree_host
+ 
+ #: The host gate's negative control (`-D MOJOLEARN_HOST_SABOTAGE=1`, host builds
+@@ -488,7 +489,7 @@ def samme_step[CACHE: Bool = False](
+     var s: Float64
      if not last:
          # DEVIATION 5603: the pinned exp.
 -        var boost = identical_exp64(alpha)
 +        var boost = exp(alpha)  # SABOTAGE 5603
-         for i in range(n):
-             if pred[unsafe_offset=i] != y[unsafe_offset=i] and w[unsafe_offset=i] > 0.0:
-                 w[unsafe_offset=i] = identical_mul64(w[unsafe_offset=i], boost)
+         var q = List[Float64](length=m, fill=0.0)
+         for c in range(m):
+             var run: Float64 = 0.0
