@@ -25,6 +25,8 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               dispatch name with no caller, constructed family or keep reason; fb12-dead-names). Seconds.
               Then the commit's tools/block_tables_check.py over the commit's blobs (every table that lists
               Sequential layer codes or names agrees for every code; lane layer-tables). Seconds.
+              Then the commit's tools/gil_region_check.py over its bindings/ and providers/ blobs (no PythonObject
+              use inside a `with GILReleased` region; lane meta-gil). Single process, seconds.
   host-parse  (with device-parse since 2026-11-18: the identical device groups through the same parse with the
               NVIDIA sm_89 column's flags and no GPU; it cannot see what only optimised lowering, ptxas or a GPU finds)
               (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
@@ -202,7 +204,27 @@ def run_audits(tree, commit, workdir, git_root=ROOT):
     nativecall = native_caller_audit(tree, commit, git_root)
     mathlint = math_lint_audit(tree, commit, git_root)
     tables = block_tables_audit(tree, commit, git_root)
-    return 1 if errors or lastuse or pyfree or nativecall or mathlint or tables else 0
+    gil = gil_region_audit(tree, commit, git_root)
+    return 1 if errors or lastuse or pyfree or nativecall or mathlint or tables or gil else 0
+
+
+def gil_region_audit(tree, commit, git_root=ROOT):
+    """The COMMIT's tools/gil_region_check.py over the commit's bindings/ and providers/ blobs (lane meta-gil,
+    2026-11-23: bm-meta-3's doors read `Array._addr` as RUN arguments inside `with GILReleased`, a segfault in
+    verify --self-test): no PythonObject read, copy, attribute or Python API call inside a released region.
+    Single process. Prints its GILREGION lines; returns its exit code (0 when the commit predates the check)."""
+    tool = Path(tree) / "tools/gil_region_check.py"
+    if not tool.is_file():
+        print(f"GILREGION SKIP {commit[:12]} has no tools/gil_region_check.py")
+        return 0
+    p = subprocess.run([sys.executable, str(tool), "--commit", commit, "--root", str(git_root)],
+                       capture_output=True, text=True)
+    lines = (p.stdout + p.stderr).splitlines()
+    for line in lines[:80]:
+        print(line if line.startswith("GILREGION") else f"GILREGION {line}")
+    if len(lines) > 80:
+        print(f"GILREGION ... {len(lines) - 80} more lines; last: {lines[-1]}")
+    return p.returncode
 
 
 def block_tables_audit(tree, commit, git_root=ROOT):

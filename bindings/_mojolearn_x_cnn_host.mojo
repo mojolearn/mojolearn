@@ -165,9 +165,12 @@ def conv_block_backward_binding(
     _ = db_addr  # keep the Python object alive through the native call above
     with GILReleased(Python()):
         conv_block_backward_run(px, pw, pb, pg, pi, pdx, pdw, pdb, cprm, pprm, pool, need_dx, keep, pk, py_, nx, OC, ckk)
-        _ = db_addr  # keep the Python object alive through the native call above
-        _ = dw_addr  # keep the Python object alive through the native call above
-        _ = dx_addr  # keep the Python object alive through the native call above
+    # Lane meta-gil (2026-11-23): the keep-alives of these PythonObjects were inside the released region: `_ = obj`
+    # copies and drops a PythonObject, two refcount changes with no GIL (tools/gil_region_check.py). Named here,
+    # GIL held again, they still outlive the call.
+    _ = db_addr  # keep the Python object alive through the native call above
+    _ = dw_addr  # keep the Python object alive through the native call above
+    _ = dx_addr  # keep the Python object alive through the native call above
     _ = noidx^
     return PythonObject(0)
 
