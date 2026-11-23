@@ -209,6 +209,12 @@ def check_text(text, delegated=None):
     unused = unused_codes(values)
     names = {v: k for k, v in values.items() if k.startswith("LAYER_") and first <= v <= last}
     problems = []
+    for k, v in values.items():
+        if k.startswith("LAYER_") and v > last:
+            problems.append(f"{k} = {v} lies above BLOCK_LAST = {last} (is_block refuses it)")
+    for v, k in delegated.items():
+        if v > last:
+            problems.append(f"{k} = {v} (a delegated module's) lies above BLOCK_LAST = {last} (is_block refuses it)")
     for v in range(first, last + 1):
         here, there = v in names, v in delegated
         if v in unused:

@@ -20,6 +20,12 @@ from checks.numerics import (
     identical_sqrt,
 )
 from autograd.row_ops import ROW_COOP, ROW_SORT_PAD, row_ce_fwd, row_ce_grad, row_bitonic_exchange
+# nn-losses begin
+from autograd.nn_losses import (
+    LS_SMOOTH_L1, LS_NLL, LS_KL_DIV, smooth_l1_term, smooth_l1_dp, nll_term, nll_dp, nll_dy, kl_div_term,
+    kl_div_dp, kl_div_dy, bce_logits_term, bce_logits_dp, bce_logits_dy,
+)
+# nn-losses end
 
 # Codes 1000..1010 are the autograd ops (autograd/ops.mojo); this family is
 # the contiguous range below, asserted free in sequence/dispatch.mojo.
@@ -97,6 +103,28 @@ def clip_probability(p: Float32) -> Float32:
     return p
 
 
+# nn-losses begin
+def ls_elem_kind(kind: Int) -> Bool:
+    """True for the elementwise loss kinds (OP_LS_ELEM_FWD, Tape.loss_terms and loss_reduced, the loss fold)."""
+    return (kind == LS_MSE or kind == LS_MAE or kind == LS_HUBER or kind == LS_BCE_LOGITS or kind == LS_SMOOTH_L1
+            or kind == LS_NLL or kind == LS_KL_DIV)
+
+
+def ls_check_param(kind: Int, delta: Float32) raises:
+    """The refusals of an elementwise kind's scalar: the Huber delta and the BCE pos_weight must be positive, the
+    smooth L1 beta non-negative (all finite)."""
+    if not ls_elem_kind(kind):
+        raise Error("unknown elementwise loss kind " + String(kind))
+    var finite = delta == delta and abs(delta) < Float32(3.4028234663852886e38)
+    if kind == LS_HUBER and not (delta > 0 and finite):
+        raise Error("Huber delta must be positive")
+    if kind == LS_BCE_LOGITS and not (delta > 0 and finite):
+        raise Error("bce_with_logits pos_weight must be positive")
+    if kind == LS_SMOOTH_L1 and not (delta >= 0 and finite):
+        raise Error("smooth_l1 beta must be non-negative")
+# nn-losses end
+
+
 @always_inline
 def loss_term(kind: Int, p: Float32, y: Float32, delta: Float32) -> Float32:
     """The per-element loss of prediction p against target y."""
@@ -114,18 +142,24 @@ def loss_term(kind: Int, p: Float32, y: Float32, delta: Float32) -> Float32:
             return mul(Float32(0.5), mul(d, d))
         return mul(delta, sub(ad, mul(Float32(0.5), delta)))
     if kind == LS_BCE_LOGITS:
-        # p is the logit: max(p, 0) - p y + log1p(exp(-|p|)), torch's stable form
-        var x = p
-        var pos = x if x > 0 else Float32(0)
-        var soft = ftz(identical_log1p(ftz(identical_exp(-_abs(x)))))
-        return add(sub(pos, mul(x, y)), soft)
+        # p is the logit: max(p, 0) - p y + log1p(exp(-|p|)), torch's stable form; delta is pos_weight
+        # (1: the unweighted words; autograd/nn_losses.mojo)
+        return bce_logits_term(p, y, delta)
+    # nn-losses begin
+    if kind == LS_SMOOTH_L1:
+        return smooth_l1_term(p, y, delta)
+    if kind == LS_NLL:
+        return nll_term(p, y)
+    if kind == LS_KL_DIV:
+        return kl_div_term(p, y)
+    # nn-losses end
     # unreachable: loss_value_into and the tape refuse any other kind
     return Float32(0)
 
 
 @always_inline
 def loss_term_dp(kind: Int, p: Float32, y: Float32, delta: Float32, g: Float32) -> Float32:
-    """g * d loss_term / d p (LS_MSE .. LS_BCE_LOGITS)."""
+    """g * d loss_term / d p (every elementwise kind, ls_elem_kind)."""
     if kind == LS_MSE:
         # 2 (g d): the bits of the tape's multiply VJP added to itself
         return mul(Float32(2), mul(g, sub(p, y)))
@@ -136,15 +170,29 @@ def loss_term_dp(kind: Int, p: Float32, y: Float32, delta: Float32, g: Float32) 
         if _abs(d) < delta:
             return mul(g, d)
         return mul(g, mul(delta, _sign(d)))
-    # LS_BCE_LOGITS
-    return mul(g, sub(ftz(identical_sigmoid(p)), y))
+    # nn-losses begin
+    if kind == LS_SMOOTH_L1:
+        return smooth_l1_dp(p, y, delta, g)
+    if kind == LS_NLL:
+        return nll_dp(p, y, g)
+    if kind == LS_KL_DIV:
+        return kl_div_dp(p, y, g)
+    # nn-losses end
+    # LS_BCE_LOGITS (delta is pos_weight)
+    return bce_logits_dp(p, y, delta, g)
 
 
 @always_inline
 def loss_term_dy(kind: Int, p: Float32, y: Float32, delta: Float32, g: Float32) -> Float32:
-    """g * d loss_term / d y (LS_MSE .. LS_BCE_LOGITS)."""
+    """g * d loss_term / d y (every elementwise kind, ls_elem_kind)."""
     if kind == LS_BCE_LOGITS:
-        return mul(g, -p)
+        return bce_logits_dy(p, y, delta, g)
+    # nn-losses begin
+    if kind == LS_NLL:
+        return nll_dy(p, y, g)
+    if kind == LS_KL_DIV:
+        return kl_div_dy(p, y, g)
+    # nn-losses end
     return -loss_term_dp(kind, p, y, delta, g)
 
 

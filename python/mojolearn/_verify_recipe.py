@@ -167,6 +167,30 @@ GENERATORS = {
 }
 
 
+# nn-losses-2 begin (2026-11-23): frame sequences for the ctc loss
+def _gen_ctc_frames(np, rng, rows, steps=8, symbols=3, max_labels=2):
+    """Samples of (steps, symbols + 1) frames and their label sequences (rows, max_labels) for loss='ctc' (blank
+    0): sample i has 1 + i % max_labels labels in 1..symbols (padded with 1), its frames a silence frame then two
+    frames of each label's one-hot and a silence frame, plus noise; the remaining steps are silence. The target
+    lengths are 1 + i % max_labels, which a recipe gives as fit's target_lengths."""
+    X = 0.1 * rng.standard_normal((rows, steps, symbols + 1))
+    y = np.ones((rows, max_labels), dtype=np.int64)
+    for i in range(rows):  # verify tooling: over the generator's samples
+        count = 1 + i % max_labels
+        labels = rng.integers(1, symbols + 1, count)
+        y[i, :count] = labels
+        frames = [0]
+        for label in labels:  # verify tooling: over the sample's labels
+            frames += [int(label), int(label), 0]
+        for t in range(steps):  # verify tooling: over the sample's steps
+            X[i, t, frames[t] if t < len(frames) else 0] += 1.0
+    return X.reshape(rows, steps * (symbols + 1)).astype(np.float32), y
+
+
+GENERATORS["ctc_frames"] = _gen_ctc_frames
+# nn-losses-2 end
+
+
 def generate(name, args):
     """The arrays of a built-in generator: X, y and, with `test_rows`, X_test
     (the rows that follow the training rows in the same stream)."""
@@ -1027,6 +1051,42 @@ EXAMPLES["seq-attention"] = _seq((6, 4), [
     ["multihead_attention", 8, 2, {"kdim": 4, "vdim": 4, "source": -1}],
     ["flatten"], ["linear", 1]])
 # nn-attention end
+
+
+# nn-losses begin (2026-11-23): the regression losses of lane nn-losses on a small sequence model
+def _nn_losses_seq(compile_options):
+    shipped = _seq((8, 4), [["linear", 8], ["tanh"], ["flatten"], ["linear", 1]])
+    shipped["model"]["sequential"]["compile"] = compile_options
+    return shipped
+
+
+EXAMPLES["seq-l1"] = _nn_losses_seq({"loss": "l1", "optimizer": "sgd", "lr": 0.01})
+EXAMPLES["seq-smooth-l1"] = _nn_losses_seq({"loss": "smooth_l1", "beta": 0.5, "reduction": "sum",
+                                             "optimizer": "sgd", "lr": 0.002})
+# nn-losses end
+
+
+# nn-losses-2 begin (2026-11-23): log_softmax with nll, and the ctc loss (blank 0) on a GRU over frame sequences
+EXAMPLES["seq-nll-log-softmax"] = {
+    "format": FORMAT,
+    "model": {"sequential": {"numeric_mode": "identical", "input_shape": [8],
+                             "layers": [["linear", 8], ["tanh"], ["linear", 3], ["log_softmax"]],
+                             "compile": {"loss": "nll", "optimizer": "sgd", "lr": 0.05}}},
+    "seed": 0, "fit": {"epochs": 2, "batch_size": 16, "shuffle": False},
+    "data": {"generator": "classification", "args": {"rows": 64, "features": 8, "classes": 3, "test_rows": 16,
+                                                     "seed": 11}},
+    "outputs": {"digest": True, "predict": {"method": "predict", "on": "test"}, "score": False}}
+EXAMPLES["seq-ctc"] = {
+    "format": FORMAT,
+    "model": {"sequential": {"numeric_mode": "identical", "input_shape": [8, 4],
+                             "layers": [["gru", 8], ["linear", 4], ["log_softmax"]],
+                             "compile": {"loss": "ctc", "blank": 0, "optimizer": "adam", "lr": 0.01}}},
+    "seed": 0, "fit": {"epochs": 2, "batch_size": 16, "shuffle": False,
+                       "target_lengths": [1 + i % 2 for i in range(32)]},
+    "data": {"generator": "ctc_frames", "args": {"rows": 32, "test_rows": 16, "steps": 8, "symbols": 3,
+                                                 "max_labels": 2, "seed": 13}},
+    "outputs": {"digest": True, "predict": {"method": "predict", "on": "test"}, "score": False}}
+# nn-losses-2 end
 
 
 def load_recipe(name):

@@ -119,6 +119,10 @@ struct SequentialKeys(Defaultable, Movable):
     var k_weight_decay: PythonObject
     var k_x_sequence_numeric_mode: PythonObject
     var k_x_sequence_vendor: PythonObject
+    # nn-losses begin
+    var k_reduction: PythonObject
+    var k_reduction_codes: PythonObject
+    # nn-losses end
 
     def __init__(out self):
         self.ready = False
@@ -205,6 +209,10 @@ struct SequentialKeys(Defaultable, Movable):
         self.k_weight_decay = PythonObject(None)
         self.k_x_sequence_numeric_mode = PythonObject(None)
         self.k_x_sequence_vendor = PythonObject(None)
+        # nn-losses begin
+        self.k_reduction = PythonObject(None)
+        self.k_reduction_codes = PythonObject(None)
+        # nn-losses end
 
 
 comptime _SEQUENTIAL_KEYS = SharedSlot[SequentialKeys, "MojolearnSequentialKeysV1"]
@@ -295,6 +303,10 @@ def _sequential_keys_fill(nk: UnsafePointer[SequentialKeys, MutUntrackedOrigin])
     nk[].k_weight_decay = py_key("weight_decay")
     nk[].k_x_sequence_numeric_mode = py_key("x_sequence_numeric_mode")
     nk[].k_x_sequence_vendor = py_key("x_sequence_vendor")
+    # nn-losses begin
+    nk[].k_reduction = py_key("reduction")
+    nk[].k_reduction_codes = py_key("reduction_codes")
+    # nn-losses end
     var ops = Python.dict()
     py_op_add(ops, "initialize", SEQUENTIAL_OPN_INITIALIZE)
     py_op_add(ops, "construct", SEQUENTIAL_OPN_CONSTRUCT)

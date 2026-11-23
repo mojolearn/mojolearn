@@ -9,14 +9,24 @@ from autograd.tape import Tape, Tensor
 from autograd.fold import blocked_fold, fold_partials_bound, loss_fold
 from autograd.ops import AXIS_ALL
 from autograd.loss_ops import (
-    OP_LS_CE_FWD, LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_CROSS_ENTROPY,
+    OP_LS_CE_FWD, LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_CROSS_ENTROPY, ls_check_param,
 )
+from autograd.nn_losses import LS_SMOOTH_L1, LS_NLL, LS_KL_DIV
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
 from checks.numerics import identical_div
 
 comptime REDUCTION_MEAN = 0
 comptime REDUCTION_SUM = 1
+# nn-losses begin: KLDivLoss's reduction='batchmean', the sum over the rows' terms divided by the rows (the
+# mathematical KL divergence per sample); NLLLoss's mean is over rows too, so LS_NLL's mean is this factor
+comptime REDUCTION_BATCHMEAN = 2
+
+
+def ls_per_row(kind: Int, reduction: Int) -> Bool:
+    """True when the mean of `kind` divides by the rows: NLL's mean (one target class a row) and batchmean."""
+    return reduction == REDUCTION_BATCHMEAN or (kind == LS_NLL and reduction == REDUCTION_MEAN)
+# nn-losses end
 
 
 def reduction_factor(count: Int, reduction: Int) raises -> Float32:
@@ -47,9 +57,10 @@ def _elem_loss[E: Exec](
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF (loss_terms + mean / sum, old path, no A/B recorded) deleted
     # 2026-11-15 by lane/expdel2-24-neural; code recoverable at 56d165c105.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.patch
-    if reduction != REDUCTION_MEAN and reduction != REDUCTION_SUM:
-        raise Error("reduction must be REDUCTION_MEAN or REDUCTION_SUM")
-    return tape.loss_reduced(ex, prediction, target, kind, delta, reduction == REDUCTION_MEAN)
+    if reduction != REDUCTION_MEAN and reduction != REDUCTION_SUM and reduction != REDUCTION_BATCHMEAN:
+        raise Error("reduction must be REDUCTION_MEAN, REDUCTION_SUM or REDUCTION_BATCHMEAN")
+    return tape.loss_reduced(ex, prediction, target, kind, delta, reduction != REDUCTION_SUM,
+                             ls_per_row(kind, reduction))
 
 
 def mse[E: Exec](
@@ -82,10 +93,44 @@ def huber[E: Exec](
 
 def binary_cross_entropy_with_logits[E: Exec](
     mut tape: Tape, mut ex: E, logits: Tensor, target: Tensor, reduction: Int = REDUCTION_MEAN,
+    pos_weight: Float32 = 1,
 ) raises -> Tensor:
     """Binary cross-entropy of sigmoid(logits) against targets in [0, 1],
-    computed stably from the logits: max(x, 0) - x y + log(1 + exp(-|x|))."""
-    return _elem_loss(tape, ex, logits, target, LS_BCE_LOGITS, Float32(1), reduction)
+    computed stably from the logits: max(x, 0) - x y + log(1 + exp(-|x|)),
+    plus (pos_weight - 1) y softplus(-x) (torch's pos_weight: the positive
+    term weighted by pos_weight)."""
+    return _elem_loss(tape, ex, logits, target, LS_BCE_LOGITS, pos_weight, reduction)
+
+
+# nn-losses begin
+def smooth_l1[E: Exec](
+    mut tape: Tape, mut ex: E, prediction: Tensor, target: Tensor, beta: Float32 = 1,
+    reduction: Int = REDUCTION_MEAN,
+) raises -> Tensor:
+    """Smooth L1 loss (torch.nn.SmoothL1Loss): 0.5 d^2 / beta where |d| <
+    beta, else |d| - 0.5 beta, d = prediction - target; beta 0 is the L1
+    loss. Averaged or summed."""
+    return _elem_loss(tape, ex, prediction, target, LS_SMOOTH_L1, beta, reduction)
+
+
+def nll[E: Exec](
+    mut tape: Tape, mut ex: E, log_prob: Tensor, target: Tensor, reduction: Int = REDUCTION_MEAN,
+) raises -> Tensor:
+    """Negative log-likelihood (torch.nn.NLLLoss) of log-probabilities
+    (rows, classes) against a one-hot target of the same shape: -sum y p,
+    averaged over the rows (mean) or summed."""
+    return _elem_loss(tape, ex, log_prob, target, LS_NLL, Float32(1), reduction)
+
+
+def kl_div[E: Exec](
+    mut tape: Tape, mut ex: E, log_prob: Tensor, target: Tensor, reduction: Int = REDUCTION_BATCHMEAN,
+) raises -> Tensor:
+    """KL divergence (torch.nn.KLDivLoss, log_target=False) of the target
+    distribution from the model's: sum y (log y - p), p the log-probabilities,
+    0 where y is 0. REDUCTION_BATCHMEAN divides by the rows (the divergence
+    per sample), REDUCTION_MEAN by the elements, REDUCTION_SUM by nothing."""
+    return _elem_loss(tape, ex, log_prob, target, LS_KL_DIV, Float32(1), reduction)
+# nn-losses end
 
 
 def cross_entropy[E: Exec](
@@ -130,18 +175,18 @@ def loss_value_into[E: Exec](
 ) raises:
     """dst[0] = the loss of `kind` over executor buffers, with no tape.
 
-    kind is LS_MSE, LS_MAE, LS_HUBER or LS_BCE_LOGITS (rows x cols
-    prediction and target), or
+    kind is an elementwise kind (LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS,
+    LS_SMOOTH_L1, LS_NLL, LS_KL_DIV: rows x cols prediction and target), or
     LS_CROSS_ENTROPY (rows x cols logits, `target` the rows class codes,
     reduced over rows). The value equals the tape loss of the same kind and
     reduction bit for bit: the same term body and the same fold.
     """
     if rows <= 0 or cols <= 0:
         raise Error("loss dimensions must be positive")
-    if kind == LS_HUBER and not (delta > 0):
-        raise Error("Huber delta must be positive")
-    var count = rows if kind == LS_CROSS_ENTROPY else rows * cols
-    if count > scratch.capacity:
+    if kind != LS_CROSS_ENTROPY:
+        ls_check_param(kind, delta)
+    var count = rows if kind == LS_CROSS_ENTROPY or ls_per_row(kind, reduction) else rows * cols
+    if (rows if kind == LS_CROSS_ENTROPY else rows * cols) > scratch.capacity:
         raise Error("loss scratch is smaller than the loss")
     var a = Args()
     a.p0 = prediction
@@ -152,9 +197,8 @@ def loss_value_into[E: Exec](
         ex.launch[OP_LS_CE_FWD](a, rows)
         blocked_fold(ex, dst, scratch.terms, rows, 1, AXIS_ALL, reduction_factor(count, reduction), scratch.partials)
         return
-    if kind < LS_MSE or kind > LS_BCE_LOGITS:
-        raise Error("unknown loss kind")
+    var red = REDUCTION_MEAN if reduction == REDUCTION_BATCHMEAN else reduction
     # the terms folded in the leaf chain (lane ag-pass6-fold): the same
     # word as the stored terms then the fold, no terms pass
-    loss_fold(ex, dst, prediction, target, rows, cols, kind, delta, reduction_factor(count, reduction),
+    loss_fold(ex, dst, prediction, target, rows, cols, kind, delta, reduction_factor(count, red),
               scratch.partials)

@@ -18,6 +18,10 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           'sequence-composed-mamba2', 'sequence-composed-mamba3',
                           'sequence-composed-recurrent',
                           'sequence-composed-conv1d',
+                          # lane nn-losses: one seeded step per added loss
+                          'sequence-composed-losses',
+                          # lane nn-losses-2: log_softmax with nll / kl_div, and ctc
+                          'sequence-composed-log-softmax-ctc',
                           # nn-recurrent: the recurrent options (tools/identity_lanes/nn_recurrent.py)
                           'sequence-blocks-bigru-lengths', 'sequence-blocks-bilstm',
 

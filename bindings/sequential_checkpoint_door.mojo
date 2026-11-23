@@ -85,7 +85,9 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
     var count = 0 if classes is None else Int(py=classes.shape[0])
     # The checkpoint's words, typed here once (UNPACK); the save itself is one
     # native descriptor call with no Python object.
-    var ip: List[Int] = [1 if export else 0, Int(py=py_item(context, nk[].k_loss_codes)[py_item(options, nk[].k_loss)]),
+    # nn-losses: the loss word, code + 256 * reduction, as the fit reads it
+    var loss_word = Int(py=py_item(context, nk[].k_loss_codes)[py_item(options, nk[].k_loss)]) + 256 * Int(py=py_get(options, nk[].k_reduction, 0))
+    var ip: List[Int] = [1 if export else 0, loss_word,
         Int(py=py_item(fields, nk[].k__target)), Int(py=py_item(options, nk[].k_opt)), Int(py=py_item(options, nk[].k_flags)),
         Int(py=py_item(options, nk[].k_sched)), Int(py=py_item(options, nk[].k_step_size)),
         Int(py=py_item(options, nk[].k_n_iter_no_change)), Int(py=py_item(fields, nk[].k__fit_batch)),
@@ -155,9 +157,11 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     for k in range(len(description.layer_floats)):  # driver-loop: over checkpoint layer records
         sequential_append(mods, model, PythonObject(description.layer_ints[3 * k]), PythonObject(description.layer_ints[3 * k + 1]),
                           PythonObject(description.layer_ints[3 * k + 2]), PythonObject(description.layer_floats[k]), PythonObject(None))
-    var loss_name = py_item(context, nk[].k_loss_names)[PythonObject(ip[0])]
+    # nn-losses: the loss word, code + 256 * reduction
+    var loss_name = py_item(context, nk[].k_loss_names)[PythonObject(ip[0] % 256)]
     var options = b.dict()
     py_setitem(options, nk[].k_loss, loss_name)
+    py_setitem(options, nk[].k_reduction, PythonObject(ip[0] // 256))
     py_setitem(options, nk[].k_opt, PythonObject(ip[2]))
     py_setitem(options, nk[].k_flags, PythonObject(ip[3]))
     py_setitem(options, nk[].k_sched, PythonObject(ip[4]))

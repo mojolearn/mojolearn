@@ -484,6 +484,15 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         args = Python.list(ichannels, ibits, 1 if kind == "instance_norm1d" else 2, 1 if Bool(py=options[3]) else 0,
                            1 if Bool(py=options[4]) else 0, 0)
     # nn-norms end
+    # nn-losses-2 begin: log_softmax (a0 PyTorch's dim, counted with the batch axis; autograd/nn_log_softmax.mojo
+    # checks it against the sample's axes when the model is parsed)
+    elif kind == "log_softmax":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("dim"), Python.tuple(-1), 0)
+        if not _integer(options[0], context):
+            raise Error("dim must be an integer axis")
+        a0 = py_call(b.int, options[0])
+        args = Python.list(a0, 0, 0, 0, 0, 0)
+    # nn-losses-2 end
     elif len(supplied) != 0 or len(keywords) != 0:
         raise Error("TypeError: " + kind + " takes no arguments")
     # lane neural-blocks-3 (2026-11-22): the native model reads the float argument as a Float32 (eps, p, theta,
@@ -744,7 +753,32 @@ def sequential_compile(mut mods: NativeModules, model: PythonObject, options: Py
     py_setitem(out, nk[].k_sched, py_item(context, nk[].k_schedule_codes)[schedule])
     py_setitem(out, nk[].k_step_size, py_call(b.int, options[10]))
     py_setitem(out, nk[].k_gamma, py_call(b.float, options[11]))
-    py_setitem(out, nk[].k_huber_delta, py_call(b.float, options[12]))
+    # nn-losses begin: one loss scalar word, the Huber delta, the smooth_l1 beta or the bce_with_logits
+    # pos_weight (autograd/model.mojo FitConfig.huber_delta); the reduction's code rides in the loss word
+    var reduction = options[15]
+    if not py_contains(py_item(context, nk[].k_reduction_codes), reduction):
+        raise Error("reduction must be 'mean', 'sum' or 'batchmean'")
+    var loss_name = String(loss)
+    var scalar = options[12]
+    if loss_name == "smooth_l1":
+        scalar = options[17]
+    elif loss_name == "bce_with_logits":
+        scalar = options[16]
+    # nn-losses-2 begin: ctc's scalar word is the blank index, or -1 - blank with zero_infinity
+    # (autograd/nn_ctc.mojo ctc_blank_word); blank is checked against the output's classes at fit
+    elif loss_name == "ctc":
+        var blank = options[18] if len(options) > 18 else PythonObject(0)
+        if not _integer(blank, context) or Bool(py=blank < PythonObject(0)) or Bool(py=blank > PythonObject(16777215)):
+            raise Error("blank must be a non-negative integer class index")
+        if String(reduction) == "batchmean":
+            raise Error("ctc takes reduction='mean' or 'sum'")
+        var zero_infinity = Bool(py=options[19]) if len(options) > 19 else False
+        var blank_index = Int(py=py_call(b.int, blank))
+        scalar = PythonObject(Float64(-1 - blank_index) if zero_infinity else Float64(blank_index))
+    # nn-losses-2 end
+    py_setitem(out, nk[].k_huber_delta, py_call(b.float, scalar))
+    py_setitem(out, nk[].k_reduction, py_item(context, nk[].k_reduction_codes)[reduction])
+    # nn-losses end
     py_setitem(out, nk[].k_tol, py_call(b.float, options[13]))
     py_setitem(out, nk[].k_n_iter_no_change, py_call(b.int, options[14]))
     var fields = sequential_fields(model)

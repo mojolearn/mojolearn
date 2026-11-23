@@ -92,6 +92,13 @@ lane adds its own `api_exclude.txt` lines with the one reason, plus rows in `SEQ
 - nn-losses: loss codes.
 - nn-optim: optimizer and schedule codes.
 - nn-recurrent: arguments.
+- nn-losses-2: layer code 77 (log_softmax); loss code 9 (ctc). Rows:
+
+| name | family (lane) | verify lane | endpoint row | sabotage | recipe | native case | boundary | GPU owed |
+|---|---|---|---|---|---|---|---|---|
+| `Sequential.log_softmax` | activations (nn-losses-2) | sequence-composed-log-softmax-ctc | yes | `MOJOLEARN_NN_LOSSES_SABOTAGE_LOG_SOFTMAX` | seq-nll-log-softmax, seq-ctc | nn_losses_2 | sequential_ctc, layers | nn_losses_2 device column |
+| `compile(loss="ctc", blank=, zero_infinity=)`, `fit(target_lengths=)` | losses (nn-losses-2) | sequence-composed-log-softmax-ctc | yes (`compile:loss=ctc`) | `MOJOLEARN_NN_LOSSES_SABOTAGE_CTC_REPEAT` | seq-ctc | nn_losses_2 | sequential_ctc | nn_losses_2 device column |
+| `compile(loss="l1" / "smooth_l1" / "nll" / "kl_div" / "bce_with_logits")`, `pos_weight=`, `beta=`, `reduction=` | losses (nn-losses) | sequence-composed-losses (and -log-softmax-ctc for nll, kl_div) | yes (`compile:loss=<name>`, added by nn-losses-2) | `MOJOLEARN_NN_LOSSES_SABOTAGE_SMOOTH_L1_HALF` | seq-l1, seq-smooth-l1, seq-nll-log-softmax | nn_losses, nn_losses_2 | sequential_losses | nn_losses device column |
 
 ## Records to take at the release (named, not recorded here)
 

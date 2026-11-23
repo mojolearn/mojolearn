@@ -206,6 +206,10 @@ from autograd.nn_attention_ops import OP_NN_FIRST, OP_NN_LAST, apply_nn_attentio
 # lane nn-conv: the convolution and shape layers of Sequential (autograd/nn_conv_ops.mojo), 5560..5579
 from autograd.nn_conv_ops import OP_NNC_FIRST, OP_NNC_LAST, apply_nn_conv
 # nn-conv end
+# nn-losses-2 begin
+# lane nn-losses-2: the ctc loss's row scans and its target pack (autograd/nn_ctc_ops.mojo), 5640..5649
+from autograd.nn_ctc_ops import OP_CTC_FIRST, OP_CTC_LAST, apply_nn_ctc
+# nn-losses-2 end
 
 
 @always_inline
@@ -775,3 +779,8 @@ def apply[OP: Int](t: Int, a: Args):
         comptime assert OP_NNC_FIRST > OP_SSM_LAST and OP_NNC_FIRST > OP_TFP_LAST and OP_NNC_FIRST > OP_IMP_LAST, "nn-conv opcode range overlaps another family"
         apply_nn_conv[OP](t, a)
     # nn-conv end
+    # nn-losses-2 begin
+    elif OP >= OP_CTC_FIRST and OP <= OP_CTC_LAST:
+        comptime assert OP_CTC_FIRST > OP_SSM_LAST and OP_CTC_FIRST > OP_TFP_LAST and OP_CTC_FIRST > OP_IMP_LAST, "nn-losses-2 opcode range overlaps another family"
+        apply_nn_ctc[OP](t, a)
+    # nn-losses-2 end

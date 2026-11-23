@@ -19,7 +19,7 @@ from bindings.py_balanced import py_item
 from bindings.admitted_sequence_door import admit_nd_f32
 
 
-def _sequential_lengths(source: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+def _sequential_lengths(source: PythonObject, n: Int, context: PythonObject, name: String = "lengths") raises -> PythonObject:
     """The `lengths` argument (lane seq-blocks-3): None stays None, else one C-ordered float32 vector of n
     values (the one admission cast); the values are checked natively (autograd/model.mojo
     model_lengths_check: whole numbers from 1 to the padded sequence length)."""
@@ -27,8 +27,8 @@ def _sequential_lengths(source: PythonObject, n: Int, context: PythonObject) rai
         return source
     var a = sequential_input(source, context)
     if Int(py=a.ndim) != 1 or Int(py=a.shape[0]) != n:
-        raise Error("ValueError: lengths must be a vector of one length per sample (" + String(n) + ")")
-    return admit_nd_f32(a, "lengths", False, context)
+        raise Error("ValueError: " + name + " must be a vector of one length per sample (" + String(n) + ")")
+    return admit_nd_f32(a, name, False, context)
 
 
 def sequential_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -45,7 +45,7 @@ def sequential_targets(mut mods: NativeModules, model: PythonObject, source: Pyt
     var y = sequential_input(source, context)
     var nd = Int(py=y.ndim)
     var fields = sequential_fields(model)
-    var classification = loss == "cross_entropy" or loss == "bce_with_logits"
+    var classification = loss == "cross_entropy" or loss == "bce_with_logits" or loss == "nll"
     if nd < 1 or nd > 2 or Int(py=y.shape[0]) != n or (classification and nd != 1):
         raise Error("y must hold one target row per input sample")
     var descriptor = sequential_descriptor(y, "y")
@@ -57,12 +57,18 @@ def sequential_targets(mut mods: NativeModules, model: PythonObject, source: Pyt
     py_setitem(fields, nk[].k__y_1d, False)
     if loss == "token_cross_entropy":
         return Python.tuple(y, descriptor, 0, PythonObject(None))
+    # nn-losses-2 begin: ctc's (n_samples, max target length) label sequences, one C-ordered float32 copy (the one
+    # admission cast); the native fit checks them with the target lengths (autograd/nn_ctc.mojo ctc_admit)
+    if loss == "ctc":
+        var labels = admit_nd_f32(y, "y", False, context)
+        return Python.tuple(labels, sequential_descriptor(labels, "y"), 0, PythonObject(None))
+    # nn-losses-2 end
     if classification:
         # the labels as they are and a classes buffer of their dtype: the
         # fit entry sorts them and keeps the codes on the device
         # (`model_fit_labels`); the class-count refusals run there
         var classes = sequential_array(mods, Python.tuple(n), y.dtype, context)
-        return Python.tuple(y, descriptor, 1 if loss == "cross_entropy" else 2, classes)
+        return Python.tuple(y, descriptor, 2 if loss == "bce_with_logits" else 1, classes)
     py_setitem(fields, nk[].k__y_1d, nd == 1)
     var width = 1 if nd == 1 else Int(py=y.shape[1])
     if width != n_out:
@@ -157,7 +163,9 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         state = sequential_array(mods, Python.tuple(12), py_item(context, nk[].k_int64), context)
         curve = sequential_array(mods, Python.tuple(epochs), py_item(context, nk[].k_float32), context)
     seed = py_call(b.int, seed)
-    var ip = Python.list(n, py_item(context, nk[].k_loss_codes)[py_item(options, nk[].k_loss)], target, py_item(options, nk[].k_opt), py_item(options, nk[].k_flags),
+    # nn-losses: the loss word, code + 256 * reduction (autograd/model.mojo LOSS_WORD_REDUCTION)
+    var loss_word = Int(py=py_item(context, nk[].k_loss_codes)[py_item(options, nk[].k_loss)]) + 256 * Int(py=py_get(options, nk[].k_reduction, 0))
+    var ip = Python.list(n, loss_word, target, py_item(options, nk[].k_opt), py_item(options, nk[].k_flags),
         py_item(options, nk[].k_sched), py_item(options, nk[].k_step_size), batch_size, epochs, 1 if Bool(py=shuffle) else 0,
         seed.__and__(4294967295), seed.__rshift__(32), py_item(options, nk[].k_n_iter_no_change),
         0 if resume or warm else 1, 1 if resume else 0)
@@ -170,6 +178,16 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     if lengths is not None:
         # the ninth address (autograd/model_execution.mojo model_fit_native)
         _ = py_call(addresses.append, sequential_address(lengths))
+    # nn-losses-2 begin: the ctc loss's target lengths, the tenth address (the ninth 0 without lengths)
+    var target_lengths_source = args[10] if len(args) > 10 else PythonObject(None)
+    if target_lengths_source is not None and validation is not None:
+        raise Error("ValueError: validation_data with target_lengths is not supported")
+    var target_lengths = _sequential_lengths(target_lengths_source, n, context, "target_lengths")
+    if target_lengths is not None:
+        if lengths is None:
+            _ = py_call(addresses.append, 0)
+        _ = py_call(addresses.append, sequential_address(target_lengths))
+    # nn-losses-2 end
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     _ = state  # keep the Python object alive through the native call above
@@ -253,6 +271,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     _ = vx^
     _ = vy^
     _ = lengths^
+    _ = target_lengths^  # nn-losses-2
     py_setitem(fields, nk[].k_params_, params)
     py_setitem(fields, nk[].k_n_iter_, n_iter)
     if validation is not None:
@@ -368,19 +387,20 @@ def sequential_predict(mut mods: NativeModules, model: PythonObject, source: Pyt
     var loss = "" if saved_loss is None else String(saved_loss)
     var entries = sequential_entries(model, context)
     mods.released()
-    var classifier = loss == "cross_entropy" or loss == "bce_with_logits"
+    var classifier = loss == "cross_entropy" or loss == "bce_with_logits" or loss == "nll"
     if probabilities:
-        if loss == "cross_entropy":
+        # nll: the outputs are log-probabilities, and their softmax is the probabilities themselves
+        if loss == "cross_entropy" or loss == "nll":
             return sequential_forward(mods, model, source, 1, PythonObject(None), entries, context, PythonObject(None),
                                       lengths)
         if loss == "bce_with_logits":
             return sequential_forward(mods, model, source, 3, PythonObject(2), entries, context, PythonObject(None),
                                       lengths)
-        raise Error("predict_proba needs a model fitted with cross_entropy or bce_with_logits")
+        raise Error("predict_proba needs a model fitted with cross_entropy, nll or bce_with_logits")
     if classifier:
         # one entry: the argmax (threshold) codes stay on the device and are
         # gathered there into the labels (`model_predict_labels`)
-        return sequential_forward(mods, model, source, 4 if loss == "cross_entropy" else 5, PythonObject(1), entries,
+        return sequential_forward(mods, model, source, 5 if loss == "bce_with_logits" else 4, PythonObject(1), entries,
                                   context, py_item(fields, nk[].k_classes_), lengths)
     var result = sequential_forward(mods, model, source, 0, PythonObject(None), entries, context, PythonObject(None),
                                     lengths)

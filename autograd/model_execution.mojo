@@ -50,11 +50,15 @@ def model_fit_native[E: Exec](
     var validated = len(addrs) == 13 and len(ip) == 16
     # lane seq-blocks-3: a ninth address after the training state holds N float32 sequence lengths (0: none)
     var with_lengths = len(addrs) == FIT_ADDRS_STATE + 1 and len(ip) == FIT_INTS_STATE
+    # nn-losses-2: a tenth address holds the ctc loss's N float32 target lengths (the ninth may then be 0)
+    var with_targets = len(addrs) == FIT_ADDRS_STATE + 2 and len(ip) == FIT_INTS_STATE
+    if with_targets:
+        with_lengths = True
     var stateful = (len(addrs) == FIT_ADDRS_STATE and len(ip) == FIT_INTS_STATE) or validated or with_lengths
     var plain = len(addrs) == FIT_ADDRS and len(ip) == FIT_INTS
     if not (stateful or plain) or len(fp) < FIT_FLOATS + 1:
         raise Error("model_fit: requires 4 addresses and 14 integer parameters (or 8 and 15 with the "
-                    + "training state, 9 with sequence lengths) and 9 floats plus one per layer")
+                    + "training state, 9 with sequence lengths, 10 with the ctc target lengths) and 9 floats plus one per layer")
     var spec = parse_model(prog, model_float_words(fp, FIT_FLOATS))
     var N = ip[0]
     var opt = OptConfig(ip[3], ip[4], Float32(fp[1]), Float32(fp[2]), Float32(fp[3]), Float32(fp[4]), Float32(fp[5]))
@@ -94,10 +98,13 @@ def model_fit_native[E: Exec](
         var lengths = Optional[FP]()
         if with_lengths and addrs[8] != 0:
             lengths = Optional[FP](model_fptr(addrs[8], "lengths"))
+        var target_lengths = Optional[FP]()  # nn-losses-2
+        if with_targets:
+            target_lengths = Optional[FP](model_fptr(addrs[9], "target_lengths"))
         _ = model_fit_state(ex, spec, cfg, sources[0], y, N,
                             model_fptr(addrs[2], "params"), model_fptr(addrs[3], "loss_curve"),
                             model_fptr(addrs[4], "m"), model_fptr(addrs[5], "v"), state, prev, resume, validation,
-                            codes_dev, lengths)
+                            codes_dev, lengths, target_lengths)
         n_iter = Int(state[FS_EPOCH])
     else:
         if codes_dev != 0:

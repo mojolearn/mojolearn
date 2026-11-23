@@ -62,6 +62,8 @@ EXISTING backward rule; no kernel is written or edited here:
   47-53 identity, leaky_relu, elu,  autograd/nn_activations.mojo (lane nn-activations,    ImportRules 192 /
         prelu, mish, hardswish,     2026-11-23): imp_unary / imp_binary kinds over        193
         hardsigmoid                 checks/numerics.mojo's activation bodies
+  77    log_softmax (a0 dim)     Tape.log_softmax along the axis (rn_softmax_along):    tape (LOG_SOFTMAX)
+                                 autograd/nn_log_softmax.mojo (lane nn-losses-2)
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -104,6 +106,10 @@ from autograd.ssm_ops import ssm_m1_states_supported
 from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
+# nn-losses-2 begin: code 77, log_softmax (autograd/nn_log_softmax.mojo); the CTC loss's rule (autograd/nn_ctc.mojo)
+from autograd.nn_log_softmax import is_nn_log_softmax, nn_log_softmax_shape, nn_log_softmax_forward, NN_LOG_SOFTMAX
+from autograd.nn_ctc import NnCtcRules
+# nn-losses-2 end
 # nn-recurrent begin
 from autograd.nn_recurrent import nn_rnn_final, nn_rnn_reverse_lengths
 # nn-recurrent end
@@ -158,14 +164,17 @@ comptime LAYER_GROUP_NORM = 54
 #: running_mean, running_var (tracked; state the optimizer never updates, bn_state)
 comptime LAYER_INSTANCE_NORM = 55
 # nn-norms end
+# nn-losses-2 begin: log_softmax (a0 PyTorch's dim), dispatched to autograd/nn_log_softmax.mojo
+comptime LAYER_LOG_SOFTMAX = 77
+# nn-losses-2 end
 #: the block layer codes (lane nn-integrate, 2026-11-23): every code from BLOCK_FIRST to BLOCK_LAST is a block
 #: layer, defined either here or by a lane's own module, which defines its LAYER_* codes and tables and is called
 #: from each table below (tools/block_tables_check.py DELEGATES lists them):
 #:   47..53 autograd/nn_activations.mojo     56..66 autograd/nn_conv_blocks.mojo
-#:   67, 72 autograd/nn_attention.mojo
+#:   67, 72 autograd/nn_attention.mojo            77 log_softmax, here (autograd/nn_log_softmax.mojo's body)
 #: BLOCK_UNUSED_FIRST..BLOCK_UNUSED_LAST were never assigned and are not layers.
 comptime BLOCK_FIRST = 32
-comptime BLOCK_LAST = 72
+comptime BLOCK_LAST = 77
 comptime BLOCK_UNUSED_FIRST = 68
 comptime BLOCK_UNUSED_LAST = 71
 
@@ -185,6 +194,9 @@ comptime _ARGS = 6
 
 
 def is_block(code: Int) -> Bool:
+    # nn-losses-2 begin
+    comptime assert LAYER_LOG_SOFTMAX == NN_LOG_SOFTMAX, "log_softmax's code differs between its two declarations"
+    # nn-losses-2 end
     return code >= BLOCK_FIRST and code <= BLOCK_LAST and (code < BLOCK_UNUSED_FIRST or code > BLOCK_UNUSED_LAST)
 
 
@@ -431,6 +443,10 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
             raise Error(name + " (InstanceNorm): eps must be positive")
         return cur
     # nn-norms end
+    # nn-losses-2 begin
+    if code == LAYER_LOG_SOFTMAX:
+        return nn_log_softmax_shape(code, a0, cur, name)
+    # nn-losses-2 end
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -919,6 +935,10 @@ def block_forward[E: Exec](
         return graph_instance_norm(tape, ex, h, B, a0, cur.count() // a0, iw, ib, running, bn_momentum(xargs, i), f,
                                    train)
     # nn-norms end
+    # nn-losses-2 begin
+    if code == LAYER_LOG_SOFTMAX:
+        return nn_log_softmax_forward(tape, ex, a0, cur, h)
+    # nn-losses-2 end
     raise Error("model: unknown block code " + String(code))
 
 
@@ -956,6 +976,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         if nn_attention_rule(tag):
             return True
         # nn-attention end
+        # nn-losses-2 begin
+        if NnCtcRules.owns(tag):
+            return True
+        # nn-losses-2 end
         if Self._recurrent(tag):
             return True
         # lm_head (lane neural-blocks-3-lm): the fused head's tag, StepOpRules' own answers
@@ -974,6 +998,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         if nn_attention_rule(tag):
             return NNAttentionRules().zeroed_destination(tag, saved, edge)
         # nn-attention end
+        # nn-losses-2 begin
+        if NnCtcRules.owns(tag):
+            return NnCtcRules().zeroed_destination(tag, saved, edge)
+        # nn-losses-2 end
         if Self._recurrent(tag):
             return RecurrentRules().zeroed_destination(tag, saved, edge)
         if tag == LM_HEAD_V2_TAG:
@@ -991,6 +1019,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         if nn_attention_rule(tag):
             return NNAttentionRules().writes_total(tag, saved, edge)
         # nn-attention end
+        # nn-losses-2 begin
+        if NnCtcRules.owns(tag):
+            return NnCtcRules().writes_total(tag, saved, edge)
+        # nn-losses-2 end
         if Self._recurrent(tag):
             return RecurrentRules().writes_total(tag, saved, edge)
         if tag == LM_HEAD_V2_TAG:
@@ -1012,6 +1044,11 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             NNAttentionRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
             return
         # nn-attention end
+        # nn-losses-2 begin
+        if NnCtcRules.owns(tag):
+            NnCtcRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        # nn-losses-2 end
         if Self._recurrent(tag):
             RecurrentRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         elif tag == LM_HEAD_V2_TAG:

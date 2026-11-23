@@ -45,6 +45,8 @@ from autograd.ops import (
     LINEAR, LOSS_ELEM, LOSS_REDUCED, LOSS_CE, LOSS_SCE, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
 )
 from autograd.loss_ops import LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS
+from autograd.nn_losses import LS_SMOOTH_L1, LS_NLL, LS_KL_DIV
+from checks.numerics import identical_div
 from autograd.data_ops import DROPOUT
 from autograd.embedding_ops import EMBEDDING
 from autograd.higher_loss_ops import onehot_into
@@ -170,7 +172,33 @@ def _loss_terms_recorded[E: Exec](
         MSE    2 (g d)              d = p - y; edge 1 negated
         MAE    g sign(d)            sign a constant (zero curvature); edge 1 negated
         HUBER  g clamp(d, delta)    d inside the threshold, else delta sign(d); edge 1 negated
-        BCE    g (sigmoid(p) - y)   edge 1: -(g p)"""
+        BCE    g (sigmoid(p) - y)   edge 1: -(g p)
+    and lane nn-losses' kinds (autograd/nn_losses.mojo):
+        BCE pos_weight w != 1: g ((1 + (w - 1) y) sigmoid(p) - w y); edge 1: g (-p + (w - 1) softplus(-p))
+        SMOOTH_L1  g clamp(d, beta) / beta (beta 0: g sign(d)); edge 1 negated
+        NLL        -(g y); edge 1: -(g p)
+        KL_DIV     -(g y); edge 1 (a target that takes a gradient) is refused"""
+    # nn-losses begin
+    if kind == LS_BCE_LOGITS and delta != Float32(1):
+        var wm1 = delta - Float32(1)
+        if edge == 0:
+            var lw = tape.add(ex, tape.scale(ex, y, wm1), tape.scalar(ex, Float32(1)))
+            var r = tape.subtract(ex, tape.multiply(ex, lw, tape.sigmoid(ex, p)), tape.scale(ex, y, delta))
+            return tape.multiply(ex, g, r)
+        var negp = tape.scale(ex, p, Float32(-1))
+        var absp = tape.add(ex, tape.relu(ex, p), tape.relu(ex, negp))
+        var one = tape.scalar(ex, Float32(1))
+        var soft = tape.log(ex, tape.add(ex, tape.exp(ex, tape.scale(ex, absp, Float32(-1))), one))
+        var spn = tape.add(ex, tape.relu(ex, negp), soft)
+        return tape.multiply(ex, g, tape.add(ex, negp, tape.scale(ex, spn, wm1)))
+    if kind == LS_NLL or kind == LS_KL_DIV:
+        if edge == 0:
+            return tape.scale(ex, tape.multiply(ex, g, y), Float32(-1))
+        if kind == LS_KL_DIV:
+            raise Error("autograd: second derivatives through a kl_div target are not supported; "
+                        + "give the target no gradient")
+        return tape.scale(ex, tape.multiply(ex, g, p), Float32(-1))
+    # nn-losses end
     if kind == LS_BCE_LOGITS:
         if edge == 0:
             var s = tape.sigmoid(ex, p)
@@ -189,6 +217,11 @@ def _loss_terms_recorded[E: Exec](
     elif kind == LS_HUBER:
         var q = clamp(tape, ex, d, delta)
         c = tape.multiply(ex, g, q)
+    elif kind == LS_SMOOTH_L1:  # nn-losses
+        if delta > Float32(0):
+            c = tape.multiply(ex, g, tape.scale(ex, clamp(tape, ex, d, delta), identical_div(Float32(1), delta)))
+        else:
+            c = tape.multiply(ex, g, sign(tape, ex, d))
     else:
         raise Error("autograd: loss node with an unknown loss kind " + String(kind))
     if edge == 0:
