@@ -1,9 +1,9 @@
 diff --git a/gbdt/host/gbdt_oracle_multiclass.mojo b/gbdt/host/gbdt_oracle_multiclass.mojo
-index eff1b7891d..1411a2d44d 100644
+index d1a66236df..85bc359a4b 100644
 --- a/gbdt/host/gbdt_oracle_multiclass.mojo
 +++ b/gbdt/host/gbdt_oracle_multiclass.mojo
-@@ -864,6 +864,16 @@ def _class_weight_rows(
-     _ = len(weights)
+@@ -941,6 +941,16 @@ def _dims_planes(
+     _ = len(planes)
  
  
 +from std.memory import bitcast as _sab_bitcast
@@ -19,7 +19,7 @@ index eff1b7891d..1411a2d44d 100644
  def gbdt_multi_host_fit(
      x_colmajor: List[Float32],
      y: List[Float32],
-@@ -1397,6 +1407,7 @@ def gbdt_multi_host_fit(
+@@ -1582,6 +1592,7 @@ def gbdt_multi_host_fit(
                      leaf_method, leaf_iterations,
                  )
                  p_scaled = rescaled_leaves(estimated, lr)
@@ -27,7 +27,7 @@ index eff1b7891d..1411a2d44d 100644
                  apply_scaled_leaves_host(
                      cursors[p], p_scaled, row_index, offsets, sizes, n_live,
                      dim, n_rows,
-@@ -1411,6 +1422,7 @@ def gbdt_multi_host_fit(
+@@ -1596,6 +1607,7 @@ def gbdt_multi_host_fit(
                      params.l2_leaf_reg, leaf_method, leaf_iterations,
                  )
                  p_scaled = rescaled_leaves(estimated, lr)
