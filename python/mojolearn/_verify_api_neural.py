@@ -86,6 +86,15 @@ SEQUENTIAL_LAYER_FIXTURES={
     'upsample':((1,2,2),lambda m,S:m.upsample(scale_factor=2,mode='bilinear')),
     'pixel_shuffle':((4,2,2),lambda m,S:m.pixel_shuffle(2)),
     # nn-conv end
+    # nn-activations begin
+    'identity':((4,),lambda m,S:m.linear(4).identity()),
+    'leaky_relu':((4,),lambda m,S:m.linear(4).leaky_relu(0.1)),
+    'elu':((4,),lambda m,S:m.linear(4).elu()),
+    'prelu':((2,4),lambda m,S:m.prelu(2)),
+    'mish':((4,),lambda m,S:m.linear(4).mish()),
+    'hardswish':((4,),lambda m,S:m.linear(4).hardswish()),
+    'hardsigmoid':((4,),lambda m,S:m.linear(4).hardsigmoid()),
+    # nn-activations end
 }
 
 

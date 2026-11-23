@@ -4,6 +4,7 @@
 # the UNPACK half is `bindings/sequential_description_unpack.mojo`.
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from std.memory import bitcast
+from std.math import isfinite  # nn-activations
 from std.python import Python, PythonObject
 from bindings.sequential_admission_door import sequential_integer, sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_fields, py_setitem, py_type
@@ -308,6 +309,29 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         a0 = PythonObject(channels)
         a1 = PythonObject(bits)
         args = Python.list(channels, bits, 1 if kind == "batch_norm1d" else 2, 0, 0, 0)
+    # nn-activations begin: leaky_relu (f negative_slope), elu (f alpha), prelu (a0 num_parameters, a1 the init's
+    # float32 bits); identity, mish, hardswish and hardsigmoid take no arguments (the last branch below)
+    elif kind == "leaky_relu" or kind == "elu":
+        var label = "negative_slope" if kind == "leaky_relu" else "alpha"
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple(label),
+                                 Python.tuple(0.01 if kind == "leaky_relu" else 1.0), 0)
+        var value = Float64(py=py_call(b.float, options[0]))
+        if not isfinite(value) or not isfinite(Float32(value)):
+            raise Error(label + " must be a finite number")
+        f = PythonObject(value)
+        args = Python.list(0, 0, 0, 0, 0, 0)
+    elif kind == "prelu":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("num_parameters", "init"),
+                                 Python.tuple(1, 0.25), 0)
+        var count = _positive(options[0], "num_parameters", 1, context)
+        var init = Float32(Float64(py=py_call(b.float, options[1])))
+        if not isfinite(init) or not (init > Float32(-1)):
+            raise Error("init must be a finite number greater than -1")
+        var init_bits = Int(bitcast[DType.int32](init))
+        a0 = PythonObject(count)
+        a1 = PythonObject(init_bits)
+        args = Python.list(count, init_bits, 0, 0, 0, 0)
+    # nn-activations end
     elif kind == "gated":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("gate", "up"),
                                  Python.tuple(None, None), 2)

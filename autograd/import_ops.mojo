@@ -2,9 +2,9 @@
 # THE IMPORT ELEMENTWISE FAMILY (lane ag-import-kernels, docs/plans/
 # MODEL_IMPORT.md section 3.3): the element bodies an imported ONNX or
 # torch.export graph needs beyond the tape's own (erf, gelu, softplus, silu,
-# leaky relu, elu, hard sigmoid / swish, clip, abs, floor, ceil, round, sin,
+# leaky relu, elu, hard sigmoid / swish, mish, clip, abs, floor, ceil, round, sin,
 # cos, sign, reciprocal, logical not, pow; the broadcasting binary kinds pow,
-# minimum, maximum, where, the comparisons and logical and / or; argmax's
+# minimum, maximum, prelu, where, the comparisons and logical and / or; argmax's
 # position words; constant pad; lane ag-import-lm-ops: the nonzero test of
 # any / all, cumsum's blocked scan and the flat ids of a multi-tensor index).
 # Shared by HostExec and DeviceExec through
@@ -79,6 +79,13 @@ from checks.numerics import (
     identical_gelu_erf, identical_gelu_tanh, identical_log, identical_pow, identical_sigmoid,
     identical_silu, identical_sin, identical_softplus, identical_tanh,
 )
+# nn-activations begin: the activation bodies live in checks/numerics.mojo (one body each, lane nn-activations)
+from checks.numerics import (
+    identical_leaky_relu, identical_leaky_relu_vjp, identical_prelu_weight_vjp, identical_elu, identical_elu_vjp,
+    identical_hardsigmoid, identical_hardsigmoid_vjp, identical_hardswish, identical_hardswish_vjp,
+    identical_mish, identical_mish_vjp,
+)
+# nn-activations end
 
 comptime OP_IMP_UNARY_FWD = 4600
 comptime OP_IMP_UNARY_VJP = 4601
@@ -115,7 +122,10 @@ comptime IMP_RECIPROCAL = 18
 comptime IMP_NOT = 19            # 1 where x == 0, else 0
 comptime IMP_POW_SCALAR = 20     # f0 the exponent
 comptime IMP_BOOL = 21           # 1 where x != 0 (NaN included), else 0
-comptime IMP_UNARY_LAST = 21
+# nn-activations begin
+comptime IMP_MISH = 22           # x tanh(softplus(x)) (lane nn-activations)
+comptime IMP_UNARY_LAST = 22
+# nn-activations end
 
 # Binary kinds (Args.i1 of OP_IMP_BIN_*).
 comptime IMP_POW = 1
@@ -130,7 +140,10 @@ comptime IMP_LE = 9
 comptime IMP_NE = 10
 comptime IMP_AND = 11
 comptime IMP_OR = 12
-comptime IMP_BINARY_LAST = 12
+# nn-activations begin
+comptime IMP_PRELU = 13          # a >= 0 ? a : b a, b the learned slope (broadcast; lane nn-activations)
+comptime IMP_BINARY_LAST = 13
+# nn-activations end
 
 # argmax output forms (Args.i1 of OP_IMP_ARGMAX)
 comptime IMP_ARGMAX_INT32 = 0    # int32 words in float storage
@@ -164,7 +177,7 @@ def unary_has_gradient(kind: Int) -> Bool:
 
 def binary_has_gradient(kind: Int) -> Bool:
     """False for the comparisons and logical kinds (0/1 results)."""
-    return kind == IMP_POW or kind == IMP_MINIMUM or kind == IMP_MAXIMUM or kind == IMP_WHERE
+    return kind == IMP_POW or kind == IMP_MINIMUM or kind == IMP_MAXIMUM or kind == IMP_WHERE or kind == IMP_PRELU
 
 
 # ---------------------------------------------------------------- scalar helpers
@@ -254,18 +267,17 @@ def imp_unary_value(kind: Int, x: Float32, f0: Float32, f1: Float32) -> Float32:
         return ftz(identical_softplus(x))
     if kind == IMP_SILU:
         return ftz(identical_silu(x))
+    # nn-activations: leaky relu, elu, hard sigmoid / swish and mish are checks/numerics.mojo's bodies
     if kind == IMP_LEAKY_RELU:
-        if x >= Float32(0):
-            return x
-        return mul(f0, x)
+        return identical_leaky_relu(x, f0)
     if kind == IMP_ELU:
-        if x >= Float32(0):
-            return x
-        return mul(f0, sub(ftz(identical_exp(x)), Float32(1)))
+        return identical_elu(x, f0)
     if kind == IMP_HARD_SIGMOID:
-        return ftz(identical_clamp(add(mul(f0, x), f1), Float32(0), Float32(1)))
+        return identical_hardsigmoid(x, f0, f1)
     if kind == IMP_HARD_SWISH:
-        return mul(x, ftz(identical_clamp(add(mul(f0, x), f1), Float32(0), Float32(1))))
+        return identical_hardswish(x, f0, f1)
+    if kind == IMP_MISH:
+        return identical_mish(x)
     if kind == IMP_CLIP:
         return ftz(identical_clamp(x, f0, f1))
     if kind == IMP_ABS:
@@ -326,24 +338,15 @@ def imp_unary_vjp_value(kind: Int, g: Float32, x: Float32, y: Float32, f0: Float
         var s = ftz(identical_sigmoid(x))
         return mul(g, mul(s, add(Float32(1), mul(x, sub(Float32(1), s)))))
     if kind == IMP_LEAKY_RELU:
-        if x > Float32(0):
-            return g
-        return mul(g, f0)
+        return identical_leaky_relu_vjp(g, x, f0)
     if kind == IMP_ELU:
-        if x > Float32(0):
-            return g
-        return mul(g, mul(f0, ftz(identical_exp(x))))
-    if kind == IMP_HARD_SIGMOID or kind == IMP_HARD_SWISH:
-        var v = add(mul(f0, x), f1)
-        var inside = v > Float32(0) and v < Float32(1)
-        if kind == IMP_HARD_SIGMOID:
-            if inside:
-                return mul(g, f0)
-            return Float32(0)
-        var hs = ftz(identical_clamp(v, Float32(0), Float32(1)))
-        if inside:
-            return mul(g, add(hs, mul(x, f0)))
-        return mul(g, hs)
+        return identical_elu_vjp(g, x, f0)
+    if kind == IMP_HARD_SIGMOID:
+        return identical_hardsigmoid_vjp(g, x, f0, f1)
+    if kind == IMP_HARD_SWISH:
+        return identical_hardswish_vjp(g, x, f0, f1)
+    if kind == IMP_MISH:
+        return identical_mish_vjp(g, x)
     if kind == IMP_CLIP:
         if x >= f0 and x <= f1:
             return g
@@ -389,6 +392,8 @@ def imp_binary_value(kind: Int, x: Float32, y: Float32) -> Float32:
         return _unit(x <= y)
     if kind == IMP_NE:
         return _unit(x != y)
+    if kind == IMP_PRELU:
+        return identical_leaky_relu(x, y)
     if kind == IMP_AND:
         return _unit(x != Float32(0) and y != Float32(0))
     # IMP_OR
@@ -423,6 +428,11 @@ def imp_binary_vjp_value(kind: Int, e: Int, g: Float32, x: Float32, y: Float32, 
         if wins:
             return g
         return Float32(0)
+    if kind == IMP_PRELU:
+        # nn-activations: a the input, b the slope
+        if e == 0:
+            return identical_leaky_relu_vjp(g, x, y)
+        return identical_prelu_weight_vjp(g, x)
     if kind == IMP_WHERE:
         var take_a = c != Float32(0)
         if (e == 0 and take_a) or (e == 1 and not take_a):

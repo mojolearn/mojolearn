@@ -93,13 +93,19 @@ DELEGATES = (
         "block_param_sizes": "nn_attention_param_sizes", "block_param_names": "nn_attention_param_names",
         "block_init_bounds": "nn_attention_init_bounds", "block_tensor_dims": "nn_attention_tensor_dims",
         "block_shape": "nn_attention_shape", "block_forward": None}),
+    ("autograd/nn_activations.mojo", "is_nn_activation", {
+        "block_param_sizes": "nn_act_param_sizes", "block_param_names": "nn_act_param_names",
+        "block_init_bounds": "nn_act_init_bounds", "block_tensor_dims": "nn_act_tensor_dims",
+        "block_shape": "nn_act_shape", "block_forward": "nn_act_forward"}),
     ("autograd/nn_conv_blocks.mojo", "is_nn_conv", {
         "block_param_sizes": "nnc_param_sizes", "block_param_names": "nnc_param_names",
         "block_init_bounds": "nnc_init_bounds", "block_tensor_dims": "nnc_tensor_dims",
         "block_shape": "nnc_shape", "block_forward": "nnc_forward"}),
 )
 #: core layers built by add() with no arguments (the description pack's final `takes no arguments` branch)
-NO_ARGUMENTS = frozenset(("relu", "sigmoid", "tanh", "softmax", "flatten"))
+NO_ARGUMENTS = frozenset(("relu", "sigmoid", "tanh", "softmax", "flatten",
+                          # nn-activations: block layers without arguments, the same final branch
+                          "identity", "mish", "hardswish", "hardsigmoid"))
 #: parameter-free core codes verify covers through its own endpoint branches (relu .. avg_pool2d but the
 #: parameter layers 1 linear, 6 layer_norm and 12 conv2d); every other code, and every new one, needs a fixture
 CORE_NO_FIXTURE = frozenset((2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14))
@@ -316,6 +322,9 @@ def check_delegate(path, text, admit, tables, blocks_text):
             problems.append(f"{path}: {fn} not found")
             continue
         joined = "\n".join(body)
+        code_lines = [l.strip() for l in body if l.strip() and not l.strip().startswith("#")]
+        if table == "block_shape" and code_lines and code_lines[-1] == "return cur":
+            continue  # every code the module admits keeps its input's shape unless a branch says otherwise
         named = set(re.findall(r"\b(LAYER_[A-Z0-9_]+)\b", joined))
         for line in body:
             m = re.match(r"^\s*(?:el)?if\b(.*):", line)

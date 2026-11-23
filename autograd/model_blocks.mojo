@@ -59,6 +59,9 @@ EXISTING backward rule; no kernel is written or edited here:
         adaptive pools, global   transposed convolutions are the tape convolution's    560..564 and
         max pool, pads,          adjoint launches; pools and pads x_cnn's bodies;      ImportRules /
         upsample, pixel shuffle  constant pad imp_pad; global max rankn_max            RankNRules
+  47-53 identity, leaky_relu, elu,  autograd/nn_activations.mojo (lane nn-activations,    ImportRules 192 /
+        prelu, mish, hardswish,     2026-11-23): imp_unary / imp_binary kinds over        193
+        hardsigmoid                 checks/numerics.mojo's activation bodies
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -119,6 +122,12 @@ from autograd.nn_conv_blocks import (
 )
 from autograd.nn_conv import NnConvRules
 # nn-conv end
+# nn-activations begin: codes 47..53, identity and the activations (autograd/nn_activations.mojo)
+from autograd.nn_activations import (
+    is_nn_activation, nn_act_shape, nn_act_param_sizes, nn_act_param_names, nn_act_init_bounds,
+    nn_act_tensor_dims, nn_act_forward,
+)
+# nn-activations end
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -171,6 +180,10 @@ def is_block(code: Int) -> Bool:
     if is_nn_conv(code):
         return True
     # nn-conv end
+    # nn-activations begin
+    if is_nn_activation(code):
+        return True
+    # nn-activations end
     return code >= BLOCK_FIRST and code <= BLOCK_LAST
 
 
@@ -372,6 +385,10 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
     if is_nn_conv(code):
         return nnc_shape(code, xargs, i, f, cur, name)
     # nn-conv end
+    # nn-activations begin
+    if is_nn_activation(code):
+        return nn_act_shape(code, a0, a1, f, cur, name)
+    # nn-activations end
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -431,6 +448,10 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif is_nn_conv(code):
         return nnc_param_sizes(code, xargs, i, cur)
     # nn-conv end
+    # nn-activations begin
+    elif is_nn_activation(code):
+        return nn_act_param_sizes(code, _x(xargs, i, 0))
+    # nn-activations end
     return out^
 
 
@@ -476,6 +497,10 @@ def block_param_names(code: Int) -> List[String]:
     elif is_nn_conv(code):
         return nnc_param_names(code)
     # nn-conv end
+    # nn-activations begin
+    elif is_nn_activation(code):
+        return nn_act_param_names(code)
+    # nn-activations end
     return out^
 
 
@@ -549,6 +574,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif is_nn_conv(code):
         return nnc_init_bounds(code, xargs, i, cur)
     # nn-conv end
+    # nn-activations begin
+    elif is_nn_activation(code):
+        return nn_act_init_bounds(code, _x(xargs, i, 1))
+    # nn-activations end
     return out^
 
 
@@ -782,6 +811,10 @@ def block_forward[E: Exec](
     if is_nn_conv(code):
         return nnc_forward(tape, ex, code, xargs, i, f, cur, P, Gr, off, h, train)
     # nn-conv end
+    # nn-activations begin
+    if is_nn_activation(code):
+        return nn_act_forward(tape, ex, code, a0, f, cur, P, Gr, off, h, train)
+    # nn-activations end
     raise Error("model: unknown block code " + String(code))
 
 
@@ -944,6 +977,10 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
     elif is_nn_conv(code):
         return nnc_tensor_dims(code, xargs, i, cur, slot)
     # nn-conv end
+    # nn-activations begin
+    elif is_nn_activation(code):
+        return nn_act_tensor_dims(code, _x(xargs, i, 0))
+    # nn-activations end
     return out^
 
 

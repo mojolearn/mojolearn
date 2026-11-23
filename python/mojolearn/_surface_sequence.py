@@ -49,6 +49,9 @@ FAMILIES = (
                         # nn-conv begin
                         "sequence-nnconv-transpose", "sequence-nnconv-pools", "sequence-nnconv-pads", "sequence-nnconv-upsample", "sequence-nnconv-shuffle",
                         # nn-conv end
+                        # nn-activations begin
+                        "sequence-composed-activations",
+                        # nn-activations end
                         # lane verify-coverage-audit (2026-10-21): MoEBlock.backward,
                         # Sequential export/load/predict, import_model
                         "sequence-moe-backward", "sequence-export-roundtrip",
@@ -185,6 +188,9 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-nnconv-upsample": "Sequential upsample (nearest, linear, bilinear)",
                        "sequence-nnconv-shuffle": "Sequential pixel_shuffle and pixel_unshuffle",
                        # nn-conv end
+                       # nn-activations begin
+                       "sequence-composed-activations": "Sequential composed: the activation and identity layers",
+                       # nn-activations end
                        "sequence-moe-backward": "MoEBlock backward",
                        "sequence-export-roundtrip": "Sequential export, load and predict",
                        "sequence-onnx-import": "import_model on an ONNX file",
@@ -224,6 +230,9 @@ PUBLIC_PENDING_LANES = {
     "sequence-nnconv-upsample": "unwatched",
     "sequence-nnconv-shuffle": "unwatched",
     # nn-conv end
+    # nn-activations begin
+    "sequence-composed-activations": "unwatched",
+    # nn-activations end
     "sequence-moe-backward": "unwatched",
     "sequence-export-roundtrip": "unwatched",
     "sequence-onnx-import": "unwatched",

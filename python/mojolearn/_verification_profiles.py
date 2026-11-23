@@ -28,6 +28,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           'sequence-nnconv-transpose', 'sequence-nnconv-pools', 'sequence-nnconv-pads',
                           'sequence-nnconv-upsample', 'sequence-nnconv-shuffle',
                           # nn-conv end
+                          # nn-activations begin
+                          'sequence-composed-activations',
+                          # nn-activations end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',
