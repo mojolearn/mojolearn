@@ -36,7 +36,9 @@ from bindings.x_prep_native_owner_door import xprep_drop_resident
 from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
 from bindings.py_cpython_table import cpython_table
 from bindings.p3_array_arena_records_unpack import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
-from bindings.arena_prog_run import _switch, _add_input, _merge_pairs, _pad, MetricArenaOwner, MetricProgramInput, metrics_plan_execute
+from bindings.arena_prog_run import (
+    _switch, _add_input, _merge_pairs, _pad, MetricArenaOwner, MetricRoute, metric_inputs_run,
+)
 from std.python._cpython import GILReleased
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
@@ -443,8 +445,7 @@ def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode:
     address (a DeviceRows input materialized on the host: x_metrics connects
     no row gather or resident store). RUN: `metrics_plan_execute`, typed, the
     GIL released, every input owner held across it. The arena is native."""
-    classical_connect_numpy(context)
-    return metrics_run_plan_entries(plan, inputs, _family_entries(mode, "x_metrics", context), context)
+    return metrics_run_plan_entries(plan, inputs, metric_route_entries(mode, context), context)
 
 
 def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject], entries: PythonObject,
@@ -453,41 +454,70 @@ def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject]
     caller already holds: the selected mode's (above), or the CPU image a
     `device="cpu"` estimator's route names beside a device set (lane
     dw-decomp, 2026-11-21: EllipticEnvelope.score). Same UNPACK and RUN."""
+    var pin = metric_route_of(entries)
+    if len(inputs) != plan.buffer_inputs():
+        raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
+    # UNPACK: each buffer input's address and word count (a DeviceRows input
+    # materialized on the host), its owner held across RUN.
+    var held = List[PythonObject](capacity=len(inputs))
+    var addresses = List[Int](capacity=len(inputs))
+    var sizes = List[Int](capacity=len(inputs))
+    for i in range(len(inputs)):  # driver-loop: over the program's buffer inputs
+        var value = inputs[i]
+        var size_i = Int(py=value.size)
+        if size_i == 0:
+            addresses.append(0)
+            sizes.append(0)
+            continue
+        if _is_rows(value, context):
+            value = _values(value, context, True)
+        addresses.append(Int(py=classical_address(value)))
+        sizes.append(size_i)
+        held.append(value)
+    var arena = MetricArenaOwner(0)
+    try:
+        with GILReleased(Python()):
+            arena = metric_inputs_run(pin.route, plan, addresses, sizes)
+    finally:
+        _ = held^
+        _ = addresses^
+        _ = sizes^
+        _ = pin^
+        _ = entries
+    return arena^
+
+
+struct MetricRoutePin(Movable):
+    """A typed program route (bindings/arena_prog_run.mojo `MetricRoute`) and
+    the Python owners of its connection, held by the UNPACK for the
+    operation (lane bm-meta-3, 2026-11-23)."""
+
+    var route: MetricRoute
+    var provider: PythonObject
+    var entries: PythonObject
+
+    def __init__(out self, route: MetricRoute, provider: PythonObject, entries: PythonObject):
+        self.route = route
+        self.provider = provider
+        self.entries = entries
+
+
+def metric_route_of(entries: PythonObject) raises -> MetricRoutePin:
+    """UNPACK of the program runner of one connected x_metrics image
+    (`entries`): its program entry (connected once per factory) and the two
+    range switches. The one place they are read for every runner."""
     var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_metrics_run_ranges") is not None
     var output_ranges = py_get(entries, "x_metrics_run_out") is not None
-    if len(inputs) != plan.buffer_inputs():
-        raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
-    var held = List[PythonObject](capacity=len(inputs))
-    var records = List[MetricProgramInput](capacity=len(plan.input_offsets))
-    var next_buffer = 0
-    for k in range(len(plan.input_offsets)):  # driver-loop: over the program's input records
-        if plan.input_consts[k] >= 0:
-            # a program-owned constant (native words, no Python owner)
-            records.append(MetricProgramInput(plan.input_offsets[k], plan.const_address(k),
-                                              len(plan.consts[plan.input_consts[k]])))
-            continue
-        var value = inputs[next_buffer]
-        next_buffer += 1
-        var size_k = Int(py=value.size)
-        if size_k == 0:
-            continue
-        if _is_rows(value, context):
-            value = _values(value, context, True)
-        records.append(MetricProgramInput(plan.input_offsets[k], Int(py=classical_address(value)), size_k))
-        held.append(value)
-    var arena = MetricArenaOwner(0)
-    try:
-        with GILReleased(Python()):
-            arena = metrics_plan_execute(entry, plan, records, ranges, output_ranges)
-    finally:
-        _ = held^
-        _ = records^
-        _ = provider
-        _ = entries
-    return arena^
+    return MetricRoutePin(MetricRoute(entry, ranges, output_ranges), provider, entries)
+
+
+def metric_route_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The x_metrics image of `mode` `_metrics_run_plan` runs (connected)."""
+    classical_connect_numpy(context)
+    return _family_entries(mode, "x_metrics", context)
 
 
 # ---------------------------------------------------------------- the door

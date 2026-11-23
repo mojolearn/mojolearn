@@ -184,3 +184,47 @@ def metrics_plan_execute(entry: NativeDescriptorCall, plan: MetricProgramPlan, i
         _ = native_descriptor_call(entry, MP_RUN, [base, pa], [size, nst], [])
     _ = ins^
     return arena^
+
+
+@fieldwise_init
+struct MetricRoute(ImplicitlyCopyable, Movable):
+    """The x_metrics program runner one operation calls, resolved once by its
+    UNPACK (bindings/metrics_program_door.mojo `metric_route_open`): the
+    image's program entry and its two range switches (lane bm-meta-3,
+    2026-11-23). Typed: a RUN holds it with no Python owner; the pin that
+    keeps the entry's connection alive stays with the UNPACK."""
+
+    var program: NativeDescriptorCall
+    var ranges: Bool
+    var output_ranges: Bool
+
+
+def metric_inputs_run(route: MetricRoute, plan: MetricProgramPlan, addresses: List[Int],
+                      sizes: List[Int]) raises -> MetricArenaOwner:
+    """THE typed run of one x_metrics program (lane bm-meta-3, 2026-11-23:
+    the one body every runner calls; it was written twice, in
+    bindings/arena_prog_native_door.mojo `metrics_run_plan_entries` and
+    bindings/msel_split_plan_run.mojo `msel_prog_run`). `addresses[i]` /
+    `sizes[i]`: the words of the plan's i-th buffer input (float32, or int32
+    as its bits; the caller keeps them alive through the call). The input
+    records are the program-owned constants and the buffer inputs in input
+    order (an empty buffer has no record), then `metrics_plan_execute`. No
+    Python object is read."""
+    if len(addresses) != plan.buffer_inputs() or len(sizes) != len(addresses):
+        raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
+    var records = List[MetricProgramInput](capacity=len(plan.input_offsets))
+    var next_buffer = 0
+    for k in range(len(plan.input_offsets)):  # driver-loop: over the program's input records
+        if plan.input_consts[k] >= 0:
+            # a program-owned constant (native words, no Python owner)
+            records.append(MetricProgramInput(plan.input_offsets[k], plan.const_address(k),
+                                              len(plan.consts[plan.input_consts[k]])))
+            continue
+        var at = next_buffer
+        next_buffer += 1
+        if sizes[at] == 0:
+            continue
+        records.append(MetricProgramInput(plan.input_offsets[k], addresses[at], sizes[at]))
+    var arena = metrics_plan_execute(route.program, plan, records, route.ranges, route.output_ranges)
+    _ = records^
+    return arena^

@@ -14,7 +14,9 @@
 from std.python import PythonObject
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.arena_prog_run import MetricArenaOwner
-from bindings.arena_prog_native_door import _metrics_run_plan, metrics_run_plan_entries
+from bindings.arena_prog_native_door import (
+    metrics_run_plan_entries, metric_route_of, metric_route_entries, MetricRoutePin,
+)
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.py_balanced import py_item, py_get, py_type
@@ -93,14 +95,30 @@ def metric_plan_run(plan: MetricProgramPlan, pins: List[PythonObject], mode: Pyt
     with the interned key per program."""
     var nk = metrics_keys()
     var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
+    return metrics_run_plan_entries(plan, pins, _door_entries(mode, context), prog_context)
+
+
+def _door_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The connected x_metrics image a door program of `context` runs on
+    (`metric_plan_run`): the CPU label scope's entries, else `mode`'s."""
+    var nk = metrics_keys()
+    var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
     var entries = py_get(context, nk[].k_labels_metrics_entries)
     if entries is None:
-        return _metrics_run_plan(plan, pins, mode, prog_context)
+        return metric_route_entries(mode, prog_context)
     if py_type(entries) is py_type(PythonObject("")):
         # the CPU image did not connect at import: its recorded words
         raise Error(String(entries))
     classical_connect_numpy(prog_context)
-    return metrics_run_plan_entries(plan, pins, entries, prog_context)
+    return entries
+
+
+def metric_route_open(mode: PythonObject, context: PythonObject) raises -> MetricRoutePin:
+    """UNPACK of a typed metric RUN (lane bm-meta-3, 2026-11-23): the program
+    route `metric_door_run` would take for `mode` / `context`, typed
+    (`pin.route`, bindings/arena_prog_run.mojo `MetricRoute`) for
+    `metric_inputs_run`, its connection owners held by the pin."""
+    return metric_route_of(_door_entries(mode, context))
 
 
 def metric_door_run(prog: MetricDoorProg, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:

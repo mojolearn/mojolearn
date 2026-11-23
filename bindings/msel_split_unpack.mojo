@@ -28,10 +28,7 @@ from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_get, py_item
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.arena_prog_native_door import _family_entries
-from bindings.arena_prog_run import _switch
-from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
-from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
+from bindings.arena_prog_native_door import metric_route_of, metric_route_entries
 from bindings.base_helpers_key_unpack import base_helpers_key
 from bindings.msel_helpers_key_unpack import msel_helpers_key
 from bindings.msel_common_door import (
@@ -74,15 +71,14 @@ def msel_split_route(context: PythonObject, base: Bool, program: Bool) raises ->
     if program:
         var nk = metrics_keys()
         var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
-        classical_connect_numpy(prog_context)
-        var entries = _family_entries(PythonObject(None), "x_metrics", prog_context)
-        var provider = neural_descriptor_connect_factory_once(entries["metrics_program_native_api_v1"],
-            String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
-        pin.route.program = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
-        pin.route.ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_metrics_run_ranges") is not None
-        pin.route.output_ranges = py_get(entries, "x_metrics_run_out") is not None
-        pin.provider = provider
-        pin.entries = entries
+        # The one runner UNPACK (bindings/arena_prog_native_door.mojo
+        # `metric_route_of`, lane bm-meta-3: this was a copy of it).
+        var got = metric_route_of(metric_route_entries(PythonObject(None), prog_context))
+        pin.route.program = got.route.program
+        pin.route.ranges = got.route.ranges
+        pin.route.output_ranges = got.route.output_ranges
+        pin.provider = got.provider
+        pin.entries = got.entries
     return pin^
 
 
