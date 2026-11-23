@@ -146,6 +146,17 @@ def member_cw_invalid_message(family: Int, model: PythonObject, class_weight: Py
     var is_str = Bool(py=py_call(b.isinstance, class_weight, b.str))
     var is_dict = Bool(py=py_call(b.isinstance, class_weight, b.dict))
     if family == MEMBER_FAMILY_LOGISTIC:
+        # The door's fit admits every consumed value first
+        # (bindings/logistic_admission_unpack.mojo `_parameter` through
+        # `logistic_fields`): a value that is neither a mapping nor a native
+        # scalar (a list, a tuple, an array: a class with `__len__`, read on
+        # the class, never the instance) raises its TypeError there and never
+        # reaches `_row_weights` (gate 5645984a8f mf_left4 inv_lr_2_* rows).
+        if (not is_str and not is_dict and py_type(class_weight) is not b.bool and py_type(class_weight) is not b.int
+                and py_type(class_weight) is not b.float
+                and Bool(py=py_call(b.hasattr, py_type(class_weight), PythonObject("__len__")))):
+            return String("TypeError: LogisticRegression parameter class_weight requires native scalar configuration "
+                          + "without conversion hooks")
         if (is_str and Bool(py=class_weight != PythonObject("balanced"))) or (not is_str and not is_dict):
             return ("The 'class_weight' parameter of " + String(py=py_type(model).__name__) + " must be an "
                     + "instance of 'dict', a str among {'balanced'} or None. "
