@@ -101,6 +101,7 @@ from autograd.ssm_m3_primitives import graph_trapezoid_scan
 from autograd.nn_attention import (
     nn_attention_is, nn_attention_shape, nn_attention_param_sizes, nn_attention_param_names,
     nn_attention_init_bounds, nn_attention_tensor_dims, nn_attention_state, nn_attention_reads,
+    nn_attention_rule, NNAttentionRules, LAYER_NN_MHA,
 )
 # nn-attention end
 
@@ -753,6 +754,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         return tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST
 
     def supports(self, tag: Int) -> Bool:
+        # nn-attention begin
+        if nn_attention_rule(tag):
+            return True
+        # nn-attention end
         if Self._recurrent(tag):
             return True
         # lm_head (lane neural-blocks-3-lm): the fused head's tag, StepOpRules' own answers
@@ -763,6 +768,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # nn-attention begin
+        if nn_attention_rule(tag):
+            return NNAttentionRules().zeroed_destination(tag, saved, edge)
+        # nn-attention end
         if Self._recurrent(tag):
             return RecurrentRules().zeroed_destination(tag, saved, edge)
         if tag == LM_HEAD_V2_TAG:
@@ -772,6 +781,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # nn-attention begin
+        if nn_attention_rule(tag):
+            return NNAttentionRules().writes_total(tag, saved, edge)
+        # nn-attention end
         if Self._recurrent(tag):
             return RecurrentRules().writes_total(tag, saved, edge)
         if tag == LM_HEAD_V2_TAG:
@@ -784,6 +797,11 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
     ) raises:
+        # nn-attention begin
+        if nn_attention_rule(tag):
+            NNAttentionRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+            return
+        # nn-attention end
         if Self._recurrent(tag):
             RecurrentRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         elif tag == LM_HEAD_V2_TAG:
@@ -843,11 +861,15 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
     # end lm_head
     # nn-attention begin
     if nn_attention_is(code):
-        return nn_attention_tensor_dims(code, xargs, i, cur, slot)
+        return nn_attention_tensor_dims(code, xargs, i, cur, slot, torch_layout)
     # nn-attention end
     return out^
 
 
 def block_tensor_transposed(code: Int, slot: Int) -> Bool:
     """True when PyTorch's layout of the tensor is the transpose of params_' (the attention projections)."""
+    # nn-attention begin: out_proj.weight is a whole transpose; in_proj_weight's blocks are weight_import's
+    if code == LAYER_NN_MHA:
+        return slot == 1
+    # nn-attention end
     return code == LAYER_ATTENTION

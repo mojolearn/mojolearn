@@ -738,9 +738,12 @@ class Sequential(_CheckMixin):
             input's length.
 
         The parameters are PyTorch's: ``in_proj_weight`` ``(3 * embed_dim,
-        embed_dim)`` (the query, key and value weights stacked; with a
-        different ``kdim`` one vector of the three), ``out_proj.weight``,
-        ``in_proj_bias`` and ``out_proj.bias``, initialized as PyTorch does.
+        embed_dim)`` (the query, key and value weights stacked),
+        ``out_proj.weight``, ``in_proj_bias`` and ``out_proj.bias``,
+        initialized as PyTorch does. With a ``kdim`` other than
+        ``embed_dim``, ``in_proj_weight`` is one vector: the query weight
+        ``(embed_dim, embed_dim)`` then the key and value weights side by side
+        ``(kdim, 2 * embed_dim)``, each laid out (inputs, outputs).
 
         Examples
         --------

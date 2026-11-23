@@ -36,11 +36,14 @@ def _tlin(x, w, b):
 
 def _mha_ref(xq, xkv, sd, name, heads, causal=False, lengths=None):
     e = xq.shape[-1]
-    w = sd[name + ".in_proj_weight"].astype(np.float64).reshape(-1)
+    w = sd[name + ".in_proj_weight"].astype(np.float64)
     kd = xkv.shape[-1]
-    wq = w[:e * e].reshape(e, e)
-    wk = w[e * e:e * e + e * kd].reshape(e, kd)
-    wv = w[e * e + e * kd:].reshape(e, kd)
+    if w.ndim == 2:   # PyTorch's stacked (3E, E)
+        wq, wk, wv = w[:e], w[e:2 * e], w[2 * e:]
+    else:             # kdim other than E: params_' words, Wq (E, E) then [Wk | Wv] (kdim, 2E), (in, out)
+        wq = w[:e * e].reshape(e, e).T
+        wkv = w[e * e:].reshape(kd, 2 * e)
+        wk, wv = wkv[:, :e].T, wkv[:, e:].T
     bq, bk, bv = np.split(sd[name + ".in_proj_bias"].astype(np.float64), 3)
     q, k, v = _tlin(xq, wq, bq), _tlin(xkv, wk, bk), _tlin(xkv, wv, bv)
     n, t, _ = q.shape
@@ -200,6 +203,21 @@ def test_cross_attention_and_positional_encoding_match_numpy():
     h = _mha_ref(h, x, sd, "2", 2)
     want = _lin_ref(h.reshape(4, -1), sd, "4")
     np.testing.assert_allclose(model.predict(x.astype(np.float32).reshape(4, -1)), want, rtol=1e-4, atol=1e-4)
+
+
+def test_cross_attention_stacked_weights_match_numpy_and_load():
+    build = lambda: (S(input_shape=(5, 4)).linear(8).branch(-1).linear(8).narrow(0, 0, 3).branch(0)
+                     .multihead_attention(8, 2, source=3).flatten().linear(1))
+    model, _ = _fitted(build(), (5, 4))
+    sd = model.state_dict()
+    assert sd["5.in_proj_weight"].shape == (24, 8)
+    x = _x(4, (5, 4), 11).astype(np.float64)
+    h = _lin_ref(x, sd, "0")
+    mem = _lin_ref(x, sd, "2")[:, :3]
+    want = _lin_ref(_mha_ref(h, mem, sd, "5", 2).reshape(4, -1), sd, "7")
+    flat = x.astype(np.float32).reshape(4, -1)
+    np.testing.assert_allclose(model.predict(flat), want, rtol=1e-4, atol=1e-4)
+    np.testing.assert_array_equal(build().load_state_dict(sd).predict(flat), model.predict(flat))
 
 
 def test_encoder_layer_matches_numpy():

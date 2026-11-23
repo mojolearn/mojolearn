@@ -199,6 +199,9 @@ from autograd.transformer_primitives_ops import OP_TFP_FIRST, OP_TFP_LAST, apply
 from autograd.ssm_ops import OP_SSM_FIRST, OP_SSM_LAST, apply_ssm
 # lane fix-d3-executor-loops: the program loop's control ops (autograd/program_loop.mojo), 1800..1809
 from autograd.program_loop import OP_LOOP_FIRST, OP_LOOP_LAST, apply_loop
+# nn-attention begin: classic attention's masked softmax and positional encoding (6700..6709)
+from autograd.nn_attention_ops import OP_NN_FIRST, OP_NN_LAST, apply_nn_attention
+# nn-attention end
 
 
 @always_inline
@@ -551,6 +554,10 @@ def apply[OP: Int](t: Int, a: Args):
     elif OP >= OP_LOOP_FIRST and OP <= OP_LOOP_LAST:
         # lane fix-d3-executor-loops: the program loop's tick, commit, advance
         apply_loop[OP](t, a)
+    # nn-attention begin
+    elif OP >= OP_NN_FIRST and OP <= OP_NN_LAST:
+        apply_nn_attention[OP](t, a)
+    # nn-attention end
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

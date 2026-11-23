@@ -40,6 +40,9 @@ from sequence.ops import FP
 from core.cast_in import CAST_KIND_BFLOAT, CAST_KIND_FLOAT, CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast
 from autograd.model_blocks import block_param_sizes, block_tensor_dims, block_tensor_transposed, is_block
+# nn-attention begin
+from autograd.nn_attention import nn_attention_torch_blocks
+# nn-attention end
 from autograd.model import LAYER_CONV1D, LAYER_CONV2D, LAYER_LAYER_NORM, LAYER_LINEAR, SPEC2_ARGS, ModelSpec, conv_in_per_group
 
 #: the dtype code of a bfloat16 source (NumPy has no number for it)
@@ -344,6 +347,20 @@ def model_import_params[E: Exec](
             transpose = layout == WI_LAYOUT_TORCH and block_tensor_transposed(spec.kinds[i], slot)
         views.append(wi_matrix(src, transpose))
         dsts.append(_slot_offset(spec, i, slot))
+        # nn-attention begin: PyTorch's stacked in_proj_weight (3E, E) onto params_' (in, out) blocks
+        if layout == WI_LAYOUT_TORCH:
+            var nb = nn_attention_torch_blocks(spec.kinds[i], spec.xargs, i, spec.in_shape[i], slot)
+            if len(nb) > 0:
+                _ = views.pop()
+                _ = dsts.pop()
+                for q in range(len(nb) // 3):  # small-loop(at most 2 blocks of one tensor)
+                    var sd: List[Int] = [nb[3 * q + 1], src.dims[1]]
+                    var ss: List[Int] = [src.strides[0], src.strides[1]]
+                    var sub = WeightSource(src.name, src.addr + nb[3 * q] * src.strides[0], src.kind, src.itemsize,
+                                           sd^, ss^)
+                    views.append(wi_matrix(sub, True))
+                    dsts.append(_slot_offset(spec, i, slot) + nb[3 * q + 2])
+        # nn-attention end
     for i in range(nl):  # driver-loop: over layers
         if not _has_params(spec, i):
             continue
@@ -454,6 +471,15 @@ def model_export_params[E: Exec](
                 var view = CastIn(params + 4 * off, CAST_KIND_FLOAT, 4, fo, fi, 4, 4 * fo)
                 view.check("state_dict: layer " + String(i) + " (linear) weight")
                 upload_cast(ex, D + off, view)
+            # nn-attention begin: params_' (in, out) blocks of in_proj -> PyTorch's stacked (3E, E) rows
+            var nb = nn_attention_torch_blocks(spec.kinds[i], spec.xargs, i, spec.in_shape[i], slot)
+            for q in range(len(nb) // 3):  # small-loop(at most 2 blocks of one tensor)
+                var ne = spec.in_shape[i].d[1]
+                var nr = nb[3 * q + 1]
+                var nview = CastIn(params + 4 * (off + nb[3 * q + 2]), CAST_KIND_FLOAT, 4, nr, ne, 4, 4 * nr)
+                nview.check("state_dict: layer " + String(i) + " in_proj_weight")
+                upload_cast(ex, D + off + nb[3 * q] * ne, nview)
+            # nn-attention end
             var dims = _expected(spec, i, slot, WI_LAYOUT_TORCH)
             var base = at * WE_SHAPE_WORDS
             rec[base] = i

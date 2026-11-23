@@ -317,32 +317,41 @@ def _lin64(x: _M, p: List[Float32], off: Int, fo: Int, bias: Bool) -> _M:
     return y^
 
 
-def _tlin64(x: _M, p: List[Float32], w_off: Int, fo: Int, b_off: Int) -> _M:
-    """x W^T + b, W (out, in) at w_off (PyTorch's layout), b at b_off (-1: none)."""
+def _cols64(x: _M, p: List[Float32], w_off: Int, width: Int, col0: Int, fo: Int, b_off: Int) -> _M:
+    """x @ W[:, col0 : col0 + fo] + b, W (in, width) row-major at w_off (the tape's Linear layout), b at
+    b_off (-1: none)."""
     var y = _M(x.rows, fo)
     for r in range(x.rows):  # small-loop(oracle)
         for o in range(fo):  # small-loop(oracle)
             var s = Float64(0)
             for k in range(x.cols):  # small-loop(oracle)
-                s += x.v[r * x.cols + k] * Float64(p[w_off + o * x.cols + k])
+                s += x.v[r * x.cols + k] * Float64(p[w_off + k * width + col0 + o])
             if b_off >= 0:
                 s += Float64(p[b_off + o])
             y.v[r * fo + o] = s
     return y^
 
 
-def _mha64(xq: _M, xkv: _M, p: List[Float32], off: Int, heads: Int, flags: Int, length: Int) -> _M:
+def _mha64(xq: _M, xkv: _M, p: List[Float32], off: Int, heads: Int, flags: Int, length: Int, self_attn: Bool) -> _M:
+    """params_' layout: self in_proj (E, 3E) columns [q | k | v]; cross Wq (E, E) then [Wk | Wv] (kdim, 2E);
+    out_proj (E, E); in_proj_bias [bq | bk | bv]; out_proj.bias. All (in, out)."""
     var e = xq.cols
     var kd = xkv.cols
     var hd = e // heads
     var bias = (flags & 1) != 0
-    var o_wk = off + e * e
-    var o_wv = o_wk + e * kd
-    var o_wo = o_wv + e * kd
+    var o_wo = off + e * (e + 2 * kd)
     var o_b = o_wo + e * e
-    var q = _tlin64(xq, p, off, e, o_b if bias else -1)
-    var k = _tlin64(xkv, p, o_wk, e, o_b + e if bias else -1)
-    var v = _tlin64(xkv, p, o_wv, e, o_b + 2 * e if bias else -1)
+    var q: _M
+    var k: _M
+    var v: _M
+    if self_attn:
+        q = _cols64(xq, p, off, 3 * e, 0, e, o_b if bias else -1)
+        k = _cols64(xkv, p, off, 3 * e, e, e, o_b + e if bias else -1)
+        v = _cols64(xkv, p, off, 3 * e, 2 * e, e, o_b + 2 * e if bias else -1)
+    else:
+        q = _cols64(xq, p, off, e, 0, e, o_b if bias else -1)
+        k = _cols64(xkv, p, off + e * e, 2 * e, 0, e, o_b + e if bias else -1)
+        v = _cols64(xkv, p, off + e * e, 2 * e, e, e, o_b + 2 * e if bias else -1)
     var T = xq.rows
     var S = xkv.rows
     var ctx = _M(T, e)
@@ -369,7 +378,7 @@ def _mha64(xq: _M, xkv: _M, p: List[Float32], off: Int, heads: Int, flags: Int, 
                 if ok[j]:
                     for d in range(hd):  # small-loop(oracle)
                         ctx.v[i * e + h * hd + d] += sc[j] / den * v.v[j * e + h * hd + d]
-    return _tlin64(ctx, p, o_wo, e, o_b + 3 * e if bias else -1)
+    return _cols64(ctx, p, o_wo, e, 0, e, o_b + 3 * e if bias else -1)
 
 
 def _ln64(x: _M, p: List[Float32], off: Int, eps: Float64) -> _M:
@@ -443,7 +452,7 @@ def _oracle(c: _Case, spec: ModelSpec, p: List[Float32]) raises -> List[Float64]
                 h.rows = 1
             elif k == LAYER_NN_MHA:
                 var kv = h.copy() if a2 == _SELF else (x0.copy() if a2 == -1 else outs[a2].copy())
-                h = _mha64(h, kv, p, off, a0, a1, length)
+                h = _mha64(h, kv, p, off, a0, a1, length, a2 == _SELF)
             elif k == LAYER_NN_POS_ENC:
                 var d = h.cols
                 for t in range(h.rows):  # small-loop(oracle)

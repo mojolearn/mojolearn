@@ -4,56 +4,65 @@
   code  layer                 arguments                                 parameters (params_ order)
   67    multihead_attention   a0 num_heads, a1 flags (1 bias, 2 causal, in_proj_weight, out_proj.weight,
                               4 key_padding_mask), a2 key/value source   in_proj_bias, out_proj.bias
-                              (-2 self, -1 the model input, else an     (PyTorch's names and layouts)
-                              earlier layer), a3 embed_dim, a4 kdim
+                              (-2 self, -1 the model input, else an     (PyTorch's names; its layouts in
+                              earlier layer), a3 embed_dim, a4 kdim      state_dict, see below)
                               (0: embed_dim; the value width too);
                               f dropout of the attention weights
   72    positional_encoding   a0 max_len, a1 d_model; f dropout         none
 
 PyTorch's ``nn.MultiheadAttention`` (batch_first=True): q = x Wq^T + bq, k = m Wk^T + bk, v = m Wv^T + bv
 (m the key/value source, x itself for self-attention), per head softmax(q k^T / sqrt(head_dim) + mask) v,
-then the output projection. The weights are held in PyTorch's (out, in) layout, so ``in_proj_weight`` is
-PyTorch's stacked (3 embed_dim, embed_dim) tensor and its row slices are the three projections.
-``positional_encoding`` is the sinusoidal encoding of PyTorch's transformer tutorial ("Attention Is All You
-Need"): x + PE[:length], PE[p, 2j] = sin(p / 10000^(2j / d)), PE[p, 2j + 1] = cos(...), then dropout.
+then the output projection. ``positional_encoding`` is the sinusoidal encoding of PyTorch's transformer
+tutorial: x + PE[:length], PE[p, 2j] = sin(p / 10000^(2j / d)), PE[p, 2j + 1] = cos(...), then dropout.
 
-One body per operation: no math is written in this file. Every value comes from an existing tape op whose
-host and device kernels call one body each: the projections are the transformer projection op
-(graph_transformer_linear, the neural GEMM cell the fused Transformer's panels run), the bias add, scale,
-mask select and softmax are the tape's own elementwise and row ops, the two attention products the rank-N
-batched matmul, the dropout the tape's dropout (the same mask function as the dropout layer), and the
-sinusoids are the rotary op's table body (OP_TFP_ROPE_TABLE, identical_cos / identical_sin of position *
-frequency, the frequencies by graph_rotary's formula). The backward is the existing rules of those ops
-(ModelRules), so this file adds no backward rule.
+params_ holds the projections in the tape's Linear layout (in, out), so each projection is ONE tape.linear
+node with its bias in the GEMM's epilogue: self-attention's in_proj is (E, 3E), the columns [q | k | v]
+(its transpose is PyTorch's stacked in_proj_weight (3E, E)), one GEMM for q, k and v; cross-attention's is
+Wq (E, E) then [Wk | Wv] (kdim, 2E), one GEMM for the queries and one for the keys and values. state_dict
+and load_state_dict give PyTorch's (3E, E) (autograd/weight_import.mojo, nn-attention groups); with kdim
+other than E it is one vector of params_' words (PyTorch keeps three tensors then).
 
-Launches (B batch rows, one layer, training step):
-  multihead_attention forward: 3 projection GEMMs + 3 bias adds (bias) + scores matmul + scale + causal or
-    padding mask (iota, compare, fill, select: 4; both masks 7) + softmax + dropout (p > 0) + context matmul
-    + context copy (the permuted view's one copy) + output GEMM + bias add: 12 to 20.
-  backward: about two launches per forward launch (the GEMM rules' dX and dW, the matmuls' two operands).
-  positional_encoding forward: 1 frequency upload (head_dim / 2 constants, as graph_rotary) + 1 table + 1
-    interleave copy + 1 add (+ dropout); backward: the add's pass-through.
+The heads are split by strided views of the projection output (nn_view: no copy; the batched matmul reads
+them in place through their strides; the gradient lands in the projection's gradient through one slab
+copy each) and joined by one copy (the context's permuted view read densely by the output GEMM).
+
+One body per operation: the GEMMs and their epilogues are tape.linear's, the two attention products the
+rank-N batched matmul's, the softmax and its VJP the tape softmax's bodies called inside one row kernel that
+also applies the scale and the masks (autograd/nn_attention_ops.mojo), the dropout the tape's. No mask
+tensor and no positional table exist: the causal and key-padding masks are index comparisons inside the
+softmax row (the key padding reads the batch's lengths vector), and the encoding's sinusoids are computed
+where they are added, with the rotary table's expressions.
+
+Launches, one layer, one training step (forward / backward; dropout p > 0 adds 1 / 1):
+                                       before (composed ops)        now
+  self-attention, no mask              13 / about 26                6 / 12
+  self-attention, causal or padding    17 / about 30                6 / 12
+  self-attention, causal and padding   20 / about 33                6 / 12
+  cross-attention (any mask)           13 to 20 / 26 to 33          7 / 14
+  now forward: in-projection GEMM (cross: 2), scores bmm, masked softmax, context bmm, head-merge copy,
+  output GEMM. Backward: the in-projection's dW and dX GEMMs with db from the dW launch (cross: 2 each),
+  3 view slab copies into the projection's gradient (cross: 3), 2 + 2 bmm, the softmax VJP, the merge
+  copy's VJP, the output GEMM's 2.
+  positional_encoding: before 4 / 1 (upload, table, interleave, add), now 1 / 1 (the add with the encoding
+  computed in place; its VJP copies the upstream).
 
 The encoder and decoder layers (PyTorch's TransformerEncoderLayer / TransformerDecoderLayer) and stacks are
 containers written into the description by the Sequential door (bindings/sequential_description_pack.mojo,
-lane nn-attention group): multihead_attention, dropout, residual, layer_norm and linear layers; no fused
-kernel and no code here.
+lane nn-attention group): multihead_attention, dropout, residual, layer_norm and linear layers.
 """
+from std.collections import Array
 from std.sys.compile import is_defined
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args, OP_SEQ_IOTA, OP_FILL
-from checks.numerics import ftz, identical_div, identical_sqrt, portable_powf
-from autograd.tape import Tape, Tensor
-from autograd.ops import ADD
-from autograd.rankn import ShapeN
+from sequence.ops import FP, Args, OP_COPY
+from checks.numerics import ftz, identical_div, identical_sqrt
+from autograd.tape import Tape, Tensor, BackwardRules
+from autograd.rankn import ShapeN, RN_MAX_RANK
 from autograd.rankn_api import rn_shape
 from autograd.rankn_bmm import rankn_matmul
-from autograd.rankn_fold import rankn_binary
-from autograd.rankn_layout import rankn_concat
-from autograd.transformer_primitives import graph_transformer_linear
-from autograd.transformer_primitives_ops import OP_TFP_ROPE_TABLE
-from autograd.import_api import imp_binary, imp_where
-from autograd.import_ops import IMP_GT, IMP_GE, IMP_OR
+from autograd.rankn_layout import _put_record, _dense_strides, _slab_copy
+from autograd.nn_attention_ops import (
+    OP_NN_ATTN_SOFTMAX, OP_NN_ATTN_SOFTMAX_VJP, OP_NN_PE_ADD, NN_OP_CAUSAL, NN_OP_KEY_PADDING,
+)
 
 comptime LAYER_NN_MHA = 67
 comptime LAYER_NN_POS_ENC = 72
@@ -68,19 +77,19 @@ comptime NN_MHA_KEY_PADDING = 4
 comptime NN_MHA_SELF = -2
 comptime NN_MHA_MEMORY_UNSET = -3
 
-#: the score at a masked position before the row softmax; the value of autograd/model_blocks.mojo
-#: ATTENTION_MASKED (not imported: model_blocks imports this module): exp(MASKED - max) is +0.0 for every
-#: finite row max, without an infinity in the saved scores
-comptime NN_ATTN_MASKED = Float32(-1.0e30)
-#: the sinusoid base (PyTorch's tutorial and the paper) and the largest length the identical cos / sin
-#: domain covers (graph_rotary's bound: position * frequency < 8192, the frequency of pair 0 is 1)
-comptime NN_PE_BASE = Float32(10000.0)
+#: the largest length the identical cos / sin domain covers (graph_rotary's bound: position * frequency <
+#: 8192, the frequency of pair 0 is 1)
 comptime NN_PE_MAX_LEN = 8192
+#: backward tags: the masked softmax, the positional encoding, and the head view (a rank-N tag of the layout
+#: family's free range 162..175, so the tape keeps it as a pending strided view)
+comptime NN_TAG_SOFTMAX = 6710
+comptime NN_TAG_PE = 6711
+comptime NN_TAG_VIEW = 174
 
-# Fault injection (verify sabotage arms, test builds only): the scores without 1 / sqrt(head_dim); the
-# encoding with sin and cos swapped. Both must make checks/native_tests/nn_attention.mojo FAIL.
+# Fault injection (verify sabotage arms, test builds only): the scores without 1 / sqrt(head_dim); and
+# (autograd/nn_attention_ops.mojo) the encoding with sin and cos swapped. Both must make
+# checks/native_tests/nn_attention.mojo FAIL.
 comptime NN_SABOTAGE_SCALE = is_defined["MOJOLEARN_NN_ATTENTION_SABOTAGE_SCALE"]()
-comptime NN_SABOTAGE_PE = is_defined["MOJOLEARN_NN_ATTENTION_SABOTAGE_PE_SWAP"]()
 
 comptime _ARGS = 6
 
@@ -197,7 +206,7 @@ def nn_attention_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -
     if code == LAYER_NN_MHA:
         var e = cur.d[1]
         var kd = nn_mha_kdim(xargs, i)
-        out.append(e * (e + 2 * kd))  # in_proj_weight: Wq (E, E), Wk (E, kdim), Wv (E, kdim), PyTorch's (out, in)
+        out.append(e * (e + 2 * kd))  # in_proj: self (E, 3E); cross Wq (E, E) then [Wk | Wv] (kdim, 2E)
         out.append(e * e)             # out_proj.weight (E, E)
         out.append(3 * e)             # in_proj_bias [bq | bk | bv]
         out.append(e)                 # out_proj.bias
@@ -228,18 +237,23 @@ def nn_attention_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -
     return out^
 
 
-def nn_attention_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: Int) -> List[Int]:
-    """The shape of tensor `slot` (PyTorch's and params_' layouts are the same): in_proj_weight (3E, E)
-    (one vector [Wq | Wk | Wv] of E (E + 2 kdim) values when kdim differs, as PyTorch keeps three tensors
-    then), out_proj.weight (E, E), in_proj_bias (3E), out_proj.bias (E)."""
+def nn_attention_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: Int, torch_layout: Bool) -> List[Int]:
+    """The shape of tensor `slot`: in_proj_weight PyTorch's (3E, E) or params_' (E, 3E) for self-attention
+    (cross-attention params_' is one vector, Wq then [Wk | Wv]; with kdim = E PyTorch's is (3E, E));
+    out_proj.weight (E, E) both ways (the transpose: block_tensor_transposed); in_proj_bias (3E); out_proj.bias
+    (E). With kdim other than E in_proj_weight is one vector of params_' words in both layouts."""
     var out = List[Int]()
     if code == LAYER_NN_MHA:
         var e = cur.d[1]
         var kd = nn_mha_kdim(xargs, i)
+        var self_attn = _x(xargs, i, 2) == NN_MHA_SELF
         if slot == 0:
-            if kd == e:
+            if kd == e and torch_layout:
                 out.append(3 * e)
                 out.append(e)
+            elif self_attn:
+                out.append(e)
+                out.append(3 * e)
             else:
                 out.append(e * (e + 2 * kd))
         elif slot == 1:
@@ -249,6 +263,30 @@ def nn_attention_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, s
             out.append(3 * e)
         else:
             out.append(e)
+    return out^
+
+
+def nn_attention_torch_blocks(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: Int) -> List[Int]:
+    """How PyTorch's (3E, E) in_proj_weight maps onto params_' words: (first PyTorch row, rows, params_ offset
+    from the tensor's) per block, each block the transpose of a params_ (in, out) matrix of `rows` columns;
+    empty when the tensor is not transposed by blocks (another slot, or kdim other than E)."""
+    var out = List[Int]()
+    if code != LAYER_NN_MHA or slot != 0:
+        return out^
+    var e = cur.d[1]
+    if nn_mha_kdim(xargs, i) != e:
+        return out^
+    if _x(xargs, i, 2) == NN_MHA_SELF:
+        out.append(0)
+        out.append(3 * e)
+        out.append(0)
+    else:
+        out.append(0)
+        out.append(e)
+        out.append(0)
+        out.append(e)
+        out.append(2 * e)
+        out.append(e * e)
     return out^
 
 
@@ -269,31 +307,55 @@ def _p[E: Exec](mut tape: Tape, mut ex: E, P: FP, Gr: FP, off: Int, rows: Int, c
     return tape.variable(ex, P + off, rows, cols, False)
 
 
-def _constant[E: Exec](mut tape: Tape, mut ex: E, value: Float32) raises -> Tensor:
-    var p = tape.reserve(ex, 1)
-    var a = Args()
-    a.p0 = p
-    a.f0 = value
-    ex.launch[OP_FILL](a, 1)
-    return tape.variable(ex, p, 1, 1, False)
-
-
-def _positions[E: Exec](mut tape: Tape, mut ex: E, n: Int) raises -> FP:
-    var pos = tape.reserve(ex, n)
-    var a = Args()
-    a.p0 = pos
-    ex.launch[OP_SEQ_IOTA](a, n)
-    return pos
-
-
-def _project[E: Exec](
-    mut tape: Tape, mut ex: E, x: Tensor, w: Tensor, b: Optional[Tensor], dims: List[Int],
+def nn_view[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, base: Int, dims: List[Int], strides: List[Int],
 ) raises -> Tensor:
-    """x W^T (+ b), W in PyTorch's (out, in) layout, viewed as `dims`."""
-    var y = graph_transformer_linear(tape, ex, x, w)
-    if b:
-        y = rankn_binary(tape, ex, y, b.value(), ADD)
-    return tape.view_nd(ex, y, _sh(dims))
+    """A strided view of the dense tensor x without a copy: element c is x[base + sum_k c_k strides[k]]
+    (a head of a projection output). Its gradient is one slab copy of the upstream into those words of x's
+    gradient (NN_TAG_VIEW; the views of one tensor read disjoint words)."""
+    var op = tape.operand_nd(ex, x)
+    var xs = op[2]
+    var dense = xs.strides()
+    for k in range(xs.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+        if op[3][k] != dense[k] and xs.d[k] != 1:
+            raise Error("nn_view: the source must be dense")
+    if op[1] != 0:
+        raise Error("nn_view: the source must be dense")
+    var shape = _sh(dims)
+    var st = Array[Int, RN_MAX_RANK](fill=0)
+    for k in range(len(strides)):  # small-loop(rank: at most 4): shape metadata, no data
+        st[k] = strides[k]
+    var saved = tape.strided_view_args(ex, op[0], base, shape, st)
+    var words = List[Int]()
+    _put_record(words, 0, base, shape, _dense_strides(shape), st)
+    saved.p1 = tape.descriptor(ex, words)
+    saved.i11 = shape.count()
+    var output = tape.reserve(ex, shape.count())
+    return tape.custom_nd(ex, [x], output, shape, NN_TAG_VIEW, saved)
+
+
+def nn_attn_softmax[E: Exec](
+    mut tape: Tape, mut ex: E, scores: Tensor, B: Int, H: Int, T: Int, S: Int, scale: Float32, flags: Int,
+    lengths: Optional[FP],
+) raises -> Tensor:
+    """softmax(scale * scores + mask) over the last axis of scores (B, H, T, S), one launch; the causal mask
+    (flags & 2) and the key padding mask (flags & 4, the batch's lengths) are index comparisons in the row."""
+    var a = Args()
+    a.p0 = tape.value_of(ex, scores)
+    var output = tape.reserve(ex, B * H * T * S)
+    a.p1 = output
+    var f = flags & NN_OP_CAUSAL
+    if (flags & NN_OP_KEY_PADDING) != 0 and lengths:
+        a.p2 = lengths.value()
+        f |= NN_OP_KEY_PADDING
+    a.i0 = S
+    a.i1 = T
+    a.i2 = H
+    a.i3 = f
+    a.f0 = scale
+    ex.launch[OP_NN_ATTN_SOFTMAX](a, B * H * T)
+    var s4: List[Int] = [B, H, T, S]
+    return tape.custom_nd(ex, [scores], output, _sh(s4), NN_TAG_SOFTMAX, a)
 
 
 def nn_mha_forward[E: Exec](
@@ -309,113 +371,89 @@ def nn_mha_forward[E: Exec](
     var kd = nn_mha_kdim(xargs, i)
     var hd = Ed // H
     var B = tape.rows(h) * tape.cols(h) // cur.count()
-    var ms = tape.shape_of(memory)
-    var S = ms.d[ms.ndim - 2]
+    var self_attn = _x(xargs, i, 2) == NN_MHA_SELF
     var bias = (flags & NN_MHA_BIAS) != 0
-    var o_wk = off + Ed * Ed
-    var o_wv = o_wk + Ed * kd
-    var o_wo = o_wv + Ed * kd
+    var o_wo = off + Ed * (Ed + 2 * kd)
     var o_b = o_wo + Ed * Ed
-    var wq = _p(tape, ex, P, Gr, off, Ed, Ed, train)
-    var wk = _p(tape, ex, P, Gr, o_wk, Ed, kd, train)
-    var wv = _p(tape, ex, P, Gr, o_wv, Ed, kd, train)
     var wo = _p(tape, ex, P, Gr, o_wo, Ed, Ed, train)
-    var bq: Optional[Tensor] = None
-    var bk: Optional[Tensor] = None
-    var bv: Optional[Tensor] = None
     var bo: Optional[Tensor] = None
     if bias:
-        bq = Optional[Tensor](_p(tape, ex, P, Gr, o_b, 1, Ed, train))
-        bk = Optional[Tensor](_p(tape, ex, P, Gr, o_b + Ed, 1, Ed, train))
-        bv = Optional[Tensor](_p(tape, ex, P, Gr, o_b + 2 * Ed, 1, Ed, train))
         bo = Optional[Tensor](_p(tape, ex, P, Gr, o_b + 3 * Ed, 1, Ed, train))
-    var q4: List[Int] = [B, T, H, hd]
-    var k4: List[Int] = [B, S, H, hd]
-    var q = _project(tape, ex, h, wq, bq, q4)
-    var k = _project(tape, ex, memory, wk, bk, k4)
-    var v = _project(tape, ex, memory, wv, bv, k4)
-    var qp: List[Int] = [0, 2, 1, 3]   # (B, H, T, hd)
-    var kp: List[Int] = [0, 2, 3, 1]   # (B, H, hd, S)
-    var qh = tape.permute(ex, q, qp)
-    var kt = tape.permute(ex, k, kp)
-    var vh = tape.permute(ex, v, qp)
-    var scores = rankn_matmul(tape, ex, qh, kt)
-    comptime if not NN_SABOTAGE_SCALE:
-        scores = tape.scale(ex, scores, ftz(identical_div(Float32(1), identical_sqrt(Float32(hd)))))
-    var masked = (flags & (NN_MHA_CAUSAL | NN_MHA_KEY_PADDING)) != 0
-    if masked:
-        var cond: Optional[Tensor] = None
-        if (flags & NN_MHA_CAUSAL) != 0:
-            # (T, S): key j after query i (S == T, checked at parse)
-            var pos = _positions(tape, ex, T)
-            var col = tape.variable(ex, pos, T, 1, False)
-            var row = tape.variable(ex, pos, 1, T, False)
-            cond = Optional[Tensor](imp_binary(tape, ex, row, col, IMP_GT))
-        if (flags & NN_MHA_KEY_PADDING) != 0 and lengths:
-            # (B, 1, 1, S): key position at or past the row's length (PyTorch's key_padding_mask True)
-            var kpos = _positions(tape, ex, S)
-            var krow = tape.variable(ex, kpos, 1, S, False)
-            var lens = tape.variable(ex, lengths.value(), B, 1, False)
-            var pad = imp_binary(tape, ex, krow, lens, IMP_GE)
-            var p4: List[Int] = [B, 1, 1, S]
-            pad = tape.view_nd(ex, pad, _sh(p4))
-            if cond:
-                cond = Optional[Tensor](imp_binary(tape, ex, cond.value(), pad, IMP_OR))
-            else:
-                cond = Optional[Tensor](pad)
-        if cond:
-            scores = imp_where(tape, ex, cond.value(), _constant(tape, ex, NN_ATTN_MASKED), scores)
-    var s4: List[Int] = [B, H, T, S]
-    var probs = tape.view_nd(ex, tape.softmax(ex, scores), _sh(s4))
+    var S = T
+    var q: Tensor
+    var kt: Tensor
+    var v: Tensor
+    if self_attn:
+        # one GEMM: (B T, E) @ (E, 3E) + [bq | bk | bv], the heads as views of its (B, T, 3E) words
+        var w = _p(tape, ex, P, Gr, off, Ed, 3 * Ed, train)
+        var b: Optional[Tensor] = None
+        if bias:
+            b = Optional[Tensor](_p(tape, ex, P, Gr, o_b, 1, 3 * Ed, train))
+        var qkv = tape.linear(ex, h, w, b, 0)
+        var row = 3 * Ed
+        var hq: List[Int] = [B, H, T, hd]
+        var sq: List[Int] = [T * row, hd, row, 1]
+        var hk: List[Int] = [B, H, hd, T]
+        var sk: List[Int] = [T * row, hd, 1, row]
+        q = nn_view(tape, ex, qkv, 0, hq, sq)
+        kt = nn_view(tape, ex, qkv, Ed, hk, sk)
+        v = nn_view(tape, ex, qkv, 2 * Ed, hq, sq)
+    else:
+        var ms = tape.shape_of(memory)
+        S = ms.d[ms.ndim - 2]
+        var wq = _p(tape, ex, P, Gr, off, Ed, Ed, train)
+        var wkv = _p(tape, ex, P, Gr, off + Ed * Ed, kd, 2 * Ed, train)
+        var bq: Optional[Tensor] = None
+        var bkv: Optional[Tensor] = None
+        if bias:
+            bq = Optional[Tensor](_p(tape, ex, P, Gr, o_b, 1, Ed, train))
+            bkv = Optional[Tensor](_p(tape, ex, P, Gr, o_b + Ed, 1, 2 * Ed, train))
+        var qp = tape.linear(ex, h, wq, bq, 0)
+        var kv = tape.linear(ex, memory, wkv, bkv, 0)
+        var hq: List[Int] = [B, H, T, hd]
+        var sq: List[Int] = [T * Ed, hd, Ed, 1]
+        var hk: List[Int] = [B, H, hd, S]
+        var sk: List[Int] = [S * 2 * Ed, hd, 1, 2 * Ed]
+        var hv: List[Int] = [B, H, S, hd]
+        var sv: List[Int] = [S * 2 * Ed, hd, 2 * Ed, 1]
+        q = nn_view(tape, ex, qp, 0, hq, sq)
+        kt = nn_view(tape, ex, kv, 0, hk, sk)
+        v = nn_view(tape, ex, kv, Ed, hv, sv)
+    var scores = rankn_matmul(tape, ex, q, kt)    # (B, H, T, S)
+    var scale = ftz(identical_div(Float32(1), identical_sqrt(Float32(hd))))
+    comptime if NN_SABOTAGE_SCALE:
+        scale = Float32(1)
+    var probs = nn_attn_softmax(tape, ex, scores, B, H, T, S, scale, flags, lengths)
     if train and f > Float32(0):
+        var s4: List[Int] = [B, H, T, S]
         probs = tape.view_nd(ex, tape.dropout(ex, probs, f, seed, counter), _sh(s4))
-    var ctx = rankn_matmul(tape, ex, probs, vh)   # (B, H, T, hd)
-    ctx = tape.permute(ex, ctx, qp)               # (B, T, H, hd)
-    var c3: List[Int] = [B, T, Ed]
-    ctx = tape.view_nd(ex, ctx, _sh(c3))
-    return _project(tape, ex, ctx, wo, bo, c3)
+    var ctx = rankn_matmul(tape, ex, probs, v)    # (B, H, T, hd)
+    var cp: List[Int] = [0, 2, 1, 3]
+    var c2: List[Int] = [B * T, Ed]
+    ctx = tape.view_nd(ex, tape.permute(ex, ctx, cp), _sh(c2))   # the heads joined: one copy
+    var y = tape.linear(ex, ctx, wo, bo, 0)
+    var y3: List[Int] = [B, T, Ed]
+    return tape.view_nd(ex, y, _sh(y3))
 
 
 def nn_pos_enc_forward[E: Exec](
     mut tape: Tape, mut ex: E, f: Float32, cur: ShapeN, h: Tensor, train: Bool, seed: UInt64, counter: Int,
 ) raises -> Tensor:
-    """h (B, T, d) + PE[:T], then dropout (training, p > 0)."""
+    """h (B, T, d) + PE[:T] in one launch, then dropout (training, p > 0)."""
     var T = cur.d[0]
     var d = cur.d[1]
-    var half = d // 2
-    # the frequencies by graph_rotary's formula (autograd/transformer_primitives.mojo; head_dim d, theta 10000)
-    var inv = List[Float32]()
-    for j in range(half):  # cpu-route: native sinusoid frequency constants, graph_rotary's shared host contract S6
-        var exponent = ftz(identical_div(Float32(2 * j), Float32(d)))
-        inv.append(ftz(identical_div(Float32(1), portable_powf(NN_PE_BASE, exponent))))
-    var ip = tape.reserve(ex, half)
-    ex.upload(ip, FP(unsafe_from_address=Int(inv.unsafe_ptr())), half)
-    _ = inv^  # the host upload source stays alive through the transfer
-    var cosp = tape.reserve(ex, T * half)
-    var sinp = tape.reserve(ex, T * half)
+    var n = tape.rows(h) * tape.cols(h)
+    var B = n // cur.count()
     var a = Args()
-    a.p0 = ip
-    a.p1 = cosp
-    a.p2 = sinp
-    a.i0 = half
-    a.i1 = 0
-    ex.launch[OP_TFP_ROPE_TABLE](a, T * half)
-    var t3: List[Int] = [T, half, 1]
-    var sv = tape.view_nd(ex, tape.variable(ex, sinp, T, half, False), _sh(t3))
-    var cv = tape.view_nd(ex, tape.variable(ex, cosp, T, half, False), _sh(t3))
-    var parts = List[Tensor]()
-    comptime if NN_SABOTAGE_PE:
-        parts.append(cv)
-        parts.append(sv)
-    else:
-        parts.append(sv)
-        parts.append(cv)
-    var t2: List[Int] = [T, d]
-    var pe = tape.view_nd(ex, rankn_concat(tape, ex, parts, 2), _sh(t2))   # (T, half, 2) -> interleaved (T, d)
-    var y = rankn_binary(tape, ex, h, pe, ADD)
+    a.p0 = tape.value_of(ex, h)
+    var output = tape.reserve(ex, n)
+    a.p1 = output
+    a.i0 = d
+    a.i1 = T
+    ex.launch[OP_NN_PE_ADD](a, n)
+    var y3: List[Int] = [B, T, d]
+    var y = tape.custom_nd(ex, [h], output, _sh(y3), NN_TAG_PE, a)
     if train and f > Float32(0):
-        var B = tape.rows(h) * tape.cols(h) // cur.count()
-        var y3: List[Int] = [B, T, d]
         y = tape.view_nd(ex, tape.dropout(ex, y, f, seed, counter), _sh(y3))
     return y
 
@@ -431,3 +469,46 @@ def nn_attention_forward[E: Exec](
     if code == LAYER_NN_POS_ENC:
         return nn_pos_enc_forward(tape, ex, f, cur, h, train, seed, counter)
     raise Error("model: unknown attention layer code " + String(code))
+
+
+# ---------------------------------------------------------------- backward
+def nn_attention_rule(tag: Int) -> Bool:
+    return tag == NN_TAG_SOFTMAX or tag == NN_TAG_PE or tag == NN_TAG_VIEW
+
+
+@fieldwise_init
+struct NNAttentionRules(BackwardRules, ImplicitlyCopyable, Movable):
+    """The backward of the masked softmax (one VJP launch), the positional encoding (the upstream copied)
+    and the head views (one slab copy into the source's gradient, the rest zero)."""
+
+    def supports(self, tag: Int) -> Bool:
+        return nn_attention_rule(tag)
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return tag == NN_TAG_VIEW
+
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return False
+
+    def apply[E: Exec](
+        self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
+        inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
+    ) raises:
+        if tag == NN_TAG_VIEW:
+            _slab_copy(ex, upstream, gradients[0], saved.p1, 0, saved.i11)
+        elif tag == NN_TAG_SOFTMAX:
+            var a = Args()
+            a.p0 = output
+            a.p1 = upstream
+            a.p2 = gradients[0]
+            a.i0 = 0
+            a.i1 = saved.i0
+            a.f0 = saved.f0
+            ex.launch[OP_NN_ATTN_SOFTMAX_VJP](a, rows[0] * cols[0] // saved.i0)
+        elif tag == NN_TAG_PE:
+            var c = Args()
+            c.p0 = upstream
+            c.p1 = gradients[0]
+            ex.launch[OP_COPY](c, rows[0] * cols[0])
+        else:
+            raise Error("nn-attention: unknown backward tag " + String(tag))
