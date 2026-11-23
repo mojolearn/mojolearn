@@ -224,7 +224,16 @@ def _present(truth: Int, n: Int, k: Int, mut rank: List[Int32]) raises -> Int:
 
 def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, k: Int,
                           positive: Int) raises -> Float64:
-    """THE TYPED RUN of `average_precision_score(y_true, y_score)` with its
+    """`average_precision_run` unweighted."""
+    return average_precision_run(route, truth, scores, n, cols, k, positive, 0)
+
+
+def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, k: Int,
+                          positive: Int, w: Int) raises -> Float64:
+    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    builders' W input as the door pins it (`ap_binary_stages` /
+    `ap_ovr_stages(weighted)`).
+    THE TYPED RUN of `average_precision_score(y_true, y_score)` with its
     defaults (average 'macro', pos_label 1) over n int32 class codes in
     0 .. k-1 and the member's float32 scores (n x cols; cols 1: the one
     column the scorer hands a binary member), `positive` the class code of
@@ -248,9 +257,12 @@ def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, c
         var flags = List[Int32](length=max(n, 1), fill=Int32(0))
         for i in range(n):  # driver-loop: over the rows (y_true == pos_label)
             flags[i] = Int32(1) if Int(t[i]) == positive else Int32(0)
-        var out = ap_binary_stages(plan, n, False)
+        var out = ap_binary_stages(plan, n, w != 0)
         var addresses: List[Int] = [scores, Int(flags.unsafe_ptr())]
         var sizes: List[Int] = [n, n]
+        if w != 0:
+            addresses.append(w)
+            sizes.append(n)
         var arena = metric_inputs_run(route, plan, addresses, sizes)
         _ = len(flags)  # copied into the program's arena above
         var zero = False
@@ -267,9 +279,12 @@ def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, c
     var codes = List[Int32](length=max(n, 1), fill=Int32(0))
     for i in range(n):  # driver-loop: over the rows (the codes among the classes y_true holds)
         codes[i] = rank[Int(t[i])]
-    var o = ap_ovr_stages(plan, n, cols, False, True, False)
+    var o = ap_ovr_stages(plan, n, cols, w != 0, True, False)
     var addresses: List[Int] = [scores, Int(codes.unsafe_ptr())]
     var sizes: List[Int] = [n * cols, n]
+    if w != 0:
+        addresses.append(w)
+        sizes.append(n)
     var arena = metric_inputs_run(route, plan, addresses, sizes)
     _ = len(codes)  # copied into the program's arena above
     if not ap_ovr_edge(arena, o, cols):
@@ -349,7 +364,15 @@ def top_k_value(arena: MetricArenaOwner, tot: Int, sw: Int, n: Int, normalize: B
 
 def top_k_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, classes: Int, k: Int,
               mut warn: Int) raises -> Float64:
-    """THE TYPED RUN of `top_k_accuracy_score(y_true, y_score, k=k)` with
+    """`top_k_run` unweighted."""
+    return top_k_run(route, truth, scores, n, cols, classes, k, 0, warn)
+
+
+def top_k_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, classes: Int, k: Int, w: Int,
+              mut warn: Int) raises -> Float64:
+    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    program's last input as the door pins it (`top_k_stages(weighted)`).
+    THE TYPED RUN of `top_k_accuracy_score(y_true, y_score, k=k)` with
     its other defaults (normalize, labels None) over n int32 class codes in
     0 .. classes-1 and the member's float32 scores (n x cols; cols 1: the
     one column the scorer hands a binary member). The door's refusals in its
@@ -382,7 +405,7 @@ def top_k_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, cl
     if binary and k == 1:
         threshold = top_k_threshold(scores, n)
     var plan = MetricProgramPlan()
-    var got = top_k_stages(plan, n, binary, k, cols, threshold, False)
+    var got = top_k_stages(plan, n, binary, k, cols, threshold, w != 0)
     var addresses = List[Int]()
     var sizes = List[Int]()
     if top_k_reads_scores(binary, k):
@@ -390,6 +413,9 @@ def top_k_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, cl
         sizes.append(n * cols)
     addresses.append(Int(codes.unsafe_ptr()))
     sizes.append(n)
+    if w != 0:
+        addresses.append(w)
+        sizes.append(n)
     var arena = metric_inputs_run(route, plan, addresses, sizes)
     _ = len(codes)  # copied into the program's arena above
     return top_k_value(arena, got[0], got[1], n, True)

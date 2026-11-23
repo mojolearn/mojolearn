@@ -163,7 +163,15 @@ def brier_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, cols: 
 
 def brier_options_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, cols: Int, marks: Int,
                       given: Int) raises -> Float64:
-    """`given` (lane mf-tail5b): a caller's pos_label as its class code (the
+    """`brier_options_run` unweighted."""
+    return brier_options_run(route, truth, proba, n, k, cols, marks, given, 0)
+
+
+def brier_options_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, cols: Int, marks: Int,
+                      given: Int, w: Int) raises -> Float64:
+    """`w` (lane mf-score6): n float32 sample weights (0: none), the
+    program's third input as the door pins it (`brier_stages(weighted)`).
+    `given` (lane mf-tail5b): a caller's pos_label as its class code (the
     door's `mx_pos_label` of a label of the targets' kind: y_true == it);
     -1: pos_label None, the marks decide.
     THE TYPED RUN of `brier_score_loss(y_true, y_proba)` with its
@@ -205,9 +213,12 @@ def brier_options_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int
             codes[i] = rank[Int(t[i])]
     var shape = ProbaShape(n, width, binary)
     var plan = MetricProgramPlan()
-    var got = brier_stages(plan, shape, False, binary or width < 3)
+    var got = brier_stages(plan, shape, w != 0, binary or width < 3)
     var addresses: List[Int] = [proba, Int(codes.unsafe_ptr())]
     var sizes: List[Int] = [n if binary else n * width, n]
+    if w != 0:
+        addresses.append(w)
+        sizes.append(n)
     var arena = metric_inputs_run(route, plan, addresses, sizes)
     _ = len(codes)  # copied into the program's arena above
     proba_check(arena, got[0], caller)
