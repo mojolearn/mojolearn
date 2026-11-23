@@ -223,6 +223,8 @@ comptime RESAMPLE_MAP_TPB = 256
 # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime RESAMPLE_FAST_PERM_SELECT = RESAMPLE_FAST_APPLE
 
+# TOMBSTONE: MOJOLEARN_CV_FAST_SLICE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 289e8ff918.
+# Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_CV_FAST_SLICE (FAST+Apple default, plumbing folded into the typed search RUN's views of a side that is one run of rows, rule 2026-11-22) deleted 2026-11-23 by lane/mf-msel5b; code recoverable at 6f0a3de6ed.
 # Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE.patch; record in docs/TOMBSTONES.md.
 
