@@ -305,6 +305,18 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
             raise Error("TypeError: parallel takes its branches as positional arguments")
         _parallel(mods, model, supplied, context)
         return model
+    # nn-attention begin
+    elif kind == "multihead_attention" or kind == "positional_encoding":
+        var layer = _nn_attention_layer(mods, kind, supplied, keywords, context)
+        a0 = layer[0]
+        a1 = layer[1]
+        f = layer[2]
+        args = layer[3]
+    elif (kind == "transformer_encoder_layer" or kind == "transformer_decoder_layer"
+          or kind == "transformer_encoder" or kind == "transformer_decoder"):
+        _nn_attention_container(mods, model, kind, supplied, keywords, context)
+        return model
+    # nn-attention end
     elif len(supplied) != 0 or len(keywords) != 0:
         raise Error("TypeError: " + kind + " takes no arguments")
     # lane neural-blocks-3 (2026-11-22): the native model reads the float argument as a Float32 (eps, p, theta,
@@ -366,6 +378,12 @@ def _emit(mut mods: NativeModules, model: PythonObject, sub: PythonObject, entry
                     py_setitem(args, j, _remap(v, base, entry))
             a0 = args[0]
             a1 = args[1]
+        # nn-attention begin: multihead_attention's key/value source (a2; -2 self and -3 an unset memory stay)
+        elif code == _NN_CODE_MHA:
+            var src = Int(py=args[2])
+            if src >= -1:
+                py_setitem(args, 2, _remap(src, base, entry))
+        # nn-attention end
         _ = py_call(layers.append, Python.tuple(layer[0], a0, a1, layer[3], py_call(b.tuple, args)))
     return entry if count == 0 else base + count - 1
 
@@ -574,3 +592,270 @@ def sequential_sample_shape(mut mods: NativeModules, model: PythonObject, dims: 
     if nd > 2 and not Bool(py=py_call(b.tuple, actual) == shape):
         raise Error("X samples have a different shape from the model's input_shape")
     return shape
+
+
+# nn-attention begin ---------------------------------------------------------------------------------------
+# Classic attention (lane nn-attention, 2026-11-23): multihead_attention (67) and positional_encoding (72) are
+# layers (autograd/nn_attention.mojo); the encoder and decoder layers and stacks are containers written here
+# into the flat description from existing layers (PyTorch's TransformerEncoderLayer / TransformerDecoderLayer
+# and TransformerEncoder / TransformerDecoder module for module): nothing of them runs here.
+comptime _NN_CODE_MHA = 67
+comptime _NN_CODE_POS_ENC = 72
+comptime _NN_CODE_LINEAR = 1
+comptime _NN_CODE_RELU = 2
+comptime _NN_CODE_LAYER_NORM = 6
+comptime _NN_CODE_DROPOUT = 7
+comptime _NN_CODE_GELU = 33
+comptime _NN_SELF = -2
+comptime _NN_MEMORY_UNSET = -3
+
+
+def _nn_float(mut mods: NativeModules, value: PythonObject, name: String) raises -> PythonObject:
+    var b = mods.module("builtins")
+    if value is None or py_type(value) is b.bool or py_type(value) is b.str:
+        raise Error("TypeError: " + name + " must be a number")
+    # one rounding to float32, as sequential_add's (the native model reads a Float32)
+    return PythonObject(Float64(Float32(Float64(py=py_call(b.float, value)))))
+
+
+def _nn_dropout(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
+    var p = _nn_float(mods, value, "dropout")
+    if not (Bool(py=p >= PythonObject(0)) and Bool(py=p < PythonObject(1))):
+        raise Error("dropout must be in [0, 1)")
+    return p
+
+
+def _nn_flag(mut mods: NativeModules, value: PythonObject, name: String) raises -> Bool:
+    var b = mods.module("builtins")
+    if py_type(value) is not b.bool:
+        raise Error("TypeError: " + name + " must be True or False")
+    return Bool(py=value)
+
+
+def _nn_source(value: PythonObject, absent: Int, name: String, context: PythonObject) raises -> Int:
+    if value is None:
+        return absent
+    if not _integer(value, context) or Bool(py=value < PythonObject(-1)):
+        raise Error(name + " must be -1 (the model input) or the index of an earlier layer")
+    return Int(py=value)
+
+
+def _nn_batch_first(mut mods: NativeModules, value: PythonObject) raises:
+    if not _nn_flag(mods, value, "batch_first"):
+        raise Error("batch_first must be True: Sequential samples are (length, features), the batch axis first")
+
+
+def _nn_mha_args(heads: Int, flags: Int, source: Int, embed: Int, kdim: Int) raises -> PythonObject:
+    return Python.list(heads, flags, source, embed, kdim, 0)
+
+
+def _nn_attention_layer(mut mods: NativeModules, kind: String, supplied: PythonObject, keywords: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """(a0, a1, f, args) of a multihead_attention or positional_encoding layer."""
+    if kind == "positional_encoding":
+        var po = _arguments(mods, kind, supplied, keywords, Python.tuple("d_model", "dropout", "max_len"),
+                            Python.tuple(None, 0.1, 5000), 1)
+        var d = _positive(po[0], "d_model", 2, context)
+        if d % 2 != 0:
+            raise Error("d_model must be even")
+        var p = _nn_dropout(mods, po[1])
+        var ml = _positive(po[2], "max_len", 1, context)
+        if ml > 8192:
+            raise Error("max_len must be at most 8192")
+        return Python.tuple(PythonObject(ml), PythonObject(d), p, Python.list(ml, d, 0, 0, 0, 0))
+    var o = _arguments(mods, kind, supplied, keywords,
+        Python.tuple("embed_dim", "num_heads", "dropout", "bias", "add_bias_kv", "add_zero_attn", "kdim", "vdim",
+                     "batch_first", "source", "is_causal", "attn_mask", "key_padding_mask"),
+        Python.tuple(None, None, 0.0, True, False, False, None, None, True, None, False, None, False), 2)
+    var embed = _positive(o[0], "embed_dim", 1, context)
+    var heads = _positive(o[1], "num_heads", 1, context)
+    if embed % heads != 0:
+        raise Error("embed_dim must be divisible by num_heads")
+    var p = _nn_dropout(mods, o[2])
+    var bias = _nn_flag(mods, o[3], "bias")
+    if _nn_flag(mods, o[4], "add_bias_kv") or _nn_flag(mods, o[5], "add_zero_attn"):
+        raise Error("add_bias_kv and add_zero_attn are not supported; leave them False")
+    var kdim = 0 if o[6] is None else _positive(o[6], "kdim", 1, context)
+    var vdim = 0 if o[7] is None else _positive(o[7], "vdim", 1, context)
+    if kdim != 0 and vdim != 0 and kdim != vdim:
+        raise Error("kdim and vdim must be equal: the keys and values are read from one source")
+    if kdim == 0:
+        kdim = vdim
+    _nn_batch_first(mods, o[8])
+    var source = _nn_source(o[9], _NN_SELF, "source", context)
+    if source == _NN_SELF and kdim != 0 and kdim != embed:
+        raise Error("self-attention takes kdim = vdim = embed_dim; give source= to attend to another layer")
+    var causal = _nn_flag(mods, o[10], "is_causal")
+    if o[11] is not None:
+        var b = mods.module("builtins")
+        if not (py_type(o[11]) is b.str and String(o[11]) == "causal"):
+            raise Error("attn_mask takes None or 'causal' (a mask tensor is not supported: a Sequential layer holds "
+                        + "no tensor arguments; use is_causal=True for the causal mask)")
+        causal = True
+    var kpm = _nn_flag(mods, o[12], "key_padding_mask")
+    var flags = (1 if bias else 0) + (2 if causal else 0) + (4 if kpm else 0)
+    return Python.tuple(PythonObject(heads), PythonObject(flags), p,
+                        _nn_mha_args(heads, flags, source, embed, 0 if kdim == embed else kdim))
+
+
+def _nn_add(mut mods: NativeModules, model: PythonObject, code: Int, args: PythonObject, f: PythonObject) raises -> Int:
+    var nk = sequential_keys()
+    var b = mods.module("builtins")
+    var layers = py_item(sequential_fields(model), nk[].k__layers)
+    var at = len(layers)
+    _ = py_call(layers.append, Python.tuple(PythonObject(code), args[0], args[1], f, py_call(b.tuple, args)))
+    return at
+
+
+def _nn_simple(mut mods: NativeModules, model: PythonObject, code: Int, a0: Int, a1: Int, f: PythonObject) raises -> Int:
+    return _nn_add(mods, model, code, Python.list(a0, a1, 0, 0, 0, 0), f)
+
+
+def _nn_ffn(mut mods: NativeModules, model: PythonObject, d: Int, dff: Int, gelu: Bool, p: PythonObject) raises:
+    """linear1, activation, dropout, linear2, dropout2 (PyTorch's _ff_block)."""
+    _ = _nn_simple(mods, model, _NN_CODE_LINEAR, dff, 1, PythonObject(0.0))
+    if gelu:
+        _ = _nn_simple(mods, model, _NN_CODE_GELU, 0, 0, PythonObject(0.0))
+    else:
+        _ = _nn_simple(mods, model, _NN_CODE_RELU, 0, 0, PythonObject(0.0))
+    _ = _nn_simple(mods, model, _NN_CODE_DROPOUT, 0, 0, p)
+    _ = _nn_simple(mods, model, _NN_CODE_LINEAR, d, 1, PythonObject(0.0))
+    _ = _nn_simple(mods, model, _NN_CODE_DROPOUT, 0, 0, p)
+
+
+def _nn_mha(mut mods: NativeModules, model: PythonObject, d: Int, heads: Int, flags: Int, source: Int,
+            p: PythonObject) raises -> Int:
+    return _nn_add(mods, model, _NN_CODE_MHA, _nn_mha_args(heads, flags, source, d, 0), p)
+
+
+def _nn_attention_container(mut mods: NativeModules, model: PythonObject, kind: String, supplied: PythonObject,
+                            keywords: PythonObject, context: PythonObject) raises:
+    var b = mods.module("builtins")
+    if kind == "transformer_encoder" or kind == "transformer_decoder":
+        var decoder = kind == "transformer_decoder"
+        var stack_names = Python.tuple("encoder_layer", "num_layers", "norm")
+        var stack_defaults = Python.tuple(None, None, None)
+        if decoder:
+            stack_names = Python.tuple("decoder_layer", "num_layers", "memory", "norm")
+            stack_defaults = Python.tuple(None, None, None, None)
+        var so = _arguments(mods, kind, supplied, keywords, stack_names, stack_defaults, 3 if decoder else 2)
+        var template = _model_layers(mods, model, so[0], "decoder_layer" if decoder else "encoder_layer")
+        if len(template) == 0:
+            raise Error("the layer must hold at least one layer")
+        var n = _positive(so[1], "num_layers", 1, context)
+        var memory = 0
+        var norm_at = 2
+        if decoder:
+            memory = _nn_source(so[2], -1, "memory", context)
+            norm_at = 3
+            var unset = 0
+            for k in range(len(template)):  # driver-loop: over the decoder layer's description (admission)
+                var layer = template[k]
+                if Int(py=layer[0]) == _NN_CODE_MHA:
+                    var src = Int(py=layer[4][2])
+                    if src == _NN_MEMORY_UNSET:
+                        unset += 1
+                    elif src != _NN_SELF:
+                        raise Error("decoder_layer must be built without memory (transformer_decoder sets it)")
+            if unset == 0:
+                raise Error("decoder_layer must hold a transformer_decoder_layer")
+        var norm_layers = PythonObject(None)
+        if so[norm_at] is not None:
+            norm_layers = _model_layers(mods, model, so[norm_at], "norm")
+        var nk = sequential_keys()
+        var layers = py_item(sequential_fields(model), nk[].k__layers)
+        var entry = _block_entry(mods, model)
+        for _ in range(n):  # driver-loop: over num_layers copies of the layer (description only)
+            var base = len(layers)
+            entry = _emit(mods, model, template, entry)
+            if decoder:
+                for k in range(base, len(layers)):  # driver-loop: over the copy's layers (description only)
+                    var layer = layers[k]
+                    if Int(py=layer[0]) == _NN_CODE_MHA and Int(py=layer[4][2]) == _NN_MEMORY_UNSET:
+                        var args = py_call(b.list, layer[4])
+                        py_setitem(args, 2, memory)
+                        py_setitem(layers, k, Python.tuple(layer[0], layer[1], layer[2], layer[3],
+                                                           py_call(b.tuple, args)))
+        if norm_layers is not None:
+            _ = _emit(mods, model, norm_layers, entry)
+        return
+    var decoder = kind == "transformer_decoder_layer"
+    var names = Python.tuple("d_model", "nhead", "dim_feedforward", "dropout", "activation", "layer_norm_eps",
+                             "batch_first", "norm_first", "bias", "is_causal", "key_padding_mask")
+    var defaults = Python.tuple(None, None, 2048, 0.1, "relu", 1e-5, True, False, True, False, False)
+    if decoder:
+        names = Python.tuple("d_model", "nhead", "dim_feedforward", "dropout", "activation", "layer_norm_eps",
+                             "batch_first", "norm_first", "bias", "memory", "tgt_is_causal",
+                             "tgt_key_padding_mask", "memory_key_padding_mask")
+        defaults = Python.tuple(None, None, 2048, 0.1, "relu", 1e-5, True, False, True, None, False, False, False)
+    var o = _arguments(mods, kind, supplied, keywords, names, defaults, 2)
+    var d = _positive(o[0], "d_model", 1, context)
+    var heads = _positive(o[1], "nhead", 1, context)
+    if d % heads != 0:
+        raise Error("d_model must be divisible by nhead")
+    var dff = _positive(o[2], "dim_feedforward", 1, context)
+    var p = _nn_dropout(mods, o[3])
+    if py_type(o[4]) is not b.str or (String(o[4]) != "relu" and String(o[4]) != "gelu"):
+        raise Error("activation must be 'relu' or 'gelu'")
+    var gelu = String(o[4]) == "gelu"
+    var eps = _nn_float(mods, o[5], "layer_norm_eps")
+    if not Bool(py=eps > PythonObject(0)):
+        raise Error("layer_norm_eps must be positive")
+    _nn_batch_first(mods, o[6])
+    var norm_first = _nn_flag(mods, o[7], "norm_first")
+    if not _nn_flag(mods, o[8], "bias"):
+        raise Error("bias=False is not supported: layer_norm always has a bias")
+    var self_flags = 1 + (2 if _nn_flag(mods, o[10 if decoder else 9], "tgt_is_causal" if decoder else "is_causal") else 0)
+    self_flags += 4 if _nn_flag(mods, o[11 if decoder else 10],
+                                "tgt_key_padding_mask" if decoder else "key_padding_mask") else 0
+    var entry = _block_entry(mods, model)
+    var zero = PythonObject(0.0)
+    if not decoder:
+        if norm_first:
+            # x = x + sa(norm1(x)); x = x + ff(norm2(x))
+            _ = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+            _ = _nn_mha(mods, model, d, heads, self_flags, _NN_SELF, p)
+            _ = _nn_simple(mods, model, _NN_CODE_DROPOUT, 0, 0, p)
+            var r1 = _nn_simple(mods, model, _CODE_RESIDUAL, entry, 0, zero)
+            _ = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+            _nn_ffn(mods, model, d, dff, gelu, p)
+            _ = _nn_simple(mods, model, _CODE_RESIDUAL, r1, 0, zero)
+        else:
+            # x = norm1(x + sa(x)); x = norm2(x + ff(x))
+            _ = _nn_mha(mods, model, d, heads, self_flags, _NN_SELF, p)
+            _ = _nn_simple(mods, model, _NN_CODE_DROPOUT, 0, 0, p)
+            _ = _nn_simple(mods, model, _CODE_RESIDUAL, entry, 0, zero)
+            var n1 = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+            _nn_ffn(mods, model, d, dff, gelu, p)
+            _ = _nn_simple(mods, model, _CODE_RESIDUAL, n1, 0, zero)
+            _ = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+        return
+    var memory = _nn_source(o[9], _NN_MEMORY_UNSET, "memory", context)
+    var cross_flags = 1 + (4 if _nn_flag(mods, o[12], "memory_key_padding_mask") else 0)
+    if norm_first:
+        # x = x + sa(norm1(x)); x = x + mha(norm2(x), memory); x = x + ff(norm3(x))
+        _ = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+        _ = _nn_mha(mods, model, d, heads, self_flags, _NN_SELF, p)
+        _ = _nn_simple(mods, model, _NN_CODE_DROPOUT, 0, 0, p)
+        var r1 = _nn_simple(mods, model, _CODE_RESIDUAL, entry, 0, zero)
+        _ = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+        _ = _nn_mha(mods, model, d, heads, cross_flags, memory, p)
+        _ = _nn_simple(mods, model, _NN_CODE_DROPOUT, 0, 0, p)
+        var r2 = _nn_simple(mods, model, _CODE_RESIDUAL, r1, 0, zero)
+        _ = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+        _nn_ffn(mods, model, d, dff, gelu, p)
+        _ = _nn_simple(mods, model, _CODE_RESIDUAL, r2, 0, zero)
+    else:
+        # x = norm1(x + sa(x)); x = norm2(x + mha(x, memory)); x = norm3(x + ff(x))
+        _ = _nn_mha(mods, model, d, heads, self_flags, _NN_SELF, p)
+        _ = _nn_simple(mods, model, _NN_CODE_DROPOUT, 0, 0, p)
+        _ = _nn_simple(mods, model, _CODE_RESIDUAL, entry, 0, zero)
+        var n1 = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+        _ = _nn_mha(mods, model, d, heads, cross_flags, memory, p)
+        _ = _nn_simple(mods, model, _NN_CODE_DROPOUT, 0, 0, p)
+        _ = _nn_simple(mods, model, _CODE_RESIDUAL, n1, 0, zero)
+        var n2 = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+        _nn_ffn(mods, model, d, dff, gelu, p)
+        _ = _nn_simple(mods, model, _CODE_RESIDUAL, n2, 0, zero)
+        _ = _nn_simple(mods, model, _NN_CODE_LAYER_NORM, 0, 0, eps)
+# nn-attention end

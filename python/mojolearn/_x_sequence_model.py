@@ -20,6 +20,12 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "selective_scan": 42, "ssd_scan": 43, "trapezoid_scan": 44,
           "lm_head": 45,
           "batch_norm1d": 46, "batch_norm2d": 46}  # lm_head (lane neural-blocks-3-lm)
+# nn-attention begin: classic attention (autograd/nn_attention.mojo); the encoder and decoder layers and
+# stacks are containers (code 0) written from existing layers by the description door
+_LAYER.update({"multihead_attention": 67, "positional_encoding": 72,
+               "transformer_encoder_layer": 0, "transformer_decoder_layer": 0,
+               "transformer_encoder": 0, "transformer_decoder": 0})
+# nn-attention end
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -610,6 +616,228 @@ class Sequential(_CheckMixin):
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("gated", (gate, up), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
+    # nn-attention begin
+    def multihead_attention(self, embed_dim, num_heads, dropout=0.0, bias=True, add_bias_kv=False,
+                            add_zero_attn=False, kdim=None, vdim=None, batch_first=True, *, source=None,
+                            is_causal=False, attn_mask=None, key_padding_mask=False):
+        """Append multi-head attention, as PyTorch's ``nn.MultiheadAttention``
+        with ``batch_first=True``, over ``(length, embed_dim)`` samples.
+
+        The queries are the current output. The keys and values are the
+        current output too (self-attention), or the output of layer
+        ``source`` (cross-attention, for example a decoder attending to an
+        encoder's output). Each projection is ``x W^T + b``; per head the
+        result is ``softmax(q k^T / sqrt(head_dim) + mask) v``; the heads
+        are joined and projected by ``out_proj``. The output has the shape
+        of the queries.
+
+        Parameters
+        ----------
+        embed_dim : int
+            The features of the queries and of the output.
+        num_heads : int
+            Number of heads; it divides ``embed_dim``.
+        dropout : float, default 0.0
+            Dropout on the attention weights during :meth:`fit`.
+        bias : bool, default True
+            Add the projection biases ``in_proj_bias`` and ``out_proj.bias``.
+            Without bias they stay zero and are never trained.
+        add_bias_kv, add_zero_attn : bool, default False
+            Must be False.
+        kdim, vdim : int or None, default None
+            The features of the keys and values (equal: both come from
+            ``source``). None takes ``embed_dim``.
+        batch_first : bool, default True
+            Must be True: samples are ``(length, features)``.
+        source : int or None, default None
+            None for self-attention, -1 for the model input, or the index of
+            an earlier layer whose output gives the keys and values.
+        is_causal : bool, default False
+            Each query attends only to keys at its own position or before.
+        attn_mask : None or 'causal', default None
+            ``'causal'`` is the same as ``is_causal=True``.
+        key_padding_mask : bool, default False
+            Ignore the keys at or past each sample's length, the
+            ``lengths`` given to :meth:`fit` and :meth:`predict` (PyTorch's
+            ``key_padding_mask`` True there). The keys must have the model
+            input's length.
+
+        The parameters are PyTorch's: ``in_proj_weight`` ``(3 * embed_dim,
+        embed_dim)`` (the query, key and value weights stacked; with a
+        different ``kdim`` one vector of the three), ``out_proj.weight``,
+        ``in_proj_bias`` and ``out_proj.bias``, initialized as PyTorch does.
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> model = (mojolearn.Sequential(input_shape=(10,)).embedding(20, 16)
+        ...          .positional_encoding(16, dropout=0.0)
+        ...          .multihead_attention(16, 4, is_causal=True)
+        ...          .flatten().linear(3))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("multihead_attention", (embed_dim, num_heads, dropout, bias, add_bias_kv, add_zero_attn, kdim, vdim, batch_first, source, is_causal, attn_mask, key_padding_mask), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def positional_encoding(self, d_model, dropout=0.1, max_len=5000):
+        """Append the sinusoidal positional encoding of "Attention Is All You
+        Need" (the ``PositionalEncoding`` of PyTorch's transformer
+        tutorial): ``x + PE[:length]`` with ``PE[p, 2j] = sin(p / 10000^(2j /
+        d_model))`` and ``PE[p, 2j + 1] = cos(p / 10000^(2j / d_model))``,
+        then dropout during :meth:`fit`. It has no parameters.
+
+        Parameters
+        ----------
+        d_model : int
+            The features of each position (even).
+        dropout : float, default 0.1
+            Dropout after the addition.
+        max_len : int, default 5000
+            The longest sequence accepted (at most 8192).
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> model = mojolearn.Sequential(input_shape=(12,)).embedding(50, 32).positional_encoding(32)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("positional_encoding", (d_model, dropout, max_len), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def transformer_encoder_layer(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu",
+                                  layer_norm_eps=1e-5, batch_first=True, norm_first=False, bias=True, *,
+                                  is_causal=False, key_padding_mask=False):
+        """Append a Transformer encoder layer, as PyTorch's
+        ``nn.TransformerEncoderLayer`` with ``batch_first=True``.
+
+        With ``norm_first=False``: ``x = norm1(x + dropout(self_attn(x)))``
+        then ``x = norm2(x + dropout(ff(x)))``, where ``ff`` is ``linear(
+        dim_feedforward)``, the activation, dropout and ``linear(d_model)``.
+        With ``norm_first=True`` the norms come first:
+        ``x = x + dropout(self_attn(norm1(x)))``, ``x = x + dropout(ff(norm2(
+        x)))``. The layer is written into the model as its modules
+        (:meth:`multihead_attention`, :meth:`dropout`, :meth:`residual`,
+        :meth:`layer_norm`, :meth:`linear` and the activation), which appear
+        in :attr:`layers` and in the parameter names.
+
+        Parameters
+        ----------
+        d_model : int
+            The features of each position.
+        nhead : int
+            Attention heads; it divides ``d_model``.
+        dim_feedforward : int, default 2048
+            The width of the feed-forward network.
+        dropout : float, default 0.1
+            Dropout in attention, after attention and in the feed-forward
+            network, during :meth:`fit`.
+        activation : {'relu', 'gelu'}, default 'relu'
+        layer_norm_eps : float, default 1e-5
+        batch_first : bool, default True
+            Must be True.
+        norm_first : bool, default False
+        bias : bool, default True
+            Must be True.
+        is_causal : bool, default False
+            A causal mask in self-attention.
+        key_padding_mask : bool, default False
+            Ignore the positions at or past each sample's ``lengths`` (see
+            :meth:`multihead_attention`).
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> model = (mojolearn.Sequential(input_shape=(16,)).embedding(100, 32)
+        ...          .positional_encoding(32)
+        ...          .transformer_encoder_layer(32, 4, dim_feedforward=64)
+        ...          .flatten().linear(2))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("transformer_encoder_layer", (d_model, nhead, dim_feedforward, dropout, activation, layer_norm_eps, batch_first, norm_first, bias, is_causal, key_padding_mask), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def transformer_decoder_layer(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu",
+                                  layer_norm_eps=1e-5, batch_first=True, norm_first=False, bias=True, *,
+                                  memory=None, tgt_is_causal=False, tgt_key_padding_mask=False,
+                                  memory_key_padding_mask=False):
+        """Append a Transformer decoder layer, as PyTorch's
+        ``nn.TransformerDecoderLayer`` with ``batch_first=True``: self-attention
+        over the current output, attention to ``memory`` (the output of an
+        earlier layer, typically an encoder's), and the feed-forward network,
+        each with dropout, a residual connection and a layer norm (first, with
+        ``norm_first=True``). The layer is written into the model as its
+        modules, as for :meth:`transformer_encoder_layer`.
+
+        Parameters
+        ----------
+        d_model, nhead, dim_feedforward, dropout, activation, layer_norm_eps, batch_first, norm_first, bias
+            As for :meth:`transformer_encoder_layer`.
+        memory : int or None, default None
+            The layer whose output is attended to (-1: the model input); it
+            has ``d_model`` features. None only in a layer given to
+            :meth:`transformer_decoder`, which sets it.
+        tgt_is_causal : bool, default False
+            A causal mask in self-attention (each position sees only itself
+            and earlier ones), as a decoder trained with teacher forcing needs.
+        tgt_key_padding_mask, memory_key_padding_mask : bool, default False
+            Ignore the target or memory positions at or past each sample's
+            ``lengths`` (see :meth:`multihead_attention`).
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> S = mojolearn.Sequential
+        >>> enc = S(input_shape=(8, 16)).transformer_encoder_layer(16, 2, 32, dropout=0.0)
+        >>> memory = len(enc.layers) - 1   # the encoder layer's last module
+        >>> model = (enc.transformer_decoder_layer(16, 2, 32, dropout=0.0, memory=memory, tgt_is_causal=True)
+        ...          .flatten().linear(4))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("transformer_decoder_layer", (d_model, nhead, dim_feedforward, dropout, activation, layer_norm_eps, batch_first, norm_first, bias, memory, tgt_is_causal, tgt_key_padding_mask, memory_key_padding_mask), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def transformer_encoder(self, encoder_layer, num_layers, norm=None):
+        """Append ``num_layers`` copies of ``encoder_layer`` (a ``Sequential``
+        holding a :meth:`transformer_encoder_layer`), then ``norm``, as
+        PyTorch's ``nn.TransformerEncoder``. Each copy has its own
+        parameters; ``encoder_layer`` itself is not changed or trained.
+
+        Parameters
+        ----------
+        encoder_layer : Sequential
+        num_layers : int
+        norm : Sequential or None, default None
+            Layers after the last copy, for example
+            ``Sequential().layer_norm()``.
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> S = mojolearn.Sequential
+        >>> layer = S().transformer_encoder_layer(32, 4, dim_feedforward=64)
+        >>> model = (S(input_shape=(16,)).embedding(100, 32).positional_encoding(32)
+        ...          .transformer_encoder(layer, 2).flatten().linear(2))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("transformer_encoder", (encoder_layer, num_layers, norm), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def transformer_decoder(self, decoder_layer, num_layers, memory, norm=None):
+        """Append ``num_layers`` copies of ``decoder_layer`` (a ``Sequential``
+        holding a :meth:`transformer_decoder_layer` built without
+        ``memory``), each attending to the output of layer ``memory``, then
+        ``norm``, as PyTorch's ``nn.TransformerDecoder``.
+
+        Parameters
+        ----------
+        decoder_layer : Sequential
+        num_layers : int
+        memory : int
+            The layer whose output every copy attends to (-1: the model
+            input).
+        norm : Sequential or None, default None
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> S = mojolearn.Sequential
+        >>> layer = S().transformer_decoder_layer(16, 2, 32, dropout=0.0, tgt_is_causal=True)
+        >>> model = (S(input_shape=(8, 16)).linear(16)
+        ...          .transformer_decoder(layer, 2, memory=-1).flatten().linear(4))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("transformer_decoder", (decoder_layer, num_layers, memory, norm), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+    # nn-attention end
+
     @property
     def layers(self):
         """The layers in order: ``(kind, arg0, arg1, float_arg)`` tuples,
@@ -1089,6 +1317,15 @@ _SEQUENTIAL_CONTEXT = {
                     "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
                     "selective_scan", "", "", "lm_head", "batch_norm"),
 }
+
+
+# nn-attention begin: the names of layer codes 67 (multihead_attention) and 72 (positional_encoding), by index
+_NN_ATTENTION_NAMES = list(_SEQUENTIAL_CONTEXT["layer_names"])  # glue: layer-name table at package import
+_NN_ATTENTION_NAMES += [""] * max(0, 73 - len(_NN_ATTENTION_NAMES))  # glue: layer-name table at package import
+_NN_ATTENTION_NAMES[67] = "multihead_attention"
+_NN_ATTENTION_NAMES[72] = "positional_encoding"
+_SEQUENTIAL_CONTEXT["layer_names"] = tuple(_NN_ATTENTION_NAMES)
+# nn-attention end
 
 
 def _connect_sequential_bindings():

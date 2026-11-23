@@ -45,6 +45,14 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
             for j in range(len(suffixes)):  # small-loop(at most four tensors of a block layer)
                 _ = py_call(names.append, PythonObject(suffixes[j]))
             _ = py_call(result.append, Python.tuple(k, False, py_call(native_loaded_module("builtins").tuple, names)))
+        # nn-attention begin: multihead_attention's four tensors by name (autograd/nn_attention.mojo)
+        elif code == 67:
+            var nn_suffixes = block_param_names(code)
+            var nn_names = Python.list()
+            for j in range(len(nn_suffixes)):  # small-loop(four tensors of a multihead_attention layer)
+                _ = py_call(nn_names.append, PythonObject(nn_suffixes[j]))
+            _ = py_call(result.append, Python.tuple(k, False, py_call(native_loaded_module("builtins").tuple, nn_names)))
+        # nn-attention end
     return result
 
 

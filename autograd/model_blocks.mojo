@@ -97,6 +97,13 @@ from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
 
+# nn-attention begin
+from autograd.nn_attention import (
+    nn_attention_is, nn_attention_shape, nn_attention_param_sizes, nn_attention_param_names,
+    nn_attention_init_bounds, nn_attention_tensor_dims, nn_attention_state, nn_attention_reads,
+)
+# nn-attention end
+
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
 comptime LAYER_SOFTPLUS = 34
@@ -134,6 +141,10 @@ comptime _ARGS = 6
 
 
 def is_block(code: Int) -> Bool:
+    # nn-attention begin
+    if nn_attention_is(code):
+        return True
+    # nn-attention end
     return code >= BLOCK_FIRST and code <= BLOCK_LAST
 
 
@@ -170,6 +181,10 @@ def bn_state(code: Int, xargs: List[Int], i: Int) -> Tuple[Int, Int]:
     if code == LAYER_BATCH_NORM:
         var c = _x(xargs, i, 0)
         return (2 * c, 2 * c)
+    # nn-attention begin
+    if nn_attention_is(code):
+        return nn_attention_state(code, xargs, i)
+    # nn-attention end
     return (0, 0)
 
 
@@ -317,6 +332,10 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         hd[cur.ndim - 1] = a0
         return rn_shape(hd, name + " (LMHead)")
     # end lm_head
+    # nn-attention begin
+    if nn_attention_is(code):
+        return nn_attention_shape(code, xargs, i, f, cur, name)
+    # nn-attention end
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -368,6 +387,10 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(_x(xargs, i, 0) * cur.cols())  # weight (vocab, features)
     # end lm_head
+    # nn-attention begin
+    if nn_attention_is(code):
+        return nn_attention_param_sizes(code, xargs, i, cur)
+    # nn-attention end
     return out^
 
 
@@ -405,11 +428,19 @@ def block_param_names(code: Int) -> List[String]:
     elif code == LAYER_LM_HEAD:
         out.append(".weight")
     # end lm_head
+    # nn-attention begin
+    if nn_attention_is(code):
+        return nn_attention_param_names(code)
+    # nn-attention end
     return out^
 
 
 def block_reads(code: Int, xargs: List[Int], i: Int, j: Int) -> Bool:
     """True when block layer i reads earlier layer j's output (not through its input)."""
+    # nn-attention begin
+    if nn_attention_is(code):
+        return nn_attention_reads(code, xargs, i, j)
+    # nn-attention end
     return code == LAYER_MULTIPLY and _x(xargs, i, 0) == j
 
 
@@ -466,6 +497,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_LM_HEAD:
         out.append(ftz(identical_div(Float32(1), identical_sqrt(Float32(cur.cols())))))
     # end lm_head
+    # nn-attention begin
+    if nn_attention_is(code):
+        return nn_attention_init_bounds(code, xargs, i, cur)
+    # nn-attention end
     return out^
 
 
@@ -806,6 +841,10 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
         out.append(_x(xargs, i, 0))
         out.append(cur.cols())
     # end lm_head
+    # nn-attention begin
+    if nn_attention_is(code):
+        return nn_attention_tensor_dims(code, xargs, i, cur, slot)
+    # nn-attention end
     return out^
 
 

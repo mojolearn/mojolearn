@@ -46,6 +46,12 @@ from autograd.model_blocks import (
 # lm_head (lane neural-blocks-3-lm): the token cross-entropy's head layer and its fused loss
 from autograd.model_blocks import LAYER_LM_HEAD, block_lm_head_loss
 from autograd.ssm_ops import OP_SSM_S4D_INIT
+# nn-attention begin
+from autograd.nn_attention import (
+    nn_attention_is, nn_attention_source, nn_attention_check_source, nn_attention_forward,
+    nn_attention_key_padding_length, NN_MHA_SELF,
+)
+# nn-attention end
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
 # optimizer step and layer, including across checkpoint/resume.
@@ -560,6 +566,16 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
                 var src_shape = s.sample if a0 == -1 else s.out_shape[a0]
                 if not src_shape.same(cur):
                     raise Error(_layer_name(i) + " (Multiply): multiplies tensors of different shapes")
+            # nn-attention begin
+            if nn_attention_is(k):
+                var nsrc = nn_attention_source(k, la, 0)
+                var nshape = cur
+                if nsrc == -1:
+                    nshape = s.sample
+                elif nsrc >= 0 and nsrc < i:
+                    nshape = s.out_shape[nsrc]
+                nn_attention_check_source(k, la, 0, i, cur, s.sample, nshape, _layer_name(i))
+            # nn-attention end
             nxt = block_shape(k, la, 0, f, cur, _layer_name(i))
             # lm_head (lane neural-blocks-3-lm): the LM head is the model's projection layer
             if k == LAYER_LM_HEAD:
@@ -998,6 +1014,13 @@ def _model_forward_v2[E: Exec](
                 parts.append(x0 if v == -1 else outs[v])
             # the sample's axis f (0: the first axis, the channels), after the batch axis
             h = rankn_concat(tape, ex, parts, Int(spec.farg[i]) + 1)
+        # nn-attention begin
+        elif nn_attention_is(k):
+            var msrc = nn_attention_source(k, spec.xargs, i)
+            var mem = h if msrc == NN_MHA_SELF else (x0 if msrc == -1 else outs[msrc])
+            h = nn_attention_forward(tape, ex, k, spec.xargs, i, spec.farg[i], spec.in_shape[i], P, Gr,
+                                     spec.param_off[i], h, mem, train, seed, step * spec.n_layers() + i, lengths)
+        # nn-attention end
         elif is_block(k):
             var other: Optional[Tensor] = None
             if k == LAYER_MULTIPLY:
@@ -1601,6 +1624,17 @@ def model_lengths_check(spec: ModelSpec, lengths: FP, N: Int, operation: String)
                 raise Error("ValueError: " + operation + ": lengths need every recurrent layer to read sequences "
                             + "of one length (" + String(T) + " and " + String(t) + " here)")
             T = t
+    # nn-attention begin: multihead_attention's key_padding_mask reads the lengths (of the model input)
+    for i in range(spec.n_layers()):  # driver-loop: over layers (description metadata)
+        if spec.version == SPEC2_VERSION:
+            var t = nn_attention_key_padding_length(spec.kinds[i], spec.xargs, i, spec.sample)
+            if t != 0:
+                if T != 0 and t != T:
+                    raise Error("ValueError: " + operation + ": lengths need the recurrent layers and the "
+                                + "key_padding_mask to read sequences of one length (" + String(T) + " and "
+                                + String(t) + " here)")
+                T = t
+    # nn-attention end
     if T == 0:
         raise Error("ValueError: " + operation + ": lengths apply to the recurrent layers (rnn, lstm, gru); this "
                     + "model has none")
