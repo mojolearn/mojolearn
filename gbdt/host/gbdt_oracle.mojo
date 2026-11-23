@@ -156,7 +156,6 @@ from checks.numerics import (
     identical_log64,
     identical_mul_add,
     identical_pow,
-    identical_sqrt,
 )
 from gbdt.data.permutation import TRandom
 from gbdt.targets.pointwise_bodies import (
@@ -220,6 +219,7 @@ from gbdt.grid_creator.binarization import (
 )
 # the device score kernels' AddLeaf (lane gbdt-cpu-rest-4-ns)
 from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import add_leaf_score
+from gbdt.methods.score_calcer_body import cosine_gain
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from gbdt.options.data_processing_options import (
     NAN_MODE_FORBIDDEN,
@@ -2992,10 +2992,7 @@ def _cosine_gains_range(
         var final_score = sp[bf]
         var denum_sqr = dp[bf]
         var score_before = Float32(0.0)
-        if denum_sqr > Float32(1e-15):
-            final_score = ftz(final_score / identical_sqrt(denum_sqr))
-        else:
-            final_score = -GBDT_FLOAT32_MAX
+        final_score = cosine_gain(final_score, denum_sqr)
         if score_std_dev != Float32(0.0):
             if bf_feature[bf] != last_feature:
                 var seed = advance_seed_k(level_seed + UInt64(bf_feature[bf]), 4)
@@ -4219,10 +4216,7 @@ def _cosine_gain_n(
             _add_leaf_cosine(-total_sum_right, weight_right, lambda_l2, score, denum_sqr)
     var final_score = score
     var score_before = Float32(0.0)
-    if denum_sqr > Float32(1e-15):
-        final_score = ftz(score / identical_sqrt(denum_sqr))
-    else:
-        final_score = -GBDT_FLOAT32_MAX
+    final_score = cosine_gain(score, denum_sqr)
     if score_std_dev != Float32(0.0):
         var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
         var draw = next_normal_f(seed)

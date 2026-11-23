@@ -83,7 +83,7 @@ tools/identity_break.py on the gbdt-ordered-rmse lane is the measurement.
 from std.math import ceil, isfinite, log2
 
 from checks.fixed_point import choose_scale
-from checks.numerics import ftz, identical_mul, identical_mul64, identical_mul_add, identical_mul_add_simd, identical_sqrt
+from checks.numerics import ftz, identical_mul, identical_mul64, identical_mul_add, identical_mul_add_simd
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
@@ -100,6 +100,7 @@ from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
 from gbdt.data.permutation import TRandom
 from gbdt.methods.score_calcer_body import (
     add_dim_leaves,
+    cosine_cost,
     add_pinned_class_leaves,
     make_score_calcer,
 )
@@ -1998,10 +1999,7 @@ def _dynamic_cosine_range(
     for b in range(b_lo, b_hi):
         var sc = sptr[b]
         var denum_sqr = dptr[b]
-        if denum_sqr > Float32(1e-15):
-            sc = -sc / identical_sqrt(denum_sqr)
-        else:
-            sc = GBDT_ORD_FLOAT32_MAX
+        sc = cosine_cost(sc, denum_sqr)
         sc *= Float32(1.0)
         var noisy = sc
         if score_std_dev != Float32(0.0):
