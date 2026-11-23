@@ -71,6 +71,9 @@ SERIAL BY NATURE: one meta-estimator's admission, publication or import.
 """
 from std.python import Python, PythonObject
 from bindings.member_fit_notices_pack import member_fit_notices_raise, member_fit_notices_raise_with
+from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_marker_index
+from core.xneighbors_member import LP_MARKER_WORD
+from bindings.member_leaf_boundary_door import member_leaf_admit_serving_labeled
 from bindings.member_leaf_boundary_door import (
     member_leaf_admit_serving, member_leaf_pack, member_leaf_pack_labeled, member_leaf_state,
 )
@@ -305,6 +308,43 @@ def _child_labels(kind: Int, labels: PythonObject, b: PythonObject) raises -> Py
     if kind == META_CALIBRATED or _search(kind):
         return labels
     return py_call(b.list, py_call(b.range, PythonObject(len(labels))))
+
+
+def _admit_cal_base(done: _Done, mut nested: _Nested, base: PythonObject, needs: Int, context: PythonObject,
+                    b: PythonObject, labels: PythonObject, whole: Bool) raises -> Bool:
+    """A CalibratedClassifierCV base (`_admit_nested`), and THE UNLABELED MARKER (lane mf-meta5b): a
+    LabelPropagation / LabelSpreading base whose labels (`_child_labels`: the calibration's own, y as given)
+    hold -1 is admitted over the codes with the marker's code in its marker word (scikit-learn fits it on y
+    as given: its classes_ exclude -1); the kind's fit leaves the marker out of each unit's held classes
+    (xtrees/trees_calibrated_fit_run.mojo) and clears it on cross_val_predict's folds (ensemble=False). Two
+    classes with ensemble=False: not served (the door's units; scikit-learn's own fit reads a column
+    label_binarize does not make there)."""
+    var plan = prep_estimator_plan(base, context)
+    if plan is not None and py_get(plan, "member") is not None and labels is not None:
+        var mark = member_mark(plan, b)
+        if xneighbors_kind_reads_marker(mark.family, mark.kind):
+            var marker = xneighbors_marker_index(labels)
+            if marker >= 0:
+                if not whole and len(labels) == 2:
+                    return False
+                var fields = py_call(plan["fields_get"], base, py_type(base))
+                var owner = member_leaf_admit_serving_labeled(base, fields, plan, plan["context"], b, needs,
+                                                              Python.list())
+                if not owner.published or len(owner.plan.params) <= LP_MARKER_WORD:
+                    return False
+                owner.plan.params[LP_MARKER_WORD] = Float64(marker)
+                var mask = 0
+                try:
+                    mask = member_kind_capabilities(owner.plan)
+                except:
+                    return False
+                if (mask & needs) != needs or (mask & MEMBER_CAN_CLASSIFIER) == 0:
+                    return False
+                nested.plans.append(owner.plan.copy())
+                nested.masks.append(mask)
+                _ = py_call(nested.pins.append, owner.pins)
+                return True
+    return _admit_nested(done, nested, base, True, needs, context, b, labels)
 
 
 def _admit_nested(done: _Done, mut nested: _Nested, est: PythonObject, classifier: Bool, needs: Int,
@@ -1577,7 +1617,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
                 return False
         var decision = prep_estimator_has(base, "decision_function", context)
         var needs = base_needs | (MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA)
-        if not _admit_nested(done, nested, base, True, needs, context, b, labels):
+        if not _admit_cal_base(done, nested, base, needs, context, b, labels, whole):
             return False
         words.append(1.0 if sigmoid else 0.0)
         words.append(1.0 if whole else 0.0)

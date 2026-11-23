@@ -235,6 +235,7 @@ from core.member_abi import (
 )
 from core.member_families import (
     MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_GP, MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES,
+    MEMBER_FAMILY_XNEIGHBORS,
 )
 from core.member_notices import member_notices_take
 from core.array_helpers_impl import class_ratio_f64
@@ -2051,6 +2052,17 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
     var plan = CalFitPlan(x, n, d, y, k, operation, sigmoid, ensemble, _CALIB_FAST_HOST_FOLDS)
     for f in range(used):  # driver-loop: over the cv folds (their test rows)
         plan.fold(te_at[f], te_n[f])
+    # THE UNLABELED MARKER (lane mf-meta5b): a LabelPropagation / LabelSpreading base admitted with the
+    # caller's code of -1 in its marker word. ensemble=True: every fold's fit reads y as given (its classes_
+    # exclude -1). ensemble=False: scikit-learn's cross_val_predict encodes y first, so its fold fits see -1
+    # as one more class (the fold units' marker word cleared), and only the fit over every row reads it.
+    var marker = _cal_unit_marker(run.plans[0])
+    if marker >= 0:
+        plan.markers = List[Int](length=units, fill=marker)
+        if not ensemble:
+            for f in range(used):  # driver-loop: over the cv folds (their marker words cleared)
+                run.plans[f].params[_LP_MARKER] = -1.0
+                plan.markers[f] = -1
     var res = CalFitOut()
     # A refused scoring call raises its member's words (the RUN released every state).
     var answered = calibrated_fit_run(glue, run, plan, res)
@@ -2084,7 +2096,7 @@ def _fit_cal(slot: _SlotPtr, call: _CallPtr) raises:
         drawn.append(u < used)
         slot[].states[i] = run.states[u]
         run.states[u] = 0
-        slot[].unit_held.append(plan.fold_classes[u].copy() if u < plan.folds() else List[Int32]())
+        slot[].unit_held.append(plan.fold_classes[u].copy() if u < plan.folds() else plan.full_held.copy())
     # Every unit's fit notices, in unit order (a discarded fold's with the first pair's context: one base class).
     for u in range(len(run.states)):  # driver-loop: over the units (their fit notices)
         var owner = 0
@@ -3983,6 +3995,7 @@ def _predict_cal(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         var at = 0
         var cols_at = 0
         var ks = 0
+        var used = slot[].pair_count[i]
         if k == 2:
             if cols != 1:
                 at = _index_of_code(slot[].unit_held[i], 1)
@@ -3993,16 +4006,20 @@ def _predict_cal(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         else:
             # THE PLACEMENT RULE of a pair whose member lacks a class (lane mf-cal3b).
             var place = cal_fold_place(k, slot[].unit_held[i], op, cols, True, 0)
-            if len(place.calibrate) != slot[].pair_count[i]:
+            # scikit-learn's predict zips the score columns with the calibrators: a pair fitted with more
+            # calibrators than its member's columns place (ensemble=False's full fit with the unlabeled marker,
+            # lane mf-meta5b: zipped there with the out-of-fold columns) reads the first of them.
+            if len(place.calibrate) > slot[].pair_count[i]:
                 raise Error("ValueError: mojolearn: CalibratedClassifierCV: a pair holds " + String(slot[].pair_count[i])
                             + " calibrators for a member placed at " + String(len(place.calibrate)) + " columns")
+            used = len(place.calibrate)
             placed.append(place.place.copy())
             cols_at = Int(placed[len(placed) - 1].unsafe_ptr())
             ks = len(place.place)
         m.class_cols = cols_at
         members.append(m)
-        cal_pairs.append(CalPair(at, cols_at, ks, len(cals), slot[].pair_count[i]))
-        for j in range(slot[].pair_first[i], slot[].pair_first[i] + slot[].pair_count[i]):  # driver-loop: over the pair's calibrators
+        cal_pairs.append(CalPair(at, cols_at, ks, len(cals), used))
+        for j in range(slot[].pair_first[i], slot[].pair_first[i] + used):  # driver-loop: over the pair's calibrators
             cals.append(CalFit(slot[].cal_iso[j], slot[].cal_a[j], slot[].cal_b[j],
                                Int(slot[].cal_kx[j].unsafe_ptr()), Int(slot[].cal_ky[j].unsafe_ptr()), slot[].cal_m[j]))
     var scratch = List[Float64]()
@@ -4292,6 +4309,21 @@ def _outputs(call: _CallPtr) raises:
 
 
 # ------------------------------------------------------------------ EXPORT / IMPORT
+
+
+#: LabelPropagation / LabelSpreading (core/xneighbors_member.mojo kinds 7 / 8, `LP_MARKER_WORD`).
+comptime _LP_KIND_PROPAGATION = 7
+comptime _LP_KIND_SPREADING = 8
+comptime _LP_MARKER = 13
+
+
+def _cal_unit_marker(plan: MemberPlan) -> Int:
+    """The unlabeled marker a Calibrated unit's base reads (lane mf-meta5b): a LabelPropagation /
+    LabelSpreading plan's marker word, else -1."""
+    if (plan.family == MEMBER_FAMILY_XNEIGHBORS and (plan.kind == _LP_KIND_PROPAGATION or plan.kind == _LP_KIND_SPREADING)
+            and len(plan.params) > _LP_MARKER):
+        return Int(plan.params[_LP_MARKER])
+    return -1
 
 
 def _export_forward(slot: _SlotPtr, call: _CallPtr) raises:
