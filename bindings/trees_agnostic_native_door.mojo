@@ -990,7 +990,9 @@ def _batched_member(model: PythonObject, context: PythonObject) -> PythonObject:
         var batched = py_get(py_fields(model), "_batched")
         if batched is None:
             return PythonObject(None)
-        return batched[0]
+        # Named before the return (AGENTS.md part 6: no subscript in tail position beside a borrowed argument).
+        var inner = batched[0]
+        return inner
     except:
         return PythonObject(None)
 
