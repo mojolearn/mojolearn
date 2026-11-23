@@ -18,7 +18,15 @@ asks the binding for them; here `_kfold_folds` is the same keyed permutation wri
 `c2_kfold_unit`, `_perm_image`, `_fold_of`; x_prep/py2mojo.mojo `splitmix_at`), and the Mojo check first asserts
 the native fold stage gives exactly these folds, so a slip here fails the check, never hides.
 
-Regenerate and repack (the sets are independent and run one per process, `--workers` of them, default every core):
+Size (check-trim, 2026-11-23): the prep_enc pack was 2.8 MB for nine encoder cases. The tables are now ENC_N = 33
+and INF_N = 40 rows (were the originals' 257 and 400; the encoder programs have no row threshold below their 1,024-row
+chunks, so one chunk ran either way), INF_MIN_FREQ keeps min_frequency=30's share of the rows, the references are
+float32 words (each value is asserted to round-trip exactly: codes, -1/-7/-2, NaN and the float32 inputs' category
+values) and the one-hot blocks one byte per 0/1 word, their column count the length over the rows (no shape files),
+and the 30 infrequent one-hot cases are three concatenated members. The prep_te set is unchanged.
+
+Regenerate and repack (the sets are independent and run one per process, `--workers` of them, default every core;
+the prep_enc directory is cleared first so no member of the old layout is packed):
 
     .pixi/envs/test/bin/python tools/py2mojo_native_fixtures_b2_enc.py && \
         python3 tools/fixture_packs.py pack checks/native_tests/fixtures
@@ -26,6 +34,7 @@ Regenerate and repack (the sets are independent and run one per process, `--work
 import argparse
 from concurrent.futures import ProcessPoolExecutor
 import os
+import shutil
 import sys
 import warnings
 from pathlib import Path
@@ -33,7 +42,26 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from py2mojo_native_fixtures import _put  # noqa: E402
+from py2mojo_native_fixtures import ROOT, _put  # noqa: E402
+
+ENC_N = 33  # rows of the test_x_prep_encoders.py tables (the original 257); prep_encoders.mojo ENC_N
+INF_N = 40  # rows of the test_infrequent tables (the original 400); prep_encoders.mojo INF_N
+INF_MIN_FREQ = 3  # min_frequency=30 of 400 rows: the same 7.5 percent of INF_N; prep_encoders.mojo INF_MIN_FREQ
+
+
+def _f32_exact(array):
+    """A float64 reference as float32 words, asserted exact (NaN where NaN, every value round-trips)."""
+    a = np.asarray(array, dtype=np.float64)
+    w = a.astype(np.float32)
+    assert np.array_equal(w.astype(np.float64), a, equal_nan=True), "a reference is not exact in float32"
+    return w
+
+
+def _onehot_u8(array):
+    """A one-hot reference as one byte per word, asserted to hold only 0 and 1."""
+    a = np.asarray(array, dtype=np.float64)
+    assert np.isin(a, (0.0, 1.0)).all(), "a one-hot reference holds a value other than 0 and 1"
+    return a.astype(np.uint8)
 
 
 def _obj_to_nan(a):
@@ -50,7 +78,7 @@ def _cats_words(cats):
 
 
 # ---------------------------------------------------------------- test_x_prep_encoders.py
-def _enc_data(seed=0, n=257, d=5):
+def _enc_data(seed=0, n=ENC_N, d=5):
     rng = np.random.default_rng(seed)
     X = np.floor(rng.standard_normal((n, d)) * 2).astype(np.float32)
     X[:, 2] = np.float32(7)
@@ -67,6 +95,12 @@ def encoders():
     def put(name, array, dtype=np.float64):
         out.append(_put("prep_enc", name, array, dtype))
 
+    def ref(name, array):
+        put(name, _f32_exact(array), np.float32)
+
+    def onehot(name, array):
+        put(name, _onehot_u8(array), np.uint8)
+
     # test_ordinal
     X = _enc_data()
     Xh = _enc_data(1)
@@ -75,11 +109,11 @@ def encoders():
     put("ord-xh.f32", Xh, np.float32)
     r = sk.OrdinalEncoder().fit(X)
     values, sizes = _cats_words(r.categories_)
-    put("ord-cats.f64", values)
+    ref("ord-cats.f32", values)
     put("ord-sizes.i32", sizes, np.int32)
-    put("ord-t.f64", r.transform(X))
+    ref("ord-t.f32", r.transform(X))
     r = sk.OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1).fit(X)
-    put("ord-th.f64", r.transform(Xh))
+    ref("ord-th.f32", r.transform(Xh))
     # test_ordinal_missing_and_inverse
     X = _enc_data()
     X[::9, 0] = np.nan
@@ -93,15 +127,15 @@ def encoders():
                             dict(handle_unknown="use_encoded_value", unknown_value=np.nan, encoded_missing_value=-2))):
         r = sk.OrdinalEncoder(**kw).fit(X)
         values, sizes = _cats_words(r.categories_)
-        put(f"om{k}-cats.f64", values)
+        ref(f"om{k}-cats.f32", values)
         put(f"om{k}-sizes.i32", sizes, np.int32)
         Z = r.transform(X)
-        put(f"om{k}-t.f64", Z)
-        put(f"om{k}-inv.f64", _obj_to_nan(r.inverse_transform(Z)))
+        ref(f"om{k}-t.f32", Z)
+        ref(f"om{k}-inv.f32", _obj_to_nan(r.inverse_transform(Z)))
         if kw.get("handle_unknown"):
             Z = r.transform(Xh)
-            put(f"om{k}-th.f64", Z)
-            put(f"om{k}-invh.f64", _obj_to_nan(r.inverse_transform(Z)))
+            ref(f"om{k}-th.f32", Z)
+            ref(f"om{k}-invh.f32", _obj_to_nan(r.inverse_transform(Z)))
     # test_onehot
     X = _enc_data()
     Xh = _enc_data(2)
@@ -112,13 +146,12 @@ def encoders():
                             dict(drop="if_binary", handle_unknown="ignore"))):
         r = sk.OneHotEncoder(sparse_output=False, **kw).fit(X)
         Z = r.transform(X)
-        put(f"oh{k}-shape.i32", Z.shape, np.int32)
-        put(f"oh{k}-t.f64", Z)
-        put(f"oh{k}-inv.f64", _obj_to_nan(r.inverse_transform(Z)))
+        onehot(f"oh{k}-t.u8", Z)
+        ref(f"oh{k}-inv.f32", _obj_to_nan(r.inverse_transform(Z)))
         if kw.get("handle_unknown") == "ignore":
             Z = r.transform(Xh)
-            put(f"oh{k}-th.f64", Z)
-            put(f"oh{k}-invh.f64", _obj_to_nan(r.inverse_transform(Z)))
+            onehot(f"oh{k}-th.u8", Z)
+            ref(f"oh{k}-invh.f32", _obj_to_nan(r.inverse_transform(Z)))
     # test_given_categories
     X = _enc_data(4)
     Xn = X.copy()
@@ -136,24 +169,22 @@ def encoders():
     put("gc-cats.f32", canon, np.float32)
     put("gc-sizes.i32", [len(c) for c in cats], np.int32)
     r = sk.OrdinalEncoder(categories=cats, handle_unknown="use_encoded_value", unknown_value=-1).fit(Xn)
-    put("gc-ord-t.f64", r.transform(Xn))
+    ref("gc-ord-t.f32", r.transform(Xn))
     for k, kw in enumerate((dict(handle_unknown="ignore"), dict(drop="first", handle_unknown="ignore"))):
         r = sk.OneHotEncoder(categories=cats, sparse_output=False, **kw).fit(Xn)
-        Z = r.transform(Xn)
-        put(f"gc-oh{k}-shape.i32", Z.shape, np.int32)
-        put(f"gc-oh{k}-t.f64", Z)
+        onehot(f"gc-oh{k}-t.u8", r.transform(Xn))
     return out
 
 
 # ---------------------------------------------------------------- test_x_prep_parity.py::test_infrequent
-def _inf_data(seed=0, n=400, d=4):
+def _inf_data(seed=0, n=INF_N, d=4):
     rng = np.random.default_rng(seed)
     X = np.floor(np.abs(rng.standard_normal((n, d))) * 3).astype(np.float32)
     X[::11, 0] = np.nan
     return X
 
 
-INF_KW = (dict(min_frequency=30), dict(max_categories=3), dict(min_frequency=0.05, max_categories=4),
+INF_KW = (dict(min_frequency=INF_MIN_FREQ), dict(max_categories=3), dict(min_frequency=0.05, max_categories=4),
           dict(max_categories=1))
 INF_HU = ("infrequent_if_exist", "ignore", "warn")
 INF_DROP = (None, "first", "if_binary")
@@ -170,13 +201,16 @@ def infrequent():
     Xh[::7, 1] = 77.0
     put("inf-x.f32", X, np.float32)
     put("inf-xh.f32", Xh, np.float32)
+    # the 30 one-hot cases in prep_encoders.mojo's unit order (k, then handle_unknown, then drop), concatenated:
+    # their column counts, their transforms of Xh (one byte per word) and their inverse transforms (n x d each)
+    oh_cols, oh_th, oh_inv = [], [], []
     for k, kw in enumerate(INF_KW):
         r = skp.OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1, **kw).fit(X)
         counts = [-1 if a is None else len(a) for a in r.infrequent_categories_]
         put(f"inf{k}-ord-infcount.i32", counts, np.int32)
         picked = [np.asarray(a, dtype=np.float64) for a in r.infrequent_categories_ if a is not None]
-        put(f"inf{k}-ord-infvals.f64", np.concatenate(picked) if picked else np.zeros(0))
-        put(f"inf{k}-ord-th.f64", r.transform(Xh))
+        put(f"inf{k}-ord-infvals.f32", _f32_exact(np.concatenate(picked) if picked else np.zeros(0)), np.float32)
+        put(f"inf{k}-ord-th.f32", _f32_exact(r.transform(Xh)), np.float32)
         for h, hu in enumerate(INF_HU):
             for dr, drop in enumerate(INF_DROP):
                 if drop is not None and kw.get("max_categories") == 1:
@@ -184,11 +218,14 @@ def infrequent():
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
                     r = skp.OneHotEncoder(handle_unknown=hu, drop=drop, sparse_output=False, **kw).fit(X)
-                    tag = f"inf{k}-oh{h}{dr}"
                     Z = r.transform(Xh)
-                    put(f"{tag}-shape.i32", Z.shape, np.int32)
-                    put(f"{tag}-th.f64", Z)
-                    put(f"{tag}-inv.f64", _obj_to_nan(r.inverse_transform(r.transform(X))))
+                    oh_cols.append(Z.shape[1])
+                    oh_th.append(_onehot_u8(Z).ravel(order="C"))
+                    oh_inv.append(_f32_exact(_obj_to_nan(r.inverse_transform(r.transform(X)))).ravel(order="C"))
+    assert len(oh_cols) == 30, "the infrequent one-hot cases are prep_encoders.mojo's 30 units"
+    put("inf-oh-cols.i32", oh_cols, np.int32)
+    put("inf-oh-th.u8", np.concatenate(oh_th), np.uint8)
+    put("inf-oh-inv.f32", np.concatenate(oh_inv), np.float32)
     return out
 
 
@@ -337,6 +374,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 1)
     args = parser.parse_args()
+    # encoders and infrequent both write prep_enc: cleared once here, before either runs
+    shutil.rmtree(ROOT / "prep_enc", ignore_errors=True)
     with ProcessPoolExecutor(max_workers=max(1, min(len(SETS), args.workers))) as pool:
         for lines in pool.map(_run, range(len(SETS))):
             for line in lines:
