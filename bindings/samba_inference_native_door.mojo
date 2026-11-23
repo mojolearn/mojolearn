@@ -156,7 +156,7 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
         addresses.append(_mutable(slots[names[i]], shapes[i], keep, copies, names[i]))
     # y and the four reports are written whole by every route below (the
     # GPU and owned `mamba_block_call`, the host shells' `_write`): unfilled
-    # unless MAMBA3_FORWARD_ZERO_FILL (bindings/neural_prefill_native_door.mojo).
+    # (bindings/neural_prefill_native_door.mojo `_m3_output_array`).
     var output = _m3_output_array([b, l, d])
     var reports = Python.list(_m3_output_array([b, h, 64, 128]), _m3_output_array([b, h, 128]),
                               _m3_output_array([b, h, 64]), _m3_output_array([b, h, 32]))
@@ -342,8 +342,8 @@ def _samba_program_reports(fields: PythonObject, config: PythonObject, b: Int, m
             continue
         var h = Int(py=samba_fields(blocks[i])["nheads"])
         # Lane fix-wave2-leftovers (fix-mamba3-unfilled-rest leftover): the
-        # four arrays are unfilled unless MAMBA3_FORWARD_ZERO_FILL (the one
-        # Mamba-3 output switch, bindings/neural_prefill_native_door.mojo):
+        # four arrays are unfilled (`_m3_output_array`,
+        # bindings/neural_prefill_native_door.mojo):
         # a run that asks for reports clears skip_reports
         # (training/samba_program_entry.mojo), every Mamba-3 step op copies
         # its four reports, and enqueue_reports downloads each whole

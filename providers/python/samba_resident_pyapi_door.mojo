@@ -2,7 +2,6 @@
 # Resident Samba ownership/admission over the SAME provider used by the other
 # neural routes. Python objects end here; all model and optimizer work uses the
 # shared native descriptor table and its original native numerical owners.
-from core.weight_epoch import SAMBA_STEP_REGISTRY_RESIDENT, registry_epoch_bump
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.causal_lm_public_door import _native_function
@@ -156,14 +155,13 @@ def samba_resident_native_step(fields: PythonObject, config: PythonObject, provi
     # The written registry's own epoch (core/weight_epoch.mojo), stamped from
     # the address this step already passed (hot-path audit 2026-11-13: the
     # public door no longer reads `flat` per call to stamp it)
-    # SAMBA_STEP_REGISTRY_RESIDENT (lane fx-samba-step-resident; default on
-    # since 2026-11-20): the step stamped the registry itself, after its download,
+    # Lane fx-samba-step-resident (promoted 2026-11-20): the step stamped the registry itself, after its download,
     # and kept the key of that stamp for its own device copy
     # (training/samba_resident.mojo `_step_registry_out`); a second stamp here
     # would make that copy reload. A step that raised reaches neither stamp:
     # the public door's failed-write stamp covers it, as before.
-    comptime if not SAMBA_STEP_REGISTRY_RESIDENT:
-        registry_epoch_bump(registry_addr)
+    # TOMBSTONE: MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF (old path; promoted winner confirmed: A/B round 2+3 NVIDIA L40S, samba-train-step 0.952 / 0.965, driver 0.979, controls 1.00, digests equal; EXP:4532) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
     _ = parameters
     _ = offsets
     _ = initialized

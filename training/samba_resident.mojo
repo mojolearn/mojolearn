@@ -70,7 +70,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.identity_trace import IdentityTrace
-from core.weight_epoch import RegistryKey, SAMBA_STEP_REGISTRY_RESIDENT, registry_epoch_bump
+from core.weight_epoch import RegistryKey, registry_epoch_bump
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.contract import OP_NT
@@ -1052,10 +1052,7 @@ def _step_registry_in(
     whether the registry went up, i.e. whether the caller must admit it
     (`_admit_registry`).
 
-    Under MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF: always (the copy
-    and the scan every step, the default before 2026-11-20).
-
-    SAMBA_STEP_REGISTRY_RESIDENT: only when the key is not current, the
+    Only when the key is not current, the
     forward's own test (`samba_resident_forward`): one atomic load, no pass
     over the weights. A current key means `param` holds the bytes at
     `param_ptr` AND that they were admitted: the key is only ever set after
@@ -1064,9 +1061,9 @@ def _step_registry_in(
     writer of the registry (another step route, publish, load_weights, a
     failed write) stamps it, so the key is then not current and the registry
     is uploaded and scanned here exactly as in the default."""
-    var upload = True
-    comptime if SAMBA_STEP_REGISTRY_RESIDENT:
-        upload = not s.wkey.current(Int(param_ptr))
+    # TOMBSTONE: MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF (old path; promoted winner confirmed: A/B round 2+3 NVIDIA L40S, samba-train-step 0.952 / 0.965, driver 0.979, controls 1.00, digests equal; EXP:4532) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+    var upload = not s.wkey.current(Int(param_ptr))
     s.wkey = RegistryKey()
     if upload:
         s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
@@ -1081,7 +1078,7 @@ def _step_registry_out(
     """A train step's registry transport out: the updated registry device ->
     host and the step's closing wait.
 
-    SAMBA_STEP_REGISTRY_RESIDENT: the non-finite refusal the next step's
+    The non-finite refusal the next step's
     upload scan gave is kept by scanning what the optimizer just wrote, on
     the device, with the answer read at this same wait (no wait of its own:
     `DeferredNonfiniteScan`, the kernels and the index of
@@ -1091,22 +1088,21 @@ def _step_registry_out(
     stamped and the key stays EMPTY, so the next call uploads the same bytes
     and `_admit_registry` refuses them there with today's message at today's
     call. The provider door's stamp after the step
-    (providers/python/samba_resident_pyapi_door.mojo) is not made under the
-    define: it would leave the key taken here not current."""
+    (providers/python/samba_resident_pyapi_door.mojo) is not made: it would
+    leave the key taken here not current."""
     s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
-    comptime if SAMBA_STEP_REGISTRY_RESIDENT:
-        var written = DeferredNonfiniteScan(s.ctx, s.param, s.n_total)
-        written.enqueue_readback(s.ctx)
-        s.ctx.synchronize()
-        # `written` (its device and host words) is named past the wait
-        var bad = written.result_after_sync()
-        if bad < 0:
-            s.wkey = RegistryKey.stamp_and_take(Int(param_ptr))
-        else:
-            registry_epoch_bump(Int(param_ptr))
-        _ = written^
+    # TOMBSTONE: MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF (old path; promoted winner confirmed: A/B round 2+3 NVIDIA L40S, samba-train-step 0.952 / 0.965, driver 0.979, controls 1.00, digests equal; EXP:4532) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+    var written = DeferredNonfiniteScan(s.ctx, s.param, s.n_total)
+    written.enqueue_readback(s.ctx)
+    s.ctx.synchronize()
+    # `written` (its device and host words) is named past the wait
+    var bad = written.result_after_sync()
+    if bad < 0:
+        s.wkey = RegistryKey.stamp_and_take(Int(param_ptr))
     else:
-        s.ctx.synchronize()
+        registry_epoch_bump(Int(param_ptr))
+    _ = written^
 
 
 def samba_resident_train_step(
@@ -1171,8 +1167,8 @@ def samba_resident_train_step(
     var v = s.vocab
     # ---- transport in: the registry, the ids, the targets. The step
     # rewrites `param`; the forward's key is current again only after its
-    # own upload (the dispatcher bumps the epoch around every step), or,
-    # under SAMBA_STEP_REGISTRY_RESIDENT, after this step's own clean
+    # own upload (the dispatcher bumps the epoch around every step), or
+    # after this step's own clean
     # download (`_step_registry_in` / `_step_registry_out`).
     var uploaded = _step_registry_in(s, param_ptr)
     _upload_tokens(s, ids_ptr)

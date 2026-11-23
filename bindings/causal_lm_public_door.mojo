@@ -52,7 +52,7 @@ from bindings.causal_keys_unpack import causal_keys
 from core.causal_layer_run import (
     CausalLayerRoute, CausalLayerRequest, CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1, CAUSAL_LAYER_MAMBA2,
 )
-from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP, IDN_MAMBA12_FORWARD_COPIES_OLD, IDN_MAMBA12_FORWARD_DOOR_OLD
+from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP
 from std.memory import unsafe_memcpy, unsafe_memset_zero
 from core.generation_buffers_impl import generation_bytes_copy
 from bindings.generation_buffers_door import (
@@ -990,8 +990,6 @@ def causal_layer_stateless_plan(kind: String, entries: PythonObject) raises -> B
     door used to allocate a host zero state (Mamba-2: about 2 MB at d_model
     384) that the call uploaded and downloaded. The host image reads every
     state address, so it keeps the allocated state.
-    `-D MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD` keeps the allocated state
-    everywhere.
     Decided ONCE, at plan construction (`NativeBlockPlan.stateless_forward`):
     the kind, the entry vendor and the Mamba-1 profile are fixed for a plan
     (hot-path audit 2026-11-13, BLOCK door:824/826: this read two entry
@@ -1000,8 +998,8 @@ def causal_layer_stateless_plan(kind: String, entries: PythonObject) raises -> B
     # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 2e9d66525c.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
     # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-    comptime if IDN_MAMBA12_FORWARD_COPIES_OLD:
-        return False
+    # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
     if kind != "mamba1" and kind != "mamba2":
         return False
     if Int(py=entries["entry_vendor"]) == 0:
@@ -1021,13 +1019,11 @@ def causal_layer_stateless_plan(kind: String, entries: PythonObject) raises -> B
 #: fields dict check, the state-namespace and `_resident_session` getattr
 #: probes of a None state, the (tier, vendor) dict reads and table read).
 #: The same addresses and words reach the same table call: no bit moves.
-#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD` (autograd/block_step_ops.mojo,
-#: the one Mamba-1/2 switch of this lane) keeps the four-hop chain (B arm of
-#: the owed A/B, bench/results/paper_compare/owed-pre0867.json row
-#: fix-mamba-forward-doors).
 # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at f1c5239d24.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22; the four-hop neural door -> causal_layer_run_fields -> _causal_layer_run_bound -> table chain to the same table call) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 
 def causal_mamba_entry(entries: PythonObject) raises -> EntryRef:
@@ -1038,7 +1034,7 @@ def causal_mamba_entry(entries: PythonObject) raises -> EntryRef:
 
 def causal_mamba_stateless_run(mut mods: NativeModules, fields: PythonObject, entry: EntryRef, kind: String, d: Int,
     prepared: PythonObject, x: PythonObject) raises -> PythonObject:
-    """Lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD off): the
+    """Lane fix-mamba-forward-doors: the
     stateless Mamba-1/2 device forward (`causal_layer_stateless_plan`) as one
     table call through `entry` (held by the caller's plan) over the prepared
     layer: x, the weights, zero state addresses (the device program runs
@@ -1166,8 +1162,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
         var failure = py_get(causal_snapshot_fields(mods, st), "_causal_admission_failure")
         if failure is not None:
             raise Error(String(failure))
-    # lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD,
-    # autograd/block_step_ops.mojo): a Mamba-1/2 device call writes every
+    # lane fix-mamba12-forward-exec: a Mamba-1/2 device call writes every
     # element of y (one download of the block output), so y is allocated
     # unfilled there; the host image and the Transformer keep the zeros.
     # Hot-path audit 2026-11-13 (BLOCK door:894): the Mamba table entry and
@@ -1178,11 +1173,8 @@ def _causal_layer_run_bound(mut mods: NativeModules,
     if stateless and not device_mamba:
         raise Error("CausalLM: a stateless layer call needs a device Mamba image")
     var y: PythonObject
-    comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
-        if device_mamba:
-            y = generation_array_unfilled([b, l, d])
-        else:
-            y = generation_array([b, l, d])
+    if device_mamba:
+        y = generation_array_unfilled([b, l, d])
     else:
         y = generation_array([b, l, d])
     # every layer kind: a state a decode session holds resident is refused by name
@@ -1321,13 +1313,10 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             m_addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies, "buffer_xbc"))
             m_addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies, "buffer_dtraw"))
             m_addresses.append(_addr(y, keep))
-            comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
-                # lane fix-mamba12-forward-exec: written whole by the device
-                # report copy; the host image keeps the zeros
-                if device_mamba:
-                    last = generation_array_unfilled([b, layer.words.heads, 64, 128])
-                else:
-                    last = generation_array([b, layer.words.heads, 64, 128])
+            # lane fix-mamba12-forward-exec: written whole by the device
+            # report copy; the host image keeps the zeros
+            if device_mamba:
+                last = generation_array_unfilled([b, layer.words.heads, 64, 128])
             else:
                 last = generation_array([b, layer.words.heads, 64, 128])
             m_addresses.append(_addr(last, keep))
@@ -1392,11 +1381,8 @@ def _causal_layer_run_owned(mut mods: NativeModules,
     var mamba1 = route.kind == CAUSAL_LAYER_MAMBA1
     var device_mamba = route.device_mamba
     var y: PythonObject
-    comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
-        if device_mamba:
-            y = generation_array_unfilled([b, l, d])
-        else:
-            y = generation_array([b, l, d])
+    if device_mamba:
+        y = generation_array_unfilled([b, l, d])
     else:
         y = generation_array([b, l, d])
     # every layer kind: a state a decode session holds resident is refused by name
@@ -1482,11 +1468,8 @@ def _causal_layer_run_owned(mut mods: NativeModules,
             m_addresses.append(causal_state_buffer_address(state.buffers[CAUSAL_STATE_XBC], [b, 256, cd], "buffer_xbc"))
             m_addresses.append(causal_state_buffer_address(state.buffers[CAUSAL_STATE_DTRAW], [b, 256, nh], "buffer_dtraw"))
             m_addresses.append(_addr(y, keep))
-            comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
-                if device_mamba:
-                    last = generation_array_unfilled([b, nh, 64, 128])
-                else:
-                    last = generation_array([b, nh, 64, 128])
+            if device_mamba:
+                last = generation_array_unfilled([b, nh, 64, 128])
             else:
                 last = generation_array([b, nh, 64, 128])
             m_addresses.append(_addr(last, keep))

@@ -192,11 +192,10 @@ def test_decode_session_methods_are_native_and_equal_the_per_call_step(monkeypat
 def test_mamba3_forward_unfilled_outputs_hold_the_zero_filled_bytes(monkeypatch):
     # Lane fix-mamba3-unfilled-arrays (2026-11-13): the forward's y and four
     # reports are allocated unfilled (bindings/neural_prefill_native_door.mojo
-    # MAMBA3_FORWARD_ZERO_FILL). Every byte must still come from the kernel:
+    # `_m3_output_array`). Every byte must still come from the kernel:
     # recycle freed allocator blocks of the same sizes filled with 0xFF (NaN
     # bit patterns) between calls, and the bytes must equal the retained
-    # driver's y and the first call's reports, which the zero-filled arm
-    # (-D MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL) returns too.
+    # driver's y and the first call's reports.
     block, dm = _block("mamba3")
     x = _tokens(2, 5, dm)
     expected = np.asarray(_mamba_block_reference.block_call(block, x, None, step=False)).copy()
