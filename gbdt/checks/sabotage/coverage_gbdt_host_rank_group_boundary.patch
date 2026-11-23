@@ -1,0 +1,20 @@
+diff --git a/gbdt/mojolearn_gbdt_host_run.mojo b/gbdt/mojolearn_gbdt_host_run.mojo
+index 6e1571058f..96d29d03d5 100644
+--- a/gbdt/mojolearn_gbdt_host_run.mojo
++++ b/gbdt/mojolearn_gbdt_host_run.mojo
+@@ -946,6 +946,15 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
+         # row a query of one (`TWithoutQueriesGrouping`)
+         if not (len(host_group_sizes) > 0 and len(host_group_sizes) < tail_rows):
+             host_group_sizes = List[Int](length=tail_rows, fill=1)
++        # SABOTAGE (coverage-gbdt-host_rank_group_boundary): the boundary
++        # between the last two queries one row early, so the last row of the
++        # second-to-last query joins the last query (an off-by-one in the
++        # group layout). Every querywise target, the generated pairs and the
++        # YetiRank tasks read these sizes.
++        var g_last = len(host_group_sizes) - 1
++        if g_last >= 1 and host_group_sizes[g_last - 1] > 1:
++            host_group_sizes[g_last - 1] -= 1
++            host_group_sizes[g_last] += 1
+ 
+     var border_count = params.i(4)
+     var n_estimators = params.i(5)

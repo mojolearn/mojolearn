@@ -407,6 +407,10 @@ sampler, a solver, a metric, a reduction).
                CPU column trains since pv-gbdt-cpu-cat, RMSE, the bootstraps,
                the score noise and Ordered over CTR and one-hot columns)
       gbdt-cat-rmse gbdt-cat-bootstrap gbdt-cat-noise gbdt-cat-ordered
+    2026-11-22 (lane verify-gbdt-rank: the ranking losses under each
+               bootstrap, the score noise, Gradient and multi-step leaves,
+               the pointwise searcher's L2 scores and explicit weighted pairs)
+      gbdt-rank-bootstrap gbdt-rank-leaves gbdt-rank-pointwise-arms gbdt-rank-pairs
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -5170,6 +5174,173 @@ def _(ml, X, yc, yr, Xh=None):
     return _querywise_pointwise_identity(ml, X, yr, Xh, "YetiRank")
 
 
+# THE RANKING CONFIGURATIONS (lane verify-gbdt-rank, 2026-11-22). The ranking
+# lanes above fit each loss at its defaults (gbdt-ranking-defaults), on the
+# greedy searcher without bootstrap or noise (gbdt-query-rmse, gbdt-pair-logit,
+# gbdt-yeti-rank) and on the pointwise searcher at Cosine and NewtonCosine
+# with the Bayesian bootstrap (the *-pointwise lanes). What the CPU column
+# trains for the three ranking losses and no lane fitted: the Bernoulli and
+# Poisson bootstraps and the Bayesian bootstrap at another temperature, the
+# score noise alone, Gradient leaves and more than one Newton step, the L2
+# and NewtonL2 scores of the pointwise searcher, its discrete bootstraps, and
+# explicit weighted pairs under bootstrap and on the pointwise searcher. Four
+# lanes, so the verifier's per-lane workers spread the 33 fits across cores.
+# Every fit runs at `_GBDT_RANK_RATE` (not a power of two: a fused and a
+# rounded cursor update differ there, see `_GBDT_CAT_RATE`) with every option
+# it reads passed, and hashes its predictions, its `digest_` and the
+# per-query NDCG of `ml.metrics.ndcg_score` over the fixture's 16-row queries
+# (the ranking metric a user reads). The model, infer and batch columns come
+# from the first fit. The sabotage arms coverage-gbdt-host_rank_group_boundary,
+# coverage-gbdt-host_pair_weight and coverage-gbdt-host_losses_leaf_ulp
+# (tools/identity_lanes/coverage_sabotage.tsv) prove these lanes can fail.
+# Not here because the CPU column refuses them by name (a product gap, not a
+# coverage choice): sample_weight with a ranking loss, which the device fit
+# reads; see gbdt/mojolearn_gbdt_host_run.mojo `binary_sample_weights`.
+_GBDT_RANK_ROWS = 1500
+_GBDT_RANK_RATE = 0.1
+#: the queries whose rows the NDCG part reads (`RANK_QUERY_SIZES` holds 16 once per cycle)
+_GBDT_RANK_NDCG_SIZE = 16
+
+
+def _rank_ndcg(ml, groups, relevance, pred):
+    """`ml.metrics.ndcg_score` over the queries of `_GBDT_RANK_NDCG_SIZE`
+    rows, one row of the metric's input per query, as float64 bytes."""
+    _, starts, sizes = np.unique(groups, return_index=True, return_counts=True)
+    rows = np.concatenate([np.arange(s, s + _GBDT_RANK_NDCG_SIZE)
+                           for s, c in zip(starts, sizes) if c == _GBDT_RANK_NDCG_SIZE])
+    shape = (-1, _GBDT_RANK_NDCG_SIZE)
+    return np.float64(ml.metrics.ndcg_score(relevance[rows].reshape(shape).astype(np.float32),
+                                            np.asarray(pred, dtype=np.float32)[rows].reshape(shape)))
+
+
+def _rank_pairs(groups, relevance, skip_last=2):
+    """Explicit PairLogit pairs: in every query but the last `skip_last`,
+    every two rows of different grades whose index sum is even, the higher
+    grade winning. Integer arithmetic on the fixture's grades only."""
+    pairs = []
+    qs = np.unique(groups)
+    for q in qs[:len(qs) - skip_last]:
+        rows = np.flatnonzero(groups == q)
+        for i, a in enumerate(rows):
+            for b in rows[i + 1:]:
+                if relevance[a] != relevance[b] and (a + b) % 2 == 0:
+                    pairs.append((int(a), int(b)) if relevance[a] > relevance[b] else (int(b), int(a)))
+    return pairs
+
+
+def _gbdt_rank_fits(ml, X, yr, Xh, configs):
+    """Fit every `(name, loss, options, with_pairs)` of one ranking lane on
+    the first `_GBDT_RANK_ROWS` rows of the `_rank_groups` queries and
+    `_relevance` grades; `with_pairs` passes `_rank_pairs` with hashed
+    weights. The first fit answers the infer, model and batch columns."""
+    rows = min(_GBDT_RANK_ROWS, X.shape[0])
+    Xr = np.ascontiguousarray(X[:rows])
+    groups, rel = _rank_groups(rows), _relevance(yr[:rows])
+    pairs = _rank_pairs(groups, rel)
+    pair_w = _hw((len(pairs),), "gbdt-rank:pairs_weight", 0.5, 2.0)
+    parts, first = {}, None
+    for name, loss, options, with_pairs in configs:
+        kw = dict(n_estimators=10, max_depth=4, learning_rate=_GBDT_RANK_RATE, l2_leaf_reg=3.0,
+                  border_count=128, boosting_type="Plain", random_state=7, loss=loss,
+                  bootstrap_type="No", random_strength=0.0, leaf_estimation_method="Newton",
+                  leaf_estimation_iterations=1)
+        kw.update(options)
+        fit_kw = dict(group_id=groups)
+        if with_pairs:
+            fit_kw.update(pairs=pairs, pairs_weight=pair_w)
+        m = ml.GradientBoosting(**kw).fit(Xr, rel, **fit_kw)
+        pred = m.predict(Xr)
+        parts[name] = _h(pred)
+        parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
+        parts[name + ":ndcg"] = _h(_rank_ndcg(ml, groups, rel, pred))
+        first = first if first is not None else m
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-rank-bootstrap")
+def _(ml, X, yc, yr, Xh=None):
+    """The three ranking losses on the greedy searcher under each bootstrap,
+    the score noise off so the bootstrap alone moves the fit: Bernoulli
+    (subsample 0.7), Poisson (subsample 0.66) and Bayesian at temperature 2."""
+    configs = []
+    for loss in ("QueryRMSE", "PairLogit", "YetiRank"):
+        configs += [
+            (loss + "_bernoulli", loss, dict(bootstrap_type="Bernoulli", subsample=0.7), False),
+            (loss + "_poisson", loss, dict(bootstrap_type="Poisson", subsample=0.66), False),
+            (loss + "_bayesian_t2", loss, dict(bootstrap_type="Bayesian", bagging_temperature=2.0), False),
+        ]
+    return _gbdt_rank_fits(ml, X, yr, Xh, configs)
+
+
+@lane("gbdt-rank-leaves")
+def _(ml, X, yc, yr, Xh=None):
+    """The three ranking losses on the greedy searcher with the score noise
+    alone (bootstrap No, random_strength 1), Gradient leaves (QueryRMSE and
+    PairLogit; YetiRank refuses another method by name), Newton at more than
+    one step, and YetiRank at another L2."""
+    noise = dict(random_strength=1.0)
+    return _gbdt_rank_fits(ml, X, yr, Xh, [
+        ("QueryRMSE_noise", "QueryRMSE", noise, False),
+        ("PairLogit_noise", "PairLogit", noise, False),
+        ("YetiRank_noise", "YetiRank", noise, False),
+        ("QueryRMSE_gradient3", "QueryRMSE",
+         dict(leaf_estimation_method="Gradient", leaf_estimation_iterations=3), False),
+        ("PairLogit_gradient5", "PairLogit",
+         dict(leaf_estimation_method="Gradient", leaf_estimation_iterations=5), False),
+        ("QueryRMSE_newton3", "QueryRMSE", dict(leaf_estimation_iterations=3), False),
+        ("PairLogit_newton10", "PairLogit", dict(leaf_estimation_iterations=10), False),
+        ("YetiRank_l2_1", "YetiRank", dict(l2_leaf_reg=1.0), False),
+    ])
+
+
+@lane("gbdt-rank-pointwise-arms")
+def _(ml, X, yc, yr, Xh=None):
+    """The three ranking losses on the doc-parallel pointwise searcher with
+    the L2 and NewtonL2 scores (the *-pointwise lanes take Cosine and
+    NewtonCosine), its Bernoulli and Poisson bootstraps, and Gradient
+    leaves."""
+    pw = dict(use_pointwise_searcher=True)
+    configs = []
+    for loss in ("QueryRMSE", "PairLogit", "YetiRank"):
+        configs += [
+            (loss + "_pw_l2", loss, dict(pw, score_function="L2"), False),
+            (loss + "_pw_newtonl2", loss, dict(pw, score_function="NewtonL2"), False),
+        ]
+    configs += [
+        ("QueryRMSE_pw_bernoulli", "QueryRMSE",
+         dict(pw, score_function="Cosine", bootstrap_type="Bernoulli", subsample=0.7), False),
+        ("PairLogit_pw_poisson", "PairLogit",
+         dict(pw, score_function="Cosine", bootstrap_type="Poisson", subsample=0.66), False),
+        ("YetiRank_pw_bernoulli_noise", "YetiRank",
+         dict(pw, score_function="NewtonCosine", bootstrap_type="Bernoulli", subsample=0.7,
+              random_strength=1.0), False),
+        ("PairLogit_pw_gradient", "PairLogit",
+         dict(pw, score_function="Cosine", leaf_estimation_method="Gradient",
+              leaf_estimation_iterations=3), False),
+    ]
+    return _gbdt_rank_fits(ml, X, yr, Xh, configs)
+
+
+@lane("gbdt-rank-pairs")
+def _(ml, X, yc, yr, Xh=None):
+    """PairLogit on explicit pairs with hashed `pairs_weight` (gbdt-pair-logit
+    fits them once, deterministic, at 0.03): on the greedy searcher plain,
+    under the Bernoulli and Bayesian bootstraps and with score noise, and on
+    the pointwise searcher at Cosine and NewtonL2. The first fit is the
+    generated pairs at the same options, so a fault in the explicit-pair
+    path moves every other part against it."""
+    pw = dict(use_pointwise_searcher=True)
+    return _gbdt_rank_fits(ml, X, yr, Xh, [
+        ("generated", "PairLogit", {}, False),
+        ("explicit", "PairLogit", {}, True),
+        ("explicit_bernoulli", "PairLogit", dict(bootstrap_type="Bernoulli", subsample=0.7), True),
+        ("explicit_bayesian_noise", "PairLogit",
+         dict(bootstrap_type="Bayesian", bagging_temperature=1.0, random_strength=1.0), True),
+        ("explicit_pw_cosine", "PairLogit", dict(pw, score_function="Cosine"), True),
+        ("explicit_pw_newtonl2", "PairLogit", dict(pw, score_function="NewtonL2"), True),
+    ])
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -9046,6 +9217,8 @@ _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-
 _batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 _batch_decl(_rows_calls("predict", sl=_GBDT_BATCH_ROWS, prep=_gbdt_cat_xh),
             "gbdt-cat-rmse", "gbdt-cat-bootstrap", "gbdt-cat-noise", "gbdt-cat-ordered")
+_batch_decl(_rows_calls("predict"),
+            "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):

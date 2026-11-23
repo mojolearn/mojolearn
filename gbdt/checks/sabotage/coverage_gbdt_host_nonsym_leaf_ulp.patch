@@ -1,0 +1,29 @@
+diff --git a/gbdt/host/gbdt_oracle_depthwise.mojo b/gbdt/host/gbdt_oracle_depthwise.mojo
+index bdd13823a6..6184979b39 100644
+--- a/gbdt/host/gbdt_oracle_depthwise.mojo
++++ b/gbdt/host/gbdt_oracle_depthwise.mojo
+@@ -1226,6 +1226,16 @@ def _sample_tree_folds(
+     return result^
+ 
+ 
++from std.memory import bitcast as _sab_bitcast
++
++
++def _sabotage_leaf_ulp(mut scaled: List[Float32]):
++    """SABOTAGE (coverage-gbdt-host_nonsym_leaf_ulp): every rescaled leaf one
++    ulp up (its bit pattern plus one), in the cursor and the stored model."""
++    for i in range(len(scaled)):  # driver-loop: over one tree's leaf values
++        scaled[i] = _sab_bitcast[DType.float32](_sab_bitcast[DType.uint32](scaled[i]) + UInt32(1))
++
++
+ def gbdt_host_fit_non_symmetric(
+     x_colmajor: List[Float32],
+     y: List[Float32],
+@@ -1429,6 +1439,7 @@ def gbdt_host_fit_non_symmetric(
+                 + " values for a non-symmetric tree of " + String(n_bins) + " bins"
+             )
+         var scaled = rescaled_leaves(estimated, lr)
++        _sabotage_leaf_ulp(scaled)
+         apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_bins)
+         for i in range(len(tree.node_feature)):
+             node_feature.append(tree.node_feature[i])
