@@ -1214,11 +1214,11 @@ TRAINING_LANE_NAMES = {
     # ModelPlan, TensorInfo, the shard map and _read_weights)
     "hf-causal-lm-text": "a causal language model's text generation and text stream",
     "hf-model-surface": "the Hugging Face config, plan and checkpoint header surface",
-    # The CTR table lanes: CPU TRAINING of CTR tables refuses by name
-    # (NO_CPU_PATH), so the CPU column LOADS the Metal-saved model of each
+    # The CTR table lanes: the CPU column LOADS the Metal-saved model of each
     # fixture from GBDT_CTR_MODELS_DIR and predicts through the forest host
-    # binding's CTR and tensor CTR step (HostGBDT). What the CPU column
-    # computes is the prediction from a GPU-fitted model, not a fit.
+    # binding's CTR and tensor CTR step (HostGBDT). (Lane gbdt-cpu-rest-4,
+    # 2026-11-23: CPU training of CTR tables no longer refuses; NO_CPU_PATH
+    # is gone, and these lanes' own fits run on the CPU column too.)
     "gbdt-categorical-ctr-tables": "predictions of Metal-saved gradient boosting models with CTR tables (inference)",
     "gbdt-tensor-ctr-tables": "predictions of Metal-saved gradient boosting models with tensor CTRs (inference)",
     # lane/identical-lowbit-inference (2026-09-17): the two low-bit GEMM
@@ -3069,8 +3069,8 @@ FAMILIES = (
             # 2026-09-20). len(family("gbdt")["training_lanes"]) is the number.
             "Ships: the boosting fit, which is twenty-seven declared training lanes, the largest block of "
             "checkable surface any one binding holds. Saved models still predict through the "
-            "shipped forest binding. CPU training of sample weights and of CTR categorical "
-            "features still refuses by name (NO_CPU_PATH). At about 1.4 MB it is the largest "
+            "shipped forest binding. CPU training covers every combination the device trains, and "
+            "refuses what the device refuses in the device's words. At about 1.4 MB it is the largest "
             "host binding."
         ),
         ships_in_wheel=True,
