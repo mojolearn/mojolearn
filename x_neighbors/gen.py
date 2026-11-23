@@ -161,11 +161,9 @@ OPS = [
      [("cells", "iin", "nc"), ("x", "fin", "n * d"), ("fx", "fin", "m * d"), ("best_d", "fscr", "n * d * k"),
       ("best_i", "iscr", "n * d * k"), ("res", "finout", "n * d"), ("n", "int"), ("m", "int"), ("d", "int"),
       ("k", "int"), ("weights", "int"), ("nc", "int")]),
-    ("pagerank_step", "items", "pagerank_step_item", "n",
-     [("q", "fin", "n * n"), ("x", "fin", "n"), ("p", "fin", "n"), ("dw", "fin", "n"), ("dangling", "iin", "n"), ("res", "fout", "n"),
-      ("n", "int"), ("alpha", "float")]),
-    ("cc_step", "items", "cc_step_item", "n",
-     [("a", "fin", "n * n"), ("lab", "iin", "n"), ("res", "iout", "n"), ("n", "int")]),
+    # TOMBSTONE: the dense pagerank_step and cc_step ops (check-only: graph_check was their one caller; the
+    # product runs graph_par.pr_step_csr and iter_device/iter_host.op_cc_iterate, which the check now holds)
+    # deleted 2026-11-23 by lane/verify-gaps; recoverable at aecad68fb8.
     ("graph_symmetry", "items", [("graph_symmetry_row_item", "n"), ("graph_symmetry_fin_item", "1")], None,
      [("a", "fin", "n * n"), ("flags", "iout", "2"), ("rf", "iscr", "2 * n"), ("n", "int")]),
     ("svgp_var", "items", "svgp_var_item", "n",

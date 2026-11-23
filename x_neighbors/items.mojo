@@ -1517,23 +1517,9 @@ def knn_impute_cell_item(
 
 
 # ------------------------------------------------------------------ graphs
-# DEVIATION 5216 (row 129)
-def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dw: FP, dangling: IP, res: FP, n: Int, alpha: Float32):
-    """One power-iteration step for node t (networkx `_pagerank_scipy`;
-    cuGraph cpp/src/link_analysis/pagerank_impl.cuh): alpha * (x @ Q +
-    sum(x[dangling]) * dw) + (1 - alpha) * p, both folds ascending by node;
-    dw is networkx's `dangling` weights (the personalization when not given)."""
-    var acc = Float32(0)
-    for i in range(n):
-        acc = ftz(identical_mul_add(ftz(x.unsafe_load(i)), ftz(q.unsafe_load(i * n + t)), acc))
-    var dsum = Float32(0)
-    for i in range(n):
-        if Int(dangling.unsafe_load(i)) != 0:
-            dsum = _add(dsum, x.unsafe_load(i))
-    var pt = ftz(p.unsafe_load(t))
-    var inner = ftz(identical_mul_add(dsum, ftz(dw.unsafe_load(t)), acc))
-    var teleport = ftz(identical_mul(_sub(Float32(1), alpha), pt))
-    res.unsafe_store(t, ftz(identical_mul_add(alpha, inner, teleport)))
+# DEVIATION 5216 (row 129): the PageRank step lives in x_neighbors/graph_par.mojo `pr_step_csr` (the
+# product's one body, host and device). TOMBSTONE: the dense `pagerank_step_item` (check-only: its one caller
+# was the dense op_pagerank_step graph_check ran) deleted 2026-11-23 by lane/verify-gaps; recoverable at aecad68fb8.
 
 
 # DEVIATION 5217 (row 129)
@@ -1570,17 +1556,9 @@ def graph_symmetry_fin_item(t: Int, a: FP, flags: IP, rf: IP, n: Int):
     flags.unsafe_store(1, nonzero)
 
 
-def cc_step_item(t: Int, a: FP, lab: IP, res: IP, n: Int):
-    """Weak connectivity as a product (DBSCAN's weak_cc; cuGraph
-    weakly_connected_components_impl.cuh): the smallest label among the node
-    and its neighbors in either direction. Integers only."""
-    var best = lab.unsafe_load(t)
-    for j in range(n):
-        if a.unsafe_load(t * n + j) != Float32(0) or a.unsafe_load(j * n + t) != Float32(0):
-            var l = lab.unsafe_load(j)
-            if l < best:
-                best = l
-    res.unsafe_store(t, best)
+# DEVIATION 5217: the min-label components live in x_neighbors/iter_device.mojo and x_neighbors/cc_sparse.mojo
+# (`op_cc_iterate`). TOMBSTONE: the dense `cc_step_item` (check-only: its one caller was the dense op_cc_step
+# graph_check ran) deleted 2026-11-23 by lane/verify-gaps; recoverable at aecad68fb8.
 
 
 # DEVIATION 5205 (row 129)
