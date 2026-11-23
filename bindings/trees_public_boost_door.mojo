@@ -66,6 +66,7 @@ from bindings.member_set_door import (
 from core.member_abi import MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
 from xtrees.trees_meta_vote_run import (
     VoteMember, VOTE_ALL_ANSWERED, bag_predict_run, bag_oob_run, bag_oob_classifier_finish, bag_oob_r2_run,
+    ada_classifier_run, ada_regressor_run, ADA_DECISION, ADA_PROBA, ADA_CODES,
 )
 from std.python._cpython import GILReleased
 # TOMBSTONE: TreesView / _view_of_array / trees_f32 / trees_all_finite / trees_check_sample_weight / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -378,14 +379,6 @@ def _gather_vec(xt: PythonObject, v_addr: Int, n: Int, rows: PythonObject, conte
     var col = admitted_vector(1, "<i4", context)
     var out = _gather(xt, v_addr, n, 1, rows, col, context)
     return trees_reshape(out, Python.tuple(Int(py=rows.shape[0])), context)
-
-
-def _acc_votes(xt: PythonObject, acc: PythonObject, codes: PythonObject, n: Int, k: Int, on: Float64,
-               off: Float64) raises:
-    var glue = _xr(xt)
-    _ = xt_accumulate_onehot(glue, trees_address(acc), trees_address(codes), n, k, on, off)
-    _ = acc
-    _ = codes
 
 
 def _scale(xt: PythonObject, acc: PythonObject, divisor: Float64) raises:
@@ -1931,34 +1924,49 @@ def _ada_x(fields: PythonObject, X: PythonObject, context: PythonObject) raises 
     return x^
 
 
-def _ada_decision(fields: PythonObject, x: AdmittedX, xt: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`AdaBoostClassifier._decision`: the members' weighted one-hot votes
-    over the native fsum of their weights."""
+def _ada_weights(alphas: PythonObject, context: PythonObject) raises -> List[Float64]:
+    """The member weights as float64, read once: `array('d', alphas)` (one
+    C conversion, as before) copied into native words."""
+    var store = py_call(context["array_type"], PythonObject("d"), alphas)
+    var count = len(store)
+    var words = List[Float64](length=count, fill=0.0)
+    var src = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
+    for i in range(count):  # small-loop(one copy of the m member weights)
+        words[i] = src[unsafe_offset=i]
+    _ = store  # keep the store alive through the reads above
+    return words^
+
+
+def _ada_classify(fields: PythonObject, x: AdmittedX, xt: PythonObject, finish: Int, dst: Int,
+                  context: PythonObject) raises -> PythonObject:
+    """`AdaBoostClassifier._decision` and its finish (lane bm-meta-3,
+    2026-11-23): UNPACK the members' int32 codes (each one-tree member's
+    door over the one staged device copy of X, `_member_codes`) and their
+    weights read once as float64 (`array('d', alphas)`'s conversion), RUN
+    `ada_classifier_run`. Answers the float64 n x k decision block."""
     var n = x.rows
     var k = Int(py=_int(fields["n_classes_"]))
     var xa = _as_array(x, Python.tuple(n, x.cols), context)
     var acc = admitted_vector(n * k, "<f8", context)  # zero-filled: `_class_major([0.0])` without its fill program
     var members = fields["estimators_"]
     var alphas = fields["estimator_weights_"]
-    # One device copy of X for every one-tree member (trees_staged_input).
-    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
-    # The weights as one float64 store, read once (`array('d', alphas)` is
-    # the same float conversion `_float` made per member, and the store fsum
-    # reads): one conversion per predict instead of one per member plus the
-    # fsum's own (lane perf-sweep-trees, 2026-11-05).
-    var weights = py_call(context["array_type"], PythonObject("d"), alphas)
+    var weights = _ada_weights(alphas, context)
     if len(weights) < len(members):
         raise Error("IndexError: list index out of range")
-    var wp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(weights.buffer_info)[0]))
+    # One device copy of X for every one-tree member (trees_staged_input).
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    var keep = Python.list()
+    var codes = List[Int](capacity=len(members))
     try:
-        for i in range(len(members)):  # driver-loop: over the member estimators
+        for i in range(len(members)):  # driver-loop: over the member estimators (their codes)
             var pred = _member_codes(members[i], xa, context)
-            var a = wp[unsafe_offset=i]
-            _acc_votes(xt, acc, pred, n, k, a, -a / Float64(k - 1))
+            _ = py_call(keep.append, pred)
+            codes.append(trees_address(pred))
     finally:
         trees_unstage(staged)
-    _ = weights  # keep the store alive through the reads above
-    _scale(xt, acc, _fsum(alphas, context))
+    ada_classifier_run(_xr(xt), codes, weights, n, k, trees_address(acc), finish, dst)
+    _ = keep  # the members' codes are read through RUN
+    _ = acc
     return acc
 
 
@@ -1968,15 +1976,12 @@ def ada_decision_function(model: PythonObject, args: PythonObject, context: Pyth
     var xt = _xt(fields, context)
     var n = x.rows
     var k = Int(py=_int(fields["n_classes_"]))
-    var acc = _ada_decision(fields, x, xt, context)
-    var glue = _xr(xt)
     if k == 2:
         var d = admitted_vector(n, "<f8", context)
-        _ = xt_margin2(glue, trees_address(acc), trees_address(d), n, 0)
-        _ = d  # keep the Python object alive through the native call above
-        _ = acc  # keep the Python object alive through the native call above
+        _ = _ada_classify(fields, x, xt, ADA_DECISION, trees_address(d), context)
+        _ = d  # written through RUN
         return d
-    return trees_reshape(acc, Python.tuple(n, k), context)
+    return trees_reshape(_ada_classify(fields, x, xt, ADA_DECISION, 0, context), Python.tuple(n, k), context)
 
 
 def ada_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1985,35 +1990,19 @@ def ada_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     var xt = _xt(fields, context)
     var n = x.rows
     var k = Int(py=_int(fields["n_classes_"]))
-    var acc = _ada_decision(fields, x, xt, context)
-    var glue = _xr(xt)
     if k == 2:
         var pairs = admitted_vector(n * 2, "<f8", context)
-        _ = xt_margin2(glue, trees_address(acc), trees_address(pairs), n, 2)
-        _ = pairs  # keep the Python object alive through the native call above
-        _ = acc  # keep the Python object alive through the native call above
-        acc = pairs
-    else:
-        _scale(xt, acc, Float64(k - 1))
-    _ = xt_softmax_rows(glue, trees_address(acc), n, k)
-    _ = acc  # keep the Python object alive through the native call above
-    return trees_reshape(acc, Python.tuple(n, k), context)
+        _ = _ada_classify(fields, x, xt, ADA_PROBA, trees_address(pairs), context)
+        _ = pairs  # written through RUN
+        return trees_reshape(pairs, Python.tuple(n, k), context)
+    return trees_reshape(_ada_classify(fields, x, xt, ADA_PROBA, 0, context), Python.tuple(n, k), context)
 
 
 def _ada_codes_of(fields: PythonObject, x: AdmittedX, xt: PythonObject, context: PythonObject) raises -> PythonObject:
     """AdaBoostClassifier's predicted class codes (int32), undecoded."""
-    var n = x.rows
-    var k = Int(py=_int(fields["n_classes_"]))
-    var acc = _ada_decision(fields, x, xt, context)
-    var codes = PythonObject(None)
-    var glue = _xr(xt)
-    if k == 2:
-        codes = admitted_vector(n, "<i4", context)
-        _ = xt_margin2(glue, trees_address(acc), trees_address(codes), n, 1)
-        _ = codes  # keep the Python object alive through the native call above
-        _ = acc  # keep the Python object alive through the native call above
-    else:
-        codes = _argmax(xt, acc, n, k, context)
+    var codes = admitted_vector(x.rows, "<i4", context)
+    _ = _ada_classify(fields, x, xt, ADA_CODES, trees_address(codes), context)
+    _ = codes  # written through RUN
     return codes
 
 
@@ -2034,26 +2023,26 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
     var members = fields["estimators_"]
     var m = len(members)
     var xa = _as_array(x, Python.tuple(n, x.cols), context)
-    var preds = admitted_vector(m * n, "<f4", context)
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
-    var glue = _xr(xt)
+    # Lane bm-meta-3: UNPACK (the members' float32 predictions from their
+    # doors, the weights read once as float64), RUN `ada_regressor_run`.
+    var keep = Python.list()
+    var blocks = List[Int](capacity=m)
     try:
-        for j in range(m):  # driver-loop: over the member estimators
+        for j in range(m):  # driver-loop: over the member estimators (their predictions)
             var p = _f32_vector(_member_predict(members[j], xa, context), context)
-            _ = xt_put_f32(glue, trees_address(preds), p.address, j * n, n)
-            _ = p  # keep the Python object alive through the native call above
-            _ = preds  # keep the Python object alive through the native call above
+            _ = py_call(keep.append, p.array)
+            blocks.append(p.address)
+            _ = p^
     finally:
         trees_unstage(staged)
-    var b = trees_builtins()
-    # `array('d', ...)` converts each weight with float() itself: no map layer.
-    var weights_store = py_call(context["array_type"], PythonObject("d"), fields["estimator_weights_"])
-    var weights = classical_wrap_array(weights_store, Python.tuple(m), "<f8", "C", context)
+    var weights = _ada_weights(fields["estimator_weights_"], context)
+    if len(weights) < m:
+        raise Error("IndexError: list index out of range")
     var out = admitted_vector(n, "<f4", context)
-    _ = xt_weighted_median(glue, trees_address(preds), trees_address(weights), trees_address(out), n, m)
+    ada_regressor_run(_xr(xt), blocks, weights, n, trees_address(out))
     _ = out  # keep the Python object alive through the native call above
-    _ = weights  # keep the Python object alive through the native call above
-    _ = preds  # keep the Python object alive through the native call above
+    _ = keep  # the members' predictions are read through RUN
     return out
 
 

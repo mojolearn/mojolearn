@@ -31,7 +31,7 @@ from xtrees.trees_meta_run import CalibratedProgram
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_cols_many, xt_accumulate_onehot, xt_argmax_rows, xt_scale,
     xt_scatter, xt_ovr_assemble, xt_accumulate_rows, xt_count_rows, xt_normalize_rows, xt_count_equal, xt_oob_r2,
-    xt_calibrated_proba,
+    xt_calibrated_proba, xt_margin2, xt_softmax_rows, xt_weighted_median, xt_put_f32,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -605,3 +605,62 @@ def calibrated_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMembe
     _ = keep^  # the native blocks are read through the program above
     _ = blocks^
     return VOTE_ALL_ANSWERED
+
+
+# ---------------------------------------------------------------- AdaBoost
+# Lane bm-meta-3 (2026-11-23). An AdaBoost member is a one-tree forest: its
+# door predicts from the one staged device copy of X (not served by a member
+# call, by rule), so the UNPACK hands RUN each member's door block.
+
+#: What `ada_classifier_run` finishes the decision into.
+comptime ADA_DECISION = 0
+comptime ADA_PROBA = 1
+comptime ADA_CODES = 2
+
+
+def ada_classifier_run(glue: EntryRef, codes: List[Int], alphas: List[Float64], n: Int, k: Int, acc: Int,
+                       finish: Int, dst: Int) raises:
+    """`AdaBoostClassifier._decision` and its finishes: acc (float64 n x k,
+    zero) = each member's one-hot vote of its int32 codes (`codes[i]`),
+    weighted +a / -a/(k-1) with its weight `alphas[i]`, over the fsum of
+    every weight (`vote_weight_sum`, the core fsum the door's `_fsum` called).
+    Then `finish`: ADA_DECISION (k 2: the margin into `dst`, float64 n),
+    ADA_PROBA (k 2: the margin pairs into `dst`, float64 n x 2; else acc /
+    (k-1) in place; then the row softmax of that block), ADA_CODES (int32 n
+    into `dst`: k 2 the margin's sign, else the row argmax). The glue ops of
+    the door before this split in the same order: no bits change."""
+    for i in range(len(codes)):  # driver-loop: over the member estimators
+        var a = alphas[i]
+        _ = xt_accumulate_onehot(glue, acc, codes[i], n, k, a, -a / Float64(k - 1))
+    _ = xt_scale(glue, acc, n * k, vote_weight_sum(alphas))
+    if finish == ADA_DECISION:
+        if k == 2:
+            _ = xt_margin2(glue, acc, dst, n, 0)
+    elif finish == ADA_PROBA:
+        var block = acc
+        if k == 2:
+            _ = xt_margin2(glue, acc, dst, n, 2)
+            block = dst
+        else:
+            _ = xt_scale(glue, acc, n * k, Float64(k - 1))
+        _ = xt_softmax_rows(glue, block, n, k)
+    else:
+        if k == 2:
+            _ = xt_margin2(glue, acc, dst, n, 1)
+        else:
+            _ = xt_argmax_rows(glue, acc, dst, n, k)
+
+
+def ada_regressor_run(glue: EntryRef, blocks: List[Int], weights: List[Float64], n: Int, dst: Int) raises:
+    """`AdaBoostRegressor.predict`: the weighted median (float32 n into
+    `dst`) of the members' float32 predictions (`blocks[j]`, n each) under
+    their weights, one `x_trees_weighted_median` over the m x n block the
+    door filled member by member before this split (same words)."""
+    var m = len(blocks)
+    var preds = List[Float32](unsafe_uninit_length=max(m * n, 1))
+    for j in range(m):  # driver-loop: over the member estimators
+        _ = xt_put_f32(glue, Int(preds.unsafe_ptr()), blocks[j], j * n, n)
+    var w = weights.copy()
+    _ = xt_weighted_median(glue, Int(preds.unsafe_ptr()), Int(w.unsafe_ptr()), dst, n, m)
+    _ = preds^
+    _ = w^
