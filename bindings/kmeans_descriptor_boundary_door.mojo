@@ -10,6 +10,7 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from core.kmeans_native_api import (
     KMEANS_NATIVE_ABI, KMEANS_NATIVE_COUNT,
     KMeansNativeDriver, KMeansFitRequest, KMeansFitResult, KMeansQueryRequest, KMeansQueryResult,
+    KMeansScoreRequest, KMeansScoreResult,
 )
 from x_cluster.kmeans_descriptor_boundary_run import kmeans_connection_index, kmeans_connection_add, kmeans_driver
 from bindings.py_provider_pins import ProviderPins, provider_word
@@ -71,5 +72,15 @@ def kmeans_run_query(connection: Int, request: KMeansQueryRequest) raises -> KMe
     try:
         with GILReleased(Python()):
             return driver.query(request)
+    finally:
+        _ = pin
+
+
+def kmeans_run_score(connection: Int, request: KMeansScoreRequest) raises -> KMeansScoreResult:
+    var pin = kmeans_provider(connection)
+    var driver = kmeans_driver(connection)
+    try:
+        with GILReleased(Python()):
+            return driver.score(request)
     finally:
         _ = pin
