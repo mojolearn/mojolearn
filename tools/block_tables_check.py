@@ -91,7 +91,9 @@ def branches(body):
 
 
 def check(path=SOURCE):
-    """The list of disagreements (empty: consistent) and the per-code table {code name: (sizes, names, inits, dims)}."""
+    """The list of disagreements (empty: consistent) and the per-code table {code name: (sizes, names, inits, dims)}:
+    the tensor counts of the first three tables, and the appends of the code's block_tensor_dims branch (the axes it
+    can give a shape; 0 without a branch)."""
     text = Path(path).read_text(encoding="utf-8")
     values = constants(text)
     first, last = values.get("BLOCK_FIRST"), values.get("BLOCK_LAST")

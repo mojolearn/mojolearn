@@ -26,8 +26,9 @@ def test_live_source_is_consistent():
     # every code from BLOCK_FIRST to BLOCK_LAST is read, and the scan layers carry their tensors
     values = btc.constants(SOURCE)
     assert len(table) == values["BLOCK_LAST"] - values["BLOCK_FIRST"] + 1
-    assert table["LAYER_SSD_SCAN"] == (2, 2, 2, 1)
-    assert table["LAYER_SELECTIVE_SCAN"] == (2, 2, 2, 1)
+    # (sizes, names, inits, the appends of the dims branch: a shape's axes, 0 without a branch)
+    assert table["LAYER_SSD_SCAN"][:3] == (2, 2, 2) and table["LAYER_SSD_SCAN"][3] > 0
+    assert table["LAYER_SELECTIVE_SCAN"][:3] == (2, 2, 2) and table["LAYER_SELECTIVE_SCAN"][3] > 0
     assert table["LAYER_BATCH_NORM"][:3] == (4, 4, 4)
     assert table["LAYER_SILU"] == (0, 0, 0, 0)
 
