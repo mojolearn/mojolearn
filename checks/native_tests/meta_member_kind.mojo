@@ -1057,7 +1057,9 @@ def check_search() raises:
     state's."""
     var x = _x()
     var y = _codes()
-    var words: List[Float64] = [0.0, 0.0, 0.0, 0.0, -1.0]
+    # The search head (core/ensemble_member.mojo META_SEARCH_*, 8 words since mf-metric4 / mf-search4b): scoring None,
+    # no error_score, no train scores, a grid, refit, refit scorer 0, one scorer; then its positive word (-1: none).
+    var words: List[Float64] = [0.0, 0.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0, -1.0]
     var meta = _meta_with(META_SEARCH_CLASSIFIER, 3, _search_plans(), words^, List[List[Int32]](),
                           List[List[Int32]](), List[Int](), 0)
     var state = _meta_fit(meta, x, y)

@@ -123,7 +123,13 @@ def member_admit_serving_deferred(model: PythonObject, fields: PythonObject, pla
     class_weight tail stays pending: the caller completes every member's
     plan with `member_cw_fill_plan` over the encode's classes before any
     fit, and an invalid value or a refused dict raises there."""
-    return member_admit_serving_labeled(model, fields, plan, context, b, needs, PythonObject(None))  # None: no labels known yet (as an empty list)
+    # An EMPTY list, not None: `member_admit_serving_labeled` reads None as "no labels and none coming" and unpublishes
+    # a member whose class_weight is pending; the deferred caller completes it after its encode. Python.list() may
+    # raise, this function may not: the except arm is unreachable in practice.
+    try:
+        return member_admit_serving_labeled(model, fields, plan, context, b, needs, Python.list())
+    except:
+        return member_admit_serving_labeled(model, fields, plan, context, b, needs, PythonObject(None))
 
 
 def member_admit_serving_valued(model: PythonObject, fields: PythonObject, plan: PythonObject,
