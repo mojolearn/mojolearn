@@ -14,7 +14,9 @@ hyperparameters, and the extension record the rest:
            description words, the 9 option words (loss, target, optimizer,
            optimizer flags, schedule, schedule step, n_iter_no_change,
            batch size, shuffle), n_features, n_outputs, y_1d, tol (float64
-           bits), the FIT_STATE_WORDS state words (autograd/model.mojo FS_*),
+           bits), the FIT_STATE_WORDS state words (autograd/model.mojo FS_*;
+           12 in record version 1), record version 2 only: the schedule's
+           NN_SCHED_ARGS argument words as float64 bits (autograd/nn_optim.mojo),
            epochs run, class count k, class kind (core/cast_in.mojo
            CAST_KIND_*), class item size, then k class values (their bytes,
            little-endian, zero-extended to 64 bits)]
@@ -50,6 +52,7 @@ from autograd.model import (
     FIT_STATE_WORDS, FS_SEED_HI, FS_SEED_LO, FS_STEP, IP64, LAYER_CONV1D, LAYER_CONV2D, LAYER_LAYER_NORM,
     LAYER_LINEAR, ModelSpec, SPEC2_ARGS, conv_in_per_group, parse_model,
 )
+from autograd.nn_optim import NN_SCHED_ARGS
 from autograd.program import program_from_words, program_words, PROGRAM_PARAM_WEIGHT, PROGRAM_PARAM_STATE_WORDS
 from autograd.ops_api import OpsSession, ops_session
 from core.cast_in import CAST_KIND_FLOAT, CastIn
@@ -63,7 +66,10 @@ from training.checkpoint import (
 
 comptime BP = UnsafePointer[UInt8, MutUntrackedOrigin]
 
-comptime SEQ_RECORD_VERSION = 1
+# lane nn-optim (2026-11-23): version 2 adds the schedule's argument words and the 4 reduce_on_plateau state
+# words; a version-1 record reads with those zero (its 12 state words)
+comptime SEQ_RECORD_VERSION = 2
+comptime SEQ_V1_STATE_WORDS = 12
 comptime SESSION_RECORD_VERSION = 1
 comptime SEQ_OPT_INTS = 9      # loss, target, optimizer, flags, schedule, step, patience, batch, shuffle
 comptime SEQ_MODEL_INTS = 3    # n_features, n_outputs, y_1d
@@ -159,6 +165,7 @@ struct _SeqRecord(Movable):
     var class_size: Int
     var class_at: Int         # index of the first class word in ext_ints
     var floats: List[Float32] # the 8 option floats
+    var sched_args: List[Float64]  # the schedule's argument words (zeros in a version-1 record)
     var table: List[Float32]
     var curve_at: Int         # index of the first curve value in ext_floats
 
@@ -174,6 +181,7 @@ struct _SeqRecord(Movable):
         self.class_size = 0
         self.class_at = 0
         self.floats = List[Float32]()
+        self.sched_args = List[Float64](length=NN_SCHED_ARGS, fill=0.0)
         self.table = List[Float32]()
         self.curve_at = 0
 
@@ -189,12 +197,14 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
         raise Error("mojolearn: '" + path + "' is not a Sequential checkpoint")
     var xi = ck.ext_ints.copy()
     var xf = ck.ext_floats.copy()
-    if len(xi) < 3 or Int(xi[0]) != SEQ_RECORD_VERSION:
+    if len(xi) < 3 or (Int(xi[0]) != SEQ_RECORD_VERSION and Int(xi[0]) != 1):
         raise Error("mojolearn: '" + path + "' holds an unknown Sequential record version")
+    var v2 = Int(xi[0]) == SEQ_RECORD_VERSION
+    var n_state = FIT_STATE_WORDS if v2 else SEQ_V1_STATE_WORDS
     var r = _SeqRecord()
     r.is_export = xi[1] != 0
     var P = Int(xi[2])
-    var fixed = SEQ_OPT_INTS + SEQ_MODEL_INTS + 1 + FIT_STATE_WORDS + 4
+    var fixed = SEQ_OPT_INTS + SEQ_MODEL_INTS + 1 + n_state + (NN_SCHED_ARGS if v2 else 0) + 4
     if P < 3 or len(xi) < 3 + P + fixed:
         raise _damaged(path)
     var at = 3
@@ -206,9 +216,15 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
         at += 1
     r.tol_bits = xi[at]
     at += 1
-    for _ in range(FIT_STATE_WORDS):  # driver-loop: over state words
+    for _ in range(n_state):  # driver-loop: over state words
         r.state.append(xi[at])
         at += 1
+    for _ in range(n_state, FIT_STATE_WORDS):  # driver-loop: over the state words a version-1 record lacks
+        r.state.append(Int64(0))
+    if v2:
+        for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
+            r.sched_args[k] = bitcast[DType.float64](xi[at])
+            at += 1
     r.n_run = Int(xi[at])
     r.k = Int(xi[at + 1])
     r.class_kind = Int(xi[at + 2])
@@ -296,8 +312,16 @@ def model_save_checkpoint(
     if len(addrs) != 5 or len(ip) != SEQ_SAVE_INTS or len(fp) < SEQ_FIT_FLOATS + 1:
         raise Error("model_save_checkpoint: requires 5 addresses, " + String(SEQ_SAVE_INTS)
                     + " integers and 9 floats plus one per layer")
+    # lane nn-optim: fp may end in the schedule's NN_SCHED_ARGS words after the layers' floats
+    var n_layers = words[2] if len(words) > 2 else 0
+    var table_end = len(fp)
+    var sched_args = List[Float64](length=NN_SCHED_ARGS, fill=0.0)
+    if len(fp) == SEQ_FIT_FLOATS + n_layers + NN_SCHED_ARGS:
+        table_end = SEQ_FIT_FLOATS + n_layers
+        for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
+            sched_args[k] = fp[table_end + k]
     var table = List[Float32]()
-    for i in range(SEQ_FIT_FLOATS, len(fp)):  # driver-loop: over layers' float arguments
+    for i in range(SEQ_FIT_FLOATS, table_end):  # driver-loop: over layers' float arguments
         table.append(fval_word(fp, i))
     var spec = parse_model(words, table)
     var is_export = ip[0] != 0
@@ -349,6 +373,8 @@ def model_save_checkpoint(
     xi.append(bitcast[DType.int64](fp[6]))
     for i in range(FIT_STATE_WORDS):  # driver-loop: over state words
         xi.append(state[i])
+    for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words, float64 bits)
+        xi.append(bitcast[DType.int64](sched_args[k]))
     xi.append(Int64(n_run))
     xi.append(Int64(k))
     if k > 0:
@@ -388,7 +414,8 @@ struct SeqCheckpointInfo(Movable):
     arg0, arg1) in `layer_ints` and its float in `layer_floats`; `ints` =
     the option words, n_features, n_outputs, y_1d, epochs run, class count,
     class kind, class item size, n_params; `floats` = lr, f1, f2, eps,
-    weight_decay, f7, tol, schedule gamma, huber delta."""
+    weight_decay, f7, tol, schedule gamma, huber delta, then the schedule's
+    NN_SCHED_ARGS argument words (lane nn-optim)."""
     var is_export: Bool
     var layer_ints: List[Int]
     var layer_floats: List[Float64]
@@ -426,6 +453,9 @@ def model_checkpoint_info(file: String) raises -> SeqCheckpointInfo:
     out.floats.append(bitcast[DType.float64](r.tol_bits))
     out.floats.append(Float64(r.floats[6]))
     out.floats.append(Float64(r.floats[7]))
+    # lane nn-optim: then the schedule's NN_SCHED_ARGS argument words
+    for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
+        out.floats.append(r.sched_args[k])
     return out^
 
 

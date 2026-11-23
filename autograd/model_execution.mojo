@@ -6,7 +6,12 @@ from sequence.exec_trait import Exec
 from sequence.recurrent import OptConfig
 from sequence.ops import FP
 from core.cast_in import CastIn
-from autograd.model import FS_EPOCH, IP64, FitConfig, FitValidation, model_fit, model_fit_state, model_predict, parse_model
+from autograd.model import (
+    FS_EPOCH, IP64, SPEC2_HEADER, SPEC2_VERSION, FitConfig, FitValidation, model_fit, model_fit_state, model_predict,
+    parse_model,
+)
+from autograd.model_checkpoint import model_layout
+from autograd.nn_optim import NN_OPT_LAMB, NN_SCHED_ARGS
 from autograd.cast_ops import gather_labels
 from autograd.profile import ag_profile_on, ag_profile_reset, ag_profile_report
 
@@ -55,13 +60,31 @@ def model_fit_native[E: Exec](
     if not (stateful or plain) or len(fp) < FIT_FLOATS + 1:
         raise Error("model_fit: requires 4 addresses and 14 integer parameters (or 8 and 15 with the "
                     + "training state, 9 with sequence lengths) and 9 floats plus one per layer")
-    var spec = parse_model(prog, model_float_words(fp, FIT_FLOATS))
+    # lane nn-optim: the floats are the 9 head words, one per layer, then (optionally) the schedule's
+    # NN_SCHED_ARGS words (autograd/nn_optim.mojo); without them every argument word is 0
+    var n_layers = prog[SPEC2_HEADER - 1] if len(prog) >= SPEC2_HEADER and prog[0] == SPEC2_VERSION else (
+        prog[2] if len(prog) > 2 else 0
+    )
+    var table = List[Float32]()
+    var sched_args = List[Float64](length=NN_SCHED_ARGS, fill=0.0)
+    var table_end = len(fp)
+    if len(fp) == FIT_FLOATS + n_layers + NN_SCHED_ARGS:
+        table_end = FIT_FLOATS + n_layers
+        for k in range(NN_SCHED_ARGS):  # small-loop(8: the schedule's argument words)
+            sched_args[k] = fp[table_end + k]
+    for i in range(FIT_FLOATS, table_end):  # driver-loop: admitted native model scalar words
+        table.append(Float32(fp[i]))
+    var spec = parse_model(prog, table)
     var N = ip[0]
     var opt = OptConfig(ip[3], ip[4], Float32(fp[1]), Float32(fp[2]), Float32(fp[3]), Float32(fp[4]), Float32(fp[5]))
+    var offsets = List[Int]()
+    if ip[3] == NN_OPT_LAMB:
+        var names = List[String]()
+        model_layout(spec, offsets, names)
     var cfg = FitConfig(
         ip[1], ip[2], opt, Float32(fp[0]), ip[5], ip[6], Float32(fp[7]),
         ip[7], ip[8], ip[9] != 0, model_seed(ip, 10), ip[12],
-        fp[6], Float32(fp[8]), ip[13] != 0,
+        fp[6], Float32(fp[8]), ip[13] != 0, sched_args^, offsets^,
     )
     # MOJOLEARN_AG_PROFILE (lane ag-pass2-kernels): this fit's launch
     # profile, counted by the executor, printed after it

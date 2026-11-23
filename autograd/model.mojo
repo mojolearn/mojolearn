@@ -46,6 +46,11 @@ from autograd.model_blocks import (
 # lm_head (lane neural-blocks-3-lm): the token cross-entropy's head layer and its fused loss
 from autograd.model_blocks import LAYER_LM_HEAD, block_lm_head_loss
 from autograd.ssm_ops import OP_SSM_S4D_INIT
+# lane nn-optim (2026-11-23): rmsprop, adagrad, lamb and the schedules multi_step .. reduce_on_plateau
+from autograd.nn_optim import (
+    NN_OPT_ADAGRAD, NN_SCHED_MULTI_STEP, NN_SCHED_PLATEAU, NnLamb, NnPlateau, nn_epoch_lr, nn_multi_step_count,
+    nn_opt_step, nn_optim_admit, nn_sched_per_step, nn_step_lrs,
+)
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
 # optimizer step and layer, including across checkpoint/resume.
@@ -617,6 +622,10 @@ struct FitConfig(Copyable, Movable):
     var tol: Float64
     var huber_delta: Float32
     var init: Bool
+    # lane nn-optim: the schedule's NN_SCHED_ARGS words (autograd/nn_optim.mojo; empty for codes 0..2) and the
+    # parameter tensors' offsets (LAMB's per-tensor trust ratios; empty: one tensor)
+    var sched_args: List[Float64]
+    var tensor_offs: List[Int]
 
 
 @fieldwise_init
@@ -660,16 +669,18 @@ def check_fit(spec: ModelSpec, cfg: FitConfig, N: Int) raises:
                     + "Softmax or Sigmoid layer")
     if cfg.loss == LOSS_HUBER and not (cfg.huber_delta > Float32(0)):
         raise Error("model fit: the Huber delta must be positive")
-    var kind = cfg.opt.kind
-    if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
-        raise Error("model fit: the optimizer must be sgd, momentum, adam or adamw")
+    # lane nn-optim: every optimizer code and this lane's schedule codes, one admission body with compile's
+    nn_optim_admit(cfg.opt.kind, cfg.opt.flags, Float64(cfg.opt.f1), Float64(cfg.opt.f2), Float64(cfg.opt.eps),
+                   Float64(cfg.opt.wd), Float64(cfg.opt.f7), cfg.sched, cfg.sched_args)
     if not (cfg.lr > Float32(0)):
         raise Error("model fit: the learning rate must be positive")
     if cfg.batch < 1 or cfg.epochs < 1:
         raise Error("model fit: batch size and epochs must be at least 1")
-    if cfg.sched < SCHED_CONSTANT or cfg.sched > SCHED_EXPONENTIAL:
+    if cfg.sched < SCHED_CONSTANT or cfg.sched > NN_SCHED_PLATEAU:
         raise Error("model fit: unknown learning-rate schedule code " + String(cfg.sched))
-    if cfg.sched != SCHED_CONSTANT and not (cfg.sched_gamma > Float32(0)):
+    if (cfg.sched == SCHED_STEP or cfg.sched == SCHED_EXPONENTIAL or cfg.sched == NN_SCHED_MULTI_STEP) and not (
+        cfg.sched_gamma > Float32(0)
+    ):
         raise Error("model fit: the schedule's gamma must be positive")
     if cfg.sched == SCHED_STEP and cfg.sched_step < 1:
         raise Error("model fit: the step schedule's step size must be at least 1 epoch")
@@ -1158,7 +1169,7 @@ def model_lr(cfg: FitConfig, epoch: Int) -> Float32:
 # starts from it, so 2 + 2 epochs give the words of 4 epochs (the epoch
 # index keys the shuffle (mlp_epoch_key) and the schedule, the step counter
 # keys the optimizer's bias correction and the dropout masks).
-comptime FIT_STATE_WORDS = 12
+comptime FIT_STATE_WORDS = 16
 comptime FS_VALID = 0      # 1 once a fit has written the state
 comptime FS_EPOCH = 1      # epochs completed: the next epoch's index
 comptime FS_STEP = 2       # optimizer steps completed
@@ -1171,6 +1182,11 @@ comptime FS_OPT = 8        # the optimizer kind the buffers belong to
 comptime FS_NPARAMS = 9    # the parameter count they cover
 comptime FS_SEED_LO = 10   # the fit's seed, low 32 bits
 comptime FS_SEED_HI = 11   # the fit's seed, high 32 bits
+# lane nn-optim: reduce_on_plateau's state (autograd/nn_optim.mojo NnPlateau), kept across resume
+comptime FS_PL_LR = 12     # the current rate (float64 bits; 0: not started, the compiled lr)
+comptime FS_PL_BEST = 13   # the best monitored loss (float64 bits)
+comptime FS_PL_BAD = 14    # epochs without improvement
+comptime FS_PL_COOL = 15   # cooldown epochs left
 
 comptime IP64 = UnsafePointer[Int64, MutUntrackedOrigin]
 
@@ -1252,6 +1268,7 @@ def model_fit_state[E: Exec](
     var stall = 0
     var best = Float64(1.0e308)
     var st = OptState()
+    var plateau = NnPlateau(Float64(cfg.lr))
     if resume:
         if cfg.init:
             raise Error("model fit: resuming continues from the saved parameters (init must be 0)")
@@ -1266,6 +1283,11 @@ def model_fit_state[E: Exec](
         st.pw2 = _word_f32(St[FS_PW2])
         st.mu_prod = _word_f32(St[FS_MU])
         cfg.seed = (UInt64(St[FS_SEED_HI]) << 32) | UInt64(St[FS_SEED_LO])
+        if St[FS_PL_LR] != 0:
+            plateau.lr = bitcast[DType.float64](St[FS_PL_LR])
+            plateau.best = bitcast[DType.float64](St[FS_PL_BEST])
+            plateau.bad = Int(St[FS_PL_BAD])
+            plateau.cool = Int(St[FS_PL_COOL])
         if start < 0 or step < 0 or start + cfg.epochs >= MODEL_MAX_ROWS:
             raise Error("model fit: the saved epoch and step counters are out of range")
     check_fit(spec, cfg, N)
@@ -1340,9 +1362,14 @@ def model_fit_state[E: Exec](
     var s3 = ex.alloc(np_)
     if resume:
         # the optimizer buffers where the earlier fit left them (s3 is not
-        # read by sgd, momentum, adam or adamw)
+        # read by sgd, momentum, adam or adamw, nor by this lane's optimizers: autograd/nn_optim.mojo)
         ex.upload(s1, Mio, np_)
         ex.upload(s2, Vio, np_)
+    elif cfg.opt.kind == NN_OPT_ADAGRAD and cfg.opt.f2 != Float32(0):
+        # torch Adagrad's initial_accumulator_value: the sum starts there (one fill a fit)
+        _fill(ex, s2, np_, cfg.opt.f2)
+    # lane nn-optim: LAMB's buffers and tensor table, once a fit (nothing for the other optimizers)
+    var lamb = NnLamb(ex, cfg.opt, cfg.tensor_offs, np_)
     var didx = ex.alloc(N)
     var xb = ex.alloc(bs * D)
     var yb = ex.alloc(bs * TW)
@@ -1356,6 +1383,13 @@ def model_fit_state[E: Exec](
         Xp = ex.alloc(N * D)
         Yp = ex.alloc(N * TW)
     var n_batches = (N + bs - 1) // bs
+    # lane nn-optim: a per-step schedule's rates for every step this fit can run, filled once (host scalars)
+    var per_step = nn_sched_per_step(cfg.sched)
+    var step0 = step
+    var step_lrs = List[Float32]()
+    if per_step:
+        step_lrs = nn_step_lrs(cfg.sched, cfg.lr, cfg.sched_args, step + 1, cfg.epochs * n_batches)
+    var plateau_on = cfg.sched == NN_SCHED_PLATEAU
     var dloss = ex.alloc(n_batches)
     var dcurve = ex.alloc(cfg.epochs)
     var nv = 0
@@ -1426,6 +1460,13 @@ def model_fit_state[E: Exec](
             ia.p0 = didx
             ex.launch[OP_SEQ_IOTA](ia, N)
         var lr = model_lr(cfg, epoch)
+        if cfg.sched == NN_SCHED_MULTI_STEP:
+            # torch MultiStepLR: lr gamma^k, k the milestones passed (epoch_lr's exponential form at epoch k)
+            lr = epoch_lr(cfg.lr, SCHED_EXPONENTIAL, 1, cfg.sched_gamma, nn_multi_step_count(cfg.sched_args, epoch))
+        elif plateau_on:
+            lr = Float32(plateau.lr)
+        elif cfg.sched > NN_SCHED_MULTI_STEP:
+            lr = nn_epoch_lr(cfg.sched, cfg.lr, cfg.sched_args, epoch)
         # the order changes only when shuffling: an unshuffled fit keeps epoch 0's copy
         if epoch_gather and (cfg.shuffle or e == 0):
             gather_epoch(ex, dX, dY, didx, N, D, TW, Xp, Yp)
@@ -1494,7 +1535,8 @@ def model_fit_state[E: Exec](
             for r in range(len(ranges) // 2):  # driver-loop: over state ranges (at most one a batch-norm layer)
                 _copy(ex, Sv + so, P + ranges[2 * r], ranges[2 * r + 1])
                 so += ranges[2 * r + 1]
-            opt_step(ex, cfg.opt, st, step, lr, P, Gr, s1, s2, s3, np_)
+            var step_lr = step_lrs[step - step0 - 1] if per_step else lr
+            nn_opt_step(ex, cfg.opt, st, step, step_lr, P, Gr, s1, s2, s3, np_, lamb)
             so = 0
             for r in range(len(ranges) // 2):  # driver-loop: over state ranges (at most one a batch-norm layer)
                 _copy(ex, P + ranges[2 * r], Sv + so, ranges[2 * r + 1])
@@ -1522,12 +1564,15 @@ def model_fit_state[E: Exec](
             var average = epoch_tape.scale(ex, epoch_tape.sum(ex, parts), identical_div(Float32(1), Float32(nv)))
             _copy(ex, vcurve + e, epoch_tape.value(average), 1)
             monitored = vcurve + e
-        if cfg.patience > 0 or nv > 0:
+        if cfg.patience > 0 or nv > 0 or plateau_on:
             ex.sync()
             ex.download(FP(unsafe_from_address=Int(word.unsafe_ptr())), monitored, 1)
             var value = Float64(word[0])
             if value != value or abs(value) > Float64(3.4028234663852886e38):
                 raise Error("model fit: monitored loss is not finite")
+            if plateau_on:
+                # torch ReduceLROnPlateau.step(loss) on the loss read above (autograd/nn_optim.mojo)
+                plateau.epoch_end(value, cfg.sched_args)
             if value > best - cfg.tol:
                 stall += 1
             else:
@@ -1582,6 +1627,11 @@ def model_fit_state[E: Exec](
     St[FS_NPARAMS] = Int64(np_)
     St[FS_SEED_LO] = Int64(cfg.seed & UInt64(0xFFFFFFFF))
     St[FS_SEED_HI] = Int64(cfg.seed >> 32)
+    St[FS_PL_LR] = bitcast[DType.int64](plateau.lr) if plateau_on else Int64(0)
+    St[FS_PL_BEST] = bitcast[DType.int64](plateau.best) if plateau_on else Int64(0)
+    St[FS_PL_BAD] = Int64(plateau.bad) if plateau_on else Int64(0)
+    St[FS_PL_COOL] = Int64(plateau.cool) if plateau_on else Int64(0)
+    lamb.release(ex)
     tape.release(ex)
     epoch_tape.release(ex)
     _ = word^
