@@ -64,8 +64,9 @@ def _kind_name(kind: Int) -> String:
 def discriminant_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: this class has no member entry, or
-    its settings stay on its door."""
+    from the unfitted estimator. False: this class has no member entry
+    (an unpublished kind; every published setting is a member route or the
+    door's refusal in its words since lane mf-lin6)."""
     if not discriminant_kind_published(kind):
         return False
     var nk = prep_keys()

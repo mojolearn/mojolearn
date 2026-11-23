@@ -12,7 +12,8 @@ Nystroem, kind 1 RBFSampler
     (`km_extension`), gamma='scale''s capability check, the provider table
     in the route's entry slot, its capability word in `route.flags`, and
     the 9 parameter words of core/kernel_approx_member.mojo. `fast` (no
-    provider) is not published: admit returns False.
+    provider on the door's route) runs the image's own provider table
+    (`kernel_method_member_provider`, lane mf-lin6): admit is always True.
   * `kernel_approx_member_pack` (PACK): the fitted attributes the
     estimator's own fit writes (`km_nys_fit_pack` / `km_rbf_fit_pack`,
     `kernel_public_fit_complete`), from the member state's blocks.
@@ -44,9 +45,11 @@ from kernel_methods.descriptor_schema import KERNEL_METHOD_OPERATIONS
 from kernel_methods.native_call_run import KmKernel
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from providers.python.host_estimator_binding_pyapi_door import estimator_member_binding
-from providers.python.kernel_method_descriptor_pyapi_door import kernel_method_metadata
+from providers.python.kernel_method_descriptor_pyapi_door import kernel_method_metadata, kernel_method_member_provider
 from providers.python.kernel_public_lifecycle_pyapi_unpack import kernel_public_fit_complete
-from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import (
+    NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_provider_id,
+)
 from x_decomp.descriptor_schema import xd_vendor_code
 
 comptime _B_FIRST = MEMBER_BLOCK_FAMILY
@@ -55,8 +58,8 @@ comptime _B_FIRST = MEMBER_BLOCK_FAMILY
 def kernel_approx_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: this configuration has no member
-    entry (`fast`)."""
+    from the unfitted estimator. Always True (a `fast` binding runs the
+    image's own provider table, lane mf-lin6)."""
     if kind != 0 and kind != 1:
         raise Error("ValueError: mojolearn: unknown kernel approximation member kind " + String(kind))
     var nystroem = kind == 0
@@ -107,7 +110,13 @@ def kernel_approx_member_admit(model: PythonObject, fields: PythonObject, kind: 
         if not scaled:
             route = km_extension(fields, binding, where, context)
     if not route.described():
-        return False
+        # A `fast` binding (lane mf-lin6, as KernelRidge since lane mf-img3): its door keeps its list and pointer
+        # entries; the member runs the same bodies through the image's own provider table
+        # (`kernel_method_member_provider`: Nystroem fit / fit-pointer / transform and RBFSampler fit / transform
+        # are the same km_*_run / kmh_*_run calls the door's entries make). The mode check and gamma='scale''s
+        # capability check above ran on the door's own route first, in the door's order.
+        var table = kernel_method_member_provider(fields, binding)
+        route = KmRoute(binding, table, kernel_method_metadata(table, 14), neural_descriptor_provider_id(table))
     words[6] = Float64(q)
     words[7] = Float64(seed & 0xFFFFFFFF)
     words[8] = Float64(seed >> 32)
