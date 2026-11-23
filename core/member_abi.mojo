@@ -131,7 +131,7 @@ from core.native_descriptor_abi import NativeDescriptorCall
 #: `MemberPlan.class_counts`): one y layout for every caller, `y.cols` outputs.
 #: Words APPENDED to the end of `MemberCall` (round 5: out_dtype, scope, pin, devices, device_count; round 6:
 #: pin_kept; lane mf-img3: groups; lane mf-left4: eval_x, eval_y, pairs, pairs_weight, cat_keys,
-#: eval_cat_keys) do not
+#: eval_cat_keys; lane mf-hostent5: permutation) do not
 #: bump it: every image of one build compiles this file, and a member that does not read them is unchanged.
 comptime MEMBER_CALL_LAYOUT = 4
 
@@ -464,6 +464,13 @@ struct MemberCall(Movable):
     # Float32 words are the keys.
     var cat_keys: MemberMatrix
     var eval_cat_keys: MemberMatrix
+    # APPENDED 2026-11-23 (lane mf-hostent5; a member that does not read it
+    # ignores it; rows 0 = not given). MEMBER_OP_FIT: the row order a fit
+    # with an explicit permutation reads (the Gbdt member's OrderedRMSE kind:
+    # its required `permutation`), int64 rows x 1, one row id per fit row,
+    # numbered in the row order the member sees; the member checks it is a
+    # bijection in its estimator's words.
+    var permutation: MemberMatrix
 
     def __init__(out self, route: DeviceRoute, state: Int = 0):
         self.layout = MEMBER_CALL_LAYOUT
@@ -497,6 +504,7 @@ struct MemberCall(Movable):
         self.pairs_weight = MemberMatrix()
         self.cat_keys = MemberMatrix()
         self.eval_cat_keys = MemberMatrix()
+        self.permutation = MemberMatrix()
 
     def on_cpu(self) -> Bool:
         """The member's RESOLVED device is the CPU (its route says so; no

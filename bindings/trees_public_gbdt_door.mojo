@@ -20,9 +20,11 @@
 # from the predict entry to the binary output kernel without a Python step.
 from core.mode_answer import MODE_FAMILY_GBDT, answer_mode_word
 from std.python import Python, PythonObject
-from bindings.base_helpers_key_unpack import base_helpers_key
-from bindings.base_helpers_released_unpack import base_check_indices_i64
-from gbdt.trees_gbdt_fit_run import gbdt_feature_freq_check, gbdt_weights_check
+from std.python._cpython import GILReleased
+from gbdt.trees_gbdt_fit_run import (
+    gbdt_feature_freq_check, gbdt_weights_check, gbdt_ordered_rows_check, gbdt_ordered_target_check,
+    gbdt_ordered_order, GBDT_ORDERED_BIJECTION,
+)
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native_door import _resolved
 from bindings.native_instance_item_pack import native_instance_item
@@ -740,6 +742,8 @@ struct GbdtTextFit(Movable):
     var held_y: AdmittedX
     var held_weights: Optional[AdmittedX]
     var held_extra: PythonObject
+    # OrderedRMSE (lane mf-hostent5): the uint32 order `gbdt_ordered_order` built (`extra` is its address).
+    var held_order: List[UInt32]
 
     def __init__(out self, entry: EntryRef, weights: Int, n_weights: Int, extra: Int, n_extra: Int,
                  var held_x: AdmittedX, var held_y: AdmittedX, var held_weights: Optional[AdmittedX],
@@ -763,6 +767,7 @@ struct GbdtTextFit(Movable):
         self.held_y = held_y^
         self.held_weights = held_weights^
         self.held_extra = held_extra
+        self.held_order = List[UInt32]()
 
 
 def _real_setting(fields: PythonObject, model: PythonObject, key: PythonObject, name: String) raises -> Float64:
@@ -795,10 +800,8 @@ def ordered_rmse_unpack(model: PythonObject, args: PythonObject, context: Python
     _ordered_options(fields, model, context)
     var x = admit_f32(args[0], 2, "X", context, order="F", finite=False)
     var n = x.rows
-    if n < 4 or n > 4294967295 or x.cols < 1:
-        raise Error("mojolearn: ordered RMSE requires >=4 rows and >=1 feature")
-    if not trees_finite_f32(x.address, n * x.cols):
-        raise Error("mojolearn: ordered RMSE X must be finite")
+    # THE ONE BODY of the X checks (gbdt/trees_gbdt_fit_run.mojo, lane mf-hostent5): the member's kind runs it.
+    gbdt_ordered_rows_check(x.address, n, x.cols)
     _ = x  # keep the Python object alive through the native calls above
     var y: AdmittedX
     try:
@@ -809,10 +812,55 @@ def ordered_rmse_unpack(model: PythonObject, args: PythonObject, context: Python
         raise error^
     if y.rows != n:
         raise Error("mojolearn: y must be one-dimensional with one value per row")
-    if not trees_finite_f32(y.address, n):
-        raise Error("mojolearn: y must be finite")
-    var permutation = args[2]
-    var bijection = String("mojolearn: permutation must be an integer bijection of row ids")
+    gbdt_ordered_target_check(y.address, n)
+    var nk = trees_keys()
+    var order64 = ordered_permutation_ids(args[2], context)
+    var m = Int(py=order64.size)
+    var ids = trees_address(order64)
+    # THE ONE BODY of the bijection check and the uint32 cast (the member's kind runs it too); the GIL is
+    # released around it as it was around the index helper it replaces.
+    var order = List[UInt32]()
+    var refused = False
+    with GILReleased(Python()):
+        try:
+            order = gbdt_ordered_order(ids, m, n)
+        except:
+            refused = True
+    _ = order64  # keep the Python object alive through the native call above
+    if refused:
+        raise Error(GBDT_ORDERED_BIJECTION)
+    var w_addr = y.address
+    var n_weights = 0
+    var weights: Optional[AdmittedX] = None
+    if args[3] is not None:
+        weights = _checked_weights(args[3], n, True, context)
+        w_addr = weights.value().address
+        n_weights = n
+    var entry = gbdt_entry_of(gbdt_table(fields, context))
+    var n_estimators = _int(_field(fields, model, nk[].k_n_estimators, "n_estimators"))
+    var max_depth = _int(_field(fields, model, nk[].k_max_depth, "max_depth"))
+    var border_count = _int(_field(fields, model, nk[].k_border_count, "border_count"))
+    var learning_rate = _real_setting(fields, model, nk[].k_learning_rate, "learning_rate")
+    var l2_leaf_reg = _real_setting(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")
+    # x, y (the float32 target copy the fit reads), the weights and the
+    # UInt32 order stay alive in the request until PACK returns.
+    var call = GbdtTextFit(entry, w_addr, n_weights, 0, n, x^, y^, weights^, PythonObject(None))
+    call.held_order = order^
+    call.extra = Int(call.held_order.unsafe_ptr())
+    call.n_estimators = n_estimators
+    call.max_depth = max_depth
+    call.border_count = border_count
+    call.learning_rate = learning_rate
+    call.l2_leaf_reg = l2_leaf_reg
+    return call^
+
+
+def ordered_permutation_ids(permutation: PythonObject, context: PythonObject) raises -> PythonObject:
+    """UNPACK of OrderedRMSE's `permutation` (the door's and the Gbdt member boundary's one admission, lane
+    mf-hostent5): its element type checks in the door's order and words, then the C-order int64 vector
+    (`trees_view_i64`). The bijection over the fit's rows is checked by `gbdt_ordered_order` (one body)."""
+    var b = trees_builtins()
+    var bijection = String(GBDT_ORDERED_BIJECTION)
     var nk = trees_keys()
     if py_type(permutation) is b.list or py_type(permutation) is b.tuple:
         # An exact int is integral and not a bool: only other items take the
@@ -842,45 +890,12 @@ def ordered_rmse_unpack(model: PythonObject, args: PythonObject, context: Python
             var code = String(fmt[byte=fmt.byte_length() - 1:fmt.byte_length()])
             if code == "?" or code == "f" or code == "d" or code == "e" or code == "O":
                 raise Error(bijection)
-    var order64 = PythonObject(None)
     try:
-        var view = trees_view_i64(permutation, context)
-        order64 = view
+        return trees_view_i64(permutation, context)
     except error:
         if _type_or_value(error) or String(error).startswith("OverflowError:"):
             raise Error(bijection)
         raise error^
-    var m = Int(py=order64.size)
-    if m != n or n < 1 or base_check_indices_i64(base_helpers_key(py_item(context, nk[].k_trees_helpers)),
-                                                 trees_address(order64), n, n) != 0:
-        raise Error(bijection)
-    _ = order64  # keep the Python object alive through the native calls above
-    var order = admitted_vector(n, "<u4", context)
-    trees_cast(trees_address(order64), "<i8", trees_address(order), "<u4", n, context)
-    _ = order  # keep the Python object alive through the native call above
-    _ = order64  # keep the Python object alive through the native call above
-    var w_addr = y.address
-    var n_weights = 0
-    var weights: Optional[AdmittedX] = None
-    if args[3] is not None:
-        weights = _checked_weights(args[3], n, True, context)
-        w_addr = weights.value().address
-        n_weights = n
-    var entry = gbdt_entry_of(gbdt_table(fields, context))
-    var n_estimators = _int(_field(fields, model, nk[].k_n_estimators, "n_estimators"))
-    var max_depth = _int(_field(fields, model, nk[].k_max_depth, "max_depth"))
-    var border_count = _int(_field(fields, model, nk[].k_border_count, "border_count"))
-    var learning_rate = _real_setting(fields, model, nk[].k_learning_rate, "learning_rate")
-    var l2_leaf_reg = _real_setting(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")
-    # x, y (the float32 target copy the fit reads), the weights and the
-    # UInt32 order stay alive in the request until PACK returns.
-    var call = GbdtTextFit(entry, w_addr, n_weights, trees_address(order), n, x^, y^, weights^, order)
-    call.n_estimators = n_estimators
-    call.max_depth = max_depth
-    call.border_count = border_count
-    call.learning_rate = learning_rate
-    call.l2_leaf_reg = l2_leaf_reg
-    return call^
 
 
 def trees_view_i64(source: PythonObject, context: PythonObject) raises -> PythonObject:

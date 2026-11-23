@@ -233,25 +233,59 @@ def connect_members(context, register, registry):
     _connect_host_members(registry, register, waiting)
     _connect_search_members(context, registry, register, waiting)
     _connect_feature_freq_members(registry, register, waiting)
+    _connect_host_tree_members(registry, register, waiting)
+
+
+#: 6. The Gbdt member kinds with a native constructor `_derive_member` cannot read (its body calls the owner,
+#: and the constructor stores the booster's settings beside its parameters), by mark: the constructor's
+#: parameters in its body's order, that native constructor operation, and the keywords its fit takes beyond
+#: X and y. ExperimentalTwoLevelFeatureFreq (16, 3; lane mf-meta5); OrderedRMSE (16, 4; lane mf-hostent5: its
+#: required `permutation` and its sample_weight reach the member from a caller's fit parameters).
+_TEXT_MODEL_MEMBERS = {
+    (16, 3): (('sources', 'learning_rate', 'l2_leaf_reg', 'random_state', 'numeric_mode', 'device'),
+              'trees_gbdt_feature_freq_init', ()),
+    (16, 4): (('n_estimators', 'max_depth', 'learning_rate', 'l2_leaf_reg', 'border_count', 'numeric_mode',
+               'device'), 'trees_gbdt_ordered_init', ('permutation', 'sample_weight')),
+}
 
 
 def _connect_feature_freq_members(registry, register, waiting):
-    # glue: import-time class metadata. 6. ExperimentalTwoLevelFeatureFreq (mark (16, 3): the Gbdt member's
-    # kind 3, core/gbdt_member.mojo; lane mf-meta5) has a native constructor `_derive_member` cannot read (its
-    # body calls the owner, and the constructor stores the booster's settings beside its parameters): it is
-    # registered as a MEMBER-ONLY plan with its constructor's parameters in its body's order and that native
-    # constructor operation, so a clone is built by the constructor, as `_connect_native_init` registers it.
+    # glue: import-time class metadata. 6. A class of `_TEXT_MODEL_MEMBERS` is registered as a MEMBER-ONLY plan
+    # with its constructor's parameters and native constructor operation, so a clone is built by the
+    # constructor, as `_connect_native_init` registers it.
     for cls in tuple(waiting):  # glue: the classes the scan above left waiting, once per connect
         own = vars(cls)
-        if own.get('_mojolearn_member') != (16, 3):
+        row = _TEXT_MODEL_MEMBERS.get(own.get('_mojolearn_member'))
+        if row is None:
             continue
         module = sys.modules.get(own.get('__module__'))
         fields = vars(module) if module is not None else {}
         if '_TREES' not in fields or type(fields.get('_TREES_CONTEXT')) is not dict:
             continue
-        register(cls, fields['_TREES'], fields['_TREES_CONTEXT'],
-                 ('sources', 'learning_rate', 'l2_leaf_reg', 'random_state', 'numeric_mode', 'device'),
-                 'trees_gbdt_feature_freq_init', {})
+        register(cls, fields['_TREES'], fields['_TREES_CONTEXT'], row[0], row[1], {})
+        plan = registry[cls]
+        plan['member_only'] = True
+        plan['initial_fields'] = {}
+        plan['keywords'] = {'fit': row[2]} if row[2] else {}
+        waiting.remove(cls)
+
+
+def _connect_host_tree_members(registry, register, waiting):
+    # glue: import-time class metadata. 7. The saved-model classes HostForest (mark (14, 2)) and HostGBDT (mark
+    # (16, 5)) (lane mf-hostent5): PREDICT-ONLY member kinds (core/forest_member_run.mojo, core/gbdt_member.mojo),
+    # whose fitted state is imported from their own fields (`_mojolearn_member_predict_only`). They have no fit
+    # and a constructor that takes the saved arrays, so `_derive_member` cannot read them: registered as
+    # MEMBER-ONLY plans with no constructor parameters (a clone is never built: nothing fits them) and the tree
+    # owner's entry and context (the trees bridge's, which every tree class shares), no method recipes.
+    for cls in tuple(waiting):  # glue: the classes the scan above left waiting, once per connect
+        own = vars(cls)
+        if own.get('_mojolearn_member_predict_only') is not True:
+            continue
+        if own.get('_mojolearn_member') not in ((14, 2), (16, 5)):
+            continue
+        from . import _native_trees_bridge
+        entry, trees = _native_trees_bridge.connect()
+        register(cls, entry, trees, (), None, {})
         plan = registry[cls]
         plan['member_only'] = True
         plan['initial_fields'] = {}

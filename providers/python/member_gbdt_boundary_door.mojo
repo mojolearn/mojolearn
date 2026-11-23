@@ -7,16 +7,18 @@ Published classes: `GradientBoostingClassifier` (kind 0),
 `GradientBoostingRegressor` (kind 2) and, since lane mf-meta5,
 `ExperimentalTwoLevelFeatureFreq` (kind 3: its own fit, `xg_feature_freq_fit`
 after the door's checks; its settings and source columns read here as its fit
-door reads them; PACK `_feature_freq_pack`, the door's `_fitted_text`). The adapters (kinds 0 and 2) are
+door reads them; PACK `_text_model_pack`, the door's `_fitted_text`), since lane mf-hostent5
+`OrderedRMSE` (kind 4: its own fit, `xg_ordered_fit` after the door's checks; its five settings read here
+after the door's `_ordered_options`; its required `permutation` from a caller's fit parameters,
+`gbdt_member_fit_params`, as typed int64 words in `call.permutation`; PACK `_text_model_pack`) and
+`HostGBDT` (kind 5: a saved model, predict-only, its state imported from its own fields by
+`gbdt_member_state` and predicted on the host gbdt image, `_host_admit`). The adapters (kinds 0 and 2) are
 their inner learner: the admission builds the learner their fit builds
 (`adapter_member_learner`, a new object; the adapter is only read) and
 takes ITS config, table and route, so the member fits exactly the learner's
 request; the pack writes one learner (`_learner_`, packed from the member
 state) and the adapter's copies of its attributes, as the adapter's fit
-door writes them. Not published: `OrderedRMSE` (no mark; its own door):
-its fit is a second algorithm, not a config word (XG_ORDERED_FIT, five
-settings, an ordered RMSE booster of its own), and it needs a per-fit
-`permutation` argument that no member call carries.
+door writes them.
 
   * `gbdt_member_admit` (UNPACK, once per member): the fit's own option
     checks (`gbdt_check_option_tables`) and the typed config
@@ -72,10 +74,12 @@ from bindings.py_balanced import py_call, py_get, py_item, py_setitem, py_fields
 from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import classical_view, admitted_vector
 from bindings.trees_keys_unpack import trees_keys
-from bindings.trees_route_boundary_door import trees_route_context
+from bindings.trees_route_boundary_door import trees_route_context, trees_cpu_context, _process_cpu_only
 from bindings.trees_public_gbdt_door import (
     gbdt_table, gbdt_entry_of, _field, _repr, _real_setting, _int, _source_columns, _fitted_text,
+    _ordered_options, _checked_weights, ordered_permutation_ids,
 )
+from bindings.trees_public_inputs_door import trees_table
 from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.trees_public_gbdt_fit_door import (
@@ -95,7 +99,7 @@ from bindings.native_typed_context_pack import native_typed_context
 from bindings.classifier_public_lifecycle_door import _public_labels
 from bindings.member_owner_unpack import member_labels_take
 from gbdt.fit_calls import xg_numeric_mode
-from bindings.gbdt_config_run import gbdt_config_words
+from bindings.gbdt_config_run import GbdtConfig, gbdt_config_words
 from gbdt.fit_request import gbdt_string_at
 from core.entry_table import entry_ref_mode, entry_ref_vendor
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
@@ -141,6 +145,28 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
             extra.append(Float64(sources[i]))
         extra.append(Float64(len(sources)))
         return _learner_admit(model, 3.0, trees_route_context(model, context), owner, extra^)
+    if kind == 4:
+        # OrderedRMSE (lane mf-hostent5; core/gbdt_member.mojo kind 4): its fit door's settings checks
+        # (`_ordered_options`, in its words), then the booster's admission over its own fields plus the five
+        # settings as `ordered_rmse_unpack` reads them, before the feature-list tail.
+        if name != "OrderedRMSE":
+            return False
+        var own = py_fields(model)
+        var nk = trees_keys()
+        var run = trees_route_context(model, context)
+        _ordered_options(own, model, run)
+        var extra: List[Float64] = [
+            Float64(_int(_field(own, model, nk[].k_n_estimators, "n_estimators"))),
+            Float64(_int(_field(own, model, nk[].k_max_depth, "max_depth"))),
+            Float64(_int(_field(own, model, nk[].k_border_count, "border_count"))),
+            _real_setting(own, model, nk[].k_learning_rate, "learning_rate"),
+            _real_setting(own, model, nk[].k_l2_leaf_reg, "l2_leaf_reg"),
+        ]
+        return _learner_admit(model, 4.0, run, owner, extra^)
+    if kind == 5:
+        if name != "HostGBDT":
+            return False
+        return _host_admit(model, context, owner)
     if (kind != 0 and kind != 2) or name != _adapter_name(kind):
         return False
     # The adapter's typed run context, as its lifecycle door hands its fit.
@@ -152,6 +178,38 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
     if code != (0 if mode == "fast" else 1):
         raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
     return _learner_admit(learner, Float64(kind), native, owner, List[Float64]())
+
+
+def _host_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """UNPACK of a HostGBDT (kind 5, lane mf-hostent5): a saved model that predicts on the CPU, so its route is
+    the host image of the identical tier whatever device its file recorded (the CPU run context of a GPU
+    installation, `trees_cpu_context`; the connection context of a CPU-only one), as HostGBDT's own predict runs
+    on the host binding. NEW's config is a GradientBoosting config carrying only the saved `loss` (the member's
+    predict and proba read the loss and the model text, nothing else of a config). Its fitted state is imported
+    by `gbdt_member_state` from its own fields."""
+    var own = py_fields(model)
+    var nk = trees_keys()
+    var loss = py_get(own, nk[].k_loss)
+    if loss is None or py_get(own, nk[].k_model_) is None:
+        return False
+    var run = context if _process_cpu_only(context) else trees_cpu_context(context)
+    var table = trees_table(run, "identical", "_mojolearn_gbdt")
+    var entry = gbdt_entry_of(table)
+    var vendor = entry_ref_vendor(entry)
+    var route = DeviceRoute(DEVICE_CPU if vendor == 0 else DEVICE_GPU)
+    route.mode = entry_ref_mode(entry)
+    route.vendor = vendor
+    route.entry = entry
+    owner.plan.route = route
+    var config = GbdtConfig()
+    config.loss = String(py=loss)
+    var words: List[Float64] = [5.0]
+    words.extend(gbdt_config_words(config))
+    words.append(0.0)  # the feature-list tail: no cat_features (the category map is the imported block)
+    words.append(0.0)
+    owner.plan.params = words^
+    owner.pins = Python.tuple(table, run)
+    return True
 
 
 def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut owner: MemberOwner,
@@ -387,6 +445,8 @@ def _carried_keys(fit_params: PythonObject, kind: Int, b: PythonObject) raises -
             continue
         if kind == 1 and (name == "group_id" or name == "subgroup_id" or name == "pairs" or name == "pairs_weight"):
             continue
+        if kind == 4 and name == "permutation":
+            continue
         return False
     return True
 
@@ -420,9 +480,13 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
     fit's categorical columns as the fit door admits it (`_eval_x_cats`), its
     keys handed to the member, which applies the fit's category map as the
     door does; a classifier adapter over more than two classes is refused at
-    the caller's encode (`gbdt_member_label_check`). Not admitted (the fit
-    door keeps them, answering in its words): a key the kind's fit does not
-    take, a cat_features index outside X."""
+    the caller's encode (`gbdt_member_label_check`). OrderedRMSE (kind 4,
+    lane mf-hostent5), as `ordered_rmse_unpack`: `permutation` through the
+    door's admission (`ordered_permutation_ids`: its element checks, then
+    int64 row ids, held in `pins`; the bijection over the fit's rows is the
+    member fit's `gbdt_ordered_order`), then sample_weight (`_checked_weights`).
+    Not admitted (the fit door keeps them, answering in its words): a key the
+    kind's fit does not take, a cat_features index outside X."""
     var b = native_loaded_module("builtins")
     var nk = trees_keys()
     var got = GbdtMemberFitParams()
@@ -446,7 +510,7 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
         if len(cat_columns) == 0:
             return got^  # an index outside X: the fit door refuses it at its X, in its words
     var run: PythonObject
-    if kind == 1:
+    if kind == 1 or kind == 4:
         run = trees_route_context(model, context)
     else:
         run = native_typed_context(trees_route_context(model, context), False, True)
@@ -457,6 +521,22 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
     var eval_y = PythonObject(None)
     var group_holder = PythonObject(None)
     var pair_holders = PythonObject(None)
+    if kind == 4:
+        var order = PythonObject(None)
+        var permutation = py_get(fit_params, PythonObject("permutation"))
+        if permutation is not None:
+            order = ordered_permutation_ids(permutation, run)
+            extras.permutation = trees_address(order)
+            if Int(py=order.size) != n:
+                raise Error("mojolearn: permutation must be an integer bijection of row ids")
+        if sample_weight is not None:
+            var w = _checked_weights(sample_weight, n, True, run)
+            weights = w.array
+            extras.weights = w.address
+        got.pins = Python.tuple(weights, order)
+        got.extras = extras^
+        got.admitted = True
+        return got^
     if kind == 1:
         if sample_weight is not None:
             var w = admit_weight_words(sample_weight, n, run)
@@ -590,15 +670,21 @@ def gbdt_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
         _adapter_pack(model, context, b, plan, state)
         return
     if plan.kind == 3:
-        _feature_freq_pack(model, plan, state)
+        _text_model_pack(model, plan, state, PythonObject(0))
         return
+    if plan.kind == 4:
+        # OrderedRMSE: its fit door's PACK (`ordered_rmse_fit`: best_iteration_ None).
+        _text_model_pack(model, plan, state, PythonObject(None))
+        return
+    if plan.kind == 5:
+        raise Error("AttributeError: 'HostGBDT' object has no attribute 'fit'")
     _learner_pack(model, context, plan, state)
 
 
-def _feature_freq_pack(model: PythonObject, plan: MemberPlan, state: Int) raises:
-    """PACK of an ExperimentalTwoLevelFeatureFreq state: what its fit door's PACK writes (`model_`, then
-    `_fitted_text`: n_features_in_, approx_dim_ 1, n_classes_ None, bias_ 0, best_iteration_ 0,
-    stopped_early_ False, no curves), the same body."""
+def _text_model_pack(model: PythonObject, plan: MemberPlan, state: Int, iteration: PythonObject) raises:
+    """PACK of an ExperimentalTwoLevelFeatureFreq or OrderedRMSE state: what its fit door's PACK writes
+    (`model_`, then `_fitted_text`: n_features_in_, approx_dim_ 1, n_classes_ None, bias_ 0, best_iteration_
+    `iteration` (FeatureFreq 0, OrderedRMSE None), stopped_early_ False, no curves), the same body."""
     var nk = trees_keys()
     var own = py_fields(model)
     var call = MemberCall(plan.route, state)
@@ -611,7 +697,7 @@ def _feature_freq_pack(model: PythonObject, plan: MemberPlan, state: Int) raises
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var text = gbdt_string_at(call.dst.data, nbytes)
     py_setitem(own, nk[].k_model_, PythonObject(text))
-    _fitted_text(own, model, features, PythonObject(0))
+    _fitted_text(own, model, features, iteration)
 
 
 def _adapter_pack(model: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan, state: Int) raises:
@@ -733,12 +819,15 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
     unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(packed.unsafe_ptr())),
                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(text.unsafe_ptr())), count=nbytes)
     var curve = py_get(own, nk[].k_loss_curve_)
-    # An ExperimentalTwoLevelFeatureFreq model has no curves and no learning_rate_ (its fit door writes
-    # neither): an empty learn curve and its learning_rate setting (lane mf-meta5).
-    var feature_freq = plan.kind == 3
+    # An ExperimentalTwoLevelFeatureFreq or OrderedRMSE model has no curves and no learning_rate_ (its fit
+    # door writes neither): an empty learn curve and its learning_rate setting (lanes mf-meta5, mf-hostent5).
+    # A HostGBDT (a saved model, lane mf-hostent5) has neither curves nor a rate nor the fit's scalars: its
+    # model text, dimensions, bias and category map are what its predict reads.
+    var feature_freq = plan.kind == 3 or plan.kind == 4
+    var host = plan.kind == 5
     var no_curve = List[Float64](length=1, fill=0.0)
     var curve_view = PythonObject(None)
-    if not feature_freq or curve is not None:
+    if not (feature_freq or host) or curve is not None:
         curve_view = classical_view(curve, context, "gbdt loss curve")
     var test_curve = py_get(own, nk[].k_test_loss_curve_)
     var test_view = PythonObject(None)
@@ -746,11 +835,17 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         test_view = classical_view(test_curve, context, "gbdt test loss curve")
     var classes_source = py_get(own, nk[].k_n_classes_)
     var boosting = py_get(own, nk[].k_boosting_type_)
+    var best_source = py_get(own, nk[].k_best_iteration_)
+    var stopped_source = py_get(own, nk[].k_stopped_early_)
+    var rate = 0.0
+    if not host:
+        rate = Float64(py=py_item(own, nk[].k_learning_rate if feature_freq else nk[].k_learning_rate_))
     var scalars: List[Float64] = [
         Float64(py=py_item(own, nk[].k_n_features_in_)), Float64(py=py_item(own, nk[].k_approx_dim_)),
         0.0 if classes_source is None else Float64(py=classes_source), Float64(py=py_item(own, nk[].k_bias_)),
-        Float64(py=py_item(own, nk[].k_best_iteration_)), 1.0 if Bool(py=py_item(own, nk[].k_stopped_early_)) else 0.0,
-        Float64(py=py_item(own, nk[].k_learning_rate if feature_freq else nk[].k_learning_rate_)), Float64(nbytes),
+        0.0 if best_source is None else Float64(py=best_source),
+        1.0 if stopped_source is not None and Bool(py=stopped_source) else 0.0,
+        rate, Float64(nbytes),
         1.0 if boosting is not None and Bool(py=boosting == PythonObject("Ordered")) else 0.0]
     var call = member_new(plan)
     try:

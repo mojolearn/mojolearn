@@ -1359,6 +1359,10 @@ class OrderedRMSE(GradientBoosting):
         requires a GPU installation. Other values raise ``ValueError``.
     """
 
+    #: A member of a meta-estimator (core/gbdt_member.mojo: family 16, kind 4, its own fit over the
+    #: caller's `permutation`).
+    _mojolearn_member = (16, 4)
+
     def __init__(
         self, n_estimators=100, max_depth=6, learning_rate=0.03,
         l2_leaf_reg=3.0, border_count=128, *, numeric_mode=None, device=None,

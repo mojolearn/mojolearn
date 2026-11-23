@@ -16,6 +16,7 @@ from std.os import getenv
 from std.memory import bitcast
 from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
 from core.host_parallel import host_parallelize
+from core.host_finite_scan import host_all_finite_f32
 
 comptime GBDT_F32_MAX = 3.4028234663852886e+38
 
@@ -315,6 +316,54 @@ def gbdt_feature_freq_check(xcm: Int, n: Int, d: Int, sources: List[Int]) raises
         if status[f] == _FF_CONSTANT:
             raise Error("mojolearn: experimental FeatureFreq numeric columns "
                         + "must vary; column " + String(f) + " is constant")
+
+
+#: The OrderedRMSE fit's permutation refusal (the door's words).
+comptime GBDT_ORDERED_BIJECTION = "mojolearn: permutation must be an integer bijection of row ids"
+
+
+def _finite_words(x: Int, count: Int) -> Bool:
+    """The `count` float32 words at `x` are finite: the one host scan (SIMD tasks across cores)."""
+    if count <= 0:
+        return True
+    return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x), count)
+
+
+def gbdt_ordered_rows_check(x: Int, n: Int, d: Int) raises:
+    """THE ONE BODY of the OrderedRMSE fit's X checks (lane mf-hostent5; the door's `ordered_rmse_unpack` and
+    the Gbdt member's OrderedRMSE kind both run it, after their admission of X as float32 words): at least 4
+    rows (at most 2^32 - 1, the uint32 row ids) and one feature, then every value finite (one parallel scan;
+    the layout of X does not matter to it)."""
+    if n < 4 or n > 4294967295 or d < 1:
+        raise Error("mojolearn: ordered RMSE requires >=4 rows and >=1 feature")
+    if not _finite_words(x, n * d):
+        raise Error("mojolearn: ordered RMSE X must be finite")
+
+
+def gbdt_ordered_target_check(y: Int, n: Int) raises:
+    """THE ONE BODY of the OrderedRMSE fit's target check (door and member): the `n` float32 targets finite."""
+    if not _finite_words(y, n):
+        raise Error("mojolearn: y must be finite")
+
+
+def gbdt_ordered_order(ids: Int, m: Int, n: Int) raises -> List[UInt32]:
+    """THE ONE BODY of the OrderedRMSE fit's permutation check and cast (door and member): the `m` int64 row
+    ids at `ids` must be a bijection of 0 .. n-1 (`m == n`, each in range, none repeated; the door's
+    `base_check_indices_i64` test), returned as the uint32 order the fit reads (the door's `trees_cast`
+    <i8 -> <u4 of the same values). Refused in the door's words (`GBDT_ORDERED_BIJECTION`). SERIAL BY NATURE:
+    the repeat test reads the marks of every earlier id (one pass over n words, as the helper's)."""
+    if m != n or n < 1:
+        raise Error(GBDT_ORDERED_BIJECTION)
+    var src = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ids)
+    var seen = List[Bool](length=n, fill=False)
+    var order = List[UInt32](length=n, fill=UInt32(0))
+    for i in range(n):  # native data loop (the permutation, one pass: the repeat marks)
+        var v = Int(src[i])
+        if v < 0 or v >= n or seen[v]:
+            raise Error(GBDT_ORDERED_BIJECTION)
+        seen[v] = True
+        order[i] = UInt32(v)
+    return order^
 
 
 def gbdt_weights_check(w: Int, n: Int) raises:
