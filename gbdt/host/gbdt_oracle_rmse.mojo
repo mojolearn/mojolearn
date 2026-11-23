@@ -112,17 +112,24 @@ struct GbdtRmseHostFit(Movable):
 # ===========================================================================
 
 
-def _rmse_starting_approx(targets: List[Float32], n_rows: Int) raises -> Float64:
-    """`calculate_weighted_target_average` on the unweighted branch, through
-    the RMSE arm of `calc_one_dimensional_optimum_const_approx`
-    (`optimal_const_for_loss.mojo`): `summary_weight` is the exact row
-    count, the target sum is `bfa_tree_sum`'s fixed tree in Float64, the
-    quotient narrows to Float32 at the return and widens back."""
+def _rmse_starting_approx(
+    targets: List[Float32], n_rows: Int,
+    weights: List[Float32] = List[Float32](),
+) raises -> Float64:
+    """`calculate_weighted_target_average` through the RMSE arm of
+    `calc_one_dimensional_optimum_const_approx` (`optimal_const_for_loss.
+    mojo`): unweighted (`weights` empty), `summary_weight` is the exact row
+    count; weighted, the weight sum and the weighted target sum (the
+    device's `optimum_const_approx_device` arms). The sums are `bfa_tree_sum`'s
+    fixed tree in Float64, the quotient narrows to Float32 at the return and
+    widens back."""
     if n_rows == 0:
         raise Error("optimal const approx: empty target")
     if len(targets) != n_rows:
         raise Error("optimal const approx: " + String(len(targets)) + " targets for " + String(n_rows) + " rows")
-    # the shared unweighted arm: `bfa_tree_sum`'s fold order, the device's
+    # the shared arms: `bfa_tree_sum`'s fold order, the device's
+    if len(weights) > 0:
+        return Float64(calculate_weighted_target_average(targets, weights, True))
     return Float64(
         calculate_weighted_target_average(targets, List[Float32](), False)
     )

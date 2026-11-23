@@ -241,9 +241,11 @@ from gbdt.targets.kernel.pointwise_targets import (
     deterministic_sum_lanes_kernel,
     launch_approximate,
     pinned_block_sum,
+)
+from gbdt.targets.pointwise_bodies import (
     routed_exp,
-    target_der,
-    target_der2,
+    weighted_der,
+    weighted_der2,
 )
 
 comptime ORDERED_BLOCK = 256
@@ -1892,8 +1894,8 @@ def _ord_point[objective: Int](
         )
     else:
         return SIMD[DType.float32, 2](
-            ftz(weight * target_der[objective](relev, val, alpha)),
-            ftz(weight * target_der2[objective](relev, val, alpha)),
+            weighted_der[objective](relev, val, alpha, weight),
+            weighted_der2[objective](relev, val, alpha, weight),
         )
 
 

@@ -130,6 +130,8 @@ from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     pinned_block_sum,
+)
+from gbdt.targets.pointwise_bodies import (
     routed_exp,
 )
 from gbdt.targets.kernel.query_rmse import (

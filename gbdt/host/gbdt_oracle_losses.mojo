@@ -84,6 +84,24 @@ from checks.numerics import (
     identical_pow,
 )
 from core.host_parallel import host_parallelize
+from gbdt.targets.pointwise_bodies import (
+    BODY_OBJ_EXPECTILE,
+    BODY_OBJ_HUBER,
+    BODY_OBJ_LOGLINQUANTILE,
+    BODY_OBJ_LQ,
+    BODY_OBJ_MAE,
+    BODY_OBJ_MAPE,
+    BODY_OBJ_POISSON,
+    BODY_OBJ_QUANTILE,
+    BODY_OBJ_RMSE,
+    BODY_OBJ_TWEEDIE,
+    target_der,
+    target_der2,
+    target_score,
+    weighted_der,
+    weighted_der2,
+    weighted_score,
+)
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import build_layout
@@ -162,19 +180,20 @@ from gbdt.host.gbdt_oracle import (
 )
 
 
-#: The objective codes (`gbdt/targets/kernel/pointwise_targets.mojo:45-56`).
-comptime GBDT_OBJ_RMSE = 0
+#: The objective codes (`gbdt/targets/kernel/pointwise_targets.mojo`'s
+#: `OBJECTIVE_*`; the pointwise ones are the body module's `BODY_OBJ_*`).
+comptime GBDT_OBJ_RMSE = BODY_OBJ_RMSE
 comptime GBDT_OBJ_LOGLOSS = 1
 comptime GBDT_OBJ_CROSSENTROPY = 2
-comptime GBDT_OBJ_QUANTILE = 3
-comptime GBDT_OBJ_MAE = 4
-comptime GBDT_OBJ_LOGLINQUANTILE = 5
-comptime GBDT_OBJ_MAPE = 6
-comptime GBDT_OBJ_POISSON = 7
-comptime GBDT_OBJ_LQ = 8
-comptime GBDT_OBJ_EXPECTILE = 9
-comptime GBDT_OBJ_TWEEDIE = 10
-comptime GBDT_OBJ_HUBER = 11
+comptime GBDT_OBJ_QUANTILE = BODY_OBJ_QUANTILE
+comptime GBDT_OBJ_MAE = BODY_OBJ_MAE
+comptime GBDT_OBJ_LOGLINQUANTILE = BODY_OBJ_LOGLINQUANTILE
+comptime GBDT_OBJ_MAPE = BODY_OBJ_MAPE
+comptime GBDT_OBJ_POISSON = BODY_OBJ_POISSON
+comptime GBDT_OBJ_LQ = BODY_OBJ_LQ
+comptime GBDT_OBJ_EXPECTILE = BODY_OBJ_EXPECTILE
+comptime GBDT_OBJ_TWEEDIE = BODY_OBJ_TWEEDIE
+comptime GBDT_OBJ_HUBER = BODY_OBJ_HUBER
 #: `OBJECTIVE_QUERY_RMSE` (`pointwise_targets.mojo`), the querywise target of
 #: `gbdt/host/gbdt_oracle_query.mojo`
 comptime GBDT_OBJ_QUERY_RMSE = 14
@@ -215,125 +234,159 @@ struct GbdtHostLoss(ImplicitlyCopyable, Movable):
     var border: Float32
 
 
-# ===========================================================================
-# THE OBJECTIVES (`pointwise_targets.mojo:191-418`)
-# ===========================================================================
-
-
-def _target_sign(x: Float32) -> Float32:
-    return Float32(1.0) if x > Float32(0.0) else Float32(-1.0)
+# THE OBJECTIVES: `gbdt/targets/pointwise_bodies.mojo`, the bodies the device
+# kernels call (lane gbdt-gaps, 2026-11-23: this file carried its own copy of
+# `target_score` / `target_der` / `target_der2` until then). The host picks the
+# objective at run time, so each body is reached through one switch here.
 
 
 def _target_score(objective: Int, t: Float32, p: Float32, alpha: Float32) -> Float32:
-    """`target_score` (`pointwise_targets.mojo:203-265`)."""
+    """`target_score[objective]` for a run-time objective."""
     if objective == GBDT_OBJ_RMSE:
-        return (t - p) * (t - p)
-    elif objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_MAE:
-        var val = t - p
-        var multiplier = alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
-        return multiplier * val
+        return target_score[BODY_OBJ_RMSE](t, p, alpha)
+    elif objective == GBDT_OBJ_QUANTILE:
+        return target_score[BODY_OBJ_QUANTILE](t, p, alpha)
+    elif objective == GBDT_OBJ_MAE:
+        return target_score[BODY_OBJ_MAE](t, p, alpha)
     elif objective == GBDT_OBJ_LOGLINQUANTILE:
-        var val = t - identical_exp(p)
-        var multiplier = alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
-        return val * multiplier
+        return target_score[BODY_OBJ_LOGLINQUANTILE](t, p, alpha)
     elif objective == GBDT_OBJ_MAPE:
-        return abs(t - p) / max(Float32(1.0), abs(t))
+        return target_score[BODY_OBJ_MAPE](t, p, alpha)
     elif objective == GBDT_OBJ_POISSON:
-        # `exp(p) - t * p`, CONTRACTED: the device columns fuse the
-        # product into the subtraction (IDENTITY_PATHS row 9: Metal through
-        # MAX contracts by default), measured on gbdt-parametric-losses
-        return identical_mul_add(-t, p, identical_exp(p))
+        return target_score[BODY_OBJ_POISSON](t, p, alpha)
     elif objective == GBDT_OBJ_LQ:
-        var abs_loss = abs(t - p)
-        return identical_pow(abs_loss, alpha)
+        return target_score[BODY_OBJ_LQ](t, p, alpha)
     elif objective == GBDT_OBJ_EXPECTILE:
-        var val = t - p
-        var multiplier = alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
-        return multiplier * val * val
+        return target_score[BODY_OBJ_EXPECTILE](t, p, alpha)
     elif objective == GBDT_OBJ_TWEEDIE:
-        var val = -t * identical_exp((Float32(1.0) - alpha) * p) / (Float32(1.0) - alpha)
-        var delta = identical_exp((Float32(2.0) - alpha) * p) / (Float32(2.0) - alpha)
-        return val + delta
+        return target_score[BODY_OBJ_TWEEDIE](t, p, alpha)
     elif objective == GBDT_OBJ_HUBER:
-        var mismatch = abs(t - p)
-        if mismatch < alpha:
-            return Float32(0.5) * mismatch * mismatch
-        # `mismatch - 0.5 * alpha` in ONE rounding, as the default build fused it
-        return alpha * identical_mul_add(Float32(-0.5), alpha, mismatch)
+        return target_score[BODY_OBJ_HUBER](t, p, alpha)
     return Float32(0.0)
 
 
 def _target_der(objective: Int, t: Float32, p: Float32, alpha: Float32) -> Float32:
-    """`target_der` (`pointwise_targets.mojo:269-327`)."""
+    """`target_der[objective]` for a run-time objective."""
     if objective == GBDT_OBJ_RMSE:
-        return t - p
-    elif objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_MAE:
-        var val = t - p
-        return alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
+        return target_der[BODY_OBJ_RMSE](t, p, alpha)
+    elif objective == GBDT_OBJ_QUANTILE:
+        return target_der[BODY_OBJ_QUANTILE](t, p, alpha)
+    elif objective == GBDT_OBJ_MAE:
+        return target_der[BODY_OBJ_MAE](t, p, alpha)
     elif objective == GBDT_OBJ_LOGLINQUANTILE:
-        var exp_pred = identical_exp(p)
-        if t - exp_pred > Float32(0.0):
-            return alpha * exp_pred
-        return -(Float32(1.0) - alpha) * exp_pred
+        return target_der[BODY_OBJ_LOGLINQUANTILE](t, p, alpha)
     elif objective == GBDT_OBJ_MAPE:
-        if t - p > Float32(0.0):
-            return Float32(1.0) / max(Float32(1.0), abs(t))
-        return Float32(-1.0) / max(Float32(1.0), abs(t))
+        return target_der[BODY_OBJ_MAPE](t, p, alpha)
     elif objective == GBDT_OBJ_POISSON:
-        return t - identical_exp(p)
+        return target_der[BODY_OBJ_POISSON](t, p, alpha)
     elif objective == GBDT_OBJ_LQ:
-        var abs_loss = abs(t - p)
-        var abs_loss_q = identical_pow(abs_loss, alpha - Float32(1.0))
-        return alpha * _target_sign(t - p) * abs_loss_q
+        return target_der[BODY_OBJ_LQ](t, p, alpha)
     elif objective == GBDT_OBJ_EXPECTILE:
-        var val = t - p
-        var multiplier = alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
-        return Float32(2.0) * multiplier * val
+        return target_der[BODY_OBJ_EXPECTILE](t, p, alpha)
     elif objective == GBDT_OBJ_TWEEDIE:
-        # `t * e1 - e2` in ONE rounding, as the default (contract=fast)
-        # build fused it on every backend (lane/explicit-fma-contract-proof)
-        var e1 = identical_exp((Float32(1.0) - alpha) * p)
-        var delta = identical_exp((Float32(2.0) - alpha) * p)
-        return identical_mul_add(t, e1, -delta)
+        return target_der[BODY_OBJ_TWEEDIE](t, p, alpha)
     elif objective == GBDT_OBJ_HUBER:
-        var diff = t - p
-        if abs(diff) < alpha:
-            return diff
-        return alpha if diff > Float32(0.0) else -alpha
+        return target_der[BODY_OBJ_HUBER](t, p, alpha)
     return Float32(0.0)
 
 
 def _target_der2(objective: Int, t: Float32, p: Float32, alpha: Float32) -> Float32:
-    """`target_der2` (`pointwise_targets.mojo:331-413`)."""
+    """`target_der2[objective]` for a run-time objective."""
     if objective == GBDT_OBJ_RMSE:
-        return Float32(1.0)
-    elif (
-        objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_MAE
-        or objective == GBDT_OBJ_LOGLINQUANTILE or objective == GBDT_OBJ_MAPE
-    ):
-        return Float32(0.0)
+        return target_der2[BODY_OBJ_RMSE](t, p, alpha)
+    elif objective == GBDT_OBJ_QUANTILE:
+        return target_der2[BODY_OBJ_QUANTILE](t, p, alpha)
+    elif objective == GBDT_OBJ_MAE:
+        return target_der2[BODY_OBJ_MAE](t, p, alpha)
+    elif objective == GBDT_OBJ_LOGLINQUANTILE:
+        return target_der2[BODY_OBJ_LOGLINQUANTILE](t, p, alpha)
+    elif objective == GBDT_OBJ_MAPE:
+        return target_der2[BODY_OBJ_MAPE](t, p, alpha)
     elif objective == GBDT_OBJ_POISSON:
-        return identical_exp(p)
+        return target_der2[BODY_OBJ_POISSON](t, p, alpha)
     elif objective == GBDT_OBJ_LQ:
-        var abs_loss = abs(t - p)
-        if alpha >= Float32(2.0):
-            return alpha * (alpha - Float32(1.0)) * identical_pow(abs_loss, alpha - Float32(2.0))
-        return Float32(1.0)
+        return target_der2[BODY_OBJ_LQ](t, p, alpha)
     elif objective == GBDT_OBJ_EXPECTILE:
-        var val = t - p
-        var multiplier = alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
-        return Float32(2.0) * multiplier
+        return target_der2[BODY_OBJ_EXPECTILE](t, p, alpha)
     elif objective == GBDT_OBJ_TWEEDIE:
-        # `e2 * (2 - alpha) - der2` in ONE rounding: the default build fused
-        # the SECOND product (delta's) into the subtraction
-        var der2 = t * identical_exp((Float32(1.0) - alpha) * p) * (Float32(1.0) - alpha)
-        var e2 = identical_exp((Float32(2.0) - alpha) * p)
-        return identical_mul_add(e2, Float32(2.0) - alpha, -der2)
+        return target_der2[BODY_OBJ_TWEEDIE](t, p, alpha)
     elif objective == GBDT_OBJ_HUBER:
-        var diff = t - p
-        if abs(diff) < alpha:
-            return Float32(1.0)
-        return Float32(0.0)
+        return target_der2[BODY_OBJ_HUBER](t, p, alpha)
+    return Float32(0.0)
+
+
+def _weighted_der(objective: Int, t: Float32, p: Float32, alpha: Float32, weight: Float32) -> Float32:
+    """`weighted_der[objective]` for a run-time objective."""
+    if objective == GBDT_OBJ_RMSE:
+        return weighted_der[BODY_OBJ_RMSE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_QUANTILE:
+        return weighted_der[BODY_OBJ_QUANTILE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_MAE:
+        return weighted_der[BODY_OBJ_MAE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_LOGLINQUANTILE:
+        return weighted_der[BODY_OBJ_LOGLINQUANTILE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_MAPE:
+        return weighted_der[BODY_OBJ_MAPE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_POISSON:
+        return weighted_der[BODY_OBJ_POISSON](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_LQ:
+        return weighted_der[BODY_OBJ_LQ](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_EXPECTILE:
+        return weighted_der[BODY_OBJ_EXPECTILE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_TWEEDIE:
+        return weighted_der[BODY_OBJ_TWEEDIE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_HUBER:
+        return weighted_der[BODY_OBJ_HUBER](t, p, alpha, weight)
+    return Float32(0.0)
+
+
+def _weighted_der2(objective: Int, t: Float32, p: Float32, alpha: Float32, weight: Float32) -> Float32:
+    """`weighted_der2[objective]` for a run-time objective."""
+    if objective == GBDT_OBJ_RMSE:
+        return weighted_der2[BODY_OBJ_RMSE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_QUANTILE:
+        return weighted_der2[BODY_OBJ_QUANTILE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_MAE:
+        return weighted_der2[BODY_OBJ_MAE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_LOGLINQUANTILE:
+        return weighted_der2[BODY_OBJ_LOGLINQUANTILE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_MAPE:
+        return weighted_der2[BODY_OBJ_MAPE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_POISSON:
+        return weighted_der2[BODY_OBJ_POISSON](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_LQ:
+        return weighted_der2[BODY_OBJ_LQ](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_EXPECTILE:
+        return weighted_der2[BODY_OBJ_EXPECTILE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_TWEEDIE:
+        return weighted_der2[BODY_OBJ_TWEEDIE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_HUBER:
+        return weighted_der2[BODY_OBJ_HUBER](t, p, alpha, weight)
+    return Float32(0.0)
+
+
+def _weighted_score(objective: Int, t: Float32, p: Float32, alpha: Float32, weight: Float32) -> Float32:
+    """`weighted_score[objective]` for a run-time objective."""
+    if objective == GBDT_OBJ_RMSE:
+        return weighted_score[BODY_OBJ_RMSE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_QUANTILE:
+        return weighted_score[BODY_OBJ_QUANTILE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_MAE:
+        return weighted_score[BODY_OBJ_MAE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_LOGLINQUANTILE:
+        return weighted_score[BODY_OBJ_LOGLINQUANTILE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_MAPE:
+        return weighted_score[BODY_OBJ_MAPE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_POISSON:
+        return weighted_score[BODY_OBJ_POISSON](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_LQ:
+        return weighted_score[BODY_OBJ_LQ](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_EXPECTILE:
+        return weighted_score[BODY_OBJ_EXPECTILE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_TWEEDIE:
+        return weighted_score[BODY_OBJ_TWEEDIE](t, p, alpha, weight)
+    elif objective == GBDT_OBJ_HUBER:
+        return weighted_score[BODY_OBJ_HUBER](t, p, alpha, weight)
     return Float32(0.0)
 
 
@@ -349,12 +402,15 @@ struct _LossRow(ImplicitlyCopyable, Movable):
     var score: Float32
 
 
-def _loss_row(objective: Int, t: Float32, p: Float32, alpha: Float32) -> _LossRow:
-    """One in-range thread of the kernel the objective reaches, unit weight:
+def _loss_row(
+    objective: Int, t: Float32, p: Float32, alpha: Float32,
+    weight: Float32 = Float32(1.0),
+) -> _LossRow:
+    """One in-range thread of the kernel the objective reaches at the row's
+    weight (unit unless the fit carries row weights):
     `pointwise_target_kernel` (`:553-663`) or, for CrossEntropy and Logloss,
     `cross_entropy_kernel[has_border]` (`:947-1054`; `alpha` carries
     Logloss's border)."""
-    var weight = Float32(1.0)
     if objective == GBDT_OBJ_CROSSENTROPY or objective == GBDT_OBJ_LOGLOSS:
         var exp_val = identical_exp(p)
         var prob = Float32(1.0)
@@ -374,10 +430,10 @@ def _loss_row(objective: Int, t: Float32, p: Float32, alpha: Float32) -> _LossRo
             # `c * p - log(1 + e)` in ONE rounding, as the default build fused it
             ftz(weight * scale), weight * identical_mul_add(c, p, -log_exp_val_plus_one),
         )
-    var der = ftz(weight * _target_der(objective, t, p, alpha))
+    var der = _weighted_der(objective, t, p, alpha, weight)
     return _LossRow(
-        der, abs(der), ftz(weight * _target_der2(objective, t, p, alpha)),
-        -weight * _target_score(objective, t, p, alpha),
+        der, abs(der), _weighted_der2(objective, t, p, alpha, weight),
+        _weighted_score(objective, t, p, alpha, weight),
     )
 
 
@@ -389,11 +445,13 @@ def _loss_search_pass(
     mut stats: List[Float32],
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
+    weights: List[Float32] = List[Float32](),
 ):
     """`launch_approximate[False]` with `compute_fv` and
-    `compute_magnitudes` set: plane 0 the unit weight, plane 1 the flushed
+    `compute_magnitudes` set: plane 0 the row's weight, plane 1 the flushed
     weighted derivative, one score partial and two magnitude partials per
-    256-thread block through the halving tree."""
+    256-thread block through the halving tree. `weights` empty is the unit
+    weight, otherwise the kernels' `has_weights` arm (sample weights)."""
     # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
     # one 256-thread device block owns its rows' two planes and its three
     # partials, and its halving trees are the kernel's. Blocks go round
@@ -402,16 +460,20 @@ def _loss_search_pass(
     var units = _gbdt_units(blocks, 16 * n_rows)
     var objective = loss.objective
     var alpha = loss.kernel_alpha
+    var has_weights = len(weights) > 0
     var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
     var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
     var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
     var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm alpha, imm targets_p, imm cursor_p, imm stats_p, imm fv_p, imm mag_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm alpha, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
+        var weight = Float32(1.0)
         var b = unit
         while b < blocks:
             for t in range(GBDT_MSE_BLOCK):
@@ -421,11 +483,13 @@ def _loss_search_pass(
                 s_w[t] = Float32(0.0)
                 s_g[t] = Float32(0.0)
                 if i < n_rows:
-                    var r = _loss_row(objective, targets_p[i], cursor_p[i], alpha)
-                    stats_p[i] = Float32(1.0)
+                    if has_weights:
+                        weight = weights_p[i]
+                    var r = _loss_row(objective, targets_p[i], cursor_p[i], alpha, weight)
+                    stats_p[i] = weight
                     stats_p[n_rows + i] = r.der
                     s_score[t] = r.score
-                    s_w[t] = Float32(1.0)
+                    s_w[t] = abs(weight)
                     s_g[t] = r.der_abs
             fv_p[b] = _halving_fold(s_score)
             mag_p[2 * b] = _halving_fold(s_w)
@@ -435,15 +499,18 @@ def _loss_search_pass(
     host_parallelize(score_blocks, units)
     _ = len(targets)
     _ = len(cursor)
+    _ = len(weights)
     _ = len(stats)
     _ = len(fv_partials)
     _ = len(mag_partials)
 
 
 def _loss_value(
-    loss: GbdtHostLoss, targets: List[Float32], cursor: List[Float32], n_rows: Int
+    loss: GbdtHostLoss, targets: List[Float32], cursor: List[Float32], n_rows: Int,
+    weights: List[Float32] = List[Float32](),
 ) -> Float32:
-    """The final learn loss pass, folded by `deterministic_sum_lanes_kernel[1]`."""
+    """The final learn loss pass (each row at its weight; unit when
+    `weights` is empty), folded by `deterministic_sum_lanes_kernel[1]`."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_partials = List[Float32](length=blocks, fill=Float32(0.0))
     # THE SPLIT (lane gbdt-host-par): one 256-thread device block per unit
@@ -452,12 +519,16 @@ def _loss_value(
     var units = _gbdt_units(blocks, 16 * n_rows)
     var objective = loss.objective
     var alpha = loss.kernel_alpha
+    var has_weights = len(weights) > 0
     var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
     var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm alpha, imm targets_p, imm cursor_p, imm fv_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm alpha, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm fv_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
+        var weight = Float32(1.0)
         var b = unit
         while b < blocks:
             for t in range(GBDT_MSE_BLOCK):
@@ -465,8 +536,10 @@ def _loss_value(
                 # an out-of-range thread adds 0.0 (the slab is reused)
                 s_score[t] = Float32(0.0)
                 if i < n_rows:
+                    if has_weights:
+                        weight = weights_p[i]
                     s_score[t] = _loss_row(
-                        objective, targets_p[i], cursor_p[i], alpha
+                        objective, targets_p[i], cursor_p[i], alpha, weight
                     ).score
             fv_p[b] = _halving_fold(s_score)
             b += units
@@ -474,6 +547,7 @@ def _loss_value(
     host_parallelize(score_blocks, units)
     _ = len(targets)
     _ = len(cursor)
+    _ = len(weights)
     return _deterministic_sum_lanes(fv_partials, 1, blocks)[0]
 
 
@@ -493,11 +567,14 @@ def _loss_eval(
     mut value: Float64,
     mut gradient: List[Float64],
     mut cached_der2: List[Float64],
+    g_weights: List[Float32] = List[Float32](),
 ):
     """`write_value_and_first_derivatives`' single-dimensional arm
     (`pointwise_oracle.mojo:458-573`): the estimation planes, one score
     partial per 256-thread block, `compute_partition_stats` per leaf, the
-    Hessian plus lambda, and the HOST Float32 fold of the value partials."""
+    Hessian plus lambda, and the HOST Float32 fold of the value partials.
+    `g_weights` (empty: unit) are the row weights gathered in bin order,
+    as the targets and the cursor are."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var fv = List[Float32](length=blocks, fill=Float32(0.0))
@@ -508,13 +585,17 @@ def _loss_eval(
     var units = _gbdt_units(blocks, 16 * n_rows)
     var objective = loss.objective
     var alpha = loss.kernel_alpha
+    var has_weights = len(g_weights) > 0
     var targets_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
     var cursor_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    # an empty `g_weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
     var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
     var fv_p = rebind[HostF32Ptr](fv.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm alpha, imm targets_p, imm cursor_p, imm stats_p, imm fv_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm alpha, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
+        var weight = Float32(1.0)
         var b = unit
         while b < blocks:
             for t in range(GBDT_MSE_BLOCK):
@@ -522,7 +603,9 @@ def _loss_eval(
                 # an out-of-range thread adds 0.0 (the slab is reused)
                 s_score[t] = Float32(0.0)
                 if i < n_rows:
-                    var r = _loss_row(objective, targets_p[i], cursor_p[i], alpha)
+                    if has_weights:
+                        weight = weights_p[i]
+                    var r = _loss_row(objective, targets_p[i], cursor_p[i], alpha, weight)
                     stats_p[i] = r.der
                     stats_p[n_rows + i] = r.der2
                     s_score[t] = r.score
@@ -532,6 +615,7 @@ def _loss_eval(
     host_parallelize(score_blocks, units)
     _ = len(g_target)
     _ = len(g_cursor)
+    _ = len(g_weights)
     gradient.clear()
     cached_der2.clear()
     # the leaves' two sums (`compute_partition_stats`): the (leaf, plane)
@@ -577,13 +661,19 @@ def _walker_estimate(
     pairs: Optional[HostPairs] = None,
     yeti_tasks: Optional[YetiRankTasks] = None,
     yeti_seed: UInt64 = UInt64(0),
+    g_weights: List[Float32] = List[Float32](),
+    row_weights: List[Float32] = List[Float32](),
 ) raises -> List[Float32]:
     """`newton_like_walker_estimate` with AnyImprovement
     (`descent_helpers.mojo:198-285`, `step_estimator.mojo:50-72`), the TWIN
     of `gbdt_oracle.mojo::_estimate_leaves` with the method's second
-    derivatives."""
+    derivatives. `g_weights` are the row weights in bin order (the
+    pointwise evaluation's) and `row_weights` the same weights in row order
+    (YetiRank's and QueryRMSE's, which read their groups in row order);
+    both empty at unit weight."""
     var n_leaves = len(sizes)
     var lambda_reg = Float64(l2_leaf_reg)
+    var has_row_weights = len(row_weights) > 0
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
         lambda_reg = lambda_reg + 1.0
     var iterations = loss.iterations
@@ -598,7 +688,7 @@ def _walker_estimate(
     _oracle_move_to(cur_point, current_point, bins, g_cursor, n_rows)
     if loss.objective == GBDT_OBJ_YETI_RANK:
         yeti_rank_eval(
-            targets_rows, List[Float32](), False, g_cursor, row_index,
+            targets_rows, row_weights, has_row_weights, g_cursor, row_index,
             group_sizes, yeti_tasks.value(), yeti_rng.next_uniform_l(), 10,
             Float32(0.85), offsets, sizes, n_rows, lambda_reg, cur_value,
             cur_grad, cached_der2,
@@ -616,7 +706,7 @@ def _walker_estimate(
     else:
         _loss_eval(
             loss, g_target, g_cursor, offsets, sizes, n_rows, lambda_reg,
-            cur_value, cur_grad, cached_der2,
+            cur_value, cur_grad, cached_der2, g_weights,
         )
     var cur_hess = _second_derivatives(loss.method, weights_cpu, lambda_reg, cached_der2)
     var direction = _diagonal_direction(cur_grad, cur_hess)
@@ -640,8 +730,8 @@ def _walker_estimate(
             _oracle_move_to(next_point, current_point, bins, g_cursor, n_rows)
             if loss.objective == GBDT_OBJ_YETI_RANK:
                 yeti_rank_eval(
-                    targets_rows, List[Float32](), False, g_cursor, row_index,
-                    group_sizes, yeti_tasks.value(), yeti_rng.next_uniform_l(),
+                    targets_rows, row_weights, has_row_weights, g_cursor,
+                    row_index, group_sizes, yeti_tasks.value(), yeti_rng.next_uniform_l(),
                     10, Float32(0.85), offsets, sizes, n_rows, lambda_reg,
                     next_value, next_grad, cached_der2,
                 )
@@ -659,7 +749,7 @@ def _walker_estimate(
             else:
                 _loss_eval(
                     loss, g_target, g_cursor, offsets, sizes, n_rows,
-                    lambda_reg, next_value, next_grad, cached_der2,
+                    lambda_reg, next_value, next_grad, cached_der2, g_weights,
                 )
             if function_value <= next_value:
                 cur_hess = _second_derivatives(loss.method, weights_cpu, lambda_reg, cached_der2)
@@ -922,9 +1012,13 @@ def _estimate_leaves_for_loss(
     pairs: Optional[HostPairs] = None,
     yeti_tasks: Optional[YetiRankTasks] = None,
     yeti_seed: UInt64 = UInt64(0),
+    weights: List[Float32] = List[Float32](),
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
-    698-797`): the gathers by the row index, then Exact or the walker."""
+    698-797`): the gathers by the row index, then Exact or the walker.
+    `weights` (row order, empty: unit) are the fit's row weights: gathered
+    with the targets, and their per-leaf sums are the leaf weights Gradient
+    leaves and `RegularizeImpl` read, as PairLogit's pair row weights are."""
     var n_leaves = len(sizes)
     var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
@@ -935,6 +1029,11 @@ def _estimate_leaves_for_loss(
     var bins = List[Int](length=n_rows, fill=0)
     _leaf_bins(offsets, sizes, n_rows, bins)
     var weights_cpu = List[Float64]()
+    var has_weights = len(weights) > 0
+    var g_weights = List[Float32]()
+    if has_weights and loss.objective != GBDT_OBJ_PAIR_LOGIT:
+        g_weights = List[Float32](length=n_rows, fill=Float32(0.0))
+        _gather_rows(weights, row_index, n_rows, g_weights)
     # Both CPU searcher callers compiled on Apple M1 at O0 (2026-10-28);
     # runtime/identity remain pending. GPU setup replaces row weights with per-row
     # pair weights. Gradient leaves and Regularize need their partition sums,
@@ -959,17 +1058,33 @@ def _estimate_leaves_for_loss(
         )
         for leaf in range(n_leaves):
             weights_cpu.append(Float64(leaf_weight_sums[leaf]))
+    elif len(g_weights) > 0:
+        # the row weights' leaf sums, the PairLogit arm's partition stat
+        var leaf_weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
+        _pinned_partition_stats(
+            g_weights, offsets, sizes, 2 * GBDT_PINNED_SM, leaf_weight_sums
+        )
+        for leaf in range(n_leaves):
+            weights_cpu.append(Float64(leaf_weight_sums[leaf]))
     else:
         for leaf in range(n_leaves):
             weights_cpu.append(Float64(sizes[leaf]))
     if loss.method == GBDT_LEAF_EXACT:
+        if has_weights:
+            raise Error(
+                "the Exact leaf estimator is restated at unit row weights"
+                " only (sample_weight with Exact leaves)"
+            )
         return _exact_estimate(
             loss, g_target, g_cursor, offsets, sizes, weights_cpu, n_rows
         )
+    var row_weights = List[Float32]()
+    if loss.objective != GBDT_OBJ_PAIR_LOGIT:
+        row_weights = weights.copy()
     return _walker_estimate(
         loss, g_target, g_cursor, bins, offsets, sizes, weights_cpu, n_rows,
         l2_leaf_reg, targets, row_index, group_sizes, pairs, yeti_tasks,
-        yeti_seed,
+        yeti_seed, g_weights, row_weights,
     )
 
 
@@ -991,10 +1106,29 @@ def gbdt_losses_host_fit(
     pair_weights: List[Float32] = List[Float32](),
     start: Float64 = 0.0,
     random_strength: Float32 = Float32(0.0),
+    weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostModel:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
-    resolved to their `TWithoutQueriesGrouping` rule by the binding."""
+    resolved to their `TWithoutQueriesGrouping` rule by the binding.
+
+    `weights` (empty: unit) are the sample weights, the device's one
+    `weights` column (lane gbdt-gaps, 2026-11-23): the pointwise losses read
+    them in the search pass, the leaf estimate and the learn loss; YetiRank
+    through its own `has_weights` arm; PairLogit through the generated
+    pairs' weights (`generate_pairs` / the group layout, as `train` builds
+    them; a caller's pairs keep their own weights, the device replaces the
+    row weights with the pair row weights). QueryRMSE's weighted query
+    means are not restated and refuse."""
+    var has_weights = len(weights) > 0
+    if has_weights and len(weights) != n_rows:
+        raise Error("weights size mismatch")
+    if has_weights and loss.objective == GBDT_OBJ_QUERY_RMSE:
+        raise Error(
+            "no CPU implementation of _mojolearn_gbdt.gbdt_fit for"
+            " sample_weight with loss='QueryRMSE' (the weighted query means"
+            " are not restated on the host)"
+        )
     if (
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
@@ -1021,7 +1155,7 @@ def gbdt_losses_host_fit(
         if IDN_PAIRLOGIT_GROUP and len(pair_winners) == 0:
             # lane/fam2-gbdt F2: generated pairs take the device's group
             # layout (`pair_logit_group.mojo`), no pair list
-            var hg = host_pair_groups(sizes_u32, y, List[Float32](), n_rows)
+            var hg = host_pair_groups(sizes_u32, y, weights, n_rows)
             loss_norm = hg.total_weight()
             pairs = Optional(hg^)
         else:
@@ -1033,7 +1167,7 @@ def gbdt_losses_host_fit(
                 )
             else:
                 ordered = order_pairs_by_winner(
-                    generate_pairs(sizes_u32, y, List[Float32]()), sizes_u32, n_rows
+                    generate_pairs(sizes_u32, y, weights), sizes_u32, n_rows
                 )
             var hp = host_pairs(ordered.winners, ordered.losers, ordered.weights, n_rows)
             loss_norm = hp.total_weight()
@@ -1108,7 +1242,7 @@ def gbdt_losses_host_fit(
         if loss.objective == GBDT_OBJ_YETI_RANK:
             # the tree's first YetiRank draw, as the device's search pass
             yeti_rank_search_pass(
-                y, List[Float32](), False, cursor, group_sizes,
+                y, weights, has_weights, cursor, group_sizes,
                 yeti_tasks.value(), yeti_rand.next_uniform_l(), 10,
                 Float32(0.85), n_rows, stats, fv_part, mag_part,
             )
@@ -1121,7 +1255,9 @@ def gbdt_losses_host_fit(
                 y, cursor, group_sizes, n_rows, stats, fv_part, mag_part
             )
         else:
-            _loss_search_pass(loss, y, cursor, n_rows, stats, fv_part, mag_part)
+            _loss_search_pass(
+                loss, y, cursor, n_rows, stats, fv_part, mag_part, weights
+            )
         var fv = _deterministic_sum_lanes(fv_part, 1, fv_blocks)[0]
         var noise_mult = Float64(0.0)
         if random_strength != Float32(0.0):
@@ -1299,6 +1435,7 @@ def gbdt_losses_host_fit(
         var estimated = _estimate_leaves_for_loss(
             loss, y, cursor, row_index, offsets, sizes, n_rows,
             params.l2_leaf_reg, group_sizes, pairs, yeti_tasks, yeti_tree_seed,
+            weights,
         )
         if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
             # `MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:25-37`),
@@ -1335,7 +1472,9 @@ def gbdt_losses_host_fit(
             -Float64(_deterministic_sum_lanes(q_fv, 1, len(q_fv))[0]) / Float64(n_rows)
         )
     else:
-        losses.append(-Float64(_loss_value(loss, y, cursor, n_rows)) / Float64(n_rows))
+        losses.append(
+            -Float64(_loss_value(loss, y, cursor, n_rows, weights)) / Float64(n_rows)
+        )
     return GbdtHostModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,

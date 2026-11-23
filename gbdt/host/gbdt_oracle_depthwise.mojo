@@ -165,6 +165,12 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_grid,
 )
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
+from gbdt.host.gbdt_oracle_eval import (
+    GbdtHostEval,
+    gbdt_eval_add_tree,
+    gbdt_eval_detector,
+    gbdt_eval_shrink_point,
+)
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_NEWTON,
     GBDT_OBJ_LOGLOSS,
@@ -248,6 +254,10 @@ struct GbdtHostNsModel(Movable):
     var leaf_values: List[Float32]
     var leaf_weights: List[Float64]
     var losses: List[Float64]
+    #: the held-out arm's report (empty, 0, False without an eval set)
+    var test_losses: List[Float64]
+    var best_iteration: Int
+    var stopped_early: Bool
 
     def n_trees(self) -> Int:
         return len(self.tree_node_offsets) - 1
@@ -1232,6 +1242,7 @@ def gbdt_host_fit_non_symmetric(
     n_rows: Int,
     n_features: Int,
     params: GbdtHostTreeParams,
+    eval: GbdtHostEval,
     start: Float64 = 0.0,
     weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostNsModel:
@@ -1244,7 +1255,16 @@ def gbdt_host_fit_non_symmetric(
     estimator as every non-symmetric fit's do
     (`doc_parallel_boosting.mojo:1507-1511`), and `start` is the resolved
     `boost_from_average` constant the cursor is filled with; the caller
-    writes it as the model's bias."""
+    writes it as the model's bias.
+
+    `weights` (empty: unit) are the row weights, read by the search passes,
+    both leaf estimators and the learn loss. `eval` is the HELD-OUT arm
+    (lane gbdt-gaps, 2026-11-23; the symmetric fit's, gbdt/host/
+    gbdt_oracle_eval.mojo): the held-out rows binned on the learn grid, the
+    test cursor at `start`, each tree added through its bins off the model
+    (`add_non_symmetric_tree_to_cursor`, every tree, the stored values),
+    the held-out loss at unit weight through the learn loss's kernel, the
+    detector's break before the learn point, and `ShrinkToBestIteration`."""
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -1307,14 +1327,22 @@ def gbdt_host_fit_non_symmetric(
         is_logloss and params.loss.method == GBDT_LEAF_NEWTON
         and not bootstrap_on
     )
-    if len(weights) > 0 and not plain_newton:
-        raise Error(
-            "no CPU implementation of _mojolearn_gbdt.gbdt_fit for sample_weight or class_weights"
-            " outside Logloss with Newton leaves and no bootstrap on a"
-            " Depthwise or Lossguide tree"
-        )
+    # row weights reach every arm (lane gbdt-gaps, 2026-11-23): the search
+    # passes and both estimators read them, as the device's one `weights`
+    # column does
     if len(weights) > 0 and len(weights) != n_rows:
         raise Error("weights size mismatch")
+
+    # the held-out arm (`fit_with_test`'s test cursor, `CreateCursors`' seed)
+    var has_test = eval.n_rows > 0
+    var n_eval = eval.n_rows if has_test else 1
+    var test_cindex = List[UInt32]()
+    if has_test:
+        test_cindex = _binarize_columns(eval.x_colmajor, n_eval, n_features, grid, layout)
+    var test_cursor = List[Float32](length=n_eval, fill=Float32(start))
+    var detector = gbdt_eval_detector(eval)
+    var test_losses = List[Float64]()
+    var stopped_early = False
 
     var losses = List[Float64]()
     var tree_node_offsets = List[Int]()
@@ -1356,7 +1384,7 @@ def gbdt_host_fit_non_symmetric(
 
         # ---- the gradients, the learn loss and the magnitudes ----
         if not is_logloss:
-            _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part)
+            _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part, weights)
         elif newton:
             logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part, weights)
         else:
@@ -1421,7 +1449,7 @@ def gbdt_host_fit_non_symmetric(
         else:
             estimated = _estimate_leaves_for_loss(
                 params.loss, y, cursor, row_index, offsets, sizes, n_rows,
-                base.l2_leaf_reg,
+                base.l2_leaf_reg, weights=weights,
             )
         if len(estimated) != n_bins:
             raise Error(
@@ -1441,6 +1469,25 @@ def gbdt_host_fit_non_symmetric(
             model_weights.append(tree.leaf_weights[i])
         tree_leaf_offsets.append(len(model_leaves))
 
+        # ---- `AppendModels(..., testCursor)`: the same tree onto the
+        # held-out cursor (bins off the model, the stored values), its loss
+        # and the detector, whose break comes before the learn point
+        # (`doc_parallel_boosting.mojo`, `_apply_last_tree_to_test`) ----
+        if has_test:
+            var test_bins = _non_symmetric_bins(tree, layout, test_cindex, n_eval)
+            gbdt_eval_add_tree(test_cursor, test_bins, scaled)
+            var t_fv: Float32
+            if is_logloss:
+                t_fv = _logloss_value(eval.y, test_cursor, n_eval, border)
+            else:
+                t_fv = _loss_value(params.loss, eval.y, test_cursor, n_eval)
+            var t_loss = -Float64(t_fv) / Float64(n_eval)
+            test_losses.append(t_loss)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                stopped_early = True
+                break
+
         # the learn loss read alongside this iteration's gradients
         if len(losses) < base.n_estimators:
             if iteration + 1 > 1:
@@ -1449,11 +1496,29 @@ def gbdt_host_fit_non_symmetric(
     if is_logloss:
         losses.append(-Float64(_logloss_value(y, cursor, n_rows, border, weights)) / Float64(n_rows))
     else:
-        losses.append(-Float64(_loss_value(params.loss, y, cursor, n_rows)) / Float64(n_rows))
+        losses.append(-Float64(_loss_value(params.loss, y, cursor, n_rows, weights)) / Float64(n_rows))
+    # ---- `ShrinkToBestIteration`: whole trees off the flat model ----
+    var shrink_to = gbdt_eval_shrink_point(
+        test_losses, eval.want_best_model, eval.best_model_min_trees
+    )
+    var n_trees = len(tree_node_offsets) - 1
+    if 0 < shrink_to and shrink_to < n_trees:
+        while len(tree_node_offsets) - 1 > shrink_to:
+            _ = tree_node_offsets.pop()
+            _ = tree_leaf_offsets.pop()
+        var nodes_kept = tree_node_offsets[len(tree_node_offsets) - 1]
+        var leaves_kept = tree_leaf_offsets[len(tree_leaf_offsets) - 1]
+        node_feature.resize(nodes_kept, 0)
+        node_bin.resize(nodes_kept, 0)
+        node_left.resize(nodes_kept, 0)
+        node_right.resize(nodes_kept, 0)
+        model_leaves.resize(leaves_kept, Float32(0.0))
+        model_weights.resize(leaves_kept, Float64(0.0))
     return GbdtHostNsModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_node_offsets^, node_feature^, node_bin^, node_left^, node_right^,
         tree_leaf_offsets^, model_leaves^, model_weights^, losses^,
+        test_losses^, detector.best_iteration, stopped_early,
     )
 
 

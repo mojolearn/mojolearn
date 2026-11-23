@@ -156,6 +156,12 @@ from checks.numerics import (
     identical_sqrt,
 )
 from gbdt.data.permutation import TRandom
+from gbdt.targets.pointwise_bodies import (
+    BODY_OBJ_RMSE,
+    weighted_der,
+    weighted_der2,
+    weighted_score,
+)
 from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.gpu_util.kernel.random_gen import (
     advance_seed_k,
@@ -585,8 +591,9 @@ def _rmse_row(relev: Float32, val: Float32, weight: Float32) -> _RmseRow:
     `t - p` (`:421-423`), stored flushed as `ftz(weight * der)`;
     `target_score` is `(t - p) * (t - p)` (`:348-350`), accumulated as
     `-weight * score`."""
-    var der = ftz(weight * (relev - val))
-    var score = -weight * ((relev - val) * (relev - val))
+    # the bodies the device kernel calls (gbdt/targets/pointwise_bodies.mojo)
+    var der = weighted_der[BODY_OBJ_RMSE](relev, val, Float32(0.0), weight)
+    var score = weighted_score[BODY_OBJ_RMSE](relev, val, Float32(0.0), weight)
     return _RmseRow(der, score)
 
 
@@ -597,24 +604,30 @@ def _rmse_search_pass(
     mut stats: List[Float32],
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
+    weights: List[Float32] = List[Float32](),
 ):
     """`launch_approximate[False]` on RMSE with `compute_fv` and
-    `compute_magnitudes` set: plane 0 the unit weight, plane 1 the flushed
-    der, one score partial and two magnitude partials per 256-thread block
-    through the halving tree. Out-of-range threads add 0.0."""
+    `compute_magnitudes` set: plane 0 the row's weight (unit when `weights`
+    is empty), plane 1 the flushed weighted der, one score partial and two
+    magnitude partials per 256-thread block through the halving tree.
+    Out-of-range threads add 0.0. `weights` is the kernel's `has_weights`
+    arm (`pointwise_target_kernel`), as `_logloss_search_pass`'s."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
     # one 256-thread device block owns its rows' two planes and its three
     # partials, and its halving trees are the kernel's. Blocks go round
     # robin to `_gbdt_units` tasks; a task holds three block slabs.
     var units = _gbdt_units(blocks, 8 * n_rows)
+    var has_weights = len(weights) > 0
     var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
     var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
     var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
     var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm targets_p, imm cursor_p, imm stats_p, imm fv_p, imm mag_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
@@ -628,6 +641,8 @@ def _rmse_search_pass(
                 s_w[t] = Float32(0.0)
                 s_g[t] = Float32(0.0)
                 if i < n_rows:
+                    if has_weights:
+                        weight = weights_p[i]
                     var r = _rmse_row(targets_p[i], cursor_p[i], weight)
                     var plane0 = weight
                     stats_p[i] = plane0
@@ -643,14 +658,19 @@ def _rmse_search_pass(
     host_parallelize(score_blocks, units)
     _ = len(targets)
     _ = len(cursor)
+    _ = len(weights)
     _ = len(stats)
     _ = len(fv_partials)
     _ = len(mag_partials)
 
 
-def _rmse_value(targets: List[Float32], cursor: List[Float32], n_rows: Int) -> Float32:
+def _rmse_value(
+    targets: List[Float32], cursor: List[Float32], n_rows: Int,
+    weights: List[Float32] = List[Float32](),
+) -> Float32:
     """The final learn loss pass (`doc_parallel_boosting.mojo:2180-2211`):
-    the same kernel's score partials, folded by
+    the same kernel's score partials (each row's at its weight; unit when
+    `weights` is empty, as the held-out rows always are), folded by
     `deterministic_sum_lanes_kernel[1]`."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_partials = List[Float32](length=blocks, fill=Float32(0.0))
@@ -658,11 +678,14 @@ def _rmse_value(targets: List[Float32], cursor: List[Float32], n_rows: Int) -> F
     # (its own halving tree), round robin to `_gbdt_units` tasks; the lane
     # fold over the blocks runs after the join in block order.
     var units = _gbdt_units(blocks, 8 * n_rows)
+    var has_weights = len(weights) > 0
     var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
     var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm targets_p, imm cursor_p, imm fv_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm fv_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var weight = Float32(1.0)
         var b = unit
@@ -672,6 +695,8 @@ def _rmse_value(targets: List[Float32], cursor: List[Float32], n_rows: Int) -> F
                 # an out-of-range thread adds 0.0 (the slab is reused)
                 s_score[t] = Float32(0.0)
                 if i < n_rows:
+                    if has_weights:
+                        weight = weights_p[i]
                     s_score[t] = _rmse_row(targets_p[i], cursor_p[i], weight).score
             fv_p[b] = _halving_fold(s_score)
             b += units
@@ -679,6 +704,7 @@ def _rmse_value(targets: List[Float32], cursor: List[Float32], n_rows: Int) -> F
     host_parallelize(score_blocks, units)
     _ = len(targets)
     _ = len(cursor)
+    _ = len(weights)
     return _deterministic_sum_lanes(fv_partials, 1, blocks)[0]
 
 
@@ -3252,7 +3278,7 @@ def _oracle_eval(
                             weight = weights_p[i]
                         var r = _rmse_row(target_p[i], cursor_p[i], weight)
                         stats_p[i] = r.der
-                        stats_p[n_rows + i] = ftz(weight * Float32(1.0))
+                        stats_p[n_rows + i] = weighted_der2[BODY_OBJ_RMSE](target_p[i], cursor_p[i], Float32(0.0), weight)
                         score = r.score
                     s_score[t] = score
                 fv_p[b] = _halving_fold(s_score)
@@ -4096,10 +4122,6 @@ def gbdt_host_boost(
     var is_rmse = objective == GBDT_BOOST_RMSE
     if not is_rmse and objective != GBDT_BOOST_LOGLOSS:
         raise Error("gbdt_host_boost: objective must be Logloss or RMSE")
-    if is_rmse and len(weights) > 0:
-        raise Error("gbdt_host_boost: row weights are carried under Logloss only")
-    if is_rmse and eval.n_rows > 0:
-        raise Error("gbdt_host_boost: the held-out arm is carried under Logloss only")
     if is_rmse and params.leaf_estimation_iterations != 1:
         raise Error("gbdt_host_boost: RMSE takes Newton leaves at one iteration only")
     if not is_rmse and starting_approx != 0.0:
@@ -4119,9 +4141,11 @@ def gbdt_host_boost(
     var hist_cells = layout.hist_cells
     var has_test = eval.n_rows > 0
     var n_eval = eval.n_rows if has_test else 1
-    # `CreateCursors`' test seed: zero here, because this arm refuses
-    # `boost_from_average` by name and its model carries no bias
-    var test_cursor = List[Float32](length=n_eval, fill=Float32(0.0))
+    # `CreateCursors`' test seed: the same starting point as the learn
+    # cursors (`doc_parallel_boosting.mojo`, the test cursor filled with
+    # `start_value` under boost_from_average, zero otherwise; RMSE's
+    # `starting_approx` is zero exactly when boost_from_average is off)
+    var test_cursor = List[Float32](length=n_eval, fill=Float32(starting_approx))
     var detector = gbdt_eval_detector(eval)
     var test_losses = List[Float64]()
     var stopped_early = False
@@ -4192,7 +4216,7 @@ def gbdt_host_boost(
         # ---- the gradients, the learn loss and the magnitudes ----
         if is_rmse:
             _rmse_search_pass(
-                y, cursors[learn_p], n_rows, stats, fv_part, mag_part
+                y, cursors[learn_p], n_rows, stats, fv_part, mag_part, weights
             )
         else:
             _logloss_search_pass(
@@ -4476,9 +4500,14 @@ def gbdt_host_boost(
                     feat_offset, feat_mask, feat_shift, feat_one_hot,
                 )
                 gbdt_eval_add_tree(test_cursor, test_bins, tree_values)
-            var t_loss = -Float64(
-                _logloss_value(eval.y, test_cursor, n_eval, border)
-            ) / Float64(n_eval)
+            # the held-out rows at unit weight, through the learn loss's
+            # target kernel (`_test_loss`, `doc_parallel_boosting.mojo`)
+            var t_fv: Float32
+            if is_rmse:
+                t_fv = _rmse_value(eval.y, test_cursor, n_eval)
+            else:
+                t_fv = _logloss_value(eval.y, test_cursor, n_eval, border)
+            var t_loss = -Float64(t_fv) / Float64(n_eval)
             test_losses.append(t_loss)
             detector.add_error(t_loss)
             if detector.is_need_stop():
@@ -4501,7 +4530,8 @@ def gbdt_host_boost(
     # 3001-3052`, which is the only cursor when there is one permutation)
     if is_rmse:
         losses.append(
-            -Float64(_rmse_value(y, cursors[est_p], n_rows)) / Float64(n_rows)
+            -Float64(_rmse_value(y, cursors[est_p], n_rows, weights))
+            / Float64(n_rows)
         )
     else:
         losses.append(

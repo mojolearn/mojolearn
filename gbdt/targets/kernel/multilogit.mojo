@@ -111,6 +111,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 # IDENTICAL arm row 12's `identical_exp`/`identical_log`.
 from gbdt.targets.kernel.pointwise_targets import (
     pinned_block_sum,
+)
+from gbdt.targets.pointwise_bodies import (
     routed_exp,
     routed_log,
 )
