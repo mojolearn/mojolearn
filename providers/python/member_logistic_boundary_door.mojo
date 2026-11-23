@@ -8,9 +8,11 @@ core/logistic_member.mojo.
     and the ten parameter words, read with the estimator's OWN checks (penalty,
     C, l1_ratio, tol and their promotion reports; max_iter,
     linesearch_max_iter; the class constants lbfgs_memory and
-    penalty_normalized). An instance with `class_weight` set is not admitted
-    (False): its weights are keyed by labels, which never cross the member
-    ABI, so the caller keeps the estimator's own doors for it.
+    penalty_normalized), then the class-weight tail (lane mf-adm3,
+    core/member_class_weight.mojo): 'balanced', or a dict's PENDING table
+    the caller fills over its labels (bindings/member_class_weight_unpack.mojo
+    `member_cw_fill`). Any other class_weight value is not admitted (False:
+    the estimator's own fit refuses it in its words).
   * `logistic_member_pack` (PACK): `_w`, coef_, intercept_, n_iter_,
     objective_, retcode_ and n_features_in_ as the estimator's own fit writes
     them (bindings/logistic_state_boundary_unpack.mojo `logistic_fit_pack`),
@@ -40,6 +42,8 @@ from bindings.logistic_config_boundary_unpack import (
 from bindings.logistic_keys_unpack import logistic_keys
 from bindings.logistic_state_boundary_unpack import logistic_fit_pack
 from bindings.member_owner_unpack import MemberOwner
+from bindings.member_class_weight_unpack import member_cw_kind
+from core.member_class_weight import MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words
 from bindings.prep_lda_admission_door import lda_native_context
 from bindings.py_balanced import py_get, py_item, py_type, py_setitem
 from core.hostptr import f32_ptr
@@ -73,13 +77,15 @@ def _class_constant(model: PythonObject, fields: PythonObject, name: String, con
 def logistic_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False for an instance with class weights."""
+    from the unfitted estimator. False for a class_weight that is neither
+    None, 'balanced' nor an exact dict."""
     if kind == 1:
         return qn_regressor_member_admit(model, fields, context, b, owner)
     if kind != 0:
         raise Error("RuntimeError: mojolearn: unknown Logistic member kind " + String(kind))
     var nk = logistic_keys()
-    if py_item(fields, nk[].k_class_weight) is not None:
+    var weighting = member_cw_kind(py_item(fields, nk[].k_class_weight), b)
+    if weighting < 0:
         return False
     # The estimator's route, as its own door finds it: the held owner names
     # the context its class runs in; without one the class hierarchy is
@@ -116,6 +122,10 @@ def logistic_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     owner.plan.route = device_route_value(route_owner)
     var words: List[Float64] = [0.0, 1.0 if intercept else 0.0, strengths[0], strengths[1], Float64(max_iter),
         Float64(linesearch), Float64(memory), 1.0 if normalized else 0.0, tolerances[0], tolerances[1]]
+    if weighting == MEMBER_CW_BALANCED:
+        member_cw_balanced_words(words)
+    elif weighting == MEMBER_CW_DICT:
+        member_cw_pending_words(words)
     owner.plan.params = words^
     owner.pins = Python.tuple(route_owner, checks)
     return True

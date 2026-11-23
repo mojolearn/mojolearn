@@ -17,7 +17,8 @@ each once and runs them on its own workers.
 from std.python import PythonObject
 from bindings.member_owner_unpack import MemberOwner, member_mark, member_labels_hold, member_labels_take
 from bindings.py_balanced import py_setitem
-from core.member_abi import MemberPlan, member_resolve_family
+from core.member_abi import MemberPlan, member_resolve_family, MEMBER_CAN_FIT
+from core.member_class_weight import member_cw_start, member_cw_pending
 from core.member_families import (
     MEMBER_FAMILY_LINEAR,
     MEMBER_FAMILY_LOGISTIC,
@@ -229,11 +230,33 @@ def member_admit_serving(model: PythonObject, fields: PythonObject, plan: Python
     does not take as words, class weights, a precomputed kernel, an image
     that is not loaded) is the same silent fallback, and that path then
     raises its own words if the request is wrong. A member mark never turns
-    a call that worked into a refusal."""
+    a call that worked into a refusal.
+
+    A classifier whose class_weight is a dict (lane mf-adm3) is admitted
+    with its table pending (core/member_class_weight.mojo): served for a
+    caller that only predicts (`needs` without MEMBER_CAN_FIT: the weights
+    shaped the fitted state, not the predictions), refused here for a fit,
+    whose caller hands over its labels through
+    `member_admit_serving_labeled` instead."""
+    return member_admit_serving_labeled(model, fields, plan, context, b, needs, PythonObject(None))
+
+
+def member_admit_serving_labeled(model: PythonObject, fields: PythonObject, plan: PythonObject,
+    context: PythonObject, b: PythonObject, needs: Int, labels: PythonObject) -> MemberOwner:
+    """`member_admit_serving` for a FIT caller that holds the labels of the
+    codes it fits on (`labels`: the classes in code order; None: it holds
+    none). A pending class_weight table stays pending here: the caller
+    completes it with `member_cw_fill` outside this never-raising call, so
+    a dict the estimator refuses raises its own words there (lane mf-adm3).
+    Without labels a FIT admission of such a member is the fallback."""
     try:
         var owner = member_admit(model, fields, plan, context, b)
         if owner.published and not owner.plan.member.has(needs):
             owner.published = False
+        if owner.published and (needs & MEMBER_CAN_FIT) != 0 and labels is None:
+            if member_cw_pending(owner.plan.params, member_cw_start(owner.plan.family, owner.plan.kind,
+                                                                    owner.plan.params)):
+                owner.published = False
         return owner^
     except:
         return MemberOwner()

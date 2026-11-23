@@ -32,8 +32,9 @@ SGDOneClassSVM the hinge loss, 'l2', alpha = nu):
   [10] batch (batch_size 'auto': minus the auto cap; None: -1; else its
   value), [11] batch_sum (0 / 1, `_sgd_auto_sum`), [12] alpha, [13]
   l1_ratio, [14] eta0, [15] power_t, [16] epsilon, [17] tol (None:
-  -3.0e38), [18] class_weight (0 None, 1 'balanced'; a dict is not
-  admitted: its labels never cross the ABI), [19] probability (1:
+  -3.0e38), [18] class_weight (0 None, 1 'balanced', 2 a dict: its table
+  over the caller's codes is the tail from word 20, lane mf-adm3,
+  core/member_class_weight.mojo), [19] probability (1:
   SGDClassifier with loss='log_loss', which alone publishes
   PREDICT_PROBA).
 The estimators' own checks (early_stopping, average, warm_start, the loss,
@@ -86,6 +87,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_SGD
+from core.member_class_weight import MEMBER_CW_HEAD, member_cw_table_f32
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -367,19 +369,25 @@ def _fit(slot: _SlotP, call: _CallP) raises:
         if has_sw == 1:
             unsafe_memcpy(dest=parts.unsafe_ptr() + n, src=_F32P(unsafe_from_address=call[].weights.data), count=n)
     var problems = k if k > 2 else 1
-    var balanced = _classifier(kind) and p[18] != 0.0
+    # word 18: 1 'balanced', 2 a dict (its table in the tail; lane mf-adm3)
+    var weighted_classes = _classifier(kind) and p[18] != 0.0
+    var balanced = weighted_classes and p[18] == 1.0
     var ip: List[Int] = [k, Int(p[1]), Int(p[2]), Int(p[3]), Int(p[4]), Int(p[5]), Int(p[6]), Int(p[7]), Int(p[8]),
-        Int(p[9]), has_sw, 1 if balanced else 0, Int(p[10]), Int(p[11])]
+        Int(p[9]), has_sw, 1 if weighted_classes else 0, Int(p[10]), Int(p[11])]
     var fp: List[Float64] = [p[12], p[13], p[14], p[15], p[16], p[17]]
     var n_out = problems * d + problems + 2
     var result = List[Float32](length=n_out, fill=0.0)
     var request = XlFitRequest(call[].route.entry.call, ALGO_SGD, call[].x.data, n * d, n, d, y, n * (1 + has_sw),
         ip^, fp^, n_out, problems * (n + d + 1), problems * n, Int(result.unsafe_ptr()), False, 0, 0, 0)
-    if balanced:
+    if weighted_classes:
         # 'balanced': the class-weight step writes the k weights the fit
-        # takes as its last float parameters (`xl_class_fit_run`).
+        # takes as its last float parameters (`xl_class_fit_run`); a dict:
+        # the step reads its k float32 words (the door's
+        # `xl_class_weights_unpack` words, read at UNPACK).
         var class_weight = List[Float32](length=k, fill=1.0)
-        var prep = XlClassPrepRequest(True, call[].y.data, 0, Int(class_weight.unsafe_ptr()), 0, n, k, True, False)
+        if not balanced:
+            class_weight = member_cw_table_f32(p, SGD_MEMBER_PARAMS, k, "class_weight contains labels absent from y")
+        var prep = XlClassPrepRequest(True, call[].y.data, 0, Int(class_weight.unsafe_ptr()), 0, n, k, balanced, False)
         _ = xl_class_fit_run(request, prep)
         _ = class_weight^
     else:
@@ -634,7 +642,7 @@ def _sgd_member(operation: Int, address: Int) raises -> Int:
         var bits: Int
         var regressor: Bool
         if call[].state == 0:
-            if not call[].params or call[].param_count != SGD_MEMBER_PARAMS:
+            if not call[].params or call[].param_count < SGD_MEMBER_PARAMS:
                 return _capabilities(-1, True)
             var words = _F64P(unsafe_from_address=call[].params)
             bits = _capabilities(Int(words[0]), words[19] != 0.0)
@@ -655,10 +663,14 @@ def _sgd_member(operation: Int, address: Int) raises -> Int:
         var kind = Int(words[0])
         if Float64(kind) != words[0] or kind < 0 or kind > SGD_MEMBER_ONE_CLASS:
             raise Error("member ABI: unknown SGD member kind")
-        if call[].param_count != SGD_MEMBER_PARAMS:
+        # twenty words; a classifier with a dict class_weight (word 18 = 2):
+        # and its class-weight tail (lane mf-adm3)
+        var count = call[].param_count
+        if count != SGD_MEMBER_PARAMS and (not _classifier(kind) or words[18] != 2.0
+                or count < SGD_MEMBER_PARAMS + MEMBER_CW_HEAD):
             raise Error("member ABI: an SGD member takes " + String(SGD_MEMBER_PARAMS) + " parameters")
-        var params = List[Float64](length=SGD_MEMBER_PARAMS, fill=0.0)
-        unsafe_memcpy(dest=params.unsafe_ptr(), src=words, count=SGD_MEMBER_PARAMS)
+        var params = List[Float64](length=count, fill=0.0)
+        unsafe_memcpy(dest=params.unsafe_ptr(), src=words, count=count)
         call[].state = _mint(params^)
         return 0
     if operation == MEMBER_OP_FREE:
@@ -684,7 +696,7 @@ def _sgd_member(operation: Int, address: Int) raises -> Int:
             var probability = True
             if call[].state != 0:
                 probability = _SlotP(unsafe_from_address=_lookup(call[].state, False))[].params[19] != 0.0
-            elif call[].param_count == SGD_MEMBER_PARAMS:
+            elif call[].param_count >= SGD_MEMBER_PARAMS:
                 probability = _F64P(unsafe_from_address=call[].params)[19] != 0.0
             var can = _capabilities(asked_kind, probability)
             var served = ((op == MEMBER_OP_PREDICT and (can & MEMBER_CAN_PREDICT) != 0)

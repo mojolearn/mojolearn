@@ -9,9 +9,12 @@ SVR (`_mojolearn_member = (MEMBER_FAMILY_KERNEL_SVM, kind)` on each class).
     `_hp_*` working values), its binding through the estimator's binding
     route (device='cpu' beside a GPU set answers the host image), that
     binding's SVC tables (and the SVR table for kind 1 or a GPU binding) in the route's
-    slots, and the 17 parameter words of core/kernel_svm_member.mojo.
-    kernel='precomputed' and an SVC class_weight are not published: admit
-    returns False and the caller keeps the estimator's own doors.
+    slots, and the 17 parameter words of core/kernel_svm_member.mojo
+    (kernel='precomputed' among them since lane mf-adm3), then SVC's
+    class-weight tail ('balanced', or a dict's pending table the caller
+    fills over its labels: core/member_class_weight.mojo). A class_weight
+    that is neither None, 'balanced' nor an exact dict is not admitted
+    (False: the estimator's own fit refuses it in its words).
   * `kernel_svm_member_pack` (PACK): the fitted attributes the estimator's
     own fit writes (bindings/svc_kernel_fit_pack.mojo,
     bindings/svc_kernel_svr_pack.mojo), from the member state's blocks.
@@ -27,6 +30,8 @@ from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_address
 from bindings.family_common_pack import family_call, family_array
 from bindings.member_owner_unpack import MemberOwner, member_host_only
+from bindings.member_class_weight_unpack import member_cw_kind
+from core.member_class_weight import MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_item, py_setitem
 from bindings.svc_common_pack import svc_prefix, svc_scalar_array
@@ -66,7 +71,7 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator. False: this configuration has no member
-    entry (kernel='precomputed', an SVC class_weight)."""
+    entry (a class_weight it does not take as words)."""
     var classifier = kind == 0
     if kind != 0 and kind != 1:
         raise Error("ValueError: mojolearn: unknown kernel SVM member kind " + String(kind))
@@ -76,10 +81,11 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     var scratch = py_call(native_loaded_module("builtins").dict, fields)
     var hp = svm_settings_unpack(model, scratch, classifier, context)
     var nk = svm_keys()
-    if hp.precomputed:
-        return False
-    if classifier and py_get(scratch, nk[].k_class_weight, PythonObject(None)) is not None:
-        return False
+    var weighting = 0
+    if classifier:
+        weighting = member_cw_kind(py_get(scratch, nk[].k_class_weight, PythonObject(None)), b)
+        if weighting < 0:
+            return False
     # An explicit HostSVC / HostSVR (its own host-only word, lane mf-cal3b): the host image its own fit
     # binds; any other class: the estimator's binding route.
     var binding = (estimator_binding_host(model, "_mojolearn_svm", context) if member_host_only(model)
@@ -144,6 +150,10 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     words[14] = break_ties
     words[15] = Float64(low)
     words[16] = Float64(high)
+    if weighting == MEMBER_CW_BALANCED:
+        member_cw_balanced_words(words)
+    elif weighting == MEMBER_CW_DICT:
+        member_cw_pending_words(words)
     owner.plan.route = route
     owner.plan.params = words^
     owner.pins = Python.tuple(binding, connection.table, connection.device, svr_owner)

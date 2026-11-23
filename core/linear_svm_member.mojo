@@ -24,6 +24,11 @@ MEMBER_OP_NEW parameters, 11 Float64 words: [0] kind, [1] fit_intercept
 'l2', else 0), [9] tol (the change tolerance is 0.1 * tol, as the own fit),
 [10] epsilon (LinearSVR; 0 for LinearSVC). The estimator's own checks
 (`_linear_check_common`, multi_class, epsilon) run at the caller's admission.
+LinearSVC's class_weight (lane mf-adm3) is a tail from word 11
+(core/member_class_weight.mojo): 'balanced' or a dict's table; FIT then
+fits on the door's row weights (sample weights, or ones, times each row's
+class weight: `member_cw_rows`, the body of
+bindings/svc_linear_boundary_unpack.mojo `_qn_row_weights`).
 
 Views: X dense row-major host float32, BORROWED (never copied). LinearSVC:
 y the caller's int32 class codes 0..classes-1 (rows x 1), `call.classes`
@@ -69,6 +74,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_LINEAR_SVM
+from core.member_class_weight import MEMBER_CW_HEAD, MEMBER_CW_NONE, member_cw_mode, member_cw_rows
 from core.linear_score_run import member_r2_score
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_call, native_descriptor_report
@@ -316,6 +322,12 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var k = call[].classes
     if k < 2:
         raise Error("mojolearn LinearSVC: y has one class")
+    # class_weight (lane mf-adm3): the door's row weights from this fit's
+    # codes, held until the fit returned.
+    var class_rows = List[Float32]()
+    if member_cw_mode(p, LINEAR_SVM_MEMBER_PARAMS) != MEMBER_CW_NONE:
+        sw = member_cw_rows(p, LINEAR_SVM_MEMBER_PARAMS, call[].y.data, MEMBER_I32, rows, k, sw,
+            "class_weight contains labels absent from y", class_rows)
     # The original OVR selection: binary fits class 1 once.
     var first = 1 if k == 2 else 0
     var fits = 1 if k == 2 else k
@@ -324,6 +336,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var plan = LinearSvcFitPlan(fits, width)
     plan.storage[0].prepare_info(fits)
     driver.fit(LinearSvcFitRequest(call[].x.data, call[].y.data, sw, options^), plan)
+    _ = class_rows^  # the row weights the fit read
     slot[].w = List[Float32](length=fits * width, fill=0.0)
     slot[].coef = List[Float32](length=fits * cols, fill=0.0)
     slot[].intercept = List[Float32](length=fits, fill=0.0)
@@ -545,7 +558,7 @@ def _linear_svm_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
             # Without a state the NEW words name the kind when given.
-            if call[].params and call[].param_count == LINEAR_SVM_MEMBER_PARAMS:
+            if call[].params and call[].param_count >= LINEAR_SVM_MEMBER_PARAMS:
                 return _capabilities(Int(_F64P(unsafe_from_address=call[].params)[0]), call[].route.has_fifth)
             return _capabilities(-1, call[].route.has_fifth)
         var asked = _SlotP(unsafe_from_address=_lookup(call[].state, False))
@@ -557,10 +570,13 @@ def _linear_svm_member(operation: Int, address: Int) raises -> Int:
         var kind = Int(words[0])
         if Float64(kind) != words[0] or kind < 0 or kind > LINEAR_SVM_MEMBER_SVR:
             raise Error("member ABI: unknown linear SVM member kind")
-        if call[].param_count != LINEAR_SVM_MEMBER_PARAMS:
+        # eleven words; LinearSVC: and a class-weight tail (lane mf-adm3)
+        var count = call[].param_count
+        if count != LINEAR_SVM_MEMBER_PARAMS and (kind != LINEAR_SVM_MEMBER_SVC
+                or count < LINEAR_SVM_MEMBER_PARAMS + MEMBER_CW_HEAD):
             raise Error("member ABI: a linear SVM member takes " + String(LINEAR_SVM_MEMBER_PARAMS) + " parameters")
-        var params = List[Float64](length=LINEAR_SVM_MEMBER_PARAMS, fill=0.0)
-        unsafe_memcpy(dest=params.unsafe_ptr(), src=words, count=LINEAR_SVM_MEMBER_PARAMS)
+        var params = List[Float64](length=count, fill=0.0)
+        unsafe_memcpy(dest=params.unsafe_ptr(), src=words, count=count)
         call[].state = _mint(params^)
         return 0
     if operation == MEMBER_OP_FREE:

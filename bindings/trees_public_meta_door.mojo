@@ -3261,7 +3261,7 @@ def _cal_warn_lacking(plan: CalFitPlan, upto: Int, context: PythonObject) raises
 
 
 def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject, n: Int, d: Int,
-                k: Int, codes: PythonObject, splits: PythonObject, ensemble: Bool, jobs: Int,
+                k: Int, codes: PythonObject, classes: PythonObject, splits: PythonObject, ensemble: Bool, jobs: Int,
                 pairs: PythonObject, context: PythonObject) raises -> Int:
     """CalibratedClassifierCV.fit as UNPACK / RUN / PACK over ONE native
     member set (lanes mf-cal, mf-cal2 and mf-cal3, 2026-11-23;
@@ -3314,6 +3314,10 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     var set = MemberSet(trees_address(Xa), n, d, MEMBER_I32, MEMBER_I32)
     set.run.cap = jobs
     set.adopt = True
+    # `classes_` in code order: a base whose class_weight is a dict reads its
+    # table over them at admission (lane mf-adm3), as scikit-learn's fold fit
+    # reads the dict against the fold's labels.
+    set.labels = classes
     var codes_address = trees_address(codes)
     var clones = Python.list()
     for u in range(units):  # driver-loop: over the cv folds (+ the full-X member), admission once each
@@ -3492,7 +3496,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         # Raises every refusal of a served base in its estimator's words
         # (lane mf-cal3); _CAL_NOT_MEMBER: a base it does not serve, whose
         # fit doors fit every fold below.
-        if _cal_native(model, xt, base, Xa, n, d, k, labels.codes, splits, ensemble, jobs, pairs,
+        if _cal_native(model, xt, base, Xa, n, d, k, labels.codes, labels.classes, splits, ensemble, jobs, pairs,
                        context) == _CAL_DONE:
             _set(model, "n_features_in_", PythonObject(d))
             _set(model, "_fitted", PythonObject(True))

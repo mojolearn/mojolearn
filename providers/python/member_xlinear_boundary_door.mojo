@@ -30,6 +30,10 @@ from std.python._cpython import PyObjectPtr
 from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
+from bindings.member_class_weight_unpack import member_cw_kind
+from core.member_class_weight import (
+    MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words,
+)
 from bindings.admitted_input_unpack import admitted_array
 from bindings.py_lists import py_list_f64
 from bindings.py_lists import py_list_int
@@ -257,9 +261,10 @@ def _xl_enetcv_words(model: PythonObject, fields: PythonObject, context: PythonO
 
 def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admitted: Bool) raises -> List[Float64]:
     """Kind 13: `xl_fit_logistic_cv_unpack`'s refusals (penalty, scoring,
-    refit, solver), then 7 + C words. `admitted` is False for a dict (or
-    any other non-word) class_weight, whose labels never cross the ABI, and
-    for a splitter object as cv."""
+    refit, solver), then 7 + C words (and, for an exact dict class_weight,
+    word 5 = 2 and the pending class-weight tail: lane mf-adm3, filled over
+    the caller's labels by `member_cw_fill`). `admitted` is False for any
+    other non-word class_weight and for a splitter object as cv."""
     var nk = x_linear_keys()
     if not _eq(py_item(fields, nk[].k_penalty), PythonObject("l2")) or _truth(py_item(fields, nk[].k_dual)) or py_item(fields, nk[].k_l1_ratios) is not None:
         raise Error("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
@@ -270,10 +275,14 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
     admitted = False
     var class_weight = py_item(fields, nk[].k_class_weight)
     var balanced = False
+    var keyed = False
     if class_weight is not None:
-        if not _eq(class_weight, PythonObject("balanced")):
+        if member_cw_kind(class_weight, _b()) == MEMBER_CW_DICT:
+            keyed = True
+        elif not _eq(class_weight, PythonObject("balanced")):
             return List[Float64]()
-        balanced = True
+        else:
+            balanced = True
     var cv = py_item(fields, nk[].k_cv)
     var folds = 5
     if cv is not None:
@@ -284,9 +293,11 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
     var cs = _xl_cs_grid(py_item(fields, nk[].k_Cs), context)
     var words: List[Float64] = [Float64(XL_MEMBER_LOGISTIC_CV), _intercept_word(fields),
         Float64(_int(py_item(fields, nk[].k_max_iter))), _float(py_item(fields, nk[].k_tol)), Float64(folds),
-        1.0 if balanced else 0.0, Float64(len(cs))]
+        2.0 if keyed else (1.0 if balanced else 0.0), Float64(len(cs))]
     for i in range(len(cs)):  # driver-loop: over the Cs grid
         words.append(cs[i])
+    if keyed:
+        member_cw_pending_words(words)
     return words^
 
 
@@ -329,11 +340,17 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     elif kind == XL_MEMBER_QUANTILE:
         words = _xl_quantile_words(fields)
     elif kind == XL_MEMBER_RIDGE_CLASSIFIER:
-        # Class weights are keyed by labels, which never cross the ABI: the
-        # caller keeps the estimator's own doors for such an instance.
-        if py_item(fields, nk[].k_class_weight) is not None:
+        # A class_weight is the tail from word 3 (lane mf-adm3): 'balanced',
+        # or a dict's pending table the caller fills over its labels
+        # (`member_cw_fill`); any other value keeps the estimator's own doors.
+        var weighting = member_cw_kind(py_item(fields, nk[].k_class_weight), b)
+        if weighting < 0:
             return False
         words = _xl_ridge_classifier_words(model, fields)
+        if weighting == MEMBER_CW_BALANCED:
+            member_cw_balanced_words(words)
+        elif weighting == MEMBER_CW_DICT:
+            member_cw_pending_words(words)
     elif kind == XL_MEMBER_RIDGE_CV:
         var admitted = True
         words = _xl_ridge_cv_words(fields, context, admitted)

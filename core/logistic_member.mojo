@@ -18,6 +18,11 @@ strength (both as the estimator's own C / penalty / l1_ratio checks produce
 them), [4] max_iter, [5] linesearch_max_iter, [6] lbfgs_memory, [7]
 penalty_normalized (0 / 1), [8] the gradient tolerance (`tol`), [9] the
 change tolerance (`tol * 0.01`, computed by the estimator's own check).
+A class_weight (lane mf-adm3) is a tail from word 10
+(core/member_class_weight.mojo): 'balanced', or a dict's table over the
+caller's codes. FIT then fits on the door's row weights (sample weights,
+or ones, times each row's class weight: `member_cw_rows`, the body of
+bindings/logistic_native_door.mojo `_row_weights`).
 
 Classifier (MEMBER_CAN_CLASSIFIER): `y` holds the class CODES 0..classes-1 as
 a host int64 column (MEMBER_I64; int32 and float32 codes are also read), and
@@ -80,6 +85,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_LOGISTIC
+from core.member_class_weight import MEMBER_CW_HEAD, MEMBER_CW_NONE, member_cw_mode, member_cw_rows
 from core.qn_regressor_member import qn_regressor_member, qn_regressor_member_owns
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -309,6 +315,12 @@ def _fit(slot: _SlotP, call: _CallP) raises:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
         _finite(call[].weights, "sample_weight")
         sample = call[].weights.data
+    # class_weight (lane mf-adm3): the door's row weights, from this fit's
+    # own codes; held until the fit returned.
+    var class_rows = List[Float32]()
+    if member_cw_mode(p, _PARAMS) != MEMBER_CW_NONE:
+        sample = member_cw_rows(p, _PARAMS, call[].y.data, call[].y.dtype, rows, classes, sample,
+            "class_weight contains labels absent from y", class_rows)
     var y = call[].y.data
     # The QN solver reads float32 codes; int codes are cast once per fit.
     var codes = List[Float32]()
@@ -328,6 +340,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var iterations = logistic_fit_run(logistic_route_view(call[].route), request)
     admitted_finite_refuse(Int(status[0]), _ESTIMATOR)
     _ = codes^
+    _ = class_rows^  # the row weights the fit read
     slot[].features = cols
     slot[].classes = classes
     slot[].targets = targets
@@ -577,13 +590,15 @@ def _logistic_member(operation: Int, address: Int) raises -> Int:
             | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
             | MEMBER_CAN_COEF | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE)
     if operation == MEMBER_OP_NEW:
-        if call[].param_count != _PARAMS or not call[].params:
-            raise Error("member ABI: a logistic member takes ten parameters")
+        # ten words, or ten and a class-weight tail (lane mf-adm3)
+        if not call[].params or (call[].param_count != _PARAMS and call[].param_count < _PARAMS + MEMBER_CW_HEAD):
+            raise Error("member ABI: a logistic member takes ten parameters (and a class-weight tail)")
         var words = _F64P(unsafe_from_address=call[].params)
         if words[0] != 0.0:
             raise Error("member ABI: unknown logistic member kind")
-        var params = List[Float64](length=_PARAMS, fill=0.0)
-        for i in range(_PARAMS):  # driver-loop: over the ten parameter words
+        var count = call[].param_count
+        var params = List[Float64](length=count, fill=0.0)
+        for i in range(count):  # driver-loop: over the parameter words
             params[i] = words[i]
         call[].state = _mint(params^)
         return 0
