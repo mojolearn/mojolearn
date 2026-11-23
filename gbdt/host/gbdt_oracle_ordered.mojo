@@ -85,6 +85,7 @@ from std.math import ceil, isfinite, log2
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul, identical_mul64, identical_mul_add, identical_mul_add_simd
 from gbdt.methods.cursor_rescale import rescaled_leaf, rescaled_leaves
+from gbdt.methods.random_score_bodies import std_dev_of_sums
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
@@ -3561,7 +3562,7 @@ def gbdt_ordered_host_fit(
                 n, identical_mul64(Float64(iteration), Float64(lr))
             )
             score_std = Float32(
-                mult * sqrt(Float64(s2) / (Float64(quality_count) + 1e-100))
+                mult * std_dev_of_sums(Float64(s2), Float64(quality_count))
                 * Float64(opts.random_strength)
             )
         # ---- the bootstrap, quality slices only ----

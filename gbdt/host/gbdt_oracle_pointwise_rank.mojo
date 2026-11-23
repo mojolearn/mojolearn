@@ -14,7 +14,7 @@
 # single-fold scoring, stable bin partition, and the shared grouped estimator.
 # It never substitutes the greedy searcher or calls Python/native GPU kernels.
 
-from gbdt.methods.random_score_bodies import std_dev_row_term
+from gbdt.methods.random_score_bodies import std_dev_of_sums, std_dev_row_term
 from std.math import exp, fma, isfinite, log, sqrt
 
 from checks.numerics import ftz, identical_mul_add
@@ -117,7 +117,7 @@ def _pointwise_target_std_dev(
     _ = len(stats)
     var sum2 = _deterministic_sum_lanes(partials, 1, blocks)[0]
     var objects = n_rows if object_count < 0 else object_count
-    return sqrt(Float64(sum2) / (Float64(objects) + 1e-100))
+    return std_dev_of_sums(Float64(sum2), Float64(objects))
 
 
 def _pw_helpers(

@@ -147,6 +147,7 @@ from checks.numerics import (
     identical_mul64,
 )
 from gbdt.methods.cursor_rescale import rescaled_leaf
+from gbdt.methods.random_score_bodies import std_dev_of_sums
 from gbdt.data.ordered_plan import (
     ORDERED_BOOTSTRAP_SALT,
     ORDERED_MIN_FOLD_SIZE,
@@ -3077,7 +3078,7 @@ def fit_ordered(
                 )
                 score_std = Float32(
                     mult
-                    * sqrt(Float64(h_sums[0]) / (Float64(count) + 1e-100))
+                    * std_dev_of_sums(Float64(h_sums[0]), Float64(count))
                     * Float64(opts.random_strength)
                 )
         elif opts.random_strength != Float32(0.0):
@@ -3127,7 +3128,7 @@ def fit_ordered(
                     )
                     score_std = Float32(
                         mult
-                        * sqrt(Float64(hs[0]) / (Float64(count) + 1e-100))
+                        * std_dev_of_sums(Float64(hs[0]), Float64(count))
                         * Float64(opts.random_strength)
                     )
                     _ = terms^
@@ -3222,7 +3223,7 @@ def fit_ordered(
                     )
                     score_std = Float32(
                         mult
-                        * sqrt(Float64(held_h[0][0]) / (Float64(count) + 1e-100))
+                        * std_dev_of_sums(Float64(held_h[0][0]), Float64(count))
                         * Float64(opts.random_strength)
                     )
         _ = held_h^

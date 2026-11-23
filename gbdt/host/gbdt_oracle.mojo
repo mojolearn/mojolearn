@@ -168,7 +168,7 @@ from gbdt.targets.pointwise_bodies import (
 )
 from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.methods.leaves_estimation.searcher_leaf_body import searcher_leaf_value
-from gbdt.methods.random_score_bodies import score_model_length_mult
+from gbdt.methods.random_score_bodies import score_model_length_mult, std_dev_of_sums
 from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_GRADIENT,
     LEAF_ESTIMATION_NEWTON,
@@ -3288,7 +3288,7 @@ def _target_std_dev(
     var l2 = _deterministic_sum_lanes(partials, 3, n_blocks)
     var sum2 = Float64(l2[1])
     var weight = Float64(l2[2])
-    return sqrt(sum2 / (weight + 1e-100))
+    return std_dev_of_sums(sum2, weight)
 
 
 def _halving_fold_512(mut slab: List[Float32]) -> Float32:
