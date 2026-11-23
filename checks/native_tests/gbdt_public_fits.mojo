@@ -58,6 +58,9 @@ from gbdt.mojolearn_gbdt_host_run import (
 )
 from gbdt.host.gbdt_host_entries_impl import (
     _parse_model,
+    gbdt_host_model_dim,
+    gbdt_host_predict_ctr_into,
+    gbdt_host_text_has_ctr,
     gbdt_host_predict_into,
     gbdt_host_sigmoid_pair_into,
     gbdt_host_binary_margins_check,
@@ -528,7 +531,7 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
 
 
 def model_dim(text: String) raises -> Int:
-    return _parse_model(text).dim
+    return gbdt_host_model_dim(text)
 
 
 def predict(text: String, x: List[Float32], n: Int) raises -> List[Float32]:
@@ -537,7 +540,11 @@ def predict(text: String, x: List[Float32], n: Int) raises -> List[Float32]:
     var dim = model_dim(text)
     var out = List[Float32](length=n * dim, fill=Float32(0))
     var op = _F32P(unsafe_from_address=Int(out.unsafe_ptr()))
-    if dim == 1:
+    if gbdt_host_text_has_ctr(text):
+        # a CTR model reads the RAW columns (the public predict's input) and
+        # expands them on the host (lane gbdt-units-6)
+        _ = gbdt_host_predict_ctr_into(text, Int(x.unsafe_ptr()), n, 0, op)
+    elif dim == 1:
         var m = _parse_model(text)
         var nf = len(m.fold_counts)
         var nt = len(m.tree_offsets) - 1

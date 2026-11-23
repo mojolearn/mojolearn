@@ -121,7 +121,10 @@ from gbdt.host.gbdt_host_entries_impl import (
     _parse_model,
     gbdt_host_binary_margins_check,
     gbdt_host_binary_prediction_into,
+    gbdt_host_model_dim,
+    gbdt_host_predict_ctr_into,
     gbdt_host_predict_into,
+    gbdt_host_text_has_ctr,
     gbdt_host_sigmoid_pair_into,
 )
 from checks.kernel_matrix import (
@@ -232,6 +235,18 @@ def gbdt_predict_native(text: String, x_address: Int, n_rows: Int, out_address: 
     _ = f32_ptr(x_address)
     if n_rows <= 0:
         raise Error("gbdt_predict: n_rows must be positive")
+    if gbdt_host_text_has_ctr(text):
+        # a CTR model: the raw columns expanded through the device's own
+        # bodies, then the same walk (lane gbdt-units-6)
+        if gbdt_host_model_dim(text) != 1:
+            raise Error(
+                "predict_floats is one-dimensional; this model has"
+                " approx_dim " + String(gbdt_host_model_dim(text))
+                + ". Use predict_multi_floats, which returns"
+                " [row * approx_dim + dim]."
+            )
+        _ = gbdt_host_predict_ctr_into(text, x_address, n_rows, 0, op)
+        return n_rows
     var m = _parse_model(text)
     if m.dim != 1:
         raise Error(
@@ -264,7 +279,7 @@ def gbdt_predict_multi_native(text: String, x_address: Int, n_rows: Int, out_add
 def gbdt_model_dim_binding(model: PythonObject) raises -> PythonObject:
     """`gbdt_model_dim` (`bindings/_mojolearn_gbdt.mojo:442-450`): 1 for an
     empty ensemble, else the trees' common dim."""
-    return PythonObject(_parse_model(String(py=model)).dim)
+    return PythonObject(gbdt_host_model_dim(String(py=model)))
 
 
 def gbdt_fit_two_level_feature_freq_native(
@@ -372,7 +387,7 @@ struct _GbdtHostImage(GbdtImage):
 
     @staticmethod
     def model_dim(text: String) raises -> Int:
-        return _parse_model(text).dim
+        return gbdt_host_model_dim(text)
 
     @staticmethod
     def predict(text: String, x: Int, n_rows: Int, dst: Int) raises -> Int:
