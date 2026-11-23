@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost-compatible boosting loop: derive gradients from the current cursor, fit a tree, estimate leaves, and update predictions."""
 
+from gbdt.options.catboost_options import infinite_score_message
 from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
 from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -3376,12 +3377,8 @@ struct SymDeviceRounds(LoopStep, Movable):
                     " disagree"
                 )
             raise Error(
-                "All splits have infinite score. Probably, numerical"
-                " overflow occurs in loss function and/or split score"
-                " calculation. Try increasing l2_leaf_reg, and/or"
-                " decreasing learning_rate, etc."
-                " [level " + String(status - 1) + ", live leaves "
-                + String(1 << (status - 1)) + "]"
+                # the one text, both columns (lane gbdt-units-10)
+                infinite_score_message(status - 1, 1 << (status - 1))
             )
         if status > 0:
             raise Error(

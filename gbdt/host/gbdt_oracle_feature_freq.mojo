@@ -96,6 +96,7 @@ move with it.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-feature-freq lane is the measurement.
 """
+from gbdt.options.catboost_options import infinite_score_message
 from std.math import isfinite
 from std.memory import bitcast
 
@@ -839,12 +840,8 @@ def _ff_level(
     # `accept_symmetric_level_winner` (`greedy_search_helper.mojo:3835-3880`)
     if best_bin == GBDT_SENTINEL or Int(best_bin) >= hist_cells:
         raise Error(
-            "All splits have infinite score. Probably, numerical"
-            " overflow occurs in loss function and/or split score"
-            " calculation. Try increasing l2_leaf_reg, and/or"
-            " decreasing learning_rate, etc."
-            " [level " + String(level) + ", live leaves "
-            + String(n_live) + "]"
+            # the one text, both columns (lane gbdt-units-10)
+            infinite_score_message(level, n_live)
         )
     var feature = -1
     var fbin = 0

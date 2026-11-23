@@ -73,6 +73,7 @@ leaves move.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two lanes is the measurement.
 """
+from gbdt.options.catboost_options import infinite_score_message
 from std.math import exp, fma, isfinite, log
 from std.memory import bitcast
 
@@ -1625,12 +1626,8 @@ def gbdt_losses_host_fit(
             var best_bin_u = winners_bf[d]
             if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
                 raise Error(
-                    "All splits have infinite score. Probably, numerical"
-                    " overflow occurs in loss function and/or split score"
-                    " calculation. Try increasing l2_leaf_reg, and/or"
-                    " decreasing learning_rate, etc."
-                    " [level " + String(d) + ", live leaves "
-                    + String(1 << d) + "]"
+                    # the one text, both columns (lane gbdt-units-10)
+                    infinite_score_message(d, 1 << d)
                 )
             var cf_ = s_bf_feature[Int(best_bin_u)]
             var cb_ = s_bf_bin[Int(best_bin_u)]

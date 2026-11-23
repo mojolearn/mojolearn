@@ -76,6 +76,7 @@ THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1`
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two lanes is the measurement.
 """
+from gbdt.options.catboost_options import infinite_score_message
 from std.math import exp, fma, isfinite, log
 from gbdt.data.permutation import TRandom
 from gbdt.data.class_weight_body import class_weight_slot, class_weighted
@@ -1524,12 +1525,8 @@ def gbdt_multi_host_fit(
                 var best_bin_u = winners_bf[d]
                 if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
                     raise Error(
-                        "All splits have infinite score. Probably, numerical"
-                        " overflow occurs in loss function and/or split score"
-                        " calculation. Try increasing l2_leaf_reg, and/or"
-                        " decreasing learning_rate, etc."
-                        " [level " + String(d) + ", live leaves "
-                        + String(1 << d) + "]"
+                        # the one text, both columns (lane gbdt-units-10)
+                        infinite_score_message(d, 1 << d)
                     )
                 var cf_ = s_bf_feature[Int(best_bin_u)]
                 var cb_ = s_bf_bin[Int(best_bin_u)]

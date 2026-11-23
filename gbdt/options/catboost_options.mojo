@@ -272,6 +272,39 @@ def simple_leaf_iterations_check(leaf_estimation_method: Int, iterations: Int) r
         )
 
 
+def infinite_score_message(level: Int, live_leaves: Int) -> String:
+    """THE ONE TEXT of the fit's "every split scored non-finite" stop
+    (lane gbdt-units-10, 2026-11-23): every searcher and both columns raise
+    it through this body, so the words are the same everywhere. It names the
+    cause a user meets in practice and what to do; it changes no behaviour
+    (no clamp, no new guard). The first sentence is CatBoost's own, kept so
+    a search for their message finds ours.
+
+    The cause it names: a loss with an EXPONENTIAL link (Poisson, Tweedie,
+    LogLinQuantile) starts every approximation at zero, and one Newton step
+    from there moves it by about the TARGET'S SCALE (Poisson's leaf is
+    `sum(y - 1) / (count + l2_leaf_reg)`), not by its logarithm; times the
+    learning rate the approximation passes ~88, `exp` of it passes float32's
+    largest value (3.4e38), every derivative is then infinite and no split
+    scores finite. Seen on targets in the thousands (verify fixtures
+    gbdt-cat-rest and gbdt-weighted-symmetric on the `wide` input)."""
+    return (
+        "All splits have infinite score. Probably, numerical overflow occurs"
+        " in loss function and/or split score calculation"
+        " [level " + String(level) + ", live leaves " + String(live_leaves)
+        + "]. Every candidate split scored non-finite: the loss or its"
+        " derivatives overflowed float32. The usual cause is a loss with an"
+        " exponential link (Poisson, Tweedie, LogLinQuantile) on a target"
+        " whose values are large: from the zero start one Newton step moves"
+        " the approximation by about the target's scale, and exp of it passes"
+        " float32's largest value (3.4e38) once the step exceeds about 88."
+        " Rescale the target to smaller values, or raise"
+        " leaf_estimation_iterations (the line search bounds each step), or"
+        " lower learning_rate; for any other loss, increase l2_leaf_reg or"
+        " lower learning_rate."
+    )
+
+
 def pointwise_policy_check(use_pointwise_searcher: Bool, grow_policy: Int) raises:
     """THE ONE REFUSAL of `use_pointwise_searcher` under Depthwise or
     Lossguide, for the device fit (`gbdt/train.mojo::train`,
