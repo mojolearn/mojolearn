@@ -252,6 +252,7 @@ def _posterior_set(unit: Int, with_member: Bool) raises:
                 var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
                 for c in range(m):  # small-loop(oracle: the missing cells of one fit)
                     dp.unsafe_store(seed * m + c, src[fit.out_offset + Int(cp[c])])
+                _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
                 iterimp_member_free(member, fit)
             else:
                 var fitted = iterimp_fit(runner, request)
@@ -375,6 +376,7 @@ def estimator_case(unit: Int) raises:
         var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
         for i in range(N * D):  # small-loop(oracle: one result block)
             got[i] = src[fit.out_offset + i]
+        _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
         same_bits(got, fixture_f32(name + "-xt.f32", N * D), label + ": fit_transform")
         var js = fixture_f64(name + "-j.f64", steps)
         var coef = fixture_f32(name + "-coef.f32", steps * (D - 1))
@@ -426,6 +428,7 @@ def estimator_transform_case(unit: Int) raises:
         var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=other.words(applied.out_handle))
         for i in range(N * D):  # small-loop(oracle: one result block)
             got[i] = src[applied.out_offset + i]
+        _ = other.words(applied.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
         same_bits(got, fixture_f32(MF_ITERIMP2_DIR + "est-" + String(unit) + "-tr.f32", N * D), label)
     finally:
         iterimp_member_free(member, fit)
@@ -490,6 +493,7 @@ def empty_kept_case(unit: Int) raises:
             var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
             for i in range(N * D):  # small-loop(oracle: one result block)
                 got[i] = src[fit.out_offset + i]
+            _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
         finally:
             iterimp_member_free(member, fit)
     require(len(fitted.keep) == D and len(fitted.empty) == 1 and fitted.empty[0] == 2,
@@ -612,6 +616,7 @@ def classifier_case(unit: Int) raises:
             var want = Float32((i // C) % 3)
             require(src[fit.out_offset + i] == want, label + ": cell " + String(i) + " "
                 + String(src[fit.out_offset + i]) + " expected " + String(want))
+        _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
     finally:
         iterimp_member_free(member, fit)
     _ = len(x)  # X stays alive past every program that read it
@@ -678,6 +683,7 @@ def logistic_classifier_case(unit: Int) raises:
                     + String(j) + " " + String(got) + " is not a class label")
                 if got == want:
                     right += 1
+        _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
         require(right * 100 >= missing * 95, label + ": " + String(right) + " of " + String(missing)
             + " imputed cells are their row's label")
     finally:
