@@ -39,7 +39,7 @@ from xtrees.trees_agnostic_native_run import _chunk
 from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_regress_run, vote_codes_run, vote_transform_run,
     bag_predict_run, stack_place_run, ovr_assemble_run, multioutput_proba_run, calibrated_proba_run, CalPair,
-    CalFit, ada_classifier_run, ada_regressor_run, ADA_PROBA, _member_f32, _member_codes_into,
+    CalFit, ada_classifier_run, ada_regressor_run, ADA_PROBA, member_f32_block, _member_codes_into,
 )
 from std.memory import unsafe_memcpy
 from core.host_finite_scan import host_all_finite_f32
@@ -574,9 +574,8 @@ struct AgnMeta(AgnModel):
             _ = acc^
         else:
             var keep = List[List[Float32]]()
-            var block = _member_f32(final_est, meta_rows, keep)
-            if block == 0:
-                _agn_refusal(final_est, meta_rows.x, n, width)
+            # A refusal raises the final estimator's own words (`member_f32_block`).
+            var block = member_f32_block(final_est, meta_rows, keep)
             unsafe_memcpy(dest=_F32(unsafe_from_address=dst), src=_F32(unsafe_from_address=block), count=n)
             _ = keep^  # the final's predictions are read through the copy above
         _ = xm^  # the meta features are read through the final estimator above
@@ -593,9 +592,7 @@ struct AgnMeta(AgnModel):
         if classes == 2:
             var keep = List[List[Float32]]()
             var first = self.plan.members[0]
-            var block = _member_f32(first, rows, keep)
-            if block == 0:
-                _agn_refusal(first, x, n, d)
+            var block = member_f32_block(first, rows, keep)
             var p = List[Float32](length=max(1, n), fill=Float32(0))
             var at = self.plan.at[0]
             if at >= 0:
@@ -626,10 +623,7 @@ struct AgnMeta(AgnModel):
             var keep = List[List[Float32]]()
             var blocks = List[Int](capacity=m)
             for j in range(m):  # driver-loop: over the member estimators (every member answers first)
-                var block = _member_f32(self.plan.members[j], rows, keep)
-                if block == 0:
-                    _agn_refusal(self.plan.members[j], x, n, d)
-                blocks.append(block)
+                blocks.append(member_f32_block(self.plan.members[j], rows, keep))
             ada_regressor_run(self.glue, blocks, self.plan.alphas, n, dst)
             _ = keep^  # the members' predictions are read through RUN
             return
