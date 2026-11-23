@@ -57,6 +57,23 @@ inside the Bagging META kind and META estimators nested two and three deep (befo
     each with the nested fitted estimators' attributes.
 EVERY (C) line must be equal (the same forest fit, the same RUNs; the nested states run the same sets).
 
+(D, lane mf-ada4, base = origin/lane/member-fits dcb76ed253, head = lane/mf-ada4) THE ADABOOST KIND: an
+AdaBoostClassifier / AdaBoostRegressor as a native member (before: the callers' door units, `_CalUnits`, the outer
+meta's door loop, IterativeImputer's door rounds, SHAP's `_DoorModel`):
+  * CalibratedClassifierCV(AdaBoostClassifier(n_estimators=5, random_state=0)) (the default stump: the session
+    rounds) x method x ensemble, n_jobs 1;
+  * VotingClassifier([("ada", <ada>), ("lr", lr)], soft) for <ada> in {the default stump, a RandomForestClassifier
+    (n_estimators=3, max_depth=2) base (the member rounds), an ExtraTreesClassifier(n_estimators=3, max_depth=2)
+    base, a DecisionTreeClassifier(splitter="random") base (kept on the door: equal words), a
+    DecisionTreeClassifier(class_weight="balanced") base (kept on the door)}, with every member's
+    estimator_weights_ / estimator_errors_ and each round's leaves;
+  * StackingClassifier([("ada", default ada), ("lda", lda)], cv 3) and its Kernel / Permutation SHAP values;
+  * IterativeImputer(estimator=AdaBoostRegressor(n_estimators=4, loss="square", random_state=0)) and with a
+    RandomForestRegressor(n_estimators=3, max_depth=3) base, max_iter 2;
+  * GridSearchCV(AdaBoostClassifier(random_state=0), {"n_estimators": [3, 5]}, cv 3): best_params_, predicts.
+EVERY (D) line must be equal: the kind runs the door's `ada_fit_run` (same session, same rounds, same seeds) and its
+`ada_classifier_run` / `ada_regressor_run` over the same members' predicts.
+
 The configurations are independent: one process each across the host cores.
 
     python tools/mf_meta3_digests.py > digests.txt
@@ -144,7 +161,42 @@ def _configs():
     rows += [("batchvote", "default"), ("batchvote", "every_row"), ("batchvote", "subset"),
              ("batchvote", "weighted"), ("batchiterimp",), ("deep", "cal_stack_vote"), ("deep", "vote3"),
              ("deep", "search")]
+    # (D) lane mf-ada4
+    for method in ("sigmoid", "isotonic"):
+        for ensemble in (True, False):
+            rows.append(("adacal", method, ensemble))
+    rows += [("adavote", "default"), ("adavote", "rf"), ("adavote", "et"), ("adavote", "random"),
+             ("adavote", "balanced"), ("adastack",), ("adashap", "K"), ("adashap", "P"), ("adaiterimp", "default"),
+             ("adaiterimp", "rf"), ("adasearch",)]
     return rows
+
+
+def _ada(ml, base="default"):
+    if base == "rf":
+        est = ml.RandomForestClassifier(n_estimators=3, max_depth=2, random_state=0)
+    elif base == "et":
+        est = ml.ExtraTreesClassifier(n_estimators=3, max_depth=2, random_state=0)
+    elif base == "random":
+        est = ml.DecisionTreeClassifier(splitter="random", max_depth=2)
+    elif base == "balanced":
+        est = ml.DecisionTreeClassifier(class_weight="balanced", max_depth=1)
+    else:
+        est = None
+    return ml.AdaBoostClassifier(est, n_estimators=5, random_state=0)
+
+
+def _ada_attrs(model, tag):
+    out = []
+    for i, e in enumerate(getattr(model, "estimators_", None) or ()):
+        for attr in ("estimator_weights_", "estimator_errors_"):
+            v = getattr(e, attr, None)
+            if v is not None:
+                out.append((f"{tag}_m{i}_{attr}", _digest(np.asarray(v, dtype=np.float64))))
+        for j, r in enumerate(getattr(e, "estimators_", None) or ()):
+            v = getattr(r, "_leaves", None)
+            if v is not None and hasattr(e, "estimator_weights_"):
+                out.append((f"{tag}_m{i}_round{j}_leaves", _digest(v)))
+    return out
 
 
 def _bag(ml, **kw):
@@ -310,6 +362,45 @@ def _run(index):
             return ([(tag + "_best", str(model.best_params_))] + _predicts(model, Xt, tag)
                     + _members(model.best_estimator_, tag) + _members(model.best_estimator_.estimators_[0],
                                                                        tag + "_inner"))
+        if row[0] == "adacal":
+            _, method, ensemble = row
+            model = ml.CalibratedClassifierCV(_ada(ml), method=method, ensemble=ensemble, cv=3, n_jobs=1).fit(X, y)
+            out = _predicts(model, Xt, tag)
+            for i, (e, _cals) in enumerate(model.calibrated_classifiers_):
+                out.append((f"{tag}_pair{i}_weights", _digest(np.asarray(e.estimator_weights_, dtype=np.float64))))
+                out.append((f"{tag}_pair{i}_decision", _digest(e.decision_function(Xt))))
+            return out
+        if row[0] == "adavote":
+            model = ml.VotingClassifier([("ada", _ada(ml, row[1])), ("lr", ml.LogisticRegression(max_iter=200))],
+                                        voting="soft").fit(X, y)
+            return _predicts(model, Xt, tag) + _members(model, tag) + _ada_attrs(model, tag)
+        if row[0] == "adastack":
+            model = ml.StackingClassifier([("ada", _ada(ml)), ("lda", ml.LinearDiscriminantAnalysis())],
+                                          cv=3).fit(X, y)
+            return _predicts(model, Xt, tag) + _members(model, tag) + _ada_attrs(model, tag)
+        if row[0] == "adashap":
+            model = ml.StackingClassifier([("ada", _ada(ml)), ("lda", ml.LinearDiscriminantAnalysis())],
+                                          cv=3).fit(X, y)
+            explainer = (ml.KernelExplainer if row[1] == "K" else ml.PermutationExplainer)(model, X[:20])
+            phi = np.asarray(explainer.shap_values(Xt[:5]))
+            return [(tag + "_values", _digest(phi)),
+                    (tag + "_expected", _digest(np.asarray(explainer.expected_value, dtype=np.float64)))]
+        if row[0] == "adaiterimp":
+            Xr, _ = _data(11, 120, 0, d=5)
+            Xr = Xr.copy()
+            rng = np.random.default_rng(3)
+            Xr[rng.random(Xr.shape) < 0.15] = np.nan
+            base = (ml.RandomForestRegressor(n_estimators=3, max_depth=3, random_state=0) if row[1] == "rf"
+                    else None)
+            est = ml.AdaBoostRegressor(base, n_estimators=4, loss="square", random_state=0)
+            imp = ml.IterativeImputer(estimator=est, max_iter=2, random_state=0).fit(Xr)
+            return [(tag + "_transform", _digest(imp.transform(Xr)))]
+        if row[0] == "adasearch":
+            from mojolearn.model_selection import GridSearchCV
+            model = GridSearchCV(ml.AdaBoostClassifier(random_state=0), {"n_estimators": [3, 5]}, cv=3).fit(X, y)
+            return ([(tag + "_best", str(model.best_params_))] + _predicts(model, Xt, tag)
+                    + [(tag + "_best_weights", _digest(np.asarray(model.best_estimator_.estimator_weights_,
+                                                                  dtype=np.float64)))])
     except Exception as e:  # noqa: BLE001 - the words are the digest
         return [(tag + "_raised", f"{type(e).__name__}: {e}")]
     return []
