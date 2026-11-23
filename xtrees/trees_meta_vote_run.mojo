@@ -27,9 +27,11 @@ from core.member_abi import (
     MEMBER_OP_PREDICT,
 )
 from core.array_helpers_impl import fsum_f64
+from xtrees.trees_meta_run import CalibratedProgram
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_cols_many, xt_accumulate_onehot, xt_argmax_rows, xt_scale,
     xt_scatter, xt_ovr_assemble, xt_accumulate_rows, xt_count_rows, xt_normalize_rows, xt_count_equal, xt_oob_r2,
+    xt_calibrated_proba,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -540,4 +542,66 @@ def stack_place_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k
             widths.append(c)
         at += c
     _ = keep^  # the native blocks are read through the scatters above
+    return VOTE_ALL_ANSWERED
+
+
+# ------------------------------------------------- CalibratedClassifierCV
+# Lane bm-meta-3 (2026-11-23).
+
+
+@fieldwise_init
+struct CalPair(ImplicitlyCopyable, Movable):
+    """One fitted (member, calibrators) pair of a calibrated predict: the
+    member's score block's positive column `at` (binary, a two-column
+    block), its class codes `class_cols` and class count `ks` (k > 2), and
+    its calibrators `cals[first : first + count]`."""
+
+    var at: Int
+    var class_cols: Int
+    var ks: Int
+    var first: Int
+    var count: Int
+
+
+@fieldwise_init
+struct CalFit(ImplicitlyCopyable, Movable):
+    """One fitted calibrator: Platt (`isotonic` False: `a`, `b`) or isotonic
+    (`m` knots at `knots_x` / `knots_y`, float64, the caller's)."""
+
+    var isotonic: Bool
+    var a: Float64
+    var b: Float64
+    var knots_x: Int
+    var knots_y: Int
+    var m: Int
+
+
+def calibrated_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], pairs: List[CalPair],
+                         cals: List[CalFit], k: Int, acc: Int) raises -> Int:
+    """`CalibratedClassifierCV.predict_proba` (k >= 2): each pair's member
+    scores (its decision_function, else its predict_proba: `members[i]`,
+    native or its door's float32 block), then the whole epilogue as one
+    `x_trees_calibrated_proba` program (`CalibratedProgram`: the same words
+    in the same order as the door's `_calibrated_fused` before this split,
+    no bits change) into `acc` (float64 n x k). Every member answers before
+    the program runs; a native member that refuses is returned by index."""
+    var keep = List[List[Float32]]()
+    var blocks = List[Int](capacity=len(members))
+    for i in range(len(members)):  # driver-loop: over the (member, calibrators) pairs (every member answers first)
+        var block = _member_f32(members[i], rows, keep)
+        if block == 0:
+            return i
+        blocks.append(block)
+    var program = CalibratedProgram(acc, rows.n, k, len(pairs))
+    for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
+        var p = pairs[i]
+        program.pair(blocks[i], p.class_cols, members[i].cols, p.at, p.ks, p.count)
+        for j in range(p.first, p.first + p.count):  # driver-loop: over the pair's calibrators
+            if cals[j].isotonic:
+                program.isotonic(cals[j].knots_x, cals[j].knots_y, cals[j].m)
+            else:
+                program.sigmoid(cals[j].a, cals[j].b)
+    _ = xt_calibrated_proba(glue, program.addrs, program.ints, program.floats)
+    _ = keep^  # the native blocks are read through the program above
+    _ = blocks^
     return VOTE_ALL_ANSWERED

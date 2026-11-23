@@ -3199,57 +3199,106 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     return model
 
 
+def _cal_door(e: PythonObject, decision: Bool, Xa: PythonObject, n: Int, class_cols: Int, keep: PythonObject,
+             answer: PythonObject, context: PythonObject) raises -> VoteMember:
+    """One pair member's float32 score block from its door (or the Array its
+    held state already wrote, `answer`), as `_out2d` admitted it."""
+    var out = answer
+    if out is None:
+        out = meta_member_call(e, "decision_function" if decision else "predict_proba", Python.tuple(Xa), context)
+    var blk = _out2d(out, n, context)
+    _ = py_call(keep.append, blk.array)
+    var got = VoteMember(blk.address, blk.cols, class_cols, 1.0)
+    _ = blk^
+    return got
+
+
 def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject,
                       Xa: PythonObject, n: Int, k: Int, context: PythonObject) raises -> PythonObject:
     """`_calibrated_proba` through `x_trees_calibrated_proba`: the members'
     scores, then the whole epilogue (scores, calibrators, complement or
     normalization, float32 narrowing, the mean) as one device program with
-    one readback (lane perf-sweep-trees, 2026-11-05; before it about twenty
-    glue round trips per pair). Same kernels in the same order: no bit moves
-    (xtrees/calibrated_apply.mojo)."""
-    var keep = List[PythonObject]()
+    one readback (lane perf-sweep-trees, 2026-11-05; xtrees/calibrated_apply.mojo).
+
+    Lane bm-meta-3 (2026-11-23): UNPACK here (per pair its member opened on
+    its held state when its family serves it, else its door's block; the
+    positive column, class codes and calibrator parameters read once), RUN
+    `calibrated_proba_run` (no Python; the GIL released when a member is
+    native), the fallback rule on a refusal. Same words: no bit moves."""
     var acc = admitted_vector(n * k, "<f8", context)
-    var program = CalibratedProgram(trees_address(acc), n, k, len(pairs))
     var nk = trees_keys()
-    for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
-        var e = pairs[i][0]
-        var cals = pairs[i][1]
-        var out: PythonObject
-        if prep_estimator_has(e, "decision_function", context):
-            out = _member_scores(e, "decision_function", Xa, context)
-        else:
-            out = _member_scores(e, "predict_proba", Xa, context)
-        var blk = _out2d(out, n, context)
-        keep.append(blk.array)
-        var at = 0
-        var cols_addr = 0
-        var ks = 0
-        if k == 2:
-            if blk.cols != 1:
+    var got = _VoteUnpack()
+    var cal_pairs = List[CalPair](capacity=len(pairs))
+    var cals = List[CalFit]()
+    var decisions = List[Bool](capacity=len(pairs))
+    try:
+        for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs (admission, once each)
+            var e = pairs[i][0]
+            var fitted = pairs[i][1]
+            var decision = prep_estimator_has(e, "decision_function", context)
+            decisions.append(decision)
+            var cols_addr = 0
+            var ks = 0
+            if k != 2:
+                var sub_cols = _sub_cols(e, context)
+                _ = py_call(got.keep.append, sub_cols)
+                cols_addr = trees_address(sub_cols)
+                ks = len(_attr(e, nk[].k_classes_, Python.list()))
+            var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA
+            var opened = _member_open(e, Xa, operation, True, context)
+            var member: VoteMember
+            if opened.served and opened.gil_free:
+                member = VoteMember(len(got.opened), opened.held.state, operation, opened.cols, opened.dtype,
+                                    cols_addr, 1.0)
+                got.native += 1
+                got.opened.append(opened^)
+            else:
+                var answer = PythonObject(None)
+                if opened.served:
+                    try:
+                        answer = member_held_run(opened, trees_address(Xa), n, _cols(Xa), context)
+                    finally:
+                        member_held_close(opened)
+                member = _cal_door(e, decision, Xa, n, cols_addr, got.keep, answer, context)
+            var at = 0
+            if k == 2 and member.cols != 1:
                 at = _index_of_one(e, context)
                 meta_binary_column_check(at)
-        else:
-            var sub_cols = _sub_cols(e, context)
-            keep.append(sub_cols)
-            cols_addr = trees_address(sub_cols)
-            ks = len(_attr(e, nk[].k_classes_, Python.list()))
-        program.pair(blk.address, cols_addr, blk.cols, at, ks, len(cals))
-        for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
-            var entry = cals[j]
-            var par = entry[1]
-            if String(entry[0]) == "sigmoid":
-                program.sigmoid(Float64(py=par[0]), Float64(py=par[1]))
+            got.members.append(member)
+            cal_pairs.append(CalPair(at, cols_addr, ks, len(cals), len(fitted)))
+            for j in range(len(fitted)):  # driver-loop: over the class columns (one calibrator each)
+                var par = fitted[j][1]
+                if String(fitted[j][0]) == "sigmoid":
+                    cals.append(CalFit(False, Float64(py=par[0]), Float64(py=par[1]), 0, 0, 0))
+                else:
+                    _ = py_call(got.keep.append, par[0])
+                    _ = py_call(got.keep.append, par[1])
+                    cals.append(CalFit(True, 0.0, 0.0, trees_address(par[0]), trees_address(par[1]),
+                                       Int(py=par[2])))
+        for i in range(len(got.members)):  # driver-loop: over members
+            if got.members[i].native:
+                got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
+        var glue = _xr(xt)
+        var rows = VoteRows(trees_address(Xa), n, _cols(Xa))
+        while True:  # driver-loop: over refusals (at most one round per native member)
+            var refused = VOTE_ALL_ANSWERED
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = calibrated_proba_run(glue, rows, got.members, cal_pairs, cals, k, trees_address(acc))
             else:
-                var knots_x = par[0]
-                var knots_y = par[1]
-                keep.append(knots_x)
-                keep.append(knots_y)
-                program.isotonic(trees_address(knots_x), trees_address(knots_y), Int(py=par[2]))
-        _ = blk^
-    var glue = _xr(xt)
-    _ = xt_calibrated_proba(glue, program.addrs, program.ints, program.floats)
+                refused = calibrated_proba_run(glue, rows, got.members, cal_pairs, cals, k, trees_address(acc))
+            if refused == VOTE_ALL_ANSWERED:
+                break
+            got.members[refused] = _cal_door(pairs[refused][0], decisions[refused], Xa, n,
+                                             got.members[refused].class_cols, got.keep, PythonObject(None), context)
+            got.native -= 1
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
     _ = acc  # keep the Python object alive through the native call above
-    _ = keep  # keep the members' blocks, class codes and knots alive through the native call above
+    _ = Xa  # the rows are read through RUN
+    _ = got.keep  # the members' blocks, class codes and knots are read through RUN
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
