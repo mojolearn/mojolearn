@@ -248,6 +248,17 @@ operation's math, on any column or in any kernel, is a defect.
   math, with a comment saying which body it departs from and why, and a check comparing it with the shared body's
   result to the stated tolerance or bits.
 - A body takes typed values and has no launch, allocation or Python in it, so it inlines into every caller.
+- **Fused kernels stay (Andrew, 2026-11-22).** A fused kernel exists for speed. It is never replaced by a composition
+  of separate layers, and no time is spent measuring such a replacement. Layers are added BESIDE the fused blocks so
+  people can compose their own models; a block keeps its fused kernels. What may be removed around a fused block is
+  duplicated plumbing (a second door, session, state layout, checkpoint path, training loop or inference twin that
+  runs the same kernels), with the same-kernels, same-outputs evidence and no measurement.
+- **Words (the ones the field uses).** A LAYER (PyTorch: module) is one public composable piece: convolution,
+  attention, `ssd_scan`. A BLOCK is a repeated unit made of layers or of one fused kernel: `TransformerBlock`,
+  `Mamba2Block`, `BasicBlock`. A MODEL is what a user assembles from layers and blocks (`Sequential`). An ESTIMATOR
+  is a scikit-learn-style object with fit and predict. An OP (operator) is a differentiable operation on the
+  autograd tape. A KERNEL is the compiled function that runs an op on the device or the host. Do not say "building
+  blocks", "pieces", "presets" or "subparts" in code, docs or reports.
 
 ### No refactor adds cost on a hot path (Andrew, 2026-11-11)
 
