@@ -17,6 +17,12 @@ these with the kind prefix its classes connect under ("dt_", "rf_", "et_").
     DecisionTree splitter='random' (its inner Extra Trees forest),
     `class_weight`, `oob_score`, and the deviance criteria of a regressor
     (poisson, gamma, inverse_gaussian: their target check reads y).
+    `caller_rows` (lane mf-ada2, AdaBoost's member rounds): the caller
+    multiplies the class_weight row weights into the fit's row weights
+    itself and runs the deviance criteria's target check on each fit's
+    targets itself (xtrees/trees_ada_fit_run.mojo), so those two are
+    admitted; `oob_score` and splitter='random' still are not (the caller
+    admits a random-splitter tree's inner forest itself).
   * `forest_member_pack_common` (PACK): the fitted attributes and model
     arrays the estimator's own fit writes, from the state's blocks, and
     `feature_importances_` when the state holds them (else removed, as the
@@ -67,7 +73,7 @@ def _family_of(kind: String) -> String:
 
 
 def forest_member_admit_common(model: PythonObject, kind_word: Int, prefix: String, context: PythonObject,
-    mut owner: MemberOwner) raises -> Bool:
+    mut owner: MemberOwner, caller_rows: Bool = False) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator (see the module docstring)."""
     var run = trees_route_context(model, context)
@@ -87,14 +93,14 @@ def forest_member_admit_common(model: PythonObject, kind_word: Int, prefix: Stri
         var splitter = py_get(scratch, PythonObject("splitter"))
         if splitter is not None and Bool(py=splitter == PythonObject("random")):
             return False
-    if classifier and py_get(scratch, PythonObject("class_weight")) is not None:
+    if classifier and not caller_rows and py_get(scratch, PythonObject("class_weight")) is not None:
         return False
     var mode = forest_capture_mode(scratch, run)
     var engine = forest_prediction_engine(scratch, run)
     var config = forest_config(scratch, py_item(scratch, PythonObject("_cfg")), kind, not classifier, run)
-    if config.oob_score or config.class_weighted:
+    if config.oob_score or (config.class_weighted and not caller_rows):
         return False
-    if not classifier and forest_target_need(config) != FOREST_TARGET_ANY:
+    if not classifier and not caller_rows and forest_target_need(config) != FOREST_TARGET_ANY:
         return False
     # The conversions the estimator's fit would refuse: refused now, in its words.
     if config.refusal != "":
