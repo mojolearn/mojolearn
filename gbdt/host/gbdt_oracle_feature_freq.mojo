@@ -909,9 +909,15 @@ def gbdt_feature_freq_host_fit(
     sources_in: List[Int],
     learning_rate: Float32,
     l2_leaf_reg: Float32,
+    sample_weight: List[Float32] = List[Float32](),
 ) raises -> String:
     """`gbdt_fit_two_level_feature_freq` on the covered configuration; returns
-    the model text. See the module docstring for what mirrors what."""
+    the model text. See the module docstring for what mirrors what.
+    `sample_weight` (row order, empty: unit) is `two_level_prep_kernel`'s
+    `has_w` arm (lane gbdt-cpu-rest, 2026-11-23): plane 0 the weight, plane
+    1 `weight * y`, the weight fold the scale and the leaves read."""
+    if len(sample_weight) != 0 and len(sample_weight) != n_rows:
+        raise Error("two-level tensor fit weight shape mismatch")
     if n_rows < 1 or n_features < 2 or len(sources_in) < 2:
         raise Error("two-level FeatureFreq fit needs rows and two sources")
     if len(x_colmajor) != n_rows * n_features or len(y) != n_rows:
@@ -999,22 +1005,38 @@ def gbdt_feature_freq_host_fit(
     var grad_mag = Float32(0.0)
     var weight_mag = Float32(0.0)
     var abs_targets = List[Float32](length=n_rows, fill=Float32(0.0))
-    var unit_weights = List[Float32](length=n_rows, fill=Float32(1.0))
+    var unit_weights: List[Float32]
+    if len(sample_weight) != 0:
+        unit_weights = sample_weight.copy()
+    else:
+        unit_weights = List[Float32](length=n_rows, fill=Float32(1.0))
+    # the kernel's two flags over every row, raised in its order (an
+    # invalid weight before a non-finite weighted target)
+    var bad_weight = False
+    var bad_target = False
     for r in range(n_rows):
-        var weight = Float32(1.0)
+        var weight = unit_weights[r]
+        if weight < Float32(0.0) or not isfinite(weight):
+            bad_weight = True
         var weighted_target = identical_mul(weight, y[r])
         if not isfinite(weighted_target):
-            raise Error("two-level tensor fit weighted target is not finite")
+            bad_target = True
         stats[r] = weight
         stats[n_rows + r] = weighted_target
         abs_targets[r] = (
             -weighted_target if weighted_target < Float32(0.0) else weighted_target
         )
+    if bad_weight:
+        raise Error("two-level tensor fit weight is invalid")
+    if bad_target:
+        raise Error("two-level tensor fit weighted target is not finite")
     # `two_level_prep_kernel`'s fold, not a row-order chain (lane cpu3-gbdt-a)
     weight_mag = _ff_two_stage_sum(unit_weights)
     grad_mag = _ff_two_stage_sum(abs_targets)
     if not isfinite(weight_mag) or not isfinite(grad_mag):
         raise Error("two-level tensor fit weighted statistics overflow")
+    if not (weight_mag > Float32(0.0)):
+        raise Error("two-level tensor fit weights sum to zero")
     var magnitude = Float64(weight_mag)
     if magnitude < 0.0:
         magnitude = -magnitude

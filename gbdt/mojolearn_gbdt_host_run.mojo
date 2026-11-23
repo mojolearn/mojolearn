@@ -1761,6 +1761,9 @@ def gbdt_fit_two_level_feature_freq_run(
     n_sources: Int,
     learning_rate: Float32,
     l2_leaf_reg: Float32,
+    # the sample weights' address (read when `n_weights` is n_rows; lane
+    # gbdt-cpu-rest, 2026-11-23, the device's `has_w` arm)
+    weights_address: Int = 0,
 ) raises -> String:
     """The typed body of `gbdt_fit_two_level_feature_freq_binding`: its
     checks and refusal, the source columns and the host fit. The door calls
@@ -1769,19 +1772,14 @@ def gbdt_fit_two_level_feature_freq_run(
         raise Error("two-level FeatureFreq fit needs rows and two sources")
     if n_weights != 0 and n_weights != n_rows:
         raise Error("two-level FeatureFreq weights must be empty or per-row")
-    if n_weights != 0:
-        raise Error(
-            "no CPU implementation of"
-            " _mojolearn_gbdt.gbdt_fit_two_level_feature_freq for"
-            " sample_weight; the gbdt host binding trains the"
-            " gbdt-feature-freq lane only (unit weights), see"
-            " gbdt/host/gbdt_oracle_feature_freq.mojo"
-        )
     var sources = gbdt_host_load_sources(sp, n_sources)
     var x = read_f32(x_address, n_rows * n_features)
     var y = read_f32(y_address, n_rows)
+    var w = List[Float32]()
+    if n_weights != 0:
+        w = read_f32(weights_address, n_rows)
     return gbdt_feature_freq_host_fit(
-        x, y, n_rows, n_features, sources, learning_rate, l2_leaf_reg
+        x, y, n_rows, n_features, sources, learning_rate, l2_leaf_reg, w
     )
 
 
@@ -1807,13 +1805,6 @@ def gbdt_fit_ordered_rmse_run(
         raise Error("ordered RMSE requires >=4 rows, features and a full permutation")
     if n_weights != 0 and n_weights != n_rows:
         raise Error("ordered RMSE sample weight shape mismatch")
-    if n_weights != 0:
-        raise Error(
-            "no CPU implementation of _mojolearn_gbdt.gbdt_fit_ordered_rmse"
-            " for sample_weight; the gbdt host binding trains the"
-            " gbdt-ordered-rmse lane only (unit weights), see"
-            " gbdt/host/gbdt_oracle_ordered.mojo"
-        )
     _ = f32_ptr(x_address)
     _ = f32_ptr(y_address)
     _ = f32_ptr(weights_address)
@@ -1821,7 +1812,10 @@ def gbdt_fit_ordered_rmse_run(
     var permutation = gbdt_host_load_u32(pp, n_rows)
     var x = read_f32(x_address, n_rows * n_features)
     var y = read_f32(y_address, n_rows)
+    var w = List[Float32]()
+    if n_weights != 0:
+        w = read_f32(weights_address, n_rows)
     return gbdt_ordered_rmse_host_fit(
         x, y, n_rows, n_features, permutation, n_estimators, max_depth,
-        border_count, learning_rate, l2_leaf_reg,
+        border_count, learning_rate, l2_leaf_reg, w,
     )
