@@ -85,6 +85,13 @@ rank 1), and the refit: the best candidate fitted on every row.
    a binary fold estimator: its positive column, against a test side holding three labels) raises scikit-learn's
    words "ValueError: y_true and y_pred contain different number of classes 3, 2. ..."; with a number fold 0
    takes it and fold 1 equals the metric over the member's own probabilities.
+17. (lane mf-msel5c) THE LACKING FOLD BY 'average_precision' AND 'neg_brier_score': case 12's fold 0 (a binary
+   fold estimator) against a test side of three labels: AP refuses its (30,) scores in scikit-learn's
+   `label_binarize` shape words; brier refuses a multiclass y_true for one column.
+18. (lane mf-msel5c) FOUR classes, fold 0 a three-class fold estimator against four test labels: AP's shape words
+   with (30, 3); brier's "different number of classes: 4 vs 3 ... Classes found in y_true: [0 1 2 3]".
+19. (lane mf-msel5c) MAKE_SCORER KWARGS: top_k's k in the code (metric word, kept by the XOR flip), a binary row's
+   given pos_label (its refusal names the label's str), and both refused on other rows.
 
 FAIL-PROOF EDITS (each must make a case fail): `side_rows[f * sides] = rows_at + 4 * (f * n)` (case 1: the train
 rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits learn the wrong count);
@@ -112,7 +119,11 @@ False` removed from the lacking block (case 12: fold 0 scored by the member agai
 core/kmeans_member.mojo `call[].value = result.inertia` (cases 14, 15: the sign), or in
 cluster/host/kmeans_oracle.mojo `host_kmeans_score` passing `SUM_MODE_PLAIN` (case 14's weighted fit), or the
 `MEMBER_OP_SCORE` arm removed from `_host_indexed` (case 14: the indexed score reads the base X as the rows);
-`label_count = classes` kept in `_fold_view_side` (case 16: no refusal, a log loss over three labels).
+`label_count = classes` kept in `_fold_view_side` (case 16: no refusal, a log loss over three labels); in
+`_fold_truth_checks` `if present > 2:` written `if present > 3:` (cases 17, 18: the AP shape words), or
+`present != view_cols` written `present < view_cols` (case 18: brier's count words); in core/msel_scorer_run.mojo
+`return code ^ SCORER_FLIP` written `return code + SCORER_FLIP`, or `row.metric = k` removed, or the
+`msel_scorer_pos_words` call in `_binary_value` replaced by "1" (case 19).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -120,7 +131,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from bindings.arena_prog_run import MetricRoute
 from bindings.msel_search_stats_run import msel_row_means, msel_row_stds, msel_rank_scores, msel_rank_best
 from core.device_route import DEVICE_CPU
-from core.entry_table import EntryRef
+from core.entry_table import EntryRef, entry_ref_unresolved
 from core.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
@@ -136,7 +147,10 @@ from core.msel_search_run import (
 )
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
-from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_value, SCORER_POSITIVE_ABSENT
+from core.msel_scorer_run import (
+    msel_scorer_code, msel_scorer_row, msel_scorer_value, SCORER_POSITIVE_ABSENT, msel_scorer_flip,
+    msel_scorer_with_k, msel_scorer_given_pos, msel_scorer_pos_words,
+)
 from bindings.mcls_classify_run import label_binary_run, LBL_PRECISION, LBL_RECALL, LBL_F1
 from core.trees_entry_table import TreesEntryKey
 from glm.host.logistic_native_host import qn_host_native_v1
@@ -155,7 +169,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 16
+comptime CASES = 19
 
 
 def _glue() raises -> EntryRef:
@@ -1394,6 +1408,151 @@ def check_lacking_proba() raises:
     _ = y^
 
 
+def _refusal(var plan: MselSearchPlan) -> String:
+    """The words the RUN raises for `plan` ("" when it returns)."""
+    try:
+        _ = msel_search_run(plan)
+    except error:
+        return String(error)
+    return String("")
+
+
+def check_lacking_ap_brier() raises:
+    """(lane mf-msel5c) case 12's folds (fold 0 a binary fold estimator, classes 1 and 2, its test side holding
+    three labels) scored by 'average_precision' (predict_proba row, pos_label=1 = code 1) and 'neg_brier_score':
+    scikit-learn's `label_binarize` shape refusal and brier's binary-branch refusal."""
+    var x = _x()
+    var y = _codes()
+    var one = _logistic(1.0, 0.0)
+    var train0 = List[Int32]()
+    var test0 = List[Int32]()
+    var train1 = List[Int32]()
+    var test1 = List[Int32]()
+    _lacking_folds(y, train0, test0, train1, test1)
+    var given: List[Int] = [Int(train0.unsafe_ptr()), len(train0), Int(test0.unsafe_ptr()), len(test0),
+                            Int(train1.unsafe_ptr()), len(train1), Int(test1.unsafe_ptr()), len(test1)]
+    var ap = msel_scorer_code("average_precision", False)
+    var plan = _plan([one.copy()], x, y, ap)
+    _given(plan, given)
+    plan.refit = False
+    plan.positives = [1]
+    plan.label_words = ["0", "1", "2"]
+    var words = _refusal(plan^)
+    require(words == "ValueError: `y_score` needs to be of shape `(n_samples, n_classes)`, since `y_true` contains "
+            + "multiple classes. Got `y_score.shape=(" + String(N // 2) + ",)`.",
+            "AP over a binary fold estimator against three labels, got: " + words)
+    var brier = msel_scorer_code("neg_brier_score", False)
+    var plan2 = _plan([one.copy()], x, y, brier)
+    _given(plan2, given)
+    plan2.refit = False
+    plan2.positives = [0]
+    plan2.label_words = ["0", "1", "2"]
+    var words2 = _refusal(plan2^)
+    require(words2.startswith("The type of the target inferred from y_true is multiclass but should be binary"),
+            "brier over a binary fold estimator against three labels, got: " + words2)
+    _ = len(train0)
+    _ = len(test0)
+    _ = len(train1)
+    _ = len(test1)
+    _ = x^
+    _ = y^
+
+
+def check_lacking_four() raises:
+    """(lane mf-msel5c) FOUR classes, fold 0 trained without class 0 (a MULTICLASS fold estimator holding three
+    classes) against a test side holding all four: 'average_precision' refuses the (30, 3) scores in scikit-learn's
+    words, and 'neg_brier_score' refuses the class count with the labels found in y_true."""
+    var x = _x()
+    var y = List[Int32](length=N, fill=Int32(0))
+    for i in range(N):  # small-loop(fixture: four classes)
+        y[i] = Int32((i + i // 5) % 4)
+    var one = _logistic(1.0, 0.0)
+    one.classes = 4
+    var train0 = List[Int32]()
+    var test0 = List[Int32]()
+    var train1 = List[Int32]()
+    var test1 = List[Int32]()
+    _lacking_folds(y, train0, test0, train1, test1)
+    var given: List[Int] = [Int(train0.unsafe_ptr()), len(train0), Int(test0.unsafe_ptr()), len(test0),
+                            Int(train1.unsafe_ptr()), len(train1), Int(test1.unsafe_ptr()), len(test1)]
+    var words4: List[String] = ["0", "1", "2", "3"]
+    var ap = msel_scorer_code("average_precision", False)
+    var masks = _masks([one.copy()])
+    var plan = MselSearchPlan([one.copy()], masks^, Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), 4, F, _glue(),
+                              MetricRoute(metrics_program_host_v1, False, False))
+    plan.scoring = ap
+    _given(plan, given)
+    plan.refit = False
+    plan.positives = [1]
+    plan.label_words = words4.copy()
+    var words = _refusal(plan^)
+    require(words == "ValueError: `y_score` needs to be of shape `(n_samples, n_classes)`, since `y_true` contains "
+            + "multiple classes. Got `y_score.shape=(" + String(N // 2) + ", 3)`.",
+            "AP over a three-class fold estimator against four labels, got: " + words)
+    var brier = msel_scorer_code("neg_brier_score", False)
+    var masks2 = _masks([one.copy()])
+    var plan2 = MselSearchPlan([one.copy()], masks2^, Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), 4, F, _glue(),
+                               MetricRoute(metrics_program_host_v1, False, False))
+    plan2.scoring = brier
+    _given(plan2, given)
+    plan2.refit = False
+    plan2.positives = [0]
+    plan2.label_words = words4.copy()
+    var words2 = _refusal(plan2^)
+    require(words2 == "ValueError: y_true and y_prob contain different number of classes: 4 vs 3. Please provide "
+            + "the true labels explicitly through the labels argument. Classes found in y_true: [0 1 2 3]",
+            "brier over a three-class fold estimator against four labels, got: " + words2)
+    _ = len(train0)
+    _ = len(test0)
+    _ = len(train1)
+    _ = len(test1)
+    _ = x^
+    _ = y^
+
+
+def check_scorer_words() raises:
+    """(lane mf-msel5c) MAKE_SCORER KWARGS IN THE CODE: top_k_accuracy's k is the row's metric word (and survives
+    a flip, which is an XOR), a binary row's given pos_label marks the row and names the label in the refusal,
+    and a k or a given pos_label on another row refuses."""
+    var top = msel_scorer_code("top_k_accuracy", False)
+    var three = msel_scorer_row(msel_scorer_with_k(top, 3))
+    require(three.metric == 3 and three.sign == 1.0, "top_k k=3 is the metric word")
+    var flipped = msel_scorer_row(msel_scorer_flip(msel_scorer_with_k(top, 3)))
+    require(flipped.metric == 3 and flipped.sign == -1.0, "a flipped top_k keeps its k")
+    require(msel_scorer_flip(msel_scorer_flip(top)) == top, "the flip is its own inverse")
+    var f1 = msel_scorer_code("f1", False)
+    var given = msel_scorer_row(msel_scorer_given_pos(f1))
+    var plain = msel_scorer_row(f1)
+    var label_words: List[String] = ["'a'", "'b'", "'c'"]
+    require(msel_scorer_pos_words(given, label_words, 2) == "c", "a given string pos_label prints its str")
+    require(msel_scorer_pos_words(plain, label_words, 2) == "1", "the default pos_label prints 1")
+    var truth: List[Int32] = [0, 0, 1, 1]
+    var pred: List[Int32] = [0, 1, 1, 0]
+    var notes = List[Float64]()
+    var words = String("")
+    try:
+        _ = msel_scorer_value(MetricRoute(metrics_program_host_v1, False, False), entry_ref_unresolved(), label_words,
+                              given, Int(truth.unsafe_ptr()), Int(pred.unsafe_ptr()), 4, 3, 1, 2, notes)
+    except error:
+        words = String(error)
+    require(words == "pos_label=c is not a valid label. It should be one of ['a', 'b']",
+            "a given pos_label absent from two present labels, got: " + words)
+    var refused = False
+    try:
+        _ = msel_scorer_row(msel_scorer_with_k(f1, 3))
+    except:
+        refused = True
+    require(refused, "a k on a binary row refuses")
+    refused = False
+    try:
+        _ = msel_scorer_row(msel_scorer_given_pos(top))
+    except:
+        refused = True
+    require(refused, "a given pos_label on top_k refuses")
+    _ = len(truth)
+    _ = len(pred)
+
+
 def test_msel_search_run() raises:
     publish_x_trees_glue("cpu")
     def run_case(which: Int) raises:
@@ -1427,8 +1586,14 @@ def test_msel_search_run() raises:
             check_kmeans_score()
         elif which == 14:
             check_kmeans_search()
-        else:
+        elif which == 15:
             check_lacking_proba()
+        elif which == 16:
+            check_lacking_ap_brier()
+        elif which == 17:
+            check_lacking_four()
+        else:
+            check_scorer_words()
     check_cases("msel_search_run", CASES, run_case)
 
 

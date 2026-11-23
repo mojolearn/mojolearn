@@ -1,152 +1,50 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Model selection's units over NATIVE MEMBERS (core/member_abi.mojo): the
-(candidate, fold) units of cross_validate, cross_val_score and the searches,
-run without a Python estimator when the member's family has published its
-member entry.
+"""Model selection's ONE-FIT door over a NATIVE MEMBER (core/member_abi.mojo):
+a search fitted as one member of its own META kind (core/ensemble_member.mojo
+`_fit_search`, whose RUN core/msel_search_run.mojo runs every candidate and
+fold), the cv tools' carrier search, and a search's refit of its best
+estimator.
 
-WHAT THIS REPLACES for such a member. The unit of bindings/msel_cv_door.mojo
-(`MselUnitRun.unit`) clones the Python estimator once per unit, sets the
-candidate's parameters on the clone, takes the fold's rows as Python arrays
-and calls the member's fit and score doors through the Python model, every
-step with the GIL held. Here:
-  * UNPACK (GIL held, once per CANDIDATE, never per unit): the candidate's
-    estimator (the base itself for a plain cross-validation: it is never
-    fitted, so it needs no clone) is admitted as a member
-    (`member_admit`: route, parameter words, resolved entry); X, y and the
-    fold indices are read once as addresses.
-  * RUN, TWO MODES (THE GIL RULE, core/member_abi.mojo `MEMBER_GIL_FREE`).
-    A member kind WITH the bit: the GIL released, the units on `workers`
-    host tasks (`host_parallelize` over lanes; a lane takes units lane,
-    lane + workers, ...). A kind WITHOUT it: the units one after the other
-    on the public thread with the GIL held (its route's entries release
-    inside as for the family's own door and may rely on the GIL as their
-    lock): what the Python units did, without their Python. The fold-shape
-    scans run released and in parallel either way. X is NOT copied per fold: a fold side that is one run of rows (a
-    test fold of an unshuffled KFold, a time-series split's sides) is a view
-    of X; a scattered side goes to a member that reads row numbers
-    (`MEMBER_CAN_ROW_INDEX`) as the whole X plus the fold's index array.
-    Only a scattered side of a family without that bit is gathered into the
-    unit's own buffers (with one worker the gather itself is split across
-    the host cores). Each unit makes its own member state (`member_new`),
-    fits, scores and frees it.
-  * Results go to typed slots per unit. If any unit fails, this route
-    publishes nothing and answers `ran == False`: the Python units then run
-    and raise the estimator's own exception. With a numeric `error_score`
-    (`tolerate`) a unit whose FIT or one side's SCORE fails on its data is
-    reported instead (`fit_failed`, UNIT_* words) and the caller writes the
-    value, as the Python unit does (scikit-learn's `_fit_and_score`).
+LANE mf-msel5c (2026-11-23): the (candidate, fold) units this door used to
+run over native members (`msel_member_units`, the route
+bindings/msel_cv_door.mojo `_msel_member_route` called) are gone with that
+route: every search and cv tool a member serves is the search kind's typed
+RUN; what the kind does not take runs the door's Python units. What is left
+is one fit:
+  * UNPACK (GIL held, once): the estimator (or its clone with the given
+    parameters) admitted as a member (`member_admit_serving_*`); X read once
+    as an address (host float32, C order); y as the member's fit reads it:
+    float32 targets (`classical_check_y`), or a CLASSIFIER's int32 codes by
+    model selection's one label encoder (`msel_encode`: code c is the
+    estimator's own `classes_[c]`), a 2-D y PER OUTPUT (THE 2-D y, layout 4:
+    each column encoded on its own, rows x outputs codes and each output's
+    class count in the plan's `class_counts`). A SEARCH over a classifier
+    encodes y BEFORE its admission and hands it the labels (the search kind's
+    scorers read them: positive classes, label words, Brier marks).
+  * RUN: one member fit on the whole X (a view, nothing gathered or copied),
+    with the GIL released for a kind with `MEMBER_GIL_FREE` or
+    `MEMBER_GIL_DOOR`, else held (THE GIL RULE). In the caller's resident
+    scope X's own object is pinned once for the fit (THE PIN RULE).
+  * PACK (GIL held): the fitted state packed into the estimator by its
+    family (`member_pack_labeled` with the labels the estimator's own fit
+    publishes; a list of per-output labels for a 2-D y) and held by it
+    (bindings/member_held_door.mojo); its fit notices raised.
 
 THE FALLBACK RULE (MEMBER-ABI-V2.md): a member mark never turns a call that
-worked into a refusal. A marked class this route cannot serve (a transformer:
-no score; an admission the family refuses; a target the linear
-check refuses; a classifier's labels outside the CLASSIFIER rule below)
-answers `ran == False` silently.
+worked into a refusal. A class this door cannot serve (no member, an
+admission the family refuses, a target the check refuses, labels outside the
+CLASSIFIER rule, a failing fit) answers None / False having changed nothing:
+the caller fits through the estimator's own door, which raises its own words.
 
-CLASSIFIER MEMBERS (MEMBER-ABI-V2.md item 1). The labels are encoded ONCE per
-operation, at UNPACK, by model selection's own encoder (`msel_encode`: the one
-label encoder every classifier's fit door calls, so code c is the estimator's
-own `classes_[c]`): y reaches the member as int32 codes (`MEMBER_I32`), the
-class count rides in every candidate's plan (`plan.classes` -> `call.classes`
-at NEW and FIT). Labels never cross the ABI. This route runs a classifier
-only when the answer is the one its Python units give:
-  * y is a 1-D Array as long as X with at least two classes;
-  * float labels are whole finite numbers (a classifier's own fit may refuse
-    a continuous target: that refusal is the Python units' to raise);
-  * every fold's TRAIN side holds every class. The estimator's own fit on a
-    fold that lacks a class learns fewer classes than the codes name, which
-    is a different model; such a fold set takes the Python units. The scan
-    is one pass per fold over its train rows, in parallel with the fold
-    shapes, and stops at the row that completes the classes.
+CLASSIFIER RULE: y as long as X with at least two classes per output; float
+labels whole finite numbers; a 2-D y of a numeric dtype in C order (labels of
+another dtype keep the caller's door: a column of Python label objects is
+not read here).
 
-WHO REFUSES A NON-FINITE X. Model selection holds X with its finite test
-deferred to the member doors (bindings/msel_cv_door.mojo), and this route
-runs no member door. A member whose KIND has `MEMBER_CAN_TEST_ROWS` refuses
-non-finite rows in its own fit and score, from the pass its kernel already
-makes: nothing is scanned here; its refusal fails the unit, nothing is
-published (or, with a numeric `error_score`, the unit is reported as its
-failing fit was) and the Python units raise the estimator's own words. Any
-other member reads admitted words: X's verdict is read ONCE per operation at
-UNPACK (the held block's recorded verdict, `admitted_held_verify`, which
-scans at most once per held X and records it for every later door; an unheld
-X is scanned once across the host cores); not finite = `ran == False` and
-the Python units' member doors refuse it. y is admitted finite either way
-(`classical_check_y`, or the label encode).
-
-RESPONSE ELEMENT TYPE: the member's own OUTPUTS answer
-(`member_output_dtype`, once per operation at UNPACK), and every buffer is
-placed in THAT type, so the worker's words are the result with no cast or
-copy pass and no precision change: a classifier's predict as int32 codes
-(the unit's own typed list) or int64 codes (an int64 Array), decoded to
-labels at PACK by the one encode's classes; values, probabilities and
-decision scores as a float32 or a float64 Array, which is the prediction
-object itself. A member that does not say its type is read as int32 codes /
-float32 values (as before the word existed). Any other answer (a float
-code, an integer score) is `ran == False` BEFORE any fit is spent.
-
-WHEN IT RUNS (`msel_member_units` answers `ran == False` otherwise and the
-caller keeps its Python units): the member's class carries a member mark and
-its family's admit fills it; a host float32 C-order X with a target; the
-member's KIND answers fit and every operation the request asks (its score,
-or the responses below) and reads dense host views. Device fold sets, the
-slice route and learning_curve's test reuse keep their own route (the caller
-tests those before calling).
-
-RESPONSES (`responses` not empty: a named scorer, or cross_val_predict). A
-unit then fits and, instead of the member's own score, writes
-`MEMBER_OP_PREDICT` / `MEMBER_OP_PREDICT_PROBA` / `MEMBER_OP_DECISION` (a
-classifier's `decision_function`) of its test rows (and of its train rows
-when train scores are asked) into buffers placed at UNPACK: one buffer per
-(unit, side, response) in the member's own element type (above), sized from
-`member_outputs` before any state exists, which the unit's worker fills with
-the GIL released (no copy afterwards); a classifier's predict writes codes
-and PACK decodes them to labels with the classes of the one encode. `scores.outputs[(unit * sides + side) *
-len(responses) + k]` is the prediction object (side 0 test, 1 train). The
-CALLER runs its metric over them (bindings/msel_cv_door.mojo): this file
-knows no scorer. Served only where the width is the plain one: predict one
-column, predict_proba one column per class, decision_function one column
-(the estimator's 1-D margin) or, with more than two classes, one column per
-class; anything else (a one-vs-one decision, a two-column binary decision)
-takes the Python units, because the shape the estimator's own method returns
-is then not the member's columns.
-
-THE RESIDENT SCOPE (MEMBER-ABI-V2.md item 27, THE PIN RULE at
-core/member_abi.mojo `MemberCall.pin`). For a member KIND with
-`MEMBER_CAN_SCOPE` the calling thread's scope is read ONCE per operation at
-UNPACK (`member_scope_word`; a kind without the bit costs nothing). Inside
-`resident()`: every unit's calls carry the scope word, and X's own object is
-pinned once per offering call (`member_pin_take`: fit, plus each score or
-response call of each side), so the member keeps X on the device across the
-units, where it used to put a fold per call. A kind that also reads row
-numbers gets EVERY side, a run of rows included, as the whole X plus the
-fold's index: one resident base for all folds, each fold gathered on the
-device (a view of a run would be a second resident range per fold). A kind
-without row numbers offers the pin for its view sides only; a side gathered
-into the unit's own buffer never carries a pin. After the units joined the
-references no cache took are returned (`member_pin_return`). OUTSIDE
-`resident()`: no scope, no pin; the member puts X per call exactly as its own
-door does outside a scope. A scope read that raises (a thread-local holding
-something else) answers `ran == False`: the Python units' doors refuse it.
-
-A SEARCH'S REFIT (`msel_member_refit`): the same route with one candidate
-and one unit whose train side is all of X (a view), fit only; the fitted
-state is packed into the route's own clone and held by it.
-
-FITTED ESTIMATORS ASKED BACK (`return_estimator`; `keep` True). A unit then
-leaves its fitted state alive; PACK (GIL held, after the units joined) makes
-one Python estimator per unit: the native clone of the candidate, the
-family's `member_pack` (a classifier: `member_pack_labeled` with the labels
-the estimator's own fit publishes), and the state becomes that estimator's
-HELD member state (bindings/member_held_door.mojo), so its first predict
-imports nothing; where nothing can be held the state is freed. The family
-must export (`MEMBER_CAN_EXPORT`), else the Python units run. PACK builds
-Python objects: SERIAL BY NATURE under the GIL, one estimator per unit.
-
-Memory per worker: nothing for viewed or indexed sides; for a gathered side
-its rows (at most one copy of X and y), as a Python unit holds. The worker count is the caller's
-(`msel_unit_workers`: the n_jobs bound, the units, one on a GPU), and ONE
-whenever an admitted candidate's resolved route is a GPU (read here from the
-plan's route, not from the caller: no two workers enqueue on one device
-context).
+WHO REFUSES A NON-FINITE X: a member whose KIND has `MEMBER_CAN_TEST_ROWS`
+refuses non-finite rows in its own fit; for any other X's verdict is read
+once (the held block's recorded verdict, else one scan across the host
+cores) and a non-finite X keeps the caller's door.
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
@@ -154,535 +52,103 @@ from std.python._cpython import GILReleased
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
 from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_marker_index
 from core.xneighbors_member import LP_MARKER_WORD
-from bindings.member_boundary_door import member_admit_serving_deferred, member_pack, member_pack_labeled
+from bindings.member_boundary_door import (
+    member_admit_serving_deferred, member_admit_serving_labeled, member_pack, member_pack_labeled,
+)
 from bindings.member_class_weight_unpack import member_cw_fill_plan
+from bindings.member_owner_unpack import MemberOwner
 from bindings.member_held_door import member_held_adopt
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_notices import member_notices_take
 from bindings.member_scope_door import member_scope_word, member_pin_take, member_pin_return
 from bindings.classifier_public_lifecycle_door import _public_labels
-from bindings.classical_labels_door import labels_decode_i32_codes, labels_decode_labels
-from bindings.family_common_pack import family_array
-from bindings.msel_common_door import msel_is_array, msel_addr, msel_index_i64, msel_encode
-from bindings.msel_cv_run import msel_seconds
+from bindings.msel_common_door import msel_is_array, msel_addr, msel_encode, msel_new
+from bindings.msel_split_door import msel_cls
 from bindings.msel_estimator_native_door import (
     msel_estimator_plan, msel_native_clone, msel_native_set_params, msel_clone_parameter,
 )
-from bindings.native_unit_os_threads_run import native_unit_cores
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_admitted_registry import admitted_held_index
 from bindings.admitted_meta_scope_unpack import admitted_held_verify
 from core.host_finite_scan import host_all_finite_f32
-from core.host_parallel import host_parallelize
-from core.device_route import DEVICE_CPU
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities, MEMBER_I64,
-    MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
-    MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, member_outputs, member_output_dtype, MEMBER_CAN_TEST_ROWS,
-    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
-    MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
-    MEMBER_OP_DECISION, MEMBER_CAN_DECISION, MEMBER_F64,
+    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities,
+    MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, MEMBER_CAN_TEST_ROWS,
+    MEMBER_OP_FIT, MEMBER_CAN_FIT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
 )
 
-#: Rows below which a fold gather is not split (a task costs more than the
-#: copy); a cost rule over any shape.
-comptime _GATHER_SPLIT_WORDS = 1048576
+# REMOVED: msel_member_units (the native (candidate, fold) units of bindings/msel_cv_door.mojo
+# `_msel_member_route`; not an experiment define: a door path) deleted 2026-11-23 by lane/mf-msel5c; code
+# recoverable at b3ca4be7a9 (this file before the change: its MselMemberRun / MselMemberScores, the fold
+# shapes, gathers, responses and UNIT_* words).
 
 
-struct MselMemberScores(Movable):
-    """Per-unit results of a native member run (unit = candidate * folds +
-    fold). `ran` False: nothing ran and the lists are empty."""
-    var ran: Bool
-    var test: List[Float64]
-    var train: List[Float64]
-    var fit_time: List[Float64]
-    var score_time: List[Float64]
-    # One fitted Python estimator per unit when they were asked back, else None.
-    var estimators: PythonObject
-    # RESPONSES (module note): the prediction objects, index
-    # (unit * sides + side) * responses + k; an empty list without responses.
-    var outputs: PythonObject
-    var sides: Int
-    # `tolerate`: per unit, UNIT_FIT_FAILED (the caller writes its
-    # `error_score` into every score of the unit), or UNIT_TEST_FAILED /
-    # UNIT_TRAIN_FAILED (into that side's scores); 0 for a unit that
-    # scored; empty otherwise.
-    var fit_failed: List[UInt8]
-    # Per candidate: the estimator its units were admitted from (the caller's
-    # metric reads its device once per scorer template).
-    var members: PythonObject
-
-    def __init__(out self) raises:
-        self.ran = False
-        self.estimators = PythonObject(None)
-        self.outputs = Python.list()
-        self.sides = 1
-        self.fit_failed = List[UInt8]()
-        self.members = Python.list()
-        self.test = List[Float64]()
-        self.train = List[Float64]()
-        self.fit_time = List[Float64]()
-        self.score_time = List[Float64]()
-
-
-struct MselMemberRun(Movable):
-    """Everything typed the units read. Built by UNPACK; workers read it
-    through one address and write only their own unit's slots."""
-    var plans: List[MemberPlan]
-    # Per fold, four words: train index address, train rows, test index
-    # address, test rows (int64 row numbers of X).
-    var folds: List[Int]
-    # Per fold side (2 * fold + {0 train, 1 test}): the first row when the
-    # side is one run of consecutive rows (a view of X), else -1.
-    var starts: List[Int]
+struct _FitOne(Movable):
+    """The one fit's typed words: built by UNPACK, read by the RUN through
+    one address, its results read back by PACK."""
+    var plan: MemberPlan
     var x: Int
-    # The target, one 4-byte word per row: float32 values (a regressor) or
-    # int32 class codes (a classifier; `classes` > 0), per `y_dtype`.
-    var y: Int
-    var y_dtype: Int
-    var classes: Int
-    # Per fold: 1 when its train side lacks a class (classifier members).
-    var short: List[UInt8]
     var rows: Int
     var cols: Int
-    var n_folds: Int
-    var n_units: Int
-    var workers: Int
-    var return_train: Bool
-    # `keep`: a unit leaves its fitted state in `states[u]` for PACK (0: none).
-    var keep: Bool
-    var states: List[Int]
-    var test: List[Float64]
-    var train: List[Float64]
-    var fit_time: List[Float64]
-    var score_time: List[Float64]
-    var failed: List[UInt8]
-    var errors: List[String]
-    # RESPONSES (module note): the operations each unit writes instead of the
-    # member's score, each one's columns per row and its 4-byte word type, and
-    # the placed buffer of every (unit, side, response): index
-    # (unit * sides + side) * len(ops) + k. `codes` owns a classifier's
-    # predict words (the other slots are empty lists).
-    var ops: List[Int]
-    var widths: List[Int]
-    var words: List[Int]
-    var sides: Int
-    var dst: List[Int]
-    var codes: List[List[Int32]]
-    # A numeric `error_score`: a unit whose FIT fails records it here and
-    # runs nothing more; the other units are unaffected.
-    var tolerate: Bool
-    var fit_failed: List[UInt8]
-    # A search's refit: one unit that fits on every row and runs nothing else.
-    var fit_only: Bool
-    # THE RESIDENT SCOPE (module note): the caller's scope handle word
-    # (MEMBER_SCOPE_NONE: none), the pin token of X's own object (0: nothing
-    # is offered), whether every side goes as the whole X plus row numbers,
-    # and per unit the offered references a cache took.
+    # The target: 0 (a fit without one), float32 values, or int32 codes
+    # (rows x `y_cols` words of `y_dtype`).
+    var y: Int
+    var y_dtype: Int
+    var y_cols: Int
+    # THE RESIDENT SCOPE: the caller's scope word and X's pin token (0: none
+    # offered); `taken` is 1 when the fit's cache took the reference.
     var scope: Int
     var pin: Int
-    var index_all: Bool
-    var taken: List[Int]
-    # THE LIFETIME RULE (MEMBER-ABI-V2.md item 34): a buffer handed to FIT
-    # stays valid until its state is freed or has been exported. A KEPT unit
-    # (`keep`) whose train side was gathered therefore gathers into these
-    # run-owned buffers, one pair per unit, which die with the run: after PACK
-    # has exported every kept state (and `member_held_adopt` has made an
-    # adopted one own its rows). Empty for every other unit, whose gathered
-    # side stays the unit's own and is freed when the unit ends, as before.
-    # `borrows`: the member kind keeps a pointer into a FIT buffer
-    # (MEMBER_BORROWS_FIT); a kind that owns its state never uses them.
-    var borrows: Bool
-    # THE GIL RULE: the member kind has `MEMBER_GIL_FREE` (its units run on
-    # workers with no GIL). False: every unit runs on the public thread with
-    # the GIL held, one at a time (`workers` is then 1).
-    var gil_free: Bool
-    # MEMBER_GIL_DOOR (a kind without `gil_free`): its units still run one at
-    # a time on the public thread, with the GIL released around them as the
-    # family's own door releases it.
-    var gil_door: Bool
-    var held_x: List[List[Float32]]
-    var held_y: List[List[Float32]]
-    # Per candidate (lane mf-left4): the words of a class_weight its
-    # estimator refuses (read at UNPACK over the one encode's classes), under
-    # a numeric `error_score`; "" for a candidate whose words are complete.
-    # Every unit of such a candidate records the failed fit and fits nothing.
-    var refused: List[String]
-    # Per unit, the FIT NOTICES of its fitted state (core/member_notices.mojo;
-    # empty: none), taken on the unit's worker after its fit, kept or freed,
-    # and raised in unit order once publication is done (GIL held).
-    var notices: List[List[Float64]]
-    # A search's own fit (lane mf-msel5b): the int32 codes of its `groups`
-    # (rows words, sorted-group order; 0: none), handed to the fit as
-    # `MemberCall.groups` for its group splitter.
-    var groups: Int
+    var taken: Int
+    var state: Int
+    var failed: Bool
+    var error: String
+    var notices: List[Float64]
 
-    def __init__(out self, x: Int, y: Int, rows: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int,
-        return_train: Bool, keep: Bool):
-        self.ops = List[Int]()
-        self.widths = List[Int]()
-        self.words = List[Int]()
-        self.sides = 2 if return_train else 1
-        self.dst = List[Int]()
-        self.codes = List[List[Int32]]()
-        self.tolerate = False
-        self.fit_only = False
-        self.scope = MEMBER_SCOPE_NONE
-        self.pin = 0
-        self.index_all = False
-        self.taken = List[Int](length=n_units, fill=0)
-        self.borrows = False
-        self.gil_free = False
-        self.gil_door = False
-        self.held_x = List[List[Float32]]()
-        self.held_y = List[List[Float32]]()
-        self.refused = List[String]()
-        self.notices = List[List[Float64]](length=n_units, fill=List[Float64]())
-        self.groups = 0
-        self.fit_failed = List[UInt8](length=n_units, fill=UInt8(0))
-        self.plans = List[MemberPlan]()
-        self.folds = List[Int]()
-        self.starts = List[Int](length=2 * n_folds, fill=-1)
+    def __init__(out self, var plan: MemberPlan, x: Int, rows: Int, cols: Int):
+        self.plan = plan^
         self.x = x
-        self.y = y
-        self.y_dtype = MEMBER_F32
-        self.classes = 0
-        self.short = List[UInt8](length=n_folds, fill=UInt8(0))
         self.rows = rows
         self.cols = cols
-        self.n_folds = n_folds
-        self.n_units = n_units
-        self.workers = workers
-        self.return_train = return_train
-        self.keep = keep
-        self.states = List[Int](length=n_units, fill=0)
-        self.test = List[Float64](length=n_units, fill=0.0)
-        self.train = List[Float64](length=n_units, fill=0.0)
-        self.fit_time = List[Float64](length=n_units, fill=0.0)
-        self.score_time = List[Float64](length=n_units, fill=0.0)
-        self.failed = List[UInt8](length=n_units, fill=UInt8(0))
-        self.errors = List[String](length=n_units, fill=String(""))
-        if keep:
-            for unit in range(n_units):  # driver-loop: over units, one empty buffer pair each
-                self.held_x.append(List[Float32]())
-                self.held_y.append(List[Float32]())
+        self.y = 0
+        self.y_dtype = MEMBER_F32
+        self.y_cols = 1
+        self.scope = MEMBER_SCOPE_NONE
+        self.pin = 0
+        self.taken = 0
+        self.state = 0
+        self.failed = False
+        self.error = String("")
+        self.notices = List[Float64]()
 
 
-def _gather_span(src: Int, index: Int, first: Int, count: Int, cols: Int, dst: Int) raises:
-    """Rows `index[first .. first + count]` of the float32 matrix at `src`
-    (`cols` wide) into rows `first ..` of `dst`. A host fold gather out of
-    host words: a device fold set never takes this route."""
-    var rows = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index)
-    var source = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src)
-    var target = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst)
-    for i in range(first, first + count):
-        unsafe_memcpy(dest=target + i * cols, src=source + Int(rows[i]) * cols, count=cols)
-
-
-def _gather(src: Int, index: Int, count: Int, cols: Int, dst: Int, split: Bool) raises:
-    """One fold side's rows. `split`: this unit is the only one running, so
-    the copy itself is split across the host cores (row chunks are
-    independent); otherwise the units are the parallel split."""
-    var cores = native_unit_cores()
-    if not split or cores <= 1 or count * cols < _GATHER_SPLIT_WORDS:
-        _gather_span(src, index, 0, count, cols, dst)
-        return
-    var chunks = min(cores, count)
-    var per = (count + chunks - 1) // chunks
-
-    def _chunk(part: Int) {imm src, imm index, imm count, imm cols, imm dst, imm per}:
-        var first = part * per
-        if first >= count:
-            return
+def _fit_one(address: Int):
+    """RUN: the member's fit on every row of X (a view). Touches no CPython;
+    a failure is recorded in the run's words, never raised."""
+    var run = MutPointer[_FitOne, MutUntrackedOrigin](unsafe_from_address=address)
+    try:
+        var call = member_new(run[].plan)
+        call.scope = run[].scope
+        call.x = MemberMatrix(run[].x, run[].rows, run[].cols)
+        if run[].y != 0:
+            call.y = MemberMatrix(run[].y, run[].rows, run[].y_cols, run[].y_dtype)
+        call.pin = run[].pin
+        var kept = False
         try:
-            _gather_span(src, index, first, min(per, count - first), cols, dst)
-        except:
-            pass
-
-    host_parallelize(_chunk, chunks)
-
-
-def _fold_run_start(index: Int, count: Int) -> Int:
-    """The first row when `index[0 .. count]` is one ascending run of
-    consecutive rows (the fold side is then a VIEW of X), else -1."""
-    if count <= 0:
-        return -1
-    var rows = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index)
-    var first = Int(rows[0])
-    if Int(rows[count - 1]) - first != count - 1:
-        return -1
-    for i in range(1, count):
-        if Int(rows[i]) != first + i:
-            return -1
-    return first
-
-
-def _fold_lacks_class(index: Int, count: Int, codes: Int, classes: Int) -> Bool:
-    """True when rows `index[0 .. count]` of the int32 `codes` do not hold
-    every code 0 .. classes-1. Stops at the row that completes the classes.
-    The codes are the encoder's (0 .. classes-1) and the row numbers the
-    splitter's (inside X), as the gathers read them."""
-    var seen = List[UInt8](length=classes, fill=UInt8(0))
-    var rows = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index)
-    var code = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes)
-    var found = 0
-    for i in range(count):
-        var c = Int(code[Int(rows[i])])
-        if seen[c] == UInt8(0):
-            seen[c] = UInt8(1)
-            found += 1
-            if found == classes:
-                return False
-    return True
-
-
-def _msel_member_fold_shape(address: Int, side: Int):
-    """One fold side (2 * fold + {0 train, 1 test}): is it a run of rows?
-    A classifier's train side: does it hold every class?"""
-    var run = MutPointer[MselMemberRun, MutUntrackedOrigin](unsafe_from_address=address)
-    var f = side // 2
-    var at = 4 * f + 2 * (side - 2 * f)
-    run[].starts[side] = _fold_run_start(run[].folds[at], run[].folds[at + 1])
-    if run[].classes > 0 and side == 2 * f:
-        if _fold_lacks_class(run[].folds[at], run[].folds[at + 1], run[].y, run[].classes):
-            run[].short[f] = UInt8(1)
-
-
-def _side_mode(start: Int, indexed: Bool) -> Int:
-    """How a fold side reaches the member: 0 a view of X (no copy), 1 the
-    whole X with the fold's row numbers (`call.row_index`, no copy), 2 rows
-    gathered into the unit's own buffer (a family that reads neither)."""
-    if start >= 0:
-        return 0
-    return 1 if indexed else 2
-
-
-def _side_set(run: MutPointer[MselMemberRun, MutUntrackedOrigin], mode: Int, start: Int, index: Int, count: Int,
-    gathered_x: Int, gathered_y: Int, mut call: MemberCall):
-    """Point the call's x, y and row_index at one fold side. y is 4-byte
-    words either way (float32 values or int32 class codes: `run.y_dtype`)."""
-    var cols = run[].cols
-    var y_dtype = run[].y_dtype
-    # A fit without a target (lane mf-msel5b: an unsupervised search's own
-    # fit, y=None): the call carries no y.
-    var has_y = run[].y != 0
-    call.row_index = MemberMatrix()
-    if mode == 0:
-        call.x = MemberMatrix(run[].x + start * cols * 4, count, cols)
-        if has_y:
-            call.y = MemberMatrix(run[].y + start * 4, count, 1, y_dtype)
-    elif mode == 1:
-        call.x = MemberMatrix(run[].x, run[].rows, cols)
-        if has_y:
-            call.y = MemberMatrix(run[].y, run[].rows, 1, y_dtype)
-        call.row_index = MemberMatrix(index, count, 1, MEMBER_I64)
-    else:
-        call.x = MemberMatrix(gathered_x, count, cols)
-        if has_y:
-            call.y = MemberMatrix(gathered_y, count, 1, y_dtype)
-
-
-def _offered(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, op: Int, offer: Int,
-    mut call: MemberCall) raises:
-    """One member call of unit `u` over the side the call points at, offering
-    the pin token `offer` (0: the side is the unit's own gathered buffer, or
-    the run has no scope). The member's answer about the reference is read
-    whether the call returns or raises (THE PIN RULE)."""
-    call.pin = offer
-    if offer == 0:
-        _ = member_call(run[].plans[u // run[].n_folds].member, op, call)
-        return
-    try:
-        _ = member_call(run[].plans[u // run[].n_folds].member, op, call)
-    finally:
-        run[].taken[u] += member_pin_settle(call)
-
-
-def _respond(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, side: Int, count: Int, offer: Int,
-    mut call: MemberCall) raises:
-    """Write every asked response of the side the call points at into the
-    unit's placed buffers (RESPONSES, module note). The fitted state reads
-    x (and row_index) as `_side_set` left them."""
-    var n_ops = len(run[].ops)
-    var at = (u * run[].sides + side) * n_ops
-    for k in range(n_ops):  # driver-loop: over the request's responses (at most two)
-        call.dst = MemberMatrix(run[].dst[at + k], count, run[].widths[k], run[].words[k])
-        _offered(run, u, run[].ops[k], offer, call)
-    call.dst = MemberMatrix()
-
-
-# `fit_failed` words under a numeric error_score (`tolerate`): the fit failed
-# (every score of the unit takes the value), or one side's score failed (that
-# side's scores take it). scikit-learn's `_fit_and_score` forgives both: a fit
-# error and a scoring error each record `error_score`; only 'raise' raises.
-comptime UNIT_FIT_FAILED = UInt8(1)
-comptime UNIT_TEST_FAILED = UInt8(2)
-comptime UNIT_TRAIN_FAILED = UInt8(4)
-
-
-def _score_side(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, side: Int, mode: Int, start: Int,
-                index: Int, rows: Int, x_at: Int, y_at: Int, offer: Int, mut call: MemberCall) raises:
-    """One side's score (side 0 test, 1 train) or responses of unit `u`.
-    Under `tolerate` a failure of this side (its data: a non-finite row the
-    fitted state refuses) is recorded in `fit_failed` and the unit goes on;
-    the caller writes `error_score` into that side's scores. Otherwise it
-    raises, as before."""
-    try:
-        _side_set(run, mode, start, index, rows, x_at, y_at, call)
-        if len(run[].ops) == 0:
-            _offered(run, u, MEMBER_OP_SCORE, offer, call)
-            if side == 0:
-                run[].test[u] = call.value
-            else:
-                run[].train[u] = call.value
-        else:
-            _respond(run, u, side, rows, offer, call)
-    except error:
-        if not run[].tolerate:
-            raise error^
-        run[].errors[u] = String(error)
-        run[].fit_failed[u] = run[].fit_failed[u] | (UNIT_TEST_FAILED if side == 0 else UNIT_TRAIN_FAILED)
-        call.dst = MemberMatrix()
-
-
-def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int) raises:
-    var c = u // run[].n_folds
-    var f = u - c * run[].n_folds
-    var cols = run[].cols
-    var split = run[].workers <= 1
-    var train_index = run[].folds[4 * f]
-    var train_rows = run[].folds[4 * f + 1]
-    var test_index = run[].folds[4 * f + 2]
-    var test_rows = run[].folds[4 * f + 3]
-    var indexed = run[].plans[c].member.can(MEMBER_CAN_ROW_INDEX)
-    var train_mode = _side_mode(run[].starts[2 * f], indexed)
-    var test_mode = _side_mode(run[].starts[2 * f + 1], indexed)
-    if run[].index_all and indexed and not run[].fit_only:
-        # In the caller's resident scope every side is the whole X plus the
-        # fold's row numbers: one resident base for all folds (module note).
-        train_mode = 1
-        test_mode = 1
-    # A side gathered into this unit's own buffer never carries the pin.
-    var train_offer = run[].pin if train_mode != 2 else 0
-    var test_offer = run[].pin if test_mode != 2 else 0
-    var t0 = msel_seconds()
-    if len(run[].refused[c]) > 0:
-        # The candidate's class_weight, refused at UNPACK under a numeric
-        # error_score (lane mf-left4): this unit's fit failed in the
-        # estimator's words, as each of its folds' own fit fails.
-        run[].errors[u] = run[].refused[c]
-        run[].fit_failed[u] = UNIT_FIT_FAILED
-        run[].fit_time[u] = msel_seconds() - t0
-        return
-    # X IS NOT COPIED PER FOLD when the side is a run of rows (a view) or the
-    # member reads row numbers. Only a scattered side of a family without
-    # MEMBER_CAN_ROW_INDEX is gathered, into this unit's own buffers.
-    var train_words = train_rows if train_mode == 2 else 0
-    var test_words = test_rows if test_mode == 2 else 0
-    # THE LIFETIME RULE: a kept state of a borrowing kind reads its FIT
-    # buffers again at PACK (the export), after this unit returned. Its
-    # gathered train side is therefore the RUN's (`held_x[u]`, `held_y[u]`:
-    # this unit's own slots, written by no other worker), not a local.
-    var hold = run[].keep and run[].borrows and train_mode == 2
-    var local_words = 0 if hold else train_words
-    var x_train = List[Float32](length=local_words * cols, fill=0.0)
-    var y_train = List[Float32](length=local_words, fill=0.0)
-    var x_train_at = Int(x_train.unsafe_ptr())
-    var y_train_at = Int(y_train.unsafe_ptr())
-    if hold:
-        run[].held_x[u] = List[Float32](length=train_words * cols, fill=0.0)
-        run[].held_y[u] = List[Float32](length=train_words, fill=0.0)
-        x_train_at = Int(run[].held_x[u].unsafe_ptr())
-        y_train_at = Int(run[].held_y[u].unsafe_ptr())
-    var x_test = List[Float32](length=test_words * cols, fill=0.0)
-    # The gathered target is copied as 4-byte words: a classifier's int32
-    # codes travel through these buffers bit for bit (`run.y_dtype` names them).
-    var y_test = List[Float32](length=test_words, fill=0.0)
-    if train_mode == 2:
-        _gather(run[].x, train_index, train_rows, cols, x_train_at, split)
-        _gather(run[].y, train_index, train_rows, 1, y_train_at, split)
-    if test_mode == 2:
-        _gather(run[].x, test_index, test_rows, cols, Int(x_test.unsafe_ptr()), split)
-        _gather(run[].y, test_index, test_rows, 1, Int(y_test.unsafe_ptr()), split)
-    var call = member_new(run[].plans[c])
-    call.scope = run[].scope
-    call.pin = 0
-    var kept = False
-    try:
-        _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, x_train_at, y_train_at, call)
-        if run[].fit_only and run[].groups != 0:
-            call.groups = MemberMatrix(run[].groups, run[].rows, 1, MEMBER_I32)
-        if run[].tolerate:
             try:
-                _offered(run, u, MEMBER_OP_FIT, train_offer, call)
-            except error:
-                run[].errors[u] = String(error)
-                run[].fit_failed[u] = UNIT_FIT_FAILED
-        else:
-            _offered(run, u, MEMBER_OP_FIT, train_offer, call)
-        var t1 = msel_seconds()
-        if run[].fit_failed[u] != UInt8(0):
-            run[].fit_time[u] = t1 - t0
-            return
-        # One mask test for a family without fit notices; else a few words.
-        member_notices_take(run[].plans[c], call.state, run[].notices[u])
-        if run[].fit_only:
-            run[].fit_time[u] = t1 - t0
-            run[].states[u] = call.state
+                _ = member_call(run[].plan.member, MEMBER_OP_FIT, call)
+            finally:
+                if run[].pin != 0:
+                    run[].taken += member_pin_settle(call)
+            member_notices_take(run[].plan, call.state, run[].notices)
+            run[].state = call.state
             kept = True
-            return
-        _score_side(run, u, 0, test_mode, run[].starts[2 * f + 1], test_index, test_rows, Int(x_test.unsafe_ptr()),
-                    Int(y_test.unsafe_ptr()), test_offer, call)
-        if run[].return_train:
-            _score_side(run, u, 1, train_mode, run[].starts[2 * f], train_index, train_rows, x_train_at, y_train_at,
-                        train_offer, call)
-        run[].fit_time[u] = t1 - t0
-        run[].score_time[u] = msel_seconds() - t1
-        if run[].keep:
-            # The fitted state outlives the unit: PACK publishes it.
-            run[].states[u] = call.state
-            kept = True
-    finally:
-        if not kept:
-            member_free(run[].plans[c], call)
-            if hold:
-                # The state is gone: nothing reads the held side any more.
-                run[].held_x[u] = List[Float32]()
-                run[].held_y[u] = List[Float32]()
-        # Integer addresses carry no lifetime: the fold buffers live to here.
-        _ = len(x_train)
-        _ = len(y_train)
-        _ = len(x_test)
-        _ = len(y_test)
-
-
-def _msel_member_lane(address: Int, lane: Int):
-    """One worker: units lane, lane + workers, ... THE GIL RULE: on a worker
-    with no GIL for a kind with `MEMBER_GIL_FREE`; else called once, lane 0
-    of one, on the public thread with the GIL held. Nothing a unit does here
-    touches CPython in either mode. A failing unit records
-    its words in its own slot; the other units still run (each is
-    independent), and the caller raises the first in unit order."""
-    var run = MutPointer[MselMemberRun, MutUntrackedOrigin](unsafe_from_address=address)
-    var u = lane
-    while u < run[].n_units:  # driver-loop: over this worker's units
-        try:
-            _msel_member_unit(run, u)
-        except error:
-            run[].errors[u] = String(error)
-            run[].failed[u] = UInt8(1)
-        u += run[].workers
-
-
-def _free_kept(mut run: MselMemberRun):
-    """Release every fitted state the units left for PACK (a route that
-    publishes nothing, or a PACK that failed). Never raises."""
-    for u in range(run.n_units):  # driver-loop: over units, one release each
-        if run.states[u] != 0:
-            var call = MemberCall(run.plans[u // run.n_folds].route, run.states[u])
-            member_free(run.plans[u // run.n_folds], call)
-            run.states[u] = 0
+        finally:
+            if not kept:
+                member_free(run[].plan, call)
+    except error:
+        run[].error = String(error)
+        run[].failed = True
 
 
 def _whole_classes(classes: PythonObject, b: PythonObject) raises -> Bool:
@@ -698,15 +164,73 @@ def _whole_classes(classes: PythonObject, b: PythonObject) raises -> Bool:
     return True
 
 
-def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObject, x: PythonObject,
-    folds: PythonObject, return_train: Bool, keep: Bool, workers_in: Int, context: PythonObject,
-    b: PythonObject, responses: List[Int], tolerate: Bool) raises -> MselMemberScores:
-    return _member_units(base, candidates, y, x, folds, return_train, keep, workers_in, context, b, responses,
-                         tolerate, False, PythonObject(None))
+def _numeric_width(dtype: String) -> Int:
+    """The bytes of one element of a numeric NumPy-style typestr ('<i8',
+    '<f4', '|b1', '<u2', ...), 0 for any other kind."""
+    if dtype.byte_length() != 3:
+        return 0
+    var kind = String(dtype[byte=1])
+    if kind != "i" and kind != "u" and kind != "f" and kind != "b":
+        return 0
+    var size = String(dtype[byte=2])
+    if size == "1":
+        return 1
+    if size == "2":
+        return 2
+    if size == "4":
+        return 4
+    if size == "8":
+        return 8
+    return 0
+
+
+def _encode_outputs(y: PythonObject, rows: Int, context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """THE 2-D y of a classifier (layout 4), PER OUTPUT: each column of a C
+    order numeric rows x outputs y copied once into its own vector (its
+    elements' bytes, no conversion) and encoded by the one label encoder.
+    Returns (int32 rows x outputs codes, [classes of each output]), or None
+    when y is not one this door reads (the caller's door then fits it)."""
+    if Int(py=y.ndim) != 2 or Int(py=y.shape[0]) != rows or String(py=y.order) != "C":
+        return PythonObject(None)
+    var outputs = Int(py=y.shape[1])
+    var dtype = String(py=y.dtype)
+    var width = _numeric_width(dtype)
+    if outputs < 2 or width == 0 or rows == 0:
+        return PythonObject(None)
+    var codes = msel_new(rows * outputs, "<i4", context)
+    var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=msel_addr(codes))
+    var src = msel_addr(y)
+    var classes = Python.list()
+    for j in range(outputs):  # driver-loop: over the outputs (one column copy and one encode each)
+        var column = msel_new(rows, dtype, context)
+        var to = msel_addr(column)
+        for i in range(rows):  # driver-loop: over the rows of one output column (its elements' bytes)
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=to + i * width),
+                          src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src + (i * outputs + j) * width),
+                          count=width)
+        var encoded = msel_encode(column, context)
+        _ = column  # copied by the encode above
+        if len(encoded[0]) < 2 or not _whole_classes(encoded[0], b):
+            return PythonObject(None)
+        var column_codes = encoded[1]
+        if Int(py=column_codes.size) != rows or String(py=column_codes.dtype) != "<i4":
+            return PythonObject(None)
+        var got = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=msel_addr(column_codes))
+        for i in range(rows):  # driver-loop: over the rows (output j's codes into its column of the block)
+            dst[i * outputs + j] = got[i]
+        _ = column_codes  # read through the pointer above
+        _ = py_call(classes.append, encoded[0])
+    _ = y  # read through its address above
+    return Python.tuple(codes, classes)
+
+
+def _is_search(model: PythonObject, context: PythonObject) raises -> Bool:
+    var cls = py_type(model)
+    return cls is msel_cls("GridSearchCV", context) or cls is msel_cls("RandomizedSearchCV", context)
 
 
 def msel_member_refit(base: PythonObject, parameters: PythonObject, y: PythonObject, x: PythonObject,
-    context: PythonObject, b: PythonObject, groups: PythonObject) raises -> PythonObject:
+    context: PythonObject, b: PythonObject) raises -> PythonObject:
     """A search's refit over the native member: a clone of `base` with
     `parameters` set, fitted ONCE on every row of X (a view: nothing is
     gathered or copied) with the GIL released, packed by its family's
@@ -714,494 +238,231 @@ def msel_member_refit(base: PythonObject, parameters: PythonObject, y: PythonObj
     (bindings/member_held_door.mojo), so a caller that uses the best
     estimator as a member imports nothing. None when this member, data or
     fit is not one the route runs: the caller then fits the estimator through
-    its own door, which raises its own exception (THE FALLBACK RULE).
-    `groups` (lane mf-msel5b): a search's fit groups, read once and handed
-    to its fit (`MemberCall.groups`); None: none. y None: a fit without a
-    target (an unsupervised search)."""
-    var none = List[Int]()
-    var got = _member_units(base, Python.list(parameters), y, x, Python.list(PythonObject(None)), False, True, 1,
-                            context, b, none, False, True, groups)
-    if not got.ran:
-        return PythonObject(None)
-    return got.estimators[0]
+    its own door, which raises its own exception (THE FALLBACK RULE). y
+    None: a fit without a target (an unsupervised search)."""
+    return _member_fit(base, parameters, True, False, y, x, context, b)
 
 
 def msel_member_fit_in_place(model: PythonObject, y: PythonObject, x: PythonObject, context: PythonObject,
     b: PythonObject) raises -> Bool:
     """`msel_member_refit` of `model` ITSELF (lane mf-msel5): its own
     instance dictionary is admitted (no clone, so a field only its door set,
-    the cv tools' `_msel_cv_tool`, is read), fitted once on every row of X
+    the carrier's `_msel_cv_tool`, is read), fitted once on every row of X
     with the GIL released and packed into it in place. False (nothing
     changed): the route did not take it (THE FALLBACK RULE)."""
-    var none = List[Int]()
-    var got = _member_units(model, PythonObject(None), y, x, Python.list(PythonObject(None)), False, True, 1,
-                            context, b, none, False, True, PythonObject(None))
-    return got.ran
+    return _member_fit(model, PythonObject(None), False, False, y, x, context, b) is not None
 
 
-def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject, x: PythonObject,
-    folds: PythonObject, return_train: Bool, keep: Bool, workers_in: Int, context: PythonObject,
-    b: PythonObject, responses: List[Int], tolerate: Bool, fit_only: Bool,
-    groups: PythonObject) raises -> MselMemberScores:
-    """Run every (candidate, fold) unit over native members, or answer
-    `ran == False` having changed nothing when this member, data or request
-    is not one this route runs (module note). `keep`: one fitted estimator
-    per unit is asked back (`scores.estimators`). `context` is model selection's
-    context, `b` the builtins module, `workers_in` the caller's worker bound.
-    `responses`: empty = the member's own score per unit; else the
-    `MEMBER_OP_PREDICT` / `MEMBER_OP_PREDICT_PROBA` outputs the caller scores
-    or returns (`scores.outputs`). `tolerate` (a numeric `error_score`): a
-    unit whose FIT fails is reported in `scores.fit_failed` and the others
-    still publish; without it any failing unit publishes nothing."""
-    var scores = MselMemberScores()
+def msel_member_fit_cloned(model: PythonObject, y: PythonObject, x: PythonObject, context: PythonObject,
+    b: PythonObject) raises -> Bool:
+    """`msel_member_fit_in_place` of a `model` the caller made itself with
+    `msel_native_clone` (lane mf-msel5c: the search door's carrier), whose
+    parameters that clone already admitted: no second admission clone."""
+    return _member_fit(model, PythonObject(None), False, True, y, x, context, b) is not None
+
+
+def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vetted: Bool, y: PythonObject,
+    x: PythonObject, context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """UNPACK, RUN and PACK of the one fit (module note): the fitted
+    estimator (`base` itself, or its clone with `parameters` set), or None
+    having changed nothing."""
     var plan = msel_estimator_plan(base, context)
-    # y None (lane mf-msel5b): a fit without a target, for a fit-only unit
-    # (an unsupervised search's own fit); any other request needs y.
-    if py_get(plan, "member") is None or (y is None and not fit_only):
-        return scores^
+    if py_get(plan, "member") is None:
+        return PythonObject(None)
     if not msel_is_array(x, context) or (y is not None and not msel_is_array(y, context)):
-        return scores^
+        return PythonObject(None)
     if String(py=x.dtype) != "<f4" or Int(py=x.ndim) != 2 or String(py=x.order) != "C" or Int(py=x.size) == 0:
-        return scores^
+        return PythonObject(None)
     var member_context = plan["context"]
-    var n_folds = len(folds)
-    var n_candidates = 1 if candidates is None else len(candidates)
-    var n_units = n_candidates * n_folds
-    if n_units == 0:
-        return scores^
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    var workers = max(min(workers_in, n_units), 1)
-    # Everything that must stay alive (estimators, route owners, images,
-    # index arrays, the admitted target) until the units have joined.
+    var est = base
+    if clone:
+        est = msel_native_clone(base, context)
+        _ = msel_native_set_params(est, msel_clone_parameter(parameters, context), context)
+    elif not vetted:
+        # The caller's estimator is admitted as its clone admits it (every
+        # constructor parameter an exact native value, refused in words
+        # before any Python protocol of it runs), then the member reads it in
+        # place (lane sr3-smoke: a member's own admission must not read a
+        # caller's object first).
+        _ = msel_native_clone(base, context)
+    var fields = py_call(plan["fields_get"], est, py_type(est))
+    var needs = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT
+    # Everything that must stay alive until PACK is done: the admission's
+    # pins, the encoded or converted target, X and y.
     var pins = Python.list()
-    var classifier = False
-    var tests_rows = False
-    var scope = MEMBER_SCOPE_NONE
-    var index_all = False
-    var run = MselMemberRun(msel_addr(x), 0, rows, cols, n_folds, n_units, workers, return_train, keep)
-    # Per candidate: its estimator and its admission's pins (PACK reads them).
-    var members = Python.list()
-    var member_pins = Python.list()
-    # Per candidate: its instance dictionary (a class_weight dict's table is
-    # read over the one encode's classes after it: lane mf-left4).
-    var member_fields = Python.list()
-    run.refused = List[String](length=n_candidates, fill=String(""))
-    var n_ops = len(responses)
-    var asked = MEMBER_CAN_FIT
-    if n_ops == 0 and not fit_only:
-        asked = asked | MEMBER_CAN_SCORE
-    for k in range(n_ops):  # driver-loop: over the request's responses (at most two)
-        if responses[k] == MEMBER_OP_PREDICT:
-            asked = asked | MEMBER_CAN_PREDICT
-        elif responses[k] == MEMBER_OP_PREDICT_PROBA:
-            asked = asked | MEMBER_CAN_PREDICT_PROBA
-        elif responses[k] == MEMBER_OP_DECISION:
-            asked = asked | MEMBER_CAN_DECISION
-        else:
-            return scores^
-    var needs = asked
-    if keep:
-        needs = needs | MEMBER_CAN_EXPORT
-    for c in range(n_candidates):  # driver-loop: over candidates (admission with Python objects; once each)
-        var est = base
-        if candidates is not None:
-            est = msel_native_clone(base, context)
-            _ = msel_native_set_params(est, msel_clone_parameter(candidates[c], context), context)
-        else:
-            # The caller's estimator is admitted as its clone admits it (every
-            # constructor parameter an exact native value, refused in words
-            # before any Python protocol of it runs), then the member reads
-            # it in place. Without this the member's own admission read a
-            # caller's object first: GradientBoosting's `float(learning_rate)`
-            # ran a Python `__float__` before the refusal (verify smoke of
-            # e282d53b19, test_native_cv_gbdt_nb.py; lane sr3-smoke). Once per
-            # call (n_candidates is 1 here), never per fold.
-            _ = msel_native_clone(base, context)
-        var fields = py_call(plan["fields_get"], est, py_type(est))
-        # THE FALLBACK RULE: a marked class this route cannot serve (no score:
-        # a transformer; an admission its family refuses) takes the
-        # Python units exactly as an unmarked class does. Never a refusal here.
-        # A classifier's class_weight tail stays pending here: the labels
-        # are encoded after the admission (below), and its table is read
-        # over them there (`member_admit_serving_deferred`, lane mf-left4).
-        var owner = member_admit_serving_deferred(est, fields, plan, member_context, b, needs)
-        if not owner.published:
-            return scores^
-        # A classifier member reads class codes and a class count; a regressor
-        # float32 words. The KIND's own mask decides (the family's union would
-        # call SVR, a k-NN or forest regressor a classifier); the kind is the
-        # class's, so it is asked for the first candidate only.
-        if c == 0:
-            var kind_mask = 0
+    # THE LABELS (module note): `encoded` (classes, codes) of a 1-D y, or
+    # `outputs` (codes block, [classes per output]) of a 2-D y.
+    var encoded = PythonObject(None)
+    var outputs = PythonObject(None)
+    var early = False
+    if y is not None and _is_search(est, context):
+        # A SEARCH over a classifier: its admission reads the labels.
+        var search_base = py_get(fields, "estimator")
+        if search_base is not None:
             try:
-                kind_mask = member_kind_capabilities(owner.plan)
+                early = Bool(py=msel_estimator_plan(search_base, context)["classifier"])
             except:
-                return scores^
-            if (kind_mask & asked) != asked:
-                return scores^
-            classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
-            tests_rows = (kind_mask & MEMBER_CAN_TEST_ROWS) != 0
-            # THE LIFETIME RULE: only a kind that keeps a pointer into its
-            # fit buffers has a kept unit's gathered side held until PACK.
-            run.borrows = (kind_mask & MEMBER_BORROWS_FIT) != 0
-            # THE GIL RULE: a kind without the bit runs its units on this
-            # thread with the GIL held, one at a time (below).
-            run.gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
-            run.gil_door = not run.gil_free and (kind_mask & MEMBER_GIL_DOOR) != 0
-            if not run.gil_free:
-                workers = 1
-                run.workers = 1
-            if (kind_mask & MEMBER_CAN_SCOPE) != 0:
-                # THE RESIDENT SCOPE (module note): read once per operation,
-                # only for a kind that can keep X resident. A read that
-                # raises is the Python units' doors' to refuse.
-                try:
-                    scope = member_scope_word(context["family_msel_rows_context"])
-                except:
-                    return scores^
-                index_all = scope >= 0 and (kind_mask & MEMBER_CAN_ROW_INDEX) != 0
-        # THE GPU WORKER CAP (THE GIL RULE, round 4): a member whose RESOLVED
-        # route is a GPU runs its units one at a time, whatever the caller's
-        # bound and whatever the process vendor says: several workers
-        # enqueueing on one device context is not proven. Read from the
-        # admitted route itself, as `member_set_workers` does.
-        if owner.plan.route.device != DEVICE_CPU:
-            workers = 1
-            run.workers = 1
-        run.plans.append(owner.plan.copy())
-        _ = py_call(members.append, est)
-        _ = py_call(member_fields.append, fields)
-        _ = py_call(member_pins.append, owner.pins)
-    # X's finite verdict, once per operation, only for a member kind that
-    # does not test its rows itself (module note): the held block's recorded
-    # verdict (one scan per held X at most, then recorded), else one scan
-    # across the host cores. Not finite: the Python units, whose member doors
-    # refuse it in the estimator's own words.
-    if not tests_rows:
+                return PythonObject(None)  # a base no plan holds: the search door refuses it in its words
+    if early:
+        try:
+            if Int(py=y.ndim) == 1:
+                if Int(py=y.size) != rows:
+                    return PythonObject(None)
+                encoded = msel_encode(y, context)
+            else:
+                outputs = _encode_outputs(y, rows, context, b)
+                if outputs is None:
+                    return PythonObject(None)
+        except:
+            return PythonObject(None)
+    # One admission: with the labels for a search over a classifier, else
+    # deferred (a class_weight tail is completed over the encode below).
+    var owner: MemberOwner
+    if early:
+        owner = member_admit_serving_labeled(est, fields, plan, member_context, b, needs,
+                                             encoded[0] if encoded is not None else outputs[1])
+    else:
+        owner = member_admit_serving_deferred(est, fields, plan, member_context, b, needs)
+    if not owner.published:
+        return PythonObject(None)
+    _ = py_call(pins.append, owner.pins)
+    var kind_mask = 0
+    try:
+        kind_mask = member_kind_capabilities(owner.plan)
+    except:
+        return PythonObject(None)
+    if (kind_mask & MEMBER_CAN_FIT) == 0:
+        return PythonObject(None)  # (the export is the admission's `needs`, as before)
+    var classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
+    var run = _FitOne(owner.plan.copy(), msel_addr(x), rows, cols)
+    var gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
+    var gil_door = not gil_free and (kind_mask & MEMBER_GIL_DOOR) != 0
+    if (kind_mask & MEMBER_CAN_SCOPE) != 0:
+        # THE RESIDENT SCOPE, read once; a read that raises is the caller's
+        # door's to refuse.
+        try:
+            run.scope = member_scope_word(context["family_msel_rows_context"])
+        except:
+            return PythonObject(None)
+    if (kind_mask & MEMBER_CAN_TEST_ROWS) == 0:
         var finite = False
         try:
             var held_x = admitted_held_index(x)
             if held_x >= 0:
                 finite = admitted_held_verify(held_x)
             else:
-                finite = host_all_finite_f32(
-                    MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=msel_addr(x)), rows * cols)
+                finite = host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=run.x),
+                                             rows * cols)
             _ = x  # keep the Python object alive through the scan above
         except:
             finite = False
         if not finite:
-            return scores^
-    # The target once, as the member's own fit door admits it (present,
-    # real, one column, finite, as long as X): float32 words.
-    # A target that check refuses (several columns, not real) is not this
-    # route's: the Python units admit or refuse it with the member's own words.
-    var target = PythonObject(None)
+            return PythonObject(None)
     var labels = PythonObject(None)
-    var classes = PythonObject(None)
     if classifier and y is None:
-        return scores^  # a classifier fits class codes
+        return PythonObject(None)  # a classifier fits class codes
     if classifier:
-        # THE LABELS, ONCE PER OPERATION (module note, CLASSIFIER MEMBERS): the
-        # int32 codes every unit reads through views, row numbers or gathers,
-        # and the class count in every candidate's plan. Anything outside the
-        # rule (and anything the encoder refuses) is the Python units' request.
-        if Int(py=y.ndim) != 1 or Int(py=y.size) != rows:
-            return scores^
-        var n_classes = 0
         try:
-            var encoded = msel_encode(y, context)
-            n_classes = len(encoded[0])
-            if n_classes < 2 or not _whole_classes(encoded[0], b):
-                return scores^
-            # A kind that reads -1 in y as unlabeled (LabelPropagation,
-            # LabelSpreading) fits y as given in these units: the marker's
-            # code goes into every candidate's word [13] (lane mf-meta5,
-            # core/xneighbors_member.mojo THE UNLABELED MARKER), so the
-            # member reads it as the estimator's own fit door does.
-            if xneighbors_kind_reads_marker(run.plans[0].family, run.plans[0].kind):
-                var marker = xneighbors_marker_index(encoded[0])
-                if marker >= 0:
-                    for c in range(n_candidates):  # driver-loop: over candidates (one word each)
-                        run.plans[c].params[LP_MARKER_WORD] = Float64(marker)
-            target = encoded[1]
-            classes = encoded[0]
-            if keep:
-                # The labels as the estimator's own fit publishes them.
-                labels = _public_labels(encoded[0], member_context)
+            if encoded is None and outputs is None:
+                if Int(py=y.ndim) == 1:
+                    if Int(py=y.size) != rows:
+                        return PythonObject(None)
+                    encoded = msel_encode(y, context)
+                else:
+                    outputs = _encode_outputs(y, rows, context, b)
+                    if outputs is None:
+                        return PythonObject(None)
+            if encoded is not None:
+                var classes = encoded[0]
+                if len(classes) < 2 or not _whole_classes(classes, b):
+                    return PythonObject(None)
+                var codes = encoded[1]
+                if Int(py=codes.size) != rows:
+                    return PythonObject(None)
+                # A kind that reads -1 in y as unlabeled (LabelPropagation,
+                # LabelSpreading): the marker's code in its word (lane mf-meta5).
+                if xneighbors_kind_reads_marker(run.plan.family, run.plan.kind):
+                    var marker = xneighbors_marker_index(classes)
+                    if marker >= 0:
+                        run.plan.params[LP_MARKER_WORD] = Float64(marker)
+                run.plan.classes = len(classes)
+                _ = py_call(pins.append, codes)
+                run.y = msel_addr(codes)
+                labels = _public_labels(classes, member_context)
+                # CLASS WEIGHTS over the encode's classes (lane mf-left4): a
+                # dict the estimator refuses raises its own words here.
+                if not member_cw_fill_plan(run.plan, est, fields, classes, member_context, b):
+                    return PythonObject(None)
+            else:
+                # THE 2-D y: rows x outputs codes, each output's class count.
+                var per = outputs[1]
+                run.plan.classes = 0
+                run.plan.class_counts = List[Int]()
+                labels = Python.list()
+                for j in range(len(per)):  # driver-loop: over the outputs (their counts and public labels)
+                    run.plan.class_counts.append(len(per[j]))
+                    _ = py_call(labels.append, _public_labels(per[j], member_context))
+                _ = py_call(pins.append, outputs[0])
+                run.y = msel_addr(outputs[0])
+                run.y_cols = len(per)
         except:
-            return scores^
-        if Int(py=target.size) != rows:
-            return scores^
+            return PythonObject(None)
         run.y_dtype = MEMBER_I32
-        run.classes = n_classes
-        for c in range(n_candidates):  # driver-loop: over candidates (one word each)
-            run.plans[c].classes = n_classes
-        # CLASS WEIGHTS (lane mf-adm3 / mf-left4): a candidate whose
-        # class_weight is a dict reads its table over the encode's classes
-        # (the labels the estimator's own fit reads it against: code c is
-        # classes[c]), before any fit. A dict or a value the estimator
-        # refuses raises its own words here under error_score='raise', as
-        # the first fold's own fit raises them; under a numeric error_score
-        # every unit of that candidate records them as its failed fit (every
-        # fold's train side holds every class, so each fold refuses alike).
-        for c in range(n_candidates):  # driver-loop: over candidates (one class_weight read each)
-            try:
-                if not member_cw_fill_plan(run.plans[c], members[c], member_fields[c], classes, member_context,
-                                           b):
-                    return scores^
-            except error:
-                if not tolerate:
-                    raise error^
-                run.refused[c] = String(error)
     elif y is not None:
         try:
-            target = classical_check_y(y, rows, classical_estimator_name(base), member_context)
+            var target = classical_check_y(y, rows, classical_estimator_name(est), member_context)
+            _ = py_call(pins.append, target)
+            run.y = msel_addr(target)
         except:
-            return scores^
-    _ = py_call(pins.append, target)
-    run.y = 0 if target is None else msel_addr(target)
-    if groups is not None and fit_only:
-        # THE SEARCH'S GROUPS (lane mf-msel5b), once per fit: encoded by the
-        # one label encoder (code g is the g-th group in sorted order, the
-        # order the group splitters read), as long as X; else the door's
-        # splitter raises its own words.
-        try:
-            var encoded_groups = msel_encode(groups, context)
-            var group_codes = encoded_groups[1]
-            if Int(py=group_codes.size) != rows or String(py=group_codes.dtype) != "<i4":
-                return scores^
-            _ = py_call(pins.append, group_codes)
-            run.groups = msel_addr(group_codes)
-        except:
-            return scores^
-    if fit_only:
-        # The one unit's train side is every row of X: a view from row 0, no
-        # index array; it holds every class by construction of the encode.
-        run.folds.append(0)
-        run.folds.append(rows)
-        run.folds.append(0)
-        run.folds.append(0)
-        run.starts[0] = 0
-        run.starts[1] = 0
-        run.fit_only = True
-    for f in range(0 if fit_only else n_folds):  # driver-loop: over folds (their index arrays, read once)
-        var pair = folds[f]
-        var train = msel_index_i64(pair[0], context)
-        var test = msel_index_i64(pair[1], context)
-        _ = py_call(pins.append, train)
-        _ = py_call(pins.append, test)
-        run.folds.append(msel_addr(train))
-        run.folds.append(Int(py=train.size))
-        run.folds.append(msel_addr(test))
-        run.folds.append(Int(py=test.size))
-    # RESPONSES: every unit's output buffers, placed once (module note). The
-    # widths are asked before any state exists; a width other than the plain
-    # one (or a family that cannot say it before a fit) is the Python units'.
-    var outputs = Python.list()
-    if n_ops > 0:
-        try:
-            for k in range(n_ops):  # driver-loop: over the request's responses (at most two)
-                var width = member_outputs(run.plans[0], responses[k], cols, 1)
-                var coded = classifier and responses[k] == MEMBER_OP_PREDICT
-                if responses[k] == MEMBER_OP_PREDICT_PROBA and (not classifier or width != run.classes):
-                    return scores^
-                if responses[k] == MEMBER_OP_PREDICT and width != 1:
-                    return scores^
-                # decision_function: the 1-D margin, or one column per class
-                # with more than two classes (module note, RESPONSES).
-                if responses[k] == MEMBER_OP_DECISION and (not classifier or not (
-                        width == 1 or (run.classes > 2 and width == run.classes))):
-                    return scores^
-                # The element type is the member's own answer and the buffer
-                # is placed in it (module note); one that does not say it is
-                # read as int32 codes / float32 values, as before the word
-                # existed. Codes are integers, everything else floats.
-                var placed = member_output_dtype(run.plans[0], responses[k], cols, 1,
-                                                 MEMBER_I32 if coded else MEMBER_F32)
-                if coded:
-                    if placed != MEMBER_I32 and placed != MEMBER_I64:
-                        return scores^
-                elif placed != MEMBER_F32 and placed != MEMBER_F64:
-                    return scores^
-                run.ops.append(responses[k])
-                run.widths.append(width)
-                run.words.append(placed)
-            for u in range(n_units):  # driver-loop: over units (their placed buffers, allocated once each)
-                var f = u - (u // n_folds) * n_folds
-                for side in range(run.sides):  # driver-loop: test side, then train side when asked
-                    var count = run.folds[4 * f + 3] if side == 0 else run.folds[4 * f + 1]
-                    for k in range(n_ops):  # driver-loop: over the request's responses
-                        if run.words[k] == MEMBER_I32:
-                            run.codes.append(List[Int32](length=count, fill=Int32(0)))
-                            _ = py_call(outputs.append, PythonObject(None))
-                            run.dst.append(0)
-                        else:
-                            # int64 codes, float32 or float64 words: an Array
-                            # of that type, written in place by the worker.
-                            run.codes.append(List[Int32]())
-                            var shape = Python.tuple(count) if run.widths[k] == 1 else Python.tuple(count, run.widths[k])
-                            var typestr = "<f4"
-                            if run.words[k] == MEMBER_F64:
-                                typestr = "<f8"
-                            elif run.words[k] == MEMBER_I64:
-                                typestr = "<i8"
-                            var placed = family_array(shape, typestr, context)
-                            _ = py_call(outputs.append, placed)
-                            run.dst.append(msel_addr(placed) if count > 0 else 0)
-            # The code lists' words are addressed once every list is in place.
-            for i in range(len(run.codes)):  # driver-loop: over the placed buffers (one address each)
-                if len(run.codes[i]) > 0:
-                    run.dst[i] = Int(run.codes[i].unsafe_ptr())
-        except:
-            return scores^
-    run.tolerate = tolerate
-    # THE PIN RULE: one reference on X's own object per member call that can
-    # offer it (the fit, then one score or each response per side), taken
-    # here with the interpreter held; what no cache took comes back below.
-    var offers = 0
-    if scope >= 0:
-        offers = n_units * (1 + (0 if fit_only else run.sides * max(n_ops, 1)))
-        run.scope = scope
-        run.index_all = index_all
-        run.pin = member_pin_take(x, offers)
+            return PythonObject(None)
+    # THE PIN RULE: one reference on X's own object for the fit, taken with
+    # the interpreter held; what the fit's cache did not take comes back.
+    if run.scope >= 0:
+        run.pin = member_pin_take(x, 1)
     var address = Int(UnsafePointer(to=run))
-    var lanes = workers
-
-    def _lane(lane: Int) {imm address}:
-        _msel_member_lane(address, lane)
-
-    def _shape(side: Int) {imm address}:
-        _msel_member_fold_shape(address, side)
-
     var py = Python()
     try:
-        with GILReleased(py):
-            # The fold sides' shapes first (independent scans of the index
-            # arrays), then the units.
-            if not fit_only:
-                host_parallelize(_shape, 2 * n_folds)
-            # A classifier fold whose train side lacks a class is not this
-            # route's (module note): nothing has run, the Python units take it.
-            var whole = True
-            for f in range(n_folds):  # driver-loop: over folds, one flag each
-                if run.short[f] != UInt8(0):
-                    whole = False
-            if not whole:
-                lanes = 0
-            if lanes > 0 and run.gil_free:
-                host_parallelize(_lane, lanes)
-            elif lanes > 0 and run.gil_door:
-                # MEMBER_GIL_DOOR: one at a time on this thread, the GIL
-                # released as the family's own door releases it.
-                _msel_member_lane(address, 0)
-        # GIL held again: the units of a kind that may not run without it,
-        # one at a time on this thread. SERIAL BY RULE (THE GIL RULE), not by
-        # nature: the kind becomes parallel when its trace earns the bit.
-        if lanes > 0 and not run.gil_free and not run.gil_door:
-            _msel_member_lane(address, 0)
+        if gil_free or gil_door:
+            with GILReleased(py):
+                _fit_one(address)
+        else:
+            # THE GIL RULE: a kind without either bit fits with the GIL held.
+            _fit_one(address)
     finally:
         if run.pin != 0:
-            var took = 0
-            for u in range(n_units):  # driver-loop: over units, the references their caches took
-                took += run.taken[u]
-            member_pin_return(run.pin, offers - took)
+            member_pin_return(run.pin, 1 - run.taken)
             run.pin = 0
         _ = pins
-        _ = members
-        _ = member_pins
-        _ = outputs
         _ = x
         _ = y
-    # A unit the member refused or failed: nothing is published from this
-    # route. The Python units run the request and raise the estimator's own
-    # exception (type and words) in unit order, as before the member mark. The
-    # repeat is paid only by a failing request.
-    if lanes == 0:
-        return scores^
-    for u in range(n_units):  # driver-loop: over units, any failure
-        if run.failed[u] != UInt8(0):
-            _free_kept(run)
-            return scores^
-        # A FIT that failed under a numeric error_score takes that value at
-        # the caller, as the Python unit's failing fit did. NOT when the words
-        # are a refusal of this route and not of the data (an operation or
-        # view the member does not publish, a missing image): the estimator's
-        # own fit may well succeed, so the Python units run the request. Nor
-        # when fitted estimators are asked back (the Python unit hands back
-        # its unfitted clone).
-        if run.fit_failed[u] != UInt8(0):
-            if (keep or run.errors[u].startswith("NotImplementedError") or run.errors[u].startswith("ImportError")
-                    or run.errors[u].startswith("member ABI")):
-                _free_kept(run)
-                return scores^
-    if keep:
-        # PACK: one fitted Python estimator per unit (module note). A pack the
-        # family refuses publishes nothing: the Python units run the request.
-        var estimators = Python.list()
-        try:
-            for u in range(n_units):  # driver-loop: over units (Python estimators, GIL held)
-                var c = u // n_folds
-                # A refit's member is this route's own clone, never fitted
-                # and seen by nobody: it is the estimator handed back.
-                var fitted = members[c] if fit_only else msel_native_clone(members[c], context)
-                var fitted_fields = py_call(plan["fields_get"], fitted, py_type(fitted))
-                if classifier:
-                    member_pack_labeled(fitted, fitted_fields, member_context, b, run.plans[c], run.states[u], labels)
-                else:
-                    member_pack(fitted, fitted_fields, member_context, b, run.plans[c], run.states[u])
-                var state = run.states[u]
-                run.states[u] = 0
-                if not member_held_adopt(fitted, plan, member_context, member_pins[c], run.plans[c], state):
-                    var call = MemberCall(run.plans[c].route, state)
-                    member_free(run.plans[c], call)
-                _ = py_call(estimators.append, fitted)
-        except:
-            _free_kept(run)
-            return scores^
-        scores.estimators = estimators
-    # THE LIFETIME RULE (core/member_abi.mojo): X and the admitted target
-    # (`pins` holds it: it may be this door's own encoded or converted
-    # array) were handed to every unit's fit and are read again by a
-    # borrowing kind's export and by the adoption's OWN in the PACK above:
-    # they live to here, past the last kept state.
+    if run.failed:
+        return PythonObject(None)
+    # PACK: the fitted state into the estimator, held by it. A pack the
+    # family refuses publishes nothing: the caller's door fits it.
+    try:
+        fields = py_call(plan["fields_get"], est, py_type(est))
+        if classifier:
+            member_pack_labeled(est, fields, member_context, b, run.plan, run.state, labels)
+        else:
+            member_pack(est, fields, member_context, b, run.plan, run.state)
+        var state = run.state
+        run.state = 0
+        if not member_held_adopt(est, plan, member_context, owner.pins, run.plan, state):
+            var call = MemberCall(run.plan.route, state)
+            member_free(run.plan, call)
+    except:
+        if run.state != 0:
+            var call = MemberCall(run.plan.route, run.state)
+            member_free(run.plan, call)
+            run.state = 0
+        return PythonObject(None)
+    # THE LIFETIME RULE: X and the admitted target were handed to the fit
+    # and are read again by a borrowing kind's export at PACK: they live to
+    # here.
     _ = pins
     _ = x
     _ = y
-    if n_ops > 0 and classifier:
-        # PACK: a classifier's predicted codes as labels, one decode per
-        # (unit, side) with the classes of the one encode (code c is the
-        # estimator's own `classes_[c]`). SERIAL BY NATURE: Python labels,
-        # GIL held; the estimator's own predict made the same decode per unit.
-        try:
-            for i in range(len(run.codes)):  # driver-loop: over the placed code buffers
-                var word = run.words[i - (i // n_ops) * n_ops]
-                if word == MEMBER_I32:
-                    py_setitem(outputs, PythonObject(i), labels_decode_i32_codes(classes, run.codes[i], member_context))
-                elif word == MEMBER_I64:
-                    # the worker's int64 code Array, read in place by the decode
-                    py_setitem(outputs, PythonObject(i), labels_decode_labels(classes, outputs[i], member_context))
-        except:
-            _free_kept(run)
-            return scores^
-    # PACK: every fitted unit's fit notices, kept or freed, in unit order, as
-    # each unit's own fit door raised them (GIL held). Here, after every
-    # fallible publication, so a route that falls back to the Python units
-    # (whose doors raise them) raises nothing twice.
-    for u in range(n_units):  # driver-loop: over units (a few warnings each)
-        member_fit_notices_raise(run.notices[u], member_context)
-    scores.outputs = outputs
-    scores.sides = run.sides
-    scores.members = members
-    if tolerate:
-        scores.fit_failed = run.fit_failed.copy()
-    scores.ran = True
-    scores.test = run.test.copy()
-    scores.train = run.train.copy()
-    scores.fit_time = run.fit_time.copy()
-    scores.score_time = run.score_time.copy()
-    # THE LIFETIME RULE: the kept units' gathered sides live to here, past
-    # every export and adoption of PACK above.
-    _ = len(run.held_x)
-    _ = len(run.held_y)
-    return scores^
+    member_fit_notices_raise(run.notices, member_context)
+    return est

@@ -122,6 +122,15 @@ comptime _CL_AMI = 1
 comptime _CL_PAIR = 2
 #: A make_scorer row whose sign is the table row's negated: the code plus this.
 comptime SCORER_FLIP = 1048576
+#: Lane mf-msel5c, MAKE_SCORER KWARGS read into the row's words (module note):
+#: a binary label scorer whose pos_label is the caller's (its class code is the
+#: scorer's positive word; the refusal words name it), and a top_k_accuracy
+#: scorer's k (the code plus k times SCORER_K_UNIT). The bits sit above every
+#: table code and SCORER_FLIP; codes are exact in the plan's Float64 words.
+comptime SCORER_POS_GIVEN = 2097152
+comptime SCORER_K_UNIT = 4194304
+#: `MselScorer.avg` of a binary label row whose pos_label is the caller's.
+comptime _AVG_POS_GIVEN = 1
 #: The top_k scorer's k (`top_k_accuracy_score`'s default; the scorer passes none).
 comptime _TOP_K = 2
 #: `MselSearchPlan.positives` words a scorer reads (`msel_scorer_positive_kind`).
@@ -219,13 +228,29 @@ def _table() -> List[MselScorer]:
     return t^
 
 
-def msel_scorer_row(code: Int) raises -> MselScorer:
-    """The scorer of `code` (once per RUN and scorer); a code at or above
-    SCORER_FLIP is the row below it with its sign negated (a make_scorer
-    whose greater_is_better differs from the row's)."""
-    if code >= SCORER_FLIP:
-        var row = msel_scorer_row(code - SCORER_FLIP)
-        row.sign = -row.sign
+def msel_scorer_row(code_in: Int) raises -> MselScorer:
+    """The scorer of `code_in` (once per RUN and scorer): its table row, the
+    sign negated with SCORER_FLIP (a make_scorer whose greater_is_better
+    differs from the row's), the caller's pos_label marked with
+    SCORER_POS_GIVEN (a binary label row; `avg` _AVG_POS_GIVEN) and a
+    top_k_accuracy k above SCORER_K_UNIT (the row's `metric` word is k)."""
+    var k = code_in // SCORER_K_UNIT
+    var code = code_in - k * SCORER_K_UNIT
+    var given = (code & SCORER_POS_GIVEN) != 0
+    var flip = (code & SCORER_FLIP) != 0
+    code = code & (SCORER_FLIP - 1)
+    if k > 0 or given or flip:
+        var row = msel_scorer_row(code)
+        if flip:
+            row.sign = -row.sign
+        if given:
+            if row.family != _F_BINARY:
+                raise Error("RuntimeError: a given pos_label on a search scorer other than a binary label scorer")
+            row.avg = _AVG_POS_GIVEN
+        if k > 0:
+            if row.family != _F_TOP_K:
+                raise Error("RuntimeError: a given k on a search scorer other than top_k_accuracy")
+            row.metric = k
         return row
     if code == SCORER_ACCURACY:
         return MselScorer("accuracy", _F_ACCURACY, 0, 0, 1.0, MEMBER_OP_PREDICT)
@@ -267,7 +292,36 @@ def msel_scorer_code(name: String, has_decision: Bool) -> Int:
 
 def msel_scorer_flip(code: Int) -> Int:
     """UNPACK: the code of `code`'s row with its sign negated."""
-    return code - SCORER_FLIP if code >= SCORER_FLIP else code + SCORER_FLIP
+    return code ^ SCORER_FLIP
+
+
+def msel_scorer_given_pos(code: Int) -> Int:
+    """UNPACK (lane mf-msel5c): `code` with the caller's pos_label (a binary
+    label scorer; its class code is the scorer's positive word)."""
+    return code | SCORER_POS_GIVEN
+
+
+def msel_scorer_with_k(code: Int, k: Int) -> Int:
+    """UNPACK (lane mf-msel5c): a top_k_accuracy `code` with the caller's k
+    (at least 1)."""
+    return code + k * SCORER_K_UNIT
+
+
+def msel_scorer_top_k(row: MselScorer) -> Bool:
+    """True for 'top_k_accuracy' (its k is a make_scorer kwarg)."""
+    return row.family == _F_TOP_K
+
+
+def msel_scorer_pos_words(row: MselScorer, label_words: List[String], positive: Int) -> String:
+    """The pos_label as scikit-learn's refusal prints it (`f"pos_label={pos_label}"`):
+    1 unless the caller gave it (lane mf-msel5c), then its label's word."""
+    if row.avg != _AVG_POS_GIVEN or positive < 0 or positive >= len(label_words):
+        return String("1")
+    var word = label_words[positive]
+    var n = word.byte_length()
+    if n >= 2 and word.startswith("'") and word.endswith("'"):
+        return String(word[byte=1 : n - 1])
+    return word
 
 
 def msel_scorer_cluster(row: MselScorer) -> Bool:
@@ -323,6 +377,11 @@ def msel_scorer_log_loss(row: MselScorer) -> Bool:
 def msel_scorer_ap(row: MselScorer) -> Bool:
     """True for 'average_precision' (its binary column is the positive's)."""
     return row.family == _F_AP
+
+
+def msel_scorer_brier(row: MselScorer) -> Bool:
+    """True for 'neg_brier_score' (lane mf-msel5c: a fold that lacks a class)."""
+    return row.family == _F_BRIER
 
 
 def msel_scorer_regression(row: MselScorer) -> Bool:
@@ -519,7 +578,8 @@ def _binary_value(route: MetricRoute, label_words: List[String], row: MselScorer
         raise Error("pos_label must use the same type as the targets")
     var absent = positive == SCORER_POSITIVE_ABSENT
     if (absent or (positive >= 0 and positive < classes and not seen[positive])) and present >= 2:
-        raise Error("pos_label=1 is not a valid label. It should be one of " + _present_words(label_words, seen))
+        raise Error("pos_label=" + msel_scorer_pos_words(row, label_words, positive)
+                    + " is not a valid label. It should be one of " + _present_words(label_words, seen))
     if absent:
         return label_binary_run(route, row.metric, truth, response, count, classes + 1, classes, warn)
     return label_binary_run(route, row.metric, truth, response, count, classes, positive, warn)

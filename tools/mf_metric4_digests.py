@@ -82,6 +82,20 @@ no KMeans.score, so H5k_kmeans_score_* and H5k_kmeans_*_none are new lines (each
 minus_inertia line on the training rows); H5k_lacking_own_* (the base's door units scored a lacking fold through
 the fold estimator's own score, which is accuracy: values equal); H5k_lacking_log_loss_raise (scikit-learn's
 "y_true and y_pred contain different number of classes" words; compare the words); the _nan lines equal.
+
+Lane mf-msel5c extends section msel5 (H; base: origin/lane/member-fits-5 b3ca4be7a9 vs head): searches over every
+splitter object the door now splits and hands to the search kind (ShuffleSplit, StratifiedShuffleSplit,
+RepeatedKFold, RepeatedStratifiedKFold, TimeSeriesSplit, GroupShuffleSplit, LeaveOneGroupOut with groups, an
+index list), make_scorer kwargs (fbeta_score beta=2 keeps the door; f1 pos_label=2, an explicit average='binary',
+top_k_accuracy k=1 and k=3 are now typed rows), error_score='bogus' (scikit-learn's InvalidParameterError
+words), a lacking fold scored by 'average_precision' and 'neg_brier_score' (raise and nan), a 2-D classifier
+target (GridSearchCV over MultiOutputClassifier, scoring None, and cross_val_predict predict, integer and real
+labels), permutation_test_score, and a classifier search by 'f1' / 'roc_auc' (its admission now has the labels).
+Expected: value lines equal, except the scorer lines may differ in the last bits where the base scored through
+the deleted member units' Python metric calls (the RUN reads the binary64 program, as mf-metric4 noted); the
+error_score line changes words (was "error_score must be 'raise' or a number"); the lacking AP / brier raise
+lines carry scikit-learn's words (the base: the metric door's); the multi-output lines are new values from the
+kind (the base fitted them through the door: values equal, the dtype the same).
 """
 import hashlib
 import os
@@ -643,6 +657,116 @@ def _kmeans5_cases():
     ]
 
 
+def _splitter_search(which):
+    import mojolearn
+    from mojolearn import model_selection as ms
+    X, _, c = _data(113, n=150, d=4, k=3)
+    groups = np.arange(150) % 6
+    cv = {
+        "shuffle": lambda: ms.ShuffleSplit(n_splits=3, test_size=0.25, random_state=0),
+        "strat_shuffle": lambda: ms.StratifiedShuffleSplit(n_splits=3, test_size=0.25, random_state=0),
+        "repeated": lambda: ms.RepeatedKFold(n_splits=3, n_repeats=2, random_state=0),
+        "repeated_strat": lambda: ms.RepeatedStratifiedKFold(n_splits=3, n_repeats=2, random_state=0),
+        "time_series": lambda: ms.TimeSeriesSplit(n_splits=3),
+        "group_shuffle": lambda: ms.GroupShuffleSplit(n_splits=3, test_size=0.3, random_state=0),
+        "logo": lambda: ms.LeaveOneGroupOut(),
+        "index_list": lambda: [(np.arange(50, 150), np.arange(0, 50)), (np.arange(0, 100), np.arange(100, 150))],
+    }[which]()
+    s = ms.GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring="accuracy", cv=cv,
+                        return_train_score=True)
+    if which in ("group_shuffle", "logo"):
+        s.fit(X, c, groups=groups)
+    else:
+        s.fit(X, c)
+    return _rows_of_search(s, X)
+
+
+def _kwargs_search(which):
+    import mojolearn
+    from mojolearn import metrics
+    from mojolearn.model_selection import GridSearchCV, make_scorer
+    X, _, c = _data(127, n=150, d=4, k=3)
+    target = c
+    if which == "fbeta":
+        scoring = make_scorer(metrics.fbeta_score, beta=2.0, average="macro")
+    elif which == "f1_pos2":
+        target = np.where(c > 0, 2, 0)
+        scoring = make_scorer(metrics.f1_score, pos_label=2)
+    elif which == "f1_binary_explicit":
+        target = (c > 0).astype(np.int64)
+        scoring = make_scorer(metrics.f1_score, average="binary")
+    else:
+        scoring = make_scorer(metrics.top_k_accuracy_score, k=int(which[-1]),
+                                      response_method=("decision_function", "predict_proba"))
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring=scoring,
+                     cv=3).fit(X, target)
+    return _rows_of_search(s, X)
+
+
+def _bogus_error_score():
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV
+    X, _, c = _data(131, n=90, d=4, k=3)
+    return _rows_of_search(GridSearchCV(mojolearn.LogisticRegression(), {"C": [1.0]}, error_score="bogus",
+                                        cv=3).fit(X, c), X)
+
+
+def _multi_output(which, real):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV, cross_val_predict
+    X, _, c = _data(137, n=150, d=4, k=3)
+    Y = np.stack([c, (c + 1) % 3], axis=1)
+    Y = (Y.astype(np.float64) * 0.5) if real else Y.astype(np.int64)
+    base = mojolearn.MultiOutputClassifier(mojolearn.LogisticRegression(max_iter=100))
+    if which == "search":
+        s = GridSearchCV(base, {"estimator__C": [0.1, 1.0]}, cv=3).fit(X, Y)
+        return _rows_of_search(s, X)
+    a = np.asarray(cross_val_predict(base, X, Y, cv=3))
+    return [("dtype", a.dtype.str), ("values", _digest(a))]
+
+
+def _permutation():
+    import mojolearn
+    from mojolearn.model_selection import permutation_test_score
+    X, _, c = _data(139, n=120, d=4, k=3)
+    score, perms, pvalue = permutation_test_score(mojolearn.LogisticRegression(max_iter=100), X, c, cv=3,
+                                                  n_permutations=5, random_state=0, scoring="accuracy")
+    return [("score", repr(float(score))), ("perms", _digest(np.asarray(perms, dtype=np.float64))),
+            ("pvalue", repr(float(pvalue)))]
+
+
+def _labels_search(scoring):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV
+    X, _, c = _data(149, n=150, d=4, k=2)
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring=scoring,
+                     cv=3).fit(X, c)
+    return _rows_of_search(s, X)
+
+
+def _msel5c_cases():
+    cases = [("H5c_split_" + w, (lambda w=w: _splitter_search(w)))
+             for w in ("shuffle", "strat_shuffle", "repeated", "repeated_strat", "time_series", "group_shuffle",
+                       "logo", "index_list")]
+    cases += [("H5c_kwargs_" + w, (lambda w=w: _warned(lambda: _kwargs_search(w))))
+              for w in ("fbeta", "f1_pos2", "f1_binary_explicit", "top_k1", "top_k3")]
+    cases += [
+        ("H5c_error_score_bogus", _bogus_error_score),
+        ("H5c_lacking_ap_raise", lambda: _lacking_scored("average_precision")),
+        ("H5c_lacking_ap_nan", lambda: _warned(lambda: _lacking_scored("average_precision", np.nan))),
+        ("H5c_lacking_brier_raise", lambda: _lacking_scored("neg_brier_score")),
+        ("H5c_lacking_brier_nan", lambda: _warned(lambda: _lacking_scored("neg_brier_score", np.nan))),
+        ("H5c_multi_search_int", lambda: _multi_output("search", False)),
+        ("H5c_multi_predict_int", lambda: _multi_output("predict", False)),
+        ("H5c_multi_predict_real", lambda: _multi_output("predict", True)),
+        ("H5c_permutation", _permutation),
+        ("H5c_labels_f1", lambda: _warned(lambda: _labels_search("f1"))),
+        ("H5c_labels_roc_auc", lambda: _labels_search("roc_auc")),
+        ("H5c_labels_brier", lambda: _labels_search("neg_brier_score")),
+    ]
+    return cases
+
+
 def _msel5_cases():
     from mojolearn.model_selection import cross_val_score
     import mojolearn
@@ -671,7 +795,7 @@ def _msel5_cases():
 def _all_cases():
     return (_metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
             + _search5_cases() + _cluster5_metric_cases() + _cluster5_search_cases() + _msel5_cases()
-            + _msel5b_cases() + _kmeans5_cases())
+            + _msel5b_cases() + _kmeans5_cases() + _msel5c_cases())
 
 
 def _run(index):
