@@ -299,6 +299,15 @@ Measure when speed or quality could actually change. Do not measure to remove du
 
 ## 3. Measurement
 
+### Measurement is ad hoc (Andrew, 2026-11-23)
+
+Nothing is measured on a schedule, per release, per merge or per wave. A measurement (a board run, a paper-row
+timing, an A/B, a composed-row run, a re-time of a prior wheel) happens only when Andrew asks for that measurement.
+Tools may OFFER a run behind a flag; no release step, workflow, plan, brief or agent schedules one, and no agent
+writes "measured once per release", "re-measured when X changes" or similar into code, docs or a report as if it
+were going to happen. A staleness mark on a stored cell is information for Andrew, never a trigger. Speed claims
+are still made only from a measurement that was actually taken ("Releases").
+
 ### What a win is: speed at the same or similar quality (Andrew, 2026-11-22)
 
 - "Wins", "faster" and "the fastest" always mean faster WITH QUALITY THE SAME OR SIMILAR. Speed bought with a
@@ -330,10 +339,9 @@ Measure when speed or quality could actually change. Do not measure to remove du
 - A regression verdict compares two timings taken on the SAME machine in the SAME job: same host (host id, CPU model,
   NUMA layout, PCIe link) and the same GPU. Times from different hosts are never compared, even when the GPU model is
   the same: on 2026-11-14 two L40S hosts differed 1.2-2.2x on unchanged code and produced 56 false regression flags.
-- Every paper or full-board job therefore re-times OUR prior wheels (the paper baseline 0.8.55 and the last release,
-  installed from PyPI, our arms only) on the same box in the same job, and the compare's columns are those on-box
-  timings. A stored column from another run is reference only and carries the host it was taken on; it never makes a
-  REGRESSION or FASTER flag. Opponents are still never rerun: their stored cells keep their host and are shown as such.
+- When Andrew asks for a speed verdict, the two wheels compared are timed on the same box in the same job, our arms
+  only. A stored column from another run is reference only and carries the host it was taken on; it never makes a
+  REGRESSION or FASTER flag. Opponents are never rerun: their stored cells keep their host and are shown as such.
 - The job records a host probe in `job/box.txt` (host id, CPU model, NUMA nodes, cgroup cores, host memcpy GB/s,
   host-to-device GB/s pageable and pinned, PCIe generation and width under load) and the compare prints both
   arms' probes beside the verdict. A verdict without the probe is not a verdict.
@@ -434,13 +442,12 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 - We fix everything we can before a release. We do not release while there is more work to incorporate: known
   regressions, planned refactors, owed fixes and owed deletions all go in first. No piecemeal releases.
-- When to measure (Andrew, 2026-11-12): measure BEFORE the release only when the release's purpose is improving
-  speed; then time the measurement build on NVIDIA and AMD against the last release and the paper baseline, fix
-  every regression found, and measure again before freezing. Otherwise measure AFTER the release, on the
-  published PyPI wheel, and those numbers are what the boards, the paper and the site broadcast. A claim about
-  speed is only ever made from a published wheel's measurement.
-- Order: all code in, one compile, (measure, fix, measure again when the release is about speed), freeze, the one
-  cross-vendor verification, publish, then measure the published wheel.
+- When to measure: only when Andrew asks ("Measurement is ad hoc", 2026-11-23). When he asks for a speed release,
+  the measurement build is timed against the last release and the paper baseline, every regression found is fixed,
+  and it is measured again before freezing. A claim about speed is only ever made from a measurement that was
+  taken, and for a published claim from the published wheel.
+- Order: all code in, one compile, (measure, fix, measure again only when Andrew asked for it), freeze, the one
+  cross-vendor verification, publish. Measuring the published wheel happens when Andrew asks.
 
 ### Fix everything first, then one compile, then one measurement (Andrew, 2026-11-13: "fix fix fix")
 
@@ -745,22 +752,6 @@ Ends when Andrew says. It is not the product direction: AMD and Apple remain in 
   and an owed A/B arm is timed on the NVIDIA L40S alone. No AMD box is rented and no AMD build is waited on. The
   two-vendor average, the AMD and Apple timing columns and the vendor-split flag return when Andrew reopens them.
   Bits across vendors are unaffected: the release's one verification still covers every vendor.
-- Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
-  GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 alone ->
-  read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
-  measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
-  and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
-  at least as fast as 0.8.55 with quality equal.
-- Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions. The full board
-  times one prior on the same box, 0.8.55 (Andrew, 2026-11-15).
-- One prior only, on every board (Andrew, 2026-11-16): a measurement job times the candidate and 0.8.55 on the same box
-  and nothing else. 0.8.66 is not timed on the paper rows or anywhere; this overrides "and the last release" in part 3.
-- 0.8.55 is not timed again (Andrew, 2026-11-17): the 0.8.55 times taken on the L40S on 2026-11-17 (full board, host
-  26ee0a3b0f86, driver 595.112.07) are the stored baseline for this campaign. A measurement job times OUR new wheel
-  only, on the same or a similar L40S, and only the rows a change touched plus the owed A/B switches; nothing already
-  known is measured again. This overrides "re-times OUR prior wheels on the same box in the same job" in part 3 while
-  it runs: the compare shows the stored 0.8.55 time with its host, driver and date beside each row and says in its
-  first line that the baseline is stored. A/B switches are still decided back to back in one job (base and arm).
 - ONE integration branch for the whole campaign (Andrew, 2026-11-14: "everything, everything, everything"): every fix
   lane, every audit fix and every leftover is merged into the same integration branch (`preinteg/wave2-20261113` until
   it lands), which is the only branch compiled. main receives that branch whole, never a piece of it; no lane and no
@@ -770,27 +761,20 @@ Ends when Andrew says. It is not the product direction: AMD and Apple remain in 
   is a regression), no rule may key on a benchmark shape or dataset ("No dimension targeting"), and no row is
   "fixed" by measuring it on a smaller case. Not piecemeal: one wave fixes everything the last measurement showed.
 
-### TEMPORARY: we time ourselves against ourselves, on the same pod; 0.8.55 is retired as a yardstick (Andrew, 2026-11-19)
+### TEMPORARY: we time ourselves against ourselves, on the same pod (Andrew, 2026-11-19; trimmed 2026-11-23)
 
-Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs and replaces the 2026-11-18 direction
-"time our latest against the stored 0.8.55 board" (verbatim in `docs/rules/RULES_HISTORY.md`).
+Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs. Every measurement it describes
+happens only when Andrew asks for it ("Measurement is ad hoc").
 
 - A speed verdict (REGRESSION, FASTER, an A/B win or loss) comes ONLY from two of our own wheels timed on the SAME pod
   in the SAME job, with every worker bound to the GPU's NUMA node: the candidate beside the last green build
   (`tools/ops/measure_candidate.py stage ... --prior-wheel NAME=DIR@SHA`), or an arm beside its base. A pair whose two
   cells ran on different nodes or hosts is not a verdict.
-- The reference is rolling: each green measurement build is timed against the previous green build that was timed.
-  Nothing has to be at least as fast as 0.8.55; what must not happen is our latest being slower than our previous
-  build, at equal quality, beyond the pair's noise.
-- 0.8.55 is never installed, timed, profiled or compared again. Its stored board (the 2026-11-17 L40S full board) stays
-  in the evidence as history; it makes no flag, opens no lane and ranks no work. Reason (2026-11-19): against it, the
-  2026-11-19 full board showed 178 entries at 1.2x or slower; the same-pod pair job showed all but one of the rows
-  examined were the host or the unbound workers, and the one "regression" (cagra taxi) was NUMA placement.
-- Our latest build is still TIMED in full: every round ends with the whole board timed on the L40S for the candidate
-  and its prior, not only the rows a fix changed.
+- When a timing is asked for, the reference is our own previous build timed in the same job; what must not happen is
+  our latest being slower than it, at equal quality, beyond the pair's noise.
 - Work is opened for a same-pod gap beyond the pair's noise, worst absolute time first.
 - Opponents are set aside for now: no opponent job, no opponent re-score, and no work is opened, held or ranked because
-  of an opponent cell. (The paper's 0.8.55 comparison and the opponent boards are a release-time question for Andrew.)
+  of an opponent cell.
 - Order, without haste: fixes and A/B verdicts timed same-pod; the boundary cleanup by waves (no speed case: compile
   and native checks only, no measurement of its own); `fast` routes and per-estimator `fast`; the other owed cleanups;
   and only then the release, when Andrew says. Nothing is skipped or shortened to reach it sooner.

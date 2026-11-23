@@ -1,29 +1,90 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""The per-layer tables of autograd/model_blocks.mojo agree, for EVERY block layer code (lane mamba2-nan, 2026-11-23).
+"""Every table that lists Sequential layer codes or layer names agrees, for EVERY code (lanes mamba2-nan and
+layer-tables, 2026-11-23).
 
-A block layer's parameters are described four times, in four functions that the interpreter reads separately:
-block_param_sizes (the element counts, the flat vector's layout), block_param_names (the checkpoint names),
-block_init_bounds (the seeded init of each tensor) and block_tensor_dims (each tensor's shape for import and
-checkpoints). Merge 9e745eb1a8 dropped three lines of the ssd_scan rows (an empty block_tensor_dims branch, the
-second name `.D`, the D init) and nothing failed until a fit ran off the end of the init list. This check reads the
-source and, for every code from BLOCK_FIRST to BLOCK_LAST:
-  - the number of tensors in block_param_sizes, block_param_names and block_init_bounds is the same;
-  - block_tensor_dims has a branch exactly when the layer has parameters;
-  - no branch of the four tables is empty (a header with no `out.append`);
-  - block_shape and block_forward name the code (every layer has a shape rule and a forward).
-A `for _ in range(K):` around an append counts K appends. Source reading only: no build, no binding.
+Where a layer code or name must appear for a layer to work end to end. Each place is checked below; "generic"
+means the place reads the code through `is_block` and the model_blocks tables, so it needs no line per code, and
+the check proves it still does (a literal code list there is how 42 to 46 went missing from load_state_dict).
 
-    python3 tools/block_tables_check.py [path/to/model_blocks.mojo]     exit 0 when consistent, 1 with the list
+  autograd/model_blocks.mojo (block layers, BLOCK_FIRST .. BLOCK_LAST)
+    LAYER_* constants         the code itself; one constant per code, no gap, no value shared with model.mojo
+    block_shape               construct and shape: argument validation and the output shape
+    block_param_sizes         parameter layout: the tensors of the flat params_ vector
+    block_param_names         state_dict / load_state_dict / checkpoint names of those tensors
+    block_init_bounds         seeded init of each tensor
+    block_tensor_dims         each tensor's shape for import, export and state_dict (a branch iff it has tensors)
+    block_forward             forward (backward is the tape of the ops it records)
+    block_reads               the codes that read an earlier layer's output (their reference is renumbered)
+  autograd/model.mojo         core codes 1..20 (LAYER_*); parse_model_v2 (block_shape, block_param_sizes),
+                              model_init_params (block_init_bounds), _model_forward_v2 (block_forward), _absorbed_activation
+                              (block_reads):
+                              generic over block codes
+  autograd/model_checkpoint.mojo  checkpoint save and load names: generic (block_param_sizes, block_param_names)
+  autograd/weight_import.mojo     import, export, state_dict layouts: generic (block_param_sizes, block_tensor_dims)
+  bindings/sequential_weights_pack.mojo
+    sequential_parameter_layers   load_state_dict's tensor names: generic (is_block, block_param_names)
+    sequential_export_weights     state_dict / parameters / named_parameters names: generic (is_block, names)
+  bindings/sequential_description_pack.mojo
+    sequential_add            construct: one `kind == "<name>"` branch per name that takes arguments
+    _CODE_* / _emit           containers: the codes whose reference is renumbered equal model.mojo's and include
+                              every code block_reads names
+    sequential_layers         `model.layers`: reads the layer-name tuple below (generic)
+  python/mojolearn/_x_sequence_model.py
+    _LAYER                    name -> code, the table add() and recipes resolve a name through; every code named
+    layer_names               code -> the name `model.layers` reports; one non-empty, unique name per code
+    Sequential.<name>         a public method per name
+    Sequential.add docstring  every name listed
+  python/mojolearn/_verify_api_neural.py
+    SEQUENTIAL_LAYER_FIXTURES verify's endpoint fixture per layer method, and the constructor table of the boundary
+                              test python/mojolearn/tests/test_sequential_layers_boundary.py (fit one step,
+                              state_dict -> load_state_dict, save_checkpoint -> from_checkpoint, export -> load):
+                              every code needs one, except the parameter-free core codes CORE_NO_FIXTURE
+  Generic, nothing per code: python/mojolearn/_digest_fields.py (digest_ reads `_layers`, the codes), the checkpoint
+  and export files (they store codes), recipe serialisation (names through add() and _LAYER).
+
+For model_blocks.mojo, per code: the number of tensors in block_param_sizes, block_param_names and block_init_bounds
+is the same; block_tensor_dims has a branch exactly when the layer has parameters; no branch of the four tables is
+empty; block_shape and block_forward name the code. A `for _ in range(K):` around an append counts K appends.
+Source reading only: no build, no binding, no import of the package.
+
+    python3 tools/block_tables_check.py [--root DIR | --tree SHA]    exit 0 when consistent, 1 with the list
+    python3 tools/block_tables_check.py path/to/model_blocks.mojo    the model_blocks tables only
 """
+import ast
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "autograd/model_blocks.mojo"
+BLOCKS = "autograd/model_blocks.mojo"
+MODEL = "autograd/model.mojo"
+CHECKPOINT = "autograd/model_checkpoint.mojo"
+IMPORT = "autograd/weight_import.mojo"
+WEIGHTS = "bindings/sequential_weights_pack.mojo"
+DESCRIPTION = "bindings/sequential_description_pack.mojo"
+PYMODEL = "python/mojolearn/_x_sequence_model.py"
+FIXTURES = "python/mojolearn/_verify_api_neural.py"
 TABLES = ("block_param_sizes", "block_param_names", "block_init_bounds", "block_tensor_dims")
 NAMED = ("block_shape", "block_forward")
+#: (file, function, the calls it must make): the generic consumers of the block tables
+GENERIC = (
+    (MODEL, "parse_model_v2", ("is_block(", "block_shape(", "block_param_sizes(")),
+    (MODEL, "model_init_params", ("is_block(", "block_init_bounds(")),
+    (MODEL, "_model_forward_v2", ("is_block(", "block_forward(")),
+    (MODEL, "_absorbed_activation", ("is_block(", "block_reads(")),
+    (CHECKPOINT, None, ("is_block(", "block_param_sizes(", "block_param_names(")),
+    (IMPORT, None, ("is_block(", "block_param_sizes(", "block_tensor_dims(")),
+    (WEIGHTS, "sequential_parameter_layers", ("is_block(", "block_param_names(")),
+    (WEIGHTS, "sequential_export_weights", ("is_block(", "block_param_names(")),
+)
+#: core layers built by add() with no arguments (the description pack's final `takes no arguments` branch)
+NO_ARGUMENTS = frozenset(("relu", "sigmoid", "tanh", "softmax", "flatten"))
+#: parameter-free core codes verify covers through its own endpoint branches (relu .. avg_pool2d but the
+#: parameter layers 1 linear, 6 layer_norm and 12 conv2d); every other code, and every new one, needs a fixture
+CORE_NO_FIXTURE = frozenset((2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14))
 _CODE = re.compile(r"\bcode == (LAYER_[A-Z0-9_]+)")
 _HEADER = re.compile(r"^\s*(?:el)?if\b.*\bcode == LAYER_")
 _RANGE = re.compile(r"^(\s*)for _ in range\((\d+)\)")
@@ -32,12 +93,12 @@ _RANGE = re.compile(r"^(\s*)for _ in range\((\d+)\)")
 def constants(text):
     """{name: value} of the module's `comptime LAYER_* = <int>` lines, and BLOCK_FIRST / BLOCK_LAST."""
     out = {}
-    for m in re.finditer(r"^comptime ((?:LAYER|BLOCK)_[A-Z0-9_]+) = (\d+)\s*$", text, re.M):
+    for m in re.finditer(r"^comptime ((?:LAYER|BLOCK)_[A-Z0-9_]+) = (\d+)\b", text, re.M):
         out[m.group(1)] = int(m.group(2))
     return out
 
 
-def function_body(text, name):
+def function_body(text, name, required=True):
     """The lines of `def name(...)` up to the next top-level statement."""
     lines = text.splitlines()
     for i, line in enumerate(lines):
@@ -49,7 +110,9 @@ def function_body(text, name):
                     break
                 body.append(nxt)
             return body
-    raise SystemExit(f"block_tables_check: {name} not found in the source")
+    if required:
+        raise SystemExit(f"block_tables_check: {name} not found in the source")
+    return None
 
 
 def branches(body):
@@ -90,11 +153,8 @@ def branches(body):
     return out
 
 
-def check(path=SOURCE):
-    """The list of disagreements (empty: consistent) and the per-code table {code name: (sizes, names, inits, dims)}:
-    the tensor counts of the first three tables, and the appends of the code's block_tensor_dims branch (the axes it
-    can give a shape; 0 without a branch)."""
-    text = Path(path).read_text(encoding="utf-8")
+def check_text(text):
+    """check() over model_blocks.mojo's TEXT."""
     values = constants(text)
     first, last = values.get("BLOCK_FIRST"), values.get("BLOCK_LAST")
     if first is None or last is None:
@@ -133,14 +193,204 @@ def check(path=SOURCE):
     return problems, {c: tuple(n) for c, n in counts.items()}
 
 
+def check(path=SOURCE):
+    """The list of disagreements of model_blocks.mojo's four tables (empty: consistent) and the per-code table
+    {code name: (sizes, names, inits, dims)}: the tensor counts of the first three tables, and the appends of the
+    code's block_tensor_dims branch (the axes it can give a shape; 0 without a branch)."""
+    return check_text(Path(path).read_text(encoding="utf-8"))
+
+
+# ------------------------------------------------------------------ the other files
+def _literal(tree, name):
+    """The literal value assigned to module-level NAME, or (for a dict-valued key "layer_names" etc.) None."""
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            return node.value
+    return None
+
+
+def _dict_item(node, key):
+    if isinstance(node, ast.Dict):
+        for k, v in zip(node.keys, node.values):
+            if isinstance(k, ast.Constant) and k.value == key:
+                return v
+    return None
+
+
+def _python_tables(text):
+    """(_LAYER {name: code}, layer_names tuple, Sequential method names, the add() docstring) of _x_sequence_model.py."""
+    tree = ast.parse(text)
+    layer = ast.literal_eval(_literal(tree, "_LAYER"))
+    names_node = _dict_item(_literal(tree, "_SEQUENTIAL_CONTEXT"), "layer_names")
+    layer_names = ast.literal_eval(names_node) if names_node is not None else None
+    methods, add_doc = set(), ""
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == "Sequential":
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef):
+                    methods.add(item.name)
+                    if item.name == "add":
+                        add_doc = ast.get_docstring(item) or ""
+    return layer, layer_names, methods, add_doc
+
+
+def _fixture_names(text):
+    node = _literal(ast.parse(text), "SEQUENTIAL_LAYER_FIXTURES")
+    if not isinstance(node, ast.Dict):
+        return None
+    return [k.value for k in node.keys if isinstance(k, ast.Constant)]
+
+
+def check_files(read):
+    """The disagreements across every place of the module docstring. READ(relative path) -> text or None."""
+    problems = []
+    texts = {}
+    for rel in (BLOCKS, MODEL, CHECKPOINT, IMPORT, WEIGHTS, DESCRIPTION, PYMODEL, FIXTURES):
+        texts[rel] = read(rel)
+        if texts[rel] is None:
+            problems.append(f"{rel}: missing")
+    if texts[BLOCKS] is None or texts[MODEL] is None or texts[PYMODEL] is None:
+        return problems, {}
+    block_problems, table = check_text(texts[BLOCKS])
+    problems += [f"{BLOCKS}: {p}" for p in block_problems]
+    bvals, mvals = constants(texts[BLOCKS]), constants(texts[MODEL])
+    first, last = bvals.get("BLOCK_FIRST"), bvals.get("BLOCK_LAST")
+    codes = {}
+    for rel, vals in ((MODEL, mvals), (BLOCKS, bvals)):
+        for name, v in vals.items():
+            if not name.startswith("LAYER_"):
+                continue
+            if v in codes and codes[v] != name:
+                problems.append(f"{rel}: {name} = {v} is also {codes[v]}")
+            codes[v] = name
+            if rel == MODEL and first is not None and v >= first:
+                problems.append(f"{MODEL}: core {name} = {v} lies in the block range {first}..{last}")
+    with_params = {bvals[c] for c, n in table.items() if n[0] > 0}
+
+    # generic consumers: no per-code line, the model_blocks tables instead
+    for rel, fn, calls in GENERIC:
+        text = texts.get(rel)
+        if text is None:
+            continue
+        body = text if fn is None else "\n".join(function_body(text, fn, required=False) or [])
+        where = f"{rel}" + (f" {fn}" if fn else "")
+        if fn is not None and not body:
+            problems.append(f"{where}: function not found")
+            continue
+        for call in calls:
+            if call not in body:
+                problems.append(f"{where}: does not call {call[:-1]} (a layer's tables are read through it)")
+        if first is not None:
+            for m in re.finditer(r"\bcode\s*(==|>=|>|<=|<)\s*(\d+)", body):
+                v = int(m.group(2))
+                if v >= first or (m.group(1) in (">=", ">") and v >= first - 1):
+                    problems.append(f"{where}: compares a code with the literal {v}; read block codes through "
+                                    f"is_block and the model_blocks tables")
+
+    # python/mojolearn/_x_sequence_model.py
+    layer, layer_names, methods, add_doc = _python_tables(texts[PYMODEL])
+    named_codes = {}
+    for name, v in layer.items():
+        if v == 0:
+            continue
+        if v not in codes:
+            problems.append(f"{PYMODEL} _LAYER: {name!r} -> {v} is no LAYER_ code")
+        named_codes.setdefault(v, []).append(name)
+    for v, cname in sorted(codes.items()):
+        if v not in named_codes:
+            problems.append(f"{PYMODEL} _LAYER: no name for {cname} ({v})")
+    for name in layer:
+        if name not in methods:
+            problems.append(f"{PYMODEL} Sequential: no method {name}()")
+        if f"``'{name}'``" not in add_doc:
+            problems.append(f"{PYMODEL} Sequential.add docstring: {name!r} is not listed")
+    if layer_names is None:
+        problems.append(f"{PYMODEL} _SEQUENTIAL_CONTEXT: no layer_names tuple")
+    else:
+        top = max(codes) if codes else 0
+        if len(layer_names) != top + 1:
+            problems.append(f"{PYMODEL} layer_names: {len(layer_names)} entries for codes 0..{top}")
+        for v, cname in sorted(codes.items()):
+            if v >= len(layer_names) or not layer_names[v]:
+                problems.append(f"{PYMODEL} layer_names: no name for {cname} ({v})")
+        for v, n in enumerate(layer_names):
+            if n and v not in codes:
+                problems.append(f"{PYMODEL} layer_names: {n!r} at {v}, which is no LAYER_ code")
+        given = [n for n in layer_names if n]
+        for n in sorted({n for n in given if given.count(n) > 1}):
+            problems.append(f"{PYMODEL} layer_names: {n!r} names more than one code")
+
+    # bindings/sequential_description_pack.mojo
+    text = texts.get(DESCRIPTION)
+    if text is not None:
+        add_body = "\n".join(function_body(text, "sequential_add", required=False) or [])
+        kinds = set(re.findall(r'\bkind == "([a-z0-9_]+)"', add_body))
+        for name in sorted(layer):
+            if name not in NO_ARGUMENTS and name not in kinds:
+                problems.append(f"{DESCRIPTION} sequential_add: no branch for {name!r}")
+        for name in sorted(kinds - set(layer)):
+            problems.append(f"{DESCRIPTION} sequential_add: branch {name!r} is not in _LAYER")
+        local = {m.group(1): int(m.group(2)) for m in re.finditer(r"^comptime _CODE_([A-Z0-9_]+) = (\d+)", text, re.M)}
+        for name, v in local.items():
+            if codes.get(v) != f"LAYER_{name}":
+                problems.append(f"{DESCRIPTION}: _CODE_{name} = {v} but {codes.get(v, 'no LAYER_ code')} has it")
+        emit = "\n".join(function_body(text, "_emit", required=False) or [])
+        renumbered = {local[n] for n in re.findall(r"\bcode == _CODE_([A-Z0-9_]+)", emit) if n in local}
+        reads = set(_CODE.findall("\n".join(function_body(texts[BLOCKS], "block_reads", required=False) or [])))
+        for cname in sorted(reads):
+            if cname in bvals and bvals[cname] not in renumbered:
+                problems.append(f"{DESCRIPTION} _emit: {cname} reads an earlier layer but its reference is not "
+                                f"renumbered in a container")
+
+    # python/mojolearn/_verify_api_neural.py: the constructor table of the boundary test
+    fixtures = _fixture_names(texts[FIXTURES]) if texts.get(FIXTURES) is not None else None
+    if fixtures is None:
+        problems.append(f"{FIXTURES}: no SEQUENTIAL_LAYER_FIXTURES")
+    else:
+        covered = {layer.get(n) for n in fixtures}
+        for n in fixtures:
+            if n not in layer:
+                problems.append(f"{FIXTURES} SEQUENTIAL_LAYER_FIXTURES: {n!r} is not a Sequential layer name")
+        for v, cname in sorted(codes.items()):
+            if v not in CORE_NO_FIXTURE and v not in covered:
+                problems.append(f"{FIXTURES} SEQUENTIAL_LAYER_FIXTURES: no constructor for {cname} ({v}"
+                                f"{', has parameters' if v in with_params else ''}; names "
+                                f"{named_codes.get(v, [])})")
+    return problems, table
+
+
+def reader(root=None, tree=None):
+    """READ(relative path) -> text or None, from directory ROOT or git commit TREE."""
+    if tree is not None:
+        def read(rel):
+            p = subprocess.run(["git", "show", f"{tree}:{rel}"], cwd=root or ROOT, capture_output=True)
+            return p.stdout.decode("utf-8") if p.returncode == 0 else None
+        return read
+    base = Path(root or ROOT)
+
+    def read(rel):
+        path = base / rel
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+    return read
+
+
 def main(argv):
-    path = Path(argv[1]) if len(argv) > 1 else SOURCE
-    problems, table = check(path)
+    args = argv[1:]
+    if args and not args[0].startswith("--"):
+        problems, table = check(Path(args[0]))
+    else:
+        root = tree = None
+        if "--root" in args:
+            root = args[args.index("--root") + 1]
+        if "--tree" in args:
+            tree = args[args.index("--tree") + 1]
+        problems, table = check_files(reader(root, tree))
     for code, (s, n, i, d) in sorted(table.items()):
         print(f"{code:<26} sizes {s} names {n} inits {i} dims {'yes' if d else 'no'}")
     for p in problems:
         print("DISAGREE", p)
-    print(f"BLOCK_TABLES {'consistent' if not problems else 'INCONSISTENT'}: {len(table)} codes, {len(problems)} problems")
+    print(f"BLOCK_TABLES {'consistent' if not problems else 'INCONSISTENT'}: {len(table)} block codes, "
+          f"{len(problems)} problems")
     return 0 if not problems else 1
 
 

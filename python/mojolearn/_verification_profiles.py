@@ -18,6 +18,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           'sequence-composed-mamba2', 'sequence-composed-mamba3',
                           'sequence-composed-recurrent',
                           'sequence-composed-conv1d',
+                          # nn-recurrent: the recurrent options (tools/identity_lanes/nn_recurrent.py)
+                          'sequence-blocks-bigru-lengths', 'sequence-blocks-bilstm',
+
                           # nn-attention begin: classic attention models, one seeded step each
                           'sequence-attention-encoder', 'sequence-attention-cross',
                           # nn-attention end

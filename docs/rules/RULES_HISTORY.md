@@ -1022,3 +1022,60 @@ Andrew, 2026-11-22: "WHY DO WE NEED TO MEASURE MEASURE MEASURE? change the rule 
 > - Until the measurement exists, the old code stays behind its switch, default
 >   unchanged. This narrows "remove what a change made unnecessary": unnecessary
 >   means measured, not argued.
+
+
+## 2026-11-23: measurement is ad hoc
+
+Andrew, 2026-11-23: "I don't want to measure every release for anything. I only want to measure ad hoc."
+Replaces the 2026-11-12 "When to measure" bullet of part 4, verbatim:
+
+> - When to measure (Andrew, 2026-11-12): measure BEFORE the release only when the release's purpose is improving
+>   speed; then time the measurement build on NVIDIA and AMD against the last release and the paper baseline, fix
+>   every regression found, and measure again before freezing. Otherwise measure AFTER the release, on the
+>   published PyPI wheel, and those numbers are what the boards, the paper and the site broadcast. A claim about
+>   speed is only ever made from a published wheel's measurement.
+
+
+## 2026-11-23: the 0.8.55 baseline is gone from the rules
+
+Andrew, 2026-11-23: "change the 8.55 rule. get rid of that, deprecate it, delete it. it is no longer relevant.
+FORGET ABOUT IT." Removed from AGENTS.md (parts 3 and 8), verbatim:
+
+> - Every paper or full-board job therefore re-times OUR prior wheels (the paper baseline 0.8.55 and the last release,
+>   installed from PyPI, our arms only) on the same box in the same job, and the compare's columns are those on-box
+>   timings. A stored column from another run is reference only and carries the host it was taken on; it never makes a
+>   REGRESSION or FASTER flag. Opponents are still never rerun: their stored cells keep their host and are shown as such.
+
+> - Order: fix everything known (every regression row, every audit finding, every leftover a lane reported) -> one
+>   GitHub build -> the PAPER board (the 108 recipes of the 0.8.55 comparison) against 0.8.55 alone ->
+>   read every flag -> for each regressed row look back through 0.8.55, the earlier releases and every stored
+>   measurement run (best-ever table, boards in `bench/results/` and R2) at what the BEST run of that row was doing,
+>   and restore that behaviour or beat it -> fix wave -> one build -> measure again. Repeat until every paper row is
+>   at least as fast as 0.8.55 with quality equal.
+> - Only then the FULL board, NVIDIA only, against best-ever; then the same fix loop on its regressions. The full board
+>   times one prior on the same box, 0.8.55 (Andrew, 2026-11-15).
+> - One prior only, on every board (Andrew, 2026-11-16): a measurement job times the candidate and 0.8.55 on the same box
+>   and nothing else. 0.8.66 is not timed on the paper rows or anywhere; this overrides "and the last release" in part 3.
+> - 0.8.55 is not timed again (Andrew, 2026-11-17): the 0.8.55 times taken on the L40S on 2026-11-17 (full board, host
+>   26ee0a3b0f86, driver 595.112.07) are the stored baseline for this campaign. A measurement job times OUR new wheel
+>   only, on the same or a similar L40S, and only the rows a change touched plus the owed A/B switches; nothing already
+>   known is measured again. This overrides "re-times OUR prior wheels on the same box in the same job" in part 3 while
+>   it runs: the compare shows the stored 0.8.55 time with its host, driver and date beside each row and says in its
+>   first line that the baseline is stored. A/B switches are still decided back to back in one job (base and arm).
+
+> ### TEMPORARY: we time ourselves against ourselves, on the same pod; 0.8.55 is retired as a yardstick (Andrew, 2026-11-19)
+> 
+> Ends when Andrew says. It narrows the NVIDIA-only direction above while it runs and replaces the 2026-11-18 direction
+> "time our latest against the stored 0.8.55 board" (verbatim in `docs/rules/RULES_HISTORY.md`).
+
+> - The reference is rolling: each green measurement build is timed against the previous green build that was timed.
+>   Nothing has to be at least as fast as 0.8.55; what must not happen is our latest being slower than our previous
+>   build, at equal quality, beyond the pair's noise.
+> - 0.8.55 is never installed, timed, profiled or compared again. Its stored board (the 2026-11-17 L40S full board) stays
+>   in the evidence as history; it makes no flag, opens no lane and ranks no work. Reason (2026-11-19): against it, the
+>   2026-11-19 full board showed 178 entries at 1.2x or slower; the same-pod pair job showed all but one of the rows
+>   examined were the host or the unbound workers, and the one "regression" (cagra taxi) was NUMA placement.
+> - Our latest build is still TIMED in full: every round ends with the whole board timed on the L40S for the candidate
+>   and its prior, not only the rows a fix changed.
+
+> of an opponent cell. (The paper's 0.8.55 comparison and the opponent boards are a release-time question for Andrew.)

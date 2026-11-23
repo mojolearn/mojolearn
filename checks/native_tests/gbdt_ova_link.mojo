@@ -18,7 +18,7 @@ max_depth 2, bootstrap_type 'No', random_strength 0, `identical`:
     the unweighted fit predicts other bytes than the weighted one
 
 DEVICE COLUMN ONLY: the host fit (`gbdt/mojolearn_gbdt_host_run.mojo`
-`gbdt_fit_native_run`) refuses sample_weight outside Plain Logloss, as the
+`gbdt_fit_native_run`) refuses sample_weight with the multi-output losses, as the
 Python test's CPU-only skip says, so the weighted OVA fit exists only on the
 device image (`gbdt.mojolearn_gbdt_run.gbdt_fit_native_run`). The two class
 counts run in order: each device fit owns the one device for its graph.

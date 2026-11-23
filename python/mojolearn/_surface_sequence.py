@@ -40,6 +40,9 @@ FAMILIES = (
                         "sequence-composed-mamba2", "sequence-composed-mamba3",
                         "sequence-composed-recurrent",
                         "sequence-composed-conv1d",
+                        # nn-recurrent begin (tools/identity_lanes/nn_recurrent.py)
+                        "sequence-blocks-bigru-lengths", "sequence-blocks-bilstm",
+                        # nn-recurrent end
                         # nn-attention begin: classic attention models (tools/identity_lanes/nn_attention.py)
                         "sequence-attention-encoder", "sequence-attention-cross",
                         # nn-attention end
@@ -164,6 +167,10 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-composed-mamba3": "Sequential composed: trapezoid_scan",
                        "sequence-composed-recurrent": "Sequential composed: lstm, gru",
                        "sequence-composed-conv1d": "Sequential composed: conv1d, narrow",
+                       # nn-recurrent begin
+                       "sequence-blocks-bigru-lengths": "Sequential gru, two bidirectional layers, lengths",
+                       "sequence-blocks-bilstm": "Sequential lstm, bidirectional",
+                       # nn-recurrent end
                        # nn-attention begin
                        "sequence-attention-encoder": "Sequential transformer_encoder_layer, positional_encoding",
                        "sequence-attention-cross": "Sequential transformer_decoder_layer, multihead_attention",
@@ -192,6 +199,10 @@ PUBLIC_PENDING_LANES = {
     "sequence-composed-mamba3": "unwatched",
     "sequence-composed-recurrent": "unwatched",
     "sequence-composed-conv1d": "unwatched",
+    # nn-recurrent begin
+    "sequence-blocks-bigru-lengths": "unwatched",
+    "sequence-blocks-bilstm": "unwatched",
+    # nn-recurrent end
     # nn-attention begin
     "sequence-attention-encoder": "unwatched",
     "sequence-attention-cross": "unwatched",

@@ -19,13 +19,13 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
           "selective_scan": 42, "ssd_scan": 43, "trapezoid_scan": 44,
           "lm_head": 45,
+          # nn-attention begin: autograd/nn_attention.mojo; the encoder and decoder layers and stacks are
+          # containers (code 0) written from existing layers by the description door
+          "multihead_attention": 67, "positional_encoding": 72,
+          "transformer_encoder_layer": 0, "transformer_decoder_layer": 0,
+          "transformer_encoder": 0, "transformer_decoder": 0,
+          # nn-attention end
           "batch_norm1d": 46, "batch_norm2d": 46}  # lm_head (lane neural-blocks-3-lm)
-# nn-attention begin: classic attention (autograd/nn_attention.mojo); the encoder and decoder layers and
-# stacks are containers (code 0) written from existing layers by the description door
-_LAYER.update({"multihead_attention": 67, "positional_encoding": 72,
-               "transformer_encoder_layer": 0, "transformer_decoder_layer": 0,
-               "transformer_encoder": 0, "transformer_decoder": 0})
-# nn-attention end
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -125,7 +125,8 @@ class Sequential(_CheckMixin):
         kind : str
             One of ``'linear'`` (``units``, ``bias=True``), ``'relu'``,
             ``'sigmoid'``, ``'tanh'``, ``'softmax'``, ``'layer_norm'``
-            (``eps=1e-5``), ``'residual'`` (``source=-1``: add the output
+            (``eps=1e-5``), ``'dropout'`` (``p``), ``'residual'``
+            (``source=-1``: add the output
             of layer ``source``, or the model input for -1, to the current
             output), ``'reshape'`` (``shape``), ``'permute'`` (``axes``),
             ``'flatten'``, ``'conv2d'`` (``out_channels``, ``kernel_size``,
@@ -139,8 +140,11 @@ class Sequential(_CheckMixin):
             ``'multiply'``, ``'narrow'``, ``'embedding'``, ``'attention'``,
             ``'lstm'``, ``'gru'``, ``'rnn'``, ``'batch_norm1d'``,
             ``'batch_norm2d'``, ``'selective_scan'``, ``'ssd_scan'``,
-            ``'trapezoid_scan'``, ``'lm_head'``), with that method's
-            arguments.
+            ``'trapezoid_scan'``, ``'lm_head'``,
+            ``'multihead_attention'``, ``'positional_encoding'``,
+            ``'transformer_encoder_layer'``, ``'transformer_decoder_layer'``,
+            ``'transformer_encoder'``, ``'transformer_decoder'``), with that
+            method's arguments.
         *args, **kwargs
             The layer's arguments, as listed for ``kind``.
 
@@ -478,47 +482,80 @@ class Sequential(_CheckMixin):
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("attention", (heads, kv_heads, rotary, theta, window, causal), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def lstm(self, hidden_size):
-        """Append an LSTM layer over ``(length, features)`` samples from a
-        zero state; the output is every step's hidden state,
-        ``(length, hidden_size)``. Weights follow PyTorch's ``nn.LSTM``
-        layout and gate order. With ``lengths`` given to :meth:`fit` and
-        :meth:`predict`, a sample's steps past its length do not change its
-        state, and the output there repeats its state at its last valid
-        step.
+    def lstm(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
+        """Append an LSTM over ``(length, features)`` samples from a zero
+        state, as PyTorch's ``nn.LSTM``: the same weight layout, gate order
+        and initialization (every tensor uniform in
+        ``[-1/sqrt(hidden_size), 1/sqrt(hidden_size)]``).
+
+        Parameters
+        ----------
+        hidden_size : int
+            Size of the hidden state.
+        num_layers : int, default 1
+            Number of stacked layers; layer ``k + 1`` reads layer ``k``'s
+            output sequence.
+        bidirectional : bool, default False
+            Add a reverse direction to every layer. It reads each sample's
+            steps in reverse order, starting at its last valid step when
+            ``lengths`` are given, and its states are concatenated after the
+            forward direction's on the features.
+        dropout : float, default 0.0
+            Dropout probability on the output of every layer except the last,
+            during :meth:`fit` only (no effect with one layer).
+        output : {'sequence', 'final'}, default 'sequence'
+            ``'sequence'``: every step's state of the last layer,
+            ``(length, directions * hidden_size)`` (PyTorch's ``output``).
+            ``'final'``: the last layer's final state of each direction,
+            ``(directions, hidden_size)`` (PyTorch's ``h_n`` of the last
+            layer).
+
+        With ``lengths`` given to :meth:`fit` and :meth:`predict`, a sample's
+        steps past its length do not change its state; the ``'sequence'``
+        output there repeats the forward direction's final state and is 0
+        for the reverse direction.
+
+        With more than one layer, ``bidirectional=True`` or
+        ``output='final'``, the module is written into the model as several
+        layers (one recurrent layer per layer and direction, the joins of the
+        directions and the dropout layers), in PyTorch's parameter order:
+        ``weight_ih``, ``weight_hh``, ``bias_ih``, ``bias_hh`` of layer 0's
+        forward direction, then of its reverse direction, then layer 1.
 
         Example: classify variable-length sequences of 3 features padded to
-        20 steps by each one's final state::
+        20 steps by the final states of a two-layer bidirectional LSTM::
 
-            model = (mojolearn.Sequential(input_shape=(20, 3)).lstm(32)
-                     .narrow(0, 19, 1).flatten().linear(2)
+            model = (mojolearn.Sequential(input_shape=(20, 3))
+                     .lstm(32, num_layers=2, bidirectional=True, output="final")
+                     .flatten().linear(2)
                      .compile(loss="cross_entropy"))
             model.fit(X, y, lengths=lengths)
         """
-        return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def gru(self, hidden_size):
-        """Append a GRU layer over ``(length, features)`` samples from a zero
-        state; the output is every step's hidden state. Weights follow
-        PyTorch's ``nn.GRU`` layout and gate order. ``lengths`` work as for
-        :meth:`lstm`.
+    def gru(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
+        """Append a GRU over ``(length, features)`` samples from a zero
+        state, as PyTorch's ``nn.GRU``: the same weight layout, gate order
+        and initialization. The arguments, ``lengths`` and the output are as
+        for :meth:`lstm`.
 
         Example::
 
-            mojolearn.Sequential(input_shape=(20, 3)).gru(32).narrow(0, 19, 1).flatten().linear(1)
+            mojolearn.Sequential(input_shape=(20, 3)).gru(32, output="final").flatten().linear(1)
         """
-        return _SEQUENTIAL_ENTRY(self, "add", ("gru", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "add", ("gru", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def rnn(self, hidden_size):
+    def rnn(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
         """Append a tanh recurrent layer over ``(length, features)`` samples
-        from a zero state; the output is every step's hidden state.
-        ``lengths`` work as for :meth:`lstm`.
+        from a zero state, as PyTorch's ``nn.RNN`` with
+        ``nonlinearity='tanh'``. The arguments, ``lengths`` and the output
+        are as for :meth:`lstm`.
 
         Example::
 
             mojolearn.Sequential(input_shape=(20, 3)).rnn(32).narrow(0, 19, 1).flatten().linear(1)
         """
-        return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def batch_norm1d(self, num_features, eps=1e-5, momentum=0.1):
         """Append batch normalization over the channels of ``(channels,)`` or
@@ -1393,17 +1430,15 @@ _SEQUENTIAL_CONTEXT = {
                     "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
                     "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
                     "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
-                    "selective_scan", "ssd_scan", "trapezoid_scan", "lm_head", "batch_norm"),
+                    "selective_scan", "ssd_scan", "trapezoid_scan", "lm_head", "batch_norm",
+                    # nn-attention begin: 47..66 are other lanes' codes; 67 and 72 autograd/nn_attention.mojo
+                    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+                    "multihead_attention", "", "", "", "", "positional_encoding",
+                    # nn-attention end
+                    ),
 }
 
 
-# nn-attention begin: the names of layer codes 67 (multihead_attention) and 72 (positional_encoding), by index
-_NN_ATTENTION_NAMES = list(_SEQUENTIAL_CONTEXT["layer_names"])  # glue: layer-name table at package import
-_NN_ATTENTION_NAMES += [""] * max(0, 73 - len(_NN_ATTENTION_NAMES))  # glue: layer-name table at package import
-_NN_ATTENTION_NAMES[67] = "multihead_attention"
-_NN_ATTENTION_NAMES[72] = "positional_encoding"
-_SEQUENTIAL_CONTEXT["layer_names"] = tuple(_NN_ATTENTION_NAMES)
-# nn-attention end
 
 
 def _connect_sequential_bindings():

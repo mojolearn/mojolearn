@@ -965,15 +965,38 @@ def box_persisted_out(out, env=None):
     return out == res or out.startswith(res.rstrip(os.sep) + os.sep)
 
 
+def composed_stored(path):
+    """{lane: the latest stored cell} of the composed-model consistency rows (one JSON object per line with lane,
+    status, modules_source_sha256, measured_at); {} when there is no store yet."""
+    out = {}
+    if path and os.path.exists(path):
+        with open(path) as fh:
+            for line in fh:
+                if line.strip():
+                    cell = json.loads(line)
+                    out[cell["lane"]] = cell
+    return out
+
+
 def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None,
-               neural_shape="full"):
+               neural_shape="full", composed=False, composed_store=None):
+    """composed (2026-11-23, Andrew): the composed-model consistency rows (bench_board_neural.ROW_CLASS, read
+    only here) are planned ONLY by the once-per-release composed measurement, and then only those whose stored
+    cell is missing or whose modules' source changed (bench_board_seqfit.needs_measure); the routine full board
+    and the paper set never plan them."""
     check_neural_modes(families, modes, vendor)
     races = []
+    stored = composed_stored(composed_store) if composed else {}
     for fam in families:
         for lane in family_lanes(fam):
             if lanes and lane not in lanes:
                 continue
             if fam == "neural":
+                row_class = NEURAL.ROW_CLASS.get(lane)
+                if bool(row_class) != bool(composed):
+                    continue                  # composed rows only in the composed measurement, and only they
+                if row_class and not NEURAL.SEQFIT.needs_measure(lane, stored.get(lane), REPO):
+                    continue                  # stored, and no module it uses changed: not measured again
                 if NEURAL.DEVICE_OF.get(lane) == "cpu":
                     continue                  # ours would run on the CPU: never raced, no mode
                 if neural_shape in NEURAL.LM_ONLY_SHAPES and NEURAL.MODEL_OF.get(lane) != "lm":
@@ -995,6 +1018,8 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                     "modes": sorted(set(ours.values()), key=MODES.index), "our_arms": ours,
                     "opponents": list(opp), "arms": list(ours) + list(opp),
                 })
+                if row_class:
+                    races[-1]["row_class"] = row_class
                 continue
             if fam == "algos":
                 ours = our_arms(fam, modes, lane)
@@ -5563,6 +5588,13 @@ def build_parser():
     p.add_argument("--modes", default=None,
                    help="narrow the vendor's modes (Apple: fast,identical; others: identical)")
     p.add_argument("--families", default=",".join(FAMILIES))
+    # 2026-11-23 (Andrew): the composed-model consistency rows. AD HOC ONLY: nothing runs this on a schedule or at a
+    # release; it runs when Andrew asks for it and someone types the flag.
+    p.add_argument("--composed", action="store_true",
+                   help="plan only the composed-model consistency rows (bench_board_neural.ROW_CLASS) that have no "
+                        "stored cell or whose modules' source changed; the routine board never plans them")
+    p.add_argument("--composed-store", default=os.path.join(REPO, "bench", "results", "composed_rows.jsonl"),
+                   help="the stored composed-row cells (JSONL: lane, status, modules_source_sha256, ...)")
     p.add_argument("--lanes", default=None, help="comma list; default every lane of the families")
     p.add_argument("--datasets", default=",".join(DATASETS))
     p.add_argument("--rows", default="full",
@@ -5957,7 +5989,8 @@ def main(argv=None):
              if args.lanes else None)
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
-    races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape)
+    races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape,
+                       composed=args.composed, composed_store=args.composed_store)
     if args.gpu_opponents_only:
         races = gpu_opponents_only(races, vendor)
     if args.opponents_only:

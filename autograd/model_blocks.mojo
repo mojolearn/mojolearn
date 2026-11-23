@@ -26,7 +26,8 @@ EXISTING backward rule; no kernel is written or edited here:
         f theta)                 device iota positions, tape.softmax, rankn_matmul
   41    recurrent (hidden, cell) rnn_scan_op (autograd/rules_recurrent.mojo), the       RecurrentRules
                                  recurrent estimators' own layer, on the time-major      16..18
-                                 view (permute (T, B, F))
+                                 view (permute (T, B, F)); a2 reverse, a3 final state
+                                 (lane nn-recurrent: autograd/nn_recurrent.mojo)
   42    selective_scan (state)   graph_selective_scan (autograd/ssm_primitives.mojo),   SsmRules 240
                                  the Mamba-1 core as a generic op (lane neural-blocks-2,
                                  2026-11-22): the (length, 2 dim + 2 state) input is
@@ -96,6 +97,9 @@ from autograd.ssm_ops import ssm_m1_states_supported
 from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
+# nn-recurrent begin
+from autograd.nn_recurrent import nn_rnn_final, nn_rnn_reverse_lengths
+# nn-recurrent end
 
 # nn-attention begin
 from autograd.nn_attention import (
@@ -123,6 +127,12 @@ comptime LAYER_LM_HEAD = 45
 #: batch_norm1d / batch_norm2d (lane seq-blocks-3; 42 before the merge with neural-blocks-3, never released): a0
 #: channels, a1 the momentum's float32 bits, a2 1 or 2 (the public name's dims); f eps
 comptime LAYER_BATCH_NORM = 46
+# nn-attention begin: autograd/nn_attention.mojo's codes (LAYER_NN_MHA, LAYER_NN_POS_ENC; defined there, since
+# this module imports that one), named here for tools/block_tables_check.py; outside BLOCK_FIRST..BLOCK_LAST,
+# is_block admits them through nn_attention_is
+comptime LAYER_MULTIHEAD_ATTENTION = 67
+comptime LAYER_POSITIONAL_ENCODING = 72
+# nn-attention end
 comptime BLOCK_FIRST = 32
 comptime BLOCK_LAST = 46
 
@@ -262,8 +272,14 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         _ = _cell(a1)
         if a0 < 1:
             raise Error(name + " (Recurrent): hidden_size must be positive")
+        # nn-recurrent begin: a2 reverse, a3 final state (autograd/nn_recurrent.mojo); a4, a5 unused
+        var rev = _x(xargs, i, 2)
+        var fin = _x(xargs, i, 3)
+        if (rev != 0 and rev != 1) or (fin != 0 and fin != 1) or _x(xargs, i, 4) != 0 or _x(xargs, i, 5) != 0:
+            raise Error(name + " (Recurrent): reverse and final must be 0 or 1")
+        # nn-recurrent end
         var rd = List[Int]()
-        rd.append(cur.d[0])
+        rd.append(1 if fin == 1 else cur.d[0])
         rd.append(a0)
         return rn_shape(rd, name + " (Recurrent)")
     if code == LAYER_BATCH_NORM:
@@ -586,8 +602,12 @@ def block_attention[E: Exec](
 def block_recurrent[E: Exec](
     mut tape: Tape, mut ex: E, h: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
     B: Int, T: Int, F: Int, Hs: Int, cell: Int, lengths: Optional[FP] = None,
+    reverse: Bool = False, final: Bool = False,
 ) raises -> Tensor:
     """One recurrent layer over h (B, T, F) from a zero state: (B, T, hidden), every step's state.
+
+    `reverse` (lane nn-recurrent): over each row's steps in reverse order, from its own last valid step (the
+    output past a row's length is 0, PyTorch's padding); `final`: the final state (B, 1, hidden) instead.
 
     With `lengths` (B float32 row lengths on the executor; lane seq-blocks-3) a row's padded steps
     (at or past its length) are packed-sequence steps: their inputs are replaced by +0.0 (a select on
@@ -613,7 +633,12 @@ def block_recurrent[E: Exec](
     var tp: List[Int] = [1, 0, 2]
     var xt = tape.permute(ex, src, tp)
     var tm = tape.view_nd(ex, xt, ShapeN.matrix(T * B, F))
-    var y = rnn_scan_op(tape, ex, tm, w_ih, w_hh, b_ih, b_hh, cell, T, B, lengths)
+    # nn-recurrent: `reverse` is the same scan walking time from T - 1 down (rnn_scan_op); its output is in time
+    # order. `final` is the state after the last step walked: time T - 1 forward, time 0 reverse.
+    var y = rnn_scan_op(tape, ex, tm, w_ih, w_hh, b_ih, b_hh, cell, T, B,
+                        nn_rnn_reverse_lengths(lengths) if reverse else lengths, reverse)
+    if final:
+        return nn_rnn_final(tape, ex, y, T, B, Hs, 0 if reverse else T - 1)
     var y3: List[Int] = [T, B, Hs]
     var yt = tape.view_nd(ex, y, _sh(y3))
     return tape.permute(ex, yt, tp)
@@ -673,7 +698,8 @@ def block_forward[E: Exec](
         var w_hh = _p(tape, ex, P, Gr, off + gh * F, gh, a0, train)
         var b_ih = _p(tape, ex, P, Gr, off + gh * F + gh * a0, 1, gh, train)
         var b_hh = _p(tape, ex, P, Gr, off + gh * F + gh * a0 + gh, 1, gh, train)
-        return block_recurrent(tape, ex, h, w_ih, w_hh, b_ih, b_hh, B, T, F, a0, cell, lengths)
+        return block_recurrent(tape, ex, h, w_ih, w_hh, b_ih, b_hh, B, T, F, a0, cell, lengths,
+                               _x(xargs, i, 2) == 1, _x(xargs, i, 3) == 1)  # nn-recurrent: reverse, final
     if code == LAYER_BATCH_NORM:
         # (B, C, rest): the channel axis is the sample's first; running statistics after weight and bias
         var gamma = _p(tape, ex, P, Gr, off, 1, a0, train)

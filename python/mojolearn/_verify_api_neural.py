@@ -30,7 +30,14 @@ def _device_values(device, expected):
 # method, (sample shape, build). Each builds a two-sample model with the layer, ends it in flatten + linear(1)
 # (lm_head ends itself), fits one epoch of one full unshuffled batch with SGD and returns the predictions of the
 # fitted model, so the record holds the layer's forward, backward and update in one output.
+# lane layer-tables (2026-11-23): this is also the constructor table of the boundary test
+# (python/mojolearn/tests/test_sequential_layers_boundary.py: fit one step, state_dict -> load_state_dict,
+# save_checkpoint -> from_checkpoint, export -> load). tools/block_tables_check.py refuses a build whose layer code
+# has no entry here: a lane that adds a code adds its minimal constructor here.
 SEQUENTIAL_LAYER_FIXTURES={
+    'linear':((4,),lambda m,S:m.linear(3)),
+    'layer_norm':((4,),lambda m,S:m.linear(4).layer_norm()),
+    'conv2d':((1,2,2),lambda m,S:m.conv2d(1,1)),
     'conv1d':((2,4),lambda m,S:m.conv1d(2,3,padding=1)),
     'max_pool1d':((2,4),lambda m,S:m.max_pool1d(2)),
     'avg_pool1d':((2,4),lambda m,S:m.avg_pool1d(2)),
@@ -58,6 +65,14 @@ SEQUENTIAL_LAYER_FIXTURES={
     'ssd_scan':((4,2),lambda m,S:m.linear(321).softplus().ssd_scan(1).rms_norm()),   # the norm as example:seq-mamba2 (lane mamba2-nan)
     'trapezoid_scan':((4,3),lambda m,S:m.linear(30).trapezoid_scan(2,4)),
     'lm_head':((3,),lambda m,S:m.embedding(5,4).lm_head(5)),
+    # nn-attention begin
+    'multihead_attention':((4,8),lambda m,S:m.multihead_attention(8,2,is_causal=True)),
+    'positional_encoding':((4,8),lambda m,S:m.positional_encoding(8,dropout=0.0)),
+    'transformer_encoder_layer':((4,8),lambda m,S:m.transformer_encoder_layer(8,2,16,dropout=0.0)),
+    'transformer_decoder_layer':((4,8),lambda m,S:m.linear(8).transformer_decoder_layer(8,2,16,dropout=0.0,memory=0)),
+    'transformer_encoder':((4,8),lambda m,S:m.transformer_encoder(S().transformer_encoder_layer(8,2,16,dropout=0.0),2)),
+    'transformer_decoder':((4,8),lambda m,S:m.linear(8).transformer_decoder(S().transformer_decoder_layer(8,2,16,dropout=0.0),2,0)),
+    # nn-attention end
 }
 
 
@@ -178,11 +193,10 @@ def neural_checks(recorder,public,methods):
                     other=cls.from_checkpoint(str(path))
                     assert encode(m.predict(x))==encode(other.predict(x))
                     return other.predict(x)
-            if method in ('conv2d','avg_pool2d','max_pool2d','flatten','reshape','permute'):
+            if method in ('avg_pool2d','max_pool2d','flatten','reshape','permute'):
                 m=cls(input_shape=(1,2,2),numeric_mode='identical')
                 x=np.arange(8,dtype=np.float32).reshape(2,1,2,2)/8
-                if method=='conv2d':m.conv2d(1,1)
-                elif method in ('avg_pool2d','max_pool2d'):getattr(m,method)(2)
+                if method in ('avg_pool2d','max_pool2d'):getattr(m,method)(2)
                 elif method=='reshape':m.reshape((4,))
                 elif method=='permute':m.permute((1,2,0))
                 else:m.flatten()
