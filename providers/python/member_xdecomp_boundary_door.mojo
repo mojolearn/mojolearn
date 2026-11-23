@@ -792,7 +792,7 @@ def _init_words(fields: PythonObject, name: String, context: PythonObject, mut w
     the dictionary doors admit it (`_matrix`: `decomp_input`, C-order
     float32): words [at, at + 3) = its address, rows and columns (address 0:
     none), the admitted array appended to `held` (the plan pins it)."""
-    var given = py_get(fields, name)
+    var given = py_get(fields, PythonObject(name))
     if given is None:
         return
     var start = decomp_input(given, name, context)
