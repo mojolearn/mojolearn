@@ -887,9 +887,10 @@ def yeti_learns[I: GbdtImage]() raises:
 # "explicit feature_fraction=1. is the default" arm (the door sends no tail
 # for 1.0, so both requests are the same words: a door decision, not a fit
 # result), the pickle fingerprints and the two adapters (public boundary).
-# The host column has feature_fraction < 1 and the eval set on Lossguide
-# Logloss only (gbdt/host/gbdt_oracle.mojo): elsewhere it asserts the host's
-# refusal by name; every arm runs on the device column, as the original did.
+# Both columns fit every arm (lane gbdt-cpu-rest, 2026-11-23: the host
+# samples each tree's features on the symmetric loop and the non-symmetric
+# driver, gbdt/host/gbdt_oracle.mojo `_sample_tree_folds`), as the original
+# did.
 comptime FF_DIR = "../gbdt_ff/"
 comptime FF_UNITS = 7
 
@@ -955,11 +956,6 @@ def feature_fraction[I: GbdtImage](unit: Int) raises:
         var o = _ff_opts(policy, loss)
         o.feature_fraction = fraction
         var what = key + " feature_fraction " + String(fraction)
-        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
-            if not (policy == "Lossguide" and loss == "Logloss"):
-                # the host binding has feature_fraction < 1 on Lossguide Logloss only: its refusal by name
-                _refuses[I](o, inp, what)
-                continue
         var first = _twice[I](o, inp, what)
         require(first.text != default.text, what + ": feature_fraction had no model effect")
         require(all_finite_f32(predict(first.text, inp.x, 256)), what + ": nonfinite predict")
@@ -1119,16 +1115,6 @@ def _twice[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises -> G
     return a^
 
 
-def _refuses[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises:
-    var refused = False
-    try:
-        _ = fit[I](o, inp)
-    except error:
-        require_fails_with(String(error), "no CPU implementation of", what)
-        refused = True
-    require(refused, what + " did not refuse on the host binding")
-
-
 def _e3() raises -> GbdtInputs:
     return _fixed("e3-x.f32", 600, 6, "e3-yc.f32")
 
@@ -1167,13 +1153,17 @@ def host_unit[I: GbdtImage](unit: Int) raises:
             require(labels[r] == (Int32(1) if margins[r] > Float32(0) else Int32(0)), "strict raw > 0")
         _ = margins^
     elif unit == 4:
-        # the two by-name refusals
+        # the two former by-name refusals, real fits since lane
+        # gbdt-cpu-rest (2026-11-23): NaN binned by the shared grid on every
+        # numeric arm, Cosine under Lossguide on the non-symmetric driver
         var nan = GbdtInputs(load_f32("e3-xn.f32", 3600), 600, 6, load_f32("e3-x0.f32", 600))
-        _refuses[I](GbdtOpts("RMSE", 2, 3), nan, "an RMSE fit on an X carrying NaN")
+        var mn = _twice[I](GbdtOpts("RMSE", 2, 3), nan, "an RMSE fit on an X carrying NaN")
+        require(all_finite_f32(predict(mn.text, nan.x, 600)), "RMSE NaN fit: nonfinite predict")
         var o = GbdtOpts("Logloss", 2, 3)
         o.grow_policy = "Lossguide"
         o.score_function = "Cosine"
-        _refuses[I](o, _e3(), "a Lossguide Cosine fit")
+        var mc = _twice[I](o, _e3(), "a Lossguide Cosine fit")
+        require("\nntree 0 " in mc.text, "Lossguide Cosine: non-symmetric model text")
     elif unit <= 6:
         # test_non_symmetric_fits_on_the_host_when_built (its save/load stays in Python)
         var o = GbdtOpts("Logloss", 3)
@@ -1235,9 +1225,13 @@ def host_losses[I: GbdtImage](case_index: Int) raises:
         o.bootstrap = "Bayesian"
         _ = _twice[I](o, reg, "Quantile Bayesian")
     else:
+        # a real fit since lane gbdt-cpu-rest (2026-11-23): the pointwise
+        # losses on the non-symmetric driver
         var o = GbdtOpts("Quantile", 2, 3)
         o.grow_policy = "Depthwise"
-        _refuses[I](o, reg, "a Depthwise Quantile fit")
+        var m = _twice[I](o, reg, "a Depthwise Quantile fit")
+        require("\nntree 0 " in m.text, "Depthwise Quantile: non-symmetric model text")
+        require(all_finite_f32(predict(m.text, reg.x, 600)), "Depthwise Quantile: nonfinite predict")
 
 
 def _trees_record(text: String) raises -> Int:
@@ -1256,7 +1250,9 @@ def host_ordered[I: GbdtImage](case_index: Int) raises:
     var x = load_f32("od-x.f32", 7200)
     var y = load_f32("od-y.f32", 1200)
     if case_index == 0:
-        # OrderedRMSE(n_estimators=3, max_depth=3), twice; weighted refusal
+        # OrderedRMSE(n_estimators=3, max_depth=3), twice; weighted, twice
+        # (a real fit since lane gbdt-cpu-rest, 2026-11-23), and unit weights
+        # give the unweighted bytes (the device's ones fill)
         var perm = load_u32("od-perm.u32", 1200)
         var texts = List[String]()
         for _ in range(2):  # small-loop(the original's two fits)
@@ -1265,21 +1261,28 @@ def host_ordered[I: GbdtImage](case_index: Int) raises:
         require(texts[0] == texts[1], "two ordered host fits returned different bytes")
         require(same_f32(predict(texts[0], x, 1200), predict(texts[1], x, 1200)), "ordered predictions differ")
         var ones = List[Float32](length=1200, fill=Float32(1))
-        var refused = False
-        try:
-            _ = gbdt_fit_ordered_rmse_run(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(ones.unsafe_ptr()),
-                Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 2, 2, 128, Float32(0.03), Float32(3.0))
-        except error:
-            require_fails_with(String(error), "no CPU implementation of", "weighted OrderedRMSE")
-            refused = True
-        require(refused, "a weighted OrderedRMSE fit did not refuse on the host binding")
+        var unit_w = gbdt_fit_ordered_rmse_run(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(ones.unsafe_ptr()),
+            Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 3, 3, 128, Float32(0.03), Float32(3.0))
+        require(unit_w == texts[0], "unit-weighted OrderedRMSE differs from the unweighted fit")
+        var ramp = List[Float32](length=1200, fill=Float32(0))
+        for r in range(1200):  # small-loop(np.linspace(.5, 1.5, 1200, dtype=float32))
+            ramp[r] = Float32(0.5 + Float64(r) / 1199.0)
+        var wa = gbdt_fit_ordered_rmse_run(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(ramp.unsafe_ptr()),
+            Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 2, 2, 128, Float32(0.03), Float32(3.0))
+        var wb = gbdt_fit_ordered_rmse_run(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(ramp.unsafe_ptr()),
+            Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 2, 2, 128, Float32(0.03), Float32(3.0))
+        require(wa == wb, "two weighted ordered host fits returned different bytes")
+        require(all_finite_f32(predict(wa, x, 1200)), "weighted OrderedRMSE: nonfinite predict")
         _ = ones^
+        _ = ramp^
         _ = perm^
         return
     var coded = load_f32("od-coded.f32", 7200)
     var yc = load_f32("od-yc.f32", 1200)
     if case_index == 1:
-        # ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7), twice; weighted refusal
+        # ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7),
+        # twice; weighted, twice (a real fit since lane gbdt-cpu-rest,
+        # 2026-11-23), and a weight that moves the model
         var sources: List[UInt32] = [0, 1]
         var sp = _U32P(unsafe_from_address=Int(sources.unsafe_ptr()))
         var a = gbdt_fit_two_level_feature_freq_run(Int(coded.unsafe_ptr()), Int(y.unsafe_ptr()), sp,
@@ -1288,19 +1291,24 @@ def host_ordered[I: GbdtImage](case_index: Int) raises:
                                                     1200, 6, 0, 2, Float32(0.03), Float32(3.0))
         require(a == b, "two FeatureFreq host fits returned different bytes")
         require(same_f32(predict(a, coded, 1200), predict(b, coded, 1200)), "FeatureFreq predictions differ")
-        var refused = False
-        try:
-            _ = gbdt_fit_two_level_feature_freq_run(Int(coded.unsafe_ptr()), Int(y.unsafe_ptr()), sp,
-                                                    1200, 6, 1200, 2, Float32(0.03), Float32(3.0))
-        except error:
-            require_fails_with(String(error), "no CPU implementation of", "weighted FeatureFreq")
-            refused = True
-        require(refused, "a weighted FeatureFreq fit did not refuse on the host binding")
-        _ = y  # read by address by the calls above (its last named use is the refused call's argument)
+        var ramp = List[Float32](length=1200, fill=Float32(0))
+        for r in range(1200):  # small-loop(np.linspace(.5, 1.5, 1200, dtype=float32))
+            ramp[r] = Float32(0.5 + Float64(r) / 1199.0)
+        var wa = gbdt_fit_two_level_feature_freq_run(Int(coded.unsafe_ptr()), Int(y.unsafe_ptr()), sp,
+                                                     1200, 6, 1200, 2, Float32(0.03), Float32(3.0),
+                                                     Int(ramp.unsafe_ptr()))
+        var wb = gbdt_fit_two_level_feature_freq_run(Int(coded.unsafe_ptr()), Int(y.unsafe_ptr()), sp,
+                                                     1200, 6, 1200, 2, Float32(0.03), Float32(3.0),
+                                                     Int(ramp.unsafe_ptr()))
+        require(wa == wb, "two weighted FeatureFreq host fits returned different bytes")
+        require(wa != a, "FeatureFreq sample weights had no model effect")
+        _ = y  # read by address by the calls above (its last named use is the weighted call's argument)
+        _ = ramp^
         _ = sources^
         return
     if case_index == 2:
-        # the pointwise eval arm, and its by-name refusal without weights
+        # the pointwise eval arm, and (lane gbdt-cpu-rest, 2026-11-23) the
+        # same fit without weights, a real fit: the device's unweighted arm
         var inp = GbdtInputs(x.copy(), 1200, 6, yc.copy())
         inp.eval_x = load_f32("od-xe.f32", 1800)
         inp.eval_y = load_f32("od-ye.f32", 300)
@@ -1313,7 +1321,7 @@ def host_ordered[I: GbdtImage](case_index: Int) raises:
         o.od_type = "Iter"
         o.od_wait = 2
         o.use_best_model = 1
-        _refuses[I](o, inp, "an unweighted pointwise fit")
+        _ = _twice[I](o, inp, "an unweighted pointwise fit")
         inp.weights = load_f32("od-wts.f32", 1200)
         _ = _twice[I](o, inp, "pointwise eval arm")
         return
