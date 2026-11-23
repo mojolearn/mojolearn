@@ -6,7 +6,10 @@ ported from python/mojolearn/tests/test_x_prep_encoders.py `test_ordinal`, `test
 
 The inputs are the original tests' NumPy draws and the references the scikit-learn 1.9.1 calls they made, stored as
 words in `fixtures/prep_enc/` by `tools/py2mojo_native_fixtures_b2_enc.py` (a scikit-learn None of an inverse
-transform stored as NaN, as the originals compare it). The programs are the typed builders the encode door builds
+transform stored as NaN, as the originals compare it). The tables are ENC_N = 33 and INF_N = 40 rows (the originals'
+257 and 400; one 1,024-row chunk of the programs either way), the references float32 words the generator asserts
+exact, the one-hot blocks one byte per 0/1 word (their column count is the length over the rows), and the 30
+infrequent one-hot cases three concatenated members (check-trim, 2026-11-23: the pack was 2.8 MB). The programs are the typed builders the encode door builds
 through (bindings/prep_encode_cats_run.mojo `cat_fit_stage`, `cat_codes_stage`, `cat_infrequent_stage`;
 bindings/prep_encode_ordinal_run.mojo `ordinal_transform_stage`, `ordinal_inverse_stage`, `ordinal_auto_clash`;
 bindings/prep_encode_onehot_run.mojo `onehot_transform_stage`, `onehot_inverse_stage`, `onehot_auto_drops`) with
@@ -51,9 +54,8 @@ from bindings.prep_encode_onehot_run import (
 )
 from checks.native_tests.prep_enc_host import enc_host_run
 from checks.native_tests.prep_cls_host import arena_words
-from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, fixture_i32
+from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, fixture_i32, read_fixture_bytes
 
 comptime PREP_ENC_DIR = "checks/native_tests/fixtures/prep_enc/"
 
@@ -78,6 +80,31 @@ def to_f32(values: List[Float64]) -> List[Float32]:
     for i in range(len(values)):  # small-loop(fixture: reference codes as the float32 words the door admits)
         words[i] = Float32(values[i])
     return words^
+
+
+def ref_f32(name: String, count: Int) raises -> List[Float64]:
+    """A reference of `count` values stored as float32 words (the generator asserts each round-trips exactly),
+    widened for the comparisons."""
+    var words = fixture_f32(PREP_ENC_DIR + name, count)
+    var values = List[Float64](length=len(words), fill=0)
+    for i in range(len(words)):  # small-loop(fixture: one reference block)
+        values[i] = Float64(words[i])
+    return values^
+
+
+def bytes_f64(bytes: List[UInt8], start: Int, count: Int) -> List[Float64]:
+    var values = List[Float64](length=count, fill=0)
+    for i in range(count):  # small-loop(fixture: one one-hot reference block)
+        values[i] = Float64(Int(bytes[start + i]))
+    return values^
+
+
+def ref_onehot(name: String, n: Int) raises -> List[Float64]:
+    """A one-hot reference stored as one byte per 0/1 word; its column count is its length over the n rows."""
+    var bytes = read_fixture_bytes(PREP_ENC_DIR + name)
+    require(n > 0 and len(bytes) % n == 0, name + ": " + String(len(bytes)) + " bytes is not a whole number of "
+        + String(n) + "-row columns")
+    return bytes_f64(bytes, 0, len(bytes))
 
 
 def int_word(arena: List[Float32], offset: Int) -> Int:
@@ -149,7 +176,7 @@ def check_categories(c: CatAuto, tag: String, label: String) raises:
         require(c.sizes[j] == Int(want_sizes[j]), label + ": categories_[" + String(j) + "] holds " + String(c.sizes[j])
             + " values, scikit-learn " + String(want_sizes[j]))
         total += Int(want_sizes[j])
-    var want = fixture_f64(PREP_ENC_DIR + tag + "-cats.f64", total)
+    var want = ref_f32(tag + "-cats.f32", total)
     var at = 0
     for j in range(c.d):  # small-loop(oracle: the columns)
         for i in range(c.sizes[j]):  # small-loop(oracle: one column's categories)
@@ -246,7 +273,7 @@ def no_strict(d: Int, hard: Bool) -> List[Float64]:
 
 
 # ---------------------------------------------------------------- test_ordinal
-comptime ENC_N = 257
+comptime ENC_N = 33  # tools/py2mojo_native_fixtures_b2_enc.py ENC_N (the original test's 257)
 comptime ENC_D = 5
 
 
@@ -258,12 +285,12 @@ def ordinal_unit(unit: Int) raises:
     if unit == 0:
         check_categories(c, "ord", "ordinal")
         var got = ordinal_transform(c, x, n, False, no_groups(d), False, 0.0, nan[DType.float64]())
-        same_words(got.words, fixture_f64(PREP_ENC_DIR + "ord-t.f64", n * d), "ordinal transform")
+        same_words(got.words, ref_f32("ord-t.f32", n * d), "ordinal transform")
         return
     var xh = fixture_f32(PREP_ENC_DIR + "ord-xh.f32", n * d)
     var got = ordinal_transform(c, xh, n, False, no_groups(d), unit == 1, -1.0, nan[DType.float64]())
     if unit == 1:
-        same_words(got.words, fixture_f64(PREP_ENC_DIR + "ord-th.f64", n * d), "ordinal use_encoded_value -1")
+        same_words(got.words, ref_f32("ord-th.f32", n * d), "ordinal use_encoded_value -1")
         return
     # handle_unknown='error': the transform's unknown counts name column 0 (the 99)
     require(got.unknown[0] > 0, "ordinal: the unknown category of column 0 was not found")
@@ -294,20 +321,20 @@ def ordinal_missing_unit(unit: Int) raises:
     var use = uses[unit]
     check_categories(c, tag, label)
     var got = ordinal_transform(c, x, n, False, no_groups(d), use, unknowns[unit], missings[unit])
-    var z = fixture_f64(PREP_ENC_DIR + tag + "-t.f64", n * d)
+    var z = ref_f32(tag + "-t.f32", n * d)
     same_words(got.words, z, label + " transform")
     var back = ordinal_inverse(c, to_f32(z), n, False, no_groups(d), missings[unit], use, unknowns[unit])
     require(back.unknown[0] == 0, label + ": inverse_transform refused " + String(back.unknown[0]) + " rows")
-    same_words(back.words, fixture_f64(PREP_ENC_DIR + tag + "-inv.f64", n * d), label + " inverse_transform")
+    same_words(back.words, ref_f32(tag + "-inv.f32", n * d), label + " inverse_transform")
     if not use:
         return
     var xh = fixture_f32(PREP_ENC_DIR + "om-xh.f32", n * d)
     var goth = ordinal_transform(c, xh, n, False, no_groups(d), use, unknowns[unit], missings[unit])
-    var zh = fixture_f64(PREP_ENC_DIR + tag + "-th.f64", n * d)
+    var zh = ref_f32(tag + "-th.f32", n * d)
     same_words(goth.words, zh, label + " transform of the unknown rows")
     var backh = ordinal_inverse(c, to_f32(zh), n, False, no_groups(d), missings[unit], use, unknowns[unit])
     require(backh.unknown[0] == 0, label + ": inverse_transform of the unknown rows refused rows")
-    same_words(backh.words, fixture_f64(PREP_ENC_DIR + tag + "-invh.f64", n * d),
+    same_words(backh.words, ref_f32(tag + "-invh.f32", n * d),
         label + " inverse_transform of the unknown rows")
 
 
@@ -339,26 +366,27 @@ def onehot_unit(unit: Int) raises:
     var label = "onehot " + String(unit)
     var ignore = ignores[unit]
     var drops = onehot_auto_drops(c.sizes, words[unit])
-    var shape = fixture_i32(PREP_ENC_DIR + tag + "-shape.i32", 2)
-    var cols = Int(shape[1])
+    var z = ref_onehot(tag + "-t.u8", n)
+    var cols = len(z) // n
     var got = onehot_transform(c, x, n, False, no_groups(d), False, drops)
     require(len(got.words) == n * cols, label + ": " + String(len(got.words) // n) + " columns, scikit-learn "
         + String(cols))
-    var z = fixture_f64(PREP_ENC_DIR + tag + "-t.f64", n * cols)
     same_words(got.words, z, label + " transform")
     var strict = no_strict(d, not ignore)
     var back = onehot_inverse(c, to_f32(z), n, False, no_groups(d), drops, strict)
     require(back.unknown[0] == 0, label + ": inverse_transform refused " + String(back.unknown[0]) + " rows")
-    same_words(back.words, fixture_f64(PREP_ENC_DIR + tag + "-inv.f64", n * d), label + " inverse_transform")
+    same_words(back.words, ref_f32(tag + "-inv.f32", n * d), label + " inverse_transform")
     if not ignore:
         return
     var xh = fixture_f32(PREP_ENC_DIR + "oh-xh.f32", n * d)
     var goth = onehot_transform(c, xh, n, False, no_groups(d), False, drops)
-    var zh = fixture_f64(PREP_ENC_DIR + tag + "-th.f64", n * cols)
+    var zh = ref_onehot(tag + "-th.u8", n)
+    require(len(zh) == n * cols, label + ": the unknown rows' reference holds " + String(len(zh) // n)
+        + " columns, the transform's " + String(cols))
     same_words(goth.words, zh, label + " transform of the unknown 55")
     var backh = onehot_inverse(c, to_f32(zh), n, False, no_groups(d), drops, strict)
     require(backh.unknown[0] == 0, label + ": inverse_transform of the unknown rows refused rows")
-    same_words(backh.words, fixture_f64(PREP_ENC_DIR + tag + "-invh.f64", n * d),
+    same_words(backh.words, ref_f32(tag + "-invh.f32", n * d),
         label + " inverse_transform of the unknown 55")
 
 
@@ -379,7 +407,7 @@ def given_unit(unit: Int) raises:
     if unit == 0:
         # OrdinalEncoder(categories=cats, handle_unknown='use_encoded_value', unknown_value=-1)
         var got = ordinal_transform(c, x, n, False, no_groups(d), True, -1.0, nan[DType.float64]())
-        same_words(got.words, fixture_f64(PREP_ENC_DIR + "gc-ord-t.f64", n * d), "given ordinal transform")
+        same_words(got.words, ref_f32("gc-ord-t.f32", n * d), "given ordinal transform")
         return
     if unit == 3:
         # the default handle_unknown='error': each list leaves out a training value, so the fit refuses
@@ -389,12 +417,12 @@ def given_unit(unit: Int) raises:
     var k = unit - 1
     var tag = "gc-oh" + String(k)
     var drops = onehot_auto_drops(c.sizes, OH_DROP_NONE if k == 0 else OH_DROP_FIRST)
-    var shape = fixture_i32(PREP_ENC_DIR + tag + "-shape.i32", 2)
-    var cols = Int(shape[1])
+    var z = ref_onehot(tag + "-t.u8", n)
+    var cols = len(z) // n
     var got = onehot_transform(c, x, n, False, no_groups(d), False, drops)
     require(len(got.words) == n * cols, "given onehot " + String(k) + ": " + String(len(got.words) // n)
         + " columns, scikit-learn " + String(cols))
-    same_words(got.words, fixture_f64(PREP_ENC_DIR + tag + "-t.f64", n * cols), "given onehot " + String(k))
+    same_words(got.words, z, "given onehot " + String(k))
 
 
 def test_given_categories() raises:
@@ -402,8 +430,10 @@ def test_given_categories() raises:
 
 
 # ---------------------------------------------------------------- test_infrequent (test_x_prep_parity.py)
-comptime INF_N = 400
+comptime INF_N = 40  # tools/py2mojo_native_fixtures_b2_enc.py INF_N (the original test's 400)
 comptime INF_D = 4
+comptime INF_MIN_FREQ = 3  # the generator's INF_MIN_FREQ: min_frequency=30 of 400 rows, the same share of INF_N
+comptime INF_OH_UNITS = 30
 
 
 @fieldwise_init
@@ -444,10 +474,10 @@ def fit_infrequent(c: CatAuto, x: List[Float32], n: Int, ignore_missing: Bool, t
 
 
 def inf_params(k: Int) -> Tuple[Int, Int]:
-    # (threshold, max_categories) of min_frequency=30; max_categories=3; min_frequency=0.05 with max_categories=4;
-    # max_categories=1 (`_infrequent_threshold`: a fraction is ceil(n * f) in binary64)
+    # (threshold, max_categories) of min_frequency=INF_MIN_FREQ; max_categories=3; min_frequency=0.05 with
+    # max_categories=4; max_categories=1 (`_infrequent_threshold`: a fraction is ceil(n * f) in binary64)
     if k == 0:
-        return (30, -1)
+        return (INF_MIN_FREQ, -1)
     if k == 1:
         return (0, 3)
     if k == 2:
@@ -472,7 +502,7 @@ def infrequent_ordinal_unit(k: Int) raises:
             + " values, scikit-learn " + String(want) + " (-1: None)")
         total += max(want, 0)
     if total > 0:
-        var vals = fixture_f64(PREP_ENC_DIR + "inf" + String(k) + "-ord-infvals.f64", total)
+        var vals = ref_f32("inf" + String(k) + "-ord-infvals.f32", total)
         var at = 0
         for j in range(d):  # small-loop(oracle: the columns)
             for i in range(len(g.infrequent[j])):  # small-loop(oracle: one column's infrequent categories)
@@ -481,7 +511,7 @@ def infrequent_ordinal_unit(k: Int) raises:
             at += len(g.infrequent[j])
     var xh = fixture_f32(PREP_ENC_DIR + "inf-xh.f32", n * d)
     var got = ordinal_transform(c, xh, n, True, g.groups, True, -1.0, nan[DType.float64]())
-    same_words(got.words, fixture_f64(PREP_ENC_DIR + "inf" + String(k) + "-ord-th.f64", n * d), label + " transform")
+    same_words(got.words, ref_f32("inf" + String(k) + "-ord-th.f32", n * d), label + " transform")
 
 
 def infrequent_onehot_unit(unit: Int) raises:
@@ -506,22 +536,36 @@ def infrequent_onehot_unit(unit: Int) raises:
     var strict = List[Float64]()
     for j in range(d):  # small-loop(params: `_onehot_inverse`'s per-column strictness)
         strict.append(1.0 if (not ignore and len(g.infrequent[j]) > 0) else 0.0)
-    var shape = fixture_i32(PREP_ENC_DIR + tag + "-shape.i32", 2)
-    var cols = Int(shape[1])
+    # the 30 cases' references are concatenated in unit order: column counts, transforms (bytes), inverses
+    var all_cols = fixture_i32(PREP_ENC_DIR + "inf-oh-cols.i32", INF_OH_UNITS)
+    var start = 0
+    var total = 0
+    for u in range(INF_OH_UNITS):  # small-loop(fixture: the 30 cases' column counts)
+        if u < unit:
+            start += n * Int(all_cols[u])
+        total += n * Int(all_cols[u])
+    var cols = Int(all_cols[unit])
+    var th = read_fixture_bytes(PREP_ENC_DIR + "inf-oh-th.u8")
+    require(len(th) == total, label + ": inf-oh-th.u8 holds " + String(len(th)) + " bytes, the column counts "
+        + String(total))
     var xh = fixture_f32(PREP_ENC_DIR + "inf-xh.f32", n * d)
     var got = onehot_transform(c, xh, n, True, g.groups, not ignore, drops)
     require(len(got.words) == n * cols, label + ": " + String(len(got.words) // n) + " columns, scikit-learn "
         + String(cols))
-    same_words(got.words, fixture_f64(PREP_ENC_DIR + tag + "-th.f64", n * cols), label + " transform")
+    same_words(got.words, bytes_f64(th, start, n * cols), label + " transform")
     var own = onehot_transform(c, x, n, True, g.groups, not ignore, drops)
     var back = onehot_inverse(c, own.words, n, True, g.groups, drops, strict)
     require(back.unknown[0] == 0, label + ": inverse_transform refused " + String(back.unknown[0]) + " rows")
-    same_words(back.words, fixture_f64(PREP_ENC_DIR + tag + "-inv.f64", n * d), label + " inverse_transform")
+    var inv = ref_f32("inf-oh-inv.f32", INF_OH_UNITS * n * d)
+    var want = List[Float64](length=n * d, fill=0)
+    for i in range(n * d):  # small-loop(fixture: this case's inverse block)
+        want[i] = inv[unit * n * d + i]
+    same_words(back.words, want, label + " inverse_transform")
 
 
 def test_infrequent() raises:
     check_cases("infrequent_ordinal", 4, infrequent_ordinal_unit)
-    check_cases("infrequent_onehot", 30, infrequent_onehot_unit)
+    check_cases("infrequent_onehot", INF_OH_UNITS, infrequent_onehot_unit)
 
 
 def main() raises:
