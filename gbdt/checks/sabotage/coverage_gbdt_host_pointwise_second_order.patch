@@ -1,0 +1,17 @@
+diff --git a/gbdt/host/gbdt_oracle_losses.mojo b/gbdt/host/gbdt_oracle_losses.mojo
+index fb27cb48ea..2af364908c 100644
+--- a/gbdt/host/gbdt_oracle_losses.mojo
++++ b/gbdt/host/gbdt_oracle_losses.mojo
+@@ -508,7 +508,11 @@ def _loss_search_pass(
+                     var r = _loss_row(objective, targets_p[i], cursor_p[i], alpha, weight)
+                     var plane0 = weight
+                     if second_order:
+-                        plane0 = r.der2
++                        # SABOTAGE (coverage-gbdt-host_pointwise_second_order):
++                        # the Newton search plane keeps the row weight, so a
++                        # NewtonL2 / NewtonCosine fit searches on first-order
++                        # planes while its estimate is unchanged
++                        plane0 = weight
+                     stats_p[i] = plane0
+                     stats_p[n_rows + i] = r.der
+                     s_score[t] = r.score
