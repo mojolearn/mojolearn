@@ -87,7 +87,7 @@ from bindings.member_set_door import (
 )
 from core.member_abi import (
     MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
-    MEMBER_CAN_DECISION, MEMBER_CAN_PREDICT_PROBA,
+    MEMBER_CAN_DECISION, MEMBER_CAN_PREDICT_PROBA, member_kind_capabilities,
 )
 from core.member_set_run import MEMBER_SET_TURN_HELD, member_set_first_failure
 from core.member_families import MEMBER_FAMILY_GP
@@ -3330,7 +3330,12 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         # A scope read that raises raises its own doors' words (nothing is
         # fitted yet; the set holds no state).
         member_set_resident(set, Xa, context)
-    if not set.run.plans[0].member.can(MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA):
+    # KIND-EXACT (lane mf-meta3): the family's union mask holds bits another
+    # kind of it has (a hard VotingClassifier, META kind, has no
+    # predict_proba where a soft one has). One state minted, asked and
+    # released per fit.
+    var scoring = MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA
+    if not set.run.plans[0].member.can(scoring) or (member_kind_capabilities(set.run.plans[0]) & scoring) == 0:
         return _CAL_NOT_MEMBER  # its kind has no native call for the scores: its fit doors fit every fold
     # A fold with no train or no test rows (only a user's cv iterable makes
     # one): scikit-learn's check_array refusal, raised by that fold's
