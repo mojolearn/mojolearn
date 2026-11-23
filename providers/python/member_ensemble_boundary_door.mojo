@@ -155,7 +155,7 @@ from bindings.msel_split_unpack import MselRoutePin
 from bindings.msel_split_spec_run import MselSplitSpec, MSEL_SPEC_NONE, msel_spec_stratified
 from bindings.msel_split_spec_unpack import msel_split_spec_read
 from core.ensemble_member import (
-    meta_plan_split, meta_plan_rfe, meta_plan_refuse,
+    meta_plan_split, meta_plan_rfe, meta_plan_refuse, META_CAL_BINARY_MARKER_WORDS,
     META_RFE_CLASSIFIER, META_RFE_REGRESSOR, META_BLOCK_RFE, META_BLOCK_FORWARD,
 )
 from providers.python.member_rfe_boundary_door import (
@@ -330,8 +330,8 @@ def _admit_cal_base(done: _Done, mut nested: _Nested, base: PythonObject, needs:
     hold -1 is admitted over the codes with the marker's code in its marker word (scikit-learn fits it on y
     as given: its classes_ exclude -1); the kind's fit leaves the marker out of each unit's held classes
     (xtrees/trees_calibrated_fit_run.mojo) and clears it on cross_val_predict's folds (ensemble=False). Two
-    classes with ensemble=False: not served (the door's units; scikit-learn's own fit reads a column
-    label_binarize does not make there)."""
+    classes with ensemble=False: scikit-learn's own fit fails (META_CAL_BINARY_MARKER_WORDS, its words, raised
+    here natively; lane mf-ens6)."""
     var plan = prep_estimator_plan(base, context)
     if plan is not None and py_get(plan, "member") is not None and labels is not None:
         var mark = member_mark(plan, b)
@@ -339,7 +339,7 @@ def _admit_cal_base(done: _Done, mut nested: _Nested, base: PythonObject, needs:
             var marker = xneighbors_marker_index(labels)
             if marker >= 0:
                 if not whole and len(labels) == 2:
-                    return False
+                    raise Error(META_CAL_BINARY_MARKER_WORDS)
                 var fields = py_call(plan["fields_get"], base, py_type(base))
                 var owner = member_leaf_admit_serving_labeled(base, fields, plan, plan["context"], b, needs,
                                                               Python.list())
