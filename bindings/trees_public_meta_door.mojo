@@ -1820,13 +1820,12 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
     var binary = layout.binary
     var col0 = 0
     var members = layout.members
-    var kinds = layout.kinds.copy()
     var k = layout.k
     # Lane bm-meta-3: UNPACK + RUN `stack_place_run` (members fitted on
     # every row saw every class: no class columns read).
     if len(members) > 0:
-        var got = _stack_place(_xr(xt), members, kinds, Xa, k, binary, trees_address(meta_view), n, width,
-                               trees_address(rows_view), 0, False, context)
+        var got = _stack_place(_xr(xt), members, layout.kinds, Xa, k, binary, trees_address(meta_view), n,
+                               width, trees_address(rows_view), 0, False, context)
         for i in range(len(got)):  # driver-loop: over members
             col0 += got[i]
     _ = meta_view  # written through the RUN above
