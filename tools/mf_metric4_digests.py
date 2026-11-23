@@ -9,6 +9,13 @@ Expected: section (A) every line equal (the same programs). Section (B): the sea
 door path called a default float32 entry (r2, neg_mean_squared_error, neg_mean_absolute_error,
 neg_root_mean_squared_error, precision/recall/f1 averages, roc_auc binary) may differ in the last bits of
 cv_results_ (the RUN reads the binary64 program value); every other line equal.
+
+Lane mf-search4b extends (B) with the cases the search kind now takes (base d1ac69da3a vs head): the 'binary'
+label scorers (f1, precision, recall, jaccard on a 0/1 target), our KFold / StratifiedKFold splitters and an
+index list as cv, multi-metric with refit=False, and a multi-metric dict holding a binary scorer. Expected: the
+binary scorers' lines may differ in the last bits (the base door read the float32 precision_recall_fscore entry;
+the RUN reads the binary64 program); every other line equal, including the fitted-state lines (multimetric_,
+whether best_estimator_ exists, its predictions).
 """
 import hashlib
 import os
@@ -95,7 +102,7 @@ _REG_SCORERS = ["r2", "neg_mean_squared_error", "neg_mean_absolute_error", "neg_
                 "d2_absolute_error_score"]
 
 
-def _search(kind, scoring, refit=True, train=False):
+def _search(kind, scoring, refit=True, train=False, cv=3):
     import mojolearn
     from mojolearn.model_selection import GridSearchCV
     X, y, c = _data(11)
@@ -105,15 +112,29 @@ def _search(kind, scoring, refit=True, train=False):
         est, grid, target = mojolearn.LogisticRegression(max_iter=200), {"C": [0.1, 1.0]}, (c > 0).astype(np.int64)
     else:
         est, grid, target = mojolearn.LogisticRegression(max_iter=200), {"C": [0.1, 1.0, 10.0]}, c
-    s = GridSearchCV(est, grid, scoring=scoring, cv=3, refit=refit, return_train_score=train).fit(X, target)
+    if cv == "kfold":
+        from mojolearn.model_selection import KFold
+        cv = KFold(n_splits=4, shuffle=True, random_state=3)
+    elif cv == "stratified":
+        from mojolearn.model_selection import StratifiedKFold
+        cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=5)
+    elif cv == "list":
+        n = len(target)
+        cv = [(np.arange(0, n - 50), np.arange(n - 50, n)), (np.arange(50, n), np.arange(0, 50))]
+    s = GridSearchCV(est, grid, scoring=scoring, cv=cv, refit=refit, return_train_score=train).fit(X, target)
     rows = []
     for key in sorted(s.cv_results_):
         if "time" in key or key == "params" or key.startswith("param_"):
             continue
         rows.append((key, _digest(np.asarray(s.cv_results_[key], dtype=np.float64))))
-    if refit is not False:
+    rows.append(("multimetric", repr(bool(s.multimetric_))))
+    rows.append(("n_splits", repr(int(s.n_splits_))))
+    if hasattr(s, "best_index_"):
         rows.append(("best_index", repr(int(s.best_index_))))
         rows.append(("best_score", repr(float(s.best_score_))))
+    rows.append(("has_best_estimator", repr(hasattr(s, "best_estimator_"))))
+    if hasattr(s, "best_estimator_"):
+        rows.append(("best_predict", _digest(np.asarray(s.best_estimator_.predict(X)))))
     return rows
 
 
@@ -131,6 +152,16 @@ def _search_cases():
     cases.append(("B_clf_refit_false", lambda: _search("clf", "f1_macro", refit=False)))
     cases.append(("B_reg_multi", lambda: _search("reg", {"r2": "r2", "mae": "neg_mean_absolute_error"},
                                                  refit=False)))
+    # lane mf-search4b
+    for name in ("f1", "precision", "recall", "jaccard"):
+        cases.append((f"B_bin_{name}_binary", lambda name=name: _search("bin", name)))
+    cases.append(("B_clf_kfold", lambda: _search("clf", "accuracy", cv="kfold")))
+    cases.append(("B_clf_stratified", lambda: _search("clf", None, cv="stratified")))
+    cases.append(("B_clf_index_list", lambda: _search("clf", "accuracy", cv="list", train=True)))
+    cases.append(("B_reg_kfold", lambda: _search("reg", "r2", cv="kfold")))
+    cases.append(("B_clf_multi_refit_false", lambda: _search("clf", ["accuracy", "f1_macro"], refit=False)))
+    cases.append(("B_bin_multi_f1", lambda: _search("bin", {"f": "f1", "acc": "accuracy"}, refit="f", train=True)))
+    cases.append(("B_clf_refit_name_single", lambda: _search("clf", "accuracy", refit="accuracy")))
     return cases
 
 

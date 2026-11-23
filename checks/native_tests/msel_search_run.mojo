@@ -25,12 +25,19 @@ rank 1), and the refit: the best candidate fitted on every row.
 5. (lane mf-metric4) multi-metric ['accuracy', 'balanced_accuracy', 'neg_log_loss'] with refit='balanced_accuracy'
    (refit_scorer 1) and refit=False: each scorer's table equals its oracle, the best follows scorer 1's ranks, and
    no refit state is made.
+6. (lane mf-search4b) GIVEN FOLDS: the int cv's folds handed back as given int32 row views in REVERSED fold
+   order (`fold_train_at` / `fold_test_at`, the path a splitter or an index list takes): every 'accuracy' split
+   score is the oracle's of the reversed fold. THE BINARY SCORERS (`label_binary_run`, average='binary'): truth
+   [1, 0, 1, 1] and predictions [1, 1, 0, 1] give precision, recall and f1 2/3 for positive code 1 and f1 0.0
+   for positive code 0 (counted by hand), and three observed classes refuse in the door's words.
 
 FAIL-PROOF EDITS (each must make a case fail): `side_rows[f * sides] = rows_at + 4 * (f * n)` (case 1: the train
 rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits learn the wrong count);
 `narrow[i] = Int32(wide[i]) + 1` in `_respond` (cases 2, 4); `value = 0.0` for a failed task (case 3);
 `narrow[i] = Float32(wide[i] * 0.5)` in `_respond` (cases 4, 5: the probabilities); `var r = 0` in place of
-`plan.refit_scorer` in the tables (case 5); `op_of.append(0)` for every scorer (case 5: log loss reads codes).
+`plan.refit_scorer` in the tables (case 5); `op_of.append(0)` for every scorer (case 5: log loss reads codes);
+`used = 0` in the given-folds branch, or `te_at.append(plan.fold_train_at[f])` (case 6); `seen[positive] = 0`
+removed, or `McEpi(2, 2, LBL_MACRO, ...)` in `label_binary_run` (case 6: the positive's value).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -49,6 +56,7 @@ from core.member_abi import (
 )
 from core.msel_search_run import MselSearchPlan, msel_search_run, SEARCH_SCORE_MEMBER, SEARCH_SCORE_ACCURACY
 from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_value
+from bindings.mcls_classify_run import label_binary_run, LBL_PRECISION, LBL_RECALL, LBL_F1
 from core.trees_entry_table import TreesEntryKey
 from glm.host.logistic_native_host import qn_host_native_v1
 from x_metrics.descriptor_host import metrics_program_host_v1
@@ -59,7 +67,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 5
+comptime CASES = 6
 
 
 def _glue() raises -> EntryRef:
@@ -340,7 +348,7 @@ def _scorer_oracle(plans: List[MemberPlan], x: List[Float32], y: List[Int32],
                 var row = msel_scorer_row(codes[j])
                 var resp = Int(proba.unsafe_ptr()) if row.op == MEMBER_OP_PREDICT_PROBA else Int(labels.unsafe_ptr())
                 var cols = K if row.op == MEMBER_OP_PREDICT_PROBA else 1
-                out[j][c].append(msel_scorer_value(route, row, Int(yt.unsafe_ptr()), resp, t, K, cols))
+                out[j][c].append(msel_scorer_value(route, row, Int(yt.unsafe_ptr()), resp, t, K, cols, -1))
             _ = len(labels)
             _ = len(proba)
             member_free(plans[c], call)
@@ -398,6 +406,58 @@ def check_multi_metric() raises:
     _ = y^
 
 
+def check_given_folds() raises:
+    var x = _x()
+    var y = _codes()
+    var plans = _candidates(False)
+    var code = msel_scorer_code("accuracy", False)
+    var want = _scorer_oracle(plans, x, y, [code])
+    var counts = List[Int32](length=F + 1, fill=Int32(0))
+    var rows = List[Int32](length=F * N, fill=Int32(0))
+    var yy = y.copy()
+    _ = xt_device_folds(_glue(), Int(yy.unsafe_ptr()), Int(rows.unsafe_ptr()), Int(counts.unsafe_ptr()), N, F, K)
+    var plan = _plan(plans.copy(), x, y, code)
+    for g in range(F):  # small-loop(check: the folds, reversed)
+        var f = F - 1 - g
+        var t = Int(counts[f])
+        plan.fold_train_at.append(Int(rows.unsafe_ptr()) + 4 * (f * N))
+        plan.fold_train_n.append(N - t)
+        plan.fold_test_at.append(Int(rows.unsafe_ptr()) + 4 * (f * N + N - t))
+        plan.fold_test_n.append(t)
+    var res = msel_search_run(plan)
+    require(res.n_splits == F, "the given folds' count")
+    for c in range(len(plans)):  # small-loop(check: candidates)
+        for g in range(F):  # small-loop(check: folds)
+            require(res.test[c][g] == want[0][c][F - 1 - g], "given split" + String(g) + " of candidate " + String(c))
+    var r = MemberCall(plans[res.best].route, res.best_state)
+    member_free(plans[res.best], r)
+    _ = rows^
+    _ = counts^
+    _ = x^
+    _ = y^
+    # THE BINARY SCORERS, counted by hand.
+    var route = MetricRoute(metrics_program_host_v1, False, False)
+    var truth: List[Int32] = [1, 0, 1, 1]
+    var pred: List[Int32] = [1, 1, 0, 1]
+    var ta = Int(truth.unsafe_ptr())
+    var pa = Int(pred.unsafe_ptr())
+    var third = 2.0 / 3.0
+    require(abs(label_binary_run(route, LBL_PRECISION, ta, pa, 4, 2, 1) - third) < 1e-12, "binary precision")
+    require(abs(label_binary_run(route, LBL_RECALL, ta, pa, 4, 2, 1) - third) < 1e-12, "binary recall")
+    require(abs(label_binary_run(route, LBL_F1, ta, pa, 4, 2, 1) - third) < 1e-12, "binary f1")
+    require(label_binary_run(route, LBL_F1, ta, pa, 4, 2, 0) == 0.0, "binary f1 of positive code 0")
+    var three: List[Int32] = [0, 1, 2, 1]
+    var refused = False
+    try:
+        _ = label_binary_run(route, LBL_F1, Int(three.unsafe_ptr()), pa, 4, 3, 1)
+    except error:
+        refused = String(error) == "average='binary' requires at most two observed classes"
+    require(refused, "three observed classes refuse in the door's words")
+    _ = len(truth)
+    _ = len(pred)
+    _ = len(three)
+
+
 def test_msel_search_run() raises:
     publish_x_trees_glue("cpu")
     def run_case(which: Int) raises:
@@ -409,8 +469,10 @@ def test_msel_search_run() raises:
             check_error_score()
         elif which == 3:
             check_named_scorer()
-        else:
+        elif which == 4:
             check_multi_metric()
+        else:
+            check_given_folds()
     check_cases("msel_search_run", CASES, run_case)
 
 
