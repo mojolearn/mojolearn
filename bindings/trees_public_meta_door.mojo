@@ -95,6 +95,8 @@ from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, vote_regress_run, vote_transform_run,
     ovr_assemble_run, multioutput_codes_run, multioutput_proba_run, stack_place_run, STACK_PREDICT, STACK_PROBA,
     STACK_DECISION,
+    # nn-integrate (compile fix): lane bm-meta-3's calibrated predict RUN names, used below and never imported
+    CalPair, CalFit, calibrated_proba_run,
 )
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,

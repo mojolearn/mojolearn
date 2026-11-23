@@ -363,7 +363,7 @@ def _neighbours[R: IterImpRunner](mut runner: R, xf: Int, n: Int, dk: Int, js: L
     return lists^
 
 
-def _indicator_run[R: IterImpRunner](mut runner: R, n: Int, d: Int, dk: Int, mark: Bool, missing: Float64,
+def iterimp_indicator[R: IterImpRunner](mut runner: R, n: Int, d: Int, dk: Int, mark: Bool, missing: Float64,
                                      indicator: List[Int], xt_address: Int, work_on: Bool,
                                      region: Bool) raises -> Tuple[Int, Int]:
     """`_with_indicator`: Xt (the (n, dk) words at `xt_address`), then

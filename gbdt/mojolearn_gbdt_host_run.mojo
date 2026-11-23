@@ -37,6 +37,7 @@ from gbdt.host.gbdt_oracle import (
     GBDT_BOOT_BERNOULLI,
     GBDT_BOOT_POISSON,
     GBDT_LOGLOSS_NEWTON_ITERATIONS,
+    GbdtHostFitWithEval,
     GbdtHostModel,
     GbdtHostParams,
     gbdt_host_fit,
@@ -150,6 +151,11 @@ comptime GBDT_HOST_DEFAULT_BORDER = Float32(0.5)
 #: The deepest tree the host binding grows; the model text reader refuses
 #: past 31 and `1 << depth` leaves are materialized per tree.
 comptime GBDT_HOST_MAX_DEPTH = 16
+
+
+def _fit_model(var fit: GbdtHostFitWithEval) -> GbdtHostModel:
+    """The ensemble of a fit with its held-out report, the pair consumed (its eval fields read before)."""
+    return fit.model^
 
 
 def _refuse(what: String) raises:
@@ -1722,7 +1728,9 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             best_iteration = pw_fit.eval.best_iteration
             stopped_early = pw_fit.eval.stopped_early
             test_losses = pw_fit.eval.test_losses.copy()
-            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_fit.model^, pw_start))
+            # the whole pair moves into _fit_model, which returns its model (moving the field out of a live
+            # pw_fit left it partly destroyed: nn-integrate compile fix of lane gbdt-cpu-rest-2's arm)
+            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(_fit_model(pw_fit^), pw_start))
             return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
         # the grouped pointwise searcher (gbdt_oracle_pointwise_rank.mojo)
         var pw_model = gbdt_ranking_pointwise_host_fit(
