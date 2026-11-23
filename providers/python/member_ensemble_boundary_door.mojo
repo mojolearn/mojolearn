@@ -82,6 +82,12 @@ from bindings.member_class_weight_unpack import member_cw_fill
 from bindings.class_weight_boundary_unpack import class_weight_dictionary_values, CLASS_WEIGHT_TREES
 from bindings.meta_plan_capsule_pack import meta_plan_capsule
 from bindings.prep_native_estimator_door import prep_estimator_plan, prep_estimator_clone, prep_estimator_has
+from bindings.prep_native_estimator_door import prep_estimator_admit
+# Lane mf-refuse5, THE DOOR'S REFUSAL: the meta doors' constructor checks, one body with the doors.
+from bindings.trees_meta_validate_unpack import (
+    meta_active, meta_active_entries, meta_owner, meta_voting_validate, meta_voting_weights, meta_stacking_validate,
+    meta_calibrated_validate, meta_jobs, meta_bagging_validate, meta_ada_validate, meta_seed,
+)
 from bindings.py_balanced import py_call, py_get, py_item, py_setattr, py_setitem, py_type, py_contains, py_fields
 from core.device_route import DeviceRoute, DEVICE_CPU
 from bindings.admitted_input_unpack import admitted_unfilled
@@ -146,7 +152,8 @@ from bindings.msel_split_unpack import MselRoutePin
 from bindings.msel_split_spec_run import MselSplitSpec, MSEL_SPEC_NONE, msel_spec_stratified
 from bindings.msel_split_spec_unpack import msel_split_spec_of
 from core.ensemble_member import (
-    meta_plan_split, meta_plan_rfe, META_RFE_CLASSIFIER, META_RFE_REGRESSOR, META_BLOCK_RFE, META_BLOCK_FORWARD,
+    meta_plan_split, meta_plan_rfe, meta_plan_refuse,
+    META_RFE_CLASSIFIER, META_RFE_REGRESSOR, META_BLOCK_RFE, META_BLOCK_FORWARD,
 )
 from providers.python.member_rfe_boundary_door import (
     RfeBase, rfe_base_admit, rfe_count_words, rfe_image, rfe_publish, rfe_dotted_path,
@@ -215,7 +222,8 @@ def _addr(array: PythonObject) raises -> Int:
 
 struct _Active(Movable):
     """The active (name, estimator) entries of `estimators` ('drop' left out),
-    as the door's `_active` reads them. `ok` False: the door raises."""
+    as the door reads them (bindings/trees_meta_validate_unpack.mojo
+    `meta_active_entries`, one body). `ok` False: the door refuses them."""
     var names: PythonObject
     var ests: PythonObject
     var ok: Bool
@@ -228,24 +236,13 @@ struct _Active(Movable):
 
 def _active(fields: PythonObject, b: PythonObject) raises -> _Active:
     var got = _Active()
-    var estimators = py_get(fields, "estimators")
-    if estimators is None or (py_type(estimators) is not b.list and py_type(estimators) is not b.tuple):
-        return got^
-    var seen = Python.list()
-    for i in range(len(estimators)):  # driver-loop: over the (name, estimator) entries (admission, once each)
-        var pair = estimators[i]
-        if (py_type(pair) is not b.tuple and py_type(pair) is not b.list) or len(pair) != 2:
-            return got^
-        if py_contains(seen, pair[0]):
-            return got^
-        _ = py_call(seen.append, pair[0])
-        if py_type(pair[1]) is b.str:
-            if String(pair[1]) == "drop":
-                continue
-            return got^
-        _ = py_call(got.names.append, pair[0])
-        _ = py_call(got.ests.append, pair[1])
-    got.ok = len(got.ests) > 0
+    try:
+        var entries = meta_active_entries(py_get(fields, "estimators"))
+        got.names = entries.names
+        got.ests = entries.ests
+        got.ok = True
+    except:
+        got.ok = False  # the door's words: `_admit_one` raises them through `meta_active`
     return got^
 
 
@@ -637,10 +634,29 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
     if _unit(kind):
         return _admit_unit(model, fields, kind, context, b, owner, done, child)
     var classifier = _classifier(kind)
-    var active = _active(fields, b)
-    if not active.ok:
-        return False
+    # THE DOOR'S REFUSAL (lane mf-refuse5): the door's constructor checks, in its order and words, one
+    # body with the door (bindings/trees_meta_validate_unpack.mojo): the voting value and n_jobs / verbose
+    # (Voting), n_jobs / verbose, stack_method and the cv value (Stacking), then the estimators (and a
+    # Stacking's final estimator) as its `_active` / `_require_member` admit them. A value it refuses is
+    # a plan whose FIT raises its words first (`_refuse_first`), where its caller fell back to the door.
+    var active = _Active()
+    try:
+        if _stack(kind):
+            meta_stacking_validate(model, context)
+        else:
+            _ = meta_voting_validate(model, classifier)
+        var entries = meta_active(py_get(fields, "estimators"), meta_owner(model), context)
+        active.names = entries.names
+        active.ests = entries.ests
+        active.ok = True
+        if _stack(kind):
+            var given_final = py_get(fields, "final_estimator")
+            if given_final is not None:
+                prep_estimator_admit(given_final, meta_owner(model), context)
+    except e:
+        return _refuse_first(fields, context, b, owner, kind, String(e))
     var m = len(active.ests)
+    var late = String("")
     var flag = 0.0
     var folds = 0
     var weights = List[Float64]()
@@ -654,24 +670,19 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
         base_needs |= MEMBER_CAN_CLASSIFIER
     if not _stack(kind):
         if kind == META_VOTE_CLASSIFIER:
-            var voting = py_get(fields, "voting")
-            if voting is None or py_type(voting) is not b.str:
-                return False
-            var name = String(voting)
-            if name == "soft":
+            # 'hard' or 'soft' by the door's equality (`meta_voting_validate` refused anything else).
+            if Bool(py=py_get(fields, "voting") == PythonObject("soft")):
                 flag = 1.0
-            elif name != "hard":
-                return False
-        var given = py_get(fields, "weights")
-        if given is None:
-            for _ in range(m):  # driver-loop: over the voting members
-                weights.append(1.0)
-        else:
-            var items = py_call(b.list, given)
-            if len(items) != m:
-                return False
+        # The weights as the door reads them after its fits (`meta_voting_weights`, one body): a value
+        # it refuses (an item `float` refuses, a count that is not one per member) is THE DOOR'S REFUSAL
+        # raised after the nested fits (`late`); the members fit with unit weights until then.
+        try:
+            var given = meta_voting_weights(py_get(fields, "weights"), m)
             for i in range(m):  # driver-loop: over the user weights (one per member)
-                weights.append(Float64(py=py_call(b.float, items[i])))
+                weights.append(Float64(py=given[i]))
+        except e:
+            late = String(e)
+            weights = List[Float64](length=m, fill=1.0)
         var needs = base_needs | (MEMBER_CAN_PREDICT_PROBA if flag != 0.0 else 0)
         for i in range(m):  # driver-loop: over the voting members (admission, once each)
             if not _admit_nested(done, nested, active.ests[i], classifier, needs, context, b, child):
@@ -698,10 +709,9 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
             folds = 5 if cv is None else _int_word(cv, b)
             if folds < 2:
                 return False
+        # passthrough by the door's truth (`_truthy`; lane mf-refuse5: a non-bool was refused here).
         var passthrough = py_get(fields, "passthrough")
-        if passthrough is not None and py_type(passthrough) is not b.bool:
-            return False
-        if passthrough is not None and Bool(py=passthrough):
+        if passthrough is not None and _truthy(passthrough, b):
             flag = 1.0
         for i in range(m):  # driver-loop: over the stacked members (admission, once each)
             # A classifier stacked with stack_method='predict' writes its
@@ -727,6 +737,22 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
                    fold_train^, fold_test^):
         return False
     _finish_split(owner, split)
+    if len(late) != 0:
+        meta_plan_refuse(Int(owner.plan.params[1]), late^, True)
+    return True
+
+
+def _refuse_first(fields: PythonObject, context: PythonObject, b: PythonObject, mut owner: MemberOwner, kind: Int,
+                  var words: String) raises -> Bool:
+    """THE DOOR'S REFUSAL first (lane mf-refuse5, core/ensemble_member.mojo `meta_plan_refuse`): a plan
+    entry with no members whose FIT raises `words`, the door's own (caught from its check, one body),
+    before it reads anything, as the door raises them before it reads X. False only when the meta
+    estimator's x_trees image is not connected (`_finish`; the door raises the table's words)."""
+    var nested = _Nested()
+    if not _finish(fields, context, b, owner, nested, kind, 0.0, 0, List[Float64](), List[Int](), List[Float64](),
+                   List[List[Int32]](), List[List[Int32]]()):
+        return False
+    meta_plan_refuse(Int(owner.plan.params[1]), words^, False)
     return True
 
 

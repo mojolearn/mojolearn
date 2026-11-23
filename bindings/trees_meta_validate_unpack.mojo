@@ -23,7 +23,7 @@ from bindings.trees_public_inputs_door import trees_builtins
 from bindings.trees_public_forest_door import _int, _float, _repr, _truthy, _is_bool, _is_integral
 from bindings.trees_keys_unpack import trees_keys
 from bindings.native_unit_threads_unpack import native_unit_jobs
-from bindings.prep_native_estimator_door import prep_native_context
+from bindings.prep_native_estimator_door import prep_native_context, prep_estimator_admit
 from bindings.msel_inputs_unpack import msel_admit
 from bindings.py_typed_call import py_call_typed
 from xtrees.trees_forest_run import _refuse
@@ -86,6 +86,57 @@ def meta_voting_validate(model: PythonObject, classifier: Bool) raises -> Int:
         if not py_contains(Python.tuple("hard", "soft"), voting):
             raise Error("voting must be 'hard' or 'soft'")
     return meta_jobs(model, True)
+
+
+struct MetaActive(Copyable, Movable):
+    """`_trees_estimators(estimators)`: the active names and estimators."""
+    var names: PythonObject
+    var ests: PythonObject
+
+    def __init__(out self, names: PythonObject, ests: PythonObject):
+        self.names = names
+        self.ests = ests
+
+
+def meta_active(estimators: PythonObject, owner: String, context: PythonObject) raises -> MetaActive:
+    """The Voting / Stacking doors' `_active`: the (name, estimator) entries
+    (`meta_active_entries`), each active estimator admitted
+    (`prep_estimator_admit`, a class with no native plan refused in its
+    words). The META admission reads its members through it too."""
+    var got = meta_active_entries(estimators)
+    for i in range(len(got.ests)):  # driver-loop: over members
+        prep_estimator_admit(got.ests[i], owner, context)
+    return got^
+
+
+def meta_active_entries(estimators: PythonObject) raises -> MetaActive:
+    """The (name, estimator) entries of `estimators` with 'drop' left out,
+    in the doors' words for a value they refuse. The META kind's PACK and
+    its work-list read the same entries (no admission: its admission did)."""
+    var b = trees_builtins()
+    if not _truthy(estimators):
+        raise Error("estimators must be a non-empty list of (name, estimator)")
+    var items = py_call(b.list, estimators)
+    var all_names = Python.list()
+    var names = Python.list()
+    var ests = Python.list()
+    for i in range(len(items)):  # driver-loop: over the (name, estimator) entries
+        var pair = py_call(b.tuple, items[i])
+        if len(pair) != 2:
+            raise Error("estimators must be a non-empty list of (name, estimator)")
+        _ = py_call(all_names.append, pair[0])
+    if len(py_call(b.set, all_names)) != len(all_names):
+        raise Error("estimator names must be unique")
+    for i in range(len(items)):  # driver-loop: over the (name, estimator) entries
+        var pair = py_call(b.tuple, items[i])
+        var est = pair[1]
+        if py_type(est) is b.str and String(est) == "drop":
+            continue
+        _ = py_call(names.append, pair[0])
+        _ = py_call(ests.append, est)
+    if len(ests) == 0:
+        raise Error("all estimators are 'drop'")
+    return MetaActive(names, ests)
 
 
 def meta_voting_weights(given: PythonObject, m: Int) raises -> PythonObject:

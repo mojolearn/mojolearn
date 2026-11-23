@@ -159,6 +159,8 @@ from bindings.trees_meta_validate_unpack import (
     meta_calibrated_validate as _calibrated_validate,
     meta_voting_validate,
     meta_voting_weights,
+    MetaActive as Active,
+    meta_active as _active,
 )
 from bindings.py_balanced import py_item
 
@@ -910,45 +912,6 @@ def _member_weights(names: PythonObject, ests: PythonObject, sample_weight: Pyth
             raise Error("Underlying estimator" + who + " does not support sample weights.")
     var w = admit_weight_words(sample_weight, n, context)
     return _as_array(w, Python.tuple(n), context)
-
-
-struct Active(Copyable, Movable):
-    """`_trees_estimators(estimators)`: the active names and estimators."""
-    var names: PythonObject
-    var ests: PythonObject
-
-    def __init__(out self, names: PythonObject, ests: PythonObject):
-        self.names = names
-        self.ests = ests
-
-
-def _active(estimators: PythonObject, owner: String, context: PythonObject) raises -> Active:
-    var b = trees_builtins()
-    if not _truthy(estimators):
-        raise Error("estimators must be a non-empty list of (name, estimator)")
-    var items = py_call(b.list, estimators)
-    var all_names = Python.list()
-    var names = Python.list()
-    var ests = Python.list()
-    for i in range(len(items)):  # driver-loop: over the (name, estimator) entries
-        var pair = py_call(b.tuple, items[i])
-        if len(pair) != 2:
-            raise Error("estimators must be a non-empty list of (name, estimator)")
-        _ = py_call(all_names.append, pair[0])
-    if len(py_call(b.set, all_names)) != len(all_names):
-        raise Error("estimator names must be unique")
-    for i in range(len(items)):  # driver-loop: over the (name, estimator) entries
-        var pair = py_call(b.tuple, items[i])
-        var est = pair[1]
-        if py_type(est) is b.str and String(est) == "drop":
-            continue
-        _ = py_call(names.append, pair[0])
-        _ = py_call(ests.append, est)
-    if len(ests) == 0:
-        raise Error("all estimators are 'drop'")
-    for i in range(len(ests)):  # driver-loop: over members
-        _require_member(ests[i], owner, context)
-    return Active(names, ests)
 
 
 def _named(names: PythonObject, fitted: PythonObject) raises -> PythonObject:
