@@ -52,8 +52,10 @@ EXTRA_BY_NAME = {
     "TargetEncoder": ("_T", "_cmax", "_enc", "_meta"),
     "_SelectorMixin": ("_mask",),
     # the imputer's generator word and posterior step advance with each sampled transform:
-    # they decide the next transform's answers, so they are state.
-    "IterativeImputer": ("_keep", "_indicator", "_bounds_k", "_posterior", "_rng", "_post_step"),
+    # they decide the next transform's answers, so they are state; so do the kept columns marked not missing
+    # (`_empty_kept`) and a classifier estimator's per-step labels (`_step_classes`).
+    "IterativeImputer": ("_keep", "_indicator", "_bounds_k", "_posterior", "_rng", "_post_step", "_empty_kept",
+                         "_step_classes"),
     # stateless-fit transformers (bindings/prep_stateless_native_door.mojo)
     "PolynomialFeatures": ("_poly_index", "_poly_start"),
     "QuantileTransformer": ("_q",),

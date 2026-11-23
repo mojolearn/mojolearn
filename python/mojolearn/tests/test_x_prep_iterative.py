@@ -83,7 +83,62 @@ def test_iterative_options():
         assert "requires a mojolearn estimator; got Ridge" in str(error)
 
 
+def _labels(seed=0, n=400, d=4):
+    # every column the row's label plus a column shift, at most one NaN a row (integer-valued targets)
+    rng = np.random.default_rng(seed)
+    labels = rng.integers(0, 3, n)
+    X = np.stack([labels + (j % 2) for j in range(d)], axis=1).astype(np.float32)
+    rows = rng.random(n) < 0.6
+    cols = rng.integers(0, d, n)
+    X[rows, cols[rows]] = np.nan
+    return X
+
+
+def test_iterative_degenerate_shapes():
+    # scikit-learn's edge cases (lane mf-iterimp3): one kept feature returns the initial imputation with
+    # n_iter_ = 0 and no step; a kept all-NaN column (keep_empty_features) is not missing and keeps its fill
+    X = _data(4)
+    X[:, 1:] = np.nan
+    for est in (None, ml.Ridge(alpha=1.0)):
+        m, r = ml.IterativeImputer(estimator=est, add_indicator=True), SkII(add_indicator=True)
+        np.testing.assert_allclose(np.asarray(m.fit_transform(X)), r.fit_transform(X.astype(np.float64)),
+                                   rtol=1e-5, atol=1e-5)
+        assert m.n_iter_ == 0 == r.n_iter_ and len(m.imputation_sequence_) == 0
+    X = _data(5)
+    X[:, 2] = np.nan
+    from sklearn.linear_model import Ridge as SkRidge
+    for est, sk in ((None, None), (ml.Ridge(alpha=1.0), SkRidge(alpha=1.0))):
+        m = ml.IterativeImputer(estimator=est, keep_empty_features=True)
+        r = SkII(estimator=sk, keep_empty_features=True)
+        a, b = np.asarray(m.fit_transform(X)), r.fit_transform(X.astype(np.float64))
+        assert np.array_equal(a[:, 2], b[:, 2]), (est, a[:, 2][:4], b[:, 2][:4])
+        np.testing.assert_allclose(a, b, rtol=2e-3, atol=2e-3, err_msg=str(est))
+        assert m.n_iter_ == r.n_iter_, (est, m.n_iter_, r.n_iter_)
+        assert m.n_features_with_missing_ == r.n_features_with_missing_
+
+
+def test_iterative_classifier():
+    # a classifier estimator is fitted on the float target as scikit-learn fits it (lane mf-iterimp3)
+    from sklearn.naive_bayes import GaussianNB as SkGNB
+    from sklearn.tree import DecisionTreeClassifier as SkTree
+    X, Xh = _labels(0), _labels(1)
+    for est, sk in ((ml.GaussianNB(), SkGNB()),
+                    (ml.DecisionTreeClassifier(random_state=0), SkTree(random_state=0))):
+        m, r = ml.IterativeImputer(estimator=est), SkII(estimator=sk)
+        a, b = np.asarray(m.fit_transform(X)), r.fit_transform(X.astype(np.float64))
+        assert np.array_equal(a, b), (type(est).__name__, np.argwhere(a != b)[:4])
+        assert m.n_iter_ == r.n_iter_
+        assert np.array_equal(np.asarray(m.transform(Xh)), r.transform(Xh.astype(np.float64)))
+    try:
+        ml.IterativeImputer(estimator=ml.GaussianNB()).fit(_data(0))
+        raise AssertionError("no ValueError")
+    except ValueError as error:
+        assert "Unknown label type: continuous" in str(error), error
+
+
 if __name__ == "__main__":
     test_iterative()
     test_iterative_options()
+    test_iterative_degenerate_shapes()
+    test_iterative_classifier()
     print("PASS test_x_prep_iterative")

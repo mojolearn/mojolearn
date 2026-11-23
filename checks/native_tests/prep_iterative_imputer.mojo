@@ -43,6 +43,26 @@ correlated, 15% NaN) for seeds 0 to 3, with scikit-learn 1.9.1's results, in `fi
                           default estimator is BayesianRidge()). Fail-proof: in x_linear/bayes.mojo `bayes_factor_std_row`
                           return `fsqrt(s)` (no 1 / alpha_ term): the spread check fails.
 
+Lane mf-iterimp3 (exact oracles, no fixture):
+    single feature        X0 with columns 1-4 all NaN (dropped): one kept feature is scikit-learn's edge case, n_iter_
+                          0, no step, Xt = the initial imputation (each missing cell the fitted fill, the observed
+                          cells as given). Fail-proof: delete the `len(fitted.keep) < 2` branch of `iterimp_fit`;
+                          n_iter_ is not 0.
+    empty kept units 0-1  X2 with column 2 all NaN and keep_empty_features: scikit-learn marks it not missing, so it
+                          is first in the ascending order (0 missing), counts in n_features_with_missing_ (skip_complete
+                          False), and keeps its fill in every row; unit 0 the built-in ridge, unit 1 Ridge(alpha=1)
+                          through the member rounds (its step fits on every row). Fail-proof: delete the
+                          `iterimp_unmark_empty` call of `iterimp_member_rounds` (unit 1 fails on a column-2 word), or
+                          the missing-count scatter of `iterimp_prepare` (the order check fails).
+    class labels units 0-3  `iterimp_class_values` / `iterimp_class_codes`: a small target, a 300000-row target split
+                          across the host cores, a continuous target (scikit-learn's words) and a NaN target.
+                          Fail-proof: in `iterimp_class_codes` test `cp[mid] <= v`; units 0 and 1 fail on a code.
+    classifier units 0-1  estimator=GaussianNB() (the naive Bayes member, a classifier kind) through the member rounds
+                          on a 400 x 4 matrix whose every column is the row's label (0, 1, 2) with at most one NaN a
+                          row: every imputed cell is its row's label, n_iter_ stops at 2; unit 1 puts 0.5 in column 0
+                          and the fit refuses in scikit-learn's continuous-target words. Fail-proof: in
+                          `_class_of_codes` write `cp[0]` for every row; unit 0 fails on an imputed cell.
+
 The GaussianProcess member's PREDICT_STD route (the same query's mean in `call.y`) needs the GP provider's host route
 and kernel words: it is in tools/mf_iterimp_digests.py, as are the public refusals. Every unit is independent and
 runs across the host cores; the posterior sets run one after the other, each with its twelve seeds across the host
@@ -61,17 +81,22 @@ from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN
 from x_prep.iterimp_run import (
     iterimp_fit, iterimp_prepare, iterimp_member_rounds, iterimp_member_free, IterImpFitted, IterImpMember,
     IterImpMemberFit, II_NONE, II_ASCENDING, II_DESCENDING, II_RANDOM, IterImpHeldStep, IterImpApply,
-    IterImpStep, iterimp_member_transform,
+    IterImpStep, iterimp_member_transform, iterimp_class_values, iterimp_class_codes, II_CONTINUOUS_WORDS,
 )
 from bindings.prep_encode_imputer_run import ImputerApply
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.device_route import DeviceRoute, DEVICE_CPU
 from core.entry_table import EntryRef, entry_ref_word
 from core.member_abi import (
-    MemberPlan, MemberRef, MemberCall, MEMBER_F64, MEMBER_OP_CAPABILITIES, MEMBER_OP_EXPORT,
-    MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, member_call, member_call_of,
+    MemberPlan, MemberRef, MemberCall, MEMBER_F64, MEMBER_I32, MEMBER_OP_CAPABILITIES, MEMBER_OP_EXPORT,
+    MEMBER_OP_PREDICT, MEMBER_BORROWS_FIT,
+    MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, member_call, member_call_of, member_kind_capabilities,
+    member_output_dtype,
 )
-from core.member_families import MEMBER_FAMILY_LINEAR, MEMBER_FAMILY_XLINEAR
+from core.member_families import MEMBER_FAMILY_LINEAR, MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_NAIVE_BAYES
+from core.naive_bayes_member import naive_bayes_member_v2
+from x_prep.transport_host import x_prep_transport_host_v1
+from x_prep.transport_abi import XP_OP_COUNT
 from core.linear_member import linear_member_v2
 from core.xlinear_member import xlinear_member_v2
 from glm.host.linear_fit_native import linear_fit_host_v1
@@ -318,7 +343,7 @@ def estimator_case(unit: Int) raises:
     var runner = HostIterRunner(Int(x.unsafe_ptr()))
     var fitted = IterImpFitted()
     var plan = iterimp_prepare(runner, request, fitted)
-    require(len(fitted.keep) == D and not fitted.empty_kept, label + ": every column is kept and observed")
+    require(len(fitted.keep) == D and len(fitted.empty) == 0, label + ": every column is kept and observed")
     var member = IterImpMember(_estimator_plan(unit), False, False)
     var fit = IterImpMemberFit()
     iterimp_member_rounds(runner, request, plan, fitted, member, fit)
@@ -393,8 +418,207 @@ def estimator_transform_case(unit: Int) raises:
     _ = len(fitted.fill)
 
 
+def _nan() -> Float32:
+    return Float32(0.0) / Float32(0.0)
+
+
+def single_feature_case(unit: Int) raises:
+    var label = String("IterativeImputer one kept feature")
+    var x = _x(0)
+    for i in range(N):  # small-loop(fixture: drop columns 1-4)
+        for j in range(1, D):  # small-loop(fixture: the dropped columns)
+            x[i * D + j] = _nan()
+    var request = ii_request(N, D, IMP_MEAN, II_ASCENDING, 10, II_NONE, 0, neg_inf(), pos_inf(), False, False)
+    var runner = HostIterRunner(Int(x.unsafe_ptr()))
+    var fitted = iterimp_fit(runner, request)
+    require(len(fitted.keep) == 1 and fitted.keep[0] == 0, label + ": kept " + String(len(fitted.keep)))
+    require(fitted.n_iter == 0, label + ": n_iter_ " + String(fitted.n_iter) + " expected 0")
+    require(len(fitted.seq_j) == 0, label + ": " + String(len(fitted.seq_j)) + " steps, expected none")
+    require(fitted.cols == 1, label + ": width " + String(fitted.cols))
+    var got = ii_output(runner, fitted, N)
+    for i in range(N):  # small-loop(oracle: the one kept column)
+        var want = fitted.fill[0] if isnan(x[i * D]) else x[i * D]
+        require(got[i] == want, label + ": row " + String(i) + " " + String(got[i]) + " expected " + String(want))
+    _ = len(x)  # X stays alive past every program that read it
+    _ = unit
+
+
+def empty_kept_case(unit: Int) raises:
+    var label = String("IterativeImputer keep_empty_features, an all-NaN column, ")
+    if unit == 0:
+        label += "built-in ridge"
+    else:
+        label += "estimator=Ridge(alpha=1)"
+    var x = _x(2)
+    for i in range(N):  # small-loop(fixture: column 2 has no observed value)
+        x[i * D + 2] = _nan()
+    var request = ii_request(N, D, IMP_MEAN, II_ASCENDING, 10, II_NONE, 0, neg_inf(), pos_inf(), False, False)
+    request.init.keep_empty = True
+    var runner = HostIterRunner(Int(x.unsafe_ptr()))
+    var fitted = IterImpFitted()
+    var got = List[Float32](length=N * D, fill=0.0)
+    if unit == 0:
+        fitted = iterimp_fit(runner, request)
+        var values = ii_output(runner, fitted, N)
+        for i in range(N * D):  # small-loop(oracle: one result block)
+            got[i] = values[i]
+    else:
+        var plan = iterimp_prepare(runner, request, fitted)
+        require(len(plan.orders) > 0 and len(plan.orders[0]) == D and plan.orders[0][0] == 2,
+            label + ": the empty column (no missing value) is not first in the ascending order")
+        var member = IterImpMember(_estimator_plan(0), False, False)
+        var fit = IterImpMemberFit()
+        iterimp_member_rounds(runner, request, plan, fitted, member, fit)
+        try:
+            require(fit.cols == D, label + ": width " + String(fit.cols))
+            var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
+            for i in range(N * D):  # small-loop(oracle: one result block)
+                got[i] = src[fit.out_offset + i]
+        finally:
+            iterimp_member_free(member, fit)
+    require(len(fitted.keep) == D and len(fitted.empty) == 1 and fitted.empty[0] == 2,
+        label + ": the empty kept positions")
+    require(fitted.n_missing == D, label + ": n_features_with_missing_ " + String(fitted.n_missing) + " expected " + String(D))
+    for i in range(N):  # small-loop(oracle: every row)
+        require(got[i * D + 2] == fitted.fill[2], label + ": row " + String(i) + " column 2 " + String(got[i * D + 2])
+            + " expected its fill " + String(fitted.fill[2]))
+        for j in range(D):  # small-loop(oracle: one row)
+            if j != 2 and not isnan(x[i * D + j]):
+                require(got[i * D + j] == x[i * D + j], label + ": observed cell " + String(i) + ", " + String(j))
+            require(not isnan(got[i * D + j]), label + ": cell " + String(i) + ", " + String(j) + " not imputed")
+    _ = len(x)  # X stays alive past every program that read it
+
+
+def class_labels_case(unit: Int) raises:
+    var label = String("IterativeImputer classifier labels unit ") + String(unit)
+    var y = List[Float32]()
+    if unit == 0:
+        for v in range(5):  # small-loop(fixture: the target 2, 0, 2, 1, 0)
+            y.append(Float32(2 if v == 0 or v == 2 else (1 if v == 3 else 0)))
+    elif unit == 1:
+        for i in range(300000):  # small-loop(fixture: a target split across the host cores)
+            y.append(Float32((i * 7919) % 11 - 5))
+    elif unit == 2:
+        y.append(Float32(0.0))
+        y.append(Float32(1.5))
+        y.append(Float32(1.0))
+    else:
+        y.append(Float32(1.0))
+        y.append(_nan())
+        y.append(Float32(0.0))
+    var m = len(y)
+    if unit >= 2:
+        var raised = String("")
+        try:
+            _ = iterimp_class_values(Int(y.unsafe_ptr()), m)
+        except problem:
+            raised = String(problem)
+        var want = String("Input y contains NaN.")
+        if unit == 2:
+            want = String(II_CONTINUOUS_WORDS)
+        require(raised == want, label + ": raised '" + raised + "' expected '" + want + "'")
+        _ = len(y)
+        return
+    var classes = iterimp_class_values(Int(y.unsafe_ptr()), m)
+    var codes = iterimp_class_codes(Int(y.unsafe_ptr()), m, classes)
+    var k = 3 if unit == 0 else 11
+    require(len(classes) == k, label + ": " + String(len(classes)) + " classes, expected " + String(k))
+    for c in range(k):  # small-loop(oracle: the ascending classes)
+        var want = Float32(c) if unit == 0 else Float32(c - 5)
+        require(classes[c] == want, label + ": class " + String(c) + " " + String(classes[c]))
+    for i in range(m):  # small-loop(oracle: every code)
+        var want = Int32(Int(y[i])) if unit == 0 else Int32(Int(y[i]) + 5)
+        require(codes[i] == want, label + ": code " + String(i) + " " + String(codes[i]) + " expected " + String(want))
+    _ = len(y)  # the target stays alive past the reads
+
+
+def _gnb_plan() raises -> MemberPlan:
+    """GaussianNB() as the naive Bayes member (kind 0) over the host x_prep transport: var_smoothing 1e-9, no
+    blocked statistics, the R3 work region off, priors None (core/naive_bayes_member.mojo NEW words)."""
+    var mode = Int(GLOBAL_NUMERIC_MODE)
+    var route = DeviceRoute(DEVICE_CPU)
+    route.mode = mode
+    route.vendor = 0
+    route.entry = EntryRef(x_prep_transport_host_v1, entry_ref_word(mode, 0, XP_OP_COUNT))
+    route.flags = 0
+    var plan = MemberPlan()
+    plan.route = route
+    plan.family = MEMBER_FAMILY_NAIVE_BAYES
+    plan.kind = 0
+    plan.member = MemberRef(EntryRef(naive_bayes_member_v2, 0), 0)
+    var probe = MemberCall(plan.route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    plan.params = [0.0, 1e-9, 0.0, 0.0, 0.0]
+    return plan^
+
+
+def classifier_case(unit: Int) raises:
+    comptime C = 4
+    var label = String("IterativeImputer estimator=GaussianNB() unit ") + String(unit)
+    var x = List[Float32](length=N * C, fill=0.0)
+    for i in range(N):  # small-loop(fixture: every column the row's label, at most one NaN a row)
+        for j in range(C):  # small-loop(fixture: one row)
+            x[i * C + j] = _nan() if (i + j) % 6 == 0 else Float32(i % 3)
+    if unit == 1:
+        x[1 * C + 0] = 0.5  # row 1 is observed in column 0: a continuous target for its step
+    var request = ii_request(N, C, IMP_MEAN, II_ASCENDING, 10, II_NONE, 0, neg_inf(), pos_inf(), False, False)
+    var runner = HostIterRunner(Int(x.unsafe_ptr()))
+    var fitted = IterImpFitted()
+    var plan = iterimp_prepare(runner, request, fitted)
+    var gnb = _gnb_plan()
+    var mask = member_kind_capabilities(gnb)
+    var two = gnb.copy()
+    two.classes = 2
+    var dtype = member_output_dtype(two, MEMBER_OP_PREDICT, C - 1, 1, MEMBER_I32)
+    var member = IterImpMember(gnb^, (mask & MEMBER_BORROWS_FIT) != 0, False)
+    member.classifier = True
+    member.code_dtype = dtype
+    var fit = IterImpMemberFit()
+    if unit == 1:
+        var raised = String("")
+        try:
+            iterimp_member_rounds(runner, request, plan, fitted, member, fit)
+        except problem:
+            raised = String(problem)
+        iterimp_member_free(member, fit)
+        require(raised == String(II_CONTINUOUS_WORDS), label + ": raised '" + raised + "'")
+        _ = len(x)
+        return
+    iterimp_member_rounds(runner, request, plan, fitted, member, fit)
+    try:
+        require(fit.n_iter == 2, label + ": n_iter_ " + String(fit.n_iter) + " expected 2")
+        require(len(fit.classes) == len(fit.states), label + ": the steps' classes")
+        for s in range(len(fit.classes)):  # small-loop(oracle: the fitted steps)
+            require(len(fit.classes[s]) == 3, label + ": step " + String(s) + " has " + String(len(fit.classes[s]))
+                + " classes")
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
+        for i in range(N * C):  # small-loop(oracle: one result block)
+            var want = Float32((i // C) % 3)
+            require(src[fit.out_offset + i] == want, label + ": cell " + String(i) + " "
+                + String(src[fit.out_offset + i]) + " expected " + String(want))
+    finally:
+        iterimp_member_free(member, fit)
+    _ = len(x)  # X stays alive past every program that read it
+
+
 def test_iterative() raises:
     check_cases("iterative", 3, iterative_case)
+
+
+def test_iterative_single_feature() raises:
+    check_cases("iterative_single_feature", 1, single_feature_case)
+
+
+def test_iterative_empty_kept() raises:
+    check_cases("iterative_empty_kept", 2, empty_kept_case)
+
+
+def test_iterative_class_labels() raises:
+    check_cases("iterative_class_labels", 4, class_labels_case)
+
+
+def test_iterative_classifier() raises:
+    check_cases("iterative_classifier", 2, classifier_case)
 
 
 def test_iterative_indicator() raises:
