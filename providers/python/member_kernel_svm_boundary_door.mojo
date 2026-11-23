@@ -13,8 +13,11 @@ SVR (`_mojolearn_member = (MEMBER_FAMILY_KERNEL_SVM, kind)` on each class).
     (kernel='precomputed' among them since lane mf-adm3), then SVC's
     class-weight tail ('balanced', or a dict's pending table the caller
     fills over its labels: core/member_class_weight.mojo). A class_weight
-    that is neither None, 'balanced' nor an exact dict is not admitted
-    (False: the estimator's own fit refuses it in its words).
+    the estimator refuses (a str other than 'balanced'; since lane
+    mf-split4b also a value neither str nor dict, read before the settings
+    admission) is the INVALID tail: the FIT caller's UNPACK raises the
+    estimator's own words. A str / dict subclass is copied exactly
+    (`member_cw_kind_accepted`).
   * `kernel_svm_member_pack` (PACK): the fitted attributes the estimator's
     own fit writes (bindings/svc_kernel_fit_pack.mojo,
     bindings/svc_kernel_svr_pack.mojo), from the member state's blocks.
@@ -83,18 +86,30 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     # settings they write (`_hp_kernel`, `_hp_C`, ...) never reach the caller's
     # template estimator; PACK writes them into the clone it packs.
     var scratch = py_call(native_loaded_module("builtins").dict, fields)
-    var hp = svm_settings_unpack(model, scratch, classifier, context)
     var nk = svm_keys()
+    # The class_weight is read BEFORE the settings admission (lane
+    # mf-split4b): a value that is neither a str nor a dict (isinstance, as
+    # `svm_settings_unpack` tests it) is the INVALID tail, whose words (the
+    # settings admission's own, `member_cw_invalid_message`) the FIT
+    # caller's UNPACK raises before any fit, as for every other refused
+    # class_weight; the settings admission then reads the scratch copy
+    # without it (it only tests the type there).
+    var class_weight = py_get(scratch, nk[].k_class_weight, PythonObject(None))
+    var wrong_type = (classifier and class_weight is not None
+                      and not Bool(py=py_call(b.isinstance, class_weight, Python.tuple(b.dict, b.str))))
+    if wrong_type:
+        py_setitem(scratch, nk[].k_class_weight, PythonObject(None))
+    var hp = svm_settings_unpack(model, scratch, classifier, context)
     var weighting = 0
-    if classifier:
-        weighting = member_cw_kind_accepted(MEMBER_FAMILY_KERNEL_SVM, model,
-                                            py_get(scratch, nk[].k_class_weight, PythonObject(None)), b)
+    if wrong_type:
+        weighting = MEMBER_CW_INVALID
+    elif classifier:
+        weighting = member_cw_kind_accepted(MEMBER_FAMILY_KERNEL_SVM, model, class_weight, b)
         # A value the estimator's fit door refuses (lane mf-left4): the INVALID
         # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
         # a value the door accepts but the member does not read: not admitted.
         if weighting < 0:
-            if len(member_cw_invalid_message(MEMBER_FAMILY_KERNEL_SVM, model,
-                                             py_get(scratch, nk[].k_class_weight, PythonObject(None)), b)) == 0:
+            if len(member_cw_invalid_message(MEMBER_FAMILY_KERNEL_SVM, model, class_weight, b)) == 0:
                 return False
             weighting = MEMBER_CW_INVALID
     # An explicit HostSVC / HostSVR (its own host-only word, lane mf-cal3b): the host image its own fit

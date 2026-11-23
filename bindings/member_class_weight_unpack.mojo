@@ -138,8 +138,9 @@ def member_cw_invalid_message(family: Int, model: PythonObject, class_weight: Py
     dict); LinearSVC bindings/svc_linear_boundary_unpack.mojo
     `_qn_row_weights` (exact types, `_class_weight_message`); SVC
     bindings/svc_kernel_params_unpack.mojo `svm_weights_unpack` (a str other
-    than 'balanced': any other non-dict is refused by the settings admission
-    at the member's own admit, the fallback rule); the x_linear kinds
+    than 'balanced'; a value neither str nor dict: the settings admission's
+    words, `svm_settings_unpack`, which the member's admit now leaves to this
+    tail, lane mf-split4b); the x_linear kinds
     bindings/x_linear_common_unpack.mojo `xl_class_weights_unpack` (equal to
     'balanced', or isinstance dict; `model` is not read there)."""
     var is_str = Bool(py=py_call(b.isinstance, class_weight, b.str))
@@ -158,6 +159,11 @@ def member_cw_invalid_message(family: Int, model: PythonObject, class_weight: Py
     if family == MEMBER_FAMILY_KERNEL_SVM:
         if is_str and String(class_weight) != "balanced":
             return "mojolearn SVC: class_weight is a dict, 'balanced' or None, got " + family_repr(class_weight)
+        if not is_str and not is_dict:
+            # The settings admission's words (bindings/svc_kernel_params_unpack.mojo
+            # `svm_settings_unpack`: the value's type name), lane mf-split4b.
+            return ("mojolearn SVC: class_weight is a dict, 'balanced' or None, got "
+                    + String(py_type(class_weight).__name__))
         return String("")
     if family == MEMBER_FAMILY_SGD or family == MEMBER_FAMILY_XLINEAR:
         if not Bool(py=class_weight == PythonObject("balanced")) and not is_dict:
