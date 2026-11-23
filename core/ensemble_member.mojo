@@ -324,7 +324,9 @@ comptime META_ADA_TARGET = 7            # the regressor's target check codes (`F
 comptime META_ADA_POISSON = 8           # `.poisson`, `.gamma`, `.inverse_gaussian`; -2: none read)
 comptime META_ADA_GAMMA = 9
 comptime META_ADA_INVERSE_GAUSSIAN = 10
-comptime META_ADA_WORDS = 11
+comptime META_ADA_DT_RANDOM = 11         # 1.0: a DecisionTree splitter='random' base, whose rounds fit its inner
+                                        # extra-trees forest (lane mf-split4; `ada_fit_run`'s tree_base word 1)
+comptime META_ADA_WORDS = 12
 #: THE SEARCH KIND's fitted words (float64, export / import): [best index,
 #: folds, best score, candidates m, train flag, sampler seed], then m x folds test scores
 #: (candidate-major), m means, m deviations, m ranks, and with the train
@@ -2323,7 +2325,9 @@ def _fit_ada(slot: _SlotPtr, call: _CallPtr) raises:
     else:
         plan.member_route = True
         plan.member_plan = base.copy()
-        plan.tree_base = 1 if base.family == MEMBER_FAMILY_TREE else 0
+        # A random-splitter tree's rounds fit its inner extra-trees forest and
+        # step as the tree they are (the door's `kind.startswith("dt_")`).
+        plan.tree_base = 1 if base.family == MEMBER_FAMILY_TREE or words[META_ADA_DT_RANDOM] != 0.0 else 0
         if not classifier:
             plan.target_need = forest_target_need(plan.config)
         # Every round's member predicts the same training X: staged once in

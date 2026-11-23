@@ -88,9 +88,13 @@ from core.member_families import (
     MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE,
 )
 from xtrees.trees_boost_run import _sub_seed, boost_ada_session_choice, boost_check_n_estimators, boost_check_learning_rate
-from bindings.trees_public_forest_door import forest_kind, forest_refresh, forest_config, _report_engine
+from bindings.trees_public_forest_door import (
+    forest_kind, forest_refresh, forest_config, _report_engine, forest_dt_random_inner, forest_dt_random_adopt,
+)
 from bindings.trees_route_boundary_door import trees_route_context
-from providers.python.forest_member_common_boundary_door import forest_member_admit_common, forest_member_state_common
+from providers.python.forest_member_common_boundary_door import (
+    forest_member_admit_common, forest_member_state_common, forest_member_pack_common,
+)
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_kind_capabilities,
     member_resolve_family,
@@ -1969,18 +1973,33 @@ def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: Python
     if py_contains(probe_fields, "random_state"):
         py_setitem(probe_fields, PythonObject("random_state"), PythonObject(_sub_seed(seed, 0)))
     var probe_context = template_plan["context"]
+    # A DecisionTree splitter='random' base (lane mf-split4; the door's
+    # `_ada_member_admit`): its rounds fit the tree's inner one-tree
+    # ExtraTrees forest (`forest_dt_random_inner`), admitted as an
+    # extra-trees member; PACK packs each round into a clone's inner forest
+    # and the clone adopts it (`_ada_pack`), IMPORT reads `_random_inner`.
+    var admitted = probe
+    var dt_random = False
+    if family == MEMBER_FAMILY_TREE:
+        var splitter = py_get(probe_fields, "splitter")
+        if splitter is not None and py_type(splitter) is b.str and String(splitter) == "random":
+            dt_random = True
+            admitted = forest_dt_random_inner(probe, forest_kind(probe, probe_context), probe_context)
+            family = MEMBER_FAMILY_EXTRA_TREES
+            prefix = String("et_")
     var sub = MemberOwner()
     sub.plan.family = family
     sub.plan.kind = 0 if classifier else 1
-    if not forest_member_admit_common(probe, sub.plan.kind, prefix, probe_context, sub, True):
-        return False  # a random-splitter tree, or another kind
+    if not forest_member_admit_common(admitted, sub.plan.kind, prefix, probe_context, sub, True):
+        return False  # another kind
     sub.plan.member = member_resolve_family(family, sub.plan.route)
     sub.published = True
     # The configuration the rounds' checks read (the door's `forest_config`
-    # of the refreshed first member, on this scratch clone).
-    var run = trees_route_context(probe, probe_context)
-    var fk = forest_kind(probe, run)
-    var refreshed = forest_refresh(probe, fk, run)
+    # of the refreshed first member, on this scratch clone; a random-splitter
+    # tree's: its inner forest's, as the door's `_ada_members`).
+    var run = trees_route_context(admitted, probe_context)
+    var fk = forest_kind(admitted, run)
+    var refreshed = forest_refresh(admitted, fk, run)
     var config = forest_config(refreshed, py_item(refreshed, PythonObject("_cfg")), fk, not classifier, run)
     # The class_weight the base's own fit door reads (the door's `_ada_native`
     # / `_ada_members`): ExtraTrees' from its derived configuration,
@@ -2034,6 +2053,7 @@ def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: Python
     words.append(Float64(config.poisson))        # META_ADA_POISSON
     words.append(Float64(config.gamma))          # META_ADA_GAMMA
     words.append(Float64(config.inverse_gaussian))  # META_ADA_INVERSE_GAUSSIAN
+    words.append(1.0 if dt_random else 0.0)      # META_ADA_DT_RANDOM
     if not _tree_cw_words(class_weight, labels, probe_context, b, words):  # META_CW_* after META_ADA_WORDS
         return False
     var nested = _Nested()
@@ -2086,8 +2106,25 @@ def _ada_pack(fields: PythonObject, context: PythonObject, b: PythonObject, plan
     var seed = 0 if state_seed is None else Int(py=state_seed)
     var codes = py_call(b.list, py_call(b.range, PythonObject(k))) if classifier else PythonObject(None)
     var members = Python.list()
+    var tf = py_fields(template)
+    var splitter = py_get(tf, "splitter")
+    var dt_random = (py_type(template) is py_get(context, "trees_dt_classifier" if classifier else "trees_dt_regressor")
+                     and splitter is not None and py_type(splitter) is b.str and String(splitter) == "random")
     for j in range(len(handles)):  # driver-loop: over the kept boosting rounds (one clone and one pack each)
-        var clone = _pack_member(template, context, b, nested[j], handles[j], codes, _sub_seed(seed, j), jobs)
+        var clone: PythonObject
+        if dt_random:
+            # The door's `_ada_member_pack` for a random-splitter tree: the
+            # round packed into the clone's inner forest, which it adopts.
+            clone = prep_estimator_clone(template, context)
+            py_setitem(py_fields(clone), PythonObject("random_state"), PythonObject(_sub_seed(seed, j)))
+            var clone_context = prep_estimator_plan(clone, context)["context"]
+            var inner = forest_dt_random_inner(clone, forest_kind(clone, clone_context), clone_context)
+            if classifier:
+                member_labels_hold(py_fields(inner), codes)
+            forest_member_pack_common(inner, clone_context, b, nested[j], handles[j])
+            forest_dt_random_adopt(clone, inner)
+        else:
+            clone = _pack_member(template, context, b, nested[j], handles[j], codes, _sub_seed(seed, j), jobs)
         _report_engine(clone, context)
         _ = py_call(members.append, clone)
     py_setitem(fields, PythonObject("estimators_"), members)
@@ -2120,7 +2157,10 @@ def _ada_state(fields: PythonObject, context: PythonObject, b: PythonObject, pla
     var ok = False
     try:
         for i in range(len(ests)):  # driver-loop: over the fitted round members (one import each)
-            handles.append(Int64(forest_member_state_common(ests[i], context, base)))
+            # A random-splitter tree's model arrays are its inner forest's
+            # (`forest_dt_random_adopt` kept it as `_random_inner`).
+            var inner = py_get(py_fields(ests[i]), "_random_inner")
+            handles.append(Int64(forest_member_state_common(ests[i] if inner is None else inner, context, base)))
         var block = MemberCall(plan.route, call.state)
         block.block = META_BLOCK_NESTED
         block.x = MemberMatrix(Int(handles.unsafe_ptr()), 1, len(handles), MEMBER_I64)
