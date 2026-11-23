@@ -1,16 +1,16 @@
 diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
-index 44c96a40c..b6ecd974c 100644
+index 753df14b13..1131a1b6eb 100644
 --- a/x_decomp/host.mojo
 +++ b/x_decomp/host.mojo
-@@ -14,6 +14,7 @@ So the bits are the same at every thread count."""
- from std.memory import bitcast
- from std.sys.compile import is_defined
+@@ -37,6 +37,7 @@ from std.sys.compile import is_defined
  
-+from checks.numerics import ftz, identical_mul_add
- from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
- from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
- from decomposition.host.pca_oracle import host_sign_flip
-@@ -225,13 +226,15 @@ struct HostExec(Exec):
+ from decomposition.host.linalg_public import host_eigh, host_qr_r
+ from checks.numerics import ftz
++from checks.numerics import identical_mul_add
+ from core.host_finite_scan import host_all_finite_f32
+ from core.host_parallel import host_parallelize
+ from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+@@ -345,13 +346,15 @@ struct HostExec(Exec):
      def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
          if kind == 0:
              # the cell's arithmetic and order, SIMD across outputs (x_decomp/host_simd.mojo)
