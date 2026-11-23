@@ -3920,6 +3920,114 @@ def gbdt_host_fit_eval(
     )
 
 
+# ---- the score and the partition chunk count at `stat_count` planes,
+# moved here from gbdt_oracle_multiclass.mojo (lane gbdt-cpu-rest-4-cat,
+# 2026-11-23): the multiclass loop and the tree-CTR level driver below
+# both call them ----
+
+
+def _stat_chunks(n_stats: Int) -> Int:
+    """The chunk count of `compute_partition_stats` at `n_stats` planes
+    (`partitions_reduce.mojo`): `(2 * 32 + n_stats - 1) // n_stats`, at
+    least one."""
+    return max((2 * GBDT_PINNED_SM + n_stats - 1) // n_stats, 1)
+
+
+def _cosine_gain_n(
+    hist: HostF32Ptr,
+    hist_cells: Int,
+    stat_count: Int,
+    part_stats: HostF32Ptr,
+    n_live: Int,
+    bin_feature_id: Int,
+    lambda_l2: Float32,
+    multiclass_optimization: Bool,
+    score_std_dev: Float32 = Float32(0.0),
+    level_seed: UInt64 = 0,
+    feature_id: Int = 0,
+) -> Float32:
+    """One bin-feature of `compute_optimal_splits_kernel[COSINE]`
+    (`compute_scores.mojo:140-224`) at `stat_count` planes: the per-class
+    `AddLeaf`s, the running totals, the multiclass optimization terms, the
+    sqrt normalization, per-feature noise, feature weight 1.0. `hist` and
+    `part_stats` are the level's storage by pointer (a task of
+    `_cosine_gains_n` calls this)."""
+    var score = Float32(0.0)
+    var denum_sqr = Float32(1e-10)
+    for i in range(n_live):
+        var leaf_base = i * stat_count * hist_cells
+        var weight_left = max(hist[leaf_base + bin_feature_id], Float32(0.0))
+        var weight_right = ftz(max(part_stats[i * stat_count] - weight_left, Float32(0.0)))
+        var total_sum_left = Float32(0.0)
+        var total_sum_part = Float32(0.0)
+        for stat_id in range(1, stat_count):
+            var sum_left = hist[leaf_base + stat_id * hist_cells + bin_feature_id]
+            var part_stat = part_stats[i * stat_count + stat_id]
+            var sum_right = ftz(part_stat - sum_left)
+            _add_leaf_cosine(sum_left, weight_left, lambda_l2, score, denum_sqr)
+            _add_leaf_cosine(sum_right, weight_right, lambda_l2, score, denum_sqr)
+            total_sum_left = ftz(total_sum_left + sum_left)
+            total_sum_part = ftz(total_sum_part + part_stat)
+        if multiclass_optimization:
+            var total_sum_right = ftz(total_sum_part - total_sum_left)
+            _add_leaf_cosine(-total_sum_left, weight_left, lambda_l2, score, denum_sqr)
+            _add_leaf_cosine(-total_sum_right, weight_right, lambda_l2, score, denum_sqr)
+    var final_score = score
+    var score_before = Float32(0.0)
+    if denum_sqr > Float32(1e-15):
+        final_score = ftz(score / identical_sqrt(denum_sqr))
+    else:
+        final_score = -GBDT_FLOAT32_MAX
+    if score_std_dev != Float32(0.0):
+        var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
+        var draw = next_normal_f(seed)
+        var neg_draw = -draw[0]
+        final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
+        score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
+    return ftz(ftz(final_score - score_before) * Float32(1.0))
+
+
+def _cosine_gains_n(
+    hist: List[Float32],
+    hist_cells: Int,
+    stat_count: Int,
+    part_stats: List[Float32],
+    n_live: Int,
+    lambda_l2: Float32,
+    multiclass_optimization: Bool,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    bf_feature: List[Int],
+) -> List[Float32]:
+    """`compute_optimal_splits_kernel[COSINE]` at `stat_count` planes over
+    every bin-feature of a level: `gains[bf] = _cosine_gain_n(bf)`.
+
+    THE SPLIT (lane gbdt-host-par): the unit is one candidate, the device
+    thread: its leaves in dense order, its planes in order, its own noise
+    draw (a function of the level seed and its feature). No candidate reads
+    another's sums, so the candidates run in `_gbdt_units` contiguous
+    ranges over `candidates x leaves x planes` AddLeaf pairs."""
+    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
+    var units = _gbdt_units(hist_cells, 8 * hist_cells * n_live * stat_count)
+    var chunk = host_predict_chunk(hist_cells, units)
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+    var part_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var feat_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
+    var gains_p = rebind[HostF32Ptr](gains.unsafe_ptr())
+
+    def candidates(unit: Int) {imm chunk, imm hist_cells, imm stat_count, imm n_live, imm lambda_l2, imm multiclass_optimization, imm score_std_dev, imm level_seed, imm hist_p, imm part_p, imm feat_p, imm gains_p}:
+        for bf in range(unit * chunk, min(hist_cells, (unit + 1) * chunk)):
+            gains_p[bf] = _cosine_gain_n(
+                hist_p, hist_cells, stat_count, part_p, n_live, bf,
+                lambda_l2, multiclass_optimization,
+                score_std_dev, level_seed, feat_p[bf],
+            )
+
+    host_parallelize(candidates, units)
+    return gains^
+
+
+
 def _tree_ctr_levels_host(
     mut tc: GbdtTreeCtrHost,
     mut cindexes: List[List[UInt32]],
@@ -3942,6 +4050,11 @@ def _tree_ctr_levels_host(
     mut p_sz: List[Int],
     mut out_features: List[Int],
     mut out_bins: List[Int],
+    # the stats planes (1 + the approx dimension) and MultiClass's pinned-
+    # class terms (lane gbdt-cpu-rest-4-cat, 2026-11-23): `run_tree_ctr_tree`
+    # takes `1 + approx_dim` planes; 2 is every one-output fit
+    stat_count: Int = 2,
+    multiclass_optimization: Bool = False,
 ) raises -> Int:
     """One oblivious tree with tree CTRs (feature combinations) on
     permutation `learn_p`'s index: the host column of `run_tree_ctr_tree`
@@ -3969,11 +4082,17 @@ def _tree_ctr_levels_host(
     Returns the live leaf count; `out_features` / `out_bins` are the
     accepted splits (a combination names its persist slot) and `row_index`,
     `stats`, `p_off`, `p_sz` the final partition. No level is speculated, so
-    there is nothing to roll back."""
+    there is nothing to roll back.
+
+    At `stat_count` above 2 (MultiClass, MultiClassOneVsAll) the level's
+    statements are the multiclass loop's (`gbdt_oracle_multiclass.mojo`):
+    the `_n` histogram blocks, the scan, subtraction and split at every
+    plane, the partition stats at `_stat_chunks(stat_count)` chunks and
+    `_cosine_gains_n`; at 2 they are the one-output loop's, unchanged."""
     var hist_cells = layout.hist_cells
     var max_leaves = 1 << max_depth
     var hist = List[Float32](
-        length=max_leaves * 2 * hist_cells, fill=Float32(0.0)
+        length=max_leaves * stat_count * hist_cells, fill=Float32(0.0)
     )
     var ids_compute = List[Int](length=max_leaves, fill=0)
     var sub_from = List[Int](length=max_leaves, fill=0)
@@ -4000,7 +4119,25 @@ def _tree_ctr_levels_host(
             var total = 0
             for k in range(blk.count()):
                 total += Int(blk.folds[k])
-            if blk.policy == POLICY_BINARY:
+            if blk.policy == POLICY_BINARY and stat_count != 2:
+                _binary_block_n(
+                    blk, block_first_bin, hist_cells, stat_count, compute,
+                    depth, p_off, p_sz, row_index, stats, cindexes[learn_p],
+                    n_rows, fixed_scale, hist,
+                )
+            elif blk.policy == POLICY_HALF_BYTE and stat_count != 2:
+                _half_byte_block_n(
+                    blk, block_first_bin, hist_cells, stat_count, compute,
+                    depth, p_off, p_sz, row_index, stats, cindexes[learn_p],
+                    n_rows, fixed_scale, hist,
+                )
+            elif blk.policy == POLICY_ONE_BYTE and stat_count != 2:
+                _one_byte_block_n(
+                    blk, block_first_bin, hist_cells, stat_count, compute,
+                    p_off, p_sz, row_index, stats, cindexes[learn_p], layout,
+                    n_rows, fixed_scale, hist,
+                )
+            elif blk.policy == POLICY_BINARY:
                 _binary_block(
                     blk, block_first_bin, hist_cells, compute, depth,
                     p_off, p_sz, row_index, stats, cindexes[learn_p], n_rows,
@@ -4021,22 +4158,30 @@ def _tree_ctr_levels_host(
             block_first_bin += total
 
         # `scan_histograms_kernel` over the computed leaves
-        _scan_histograms(hist, hist_cells, 2, compute, layout, n_features)
+        _scan_histograms(hist, hist_cells, stat_count, compute, layout, n_features)
 
         # `substract_histograms_kernel`: the larger sibling, in place
         if planned and half > 0:
-            _subtract_histograms(hist, hist_cells, sub_from, sub_what, half)
+            _subtract_histograms(hist, hist_cells, sub_from, sub_what, half, stat_count)
 
         # `compute_partition_stats` over the live leaves
         var part_stats = _partition_stats_level(
-            stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
+            stats, n_rows, stat_count, _stat_chunks(stat_count), p_off, p_sz,
+            n_live,
         )
 
         # the score and the device winner
-        var gains = _cosine_gains(
-            hist, hist_cells, part_stats, n_live, l2_leaf_reg,
-            score_std_dev, level_seed, bf_feature,
-        )
+        var gains: List[Float32]
+        if stat_count != 2:
+            gains = _cosine_gains_n(
+                hist, hist_cells, stat_count, part_stats, n_live, l2_leaf_reg,
+                multiclass_optimization, score_std_dev, level_seed, bf_feature,
+            )
+        else:
+            gains = _cosine_gains(
+                hist, hist_cells, part_stats, n_live, l2_leaf_reg,
+                score_std_dev, level_seed, bf_feature,
+            )
         var best_bin = _gain_winner(gains, hist_cells)
         var best_gain = -GBDT_FLOAT32_MAX
         if best_bin != GBDT_SENTINEL:
@@ -4080,7 +4225,7 @@ def _tree_ctr_levels_host(
             cindexes[learn_p], Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
             UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
             n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
-            ids_compute, sub_from, sub_what,
+            ids_compute, sub_from, sub_what, stat_count,
         )
         n_live = n_live * 2
         if depth + 1 < max_depth:

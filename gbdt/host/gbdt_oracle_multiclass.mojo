@@ -67,7 +67,6 @@ tools/identity_break.py on the two lanes is the measurement.
 from std.math import exp, fma, isfinite, log
 from gbdt.data.permutation import TRandom
 from gbdt.data.class_weight_body import class_weight_slot, class_weighted
-from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 
 from checks.numerics import (
     ftz,
@@ -126,6 +125,11 @@ from gbdt.host.gbdt_oracle import (
     _nan_token,
     _ns_project_index,
     _sample_tree_folds,
+    # moved to gbdt_oracle (lane gbdt-cpu-rest-4-cat, 2026-11-23): the
+    # tree-CTR level driver scores at `stat_count` planes with them too
+    _cosine_gain_n,
+    _cosine_gains_n,
+    _stat_chunks,
 )
 from gbdt.host.gbdt_oracle_eval import (
     GbdtHostEval,
@@ -172,13 +176,6 @@ struct GbdtHostMultiFit(Movable):
 
     var model: GbdtHostMultiModel
     var eval: GbdtHostEvalFit
-
-
-def _stat_chunks(n_stats: Int) -> Int:
-    """The chunk count of `compute_partition_stats` at `n_stats` planes
-    (`partitions_reduce.mojo`): `(2 * 32 + n_stats - 1) // n_stats`, at
-    least one."""
-    return max((2 * GBDT_PINNED_SM + n_stats - 1) // n_stats, 1)
 
 
 # ===========================================================================
@@ -354,100 +351,6 @@ def _multi_pass(
 # ===========================================================================
 # THE HISTOGRAMS AT `stat_count` PLANES
 # ===========================================================================
-
-
-def _cosine_gain_n(
-    hist: HostF32Ptr,
-    hist_cells: Int,
-    stat_count: Int,
-    part_stats: HostF32Ptr,
-    n_live: Int,
-    bin_feature_id: Int,
-    lambda_l2: Float32,
-    multiclass_optimization: Bool,
-    score_std_dev: Float32 = Float32(0.0),
-    level_seed: UInt64 = 0,
-    feature_id: Int = 0,
-) -> Float32:
-    """One bin-feature of `compute_optimal_splits_kernel[COSINE]`
-    (`compute_scores.mojo:140-224`) at `stat_count` planes: the per-class
-    `AddLeaf`s, the running totals, the multiclass optimization terms, the
-    sqrt normalization, per-feature noise, feature weight 1.0. `hist` and
-    `part_stats` are the level's storage by pointer (a task of
-    `_cosine_gains_n` calls this)."""
-    var score = Float32(0.0)
-    var denum_sqr = Float32(1e-10)
-    for i in range(n_live):
-        var leaf_base = i * stat_count * hist_cells
-        var weight_left = max(hist[leaf_base + bin_feature_id], Float32(0.0))
-        var weight_right = ftz(max(part_stats[i * stat_count] - weight_left, Float32(0.0)))
-        var total_sum_left = Float32(0.0)
-        var total_sum_part = Float32(0.0)
-        for stat_id in range(1, stat_count):
-            var sum_left = hist[leaf_base + stat_id * hist_cells + bin_feature_id]
-            var part_stat = part_stats[i * stat_count + stat_id]
-            var sum_right = ftz(part_stat - sum_left)
-            _add_leaf_cosine(sum_left, weight_left, lambda_l2, score, denum_sqr)
-            _add_leaf_cosine(sum_right, weight_right, lambda_l2, score, denum_sqr)
-            total_sum_left = ftz(total_sum_left + sum_left)
-            total_sum_part = ftz(total_sum_part + part_stat)
-        if multiclass_optimization:
-            var total_sum_right = ftz(total_sum_part - total_sum_left)
-            _add_leaf_cosine(-total_sum_left, weight_left, lambda_l2, score, denum_sqr)
-            _add_leaf_cosine(-total_sum_right, weight_right, lambda_l2, score, denum_sqr)
-    var final_score = score
-    var score_before = Float32(0.0)
-    if denum_sqr > Float32(1e-15):
-        final_score = ftz(score / identical_sqrt(denum_sqr))
-    else:
-        final_score = -GBDT_FLOAT32_MAX
-    if score_std_dev != Float32(0.0):
-        var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
-        var draw = next_normal_f(seed)
-        var neg_draw = -draw[0]
-        final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
-        score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
-    return ftz(ftz(final_score - score_before) * Float32(1.0))
-
-
-def _cosine_gains_n(
-    hist: List[Float32],
-    hist_cells: Int,
-    stat_count: Int,
-    part_stats: List[Float32],
-    n_live: Int,
-    lambda_l2: Float32,
-    multiclass_optimization: Bool,
-    score_std_dev: Float32,
-    level_seed: UInt64,
-    bf_feature: List[Int],
-) -> List[Float32]:
-    """`compute_optimal_splits_kernel[COSINE]` at `stat_count` planes over
-    every bin-feature of a level: `gains[bf] = _cosine_gain_n(bf)`.
-
-    THE SPLIT (lane gbdt-host-par): the unit is one candidate, the device
-    thread: its leaves in dense order, its planes in order, its own noise
-    draw (a function of the level seed and its feature). No candidate reads
-    another's sums, so the candidates run in `_gbdt_units` contiguous
-    ranges over `candidates x leaves x planes` AddLeaf pairs."""
-    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
-    var units = _gbdt_units(hist_cells, 8 * hist_cells * n_live * stat_count)
-    var chunk = host_predict_chunk(hist_cells, units)
-    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
-    var part_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
-    var feat_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
-    var gains_p = rebind[HostF32Ptr](gains.unsafe_ptr())
-
-    def candidates(unit: Int) {imm chunk, imm hist_cells, imm stat_count, imm n_live, imm lambda_l2, imm multiclass_optimization, imm score_std_dev, imm level_seed, imm hist_p, imm part_p, imm feat_p, imm gains_p}:
-        for bf in range(unit * chunk, min(hist_cells, (unit + 1) * chunk)):
-            gains_p[bf] = _cosine_gain_n(
-                hist_p, hist_cells, stat_count, part_p, n_live, bf,
-                lambda_l2, multiclass_optimization,
-                score_std_dev, level_seed, feat_p[bf],
-            )
-
-    host_parallelize(candidates, units)
-    return gains^
 
 
 # ===========================================================================

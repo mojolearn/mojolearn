@@ -1010,49 +1010,92 @@ def gbdt_ctr_host_fit(
     var n_columns = shape.n_columns
     var n_base_columns = shape.n_base_columns
     var ctr_column_count = shape.ctr_column_count
-    var tree_on = len(tree_state) > 0
     var fit = gbdt_host_boost(
         cindexes, est_perm, y, n_rows, n_columns, grid^, shape.layout, params,
         bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
         tree_state, weights, objective, starting_approx,
     )
 
-    # TREE CTRS: the model's columns are the base columns followed by one
-    # column per combination the trees chose (its map, its table, the
-    # borders it won under); the layout's slots do not reach the model, and
-    # the trees' persist-slot splits are renumbered to those columns
-    # (`train`'s own tail, on the flat host model).
-    var combination_ctrs = TCombinationCtrs()
-    if tree_on:
-        var chosen = tree_state.pop()
-        var section = chosen.assemble()
-        var split_offsets = fit.model.tree_split_offsets.copy()
-        chosen.rewrite_splits(
-            split_offsets, fit.model.split_features, section.column_of
-        )
-        var m_folds = List[Int]()
-        var m_one_hot = List[Bool]()
-        var m_borders = List[List[Float32]]()
-        var m_nan = List[Int]()
-        for c in range(n_base_columns):
-            m_folds.append(fit.model.fold_counts[c])
-            m_one_hot.append(one_hot[c])
-            m_borders.append(fit.model.borders[c].copy())
-            m_nan.append(fit.model.nan_treatment[c])
-        for i in range(len(section.borders)):
-            m_folds.append(len(section.borders[i]))
-            m_one_hot.append(False)
-            m_borders.append(section.borders[i].copy())
-            m_nan.append(NAN_TREATMENT_AS_IS)
-        fit.model.fold_counts = m_folds^
-        fit.model.borders = m_borders^
-        fit.model.nan_treatment = m_nan^
-        one_hot = m_one_hot^
-        combination_ctrs = section.ctrs.copy()
+    # TREE CTRS: the model's columns (`gbdt_ctr_host_tail`, one body for
+    # every symmetric categorical fit)
+    var cols = gbdt_ctr_host_tail(
+        tree_state, fit.model.tree_split_offsets, fit.model.split_features,
+        fit.model.fold_counts, fit.model.borders, fit.model.nan_treatment,
+        one_hot, n_base_columns,
+    )
+    # copies, not field moves: the aggregate stays whole (AGENTS.md part 6);
+    # once per fit, a handful of short lists
+    fit.model.split_features = cols.split_features.copy()
+    fit.model.fold_counts = cols.fold_counts.copy()
+    fit.model.borders = cols.borders.copy()
+    fit.model.nan_treatment = cols.nan_treatment.copy()
+    one_hot = cols.one_hot.copy()
+    var combination_ctrs = cols.combination_ctrs.copy()
     return GbdtCtrHostFit(
         fit^, one_hot^, tables^, ctr_column_count, combination_ctrs^
     )
 
+
+@fieldwise_init
+struct GbdtCtrModelColumns(Movable):
+    """`gbdt_ctr_host_tail`'s result: the model's split features and
+    columns after the tree-CTR tail, and the combinations it chose."""
+
+    var split_features: List[Int]
+    var fold_counts: List[Int]
+    var borders: List[List[Float32]]
+    var nan_treatment: List[Int]
+    var one_hot: List[Bool]
+    var combination_ctrs: TCombinationCtrs
+
+
+def gbdt_ctr_host_tail(
+    mut tree_state: List[GbdtTreeCtrHost],
+    tree_split_offsets: List[Int],
+    split_features: List[Int],
+    fold_counts: List[Int],
+    borders: List[List[Float32]],
+    nan_treatment: List[Int],
+    one_hot: List[Bool],
+    n_base_columns: Int,
+) raises -> GbdtCtrModelColumns:
+    """TREE CTRS, after the boosting loop: the model's columns are the base
+    columns followed by one column per combination the trees chose (its
+    map, its table, the borders it won under); the layout's slots do not
+    reach the model, and the trees' persist-slot splits are renumbered to
+    those columns (`train`'s own tail, on the flat host model). No tree-CTR
+    state (`max_ctr_complexity` 1) returns the inputs unchanged and no
+    combinations. Moved out of `gbdt_ctr_host_fit` (lane
+    gbdt-cpu-rest-4-cat, 2026-11-23) so the pointwise-loss and multiclass
+    categorical fits run the same statements; a tree's leaf layout does not
+    reach it, so it serves `dim` values per leaf as well."""
+    var features = split_features.copy()
+    if len(tree_state) == 0:
+        return GbdtCtrModelColumns(
+            features^, fold_counts.copy(), borders.copy(),
+            nan_treatment.copy(), one_hot.copy(), TCombinationCtrs(),
+        )
+    var chosen = tree_state.pop()
+    var section = chosen.assemble()
+    chosen.rewrite_splits(tree_split_offsets, features, section.column_of)
+    var m_folds = List[Int]()
+    var m_one_hot = List[Bool]()
+    var m_borders = List[List[Float32]]()
+    var m_nan = List[Int]()
+    for c in range(n_base_columns):  # driver-loop: over the model's base columns
+        m_folds.append(fold_counts[c])
+        m_one_hot.append(one_hot[c])
+        m_borders.append(borders[c].copy())
+        m_nan.append(nan_treatment[c])
+    for i in range(len(section.borders)):  # driver-loop: over the chosen combinations
+        m_folds.append(len(section.borders[i]))
+        m_one_hot.append(False)
+        m_borders.append(section.borders[i].copy())
+        m_nan.append(NAN_TREATMENT_AS_IS)
+    return GbdtCtrModelColumns(
+        features^, m_folds^, m_borders^, m_nan^, m_one_hot^,
+        section.ctrs.copy(),
+    )
 
 def _ctr_table_records_host(
     keyword: String, f: Int, tab: TCtrValueTable
@@ -1111,10 +1154,15 @@ def gbdt_ctr_host_model_text_of(
     tables: List[TCtrValueTable],
     ctr_column_count: Int,
     combination_ctrs: TCombinationCtrs,
+    # values per leaf (lane gbdt-cpu-rest-4-cat, 2026-11-23): the
+    # multiclass fits' `dim`, bin-major `[leaf * dim + d]`
+    # (`model_text.mojo:601-670`); 1 for every one-output fit
+    dim: Int = 1,
 ) raises -> String:
     """`gbdt_ctr_host_model_text` over the parts, for a fit that does not
     come as a `GbdtCtrHostFit` (the Ordered fit, which adds its `bias`
-    record with `gbdt_text_with_bias`)."""
+    record with `gbdt_text_with_bias`, and the pointwise-loss and
+    multiclass categorical fits)."""
     var n_columns = len(m.fold_counts)
     var table_of_column = List[Int](length=n_columns, fill=-1)
     for i in range(len(tables)):
@@ -1185,10 +1233,13 @@ def gbdt_ctr_host_model_text_of(
         var lo = m.tree_split_offsets[t]
         var depth = m.tree_split_offsets[t + 1] - lo
         var leaf_lo = m.tree_leaf_offsets[t]
-        var n_values = 1 << depth
+        var n_values = (1 << depth) * dim
         if m.tree_leaf_offsets[t + 1] - leaf_lo != n_values:
             raise Error("tree " + String(t) + " has the wrong leaf count")
-        out += String("tree ") + String(t) + " depth " + String(depth) + " dim 1 weights 0\n"
+        out += (
+            String("tree ") + String(t) + " depth " + String(depth) + " dim "
+            + String(dim) + " weights 0\n"
+        )
         for level in range(depth):
             var fid = m.split_features[lo + level]
             var line = (
