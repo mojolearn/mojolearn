@@ -5,13 +5,14 @@ MEMBER-ABI-V2.md; RUN: core/xcluster_member.mojo.
 Published kinds: 0 MiniBatchKMeans, 1 BisectingKMeans, 2 MeanShift,
 4 AffinityPropagation, 5 BayesianGaussianMixture (`_mojolearn_member =
 (25, kind)` on each class). Every other kind answers False here (OPTICS 3:
-the class has no predict), as does a BayesianGaussianMixture with an array
-`mean_prior` or `covariance_prior` or `warm_start=True` (words tied to the
-data or to a previous fit), a MiniBatchKMeans with
-explicit starting centers (an array `init`), a MeanShift with explicit
-`seeds`, an AffinityPropagation with affinity='precomputed' or a per-sample
-preference (words tied to the training rows), and the caller keeps the
-class's own doors. AffinityPropagation reads `affinity_fit_stage`'s
+the class has no predict). Settings whose value is DATA (lane mf-clu6) are
+read once here and travel as the state's data words
+(core/cluster_member_words.mojo): a MiniBatchKMeans array `init`, MeanShift
+`seeds`, an AffinityPropagation per-sample preference (and
+affinity='precomputed', a flag word), a BayesianGaussianMixture array
+`mean_prior` / `covariance_prior` and the warm state a `warm_start=True`
+refit resumes from. Their shape refusals, which need X's feature or row
+count, run in RUN at fit in the door's order. AffinityPropagation reads `affinity_fit_stage`'s
 parameters in its order and packs `affinity_fit`'s attributes. MeanShift's route also holds the binding's centroid-fit
 entry in `route.second` (`meanshift_fit_stage`'s reads: seeds, bandwidth,
 cluster_all, max_iter, bin_seeding, min_bin_freq; its pack: `meanshift_fit`'s
@@ -66,7 +67,10 @@ from core.hostptr import f32_ptr
 from core.kmeans_variants_api import VARIANTS_MODE, KMEANS_VARIANTS_COUNT
 from core.bgmm_native_api import BGMM_NATIVE_COUNT
 from bindings.boundary_read_door import read_int_like, read_float_like, read_bool
-from bindings.mixture_public_native_unpack import _bgmm_connection, _any_f32, bgmm_score_words
+from bindings.mixture_public_native_unpack import _bgmm_connection, _any_f32, _x_finite, _get_or, bgmm_score_words
+from bindings.affinity_preference_boundary_door import affinity_preference_prepare
+from core.affinity_preference_plan import AffinityPreferencePlan
+from core.cluster_member_words import member_words_append_f32
 from mixture.mixture_door_run import bgmm_count_at_least_one, mixture_by_type_shape
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -109,22 +113,46 @@ def _variants_route(model: PythonObject, context: PythonObject, mut owner: Membe
     owner.pins = Python.tuple(binding, connection.provider)
 
 
+def _data_words(array: PythonObject, mut words: List[Float64]) raises:
+    """An admitted float32 C-order 2-D array as data words: rows, columns,
+    then its words packed (one copy)."""
+    var rows = Int(py=array.shape[0])
+    var cols = Int(py=array.shape[1])
+    words.append(Float64(rows))
+    words.append(Float64(cols))
+    member_words_append_f32(words, Int(py=classical_address(array)), rows * cols)
+    _ = array  # the admitted words stay alive through the copy above
+
+
+def _init_admitted(init: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_init_array`'s callback refusal and admission (2-D, float32); its
+    finiteness and shape refusals run in RUN at fit, in its order."""
+    ref cpy = Python().cpython()
+    if cpy.lib.get_function[Int32]("PyCallable_Check")(init._obj_ptr) != 0:
+        raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers or use 'k-means++' or 'random'")
+    return admit_family(init, 2, "init", context).array
+
+
 def _minibatch_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
-    """`minibatch_fit_stage`'s reads, in its order, without X and weights.
-    False for explicit starting centers (the class's own doors)."""
+    """`minibatch_fit_stage`'s reads, in its order, without X and weights;
+    explicit starting centers as data words."""
     var k = Int(py=_int(_attr(model, "n_clusters")))
     if k < 1:
         raise Error("ValueError: n_clusters must be at least 1, got " + String(k))
     var init = _attr(model, "init")
-    if not family_is_str(init):
-        return False
-    if not _one_of(init, "k-means++", "random"):
-        raise Error("init must be 'k-means++', 'random' or an array, got " + family_repr(init))
-    var init_random = _eq(init, PythonObject("random"))
+    var has_init = not family_is_str(init)
+    var init_random = False
+    var start = List[Float64]()
+    if has_init:
+        _data_words(_init_admitted(init, context), start)
+    else:
+        if not _one_of(init, "k-means++", "random"):
+            raise Error("init must be 'k-means++', 'random' or an array, got " + family_repr(init))
+        init_random = _eq(init, PythonObject("random"))
     var n_init_field = _attr(model, "n_init")
     var n_init: Int
     if _eq(n_init_field, PythonObject("auto")):
-        n_init = minibatch_auto_n_init(False, init_random)
+        n_init = minibatch_auto_n_init(has_init, init_random)
     else:
         n_init = Int(py=_int(n_init_field))
     cluster_n_init_positive(n_init)
@@ -141,15 +169,19 @@ def _minibatch_admit(model: PythonObject, context: PythonObject, mut owner: Memb
     var words: List[Float64] = [Float64(_KIND_MINIBATCH), Float64(k), 1.0 if init_random else 0.0,
         Float64(n_init), Float64(max_iter), tolerance, bitcast[DType.float64](Int64(seed)), Float64(batch_size),
         Float64(mni), Float64(init_size), ratio]
+    words.extend(start^)
     owner.plan.params = words^
     return True
 
 
 def _meanshift_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
-    """`meanshift_fit_stage`'s reads, in its order, without X. False for
-    explicit seeds (the class's own doors)."""
-    if _attr(model, "seeds") is not None:
-        return False
+    """`meanshift_fit_stage`'s reads, in its order, without X; explicit
+    seeds as data words (the door's `_f32` admission; its finiteness and
+    feature-count refusals run in RUN at fit)."""
+    var seeds = List[Float64]()
+    var seeds_field = _attr(model, "seeds")
+    if seeds_field is not None:
+        _data_words(admit_family(seeds_field, 2, "seeds", context).array, seeds)
     var bw = Float64(0.0)
     var bandwidth = _attr(model, "bandwidth")
     if bandwidth is not None:
@@ -165,13 +197,16 @@ def _meanshift_admit(model: PythonObject, context: PythonObject, mut owner: Memb
     _variants_route(model, context, owner, True)
     var words: List[Float64] = [Float64(_KIND_MEANSHIFT), bw, 1.0 if cluster_all else 0.0, Float64(max_iter),
         1.0 if bin_seeding else 0.0, Float64(min_bin_freq)]
+    words.extend(seeds^)
     owner.plan.params = words^
     return True
 
 
 def _affinity_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
-    """`affinity_fit_stage`'s reads, in its order, without X. False for
-    affinity='precomputed' or a per-sample preference."""
+    """`affinity_fit_stage`'s reads, in its order, without X;
+    affinity='precomputed' as a flag word and a per-sample preference as
+    data words (`affinity_preference_prepare`, read once; the square-matrix
+    and one-per-sample refusals run in RUN at fit)."""
     var affinity = _attr(model, "affinity")
     if not _one_of(affinity, "euclidean", "precomputed"):
         raise Error("affinity must be 'euclidean' or 'precomputed', got " + family_repr(affinity))
@@ -180,17 +215,19 @@ def _affinity_admit(model: PythonObject, context: PythonObject, mut owner: Membe
         raise Error("damping must be in [0.5, 1), got " + family_str(damping_field))
     affinity_iterations_positive(Int(py=_int(_attr(model, "max_iter"))))
     affinity_iterations_positive(Int(py=_int(_attr(model, "convergence_iter"))))
-    if _eq(affinity, PythonObject("precomputed")):
-        return False
+    var precomputed = _eq(affinity, PythonObject("precomputed"))
     var mode = 0
     var scalar = Float64(0.0)
+    var per_sample = AffinityPreferencePlan()
     var preference = _attr(model, "preference")
     if preference is not None:
         var builtins = native_loaded_module("builtins")
-        if not family_isinstance(preference, Python.tuple(builtins.int, builtins.float)):
-            return False
-        mode = 1
-        scalar = Float64(py=_float(preference))
+        if family_isinstance(preference, Python.tuple(builtins.int, builtins.float)):
+            mode = 1
+            scalar = Float64(py=_float(preference))
+        else:
+            per_sample = affinity_preference_prepare(preference, context)
+            mode = 2
     var max_iter = Int(py=_int(_attr(model, "max_iter")))
     var convergence = Int(py=_int(_attr(model, "convergence_iter")))
     var seed = _seed(_attr(model, "random_state"))
@@ -198,6 +235,12 @@ def _affinity_admit(model: PythonObject, context: PythonObject, mut owner: Membe
     _variants_route(model, context, owner, True)
     var words: List[Float64] = [Float64(_KIND_AFFINITY), damping, Float64(max_iter), Float64(convergence),
         bitcast[DType.float64](Int64(seed)), Float64(mode), scalar]
+    if precomputed or mode == 2:
+        words.append(1.0 if precomputed else 0.0)
+        var span = per_sample.span()
+        words.append(Float64(span.count))
+        member_words_append_f32(words, span.address, span.count)
+    _ = per_sample^  # the preference words stay alive through the copy above
     owner.plan.params = words^
     return True
 
@@ -223,8 +266,9 @@ def _choice(value: PythonObject, names: List[String], what: String) raises -> In
 
 def _bgmm_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """`bgmm_fit_stage`'s reads and refusals, in its order, without X (the
-    rows-cover refusal runs in RUN at fit). False for an array mean_prior or
-    covariance_prior and for warm_start=True (the class's own doors)."""
+    rows-cover, prior-shape and warm-state feature-count checks run in RUN
+    at fit). An array mean_prior or covariance_prior and the warm state of
+    a `warm_start=True` refit are data words (lane mf-clu6)."""
     var ctypes: List[String] = ["full", "tied", "diag", "spherical"]
     var inits: List[String] = ["kmeans", "random", "k-means++", "random_from_data"]
     var ct = _choice(_attr(model, "covariance_type"), ctypes, "covariance_type")
@@ -237,10 +281,7 @@ def _bgmm_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwn
     var k = read_int_like(_attr(model, "n_components"))
     bgmm_count_at_least_one(read_int_like(_attr(model, "n_init")))
     bgmm_count_at_least_one(read_int_like(_attr(model, "max_iter")))
-    if _attr(model, "mean_prior") is not None or _attr(model, "covariance_prior") is not None:
-        return False
-    if read_bool(_attr(model, "warm_start")):
-        return False
+    var data = _bgmm_data(model, k, ct, context)
     var wcp = _attr(model, "weight_concentration_prior")
     var mpp = _attr(model, "mean_precision_prior")
     var dfp = _attr(model, "degrees_of_freedom_prior")
@@ -263,8 +304,79 @@ def _bgmm_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwn
     var words: List[Float64] = [Float64(_KIND_BGMM), Float64(k), Float64(ct), Float64(init_code),
         1.0 if process else 0.0, prior_weight, prior_mean_precision, prior_freedom, reg_covar, tol,
         Float64(max_iter), Float64(n_init), bitcast[DType.float64](Int64(seed))]
+    words.extend(data^)
     owner.plan.params = words^
     return True
+
+
+def _bgmm_data(model: PythonObject, k: Int, ct: Int, context: PythonObject) raises -> List[Float64]:
+    """The data words of a BayesianGaussianMixture (core/xcluster_member.mojo
+    kind 5, words 13 ..): the door's admissions of `mean_prior` (`_any_f32`)
+    and `covariance_prior` (`_x_finite` for full / tied, `_any_f32` for diag,
+    a float for spherical), and the warm state `bgmm_fit_stage` resumes
+    from (`_warm` with the same n_components and covariance_type; its
+    feature count is checked at fit). Empty when none is present."""
+    var words = List[Float64]()
+    var mean = PythonObject(None)
+    var mean_source = _attr(model, "mean_prior")
+    if mean_source is not None:
+        mean = _any_f32(mean_source, "mean_prior", context)
+    var cov = PythonObject(None)
+    var cov_mode = 0
+    var cov_rows = 0
+    var cov_cols = 0
+    var spherical = List[Float32]()
+    var cov_source = _attr(model, "covariance_prior")
+    if cov_source is not None:
+        if ct == 0 or ct == 1:
+            cov = _x_finite(cov_source, "covariance_prior", context)
+            cov_mode = 1
+            cov_rows = Int(py=cov.shape[0])
+            cov_cols = Int(py=cov.shape[1])
+        elif ct == 2:
+            cov = _any_f32(cov_source, "covariance_prior", context)
+            cov_mode = 2
+            cov_rows = Int(py=cov.size)
+            cov_cols = 1
+        else:
+            spherical.append(Float32(read_float_like(cov_source)))
+            cov_mode = 3
+            cov_rows = 1
+            cov_cols = 1
+    var warm = PythonObject(None)
+    var warm_d = 0
+    var lower = 0.0
+    if read_bool(_attr(model, "warm_start")):
+        var prev = _get_or(model, "_warm", PythonObject(None))
+        if prev is not None:
+            var operator = native_loaded_module("operator")
+            var key = prev[0]
+            if (Bool(py=py_call(operator.eq, key[0], PythonObject(k)))
+                    and Bool(py=py_call(operator.eq, key[2], _attr(model, "covariance_type")))):
+                warm = _any_f32(prev[1], "aux", context)
+                warm_d = Int(py=key[1])
+                lower = read_float_like(_get_or(model, "lower_bound_", PythonObject(0.0)))
+    if mean is None and cov_mode == 0 and warm is None:
+        return words^
+    var mean_size = -1 if mean is None else Int(py=mean.size)
+    var warm_size = 0 if warm is None else Int(py=warm.size)
+    var head: List[Float64] = [Float64(mean_size), Float64(cov_mode), Float64(cov_rows), Float64(cov_cols),
+        0.0 if warm is None else 1.0, Float64(warm_d), lower, Float64(warm_size)]
+    words = head^
+    if mean_size > 0:
+        member_words_append_f32(words, Int(py=classical_address(mean)), mean_size)
+    if cov_mode == 3:
+        member_words_append_f32(words, Int(spherical.unsafe_ptr()), 1)
+    elif cov_mode > 0:
+        member_words_append_f32(words, Int(py=classical_address(cov)), cov_rows * cov_cols)
+    if warm_size > 0:
+        member_words_append_f32(words, Int(py=classical_address(warm)), warm_size)
+    # the admitted words stay alive through the copies above
+    _ = mean
+    _ = cov
+    _ = warm
+    _ = len(spherical)
+    return words^
 
 
 def _bisect_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
@@ -477,8 +589,13 @@ def xcluster_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
         _set(model, "affinity_matrix_", matrix)
         _set(model, "message_diag_", messages)
         _set(model, "n_iter_", PythonObject(ap_iterations))
-        _set(model, "n_features_in_", PythonObject(ap_d))
-        _set(model, "cluster_centers_", ap_centers)
+        # affinity='precomputed' (data word 7, lane mf-clu6): X was the n x n
+        # similarity matrix, so the feature count is the row count and the
+        # class publishes no centers (`affinity_fit`).
+        var ap_precomputed = len(plan.params) > 7 and plan.params[7] != 0.0
+        _set(model, "n_features_in_", PythonObject(Int(py=ap_labels.shape[0]) if ap_precomputed else ap_d))
+        if not ap_precomputed:
+            _set(model, "cluster_centers_", ap_centers)
         return
     if kind == _KIND_MEANSHIFT:
         _export(plan, call, MEMBER_BLOCK_FAMILY)
@@ -619,6 +736,10 @@ def xcluster_member_state(model: PythonObject, fields: PythonObject, context: Py
     classical_connect_numpy(context)
     if kind == _KIND_BGMM:
         return _bgmm_state(fields, context, plan)
+    if kind == _KIND_AFFINITY and len(plan.params) > 7 and plan.params[7] != 0.0:
+        # A precomputed fit has no centers to predict from: scikit-learn's
+        # own refusal (sklearn/cluster/_affinity_propagation.py `predict`).
+        raise Error("Predict method is not supported when affinity='precomputed'.")
     var source = py_get(fields, PythonObject("cluster_centers_"), PythonObject(None))
     if source is None:
         raise Error("NotFittedError: this member is not fitted yet")

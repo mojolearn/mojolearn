@@ -21,9 +21,10 @@ Kinds (MEMBER_OP_NEW word [0]): 0 MiniBatchKMeans, 1 BisectingKMeans,
 OPTICS (the class has no predict: not a member) is reserved and refused.
 
 MEMBER_OP_NEW parameters (Float64 words):
-  kind 0 MiniBatchKMeans (11 words): [0] 0, [1] n_clusters, [2] init
-  (0 'k-means++', 1 'random'; explicit starting centers are not a word and
-  the class keeps its own doors for them), [3] n_init ('auto' resolved by
+  kind 0 MiniBatchKMeans (11 words, 13 + data with an array init): [0] 0,
+  [1] n_clusters, [2] init (0 'k-means++', 1 'random'; with explicit
+  starting centers 0 and the centers follow as data: [11] rows, [12]
+  columns, [13..] their float32 words), [3] n_init ('auto' resolved by
   the caller's UNPACK with the estimator's own rule), [4] max_iter, [5] tol,
   [6] random_state as int64 BITS (as kind 1), [7] batch_size,
   [8] max_no_improvement (-1 for None), [9] init_size (0 for None),
@@ -35,14 +36,16 @@ MEMBER_OP_NEW parameters (Float64 words):
   [7] bisecting_strategy (0 'biggest_inertia', 1 'largest_cluster').
   kind 2 MeanShift (6 words): [0] 2, [1] bandwidth (0 for None: the entry
   estimates it), [2] cluster_all (0/1), [3] max_iter, [4] bin_seeding (0/1),
-  [5] min_bin_freq. Explicit seeds are not words: the class keeps its own
-  doors for them. MeanShift takes no sample weights and has no transform or
+  [5] min_bin_freq; explicit seeds follow as data: [6] rows, [7] columns,
+  [8..] their float32 words. MeanShift takes no sample weights and has no transform or
   score (refused in words).
   kind 4 AffinityPropagation (7 words): [0] 4, [1] damping, [2] max_iter,
   [3] convergence_iter, [4] random_state as int64 BITS, [5] preference mode
-  (0 the median similarity, 1 a scalar), [6] the scalar preference. A
-  per-sample preference and affinity='precomputed' are not members (their
-  words are tied to the training rows): the class keeps its own doors. No
+  (0 the median similarity, 1 a scalar, 2 one per sample), [6] the scalar
+  preference; 9 + data words when affinity='precomputed' or the preference
+  is per sample: [7] precomputed (0/1), [8] the per-sample preference count
+  (0 none), [9..] its float32 words. A precomputed fit reads X as the
+  n x n similarity matrix and its predict is scikit-learn's refusal. No
   sample weights, no transform or score (refused in words). Predict writes
   -1 for every row when the fit found no exemplar, as the class does.
   kind 5 BayesianGaussianMixture (13 words): [0] 5, [1] n_components,
@@ -53,8 +56,13 @@ MEMBER_OP_NEW parameters (Float64 words):
   [5] weight_concentration_prior (-1 for None), [6] mean_precision_prior
   (-1 for None), [7] degrees_of_freedom_prior (-1 for None), [8] reg_covar,
   [9] tol, [10] max_iter, [11] n_init, [12] random_state as int64 BITS (the
-  estimator's own seed rule). An array mean_prior or covariance_prior and
-  warm_start=True are not words: the class keeps its own doors for them.
+  estimator's own seed rule). 21 + data words when a prior is an array or a
+  warm state is held: [13] mean_prior size (-1 None), [14] covariance prior
+  mode (0 None, 1 full/tied d x d, 2 diag d, 3 spherical scalar), [15] its
+  rows, [16] its columns, [17] warm (1: warm_start with a previous state of
+  the same n_components and covariance_type), [18] that state's feature
+  count, [19] its lower_bound_, [20] its word count; then the mean prior,
+  the covariance prior and the warm state, each packed from a fresh word.
   No sample weights, no transform (refused in words). Predict writes the
   first largest log responsibility per row (int32), predict_proba the
   responsibilities (float32 rows x n_components), score_samples the
@@ -141,6 +149,10 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_XCLUSTER
+from core.cluster_member_words import member_words_f32_slots
+from core.host_finite_scan import host_all_finite_f32
+from cluster.cluster_fit_door_run import meanshift_seed_features, affinity_similarity_square, affinity_preference_rows
+from mixture.mixture_door_run import mixture_mean_prior_size, mixture_square_prior_refused, mixture_diag_prior_size
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -286,6 +298,46 @@ def _fixed_k(kind: Int) -> Bool:
     return kind == _KIND_MINIBATCH or kind == _KIND_BISECT
 
 
+comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime _MB_DATA = 13
+comptime _MS_DATA = 8
+comptime _AP_DATA = 9
+comptime _BG_DATA = 21
+
+
+def _data(slot: _Slot, at: Int) -> _F32P:
+    """The float32 data packed from parameter word `at` of the state."""
+    return _F32P(unsafe_from_address=Int(slot[].words.unsafe_ptr()) + 8 * at)
+
+
+def _bgmm_offsets(w: _Words) -> List[Int]:
+    """The first words of the mean prior, the covariance prior and the warm
+    state of a BayesianGaussianMixture's data words, and the total."""
+    var mean = max(Int(w[13]), 0)
+    var cov = Int(w[15]) * Int(w[16]) if Int(w[14]) > 0 else 0
+    var at_cov = _BG_DATA + member_words_f32_slots(mean)
+    var at_warm = at_cov + member_words_f32_slots(cov)
+    var offsets: List[Int] = [_BG_DATA, at_cov, at_warm, at_warm + member_words_f32_slots(Int(w[20]))]
+    return offsets^
+
+
+def _word_count(kind: Int, w: _Words, given: Int) raises -> Int:
+    """The NEW word count of a published kind for these words: its scalar
+    words, or (lane mf-clu6) those plus its data words."""
+    var base = _param_count(kind)
+    if given <= base:
+        return base
+    if kind == _KIND_MINIBATCH and given >= _MB_DATA:
+        return _MB_DATA + member_words_f32_slots(Int(w[11]) * Int(w[12]))
+    if kind == _KIND_MEANSHIFT and given >= _MS_DATA:
+        return _MS_DATA + member_words_f32_slots(Int(w[6]) * Int(w[7]))
+    if kind == _KIND_AFFINITY and given >= _AP_DATA:
+        return _AP_DATA + member_words_f32_slots(Int(w[8]))
+    if kind == _KIND_BGMM and given >= _BG_DATA:
+        return _bgmm_offsets(w)[3]
+    raise Error("member ABI: a " + _name(kind) + " member's data words are incomplete")
+
+
 def _slot_address(index: Int) raises -> Int:
     # Under the store's lock. A chunk's buffer is allocated once and never
     # grows, so the address stays valid after the lock is released.
@@ -312,9 +364,9 @@ def _mint(words: _Words, count: Int) raises -> Int:
         slot[].generation += 1
         slot[].live = True
         slot[].kind = Int(words[0])
-        slot[].words = List[Float64](length=count, fill=0.0)
-        for i in range(count):  # driver-loop: the state's parameter words
-            slot[].words[i] = words[i]
+        # One copy: the words may carry a data block (lane mf-clu6).
+        slot[].words = List[Float64](unsafe_uninit_length=count)
+        unsafe_memcpy(dest=slot[].words.unsafe_ptr(), src=words, count=count)
         slot[].clear()
         slot[].handle = -1
         return slot[].generation * _INDEX_SPAN + index + 1
@@ -430,14 +482,35 @@ def _minibatch_fit(slot: _Slot, call: _Call) raises:
     var k = Int(w[1])
     if k > rows:
         raise Error("mojolearn: n_clusters=" + String(k) + " exceeds n_samples=" + String(rows))
-    # No explicit starting centers (admit refused them), so the entry's
-    # auxiliary words are the weights alone: the caller's span, borrowed.
     var weights = _fit_weights(call, kind, rows)
+    # Explicit starting centers (lane mf-clu6): the door's refusals in its
+    # order (bindings/cluster_fit_public_native_unpack.mojo `_init_array`:
+    # a NaN or an infinity, then the shape), then the entry's auxiliary words
+    # are the centers and the weights end to end, as the door lays them out
+    # (`VariantsAuxiliaryPins`); without them, the caller's weight span,
+    # borrowed.
+    var has_init = len(slot[].words) > _param_count(kind)
+    var aux = List[Float32]()
+    var auxiliary = weights
+    if has_init:
+        var start_rows = Int(w[11])
+        var start_cols = Int(w[12])
+        if not host_all_finite_f32(_data(slot, _MB_DATA), start_rows * start_cols):
+            raise Error("mojolearn: init contains NaN or infinity")
+        if start_rows != k or start_cols != cols:
+            raise Error("The shape of the initial centers (" + String(start_rows) + ", " + String(start_cols)
+                + ") does not match the number of clusters " + String(k) + " and features " + String(cols) + ".")
+        aux = List[Float32](unsafe_uninit_length=k * cols + weights.count)
+        unsafe_memcpy(dest=aux.unsafe_ptr(), src=_data(slot, _MB_DATA), count=k * cols)
+        if weights.count > 0:
+            unsafe_memcpy(dest=aux.unsafe_ptr() + k * cols, src=_F32P(unsafe_from_address=weights.address),
+                count=weights.count)
+        auxiliary = VariantsSpan(Int(aux.unsafe_ptr()), len(aux))
     var output = _fit_output(call, kind, rows, k)
     _release_resident(slot, call)
     slot[].clear()
-    var request = MiniBatchFitRequest(VariantsSpan(call[].x.data, rows * cols), weights, rows, cols, k,
-        Int(w[4]), Int(w[7]), Int(w[8]), Int(w[9]), Int(w[3]), False, Int(bitcast[DType.int64](w[6])),
+    var request = MiniBatchFitRequest(VariantsSpan(call[].x.data, rows * cols), auxiliary, rows, cols, k,
+        Int(w[4]), Int(w[7]), Int(w[8]), Int(w[9]), Int(w[3]), has_init, Int(bitcast[DType.int64](w[6])),
         w[2] != 0.0, weights.count > 0, (call[].route.flags & VARIANTS_CAP_DEVSCAN) != 0, w[5], w[10])
     var result = VariantsResultSlot()
     try:
@@ -446,6 +519,7 @@ def _minibatch_fit(slot: _Slot, call: _Call) raises:
         if String(error).find("contains NaN or infinity") >= 0:
             raise Error("mojolearn: X contains NaN or infinity")
         raise error
+    _ = len(aux)  # the auxiliary words outlive the entry
     swap(slot[].centers, result.storage[0].centers)
     swap(slot[].counts, result.storage[0].counts)
     swap(slot[].labels, result.storage[0].labels)
@@ -473,9 +547,20 @@ def _meanshift_fit(slot: _Slot, call: _Call) raises:
     var rows = call[].x.rows
     var cols = call[].x.cols
     var w = slot[].words.unsafe_ptr()
+    # Explicit seeds (lane mf-clu6): the door's refusals in its order
+    # (`meanshift_fit_stage`: a NaN or an infinity, then the feature count).
+    var seeds = VariantsSpan(0, 0)
+    var n_seeds = 0
+    if len(slot[].words) > _param_count(kind):
+        n_seeds = Int(w[6])
+        var seed_cols = Int(w[7])
+        if not host_all_finite_f32(_data(slot, _MS_DATA), n_seeds * seed_cols):
+            raise Error("mojolearn: seeds contains NaN or infinity")
+        meanshift_seed_features(seed_cols, cols)
+        seeds = VariantsSpan(Int(_data(slot, _MS_DATA)), n_seeds * seed_cols)
     _release_resident(slot, call)
     slot[].clear()
-    var request = MeanShiftFitRequest(VariantsSpan(call[].x.data, rows * cols), VariantsSpan(0, 0), rows, cols, 0,
+    var request = MeanShiftFitRequest(VariantsSpan(call[].x.data, rows * cols), seeds, rows, cols, n_seeds,
         w[2] != 0.0, Int(w[3]), w[4] != 0.0, Int(w[5]), w[1])
     var result = CentroidFitResultSlot()
     CentroidFitDriver(call[].route.second.call).meanshift(request, result)
@@ -504,10 +589,19 @@ def _affinity_fit(slot: _Slot, call: _Call) raises:
     var rows = call[].x.rows
     var cols = call[].x.cols
     var w = slot[].words.unsafe_ptr()
+    # affinity='precomputed' and a per-sample preference (lane mf-clu6): the
+    # door's refusals in its order (`affinity_fit_stage`: the square
+    # similarity matrix, then one preference per sample).
+    var precomputed = _affinity_precomputed(slot)
+    affinity_similarity_square(precomputed, rows, cols)
+    var preference = VariantsSpan(0, 0)
+    if Int(w[5]) == 2:
+        affinity_preference_rows(Int(w[8]), rows)
+        preference = VariantsSpan(Int(_data(slot, _AP_DATA)), Int(w[8]))
     _release_resident(slot, call)
     slot[].clear()
-    var request = AffinityFitRequest(VariantsSpan(call[].x.data, rows * cols), VariantsSpan(0, 0), rows, cols,
-        False, Int(w[5]), Int(w[2]), Int(w[3]), Int(bitcast[DType.int64](w[4])), w[1], w[6])
+    var request = AffinityFitRequest(VariantsSpan(call[].x.data, rows * cols), preference, rows, cols,
+        precomputed, Int(w[5]), Int(w[2]), Int(w[3]), Int(bitcast[DType.int64](w[4])), w[1], w[6])
     var result = CentroidFitResultSlot()
     CentroidFitDriver(call[].route.second.call).affinity(request, result)
     swap(slot[].centers, result.storage[0].centers)
@@ -522,8 +616,16 @@ def _affinity_fit(slot: _Slot, call: _Call) raises:
     _fit_done(slot, call, output, rows)
 
 
+def _affinity_precomputed(slot: _Slot) -> Bool:
+    return len(slot[].words) > _param_count(_KIND_AFFINITY) and slot[].words[7] != 0.0
+
+
 def _affinity_predict(slot: _Slot, call: _Call) raises:
-    """Nearest exemplar; every row -1 when the fit found none."""
+    """Nearest exemplar; every row -1 when the fit found none. A
+    precomputed fit has no centers: scikit-learn's own refusal
+    (sklearn/cluster/_affinity_propagation.py `AffinityPropagation.predict`)."""
+    if _affinity_precomputed(slot):
+        raise Error("Predict method is not supported when affinity='precomputed'.")
     if slot[].fitted and len(slot[].centers) == 0:
         var rows = _query_rows(slot, call)
         _destination(call, rows, 1, MEMBER_I32, "the label buffer")
@@ -564,7 +666,11 @@ def _bgmm_fit(slot: _Slot, call: _Call) raises:
     """ENTRY_BGMM on the borrowed X: the words `bgmm_fit_stage` reads, laid
     out as `bgmm_entry_ints` / `bgmm_entry_floats` (mixture/mixture_door_run.mojo)
     lay them out, with no mean or covariance prior, no warm state and no
-    plain-mode init words (the admit refused those instances)."""
+    plain-mode init words; the array priors and a held warm state (lane
+    mf-clu6) are the state's data words, refused and laid out in the
+    door's order (bindings/mixture_public_native_unpack.mojo
+    `bgmm_fit_stage`: the mean prior's size, the covariance prior's shape,
+    then the warm state when its feature count is X's)."""
     var kind = slot[].kind
     _whole_x(call, kind)
     if call[].weights.rows > 0:
@@ -582,14 +688,48 @@ def _bgmm_fit(slot: _Slot, call: _Call) raises:
     if k < 1 or rows < k:
         raise Error("Expected n_samples >= n_components but got n_components = " + String(k)
             + ", n_samples = " + String(rows))
+    var mean_prior = False
+    var cov_mode = 0
+    var warm = False
+    var lower = 0.0
+    var aux = List[Float32]()
+    if len(slot[].words) > _param_count(kind):
+        var at = _bgmm_offsets(_Words(unsafe_from_address=Int(w)))
+        var mean_size = Int(w[13])
+        cov_mode = Int(w[14])
+        var cov_rows = Int(w[15])
+        var cov_cols = Int(w[16])
+        mean_prior = mean_size >= 0
+        if mean_prior:
+            mixture_mean_prior_size(mean_size, cols)
+        if cov_mode == 1 and mixture_square_prior_refused(cov_rows, cov_cols, cols):
+            raise Error("The parameter '" + (String("tied") if Int(w[2]) == 1 else String("full")) + " covariance prior' should"
+                + " have the shape of (" + String(cols) + ", " + String(cols) + ")")
+        if cov_mode == 2:
+            mixture_diag_prior_size(cov_rows * cov_cols, cols)
+        warm = w[17] != 0.0 and Int(w[18]) == cols
+        if warm:
+            lower = w[19]
+        var mean_count = max(mean_size, 0)
+        var cov_count = cov_rows * cov_cols if cov_mode > 0 else 0
+        var warm_count = Int(w[20]) if warm else 0
+        aux = List[Float32](unsafe_uninit_length=mean_count + cov_count + warm_count)
+        if mean_count > 0:
+            unsafe_memcpy(dest=aux.unsafe_ptr(), src=_data(slot, at[0]), count=mean_count)
+        if cov_count > 0:
+            unsafe_memcpy(dest=aux.unsafe_ptr() + mean_count, src=_data(slot, at[1]), count=cov_count)
+        if warm_count > 0:
+            unsafe_memcpy(dest=aux.unsafe_ptr() + mean_count + cov_count, src=_data(slot, at[2]), count=warm_count)
     slot[].clear()
     # ORDER MATCHES x_cluster/entries.mojo::bgmm_entry (ip, then fp).
     var ints: List[Int] = [rows, cols, k, 1 if w[4] != 0.0 else 0, Int(w[10]), Int(w[11]), Int(w[3]),
-        Int(bitcast[DType.int64](w[12])), 0, 0, Int(w[2]), 0, 0, 0, 0, 0]
-    var floats: List[Float64] = [w[5], w[6], w[7], w[8], w[9], 0.0]
-    var request = BgmmFitRequest(VariantsSpan(call[].x.data, rows * cols), VariantsSpan(0, 0), ints^, floats^)
+        Int(bitcast[DType.int64](w[12])), 1 if mean_prior else 0, cov_mode, Int(w[2]), 1 if warm else 0, 0, 0, 0, 0]
+    var floats: List[Float64] = [w[5], w[6], w[7], w[8], w[9], lower]
+    var aux_span = VariantsSpan(Int(aux.unsafe_ptr()), len(aux)) if len(aux) > 0 else VariantsSpan(0, 0)
+    var request = BgmmFitRequest(VariantsSpan(call[].x.data, rows * cols), aux_span, ints^, floats^)
     var result = BgmmResultSlot()
     driver.fit(request, result)
+    _ = len(aux)  # the prior and warm words outlive the entry
     if len(result.storage[0].f) < _BGMM_BLOCKS or len(result.storage[0].i) < 1:
         raise Error("member ABI: the BGMM entry returned fewer blocks than bgmm_entry documents")
     # The entry's result lists become the state's blocks (no copy).
@@ -978,7 +1118,7 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
             raise Error("member ABI: an x_cluster member's first parameter word is its kind")
         var words = _Words(unsafe_from_address=call[].params)
         var kind = Int(words[0])
-        var count = _param_count(kind)
+        var count = _word_count(kind, words, call[].param_count)
         if call[].param_count != count:
             raise Error("member ABI: a " + _name(kind) + " member takes " + String(count) + " parameter words")
         if _fixed_k(kind) and words[1] < 1.0:
