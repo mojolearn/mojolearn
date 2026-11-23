@@ -2992,11 +2992,13 @@ struct _CalUnits(Movable):
     meta-estimator base whose META admit keeps its door (since lane
     mf-meta3b Voting, Stacking, OneVsRest, CalibratedClassifierCV and
     Bagging bases are META members, since lane mf-meta3c the batched Bagging
-    route and metas nested at any depth too; still the door's: a Calibrated
-    base with a non-int cv or a DeviceRows base, a Stacking base with a
-    splitter other than our KFold / StratifiedKFold (lane mf-split4), a
-    Bagging whose tree has a class_weight on a configuration that never takes
-    the batched route), a configuration its family's
+    route and metas nested at any depth too; since lane mf-split4b a
+    Calibrated base's index-list or KFold / StratifiedKFold cv, a Bagging
+    tree's class_weight on the per-member route and an AdaBoost base with
+    sample weights too, and a user's own splitter object is refused at the
+    admission; still the door's: a Calibrated base with a DeviceRows base, a
+    Stacking or Calibrated base whose cv is another of our splitters
+    (ShuffleSplit, RepeatedKFold, ...)), a configuration its family's
     admit leaves to the estimator's door (a class_weight that is neither
     None, 'balanced' nor an exact dict, which that door refuses in its
     words; a GP kernel the member cannot address, ...), or a member kind
