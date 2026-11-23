@@ -61,7 +61,7 @@ The 22 cases of `_arm_cases.py` run once per arm in subprocesses split across ev
 | RFE over LogisticRegression (binary, multiclass), tree, forest; `estimator_.classes_` | case `rfe_members` | ma-callers (rounds 2, 4) |
 | Kernel / Permutation explainers over Ridge, LinearRegression, forest | case `explainers_over_members` | ma-callers (round 2) |
 | NaN in X and in y, fit and predict: the estimator's own refusal words, every meta-estimator, cross_val_score, cross_val_predict, GridSearchCV refit | case `nan_refusals` | ma-callers (rounds 3, 4) |
-| a cv fold missing a class: Stacking (width error), Calibrated | case `missing_class_folds` | ma-callers (round 3) |
+| a cv fold missing a class: Stacking and Calibrated admit it (as scikit-learn) | case `missing_class_folds` | ma-callers (round 3) |
 | n_jobs=0 -> ValueError | `test_proving_model_selection.py::test_n_jobs_zero_is_refused` | ma-callers (round 2) |
 | a failing candidate raises the estimator's own words | `test_proving_model_selection.py::test_failing_candidate_raises_the_estimators_own_words` | ma-core (rounds 1-2) |
 | unregistered member list == ['CNNClassifier', 'DBSCAN'] | `test_proving_model_selection.py::test_every_family_is_registered_for_the_member_route` | ma-core (rounds 5-6) |

@@ -3282,13 +3282,17 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
                 got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
         var glue = _xr(xt)
         var rows = VoteRows(trees_address(Xa), n, _cols(Xa))
+        # the address is read here, with the GIL held: inside GILReleased the trees_address call ran Python
+        # without the GIL (segfault in verify --self-test, CalibratedClassifierCV.score; nn-integrate, lane
+        # bm-meta-3's RUN)
+        var acc_at = trees_address(acc)
         while True:  # driver-loop: over refusals (at most one round per native member)
             var refused = VOTE_ALL_ANSWERED
-            # nn-integrate (2026-11-23): the GIL stays HELD around this RUN. Released, a native member's call
-            # reached Python (PyObject_GetAttrString / _PyMem_DebugMalloc without the GIL: segfault in
-            # verify --self-test, CalibratedClassifierCV with a LogisticRegression member, Bagging OOB). Holding it
-            # was measured to cure it on cpc2; lane bm-meta-3 owes the member call that touches Python.
-            refused = calibrated_proba_run(glue, rows, got.members, cal_pairs, cals, k, trees_address(acc))
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = calibrated_proba_run(glue, rows, got.members, cal_pairs, cals, k, acc_at)
+            else:
+                refused = calibrated_proba_run(glue, rows, got.members, cal_pairs, cals, k, acc_at)
             if refused == VOTE_ALL_ANSWERED:
                 break
             got.members[refused] = _cal_door(pairs[refused][0], decisions[refused], Xa, n,

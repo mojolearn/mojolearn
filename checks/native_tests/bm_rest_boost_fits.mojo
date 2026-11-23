@@ -90,7 +90,7 @@ def rte_fit(s: EtSpec, x: List[Float32], n: Int, d: Int) raises -> Embedding:
     """`RandomTreesEmbedding(...).fit(X)` on a row-major float32 X."""
     var key = trees_key()
     var glue = xt_ref(key)
-    var forest = xf_ref(ForestEntryKey(FOREST_TABLE_ET, key))
+    var forest = xf_ref(ForestEntryKey(FOREST_TABLE_ET, key.copy()))
     var device_scan = (xf_caps(forest) & XF_CAP_DEVICE_SCAN) != 0
     var handle = rte_fit_run(glue, forest, et_config(s), Int(x.unsafe_ptr()), n, d, True, device_scan, s.seed)
     _ = len(x)  # the fit above read X through its address

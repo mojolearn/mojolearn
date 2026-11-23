@@ -197,9 +197,14 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
             w_at = Int(py=classical_address(w))
             w_words = Int(py=w.size)
         var got = RocMicro(False, McAuc(False, 0.0))
+        # every Python read before the GIL is released (they ran without it: segfault in roc_auc_score micro;
+        # nn-integrate, lane bm-meta-3's RUN)
+        var s_at = Int(py=classical_address(s))
+        var s_words = Int(py=s.size)
+        var codes_at = Int(py=classical_address(codes))
+        var codes_words = Int(py=codes.size)
         with GILReleased(Python()):
-            got = roc_ovr_micro_run(pin.route, Int(py=classical_address(s)), Int(py=s.size),
-                                    Int(py=classical_address(codes)), Int(py=codes.size), w_at, w_words, n, k)
+            got = roc_ovr_micro_run(pin.route, s_at, s_words, codes_at, codes_words, w_at, w_words, n, k)
         _ = s  # the RUN reads the pinned words
         _ = codes^
         _ = w
