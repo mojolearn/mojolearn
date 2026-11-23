@@ -166,9 +166,11 @@ weights of sample_weight=None:
   * the MEMBER ROUNDS (every other tree base; the door's `_ada_members`):
     each round a new state of the base's member, kept as it is; X staged
     once in its image on a device route.
-The rounds' fit notices travel to the PACK (nested member 0). No sample
-weights (the ABI's float32 weights are not the door's float64 ones; the
-mask says so). PREDICT / PREDICT_PROBA / DECISION: each round's member
+The rounds' fit notices travel to the PACK (nested member 0). Sample
+weights (lane mf-split4b): the caller's float32 weights are the words the
+door's `_normalized_weights` reads (`admit_weights` makes float32 words),
+normalized here as there (`x_trees_exact_sum` into float64, its refusals);
+the kind carries MEMBER_CAN_SAMPLE_WEIGHT. PREDICT / PREDICT_PROBA / DECISION: each round's member
 predict (in parallel over the rounds on the host column; X staged once on a
 device route), then `ada_classifier_run` (ADA_CODES / ADA_PROBA /
 ADA_DECISION) or `ada_regressor_run` (float32, the door's dtype), the
@@ -237,7 +239,7 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.trees_entry_table import TreesEntryKey
 from xtrees.glue_calls import (
     xt_ref, xt_device_folds, xt_gather_f32, xt_scatter, xt_indicator_codes, xt_binary_proba, xt_argmax_rows,
-    xt_sample_indices, xt_unseen_rows, xt_transpose_f32,
+    xt_sample_indices, xt_unseen_rows, xt_transpose_f32, xt_exact_sum,
 )
 from xtrees.trees_ada_fit_run import (
     ADA_MEMBER_SEED_WORD, AdaFitPlan, AdaFitResult, ada_fit_run, ada_release_handles, ada_release_members,
@@ -248,7 +250,7 @@ from bindings.forest_config_run import (
     FOREST_RF_SLOT_BINS, FOREST_RF_SLOT_MAX_SAMPLES, ForestConfig, forest_target_need,
 )
 from bindings.trees_public_inputs_run import TREES_NONFINITE
-from xtrees.trees_boost_run import _sub_seed, boost_count_check
+from xtrees.trees_boost_run import _sub_seed, boost_count_check, boost_weight_flags_check
 from xtrees.trees_calibrated_fit_run import (
     CalFitPlan, CalFitOut, calibrated_fit_run, cal_fold_place, CAL_ALL_ANSWERED,
 )
@@ -1004,13 +1006,17 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
         if kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER:
             mask |= MEMBER_CAN_PREDICT_PROBA
         elif kind == META_ADA_CLASSIFIER:
-            # AdaBoostClassifier's predict_proba and decision_function (its
-            # fit takes no sample weights as a member: the ABI's float32
-            # weights are not the door's float64 ones)
+            # AdaBoostClassifier's predict_proba and decision_function
             mask |= MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
         elif kind == META_OVR and (base & MEMBER_CAN_PREDICT_PROBA) != 0:
             mask |= MEMBER_CAN_PREDICT_PROBA
         if (_bag_kind(kind) or _multi_kind(kind)) and (base & MEMBER_CAN_SAMPLE_WEIGHT) != 0:
+            mask |= MEMBER_CAN_SAMPLE_WEIGHT
+        if _ada_kind(kind):
+            # AdaBoost (lane mf-split4b): the caller's float32 sample weights
+            # are the words its door normalizes (`_fit_ada`); every round
+            # hands its base its own boosting weights (whatever the caller
+            # gave), so the base's bit is not read.
             mask |= MEMBER_CAN_SAMPLE_WEIGHT
         # A Bagging entry's batched forest (its second mask) runs on the same
         # thread rules: the GIL bits both kinds have.
@@ -2476,6 +2482,18 @@ def _fit_ada(slot: _SlotPtr, call: _CallPtr) raises:
     var glue = slot[].glue
     # sample_weight=None: 1 / n per row (`_normalized_weights`, the fill of `_class_major([1 / n])`).
     var weights = List[Float64](length=n, fill=1.0 / Float64(n))
+    if call[].weights.given():
+        # THE CALLER'S SAMPLE WEIGHTS (lane mf-split4b): the door's
+        # `_normalized_weights` over them, whole: its weights are the float32
+        # words `admit_weights` made (the member's `weights` are those words),
+        # summed exactly and divided into float64 by `x_trees_exact_sum`, the
+        # refusals from its flag words (`boost_weight_flags_check`).
+        var normalized = List[Float64](length=n + 1, fill=0.0)
+        var flags = List[Int32](length=8, fill=Int32(0))
+        _ = xt_exact_sum(glue, call[].weights.data, Int(normalized.unsafe_ptr()), Int(flags.unsafe_ptr()), n, 1)
+        boost_weight_flags_check(flags[0] != 0 or flags[1] != 0 or flags[2] != 0 or flags[3] != 0, flags[4] != 0)
+        for i in range(n):  # small-loop(one copy of the n normalized weights past the sum word, once per fit)
+            weights[i] = normalized[i + 1]
     var forest = entry_ref_unresolved()
     var caps = 0
     _ada_close_session(slot)
@@ -3168,7 +3186,7 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     if _classifier_kind(slot[].kind) and call[].classes < 1 and call[].class_counts == 0:
         raise Error("member ABI: a " + name + " member needs its class count at fit")
     if call[].weights.given() and (slot[].kind == META_OVR or slot[].kind == META_CALIBRATED
-                                   or _ada_kind(slot[].kind) or _search_kind(slot[].kind)):
+                                   or _search_kind(slot[].kind)):
         raise Error("TypeError: a " + name + " member's fit takes no sample weights")
     _drop_states(slot)
     slot[].features = call[].x.cols
