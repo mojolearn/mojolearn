@@ -611,6 +611,13 @@ def run_autoencoder[E: Exec](mut ex: E) raises -> List[Float32]:
     var first = Float64(curve[0])
     var last = Float64(curve[len(curve) - 1])
     print("NN_CONV autoencoder reconstruction mse", first, "->", last)
+    # the first epoch whose loss already meets the gate (check-trim): the epoch count can come down to it
+    # with margin once a run reports it
+    var met = -1
+    for e in range(len(curve)):  # small-loop(epochs)
+        if met < 0 and Float64(curve[e]) < 0.2 * first and Float64(curve[e]) < 0.05:
+            met = e
+    print("NN_CONV autoencoder gate first met at epoch", met, "of", len(curve))
     if not (last < 0.2 * first and last < 0.05):
         _fail("autoencoder: the reconstruction MSE " + String(last) + " is not below a fifth of the first epoch's ("
               + String(first) + ") and 0.05")
@@ -675,6 +682,11 @@ def run_decoder[E: Exec](mut ex: E) raises -> List[Float32]:
     var first = Float64(curve[0])
     var last = Float64(curve[len(curve) - 1])
     print("NN_CONV decoder reconstruction mse", first, "->", last)
+    var met = -1
+    for e in range(len(curve)):  # small-loop(epochs)
+        if met < 0 and Float64(curve[e]) < first / 3.0 and Float64(curve[e]) < 0.01:
+            met = e
+    print("NN_CONV decoder gate first met at epoch", met, "of", len(curve))
     if not (last < first / 3.0 and last < 0.01):
         _fail("decoder: the MSE " + String(last) + " is not below a third of the first epoch's (" + String(first)
               + ") and 0.01")
