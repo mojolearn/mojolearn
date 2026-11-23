@@ -103,7 +103,8 @@ def sequence_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         optimizer.floats[5],
         Float64(Int(seed & 0xFFFFFFFF)), Float64(Int(seed >> 32)), 1.0 if fresh else 0.0,
     ]
-    words.extend(sched_words^)
+    for i in range(len(sched_words)):  # small-loop(the ten schedule words)
+        words.append(sched_words[i])
     owner.plan.params = words^
     owner.pins = Python.tuple(held.owner, model_provider, output_provider, held.metrics)
     return True
