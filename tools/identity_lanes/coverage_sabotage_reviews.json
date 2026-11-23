@@ -1,5 +1,5 @@
 {
- "#": "Committed reviews of fault arms whose fault surfaces only as a product refusal or a lane's in-cell byte oracle (tools/coverage_sabotage.py docstring, DECLARED REVIEWS). Each entry is bound to one run by `coverage_sabotage.py review`: the cell must have REFUSED, its error's first line must fullmatch error_match, and the patch bytes must hash to patch_sha256. A changed patch needs a new review. Lane sab-missed-5, 2026-11-23, from nvc1-0003 (L40S, tag nvc-sab-20261123T044409Z-0c21d8, batches mamba-2, mamba-3, x_decomp-4) and the 0860 reviews of the same two mamba arms (verification/records/cells/verification_faults/2026-10-26-0860/mamba-2 and mamba-3).",
+ "#": "Committed reviews of fault arms whose fault surfaces only as a product refusal or a lane's in-cell byte oracle (tools/coverage_sabotage.py docstring, DECLARED REVIEWS). Each entry is bound to one run by `coverage_sabotage.py review`: the cell must have REFUSED, its error's first line must fullmatch error_match, and the patch bytes must hash to patch_sha256. A changed patch needs a new review. Lane sab-missed-5, 2026-11-23, from nvc1-0003 (L40S, tag nvc-sab-20261123T044409Z-0c21d8, batches mamba-2, mamba-3, x_decomp-4) and the 0860 reviews of the same two mamba arms (verification/records/cells/verification_faults/2026-10-26-0860/mamba-2 and mamba-3). Lane sab-gpu-missed, 2026-11-23, from nvc1-0003 (tag nvc-sab-20261123T125906Z-5a1d18, batches core-2, core-4): the two TargetEncoder fold reviews, written from the door's refusal text (bindings/prep_encode_native_door.mojo) before the rerun; the rerun's review_*.txt says whether they bound.",
  "coverage-precise-mamba-m3_session_copy_in": {
   "mamba3-decode-session/base": {
    "product_check": "tools/identity_lanes/coverage.py:564 _coverage_decode_session: _same_bytes(steps after load_state, per-call steps after the same four tokens), the lane's independent byte oracle against the per-call Mamba3Block.step path, which shares no code with the session's load_state.",
@@ -22,6 +22,22 @@
    "why_fault_reaches_check": "tools/identity_lanes/decomp.py:289 hashes Isomap(radius=...).transform(S[:32]), rows of its own training set, so on a correct build every row has itself at distance 0 and the admission passes (STABLE on the clean and restored L40S builds). The fitted rows, the query rows and the radius reach that admission as resident x_decomp arena buffers, whose uploads, downloads and moves (x_decomp/resident.mojo dev_upload_run, dev_download_run, dev_move_run) the patch steps one ulp (its rule: 0 becomes the smallest normal); on the sabotaged L40S build (nvc1-0003 x_decomp-4) the hit total no longer equals the row count and the admission refuses, while x-decomp-robust-cov and x-decomp-factor-analysis MOVED.",
    "error_match": "ValueError: Isomap\\.transform: query row [0-9]+ has no training row within radius [0-9.eE+-]+",
    "patch_sha256": "ea6c165887396ad98fe7409ffd31f45f7e2b4a077a3c4cadf2d05cdd109814b2"
+  }
+ },
+ "coverage-core-count-fold-hits": {
+  "x-prep-user-objects/base": {
+   "product_check": "bindings/prep_encode_native_door.mojo, the user-cv admission of TargetEncoder (the loop over the folds after the row -> fold table is filled): every fold's training list must be exactly the rows outside its test fold, checked by its size and by the core check_indices_i64 and count_fold_hits_i64; any other list is refused by name.",
+   "why_fault_reaches_check": "x-prep-user-objects fits TargetEncoder(cv=<mojolearn splitter>) and TargetEncoder(cv=<(train, test) pairs>) on valid partitions. The patch makes count_fold_hits_i64 (core/hotpath_impl_rows.mojo) report one more hit than there are, so the first nonempty training list of the first fit reads as overlapping its test fold and the check refuses a partition that is valid; the clean build fits both.",
+   "error_match": "NotImplementedError: (NotImplementedError: )?mojolearn: TargetEncoder cv folds whose training rows are not every row outside the test fold are not implemented",
+   "patch_sha256": "ddb4107ad80b53cf0ba4baf95f1336c1de893eed229cfab97490661b92ce0a90"
+  }
+ },
+ "coverage-core-hotpath_impl_rows": {
+  "x-prep-user-objects/base": {
+   "product_check": "bindings/prep_encode_native_door.mojo, the user-cv admission of TargetEncoder (the loop over the folds after the row -> fold table is filled): every fold's training list must be exactly the rows outside its test fold, checked by its size and by the core check_indices_i64 and count_fold_hits_i64; any other list is refused by name.",
+   "why_fault_reaches_check": "The patch stores fold labels 0 and 1 exchanged in assign_fold_i64 (core/hotpath_impl_rows.mojo) while count_fold_hits_i64 reads the table as written. For the valid partitions x-prep-user-objects passes, fold 0's table entries are then fold 1's test rows: either the fold sizes no longer match the training list sizes, or fold 0's training list (which holds fold 1's test rows) hits fold 0; both refuse with this line, and the clean build fits.",
+   "error_match": "NotImplementedError: (NotImplementedError: )?mojolearn: TargetEncoder cv folds whose training rows are not every row outside the test fold are not implemented",
+   "patch_sha256": "e1fb05702b9775c8d78f7fe8fbc7821eeb7274bca86f745c4e2a7db5384aa4e4"
   }
  }
 }
