@@ -89,7 +89,7 @@ class Sequential(_CheckMixin):
     n_features_in_ : int
         Number of input features.
     classes_ : ndarray
-        Sorted class labels (``cross_entropy`` and ``bce_with_logits`` only).
+        Sorted class labels (``cross_entropy``, ``nll`` and ``bce_with_logits`` only).
 
     Examples
     --------
@@ -1079,14 +1079,14 @@ class Sequential(_CheckMixin):
         -------
         ndarray
             The model outputs, (n_samples,) or (n_samples, n_outputs) in the
-            shape ``y`` had at fit; for ``cross_entropy`` and
+            shape ``y`` had at fit; for ``cross_entropy``, ``nll`` and
             ``bce_with_logits`` models, the predicted class labels
             (n_samples,).
         """
         return _SEQUENTIAL_ENTRY(self, "predict", (X, lengths), _SEQUENTIAL_CONTEXT)
 
     def predict_proba(self, X, lengths=None):
-        """Class probabilities of a ``cross_entropy`` or ``bce_with_logits`` model.
+        """Class probabilities of a ``cross_entropy``, ``nll`` or ``bce_with_logits`` model.
 
         Parameters
         ----------
