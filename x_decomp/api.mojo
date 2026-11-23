@@ -206,14 +206,16 @@ def qr_r_run[E: Exec](pa: F32Ptr, pr: F32Ptr, m: Int, n: Int) raises:
 
 def tsqr_r_run[E: Exec](pa: F32Ptr, pb: F32Ptr, pr: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises -> Int:
     """`tsqr_r_py`'s typed entry: the shape checks, then Exec.tsqr_factor;
-    returns n = d + nrhs."""
+    returns the factorization's owner handle with `keep` (lane linalg-owner,
+    2026-11-22: the caller carries it to XD_TSQR_Q; no process slot), else
+    n = d + nrhs."""
     var n = d + nrhs
     if d < 1 or n > TS_MAX_N or m < n:
         raise Error("x_decomp: tsqr_r needs 1 <= d, d + nrhs <= " + String(TS_MAX_N) + " and m >= d + nrhs")
     if m * n > 2147483647:
         raise Error("x_decomp: tsqr_r exceeds the Int32 index bound")
-    E.tsqr_factor(pa, pb, pr, m, d, nrhs, keep)
-    return n
+    var handle = E.tsqr_factor(pa, pb, pr, m, d, nrhs, keep)
+    return handle if keep else n
 
 
 def r_signs_run(pr: F32Ptr, pc: F32Ptr, n: Int):
@@ -401,11 +403,13 @@ def lu_gesv_run[E: Exec](pa: F32Ptr, pb: F32Ptr, pi: F32Ptr, n: Int, nrhs: Int) 
     E.lu_gesv(pa, pb, pi, n, nrhs)
 
 
-def tsqr_q_run[E: Exec](pc: F32Ptr, pq: F32Ptr, m: Int, n: Int, k: Int) raises:
-    """`tsqr_q_py`'s typed entry: the Int32 bound, then Exec.tsqr_apply."""
+def tsqr_q_run[E: Exec](handle: Int, pc: F32Ptr, pq: F32Ptr, m: Int, n: Int, k: Int) raises:
+    """`tsqr_q_py`'s typed entry: the Int32 bound, then Exec.tsqr_apply over
+    the owner `handle` (XD_TSQR_R's keep result), which it frees."""
     if k > 0 and m * k > 2147483647:
+        E.tsqr_apply(handle, pc, pq, m, n, 0)
         raise Error("x_decomp: tsqr_q exceeds the Int32 index bound")
-    E.tsqr_apply(pc, pq, m, n, k)
+    E.tsqr_apply(handle, pc, pq, m, n, k)
 
 
 def geqrf_run[E: Exec](pa: F32Ptr, pt: F32Ptr, m: Int, n: Int) raises -> Int:

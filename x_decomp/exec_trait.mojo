@@ -171,15 +171,17 @@ trait Exec:
         ...
 
     @staticmethod
-    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises -> Int:
         """R (n x n, n = d + nrhs) of [a | b] by the blocked TSQR
-        (x_decomp/tsqr_core.mojo); `keep` holds the factorization for
-        `tsqr_apply`."""
+        (x_decomp/tsqr_core.mojo). With `keep` the factorization moves into
+        a native owner whose handle is returned for one `tsqr_apply`
+        (0 without `keep`); no process-wide state holds it."""
         ...
 
     @staticmethod
-    def tsqr_apply(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
-        """q (m x k) = Q c for the kept factorization (k == 0: release it)."""
+    def tsqr_apply(handle: Int, c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+        """q (m x k) = Q c for the factorization `handle` owns, then the
+        owner is freed (k == 0: only freed)."""
         ...
 
     @staticmethod

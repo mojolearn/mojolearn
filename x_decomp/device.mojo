@@ -153,7 +153,7 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 comptime U32Ptr = MutPointer[UInt32, MutAnyOrigin]
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import (
-    TS_SMEM_OK, ts_apply_device, ts_apply_device_owned, ts_factor_device, ts_factor_device_owned, ts_free_device, ts_pack_center_device, ts_pack_device,
+    TS_SMEM_OK, ts_apply_device, ts_apply_device_owned, ts_factor_device, ts_dev_owner, ts_dev_owner_new, ts_dev_release, ts_pack_center_device, ts_pack_device,
 )
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from x_decomp.tsqr_multi_gpu import ts_factor_dispatch, tsqr_plan_current
@@ -2284,8 +2284,8 @@ def _orth_tsqr_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: In
     ctx.enqueue_copy(dst_buf=dw, src_buf=da)
     var r = List[Float32](length=l * l, fill=Float32(0))
     var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
-    # this call's own factorization, never the process's kept one (lane r3-small)
-    var held = ts_factor_device_owned(ctx, dw, m, l, pr)
+    # this call's own factorization (lane r3-small; no process slot remains)
+    var held = ts_factor_device(ctx, dw, m, l, pr, True)
     var dr = ctx.enqueue_create_buffer[DType.float32](l * l)
     var dc = ctx.enqueue_create_buffer[DType.float32](l * l)
     ctx.enqueue_copy(dst_buf=dr, src_ptr=pr)
@@ -3981,7 +3981,7 @@ struct DevExec(Exec):
         _ = r_buf^
 
     @staticmethod
-    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises -> Int:
         """The blocked TSQR on the device (x_decomp/tsqr_device.mojo)."""
         # lane ne2-i-j (2026-11-07): the QR family's plan, read once here
         # (x_decomp/tsqr_multi_gpu.mojo; one device unless a parallel driver
@@ -3989,9 +3989,12 @@ struct DevExec(Exec):
         var plan = tsqr_plan_current()
         var ctx = xd_ctx()
         var n = d + nrhs
+        # with keep, the five buffers move into a heap owner whose address is
+        # the handle (lane linalg-owner, 2026-11-22; no process slot)
+        var held = List[DeviceBuffer[DType.float32]]()
         if nrhs == 0:
             var da = _up(ctx, a, m * n)
-            ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
+            held = ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
             _ = da^
         else:
             var ta = _up(ctx, a, m * d)
@@ -3999,17 +4002,20 @@ struct DevExec(Exec):
             var da = ts_pack_device(ctx, ta, tb, m, d, nrhs)
             comptime if IDN_XD_NO_WAIT:
                 # no wait before the factorization: a and b live until its own
-                ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
+                held = ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
                 _ = ta^
                 _ = tb^
             else:
                 ctx.synchronize()
                 _ = ta^
                 _ = tb^
-                ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
+                held = ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
             _ = da^
         ctx.synchronize()
         _ = ctx^
+        if keep:
+            return ts_dev_owner_new(held^, m, n)
+        return 0
 
     @staticmethod
     def ols_tsqr_factor(
@@ -4082,7 +4088,7 @@ struct DevExec(Exec):
             ctx.synchronize()
             step_count_sync()
         try:
-            ts_factor_dispatch(plan, ctx, da, m, n, r, False)
+            _ = ts_factor_dispatch(plan, ctx, da, m, n, r, False)
         except factor_error:
             # A non-finite X or y reaches R as NaN, and the factor's own R
             # refusal (x_decomp/tsqr_device.mojo ts_factor_device, "R entry
@@ -4152,16 +4158,23 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def tsqr_apply(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
-        if k == 0:
-            ts_free_device()
-            return
-        var ctx = xd_ctx()
-        var dq = ts_apply_device(ctx, c, m, n, k)
-        _down(ctx, dq, q, m * k)
-        ctx.synchronize()
-        _ = dq^
-        _ = ctx^
+    def tsqr_apply(handle: Int, c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+        """Q c over the factorization `handle` owns; the owner is freed on
+        every path (k == 0 only frees it)."""
+        var owner = ts_dev_owner(handle)
+        try:
+            if k == 0:
+                return
+            if owner[].m != m or owner[].n != n:
+                raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
+            var ctx = xd_ctx()
+            var dq = ts_apply_device(ctx, c, owner[].bufs, m, n, k)
+            _down(ctx, dq, q, m * k)
+            ctx.synchronize()
+            _ = dq^
+            _ = ctx^
+        finally:
+            ts_dev_release(handle)
 
     @staticmethod
     def vendor() -> String:

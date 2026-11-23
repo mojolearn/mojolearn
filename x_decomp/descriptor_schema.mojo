@@ -54,7 +54,7 @@ comptime XD_DEV_ISO_GATHER_MIN = 18  # i: [d, im, sq, q, dc, nn, one, dn, imn]
 comptime XD_DEV_UPLOAD_FINITE = 19  # a: [src]  i: [id, n]
 # Existing TSQR/SVD primitives used by the typed LinearRegression owner.
 comptime XD_FLAGS = 20        # -> existing idn_flags_run route bits
-comptime XD_TSQR_R = 21       # a: [x, y, r] i: [rows, cols, nrhs, keep]
+comptime XD_TSQR_R = 21       # a: [x, y, r] i: [rows, cols, nrhs, keep]  (keep: returns the factorization's owner handle)
 comptime XD_OLS_TSQR_R = 22   # a: [x, y, r, mean, ymean] i: [rows, cols]
 comptime XD_ORDER = 23        # a: [x, dst] i: [n]
 comptime XD_DEV_REDUCE = 24   # i: [x, dst, n, op]
@@ -126,7 +126,7 @@ comptime XD_DEV_ORDER_SMALL = 71  # i: [x, dst, n]
 # lane entangled-decompkit (2026-11-12): the TSQR doors linalg.qr / svd
 # (bindings/linalg_ops_decomp.mojo) still called as Python entries
 # (`x_decomp_tsqr_q`, `x_decomp_r_signs`), appended.
-comptime XD_TSQR_Q = 72           # a: [c, q] i: [m, n, k]   (k == 0 releases the kept factorization only)
+comptime XD_TSQR_Q = 72           # a: [c, q] i: [m, n, k, owner]   (frees the owner XD_TSQR_R returned; k == 0 frees only)
 comptime XD_R_SIGNS = 73          # a: [r, c] i: [n]
 # lane dw-decomp (2026-11-21): the FastICA, FactorAnalysis,
 # LatentDirichletAllocation and random projection drivers their native doors
@@ -285,7 +285,7 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_DEV_ORDER_SMALL:
         return (0, 3, 0)
     if op == XD_TSQR_Q:
-        return (2, 3, 0)
+        return (2, 4, 0)
     if op == XD_R_SIGNS:
         return (2, 1, 0)
     if op == XD_ICA_FIT:

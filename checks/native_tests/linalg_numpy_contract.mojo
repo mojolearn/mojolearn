@@ -14,7 +14,7 @@ from x_decomp.descriptor_schema import XD_OPERATION_COUNT
 from x_decomp.descriptor_host import x_decomp_host_v1
 from std.testing import TestSuite
 from checks.native_tests.linalg_numpy_cases import NumpyLinalgCalls, numpy_unit
-from checks.native_tests.testsuite_cases import check_cases_serial
+from checks.native_tests.testsuite_cases import check_cases
 
 comptime NUMPY_CONTRACT_UNITS = 18
 
@@ -36,8 +36,8 @@ def _unit(unit: Int) raises:
 
 def test_numpy_contract() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # in order: the TSQR route's one retained factorization (linalg_numpy_cases.mojo)
-    check_cases_serial("numpy_contract", NUMPY_CONTRACT_UNITS, _unit)
+    # across the host cores: each TSQR factorization is its call's own owner (linalg_numpy_cases.mojo)
+    check_cases("numpy_contract", NUMPY_CONTRACT_UNITS, _unit)
 
 
 def main() raises:

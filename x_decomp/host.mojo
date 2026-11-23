@@ -84,7 +84,7 @@ from cholesky.host.chol_oracle import chol_host_factor_lower, chol_host_trsm_low
 # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 from gemm.contract import CONTRACT_K_LEAF_MIN, contract_leaf_size, leaf_begin, leaf_count, leaf_end
-from x_decomp.tsqr_host import ts_apply_host, ts_apply_host_owned, ts_factor_host, ts_factor_host_owned, ts_free_host, _TsHost
+from x_decomp.tsqr_host import ts_apply_host, ts_apply_host_owned, ts_factor_host, ts_factor_host_owned, ts_release_host, _TsHost
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.host.center_host import center_on_cpu, col_sums_on_cpu
 from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
@@ -831,16 +831,16 @@ struct HostExec(Exec):
             r.unsafe_store(t, got[t])
 
     @staticmethod
-    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises -> Int:
         """The blocked TSQR's host replay (x_decomp/tsqr_host.mojo)."""
-        ts_factor_host(a, b, r, m, d, nrhs, keep)
+        return ts_factor_host(a, b, r, m, d, nrhs, keep)
 
     @staticmethod
-    def tsqr_apply(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+    def tsqr_apply(handle: Int, c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
         if k == 0:
-            ts_free_host()
+            ts_release_host(handle)
             return
-        ts_apply_host(c, q, m, n, k)
+        ts_apply_host(handle, c, q, m, n, k)
 
     @staticmethod
     def ols_tsqr_factor(

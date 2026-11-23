@@ -21,9 +21,9 @@ x_decomp kit (bindings/linalg_ops_kit_run.mojo) and the column's qr_r / svdvals 
 tolerances and assertion senses are the original's (`_close`: max |a - b| <= tol max(1, max |b|); np.allclose:
 |a - e| <= atol + rtol |e|). What stays in Python: the refusals (UPLO 'X', an unknown qr mode, float64, non-square),
 the returned Array / QRResult / SVDResult objects, the UPLO keyword default and `compute_uv=False` returning svdvals
-(the door calls the same function). The units run one after another: the TSQR route keeps its factorization in ONE
-process slot between XD_TSQR_R and XD_TSQR_Q (x_decomp/tsqr_host.mojo), so two units on that route may not overlap,
-as two public calls may not; the matrix oracles inside a unit run across the host cores.
+(the door calls the same function). The TSQR route's factorization is a native owner XD_TSQR_R returns and XD_TSQR_Q
+frees (lane linalg-owner, 2026-11-22; it was ONE process slot), so the host units run across the host cores; the
+matrix oracles inside a unit do too.
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -229,19 +229,20 @@ def same_bits(tag: String, a: Mat, b: Mat) raises:
                 tag + ": word " + String(i) + " " + String(a.v[i]) + " vs " + String(b.v[i]))
 
 
-def tsqr_r(entry: EntryRef, a: Int, rows: Int, cols: Int) raises -> List[Float32]:
-    """The door's `_lin_tsqr_r(keep=True)`: addresses (a, b, r_out), ints (m, d, nrhs, keep)."""
+def tsqr_r(entry: EntryRef, a: Int, rows: Int, cols: Int, mut owner: Int) raises -> List[Float32]:
+    """The door's `_lin_tsqr_r`: addresses (a, b, r_out), ints (m, d, nrhs, keep); `owner` gets the handle of the
+    kept factorization."""
     var r = List[Float32](length=cols * cols, fill=0.0)
     var addresses: List[Int] = [a, a, Int(r.unsafe_ptr())]
-    _ = entry_ref_call(entry, XD_TSQR_R, addresses, [rows, cols, 0, 1], List[Float64]())
+    owner = entry_ref_call(entry, XD_TSQR_R, addresses, [rows, cols, 0, 1], List[Float64]())
     return r^
 
 
-def tsqr_q(entry: EntryRef, c_addr: Int, rows: Int, cols: Int, k: Int) raises -> List[Float32]:
-    """The door's `_lin_tsqr_q`: Q C (rows x k) for the kept factorization."""
+def tsqr_q(entry: EntryRef, owner: Int, c_addr: Int, rows: Int, cols: Int, k: Int) raises -> List[Float32]:
+    """The door's `_lin_tsqr_q`: Q C (rows x k) for the factorization `owner` holds, which it frees."""
     var q = List[Float32](length=rows * k, fill=0.0)
     var addresses: List[Int] = [c_addr, Int(q.unsafe_ptr())]
-    _ = entry_ref_call(entry, XD_TSQR_Q, addresses, [rows, cols, k], List[Float64]())
+    _ = entry_ref_call(entry, XD_TSQR_Q, addresses, [rows, cols, k, owner], List[Float64]())
     return q^
 
 
@@ -249,11 +250,12 @@ def qr_mode(mut kit: LinKit, a: List[Float32], rows: Int, cols: Int, mode: Int) 
     """`_lin_qr_q`: mode 0 'reduced' (Q, R), 1 'complete' (Q, R), 2 'raw' (h, tau)."""
     var addr = Int(a.unsafe_ptr())
     if mode == 0 and _lin_tsqr_on(rows, cols):
-        var r = tsqr_r(kit.entry, addr, rows, cols)
+        var owner = 0
+        var r = tsqr_r(kit.entry, addr, rows, cols, owner)
         var signs = List[Float32](length=cols * cols, fill=0.0)
         var addresses: List[Int] = [Int(r.unsafe_ptr()), Int(signs.unsafe_ptr())]
         _ = entry_ref_call(kit.entry, XD_R_SIGNS, addresses, [cols], List[Float64]())
-        var q = tsqr_q(kit.entry, Int(signs.unsafe_ptr()), rows, cols, cols)
+        var q = tsqr_q(kit.entry, owner, Int(signs.unsafe_ptr()), rows, cols, cols)
         var result = MatPair(mat_f32(q, rows, cols), mat_f32(r, cols, cols))
         _ = signs^
         return result^
@@ -308,11 +310,12 @@ def svd_route(mut kit: LinKit, a: List[Float32], rows: Int, cols: Int, full: Boo
     var s = 0
     var vt = 0
     if not hermitian and not full and _lin_tsqr_on(rows, cols):
-        var r = tsqr_r(kit.entry, addr, rows, cols)
+        var owner = 0
+        var r = tsqr_r(kit.entry, addr, rows, cols, owner)
         var r_held = kit.borrow(Int(r.unsafe_ptr()), cols, cols)
         var ur = lin_svd_tall_run(kit, r_held, False, SVD_NULL_RTOL, s, vt)
         var c_store = kit_words(kit, ur)
-        var u = tsqr_q(kit.entry, Int(c_store.unsafe_ptr()), rows, cols, cols)
+        var u = tsqr_q(kit.entry, owner, Int(c_store.unsafe_ptr()), rows, cols, cols)
         var sm = mat_kit(kit, s)
         var vm = mat_kit(kit, vt)
         _ = r^

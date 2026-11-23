@@ -13,19 +13,19 @@ host tasks (`host_parallelize`, the caller's floating-point environment); so
 are the pairs of one tree level. Which task runs a block never changes what
 it computes, so the bits are the same at every thread count.
 
-THE FACTORED STATE. `ts_factor_host(..., keep=True)` keeps the factored
-matrix, the panels' T factors, the tree tiles and the tree's tau in ONE
-process slot until `ts_apply_host` (or `ts_free_host`) uses it; a new factor
-with `keep=True` replaces it. Temporary factorizations own their state locally
-and leave the explicit retained factorization alone.
-
-A caller that factors and applies inside ONE call (the randomized SVD's
-orthonormalisation, `HostExec._orth_tsqr`) owns its factorization: a local
-`_TsHost` filled by `ts_factor_host_owned` and read by `ts_apply_host_owned`,
-never the process slot (lane r3-small, 2026-11-22). Through the slot, two
-randomized PCA fits at once freed each other's panels mid-apply: SIGSEGV in
-`ts_apply_host` under `RKit.orth`, 100 concurrent host fits, cpc2.)"""
-from std.memory import unsafe_memcpy
+THE FACTORED STATE. Every factorization is owned by its caller; there is no
+process slot (lane linalg-owner, 2026-11-22). `ts_factor_host(..., keep=True)`
+moves the factored matrix, the panels' T factors, the tree tiles and the
+tree's tau into a heap OWNER and returns its handle (the address); the one
+`ts_apply_host(handle, ...)` (or `ts_release_host(handle)`) that follows
+reads and frees it. A factor without `keep` owns its state locally. A caller
+that factors and applies inside ONE call (`HostExec._orth_tsqr`) fills a
+local `_TsHost` (`ts_factor_host_owned` / `ts_apply_host_owned`). Before:
+one process slot `TS_HOST_STATE` held the kept factorization, so two
+randomized PCA fits freed each other's panels mid-apply (lane r3-small,
+SIGSEGV under `RKit.orth`) and two concurrent `linalg.qr` / `linalg.svd`
+calls through XD_TSQR_R(keep) / XD_TSQR_Q could take each other's factor."""
+from std.memory import alloc, unsafe_memcpy
 
 from checks.numerics import ftz, identical_div, identical_sqrt
 from core.host_parallel import host_parallelize
@@ -51,7 +51,6 @@ from x_decomp.tsqr_core import (
     ts_scale,
     ts_tree_fold,
 )
-from core.shared_slot import SharedSlot
 
 comptime _TT = TS_NB * TS_NB
 
@@ -77,19 +76,18 @@ struct _TsHost(Defaultable, Movable):
         self.live = False
 
 
-comptime TS_HOST_STATE = SharedSlot[_TsHost, "MojolearnXDecompTsqrHostV1"]
+def _ts_host_owner(handle: Int) raises -> MutPointer[_TsHost, MutUntrackedOrigin]:
+    """The heap owner behind a `ts_factor_host(keep=True)` handle."""
+    if handle == 0:
+        raise Error("x_decomp tsqr: no kept factorization (tsqr_r with keep first)")
+    return MutPointer[_TsHost, MutUntrackedOrigin](unsafe_from_address=handle)
 
 
-def ts_free_host() raises:
-    var st = TS_HOST_STATE.get_or_create_ptr()
-    st[].a = List[Float32]()
-    st[].t = List[Float32]()
-    st[].t2 = List[Float32]()
-    st[].tiles = List[Float32]()
-    st[].tau = List[Float32]()
-    st[].m = 0
-    st[].n = 0
-    st[].live = False
+def ts_release_host(handle: Int) raises:
+    """Free the owner a `ts_factor_host(keep=True)` handle names."""
+    var owner = _ts_host_owner(handle)
+    owner.unsafe_deinit_pointee()
+    owner.free()
 
 
 def _p(l: List[Float32]) -> F32Ptr:
@@ -461,30 +459,28 @@ def ts_factor_host_owned(mut state: _TsHost, a: F32Ptr, bp: F32Ptr, r: F32Ptr,
     state.live = True
 
 
-def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
-    """R of [a | bp]; optionally retain the factorization for ts_apply_host."""
+def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises -> Int:
+    """R of [a | bp]. With `keep` the factorization moves into a heap owner
+    whose handle is returned for one `ts_apply_host` (or `ts_release_host`);
+    without it the state is this call's own and 0 is returned."""
     if keep:
-        # The explicit factor/apply API owns its one retained factorization.
-        ts_free_host()
-        var slot = TS_HOST_STATE.get_or_create_ptr()
-        ts_factor_host_owned(slot[], a, bp, r, m, d, nrhs)
-    else:
-        # Temporary OLS/Ridge factorizations can overlap. Sharing the retained
-        # slot freed another fit's panels while its workers were still using
-        # them. Own this call's buffers without touching a retained factor.
-        var owned = _TsHost()
-        ts_factor_host_owned(owned, a, bp, r, m, d, nrhs)
+        var owner = alloc[_TsHost](1)
+        owner.unsafe_write(_TsHost())
+        ts_factor_host_owned(owner[], a, bp, r, m, d, nrhs)
+        return Int(owner)
+    var owned = _TsHost()
+    ts_factor_host_owned(owned, a, bp, r, m, d, nrhs)
+    return 0
 
 
-def ts_apply_host(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
-    """q (m x k) = Q c for the kept factorization of an m x n matrix (c is
-    n x k), then the state is released."""
-    var st = TS_HOST_STATE.get_or_create_ptr()
-    if not st[].live or st[].m != m or st[].n != n:
-        ts_free_host()
-        raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
-    ts_apply_host_owned(st[], c, q, m, n, k)
-    ts_free_host()
+def ts_apply_host(handle: Int, c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+    """q (m x k) = Q c for the factorization of an m x n matrix the handle
+    owns (c is n x k); the owner is freed, on success and on refusal."""
+    var owner = _ts_host_owner(handle)
+    try:
+        ts_apply_host_owned(owner[], c, q, m, n, k)
+    finally:
+        ts_release_host(handle)
 
 
 def ts_apply_host_owned(state: _TsHost, c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:

@@ -102,9 +102,29 @@ def xd_address_op[E: Exec](op: Int, a: List[Int], p: List[Int], floats: Int) rai
         return n
     if op == XD_TSQR_Q:
         # tsqr_q_py: q (m x k) = Q c for the factorization XD_TSQR_R kept,
-        # then released; p = [m, n, k] (lane entangled-decompkit, 2026-11-12)
-        var k = xd_dim(p[2])
-        tsqr_q_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_dim(p[0]), xd_dim(p[1]), k)
+        # then released; p = [m, n, k, handle] (lane entangled-decompkit,
+        # 2026-11-12; the owner handle XD_TSQR_R returned with keep, lane
+        # linalg-owner 2026-11-22). k == 0 only releases the owner.
+        if len(p) != 4:
+            raise Error("x_decomp: tsqr_q needs [m, n, k, owner handle]")
+        var qm = 0
+        var qn = 0
+        var k = 0
+        try:
+            qm = xd_dim(p[0])
+            qn = xd_dim(p[1])
+            k = xd_dim(p[2])
+            if a[0] == 0 or a[1] == 0:
+                raise Error("x_decomp: null float32 buffer address")
+        except e:
+            # a refused descriptor still frees the owner it was handed
+            # (k == 0 reads neither buffer; one word stands in for both)
+            var word = List[Float32](length=1, fill=0.0)
+            var pw = F32Ptr(unsafe_from_address=Int(word.unsafe_ptr()))
+            tsqr_q_run[E](p[3], pw, pw, 0, 0, 0)
+            _ = word^  # keep the word alive through the release above
+            raise e^
+        tsqr_q_run[E](p[3], xd_f32(a[0]), xd_f32(a[1]), qm, qn, k)
         return k
     if op == XD_R_SIGNS:
         # r_signs_py: p = [n] (lane entangled-decompkit, 2026-11-12)

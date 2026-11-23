@@ -77,19 +77,17 @@ struct _TsShard(Movable):
 
 def ts_factor_dispatch(
     plan: DevicePlan, ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr, keep: Bool,
-) raises:
+) raises -> List[DeviceBuffer[DType.float32]]:
     """`ts_factor_device(ctx, da, m, n, r, keep)` over `plan` (module
     docstring): the same R in `r`, the same factored `da` and, with `keep`,
-    the same kept state."""
+    the same five buffers returned to the caller (empty without)."""
     var nb = ts_blocks(m)
     if plan.single() or nb < 2:
         # one device, or one block: the one-device factor, unchanged
-        ts_factor_device(ctx, da, m, n, r, keep)
-        return
+        return ts_factor_device(ctx, da, m, n, r, keep)
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         # FAST keeps the one-device factor it ran before the plan reached it
-        ts_factor_device(ctx, da, m, n, r, keep)
-        return
+        return ts_factor_device(ctx, da, m, n, r, keep)
     var count = Int(plan.setting)
     if count < 1 or count > 64:
         raise Error("parallel TSQR requires 1..64 devices")
@@ -98,7 +96,7 @@ def ts_factor_dispatch(
     var npair = ts_pairs(n)
     var t_words = npan * TS_NB * TS_NB
     var t2_words = npair * TS_T2
-    var work = ts_factor_begin(ctx, m, n, keep)
+    var work = ts_factor_begin(ctx, m, n)
     ctx.synchronize()
     var shards = List[_TsShard]()
     for rank in range(active):  # driver-loop: over the plan's device shards
@@ -137,5 +135,6 @@ def ts_factor_dispatch(
         shard.ctx.synchronize()
     _ = shards^
     ctx.synchronize()
-    ts_factor_finish(ctx, da, work, m, n, r, keep)
+    var held = ts_factor_finish(ctx, da, work, m, n, r, keep)
     _ = work^
+    return held^
