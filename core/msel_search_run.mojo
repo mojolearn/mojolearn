@@ -63,6 +63,7 @@ from core.entry_table import EntryRef
 from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, msel_scorer_row, msel_scorer_value, msel_scorer_regression, msel_scorer_binary_column,
+    msel_scorer_positive,
     SCORER_MEMBER, SCORER_ACCURACY,
 )
 from core.member_abi import (
@@ -122,6 +123,17 @@ struct MselSearchPlan(Movable):
     # the index among them whose table chooses the best (refit=<name>).
     var scorers: List[Int]
     var refit_scorer: Int
+    # THE POSITIVE CLASS (lane mf-search4b item 3): per scorer (the one
+    # `scoring`, or each of `scorers`), the class code of its pos_label
+    # among the fit's labels, mapped at UNPACK (-1: the scorer reads none).
+    var positives: List[Int]
+    # THE GIVEN FOLDS (lane mf-search4b item 6): one of our splitters' folds
+    # or a user's index list, as int32 row views the caller keeps alive
+    # (empty: the int cv's KFold / StratifiedKFold below).
+    var fold_train_at: List[Int]
+    var fold_train_n: List[Int]
+    var fold_test_at: List[Int]
+    var fold_test_n: List[Int]
 
     def __init__(out self, var plans: List[MemberPlan], var masks: List[Int], x: Int, rows: Int, cols: Int, y: Int,
                  classes: Int, n_splits: Int, glue: EntryRef, metric: MetricRoute):
@@ -146,6 +158,11 @@ struct MselSearchPlan(Movable):
         self.class_counts = List[Int]()
         self.scorers = List[Int]()
         self.refit_scorer = 0
+        self.positives = List[Int]()
+        self.fold_train_at = List[Int]()
+        self.fold_train_n = List[Int]()
+        self.fold_test_at = List[Int]()
+        self.fold_test_n = List[Int]()
 
 
 struct MselSearchResult(Movable):
@@ -274,7 +291,7 @@ def _respond(run_at: Int, v: Int, op: Int, x: Int, count: Int, cols: Int, dst: I
 
 
 def _scorer_side(route: MetricRoute, row: MselScorer, truth: Int, response: Int, count: Int, classes: Int,
-                 cols: Int) raises -> Float64:
+                 cols: Int, positive: Int) raises -> Float64:
     """One scorer on one side: the `_BINARY_PROBA` column pick of a
     two-class member's probabilities (`predict_proba[:, 1]`, as the scorer
     hands it), then core/msel_scorer_run.mojo `msel_scorer_value`."""
@@ -283,10 +300,10 @@ def _scorer_side(route: MetricRoute, row: MselScorer, truth: Int, response: Int,
         var src = _F32P(unsafe_from_address=response)
         for i in range(count):  # driver-loop: over the side's rows (column 1 of the probabilities)
             column[i] = src[2 * i + 1]
-        var value = msel_scorer_value(route, row, truth, Int(column.unsafe_ptr()), count, classes, 1)
+        var value = msel_scorer_value(route, row, truth, Int(column.unsafe_ptr()), count, classes, 1, positive)
         _ = len(column)  # read by the program above
         return value
-    return msel_scorer_value(route, row, truth, response, count, classes, cols)
+    return msel_scorer_value(route, row, truth, response, count, classes, cols, positive)
 
 
 def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
@@ -309,28 +326,52 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")
     if len(plan.masks) != m:
         raise Error("member ABI: a search needs one capability mask per candidate")
-    var n_splits = plan.n_splits
-    if n_splits < 2:
+    var given = len(plan.fold_test_at)
+    if (len(plan.fold_train_at) != given or len(plan.fold_train_n) != given
+            or len(plan.fold_test_n) != given):
+        raise Error("member ABI: a search's given folds need a train and a test side each")
+    var n_splits = plan.n_splits if given == 0 else given
+    if given == 0 and n_splits < 2:
         raise Error("ValueError: k-fold cross-validation requires at least one train/test split by setting "
                     + "n_splits=2 or more, got n_splits=" + String(n_splits) + ".")
-    if n_splits > n:
+    if given == 0 and n_splits > n:
         raise Error("ValueError: Cannot have number of splits n_splits=" + String(n_splits)
                     + " greater than the number of samples: n_samples=" + String(n) + ".")
-    # 1. The folds (fold f: its n - c train rows, then its c test rows).
+    # 1. The folds: per fold its train and test rows (int32 row views). The
+    # int cv's (fold f: its n - c train rows, then its c test rows), or the
+    # given ones (the caller's views, checked by its UNPACK / fit).
     var fold_counts = List[Int32](length=n_splits + 1, fill=Int32(0))
-    var fold_rows = List[Int32](length=max(n_splits * n, 1), fill=Int32(0))
+    var fold_rows = List[Int32](length=max(n_splits * n if given == 0 else 1, 1), fill=Int32(0))
     var rows_at = Int(fold_rows.unsafe_ptr())
-    var codes_at = plan.y if classifier else Int(fold_counts.unsafe_ptr())
-    var status = xt_device_folds(plan.glue, codes_at, rows_at, Int(fold_counts.unsafe_ptr()), n, n_splits, k)
-    if status == 1:
-        raise Error("ValueError: n_splits=" + String(n_splits)
-                    + " cannot be greater than the number of members in each class.")
-    if status != 0:
-        raise Error("ValueError: y codes outside [0, n_classes)")
+    var tr_at = List[Int](capacity=n_splits)
+    var tr_n = List[Int](capacity=n_splits)
+    var te_at = List[Int](capacity=n_splits)
+    var te_n = List[Int](capacity=n_splits)
     var used = 0
-    for f in range(n_splits):  # driver-loop: over the cv folds
-        if Int(fold_counts[f]) > 0:
-            used = f + 1
+    if given == 0:
+        var codes_at = plan.y if classifier else Int(fold_counts.unsafe_ptr())
+        var status = xt_device_folds(plan.glue, codes_at, rows_at, Int(fold_counts.unsafe_ptr()), n, n_splits, k)
+        if status == 1:
+            raise Error("ValueError: n_splits=" + String(n_splits)
+                        + " cannot be greater than the number of members in each class.")
+        if status != 0:
+            raise Error("ValueError: y codes outside [0, n_classes)")
+        for f in range(n_splits):  # driver-loop: over the cv folds
+            if Int(fold_counts[f]) > 0:
+                used = f + 1
+        for f in range(used):  # driver-loop: over the cv folds (their sides' views)
+            var c = Int(fold_counts[f])
+            tr_at.append(rows_at + 4 * (f * n))
+            tr_n.append(n - c)
+            te_at.append(rows_at + 4 * (f * n + n - c))
+            te_n.append(c)
+    else:
+        used = given
+        for f in range(given):  # driver-loop: over the given folds (their sides' views)
+            tr_at.append(plan.fold_train_at[f])
+            tr_n.append(plan.fold_train_n[f])
+            te_at.append(plan.fold_test_at[f])
+            te_n.append(plan.fold_test_n[f])
     var sides = 2 if plan.return_train else 1
     # The scorers (resolved once) and the member responses they read: each
     # distinct response is asked once per unit and side.
@@ -356,6 +397,12 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             rows_of.append(row)
     var nsc = len(codes)
     var nops = len(ops)
+    var positives = List[Int](length=max(nsc, 1), fill=-1)
+    for j in range(min(nsc, len(plan.positives))):  # small-loop(the scorers' positive class codes)
+        positives[j] = plan.positives[j]
+    for j in range(len(rows_of)):  # small-loop(the scorers: a binary one needs its positive code)
+        if msel_scorer_positive(rows_of[j]) and (positives[j] < 0 or positives[j] >= k):
+            raise Error("member ABI: a binary scorer needs its positive class code")
     # Each candidate's response element types, asked once.
     var out_dtypes = List[Int](length=max(m * nops, 1), fill=MEMBER_I32)
     for c in range(m):  # driver-loop: over the candidates (one OUTPUTS question per response)
@@ -378,12 +425,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var side_x = List[List[Float32]](capacity=used * sides)
     var side_y = List[List[Int32]](capacity=used * sides)
     for f in range(used):  # driver-loop: over the cv folds (their sides' rows)
-        var c = Int(fold_counts[f])
-        side_rows[f * sides] = rows_at + 4 * (f * n + n - c)
-        side_count[f * sides] = c
+        side_rows[f * sides] = te_at[f]
+        side_count[f * sides] = te_n[f]
         if sides == 2:
-            side_rows[f * sides + 1] = rows_at + 4 * (f * n)
-            side_count[f * sides + 1] = n - c
+            side_rows[f * sides + 1] = tr_at[f]
+            side_count[f * sides + 1] = tr_n[f]
     for s in range(used * sides):  # driver-loop: over the fold sides (their blocks, allocated once)
         side_x.append(List[Float32](length=max(side_count[s] * d, 1), fill=0.0))
         side_y.append(List[Int32](length=max(side_count[s] * y_cols, 1), fill=Int32(0)))
@@ -434,8 +480,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             var mask = plan.masks[c]
             if (mask & MEMBER_GIL_FREE) == 0:
                 all_free = False
-            var count = Int(fold_counts[f])
-            run.add(p^, plan.y, 0, rows_at + 4 * (f * n), n - count, 0, 0,
+            run.add(p^, plan.y, 0, tr_at[f], tr_n[f], 0, 0,
                     UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
                     UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
         _fit_wave(run)
@@ -521,7 +566,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     var o = op_of[j]
                     try:
                         values[at] = _scorer_side(plan.metric, rows_of[j], y_dst[s], pred_at[t * nops + o],
-                                                  side_count[s], k, pred_cols[t * nops + o])
+                                                  side_count[s], k, pred_cols[t * nops + o], positives[j])
                     except error:
                         failed[at] = UInt8(2)
                         errors[at] = String(error)

@@ -129,8 +129,15 @@ def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonOb
     for i in range(len(names)):  # driver-loop: over the fitted attribute names (eight, once per fit)
         var name = names[i]
         var value = py_get(source, name)
-        if value is None and name != "scorer_":
-            return False
+        if value is None:
+            # refit=False writes no best_estimator_ / scorer_ (and a
+            # multi-metric one no best_*; lane mf-search4b); the first three
+            # are always written.
+            if i < 3:
+                return False
+            if name == "scorer_" and py_contains(source, PythonObject(name)):
+                py_setitem(updates, name, value)  # scoring=None: the door's scorer_ None
+            continue
         py_setitem(updates, name, value)
     msel_search_update(fields, updates, context)
     return True
@@ -150,10 +157,11 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     msel_admit(fields["n_jobs"], context)
     msel_admit(error_score, context)
     # THE ONE SEARCH BODY (lane mf-search4 follow-up): a search its member
-    # kind admits (core/ensemble_member.mojo META_SEARCH_*: an int cv, scoring
-    # None or one scorer name core/msel_scorer_run.mojo serves, refit=True, no
-    # device of its own, every candidate a
-    # serving member) is fitted by the typed search RUN
+    # kind admits (core/ensemble_member.mojo META_SEARCH_*: an int cv, our
+    # KFold / StratifiedKFold or an index list; scoring None or scorer names
+    # core/msel_scorer_run.mojo serves, one or several (lane mf-search4b);
+    # refit True, False or a scorer name; no device of its own; every
+    # candidate a serving member) is fitted by the typed search RUN
     # (core/msel_search_run.mojo) through `_search_member_fit`; the units
     # below run only what that kind does not take (module note of
     # providers/python/member_ensemble_boundary_door.mojo `_admit_search`) and

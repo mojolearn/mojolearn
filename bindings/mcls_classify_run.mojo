@@ -282,6 +282,76 @@ def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred
     return arena.f64(at + 2)
 
 
+def label_binary_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: Int, k: Int,
+                     positive: Int) raises -> Float64:
+    """THE TYPED RUN of one unweighted label metric with average='binary'
+    (lane mf-search4b; precision, recall, f1 or jaccard, zero_division
+    'warn') over n int32 true and predicted class codes in 0 .. k-1, the
+    positive label being class code `positive` (mapped from pos_label at
+    UNPACK). The door's order (bindings/mcls_classify_door.mojo `_prf` /
+    `_prf_weighted`, `_set_wise_labels`): more than two observed labels
+    refuse; a positive that is not observed among two refuses; the
+    selected labels are [positive] then the other observed ones
+    (`mc_extend_order`), the sums run over all of them and the epilogue's
+    macro mean over the one selected label is the positive's value. An
+    unobserved positive (fewer than two observed) is appended and scores
+    0.0 (its zero denominators). No Python."""
+    if positive < 0 or positive >= k:
+        raise Error("RuntimeError: the binary scorer's positive class code is outside [0, n_classes)")
+    var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=truth)
+    var p = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pred)
+    var seen = List[Int32](length=max(k, 1), fill=Int32(-1))
+    for i in range(n):  # driver-loop: over the rows (the observed label union, a mark per code)
+        var a = Int(t[i])
+        var b = Int(p[i])
+        if a < 0 or a >= k or b < 0 or b >= k:
+            raise Error("ValueError: y codes outside [0, n_classes)")
+        seen[a] = 0
+        seen[b] = 0
+    var observed = 0
+    for c in range(k):  # small-loop(the class codes: the observed count)
+        if seen[c] == 0:
+            observed += 1
+    if observed > 2:
+        raise Error("average='binary' requires at most two observed classes")
+    if seen[positive] != 0 and observed == 2:
+        raise Error("pos_label is not a valid observed label")
+    # The order: the positive first, then the other observed codes in their
+    # sorted order.
+    seen[positive] = 0
+    var labels = 1
+    for c in range(k):  # small-loop(the class codes: their places after the positive)
+        if c == positive:
+            continue
+        if seen[c] == 0:
+            seen[c] = Int32(labels)
+            labels += 1
+    var mt = List[Int32](length=max(n, 1), fill=Int32(0))
+    var mp = List[Int32](length=max(n, 1), fill=Int32(0))
+    for i in range(n):  # driver-loop: over the rows (the mapped codes)
+        mt[i] = seen[Int(t[i])]
+        mp[i] = seen[Int(p[i])]
+    var plan = MetricProgramPlan()
+    var s = mc_sums_stages(plan, n, labels, False)
+    var at = MC_NONE
+    if metric == LBL_JACCARD:
+        at = mc_epi_stage(plan, s, McEpi(0, 1, LBL_MACRO, 0, 0, 0.0))
+    elif metric == LBL_PRECISION or metric == LBL_RECALL or metric == LBL_F1:
+        at = mc_epi_stage(plan, s, McEpi(2, 1, LBL_MACRO, 0, 2, 1.0))
+    else:
+        raise Error("RuntimeError: unknown binary label metric " + String(metric))
+    var addresses: List[Int] = [Int(mt.unsafe_ptr()), Int(mp.unsafe_ptr())]
+    var sizes: List[Int] = [n, n]
+    var arena = metric_inputs_run(route, plan, addresses, sizes)
+    _ = len(mt)  # the program's inputs were copied from these codes above
+    _ = len(mp)
+    if metric == LBL_RECALL:
+        return arena.f64(at + 4)
+    if metric == LBL_F1:
+        return arena.f64(at + 6)
+    return arena.f64(at + 2)
+
+
 # ---------------------------------------------------------------- log_loss, typed
 # Lane mf-metric4 (2026-11-23): the program bindings/mcls_classify_door.mojo
 # `_log_loss` / `_log_loss_options` assembled over pins, as one builder.
