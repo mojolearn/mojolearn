@@ -3323,22 +3323,33 @@ def _numeric_outputs(labels: PythonObject, b: PythonObject) raises -> Int:
     """UNPACK (lane mf-msel5c): the kind of a multi-output classifier's
     per-output labels (`labels`: one label list per output): 1 every label
     an integer (not a bool), 2 every label a real number with at least one
-    not an integer, 0 otherwise or unknown. Read once per admission."""
+    not an integer, 3 (lane mf-tail5b) every label a string, 0 otherwise or
+    unknown. Read once per admission."""
     if labels is None or py_type(labels) is not b.list:
         return 0
     var numbers = native_loaded_module("numbers")
     var kind = 1
+    var strings = 0
+    var total = 0
     for j in range(len(labels)):  # driver-loop: over the outputs (their labels, once per admission)
         var items = py_call(b.list, labels[j])
         for i in range(len(items)):  # driver-loop: over one output's labels
             var item = items[i]
-            if py_type(item) is b.bool or Bool(py=py_call(b.isinstance, item, b.str)):
+            total += 1
+            if Bool(py=py_call(b.isinstance, item, b.str)):
+                strings += 1
+                continue
+            if strings > 0:
+                return 0  # strings and other labels
+            if py_type(item) is b.bool:
                 return 0
             if _label_kind(item, b) == 1:
                 continue
             if not Bool(py=py_call(b.isinstance, item, numbers.Real)):
                 return 0
             kind = 2
+    if strings > 0:
+        return 3 if strings == total else 0
     return kind
 
 
@@ -3382,6 +3393,36 @@ def _decode_outputs(result: PythonObject, labels: PythonObject, b: PythonObject)
                     raise Error("RuntimeError: mojolearn: a multi-output prediction code outside its output's classes")
                 fw[i * outputs + j] = reals[j][c]
     _ = result  # written through its address above
+
+
+def _decode_text_outputs(result: PythonObject, labels: PythonObject, context: PythonObject,
+                         b: PythonObject) raises -> PythonObject:
+    """PACK (lane mf-tail5b): a text multi-output classifier's predicted
+    codes (the rows x outputs int64 block the RUN wrote) as the rows the
+    door's placement returns: per output its codes copied natively into one
+    int64 vector and decoded by `labels_decode_labels` (the 1-D text route's
+    decoder, one list), then one list per row of its outputs' labels."""
+    var rows = Int(py=result.shape[0])
+    var outputs = Int(py=result.shape[1])
+    var src = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=msel_addr(result)) if rows > 0 else MutPointer[
+        Int64, MutUntrackedOrigin](unsafe_from_address=0)
+    var decoded = Python.list()
+    for j in range(outputs):  # driver-loop: over the outputs (one native column copy and one decode each)
+        var column = family_array(Python.tuple(rows), "<i8", context)
+        if rows > 0:
+            var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=msel_addr(column))
+            for i in range(rows):  # driver-loop: over the rows (output j's codes)
+                dst[i] = src[i * outputs + j]
+        _ = column  # written through its address above
+        _ = py_call(decoded.append, py_call(b.list, labels_decode_labels(labels[j], column, context)))
+    _ = result  # read through its address above
+    var out = Python.list()
+    for i in range(rows):  # driver-loop: over the rows (each row's labels, the returned objects)
+        var row = Python.list()
+        for j in range(outputs):  # small-loop(the outputs)
+            _ = py_call(row.append, decoded[j][i])
+        _ = py_call(out.append, row)
+    return out
 
 
 def _label_code(labels: PythonObject, value: PythonObject, b: PythonObject) raises -> Int:
@@ -3663,9 +3704,15 @@ def _search_tool_pack(fields: PythonObject, tool: PythonObject, words: _F64P, at
         # predict decodes its codes the same way), and placed by the door.
         var result = tool[4][0]
         if String(py=tool[1]) == "predict" and labels is not None and Int(py=tool[5]) > 0:
-            # a multi-output classifier's codes, decoded per output in place (lane mf-msel5c)
-            _decode_outputs(result, labels, b)
-            py_setitem(out, "predictions", result)
+            if _numeric_outputs(labels, b) == 3:
+                # TEXT LABELS (lane mf-tail5b): each output's codes decoded by
+                # the one label decoder, the rows built as the door's own
+                # placement leaves text multi-output rows (one list per row)
+                py_setitem(out, "predictions", _decode_text_outputs(result, labels, unit_context, b))
+            else:
+                # a multi-output classifier's codes, decoded per output in place (lane mf-msel5c)
+                _decode_outputs(result, labels, b)
+                py_setitem(out, "predictions", result)
             py_setitem(out, "placed", PythonObject(True))
         elif String(py=tool[1]) == "predict" and labels is not None:
             py_setitem(out, "predictions", labels_decode_labels(labels, result, unit_context))

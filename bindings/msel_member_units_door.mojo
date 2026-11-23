@@ -231,7 +231,7 @@ def _encode_outputs(y: PythonObject, rows: Int, context: PythonObject, b: Python
     return Python.tuple(codes, classes)
 
 
-def _text_rows(y: PythonObject, context: PythonObject, b: PythonObject) raises -> Bool:
+def msel_text_rows(y: PythonObject, context: PythonObject, b: PythonObject) raises -> Bool:
     """True for a 2-D target that is not an admitted Array: a list or tuple
     of rows, or any other object with `ndim` 2 (a NumPy text or object
     array). Read once per fit, before any label (lane mf-tail5b)."""
@@ -337,7 +337,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         return PythonObject(None)
     # A TEXT 2-D y (lane mf-tail5b): not an Array; a search over a
     # classifier admits it below, per output.
-    var text_y = y is not None and not msel_is_array(y, context) and _text_rows(y, context, b)
+    var text_y = y is not None and not msel_is_array(y, context) and msel_text_rows(y, context, b)
     if not msel_is_array(x, context) or (y is not None and not msel_is_array(y, context) and not text_y):
         return PythonObject(None)
     if String(py=x.dtype) != "<f4" or Int(py=x.ndim) != 2 or String(py=x.order) != "C" or Int(py=x.size) == 0:

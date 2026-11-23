@@ -69,7 +69,7 @@ from bindings.msel_common_door import (
 )
 from bindings.msel_split_door import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_flag_truth, msel_cls, msel_sabotage
 from bindings.msel_cv_run import msel_seconds, _numeric_dtype
-from bindings.msel_member_units_door import msel_member_fit_in_place
+from bindings.msel_member_units_door import msel_member_fit_in_place, msel_text_rows
 from bindings.msel_search_state_door import msel_search_fields
 
 #: model_selection's CV_FAST bits of the resample binding's define mask.
@@ -1116,16 +1116,23 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     var b = msel_b()
     var xa = PythonObject(None)
     var ya = PythonObject(None)
+    # A TEXT 2-D y (lane mf-tail5b) is no Array: the kind's UNPACK reads its
+    # rows once, per output (bindings/msel_member_units_door.mojo).
+    var text_y = y_in is not None and msel_text_rows(y_in, context, b)
     try:
         xa = msel_materialize(x_in, "X", context)
-        if y_in is not None:
+        if text_y:
+            ya = y_in
+        elif y_in is not None:
             ya = msel_materialize_y(y_in, context)
     except:
         return PythonObject(None)
     # THE RESULT BUFFER's shape words (lane mf-msel5b): the target's outputs
     # (0: a 1-D y) and the rows; the kind's UNPACK places the Array in `holder`.
     var outputs = 0
-    if ya is not None and Int(py=ya.ndim) == 2:
+    if text_y:
+        outputs = len(py_call(b.list, py_call(b.list, y_in)[0]))
+    elif ya is not None and Int(py=ya.ndim) == 2:
         outputs = Int(py=ya.shape[1])
     var holder = Python.list(PythonObject(None))
     var names = _tool_names(scoring, context)
