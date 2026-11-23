@@ -814,6 +814,10 @@ TRAINING_LANE_NAMES = {
     "gbdt-weighted-nonsym": "gradient boosting with sample weights on Depthwise and Lossguide trees",
     "gbdt-weighted-rank": "gradient boosting YetiRank and PairLogit with sample weights",
     "gbdt-eval-gaps": "gradient boosting with an eval set on RMSE, Depthwise and Lossguide",
+    # lane gbdt-cpu-rest (2026-11-23): the rest of the CPU column's refusals
+    "gbdt-weighted-rest": "gradient boosting with sample weights on Exact leaves, the multi-output losses and categorical columns",
+    "gbdt-weighted-special": "gradient boosting QueryRMSE and the pointwise searcher's ranking losses, OrderedRMSE and FeatureFreq with sample weights",
+    "gbdt-shape-gaps": "gradient boosting on NaN inputs, Lossguide Cosine, pointwise losses on non-symmetric trees and feature_fraction",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1565,13 +1569,16 @@ ADAPTED_MODULES = {
 #: Lane gbdt-gaps (2026-11-23): sample weights on RMSE, Depthwise/Lossguide,
 #: the pointwise losses, YetiRank and generated-pair PairLogit, and eval sets
 #: on RMSE and Depthwise/Lossguide, are trained by the host owners now.
+#: Lane gbdt-cpu-rest (2026-11-23): sample weights with QueryRMSE, Exact
+#: leaves, the multi-output losses, categorical columns, the grouped
+#: pointwise searcher, OrderedRMSE and FeatureFreq; NaN on every numeric arm;
+#: Cosine under Lossguide; the pointwise losses on Depthwise and Lossguide
+#: (eval sets included); feature_fraction on every numeric Logloss / RMSE
+#: fit and the pointwise losses on non-symmetric trees; the pointwise
+#: searcher without sample weights or an eval set.
 NO_CPU_PATH = (
-    "gradient boosting training with sample weights on QueryRMSE, with "
-    "Exact leaves, with the multi-output losses or on the grouped pointwise "
-    "searcher (the weighted query means and the weighted quantile are not "
-    "restated on the host). Class weights remain unsupported outside numeric "
-    "Logloss, MultiClass and MultiClassOneVsAll, and in Ordered boosting "
-    "or the pointwise searcher",
+    "gradient boosting training with class weights in Ordered boosting or "
+    "the pointwise searcher, and sample weights in Ordered boosting",
 
     "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
     "tree's level winner is the tensor column itself: the separate CPU "
@@ -1579,33 +1586,29 @@ NO_CPU_PATH = (
 
     "gradient boosting training with a categorical or one-hot column "
     "outside SymmetricTree with Logloss or RMSE and Plain boosting, or "
-    "with sample/class weights: the categorical owners do not implement "
+    "beside an X carrying NaN: the categorical owners do not implement "
     "those combinations",
 
     "gradient boosting training with an eval set or the overfitting "
-    "detector outside Logloss and RMSE (every tree shape), Ordered and "
-    "the pointwise Logloss route: multiclass and the other loss owners "
-    "lack the corresponding held-out loss",
+    "detector on the multi-output losses and on the pointwise losses under "
+    "SymmetricTree: those owners lack the corresponding held-out loss",
 
-    "gradient boosting training with the pointwise searcher outside the "
-    "gbdt-pointwise-l2-bayesian-eval configuration (L2 scores, the Bayesian "
-    "bootstrap, Newton leaves, sample weights, an eval set with the Iter "
-    "detector, boost_from_average on, GreedyLogSum borders, numeric "
-    "columns, no class weights, random_strength zero and feature_fraction "
-    "one). This includes PairLogit and YetiRank with "
-    "use_pointwise_searcher=True; their greedy-searcher CPU routes exist",
+    "gradient boosting training with the pointwise searcher outside "
+    "Logloss with L2 scores, the Bayesian bootstrap and Newton leaves "
+    "(boost_from_average on, GreedyLogSum borders, numeric columns, no "
+    "class weights, random_strength zero, feature_fraction one, the Iter "
+    "detector when an eval set is given), apart from the grouped losses "
+    "QueryRMSE, PairLogit and YetiRank, which it trains",
 
     "gradient boosting training at a (loss, grow_policy, score_function, "
     "leaf_estimation_method, bootstrap_type) combination outside the ones "
-    "the gbdt/host oracles restate, each refused by name: pointwise "
-    "losses under Depthwise and Lossguide, score functions and leaf "
-    "estimators outside each policy's covered pair, Depthwise's "
-    "min_split_gain, min_child_hessian and min_data_in_leaf, feature_fraction "
-    "outside Lossguide with Logloss, "
-    "boost_from_average outside RMSE, the quantile family and the dedicated "
-    "pointwise Logloss route, and a NaN in X "
-    "outside SymmetricTree with Logloss -- each one its own device kernel or "
-    "its own searcher gate order",
+    "the gbdt/host oracles restate, each refused by name: score functions "
+    "and leaf estimators outside each policy's covered pair, Depthwise's "
+    "min_split_gain, min_child_hessian and min_data_in_leaf, "
+    "feature_fraction with the multi-output losses and the symmetric "
+    "pointwise losses, and boost_from_average outside RMSE, the quantile "
+    "family and the dedicated pointwise Logloss route -- each one its own "
+    "device kernel or its own searcher gate order",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -2943,6 +2946,8 @@ FAMILIES = (
             "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs",
             # lane gbdt-gaps (2026-11-23): sample weights and eval sets
             "gbdt-weighted-symmetric", "gbdt-weighted-nonsym", "gbdt-weighted-rank", "gbdt-eval-gaps",
+            # lane gbdt-cpu-rest (2026-11-23): the rest of the CPU gaps
+            "gbdt-weighted-rest", "gbdt-weighted-special", "gbdt-shape-gaps",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4147,6 +4152,10 @@ PUBLIC_PENDING_LANES = {
     "gbdt-weighted-nonsym": "no reference",
     "gbdt-weighted-rank": "no reference",
     "gbdt-eval-gaps": "no reference",
+    # lane gbdt-cpu-rest (2026-11-23): new lanes, recorded CPU first at the release
+    "gbdt-weighted-rest": "no reference",
+    "gbdt-weighted-special": "no reference",
+    "gbdt-shape-gaps": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
