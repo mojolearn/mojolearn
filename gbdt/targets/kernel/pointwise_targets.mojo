@@ -118,6 +118,8 @@ from gbdt.targets.pointwise_bodies import (
     BODY_OBJ_QUANTILE,
     BODY_OBJ_RMSE,
     BODY_OBJ_TWEEDIE,
+    cross_entropy_row,
+    cross_entropy_score,
     routed_exp,
     routed_log,
     routed_pow,
@@ -760,26 +762,13 @@ def cross_entropy_kernel[
         if has_weights != Int32(0):
             weight = weights.unsafe_load(i)
 
-    # `const float expVal = idx < size ? __expf(val) : 0;` (`:353`)
-    # DEVIATION 254: the guard structure is theirs untouched; only the
-    # transcendental is routed.
-    var exp_val = Float32(0.0)
-    if in_range:
-        exp_val = routed_exp(val)
-    # `p = max(min(isfinite(expVal) ? expVal / (1.0f + expVal) : 1.0f,
-    #              1.0f - 1e-40f), 1e-40f)` (`:354`)
-    var p = Float32(1.0)
-    if isfinite(exp_val):
-        p = exp_val / (Float32(1.0) + exp_val)
-    p = max(min(p, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
-
-    # `const float c = HAS_BORDER ? targetClass > border : targetClass;`
-    var c: Float32
-
-    comptime if has_border:
-        c = Float32(1.0) if target_class > border else Float32(0.0)
-    else:
-        c = target_class
+    # `expVal`, `p`, `c`, `direction` and `scale` (`:353-359`): the one body
+    # every column calls (`pointwise_bodies.cross_entropy_row`, lane
+    # gbdt-one-body 2026-11-23). An out-of-range thread evaluates it at its
+    # defaults (val 0, class 1) and uses none of it: every store, the score
+    # and the magnitudes below are guarded by `in_range`, as their `idx <
+    # size` guards are.
+    var row = cross_entropy_row[has_border](target_class, val, border)
 
     # their `ApproximateAt` path has no `secondDerAsWeights` flag; the
     # combination is a caller error, not a mode.
@@ -790,14 +779,10 @@ def cross_entropy_kernel[
     )
 
     # DEVIATION 256 / IDENTITY_PATHS row 10 on the ESTIMATOR
-    # DERIVATIONS -- `c - p` cancels when c and p are near each other, and
-    # `p * (1 - p)` at the 1e-40 clamp IS denormal, so both are flushed
-    # at derivation and each stored product is flushed at its seam --
-    # the stats planes feed the estimator's reduces, which is the
-    # `leaves.estimated` stage E1 measured divergent. Comptime no-ops
-    # under FAST.
-    var direction = ftz(c - p)  # their `direction[j] = c - p` (`:358`)
-    var scale = ftz(p * (Float32(1.0) - p))  # their `scale[j]` (`:359`)
+    # DERIVATIONS: both flushed at derivation inside the body, each stored
+    # product flushed at its seam below. Comptime no-ops under FAST.
+    var direction = row.direction  # their `direction[j] = c - p` (`:358`)
+    var scale = row.scale  # their `scale[j]` (`:359`)
 
     # what SEARCH plane 0 holds, per `second_der_as_weights` -- see the
     # deviation block. The der2 arm is their `der2[idx] = weight[j] *
@@ -825,15 +810,8 @@ def cross_entropy_kernel[
         var score = Float32(0.0)
         if in_range:
             # DEVIATION 254: their isfinite fallback kept exactly; only
-            # the `log` call is routed.
-            var log_exp_val_plus_one = val
-            if isfinite(exp_val):
-                log_exp_val_plus_one = routed_log(
-                    Float32(1.0) + exp_val
-                )
-            # `c * val - log(1 + e)` in ONE rounding, the default build's
-            # fusion written out (the host oracle spells the same)
-            score = weight * identical_mul_add(c, val, -log_exp_val_plus_one)
+            # the `log` call is routed (the one body, `cross_entropy_score`)
+            score = cross_entropy_score(row, val, weight)
         var total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)

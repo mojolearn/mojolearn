@@ -95,6 +95,8 @@ from gbdt.targets.pointwise_bodies import (
     BODY_OBJ_QUANTILE,
     BODY_OBJ_RMSE,
     BODY_OBJ_TWEEDIE,
+    cross_entropy_row,
+    cross_entropy_score,
     target_der,
     target_der2,
     target_score,
@@ -424,23 +426,15 @@ def _loss_row(
     `cross_entropy_kernel[has_border]` (`:947-1054`; `alpha` carries
     Logloss's border)."""
     if objective == GBDT_OBJ_CROSSENTROPY or objective == GBDT_OBJ_LOGLOSS:
-        var exp_val = identical_exp(p)
-        var prob = Float32(1.0)
-        if isfinite(exp_val):
-            prob = exp_val / (Float32(1.0) + exp_val)
-        prob = max(min(prob, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
-        var c = t
-        if objective == GBDT_OBJ_LOGLOSS:
-            c = Float32(1.0) if t > alpha else Float32(0.0)
-        var direction = ftz(c - prob)
-        var scale = ftz(prob * (Float32(1.0) - prob))
-        var log_exp_val_plus_one = p
-        if isfinite(exp_val):
-            log_exp_val_plus_one = identical_log(Float32(1.0) + exp_val)
+        # the device kernel's own body (`pointwise_bodies.cross_entropy_row`
+        # / `cross_entropy_score`, lane gbdt-one-body 2026-11-23)
+        var row = (
+            cross_entropy_row[True](t, p, alpha) if objective == GBDT_OBJ_LOGLOSS
+            else cross_entropy_row[False](t, p, alpha)
+        )
         return _LossRow(
-            ftz(weight * direction), abs(weight * direction),
-            # `c * p - log(1 + e)` in ONE rounding, as the default build fused it
-            ftz(weight * scale), weight * identical_mul_add(c, p, -log_exp_val_plus_one),
+            ftz(weight * row.direction), abs(weight * row.direction),
+            ftz(weight * row.scale), cross_entropy_score(row, p, weight),
         )
     var der = _weighted_der(objective, t, p, alpha, weight)
     return _LossRow(
@@ -458,12 +452,20 @@ def _loss_search_pass(
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
     weights: List[Float32] = List[Float32](),
+    second_order: Bool = False,
 ):
     """`launch_approximate[False]` with `compute_fv` and
     `compute_magnitudes` set: plane 0 the row's weight, plane 1 the flushed
     weighted derivative, one score partial and two magnitude partials per
     256-thread block through the halving tree. `weights` empty is the unit
-    weight, otherwise the kernels' `has_weights` arm (sample weights)."""
+    weight, otherwise the kernels' `has_weights` arm (sample weights).
+
+    `second_order` is `launch_approximate[False, True]`
+    (`secondDerAsWeights`, the NewtonL2 / NewtonCosine search planes): plane
+    0 is then the flushed weighted second derivative, and its magnitude
+    bounds that plane as stored (`pointwise_target_kernel`'s `plane0`). Lane
+    gbdt-rest-3 (2026-11-23): the pointwise searcher's own copy of this pass
+    (`gbdt_oracle_pointwise.mojo::_pw_search_pass`) is deleted."""
     # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
     # one 256-thread device block owns its rows' two planes and its three
     # partials, and its halving trees are the kernel's. Blocks go round
@@ -481,7 +483,7 @@ def _loss_search_pass(
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
     var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm alpha, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm alpha, imm has_weights, imm second_order, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
@@ -498,10 +500,13 @@ def _loss_search_pass(
                     if has_weights:
                         weight = weights_p[i]
                     var r = _loss_row(objective, targets_p[i], cursor_p[i], alpha, weight)
-                    stats_p[i] = weight
+                    var plane0 = weight
+                    if second_order:
+                        plane0 = r.der2
+                    stats_p[i] = plane0
                     stats_p[n_rows + i] = r.der
                     s_score[t] = r.score
-                    s_w[t] = abs(weight)
+                    s_w[t] = abs(plane0)
                     s_g[t] = r.der_abs
             fv_p[b] = _halving_fold(s_score)
             mag_p[2 * b] = _halving_fold(s_w)

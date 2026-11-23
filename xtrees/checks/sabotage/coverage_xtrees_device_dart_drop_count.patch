@@ -1,0 +1,17 @@
+diff --git a/xtrees/dart_device.mojo b/xtrees/dart_device.mojo
+index 6c5fff3570..5c1529a5f8 100644
+--- a/xtrees/dart_device.mojo
++++ b/xtrees/dart_device.mojo
+@@ -529,6 +529,12 @@ def dart_step(
+             ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=flags_out), src_buf=fsub)
+         ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=bad_out), src_buf=sess[].bad)
+         ctx.synchronize()
++        # SABOTAGE (coverage-xtrees-device_dart_drop_count): the first tree is
++        # never reported dropped to the round's normalisation (its host flag
++        # cleared after the device took it off the score), so the drop count
++        # is one short whenever tree 0 drops
++        if t > 0:
++            I32P(unsafe_from_address=flags_out).unsafe_store(0, Int32(0))
+     else:
+         raise Error("x_trees dart_step: built without DART_DEVICE (no accelerator)")
+ 

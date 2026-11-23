@@ -50,6 +50,12 @@ Depthwise); Cosine under Lossguide; Quantile on Depthwise (weighted) and MAE
 Exact on Lossguide with an eval set; feature_fraction 0.5 on the symmetric
 RMSE and Logloss loop and on Depthwise RMSE; the pointwise searcher without
 sample weights or an eval set. Every fit at `REST_RATE` 0.1.
+
+`test_ordered_weights_host_text_is_device_text` (lane gbdt-ordered-weights,
+2026-11-23): sample weights and class weights under Ordered boosting
+(Logloss, RMSE and MAE with boost_from_average, CrossEntropy, every
+bootstrap, both scores, zero weights with an eval set, a CTR column), the
+model text, the weighted learn curve and the held-out curve compared.
 """
 from std.math import nan
 from std.memory import UnsafePointer
@@ -905,6 +911,352 @@ def test_rest2_host_text_is_device_text() raises:
         raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
                     + ("gbdt_host_device_cat rest2 device: " + String(count) + " of " + String(REST2_UNITS)
                        + " cases failed" + failed if count > 0 else ""))
+
+
+# ---- lane gbdt-rest-3 (2026-11-23): the pointwise searcher's arms, host
+# text against device text at rate 0.1 ----
+comptime REST3_UNITS = 8
+
+
+def _rest3_loss(unit: Int) raises -> String:
+    if unit < 0 or unit >= REST3_UNITS:
+        raise Error("gbdt_host_device_cat rest3: no unit " + String(unit))
+    if unit == 0 or unit == 1 or unit == 4:
+        return String("Logloss")
+    if unit == 6:
+        return String("QueryRMSE")
+    if unit == 7:
+        return String("YetiRank")
+    return String("RMSE")
+
+
+def _rest3_inputs(unit: Int) raises -> GbdtInputs:
+    """Units 6-7 the ranking fixture; every other unit `_rest2_inputs`'
+    numeric construction with a target of its loss (0/1 for Logloss);
+    unit 4 carries hashed sample weights in [0.25, 4), unit 5 a held-out
+    slice."""
+    if unit == 6 or unit == 7:
+        return _rank_inputs(0)
+    var logloss = _rest3_loss(unit) == String("Logloss")
+    var n = REST_ROWS
+    var x = List[Float32](capacity=4 * n)
+    for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+        for r in range(n):  # driver-loop: over the fixture's rows
+            x.append(_unit01(r, 90 + j) * Float32(4.0) - Float32(2.0))
+    var y = List[Float32](capacity=n)
+    for r in range(n):  # driver-loop: over the fixture's rows
+        var v = (x[r] - Float32(0.5) * x[n + r] + Float32(0.25) * x[2 * n + r] * x[3 * n + r]
+                 + Float32(0.4) * (_unit01(r, 95) - Float32(0.5)))
+        if logloss:
+            y.append(Float32(1.0) if v > Float32(0.0) else Float32(0.0))
+        else:
+            y.append(v)
+    var inp = GbdtInputs(x^, n, 4, y^)
+    if unit == 4:
+        for r in range(n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 110))
+    if unit == 5:
+        var ne = n // 2
+        for j in range(4):  # driver-loop: over the held-out columns
+            for r in range(ne):  # driver-loop: over the held-out rows
+                inp.eval_x.append(_unit01(r, 100 + j) * Float32(4.0) - Float32(2.0))
+        for r in range(ne):  # driver-loop: over the held-out rows
+            inp.eval_y.append(inp.eval_x[r] - Float32(0.5) * inp.eval_x[ne + r]
+                              + Float32(3.0) * (_unit01(r, 105) - Float32(0.5)))
+    return inp^
+
+
+def _rest3_opts(unit: Int) raises -> GbdtOpts:
+    """The pointwise searcher throughout: 0 Logloss NewtonL2 Bernoulli
+    (subsample 0.7, Newton 3); 1 Logloss Cosine Poisson with random_strength
+    1 and Gradient leaves; 2 RMSE NewtonCosine, no bootstrap, random_strength
+    1; 3 RMSE Cosine at feature_fraction 0.5 with random_strength 1; 4
+    weighted Logloss NewtonCosine Bernoulli with random_strength 1; 5 RMSE
+    Cosine Poisson with an eval set (Iter, use_best_model); 6 QueryRMSE
+    Cosine and 7 YetiRank NewtonL2 Bernoulli, both at feature_fraction 0.5."""
+    var loss = _rest3_loss(unit)
+    var o = GbdtOpts(loss, REST_TREES, 4)
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.pointwise = True
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.leaf_method = "Newton"
+    o.leaf_iterations = 1
+    if unit <= 5:
+        o.boost_from_average = 1
+    if unit == 0:
+        o.score_function = "NewtonL2"
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+        o.leaf_iterations = 3
+    elif unit == 1:
+        o.score_function = "Cosine"
+        o.bootstrap = "Poisson"
+        o.subsample = 0.66
+        o.random_strength = 1.0
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 4
+    elif unit == 2:
+        o.score_function = "NewtonCosine"
+        o.random_strength = 1.0
+    elif unit == 3:
+        o.score_function = "Cosine"
+        o.random_strength = 1.0
+        o.feature_fraction = 0.5
+    elif unit == 4:
+        o.score_function = "NewtonCosine"
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+        o.random_strength = 1.0
+        o.leaf_iterations = 3
+    elif unit == 5:
+        o.score_function = "Cosine"
+        o.bootstrap = "Poisson"
+        o.subsample = 0.66
+        o.random_strength = 1.0
+        o.n_estimators = 30
+        o.learning_rate = 1.0
+        o.od_type = "Iter"
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+    elif unit == 6:
+        o.score_function = "Cosine"
+        o.feature_fraction = 0.5
+    else:
+        o.score_function = "NewtonL2"
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+        o.feature_fraction = 0.5
+    return o^
+
+
+def test_rest3_host_text_is_device_text() raises:
+    """The units of lane gbdt-rest-3: every host fit across the cores first,
+    then one device graph at a time; the held-out curves too."""
+    var host_texts = List[String](length=REST3_UNITS, fill=String(""))
+    var host_tests = List[List[Float64]](length=REST3_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_rest3_opts(unit), _rest3_inputs(unit))
+        p[unit] = outcome.text.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat rest3 host", REST3_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(REST3_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_rest3_opts(unit), _rest3_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat rest3 unit " + String(unit) + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat rest3 unit " + String(unit) + ": held-out curve lengths differ")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat rest3 unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat rest3 device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_tests^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat rest3 device: " + String(count) + " of " + String(REST3_UNITS)
+                       + " cases failed" + failed if count > 0 else ""))
+
+
+# ---- lane gbdt-ordered-weights (2026-11-23): sample and class weights under
+# Ordered boosting, host text against device text at rate 0.1 ----
+comptime ORDW_UNITS = 8
+
+
+def _ordw_loss(unit: Int) raises -> String:
+    if unit < 0 or unit >= ORDW_UNITS:
+        raise Error("gbdt_host_device_cat ordered weights: no unit " + String(unit))
+    if unit == 3 or unit == 6:
+        return String("RMSE")
+    if unit == 4:
+        return String("MAE")
+    if unit == 5:
+        return String("CrossEntropy")
+    return String("Logloss")
+
+
+def _ordw_inputs(unit: Int) raises -> GbdtInputs:
+    """Four numeric columns (unit 7: `_inputs`' CTR fixture), the target of
+    the unit's loss (a 0/1 label for Logloss, a probability in [0, 1] for
+    CrossEntropy), and hashed row weights on [0.25, 4) on every unit but 1
+    (class weights alone); unit 6 zeroes every seventh weight and carries a
+    held-out slice of the same construction."""
+    var loss = _ordw_loss(unit)
+    if unit == 7:
+        var cat = _inputs(False)
+        for r in range(cat.n):  # driver-loop: over the fixture's rows
+            cat.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 130))
+        return cat^
+    var n = REST_ROWS
+    var x = List[Float32](capacity=4 * n)
+    for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+        for r in range(n):  # driver-loop: over the fixture's rows
+            x.append(_unit01(r, 110 + j) * Float32(4.0) - Float32(2.0))
+    var y = List[Float32](capacity=n)
+    for r in range(n):  # driver-loop: over the fixture's rows
+        var v = (x[r] - Float32(0.5) * x[n + r] + Float32(0.25) * x[2 * n + r] * x[3 * n + r]
+                 + Float32(0.4) * (_unit01(r, 115) - Float32(0.5)))
+        if loss == String("Logloss"):
+            y.append(Float32(1.0) if v > Float32(0.0) else Float32(0.0))
+        elif loss == String("CrossEntropy"):
+            y.append(_unit01(r, 116) * Float32(0.5) + (Float32(0.5) if v > Float32(0.0) else Float32(0.0)))
+        else:
+            y.append(v)
+    var inp = GbdtInputs(x^, n, 4, y^)
+    if unit != 1:
+        for r in range(n):  # driver-loop: over the fixture's rows
+            var w = Float32(0.25) + Float32(3.75) * _unit01(r, 120)
+            if unit == 6 and r % 7 == 0:
+                w = Float32(0.0)
+            inp.weights.append(w)
+    if unit == 6:
+        var ne = n // 2
+        for j in range(4):  # driver-loop: over the held-out columns
+            for r in range(ne):  # driver-loop: over the held-out rows
+                inp.eval_x.append(_unit01(r, 125 + j) * Float32(4.0) - Float32(2.0))
+        for r in range(ne):  # driver-loop: over the held-out rows
+            inp.eval_y.append(inp.eval_x[r] - Float32(0.5) * inp.eval_x[ne + r]
+                              + Float32(2.0) * (_unit01(r, 129) - Float32(0.5)))
+    return inp^
+
+
+def _ordw_opts(unit: Int) raises -> GbdtOpts:
+    """Ordered boosting, every work-changing option explicit: 0 weighted
+    Logloss (Cosine, no bootstrap); 1 Logloss with class weights [1, 2.5]
+    (Bayesian at 1 with score noise 1); 2 Logloss with sample and class
+    weights (NewtonCosine, Bernoulli 0.7); 3 weighted RMSE with
+    boost_from_average (NewtonCosine, Bayesian); 4 weighted MAE with
+    boost_from_average (the weighted median, Gradient leaves); 5
+    CrossEntropy with sample and class weights; 6 weighted RMSE, zero
+    weights, an eval set (Iter, use_best_model); 7 weighted Logloss over a
+    CTR column (Poisson 0.66)."""
+    var loss = _ordw_loss(unit)
+    var o = GbdtOpts(loss, REST_TREES, 4)
+    o.boosting_type = "Ordered"
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = "Cosine"
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.leaf_iterations = 1
+    o.boost_from_average = 0
+    if unit == 1:
+        o.class_weights = [1.0, 2.5]
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.random_strength = 1.0
+    elif unit == 2:
+        o.class_weights = [1.0, 2.5]
+        o.score_function = "NewtonCosine"
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif unit == 3:
+        o.boost_from_average = 1
+        o.score_function = "NewtonCosine"
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+    elif unit == 4:
+        o.boost_from_average = 1
+        o.leaf_method = "Gradient"
+    elif unit == 5:
+        o.class_weights = [2.0, 0.5]
+    elif unit == 6:
+        o.n_estimators = 30
+        o.learning_rate = 1.0
+        o.od_type = "Iter"
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+    elif unit == 7:
+        o.cat_features = [0]
+        o.bootstrap = "Poisson"
+        o.subsample = 0.66
+    return o^
+
+
+def test_ordered_weights_host_text_is_device_text() raises:
+    """The units of lane gbdt-ordered-weights: every host fit across the
+    cores first, then one device graph at a time; the weighted learn curves
+    and the held-out curve too."""
+    var host_texts = List[String](length=ORDW_UNITS, fill=String(""))
+    var host_learn = List[List[Float64]](length=ORDW_UNITS, fill=List[Float64]())
+    var host_tests = List[List[Float64]](length=ORDW_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var learn_addr = Int(host_learn.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm learn_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var l = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=learn_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_ordw_opts(unit), _ordw_inputs(unit))
+        p[unit] = outcome.text.copy()
+        l[unit] = outcome.learn.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat ordered weights host", ORDW_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(ORDW_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_ordw_opts(unit), _ordw_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat ordered weights unit " + String(unit)
+                    + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.learn) != len(host_learn[unit]) or len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat ordered weights unit " + String(unit) + ": curve lengths differ")
+            for i in range(len(outcome.learn)):  # small-loop(the learn curve)
+                if outcome.learn[i] != host_learn[unit][i]:
+                    raise Error("gbdt_host_device_cat ordered weights unit " + String(unit) + ": learn loss "
+                                + String(i) + " differs")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat ordered weights unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat ordered weights device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_learn^
+    _ = host_tests^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat ordered weights device: " + String(count) + " of "
+                       + String(ORDW_UNITS) + " cases failed" + failed if count > 0 else ""))
 
 
 def main() raises:

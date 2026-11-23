@@ -1,0 +1,35 @@
+diff --git a/gbdt/methods/kernel_add_model_value.mojo b/gbdt/methods/kernel_add_model_value.mojo
+index b62db4232d..7c6b7ed9b4 100644
+--- a/gbdt/methods/kernel_add_model_value.mojo
++++ b/gbdt/methods/kernel_add_model_value.mojo
+@@ -41,6 +41,7 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from std.memory import stack_allocation
++from std.math import fma as _sab_fma  # SABOTAGE (coverage-gbdt-device_boost_fused_cursor): the fused cursor update
+ 
+ from gbdt.methods.cursor_rescale import rescaled_leaf
+ # TOMBSTONE: MOJOLEARN_AFT_G08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at acfd453fec.
+@@ -153,13 +154,21 @@ def _add_model_value_body(
+         shared_scaled[0] = rescaled_leaf(raw, learning_rate)
+     barrier()
+     var scaled = shared_scaled[0]
++    _ = scaled
+     while i < size:
+         comptime for lane in range(AFT_LEAF_ROWS):
+             var position = i + lane * stride
+             if position < size:
+                 var row = plane + Int(row_index.unsafe_load(offset + position))
+                 # independent rows share the leaf value and never share writes
+-                cursor.unsafe_store(row, cursor.unsafe_load(row) + scaled)
++                # SABOTAGE (coverage-gbdt-device_boost_fused_cursor): the
++                # one-output learn cursor takes fma(leaf, rate, cursor), ONE
++                # fused rounding, where the model stores round(leaf * rate)
++                # and every other cursor adds it (the pre-2db07105a5 form)
++                if dim_count == 1:
++                    cursor.unsafe_store(row, _sab_fma(raw, learning_rate, cursor.unsafe_load(row)))
++                else:
++                    cursor.unsafe_store(row, cursor.unsafe_load(row) + scaled)
+         i += stride * AFT_LEAF_ROWS
+ 
+ 

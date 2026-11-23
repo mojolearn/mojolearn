@@ -158,6 +158,8 @@ from checks.numerics import (
 from gbdt.data.permutation import TRandom
 from gbdt.targets.pointwise_bodies import (
     BODY_OBJ_RMSE,
+    cross_entropy_row,
+    cross_entropy_score,
     weighted_der,
     weighted_der2,
     weighted_score,
@@ -438,25 +440,13 @@ def _cross_entropy_row(
     (`pointwise_targets.mojo:947-1054`), term for term: the routed `exp`,
     the clamped probability, the bordered class, the flushed direction and
     scale, and the score with its isfinite fallback."""
-    var exp_val = identical_exp(val)
-    var p = Float32(1.0)
-    if isfinite(exp_val):
-        p = exp_val / (Float32(1.0) + exp_val)
-    p = max(min(p, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
-    var c: Float32
-    if target_class > border:
-        c = Float32(1.0)
-    else:
-        c = Float32(0.0)
-    var direction = ftz(c - p)
-    var scale = ftz(p * (Float32(1.0) - p))
-    var log_exp_val_plus_one = val
-    if isfinite(exp_val):
-        log_exp_val_plus_one = identical_log(Float32(1.0) + exp_val)
-    # `c * val - log(1 + e)` in one rounding, as the default build fused it
-    var score = weight * identical_mul_add(c, val, -log_exp_val_plus_one)
+    # the device kernel's own body (`pointwise_bodies.cross_entropy_row` /
+    # `cross_entropy_score`, lane gbdt-one-body 2026-11-23)
+    var row = cross_entropy_row[True](target_class, val, border)
+    var direction = row.direction
     return _CeRow(
-        ftz(weight * direction), weight * direction, ftz(weight * scale), score
+        ftz(weight * direction), weight * direction, ftz(weight * row.scale),
+        cross_entropy_score(row, val, weight),
     )
 
 
@@ -823,22 +813,25 @@ def _snap_gradients(
     _ = len(stats)
 
 
-def _snap_plane(mut plane: List[Float32], n: Int, fixed_scale: Float32):
+def _snap_plane(mut plane: List[Float32], n: Int, fixed_scale: Float32, offset: Int = 0):
     """`snap_plane_to_scale_kernel` (`kernel/histogram_utils.mojo`,
     lane/sym-quality): the pointwise searcher's gradient plane onto the
     tree's fixed-point grid, keyed on the plane index. Every index is its
-    own statement; the indices run in `_gbdt_units` contiguous ranges."""
+    own statement; the indices run in `_gbdt_units` contiguous ranges.
+    `offset` is where index 0 of the plane sits in `plane` (lane
+    gbdt-one-body: the gradient plane of a two-plane stats list); the
+    dither stays keyed on the plane index."""
     var units = _gbdt_units(n, 8 * n)
     var chunk = host_predict_chunk(n, units)
     var plane_p = rebind[HostF32Ptr](plane.unsafe_ptr())
 
-    def rows(unit: Int) {imm chunk, imm n, imm fixed_scale, imm plane_p}:
+    def rows(unit: Int) {imm chunk, imm n, imm fixed_scale, imm plane_p, imm offset}:
         for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
-            var q = _hist2_quantize(plane_p[i], fixed_scale, _hist2_dither(i))
+            var q = _hist2_quantize(plane_p[offset + i], fixed_scale, _hist2_dither(i))
             var v = Float32(0.0)
             if q != Int32(0):
                 v = ftz(Float32(Int(q)) / fixed_scale)
-            plane_p[i] = v
+            plane_p[offset + i] = v
 
     host_parallelize(rows, units)
     _ = len(plane)
@@ -3748,6 +3741,51 @@ def _partition_for_tree(
     )
 
 
+def _onehot_code_range(col: HostF32Ptr, lo: Int, hi: Int) -> Int:
+    """`cat_code_scan_kernel`'s lenient arm (`gbdt/data/cat_code_scan.mojo`,
+    `onehot_column_max_code`) over the rows `[lo, hi)`: the largest
+    `Int(v)` of the non-negative values, 0 at least; a NaN or a negative
+    value never raises it, and a value at or past 2^31 (or +inf) is
+    2^31 - 1, which the 255-category limit refuses."""
+    var maxc = 0
+    for r in range(lo, hi):
+        var v = col[r]
+        if v >= Float32(0.0):
+            var code = 2147483647
+            if v < Float32(2147483648.0):
+                code = Int(v)
+            if code > maxc:
+                maxc = code
+    return maxc
+
+
+def gbdt_onehot_max_code(col: HostF32Ptr, n: Int) -> Int:
+    """The one-hot cardinality scan of one column of `n` rows, the device's
+    `onehot_column_max_code` (an integer maximum: any grouping). One maximum
+    a task over a contiguous row range, then the maximum of those. Lane
+    gbdt-rest-3 (2026-11-23): the one body of the one-hot grid here and of
+    gbdt_oracle_ctr.mojo (whose `_ctr_max_code` it replaces); `Int(NaN)`
+    had no defined value on either, so a NaN in a one_hot_features column
+    was refused by name."""
+    var units = _gbdt_units(n, 2 * n)
+    var chunk = host_predict_chunk(n, units)
+    var best = List[Int](length=max(units, 1), fill=0)
+    var best_p = rebind[GbdtIntPtr](best.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm col, imm best_p}:
+        best_p[unit] = _onehot_code_range(
+            col, min(n, unit * chunk), min(n, (unit + 1) * chunk)
+        )
+
+    host_parallelize(rows, units)
+    var maxc = 0
+    for u in range(len(best)):  # driver-loop: over the tasks' maxima
+        if best[u] > maxc:
+            maxc = best[u]
+    _ = len(best)
+    return maxc
+
+
 def gbdt_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -3839,11 +3877,9 @@ def gbdt_host_fit_eval(
             if not one_hot_in[f]:
                 continue
             one_hot[f] = True
-            var maxc = 0
-            for r in range(n_rows):
-                var c = Int(x_colmajor[f * n_rows + r])
-                if c > maxc:
-                    maxc = c
+            var maxc = gbdt_onehot_max_code(
+                rebind[HostF32Ptr](x_colmajor.unsafe_ptr()) + f * n_rows, n_rows
+            )
             if maxc > 254:
                 raise Error("one-hot feature " + String(f) + " has more than 255 categories")
             var bs = List[Float32]()

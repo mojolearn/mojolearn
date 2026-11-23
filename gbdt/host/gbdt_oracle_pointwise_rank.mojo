@@ -27,11 +27,13 @@ from gbdt.data.pairs import (
 )
 from gbdt.data.permutation import TRandom
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
-from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout, build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from gbdt.host.gbdt_oracle import (
+    _ns_project_index,
+    _sample_tree_folds,
     apply_scaled_leaves_host,
     _gbdt_units,
     _identity_rows,
@@ -58,7 +60,7 @@ from gbdt.host.gbdt_oracle_losses import (
     _estimate_leaves_for_loss,
     _zero_average_host,
 )
-from gbdt.host.gbdt_oracle_ordered import _PwHelper, _ordered_tree_structure
+from gbdt.host.gbdt_oracle_ordered import _OrdSplit, _PwHelper, _ordered_tree_structure
 from gbdt.host.gbdt_oracle_pair import (
     HostPairs,
     host_pair_groups,
@@ -110,26 +112,88 @@ def _pointwise_target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
     return sqrt(Float64(sum2) / (Float64(n_rows) + 1e-100))
 
 
-def _split_planes(
-    stats: List[Float32], n_rows: Int, mut sw: List[Float32], mut sg: List[Float32]
+def _pw_helpers(
+    layout: CompressedIndexLayout, n_rows: Int
+) raises -> List[_PwHelper]:
+    """The single-fold searcher's policy helpers of `layout` (the device's
+    `pw_pool`, one per policy block, BinaryFeatures included: the searcher
+    builds the binary cells for a one-border feature). A fit at
+    feature_fraction 1 builds them once; a sampled fit builds them for each
+    tree's layout, as the device clears `pw_pool` per sampled tree."""
+    var blocks = blocks_for(layout, n_rows)
+    var helpers = List[_PwHelper]()
+    for b in range(len(blocks)):  # driver-loop: over the layout's policy blocks
+        ref blk = blocks[b]
+        var gids = List[Int]()
+        var offs = List[Int]()
+        var firsts = List[Int]()
+        var folds = List[Int]()
+        var hist_line = 0
+        for k in range(blk.count()):  # driver-loop: over the block's features
+            var f = blk.feature_ids[k]
+            gids.append(f)
+            offs.append(Int(layout.features[f].offset) * n_rows)
+            firsts.append(Int(blk.fold_offset[k]))
+            folds.append(Int(blk.folds[k]))
+            hist_line += Int(blk.folds[k])
+        helpers.append(_PwHelper(
+            blk.policy, gids^, offs^, firsts^, folds^, hist_line,
+            List[Float32](), List[Int](), List[Bool](),
+        ))
+    return helpers^
+
+
+def _pw_feature_words(
+    layout: CompressedIndexLayout,
+    n_rows: Int,
+    n_features: Int,
+    mut feat_offset: List[Int],
+    mut feat_shift: List[UInt32],
+    mut feat_mask: List[UInt32],
 ):
-    """The two search planes of `stats` as the structure search's two
-    lists: a move per row, the rows in `_gbdt_units` contiguous ranges."""
-    var units = _gbdt_units(n_rows, 2 * n_rows)
-    var chunk = host_predict_chunk(n_rows, units)
-    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
-    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
-    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
+    """Each feature's word offset, shift and mask in `layout` (the
+    partition update's addressing)."""
+    feat_offset = List[Int](length=n_features, fill=0)
+    feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
+    feat_mask = List[UInt32](length=n_features, fill=UInt32(0))
+    for f in range(n_features):  # driver-loop: over the layout's features
+        feat_offset[f] = Int(layout.features[f].offset) * n_rows
+        feat_shift[f] = layout.features[f].shift
+        feat_mask[f] = layout.features[f].mask
 
-    def rows(unit: Int) {imm chunk, imm n_rows, imm stats_p, imm sw_p, imm sg_p}:
-        for r in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
-            sw_p[r] = stats_p[r]
-            sg_p[r] = stats_p[n_rows + r]
 
-    host_parallelize(rows, units)
-    _ = len(stats)
-    _ = len(sw)
-    _ = len(sg)
+def _pw_sample_tree(
+    cindex: List[UInt32],
+    layout: CompressedIndexLayout,
+    fold_counts: List[Int],
+    fraction: Float64,
+    mut random: TRandom,
+    n_rows: Int,
+    n_features: Int,
+    mut tree_cindex: List[UInt32],
+    mut helpers: List[_PwHelper],
+    mut feat_offset: List[Int],
+    mut feat_shift: List[UInt32],
+    mut feat_mask: List[UInt32],
+) raises:
+    """One tree's feature sample for the single-fold searcher
+    (`feature_fraction < 1`, `doc_parallel_boosting.mojo`): the device's
+    `sample_tree_folds` on its own stream, the tree layout, the learn index
+    projected onto it (`_ns_project_index`, the helpers the symmetric
+    losses fit calls), and the searcher's helpers and feature words rebuilt
+    for it, as the device clears `pw_pool` for a sampled tree. The splits
+    the searcher returns name the fit's features and bins, so the
+    partition, the estimate and the held-out apply read the full layout."""
+    var tree_folds = _sample_tree_folds(fold_counts, fraction, random)
+    var one_hot = List[Bool](length=n_features, fill=False)
+    var t_layout = build_layout(tree_folds, one_hot)
+    tree_cindex = _ns_project_index(
+        cindex, layout, t_layout, tree_folds, n_rows, n_features
+    )
+    helpers = _pw_helpers(t_layout, n_rows)
+    _pw_feature_words(
+        t_layout, n_rows, n_features, feat_offset, feat_shift, feat_mask
+    )
 
 
 def gbdt_ranking_pointwise_host_fit(
@@ -147,6 +211,7 @@ def gbdt_ranking_pointwise_host_fit(
     cosine_score: Bool,
     random_strength: Float32,
     weights: List[Float32] = List[Float32](),
+    feature_fraction: Float64 = 1.0,
 ) raises -> GbdtHostModel:
     """Fit grouped targets on numeric columns using pointwise tree search.
 
@@ -156,7 +221,12 @@ def gbdt_ranking_pointwise_host_fit(
     gbdt_losses_host_fit`) reads them: YetiRank's `has_weights` arm,
     PairLogit's generated pairs' weights (a caller's pairs keep their own),
     QueryRMSE's weighted query means, and the leaf weights of the shared
-    grouped estimator."""
+    grouped estimator.
+
+    `feature_fraction` below 1 is the device's per-tree feature sample on
+    this searcher (`_pw_sample_tree`; lane gbdt-rest-3, 2026-11-23)."""
+    if not (feature_fraction > 0.0) or feature_fraction > 1.0:
+        raise Error("feature_fraction must be finite and in (0, 1]")
     var has_weights = len(weights) > 0
     if has_weights and len(weights) != n_rows:
         raise Error("weights size mismatch")
@@ -222,33 +292,15 @@ def gbdt_ranking_pointwise_host_fit(
     var one_hot = List[Bool](length=n_features, fill=False)
     var layout = build_layout(grid.fold_counts, one_hot)
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
-    var blocks = blocks_for(layout, n_rows)
-    var helpers = List[_PwHelper]()
-    for b in range(len(blocks)):
-        ref blk = blocks[b]
-        var gids = List[Int]()
-        var offs = List[Int]()
-        var firsts = List[Int]()
-        var folds = List[Int]()
-        var hist_line = 0
-        for k in range(blk.count()):
-            var f = blk.feature_ids[k]
-            gids.append(f)
-            offs.append(Int(layout.features[f].offset) * n_rows)
-            firsts.append(Int(blk.fold_offset[k]))
-            folds.append(Int(blk.folds[k]))
-            hist_line += Int(blk.folds[k])
-        helpers.append(_PwHelper(
-            blk.policy, gids^, offs^, firsts^, folds^, hist_line,
-            List[Float32](), List[Int](), List[Bool](),
-        ))
-    var feat_offset = List[Int](length=n_features, fill=0)
-    var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
-    var feat_mask = List[UInt32](length=n_features, fill=UInt32(0))
-    for f in range(n_features):
-        feat_offset[f] = Int(layout.features[f].offset) * n_rows
-        feat_shift[f] = layout.features[f].shift
-        feat_mask[f] = layout.features[f].mask
+    var helpers = _pw_helpers(layout, n_rows)
+    var feat_offset = List[Int]()
+    var feat_shift = List[UInt32]()
+    var feat_mask = List[UInt32]()
+    _pw_feature_words(layout, n_rows, n_features, feat_offset, feat_shift, feat_mask)
+    # the per-tree feature sample's state (unread at feature_fraction 1)
+    var ff_on = feature_fraction < 1.0
+    var feature_random = TRandom(params.random_seed ^ UInt64(0x4645415455524553))
+    var tree_cindex = List[UInt32]()
     var doc_ids = List[Int](length=n_rows, fill=0)
     _identity_rows(doc_ids, n_rows)
     var part_bounds = List[Int]()
@@ -310,16 +362,32 @@ def gbdt_ranking_pointwise_host_fit(
         else:
             var mags = _deterministic_sum_lanes(mag_part, 2, mag_blocks)
             scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
-        var sw = List[Float32](length=n_rows, fill=Float32(0))
-        var sg = List[Float32](length=n_rows, fill=Float32(0))
-        _split_planes(stats, n_rows, sw, sg)
-        _snap_plane(sg, n_rows, scale)
-        var splits = _ordered_tree_structure(
-            cindex, helpers, params.max_depth, sw, sg, doc_ids, part_bounds,
-            1, 0, scale, params.l2_leaf_reg, feat_offset, feat_shift,
-            feat_mask, List[Bool](), not cosine_score, score_std_dev,
-            tree_seed, cosine_score,
-        )
+        # the gradient plane snapped in place in `stats`; the search reads
+        # both planes from `stats` at offsets 0 and n_rows (lane
+        # gbdt-one-body: no per-tree plane lists and copy, `_split_planes`)
+        _snap_plane(stats, n_rows, scale, n_rows)
+        var splits: List[_OrdSplit]
+        if ff_on:
+            # the tree's sample: its helpers and feature words replace the
+            # fit's for this tree (`_pw_sample_tree`)
+            _pw_sample_tree(
+                cindex, layout, grid.fold_counts, feature_fraction,
+                feature_random, n_rows, n_features, tree_cindex, helpers,
+                feat_offset, feat_shift, feat_mask,
+            )
+            splits = _ordered_tree_structure(
+                tree_cindex, helpers, params.max_depth, stats, stats, doc_ids,
+                part_bounds, 1, 0, scale, params.l2_leaf_reg, feat_offset,
+                feat_shift, feat_mask, List[Bool](), not cosine_score,
+                score_std_dev, tree_seed, cosine_score, sw_off=0, sg_off=n_rows,
+            )
+        else:
+            splits = _ordered_tree_structure(
+                cindex, helpers, params.max_depth, stats, stats, doc_ids,
+                part_bounds, 1, 0, scale, params.l2_leaf_reg, feat_offset,
+                feat_shift, feat_mask, List[Bool](), not cosine_score,
+                score_std_dev, tree_seed, cosine_score, sw_off=0, sg_off=n_rows,
+            )
         var n_leaves = 1 << len(splits)
         # `compute_bins_for_model` + `partition_from_bins`: the rows' leaves
         # and the stable counting sort across the cores (lane gbdt-host-par)

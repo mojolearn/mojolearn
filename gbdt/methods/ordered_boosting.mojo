@@ -243,6 +243,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     pinned_block_sum,
 )
 from gbdt.targets.pointwise_bodies import (
+    cross_entropy_row,
     routed_exp,
     weighted_der,
     weighted_der2,
@@ -1879,18 +1880,11 @@ def _ord_point[objective: Int](
     and `cross_entropy_kernel`'s per-element statements (estimation mode),
     the same flushes."""
     comptime if objective == OBJECTIVE_LOGLOSS or objective == OBJECTIVE_CROSSENTROPY:
-        var exp_val = routed_exp(val)
-        var p = Float32(1.0)
-        if isfinite(exp_val):
-            p = exp_val / (Float32(1.0) + exp_val)
-        p = max(min(p, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
-        var c = relev
-        comptime if objective == OBJECTIVE_LOGLOSS:
-            c = Float32(1.0) if relev > border else Float32(0.0)
-        var direction = ftz(c - p)
-        var scale = ftz(p * (Float32(1.0) - p))
+        # the one body (`pointwise_bodies.cross_entropy_row`, lane
+        # gbdt-one-body 2026-11-23)
+        var row = cross_entropy_row[objective == OBJECTIVE_LOGLOSS](relev, val, border)
         return SIMD[DType.float32, 2](
-            ftz(weight * direction), ftz(weight * scale)
+            ftz(weight * row.direction), ftz(weight * row.scale)
         )
     else:
         return SIMD[DType.float32, 2](

@@ -1,0 +1,15 @@
+diff --git a/gbdt/targets/kernel/pair_logit.mojo b/gbdt/targets/kernel/pair_logit.mojo
+index 4dc34036c1..2fe4f904d9 100644
+--- a/gbdt/targets/kernel/pair_logit.mojo
++++ b/gbdt/targets/kernel/pair_logit.mojo
+@@ -207,7 +207,9 @@ def make_pairwise_target_buffers(
+     for p in range(n_pairs):
+         h_pairs.unsafe_ptr().unsafe_store(2 * p, winners[p])
+         h_pairs.unsafe_ptr().unsafe_store(2 * p + 1, losers[p])
+-        h_pw.unsafe_ptr().unsafe_store(p, pair_weights[p])
++        # SABOTAGE (coverage-gbdt-device_pair_weight): the first pair reads
++        # the second pair's weight (an off-by-one in the pair-weight upload)
++        h_pw.unsafe_ptr().unsafe_store(p, pair_weights[1 if p == 0 and n_pairs > 1 else p])
+     for r in range(n_rows + 1):
+         h_off.unsafe_ptr().unsafe_store(r, prep.offsets[r])
+     for k in range(2 * n_pairs):

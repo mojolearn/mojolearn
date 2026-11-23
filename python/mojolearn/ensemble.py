@@ -561,7 +561,7 @@ OD_TYPES = ("None", "IncToDec", "Iter")
 # - boosting_type: boosting_options.cpp:16; Ordered default catboost_options.cpp:802-807,
 #   UpdateBoostingTypeOption (defaults_helper.h:33-42); GPU Plain-only cases :949-978. Ordered is their
 #   GPU TDynamicBoosting (gbdt/methods/ordered_boosting.mojo carries the account). The CPU host path
-#   restates Ordered at unit weights on numeric columns and agrees with Apple Metal bit for bit (the
+#   restates Ordered (sample and class weights, numeric and categorical columns) and agrees with Apple Metal bit for bit (the
 #   gbdt-ordered* identity lanes). parallel_ensemble.fit_boosting partitions its fold histograms across
 #   GPUs as it does OrderedRMSE's.
 # - fold_len_multiplier: boosting_options.cpp:11. fold_permutation_block: boosting_options.cpp:12; GPU
@@ -789,8 +789,7 @@ class GradientBoosting(_NumericModeMixin):
         bootstrap, ``random_strength``, every border type and NaN mode,
         sample and class weights, categorical columns (one-hot and CTR,
         with feature combinations when ``max_ctr_complexity`` is above 1),
-        ``boost_from_average`` and eval sets. On a CPU-only install, sample
-        weights and class weights are refused under Ordered.
+        ``boost_from_average`` and eval sets.
         Refused, as in CatBoost: Depthwise and Lossguide, the multiclass
         losses, L2 and NewtonL2 scores, the Exact leaf estimator. Not
         implemented, refused by name: the ranking losses. Its random streams are this library's, so an Ordered model

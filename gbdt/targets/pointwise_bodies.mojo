@@ -25,6 +25,8 @@ with them, word for word; see `pointwise_targets.mojo`'s deviation block for
 why they are `@always_inline` shims.
 """
 
+from std.math import isfinite
+
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -339,3 +341,67 @@ def weighted_score[objective: Int](
     """`-w * target.Score(...)`, the function value's element
     (`pointwise_targets.cu:271-280`)."""
     return -weight * target_score[objective](t, p, alpha)
+
+
+# ---------------------------------------------------------------------------
+# `CrossEntropyImpl`'s per-element statements (`pointwise_targets.cu:353-364`),
+# Logloss (`has_border`) and CrossEntropy. Lane gbdt-one-body (2026-11-23):
+# written once here and called by the device's `cross_entropy_kernel`
+# (`gbdt/targets/kernel/pointwise_targets.mojo`), the Ordered arm's
+# `_ord_point` (`gbdt/methods/ordered_boosting.mojo`) and the host oracles'
+# rows (`gbdt/host/gbdt_oracle.mojo::_cross_entropy_row`,
+# `gbdt/host/gbdt_oracle_losses.mojo::_loss_row`), which each carried their
+# own copy. The host copies called `identical_exp` / `identical_log`
+# directly, which is what `routed_exp` / `routed_log` are under IDENTICAL,
+# so no bit moves on the identical columns.
+# ---------------------------------------------------------------------------
+
+
+@fieldwise_init
+struct CrossEntropyRow(ImplicitlyCopyable, Movable):
+    """One element's derived values, before the row weight."""
+
+    #: `expVal = exp(val)`, routed (DEVIATION 254)
+    var exp_val: Float32
+    #: the class: `targetClass > border` under `has_border`, else the target
+    var c: Float32
+    #: `ftz(c - p)`, their `direction[j]`
+    var direction: Float32
+    #: `ftz(p * (1 - p))`, their `scale[j]`
+    var scale: Float32
+
+
+@always_inline
+def cross_entropy_row[has_border: Bool](
+    target_class: Float32, val: Float32, border: Float32
+) -> CrossEntropyRow:
+    """`expVal`, `p = clamp(isfinite ? expVal / (1 + expVal) : 1, [1e-40,
+    1 - 1e-40])`, the class `c`, and the flushed direction and scale
+    (DEVIATION 256 / IDENTITY_PATHS row 10: `c - p` cancels and `p * (1 -
+    p)` is denormal at the clamp, so both are flushed at derivation)."""
+    var exp_val = routed_exp(val)
+    var p = Float32(1.0)
+    if isfinite(exp_val):
+        p = exp_val / (Float32(1.0) + exp_val)
+    p = max(min(p, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
+    var c: Float32
+
+    comptime if has_border:
+        c = Float32(1.0) if target_class > border else Float32(0.0)
+    else:
+        c = target_class
+    return CrossEntropyRow(
+        exp_val, c, ftz(c - p), ftz(p * (Float32(1.0) - p))
+    )
+
+
+@always_inline
+def cross_entropy_score(row: CrossEntropyRow, val: Float32, weight: Float32) -> Float32:
+    """`tmpScore += w * (c * val - log(1 + expVal))` with their isfinite
+    fallback `logExpValPlusOne = isfinite ? log(1 + expVal) : val`
+    (`:362-364`); `c * val - log(1 + e)` in ONE rounding, the default
+    build's fusion written out."""
+    var log_exp_val_plus_one = val
+    if isfinite(row.exp_val):
+        log_exp_val_plus_one = routed_log(Float32(1.0) + row.exp_val)
+    return weight * identical_mul_add(row.c, val, -log_exp_val_plus_one)

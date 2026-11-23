@@ -98,6 +98,8 @@ from gbdt.grid_creator.binarization import (
 )
 from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
 from gbdt.data.permutation import TRandom
+from gbdt.methods.score_calcer_body import make_score_calcer
+from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE, SCORE_FUNCTION_L2
 from gbdt.host.gbdt_oracle_tree_ctr import (
     GbdtTreeCtrHost,
     TreeU32Ptr,
@@ -333,7 +335,8 @@ def _ord_part_sums_stride(
 
 @no_inline
 def _update_subsets_stats(
-    mut s: _OrdSubsets, part_count: Int, sw: List[Float32], sg: List[Float32]
+    mut s: _OrdSubsets, part_count: Int, sw: List[Float32], sg: List[Float32],
+    sw_off: Int = 0, sg_off: Int = 0,
 ):
     """`update_subsets_stats`: the offsets and sizes of the sorted bins
     (`update_partition_offsets_kernel`, `update_partition_sizes_kernel`, a
@@ -349,7 +352,12 @@ def _update_subsets_stats(
     its task with that quarter, so such a part (at most four) is summed
     with its LANES across the tasks instead (`_partition_update_sum_wide`).
     Every sum's adds and their order are the device block's at any task
-    count; every task count comes from `_gbdt_units` (the nested rule)."""
+    count; every task count comes from `_gbdt_units` (the nested rule).
+
+    `sw_off` / `sg_off` (lane gbdt-one-body, 2026-11-23): where row 0 of
+    each plane sits in its list, so a caller holding both planes in one
+    stats list (plane 0 then plane 1, the pointwise searchers) passes it
+    twice instead of copying the planes out once per tree."""
     var doc_count = len(s.bins)
     var bins_p = _u32_ptr(s.bins)
     var off_p = rebind[GbdtIntPtr](s.p_off.unsafe_ptr())
@@ -375,11 +383,11 @@ def _update_subsets_stats(
     var g_units = _gbdt_units(doc_count, 4 * doc_count)
     var g_chunk = host_predict_chunk(doc_count, g_units)
 
-    def gather(unit: Int) {imm g_chunk, imm doc_count, imm idx_p, imm sw_p, imm sg_p, imm gw_p, imm gt_p}:
+    def gather(unit: Int) {imm g_chunk, imm doc_count, imm idx_p, imm sw_p, imm sg_p, imm sw_off, imm sg_off, imm gw_p, imm gt_p}:
         for i in range(unit * g_chunk, min(doc_count, (unit + 1) * g_chunk)):
             var row = idx_p[i]
-            gw_p[i] = sw_p[row]
-            gt_p[i] = sg_p[row]
+            gw_p[i] = sw_p[sw_off + row]
+            gt_p[i] = sg_p[sg_off + row]
 
     host_parallelize(gather, g_units)
 
@@ -1100,6 +1108,9 @@ def _ord_score_blocks(
     var t_score = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
     var t_gain = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
     var t_index = List[Int](length=GBDT_ORD_SCORE_BLOCK, fill=0)
+    var l2_calcer = make_score_calcer[SCORE_FUNCTION_L2](
+        l2, Float32(1.0), False, Float32(0.0), UInt64(0)
+    )
     for blk in range(blk_lo, blk_hi):
         for tid in range(GBDT_ORD_SCORE_BLOCK):
             var th_score = GBDT_ORD_FLOAT32_MAX
@@ -1111,10 +1122,11 @@ def _ord_score_blocks(
                     break
                 var b = i + tid
                 if plain_l2:
-                    # `TL2ScoreCalcer`: Score = 0, per leaf both sides'
-                    # `(-sum * sum) / (weight + lambda)` when the weight
-                    # exceeds 1e-20, no normalization
-                    var l2score = Float32(0.0)
+                    # `TL2ScoreCalcer` at meta exponent 1, the device's own
+                    # body (`score_calcer_body.ScoreCalcer`): Score = 0, per
+                    # leaf left then right `add_leaf(sum, weight)`; the L2
+                    # calcer reads no feature id
+                    l2_calcer.next_feature(UInt32(0))
                     for leaf in range(part_count):
                         var pw = part_stats[3 * leaf]
                         var psum = part_stats[3 * leaf + 1]
@@ -1123,10 +1135,9 @@ def _ord_score_blocks(
                         var sl = hist[hb + 1]
                         var wr = max(pw - wl, Float32(0.0))
                         var sr = psum - sl
-                        if wl > Float32(1e-20):
-                            l2score += (-sl * sl) / (wl + l2)
-                        if wr > Float32(1e-20):
-                            l2score += (-sr * sr) / (wr + l2)
+                        l2_calcer.add_leaf(sl, wl)
+                        l2_calcer.add_leaf(sr, wr)
+                    var l2score = l2_calcer.get_score()
                     l2score *= Float32(1.0)
                     var l2gain = l2score - score_before
                     l2gain *= Float32(1.0)
@@ -1353,6 +1364,8 @@ def _ordered_tree_structure(
     score_std_dev: Float32 = Float32(0.0),
     seed: UInt64 = UInt64(0),
     plain_cosine: Bool = False,
+    sw_off: Int = 0,
+    sg_off: Int = 0,
 ) raises -> List[_OrdSplit]:
     """The searcher without tree CTRs: `_ordered_tree_structure_levels` over
     `cindex` with no tree-CTR state (its arguments are documented there)."""
@@ -1363,7 +1376,7 @@ def _ordered_tree_structure(
         _u32_ptr(cindex), helpers, max_depth, sw, sg, doc_ids, part_bounds,
         fold_count, fold_bits, fixed_scale, l2, word_offset_of, shift_of,
         mask_of, one_hot_of, no_tree_ctr, 0, no_indexes, no_test,
-        plain_l2, score_std_dev, seed, plain_cosine,
+        plain_l2, score_std_dev, seed, plain_cosine, sw_off, sg_off,
     )
 
 
@@ -1417,6 +1430,10 @@ def _ordered_tree_structure_levels(
     score_std_dev: Float32 = Float32(0.0),
     seed: UInt64 = UInt64(0),
     plain_cosine: Bool = False,
+    # where row 0 of `sw` / `sg` sits in its list (`_update_subsets_stats`):
+    # the pointwise searchers pass their one stats list as both planes
+    sw_off: Int = 0,
+    sg_off: Int = 0,
 ) raises -> List[_OrdSplit]:
     """The doc-parallel oblivious searcher's level loop. `fold_count > 1`
     with `plain_l2` False is the ordered fold arm (the dynamic cosine
@@ -1452,7 +1469,7 @@ def _ordered_tree_structure_levels(
     _identity_rows(s.indices, doc_count)
     # `write_fold_based_initial_bins`: part p over its concatenated range
     _ord_initial_bins(part_bounds, fold_count, s.bins)
-    _update_subsets_stats(s, 1 << fold_bits, sw, sg)
+    _update_subsets_stats(s, 1 << fold_bits, sw, sg, sw_off, sg_off)
 
     for h in range(len(helpers)):  # driver-loop: over the policy helpers
         # every slot starts the tree at +0.0: a fresh plane the first time,
@@ -1647,7 +1664,7 @@ def _ordered_tree_structure_levels(
         _ord_split_subsets(
             s, cindex, word_offset_of[fid], docs, mask, value, take_bin, bit
         )
-        _update_subsets_stats(s, 1 << (depth + 1 + fold_bits), sw, sg)
+        _update_subsets_stats(s, 1 << (depth + 1 + fold_bits), sw, sg, sw_off, sg_off)
         if level_driver:
             # the next level's candidates on the search index (the
             # partition above read the won slot before this rewrites it)
@@ -1674,29 +1691,24 @@ def _plain_cosine_range(
     gains: HostF32Ptr,
 ):
     """`_plain_cosine_candidates` for the candidates `[b_lo, b_hi)`: each
-    candidate's fma chain over the leaves in leaf order is its own."""
+    candidate's chain over the leaves in leaf order is its own. The chain,
+    the 1e-10 `DenumSqr` seed, the normalization and the per-feature noise
+    draw are the device's `TCosineScoreCalcer` body
+    (`score_calcer_body.ScoreCalcer`, normalize off, as the public fit)."""
+    var calcer = make_score_calcer[SCORE_FUNCTION_COSINE](
+        l2, Float32(1.0), False, score_std_dev, helper_seed
+    )
     for b in range(b_lo, b_hi):
-        var score = Float32(0)
-        var denum = Float32(1e-10)
+        calcer.next_feature(UInt32(bf_feature[b]))
         for leaf in range(part_count):
             var base = hist_line * leaf * 2 + 2 * b
             var wl = hist[base]
             var sl = hist[base + 1]
             var wr = max(part_stats[3 * leaf] - wl, Float32(0))
             var sr = part_stats[3 * leaf + 1] - sl
-            var ml = sl / (wl + l2) if wl > Float32(0) else Float32(0)
-            score = identical_mul_add(sl, ml, score)
-            denum = identical_mul_add(wl * ml, ml, denum)
-            var mr = sr / (wr + l2) if wr > Float32(0) else Float32(0)
-            score = identical_mul_add(sr, mr, score)
-            denum = identical_mul_add(wr * mr, mr, denum)
-        var res = GBDT_ORD_FLOAT32_MAX
-        if denum > Float32(1e-15):
-            res = -score / identical_sqrt(denum)
-        if score_std_dev != Float32(0):
-            var seed = advance_seed_k(helper_seed + UInt64(bf_feature[b]), 4)
-            var draw = next_normal_f(seed)
-            res = identical_mul_add(draw[0], score_std_dev, res)
+            calcer.add_leaf(sl, wl)
+            calcer.add_leaf(sr, wr)
+        var res = calcer.get_score()
         scores[b] = res
         gains[b] = identical_mul_add(res, Float32(1), -score_before)
 
@@ -2329,8 +2341,8 @@ def gbdt_ordered_rmse_host_fit(
 #      SAME host functions the device fit calls, and `_ordered_folds`;
 #   4. per tree: the learn-permutation draw and the tree seed from the
 #      `ORDERED_STREAM_SALT` stream; per fold the search planes at the fold
-#      cursor (`_loss_row`, unit weights: plane 0 the weight or `w * der2`
-#      under NewtonCosine, plane 1 `w * der`); the score noise's quality-slice
+#      cursor (`_loss_row` at the row weights, unit without them: plane 0
+#      the weight or `w * der2` under NewtonCosine, plane 1 `w * der`); the score noise's quality-slice
 #      terms folded by `_deterministic_sum_lanes`; the bootstrap draws over the
 #      concatenated positions (`bootstrap_kernel`'s grid, one plane of ones)
 #      applied to the quality slices; the magnitudes and `choose_scale`; the
@@ -2339,10 +2351,12 @@ def gbdt_ordered_rmse_host_fit(
 #      prefix gather, `partition_from_bins`' stable counting sort, the loss's
 #      leaf estimator (`gbdt_oracle_losses._estimate_leaves_for_loss`, the
 #      walker the plain host fits restate), and `_ordered_apply_kernel`;
-#   6. the learn loss at the estimation cursor (`_loss_value`).
+#   6. the learn loss at the estimation cursor (`_loss_value`, weighted).
 #
-# COVERED: RMSE, Logloss, CrossEntropy and the pointwise losses at UNIT
-# weights, SymmetricTree, Cosine or NewtonCosine, any bootstrap, any
+# COVERED: RMSE, Logloss, CrossEntropy and the pointwise losses, with sample
+# and class weights (lane gbdt-ordered-weights, 2026-11-23: the device's one
+# weight column reaches steps 2, 4, 5 and 6 as `fit_ordered` reads it),
+# SymmetricTree, Cosine or NewtonCosine, any bootstrap, any
 # random_strength, any permutation count, border type and NaN mode, with
 # boost_from_average only on RMSE; an eval set with the detector and
 # use_best_model (step 8 of `fit_ordered`). Everything else is refused by name in the
@@ -2565,30 +2579,42 @@ def _ordered_task_host(
     mut cursor: List[Float32],
     rate: Float32,
     l2: Float32,
+    weights: List[Float32],
 ) raises -> List[Float32]:
     """`_ordered_estimate_task` (`ordered_boosting.mojo`): the prefix gather
     in permutation order, `partition_from_bins`' stable counting sort, the
     loss's estimator at the cursor, then `_ordered_apply_kernel` over
-    `[0, apply_size)`."""
+    `[0, apply_size)`.
+
+    `weights` are the fit's ORIGINAL row weights (row order; empty is the
+    unit weight): the device's stage-in gathers `weights[perm[j]]` beside
+    the target, and the estimator reads them as the Plain fit's weighted
+    leaves do (the bootstrap never reaches the leaves)."""
     if estimate_size < 1 or estimate_size > apply_size:
         raise Error("ordered estimation requires 0 < prefix <= cursor size")
     # THE SPLITS (lane gbdt-host-par): the prefix gather per position
     # range, the stable counting sort per row range, the apply per position
     var gy = List[Float32](length=estimate_size, fill=Float32(0.0))
-    # no weights on this arm: the two empty lists are never read
-    var no_w = List[Float32]()
+    var has_w = len(weights) > 0
+    # without weights `gw` stays empty and is never read (`has_w` guards it)
     var gw = List[Float32]()
+    if has_w:
+        gw = List[Float32](length=estimate_size, fill=Float32(0.0))
     var gc = List[Float32](length=estimate_size, fill=Float32(0.0))
     var gb = List[Int](length=estimate_size, fill=0)
-    _ord_prefix_gather(y, no_w, False, permutation, bins, cursor, estimate_size, gy, gw, gc, gb)
+    _ord_prefix_gather(y, weights, has_w, permutation, bins, cursor, estimate_size, gy, gw, gc, gb)
     var sizes = List[Int](length=n_leaves, fill=0)
     var offsets = List[Int](length=n_leaves, fill=0)
     var row_index = List[Int](length=estimate_size, fill=0)
     _ord_counting_sort(gb, estimate_size, n_leaves, sizes, offsets, row_index)
+    # `gw` is in prefix (permutation) order, as `gy` and `gc`: the
+    # estimator gathers all three through the same row index
     var leaves = _estimate_leaves_for_loss(
-        loss, gy, gc, row_index, offsets, sizes, estimate_size, l2
+        loss, gy, gc, row_index, offsets, sizes, estimate_size, l2,
+        weights=gw,
     )
     _ord_apply_leaves(leaves, bins, permutation, rate, apply_size, cursor)
+    _ = len(weights)
     return leaves^
 
 
@@ -2901,6 +2927,8 @@ def _ord_fold_planes(
     alpha: Float32,
     newton: Bool,
     y: List[Float32],
+    w: List[Float32],
+    has_w: Bool,
     permutation: List[Int],
     cursor: List[Float32],
     size: Int,
@@ -2910,28 +2938,36 @@ def _ord_fold_planes(
     mut doc_ids: List[Int],
 ):
     """The fold planes of one fold of the learn permutation: position `i`
-    of the fold's prefix files its row, the row's derivative at the fold
-    cursor (`_loss_row`, unit weight) and the weight plane (the second
-    derivative under a Newton score function, else 1). One device thread a
-    position, the positions in `_gbdt_units` contiguous ranges; the folds
-    are the caller's driver loop."""
+    of the fold's prefix files its row, the row's weighted derivative at
+    the fold cursor (`_loss_row` at the row's weight `w[row]`, unit when
+    not `has_w`; `w` is never read then) and the weight plane: the row's
+    weight, or `ftz(w * der2)` under a Newton score function
+    (`ComputeWeakTarget`'s plane 0, `launch_approximate`'s
+    `pointwise_target_kernel` / `cross_entropy_kernel` statements, which
+    `_loss_row` restates). One device thread a position, the positions in
+    `_gbdt_units` contiguous ranges; the folds are the caller's driver
+    loop."""
     var units = _gbdt_units(size, 16 * size)
     var chunk = host_predict_chunk(size, units)
     var y_p = rebind[HostF32Ptr](y.unsafe_ptr())
+    var w_p = rebind[HostF32Ptr](w.unsafe_ptr())
     var perm_p = rebind[GbdtIntPtr](permutation.unsafe_ptr())
     var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
     var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
     var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
     var doc_p = rebind[GbdtIntPtr](doc_ids.unsafe_ptr())
 
-    def rows(unit: Int) {imm chunk, imm size, imm offset, imm objective, imm alpha, imm newton, imm y_p, imm perm_p, imm cursor_p, imm sw_p, imm sg_p, imm doc_p}:
+    def rows(unit: Int) {imm chunk, imm size, imm offset, imm objective, imm alpha, imm newton, imm has_w, imm y_p, imm w_p, imm perm_p, imm cursor_p, imm sw_p, imm sg_p, imm doc_p}:
         for i in range(unit * chunk, min(size, (unit + 1) * chunk)):
             var row = perm_p[i]
             doc_p[offset + i] = row
+            var row_weight = Float32(1.0)
+            if has_w:
+                row_weight = w_p[row]
             # `kernel_alpha` carries Logloss's border (the binding builds
             # the loss that way, as `_loss_row` reads it)
-            var lr_row = _loss_row(objective, y_p[row], cursor_p[i], alpha)
-            var weight = Float32(1.0)
+            var lr_row = _loss_row(objective, y_p[row], cursor_p[i], alpha, row_weight)
+            var weight = row_weight
             if newton:
                 weight = lr_row.der2
             sw_p[offset + i] = weight
@@ -2939,6 +2975,7 @@ def _ord_fold_planes(
 
     host_parallelize(rows, units)
     _ = len(y)
+    _ = len(w)
     _ = len(permutation)
     _ = len(cursor)
     _ = len(sw)
@@ -3079,7 +3116,8 @@ def gbdt_ordered_host_fit(
     opts: GbdtOrderedHostOptions,
     eval: GbdtOrderedHostEval,
     flags: List[UInt32],
-    max_ctr_complexity: Int = 1,
+    max_ctr_complexity: Int,
+    weights: List[Float32],
 ) raises -> GbdtOrderedHostFit:
     """Train `params.n_estimators` trees by Ordered boosting on the host and
     return the model text (bias included), the learn and held-out losses,
@@ -3101,7 +3139,25 @@ def gbdt_ordered_host_fit(
     `max_ctr_complexity` above 1 turns on feature combinations (tree CTRs)
     when a column feeds CTRs: every tree is then grown by the level driver
     of `_ordered_tree_structure_levels`, as the device's Ordered fit grows
-    it, and the model gains one column per combination the trees chose."""
+    it, and the model gains one column per combination the trees chose.
+
+    `weights` (row order, one per row; empty is the unit weight) are the
+    fit's row weights, the sample weight times the class weight as `train`
+    folds them into its one `weights` column. As `fit_ordered` reads that
+    column, they reach the fold planes (plane 0 the weight, or `w * der2`
+    under NewtonCosine; plane 1 `w * der`), every (learn permutation, fold)
+    task's leaves and the estimation permutation's leaves (the ORIGINAL
+    weights: the bootstrap reaches the search only), the starting average
+    (`optimum_const_approx_device` over the weights) and the learn loss at
+    the estimation cursor. The held-out loss stays at unit weight, as the
+    device's test arm. The CTR tables never read them (the device builds
+    them over trivial weights)."""
+    var has_w = len(weights) > 0
+    if has_w and len(weights) != n_rows:
+        raise Error(
+            "ordered boosting: " + String(len(weights)) + " row weights for "
+            + String(n_rows) + " rows"
+        )
     if n_rows < 4:
         raise Error(
             "Error: pool has just " + String(n_rows) + " groups or docs,"
@@ -3180,18 +3236,21 @@ def gbdt_ordered_host_fit(
         feat_mask[f] = layout.features[f].mask
 
     # ---- 2. the starting point ----
+    # over the row weights when the fit carries them (the device's
+    # `optimum_const_approx_device(targets, weights, ...)`), through the
+    # same host functions the Plain fits call with their row weights
     var start = Float64(0.0)
     if opts.boost_from_average:
         if loss.objective == GBDT_OBJ_MAPE:
             # `CalculateOptimalConstApproxForMAPE` (`sample_quantile.mojo`)
             start = Float64(
-                calculate_optimal_const_approx_for_mape(y, List[Float32](), False)
+                calculate_optimal_const_approx_for_mape(y, weights, has_w)
             )
         elif loss.objective == GBDT_OBJ_MAE or loss.objective == GBDT_OBJ_QUANTILE:
             # `CalculateWeightedTargetQuantile` with their 1e-6 delta
             start = Float64(
                 calculate_weighted_target_quantile(
-                    y, List[Float32](), False,
+                    y, weights, has_w,
                     0.5 if loss.objective == GBDT_OBJ_MAE else Float64(
                         loss.estimator_alpha
                     ),
@@ -3199,7 +3258,7 @@ def gbdt_ordered_host_fit(
                 )
             )
         else:
-            start = _rmse_starting_approx(y, n_rows)
+            start = _rmse_starting_approx(y, n_rows, weights)
     var start_value = Float32(start)
 
     # ---- 3. the plan ----
@@ -3270,6 +3329,12 @@ def gbdt_ordered_host_fit(
     var est_cursor = List[Float32](length=n, fill=start_value)
     var est_y = List[Float32](length=n, fill=Float32(0.0))
     _gather_rows(y, perms[est_p], n, est_y)
+    # the estimation permutation's weights, for the learn loss (`est_w`);
+    # empty is the unit weight
+    var est_w = List[Float32]()
+    if has_w:
+        est_w = List[Float32](length=n, fill=Float32(0.0))
+        _gather_rows(weights, perms[est_p], n, est_w)
     var bootstrap_on = opts.bootstrap_kind >= 0
     var seeds = List[UInt64]()
     if bootstrap_on:
@@ -3316,8 +3381,8 @@ def gbdt_ordered_host_fit(
         for f in range(n_folds):  # driver-loop: over the folds, each prefix's positions across the tasks
             _ord_fold_planes(
                 loss.objective, loss.kernel_alpha, opts.score_function_newton,
-                y, perms[learn_p], cursors[learn_p][f], bounds[2 * f + 1],
-                offsets[f], sw, sg, doc_ids,
+                y, weights, has_w, perms[learn_p], cursors[learn_p][f],
+                bounds[2 * f + 1], offsets[f], sw, sg, doc_ids,
             )
         # ---- the score noise ----
         var score_std = Float32(0.0)
@@ -3403,15 +3468,16 @@ def gbdt_ordered_host_fit(
                 if dep_on:
                     _ = _ordered_task_host(
                         loss, est, bounds[2 * f + 1], n_leaves, y, perms[lp],
-                        lp_bins, cursors[lp][f], lr, l2,
+                        lp_bins, cursors[lp][f], lr, l2, weights,
                     )
                 else:
                     _ = _ordered_task_host(
                         loss, est, bounds[2 * f + 1], n_leaves, y, perms[lp],
-                        bins, cursors[lp][f], lr, l2,
+                        bins, cursors[lp][f], lr, l2, weights,
                     )
         var leaves = _ordered_task_host(
             loss, n, n, n_leaves, y, perms[est_p], bins, est_cursor, lr, l2,
+            weights,
         )
         for level in range(len(splits)):
             split_features.append(splits[level].feature)
@@ -3421,7 +3487,7 @@ def gbdt_ordered_host_fit(
             model_leaves.append(identical_mul(leaves[leaf], lr))
         tree_leaf_offsets.append(len(model_leaves))
         # ---- the learn loss at the estimation cursor ----
-        var fv = _loss_value(loss, est_y, est_cursor, n)
+        var fv = _loss_value(loss, est_y, est_cursor, n, est_w)
         losses.append(-Float64(fv) / Float64(n))
         # ---- the held-out cursor (`_apply_last_tree_to_test`: a depth-0
         # tree adds nothing), its loss, the detector ----
@@ -3516,4 +3582,6 @@ def gbdt_ordered_host_fit(
         base_text = gbdt_host_model_text(model)
     var text = gbdt_text_with_bias(base_text, len(model.losses), start)
     _ = len(cat_tree_state)
+    _ = len(weights)
+    _ = len(est_w)
     return GbdtOrderedHostFit(text^, losses^, test_losses^, best, stopped_early)

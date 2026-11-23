@@ -31,6 +31,7 @@ from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
+from gbdt.data.class_weight_body import class_weight_slot, class_weighted
 
 comptime TARGET_PREP_TPB = 256
 comptime TARGET_NO_ROW = Int32(2147483647)
@@ -115,13 +116,10 @@ def class_weight_fold_kernel(
     var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if r >= Int(n_rows_in):
         return
-    var v = y.unsafe_load(r)
-    var cls: Int
-    if multiclass != 0:
-        cls = Int(Int32(v))
-    else:
-        cls = 1 if v > Float32(0.5) else 0
-    w.unsafe_store(r, w.unsafe_load(r) * cw.unsafe_load(cls))
+    # the one body the host row-weight column calls too
+    # (`gbdt/data/class_weight_body.mojo`)
+    var cls = class_weight_slot(y.unsafe_load(r), multiclass != 0)
+    w.unsafe_store(r, class_weighted(w.unsafe_load(r), cw.unsafe_load(cls)))
 
 
 def upload_and_scan_targets(

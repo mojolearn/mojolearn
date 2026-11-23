@@ -43,6 +43,7 @@ under `checks/native_tests/fixtures/gbdt/` (column-major X). Every option,
 assertion and tolerance is the original test's.
 """
 from std.math import isfinite, log, log2, min, max
+from std.math import nan as math_nan
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.host_helpers_impl import argmax_rows_f32, argmax_rows_f64
@@ -75,7 +76,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 21
+comptime GBDT_HOST_UNITS = 23
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -151,6 +152,10 @@ struct GbdtOpts(Copyable, Movable):
     var min_split_gain: Float64
     var min_child_hessian: Float64
     var feature_fraction: Float64
+    #: "Plain" (the four option strings) or "Ordered" (the eight:
+    #: GreedyLogSum borders, `fold_len_multiplier` 2.0 as its float64 bits,
+    #: `fold_permutation_block` unset), as `gbdt_fit_options` builds them
+    var boosting_type: String
 
     def __init__(out self, loss: String, n_estimators: Int, max_depth: Int = 6):
         self.loss = loss
@@ -184,6 +189,7 @@ struct GbdtOpts(Copyable, Movable):
         self.min_split_gain = UNSET
         self.min_child_hessian = UNSET
         self.feature_fraction = 1.0
+        self.boosting_type = "Plain"
 
     def deterministic(mut self):
         """The tests' pinned configuration: `bootstrap_type='No'`, `random_strength=0`."""
@@ -469,6 +475,12 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     var ex_addr = Int(inp.eval_x.unsafe_ptr()) if n_eval > 0 else x_addr
     var ey_addr = Int(inp.eval_y.unsafe_ptr()) if n_eval > 0 else y_addr
     var strs: List[String] = [o.loss, _bootstrap(o), o.od_type, o.nan_mode]
+    if o.boosting_type == "Ordered":
+        # `gbdt_fit_options`' Ordered tail (bindings/gbdt_config_run.mojo)
+        strs.append(String("GreedyLogSum"))
+        strs.append(String("Ordered"))
+        strs.append(String(bitcast[DType.uint64](Float64(2.0))))
+        strs.append(String(0))
     var args = s^.request(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), ex_addr, ey_addr, strs^)
     var outcome = I.fit(False, args)
     _ = args^
@@ -1179,8 +1191,183 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_losses[I](unit - 7)
     elif unit <= 19:
         host_ordered[I](unit - 14)
-    else:
+    elif unit == 20:
         host_rest_gaps[I]()
+    elif unit == 21:
+        host_pointwise_arms[I]()
+    else:
+        host_ordered_weights[I]()
+
+
+def _pw_opts(loss: String, score: String, boot: String) -> GbdtOpts:
+    """A pointwise-searcher fit at the given score and bootstrap, every
+    option it reads set."""
+    var o = GbdtOpts(loss, 4, 3)
+    o.learning_rate = 0.1
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.pointwise = True
+    o.score_function = score
+    o.bootstrap = boot
+    o.random_strength = 0.0
+    o.boost_from_average = 1
+    o.leaf_method = "Newton"
+    o.leaf_iterations = 1
+    return o^
+
+
+def host_pointwise_arms[I: GbdtImage]() raises:
+    """The pointwise searcher's arms the host refused by name until lane
+    gbdt-rest-3 (2026-11-23), each twice to the same bytes: NewtonL2 with
+    Bernoulli, Cosine with Poisson, score noise and Gradient leaves on
+    Logloss; NewtonCosine with score noise and Cosine at feature_fraction
+    0.5 on RMSE; QueryRMSE on the grouped pointwise searcher at
+    feature_fraction 0.5. Each moves against the L2 Bayesian fit the host
+    trained before. Class weights on Logloss (lane gbdt-one-body) move the
+    model; with RMSE they are refused in `train`'s words. Then a NaN in a one_hot_features column that is not
+    categorical is refused in `train`'s words (the binarize's), as on the
+    device."""
+    var clf = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    var base = _pw_opts("Logloss", "L2", "Bayesian")
+    var mb = _twice[I](base, clf, "pointwise Logloss L2 Bayesian")
+    var o1 = _pw_opts("Logloss", "NewtonL2", "Bernoulli")
+    o1.subsample = 0.7
+    o1.leaf_iterations = 3
+    var m1 = _twice[I](o1, clf, "pointwise Logloss NewtonL2 Bernoulli")
+    require(m1.text != mb.text, "pointwise NewtonL2 Bernoulli: the L2 Bayesian model")
+    var o2 = _pw_opts("Logloss", "Cosine", "Poisson")
+    o2.subsample = 0.66
+    o2.random_strength = 1.0
+    o2.leaf_method = "Gradient"
+    o2.leaf_iterations = 4
+    var m2 = _twice[I](o2, clf, "pointwise Logloss Cosine Poisson noise Gradient")
+    require(m2.text != mb.text, "pointwise Cosine Poisson: the L2 Bayesian model")
+    # lane gbdt-one-body (2026-11-23): class weights on this searcher, the
+    # device's one weight column; with RMSE refused in `train`'s words
+    var ocw = _pw_opts("Logloss", "Cosine", "No")
+    var mcw0 = _twice[I](ocw, clf, "pointwise Logloss Cosine")
+    var ocw2 = ocw.copy()
+    ocw2.class_weights = [1.0, 2.5]
+    var mcw = _twice[I](ocw2, clf, "class-weighted pointwise Logloss Cosine")
+    require(mcw.text != mcw0.text, "pointwise Logloss class weights had no model effect")
+    var rcw = _pw_opts("RMSE", "Cosine", "No")
+    rcw.class_weights = [1.0, 2.0]
+    var cw_refused = String("")
+    try:
+        _ = fit[I](rcw, reg)
+    except error:
+        cw_refused = String(error)
+    require_fails_with(cw_refused, "class weights take effect only with a classification loss",
+                       "pointwise RMSE class weights")
+    var o3 = _pw_opts("RMSE", "NewtonCosine", "No")
+    o3.random_strength = 1.0
+    var m3 = _twice[I](o3, reg, "pointwise RMSE NewtonCosine noise")
+    require(all_finite_f32(predict(m3.text, reg.x, 600)), "pointwise NewtonCosine: nonfinite predict")
+    var o4 = _pw_opts("RMSE", "Cosine", "No")
+    var m4 = _twice[I](o4, reg, "pointwise RMSE Cosine")
+    var o4f = o4.copy()
+    o4f.feature_fraction = 0.5
+    var m4f = _twice[I](o4f, reg, "pointwise RMSE Cosine at feature_fraction 0.5")
+    require(m4f.text != m4.text, "pointwise feature_fraction 0.5: the unsampled model")
+    var grouped = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    grouped.group_sizes = List[UInt32](length=60, fill=UInt32(10))
+    var q = GbdtOpts("QueryRMSE", 4, 3)
+    q.learning_rate = 0.1
+    q.l2_leaf_reg = 3.0
+    q.random_state = 7
+    q.pointwise = True
+    q.score_function = "Cosine"
+    q.bootstrap = "No"
+    q.random_strength = 0.0
+    q.leaf_method = "Newton"
+    q.leaf_iterations = 1
+    var mq = _twice[I](q, grouped, "grouped pointwise QueryRMSE")
+    var qf = q.copy()
+    qf.feature_fraction = 0.5
+    var mqf = _twice[I](qf, grouped, "grouped pointwise QueryRMSE at feature_fraction 0.5")
+    require(mqf.text != mq.text, "grouped pointwise feature_fraction 0.5: the unsampled model")
+    # a NaN in a plain one-hot column (the three class codes appended as
+    # column 6, flagged one_hot_features): both columns refuse it
+    var xo = load_f32("e3-x.f32", 3600)
+    var codes = load_f32("e3-y3.f32", 600)
+    for r in range(600):  # small-loop(one appended column)
+        xo.append(codes[r])
+    xo[3600 + 5] = math_nan[DType.float32]()
+    var oh_in = GbdtInputs(xo^, 600, 7, load_f32("e3-yr.f32", 600))
+    var oh = GbdtOpts("RMSE", 4, 3)
+    oh.deterministic()
+    oh.boost_from_average = 0
+    oh.leaf_iterations = 1
+    oh.one_hot_features = [6]
+    var refused = String("")
+    try:
+        _ = fit[I](oh, oh_in)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, "There are NaNs in feature number", "NaN in a plain one-hot column")
+
+
+def _ordered_opts(loss: String) -> GbdtOpts:
+    """An Ordered fit at rate 0.1 with every work-changing option set."""
+    var o = GbdtOpts(loss, 4, 3)
+    o.boosting_type = "Ordered"
+    o.learning_rate = 0.1
+    o.l2_leaf_reg = 3.0
+    o.score_function = "Cosine"
+    o.leaf_iterations = 1
+    o.deterministic()
+    return o^
+
+
+def host_ordered_weights[I: GbdtImage]() raises:
+    """Sample and class weights under Ordered boosting, which the host
+    refused by name until lane gbdt-ordered-weights (2026-11-23), each fit
+    twice to the same bytes: weighted Logloss (unit weights give the
+    unweighted bytes, the device's ones column; a ramp moves the model),
+    class weights on Logloss, weighted RMSE under NewtonCosine with
+    boost_from_average and the Bayesian bootstrap, weighted MAE (the
+    weighted median start), and class weights with RMSE refused in
+    `train`'s words."""
+    var clf = _fixed("e3-x.f32", 600, 6, "e3-yc.f32")
+    var ll = _ordered_opts("Logloss")
+    var plain = _twice[I](ll, clf, "unweighted Ordered Logloss")
+    clf.weights = List[Float32](length=600, fill=Float32(1))
+    var ones = _twice[I](ll, clf, "unit-weighted Ordered Logloss")
+    require(ones.text == plain.text, "unit-weighted Ordered Logloss differs from the unweighted fit")
+    for r in range(600):  # small-loop(np.linspace(.5, 1.5, 600, dtype=float32))
+        clf.weights[r] = Float32(0.5 + Float64(r) / 599.0)
+    var ramp = _twice[I](ll, clf, "weighted Ordered Logloss")
+    require(ramp.text != plain.text, "Ordered Logloss sample weights had no model effect")
+    clf.weights = List[Float32]()
+    var cw = _ordered_opts("Logloss")
+    cw.class_weights = [1.0, 2.0]
+    var mcw = _twice[I](cw, clf, "class-weighted Ordered Logloss")
+    require(mcw.text != plain.text, "Ordered Logloss class weights had no model effect")
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    reg.weights = List[Float32](length=600, fill=Float32(0))
+    for r in range(600):  # small-loop(np.linspace(.5, 1.5, 600, dtype=float32))
+        reg.weights[r] = Float32(0.5 + Float64(r) / 599.0)
+    var rmse = _ordered_opts("RMSE")
+    rmse.score_function = "NewtonCosine"
+    rmse.boost_from_average = 1
+    rmse.bootstrap = "Bayesian"
+    rmse.bagging_temperature = 1.0
+    var mr = _twice[I](rmse, reg, "weighted Ordered RMSE")
+    require(all_finite_f32(predict(mr.text, reg.x, 600)), "weighted Ordered RMSE: nonfinite predict")
+    var mae = _ordered_opts("MAE")
+    mae.boost_from_average = 1
+    _ = _twice[I](mae, reg, "weighted Ordered MAE")
+    var bad = _ordered_opts("RMSE")
+    bad.class_weights = [1.0, 2.0]
+    var refused = False
+    try:
+        _ = fit[I](bad, reg)
+    except error:
+        require_fails_with(String(error), "class weights take effect only with a classification loss",
+                           "Ordered RMSE class weights")
+        refused = True
+    require(refused, "Ordered RMSE class weights were silently accepted")
 
 
 def host_rest_gaps[I: GbdtImage]() raises:

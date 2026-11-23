@@ -1,0 +1,18 @@
+diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
+index fea10549f7..4aded06e16 100644
+--- a/gbdt/methods/ordered_boosting.mojo
++++ b/gbdt/methods/ordered_boosting.mojo
+@@ -2488,6 +2488,13 @@ def fit_ordered(
+     var searchable = learn_count - 1 if learn_count > 1 else 1
+     var folds = ordered_folds(n_rows, opts.fold_len_multiplier, opts.min_fold_size)
+     var n_folds = len(folds)
++    # SABOTAGE (coverage-gbdt-device_ordered_prefix): every fold's estimation
++    # prefix ends one position early (an Ordered prefix index off by one);
++    # the quality slice gains that position
++    for sab_f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful)
++        if folds[sab_f].estimate_samples.right > 0:
++            folds[sab_f].estimate_samples.right -= 1
++            folds[sab_f].quality_evaluate_samples.left = folds[sab_f].estimate_samples.right
+     # THE FIT'S ARENA (`gbdt/gpu_util/arena.mojo`): the long-lived per-fold
+     # and per-task buffers below are carved from a few parents, because on
+     # Metal every live allocation is bound to every launch

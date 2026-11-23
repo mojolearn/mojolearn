@@ -1,8 +1,8 @@
 diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
-index 95a06def2..57ded85fd 100644
+index fea10549f7..afe0859d45 100644
 --- a/gbdt/methods/ordered_boosting.mojo
 +++ b/gbdt/methods/ordered_boosting.mojo
-@@ -411,7 +411,8 @@ def _ord_segment_rows_kernel(
+@@ -1001,7 +1001,8 @@ def _ord_segment_rows_kernel(
                  hi = mid - 1
          var off = Int(table.unsafe_load(3 * lo))
          var seg = Int(table.unsafe_load(3 * lo + 2))
@@ -11,4 +11,4 @@ index 95a06def2..57ded85fd 100644
 +        row_index.unsafe_store(i, sorted_rows.unsafe_load(seg + cnt - 1 - (i - off)))
  
  
- def _grid(n: Int) -> Int:
+ def _ord_stage_in_p_kernel(

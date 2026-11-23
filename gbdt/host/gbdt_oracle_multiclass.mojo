@@ -66,6 +66,7 @@ tools/identity_break.py on the two lanes is the measurement.
 """
 from std.math import exp, fma, isfinite, log
 from gbdt.data.permutation import TRandom
+from gbdt.data.class_weight_body import class_weight_slot, class_weighted
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 
 from checks.numerics import (
@@ -732,7 +733,9 @@ def _class_weight_rows(
 
     def rows(unit: Int) {imm chunk, imm n_rows, imm y_p, imm cw_p, imm w_p}:
         for r in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
-            w_p[r] = w_p[r] * cw_p[Int(y_p[r])]
+            # the device kernel's two statements, one body
+            # (`gbdt/data/class_weight_body.mojo`)
+            w_p[r] = class_weighted(w_p[r], cw_p[class_weight_slot(y_p[r], True)])
 
     host_parallelize(rows, units)
     _ = len(y)

@@ -1,0 +1,15 @@
+diff --git a/gbdt/methods/dynamic_boosting.mojo b/gbdt/methods/dynamic_boosting.mojo
+index 4d3db4b217..a498b9d526 100644
+--- a/gbdt/methods/dynamic_boosting.mojo
++++ b/gbdt/methods/dynamic_boosting.mojo
+@@ -399,6 +399,10 @@ def fit_ordered_rmse(
+             compute_bins_for_model(ctx, layout, splits, len(splits), cindex, n, bins)
+         var n_leaves = 1 << len(splits)
+         for f in range(len(folds)):
++            # SABOTAGE (coverage-gbdt-device_ordered_rmse_cursor): the last
++            # (widest) fold's cursor is never advanced
++            if f == len(folds) - 1:
++                continue
+             var unused = ordered_estimate_and_apply(
+                 ctx, folds[f].estimate_samples.right,
+                 folds[f].quality_evaluate_samples.right,

@@ -1,0 +1,15 @@
+diff --git a/gbdt/host/gbdt_oracle_ordered.mojo b/gbdt/host/gbdt_oracle_ordered.mojo
+index 568e6e5cc9..14d7eb75bf 100644
+--- a/gbdt/host/gbdt_oracle_ordered.mojo
++++ b/gbdt/host/gbdt_oracle_ordered.mojo
+@@ -2640,7 +2640,9 @@ def _ord_prefix_gather(
+             var row = perm_p[i]
+             gy_p[i] = y_p[row]
+             if has_w:
+-                gw_p[i] = w_p[row]
++                # SABOTAGE (coverage-gbdt-host_ordered_fold_weight): the
++                # weight read at the permutation position, not its row
++                gw_p[i] = w_p[i]
+             gc_p[i] = cursor_p[i]
+             gb_p[i] = bins_p[row]
+ 
