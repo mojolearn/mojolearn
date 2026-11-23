@@ -5,7 +5,7 @@ from core.hostptr import f32_ptr, f64_ptr
 from core.logistic_native_api import (
     LOGISTIC_NATIVE_ABI, QN_NATIVE_COUNT, QN_NATIVE_DECISION, QN_NATIVE_BINARY,
     QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
-    QnFitRequest, QnQueryRequest, QnLinkRequest, QnNativeKernels, qn_native_dispatch,
+    QnFitRequest, QnQueryRequest, QnNativeKernels, qn_native_dispatch,
 )
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.neural_context import process_ctx
@@ -81,15 +81,9 @@ struct QnDeviceKernels(QnNativeKernels):
             raise Error("logistic native ABI: invalid query operation")
         ctx.synchronize()
 
-    @staticmethod
-    def link(operation: Int, r: QnLinkRequest) raises:
-        # Lane sab-missed-5 (2026-11-23): the device image has no stand-alone
-        # link. predict_proba / predict_log_proba on the device are one
-        # QN_NATIVE_PROBA query (scores stay resident, `qn_link_from_device`);
-        # nothing issued QN_NATIVE_SIGMOID / QN_NATIVE_SOFTMAX to this image,
-        # and its upload-launch-download wrappers were deleted. Code
-        # recoverable at af2d8329e6.
-        raise Error("logistic native ABI: the device image serves the link only inside QN_NATIVE_PROBA")
+    # Lane sab-missed-5 (2026-11-23): the stand-alone link (descriptor operations
+    # 5 and 6) was retired; device predict_proba is one QN_NATIVE_PROBA query
+    # (`qn_link_from_device`). Code recoverable at af2d8329e6.
 
     @staticmethod
     def logarithm(source: Int, dst: Int, count: Int) raises:

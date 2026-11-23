@@ -11,7 +11,7 @@ from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_
 from core.linear_boundary_types import LinearPredictRequest
 from core.logistic_native_api import (
     QnQueryRequest, QN_NATIVE_DECISION,
-    QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
+    QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
 )
 from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
 from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
@@ -1017,34 +1017,8 @@ def qn_proba_binding(
     return PythonObject(0)
 
 
-def qn_predict_binary_binding(
-    x_addr: PythonObject,
-    coef_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Binary `qn_predict`: int64 0/1 codes under strict score > 0."""
-    # lane a8c: an optional 4th, the deferred finite status word's host address
-    if len(params) != 3 and len(params) != 4:
-        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept and an optional status address")
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var fi = Int(py=params[2]) != 0
-    var status = Int(py=params[3]) if len(params) == 4 else 0
-    var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
-    # Every PythonObject is read BEFORE the GIL is released: `Int(py=...)`
-    # calls into the interpreter (the host binding's copy of this entry
-    # crashed with SIGSEGV doing it inside GILReleased).
-    var xp = _f32_ptr(Int(py=x_addr))
-    var cp = _f32_ptr(Int(py=coef_addr))
-    var request = QnQueryRequest(Int(xp), Int(cp), Int(op), status, nr, nf, 1, fi, False)
-    with GILReleased(Python()):
-        QnDeviceKernels.query(QN_NATIVE_BINARY, request)
-    return PythonObject(0)
-
-
-# Lane sab-missed-5 (2026-11-23): the device binding's qn_sigmoid / qn_softmax
-# exports were deleted: no product path called them (predict_proba on the
+# Lane sab-missed-5 (2026-11-23): the device binding's qn_predict_binary,
+# qn_sigmoid and qn_softmax exports were deleted: no product path called them (predict_proba on the
 # device is one QN_NATIVE_PROBA query through `qn_proba` and the logistic
 # owner). The CPU binding keeps its own exports. Recoverable at af2d8329e6.
 
@@ -1332,7 +1306,6 @@ def build__mojolearn_estimators() -> PythonObject:
         # TOMBSTONE: ridge_fit_multi / ridge_predict_multi registrations deleted 2026-11-11 by lane
         # calltable-base-helpers (see above); code recoverable at 17b0a91b04.
         m.def_function[qn_decision_function_binding]("qn_decision_function")
-        m.def_function[qn_predict_binary_binding]("qn_predict_binary")
         var published_module = m.finalize()
         # The owner identity needs the finalized type object (Mojo 1.2 creates
         # it in finalize(); see bindings/native_owner_registry.mojo).

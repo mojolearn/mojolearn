@@ -10,6 +10,9 @@ comptime QN_NATIVE_DECISION = 1
 comptime QN_NATIVE_BINARY = 2
 comptime QN_NATIVE_MULTICLASS = 3
 comptime QN_NATIVE_PROBA = 4
+# 5 and 6 were the stand-alone link operations (lane sab-missed-5, 2026-11-23:
+# retired, no caller; the descriptor refuses them). The CPU binding's
+# qn_sigmoid / qn_softmax exports still name their link by these two values.
 comptime QN_NATIVE_SIGMOID = 5
 comptime QN_NATIVE_SOFTMAX = 6
 comptime QN_NATIVE_LOG = 7
@@ -93,8 +96,6 @@ trait QnNativeKernels:
     @staticmethod
     def query(operation: Int, request: QnQueryRequest) raises: ...
     @staticmethod
-    def link(operation: Int, request: QnLinkRequest) raises: ...
-    @staticmethod
     def logarithm(source: Int, dst: Int, count: Int) raises: ...
     @staticmethod
     def mode() -> Int: ...
@@ -126,8 +127,7 @@ def qn_native_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         addresses = 4
         integers = 5
     elif operation == QN_NATIVE_SIGMOID or operation == QN_NATIVE_SOFTMAX:
-        addresses = 2
-        integers = 2
+        raise Error("logistic native ABI: the stand-alone link operations were retired; predict_proba is QN_NATIVE_PROBA")
     elif operation == QN_NATIVE_LOG:
         addresses = 2
         integers = 1
@@ -155,8 +155,6 @@ def qn_native_dispatch[K: QnNativeKernels](operation: Int, aa: Int, na: Int,
         elif QN_NATIVE_DECISION <= operation <= QN_NATIVE_PROBA:
             K.query(operation, QnQueryRequest(a[0], a[1], a[2], a[3],
                 p[0], p[1], p[2], p[3] != 0, p[4] != 0))
-        elif operation == QN_NATIVE_SIGMOID or operation == QN_NATIVE_SOFTMAX:
-            K.link(operation, QnLinkRequest(a[0], a[1], p[0], p[1]))
         elif operation == QN_NATIVE_LOG:
             K.logarithm(a[0], a[1], p[0])
         elif operation == QN_NATIVE_MODE:
@@ -190,12 +188,6 @@ struct QnNativeDriver(Copyable, Movable):
         var addresses: Array[Int, 4] = [request.x, request.coefficients, request.dst, request.status]
         var ints: Array[Int, 5] = [request.rows, request.features,
             request.targets, Int(request.intercept), Int(request.logarithm)]
-        var floats: Array[Float64, 0] = []
-        _ = native_descriptor_call_fixed(self.entry, operation, addresses, ints, floats)
-
-    def link(self, operation: Int, request: QnLinkRequest) raises:
-        var addresses: Array[Int, 2] = [request.scores, request.dst]
-        var ints: Array[Int, 2] = [request.rows, request.classes]
         var floats: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, operation, addresses, ints, floats)
 

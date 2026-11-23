@@ -86,6 +86,9 @@ struct QnHostKernels(QnNativeKernels):
 
     @staticmethod
     def link(operation: Int, r: QnLinkRequest) raises:
+        # Not a descriptor operation since lane sab-missed-5 (2026-11-23): its one
+        # caller is the CPU binding's qn_sigmoid / qn_softmax exports
+        # (bindings/_mojolearn_estimators_host.mojo), which call it directly.
         var dst = f64_ptr(r.dst)
         if operation == QN_NATIVE_SOFTMAX and r.classes < 3:
             raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
