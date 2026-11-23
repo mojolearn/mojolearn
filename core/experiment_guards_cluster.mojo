@@ -630,6 +630,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_ANN3_DIRECT_OUT.ab-prep.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_ANN3_DIRECT_OUT"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the IVF-PQ / IVF-SQ codes reach the caller's array by a plain copy on both arms, the same bytes; the arm only chose a raw pageable copy over the pooled pinned stages); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_ANN3_DIRECT_OUT.ab-prep.patch"
+    # TOMBSTONE: MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF (decided: winner promoted, A/B round 3) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, decided from A/B round 3 NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, labels and digests equal: edge-free fit taxi 0.338, taxi 250000 rows 0.519, istella 0.991 of the old route; EXP:4477): the old byte-adjacency route for admitted brute fits is gone; code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF.patch"
     # ---- end lane ab-prep-classical
     return True
 
