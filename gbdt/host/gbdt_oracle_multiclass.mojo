@@ -60,6 +60,16 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build defaults)
   6. The rescale on append, the learn losses and the model text with
      `dim` leaves per bin.
 
+THE POINTWISE SEARCHER (lane gbdt-pw-multiclass, 2026-11-23; the
+gbdt-pointwise-multiclass lane): with `use_pointwise_searcher` step 4 is the
+device's doc-parallel arm instead: the score-noise deviation from the
+unbootstrapped planes over every approx dimension, the planes laid out with
+dimension d on the searcher's fold 2 d (`_dims_planes`, `_dims_fold_shape`),
+the gradient planes snapped, `_ordered_tree_structure(dim_count=dim)` (the
+per-dimension score summed, MultiClass's pinned class added, one body with
+the device's `find_optimal_split_dims_kernel`), and every permutation's
+partition re-derived from the structure (`_partition_for_model`).
+
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1`
 (`GBDT_ORACLE_HOST_SABOTAGE`) adds 1.0 to lambda, so every leaf moves.
 
