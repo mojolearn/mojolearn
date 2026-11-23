@@ -26,7 +26,7 @@ from core.forest_fit_request import (
     XF_EXPORT_SIZES, XF_EXPORT_INTO, XF_EXPORT_VERIFY, XF_EXPORT_RELEASE, XF_PREDICT, XF_RESIDENT_PREPARE,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_RESIDENT_RELEASE, XF_STRICT_PREPARE, XF_STRICT_PREDICT,
     XF_STRICT_RELEASE, XF_SESSION_OPEN, XF_SESSION_CLOSE, XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND,
-    XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
+    XF_STAGE_INPUT, XF_UNSTAGE_INPUT, XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
 )
 
 
@@ -122,6 +122,17 @@ trait ForestImage:
     @staticmethod
     def fit_ada_round(classifier: Bool, args: ForestFitArgs) raises -> Int:
         """One AdaBoost round on `args.session`; the member's export handle."""
+        ...
+
+    @staticmethod
+    def stage_input(x: Int, rows: Int, cols: Int) raises -> Int:
+        """XF_STAGE_INPUT: 1 when the rows at `x` are staged as the image's
+        shared resident input, 0 when not (a host image stages nothing)."""
+        ...
+
+    @staticmethod
+    def unstage_input() raises:
+        """XF_UNSTAGE_INPUT: end the staged input (a host image: nothing)."""
         ...
 
 
@@ -222,6 +233,15 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, f
     if op == XF_STRICT_PREPARE:
         _need(na, np, 5, 3, "forest_strict_prepare")
         return I.strict_prepare(a, p[0], p[1], p[2])
+    if op == XF_STAGE_INPUT:
+        _need(na, np, 1, 2, "forest input staging")
+        if p[0] < 1 or p[1] < 1 or p[0] > 2147483647 // p[1]:
+            return 0
+        return I.stage_input(a[0], p[0], p[1])
+    if op == XF_UNSTAGE_INPUT:
+        _need(na, np, 0, 0, "forest input unstaging")
+        I.unstage_input()
+        return 0
     raise Error("forest entry: unknown operation " + String(op))
 
 

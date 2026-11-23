@@ -69,6 +69,17 @@ published in `core/forest_entry_table.mojo`; descriptor shape of
                       `rate`, `last`; the regressor's `round_seed`, `round`,
                       `loss`): one SAMME (classifier) or AdaBoost.R2 round
                       on the device. Returns the member's export handle.
+  XF_STAGE_INPUT      addrs [x]; ints [rows, cols]: stage the borrowed C-order
+                      float32 rows once as the image's shared resident input
+                      (core/forest_inference_model.mojo `resident_stage_input`)
+                      for the member predictions that follow on this thread;
+                      returns 1 when staged, 0 when not (a host image, several
+                      devices, no live snapshot: each member uploads as
+                      before). The caller keeps the rows alive and unchanged
+                      until XF_UNSTAGE_INPUT (lane mf-meta3c, 2026-11-23: the
+                      Bagging META member's predict, which the door staged
+                      through the Python entry `forest_stage_input_gpu`).
+  XF_UNSTAGE_INPUT    no words: end the staged input. Returns 0.
 
 The caller owns every buffer until the synchronous call returns.
 """
@@ -98,7 +109,9 @@ comptime XF_SESSION_CLOSE = 18
 comptime XF_FIT_SESSION = 19
 comptime XF_ADA_OPEN = 20
 comptime XF_FIT_ADA_ROUND = 21
-comptime XF_OP_COUNT = 22
+comptime XF_STAGE_INPUT = 22
+comptime XF_UNSTAGE_INPUT = 23
+comptime XF_OP_COUNT = 24
 
 #: capability bits (XF_CAPS)
 comptime XF_CAP_DEVICE_SCAN = 1      # the fits refuse a non-finite X cell on the device

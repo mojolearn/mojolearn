@@ -147,7 +147,8 @@ from bindings.native_unit_os_threads_run import native_unit_cores
 from core.host_parallel import host_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.device_route import DEVICE_CPU
-from core.entry_table import EntryRef, entry_ref_unresolved
+from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_gil_free
+from core.forest_calls import xf_stage_input, xf_unstage_input
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_own,
     member_outputs, member_output_dtype, member_outputs_of,
@@ -160,7 +161,9 @@ from core.member_abi import (
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
-from core.member_families import MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_GP
+from core.member_families import (
+    MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_GP, MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES,
+)
 from core.member_notices import member_notices_take
 from core.member_set_run import (
     MemberSetRun, member_set_fit, member_set_run_release, member_set_first_failure,
@@ -2027,7 +2030,20 @@ def _predict_bag(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         acc = Int(scratch.unsafe_ptr())
     else:
         _zero_dst(call, n * k)
-    var refused = bag_predict_run(glue, members, xs, ds, n, k, classifier, acc, 0)
+    # ONE DEVICE COPY OF X PER PREDICT (lane mf-meta3c; the door's
+    # `_staged_input`, bindings/trees_staged_input_door.mojo): when two or
+    # more units read X itself (every feature) through a forest image on a
+    # device, X is staged once in that image and every unit's resident
+    # predict reads the staged rows (no upload or scan per unit). Units over
+    # a feature subset read their own gathered block and upload it, as the
+    # door's did.
+    var staged = _stage_units(slot, rows.x, n, d, xs)
+    var refused = VOTE_ALL_ANSWERED
+    try:
+        refused = bag_predict_run(glue, members, xs, ds, n, k, classifier, acc, 0)
+    finally:
+        if staged:
+            xf_unstage_input(entry_ref_gil_free(slot[].base_plans[0].route.entry))
     _ = len(blocks)  # read through the RUN above
     _ = len(order)
     if refused != VOTE_ALL_ANSWERED:
@@ -2035,6 +2051,31 @@ def _predict_bag(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     if classifier and operation == MEMBER_OP_PREDICT:
         _ = xt_argmax_rows(glue, acc, call[].dst.data, n, k)
     _ = len(scratch)
+
+
+def _stage_units(slot: _SlotPtr, x: Int, n: Int, d: Int, xs: List[Int]) raises -> Bool:
+    """Stage X (`x`, n x d float32 host rows) once in the forest image of a
+    unit kind's base when two or more units read it whole and the base is a
+    tree, forest or extra-trees member on a device route (the door's rule:
+    staged in each binary two or more members predict through). True: the
+    caller unstages (`xf_unstage_input`) after the units' predictions, also
+    on an error. A host image or a build that cannot stage answers False and
+    every unit uploads as before."""
+    if len(slot[].base_plans) == 0 or n < 1 or d < 1:
+        return False
+    var base = slot[].base_plans[0].copy()
+    if base.route.device == DEVICE_CPU:
+        return False
+    if (base.family != MEMBER_FAMILY_TREE and base.family != MEMBER_FAMILY_FOREST
+            and base.family != MEMBER_FAMILY_EXTRA_TREES):
+        return False
+    var whole = 0
+    for u in range(len(xs)):  # driver-loop: over the units (which read X itself)
+        if xs[u] == x:
+            whole += 1
+    if whole < 2:
+        return False
+    return xf_stage_input(entry_ref_gil_free(base.route.entry), x, n, d)
 
 
 def _all_columns(cols: List[Int32], d: Int) -> Bool:
