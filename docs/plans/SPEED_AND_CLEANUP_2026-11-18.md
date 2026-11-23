@@ -1,7 +1,7 @@
 # Speed and cleanup plan, 2026-11-18
 
-Andrew's order of 2026-11-18: fix every row that is far slower than the stored 0.8.55 board, time our latest build in
-full, then clean up (boundary files, test code, duplicates), and release only when everything is right. No haste. Bits
+Andrew's order of 2026-11-18 (the comparison with an old release's board was dropped on 2026-11-23; measurement is
+ad hoc, only when Andrew asks): fix what is known, then clean up (boundary files, test code, duplicates), and release only when everything is right. No haste. Bits
 only have to match between GPU vendors within one version. Opponents are set aside. The rules are in `AGENTS.md` part 8.
 
 Every item names its evidence file under `~/mojolearn-evidence/briefs-20261118/` (`<name>-RESULT.md`). The live list of
@@ -24,8 +24,8 @@ Merged into `preinteg/wave2-20261113` (head 722ad41eed, parse-level compile and 
 Left on purpose: radius-neighbors fit (a 1 ms safety check on a call that does no work); knn-imputer and
 iterative-imputer (host noise by their own records).
 
-Then: the GitHub build of that head, main fast-forwarded to it, a short start-up job on the pod, and the FULL board
-timed on our latest only, compared approximately with the stored 0.8.55 board. Work opens for wide gaps only.
+Then: the GitHub build of that head, main fast-forwarded to it, and a short start-up job on the pod. No board is
+timed unless Andrew asks for it.
 
 ## 2. Speed arms, default off, timed in the same pod session
 
