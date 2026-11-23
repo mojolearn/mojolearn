@@ -61,6 +61,13 @@ core/member_families.mojo (generated; no family edits this file).
   * `MEMBER_OP_CAPABILITIES` with a live `call.state` answers for that
     state's kind (a regressor of a family with classifiers has no
     predict_proba); with `state == 0` it answers the family's union.
+  * THE 2-D y (layout 4, lane mf-search4): `y` is rows x outputs (`y.cols`;
+    1 for every single-output caller, unchanged). A classifier's y holds each
+    output's codes 0 .. count-1 in its column and `call.class_counts` the
+    address of `y.cols` Int words, each output's class count (0 with one
+    output: `call.classes` is its count). Only a kind with
+    `MEMBER_CAN_MULTI_OUTPUT` is handed `y.cols > 1`; a caller's plan carries
+    the counts (`MemberPlan.class_counts`) and `member_call_of` hands them on.
   * SEQUENCES (layout 3): `MemberMatrix.steps` makes a row of X `steps` x
     features (`MEMBER_CAN_STEPS`).
   * FORECASTERS (`MEMBER_CAN_FORECAST`): fit reads the series in `y`
@@ -120,10 +127,12 @@ from core.native_descriptor_abi import NativeDescriptorCall
 #: `MEMBER_ABI` (core/member_families.mojo), on any change of `MemberCall`,
 #: `MemberMatrix`, `DeviceRoute` or the operation codes.
 #: 3 (2026-11-21): `MemberMatrix.steps`.
+#: 4 (2026-11-23, lane mf-search4): THE 2-D y, `MemberCall.class_counts` after `classes` (and
+#: `MemberPlan.class_counts`): one y layout for every caller, `y.cols` outputs.
 #: Words APPENDED to the end of `MemberCall` (round 5: out_dtype, scope, pin, devices, device_count; round 6:
 #: pin_kept; lane mf-img3: groups) do not
 #: bump it: every image of one build compiles this file, and a member that does not read them is unchanged.
-comptime MEMBER_CALL_LAYOUT = 3
+comptime MEMBER_CALL_LAYOUT = 4
 
 comptime MEMBER_OP_CAPABILITIES = 0       # result word: the mask of MEMBER_CAN_* (of call.state's kind, or the family's union)
 comptime MEMBER_OP_NEW = 1                # params -> call.state (an unfitted member state)
@@ -373,6 +382,10 @@ struct MemberCall(Movable):
     var block: Int
     # Classifier: the class count (given at fit / import; answered by outputs).
     var classes: Int
+    # Layout 4 (THE 2-D y, module note): with `y.cols > 1` on a classifier,
+    # the address of `y.cols` Int words (each output's class count); 0: one
+    # output, whose count is `classes`.
+    var class_counts: Int
     # Results.
     var value: Float64
     var out_cols: Int
@@ -444,6 +457,7 @@ struct MemberCall(Movable):
         self.fit_output = 0
         self.block = 0
         self.classes = 0
+        self.class_counts = 0
         self.value = 0.0
         self.out_cols = 0
         self.out_dtype = MEMBER_DTYPE_UNSAID
@@ -489,6 +503,9 @@ struct MemberPlan(Copyable, Movable):
     var route: DeviceRoute
     var params: List[Float64]
     var classes: Int
+    # Layout 4 (THE 2-D y): a multi-output classifier's class count per
+    # output, empty for one output (`classes` is its count).
+    var class_counts: List[Int]
     # APPENDED 2026-11-21 (round 5). The member's device ids in rank order,
     # written by the family's admit from the public thread's device plan
     # (core/device_plan.mojo `device_plan_current(<the family's setting>)`),
@@ -507,6 +524,7 @@ struct MemberPlan(Copyable, Movable):
         self.route = DeviceRoute(0)
         self.params = List[Float64]()
         self.classes = 0
+        self.class_counts = List[Int]()
         self.devices = List[Int]()
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
@@ -564,6 +582,7 @@ def member_call_of(plan: MemberPlan, state: Int = 0) raises -> MemberCall:
     call.params = Int(plan.params.unsafe_ptr())
     call.param_count = len(plan.params)
     call.classes = plan.classes
+    call.class_counts = Int(plan.class_counts.unsafe_ptr()) if len(plan.class_counts) > 0 else 0
     call.devices = Int(plan.devices.unsafe_ptr()) if len(plan.devices) > 0 else 0
     call.device_count = len(plan.devices)
     call.scope = plan.scope
