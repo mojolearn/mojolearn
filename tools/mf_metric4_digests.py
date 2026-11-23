@@ -51,6 +51,18 @@ binary f1 search whose labels are {0, 2} (pos_label=1 absent: raise, and error_s
 units raised the door's metric words per fold; the head's RUN raises the same words). The KMeans lines' base ran
 the door units (the public scorer over predict); equal values are expected because the RUN reads the same labels
 (float32 target words of small integers) and the same entry bodies.
+
+Lane mf-msel5 adds section msel5 (base: origin/lane/member-fits-5 89a4f6be5d vs head): (H) the cv tools now on the
+typed search RUN (cross_validate with one and several scorers, train scores, return_estimator (each fold
+estimator's predict) and return_indices, error_score numeric; cross_val_score; learning_curve (with shuffle);
+cross_val_predict predict / predict_proba / decision_function for a classifier and predict for a regressor;
+groups with a GroupKFold); GridSearchCV.cv_results_ split<i>_train_score columns; validation_curve; an
+average_precision search over labels {0, 2} (raise, and error_score=nan). Expected: every value line equal, except
+the times (not digested) and these named differences: GridSearchCV with return_train_score now also has the
+split<i>_train_score columns (the base had none: H_search_train_cols differs); validation_curve through the kind
+(the base raised KeyError on the missing columns where the kind took it: H_validation_curve may differ from a
+raised base line); H_ap_absent_* raise scikit-learn's words "pos_label=1 is not a valid label: It should be one
+of [0 2]" (the base's door scorer raised its own words; compare the words).
 """
 import hashlib
 import os
@@ -411,9 +423,112 @@ def _cluster5_search_cases():
     return cases
 
 
+def _cv_validate(kind, scoring, train=False, estimator=False, indices=False, error_score=np.nan, groups=False):
+    import mojolearn
+    from mojolearn.model_selection import cross_validate, GroupKFold
+    X, y, c = _data(37, n=180, d=5, k=3)
+    est = mojolearn.LogisticRegression(max_iter=100) if kind == "clf" else mojolearn.Ridge(alpha=1.0)
+    target = c if kind == "clf" else y
+    cv = 3
+    g = None
+    if groups:
+        g = np.arange(180) % 6
+        cv = GroupKFold(n_splits=3)
+    res = cross_validate(est, X, target, groups=g, scoring=scoring, cv=cv, return_train_score=train,
+                         return_estimator=estimator, return_indices=indices, error_score=error_score)
+    out = []
+    for key in sorted(res):
+        if key in ("fit_time", "score_time"):
+            out.append((key + "_len", len(res[key])))
+        elif key == "estimator":
+            for i, e in enumerate(res[key]):
+                out.append((f"estimator{i}_predict", _digest(np.asarray(e.predict(X), dtype=np.float64))))
+        elif key == "indices":
+            for side in ("train", "test"):
+                for i, rows in enumerate(res[key][side]):
+                    out.append((f"indices_{side}{i}", _digest(np.asarray(rows, dtype=np.int64))))
+        else:
+            out.append((key, _digest(np.asarray(res[key], dtype=np.float64))))
+    return out
+
+
+def _cv_predict(kind, method):
+    import mojolearn
+    from mojolearn.model_selection import cross_val_predict
+    X, y, c = _data(41, n=180, d=5, k=3)
+    est = mojolearn.LogisticRegression(max_iter=100) if kind == "clf" else mojolearn.Ridge(alpha=1.0)
+    pred = cross_val_predict(est, X, c if kind == "clf" else y, cv=3, method=method)
+    a = np.asarray(pred)
+    return [("dtype", a.dtype.str), ("values", _digest(a))]
+
+
+def _learning(shuffle):
+    import mojolearn
+    from mojolearn.model_selection import learning_curve
+    X, _, c = _data(43, n=180, d=5, k=3)
+    got = learning_curve(mojolearn.LogisticRegression(max_iter=100), X, c, train_sizes=[0.3, 0.6, 1.0], cv=3,
+                         scoring="accuracy", shuffle=shuffle, random_state=0, return_times=True)
+    return [("sizes", _digest(np.asarray(got[0], dtype=np.int64))), ("train", _digest(got[1])),
+            ("test", _digest(got[2])), ("times_shape", f"{np.asarray(got[3]).shape}{np.asarray(got[4]).shape}")]
+
+
+def _search_train_cols():
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV
+    X, _, c = _data(47, n=150, d=4, k=3)
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring="accuracy", cv=3,
+                     return_train_score=True).fit(X, c)
+    return [(k, _digest(np.asarray(s.cv_results_[k], dtype=np.float64))) for k in sorted(s.cv_results_)
+            if k.startswith("split") or k.endswith("_test_score") or k == "mean_train_score"]
+
+
+def _validation():
+    import mojolearn
+    from mojolearn.model_selection import validation_curve
+    X, _, c = _data(53, n=150, d=4, k=3)
+    tr, te = validation_curve(mojolearn.LogisticRegression(max_iter=100), X, c, param_name="C",
+                              param_range=[0.1, 1.0, 10.0], cv=3, scoring="accuracy")
+    return (tr, te)
+
+
+def _ap_absent(error_score):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV
+    X, _, c = _data(59, n=120, d=4, k=2)
+    target = np.asarray([0, 2])[(c > 0).astype(np.int64)]
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring="average_precision",
+                     cv=3, error_score=error_score).fit(X, target)
+    return _rows_of_search(s, X)
+
+
+def _msel5_cases():
+    from mojolearn.model_selection import cross_val_score
+    import mojolearn
+    cases = [
+        ("H_cv_clf_none", lambda: _cv_validate("clf", None)),
+        ("H_cv_clf_acc_train", lambda: _cv_validate("clf", "accuracy", train=True)),
+        ("H_cv_clf_multi", lambda: _cv_validate("clf", ["accuracy", "f1_macro", "neg_log_loss"], train=True)),
+        ("H_cv_clf_estimator_indices", lambda: _cv_validate("clf", "accuracy", estimator=True, indices=True)),
+        ("H_cv_reg_r2_estimator", lambda: _cv_validate("reg", "r2", estimator=True)),
+        ("H_cv_reg_groups", lambda: _cv_validate("reg", "neg_mean_squared_error", groups=True, indices=True)),
+        ("H_cv_score_reg", lambda: cross_val_score(mojolearn.Ridge(alpha=1.0), *_data(61)[:2], cv=4, scoring="r2")),
+        ("H_cvp_clf_predict", lambda: _cv_predict("clf", "predict")),
+        ("H_cvp_clf_proba", lambda: _cv_predict("clf", "predict_proba")),
+        ("H_cvp_clf_decision", lambda: _cv_predict("clf", "decision_function")),
+        ("H_cvp_reg_predict", lambda: _cv_predict("reg", "predict")),
+        ("H_learning_plain", lambda: _learning(False)),
+        ("H_learning_shuffle", lambda: _learning(True)),
+        ("H_search_train_cols", _search_train_cols),
+        ("H_validation_curve", _validation),
+        ("H_ap_absent_raise", lambda: _ap_absent("raise")),
+        ("H_ap_absent_nan", lambda: _warned(lambda: _ap_absent(np.nan))),
+    ]
+    return cases
+
+
 def _all_cases():
     return (_metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
-            + _search5_cases() + _cluster5_metric_cases() + _cluster5_search_cases())
+            + _search5_cases() + _cluster5_metric_cases() + _cluster5_search_cases() + _msel5_cases())
 
 
 def _run(index):
