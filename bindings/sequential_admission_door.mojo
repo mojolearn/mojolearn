@@ -224,6 +224,12 @@ def _sequential_admit_value(mut mods: NativeModules, value: PythonObject, contex
         # (90c1fdb86b). A reset that drops it admits its retained pins through
         # native_release_admit. Reached only after every ordinary type check.
         return
+    if cls is py_item(context, sequential_keys()[].k_sequential_class):
+        # An exact Sequential given as an argument (gated, residual_block, parallel: lane seq-blocks-3). The
+        # containers read only its layer list, plain tuples of ints and floats, admitted here.
+        _sequential_admit_value(mods, py_item(py_fields(value), sequential_keys()[].k__layers), context, types,
+                                depth + 1)
+        return
     mods.released()
     raise Error("TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported")
 
