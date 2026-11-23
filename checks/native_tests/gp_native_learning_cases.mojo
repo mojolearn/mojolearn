@@ -60,9 +60,11 @@ def perturbed_likelihood(driver: GPDriver, source: Int, target: Int,
     try:
         require(driver.theta(GPThetaRequest(Int(theta.unsafe_ptr()), Int(converted.unsafe_ptr() + 1), count)) == count,
             "GP finite-difference native theta conversion count")
+        _ = theta  # read by address inside the call above: named again so it outlives it (lane lastuse-addr-arg)
         apply_values(kernel, converted, 1, kind)
         var status = driver.gpr_gradient(GPRGradientRequest(source, target, Int(flags.unsafe_ptr()),
             Int(gradient.unsafe_ptr() + 1), Int(scalars.unsafe_ptr() + 1), 40, 3, kernel.view(), 0.00000095367431640625))
+        _ = flags  # read by address inside the call above: named again so it outlives it (lane lastuse-addr-arg)
         require(status == 0 and scalars[1] == 0 and isfinite(scalars[2]), "GP finite-difference perturbation succeeds")
         guards64(converted, "GP theta conversion guards")
         guards64(gradient, "GP perturbed gradient guards")

@@ -284,7 +284,9 @@ def byte_lm_host_metadata(mut mods: NativeModules, trainer: PythonObject, operat
     if operation == "parameters_sha256":
         var value = fields["_parameters"]
         classical_admit_value(value, context)
-        return PythonObject(sha256_hex_addr(Int(py=classical_address(value)), Int(py=value.size) * 4))
+        var digest = PythonObject(sha256_hex_addr(Int(py=classical_address(value)), Int(py=value.size) * 4))
+        _ = value^  # read by address inside the call above: named again so it outlives it (lane lastuse-addr-arg)
+        return digest
     return fields[String("_" + operation)]
 
 
