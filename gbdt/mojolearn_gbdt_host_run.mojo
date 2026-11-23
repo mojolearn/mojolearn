@@ -72,6 +72,7 @@ from gbdt.host.gbdt_oracle_multiclass import (
     GBDT_OBJ_MULTIRMSE,
     gbdt_multi_host_fit,
     gbdt_multi_host_model_text,
+    gbdt_multi_host_model_text_ctr,
 )
 from gbdt.host.gbdt_oracle_rmse import (
     GbdtRmseHostFit,
@@ -1352,8 +1353,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "loss='" + loss + "' with one_hot_features is not implemented"
             " here"
         )
-    if n_flags != 0 and (grow_code != 0 or is_pointwise or is_multi):
-        _refuse("cat_features or one_hot_features outside SymmetricTree with Logloss or RMSE")
+    # lane gbdt-cpu-rest-4-cat (2026-11-23): SymmetricTree trains them
+    # with the pointwise losses (gbdt_oracle_losses.mojo) and with
+    # MultiClass, MultiClassOneVsAll and MultiRMSE's one-hot columns
+    # (gbdt_oracle_multiclass.mojo), through the one categorical prelude
+    # (gbdt_oracle_ctr.mojo::gbdt_ctr_host_prelude), every permutation and
+    # the tree CTRs; what remains is the non-symmetric driver
+    if n_flags != 0 and grow_code != 0:
+        _refuse("cat_features or one_hot_features under Depthwise or Lossguide")
     # the HELD-OUT arm (lane/close-no-cpu-path-gbdt, 2026-09-20): their
     # `testCursor`, held-out curve, overfitting detector and
     # `ShrinkToBestIteration`, restated in gbdt/host/gbdt_oracle_eval.mojo
@@ -1677,13 +1684,19 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             od_kind, od.auto_stop_p_value, od.iterations_wait,
             use_best_model, best_model_min_trees,
         )
+        # lane gbdt-cpu-rest-4-cat (2026-11-23): categorical and one-hot
+        # columns (`flags`), `train`'s CTR options with them
         var multi_fit = gbdt_multi_host_fit(
             x, y, n_rows, n_features, p,
             multi_objective,
             class_weights, multi_ev^, sym_boot_kind, sym_boot_param,
             random_strength, target_dim, row_weights, feature_fraction,
+            flags, permutation_count, ctr_permutation_id, max_ctr_complexity,
         )
-        text = gbdt_multi_host_model_text(multi_fit.model)
+        if len(flags) != 0:
+            text = gbdt_multi_host_model_text_ctr(multi_fit)
+        else:
+            text = gbdt_multi_host_model_text(multi_fit.model)
         losses = multi_fit.model.losses.copy()
         best_iteration = multi_fit.eval.best_iteration
         stopped_early = multi_fit.eval.stopped_early
@@ -1745,17 +1758,28 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 od_kind, od.auto_stop_p_value, od.iterations_wait,
                 use_best_model, best_model_min_trees,
             )
+            # lane gbdt-cpu-rest-4-cat (2026-11-23): categorical and one-hot
+            # columns (`flags`), `train`'s CTR options with them; the
+            # model text through the CTR writer and its `bias` record
             var pw_fit = gbdt_losses_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, pw_sym_ev^,
                 host_group_sizes, host_pair_winners, host_pair_losers,
                 host_pair_weights, pw_start, random_strength, row_weights,
-                feature_fraction,
+                feature_fraction, flags, permutation_count, ctr_permutation_id,
+                max_ctr_complexity,
             )
-            losses = pw_fit.model.losses.copy()
-            best_iteration = pw_fit.eval.best_iteration
-            stopped_early = pw_fit.eval.stopped_early
-            test_losses = pw_fit.eval.test_losses.copy()
-            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_fit.model^, pw_start))
+            losses = pw_fit.fit.model.losses.copy()
+            best_iteration = pw_fit.fit.eval.best_iteration
+            stopped_early = pw_fit.fit.eval.stopped_early
+            test_losses = pw_fit.fit.eval.test_losses.copy()
+            if len(flags) != 0:
+                text = gbdt_text_with_bias(
+                    gbdt_ctr_host_model_text(pw_fit), len(losses), pw_start
+                )
+            else:
+                text = gbdt_rmse_host_model_text(
+                    GbdtRmseHostFit(pw_fit.fit.model^, pw_start)
+                )
             return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
         # the grouped pointwise searcher (gbdt_oracle_pointwise_rank.mojo)
         var pw_model = gbdt_ranking_pointwise_host_fit(
