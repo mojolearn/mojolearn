@@ -5,15 +5,17 @@ Recipe: MEMBER-ABI-V2.md; RUN: core/density_member.mojo.
 
 KernelDensity is a member with fit, score_samples and score (no predict:
 a grid search over its bandwidth scores it). Admit reads its own
-validation (`_kde_validate`, bindings/kde_public_native_unpack.mojo) and
-answers False for a kernel or metric outside the entry's tables (the class
-refuses it by name) or a non-empty metric_params; its route is the
+validation (`_kde_validate`, bindings/kde_public_native_unpack.mojo); a
+kernel or metric name outside the member's tables travels as its text (the
+entry refuses it by name, as for the class's own door) and metric_params,
+which that validation admits only as a single Minkowski p=2 the door does
+not hand on, is not a word (lane mf-clu6); its route is the
 estimators binding's `kde_native_api_v1` entry. Its pack publishes what
 `_kde_fit` publishes (a released resident cache, input_copied_, _x frozen,
-n_features_in_, n_samples_fit_, _w frozen or None). A DBSCAN
-with prediction_data=False has no predict either, and one with
-metric='precomputed' takes words tied to the training rows: admit answers
-False for both and the caller keeps the class's own doors.
+n_features_in_, n_samples_fit_, _w frozen or None). A DBSCAN with
+prediction_data=False (and so any metric='precomputed' one) is a member
+too (lane mf-clu6): word 7 says so, and its predict is the class's own
+refusal; a precomputed X is checked square and non-negative at fit.
 
   * `density_member_admit` (UNPACK, once per member): the estimator's own
     reads and refusals in its fit's order
@@ -47,7 +49,6 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
 from bindings.py_balanced import py_get, py_fields, py_setitem
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
-from cluster.dbscan_door_run import DBSCAN_METRIC_PRECOMPUTED
 from core.dbscan_native_api import DBSCAN_MODE, DBSCAN_VENDOR, DBSCAN_NATIVE_COUNT
 from core.kde_native_api import KDE_MODE, KDE_VENDOR, KDE_NATIVE_COUNT
 from bindings.kde_native_boundary_unpack import KDEConnection
@@ -58,6 +59,7 @@ from bindings.py_balanced import py_call
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
+from core.cluster_member_words import member_words_append_text
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE,
@@ -89,13 +91,10 @@ def _kde_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     var kernels: List[String] = ["gaussian", "tophat", "epanechnikov", "exponential", "linear", "cosine"]
     var metrics: List[String] = ["euclidean", "l2", "sqeuclidean", "l1", "cityblock", "manhattan", "chebyshev",
         "cosine", "minkowski"]
-    var kernel = _code(py_get(fields, PythonObject("kernel"), PythonObject(None)), kernels)
-    var metric = _code(py_get(fields, PythonObject("metric"), PythonObject(None)), metrics)
-    if kernel < 0 or metric < 0:
-        return False
-    var params = py_get(fields, PythonObject("metric_params"), PythonObject(None))
-    if params is not None and len(params) > 0:
-        return False
+    var kernel_field = py_get(fields, PythonObject("kernel"), PythonObject(None))
+    var metric_field = py_get(fields, PythonObject("metric"), PythonObject(None))
+    var kernel = _code(kernel_field, kernels)
+    var metric = _code(metric_field, metrics)
     var bandwidth = Float64(py=py_call(native_loaded_module("builtins").float,
         py_get(fields, PythonObject("bandwidth"), PythonObject(None))))
     # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
@@ -113,6 +112,15 @@ def _kde_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     route.flags = connection.capabilities
     owner.plan.route = route
     var words: List[Float64] = [Float64(_KIND_KDE), bandwidth, Float64(kernel), Float64(metric)]
+    if kernel < 0 or metric < 0:
+        # Names outside the tables (both are str: `_kde_validate` refused
+        # anything else): their text, as the door's `_kde_text` hands it.
+        var kernel_text = family_str(kernel_field) if kernel < 0 else String("")
+        var metric_text = family_str(metric_field) if metric < 0 else String("")
+        words.append(Float64(kernel_text.byte_length()))
+        words.append(Float64(metric_text.byte_length()))
+        member_words_append_text(words, kernel_text)
+        member_words_append_text(words, metric_text)
     owner.plan.params = words^
     owner.pins = Python.tuple(binding, connection.provider)
     return True
@@ -132,8 +140,6 @@ def density_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     classical_connect_numpy(context)
     var builtins = native_loaded_module("builtins")
     var settings = dbscan_fit_settings(fields, builtins, context)
-    if not settings.predicting or settings.metric == DBSCAN_METRIC_PRECOMPUTED:
-        return False
     var budget = dbscan_fit_budget(fields, builtins, context)
     # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
     # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
@@ -151,7 +157,8 @@ def density_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     route.flags = connection.capabilities
     owner.plan.route = route
     var words: List[Float64] = [Float64(_KIND_DBSCAN), settings.eps, Float64(settings.min_samples),
-        Float64(settings.metric), Float64(settings.method), Float64(settings.cap), Float64(budget)]
+        Float64(settings.metric), Float64(settings.method), Float64(settings.cap), Float64(budget),
+        1.0 if settings.predicting else 0.0]
     owner.plan.params = words^
     owner.pins = Python.tuple(binding, connection.provider)
     return True

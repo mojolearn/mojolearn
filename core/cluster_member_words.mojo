@@ -41,3 +41,29 @@ def member_words_take_f32(words: Int, at: Int, count: Int) -> List[Float32]:
     var values = List[Float32](unsafe_uninit_length=count)
     unsafe_memcpy(dest=values.unsafe_ptr(), src=_F32P(unsafe_from_address=words + 8 * at), count=count)
     return values^
+
+
+def member_words_byte_slots(count: Int) -> Int:
+    """The Float64 words `count` packed bytes take."""
+    return (count + 7) // 8 if count > 0 else 0
+
+
+def member_words_append_text(mut words: List[Float64], text: String):
+    """Append the UTF-8 bytes of `text`, packed eight per Float64 word (a
+    name the family hands its entry by name, as the class's door does)."""
+    var count = text.byte_length()
+    if count <= 0:
+        return
+    var start = len(words)
+    words.resize(start + member_words_byte_slots(count), 0.0)
+    unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(words.unsafe_ptr()) + 8 * start),
+        src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(text.unsafe_ptr())), count=count)
+
+
+def member_words_take_text(words: Int, at: Int, count: Int) raises -> String:
+    """The `count` UTF-8 bytes packed from Float64 word `at` of the word
+    array at host address `words`, as a String (length-delimited)."""
+    if count <= 0:
+        return String("")
+    var bytes = Span(unsafe_ptr=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=words + 8 * at), length=count)
+    return String(from_utf8=bytes)

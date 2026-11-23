@@ -15,17 +15,23 @@ word (`DBSCAN_CAP_*`, read once by the caller's UNPACK). For KernelDensity
 of neighbors/neighbors_kde_run.mojo) and `route.flags` its `KDE_CAP_*` word.
 No other route slot is read. No kernel is touched.
 
-Kinds (MEMBER_OP_NEW word [0]): 1 DBSCAN with prediction_data=True (the
-class has `predict` only then); 0 KernelDensity (fit, score_samples, score:
+Kinds (MEMBER_OP_NEW word [0]): 1 DBSCAN (its `predict` serves only a fit
+with prediction_data=True; otherwise it is the class's own refusal);
+0 KernelDensity (fit, score_samples, score:
 no predict; a grid search over its bandwidth scores it).
 
 KernelDensity NEW parameters (Float64 words, 4): [0] 0, [1] bandwidth (a
 float; a rule name is the class's own refusal), [2] kernel (0 'gaussian',
 1 'tophat', 2 'epanechnikov', 3 'exponential', 4 'linear', 5 'cosine'),
 [3] metric (0 'euclidean', 1 'l2', 2 'sqeuclidean', 3 'l1', 4 'cityblock',
-5 'manhattan', 6 'chebyshev', 7 'cosine', 8 'minkowski' with no
-metric_params). The names are built once at NEW and handed to the entry by
-name, as the class's door hands them. KernelDensity is LAZY: fit BORROWS X
+5 'manhattan', 6 'chebyshev', 7 'cosine', 8 'minkowski'). metric_params
+is not a word: the class's validation admits only a single Minkowski p=2,
+which its door then does not hand to the entry either. A kernel or metric
+name outside these tables is -1 and its text follows (lane mf-clu6):
+[4] the kernel name's byte count, [5] the metric name's, then each name's
+UTF-8 bytes packed from a fresh word (core/cluster_member_words.mojo). The
+names are built once at NEW and handed to the entry by name, as the class's
+door hands them, so an unknown name meets the entry's own refusal. KernelDensity is LAZY: fit BORROWS X
 and the sample weights (no copy: the class's own fit copies X into `_x` on
 every fit), so THE CALLER KEEPS X AND THE WEIGHTS ALIVE AND UNCHANGED UNTIL
 THIS STATE IS FREED OR REFITTED (the member ABI's view lifetime); the first
@@ -40,11 +46,14 @@ query) and releases it at refit, import or free. Blocks by index: 0
 1 `MEMBER_BLOCK_FAMILY + 5` float32 1 x rows, the weights (empty: none);
 2 `MEMBER_BLOCK_SCALARS` float64 [rows, features]. An import needs 0 and 2.
 
-DBSCAN MEMBER_OP_NEW parameters (Float64 words, 7): [0] 1, [1] eps, [2] min_samples,
-[3] metric code (the estimator's `dbscan_metric_code`; 'precomputed' is not a
-member: its words are tied to the training rows), [4] algorithm code
-(`dbscan_method_code`), [5] max_iterations (0 for None), [6]
-max_mbytes_per_batch (0: the provider's own budget).
+DBSCAN MEMBER_OP_NEW parameters (Float64 words, 7 or 8): [0] 1, [1] eps,
+[2] min_samples, [3] metric code (the estimator's `dbscan_metric_code`;
+'precomputed' reads X as the n x n distance matrix and is refused in the
+door's words when it is not square or holds a negative distance), [4]
+algorithm code (`dbscan_method_code`), [5] max_iterations (0 for None), [6]
+max_mbytes_per_batch (0: the provider's own budget), [7] prediction_data
+(0/1; absent: 1). The estimator's settings refuse prediction_data=True with
+'precomputed', so a precomputed member never predicts (lane mf-clu6).
 A clusterer, not a classifier: `y` is not read, `classes` is 0.
 
 Views: X dense row-major host float32, BORROWED for the call (never copied:
@@ -77,10 +86,11 @@ fit, import or free. Serial by nature here: the store's bookkeeping.
 """
 from std.memory import unsafe_memcpy
 from std.sys.info import size_of
-from cluster.dbscan_door_run import dbscan_fit_request, dbscan_core_request
+from cluster.dbscan_door_run import dbscan_fit_request, dbscan_core_request, dbscan_check_x
 from core.admitted_input import admitted_check_weights_f32
 from core.admitted_refusals import admitted_finite_refuse
 from core.host_finite_scan import host_all_finite_f32
+from core.cluster_member_words import member_words_byte_slots, member_words_take_text
 from core.kde_native_api import KDENativeDriver, KDE_CAP_RESIDENT
 from neighbors.neighbors_kde_run import (
     kde_fit_key, kde_prepare_request, kde_query_request, kde_resident_query, kde_refuse_unfitted, kde_refuse_features,
@@ -140,6 +150,7 @@ struct DensityMemberSlot(Copyable, Movable, Defaultable):
     var method: Int
     var cap: Int
     var budget: Int
+    var predicting: Bool
     var fitted: Bool
     var features: Int
     # The resident core-row handle of a GPU image (-1: none minted).
@@ -168,6 +179,7 @@ struct DensityMemberSlot(Copyable, Movable, Defaultable):
         self.method = 0
         self.cap = 0
         self.budget = 0
+        self.predicting = True
         self.fitted = False
         self.features = 0
         self.handle = -1
@@ -219,7 +231,7 @@ def _slot_address(index: Int) raises -> Int:
     return Int(store[].chunks[index // _CHUNK].unsafe_ptr()) + (index % _CHUNK) * size_of[DensityMemberSlot]()
 
 
-def _mint(words: _Words) raises -> Int:
+def _mint(words: _Words, count: Int) raises -> Int:
     var store = _STORE.get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
@@ -240,8 +252,16 @@ def _mint(words: _Words) raises -> Int:
         slot[].kind = Int(words[0])
         if slot[].kind == _KIND_KDE:
             slot[].bandwidth = words[1]
-            slot[].kernel = _kde_kernel_name(Int(words[2]))
-            slot[].kde_metric = _kde_metric_name(Int(words[3]))
+            if words[2] < 0.0 or words[3] < 0.0:
+                var kernel_bytes = Int(words[4])
+                var metric_at = 6 + member_words_byte_slots(kernel_bytes)
+                slot[].kernel = (member_words_take_text(Int(words), 6, kernel_bytes) if words[2] < 0.0
+                    else _kde_kernel_name(Int(words[2])))
+                slot[].kde_metric = (member_words_take_text(Int(words), metric_at, Int(words[5]))
+                    if words[3] < 0.0 else _kde_metric_name(Int(words[3])))
+            else:
+                slot[].kernel = _kde_kernel_name(Int(words[2]))
+                slot[].kde_metric = _kde_metric_name(Int(words[3]))
         else:
             slot[].eps = words[1]
             slot[].min_samples = Int(words[2])
@@ -249,6 +269,7 @@ def _mint(words: _Words) raises -> Int:
             slot[].method = Int(words[4])
             slot[].cap = Int(words[5])
             slot[].budget = Int(words[6])
+            slot[].predicting = count < 8 or words[7] != 0.0
         slot[].clear()
         slot[].handle = -1
         return slot[].generation * _INDEX_SPAN + index + 1
@@ -343,6 +364,9 @@ def _fit(slot: _Slot, call: _Call) raises:
         if call[].weights.rows * call[].weights.cols != rows:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
         weights = call[].weights.data
+    # metric='precomputed': the door's square and sign refusals (the caller
+    # admitted X finite, so the finite scan is not repeated).
+    dbscan_check_x(call[].x.data, rows, d, True, slot[].metric)
     _release_resident(slot, call)
     slot[].clear()
     slot[].labels = List[Int32](length=rows, fill=0)
@@ -372,6 +396,12 @@ def _fit(slot: _Slot, call: _Call) raises:
 def _predict(slot: _Slot, call: _Call) raises:
     if not slot[].fitted:
         raise Error("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
+    if not slot[].predicting:
+        # The class's own refusal (bindings/dbscan_public_native_unpack.mojo
+        # `dbscan_predict_components`).
+        raise Error("mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
+                    + "DBSCAN(prediction_data=True), which keeps the core samples this "
+                    + "rule needs (DEVIATION 2740)")
     _whole_x(call)
     var queries = call[].x.rows
     var d = slot[].features
@@ -662,18 +692,22 @@ def _density_member(operation: Int, address: Int) raises -> Int:
         var words = _Words(unsafe_from_address=call[].params)
         var kind = Int(words[0])
         if kind == _KIND_KDE:
-            if call[].param_count != 4:
+            var want = 4
+            if call[].param_count >= 6 and (words[2] < 0.0 or words[3] < 0.0):
+                want = (6 + member_words_byte_slots(Int(words[4]) if words[2] < 0.0 else 0)
+                    + member_words_byte_slots(Int(words[5]) if words[3] < 0.0 else 0))
+            if call[].param_count != want:
                 raise Error("member ABI: a KernelDensity member takes four parameter words (kind, bandwidth,"
-                    + " kernel, metric)")
+                    + " kernel, metric), and a name's byte words after them when its code is -1")
             if not (words[1] > 0.0):
                 raise Error("ValueError: bandwidth must be positive, got " + String(words[1]))
         elif kind == _KIND_DBSCAN:
-            if call[].param_count != 7:
-                raise Error("member ABI: a DBSCAN member takes seven parameter words (kind, eps, min_samples,"
-                    + " metric, algorithm, max_iterations, max_mbytes_per_batch)")
+            if call[].param_count != 7 and call[].param_count != 8:
+                raise Error("member ABI: a DBSCAN member takes seven or eight parameter words (kind, eps,"
+                    + " min_samples, metric, algorithm, max_iterations, max_mbytes_per_batch[, prediction_data])")
         else:
             raise Error("member ABI: density member kind " + String(kind) + " is not published")
-        call[].state = _mint(words)
+        call[].state = _mint(words, call[].param_count)
         return 0
     if operation == MEMBER_OP_FREE:
         var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
