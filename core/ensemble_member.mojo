@@ -1219,6 +1219,9 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             # THE MULTI-OUTPUT KIND: predict and score over a 2-D y; the base's
             # sample weights (MultiOutput's fit hands them to every output).
             mask |= MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCORE
+            if kind == META_MULTI_CLASSIFIER and (base & MEMBER_CAN_PREDICT_PROBA) != 0:
+                # (lane mf-tail5) predict_proba: every output's block in one float64 dst
+                mask |= MEMBER_CAN_PREDICT_PROBA
         if kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER:
             mask |= MEMBER_CAN_PREDICT_PROBA
         elif kind == META_ADA_CLASSIFIER:
@@ -3566,11 +3569,99 @@ def _multi_outputs(slot: _SlotPtr, rows: VoteRows, dtype: Int, dst: Int) raises:
             raise Error(errors[j])
 
 
+def _multi_proba_width(slot: _SlotPtr) -> Int:
+    """THE MULTI-OUTPUT PROBABILITIES (lane mf-tail5): the columns of one
+    predict_proba row, every output's classes in turn (0: an output's
+    member has none)."""
+    var total = 0
+    for j in range(len(slot[].proba_cols)):  # small-loop(the outputs)
+        if slot[].proba_cols[j] <= 0:
+            return 0
+        total += slot[].proba_cols[j]
+    return total
+
+
+def _proba_multi(slot: _SlotPtr, call: _CallPtr) raises:
+    """MultiOutputClassifier.predict_proba (lane mf-tail5): scikit-learn's
+    list of per-output (n, classes_j) arrays as ONE block, output j's member
+    proba in columns `sum(proba_cols[:j]) ..` of the dense host float64 rows
+    x `_multi_proba_width` `dst` (each output's own classes, in its member's
+    order); the caller's PACK cuts the list. One task per output when every
+    member is GIL-free."""
+    var name = _name(slot[].kind)
+    var width = _multi_proba_width(slot)
+    if width == 0:
+        member_unsupported(name, MEMBER_OP_PREDICT_PROBA)
+    var rows = _rows(call, name)
+    var n = rows.n
+    if not call[].dst.dense_host(MEMBER_F64) or call[].dst.rows != n or call[].dst.cols != width:
+        raise Error("TypeError: a " + name + " member writes predict_proba as dense host float64 rows x "
+                    + String(width) + " (every output's classes)")
+    var outputs = len(slot[].states)
+    var offsets = List[Int](length=max(outputs, 1), fill=0)
+    for j in range(1, outputs):  # small-loop(the outputs' first columns)
+        offsets[j] = offsets[j - 1] + slot[].proba_cols[j - 1]
+    var bufs = List[List[Float64]](capacity=outputs)
+    var buf_at = List[Int](length=max(outputs, 1), fill=0)
+    for j in range(outputs):  # driver-loop: over the outputs (their probability buffers)
+        bufs.append(List[Float64](length=max(n * slot[].proba_cols[j], 1), fill=0.0))
+        buf_at[j] = Int(bufs[j].unsafe_ptr())
+    var failed = List[UInt8](length=max(outputs, 1), fill=UInt8(0))
+    var errors = List[String](length=max(outputs, 1), fill=String(""))
+    var slot_at = Int(slot)
+    var bufs_list = Int(buf_at.unsafe_ptr())
+    var offsets_at = Int(offsets.unsafe_ptr())
+    var failed_at = Int(failed.unsafe_ptr())
+    var errors_at = Int(errors.unsafe_ptr())
+    var x = rows.x
+    var d = rows.d
+    var dst = call[].dst.data
+
+    def _one(j: Int) {imm slot_at, imm bufs_list, imm offsets_at, imm failed_at, imm errors_at, imm x, imm d, imm n,
+                       imm dst, imm width}:
+        var s = _SlotPtr(unsafe_from_address=slot_at)
+        var buf = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=bufs_list)[j]
+        var first = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=offsets_at)[j]
+        try:
+            var pd = s[].proba_dtype[j]
+            var cols = s[].proba_cols[j]
+            var inner = member_call_of(s[].plans[j], s[].states[j])
+            inner.x = MemberMatrix(x, n, d)
+            inner.dst = MemberMatrix(buf, n, cols, pd)
+            _ = member_call(s[].plans[j].member, MEMBER_OP_PREDICT_PROBA, inner)
+            var out = _F64P(unsafe_from_address=dst)
+            for i in range(n):
+                for c in range(cols):
+                    var value = _F64P(unsafe_from_address=buf)[i * cols + c] if pd == MEMBER_F64 else Float64(
+                        _F32P(unsafe_from_address=buf)[i * cols + c])
+                    out[i * width + first + c] = value
+        except error:
+            MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=failed_at)[j] = UInt8(1)
+            MutPointer[String, MutUntrackedOrigin](unsafe_from_address=errors_at)[j] = String(error)
+
+    if _all(slot[].masks, MEMBER_GIL_FREE):
+        host_parallelize(_one, outputs)
+    else:
+        for j in range(outputs):  # driver-loop: over the outputs (THE GIL RULE: kinds that are not GIL-free)
+            _one(j)
+    _ = len(bufs)
+    _ = len(buf_at)
+    _ = len(offsets)
+    for j in range(outputs):  # driver-loop: over the outputs (the first refusal, in output order)
+        if failed[j] != UInt8(0):
+            raise Error(errors[j])
+
+
 def _predict_multi(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     """predict: n x outputs (int32 codes per output, or the regressor's
-    floats). predict_proba is a list of arrays (one per output): no one dst,
-    refused as a member operation; so is decision_function."""
+    floats). predict_proba (MultiOutputClassifier, lane mf-tail5): every
+    output's block in one float64 dst (`_proba_multi`). decision_function:
+    scikit-learn's MultiOutputClassifier has none (refused)."""
     var name = _name(slot[].kind)
+    if operation == MEMBER_OP_PREDICT_PROBA and slot[].kind == META_MULTI_CLASSIFIER:
+        _fitted(slot)
+        _proba_multi(slot, call)
+        return
     if operation != MEMBER_OP_PREDICT:
         member_unsupported(name, operation)
     var rows = _rows(call, name)
@@ -4364,6 +4455,16 @@ def _outputs(call: _CallPtr) raises:
             _outputs_search(call, _plan_first(Int(words[1])), call[].classes if kind == META_SEARCH_CLASSIFIER else 0)
             return
         if _multi_kind(kind):
+            if call[].flags == MEMBER_OP_PREDICT_PROBA and kind == META_MULTI_CLASSIFIER:
+                # (lane mf-tail5) every output's classes, float64 (`_proba_multi`)
+                var total = 0
+                if call[].class_counts != 0:
+                    var given = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=call[].class_counts)
+                    for j in range(max(call[].y.cols, 1)):  # small-loop(the outputs' class counts)
+                        total += given[j]
+                call[].out_cols = total
+                call[].out_dtype = MEMBER_F64
+                return
             if call[].flags != MEMBER_OP_PREDICT:
                 member_unsupported(_name(kind), call[].flags)
             call[].out_cols = max(call[].y.cols, 1)
@@ -4415,6 +4516,15 @@ def _outputs(call: _CallPtr) raises:
         call[].classes = slot[].classes
         return
     if _multi_kind(slot[].kind):
+        if call[].flags == MEMBER_OP_PREDICT_PROBA and slot[].kind == META_MULTI_CLASSIFIER and slot[].fitted:
+            # (lane mf-tail5) every output's own classes, float64 (`_proba_multi`)
+            var width = _multi_proba_width(slot)
+            if width == 0:
+                member_unsupported(_name(slot[].kind), call[].flags)
+            call[].out_cols = width
+            call[].out_dtype = MEMBER_F64
+            call[].classes = 0
+            return
         if call[].flags != MEMBER_OP_PREDICT:
             member_unsupported(_name(slot[].kind), call[].flags)
         if not slot[].fitted:
