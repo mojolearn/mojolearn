@@ -74,7 +74,13 @@ def test_fused_doors_keep_the_op_chain_fallback():
     chain = _read('neighbors/label_propagation_run.mojo')
     assert 'if lp_query_fused(request):' in chain and 'xn_semi_row_normalize_request(' in chain
     cluster = _read('bindings/mcls_cluster_door.mojo')
-    assert '"homogeneity_completeness_v_measure", False' in cluster and '"v_measure_score"' in cluster
+    # homogeneity_completeness_v_measure: one union encode and ONE call of the image's fused body,
+    # through the cluster table's typed RUN (lane mf-cluster5, core/metrics_cluster_table.mojo).
+    assert 'cluster_hcv_run(entry, t, p, n, beta)' in cluster
+    table = _read('core/metrics_cluster_table.mojo')
+    assert 'CLUSTER_OP_HCV, base, base + 4 * n' in table
+    for path in ('metrics/cluster_entry_device.mojo', 'metrics/host/cluster_entry_host.mojo'):
+        assert 'if operation == CLUSTER_OP_HCV:' in _read(path), path
     for path in ('bindings/_mojolearn_metrics.mojo', 'bindings/_mojolearn_metrics_host.mojo'):
         assert '("homogeneity_completeness_v_measure")' in _read(path)
 

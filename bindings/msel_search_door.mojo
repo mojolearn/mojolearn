@@ -313,6 +313,56 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
 # ---------------------------------------------------------------- validation_curve
 
 
+def _curve_by_search(estimator: PythonObject, args: PythonObject, param_range: PythonObject, context: PythonObject,
+                     b: PythonObject) raises -> PythonObject:
+    """UNPACK of a validation curve as its grid search (lane mf-cluster5):
+    a GridSearchCV over {param_name: param_range} with the curve's cv,
+    scoring, n_jobs and error_score, refit=False and train scores, fitted by
+    the search kind's typed RUN; PACK: its split<i>_train_score /
+    split<i>_test_score columns as the curve's (values x folds) blocks. None:
+    the kind did not take it (nothing was fitted)."""
+    var grid = Python.dict()
+    py_setitem(grid, args[3], py_call(b.list, param_range))
+    var keywords = Python.dict()
+    py_setitem(keywords, "scoring", args[7])
+    py_setitem(keywords, "cv", args[6])
+    py_setitem(keywords, "n_jobs", args[8])
+    py_setitem(keywords, "error_score", args[9])
+    py_setitem(keywords, "refit", PythonObject(False))
+    py_setitem(keywords, "return_train_score", PythonObject(True))
+    var search = family_call_kw(msel_cls("GridSearchCV", context), keywords, estimator, grid)
+    var fields = msel_search_fields(search, context)
+    if not _search_member_fit(search, fields, args[1], args[2], context, b):
+        return PythonObject(None)
+    var fitted = msel_search_fields(search, context)
+    var results = py_get(fitted, "cv_results_")
+    var splits = py_get(fitted, "n_splits_")
+    if results is None or splits is None:
+        return PythonObject(None)
+    var k = Int(py=splits)
+    var count = len(param_range)
+    var tr = List[Float64](capacity=count * k)
+    var te = List[Float64](capacity=count * k)
+    var train_cols = List[List[Float64]]()
+    var test_cols = List[List[Float64]]()
+    for i in range(k):  # driver-loop: over the folds (one cv_results_ column each)
+        train_cols.append(_f64_values(results["split" + String(i) + "_train_score"]))
+        test_cols.append(_f64_values(results["split" + String(i) + "_test_score"]))
+    for v in range(count):  # driver-loop: over the param_range values (their rows of the blocks)
+        for i in range(k):  # small-loop(one value's folds)
+            tr.append(train_cols[i][v])
+            te.append(test_cols[i][v])
+    return Python.tuple(msel_f64_block(tr, count, k, context), msel_f64_block(te, count, k, context))
+
+
+def _f64_values(column: PythonObject) raises -> List[Float64]:
+    """PACK: a cv_results_ float64 column (the search PACK's own list)."""
+    var out = List[Float64](capacity=len(column))
+    for i in range(len(column)):  # driver-loop: over the candidates of one column
+        out.append(Float64(py=column[i]))
+    return out^
+
+
 def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`validation_curve(estimator, X, y, param_name, param_range, groups,
     cv, scoring, n_jobs, error_score)`."""
@@ -323,6 +373,17 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     var jobs = msel_unit_jobs(args[8], error_score, "validation_curve", context)
     if py_type(args[3]) is not b.str:
         raise Error("TypeError: param_name must be an exact string")
+    var param_range = msel_parameter_values(args[4], context)
+    # THE TYPED SEARCH RUN (lane mf-cluster5): a validation curve IS the grid
+    # search over {param_name: param_range} with return_train_score=True and
+    # refit=False, so the search kind's typed RUN (core/msel_search_run.mojo,
+    # through `_search_member_fit`) fits and scores it when it takes it (no
+    # groups; every value a serving member; a scorer it serves); its split
+    # scores are the curve's. Otherwise the units below (THE FALLBACK RULE).
+    if args[5] is None and args[2] is not None and len(param_range) > 0:
+        var curve = _curve_by_search(estimator, args, param_range, context, b)
+        if curve is not None:
+            return curve
     var got = msel_cv_folds(estimator, args[1], args[2], args[6], args[5], True, context)
     var xf = got[0]
     var yf = got[1]
@@ -331,7 +392,6 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     var te = List[Float64]()
     var count = 0
     var k = 0
-    var param_range = msel_parameter_values(args[4], context)
     # A curve over the estimator's `device` (or a nested member's) hands
     # every value host rows (device wave, 2026-11-21): one of its values is
     # the CPU. The name was admitted as an exact str above.

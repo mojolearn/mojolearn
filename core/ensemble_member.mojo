@@ -446,6 +446,10 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
     # Lanes mf-split4, mf-split5: THE SPLITTER CV (kind MSEL_SPEC_NONE: an
     # int cv or a user's index list), its entries pinned by the admission.
     var split: MselSplitSpec
+    # Lane mf-cluster5: THE SEARCH KIND's cluster label-pair entry and its
+    # labels' reprs (`meta_plan_search_labels`).
+    var cluster: EntryRef
+    var label_words: List[String]
 
     def __init__(out self):
         self.generation = 0
@@ -459,6 +463,8 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
         self.fold_test = List[List[Int32]]()
         self.metric = MetricRoute(entry_ref_unresolved().call, False, False)
         self.split = MselSplitSpec()
+        self.cluster = entry_ref_unresolved()
+        self.label_words = List[String]()
 
 
 struct MetaPlanStore(Defaultable, Movable):
@@ -552,6 +558,23 @@ def meta_plan_metric(handle: Int, route: MetricRoute) raises:
     shared_slot_lock(lock)
     try:
         _PlanSlotPtr(unsafe_from_address=address)[].metric = route
+    finally:
+        shared_slot_unlock(lock)
+
+
+def meta_plan_search_labels(handle: Int, cluster: EntryRef, var label_words: List[String]) raises:
+    """UNPACK (THE SEARCH KIND's admission, lane mf-cluster5): the metrics
+    image's cluster label-pair entry (core/metrics_cluster_table.mojo,
+    resolved once; its image pinned by the admission) and the fit's labels'
+    reprs by class code, copied into every state NEW makes from it."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var entry = _PlanSlotPtr(unsafe_from_address=address)
+        entry[].cluster = cluster
+        entry[].label_words = label_words^
     finally:
         shared_slot_unlock(lock)
 
@@ -724,6 +747,9 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var metric: MetricRoute
     var search_words: List[Float64]
     var out_classes: List[Int]
+    # Lane mf-cluster5: the search's cluster entry and labels' reprs.
+    var cluster: EntryRef
+    var label_words: List[String]
 
     def __init__(out self):
         self.generation = 0
@@ -791,6 +817,8 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.metric = MetricRoute(entry_ref_unresolved().call, False, False)
         self.search_words = List[Float64]()
         self.out_classes = List[Int]()
+        self.cluster = entry_ref_unresolved()
+        self.label_words = List[String]()
 
 
 struct EnsembleMemberStore(Defaultable, Movable):
@@ -1096,6 +1124,8 @@ def _new(call: _CallPtr) raises:
         slot[].fold_test = entry[].fold_test.copy()
         slot[].metric = entry[].metric
         slot[].split = entry[].split.copy()
+        slot[].cluster = entry[].cluster
+        slot[].label_words = entry[].label_words.copy()
     finally:
         shared_slot_unlock(lock)
     try:
@@ -2969,6 +2999,8 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     for j in range(max(count, 1)):  # small-loop(one positive class word per scorer)
         plan.positives.append(Int(slot[].words[META_SEARCH_WORDS + count + j]))
     plan.cap = slot[].cap
+    plan.cluster = slot[].cluster
+    plan.label_words = slot[].label_words.copy()
     # THE SPLITTER CV and a user's index list (lane mf-search4b item 6): the
     # folds of this fit's rows, as Stacking's and Calibrated's (`_split_folds`;
     # the user's are the entry's typed folds), handed to the RUN.

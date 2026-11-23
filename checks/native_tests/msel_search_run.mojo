@@ -46,6 +46,13 @@ rank 1), and the refit: the best candidate fitted on every row.
    fits, 18 sides, the refit) and the token is written at `kept_at` once; a mixed set (resident, indexed without
    the scope bit, gathered) gives the same scores and offers the pin to the resident candidate only.
 
+9. (lane mf-cluster5) A CLUSTERER BASE: GridSearchCV over two KMeans candidates (n_clusters 2 and 3,
+   core/kmeans_member.mojo on the CPU KMeans entry), classes 0 (KFold over the rows), y the class codes as float32
+   words, multi-metric ['adjusted_rand_score', 'v_measure_score', 'normalized_mutual_info_score', 'rand_score']
+   (the label-pair scorers over the CPU column's cluster entry, metrics/host/cluster_entry_host.mojo): every split
+   score equals `msel_scorer_value` over KMeans fitted directly on the fold's train rows and its predicted cluster
+   ids on the test rows; a clusterer scored by 'r2' beside them refuses.
+
 FAIL-PROOF EDITS (each must make a case fail): `side_rows[f * sides] = rows_at + 4 * (f * n)` (case 1: the train
 rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits learn the wrong count);
 `narrow[i] = Int32(wide[i]) + 1` in `_respond` (cases 2, 4); `value = 0.0` for a failed task (case 3);
@@ -57,7 +64,9 @@ core/msel_scorer_run.mojo `cluster_mi_run(..., row.metric != _CL_AMI, ...)` (cas
 core/msel_search_run.mojo `out[c] = SEARCH_ROWS_RESIDENT` without the `_same_image` test, or
 `call.row_index = MemberMatrix(side.index, side.count - 1, 1, MEMBER_I32)` in `_side_set`, or
 `index = _IntP(unsafe_from_address=side_rows_at)[s]` taken from the train side for a test task, or
-`_note_kept` removed after the fit wave (case 8).
+`_note_kept` removed after the fit wave (case 8); `var labels_out = ops[o] == MEMBER_OP_PREDICT and classifier`
+in `msel_search_run` (case 9: KMeans' int32 ids refused as a float response), or `entry_ref_unresolved()` passed
+for `plan.cluster` in `_scorer_side`'s call (case 9: the label-pair scorers refuse).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -88,12 +97,19 @@ from glm.host.logistic_native_host import qn_host_native_v1
 from x_metrics.descriptor_host import metrics_program_host_v1
 from xtrees.glue_runs import publish_x_trees_glue
 from xtrees.glue_calls import xt_ref, xt_device_folds
+from std.memory import bitcast
+from core.device_route import DeviceRoute
+from core.kmeans_member import kmeans_member_v2
+from core.kmeans_native_host import kmeans_host_native_v1
+from core.kmeans_native_api import KMEANS_CAP_HOST
+from core.metrics_cluster_table import cluster_ops_publish, cluster_ops_entry
+from metrics.host.cluster_entry_host import METRICS_CLUSTER_HOST_API, metrics_cluster_host_v1
 
 comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 8
+comptime CASES = 9
 
 
 def _glue() raises -> EntryRef:
@@ -723,6 +739,109 @@ def check_resident_route() raises:
     _ = y^
 
 
+# ---------------------------------------------------------------- 9. a clusterer base (lane mf-cluster5)
+
+
+def _kmeans(clusters: Int) raises -> MemberPlan:
+    var route = DeviceRoute(DEVICE_CPU)
+    route.mode = Int(GLOBAL_NUMERIC_MODE)
+    route.vendor = 0
+    route.entry = EntryRef(kmeans_host_native_v1, 0)
+    route.flags = KMEANS_CAP_HOST
+    var plan = MemberPlan()
+    plan.route = route
+    plan.member = MemberRef(EntryRef(kmeans_member_v2, 0), 0)
+    var probe = MemberCall(plan.route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    # n_clusters, 'k-means++', n_init 1, max_iter 100, tol 1e-4, random_state 0 (its bits), euclidean, 2.0
+    plan.params = [Float64(clusters), 0.0, 1.0, 100.0, 1e-4, bitcast[DType.float64](Int64(0)), 0.0, 2.0]
+    plan.classes = 0
+    return plan^
+
+
+def check_clusterer_base() raises:
+    var x = _x()
+    var y = _codes()
+    var yf = List[Float32](length=N, fill=0.0)
+    for i in range(N):  # small-loop(fixture: the labels as the regressor kind's float32 target words)
+        yf[i] = Float32(y[i])
+    var mode = Int(GLOBAL_NUMERIC_MODE)
+    var api = METRICS_CLUSTER_HOST_API.get_or_create_ptr()
+    cluster_ops_publish(mode, 0, Int(api[].entries.unsafe_ptr()), metrics_cluster_host_v1)
+    var cluster = cluster_ops_entry(mode, 0)
+    var route = MetricRoute(metrics_program_host_v1, False, False)
+    var names: List[String] = ["adjusted_rand_score", "v_measure_score", "normalized_mutual_info_score",
+                               "rand_score"]
+    var codes = List[Int]()
+    for i in range(len(names)):  # small-loop(check: the scorers)
+        codes.append(msel_scorer_code(names[i], False))
+    var plans: List[MemberPlan] = [_kmeans(2), _kmeans(3)]
+    var masks = _masks(plans)
+    var plan = MselSearchPlan(plans.copy(), masks^, Int(x.unsafe_ptr()), N, D, Int(yf.unsafe_ptr()), 0, F, _glue(),
+                              route)
+    plan.scorers = codes.copy()
+    plan.refit_scorer = 0
+    plan.refit = False
+    plan.cluster = cluster
+    var res = msel_search_run(plan)
+    # THE ORACLE: KFold's folds (k 0), KMeans fitted on each fold's train rows, its ids on the test rows.
+    var counts = List[Int32](length=F + 1, fill=Int32(0))
+    var rows = List[Int32](length=F * N, fill=Int32(0))
+    _ = xt_device_folds(_glue(), Int(counts.unsafe_ptr()), Int(rows.unsafe_ptr()), Int(counts.unsafe_ptr()), N, F, 0)
+    for c in range(len(plans)):  # small-loop(oracle: candidates)
+        for f in range(F):  # small-loop(oracle: folds)
+            var t = Int(counts[f])
+            var base = Int(rows.unsafe_ptr()) + 4 * (f * N)
+            var xs = List[Float32]()
+            var ys = List[Int32]()
+            _rows_of(x, y, base, N - t, xs, ys)
+            var call = member_new(plans[c])
+            call.x = MemberMatrix(Int(xs.unsafe_ptr()), N - t, D)
+            _ = member_call(plans[c].member, MEMBER_OP_FIT, call)
+            var xt = List[Float32]()
+            var yt = List[Int32]()
+            _rows_of(x, y, base + 4 * (N - t), t, xt, yt)
+            var truth = List[Float32](length=max(t, 1), fill=0.0)
+            for i in range(t):  # small-loop(oracle: the float32 target words)
+                truth[i] = Float32(yt[i])
+            var ids = List[Int32](length=max(t, 1), fill=Int32(0))
+            var pc = member_call_of(plans[c], call.state)
+            pc.x = MemberMatrix(Int(xt.unsafe_ptr()), t, D)
+            pc.dst = MemberMatrix(Int(ids.unsafe_ptr()), t, 1, MEMBER_I32)
+            _ = member_call(plans[c].member, MEMBER_OP_PREDICT, pc)
+            for j in range(len(codes)):  # small-loop(check: scorers)
+                var notes = List[Float64]()
+                var want = msel_scorer_value(route, cluster, List[String](), msel_scorer_row(codes[j]),
+                                             Int(truth.unsafe_ptr()), Int(ids.unsafe_ptr()), t, 0, 1, -1, notes)
+                require(res.scorer_test[j][c][f] == want, names[j] + " split" + String(f) + " of candidate "
+                        + String(c))
+            member_free(plans[c], call)
+            _ = len(xs)  # the member's fit and calls read the fold rows through their addresses
+            _ = len(ys)
+            _ = len(xt)
+            _ = len(yt)
+            _ = len(truth)
+            _ = len(ids)
+    require(res.best_state == 0, "refit=False keeps no state")
+    var mixed = MselSearchPlan(plans.copy(), _masks(plans), Int(x.unsafe_ptr()), N, D, Int(yf.unsafe_ptr()), 0, F,
+                               _glue(), route)
+    var both: List[Int] = [codes[0], msel_scorer_code("r2", False)]
+    mixed.scorers = both^
+    mixed.refit = False
+    mixed.cluster = cluster
+    var refused = False
+    try:
+        _ = msel_search_run(mixed)
+    except e:
+        refused = String(e).find("clustering scorers only") >= 0
+    require(refused, "a clusterer beside a regression scorer refuses")
+    _ = rows^
+    _ = counts^
+    _ = x^
+    _ = y^
+    _ = yf^
+
+
 def test_msel_search_run() raises:
     publish_x_trees_glue("cpu")
     def run_case(which: Int) raises:
@@ -740,8 +859,10 @@ def test_msel_search_run() raises:
             check_given_folds()
         elif which == 6:
             check_score5_scorers()
-        else:
+        elif which == 7:
             check_resident_route()
+        else:
+            check_clusterer_base()
     check_cases("msel_search_run", CASES, run_case)
 
 
