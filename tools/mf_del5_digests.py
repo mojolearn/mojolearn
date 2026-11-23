@@ -54,6 +54,15 @@ RULE cases this lane moved off the doors.
     already; for the late-import case proper call `_cal5(("cal5", "host_late"))` in a fresh interpreter): their
     member plans are registered at their import (EXPECTED after: True / True; before: whatever the rescan gave).
 
+Section refuse5 (lane mf-refuse5; base origin/lane/member-fits-5 65eb618002 vs the head of lane/mf-refuse5): THE
+DOOR'S REFUSAL. Each case is a meta-estimator with one constructor value its fit door refuses, fitted (a) at the
+top level (`*_door`: its own fit door) and (b) as a member of a VotingClassifier / VotingRegressor whose fit runs
+its members through the native member set (`*_member`: before, the META admission answered False and the member
+set fell back to the meta's door to raise the words; after, the META kind's FIT raises them, from the same check
+function, bindings/trees_meta_validate_unpack.mojo). `*_same` says whether the two words are equal.
+EXPECTED: before and after, every `*_door` line equal; after, every `*_same` True (a False is a defect to send
+back); `*_member` lines equal before and after (the words do not change, only the path that raises them).
+
 Configurations are independent: one process each across the host cores.
 
     python tools/mf_del5_digests.py > digests.txt
@@ -343,7 +352,84 @@ def _cal5(arg):
     return out
 
 
+def _refuse5_meta(case):
+    """The meta-estimator of a refuse5 case and whether it is a classifier."""
+    import mojolearn
+    from mojolearn.calibration import CalibratedClassifierCV
+    lr = mojolearn.LogisticRegression(max_iter=200)
+    tree = mojolearn.DecisionTreeClassifier(max_depth=2, random_state=0)
+    two = [("a", mojolearn.LogisticRegression(max_iter=200)), ("b", mojolearn.LogisticRegression(C=0.5, max_iter=200))]
+    if case == "voting_bad":
+        return mojolearn.VotingClassifier(two, voting="bad"), True
+    if case == "voting_verbose":
+        return mojolearn.VotingClassifier(two, verbose=True), True
+    if case == "voting_weights_count":
+        return mojolearn.VotingClassifier(two, weights=[1.0, 2.0, 3.0]), True
+    if case == "voting_all_drop":
+        return mojolearn.VotingClassifier([("a", "drop"), ("b", "drop")]), True
+    if case == "stack_method_bad":
+        return mojolearn.StackingClassifier(two, stack_method="bad"), True
+    if case == "stack_cv_one":
+        return mojolearn.StackingClassifier(two, cv=1), True
+    if case == "ovr_jobs_zero":
+        return mojolearn.OneVsRestClassifier(lr, n_jobs=0), True
+    if case == "cal_method_bad":
+        return CalibratedClassifierCV(lr, method="bad", cv=3), True
+    if case == "cal_ensemble_bad":
+        return CalibratedClassifierCV(lr, ensemble="bad", cv=3), True
+    if case == "bag_oob_no_bootstrap":
+        return mojolearn.BaggingClassifier(tree, n_estimators=3, oob_score=True, bootstrap=False), True
+    if case == "bag_zero_estimators":
+        return mojolearn.BaggingClassifier(tree, n_estimators=0), True
+    if case == "bag_samples_outside":
+        return mojolearn.BaggingClassifier(tree, n_estimators=3, max_samples=1.5), True
+    if case == "bag_base_not_tree":
+        return mojolearn.BaggingClassifier(lr, n_estimators=3), True
+    if case == "bag_cw_absent":
+        return mojolearn.BaggingClassifier(mojolearn.DecisionTreeClassifier(max_depth=2, class_weight={99: 2.0}),
+                                           n_estimators=3, random_state=0), True
+    if case == "ada_algorithm_bad":
+        return mojolearn.AdaBoostClassifier(tree, n_estimators=3, algorithm="SAMME.R"), True
+    if case == "ada_rate_zero":
+        return mojolearn.AdaBoostRegressor(mojolearn.DecisionTreeRegressor(max_depth=2), n_estimators=3,
+                                           learning_rate=0.0), False
+    return mojolearn.AdaBoostClassifier(tree, n_estimators=3, random_state=-1), True  # ada_seed_negative
+
+
+def _refuse5_words(fit):
+    try:
+        fit()
+    except Exception as e:  # noqa: BLE001 - the words are the digest
+        return f"{type(e).__name__}: {e}"
+    return "fitted"
+
+
+def _refuse5(arg):
+    _, case = arg
+    import mojolearn
+    X, y, t = _data(41, 90, 4, 3)
+    tag = f"refuse5_{case}"
+    meta, classifier = _refuse5_meta(case)
+    target = y if classifier else t
+    door = _refuse5_words(lambda: meta.fit(X, target))
+    meta2, _ = _refuse5_meta(case)
+    if classifier:
+        outer = mojolearn.VotingClassifier([("m", meta2), ("l", mojolearn.LogisticRegression(max_iter=200))])
+    else:
+        outer = mojolearn.VotingRegressor([("m", meta2), ("r", mojolearn.Ridge())])
+    member = _refuse5_words(lambda: outer.fit(X, target))
+    return [(tag + "_door", door), (tag + "_member", member), (tag + "_same", str(door == member))]
+
+
+REFUSE5 = ("voting_bad", "voting_verbose", "voting_weights_count", "voting_all_drop", "stack_method_bad",
+           "stack_cv_one", "ovr_jobs_zero", "cal_method_bad", "cal_ensemble_bad", "bag_oob_no_bootstrap",
+           "bag_zero_estimators", "bag_samples_outside", "bag_base_not_tree", "bag_cw_absent", "ada_algorithm_bad",
+           "ada_rate_zero", "ada_seed_negative")
+
+
 def _unit(arg):
+    if arg[0] == "refuse5":
+        return _refuse5(arg)
     if arg[0] == "del5b_rfe":
         return _del5b_rfe(arg)
     if arg[0] == "hostent5":
@@ -368,7 +454,8 @@ UNITS = ([("del5b_rfe", m, g, r) for m in ("door", "vote", "search", "cv") for g
          + [("cal5", c) for c in (
              "cw_eq_rfe_sgd", "cw_eq_cal_sgd", "cw_eq_vote_sgd", "cw_eq_rfe_lrcv", "cw_eq_cal_lrcv",
              "rfe_fi_bool_", "rfe_fi_int", "rfe_fi_et", "rfe_one_tree", "rfe_one_logistic", "rfe_gb_cat_outside",
-             "host_late")])
+             "host_late")]
+         + [("refuse5", c) for c in REFUSE5])
 
 
 def main():
