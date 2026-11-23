@@ -143,7 +143,7 @@ def test_rfe_kind_equals_run() raises:
     var masks: List[Int] = [mask]
     var handle = meta_plan_mint_with(nested^, List[Float64](), List[Int](), masks^, _words(source.block, source.squared),
                                      List[List[Int32]](), List[List[Int32]]())
-    meta_plan_rfe(handle, run, String(""))
+    meta_plan_rfe(handle, run, String(""), List[Float64]())
     var meta = MemberPlan()
     var route = DeviceRoute(DEVICE_CPU)
     route.mode = Int(GLOBAL_NUMERIC_MODE)

@@ -524,6 +524,9 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
     # pins its selection) and the words its first round raises (empty: none).
     var rfe_run: ClsRunPlan
     var refusal: String
+    # Lane mf-del5b: THE FORWARDED EXPORT's hops of a dotted importance_getter (empty: none), copied into
+    # every state NEW makes from it (`_fit_rfe` hands them to the rounds' plan).
+    var rfe_hops: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -541,6 +544,7 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
         self.label_words = List[String]()
         self.rfe_run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
         self.refusal = String("")
+        self.rfe_hops = List[Float64]()
 
 
 struct MetaPlanStore(Defaultable, Movable):
@@ -655,10 +659,12 @@ def meta_plan_search_labels(handle: Int, cluster: EntryRef, var label_words: Lis
         shared_slot_unlock(lock)
 
 
-def meta_plan_rfe(handle: Int, run: ClsRunPlan, var refusal: String) raises:
+def meta_plan_rfe(handle: Int, run: ClsRunPlan, var refusal: String, var hops: List[Float64]) raises:
     """UNPACK (THE RFE KIND's admission, lane mf-meta5): the x_prep image the elimination rounds' programs
-    run on (its selection pinned by the admission) and the words the first round raises (a base kind that
-    exports no importance block; empty: none), copied into every state NEW makes from it."""
+    run on (its selection pinned by the admission), the words the first round raises (a base kind that
+    exports no importance block; empty: none) and (lane mf-del5b) a dotted importance_getter's hops
+    (META_BLOCK_FORWARD's words over the nested META base; empty: a leaf base), copied into every state NEW
+    makes from it."""
     var store = _PLANS.get_or_create_ptr()
     var address = _plan_lookup(handle, False)
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
@@ -667,6 +673,7 @@ def meta_plan_rfe(handle: Int, run: ClsRunPlan, var refusal: String) raises:
         var entry = _PlanSlotPtr(unsafe_from_address=address)
         entry[].rfe_run = run
         entry[].refusal = refusal^
+        entry[].rfe_hops = hops^
     finally:
         shared_slot_unlock(lock)
 
@@ -721,6 +728,7 @@ def _plan_lookup(handle: Int, release: Bool) raises -> Int:
             slot[].fold_train = List[List[Int32]]()
             slot[].fold_test = List[List[Int32]]()
             slot[].refusal = String("")
+            slot[].rfe_hops = List[Float64]()
             store[].free.append(index)
         return address
     finally:
@@ -870,6 +878,8 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var rfe_ranking: List[Float32]
     var rfe_columns: List[Int32]
     var rfe_words: List[Float64]
+    # Lane mf-del5b: the plan entry's dotted-getter hops (`meta_plan_rfe`; empty: a leaf base).
+    var rfe_hops: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -948,6 +958,7 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.rfe_ranking = List[Float32]()
         self.rfe_columns = List[Int32]()
         self.rfe_words = List[Float64]()
+        self.rfe_hops = List[Float64]()
 
 
 struct EnsembleMemberStore(Defaultable, Movable):
@@ -1116,6 +1127,7 @@ def _drop_states(slot: _SlotPtr):
     slot[].rfe_ranking = List[Float32]()
     slot[].rfe_columns = List[Int32]()
     slot[].rfe_words = List[Float64]()
+    slot[].rfe_hops = List[Float64]()
 
 
 # --------------------------------------------------------------- the masks
@@ -1274,6 +1286,7 @@ def _new(call: _CallPtr) raises:
         slot[].label_words = entry[].label_words.copy()
         slot[].rfe_run = entry[].rfe_run
         slot[].refusal = entry[].refusal.copy()
+        slot[].rfe_hops = entry[].rfe_hops.copy()
     finally:
         shared_slot_unlock(lock)
     try:
@@ -3624,6 +3637,9 @@ def _fit_rfe(slot: _SlotPtr, call: _CallPtr) raises:
     plan.squared = words[META_RFE_SQUARED] != 0.0
     plan.importance_word = words[META_RFE_IMPORTANCE_WORD] != 0.0
     plan.refusal = slot[].refusal.copy()
+    # A dotted importance_getter over a META base (lane mf-del5b): THE FORWARDED EXPORT's hops, as the
+    # door's `_rfe_native` hands them (`plan.block` is then META_BLOCK_FORWARD).
+    plan.hops = slot[].rfe_hops.copy()
     if call[].weights.given():
         # RFE.fit's sample_weight, handed to every round's fit and the final fit (scikit-learn's
         # `**fit_params`): the caller's float32 column, as the base's own fit reads it.

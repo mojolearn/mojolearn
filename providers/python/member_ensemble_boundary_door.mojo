@@ -144,8 +144,12 @@ from bindings.msel_split_door import msel_cls, MselSplitter, SPLITTER_ITERABLE
 from bindings.msel_split_unpack import MselRoutePin
 from bindings.msel_split_spec_run import MselSplitSpec, MSEL_SPEC_NONE, msel_spec_stratified
 from bindings.msel_split_spec_unpack import msel_split_spec_of
-from core.ensemble_member import meta_plan_split, meta_plan_rfe, META_RFE_CLASSIFIER, META_RFE_REGRESSOR, META_BLOCK_RFE
-from providers.python.member_rfe_boundary_door import rfe_base_admit, rfe_count_words, rfe_image, rfe_publish
+from core.ensemble_member import (
+    meta_plan_split, meta_plan_rfe, META_RFE_CLASSIFIER, META_RFE_REGRESSOR, META_BLOCK_RFE, META_BLOCK_FORWARD,
+)
+from providers.python.member_rfe_boundary_door import (
+    RfeBase, rfe_base_admit, rfe_count_words, rfe_image, rfe_publish, rfe_dotted_path,
+)
 from bindings.prep_classify_prog_run import ClsRunPlan
 from bindings.prep_keys_unpack import prep_keys
 
@@ -165,6 +169,12 @@ def _classifier(kind: Int) -> Bool:
 
 def _rfe(kind: Int) -> Bool:
     return kind == META_RFE_CLASSIFIER or kind == META_RFE_REGRESSOR
+
+
+def _rfe_dotted(getter: String) -> Bool:
+    """An RFE importance_getter that is an attribute path over its estimator (lane mf-del5b), not one of
+    the leaf getters `rfe_base_admit` reads."""
+    return getter != "auto" and getter != "coef_" and getter != "feature_importances_"
 
 
 def _search(kind: Int) -> Bool:
@@ -296,8 +306,8 @@ def _child_labels(kind: Int, labels: PythonObject, b: PythonObject) raises -> Py
     each base on its indicator column, the labels 0 and 1; AdaBoost's door
     reads its base's class_weight over its own label encoder's codes
     (`ada_fit`: `trees_class_rows_only` over `trees_encode_labels(codes)`),
-    so its labels are the codes too; Calibrated and a search fit theirs on
-    y as given, the same labels. A
+    so its labels are the codes too; Calibrated, a search and an RFE
+    (lane mf-del5b) fit theirs on y as given, the same labels. A
     MultiOutput base sees one column per output (its labels differ per
     output: none here), a regressor none. A nested class_weight dict is read
     over these (`_admit_nested`), as the member's own fit door reads it."""
@@ -307,7 +317,7 @@ def _child_labels(kind: Int, labels: PythonObject, b: PythonObject) raises -> Py
         return py_call(b.list, py_call(b.range, PythonObject(2)))
     if labels is None or len(labels) == 0:
         return PythonObject(None)
-    if kind == META_CALIBRATED or _search(kind):
+    if kind == META_CALIBRATED or _search(kind) or _rfe(kind):
         return labels
     return py_call(b.list, py_call(b.range, PythonObject(len(labels))))
 
@@ -488,8 +498,17 @@ def _meta_children(est: PythonObject, fields: PythonObject, kind: Int, context: 
         if base is not None:
             _ = py_call(out.append, base)
         return out
-    if _bag(kind) or _ada(kind) or _rfe(kind):
-        return out  # a Bagging or AdaBoost base is a tree, forest or extra-trees member; an RFE's a leaf
+    if _rfe(kind):
+        # THE RFE KIND (lane mf-del5b): with a dotted importance_getter its estimator may be a META
+        # estimator (the path's first step: `rfe_dotted_path`), admitted by this work-list before the RFE.
+        # With 'auto' / 'coef_' / 'feature_importances_' it is a leaf (`rfe_base_admit`): none.
+        var g = py_get(fields, "importance_getter")
+        var base = py_get(fields, "estimator")
+        if base is not None and g is not None and py_type(g) is b.str and _rfe_dotted(String(g)):
+            _ = py_call(out.append, base)
+        return out
+    if _bag(kind) or _ada(kind):
+        return out  # a Bagging or AdaBoost base is a tree, forest or extra-trees member
     var active = _active(fields, b)
     if active.ok:
         for i in range(len(active.ests)):  # driver-loop: over the active members
@@ -607,7 +626,7 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
     codes it is fitted on (THE LABELS, lane mf-split4)."""
     var child = _child_labels(kind, labels, b)
     if _rfe(kind):
-        return _admit_rfe(model, fields, context, b, owner)
+        return _admit_rfe(model, fields, context, b, owner, done, child)
     if _search(kind):
         return _admit_search(model, fields, context, b, owner, done, prepared, child)
     if _multi(kind):
@@ -996,7 +1015,7 @@ def _pack_one(model: PythonObject, fields: PythonObject, context: PythonObject, 
         _ada_pack(fields, context, b, plan, state, labels, features, k, jobs)
         return
     if _rfe(kind):
-        _rfe_pack(fields, context, b, plan, state, labels)
+        _rfe_pack(fields, context, b, plan, state, labels, jobs)
         return
     if _search(kind):
         _search_pack(model, fields, context, b, plan, state, labels, jobs)
@@ -1116,8 +1135,15 @@ def _fitted_children(est: PythonObject, fields: PythonObject, kind: Int, b: Pyth
     reads: `estimators_` (and a stack's `final_estimator_`), the calibrated
     pairs' members. A Bagging's are trees and forests: none."""
     var out = Python.list()
-    if _bag(kind) or _ada(kind) or _rfe(kind):
-        return out  # an RFE's estimator_ is a leaf
+    if _rfe(kind):
+        # An RFE's estimator_ (lane mf-del5b): a META one (a dotted importance_getter's) is imported by
+        # this work-list first; a leaf is skipped by the caller's family test.
+        var final = py_get(fields, "estimator_")
+        if final is not None:
+            _ = py_call(out.append, final)
+        return out
+    if _bag(kind) or _ada(kind):
+        return out
     if _search(kind):
         var best = py_get(fields, "best_estimator_")
         if best is not None:
@@ -3470,23 +3496,55 @@ def _multi_state(fields: PythonObject, context: PythonObject, b: PythonObject, p
 
 
 def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
-               mut owner: MemberOwner) raises -> Bool:
+               mut owner: MemberOwner, done: _Done, labels: PythonObject) raises -> Bool:
     """UNPACK of THE RFE KIND (core/ensemble_member.mojo): RFE's estimator admitted once as a leaf member
     with the block its importance getter names (providers/python/member_rfe_boundary_door.mojo
     `rfe_base_admit`, the admission RFE's own door runs), n_features_to_select and step as words
     (`rfe_count_words`), the x_prep image of the rounds' programs (`rfe_image`, pinned here). The kind
-    (classifier or regressor) is its estimator's. Answers False (RFE's door keeps it) for anything the
-    door's member path does not take: a callable or dotted importance getter, an estimator with no
-    serving member or no importance block (a META estimator), a value the door's reads refuse (the door
-    raises its words). A base kind that exports no importance block is admitted with its refusal, which
-    the first round raises (with no round the final fit runs, as in scikit-learn)."""
+    (classifier or regressor) is its estimator's.
+
+    A DOTTED importance_getter (lane mf-del5b; 'best_estimator_.coef_', 'estimator_.coef_',
+    'final_estimator_.feature_importances_', ...): the path walked once (`rfe_dotted_path`, the walk RFE's
+    door runs) to THE FORWARDED EXPORT's hops, handed to every state (`meta_plan_rfe`); the META estimator
+    is the one this work-list admitted before the RFE (`_meta_children`, `_admit_nested` with the labels
+    RFE's fit hands it: y as given); the kind is the META estimator's (a search's base decides).
+
+    Answers False (RFE's door keeps it) for anything the door's member path does not take: a callable
+    importance getter, a dotted path `rfe_dotted_path` does not serve, an estimator with no serving member
+    or no importance block, a value the door's reads refuse (the door raises its words). A base kind that
+    exports no importance block is admitted with its refusal, which the first round raises (with no round
+    the final fit runs, as in scikit-learn)."""
     var estimator = py_get(fields, "estimator")
     var g = py_get(fields, "importance_getter")
     if estimator is None or g is None or py_type(g) is not b.str:
         return False
-    var base = rfe_base_admit(estimator, g, context, b)
-    if not base.native:
-        return False
+    var nested = _Nested()
+    var base = RfeBase()
+    if _rfe_dotted(String(g)):
+        var path = rfe_dotted_path(estimator, g, context, b)
+        if not path.served:
+            return False
+        var at = done.find(estimator)
+        if at < 0:
+            return False
+        var classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
+        if not _admit_nested(done, nested, estimator, classifier, MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, context, b,
+                             labels):
+            return False
+        base.block = META_BLOCK_FORWARD
+        base.squared = True
+        base.refusal = path.refusal.copy()
+        base.hops = path.hops.copy()
+        base.classifier = classifier
+        base.meta = True
+        base.native = True
+    else:
+        base = rfe_base_admit(estimator, g, context, b)
+        if not base.native:
+            return False
+        nested.plans.append(base.owner.plan.copy())
+        nested.masks.append(base.mask)
+        _ = py_call(nested.pins.append, base.owner.pins)
     var words = List[Float64]()
     var image_entries = PythonObject(None)
     var run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
@@ -3504,10 +3562,6 @@ def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject,
     words.append(1.0 if base.importance_word else 0.0)
     words.append(1.0 if work_on else 0.0)
     words.append(1.0 if (run.dev_store and run.has_ranges) else 0.0)
-    var nested = _Nested()
-    nested.plans.append(base.owner.plan.copy())
-    nested.masks.append(base.mask)
-    _ = py_call(nested.pins.append, base.owner.pins)
     var kind = META_RFE_CLASSIFIER if base.classifier else META_RFE_REGRESSOR
     # The META entry and its glue run on an x_trees image: RFE's own context is the prep owner's, so the
     # image is the one the meta classes' context names (as the search kind's admission reads it).
@@ -3520,9 +3574,10 @@ def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject,
     if not _finish(fields, trees_context, b, owner, nested, kind, 0.0, 0, List[Float64](), List[Int](), words^,
                    List[List[Int32]](), List[List[Int32]]()):
         return False
-    meta_plan_rfe(Int(owner.plan.params[1]), run, base.refusal.copy())
+    meta_plan_rfe(Int(owner.plan.params[1]), run, base.refusal.copy(), base.hops.copy())
     _ = py_call(owner.pins.append, image_entries)  # the rounds' image, for every fit
-    _ = py_call(owner.pins.append, base.template)
+    if not base.meta:
+        _ = py_call(owner.pins.append, base.template)
     return True
 
 
@@ -3540,11 +3595,13 @@ def _rfe_words(plan: MemberPlan, state: Int) raises -> List[Float64]:
 
 
 def _rfe_pack(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan, state: Int,
-              labels: PythonObject) raises:
+              labels: PythonObject, mut jobs: _PackJobs) raises:
     """PACK of THE RFE KIND: the attributes RFE's door writes (providers/python/member_rfe_boundary_door.mojo
     `rfe_publish`: estimator_, the support and its cached gather words, ranking_, n_features_,
     numeric_mode_, n_features_in_), estimator_ a clone of the estimator holding the final state (a
-    classifier's with the caller's labels), then the member fits' notices with its context, in fit order."""
+    classifier's with the caller's labels), then the member fits' notices with its context, in fit order.
+    A META estimator_ (a dotted importance_getter's, lane mf-del5b) is queued on the pack work-list
+    (`_pack_into`, its labels held: RFE fits it on y as given), packed after this RFE."""
     var nested = meta_state_plans(state)
     var handles = _export_i64(plan, state, META_BLOCK_NESTED)
     if len(nested) != 1 or len(handles) != 1:
@@ -3562,10 +3619,7 @@ def _rfe_pack(fields: PythonObject, context: PythonObject, b: PythonObject, plan
     var clone_plan = prep_estimator_plan(clone, context)
     var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
     var clone_context = clone_plan["context"]
-    if labels is None:
-        member_leaf_pack(clone, clone_fields, clone_context, b, nested[0], handles[0])
-    else:
-        member_leaf_pack_labeled(clone, clone_fields, clone_context, b, nested[0], handles[0], labels)
+    _pack_into(clone, clone_fields, clone_context, b, nested[0], handles[0], labels, jobs)
     rfe_publish(fields, clone, support, ranking, k, context)
     var owners = List[Int]()
     var notices = List[List[Float64]]()
