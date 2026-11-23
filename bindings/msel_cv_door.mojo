@@ -747,11 +747,16 @@ def msel_unit_jobs(n_jobs: PythonObject, error_score: PythonObject, caller: Stri
     meaning): a positive int is the bound; -1 all cores, -k all cores but
     k - 1; None all cores (the default is parallel: AGENTS.md "parallelize
     tests and experiments by default"; the result does not depend on it).
-    Also checks `error_score` as `_require_serial` did."""
+    Also checks `error_score` before any fold or fit, in scikit-learn's
+    parameter validation words (`InvalidParameterError` of the constraints
+    [StrOptions({'raise'}), Real], sklearn/utils/_param_validation.py; lane
+    mf-msel5c: an error_score string other than 'raise' is refused here for
+    every caller, so no unit route sees one)."""
     msel_admit(n_jobs, context)
     msel_admit(error_score, context)
     if not (py_type(error_score) is msel_b().str and msel_cmp("eq", error_score, PythonObject("raise"))) and not msel_is_real(error_score, context):
-        raise Error("error_score must be 'raise' or a number")
+        raise Error("ValueError: The 'error_score' parameter of " + caller + " must be a str among {'raise'} or an "
+                    + "instance of 'float'. Got " + family_repr(error_score) + " instead.")
     var cores = native_unit_cores()
     if n_jobs is None:
         return cores

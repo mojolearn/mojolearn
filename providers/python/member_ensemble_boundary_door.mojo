@@ -2689,7 +2689,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var error_value = 0.0
     if error_score is not None and py_type(error_score) is b.str:
         if String(py=error_score) != "raise":
-            return False
+            # scikit-learn's parameter validation (lane mf-msel5c; the doors'
+            # `msel_unit_jobs` raise the same words before any fold)
+            raise Error("ValueError: The 'error_score' parameter of " + String(py=py_type(model).__name__)
+                        + " must be a str among {'raise'} or an instance of 'float'. Got "
+                        + String(py=py_call(b.repr, error_score)) + " instead.")
     elif error_score is not None and (py_type(error_score) is b.float or py_type(error_score) is b.int):
         tolerate = 1.0
         error_value = Float64(py=py_call(b.float, error_score))
