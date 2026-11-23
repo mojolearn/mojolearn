@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-# `model.digest_`: the hash of a fitted model's state, one native call
-# (`classical_native_call(model, "fitted_digest", (), context)`, the context
-# of python/mojolearn/_native_archive_bridge.py `connect()`).
+# `model.digest_`: the hash of the state that decides a fitted model's
+# answers, and `model.training_digest_`: the hash of its training record, one
+# native call each (`classical_native_call(model, "fitted_digest", args,
+# context)` with `args` () or ("training",), the context of
+# python/mojolearn/_native_archive_bridge.py `connect()`). One walk serves
+# both; the selector only chooses which fields it starts from.
 #
 # NO CACHE. Nothing here runs at fit and nothing is kept: EVERY read of
 # `digest_` describes the fitted fields (UNPACK), hashes them with the GIL
@@ -11,22 +14,25 @@
 # generation word), so the digest is always the hash of the state as it is at
 # the read.
 #
-# WHICH FIELDS (one walk, the saved-model writer's describers; the table
-# docs/api/DIGEST_FIELDS.md is generated from the same three sources):
-#   1. A class with a connected save schema (`archive_save_schemas`, the
-#      schema `save` writes): the schema's members, built by `_schema_run`
-#      and described by `_archive_unpack_member`, exactly as `save` does
-#      before it writes. Nothing is written. A class may declare a digest
-#      schema (`digest_schemas`) that is run in its place: a decision tree's
-#      is its save schema without the refusal of a splitter='random' tree,
-#      whose fitted arrays need no file to be hashed.
+# WHICH FIELDS OF `digest_` (one walk, the saved-model writer's describers;
+# the table docs/api/DIGEST_FIELDS.md is generated from the same sources):
+#   1. A class with a digest schema (`digest_schemas`: by default its save
+#      schema's answer members, python/mojolearn/_digest_fields.py
+#      `answer_steps`), else a connected save schema (`archive_save_schemas`):
+#      the schema's members, built by `_schema_run` and described by
+#      `_archive_unpack_member`, exactly as `save` does before it writes.
+#      Nothing is written. A fitted model the schema refuses (a format the
+#      file does not carry: string labels, options outside the file, no
+#      prediction data) is hashed by rule 2, so every fitted model has a
+#      digest.
 #   2. Any other class: its public fitted attributes, the rule `is_fitted`
 #      reads (instance fields whose name ends in "_" and does not start with
-#      "_", value not None, name not in `digest_skip`: the few public names
-#      that record how a call ran, not what was fitted), plus the private
-#      fields its class names in `digest_extra`
-#      (python/mojolearn/_digest_fields.py), each described by
-#      the npz codec's `_npz_value` (dtype, shape, C-order bytes).
+#      "_", value not None, name not in `digest_skip`: the public names that
+#      record how a call ran or how the model was trained, not what it
+#      answers), plus the private fields and constructor parameters its class
+#      names in `digest_extra` (python/mojolearn/_digest_fields.py), each
+#      described by the npz codec's `_npz_value` (dtype, shape, C-order
+#      bytes).
 #      A list, tuple or dict that is not one flat run of scalars is entered:
 #      `name[i]`, `name{key}` and `name.len`. An integer wider than 64 bits
 #      is hashed as its decimal text under `name.bigint`.
@@ -36,6 +42,11 @@
 #      its own digest, as text, in member order.
 #   3. A class named in `digest_refused` has no digest yet: the read raises
 #      AttributeError with the reason in words.
+# WHICH FIELDS OF `training_digest_`: rule 2's form over the public names in
+# `digest_training` and the private fields in `digest_training_extra` the
+# model holds (optimizer moments, counters, loss and score records), hashed
+# under the class name followed by "#training" (a class name has no "#", so
+# the two digests of one model never coincide). Never a schema.
 # A field holding a value with no canonical bytes (an object that is not an
 # array, a scalar, text, a container of those or an estimator) is refused by
 # name: never skipped, never hashed by address or repr.
@@ -74,8 +85,10 @@ from core.fitted_digest import fitted_digest_hex
 comptime _DIGEST_DEPTH = 8
 
 
-def _digest_unfitted(name: String) -> Error:
-    return Error("AttributeError: '" + name + "' object has no attribute 'digest_': the model is not fitted yet")
+def _digest_unfitted(name: String, training: Bool = False) -> Error:
+    var attribute = String("training_digest_") if training else String("digest_")
+    return Error("AttributeError: '" + name + "' object has no attribute '" + attribute
+                 + "': the model is not fitted yet")
 
 
 def _digest_scalar(value: PythonObject, b: PythonObject, bytes_type: PythonObject) raises -> Int:
@@ -105,9 +118,10 @@ def _digest_flat(value: PythonObject, is_list: Bool, b: PythonObject, bytes_type
     return True
 
 
-def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) raises -> String:
+def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int, training: Bool) raises -> String:
     """The digest of the fitted `model` (64 lowercase hex digits), hashed
-    from its state as it is now (nothing is kept between reads)."""
+    from its state as it is now (nothing is kept between reads): the state
+    that decides its answers, or with `training` its training record."""
     if depth > _DIGEST_DEPTH:
         raise Error("AttributeError: digest_ is not available: member estimators are nested deeper than "
                     + String(_DIGEST_DEPTH) + " levels")
@@ -132,7 +146,7 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
             # written by (`estimator`).
             var held = py_get(_fields(model), named[0])
             if held is None or py_type(held) is not py_type(PythonObject("")):
-                raise _digest_unfitted(class_name)
+                raise _digest_unfitted(class_name, training)
             hashed_name = String(py=held)
     var refused = py_get(context, "digest_refused")
     if refused is not None:
@@ -144,11 +158,12 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
     # The class's digest schema when it declares one (a tree: its fitted
     # arrays without the save refusal), else the schema `save` writes.
     var steps = PythonObject(None)
-    var own_schemas = py_get(context, "digest_schemas")
-    if own_schemas is not None:
-        steps = archive_schema_lookup(cls, own_schemas)
-    if steps is None:
-        steps = archive_schema_lookup(cls, context["archive_save_schemas"])
+    if not training:
+        var own_schemas = py_get(context, "digest_schemas")
+        if own_schemas is not None:
+            steps = archive_schema_lookup(cls, own_schemas)
+        if steps is None:
+            steps = archive_schema_lookup(cls, context["archive_save_schemas"])
     var schema = steps is not None and py_type(steps) is not b.str
     var pins = List[PythonObject]()
     var members = List[NativeArchiveMember]()
@@ -176,20 +191,22 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
         if failure.byte_length() > 0:
             if not Bool(py=_fitted(model)):
                 raise _digest_unfitted(class_name)
-            raise Error("AttributeError: " + class_name + ".digest_ is not available for this model: " + failure)
-        var keys = py_call(b.list, values.keys())
-        var names = List[String]()
-        for i in range(len(keys)):  # driver-loop: over the schema's member names (model fields)
-            names.append(String(py=keys[i]))
-        sort(names)
-        for name in names:  # driver-loop: over the schema's members (model fields), described once
-            members.append(_archive_unpack_member(name, values[PythonObject(name)], context, pins))
-        pins.append(values)
-    else:
+            # A fitted model the file format does not carry: rule 2 below.
+            schema = False
+        else:
+            var keys = py_call(b.list, values.keys())
+            var names = List[String]()
+            for i in range(len(keys)):  # driver-loop: over the schema's member names (model fields)
+                names.append(String(py=keys[i]))
+            sort(names)
+            for name in names:  # driver-loop: over the schema's members (model fields), described once
+                members.append(_archive_unpack_member(name, values[PythonObject(name)], context, pins))
+            pins.append(values)
+    if not schema:
         # 2. The public fitted attributes (the `is_fitted` rule) and the
         #    class's declared private fitted fields.
         if not Bool(py=_fitted(model)):
-            raise _digest_unfitted(class_name)
+            raise _digest_unfitted(class_name, training)
         var fields = _fields(model)
         if String(py=_schema_mode(fields, PythonObject("mojolearn: "), context)) == "fast":
             raise Error("AttributeError: digest_ exists in identical mode only: fast mode promises no identical "
@@ -208,12 +225,18 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
         var work_names = List[String]()
         var work_values = List[PythonObject]()
         var work_depths = List[Int]()
-        var skip = py_get(context, "digest_skip")
+        # `digest_` skips the public names that record how a call ran or how
+        # the model was trained; `training_digest_` starts from the training
+        # names only. Below the top level both skip the call records.
+        var skip = py_get(context, "digest_not_state") if training else py_get(context, "digest_skip")
+        var wanted = py_get(context, "digest_training") if training else PythonObject(None)
         var keys = py_call(b.list, fields.keys())
         for i in range(len(keys)):  # driver-loop: over the model's stored field names
             var name = String(py=keys[i])
             if name.endswith("_") and not name.startswith("_"):
-                # A record of how a call ran (was the input copied), not fitted state.
+                if training and (wanted is None or not py_contains(wanted, keys[i])):
+                    continue
+                # A record of how a call ran (was the input copied) or of training, not what the model answers.
                 if skip is not None and py_contains(skip, keys[i]):
                     continue
                 var value = fields[keys[i]]
@@ -221,7 +244,7 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
                     work_names.append(name)
                     work_values.append(value)
                     work_depths.append(0)
-        var extra = py_get(context, "digest_extra")
+        var extra = py_get(context, "digest_training_extra") if training else py_get(context, "digest_extra")
         if extra is not None:
             var declared = archive_schema_lookup(cls, extra)
             if declared is not None:
@@ -303,8 +326,8 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
                     leaf_names.append(name + ".unfitted")
                     leaf_values.append(PythonObject(_archive_class_name_unpack(kind)))
                     continue
-                # A member estimator: its own digest, as text, under its place.
-                var inner = fitted_digest_text(value, context, depth + 1)
+                # A member estimator: its own digest (of the same kind), as text, under its place.
+                var inner = fitted_digest_text(value, context, depth + 1, training)
                 leaf_names.append(name)
                 leaf_values.append(PythonObject(inner))
                 continue
@@ -350,6 +373,8 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
             pins.append(leaf_values[i])
     # RUN: typed members only, the interpreter lock released.
     var result = String("")
+    if training:
+        hashed_name += "#training"
     try:
         with GILReleased(Python()):
             result = fitted_digest_hex(hashed_name, members)
@@ -359,7 +384,9 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
     return result
 
 
-def fitted_digest_call(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`model.digest_`: see the module note."""
-    var text = fitted_digest_text(model, context, 0)
+def fitted_digest_call(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`model.digest_` (`args` empty) or `model.training_digest_` (`args`
+    ("training",)): see the module note."""
+    var training = len(args) > 0
+    var text = fitted_digest_text(model, context, 0, training)
     return PythonObject(text)

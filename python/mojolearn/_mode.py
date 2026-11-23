@@ -47,6 +47,7 @@ from ._array import Array as _Array
 from ._device_table import CPU_CLASSES as _DEVICE_CPU_CLASSES, record as _device_record
 from . import _sk_validate
 from ._digest_fields import CONNECTION as _DIGEST_CONNECTION, declare as _digest_declare, read as _digest_read
+from ._digest_fields import TRAINING_ARGUMENTS as _DIGEST_TRAINING_ARGUMENTS
 
 
 def _guard_cpu_training(method):
@@ -492,16 +493,27 @@ class CheckMixin:
         version: fit twice, compare the two strings, and any difference means
         the data, the parameters or the version changed.
 
-        The digest covers the fitted state that decides the model's answers:
-        the class name and every fitted array and value, by name, type, shape
-        and bytes. It is computed each time it is read, from the model as it
-        is at that moment, and never during `fit`. A meta-estimator's digest
-        includes the digests of its fitted members. A model loaded from a
-        saved file has the digest of the model that was saved. For
-        `IterativeImputer` with ``sample_posterior=True``,
-        `LatentDirichletAllocation` and `MinCovDet`, whose random draws
-        continue from one call to the next, the digest changes as the model
-        is used.
+        The digest means "this model gives these answers". It covers
+        exactly the state that decides what `predict`, `predict_proba`,
+        `transform`, `score` and the other answer methods return: the class
+        name, the architecture, the parameters those methods read, and every
+        fitted array and value (weights, buffers such as batch-norm running
+        statistics, class labels, category maps), by name, type, shape and
+        bytes. It leaves out how the model was trained: optimizer moments,
+        iteration, epoch and step counters, loss and score histories,
+        convergence records, timing, the device and the thread count (see
+        `training_digest_`). So a model, its saved, exported, pickled and
+        loaded copies, and the same model on another device have one
+        digest, and two models with different digests give different
+        answers or were hashed from different state. It is computed each
+        time it is read, from the model as it is at that moment, and never
+        during `fit`; calling `predict`, `transform` or `score` does not
+        change it. A meta-estimator's digest includes the digests of its
+        fitted members. For `IterativeImputer` with
+        ``sample_posterior=True``, `LatentDirichletAllocation` and
+        `MinCovDet`, whose random draws continue from one call to the next
+        and so decide the next answers, the digest changes as the model is
+        used.
 
         Raises
         ------
@@ -522,6 +534,37 @@ class CheckMixin:
         # One native call (bindings/fitted_digest_door.mojo); nothing is
         # hashed or looked up at fit.
         return _digest_read(self)
+
+    @property
+    def training_digest_(self):
+        """The hash of how this model was trained, as one lower-case hex
+        string, separate from `digest_`.
+
+        It covers the training record `digest_` leaves out, where the model
+        keeps one: the optimizer's moments and step counters a resumed fit
+        reads, the iteration and epoch counts, the loss and score histories
+        and the convergence records. Two fits with the same data, parameters
+        and seed have the same `training_digest_` on every machine, within
+        one Mojolearn version. A model loaded from an inference export,
+        which drops the training record, keeps its `digest_` and has a
+        different `training_digest_`. It is computed each time it is read.
+
+        Raises
+        ------
+        AttributeError
+            If the model is not fitted or runs in `fast` mode (Apple only).
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> X = np.random.default_rng(0).random((200, 4), dtype=np.float32)
+        >>> a = mojolearn.SGDRegressor(random_state=0).fit(X, X[:, 0])
+        >>> b = mojolearn.SGDRegressor(random_state=0).fit(X, X[:, 0])
+        >>> a.training_digest_ == b.training_digest_    # doctest: +SKIP
+        True
+        """
+        # The same native call as `digest_`, with the training selector.
+        return _digest_read(self, _DIGEST_TRAINING_ARGUMENTS)
 
     def check(self, X, *, method=None, fit=None):
         """Run this fitted model on the GPU and on the CPU, print both sides'
@@ -584,6 +627,7 @@ class CheckMixin:
 # that admit it by identity (bindings/fitted_digest_property_pack.mojo and the
 # property recipe of _native_public_attributes.connect_classes).
 _DIGEST_CONNECTION["property"] = vars(CheckMixin)["digest_"]
+_DIGEST_CONNECTION["training_property"] = vars(CheckMixin)["training_digest_"]
 
 
 class PublicOutputsMixin(CheckMixin):

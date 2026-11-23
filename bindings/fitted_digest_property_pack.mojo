@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# `digest_` for the class layouts that bind only connected descriptors
+# `digest_` and `training_digest_` for the class layouts that bind only connected descriptors
 # (bindings/classical_attributes_door.mojo: Ridge, LinearRegression, the
 # scalers, the neighbor queries, LogisticRegression, the model-selection
 # helpers, the explainers).
@@ -9,9 +9,10 @@
 # CPython's generic lookup runs the property, whose body is one native call. A
 # class with a connected public attribute plan reads it as a native property
 # recipe (python/mojolearn/_native_public_attributes.py, kind "fitted_digest").
-# The layouts above refuse every Python property: this file admits that one
-# property object by identity and makes the same native call the recipe makes
-# (`classical_native_call(model, "fitted_digest", (), context)`), through the
+# The layouts above refuse every Python property: this file admits those two
+# property objects by identity and makes the same native call the recipe makes
+# (`classical_native_call(model, "fitted_digest", (), context)`, or with the
+# arguments ("training",) for `training_digest_`), through the
 # connection python/mojolearn/_digest_fields.py fills (held in `_mode._MODE_METADATA_CONTEXT`). No Python code of the
 # property runs here.
 #
@@ -27,27 +28,35 @@ from bindings.py_balanced import py_call, py_fields, py_get, py_item, py_type
 
 
 def fitted_digest_property(member: PythonObject) raises -> PythonObject:
-    """The `digest_` connection when `member` is the shared base's `digest_`
-    property object, else None."""
+    """`(connection, arguments)` when `member` is the shared base's `digest_`
+    property object (arguments ()) or its `training_digest_` property object
+    (arguments ("training",)), else None."""
     # The connection rides in the mode metadata context, an export the
     # module registry already holds for `mojolearn._mode` (no new owner).
     var fields = py_fields(native_loaded_module("mojolearn._mode"))
     var metadata = py_item(fields, PythonObject("_MODE_METADATA_CONTEXT"))
     var connection = py_get(metadata, "digest_connection")
-    if connection is None or py_get(connection, "property") is not member:
+    if connection is None:
         return PythonObject(None)
-    return connection
+    if py_get(connection, "property") is member:
+        return Python.tuple(connection, Python.tuple())
+    if py_get(connection, "training_property") is member:
+        return Python.tuple(connection, Python.tuple(PythonObject("training")))
+    return PythonObject(None)
 
 
-def fitted_digest_property_read(connection: PythonObject, model: PythonObject) raises -> PythonObject:
-    """`model.digest_` through the connected compiled entry."""
+def fitted_digest_property_read(found: PythonObject, model: PythonObject) raises -> PythonObject:
+    """`model.digest_` or `model.training_digest_` through the connected
+    compiled entry (`found` is what `fitted_digest_property` returned)."""
+    var connection = found[0]
+    var arguments = found[1]
     var entry = py_get(connection, "entry")
     if entry is None:
         raise Error("AttributeError: digest_ is unavailable: the saved-model owner is not connected in this installation")
     if py_type(entry) is not static_builtin_type("types", "BuiltinFunctionType"):
         raise Error("TypeError: digest_ requires its connected native entry")
     var context = py_item(connection, PythonObject("context"))
-    var args = Python.tuple(model, PythonObject("fitted_digest"), Python.tuple(), context)
+    var args = Python.tuple(model, PythonObject("fitted_digest"), arguments, context)
     ref cpy = Python().cpython()
     var result = cpy.PyObject_Call(entry._obj_ptr, args._obj_ptr, PyObjectPtr())
     _ = args  # the argument tuple (and the model it holds) lives through the call
