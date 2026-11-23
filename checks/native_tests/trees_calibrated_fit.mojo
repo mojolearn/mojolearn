@@ -25,8 +25,12 @@ written against the round-1 base d3a8864541, whose door units fitted that fold).
 train rows hold classes 0 and 1): the two-class member's ONE decision column goes to class 1's column alone (the
 door read two columns of it before mf-cal2, so no door words exist: the out-of-fold block's fold-0 rows must be zero
 in columns 0 and 2 and not all zero in column 1), serial equal to parallel. Case 20 (`y2gap`, k = 2, fold 0's
-train rows hold class 0 only): fold 0 is not fitted and is left to its door (`native[0]` False), the others are,
-and the ensemble=False final calibrators wait for the door (`final_ready` False).
+train rows hold class 0 only; lane mf-cal3): fold 0's member is fitted with ONE class, as scikit-learn's
+`_fit_classifier_calibrator_pair` fits the fold's estimator on whatever its train rows hold, and LogisticRegression's
+fit refuses it in its fit door's words (core/logistic_model_state.mojo `logistic_fit_target_count`, the one body
+both the door and the member call): the RUN answers CAL_FIT_FAILED with fold 0 the first failing member and its words
+exactly "mojolearn LogisticRegression: y has one class", the other folds' words empty, every state released; case
+21 is the same with four fold workers (the same first failure, the same words).
 
 The member words are the admitted words of LogisticRegression(C=1.0, max_iter=100, linesearch_max_iter=20,
 tol=1e-4) (providers/python/member_logistic_boundary_door.mojo) and LinearSVC(C=1.0)
@@ -36,7 +40,8 @@ Fail-proof edits (each must fail the named cases): in `cal_calibrators_run` use 
 case); pass `plan.test_rows[(f + 1) % folds]` as `te` in `calibrated_fit_scores_run` (every case); in
 `cal_fold_classes_run` leave `run.plans[f].classes` at k (cases 16 to 18: the fold's member is fitted with four
 classes); in `_cal_fold_scores` drop `class_at += 4` (case 19: column 0 is written); in `cal_fold_classes_run`
-re-code a one-class fold instead of marking `uncovered[f]` (case 20).
+skip a fold that holds one class (`if held < 2: continue`: cases 20 and 21, fold 0 is fitted with two classes and
+answers).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
@@ -54,19 +59,19 @@ from core.member_abi import (
     MEMBER_OP_DECISION, MEMBER_I32, MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
 )
 from core.member_set_run import (
-    MemberSetRun, member_set_run_release, MEMBER_SET_WORKER, MEMBER_SET_TURN_RELEASED, MEMBER_SET_TURN_HELD,
+    MemberSetRun, member_set_run_release, member_set_first_failure, MEMBER_SET_WORKER, MEMBER_SET_TURN_RELEASED, MEMBER_SET_TURN_HELD,
 )
 from core.trees_entry_table import TreesEntryKey
 from glm.host.logistic_native_host import qn_host_native_v1
 from glm.host.linear_svc_native_host import linear_svc_host_v1
 from xtrees.glue_runs import publish_x_trees_glue
 from xtrees.glue_calls import xt_ref
-from xtrees.trees_calibrated_fit_run import CalFitPlan, CalFitOut, CAL_ALL_ANSWERED, calibrated_fit_run
+from xtrees.trees_calibrated_fit_run import CalFitPlan, CalFitOut, CAL_ALL_ANSWERED, CAL_FIT_FAILED, cal_columns, calibrated_fit_run
 
 comptime N = 60
 comptime D = 3
 comptime FOLDS = 3
-comptime CASES = 21
+comptime CASES = 22
 comptime DIR = "checks/native_tests/fixtures/mf_cal/"
 
 
@@ -120,6 +125,15 @@ def _folds() -> List[List[Int32]]:
 def _run(linsvc: Bool, sigmoid: Bool, k: Int, ensemble: Bool, cap: Int, x: List[Float32], y: List[Int32],
          folds: List[List[Int32]], mut res: CalFitOut) raises -> Int:
     """The door's UNPACK as typed values, then the RUN. The states are released before returning."""
+    var failed = -1
+    var words = List[String]()
+    return _run_words(linsvc, sigmoid, k, ensemble, cap, x, y, folds, res, failed, words)
+
+
+def _run_words(linsvc: Bool, sigmoid: Bool, k: Int, ensemble: Bool, cap: Int, x: List[Float32], y: List[Int32],
+               folds: List[List[Int32]], mut res: CalFitOut, mut failed: Int, mut words: List[String]) raises -> Int:
+    """`_run`, also giving the first failing member (`member_set_first_failure`, -1: none) and every member's
+    recorded words."""
     var plan = _plan(linsvc, k)
     var mask = member_kind_capabilities(plan)
     var tests = UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0)
@@ -148,6 +162,9 @@ def _run(linsvc: Bool, sigmoid: Bool, k: Int, ensemble: Bool, cap: Int, x: List[
         answered = calibrated_fit_run(_glue(), run, cal, res)
     finally:
         member_set_run_release(run)
+    failed = member_set_first_failure(run)
+    for u in range(len(run.errors)):  # small-loop(oracle: every member's words)
+        words.append(run.errors[u].copy())
     _ = len(x)  # read through the fits and the RUN above
     _ = len(y)
     _ = len(folds)
@@ -211,9 +228,8 @@ def check_config(which: Int) raises:
     require(_run(linsvc, sigmoid, k, ensemble, 1, x, y, folds, serial) == CAL_ALL_ANSWERED, name + ": a member refused")
     require(_run(linsvc, sigmoid, k, ensemble, 4, x, y, folds, parallel) == CAL_ALL_ANSWERED,
             name + ": a member refused (parallel)")
-    for f in range(FOLDS):  # small-loop(oracle)
-        require(serial.native[f], name + ": fold " + String(f) + " was left to its door")
-    require(ensemble or serial.final_ready, name + ": the final calibrators were not fitted")
+    require(ensemble or serial.final_count == cal_columns(k),
+            name + ": " + String(serial.final_count) + " final calibrators")
     _same(serial, parallel, name + " serial vs parallel")
     _door(serial, name)
 
@@ -234,9 +250,8 @@ def check_lacking_fold(which: Int) raises:
     require(_run(linsvc, sigmoid, 4, ensemble, 1, x, y, folds, serial) == CAL_ALL_ANSWERED, name + ": a member refused")
     require(_run(linsvc, sigmoid, 4, ensemble, 4, x, y, folds, parallel) == CAL_ALL_ANSWERED,
             name + ": a member refused (parallel)")
-    for f in range(FOLDS):  # small-loop(oracle)
-        require(serial.native[f], name + ": fold " + String(f) + " was left to its door")
-    require(ensemble or serial.final_ready, name + ": the final calibrators were not fitted")
+    require(ensemble or serial.final_count == cal_columns(k),
+            name + ": " + String(serial.final_count) + " final calibrators")
     _same(serial, parallel, name + " serial vs parallel")
     _door(serial, name)
 
@@ -251,9 +266,7 @@ def check_two_class_fold() raises:
     require(_run(False, True, 3, False, 1, x, y, folds, serial) == CAL_ALL_ANSWERED, "gap3: a member refused")
     require(_run(False, True, 3, False, 4, x, y, folds, parallel) == CAL_ALL_ANSWERED,
             "gap3: a member refused (parallel)")
-    for f in range(FOLDS):  # small-loop(oracle)
-        require(serial.native[f], "gap3: fold " + String(f) + " was left to its door")
-    require(serial.final_ready, "gap3: the final calibrators were not fitted")
+    require(serial.final_count == 3, "gap3: " + String(serial.final_count) + " final calibrators")
     _same(serial, parallel, "gap3 serial vs parallel")
     var written = False
     for i in range(0, N, FOLDS):  # small-loop(oracle: fold 0's test rows)
@@ -264,16 +277,24 @@ def check_two_class_fold() raises:
     require(written, "gap3: fold 0's decision was not placed in class 1's column")
 
 
-def check_one_class_fold() raises:
-    """Case 20: fold 0's train rows hold one class of two: not fitted, left to its door; the others are fitted."""
+def check_one_class_fold(cap: Int) raises:
+    """Cases 20 (one fold worker) and 21 (four): fold 0's train rows hold one class of two; its member is fitted
+    with one class and LogisticRegression's fit refuses it in its door's words; nothing is published."""
     var x = fixture_f32(DIR + "x.f32", N * D)
     var y = fixture_i32(DIR + "y2gap.i32", N)
     var folds = _folds()
     var res = CalFitOut()
-    require(_run(False, True, 2, False, 4, x, y, folds, res) == CAL_ALL_ANSWERED, "gap2: a member refused")
-    require(not res.native[0], "gap2: fold 0 holds one class in its train rows and was fitted")
-    require(res.native[1] and res.native[2], "gap2: a covered fold was left to its door")
-    require(not res.final_ready, "gap2: the final calibrators were fitted before the door placed fold 0")
+    var failed = -1
+    var words = List[String]()
+    var name = "gap2 cap " + String(cap)
+    require(_run_words(False, True, 2, False, cap, x, y, folds, res, failed, words) == CAL_FIT_FAILED,
+            name + ": the one-class fold was fitted")
+    require(failed == 0, name + ": the first failing member is " + String(failed) + ", not fold 0")
+    require(words[0] == "mojolearn LogisticRegression: y has one class",
+            name + ": fold 0 raised '" + words[0] + "', not its fit door's words")
+    for u in range(1, len(words)):  # small-loop(oracle: the covered folds and the full-X member)
+        require(len(words[u]) == 0, name + ": member " + String(u) + " failed: " + words[u])
+    require(res.calibrators() == 0, name + ": calibrators were fitted after a failed fit")
 
 
 def test_trees_calibrated_fit() raises:
@@ -287,7 +308,7 @@ def test_trees_calibrated_fit() raises:
         elif which == 19:
             check_two_class_fold()
         else:
-            check_one_class_fold()
+            check_one_class_fold(1 if which == 20 else 4)
     check_cases("trees_calibrated_fit", CASES, run_case)
 
 

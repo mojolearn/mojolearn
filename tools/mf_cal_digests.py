@@ -2,17 +2,23 @@
 (xtrees/trees_calibrated_fit_run.mojo), host column. Prints one line per configuration and output: name and sha256
 of the output bytes (dtype and shape included); a refusal is digested by its words. Round 1: base
 origin/lane/member-fits 4d76a9e16e, head lane/mf-cal. Round 2 (lane mf-cal2): base d3a8864541, head lane/mf-cal2.
-Every line must be equal, EXCEPT the k = 3 `gap` lines of a member whose decision has one column for two classes
-(LogisticRegression, LinearSVC, LinearDiscriminantAnalysis): fold 0 holds two classes, and the base door read two
-columns of that member's one-column decision (past the block's end); the head places it in the positive class's
-column (bits change there; the base words were not defined). Test tool, never product runtime.
+Round 3 (lane mf-cal3): base 747c1cbddf, head lane/mf-cal3: EVERY line must be equal. What moved: the k = 2 `gap`
+configurations (fold 0's train rows hold ONE class) are fitted by the native member set (the base door units fitted
+them); a member that refuses one class must raise the same type and words (`_raised` lines: lr, svc, svk, gpc, dt,
+lda/gnb at n_jobs 4), one that fits it (knn, gnb/lda at n_jobs 4) the same words; the `cal_nan_*` refusals the
+same words. The new `cal_empty_*` lines are the head's alone: it raises scikit-learn's check_array words for a fold
+with no test rows (the base's native route called the member over zero rows). A differing `_raised` line is a words defect to send back (the base's words
+are the estimator's own fit door's). Round 2's note: the k = 3 `gap` lines of a member whose decision has one column
+for two classes (LogisticRegression, LinearSVC, LinearDiscriminantAnalysis) differed from 4d76a9e16e (the base door
+read past that block's end). Test tool, never product runtime.
 
 Configurations: method {sigmoid, isotonic} x ensemble {True, False} x k {2, 3, 4} x member {LogisticRegression,
 LinearSVC, GaussianNB and LinearDiscriminantAnalysis (the resident DeviceRows route when the folds run on one
-thread), DecisionTreeClassifier, KNeighborsClassifier, CategoricalNB (no member entry: its doors)} x n_jobs {1, 4} x
+thread), DecisionTreeClassifier, KNeighborsClassifier, CategoricalNB, SVC (rbf), GaussianProcessClassifier} x n_jobs {1, 4} x
 {cv=3, an explicit cv whose fold 0 train rows lack the last class (k = 2: fold 0 holds one class, its door unit;
 k = 3: two classes; k = 4: three, fitted natively on them since mf-cal2)}, plus one non-finite X refusal per
-member (mf-cal2: refused before any fit, in the doors' words). Outputs:
+member (mf-cal2: refused before any fit, in the doors' words) and one refusal per member of a cv whose fold 1 has no
+test rows (mf-cal3: scikit-learn's check_array words, before any fit). Outputs:
 predict and predict_proba of a held-out X, and per (member, calibrators) pair: the member's scores on that X
 (decision_function, else predict_proba), its coef_/intercept_ when it has them, and every calibrator word.
 
@@ -59,6 +65,10 @@ def _member(name):
         return mojolearn.KNeighborsClassifier(n_neighbors=7)
     if name == "cnb":
         return mojolearn.CategoricalNB()
+    if name == "svk":
+        return mojolearn.SVC(C=1.0, gamma=0.5)
+    if name == "gpc":
+        return mojolearn.GaussianProcessClassifier()
     return mojolearn.DecisionTreeClassifier(max_depth=4, random_state=1)
 
 
@@ -69,7 +79,7 @@ def _for(member, X):
     return X
 
 
-MEMBERS = ("lr", "svc", "gnb", "lda", "dt", "knn", "cnb")
+MEMBERS = ("lr", "svc", "gnb", "lda", "dt", "knn", "cnb", "svk", "gpc")
 CONFIGS = list(itertools.product(("sigmoid", "isotonic"), (True, False), (2, 3, 4), MEMBERS, (1, 4), (False, True)))
 
 
@@ -131,12 +141,30 @@ def _refusal(index):
         return [(f"cal_nan_{member}", f"{type(e).__name__}: {e}")]
 
 
+def _empty(index):
+    """A cv whose fold 1 has no test rows (its train rows are every row)."""
+    from mojolearn.calibration import CalibratedClassifierCV
+    member = MEMBERS[index]
+    X, y = _data(5, 120, 2)
+    X = _for(member, X)
+    rows = np.arange(len(y))
+    cv = [(rows[rows % 2 == 1], rows[rows % 2 == 0]), (rows, rows[:0])]
+    try:
+        CalibratedClassifierCV(_member(member), cv=cv).fit(X, y)
+        return [(f"cal_empty_{member}", "no-refusal")]
+    except Exception as e:  # noqa: BLE001 - the words are the digest
+        return [(f"cal_empty_{member}", f"{type(e).__name__}: {e}")]
+
+
 def _run(index):
-    return _config(index) if index < len(CONFIGS) else _refusal(index - len(CONFIGS))
+    if index < len(CONFIGS):
+        return _config(index)
+    index -= len(CONFIGS)
+    return _refusal(index) if index < len(MEMBERS) else _empty(index - len(MEMBERS))
 
 
 def main():
-    total = len(CONFIGS) + len(MEMBERS)
+    total = len(CONFIGS) + 2 * len(MEMBERS)
     with ProcessPoolExecutor(max_workers=min(total, os.cpu_count() or 1)) as pool:
         for lines in pool.map(_run, range(total)):
             for name, value in lines:
