@@ -76,7 +76,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 23
+comptime GBDT_HOST_UNITS = 27
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -156,6 +156,14 @@ struct GbdtOpts(Copyable, Movable):
     #: GreedyLogSum borders, `fold_len_multiplier` 2.0 as its float64 bits,
     #: `fold_permutation_block` unset), as `gbdt_fit_options` builds them
     var boosting_type: String
+    #: lane gbdt-cpu-rest-4-pwl (2026-11-23): the loss parameters, the
+    #: detector's p-value (UNSET is None) and `feature_border_type` ("" is
+    #: the four option strings, GreedyLogSum; a name is the fifth string)
+    var loss_alpha: Float64
+    var loss_q: Float64
+    var loss_delta: Float64
+    var od_pvalue: Float64
+    var border_type: String
 
     def __init__(out self, loss: String, n_estimators: Int, max_depth: Int = 6):
         self.loss = loss
@@ -190,6 +198,11 @@ struct GbdtOpts(Copyable, Movable):
         self.min_child_hessian = UNSET
         self.feature_fraction = 1.0
         self.boosting_type = "Plain"
+        self.loss_alpha = UNSET
+        self.loss_q = UNSET
+        self.loss_delta = UNSET
+        self.od_pvalue = UNSET
+        self.border_type = ""
 
     def deterministic(mut self):
         """The tests' pinned configuration: `bootstrap_type='No'`, `random_strength=0`."""
@@ -404,9 +417,9 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     s.f(l2)
     s.i(o.random_state)
     s.i(_score_code(_score(o)))
-    s.f(UNSET)  # loss_alpha
-    s.f(UNSET)  # loss_q
-    s.f(UNSET)  # loss_delta
+    s.f(o.loss_alpha)
+    s.f(o.loss_q)
+    s.f(o.loss_delta)
     s.f(o.loss_variance_power)
     s.f(UNSET)  # loss_border
     s.i(iters)
@@ -414,7 +427,7 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     s.f(o.bagging_temperature)
     s.f(o.subsample)
     s.i(n_eval)
-    s.f(UNSET)  # od_pvalue
+    s.f(o.od_pvalue)
     s.i(o.od_wait)
     s.i(o.use_best_model)
     s.i(o.best_model_min_trees)
@@ -475,6 +488,8 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     var ex_addr = Int(inp.eval_x.unsafe_ptr()) if n_eval > 0 else x_addr
     var ey_addr = Int(inp.eval_y.unsafe_ptr()) if n_eval > 0 else y_addr
     var strs: List[String] = [o.loss, _bootstrap(o), o.od_type, o.nan_mode]
+    if o.boosting_type != "Ordered" and o.border_type.byte_length() > 0:
+        strs.append(o.border_type)
     if o.boosting_type == "Ordered":
         # `gbdt_fit_options`' Ordered tail (bindings/gbdt_config_run.mojo)
         strs.append(String("GreedyLogSum"))
@@ -1195,6 +1210,8 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_rest_gaps[I]()
     elif unit == 21:
         host_pointwise_arms[I]()
+    elif unit == 24:
+        host_pointwise_rest[I]()
     else:
         host_ordered_weights[I]()
 
@@ -1306,6 +1323,151 @@ def host_pointwise_arms[I: GbdtImage]() raises:
     except error:
         refused = String(error)
     require_fails_with(refused, "There are NaNs in feature number", "NaN in a plain one-hot column")
+
+
+def _pw_refused[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, needle: String, what: String) raises:
+    """`o` is refused on this column with `needle` in its words."""
+    var refused = String("")
+    try:
+        _ = fit[I](o, inp)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, needle, what)
+
+
+def host_pointwise_rest[I: GbdtImage]() raises:
+    """The pointwise searcher's arms the host refused by name until lane
+    gbdt-cpu-rest-4-pwl (2026-11-23), each twice to the same bytes: the
+    one-output losses beside Logloss and RMSE (CrossEntropy, MAE and MAPE
+    at their Exact default, Quantile, LogLinQuantile, Poisson, Lq,
+    Expectile, Tweedie, Huber), `boost_from_average` unset (resolved as
+    `train` resolves it: a bias on MAE, none on Logloss), class weights on
+    CrossEntropy, a Median border grid, an eval set under IncToDec and
+    under no detector, a one-hot column, a CTR column and `max_depth` 0.
+    Then the device's refusals in its words: Depthwise, MultiClass and
+    `boost_from_average=True` on Poisson."""
+    var clf = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    # the one-output losses on the pointwise searcher; the 0/1 target serves
+    # the losses that need a probability or a non-negative target
+    var ce = _pw_opts("CrossEntropy", "Cosine", "Bayesian")
+    ce.leaf_iterations = 2
+    var mce = _twice[I](ce, clf, "pointwise CrossEntropy")
+    require("\nbias " in mce.text, "pointwise CrossEntropy with boost_from_average: no bias record")
+    var ce0 = ce.copy()
+    ce0.boost_from_average = -1
+    var mce0 = _twice[I](ce0, clf, "pointwise CrossEntropy, boost_from_average unset")
+    require(not ("\nbias " in mce0.text), "CrossEntropy's unset boost_from_average resolved True")
+    var cew = ce0.copy()
+    cew.class_weights = [1.0, 2.5]
+    var mcew = _twice[I](cew, clf, "class-weighted pointwise CrossEntropy")
+    require(mcew.text != mce0.text, "pointwise CrossEntropy class weights had no model effect")
+    var mae = _pw_opts("MAE", "L2", "No")
+    mae.leaf_method = ""
+    mae.leaf_iterations = -1
+    mae.boost_from_average = -1
+    var mmae = _twice[I](mae, reg, "pointwise MAE (Exact, boost_from_average unset)")
+    require("\nbias " in mmae.text, "MAE's unset boost_from_average resolved False")
+    var q = _pw_opts("Quantile", "NewtonL2", "Bernoulli")
+    q.subsample = 0.7
+    q.loss_alpha = 0.3
+    q.leaf_method = "Exact"
+    q.leaf_iterations = -1
+    _ = _twice[I](q, reg, "pointwise Quantile alpha 0.3 Exact")
+    var mape = _pw_opts("MAPE", "Cosine", "No")
+    mape.leaf_method = ""
+    mape.leaf_iterations = -1
+    _ = _twice[I](mape, clf, "pointwise MAPE")
+    var llq = _pw_opts("LogLinQuantile", "Cosine", "No")
+    llq.boost_from_average = 0
+    llq.leaf_method = "Gradient"
+    llq.leaf_iterations = 2
+    _ = _twice[I](llq, clf, "pointwise LogLinQuantile")
+    var pois = _pw_opts("Poisson", "NewtonCosine", "Poisson")
+    pois.subsample = 0.66
+    pois.random_strength = 1.0
+    pois.boost_from_average = -1
+    pois.leaf_iterations = 3
+    _ = _twice[I](pois, clf, "pointwise Poisson")
+    var lq = _pw_opts("Lq", "L2", "No")
+    lq.boost_from_average = 0
+    lq.loss_q = 3.0
+    _ = _twice[I](lq, reg, "pointwise Lq q 3")
+    var ex = _pw_opts("Expectile", "Cosine", "Bayesian")
+    ex.boost_from_average = 0
+    ex.loss_alpha = 0.3
+    _ = _twice[I](ex, reg, "pointwise Expectile alpha 0.3")
+    var tw = _pw_opts("Tweedie", "Cosine", "No")
+    tw.boost_from_average = 0
+    tw.loss_variance_power = 1.5
+    _ = _twice[I](tw, clf, "pointwise Tweedie 1.5")
+    var hu = _pw_opts("Huber", "NewtonL2", "No")
+    hu.boost_from_average = 0
+    hu.loss_delta = 1.0
+    _ = _twice[I](hu, reg, "pointwise Huber delta 1")
+    # Logloss with boost_from_average unset: False, as `train` resolves it
+    var ll = _pw_opts("Logloss", "Cosine", "No")
+    var mll = _twice[I](ll, clf, "pointwise Logloss")
+    var ll0 = ll.copy()
+    ll0.boost_from_average = -1
+    var mll0 = _twice[I](ll0, clf, "pointwise Logloss, boost_from_average unset")
+    require(not ("\nbias " in mll0.text), "Logloss's unset boost_from_average resolved True")
+    require(mll0.text != mll.text, "pointwise Logloss: the unset start is the log-odds start")
+    # a Median border grid
+    var rm = _pw_opts("RMSE", "Cosine", "No")
+    var mrm = _twice[I](rm, reg, "pointwise RMSE")
+    var rmed = rm.copy()
+    rmed.border_type = "Median"
+    var mmed = _twice[I](rmed, reg, "pointwise RMSE on Median borders")
+    require(mmed.text != mrm.text, "pointwise Median borders: the GreedyLogSum model")
+    # an eval set under IncToDec, and under no detector
+    var held = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    held.eval_x = held.x.copy()
+    held.eval_y = held.y.copy()
+    var itd = _pw_opts("Huber", "Cosine", "No")
+    itd.boost_from_average = 0
+    itd.loss_delta = 1.0
+    itd.n_estimators = 12
+    itd.od_type = "IncToDec"
+    itd.od_pvalue = 0.01
+    itd.od_wait = 2
+    var mitd = _twice[I](itd, held, "pointwise Huber with an eval set under IncToDec")
+    require(len(mitd.test) > 0, "pointwise IncToDec: no held-out curve")
+    var nod = _pw_opts("RMSE", "L2", "No")
+    nod.n_estimators = 6
+    var mnod = _twice[I](nod, held, "pointwise RMSE with an eval set, no detector")
+    require(len(mnod.test) == 6, "pointwise eval set without a detector: the curve is not one point a tree")
+    # a one-hot column (the three class codes appended as column 6) and a
+    # CTR column (the same codes as cat_features)
+    var xo = load_f32("e3-x.f32", 3600)
+    var codes = load_f32("e3-y3.f32", 600)
+    for r in range(600):  # small-loop(one appended column)
+        xo.append(codes[r])
+    var oh_in = GbdtInputs(xo.copy(), 600, 7, load_f32("e3-yr.f32", 600))
+    var oh = _pw_opts("RMSE", "Cosine", "No")
+    oh.one_hot_features = [6]
+    var moh = _twice[I](oh, oh_in, "pointwise RMSE with a one-hot column")
+    require("one_hot 1" in moh.text, "pointwise one-hot: no one-hot feature record")
+    var cat_in = GbdtInputs(xo^, 600, 7, load_f32("e3-yc.f32", 600))
+    var cat = _pw_opts("Logloss", "Cosine", "Bayesian")
+    cat.cat_features = [6]
+    var mcat = _twice[I](cat, cat_in, "pointwise Logloss with a CTR column")
+    require("ctr_table" in mcat.text, "pointwise CTR: no CTR table record")
+    # depth 0: one leaf a tree
+    var d0 = _pw_opts("RMSE", "Cosine", "No")
+    d0.max_depth = 0
+    var md0 = _twice[I](d0, reg, "pointwise RMSE at max_depth 0")
+    require("depth 0" in md0.text, "pointwise max_depth 0: a tree with splits")
+    # the device's refusals, its words
+    var dw = _pw_opts("RMSE", "Cosine", "No")
+    dw.grow_policy = "Depthwise"
+    _pw_refused[I](dw, reg, "OBLIVIOUS searcher", "pointwise Depthwise")
+    var mc = _pw_opts("MultiClass", "Cosine", "No")
+    mc.boost_from_average = 0
+    var mc_in = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
+    _pw_refused[I](mc, mc_in, "a single-target searcher", "pointwise MultiClass")
+    var pb = _pw_opts("Poisson", "Cosine", "No")
+    _pw_refused[I](pb, clf, "You can use boost_from_average only", "pointwise Poisson boost_from_average")
 
 
 def _ordered_opts(loss: String) -> GbdtOpts:

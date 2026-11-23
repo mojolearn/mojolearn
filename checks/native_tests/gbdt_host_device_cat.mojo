@@ -56,6 +56,14 @@ sample weights or an eval set. Every fit at `REST_RATE` 0.1.
 (Logloss, RMSE and MAE with boost_from_average, CrossEntropy, every
 bootstrap, both scores, zero weights with an eval set, a CTR column), the
 model text, the weighted learn curve and the held-out curve compared.
+
+`test_rest4pwl_host_text_is_device_text` (lane gbdt-cpu-rest-4-pwl,
+2026-11-23): the rest of the pointwise searcher, which the CPU column
+refused by name until that lane: CrossEntropy, MAE, Quantile, MAPE,
+LogLinQuantile, Poisson, Lq, Expectile, Tweedie and Huber (Exact leaves
+where `train` resolves them), boost_from_average unset, class weights on
+Logloss, Median borders, an eval set under IncToDec, one-hot and CTR
+columns; the model text, the learn curve and the held-out curve compared.
 """
 from std.math import nan
 from std.memory import UnsafePointer
@@ -1258,6 +1266,221 @@ def test_ordered_weights_host_text_is_device_text() raises:
                     + ("gbdt_host_device_cat ordered weights device: " + String(count) + " of "
                        + String(ORDW_UNITS) + " cases failed" + failed if count > 0 else ""))
 
+
+
+# ---- lane gbdt-cpu-rest-4-pwl (2026-11-23): the rest of the pointwise
+# searcher (the one-output losses, boost_from_average resolved, border
+# types, detectors, one-hot and CTR columns), host text against device text
+# at rate 0.1 ----
+comptime REST4PWL_UNITS = 14
+
+
+def _rest4pwl_loss(unit: Int) raises -> String:
+    if unit < 0 or unit >= REST4PWL_UNITS:
+        raise Error("gbdt_host_device_cat rest4pwl: no unit " + String(unit))
+    var names: List[String] = [
+        "CrossEntropy", "MAE", "Quantile", "Poisson", "Tweedie", "Huber",
+        "Logloss", "RMSE", "RMSE", "Logloss", "Lq", "Expectile", "MAPE",
+        "LogLinQuantile",
+    ]
+    return names[unit]
+
+
+def _rest4pwl_inputs(unit: Int) raises -> GbdtInputs:
+    """Unit 8 `_inputs(True)` (its column 1 one-hot), unit 9 `_inputs(False)`
+    (a CTR column and a one-hot one); every other unit four hashed numeric
+    columns with a 0/1 target (the losses that read a probability or a
+    non-negative count) or a real one; unit 1 carries hashed sample weights
+    in [0.25, 4), unit 5 a held-out slice."""
+    if unit == 8:
+        return _inputs(True)
+    if unit == 9:
+        return _inputs(False)
+    var loss = _rest4pwl_loss(unit)
+    var binary = (
+        loss == String("CrossEntropy") or loss == String("Poisson")
+        or loss == String("Tweedie") or loss == String("Logloss")
+        or loss == String("MAPE") or loss == String("LogLinQuantile")
+    )
+    var n = REST_ROWS
+    var x = List[Float32](capacity=4 * n)
+    for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+        for r in range(n):  # driver-loop: over the fixture's rows
+            x.append(_unit01(r, 140 + j) * Float32(4.0) - Float32(2.0))
+    var y = List[Float32](capacity=n)
+    for r in range(n):  # driver-loop: over the fixture's rows
+        var v = (x[r] - Float32(0.5) * x[n + r] + Float32(0.25) * x[2 * n + r] * x[3 * n + r]
+                 + Float32(0.4) * (_unit01(r, 145) - Float32(0.5)))
+        if binary:
+            y.append(Float32(1.0) if v > Float32(0.0) else Float32(0.0))
+        else:
+            y.append(v)
+    var inp = GbdtInputs(x^, n, 4, y^)
+    if unit == 1:
+        for r in range(n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 150))
+    if unit == 5:
+        var ne = n // 2
+        for j in range(4):  # driver-loop: over the held-out columns
+            for r in range(ne):  # driver-loop: over the held-out rows
+                inp.eval_x.append(_unit01(r, 155 + j) * Float32(4.0) - Float32(2.0))
+        for r in range(ne):  # driver-loop: over the held-out rows
+            inp.eval_y.append(inp.eval_x[r] - Float32(0.5) * inp.eval_x[ne + r]
+                              + Float32(3.0) * (_unit01(r, 159) - Float32(0.5)))
+    return inp^
+
+
+def _rest4pwl_opts(unit: Int) raises -> GbdtOpts:
+    """The pointwise searcher throughout, every work-changing option
+    explicit: 0 CrossEntropy Cosine Bayesian with boost_from_average; 1
+    weighted MAE at its Exact default, boost_from_average unset (True); 2
+    Quantile alpha 0.3 Exact under NewtonL2 and Bernoulli 0.7; 3 Poisson
+    NewtonCosine, Poisson 0.66, random_strength 1, unset start (False); 4
+    Tweedie 1.5 under L2; 5 Huber delta 1 with an eval set under IncToDec
+    (p 0.01, wait 2) and use_best_model; 6 Logloss with class weights [1,
+    2.5], unset start (False); 7 RMSE on Median borders; 8 RMSE with a
+    one-hot column; 9 Logloss with a CTR and a one-hot column (Bayesian); 10
+    Lq q 3; 11 Expectile alpha 0.3 (Bayesian); 12 MAPE at its Exact
+    default; 13 LogLinQuantile with Gradient leaves."""
+    var loss = _rest4pwl_loss(unit)
+    var o = GbdtOpts(loss, REST_TREES, 4)
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.pointwise = True
+    o.score_function = "Cosine"
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.leaf_method = "Newton"
+    o.leaf_iterations = 1
+    o.boost_from_average = 0
+    if unit == 0:
+        o.boost_from_average = 1
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.leaf_iterations = 2
+    elif unit == 1:
+        o.boost_from_average = -1
+        o.score_function = "L2"
+        o.leaf_method = ""
+        o.leaf_iterations = -1
+    elif unit == 2:
+        o.boost_from_average = 1
+        o.loss_alpha = 0.3
+        o.score_function = "NewtonL2"
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+        o.leaf_method = "Exact"
+        o.leaf_iterations = -1
+    elif unit == 3:
+        o.boost_from_average = -1
+        o.score_function = "NewtonCosine"
+        o.bootstrap = "Poisson"
+        o.subsample = 0.66
+        o.random_strength = 1.0
+        o.leaf_iterations = 3
+    elif unit == 4:
+        o.score_function = "L2"
+        o.loss_variance_power = 1.5
+    elif unit == 5:
+        o.loss_delta = 1.0
+        o.n_estimators = 30
+        o.learning_rate = 1.0
+        o.od_type = "IncToDec"
+        o.od_pvalue = 0.01
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+    elif unit == 6:
+        o.boost_from_average = -1
+        o.class_weights = [1.0, 2.5]
+        o.leaf_iterations = 3
+    elif unit == 7:
+        o.boost_from_average = 1
+        o.border_type = "Median"
+    elif unit == 8:
+        o.boost_from_average = 1
+        o.cat_features = [1]
+    elif unit == 9:
+        o.cat_features = [0, 1]
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.leaf_iterations = 3
+    elif unit == 10:
+        o.loss_q = 3.0
+        o.score_function = "L2"
+    elif unit == 11:
+        o.loss_alpha = 0.3
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 0.5
+    elif unit == 12:
+        o.boost_from_average = 1
+        o.leaf_method = ""
+        o.leaf_iterations = -1
+    else:
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 2
+    return o^
+
+
+def test_rest4pwl_host_text_is_device_text() raises:
+    """The units of lane gbdt-cpu-rest-4-pwl: every host fit across the
+    cores first, then one device graph at a time; the learn curves and the
+    held-out curve too."""
+    var host_texts = List[String](length=REST4PWL_UNITS, fill=String(""))
+    var host_learn = List[List[Float64]](length=REST4PWL_UNITS, fill=List[Float64]())
+    var host_tests = List[List[Float64]](length=REST4PWL_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var learn_addr = Int(host_learn.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm learn_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var l = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=learn_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_rest4pwl_opts(unit), _rest4pwl_inputs(unit))
+        p[unit] = outcome.text.copy()
+        l[unit] = outcome.learn.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat rest4pwl host", REST4PWL_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(REST4PWL_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_rest4pwl_opts(unit), _rest4pwl_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat rest4pwl unit " + String(unit)
+                    + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.learn) != len(host_learn[unit]) or len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat rest4pwl unit " + String(unit) + ": curve lengths differ")
+            for i in range(len(outcome.learn)):  # small-loop(the learn curve)
+                if outcome.learn[i] != host_learn[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4pwl unit " + String(unit) + ": learn loss "
+                                + String(i) + " differs")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4pwl unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat rest4pwl device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_learn^
+    _ = host_tests^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat rest4pwl device: " + String(count) + " of "
+                       + String(REST4PWL_UNITS) + " cases failed" + failed if count > 0 else ""))
 
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
