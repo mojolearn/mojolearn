@@ -399,6 +399,22 @@ def gnb_refuse(fields: PythonObject, context: PythonObject) raises:
         raise Error("The 'var_smoothing' parameter of GaussianNB must be a float in the range [0.0, inf). Got " + cls_repr(vs) + " instead.")
 
 
+def lda_n_components(nc: PythonObject) raises -> Int:
+    """LinearDiscriminantAnalysis's `n_components`: -1 for None, else its
+    int (lane mf-lin6). Below 1 is refused in scikit-learn's own words:
+    sklearn/discriminant_analysis.py LinearDiscriminantAnalysis
+    `_parameter_constraints` "n_components": [Interval(Integral, 1, None,
+    closed="left"), None], checked by `validate_params` before fit reads X.
+    The one check of the door (`_lda_fit`) and the member admission."""
+    if nc is None:
+        return -1
+    var asked = Int(py=py_call(native_loaded_module("builtins").int, nc))
+    if asked < 1:
+        raise Error("The 'n_components' parameter of LinearDiscriminantAnalysis must be an int in the range "
+                    + "[1, inf) or None. Got " + cls_repr(nc) + " instead.")
+    return asked
+
+
 def prior_sum(vals: List[Float64]) -> Float64:
     # Python's sum(): left to right, binary64.
     var total = 0.0
