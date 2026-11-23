@@ -3026,7 +3026,7 @@ class OursFit(Ours):
             probe, accepted = _ours_seqfit(ml, lane, self.seq_dims)
             cls = type(probe)
             readback = dict(learning_rate=accepted["lr"], betas=[accepted["beta1"], accepted["beta2"]],
-                            eps=accepted["eps"], weight_decay=accepted["weight_decay"], d_in=d_in)
+                            eps=accepted["eps"], weight_decay=accepted["weight_decay"])
         elif MODEL_OF[lane] == "tapefit":
             probe, accepted = _ours_sequential(ml, lane)
             cls = type(probe)
