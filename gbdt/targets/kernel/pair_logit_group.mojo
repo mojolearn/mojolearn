@@ -74,6 +74,8 @@ from gbdt.data.pairs import IDN_PAIRLOGIT_GROUP
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     pinned_block_sum,
+)
+from gbdt.targets.pointwise_bodies import (
     routed_exp,
     routed_log,
 )

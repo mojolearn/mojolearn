@@ -100,44 +100,34 @@ from checks.numerics import (
 )
 
 
-@always_inline
-def routed_exp(x: Float32) -> Float32:
-    """DEVIATION 254's site call. FAST is `std.math.exp` inlined at the
-    call site, bit for bit the direct call it replaced; IDENTICAL is
-    row 12's `identical_exp`. See the deviation block above for why the
-    inlining is load-bearing."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return identical_exp(x)
-    from std.math import exp
-
-    return exp(x)
-
-
-@always_inline
-def routed_pow(x: Float32, p: Float32) -> Float32:
-    """DEVIATION 258's site call, `pow` side (Lq's `__powf` three ways:
-    score, der, der2). FAST is the `**` the sites used, inlined;
-    IDENTICAL is `identical_pow` (row 12). E2 round 1 measured gbdt_lq
-    DIVERGENT at the FIRST histogram on both AMD and NVIDIA before this."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return identical_pow(x, p)
-    return x**p
-
-
-@always_inline
-def routed_log(x: Float32) -> Float32:
-    """DEVIATION 254's site call, `log` side. Same two-arm contract as
-    `routed_exp`."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return identical_log(x)
-    from std.math import log
-
-    return log(x)
 
 #: The mode this build compiles against; see `checks/numerics.mojo`. Same
 #: declaration as the histogram kernels', and `pinned_block_sum` below is the
 #: one reader in this file.
 from checks.numerics import GLOBAL_NUMERIC_MODE as BUILD_MODE
+# the per-row math and DEVIATION 254's shims, written once for every column
+# (lane gbdt-gaps, 2026-11-23: gbdt/targets/pointwise_bodies.mojo)
+from gbdt.targets.pointwise_bodies import (
+    BODY_OBJ_EXPECTILE,
+    BODY_OBJ_HUBER,
+    BODY_OBJ_LOGLINQUANTILE,
+    BODY_OBJ_LQ,
+    BODY_OBJ_MAE,
+    BODY_OBJ_MAPE,
+    BODY_OBJ_POISSON,
+    BODY_OBJ_QUANTILE,
+    BODY_OBJ_RMSE,
+    BODY_OBJ_TWEEDIE,
+    routed_exp,
+    routed_log,
+    routed_pow,
+    target_der,
+    target_der2,
+    target_score,
+    weighted_der,
+    weighted_der2,
+    weighted_score,
+)
 
 #: the boosting loop launches this kernel at 256 threads; the reduce below
 #: needs the block size at comptime.
@@ -182,18 +172,18 @@ def pinned_block_sum[block_size: Int](value: Float32) -> Float32:
 #: dispatch `ApproximateCrossEntropy` (`pointwise_target_impl.h:333-345`),
 #: differing only in `UseBorder()` -- Logloss thresholds the target at the
 #: `GetLogLossBorder` default 0.5, CrossEntropy takes it as a probability.
-comptime OBJECTIVE_RMSE = 0
+comptime OBJECTIVE_RMSE = BODY_OBJ_RMSE
 comptime OBJECTIVE_LOGLOSS = 1
 comptime OBJECTIVE_CROSSENTROPY = 2
-comptime OBJECTIVE_QUANTILE = 3
-comptime OBJECTIVE_MAE = 4
-comptime OBJECTIVE_LOGLINQUANTILE = 5
-comptime OBJECTIVE_MAPE = 6
-comptime OBJECTIVE_POISSON = 7
-comptime OBJECTIVE_LQ = 8
-comptime OBJECTIVE_EXPECTILE = 9
-comptime OBJECTIVE_TWEEDIE = 10
-comptime OBJECTIVE_HUBER = 11
+comptime OBJECTIVE_QUANTILE = BODY_OBJ_QUANTILE
+comptime OBJECTIVE_MAE = BODY_OBJ_MAE
+comptime OBJECTIVE_LOGLINQUANTILE = BODY_OBJ_LOGLINQUANTILE
+comptime OBJECTIVE_MAPE = BODY_OBJ_MAPE
+comptime OBJECTIVE_POISSON = BODY_OBJ_POISSON
+comptime OBJECTIVE_LQ = BODY_OBJ_LQ
+comptime OBJECTIVE_EXPECTILE = BODY_OBJ_EXPECTILE
+comptime OBJECTIVE_TWEEDIE = BODY_OBJ_TWEEDIE
+comptime OBJECTIVE_HUBER = BODY_OBJ_HUBER
 
 #: MultiClass reaches NEITHER kernel in this file. It is here so that one
 #: enumeration covers every loss the trainer accepts, and so that
@@ -375,236 +365,6 @@ def objective_is_cross_entropy(objective: Int) -> Bool:
 # =========================================================================
 
 
-@always_inline
-def _target_sign(x: Float32) -> Float32:
-    """Their `sign` (`pointwise_targets.cu:193-195`).
-
-    NOTE `sign(0) == -1`, because theirs is `x > 0 ? 1.0f : -1.0f` with no
-    zero arm. Lq's `Der` multiplies by it, so an exactly-zero residual
-    takes the negative branch in their arithmetic and must here too.
-    """
-    return Float32(1.0) if x > Float32(0.0) else Float32(-1.0)
-
-
-@always_inline
-def target_score[objective: Int](
-    t: Float32, p: Float32, alpha: Float32
-) -> Float32:
-    """`TTarget::Score(target, prediction)`, per objective."""
-
-    comptime if objective == OBJECTIVE_RMSE:
-        # `TRmseTarget::Score` (`:180-182`)
-        return (t - p) * (t - p)
-    elif objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
-        # `TQuantileTarget::Score` (`:18-22`). MAE IS Quantile at
-        # alpha 0.5: `Init` sets `Alpha = 0.5` for MAE
-        # (`pointwise_target_impl.h:272-275`) and the kernel switch falls
-        # MAE through to `TQuantileTarget` (`:483-489`).
-        var val = t - p
-        var multiplier = (
-            alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
-        )
-        return multiplier * val
-    elif objective == OBJECTIVE_LOGLINQUANTILE:
-        # `TLogLinQuantileTarget::Score` (`:126-131`)
-        var val = t - routed_exp(p)
-        var multiplier = (
-            alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
-        )
-        return val * multiplier
-    elif objective == OBJECTIVE_MAPE:
-        # `TMAPETarget::Score` (`:147-149`)
-        return abs(t - p) / max(Float32(1.0), abs(t))
-    elif objective == OBJECTIVE_POISSON:
-        # `TPoissonTarget::Score` (`:164-166`), `exp(p) - t * p` in ONE
-        # rounding: every default (contract=fast) build fused the product
-        # into the subtraction, and the host oracle
-        # (`gbdt_oracle_losses._target_score`) spells the same fma. Explicit,
-        # so a contract=off build keeps CPU and GPU agreeing (lane/explicit-fma-contract-proof, 2026-09-26)
-        return identical_mul_add(-t, p, routed_exp(p))
-    elif objective == OBJECTIVE_LQ:
-        # `TLqTarget::Score` (`:204-207`); their `__powf`
-        var abs_loss = abs(t - p)
-        return routed_pow(abs_loss, alpha)
-    elif objective == OBJECTIVE_EXPECTILE:
-        # `TExpectileTarget::Score` (`:102-106`)
-        var val = t - p
-        var multiplier = (
-            alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
-        )
-        return multiplier * val * val
-    elif objective == OBJECTIVE_TWEEDIE:
-        # `TTweedieTarget::Score` (`:40-44`), `alpha` IS their
-        # `VariancePower` -- see the deviation block on the kernel.
-        var val = (
-            -t
-            * routed_exp((Float32(1.0) - alpha) * p)
-            / (Float32(1.0) - alpha)
-        )
-        var delta = routed_exp((Float32(2.0) - alpha) * p) / (
-            Float32(2.0) - alpha
-        )
-        return val + delta
-    elif objective == OBJECTIVE_HUBER:
-        # `THuberTarget::Score` (`:68-75`), `alpha` is their `Delta`
-        var mismatch = abs(t - p)
-        if mismatch < alpha:
-            return Float32(0.5) * mismatch * mismatch
-        # `mismatch - 0.5 * alpha` in ONE rounding, the default build's fusion
-        return alpha * identical_mul_add(Float32(-0.5), alpha, mismatch)
-    else:
-        return Float32(0.0)
-
-
-@always_inline
-def target_der[objective: Int](
-    t: Float32, p: Float32, alpha: Float32
-) -> Float32:
-    """`TTarget::Der(target, prediction)`, per objective.
-
-    SIGN CONVENTION, theirs: `Der` is the NEGATIVE gradient of the loss --
-    `TRmseTarget::Der` is `target - prediction` (`:184-186`), not
-    `prediction - target`. Everything downstream ascends. Each arm below
-    keeps their spelling, so the convention is inherited rather than
-    re-decided.
-    """
-
-    comptime if objective == OBJECTIVE_RMSE:
-        # `:184-186`
-        return t - p
-    elif objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
-        # `:24-27`
-        var val = t - p
-        return alpha if val > Float32(0.0) else -(Float32(1.0) - alpha)
-    elif objective == OBJECTIVE_LOGLINQUANTILE:
-        # `:133-136`
-        var exp_pred = routed_exp(p)
-        if t - exp_pred > Float32(0.0):
-            return alpha * exp_pred
-        return -(Float32(1.0) - alpha) * exp_pred
-    elif objective == OBJECTIVE_MAPE:
-        # `:151-154`
-        if t - p > Float32(0.0):
-            return Float32(1.0) / max(Float32(1.0), abs(t))
-        return Float32(-1.0) / max(Float32(1.0), abs(t))
-    elif objective == OBJECTIVE_POISSON:
-        # `:168-171`
-        return t - routed_exp(p)
-    elif objective == OBJECTIVE_LQ:
-        # `:209-213`
-        var abs_loss = abs(t - p)
-        var abs_loss_q = routed_pow(abs_loss, alpha - Float32(1.0))
-        return alpha * _target_sign(t - p) * abs_loss_q
-    elif objective == OBJECTIVE_EXPECTILE:
-        # `:108-112`
-        var val = t - p
-        var multiplier = (
-            alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
-        )
-        return Float32(2.0) * multiplier * val
-    elif objective == OBJECTIVE_TWEEDIE:
-        # `:46-50`, `t * e1 - e2` in ONE rounding (the default build's
-        # fusion, written out; the host oracle spells the same fma)
-        var e1 = routed_exp((Float32(1.0) - alpha) * p)
-        var delta = routed_exp((Float32(2.0) - alpha) * p)
-        return identical_mul_add(t, e1, -delta)
-    elif objective == OBJECTIVE_HUBER:
-        # `:77-84`
-        var diff = t - p
-        if abs(diff) < alpha:
-            return diff
-        return alpha if diff > Float32(0.0) else -alpha
-    else:
-        return Float32(0.0)
-
-
-@always_inline
-def target_der2[objective: Int](
-    t: Float32, p: Float32, alpha: Float32
-) -> Float32:
-    """`TTarget::Der2(target, prediction)`, per objective.
-
-    FOUR OF THESE RETURN A HARD ZERO -- Quantile, MAE, MAPE and
-    LogLinQuantile (`:29-31`, `:138-140`, `:156-158`). That is not an
-    omission: their second derivative is zero almost everywhere, which is
-    exactly why `catboost_options.cpp:113-124` gives those losses a
-    GRADIENT default and `:289-300` upgrades three of them to EXACT. A
-    Newton step on them divides by `lambda` alone.
-    """
-
-    comptime if objective == OBJECTIVE_RMSE:
-        # `:188-190`
-        return Float32(1.0)
-    elif (
-        objective == OBJECTIVE_QUANTILE
-        or objective == OBJECTIVE_MAE
-        or objective == OBJECTIVE_LOGLINQUANTILE
-        or objective == OBJECTIVE_MAPE
-    ):
-        return Float32(0.0)
-    elif objective == OBJECTIVE_POISSON:
-        # `:173-175`
-        return routed_exp(p)
-    elif objective == OBJECTIVE_LQ:
-        # `:215-218`: BELOW q = 2 their second derivative is the constant
-        # 1, not the true one. Copied, because it is what their Newton
-        # step divides by.
-        var abs_loss = abs(t - p)
-        if alpha >= Float32(2.0):
-            return (
-                alpha
-                * (alpha - Float32(1.0))
-                * routed_pow(abs_loss, alpha - Float32(2.0))
-            )
-        return Float32(1.0)
-    elif objective == OBJECTIVE_EXPECTILE:
-        # `:114-118`
-        var val = t - p
-        var multiplier = (
-            alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
-        )
-        return Float32(2.0) * multiplier
-    elif objective == OBJECTIVE_TWEEDIE:
-        # `:52-56`
-        var der2 = (
-            t
-            * routed_exp((Float32(1.0) - alpha) * p)
-            * (Float32(1.0) - alpha)
-        )
-        # `-der2 + e2 * (2 - alpha)` in ONE rounding on the SECOND product,
-        # the one the default build fused (the host oracle spells the same)
-        var e2 = routed_exp((Float32(2.0) - alpha) * p)
-        return identical_mul_add(e2, Float32(2.0) - alpha, -der2)
-    elif objective == OBJECTIVE_HUBER:
-        # `:86-93`. Theirs writes `-HUBER_DER2` where
-        # `HUBER_DER2 = -1.0` (`:62`), i.e. 1.0; the double negation is
-        # kept so a reader diffing against their file finds the same
-        # expression.
-        #
-        # THE ZERO ARM IS LOAD-BEARING AND THEIRS. Huber's default is
-        # Newton at one iteration (`catboost_options.cpp:187-192`) and
-        # the cursor starts at 0 (Huber is not on the boost-from-average
-        # list, `train_lib/options_helper.cpp:362-368`), so a target
-        # whose every |value| exceeds delta puts EVERY row in this arm on
-        # tree 0: the leaf Hessian is `0 + l2` (`pointwise_oracle.cpp:
-        # 86-89`) and the leaf is `sum(+-delta) / l2` -- the
-        # order-of-n overshoot that CatBoost CPU 1.2.10 reproduces on
-        # the E2 fixture (predictions in [-786, 669] for a target in
-        # [3.7, 10.6]). Measured 2026-08-23; see DEVIATION 257
-        # (`gbdt/options/catboost_options.mojo`) for the whole chain and
-        # for the one piece of it that WAS ours. Not an implementation defect; do
-        # not "fix" this arm.
-        var diff = t - p
-        if abs(diff) < alpha:
-            return -Float32(HUBER_DER2)
-        return Float32(0.0)
-    else:
-        return Float32(0.0)
-
-
-#: `THuberTarget::HUBER_DER2` (`pointwise_targets.cu:62`). Their constant
-#: is negative and every use negates it.
-comptime HUBER_DER2 = -1.0
 
 
 def pointwise_target_kernel[
@@ -773,7 +533,7 @@ def pointwise_target_kernel[
     # each derived value is flushed AT DERIVATION -- one policy for
     # every consumer (estimation stores, search stores, magnitudes).
     # Every `ftz` is a comptime no-op under FAST.
-    var der = ftz(weight * target_der[objective](relev, val, alpha))
+    var der = weighted_der[objective](relev, val, alpha, weight)
 
     # what SEARCH plane 0 holds, per `second_der_as_weights` -- see the
     # deviation block. The der2 arm is their `der2[i] = weight *
@@ -782,7 +542,7 @@ def pointwise_target_kernel[
 
     comptime if second_der_as_weights:
         # DEVIATION 256 / row 10, same flush-at-derivation policy.
-        plane0 = ftz(weight * target_der2[objective](relev, val, alpha))
+        plane0 = weighted_der2[objective](relev, val, alpha, weight)
 
     if in_range:
 
@@ -791,8 +551,7 @@ def pointwise_target_kernel[
             # DEVIATION 256 / row 10: the Newton Hessian plane, same
             # seam, same flush.
             stats.unsafe_store(
-                size + i,
-                ftz(weight * target_der2[objective](relev, val, alpha)),
+                size + i, weighted_der2[objective](relev, val, alpha, weight)
             )
         else:
             stats.unsafe_store(i, plane0)
@@ -823,7 +582,7 @@ def pointwise_target_kernel[
     if compute_fv != Int32(0):
         var score = Float32(0.0)
         if in_range:
-            score = -weight * target_score[objective](relev, val, alpha)
+            score = weighted_score[objective](relev, val, alpha, weight)
         var total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)

@@ -1,0 +1,15 @@
+diff --git a/gbdt/host/gbdt_oracle_ordered.mojo b/gbdt/host/gbdt_oracle_ordered.mojo
+index 2b53e56914..bf7bb27865 100644
+--- a/gbdt/host/gbdt_oracle_ordered.mojo
++++ b/gbdt/host/gbdt_oracle_ordered.mojo
+@@ -3230,6 +3230,10 @@ def gbdt_ordered_host_fit(
+     var lp_bins = List[Int](length=n if dep_on else 1, fill=0)
+     var bounds = _ordered_folds(n, opts.fold_len_multiplier, opts.min_fold_size)
+     var n_folds = len(bounds) // 2
++    # SABOTAGE (coverage-gbdt-host_ordered_prefix): every fold's estimation
++    # prefix ends one position early (an Ordered prefix index off by one)
++    for f in range(n_folds):
++        bounds[2 * f] -= 1
+     var fold_count = 2 * n_folds
+     var fold_bits = _int_log2_floor_ceil(fold_count)
+     if fold_bits + max_depth >= 32:

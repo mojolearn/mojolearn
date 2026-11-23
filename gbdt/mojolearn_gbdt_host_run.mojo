@@ -162,10 +162,11 @@ def _refuse(what: String) raises:
         + "; the gbdt host binding trains the declared GBDT lanes"
         " only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise"
         " and multiclass losses, Depthwise with Logloss and Cosine,"
-        " Lossguide with Logloss and NewtonL2 or NewtonCosine; no sample"
-        " weights outside Logloss; an eval set and the"
-        " overfitting detector on SymmetricTree with Logloss and on the"
-        " Ordered and pointwise-searcher arms only; one-hot and CTR"
+        " Lossguide with Logloss and NewtonL2 or NewtonCosine; sample"
+        " weights on numeric columns outside the multi-output losses,"
+        " QueryRMSE and Exact leaves; an eval set and the overfitting"
+        " detector with Logloss and RMSE on every tree shape and on the"
+        " Ordered and pointwise-searcher arms; one-hot and CTR"
         " categorical columns under SymmetricTree with Logloss or RMSE), see"
         " gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it"
     )
@@ -1138,13 +1139,29 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
     # Plain numeric Logloss already threads row weights through search,
     # leaf estimation and learn loss. Sample weights use that same owner;
-    # class weights multiply them as in train.mojo. The non-symmetric
-    # owner retains its Newton/no-bootstrap restriction below.
+    # class weights multiply them as in train.mojo.
     var binary_sample_weights = (
         n_weights != 0 and loss == String("Logloss") and n_flags == 0
     )
-    if n_weights != 0 and not binary_sample_weights:
-        _refuse("sample_weight outside Plain Logloss without categorical columns")
+    # the device's one `weights` column for every other numeric fit (lane
+    # gbdt-gaps, 2026-11-23): RMSE on both tree shapes, Logloss on
+    # Depthwise and Lossguide under every leaf method and bootstrap, the
+    # pointwise losses and YetiRank / PairLogit on the greedy symmetric
+    # searcher (gbdt/host/gbdt_oracle_losses.mojo threads them through the
+    # search pass, the leaf estimate and the learn loss). Refused still:
+    # categorical columns (the CTR tables' weighted counts are not
+    # restated), the multi-output losses, QueryRMSE (its weighted query
+    # means), the pointwise searcher's grouped arm, and Exact leaves (the
+    # weighted quantile), each by name below or in its owner.
+    var sample_weights_ok = n_weights != 0 and n_flags == 0 and not is_multi and (
+        loss == String("Logloss") or is_rmse
+        or (is_pointwise and not use_pointwise and pw_objective != GBDT_OBJ_QUERY_RMSE)
+    )
+    if n_weights != 0 and not sample_weights_ok:
+        _refuse(
+            "sample_weight with categorical columns, a multi-output loss,"
+            " QueryRMSE or the grouped pointwise searcher"
+        )
     var binary_class_weights = (
         n_class_weights != 0 and loss == String("Logloss") and n_flags == 0
     )
@@ -1168,21 +1185,24 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # for that fit ONLY. Every other Plain arm still refuses by name: their
     # test cursor runs the same four pieces over a different loss kernel and
     # a different model shape, and neither is restated.
+    # lane gbdt-gaps (2026-11-23): the same arm on the RMSE fit of that loop
+    # (numeric, one-hot and CTR columns) and on the non-symmetric driver
+    # (gbdt_oracle_depthwise.mojo, Logloss and RMSE)
     var eval_arm_ok = (
-        grow_code == 0 and loss == String("Logloss") and not is_pointwise
-        and not is_multi and not is_rmse
+        (loss == String("Logloss") or is_rmse) and not is_pointwise
+        and not is_multi
     )
     if n_eval_rows != 0 and not eval_arm_ok:
         _refuse(
-            "eval_set outside SymmetricTree with Logloss (the held-out arm"
-            " of gbdt/host/gbdt_oracle_eval.mojo covers that fit only)"
+            "eval_set outside Logloss and RMSE (the held-out arm of"
+            " gbdt/host/gbdt_oracle_eval.mojo covers those fits only)"
         )
     var od = load_overfitting_detector_options(od_type, od_pvalue, od_wait)
     var od_kind = od.od_type
     if od_kind != OD_NONE and not eval_arm_ok:
         _refuse(
             "the overfitting detector (od_type, od_pvalue, od_wait) outside"
-            " SymmetricTree with Logloss"
+            " Logloss and RMSE"
         )
     if od_kind != OD_NONE and n_eval_rows == 0:
         raise Error(
@@ -1366,6 +1386,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             leaf_method, leaf_iterations, bootstrap_type,
             Float32(params.f(19)), Float32(params.f(18)),
         )
+        if n_weights != 0 and pw_loss.method == GBDT_LEAF_EXACT:
+            _refuse(
+                "sample_weight with Exact leaves (the weighted quantile of"
+                " compute_exact_approx is not restated on the host)"
+            )
     # the symmetric stochastic arm's bootstrap, `train`'s resolution
     # (`gbdt/train.mojo`), the Ordered arm's words above
     var sym_boot_kind = -1
@@ -1424,6 +1449,12 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         row_weights = gbdt_host_binary_row_weights(
             y, n_rows, class_weights, read_f32(weights_address, n_weights)
         )
+    elif sample_weights_ok:
+        # the sample word as given (no class weights apply), negative
+        # weights refused at the first such row, as `train` does
+        row_weights = gbdt_host_binary_row_weights(
+            y, n_rows, List[Float32](), read_f32(weights_address, n_weights)
+        )
     # the symmetric loop's objective and starting constant
     # (gbdt_oracle.mojo::gbdt_host_boost): RMSE's
     # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:1597-1600`),
@@ -1433,7 +1464,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         boost_objective = GBDT_BOOST_RMSE
     var boost_start = Float64(0.0)
     if is_rmse and grow_code == 0 and boost_from_average != 0:
-        boost_start = _rmse_starting_approx(y, n_rows)
+        boost_start = _rmse_starting_approx(y, n_rows, row_weights)
     if is_multi:
         # gbdt/host/gbdt_oracle_multiclass.mojo
         var multi_objective = GBDT_OBJ_MULTICLASS_OVA
@@ -1460,13 +1491,13 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             if pw_objective == GBDT_OBJ_MAPE:
                 pw_start = Float64(
                     calculate_optimal_const_approx_for_mape(
-                        y, List[Float32](), False
+                        y, row_weights, len(row_weights) > 0
                     )
                 )
             else:
                 pw_start = Float64(
                     calculate_weighted_target_quantile(
-                        y, List[Float32](), False,
+                        y, row_weights, len(row_weights) > 0,
                         0.5 if pw_objective == GBDT_OBJ_MAE else Float64(
                             pw_loss.estimator_alpha
                         ),
@@ -1488,7 +1519,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             pw_model = gbdt_losses_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
                 host_pair_winners, host_pair_losers, host_pair_weights,
-                pw_start, random_strength,
+                pw_start, random_strength, row_weights,
             )
         losses = pw_model.losses.copy()
         best_iteration = pw_model.best_iteration
@@ -1498,15 +1529,20 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         # the numeric RMSE fit: the one symmetric loop at GBDT_BOOST_RMSE
         # (gbdt_oracle.mojo::gbdt_host_boost; the twin loop
         # gbdt_rmse_host_fit is deleted, lane pv-gbdt-cpu-cat)
+        var ev = _gbdt_host_eval_arm(
+            eval_x_address, eval_y_address, n_eval_rows, n_features,
+            od_kind, od.auto_stop_p_value, od.iterations_wait,
+            use_best_model, best_model_min_trees,
+        )
         var r = gbdt_host_fit_eval(
             x, y, n_rows, n_features, p, List[Bool](),
             sym_boot_kind, sym_boot_param, random_strength,
-            GbdtHostEval.none(), List[Float32](), GBDT_BOOST_RMSE,
-            boost_start,
+            ev^, row_weights, GBDT_BOOST_RMSE, boost_start,
         )
         losses = r.model.losses.copy()
-        best_iteration = r.model.best_iteration
-        stopped_early = r.model.stopped_early
+        best_iteration = r.eval.best_iteration
+        stopped_early = r.eval.stopped_early
+        test_losses = r.eval.test_losses.copy()
         text = gbdt_text_with_bias(
             gbdt_host_model_text(r.model), len(r.model.losses), boost_start
         )
@@ -1595,14 +1631,22 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         # (`gbdt/train.mojo:1597-1600`), written as the model's bias
         var ns_start = Float64(0.0)
         if is_rmse and boost_from_average != 0:
-            ns_start = _rmse_starting_approx(y, n_rows)
+            ns_start = _rmse_starting_approx(y, n_rows, row_weights)
+        var ev = _gbdt_host_eval_arm(
+            eval_x_address, eval_y_address, n_eval_rows, n_features,
+            od_kind, od.auto_stop_p_value, od.iterations_wait,
+            use_best_model, best_model_min_trees,
+        )
         var ns_model = gbdt_host_fit_non_symmetric(
-            x, y, n_rows, n_features, tp, ns_start, row_weights
+            x, y, n_rows, n_features, tp, ev^, ns_start, row_weights
         )
         text = gbdt_text_with_bias(
             gbdt_host_ns_model_text(ns_model), len(ns_model.losses), ns_start
         )
         losses = ns_model.losses.copy()
+        best_iteration = ns_model.best_iteration
+        stopped_early = ns_model.stopped_early
+        test_losses = ns_model.test_losses.copy()
 
     return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
 

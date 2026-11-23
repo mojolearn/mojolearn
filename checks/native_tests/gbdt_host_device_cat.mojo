@@ -34,6 +34,12 @@ Parallel plan: the host fits are independent and run across the host cores
 first (one unit each); the device fits then run one at a time, because each
 owns the one GPU for its whole graph (as `gbdt_public_fits`'s device column).
 Device column only: the CPU build has no device arm.
+
+`test_gaps_host_text_is_device_text` (lane gbdt-gaps, 2026-11-23): sample
+weights on RMSE, Poisson, Tweedie, Depthwise, Lossguide, YetiRank and
+generated-pair PairLogit, and eval sets (the Iter detector and
+use_best_model) on the symmetric RMSE fit and on Depthwise and Lossguide,
+which the CPU column refused until that lane.
 """
 from std.memory import UnsafePointer
 
@@ -349,6 +355,195 @@ def test_rank_host_text_is_device_text() raises:
     if count > 0 or host_error.byte_length() > 0:
         raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
                     + ("gbdt_host_device_cat rank device: " + String(count) + " of " + String(RANK_UNITS)
+                       + " cases failed" + failed if count > 0 else ""))
+
+
+comptime GAPS_ROWS = 1500
+comptime GAPS_TREES = 10
+#: NOT a power of two (see the module docstring)
+comptime GAPS_RATE = 0.1
+comptime GAPS_UNITS = 14
+
+
+def _gaps_uses_eval(unit: Int) -> Bool:
+    return unit >= 11
+
+
+def _gaps_inputs(unit: Int) -> GbdtInputs:
+    """Units 0-8 and 11-13: four numeric columns, a regression target
+    (positive for Poisson and Tweedie, 0/1 for the Logloss units); units
+    9-10 the ranking fixture. Every unit but the eval units carries hashed
+    sample weights in [0.25, 4); the eval units carry a held-out slice of
+    the same rule with hashed target noise (every fifth label flipped for
+    Logloss)."""
+    if unit == 9 or unit == 10:
+        var r = _rank_inputs(0)
+        for i in range(r.n):  # driver-loop: over the fixture's rows (fixture construction)
+            r.weights.append(Float32(0.25) + Float32(3.75) * _unit01(i, 60))
+        return r^
+    var logloss = _gaps_logloss(unit)
+    var positive = unit == 3 or unit == 4
+    var n = GAPS_ROWS
+    var x = List[Float32](capacity=4 * n)
+    for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+        for r in range(n):  # driver-loop: over the fixture's rows
+            x.append(_unit01(r, 40 + j) * Float32(4.0) - Float32(2.0))
+    var y = List[Float32](capacity=n)
+    for r in range(n):  # driver-loop: over the fixture's rows
+        var v = (x[r] - Float32(0.5) * x[n + r] + Float32(0.25) * x[2 * n + r] * x[3 * n + r]
+                 + Float32(0.4) * (_unit01(r, 50) - Float32(0.5)))
+        if logloss:
+            y.append(Float32(1.0) if v > Float32(0.0) else Float32(0.0))
+        elif positive:
+            y.append(abs(v) + Float32(1.0))
+        else:
+            y.append(v)
+    var inp = GbdtInputs(x^, n, 4, y^)
+    if _gaps_uses_eval(unit):
+        var ne = n // 2
+        for j in range(4):  # driver-loop: over the held-out columns
+            for r in range(ne):  # driver-loop: over the held-out rows
+                inp.eval_x.append(_unit01(r, 70 + j) * Float32(4.0) - Float32(2.0))
+        for r in range(ne):  # driver-loop: over the held-out rows
+            var v = (inp.eval_x[r] - Float32(0.5) * inp.eval_x[ne + r]
+                     + Float32(0.25) * inp.eval_x[2 * ne + r] * inp.eval_x[3 * ne + r])
+            if logloss:
+                var c = Float32(1.0) if v > Float32(0.0) else Float32(0.0)
+                inp.eval_y.append(Float32(1.0) - c if r % 5 == 0 else c)
+            else:
+                inp.eval_y.append(v + Float32(6.0) * (_unit01(r, 80) - Float32(0.5)))
+    else:
+        for r in range(n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 60))
+    return inp^
+
+
+def _gaps_logloss(unit: Int) -> Bool:
+    return unit == 6 or unit == 8 or unit == 12
+
+
+def _gaps_opts(unit: Int) raises -> GbdtOpts:
+    """Lane gbdt-gaps (2026-11-23): what the CPU column refused until then.
+    Sample weights: 0 RMSE deterministic, 1 RMSE Bayesian + noise +
+    boost_from_average, 2 RMSE Bernoulli, 3 Poisson, 4 Tweedie (1.5), 5
+    Depthwise RMSE, 6 Depthwise Logloss Newton x10 under Bernoulli, 7 Lossguide RMSE
+    NewtonL2 Bernoulli, 8 Lossguide Logloss NewtonCosine with Gradient
+    leaves x2 under the Bayesian bootstrap, 9 YetiRank, 10 PairLogit on
+    generated pairs. Eval sets with the Iter detector and use_best_model at rate 1.0:
+    11 symmetric RMSE, 12 Depthwise Logloss, 13 Lossguide RMSE."""
+    var loss = String("RMSE")
+    if unit == 3:
+        loss = String("Poisson")
+    elif unit == 4:
+        loss = String("Tweedie")
+    elif _gaps_logloss(unit):
+        loss = String("Logloss")
+    elif unit == 9:
+        loss = String("YetiRank")
+    elif unit == 10:
+        loss = String("PairLogit")
+    elif unit < 0 or unit >= GAPS_UNITS:
+        raise Error("gbdt_host_device_cat gaps: no unit " + String(unit))
+    var o = GbdtOpts(loss, GAPS_TREES, 4)
+    o.learning_rate = GAPS_RATE
+    o.l2_leaf_reg = 3.0
+    o.leaf_method = "Newton"
+    o.leaf_iterations = 1
+    o.random_state = 7
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    if loss == String("RMSE"):
+        o.boost_from_average = 0
+    if unit == 1:
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.random_strength = 1.0
+        o.boost_from_average = 1
+    elif unit == 2:
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif unit == 4:
+        o.loss_variance_power = 1.5
+    elif unit == 5:
+        o.grow_policy = "Depthwise"
+        o.score_function = "Cosine"
+        o.boost_from_average = 1
+    elif unit == 6:
+        o.grow_policy = "Depthwise"
+        o.score_function = "Cosine"
+        o.leaf_iterations = 10
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif unit == 7:
+        o.grow_policy = "Lossguide"
+        o.score_function = "NewtonL2"
+        o.max_leaves = 16
+        o.min_data_in_leaf = 4
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif unit == 8:
+        o.grow_policy = "Lossguide"
+        o.score_function = "NewtonCosine"
+        o.max_leaves = 16
+        o.min_data_in_leaf = 4
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 2
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+    if _gaps_uses_eval(unit):
+        o.n_estimators = 30
+        o.max_depth = 6
+        o.learning_rate = 1.0
+        o.od_type = "Iter"
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+        if unit == 12:
+            o.grow_policy = "Depthwise"
+            o.score_function = "Cosine"
+        elif unit == 13:
+            o.grow_policy = "Lossguide"
+            o.score_function = "NewtonL2"
+            o.max_leaves = 16
+            o.min_data_in_leaf = 4
+    return o^
+
+
+def test_gaps_host_text_is_device_text() raises:
+    """The weighted and held-out units (lane gbdt-gaps): every host fit across the cores first, then one device
+    graph at a time."""
+    var host_texts = List[String](length=GAPS_UNITS, fill=String(""))
+    var texts_addr = Int(host_texts.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var outcome = fit[_HostFit](_gaps_opts(unit), _gaps_inputs(unit))
+        p[unit] = outcome.text.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat gaps host", GAPS_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(GAPS_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_gaps_opts(unit), _gaps_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat gaps unit " + String(unit) + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat gaps device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat gaps device: " + String(count) + " of " + String(GAPS_UNITS)
                        + " cases failed" + failed if count > 0 else ""))
 
 
