@@ -3568,6 +3568,7 @@ def _fit_multi(slot: _SlotPtr, call: _CallPtr) raises:
 
         host_parallelize(_given_column, outputs)
         _ = len(given_at)
+    _ = len(columns)  # keep-alive: _column read it through columns_at
     var run = _set_of(slot, call[].x.data, n, d, MEMBER_I32 if classifier else MEMBER_F32)
     for j in range(outputs):  # driver-loop: over the outputs (admission into the set, once each)
         _add(slot, run, j, counts[j], Int(slot[].targets[j].unsafe_ptr()), weights, 0, 0)

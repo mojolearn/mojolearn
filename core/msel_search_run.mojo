@@ -1794,6 +1794,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     res.stds = res.scorer_stds[r].copy()
     res.ranks = res.scorer_ranks[r].copy()
     res.train_means = res.scorer_train_means[r].copy()
+    _ = len(tr_at)  # keep-alive: the fold-mark closures read it through tr_at_at / mtr_at
     res.best = msel_rank_best(res.ranks)
     res.best_score = res.means[res.best]
     # 6. The refit of the best on every row (a set of one).

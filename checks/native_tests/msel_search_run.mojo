@@ -1758,9 +1758,9 @@ def check_multi_lacking_helpers() raises:
     _ = len(held)
     _ = len(src)
     _ = len(rows)
+    _ = len(dsts)
     _ = len(b0)
     _ = len(b1)
-    _ = len(dsts)
     _ = len(counts)
 
 def test_msel_search_run() raises:
