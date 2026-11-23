@@ -511,6 +511,17 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   "It would be easier to verify separately" is not a reason.
 - A report's "left" or "owed" list is a work list for the same session, not a record. The orchestrator opens a lane
   for each line of it or says which real reason blocks it.
+- **One merge, one gate, per wave (Andrew, 2026-11-23: "are we still doing things piecemeal instead of all at once
+  to avoid reduplicating work?").** The sequence is fixed: (1) lanes fix everything OUTSIDE integration, code only,
+  until every lane of the wave has reported and every "left" line has its lane done; (2) ALL of them are merged into
+  the integration branch in ONE step; (3) ONE compile and ONE gated run there, failures go back to their lanes, the
+  fixes come back together, and the gate is run again only on what changed plus one final full run; (4) integration
+  moves to main whole; (5) only then the next stage (A/B builds, the box session, verification, release). The
+  orchestrator does NOT hand the integrator a branch as each lane finishes, does not start a gated run while lanes
+  of the same wave are still writing, and does not start the next stage's builds from a head that open lanes will
+  change. A gated run that is repeated because a branch arrived after it started is a defect of the orchestration.
+  The one exception is a discovery run whose purpose is to find unknown failures on a box the wave is not using
+  (the GPU run of main while lanes write); its findings join the same wave.
 
 ### Lanes
 

@@ -1079,3 +1079,5 @@ FORGET ABOUT IT." Removed from AGENTS.md (parts 3 and 8), verbatim:
 >   and its prior, not only the rows a fix changed.
 
 > of an opponent cell. (The paper's 0.8.55 comparison and the opponent boards are a release-time question for Andrew.)
+
+- 2026-11-23 (Andrew): "Nothing piecemeal" gains "One merge, one gate, per wave": lanes fix outside integration, all merge at once, one gate, integration to main, then A/B, verification, release. Reason: on 2026-11-23 the orchestrator fed the integrator branches one at a time and the gated run was repeated four times on one wave.
