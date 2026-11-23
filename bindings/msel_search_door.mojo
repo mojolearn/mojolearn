@@ -701,14 +701,16 @@ def _mean_test(estimator: PythonObject, x: PythonObject, y: PythonObject, folds:
     THE ONE TYPED SEARCH RUN (lane mf-msel5c): the folds are the carrier
     search's given folds (`msel_cv_by_search`, error_score nan as the door's
     units score them), fitted and scored by the search kind's RUN; the
-    door's units only for what that kind does not take, and for resident
-    fold rows (as the deleted native member units left those)."""
+    door's units only for what that kind does not take (resident fold rows
+    included, lane mf-tail5: the carrier reads their scope)."""
     var one = List[List[Float64]]()
-    # Host fold rows only: resident rows (`rows.dev`) keep their own scope and
-    # the units' DeviceRows route, as the deleted member units left them.
-    var by = PythonObject(None)
-    if not rows.dev:
-        by = msel_cv_by_search(estimator, x, y, folds, scoring, PythonObject(jobs), PythonObject(_nan()), False,
+    # (lane mf-tail5) Resident fold rows too (`rows.dev`): `rows` opened the
+    # same resident scope the carrier opens (`msel_rows_scope_open`), and the
+    # carrier's RUN reads it (its resident route: the whole X plus each
+    # side's rows, X pinned once in that scope for every permutation), so
+    # the permutations' folds run in the typed RUN; the units only for what
+    # the kind does not take.
+    var by = msel_cv_by_search(estimator, x, y, folds, scoring, PythonObject(jobs), PythonObject(_nan()), False,
                                False, PythonObject(None), False, context)
     if by is not None:
         var te = by["test"][0]

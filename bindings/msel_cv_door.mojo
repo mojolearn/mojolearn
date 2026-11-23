@@ -10,6 +10,8 @@
 # its fit / score / predict and a scorer are the caller's objects, called
 # as the Python called them. Same helpers, same arguments, same order: the
 # folds, the gathered rows and every score are unchanged.
+from bindings.member_scope_door import member_scope_word
+from core.member_abi import MEMBER_SCOPE_NONE
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
@@ -1140,8 +1142,13 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
                                                      holder, PythonObject(outputs), xa.shape[0]))
     # THE RESIDENT FOLD ROWS, as `msel_search_fit` reads them (the member's
     # own device; the carrier names no `device`).
+    # (lane mf-tail5) Inside an enclosing scope of the same kind (the
+    # permutation test's resident fold rows, `MselFoldRows` with `dev`, opened
+    # by `msel_rows_scope_open` too) the RUN reads THAT scope: X stays
+    # resident once across every permutation's carrier, no second scope.
     var scope = PythonObject(None)
-    if msel_device_rows_ok(estimator, scoring, context) and not msel_member_host_folds(fields, b, context):
+    if (msel_device_rows_ok(estimator, scoring, context) and not msel_member_host_folds(fields, b, context)
+            and member_scope_word(context["family_msel_rows_context"]) == MEMBER_SCOPE_NONE):
         scope = msel_rows_scope_open(context)
     var fitted = False
     try:
