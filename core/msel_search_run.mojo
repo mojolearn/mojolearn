@@ -50,6 +50,21 @@ The RUN, in the door's order (bindings/msel_search_door.mojo
      plan fitted on every row (a set of one); its state is the result's
      `best_state`, owned by the caller. Every fold state was released
      (scikit-learn keeps none).
+THE RESIDENT ROUTE (lane mf-search5; `msel_search_rows`): when the caller
+hands a resident scope and X's pin (`scope`, `pin`: the search's own fit door
+opens the scope the old DeviceRows units opened, and the boundary reads it
+with the search's own `device`), a candidate whose member reads row numbers
+(`MEMBER_CAN_ROW_INDEX`) takes EVERY side, the fit's and each score's, as the
+whole X plus the side's int32 rows: no host gather, and its device gathers
+the rows out of one resident base (the old route's device take). The pin is
+offered on those calls only for the candidates of ONE image (the first
+candidate that keeps X resident, `MEMBER_CAN_SCOPE`, and every candidate of
+the same family, kind and route): their calls share one scope cache, which
+publishes X at most once, so the caller's ONE reference covers the whole
+fit. The moment a cache takes it, the RUN writes the token at `kept_at`
+(THE PIN RULE, core/member_abi.mojo). Without a scope every side is the
+gathered block, as before.
+
 The fit notices of every unit (in unit order) and of the refit are handed
 over for the caller's PACK; each unit's words hold, after its fit notices,
 the warnings its scores' public metrics raise (lane mf-score5: test side,
@@ -70,9 +85,10 @@ from core.msel_scorer_run import (
     SCORER_MEMBER, SCORER_ACCURACY,
 )
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_outputs_of,
+    MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
-    MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
+    MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
 )
 from core.member_notices import member_notices_take
 from core.member_set_run import (
@@ -85,6 +101,13 @@ from xtrees.glue_calls import xt_device_folds, xt_gather_f32
 #: scorer code of core/msel_scorer_run.mojo ('accuracy' is 1).
 comptime SEARCH_SCORE_MEMBER = SCORER_MEMBER
 comptime SEARCH_SCORE_ACCURACY = SCORER_ACCURACY
+
+#: `msel_search_rows` per candidate (THE RESIDENT ROUTE, module note): every
+#: side a gathered host block; every side the whole X plus its rows (no pin);
+#: the same with X's pin offered (the one image that keeps X resident).
+comptime SEARCH_ROWS_GATHERED = 0
+comptime SEARCH_ROWS_INDEXED = 1
+comptime SEARCH_ROWS_RESIDENT = 2
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -137,6 +160,13 @@ struct MselSearchPlan(Movable):
     var fold_train_n: List[Int]
     var fold_test_at: List[Int]
     var fold_test_n: List[Int]
+    # THE RESIDENT ROUTE (lane mf-search5, module note): the caller's scope
+    # handle word (MEMBER_SCOPE_NONE: none), X's pin token (0: none; ONE
+    # reference the caller took) and the address of the Int the RUN writes
+    # the token into when a cache takes that reference (0: nowhere).
+    var scope: Int
+    var pin: Int
+    var kept_at: Int
 
     def __init__(out self, var plans: List[MemberPlan], var masks: List[Int], x: Int, rows: Int, cols: Int, y: Int,
                  classes: Int, n_splits: Int, glue: EntryRef, metric: MetricRoute):
@@ -166,6 +196,9 @@ struct MselSearchPlan(Movable):
         self.fold_train_n = List[Int]()
         self.fold_test_at = List[Int]()
         self.fold_test_n = List[Int]()
+        self.scope = MEMBER_SCOPE_NONE
+        self.pin = 0
+        self.kept_at = 0
 
 
 struct MselSearchResult(Movable):
@@ -249,36 +282,86 @@ def _gather_words(src: Int, rows: Int, count: Int, width: Int, dst: Int):
             d[i * width + c] = s[at + c]
 
 
-def _member_score(run_at: Int, v: Int, x: Int, y: Int, count: Int, cols: Int, y_dtype: Int,
-                  y_cols: Int) raises -> Float64:
-    """Unit `v` of the wave on one side's gathered block: the member's own
-    score (scoring None)."""
+@fieldwise_init
+struct _Side(ImplicitlyCopyable, Movable):
+    """Where one side's rows are (THE RESIDENT ROUTE, module note): `index`
+    0, the gathered block `x` / `y` of `count` rows; else the whole X
+    (`base_x`, `base_rows` rows) and target (`base_y`) with the side's
+    `count` int32 row numbers at `index`, X's pin `pin` offered (0: none) in
+    the caller's `scope`. `took`: the address of the byte written 1 when a
+    cache took the pin's reference."""
+    var x: Int
+    var y: Int
+    var count: Int
+    var index: Int
+    var base_x: Int
+    var base_y: Int
+    var base_rows: Int
+    var scope: Int
+    var pin: Int
+    var took: Int
+
+
+def _side_set(mut call: MemberCall, side: _Side, cols: Int, y_dtype: Int, y_cols: Int, with_y: Bool):
+    """Point `call` at one side (`_Side`); the pin is offered only on a
+    resident side."""
+    call.scope = side.scope
+    call.pin = 0
+    if side.index == 0:
+        call.x = MemberMatrix(side.x, side.count, cols, MEMBER_F32)
+        if with_y:
+            call.y = MemberMatrix(side.y, side.count, y_cols, y_dtype)
+        return
+    call.x = MemberMatrix(side.base_x, side.base_rows, cols, MEMBER_F32)
+    call.row_index = MemberMatrix(side.index, side.count, 1, MEMBER_I32)
+    if with_y:
+        call.y = MemberMatrix(side.base_y, side.base_rows, y_cols, y_dtype)
+    call.pin = side.pin
+
+
+def _offered(member: MemberRef, op: Int, mut call: MemberCall, side: _Side) raises:
+    """One member call over the side `call` points at; the member's answer
+    about an offered pin is read whether the call returns or raises (THE PIN
+    RULE)."""
+    if call.pin == 0:
+        _ = member_call(member, op, call)
+        return
+    try:
+        _ = member_call(member, op, call)
+    finally:
+        if member_pin_settle(call) != 0:
+            _U8P(unsafe_from_address=side.took)[0] = UInt8(1)
+
+
+def _member_score(run_at: Int, v: Int, side: _Side, cols: Int, y_dtype: Int, y_cols: Int) raises -> Float64:
+    """Unit `v` of the wave on one side (`_Side`): the member's own score
+    (scoring None)."""
     var run = _RunPtr(unsafe_from_address=run_at)
     var call = member_call_of(run[].plans[v], run[].states[v])
-    call.x = MemberMatrix(x, count, cols, MEMBER_F32)
-    call.y = MemberMatrix(y, count, y_cols, y_dtype)
-    _ = member_call(run[].plans[v].member, MEMBER_OP_SCORE, call)
+    _side_set(call, side, cols, y_dtype, y_cols, True)
+    _offered(run[].plans[v].member, MEMBER_OP_SCORE, call, side)
     return call.value
 
 
-def _respond(run_at: Int, v: Int, op: Int, x: Int, count: Int, cols: Int, dst: Int, capacity: Int,
+def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, capacity: Int,
              dtype: Int) raises -> Int:
     """Unit `v`'s response `op` (predict, predict_proba or decision_function)
-    on one side's gathered block, written in the member's own `dtype` into
+    on one side (`_Side`), written in the member's own `dtype` into
     the 8-byte words at `dst` (`capacity` words), then narrowed in place to
     the scorer's words: int32 codes (an int64 predict) or float32 (a float64
     output; the rounding the metric doors' admission applies). Answers the
     output's columns per row."""
     var run = _RunPtr(unsafe_from_address=run_at)
     var call = member_call_of(run[].plans[v], run[].states[v])
-    call.x = MemberMatrix(x, count, cols, MEMBER_F32)
+    var count = side.count
     var width = 1
     if op != MEMBER_OP_PREDICT:
         width = max(member_outputs_of(run[].plans[v], call, op), 1)
     if count * width > capacity:
         raise Error("member ABI: a member response wider than its classes")
+    _side_set(call, side, cols, MEMBER_F32, 1, False)
     call.dst = MemberMatrix(dst, count, width, dtype)
-    _ = member_call(run[].plans[v].member, op, call)
+    _offered(run[].plans[v].member, op, call, side)
     var words = count * width
     if dtype == MEMBER_I64:
         var wide = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=dst)
@@ -327,6 +410,46 @@ def _scorer_side(route: MetricRoute, row: MselScorer, truth: Int, response: Int,
         _ = len(column)  # read by the program above
         return value
     return msel_scorer_value(route, row, truth, response, count, classes, cols, positive, notices)
+
+
+def _same_image(a: MemberPlan, b: MemberPlan) -> Bool:
+    """Two candidates run on one image of one family's kind (the same
+    member entry and route words): their calls share one scope cache."""
+    return (a.family == b.family and a.kind == b.kind and a.route.device == b.route.device
+            and a.route.mode == b.route.mode and a.route.vendor == b.route.vendor)
+
+
+def msel_search_rows(plan: MselSearchPlan) -> List[Int]:
+    """THE RESIDENT ROUTE per candidate (module note), one
+    `SEARCH_ROWS_*` word each, decided once per fit: GATHERED without a
+    scope and pin or for a member that reads no row numbers; INDEXED for one
+    that does (its kind's mask and its entry's answer both); RESIDENT for
+    those of them on the image of the first candidate that keeps X resident
+    (`MEMBER_CAN_SCOPE`): only they are offered X's pin."""
+    var m = len(plan.plans)
+    var out = List[Int](length=max(m, 1), fill=SEARCH_ROWS_GATHERED)
+    if plan.scope == MEMBER_SCOPE_NONE or plan.pin == 0 or len(plan.masks) != m:
+        return out^
+    var first = -1
+    for c in range(m):  # driver-loop: over the candidates (one route word each, once per fit)
+        var mask = plan.masks[c]
+        if (mask & MEMBER_CAN_ROW_INDEX) == 0 or not plan.plans[c].member.can(MEMBER_CAN_ROW_INDEX):
+            continue
+        out[c] = SEARCH_ROWS_INDEXED
+        if (mask & MEMBER_CAN_SCOPE) == 0:
+            continue
+        if first < 0:
+            first = c
+        if _same_image(plan.plans[c], plan.plans[first]):
+            out[c] = SEARCH_ROWS_RESIDENT
+    return out^
+
+
+def _note_kept(plan: MselSearchPlan):
+    """A candidate's cache took X's reference: the caller's `pin_kept`
+    (THE PIN RULE)."""
+    if plan.kept_at != 0:
+        _IntP(unsafe_from_address=plan.kept_at)[0] = plan.pin
 
 
 def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
@@ -428,6 +551,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             raise Error("member ABI: a binary scorer needs its positive class code")
         if msel_scorer_ap(rows_of[j]) and k == 2 and (positives[j] < 0 or positives[j] >= k):
             raise Error("member ABI: 'average_precision' of a binary member needs its positive class code")
+    # THE RESIDENT ROUTE (module note): per candidate where its sides' rows
+    # are; the X blocks are gathered only for a candidate that reads none.
+    var rows_route = msel_search_rows(plan)
+    var any_gathered = False
+    for c in range(m):  # driver-loop: over the candidates (their route words)
+        if rows_route[c] == SEARCH_ROWS_GATHERED:
+            any_gathered = True
+    var rows_route_at = Int(rows_route.unsafe_ptr())
     # Each candidate's response element types, asked once.
     var out_dtypes = List[Int](length=max(m * nops, 1), fill=MEMBER_I32)
     for c in range(m):  # driver-loop: over the candidates (one OUTPUTS question per response)
@@ -456,14 +587,15 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             side_rows[f * sides + 1] = tr_at[f]
             side_count[f * sides + 1] = tr_n[f]
     for s in range(used * sides):  # driver-loop: over the fold sides (their blocks, allocated once)
-        side_x.append(List[Float32](length=max(side_count[s] * d, 1), fill=0.0))
+        side_x.append(List[Float32](length=max(side_count[s] * d if any_gathered else 1, 1), fill=0.0))
         side_y.append(List[Int32](length=max(side_count[s] * y_cols, 1), fill=Int32(0)))
     var columns = List[Int32](length=max(d, 1), fill=Int32(0))
     for j in range(d):  # small-loop(the column numbers 0 .. d-1 of a side's gather, once per fit)
         columns[j] = Int32(j)
-    for s in range(used * sides):  # driver-loop: over the fold sides (one glue gather of X each, parallel inside)
-        _ = xt_gather_f32(plan.glue, plan.x, side_rows[s], Int(columns.unsafe_ptr()), Int(side_x[s].unsafe_ptr()),
-                          n, d, side_count[s], d)
+    if any_gathered:
+        for s in range(used * sides):  # driver-loop: over the fold sides (one glue gather of X each, parallel inside)
+            _ = xt_gather_f32(plan.glue, plan.x, side_rows[s], Int(columns.unsafe_ptr()), Int(side_x[s].unsafe_ptr()),
+                              n, d, side_count[s], d)
     var side_rows_at = Int(side_rows.unsafe_ptr())
     var side_count_at = Int(side_count.unsafe_ptr())
     var y_src = plan.y
@@ -495,6 +627,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var run = MemberSetRun(plan.x, n, d, y_dtype, MEMBER_I32)
         run.cap = plan.cap
         run.y_cols = y_cols
+        run.scope = plan.scope
         var all_free = True
         for u in range(u0, u1):  # driver-loop: over the wave's units (admission into the set, once each)
             var c = u // used
@@ -508,7 +641,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             run.add(p^, plan.y, 0, tr_at[f], tr_n[f], 0, 0,
                     UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
                     UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
+            if rows_route[c] == SEARCH_ROWS_RESIDENT:
+                # the fit reads the fold's train rows by index (the set's
+                # `by_index`) out of the whole X, X's pin offered
+                run.pin_tokens[u - u0] = plan.pin
         _fit_wave(run)
+        for v in range(width):  # driver-loop: over the wave's units (did a cache take X's reference)
+            if rows_route[(u0 + v) // used] == SEARCH_ROWS_RESIDENT and run.pin_tokens[v] == 0:
+                _note_kept(plan)
         if not plan.tolerate:
             var first = member_set_first_failure(run)
             if first >= 0:
@@ -543,11 +683,19 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var cols_list = Int(pred_cols.unsafe_ptr())
         var cap_list = Int(pred_cap.unsafe_ptr())
         var x_list = Int(x_at.unsafe_ptr())
+        # THE RESIDENT ROUTE: one byte per task, 1 when a cache took X's pin.
+        var took = List[UInt8](length=max(tasks, 1), fill=UInt8(0))
+        var took_at = Int(took.unsafe_ptr())
+        var base_x = plan.x
+        var base_y = plan.y
+        var scope = plan.scope
+        var pin = plan.pin
 
         def _score(t: Int) {imm run_at, imm values_at, imm failed_at, imm errors_at, imm pred_list, imm cols_list,
                             imm cap_list, imm x_list, imm y_dst_at, imm side_count_at, imm sides, imm used, imm u0,
                             imm d, imm y_dtype, imm y_cols, imm member_score, imm nsc, imm nops, imm ops_at,
-                            imm out_dtypes_at}:
+                            imm out_dtypes_at, imm rows_route_at, imm side_rows_at, imm took_at, imm base_x,
+                            imm base_y, imm n, imm scope, imm pin}:
             var v = t // sides
             var side = t % sides
             var s = ((u0 + v) % used) * sides + side
@@ -556,18 +704,20 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 for j in range(nsc):  # small-loop(the scorers)
                     _U8P(unsafe_from_address=failed_at)[t * nsc + j] = UInt8(1)
                 return
-            var x = _IntP(unsafe_from_address=x_list)[s]
-            var count = _IntP(unsafe_from_address=side_count_at)[s]
+            var c = (u0 + v) // used
+            var route = _IntP(unsafe_from_address=rows_route_at)[c]
+            var index = 0 if route == SEARCH_ROWS_GATHERED else _IntP(unsafe_from_address=side_rows_at)[s]
+            var place = _Side(_IntP(unsafe_from_address=x_list)[s], _IntP(unsafe_from_address=y_dst_at)[s],
+                              _IntP(unsafe_from_address=side_count_at)[s], index, base_x, base_y, n, scope,
+                              pin if route == SEARCH_ROWS_RESIDENT else 0, took_at + t)
             try:
                 if member_score:
-                    _F64P(unsafe_from_address=values_at)[t] = _member_score(
-                        run_at, v, x, _IntP(unsafe_from_address=y_dst_at)[s], count, d, y_dtype, y_cols)
+                    _F64P(unsafe_from_address=values_at)[t] = _member_score(run_at, v, place, d, y_dtype, y_cols)
                     return
-                var c = (u0 + v) // used
                 for o in range(nops):  # small-loop(the distinct responses)
                     var at = t * nops + o
                     _IntP(unsafe_from_address=cols_list)[at] = _respond(
-                        run_at, v, _IntP(unsafe_from_address=ops_at)[o], x, count, d,
+                        run_at, v, _IntP(unsafe_from_address=ops_at)[o], place, d,
                         _IntP(unsafe_from_address=pred_list)[at], _IntP(unsafe_from_address=cap_list)[at],
                         _IntP(unsafe_from_address=out_dtypes_at)[c * nops + o])
             except error:
@@ -580,6 +730,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         else:
             for t in range(tasks):  # driver-loop: over the wave's tasks (THE GIL RULE: kinds that are not GIL-free)
                 _score(t)
+        for t in range(tasks):  # driver-loop: over the wave's tasks (did a cache take X's reference)
+            if took[t] != UInt8(0):
+                _note_kept(plan)
         # The metric programs (named scorers), one after the other; each
         # unit's metric warnings in its sides' order (test, then train) and
         # its scorers' order (lane mf-score5: raised at PACK after the unit's
@@ -642,9 +795,11 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         _ = len(errors)
         _ = len(x_at)
         _ = len(pred_at)
+        _ = len(took)
         u0 = u1
     _ = len(out_dtypes)
     _ = len(ops)
+    _ = len(rows_route)
     _ = len(side_x)  # the blocks were read through every wave above
     _ = len(side_y)
     _ = len(y_dst)
@@ -695,10 +850,16 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var run = MemberSetRun(plan.x, n, d, y_dtype, MEMBER_I32)
         run.cap = plan.cap
         run.y_cols = y_cols
+        run.scope = plan.scope
         run.add(best^, plan.y, 0, 0, 0, 0, 0,
                 UInt8(1) if (mask & MEMBER_CAN_TEST_ROWS) != 0 else UInt8(0),
                 UInt8(1) if (mask & MEMBER_BORROWS_FIT) != 0 else UInt8(0), _set_word(mask))
+        var resident_refit = rows_route[res.best] == SEARCH_ROWS_RESIDENT
+        if resident_refit:
+            run.pin_tokens[0] = plan.pin  # every row: the whole X, the resident base
         _fit_wave(run)
+        if resident_refit and run.pin_tokens[0] == 0:
+            _note_kept(plan)
         var first = member_set_first_failure(run)
         if first >= 0:
             var words = run.errors[first].copy()

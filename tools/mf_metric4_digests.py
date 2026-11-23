@@ -27,6 +27,17 @@ search whose folds leave a class unpredicted, an r2 search over 1-row test folds
 top_k search. Expected: (D) value lines equal; the warning lines equal in category and words (the base raised
 them from the door's per-unit scorer, the head from the PACK after each unit's fit notices), the order within a
 unit (test side, then train side, the scorers' order) equal.
+
+Lane mf-search5 adds section search5 (base: origin/lane/member-fits-5 0ed9b30aa2 vs head): (E) searches over the
+classes whose folds the old door handed as DeviceRows (GaussianNB, MultinomialNB, BernoulliNB,
+LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis), now through the typed search RUN: scoring None (the
+class's mean-accuracy `score`, now the 'accuracy' scorer), 'accuracy', 'neg_log_loss', 'balanced_accuracy',
+return_train_score, an index-list cv, and the search's own `device` (None, 'cpu', and a candidate grid naming
+`device`). Host column: every line equal (no member keeps X resident on the CPU; the same fits, the same
+programs). On the L40S (GPU owed) the same command: every line equal to the host column's except where a line of
+(B) already says the binary64 program differs; the resident route moves no bit (the same device take of the same
+rows). A scoring None line that differs only in the last bits of a mean is the 'accuracy' program's float64
+fraction against the class's own score program; say so if seen.
 """
 import hashlib
 import os
@@ -261,8 +272,55 @@ def _score5_search_cases():
     return cases
 
 
+def _search5_rows(name, scoring, cv=3, train=False, device="unset", grid_device=False, refit=True):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV
+    X, y, c = _data(19, n=180, d=5, k=3)
+    if name in ("MultinomialNB", "BernoulliNB"):
+        X = np.abs(X).astype(np.float32)
+    est = getattr(mojolearn, name)()
+    grid = {"GaussianNB": {"var_smoothing": [1e-9, 1e-3]}, "MultinomialNB": {"alpha": [0.5, 1.0]},
+            "BernoulliNB": {"alpha": [0.5, 1.0]}, "LinearDiscriminantAnalysis": {"tol": [1e-4, 1e-2]},
+            "QuadraticDiscriminantAnalysis": {"reg_param": [0.0, 0.1]}}[name]
+    if grid_device:
+        grid = dict(grid, device=[None])
+    if cv == "list":
+        n = len(c)
+        cv = [(np.arange(0, n - 60), np.arange(n - 60, n)), (np.arange(60, n), np.arange(0, 60))]
+    kwargs = {} if device == "unset" else {"device": device}
+    s = GridSearchCV(est, grid, scoring=scoring, cv=cv, return_train_score=train, refit=refit, **kwargs).fit(X, c)
+    rows = []
+    for key in sorted(s.cv_results_):
+        if "time" in key or key == "params" or key.startswith("param_"):
+            continue
+        rows.append((key, _digest(np.asarray(s.cv_results_[key], dtype=np.float64))))
+    rows.append(("best_index", repr(int(s.best_index_))))
+    rows.append(("best_predict", _digest(np.asarray(s.best_estimator_.predict(X)))))
+    if hasattr(s.best_estimator_, "predict_proba"):
+        rows.append(("best_proba", _digest(np.asarray(s.best_estimator_.predict_proba(X)))))
+    return rows
+
+
+def _search5_cases():
+    cases = []
+    for name in ("GaussianNB", "MultinomialNB", "BernoulliNB", "LinearDiscriminantAnalysis",
+                 "QuadraticDiscriminantAnalysis"):
+        for scoring in (None, "accuracy", "neg_log_loss", "balanced_accuracy"):
+            cases.append((f"E_{name}_{scoring}", lambda name=name, scoring=scoring: _search5_rows(name, scoring)))
+    cases.append(("E_GaussianNB_train", lambda: _search5_rows("GaussianNB", "accuracy", train=True)))
+    cases.append(("E_GaussianNB_list", lambda: _search5_rows("GaussianNB", None, cv="list")))
+    cases.append(("E_GaussianNB_device_none", lambda: _search5_rows("GaussianNB", "accuracy", device=None)))
+    cases.append(("E_GaussianNB_device_cpu", lambda: _search5_rows("GaussianNB", "accuracy", device="cpu")))
+    cases.append(("E_GaussianNB_grid_device", lambda: _search5_rows("GaussianNB", "accuracy", grid_device=True)))
+    cases.append(("E_LDA_multi", lambda: _search5_rows("LinearDiscriminantAnalysis",
+                                                       ["accuracy", "neg_log_loss"], train=True,
+                                                       refit="neg_log_loss")))
+    return cases
+
+
 def _all_cases():
-    return _metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
+    return (_metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
+            + _search5_cases())
 
 
 def _run(index):

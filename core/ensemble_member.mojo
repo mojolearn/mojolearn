@@ -211,6 +211,7 @@ from core.member_abi import (
     MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_TEST_ROWS,
     MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_SCORE,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import (
@@ -954,6 +955,13 @@ def _all(masks: List[Int], bit: Int) -> Bool:
     return True
 
 
+def _any(masks: List[Int], bit: Int) -> Bool:
+    for u in range(len(masks)):  # driver-loop: over the nested kinds (one mask each)
+        if (masks[u] & bit) != 0:
+            return True
+    return False
+
+
 def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
     """The kind-exact capability mask of a META state over nested kinds
     `masks` (module note, KIND-EXACT BITS; a unit kind: its base's one
@@ -980,6 +988,14 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             mask |= MEMBER_GIL_FREE
         elif len(masks) > 0 and _all_either(masks):
             mask |= MEMBER_GIL_DOOR
+        # THE RESIDENT ROUTE (lane mf-search5): `flag` is the admission's
+        # word that the search's fold rows may stay on the device (its own
+        # `device` is not 'cpu' beside a GPU set and no candidate names a
+        # `device`); then a caller in a resident scope hands the fit its
+        # scope and X's pin (`_fit_search`), for the candidates that keep X
+        # resident.
+        if flag and _any(masks, MEMBER_CAN_SCOPE):
+            mask |= MEMBER_CAN_SCOPE
         return mask
     if _unit_kind(kind):
         var base = masks[0] if len(masks) > 0 else 0
@@ -1036,7 +1052,7 @@ def _all_either(masks: List[Int]) -> Bool:
 
 comptime _UNION = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT
-    | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT)
+    | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCOPE)
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -2963,6 +2979,18 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
         # RUN), checked as the door checks a split's rows.
         _user_folds(slot, call[].x.rows, plan.fold_train_at, plan.fold_train_n, plan.fold_test_at,
                     plan.fold_test_n, False)
+    # THE RESIDENT ROUTE (lane mf-search5; core/msel_search_run.mojo
+    # `msel_search_rows`): the caller's resident scope and X's pin, read by
+    # its UNPACK once per fit (bindings/msel_member_units_door.mojo, the
+    # search's own fit door opening the scope the old DeviceRows units
+    # opened), reach every unit's fit and score when the admission allowed
+    # resident fold rows (`flag`, the search's own `device`). The RUN writes
+    # this call's `pin_kept` the moment a candidate's cache takes X's
+    # reference (THE PIN RULE: whether it returns or raises).
+    if slot[].flag and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0:
+        plan.scope = call[].scope
+        plan.pin = call[].pin
+        plan.kept_at = Int(UnsafePointer(to=call[].pin_kept))
     var res = msel_search_run(plan)
     var best = slot[].base_plans[res.best].copy()
     best.classes = k

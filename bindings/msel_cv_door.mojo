@@ -316,6 +316,29 @@ def _arena_rows_call(obj: PythonObject, op: String, args: PythonObject, context:
     return family_call(entry, obj, PythonObject(op), args, context["family_msel_rows_context"])
 
 
+def msel_rows_scope_open(context: PythonObject) raises -> PythonObject:
+    """Model selection's own resident scope (`_arena_io.resident`), entered
+    on this thread with the DeviceRows floor: only a row-indexed base (the
+    fold rows taken on the device out of it) stays resident, no other program
+    input across folds. The fold rows' set (`MselFoldRows`) and a search fit
+    through its member kind (bindings/msel_search_door.mojo, lane mf-search5)
+    open it; the caller closes it with `msel_rows_scope_close` on every
+    path."""
+    var scope = native_storage_allocate(family_call(msel_b().getattr, context["family_msel_arena_io"],
+                                                    PythonObject("resident")))
+    # the floor goes to the native scope state with the enter call; no
+    # Python attribute of the `resident` object is written
+    _ = _arena_rows_call(scope, "scope_enter", Python.tuple(PythonObject(1 << 62)), context)
+    return scope
+
+
+def msel_rows_scope_close(scope: PythonObject, context: PythonObject) raises:
+    """Leave a scope `msel_rows_scope_open` entered: its caches and the
+    references they took are released."""
+    _ = _arena_rows_call(scope, "scope_exit", Python.tuple(PythonObject(None), PythonObject(None), PythonObject(None)),
+                         context)
+
+
 def _msel_hold_rows_of(x: PythonObject, rows: PythonObject) raises:
     """Hold a fold's rows (an exact float32 C-order Array gathered out of the
     held X) with X's verdict."""
@@ -432,12 +455,7 @@ struct MselFoldRows(Movable):
             self.res = msel_resident_new(context)
             # only DeviceRows bases enter this scope (`rows_slot` ignores the
             # size floor); no other program input is kept across folds
-            var scope = native_storage_allocate(family_call(msel_b().getattr, context["family_msel_arena_io"],
-                                                            PythonObject("resident")))
-            # the floor goes to the native scope state with the enter call;
-            # no Python attribute of the `resident` object is written
-            _ = _arena_rows_call(scope, "scope_enter", Python.tuple(PythonObject(1 << 62)), context)
-            self.scope = scope
+            self.scope = msel_rows_scope_open(context)
             # perf2-msel: the DeviceRows class and the resident store's bound
             # `take` are read once per fold set, not once per fold side. The
             # store is this owner's own object; the class is the import-time
@@ -617,7 +635,7 @@ struct MselFoldRows(Movable):
         self.scope = PythonObject(None)
         try:
             if scope is not None:
-                _ = _arena_rows_call(scope, "scope_exit", Python.tuple(PythonObject(None), PythonObject(None), PythonObject(None)), context)
+                msel_rows_scope_close(scope, context)
         finally:
             if self.dev:
                 msel_resident_close(self.res, context)

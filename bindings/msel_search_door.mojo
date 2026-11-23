@@ -58,6 +58,8 @@ from bindings.msel_cv_door import (
     msel_cv_folds_admitted,
     msel_materialize_y,
     msel_device_rows_ok,
+    msel_rows_scope_open,
+    msel_rows_scope_close,
     msel_unit_jobs,
     msel_cv_units,
     msel_scorers,
@@ -156,20 +158,40 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     msel_admit(fields["n_jobs"], context)
     msel_admit(error_score, context)
     # THE ONE SEARCH BODY (lane mf-search4 follow-up): a search its member
-    # kind admits (core/ensemble_member.mojo META_SEARCH_*: an int cv, our
-    # KFold / StratifiedKFold or an index list; scoring None or scorer names
+    # kind admits (core/ensemble_member.mojo META_SEARCH_*: an int cv or one
+    # of our splitters or an index list; scoring None or scorer names
     # core/msel_scorer_run.mojo serves, one or several (lane mf-search4b);
-    # refit True, False or a scorer name; no device of its own; every
-    # candidate a serving member) is fitted by the typed search RUN
+    # refit True, False or a scorer name; its own `device`; every candidate a
+    # serving member) is fitted by the typed search RUN
     # (core/msel_search_run.mojo) through `_search_member_fit`; the units
     # below run only what that kind does not take (module note of
-    # providers/python/member_ensemble_boundary_door.mojo `_admit_search`) and
-    # the resident DeviceRows fold route of a device member.
-    comptime if MSEL_MEMBER_UNITS:
-        if y_in is not None and not msel_device_rows_ok(estimator, fields["scoring"], context):
-            if _search_member_fit(model, fields, x_in, y_in, context, b):
-                return model
-    var candidates = msel_candidates(model, context)
+    # providers/python/member_ensemble_boundary_door.mojo `_admit_search`).
+    # THE RESIDENT FOLD ROWS (lane mf-search5): where the old units handed a
+    # device member DeviceRows (the same rule as below: the member's own
+    # device, the search's own `device`, no candidate naming a `device`),
+    # the search's own resident scope is opened around the member fit, as
+    # `MselFoldRows` opens it: the RUN's units then read every side as the
+    # whole X plus the fold's rows, X resident once in that scope and the
+    # rows taken on the device by the member's own program (the kernels of
+    # the DeviceRows route; only who gathers the rows moved). Read once per
+    # search fit; the candidates are drawn once and reused below.
+    var candidates = PythonObject(None)
+    if y_in is not None:
+        var scope = PythonObject(None)
+        if msel_device_rows_ok(estimator, fields["scoring"], context):
+            candidates = msel_candidates(model, context)
+            if not _search_host_folds(fields, candidates, b, context):
+                scope = msel_rows_scope_open(context)
+        var fitted = False
+        try:
+            fitted = _search_member_fit(model, fields, x_in, y_in, context, b)
+        finally:
+            if scope is not None:
+                msel_rows_scope_close(scope, context)
+        if fitted:
+            return model
+    if candidates is None:
+        candidates = msel_candidates(model, context)
     if len(candidates) == 0:
         raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")
     var scoring_in = fields["scoring"]
@@ -190,8 +212,10 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var trains = List[List[List[Float64]]]()
     var names = List[String]()
     var n_splits = 0
-    # The search's own fold rows (device wave, 2026-11-21). They stay
-    # resident on the device only when the base estimator runs there
+    # The search's own fold rows (device wave, 2026-11-21), for the searches
+    # the member kind does not take (above; lane mf-search5: a device member's
+    # search the kind takes runs the resident route inside the typed RUN).
+    # They stay resident on the device only when the base estimator runs there
     # (msel_device_rows_ok reads the member's device), the search itself
     # does not say device="cpu", and no candidate sets a `device`: a
     # candidate that moves a member to the CPU must not be handed rows that

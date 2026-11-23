@@ -128,6 +128,7 @@ from bindings.msel_candidates_door import msel_grid_list, msel_sampler_check, ms
 from bindings.msel_estimator_native_door import msel_native_clone, msel_native_set_params, msel_clone_parameter
 from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list, msel_is_integral, msel_is_int_arg
 from bindings.msel_search_state_door import msel_search_update
+from bindings.msel_member_device_unpack import msel_member_host_folds, msel_params_name_device
 from bindings.msel_split_door import msel_cls, MselSplitter, SPLITTER_ITERABLE
 from bindings.msel_split_unpack import MselRoutePin
 from bindings.msel_split_spec_run import MselSplitSpec, MSEL_SPEC_NONE, msel_spec_stratified
@@ -2444,10 +2445,20 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     an int cv, one of our KFold / StratifiedKFold splitters or a user's
     index list (item 6). Answers False (the door's fit keeps the search) for
     a scorer the typed RUN does not serve (core/msel_scorer_run.mojo), a
-    binary scorer whose pos_label is not one of the labels, the search's own
-    `device`, another of our splitters, and any candidate with no serving
-    member. A Python scorer, refit or cv callback is refused in the door's
-    words."""
+    binary scorer whose pos_label is not one of the labels, another of our
+    splitters, and any candidate with no serving member. A Python scorer,
+    refit or cv callback is refused in the door's words.
+
+    THE SEARCH'S OWN `device` (lane mf-search5) says where its fold rows
+    live, as the door reads it (bindings/msel_search_door.mojo
+    `_search_host_folds`): 'cpu' beside a GPU set, or a candidate that names
+    a `device`, keeps them on the host; otherwise the kind's `flag` word lets
+    a caller in a resident scope hand the RUN its scope and X's pin
+    (core/ensemble_member.mojo `_fit_search`; a member keeps its own
+    `device`). SCORING None over a classifier whose `score` is the prep
+    classifiers' mean accuracy (mojolearn._expansion_prep `_Classifier.score`:
+    GaussianNB and the other naive Bayes, LDA, QDA; their member has no score
+    operation) is the 'accuracy' scorer, which is what that `score` is."""
     var scoring_in = py_get(fields, "scoring")
     # THE SCORERS: (name, scorer value as given) in the caller's order; an
     # empty list: scoring=None (the member's own score).
@@ -2490,9 +2501,8 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                     refit_scorer = j
         if refit_scorer < 0:
             raise Error("For multi-metric scoring, refit must be False or a scorer key.")
-    var device = py_get(fields, "device")
-    if device is not None:
-        return False
+    # Where the fold rows live (the docstring): read once per admission.
+    var resident = not msel_member_host_folds(fields, b, context)
     var cv = py_get(fields, "cv")
     # A user's own splitter object: refused here in the search door's words
     # (lane mf-split4b; never called, `_refuse_cv_callback`).
@@ -2537,6 +2547,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var seed = Int(py=got[2])
     if len(clones) == 0:
         return False  # the door raises "No fits were performed. ..."
+    if resident:
+        var candidates = got[0]
+        for c in range(len(candidates)):  # driver-loop: over the candidates' parameter dicts, names only
+            if msel_params_name_device(candidates[c], b):
+                resident = False
+                break
     var base = py_get(fields, "estimator")
     var base_plan = prep_estimator_plan(base, context)
     if base_plan is None or py_get(base_plan, "member") is None:
@@ -2564,7 +2580,13 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
     if classifier:
         needs |= MEMBER_CAN_CLASSIFIER
-    if len(keys) == 0:
+    if len(keys) == 0 and classifier and _mean_accuracy_score(base, b):
+        # scoring None = the class's `score` = accuracy (the docstring)
+        var accuracy = msel_scorer_code("accuracy", False)
+        codes.append(accuracy)
+        positives.append(-1)
+        responses.append(msel_scorer_row(accuracy).op)
+    elif len(keys) == 0:
         needs |= MEMBER_CAN_SCORE
         positives.append(-1)
     for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
@@ -2643,8 +2665,9 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
     if trees_context is None:
         return False
-    if not _finish(fields, trees_context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
-                   fold_train^, fold_test^):
+    # `flag`: the fold rows may stay resident (the docstring's `device`).
+    if not _finish(fields, trees_context, b, owner, nested, kind, 1.0 if resident else 0.0, folds, List[Float64](),
+                   List[Int](), words^, fold_train^, fold_test^):
         return False
     _finish_split(owner, split)
     if len(codes) > 0:
@@ -2660,6 +2683,23 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         _ = py_call(owner.pins.append, pin.provider)
         _ = py_call(owner.pins.append, pin.entries)
     return True
+
+
+def _mean_accuracy_score(base: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK (lane mf-search5): the base's class takes its `score` from the
+    prep classifiers (mojolearn._expansion_prep `_Classifier.score`, the mean
+    accuracy of its predicted labels). One attribute read and one identity
+    test per admission; False when that module is not loaded."""
+    var prep = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_prep"))
+    if prep is None:
+        return False
+    var classifiers = py_get(py_call(b.vars, prep), "_Classifier")
+    if classifiers is None:
+        return False
+    var own = py_get(py_call(b.vars, classifiers), "score")
+    if own is None:
+        return False
+    return py_call(b.getattr, py_type(base), PythonObject("score"), PythonObject(None)) is own
 
 
 def _positive_code(labels: PythonObject, b: PythonObject) raises -> Int:

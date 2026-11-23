@@ -35,6 +35,17 @@ rank 1), and the refit: the best candidate fitted on every row.
    'normalized_mutual_info_score', 'adjusted_mutual_info_score'] (predict_proba / predict responses, K = 3): every
    scorer's split scores equal `msel_scorer_value` over the member's own response.
 
+8. (lane mf-search5) THE RESIDENT ROUTE (`msel_search_rows`): with no scope every candidate's sides are gathered
+   blocks; in a scope (word 0) with a pin, a candidate whose entry and kind read row numbers is INDEXED, and
+   RESIDENT (offered the pin) when it keeps X resident and runs on the image of the first such candidate; one on
+   another route stays INDEXED. Then the RUN in that scope over WRAPPED candidates (`_indexed_member_v2`: the
+   logistic member behind an entry that answers MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE, gathers the indexed rows
+   itself and plays a scope cache that takes the first offered pin): every 'accuracy' test and train split score,
+   and every member score (scoring None), equals the gathered run's over the bare members; every fit and score
+   reads the whole X plus its rows; the pin is offered on every unit's fit and side and the refit (28 calls: 9
+   fits, 18 sides, the refit) and the token is written at `kept_at` once; a mixed set (resident, indexed without
+   the scope bit, gathered) gives the same scores and offers the pin to the resident candidate only.
+
 FAIL-PROOF EDITS (each must make a case fail): `side_rows[f * sides] = rows_at + 4 * (f * n)` (case 1: the train
 rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits learn the wrong count);
 `narrow[i] = Int32(wide[i]) + 1` in `_respond` (cases 2, 4); `value = 0.0` for a failed task (case 3);
@@ -42,7 +53,11 @@ rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits l
 `plan.refit_scorer` in the tables (case 5); `op_of.append(0)` for every scorer (case 5: log loss reads codes);
 `used = 0` in the given-folds branch, or `te_at.append(plan.fold_train_at[f])` (case 6); `seen[positive] = 0`
 removed, or `McEpi(2, 2, LBL_MACRO, ...)` in `label_binary_run` (case 6: the positive's value); in
-core/msel_scorer_run.mojo `cluster_mi_run(..., row.metric != _CL_AMI, ...)` (case 7: NMI and AMI swapped).
+core/msel_scorer_run.mojo `cluster_mi_run(..., row.metric != _CL_AMI, ...)` (case 7: NMI and AMI swapped); in
+core/msel_search_run.mojo `out[c] = SEARCH_ROWS_RESIDENT` without the `_same_image` test, or
+`call.row_index = MemberMatrix(side.index, side.count - 1, 1, MEMBER_I32)` in `_side_set`, or
+`index = _IntP(unsafe_from_address=side_rows_at)[s]` taken from the train side for a test task, or
+`_note_kept` removed after the fit wave (case 8).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -57,9 +72,15 @@ from core.logistic_route import LogisticRoute, logistic_route_pack
 from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_call_of, member_new, member_free,
     member_kind_capabilities, MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_OP_PREDICT,
-    MEMBER_OP_PREDICT_PROBA, MEMBER_F64, MEMBER_I32, MEMBER_I64,
+    MEMBER_OP_PREDICT_PROBA, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
+    member_call_from_spans,
 )
-from core.msel_search_run import MselSearchPlan, msel_search_run, SEARCH_SCORE_MEMBER, SEARCH_SCORE_ACCURACY
+from core.msel_search_run import (
+    MselSearchPlan, msel_search_run, msel_search_rows, SEARCH_SCORE_MEMBER, SEARCH_SCORE_ACCURACY,
+    SEARCH_ROWS_GATHERED, SEARCH_ROWS_INDEXED, SEARCH_ROWS_RESIDENT,
+)
+from core.native_descriptor_abi import NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_report
 from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_value
 from bindings.mcls_classify_run import label_binary_run, LBL_PRECISION, LBL_RECALL, LBL_F1
 from core.trees_entry_table import TreesEntryKey
@@ -72,7 +93,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 7
+comptime CASES = 8
 
 
 def _glue() raises -> EntryRef:
@@ -506,6 +527,202 @@ def check_score5_scorers() raises:
     _ = y^
 
 
+# ---------------------------------------------------------------- 8. the resident route (lane mf-search5)
+
+
+def _wrapped_call(operation: Int, address: Int, scoped: Bool) raises -> Int:
+    """The fixture entry's body: the logistic member behind a row-index
+    reader. The last parameter word is the address of four Int counters
+    (pin offers, cache takes, indexed calls; the fourth is the RUN's
+    `kept_at`), dropped before the
+    logistic member reads its ten words; an indexed call's rows of X (and y)
+    are gathered here, as a device take would, and handed on as a block; the
+    first offered pin is taken (`pin_kept`), as a scope cache publishes X
+    once."""
+    var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
+    var inner = MemberRef(EntryRef(logistic_member_v2, 0), 0)
+    var counters = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=0)
+    var stripped = False
+    if call[].param_count > 10:
+        var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+        counters = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(words[call[].param_count - 1]))
+        call[].param_count -= 1
+        stripped = True
+    if stripped and call[].pin != 0:
+        counters[0] += 1
+        if counters[1] == 0:
+            counters[1] = 1
+            call[].pin_kept = call[].pin
+    var x_was = call[].x
+    var y_was = call[].y
+    var index_was = call[].row_index
+    var xs = List[Float32]()
+    var ys = List[Int32]()
+    var answer = 0
+    try:
+        if call[].row_index.rows > 0:
+            require(call[].row_index.dtype == MEMBER_I32, "the search hands int32 row numbers")
+            if stripped:
+                counters[2] += 1
+            var count = call[].row_index.rows
+            var cols = call[].x.cols
+            var rows = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=call[].row_index.data)
+            var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
+            xs = List[Float32](length=max(count * cols, 1), fill=0.0)
+            for i in range(count):  # small-loop(fixture: the indexed rows of X)
+                for j in range(cols):  # small-loop(fixture)
+                    xs[i * cols + j] = src[Int(rows[i]) * cols + j]
+            call[].x = MemberMatrix(Int(xs.unsafe_ptr()), count, cols)
+            if call[].y.rows > 0:
+                var codes = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=call[].y.data)
+                ys = List[Int32](length=max(count, 1), fill=Int32(0))
+                for i in range(count):  # small-loop(fixture: the indexed rows of y)
+                    ys[i] = codes[Int(rows[i])]
+                call[].y = MemberMatrix(Int(ys.unsafe_ptr()), count, 1, y_was.dtype)
+            call[].row_index = MemberMatrix()
+        answer = member_call(inner, operation, call[])
+        if operation == MEMBER_OP_CAPABILITIES:
+            # the family's answer and a kind's (a live state) both
+            answer |= MEMBER_CAN_ROW_INDEX
+            if scoped:
+                answer |= MEMBER_CAN_SCOPE
+    finally:
+        call[].x = x_was
+        call[].y = y_was
+        call[].row_index = index_was
+        if stripped:
+            call[].param_count += 1
+        _ = len(xs)  # read by the logistic member above
+        _ = len(ys)
+    return answer
+
+
+def _indexed_scoped_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+    result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    try:
+        var word = _wrapped_call(operation, member_call_from_spans(operation, aa, na, np, nf), True)
+        if result:
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = word
+        return 0
+    except error:
+        native_descriptor_report(error, context, sink)
+        return 1
+
+
+def _indexed_plain_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+    result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    try:
+        var word = _wrapped_call(operation, member_call_from_spans(operation, aa, na, np, nf), False)
+        if result:
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = word
+        return 0
+    except error:
+        native_descriptor_report(error, context, sink)
+        return 1
+
+
+def _wrapped(l2: Float64, scoped: Bool, counters: Int) raises -> MemberPlan:
+    var plan = _logistic(l2, 0.0)
+    if scoped:
+        plan.member = MemberRef(EntryRef(_indexed_scoped_v2, 0), 0)
+    else:
+        plan.member = MemberRef(EntryRef(_indexed_plain_v2, 0), 0)
+    var probe = MemberCall(plan.route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    plan.params.append(Float64(counters))
+    return plan^
+
+
+def _same_scores(a: List[List[Float64]], b: List[List[Float64]], what: String) raises:
+    require(len(a) == len(b), what + ": the candidates")
+    for c in range(len(a)):  # small-loop(check: candidates)
+        for f in range(len(a[c])):  # small-loop(check: folds)
+            require(a[c][f] == b[c][f], what + " split" + String(f) + " of candidate " + String(c))
+
+
+def _free_best(plan: MemberPlan, state: Int) raises:
+    var r = MemberCall(plan.route, state)
+    member_free(plan, r)
+
+
+def check_resident_route() raises:
+    var x = _x()
+    var y = _codes()
+    var counters = List[Int](length=4, fill=0)
+    var at = Int(counters.unsafe_ptr())
+    # The route words.
+    var mixed: List[MemberPlan] = [_wrapped(1.0, True, at), _wrapped(0.1, False, at), _logistic(10.0, 0.0)]
+    var words_plan = _plan(mixed.copy(), x, y, SEARCH_SCORE_ACCURACY)
+    var none = msel_search_rows(words_plan)
+    for c in range(3):  # small-loop(check: candidates)
+        require(none[c] == SEARCH_ROWS_GATHERED, "no scope: every side gathered")
+    words_plan.scope = 0
+    words_plan.pin = 12345
+    var got = msel_search_rows(words_plan)
+    require(got[0] == SEARCH_ROWS_RESIDENT and got[1] == SEARCH_ROWS_INDEXED and got[2] == SEARCH_ROWS_GATHERED,
+            "resident / indexed / gathered")
+    var moved: List[MemberPlan] = [_wrapped(1.0, True, at), _wrapped(0.1, True, at)]
+    moved[1].route.mode = moved[1].route.mode + 1
+    var moved_plan = _plan(moved^, x, y, SEARCH_SCORE_ACCURACY)
+    moved_plan.scope = 0
+    moved_plan.pin = 12345
+    var other = msel_search_rows(moved_plan)
+    require(other[0] == SEARCH_ROWS_RESIDENT and other[1] == SEARCH_ROWS_INDEXED,
+            "a candidate on another image is not offered the pin")
+    # The gathered run over the bare members, then the resident run.
+    var bare = _plan(_candidates(False), x, y, SEARCH_SCORE_ACCURACY)
+    bare.return_train = True
+    var want = msel_search_run(bare)
+    var wrapped: List[MemberPlan] = [_wrapped(1.0, True, at), _wrapped(0.1, True, at), _wrapped(10.0, True, at)]
+    var plan = _plan(wrapped.copy(), x, y, SEARCH_SCORE_ACCURACY)
+    plan.return_train = True
+    plan.scope = 0
+    plan.pin = 12345
+    plan.kept_at = at + 3 * 8  # the fourth counter
+    for i in range(4):  # small-loop(fixture: the counters)
+        counters[i] = 0
+    var res = msel_search_run(plan)
+    _same_scores(want.test, res.test, "resident accuracy")
+    _same_scores(want.train, res.train, "resident train accuracy")
+    require(res.best == want.best and res.best_score == want.best_score, "the best")
+    require(counters[0] == 3 * F + 2 * 3 * F + 1, "the pin on every fit, every side and the refit")
+    require(counters[1] == 1 and counters[3] == 12345, "one take, written at kept_at")
+    require(counters[2] == 3 * F + 2 * 3 * F, "every fit and side reads the whole X plus its rows")
+    _free_best(bare.plans[want.best], want.best_state)
+    _free_best(plan.plans[res.best], res.best_state)
+    # scoring None: the member's own score through the rows (y read by index).
+    var bare_own = _plan(_candidates(False), x, y, SEARCH_SCORE_MEMBER)
+    var want_own = msel_search_run(bare_own)
+    var own = _plan(wrapped.copy(), x, y, SEARCH_SCORE_MEMBER)
+    own.scope = 0
+    own.pin = 777
+    own.kept_at = at + 3 * 8
+    counters[1] = 0
+    var res_own = msel_search_run(own)
+    _same_scores(want_own.test, res_own.test, "resident member score")
+    require(counters[3] == 777, "the member-score run's take")
+    _free_best(bare_own.plans[want_own.best], want_own.best_state)
+    _free_best(own.plans[res_own.best], res_own.best_state)
+    # The mixed set: the same scores; the pin offered to candidate 0 only.
+    var mixed_plan = _plan(mixed.copy(), x, y, SEARCH_SCORE_ACCURACY)
+    mixed_plan.return_train = True
+    mixed_plan.scope = 0
+    mixed_plan.pin = 99
+    mixed_plan.kept_at = at + 3 * 8
+    for i in range(4):  # small-loop(fixture: the counters)
+        counters[i] = 0
+    var res_mixed = msel_search_run(mixed_plan)
+    _same_scores(want.test, res_mixed.test, "mixed accuracy")
+    _same_scores(want.train, res_mixed.train, "mixed train accuracy")
+    require(counters[0] == 3 * F + (1 if res_mixed.best == 0 else 0), "the pin on candidate 0's calls only")
+    require(counters[2] == 2 * 3 * F, "candidates 0 and 1 read every side by index")
+    require(counters[3] == 99, "the mixed run's take")
+    _free_best(mixed_plan.plans[res_mixed.best], res_mixed.best_state)
+    _ = len(counters)  # read and written by the fixture entry and the RUN through its address
+    _ = x^
+    _ = y^
+
+
 def test_msel_search_run() raises:
     publish_x_trees_glue("cpu")
     def run_case(which: Int) raises:
@@ -521,8 +738,10 @@ def test_msel_search_run() raises:
             check_multi_metric()
         elif which == 5:
             check_given_folds()
-        else:
+        elif which == 6:
             check_score5_scorers()
+        else:
+            check_resident_route()
     check_cases("msel_search_run", CASES, run_case)
 
 
