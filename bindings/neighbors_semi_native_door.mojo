@@ -15,7 +15,6 @@
 # (MOJOLEARN_XN_OLD_ITEMS, MOJOLEARN_XN_UNFUSED_KNN) are read from the
 # context, where the module put them at its import.
 from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_module, xn_is_module
-from providers.python.x_neighbors_admission_pyapi_door import xn_capabilities
 from providers.python.pcs_rng_pyapi_pack import pcs_seed, _pcs_connect
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
@@ -54,7 +53,8 @@ from neighbors.chi2_run import (
 from neighbors.neighbors_semi_run import (
     xn_achi2_width, xn_schi2_missing_fit, xn_semi_knn_k, xn_lp_alpha_check, xn_lp_static_weight,
 )
-from neighbors.label_propagation_run import LpFitRequest, LpFitOutcome, LpQueryRequest, lp_fit_run, lp_query_run
+from neighbors.label_propagation_run import LpFitRequest, LpFitOutcome, lp_fit_run, lp_query_run
+from bindings.neighbors_lp_query_unpack import lp_query_unpack
 
 
 # ---------------------------------------------------------------- shared steps
@@ -602,63 +602,34 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     py_setitem(fields, "n_features_in_", PythonObject(d))
 
 
-def _lp_dense_available(binding: PythonObject) raises -> Bool:
-    """The binding carries `lp_dense_proba` (export on a loaded module,
-    capability bit 6 on the native descriptor route)."""
-    if xn_is_module(binding):
-        return family_call(_semi_b().getattr, xn_module(binding), PythonObject("x_neighbors_lp_dense_proba"),
-                           PythonObject(None)) is not None
-    return (xn_capabilities(binding) & 64) != 0
-
-
 def _lp_query(model: PythonObject, binding: PythonObject, source: PythonObject, want_labels: Bool,
               context: PythonObject) raises -> PythonObject:
     """predict_proba's float32 (nq, C) Array, or predict's int32 (nq,) class
     codes: kernel='rbf' through `lp_dense_proba` when the image carries it
     (lane ne3-g-svc-gp-neighbors, N324), else the operation chain."""
-    # UNPACK
-    var fields = py_fields(model)
-    var knn = _semi_eq(family_field(fields, "kernel"), PythonObject("knn"))
-    var fused = not knn and _lp_dense_available(binding)
+    # UNPACK: the queries, then the fitted words (bindings/neighbors_lp_query_unpack.mojo `lp_query_unpack`, the
+    # one body Kernel / Permutation SHAP also reads them through; lane mf-shap3b, 2026-11-23).
     var q = _semi_x(source, context)
-    var xfit = family_field(fields, "X_")
+    var unpacked = lp_query_unpack(model, binding, want_labels, context)
     var nq = Int(py=q.shape[0])
-    var n = Int(py=xfit.shape[0])
-    var k = 0
-    var kind = 0
-    var gamma = Float64(0.0)
-    var unfused = False
-    var old_items = False
-    if knn:
-        k = xn_semi_knn_k(_semi_int(family_field(fields, "n_neighbors")), n)
-        unfused = _semi_truth(context["family_xn_semi_unfused_knn"])
-        if not unfused:
-            old_items = _semi_truth(context["family_svc_xn_old_items"])
-    else:
-        var kind_word = context["family_svc_xn_kernels"]["rbf"]
-        gamma = _semi_float(family_field(fields, "gamma"))
-        kind = _semi_int(kind_word)
-    var dist = family_field(fields, "label_distributions_")
-    var c = Int(py=dist.shape[1])
+    var c = unpacked.request.classes
     var result: PythonObject
-    var dst = 0
-    var labels = 0
     if want_labels:
         result = _semi_out(Python.tuple(nq), "<i4", context)
-        labels = _semi_at(result)
+        unpacked.request.labels = _semi_at(result)
     else:
         result = _semi_out(Python.tuple(nq, c), "<f4", context)
-        dst = _semi_at(result)
-    var request = LpQueryRequest(_semi_at(q), _semi_at(xfit), _semi_at(dist), dst, labels, nq, n,
-                                 Int(py=q.shape[1]), c, knn, k, kind, gamma, fused, want_labels, unfused, old_items)
+        unpacked.request.dst = _semi_at(result)
+    unpacked.request.q = _semi_at(q)
+    unpacked.request.rows = nq
+    unpacked.request.features = Int(py=q.shape[1])
     var connection = LofConnection(binding)
     var status = 0
     # RUN
     with GILReleased(Python()):
-        status = lp_query_run(connection.driver, request)
+        status = lp_query_run(connection.driver, unpacked.request)
     _ = q  # keep the Python object alive through the native call above
-    _ = xfit  # keep the Python object alive through the native call above
-    _ = dist  # keep the Python object alive through the native call above
+    _ = unpacked^  # X_ and label_distributions_, read through the native call above
     _ = result  # keep the Python object alive through the native call above
     # PACK: the queries' finite status, read behind the first operation's upload
     if status != 0:

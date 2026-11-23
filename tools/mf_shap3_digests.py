@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-"""Output digests of the SHAP model classes lanes mf-shaprfe, mf-shap2 and mf-shap3 moved onto native members
-(2026-11-23); this script folds tools/mf_shap2_digests.py (its configurations are kept, under the same names). A
-testing tool, never product execution.
+"""Output digests of the SHAP model classes lanes mf-shaprfe, mf-shap2, mf-shap3 and mf-shap3b moved onto native
+members (2026-11-23); this script folds tools/mf_shap2_digests.py (its configurations are kept, under the same
+names). A testing tool, never product execution.
+
+(E, mf-shap3b) KernelExplainer and PermutationExplainer over the last classes of the door's `_DoorModel` list:
+IsolationForest (its member's int32 predict, widened in the RUN), LocalOutlierFactor(novelty=True) and KMeans
+(their members' integer predict, same route), LabelPropagation (rbf) and LabelSpreading (knn) through their typed
+query, RFE over LogisticRegression (predict_proba), LinearSVC (labels) and Ridge (predict) through the estimator's
+member over the support columns, StackingClassifier(stack_method='predict') with classifier members (their codes
+mapped to their labels, codes 0..k-1 and shifted float labels), and the forecasters (refused natively by name).
 
 (D, mf-shap3) KernelExplainer and PermutationExplainer over every meta-estimator, now through `AgnMeta` (the RUN
 of its public operation over its members' held native states): VotingClassifier hard (newly explained: it was
@@ -38,7 +45,13 @@ mean equal bits.
 
     PYTHONPATH=<repo>/python python3 tools/mf_shap3_digests.py > out.txt
 
-Expected: every line equal, except these, whose base line is a refusal and whose head line is either an answer
+Expected for (E), base origin/lane/member-fits cb25018d3e vs lane/mf-shap3b's head: `shap_*_iforest*` (base:
+"has no native predict"; head: an answer), `shap_*_label_prop*` / `shap_*_label_spread*` / `shap_*_rfe_*` (base:
+"requires a mojolearn estimator"; head: an answer), `shap_k_forecast_*` (head: the forecaster refusal's words)
+differ; `shap_*_kmeans`, `shap_*_lof_novelty` and `shap_*_stack_predict*` are answers on both builds and must be
+EQUAL (they moved from the door to the native route with the same words).
+
+Expected for (A) to (D): every line equal, except these, whose base line is a refusal and whose head line is either an answer
 or the native refusal's words: `shap_*_vote_hard*` and `shap_*_search_*` (now explained), `shap_*_label_*_str`
 (the native non-numeric labels refusal), `shap_*_multi_clf` (the native MultiOutputClassifier refusal),
 `shap_*_nonfinite` and `shap_k_categorical_nb_out_of_range` (the member's own words, where the door's were
@@ -184,8 +197,54 @@ def _metas():
     }
 
 
+# (E, mf-shap3b): name -> a factory over the package answering (model, X, y), the model unfitted
+def _extras():
+    import numpy as np
+
+    def lp_data():
+        X, y = _data("clf3")
+        y = y.copy()
+        y[60:] = -1  # glue: the unlabeled marker of the fixture
+        return X, y
+
+    def shifted(kind):
+        X, y = _data(kind)
+        return X, y.astype(np.float64) * 2.5 - 1.0
+
+    return {
+        "iforest": lambda ml: (ml.IsolationForest(n_estimators=10, random_state=0),) + _data("clf2"),
+        "lof_novelty": lambda ml: (ml.LocalOutlierFactor(n_neighbors=10, novelty=True),) + _data("clf2"),
+        "kmeans": lambda ml: (ml.KMeans(n_clusters=3, random_state=0),) + _data("clf3"),
+        "label_prop_rbf": lambda ml: (ml.LabelPropagation(kernel="rbf", gamma=2.0),) + lp_data(),
+        "label_spread_knn": lambda ml: (ml.LabelSpreading(kernel="knn", n_neighbors=5),) + lp_data(),
+        "rfe_lr": lambda ml: (ml.RFE(ml.LogisticRegression(), n_features_to_select=3),) + _data("clf3"),
+        "rfe_linear_svc": lambda ml: (ml.RFE(ml.LinearSVC(random_state=0), n_features_to_select=2),)
+        + _data("clf2"),
+        "rfe_ridge": lambda ml: (ml.RFE(ml.Ridge(), n_features_to_select=2),) + _data("reg"),
+        "stack_predict": lambda ml: (ml.StackingClassifier([("lr", ml.LogisticRegression()),
+                                                            ("svc", ml.LinearSVC(random_state=0))],
+                                                           stack_method="predict", cv=3),) + _data("clf3"),
+        "stack_predict_float": lambda ml: (ml.StackingClassifier([("lr", ml.LogisticRegression()),
+                                                                  ("nb", ml.GaussianNB())],
+                                                                 stack_method="predict", cv=3),) + shifted("clf3"),
+    }
+
+
+def _forecasters():
+    return ("ExponentialSmoothing", "AutoARIMA", "CrostonClassic", "ProphetForecaster", "Theta", "AutoTheta")
+
+
 def _cases():
     cases = {}
+    for key in _extras():  # glue: the fixed configuration table
+        cases["shap_k_" + key] = ("KE", key, {}, False, "", {}, {}, 8, "codes")
+        cases["shap_p_" + key] = ("PE", key, {}, False, "", dict(random_state=0), dict(npermutations=20), 8,
+                                  "codes")
+    for key in ("iforest", "label_prop_rbf", "rfe_lr"):  # glue: the fixed configuration table
+        cases["shap_k_" + key + "_many_rows"] = ("KE", key, {}, False, "", {}, {}, 97, "codes")
+        cases["shap_k_" + key + "_nonfinite"] = ("KE", key, {}, False, "", {}, {}, -8, "codes")
+    for cls in _forecasters():  # glue: the fixed configuration table
+        cases["shap_k_forecast_" + cls] = ("KF", cls, {}, False, "", {}, {}, 8, "codes")
     for key, (cls, mkw) in _LABEL_MODELS.items():  # glue: the fixed configuration table
         for how in ("codes", "float", "str"):  # glue: the fixed configuration table
             cases["shap_k_label_" + key + "_" + how] = ("K", cls, mkw, False, "clf3", {}, {}, 8, how)
@@ -267,7 +326,21 @@ def _run(name):
     import mojolearn as ml
     which, cls, mkw, positive, kind, ekw, vkw, rows, how = _cases()[name]
     try:
-        if which in ("KV", "PV"):
+        if which == "KF":
+            # a forecaster, unfitted: refused at construction by name
+            X, _y = _data("reg")
+            try:
+                model = getattr(ml, cls)()
+            except TypeError:
+                # the series-in-the-constructor forecasters (ExponentialSmoothing, AutoARIMA)
+                model = getattr(ml, cls)(np.arange(1, 49, dtype=np.float32))
+            ml.KernelExplainer(model, X[:20])
+            return f"{name} answered"
+        if which in ("KE", "PE"):
+            model, X, y = _extras()[cls](ml)
+            model.fit(X, y)
+            which = which[0]
+        elif which in ("KV", "PV"):
             model, kind = _vote(cls, ml)
             X, y = _data(kind)
             model.fit(X, y)

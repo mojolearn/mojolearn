@@ -496,6 +496,9 @@ class ExponentialSmoothing:
     >>> np.asarray(model.forecast(12)).shape
     (12,)
     """
+    #: Kernel and Permutation SHAP (bindings/trees_agnostic_native_door.mojo) refuse a forecaster: its predict takes
+    #: a horizon or time points, not feature rows X (shap's own explainers call model(X) and fail the same way).
+    _mojolearn_explained = "forecaster"
 
     def __init__(
         self,

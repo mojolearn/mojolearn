@@ -72,6 +72,9 @@ class AutoARIMA(ParamsMixin):
     >>> model.forecast(10).shape
     (8, 10)
     """
+    #: Kernel and Permutation SHAP (bindings/trees_agnostic_native_door.mojo) refuse a forecaster: its predict takes
+    #: a horizon or time points, not feature rows X (shap's own explainers call model(X) and fail the same way).
+    _mojolearn_explained = "forecaster"
 
     #: The bindings the search runs, through `ARIMA` and `select_d` (named
     #: here so the lane map derives them and their CPU host bindings).

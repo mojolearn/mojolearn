@@ -3043,6 +3043,9 @@ class RFE(_SelectorMixin):
     # wrappers; constructor and parameter setters remain separately audited.
     _mojolearn_native_public = True
     _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
+    #: Kernel and Permutation SHAP explain this exact class natively: its fitted estimator_'s member over the
+    #: support_ columns (bindings/trees_agnostic_native_door.mojo); read from the class's own namespace.
+    _mojolearn_explained = "rfe"
 
     def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
         self.estimator = estimator

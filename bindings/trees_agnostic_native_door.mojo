@@ -8,11 +8,14 @@
 # object); this owner shapes the float64 values (PACK). A meta-estimator is
 # opened over its members' held native states through the meta doors' X-free
 # member UNPACK and evaluated by its public operation's RUN (`AgnMeta`; lane
-# mf-shap3, 2026-11-23); a fitted search by its best estimator. A class (or a
-# member's class) with no member entry is evaluated through its compiled
-# model-selection plan (bindings/prep_native_estimator.mojo; never its Python
-# predict), `_DoorModel`. A Python callable model is refused: native code
-# never calls back into it.
+# mf-shap3, 2026-11-23); a fitted search by its best estimator; an RFE by its
+# fitted estimator's member over its support columns, a label propagation model by
+# its typed query body, an outlier detector by its member's integer predict (lane
+# mf-shap3b). A class (or a member's class) with no member entry whose plan serves
+# the method is evaluated through its compiled model-selection plan
+# (bindings/prep_native_estimator.mojo; never its Python predict), `_DoorModel`;
+# one with neither is refused in words, and so is a forecaster. A Python callable
+# model is refused: native code never calls back into it.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -47,10 +50,17 @@ from xtrees.glue_calls import xt_ref
 from xtrees.agnostic_values_run import (
     AgnModel, AgnMember, AgnMeta, AgnMetaPlan, AgnRequest, AGN_META_SOFT, AGN_META_REGRESS, AGN_META_HARD,
     AGN_META_BAG, AGN_META_STACK, AGN_META_OVR, AGN_META_CALIBRATED, AGN_META_ADA, AGN_META_COLUMNS,
-    AGN_META_RIDGE, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
+    AGN_META_RIDGE, AgnLabelProp, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
 )
 from xtrees.trees_meta_vote_run import VoteMember, CalPair, CalFit, STACK_PREDICT, STACK_PROBA
-from bindings.member_set_door import MemberHeldCall, member_held_close
+from bindings.member_set_door import MemberHeldCall, member_held_close, member_held_open
+from bindings.neighbors_lp_query_unpack import lp_query_unpack
+from bindings.lof_provider_unpack import LofConnection
+from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit
+from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.member_xneighbors_boundary_door import _family_context as xn_family_context
+from core.neighbors_native_driver import XnDriver
+from neighbors.label_propagation_run import LpQueryRequest
 from bindings.trees_public_meta_door import (
     meta_kind, meta_member_open, _sub_cols, _voting_weights, _attr as meta_attr, calibrated_pair_codes,
     calibrated_pair_words, ovr_member_words, stacking_layout, multioutput_ridge_ref,
@@ -126,6 +136,69 @@ comptime _LABELS_REFUSAL = ("TypeError: the explained classifier's classes_ are 
     + "predict_proba")
 
 
+#: A forecaster's predict takes a forecast horizon (or time points), not rows of features. shap's explainers call
+#: the model on the background rows (`match_model_to_data`: "Provided model function fails when applied to the
+#: provided data set.") and fail; these refuse it by name instead (lane mf-shap3b, 2026-11-23).
+def _forecaster_refusal(name: String, model: PythonObject) raises -> String:
+    return ("TypeError: " + name + " explains a model of the feature rows X; " + String(py_type(model).__name__)
+            + " is a forecaster: its predict takes a forecast horizon, not rows of features, so it has no output "
+            + "over X to explain (shap: Provided model function fails when applied to the provided data set.)")
+
+
+def _explained_kind(model: PythonObject) raises -> String:
+    """The class's own explained kind (lane mf-shap3b, 2026-11-23; `_mojolearn_explained`): "label_propagation"
+    and "rfe" from the exact class's own namespace (a subclass is not admitted), "forecaster" from its MRO (every
+    forecaster refuses), "" for any other class."""
+    var own = _class_fields(py_type(model))
+    if py_contains(own, "_mojolearn_explained"):
+        var word = own["_mojolearn_explained"]
+        if py_type(word) is _b().str:
+            return String(word)
+    var inherited = _class_value(model, "_mojolearn_explained")
+    if inherited is not None and py_type(inherited) is _b().str and String(inherited) == "forecaster":
+        return String("forecaster")
+    return String("")
+
+
+def _rfe_estimator(model: PythonObject) raises -> PythonObject:
+    """An RFE's fitted `estimator_`, with `RFE.predict`'s own words when it has none."""
+    var est = py_get(py_fields(model), PythonObject("estimator_"))
+    if est is None:
+        raise Error("AttributeError: '" + String(py_type(model).__name__) + "' object has no attribute 'estimator_'")
+    return est
+
+
+def _admit_explained(model: PythonObject, name: String, context: PythonObject) raises:
+    """Only connected mojolearn estimators run here. A forecaster is refused (`_forecaster_refusal`); a label
+    propagation model is its exact class (its query is typed: `lp_query_unpack`); an RFE admits its fitted
+    estimator as `RFE.predict` does (`prep_estimator_admit(estimator_, "RFE")`); any other class needs its
+    connected plan (`prep_estimator_admit`)."""
+    var kind = _explained_kind(model)
+    if kind == "forecaster":
+        raise Error(_forecaster_refusal(name, model))
+    if kind == "label_propagation":
+        return
+    if kind == "rfe":
+        prep_estimator_admit(_rfe_estimator(model), "RFE", context)
+        return
+    prep_estimator_admit(model, name, context)
+
+
+def _member_only(model: PythonObject, context: PythonObject) -> Bool:
+    """The class's connected plan is a member-only plan (python/mojolearn/_native_msel_more.py `connect_members`:
+    a marked class with no method recipes, IsolationForest among them): its methods are its member's. Never
+    raises."""
+    try:
+        var plan = prep_estimator_plan(model, context)
+        if plan is None or py_get(plan, "member") is None:
+            return False
+        var word = py_get(plan, "member_only", PythonObject(False))
+        var answer = Bool(py=word)
+        return answer
+    except:
+        return False
+
+
 def _meta_kind(model: PythonObject, context: PythonObject) -> String:
     """The connected meta schema of the model's class (bindings/trees_public_meta_door.mojo `meta_kind`, then
     bindings/trees_public_boost_door.mojo `boost_kind`), or "" for any other class. Never raises."""
@@ -163,7 +236,20 @@ def _explained(model: PythonObject, context: PythonObject) raises -> PythonObjec
 def _method(model: PythonObject, context: PythonObject) raises -> String:
     """The explained method: a classifier's predict_proba, else predict. A hard VotingClassifier has no
     predict_proba (scikit-learn's `available_if`): its predict (lane mf-shap3). A MultiOutputClassifier is
-    refused (`_MULTI_REFUSAL`)."""
+    refused (`_MULTI_REFUSAL`). An RFE: its fitted estimator's (`RFE.predict` / `predict_proba` are that
+    estimator's over the support columns); a label propagation model: predict_proba (lane mf-shap3b)."""
+    var kind = _explained_kind(model)
+    if kind == "rfe":
+        return _method_of(_rfe_estimator(model), context)
+    if kind == "label_propagation":
+        return "predict_proba"
+    return _method_of(model, context)
+
+
+def _method_of(model: PythonObject, context: PythonObject) raises -> String:
+    """`_method` of a class with a connected plan. A member-only plan (`_member_only`) serves its member's
+    methods (a classifier's predict_proba, else predict: IsolationForest's predict, lane mf-shap3b)."""
+    var member_only = _member_only(model, context)
     var kind = _class_value(model, "_estimator_type")
     if (kind is not None and py_type(kind) is _b().str and String(kind) == "classifier"):
         var meta = _meta_kind(model, context)
@@ -171,9 +257,9 @@ def _method(model: PythonObject, context: PythonObject) raises -> String:
             raise Error(_MULTI_REFUSAL)
         var nk = trees_keys()
         var hard = meta == "voting_classifier" and String(meta_attr(model, nk[].k_voting, PythonObject(""))) == "hard"
-        if not hard and prep_estimator_has(model, "predict_proba", context):
+        if not hard and (member_only or prep_estimator_has(model, "predict_proba", context)):
             return "predict_proba"
-    if not prep_estimator_has(model, "predict", context):
+    if not member_only and not prep_estimator_has(model, "predict", context):
         raise Error("TypeError: the explained mojolearn estimator has no native predict")
     return "predict"
 
@@ -310,7 +396,7 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
     # compiled operation. A Python callable or foreign model is refused.
     # A fitted search is explained through its best estimator (`_explained`).
     var explained = _explained(model, context)
-    prep_estimator_admit(explained, name, context)
+    _admit_explained(explained, name, context)
     var seed = _seed(random_state, context)
     var model_fields = _fields(explained)
     if requested is None:
@@ -338,12 +424,16 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
     try:
         var s = _State(explained, method, bg, table, mode, seed, nb, d, -1, PythonObject(None))
         _open(em, s, bg, nb, context)
-        if em.meta or em.native:
+        if em.meta or em.native or em.lp:
             k = em.k
             ev = admitted_vector(k, "<f8", context)
             var ev_at = trees_address(ev)
             var bg_at = trees_address(bg)
-            if em.meta:
+            if em.lp:
+                var lp = AgnLabelProp(em.lp_drivers[0], em.lp_requests[0], em.lp_name, bg_at, nb, d)
+                _expected_with(lp, True, glue, nb, k, logit, ev_at)
+                _ = lp^
+            elif em.meta:
                 var meta = AgnMeta(em.meta_plan, bg_at, nb, d, False, glue_key.vendor == 0, _xr(em.meta_xt))
                 _expected_with(meta, em.meta_gil_free, glue, nb, k, logit, ev_at)
                 _ = meta^
@@ -416,7 +506,7 @@ def _state(fields: PythonObject, name: String, context: PythonObject) raises -> 
     var table = trees_table(context, mode, "_mojolearn_x_trees")
     # A fitted search: its best estimator now (`_explained`), as the search's own predict reads it.
     var model = _explained(_get(fields, "model"), context)
-    prep_estimator_admit(model, name, context)
+    _admit_explained(model, name, context)
     return _State(model, String(method), bg, table, mode, _seed(_get(fields, "random_state"), context),
                   Int(py=bg.shape[0]), Int(py=bg.shape[1]), _int(_get(fields, "n_outputs_"), "output count", True),
                   _get(fields, "_dev"))
@@ -473,6 +563,20 @@ struct _Member(Movable):
     var meta_gil_free: Bool
     var meta_free: Bool
     var meta_parallel: Bool
+    # A model that is not a classifier whose member writes integer values (lane mf-shap3b: an outlier detector's
+    # predict): widened to float32 by the RUN.
+    var ints: Bool
+    # An RFE (lane mf-shap3b): its support column numbers (int32, the member reads these columns of each row);
+    # empty for every other model.
+    var select: List[Int32]
+    # A label propagation model (lane mf-shap3b): its typed query (`lp_requests[0]` over `lp_drivers[0]`), its
+    # class name for the refusal words, and the owners of the addresses the request holds (`lp_keep`: X_,
+    # label_distributions_, the connection's provider, the binding). The RUN runs with the GIL released.
+    var lp: Bool
+    var lp_drivers: List[XnDriver]
+    var lp_requests: List[LpQueryRequest]
+    var lp_name: String
+    var lp_keep: PythonObject
     var refusal: String
 
     def __init__(out self):
@@ -495,6 +599,13 @@ struct _Member(Movable):
         self.meta_gil_free = True
         self.meta_free = True
         self.meta_parallel = False
+        self.ints = False
+        self.select = List[Int32]()
+        self.lp = False
+        self.lp_drivers = List[XnDriver]()
+        self.lp_requests = List[LpQueryRequest]()
+        self.lp_name = String("")
+        self.lp_keep = PythonObject(None)
         self.refusal = String("")
 
 
@@ -505,6 +616,12 @@ def _member_release(mut em: _Member):
     member_held_release(em.held)
     em.labels = PythonObject(None)
     em.labels_at = 0
+    em.ints = False
+    em.select = List[Int32]()
+    em.lp = False
+    em.lp_drivers = List[XnDriver]()
+    em.lp_requests = List[LpQueryRequest]()
+    em.lp_keep = PythonObject(None)
     _meta_release(em)
 
 
@@ -524,25 +641,34 @@ def _meta_release(mut em: _Member):
     em.meta_parallel = False
 
 
-def _label_table(fields: PythonObject, classes: Int, context: PythonObject, mut em: _Member) raises -> Bool:
-    """UNPACK of the label route: the estimator's `classes_` as a float32 Array (the cast the door's `_evaluate`
-    made of its public predict's labels, element by element), once per values call. False (not served: the
-    door then answers, or raises its own words) when there is no `classes_` or its length is not the member's
-    class count. Non-numeric labels: `em.refusal` (`_LABELS_REFUSAL`)."""
+def _label_snapshot(fields: PythonObject, classes: Int, context: PythonObject, mut em: _Member) raises -> PythonObject:
+    """An estimator's `classes_` as a float32 Array (`_label_table`'s read), or None when there is none or its
+    length is not `classes` (when known). Non-numeric labels: `em.refusal` (`_LABELS_REFUSAL`), None."""
     var given = _get(fields, "classes_")
     if given is None:
-        return False
+        return PythonObject(None)
     var table = PythonObject(None)
     try:
         table = _snapshot(given, "<f4", 1, "classes_", context, Python.dict())
     except:
         em.refusal = String(_LABELS_REFUSAL)
-        return False
+        return PythonObject(None)
     var count = Int(py=table.size)
     if count < 1 or (classes > 0 and count != classes):
+        return PythonObject(None)
+    return table
+
+
+def _label_table(fields: PythonObject, classes: Int, context: PythonObject, mut em: _Member) raises -> Bool:
+    """UNPACK of the label route: the estimator's `classes_` as a float32 Array (the cast the door's `_evaluate`
+    made of its public predict's labels, element by element), once per values call. False (not served: the
+    door then answers, or raises its own words) when there is no `classes_` or its length is not the member's
+    class count. Non-numeric labels: `em.refusal` (`_LABELS_REFUSAL`)."""
+    var table = _label_snapshot(fields, classes, context, em)
+    if table is None:
         return False
     em.labels_at = trees_address(table)
-    em.n_labels = count
+    em.n_labels = Int(py=table.size)
     em.labels = table
     return True
 
@@ -620,6 +746,11 @@ def _member_open(mut em: _Member, s: _State, model: PythonObject, x: PythonObjec
         # GBDT classifiers and the naive Bayes / discriminant members on a float64-proba route write their
         # predict_proba as float64.
         var served = cols >= 1 and (dtype == MEMBER_F32 or dtype == MEMBER_F64)
+        # Integer values of a model that is not a classifier (lane mf-shap3b, 2026-11-23): IsolationForest's
+        # predict writes int32 1 / -1, the other outlier detectors' int64; the RUN widens them to float32.
+        var ints = not labelled and not proba and cols >= 1 and (dtype == MEMBER_I32 or dtype == MEMBER_I64)
+        if ints:
+            served = True
         if labelled:
             # codes, one column, into a table of the member's classes (int64 codes narrowed in the RUN).
             served = (cols == 1 and (dtype == MEMBER_I32 or dtype == MEMBER_I64)
@@ -641,6 +772,7 @@ def _member_open(mut em: _Member, s: _State, model: PythonObject, x: PythonObjec
         em.gil_free = gil_free
         em.parallel = parallel
         em.wide = dtype == MEMBER_F64 or dtype == MEMBER_I64
+        em.ints = ints
         em.native = True
     except:
         return
@@ -765,6 +897,37 @@ def _bag_plan(mut em: _Member, s: _State, classifier: Bool, context: PythonObjec
     return True
 
 
+def _plan_classifier(e: PythonObject, context: PythonObject) raises -> Bool:
+    """`e`'s connected plan is a classifier's."""
+    var plan = prep_estimator_plan(e, context)
+    if plan is None:
+        return False
+    var word = plan["classifier"]
+    return Bool(py=word)
+
+
+def _stack_label_member(mut em: _Member, e: PythonObject, context: PythonObject) raises -> Bool:
+    """A CLASSIFIER member a Stacking asks for predict (lane mf-shap3b, 2026-11-23): its held state's predict (the
+    member writes int32 or int64 class codes; a member's code c is its c-th class), and its `classes_` as a
+    float32 table kept in `em.meta_keep` (the RUN maps the codes to these labels: the column
+    `_StackingBase._out` places for that member). False (closed) when it is not served or its labels do not
+    match its class count; non-numeric labels leave `em.refusal`."""
+    var opened = member_held_open(e, MEMBER_OP_PREDICT, True, 1, False, context, _b())
+    if not opened.served or (opened.dtype != MEMBER_I32 and opened.dtype != MEMBER_I64):
+        member_held_close(opened)
+        return False
+    var probe = member_call_of(opened.held.plan, opened.held.state)
+    _ = member_outputs_of(opened.held.plan, probe, MEMBER_OP_PREDICT)
+    var table = _label_snapshot(_fields(e), probe.classes, context, em)
+    if table is None:
+        member_held_close(opened)
+        return False
+    _ = py_call(em.meta_keep.append, table)
+    em.meta_plan.stack_labels.append(trees_address(table))
+    em.meta_plan.stack_n_labels.append(Int(py=table.size))
+    return _meta_take(em, opened^, 0, 1.0, False)
+
+
 def _stack_plan(mut em: _Member, s: _State, classifier: Bool, context: PythonObject) raises -> Bool:
     """Stacking*: the members of its meta features (`stacking_layout`: each asked as `stack_method_` says),
     then its final estimator (`final_estimator_`) over them: a classifier's predict_proba at its class
@@ -779,6 +942,12 @@ def _stack_plan(mut em: _Member, s: _State, classifier: Bool, context: PythonObj
     em.meta_plan = AgnMetaPlan(AGN_META_STACK)
     for i in range(len(members)):  # driver-loop: over members (admission, once each)
         var kind = layout.kinds[i]
+        if kind == STACK_PREDICT and _plan_classifier(members[i], context):
+            if not _stack_label_member(em, members[i], context):
+                return False
+            continue
+        em.meta_plan.stack_labels.append(0)
+        em.meta_plan.stack_n_labels.append(0)
         var operation = MEMBER_OP_PREDICT if kind == STACK_PREDICT else (
             MEMBER_OP_PREDICT_PROBA if kind == STACK_PROBA else MEMBER_OP_DECISION)
         if not _meta_member(em, members[i], operation, kind != STACK_PREDICT, 0, 0, 1.0, False, context):
@@ -997,17 +1166,87 @@ def _batched_member(model: PythonObject, context: PythonObject) -> PythonObject:
         return PythonObject(None)
 
 
-def _open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject) raises:
-    """UNPACK of the explained model over the rows `x` (`n` rows; the background at construction): its own
-    member (`_member_open`), a batched Bagging's forest, else a meta-estimator over members (`_meta_open`). An
-    open that found the call must be refused raises its words here. Nothing served: the door answers."""
-    _member_open(em, s, s.model, x, n, context)
+def _rfe_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject) raises:
+    """UNPACK of an RFE (lane mf-shap3b, 2026-11-23): `RFE.predict` / `predict_proba` are its fitted estimator's
+    over the support columns (`self.estimator_.<op>(self.transform(X))`, bindings/prep_select_native_door.mojo
+    `prep_rfe_call`). Its fitted width is checked in `_rfe_transform`'s words, the support columns (`_mask`, the
+    mask `transform` selects by) are read once into `em.select`, and the estimator's own member is opened
+    (`_member_open`): the RUN gathers those columns of every chunk and calls it. Not served: `em.refusal`."""
+    var name = String(py_type(s.model).__name__)
+    var fields = py_fields(s.model)
+    var fitted = py_get(fields, PythonObject("n_features_in_"))
+    if fitted is None:
+        raise Error("RuntimeError: mojolearn: this " + name + " instance is not fitted yet")
+    if Int(py=fitted) != s.d:
+        raise Error("mojolearn: X has " + String(s.d) + " features, " + name + " was fitted with "
+                    + String(Int(py=fitted)))
+    var mask = py_get(fields, PythonObject("_mask"))
+    if mask is None:
+        raise Error("RuntimeError: mojolearn: this " + name + " instance is not fitted yet")
+    em.select = List[Int32]()
+    for i in range(len(mask)):  # driver-loop: over the fitted support mask (model structure, once per call)
+        if Bool(py=mask[i]):
+            em.select.append(Int32(i))
+    var est = _rfe_estimator(s.model)
+    if len(em.select) > 0 and len(em.select) <= s.d:
+        _member_open(em, s, est, x, n, context)
     if not em.native and len(em.refusal) == 0:
-        var inner = _batched_member(s.model, context)
-        if inner is not None:
-            _member_open(em, s, inner, x, n, context)
-        else:
-            _meta_open(em, s, x, n, context)
+        em.refusal = ("TypeError: the explained " + name + "'s fitted estimator (" + String(py_type(est).__name__)
+                      + ") has no native member that serves its " + s.method + " over the selected columns")
+
+
+def _lp_open(mut em: _Member, s: _State, context: PythonObject) raises:
+    """UNPACK of a LabelPropagation / LabelSpreading model (lane mf-shap3b, 2026-11-23): its predict_proba's
+    query words through the one body its public query reads them with (bindings/neighbors_lp_query_unpack.mojo
+    `lp_query_unpack`), on the x_neighbors image its own query calls (`estimator_binding`, the shared family
+    context the x_neighbors doors receive), and that image's native operations entry. The query refuses a
+    non-finite chunk itself (its deferred finite word): no host scan."""
+    var family = xn_family_context()
+    var binding = xn_admit(estimator_binding(s.model, "_mojolearn_x_neighbors", family))
+    var unpacked = lp_query_unpack(s.model, binding, False, family)
+    var name = String(py_type(s.model).__name__)
+    if unpacked.request.features != s.d:
+        raise Error("ValueError: X has " + String(s.d) + " features, but " + name + " is expecting "
+                    + String(unpacked.request.features) + " features as input.")
+    var k = unpacked.request.classes
+    if s.k >= 0 and k != s.k:
+        raise Error(_WIDTH_CHANGED)
+    var connection = LofConnection(binding)
+    em.lp_drivers = List[XnDriver]()
+    em.lp_drivers.append(connection.driver.copy())
+    em.lp_requests = List[LpQueryRequest]()
+    em.lp_requests.append(unpacked.request.copy())
+    em.lp_keep = Python.list(unpacked.fit_x, unpacked.distributions, connection.provider, binding)
+    em.lp_name = name^
+    em.k = k
+    em.lp = True
+    _ = unpacked^
+
+
+def _open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject) raises:
+    """UNPACK of the explained model over the rows `x` (`n` rows; the background at construction): a label
+    propagation model's typed query (`_lp_open`), an RFE's estimator over its support (`_rfe_open`), its own
+    member (`_member_open`), a batched Bagging's forest, else a meta-estimator over members (`_meta_open`). An
+    open that found the call must be refused raises its words here. Nothing served: the door answers when the
+    class's plan serves the method; else the call is refused (lane mf-shap3b: a member-only class whose member
+    does not serve it)."""
+    var kind = _explained_kind(s.model)
+    if kind == "label_propagation":
+        _lp_open(em, s, context)
+        return
+    if kind == "rfe":
+        _rfe_open(em, s, x, n, context)
+    else:
+        _member_open(em, s, s.model, x, n, context)
+        if not em.native and len(em.refusal) == 0:
+            var inner = _batched_member(s.model, context)
+            if inner is not None:
+                _member_open(em, s, inner, x, n, context)
+            else:
+                _meta_open(em, s, x, n, context)
+        if (not em.native and not em.meta and len(em.refusal) == 0
+                and not prep_estimator_has(s.model, s.method, context)):
+            em.refusal = "TypeError: the explained mojolearn estimator has no native " + s.method
     if len(em.refusal) > 0:
         raise Error(em.refusal)
 
@@ -1015,8 +1254,9 @@ def _open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonOb
 def _handle_of(mut em: _Member, x: Int, n: Int, d: Int, k: Int, host: Bool, glue: EntryRef) raises -> AgnMember:
     """The native model handle over the opened member (`em.native`); the plan it reads stays in `em`."""
     var plan_addr = Int(UnsafePointer(to=em.held.plan))
+    var cols = Int(em.select.unsafe_ptr()) if len(em.select) > 0 else 0
     return AgnMember(em.held.plan.member, plan_addr, em.held.state, em.operation, x, n, d, k, em.parallel, em.wide,
-                     host, glue, em.labels_at, em.n_labels)
+                     host, glue, em.labels_at, em.n_labels, em.ints, cols, len(em.select))
 
 
 def _expected_with[M: AgnModel](mut model: M, gil_free: Bool, glue: EntryRef, nb: Int, k: Int, logit: Bool,
@@ -1034,17 +1274,18 @@ struct _DoorModel(AgnModel):
     """The explained estimator through its own compiled door (`_evaluate`, per chunk), serial, with the GIL held:
     the one place the RUN's model reaches Python objects.
 
-    WHO STILL COMES HERE (lane mf-shap3, 2026-11-23): ONLY an explained estimator whose class, or the class of a
-    member of the explained meta-estimator, has no member entry that serves the call: a class without its own
-    member mark (the subclasses `_classical_host.py` binds to the host, HostLogisticRegression, HostSVC, HostSVR,
-    HostKMeans, HostKernelRidge, HostIsolationForest and the _HostCD estimators; IsolationForest, the label
-    propagation estimators, RFE, the forecasters; marks are their families' and lane mf-cal3's), a
-    meta-estimator used as a member (no meta member kind yet), a member asked for a method its family does not
-    serve (a classifier member a Stacking asks for predict). Everything else is native: every member family,
-    the votes (soft and hard), Bagging, Stacking, OneVsRest, CalibratedClassifierCV, AdaBoost,
-    MultiOutputRegressor, the search CVs' best estimator, the device forest's one call; a refusal (a member's
-    non-finite chunk, a changed width, non-numeric labels, a MultiOutputClassifier) is raised natively in its
-    own words (before, this door answered the whole call again only to raise its words)."""
+    WHO STILL COMES HERE (lane mf-shap3b, 2026-11-23): ONLY an explained estimator whose class has a plan that
+    serves the method by its door but no member entry that serves the call, or whose meta-estimator has a member
+    of that kind: the subclasses `_classical_host.py` binds to the host (HostLogisticRegression, HostSVC, HostSVR,
+    HostKMeans, HostKernelRidge, HostIsolationForest, the _HostCD estimators: their marks and host-bound plan
+    bit are lane mf-cal3b's) and a meta-estimator used as a member of a meta-estimator (lane mf-cal3b's META
+    member kind). Once those land, this door and `_evaluate` are deleted. Everything else is native: every member
+    family (an outlier detector's or clusterer's integer predict too), the votes (soft and hard), Bagging,
+    Stacking (a classifier member asked for predict too), OneVsRest, CalibratedClassifierCV, AdaBoost,
+    MultiOutputRegressor, the search CVs' best estimator, RFE (its estimator over its support), LabelPropagation
+    and LabelSpreading (their typed query), the device forest's one call; a class with neither a serving member
+    nor a door plan is refused, and so is a forecaster; a refusal (a member's non-finite chunk, a changed width,
+    non-numeric labels, a MultiOutputClassifier) is raised natively in its own words."""
     var model: PythonObject
     var method: String
     var context: PythonObject
@@ -1193,6 +1434,11 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, context: Pytho
         var handle = _handle_of(em, req.x, n, d, k, req.host, glue)
         _kernel_with(handle, em.gil_free, glue, req, ns, nl, logit)
         _ = handle^
+    elif em.lp:
+        # The typed query, released as the public predict_proba releases it; the request's buffers stay in `em`.
+        var lp = AgnLabelProp(em.lp_drivers[0], em.lp_requests[0], em.lp_name, req.x, n, d)
+        _kernel_with(lp, True, glue, req, ns, nl, logit)
+        _ = lp^
     else:
         var door = _DoorModel(s, x, n, context)
         agn_kernel_values_run(glue, req, ns, nl, logit, door)
@@ -1358,6 +1604,10 @@ def _permutation_values_over(fields: PythonObject, args: PythonObject, context: 
             var handle = _handle_of(em, req.x, n, d, k, req.host, glue)
             _permutation_with(handle, em.gil_free, glue, req, npm, wb, wb_link)
             _ = handle^
+        elif em.lp:
+            var lp = AgnLabelProp(em.lp_drivers[0], em.lp_requests[0], em.lp_name, req.x, n, d)
+            _permutation_with(lp, True, glue, req, npm, wb, wb_link)
+            _ = lp^
         else:
             var door = _DoorModel(s, x, n, context)
             agn_permutation_values_run(glue, req, npm, wb, wb_link, door)
