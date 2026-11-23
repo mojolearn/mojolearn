@@ -357,10 +357,10 @@ def _gbdt_fit_pointwise_arm(
     or unset (`AdjustBoostFromAverageDefaultValue`); every
     `feature_border_type`; an eval set under any detector (Iter, IncToDec,
     or none); one-hot and CTR columns; `max_depth` 0. Refused in the
-    device's words: Depthwise and Lossguide (`train`), MultiRMSE,
-    MultiClass and MultiClassOneVsAll and feature combinations
-    (`fit_with_test`), `boost_from_average=True` outside its list
-    (`train`)."""
+    device's words: Depthwise and Lossguide (`train`), MultiRMSE and feature
+    combinations (`fit_with_test`), `boost_from_average=True` outside its
+    list (`train`). MultiClass and MultiClassOneVsAll take the multi-output
+    fit (`gbdt_multi_host_fit(use_pointwise_searcher=True)`)."""
     var n_class_weights = params.i(35)
     var n_rows = params.i(0)
     var n_features = params.i(1)
@@ -465,13 +465,10 @@ def _gbdt_fit_pointwise_arm(
             " TGreedySubsetsSearcher only (cuda/train_lib/multiclass.cpp:"
             "1-13)"
         )
-    if loss == String("MultiClass") or loss == String("MultiClassOneVsAll"):
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-            " a single-target searcher; " + loss + " is trained by"
-            " TGreedySubsetsSearcher only (cuda/train_lib/multiclass.cpp:"
-            "1-13)"
-        )
+    # lane gbdt-pw-multiclass (2026-11-23): MultiClass and MultiClassOneVsAll
+    # never reach this arm: the caller sends them to the multi-output fit
+    # with the doc-parallel searcher (`gbdt_multi_host_fit(
+    # use_pointwise_searcher=True)`), as the device trains them now
     if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK:
         raise Error(
             "the pointwise searcher's one-output arm takes Logloss, RMSE,"
@@ -1377,7 +1374,12 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         simple_leaves_check(
             leaf_method, is_multi, False, grow_code != 0, use_pointwise
         )
-    if use_pointwise and not pw_grouped_loss:
+    # lane gbdt-pw-multiclass (2026-11-23): MultiClass and MultiClassOneVsAll
+    # on the pointwise searcher take the multi-output fit below (the greedy
+    # arm's checks are `train`'s and hold for both searchers), whose search
+    # sums every approx dimension's score
+    var pw_multi_class = loss == String("MultiClass") or loss == String("MultiClassOneVsAll")
+    if use_pointwise and not pw_grouped_loss and not pw_multi_class:
         return _gbdt_fit_pointwise_arm(
             params, border_type, feature_fraction, min_split_gain,
             min_child_hessian,
@@ -2083,6 +2085,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             score_function,
             flags, permutation_count, ctr_permutation_id, max_ctr_complexity,
             multi_leaf_method, multi_iterations,
+            use_pointwise_searcher=use_pointwise,
         )
         if len(flags) != 0:
             text = gbdt_multi_host_model_text_ctr(multi_fit)

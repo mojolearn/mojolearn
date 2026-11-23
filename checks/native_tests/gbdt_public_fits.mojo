@@ -76,7 +76,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 29
+comptime GBDT_HOST_UNITS = 30
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -1242,6 +1242,8 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_tail_rest[I]()
     elif unit == 28:
         host_simple_rest[I]()
+    elif unit == 29:
+        host_pointwise_multiclass[I]()
     else:
         raise Error("gbdt host unit " + String(unit) + " has no body on this branch")
 
@@ -1590,6 +1592,74 @@ def _pw_refused[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, needle: String, what
     require_fails_with(refused, needle, what)
 
 
+def _pw_class0_blind_inputs() -> GbdtInputs:
+    """600 rows, 6 uniform columns from a fixed LCG (column-major). Every
+    third row is class 0, whatever its columns say; every other row is class
+    1 when column 1 is above 0.5, else class 2. Class 0's gradient therefore
+    carries no signal for the deciding column: the first class's plane is
+    blind to it."""
+    var n = 600
+    var d = 6
+    var x = List[Float32](length=n * d, fill=Float32(0))
+    var state = UInt64(0x9E3779B97F4A7C15)
+    for c in range(d):  # small-loop(the fixture's six columns)
+        for r in range(n):  # small-loop(one fixture column)
+            state = state * UInt64(6364136223846793005) + UInt64(1442695040888963407)
+            x[c * n + r] = Float32(Int(state >> UInt64(40))) / Float32(16777216.0)
+    var y = List[Float32](length=n, fill=Float32(0))
+    for r in range(n):  # small-loop(the fixture's labels)
+        if r % 3 == 0:
+            y[r] = Float32(0)
+        elif x[1 * n + r] > Float32(0.5):
+            y[r] = Float32(1)
+        else:
+            y[r] = Float32(2)
+    return GbdtInputs(x^, n, d, y^)
+
+
+def host_pointwise_multiclass[I: GbdtImage]() raises:
+    """MultiClass and MultiClassOneVsAll on the pointwise searcher (lane
+    gbdt-pw-multiclass, 2026-11-23), each twice to the same bytes, at rate
+    0.1, L2 and Cosine: the split score sums every class's term. QUALITY:
+    on `_pw_class0_blind_inputs` (class 0's gradient blind to the deciding
+    column 1) the fit separates classes 1 and 2 on column 1, so at least
+    90% of the class-1/2 rows are predicted right. The old search, on the
+    first class's gradient alone, never saw column 1 and split on noise:
+    this assertion fails on it."""
+    var inp = _pw_class0_blind_inputs()
+    var losses: List[String] = ["MultiClass", "MultiClassOneVsAll"]
+    var scores: List[String] = ["L2", "Cosine"]
+    for li in range(2):  # small-loop(the two multi-output losses)
+        for si in range(2):  # small-loop(the two score functions)
+            var o = _pw_opts(losses[li], scores[si], "No")
+            o.n_estimators = 20
+            o.max_depth = 3
+            o.boost_from_average = 0
+            var what = "pointwise " + losses[li] + " " + scores[si]
+            var m = _twice[I](o, inp, what)
+            var proba = predict_proba(m.text, losses[li], inp.x, inp.n)
+            var width = len(proba) // inp.n
+            require(width == 3, what + ": " + String(width) + " probability columns")
+            var right = 0
+            var rows = 0
+            for r in range(inp.n):  # small-loop(the fixture's rows)
+                var label = Int(inp.y[r])
+                if label == 0:
+                    continue
+                rows += 1
+                var best = 0
+                for k in range(1, width):  # small-loop(three classes)
+                    if proba[r * width + k] > proba[r * width + best]:
+                        best = k
+                if best == label:
+                    right += 1
+            require(
+                Float64(right) >= 0.9 * Float64(rows),
+                what + ": " + String(right) + " of " + String(rows)
+                + " class-1/2 rows right; the split ignored the deciding column",
+            )
+
+
 def host_pointwise_rest[I: GbdtImage]() raises:
     """The pointwise searcher's arms the host refused by name until lane
     gbdt-cpu-rest-4-pwl (2026-11-23), each twice to the same bytes: the
@@ -1599,7 +1669,7 @@ def host_pointwise_rest[I: GbdtImage]() raises:
     `train` resolves it: a bias on MAE, none on Logloss), class weights on
     CrossEntropy, a Median border grid, an eval set under IncToDec and
     under no detector, a one-hot column, a CTR column and `max_depth` 0.
-    Then the device's refusals in its words: Depthwise, MultiClass and
+    Then the device's refusals in its words: Depthwise and
     `boost_from_average=True` on Poisson."""
     var clf = _e3()
     var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
@@ -1717,10 +1787,8 @@ def host_pointwise_rest[I: GbdtImage]() raises:
     var dw = _pw_opts("RMSE", "Cosine", "No")
     dw.grow_policy = "Depthwise"
     _pw_refused[I](dw, reg, "OBLIVIOUS searcher", "pointwise Depthwise")
-    var mc = _pw_opts("MultiClass", "Cosine", "No")
-    mc.boost_from_average = 0
-    var mc_in = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
-    _pw_refused[I](mc, mc_in, "a single-target searcher", "pointwise MultiClass")
+    # (lane gbdt-pw-multiclass: MultiClass on this searcher trains; its
+    # unit is host_pointwise_multiclass)
     var pb = _pw_opts("Poisson", "Cosine", "No")
     _pw_refused[I](pb, clf, "You can use boost_from_average only", "pointwise Poisson boost_from_average")
 
