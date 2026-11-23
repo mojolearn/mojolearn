@@ -280,3 +280,66 @@ def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred
     if metric == LBL_F1:
         return arena.f64(at + 6)
     return arena.f64(at + 2)
+
+
+# ---------------------------------------------------------------- log_loss, typed
+# Lane mf-metric4 (2026-11-23): the program bindings/mcls_classify_door.mojo
+# `_log_loss` / `_log_loss_options` assembled over pins, as one builder.
+
+
+def mc_log_loss_stages(mut plan: MetricProgramPlan, n: Int, k: Int, binary: Bool, weighted: Bool,
+                       normalize: Bool) raises -> Tuple[Int, Int]:
+    """The log-loss program over its inputs: the probabilities (n words
+    binary, else n * k), the codes (n) and, weighted, the weights (n), in
+    that order. (the proba FLAGS slot, the binary64 result offset)."""
+    var a_off = plan.input(n if binary else n * k)
+    var put = mc_proba_stages(plan, a_off, n, k, binary)
+    var y = plan.input(n)
+    var res = mc_row_mean(plan, put[0], k, y, n, _ROW_LOGLOSS, weighted, normalize, False)
+    return (put[1], res)
+
+
+def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int) raises -> Float64:
+    """THE TYPED RUN of `log_loss(y_true, y_proba)` with its defaults over n
+    int32 class codes in 0 .. k-1 and the member's float32 probabilities
+    (n x k; for k == 2 the scorer's one column, n words, as
+    `neg_log_loss` hands `predict_proba[:, 1]`): the labels are those
+    present in y_true, as `_log_loss` selects them, in its refusal words and
+    order. No Python."""
+    var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=truth)
+    var rank = List[Int32](length=max(k, 1), fill=Int32(-1))
+    for i in range(n):  # driver-loop: over the rows (the classes y_true holds)
+        var c = Int(t[i])
+        if c < 0 or c >= k:
+            raise Error("ValueError: y codes outside [0, n_classes)")
+        rank[c] = 0
+    var selected = 0
+    for c in range(k):  # driver-loop: over the class codes (their ranks among the selected)
+        if rank[c] == 0:
+            rank[c] = Int32(selected)
+            selected += 1
+    if selected < 2:
+        raise Error("log_loss requires at least two labels; pass labels for one observed class")
+    var binary = k == 2
+    if binary:
+        if selected != 2:
+            raise Error("one-column probabilities require exactly two labels")
+    elif k != selected:
+        raise Error("probability columns must match the label count (at least two)")
+    var codes = List[Int32](length=max(n, 1), fill=Int32(0))
+    for i in range(n):  # driver-loop: over the rows (the encoded labels)
+        codes[i] = rank[Int(t[i])]
+    var plan = MetricProgramPlan()
+    var got = mc_log_loss_stages(plan, n, k, binary, False, True)
+    var addresses: List[Int] = [proba, Int(codes.unsafe_ptr())]
+    var sizes: List[Int] = [n if binary else n * k, n]
+    var arena = metric_inputs_run(route, plan, addresses, sizes)
+    _ = len(codes)  # copied into the program's arena above
+    var code = mc_proba_code(arena, got[0])
+    if code == 1:
+        raise Error("log_loss probabilities must be finite")
+    if code == 2:
+        raise Error("log_loss probabilities must lie in [0,1]")
+    if code == 3:
+        raise Error("log_loss probabilities rows must sum to one within sqrt(float32 eps)")
+    return arena.f64(got[1])

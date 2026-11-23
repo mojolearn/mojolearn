@@ -48,7 +48,7 @@ from bindings.metrics_program_pack import metric_arena_array
 from bindings.mcls_classify_run import (
     _CM_COUNT, _CM_NORM, _CM_WSUM_LEAF, _CM_WSUM_FOLD, _WSUM_BLOCK, _ROW_LOGLOSS, _RANK_MEAN,
     McEpi, McSums, mc_wsum_sf64, mc_count_tail, mc_row_mean, mc_proba_stages, mc_proba_code,
-    mc_sums_stages, mc_epi_stage,
+    mc_sums_stages, mc_epi_stage, mc_log_loss_stages,
 )
 
 # ------------------------------------------------------------------ targets
@@ -445,20 +445,8 @@ def _prf(args: PythonObject, context: PythonObject) raises -> PythonObject:
 # ------------------------------------------------------------------ log_loss
 
 
-def mc_put_proba(mut prog: MetricDoorProg, a: PythonObject, n: Int, k: Int, binary: Bool) raises -> Tuple[Int, Int]:
-    """`_put_proba`: (S, FLAGS); the probabilities pinned, the stages typed."""
-    var a_off = prog.put(a)
-    return mc_proba_stages(prog.plan, a_off, n, k, binary)
-
-
-def mc_row_mean_door(mut prog: MetricDoorProg, s: Int, cols: Int, y: Int, n: Int, kind: Int, w: PythonObject,
-                     normalize: Bool, half: Bool) raises -> Int:
-    """`_row_mean` before the run: the typed stages, the weights pinned as
-    the input the stages declared."""
-    var res = mc_row_mean(prog.plan, s, cols, y, n, kind, w is not None, normalize, half)
-    if w is not None:
-        prog.pins.append(w)
-    return res
+# Removed (a plain door path, not an experiment): `mc_put_proba` and `mc_row_mean_door`, the pinned halves of the
+# log-loss program, removed 2026-11-23 by lane mf-metric4; both callers take the typed `mc_log_loss_stages`.
 
 
 def mc_targets(y_true: PythonObject, caller: String, context: PythonObject) raises -> McLabels:
@@ -539,10 +527,15 @@ def _log_loss_options(args: PythonObject, context: PythonObject) raises -> Pytho
     var w = PythonObject(None)
     if args[3] is not None:
         w = mc_weights(args[3], n, caller, context)
+    # the typed builder (bindings/mcls_classify_run.mojo `mc_log_loss_stages`):
+    # inputs proba, codes and (weighted) w, pinned in that order
     var prog = MetricDoorProg()
-    var put = mc_put_proba(prog, proba, n, k, binary)
-    var y = prog.put(codes)
-    var res = mc_row_mean_door(prog, put[0], k, y, n, _ROW_LOGLOSS, w, mc_bool(args[2]), False)
+    var put = mc_log_loss_stages(prog.plan, n, k, binary, w is not None, mc_bool(args[2]))
+    prog.pins.append(proba)
+    prog.pins.append(codes)
+    if w is not None:
+        prog.pins.append(w)
+    var res = put[1]
     var arena = metric_door_run(prog, args[5], context)
     var code = mc_proba_code(arena, put[1])
     if code == 1:
@@ -593,9 +586,10 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var proba = admit_family(probabilities, nd, "probabilities", context).array
     var encoded = mc_map_order(true, selected, context)
     var prog = MetricDoorProg()
-    var put = mc_put_proba(prog, proba, n, k, binary)
-    var y = prog.put(encoded)
-    var res = mc_row_mean_door(prog, put[0], k, y, n, _ROW_LOGLOSS, PythonObject(None), mc_bool(normalize), False)
+    var put = mc_log_loss_stages(prog.plan, n, k, binary, False, mc_bool(normalize))
+    prog.pins.append(proba)
+    prog.pins.append(encoded)
+    var res = put[1]
     var arena = metric_door_run(prog, args[5], context)
     var code = mc_proba_code(arena, put[1])
     if code == 1:
