@@ -1322,6 +1322,36 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "class_weights takes 2 entries for loss 'Logloss', got "
             + String(n_class_weights)
         )
+    # lane gbdt-cpu-rest-4-cat (2026-11-23): what `train` refuses with a
+    # categorical or one-hot column, in its words and its order (the
+    # MultiRMSE check, then the grouped losses' cat_features loop, then
+    # their one_hot loop); every other loss trains them below
+    var flags = gbdt_host_load_u32(cp, n_flags)
+    var any_cat_flag = False
+    var any_one_hot_flag = False
+    for f in range(n_flags):  # small-loop(n_flags: per-feature option flags): option validation, reads no data
+        if (flags[f] & UInt32(1)) != UInt32(0):
+            any_cat_flag = True
+        if (flags[f] & UInt32(2)) != UInt32(0):
+            any_one_hot_flag = True
+    if is_multi_rmse and any_cat_flag:
+        raise Error(
+            "loss='MultiRMSE' with cat_features is not carried here:"
+            " the CTR target binarization reads one target per row"
+        )
+    if pw_grouped and any_cat_flag:
+        raise Error(
+            "loss='" + loss + "' with cat_features is not implemented"
+            " here: the reference shuffles whole queries for its CTR"
+            " permutations (permutation.cpp:9-11,"
+            " GenerateQueryDocsOrder), which this implementation does"
+            " not restate"
+        )
+    if pw_grouped and any_one_hot_flag:
+        raise Error(
+            "loss='" + loss + "' with one_hot_features is not implemented"
+            " here"
+        )
     if n_flags != 0 and (grow_code != 0 or is_pointwise or is_multi):
         _refuse("cat_features or one_hot_features outside SymmetricTree with Logloss or RMSE")
     # the HELD-OUT arm (lane/close-no-cpu-path-gbdt, 2026-09-20): their
@@ -1394,9 +1424,13 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # each tree's features for every loss and both policies
     # (`_sample_tree_folds`, the device's `feature_sampling.mojo`); the
     # symmetric loop does not restate the sampling
-    if feature_fraction < 1.0 and n_flags != 0:
-        # `train`'s words (gbdt/train.mojo)
+    if feature_fraction < 1.0 and any_cat_flag:
+        # `train`'s words (gbdt/train.mojo), its cat_features loop first
         raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+    if feature_fraction < 1.0 and any_one_hot_flag:
+        # and its one_hot loop (lane gbdt-cpu-rest-4-cat: this was the
+        # categorical sentence for a one-hot column)
+        raise Error("feature_fraction<1 supports numeric features only; one_hot input refused")
     # and the numeric symmetric Logloss / RMSE loop (gbdt_host_boost, the
     # same two helpers), and the symmetric pointwise losses, grouped ones
     # included (gbdt_losses_host_fit, the same statements; lane
@@ -1581,7 +1615,6 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         elif bootstrap_type == String("Poisson"):
             sym_boot_kind = GBDT_BOOT_POISSON
             sym_boot_param = sym_subsample if sym_subsample >= Float32(0.0) else Float32(0.66)
-    var flags = gbdt_host_load_u32(cp, n_flags)
     var x_address = params.x
     var y_address = params.y
     _ = xp
