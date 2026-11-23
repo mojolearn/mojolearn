@@ -56,6 +56,13 @@ sample weights or an eval set. Every fit at `REST_RATE` 0.1.
 (Logloss, RMSE and MAE with boost_from_average, CrossEntropy, every
 bootstrap, both scores, zero weights with an eval set, a CTR column), the
 model text, the weighted learn curve and the held-out curve compared.
+
+`test_rest4cat_ns_host_text_is_device_text` (lane gbdt-cpu-rest-4-cat-ns,
+2026-11-23): Depthwise and Lossguide over CTR and one-hot columns
+(cat_features and one_hot_features), Plain boosting, Logloss, RMSE and the
+pointwise losses (Quantile, CrossEntropy, MAE), sample and class weights, eval
+sets, each bootstrap and score noise; the model text (the `ctr_table` records,
+the `split_type take_bin` nodes), the learn curve and the held-out curve.
 """
 from std.math import nan
 from std.memory import UnsafePointer
@@ -1257,6 +1264,168 @@ def test_ordered_weights_host_text_is_device_text() raises:
         raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
                     + ("gbdt_host_device_cat ordered weights device: " + String(count) + " of "
                        + String(ORDW_UNITS) + " cases failed" + failed if count > 0 else ""))
+
+
+
+# ---- lane gbdt-cpu-rest-4-cat-ns (2026-11-23): Depthwise and Lossguide over
+# CTR and one-hot columns, Plain boosting, host text against device text at
+# rate 0.1 ----
+comptime NSC_UNITS = 8
+
+
+def _nsc_loss(unit: Int) raises -> String:
+    if unit < 0 or unit >= NSC_UNITS:
+        raise Error("gbdt_host_device_cat cat non-symmetric: no unit " + String(unit))
+    if unit == 2:
+        return String("RMSE")
+    if unit == 4:
+        return String("Quantile")
+    if unit == 5:
+        return String("CrossEntropy")
+    if unit == 6:
+        return String("MAE")
+    return String("Logloss")
+
+
+def _nsc_inputs(unit: Int) raises -> GbdtInputs:
+    """`_inputs`' fixture (column 0 a 40-category CTR column, column 1 a
+    two-category column, columns 2 and 3 numeric) with the unit's target
+    (a 0/1 label for Logloss, a probability in [0, 1] for CrossEntropy, the
+    regression value otherwise); hashed row weights on [0.25, 4) on units 2
+    and 6; units 4 and 7 carry the learn rows again as the held-out set."""
+    var loss = _nsc_loss(unit)
+    var reg = _inputs(True)
+    var inp = _inputs(loss == String("Logloss") or loss == String("CrossEntropy"))
+    if loss == String("CrossEntropy"):
+        for r in range(inp.n):  # driver-loop: over the fixture's rows
+            inp.y[r] = _unit01(r, 140) * Float32(0.5) + Float32(0.5) * inp.y[r]
+    elif loss != String("Logloss"):
+        inp.y = reg.y.copy()
+    if unit == 2 or unit == 6:
+        for r in range(inp.n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 141))
+    if unit == 4 or unit == 7:
+        inp.eval_x = inp.x.copy()
+        inp.eval_y = inp.y.copy()
+    return inp^
+
+
+def _nsc_opts(unit: Int) raises -> GbdtOpts:
+    """Plain boosting under Depthwise (depth 4) or Lossguide (max_leaves 12,
+    depth 6), every work-changing option explicit: 0 Depthwise Logloss over
+    the CTR column (Cosine, no bootstrap); 1 Depthwise Logloss over the CTR
+    and one-hot columns (Bayesian at 1 with score noise 1); 2 Lossguide
+    weighted RMSE over both with boost_from_average (NewtonL2); 3 Lossguide
+    Logloss over the one-hot column alone (NewtonCosine, Bernoulli 0.7); 4
+    Depthwise Quantile over the CTR column with an eval set (Iter,
+    use_best_model) and boost_from_average; 5 Lossguide CrossEntropy over
+    the CTR column with column 1 in one_hot_features; 6 Depthwise weighted
+    MAE over both with boost_from_average; 7 Lossguide Logloss with class
+    weights over the CTR column and an eval set (Iter)."""
+    var loss = _nsc_loss(unit)
+    var depthwise = unit == 0 or unit == 1 or unit == 4 or unit == 6
+    var o = GbdtOpts(loss, REST_TREES, 4 if depthwise else 6)
+    o.grow_policy = "Depthwise" if depthwise else "Lossguide"
+    if not depthwise:
+        o.max_leaves = 12
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = "Cosine"
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.leaf_iterations = 1
+    o.boost_from_average = 0
+    o.cat_features = [0]
+    if unit == 1:
+        o.cat_features = [0, 1]
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.random_strength = 1.0
+    elif unit == 2:
+        o.cat_features = [0, 1]
+        o.score_function = "NewtonL2"
+        o.boost_from_average = 1
+    elif unit == 3:
+        o.cat_features = [1]
+        o.score_function = "NewtonCosine"
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif unit == 4:
+        o.boost_from_average = 1
+        o.od_type = "Iter"
+        o.od_wait = 2
+        o.use_best_model = 1
+    elif unit == 5:
+        o.one_hot_features = [1]
+    elif unit == 6:
+        o.cat_features = [0, 1]
+        o.boost_from_average = 1
+    elif unit == 7:
+        o.class_weights = [1.0, 2.0]
+        o.od_type = "Iter"
+        o.od_wait = 2
+    return o^
+
+
+def test_rest4cat_ns_host_text_is_device_text() raises:
+    """The units of lane gbdt-cpu-rest-4-cat-ns: every host fit across the
+    cores first, then one device graph at a time; the model text, the learn
+    curve and the held-out curve compared."""
+    var host_texts = List[String](length=NSC_UNITS, fill=String(""))
+    var host_learn = List[List[Float64]](length=NSC_UNITS, fill=List[Float64]())
+    var host_tests = List[List[Float64]](length=NSC_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var learn_addr = Int(host_learn.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm learn_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var l = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=learn_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_nsc_opts(unit), _nsc_inputs(unit))
+        p[unit] = outcome.text.copy()
+        l[unit] = outcome.learn.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat cat non-symmetric host", NSC_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(NSC_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_nsc_opts(unit), _nsc_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat cat non-symmetric unit " + String(unit)
+                    + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.learn) != len(host_learn[unit]) or len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat cat non-symmetric unit " + String(unit) + ": curve lengths differ")
+            for i in range(len(outcome.learn)):  # small-loop(the learn curve)
+                if outcome.learn[i] != host_learn[unit][i]:
+                    raise Error("gbdt_host_device_cat cat non-symmetric unit " + String(unit) + ": learn loss "
+                                + String(i) + " differs")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat cat non-symmetric unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat cat non-symmetric device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_learn^
+    _ = host_tests^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat cat non-symmetric device: " + String(count) + " of "
+                       + String(NSC_UNITS) + " cases failed" + failed if count > 0 else ""))
 
 
 def main() raises:
