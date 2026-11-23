@@ -216,7 +216,23 @@ def _close(name: String, got: List[Float32], want: List[Float64], tol: Float64) 
 def _pinned(name: String) -> UInt64:
     """This version's recorded output-and-gradient digest of a case (0: none recorded). Recorded on the CPU
     column; the device column must give the same words. Bits change between versions: a product change records
-    the new digest here in the same commit."""
+    the new digest here in the same commit. Recorded on the CPU column (cpc1, lane nn-activations, 2026-11-23)."""
+    if name == "identity":
+        return UInt64(14541554893642753075)
+    if name == "leaky_relu":
+        return UInt64(1003246152945393296)
+    if name == "elu":
+        return UInt64(16297280965698229233)
+    if name == "prelu_shared":
+        return UInt64(5928345840216340137)
+    if name == "prelu_channels":
+        return UInt64(7705402478610619409)
+    if name == "mish":
+        return UInt64(2956685032833292905)
+    if name == "hardswish":
+        return UInt64(1359718371854466513)
+    if name == "hardsigmoid":
+        return UInt64(10447624012318339352)
     return UInt64(0)
 
 
@@ -279,8 +295,8 @@ def run_case[E: Exec](mut ex: E, c: _Case, oracle: Bool) raises -> List[Float32]
 
 
 # ---------------------------------------------------------------- fits
-comptime _TRAIN = 256
-comptime _TEST = 128
+comptime _TRAIN = 512
+comptime _TEST = 256
 comptime _EPOCHS = 40
 
 
