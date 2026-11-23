@@ -28,6 +28,15 @@ from bindings.sequential_keys_unpack import sequential_keys
 from bindings.py_balanced import py_item
 
 
+def _layer_args(layer: PythonObject) raises -> List[Int]:
+    """A layer record's six integer arguments (its fifth field), for block_param_names (lane nn-norms)."""
+    var out = List[Int](capacity=6)
+    var args = layer[4]
+    for k in range(6):  # small-loop(6: the layer's integer arguments): description metadata, no data
+        out.append(Int(py=args[k]))
+    return out^
+
+
 def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
     var nk = sequential_keys()
     var layers = py_item(sequential_fields(model), nk[].k__layers)
@@ -42,7 +51,7 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
             # every block layer with tensors, by name (autograd/model_blocks.mojo block_param_names); the codes are
             # not listed here (lane layer-tables, 2026-11-23: a list of 35, 39, 40, 41 left out 42 to 46, so
             # load_state_dict refused batch_norm, lm_head and the three scans; tools/block_tables_check.py)
-            var suffixes = block_param_names(code)
+            var suffixes = block_param_names(code, _layer_args(layer), 0)
             if len(suffixes) == 0:
                 continue
             var names = Python.list()
@@ -251,7 +260,7 @@ def sequential_export_weights(mut mods: NativeModules, model: PythonObject, form
         var name = String(shapes[base]) + (".bias" if shapes[base + 1] == 1 else ".weight")
         var code = Int(py=model_layers[shapes[base]][0])
         if is_block(code):
-            name = String(shapes[base]) + block_param_names(code)[shapes[base + 1]]
+            name = String(shapes[base]) + block_param_names(code, _layer_args(model_layers[shapes[base]]), 0)[shapes[base + 1]]
         if form == SEQUENTIAL_EXPORT_STATE_DICT:
             py_setitem(named, PythonObject(name), value)
         elif form == SEQUENTIAL_EXPORT_PARAMETERS:

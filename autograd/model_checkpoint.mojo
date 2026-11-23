@@ -48,7 +48,7 @@ from sequence.ops import FP
 from autograd.model_blocks import block_param_names, block_param_sizes, is_block
 from autograd.model import (
     FIT_STATE_WORDS, FS_SEED_HI, FS_SEED_LO, FS_STEP, IP64, LAYER_CONV1D, LAYER_CONV2D, LAYER_LAYER_NORM,
-    LAYER_LINEAR, ModelSpec, SPEC2_ARGS, SPEC2_HEADER, conv_in_per_group, parse_model,
+    LAYER_LINEAR, ModelSpec, SPEC2_ARGS, SPEC2_HEADER, SPEC2_VERSION, conv_in_per_group, parse_model,
 )
 from autograd.program import program_from_words, program_words, PROGRAM_PARAM_WEIGHT, PROGRAM_PARAM_STATE_WORDS
 from autograd.ops_api import OpsSession, ops_session
@@ -110,7 +110,7 @@ def model_layout(spec: ModelSpec, mut offsets: List[Int], mut names: List[String
         elif is_block(k) and off >= 0:
             # lane neural-blocks: one entry per parameter tensor of a block layer
             var sizes = block_param_sizes(k, spec.xargs, i, spec.in_shape[i])
-            var suffixes = block_param_names(k)
+            var suffixes = block_param_names(k, spec.xargs, i)
             var end = off
             for j in range(len(sizes)):  # small-loop(at most four parameter tensors of the layer)
                 end += sizes[j]
@@ -217,9 +217,9 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
     r.class_at = at
     if r.n_run < 0 or r.k < 0 or len(xi) != at + r.k or r.class_size < 0 or r.class_size > 8:
         raise _damaged(path)
-    # lane nn-conv (2026-11-23): a version-2 description (a Sequential with an input shape) holds its layer
-    # count after the shape words, not at word 2; reading word 2 refused every such checkpoint as damaged
-    var n_layers = r.prog[2] if r.prog[0] == 1 else (r.prog[SPEC2_HEADER - 1] if len(r.prog) >= SPEC2_HEADER else 0)
+    # lane nn-norms (2026-11-23): a version-2 description (input_shape) keeps its layer count after the shape
+    # slots; prog[2] is its first sample axis, so every rank-n model's checkpoint was refused as damaged
+    var n_layers = r.prog[SPEC2_HEADER - 1] if r.prog[0] == SPEC2_VERSION and len(r.prog) >= SPEC2_HEADER else r.prog[2]
     if n_layers < 1 or len(xf) != SEQ_OPT_FLOATS + n_layers + r.n_run:
         raise _damaged(path)
     for i in range(SEQ_OPT_FLOATS):  # driver-loop: over option floats

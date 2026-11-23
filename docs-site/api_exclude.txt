@@ -193,3 +193,8 @@ Sequential.mish	not yet in a release verification
 Sequential.hardswish	not yet in a release verification
 Sequential.hardsigmoid	not yet in a release verification
 # nn-activations end
+# nn-norms begin
+Sequential.group_norm	not yet in a release verification
+Sequential.instance_norm1d	not yet in a release verification
+Sequential.instance_norm2d	not yet in a release verification
+# nn-norms end

@@ -37,6 +37,9 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "identity": 47, "leaky_relu": 48, "elu": 49, "prelu": 50, "mish": 51, "hardswish": 52,
           "hardsigmoid": 53,
           # nn-activations end
+          # nn-norms begin
+          "group_norm": 54, "instance_norm1d": 55, "instance_norm2d": 55,
+          # nn-norms end
           }
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
@@ -164,7 +167,8 @@ class Sequential(_CheckMixin):
             ``'replication_pad1d'``, ``'replication_pad2d'``, ``'upsample'``,
             ``'pixel_shuffle'``, ``'pixel_unshuffle'``, ``'identity'``,
             ``'leaky_relu'``, ``'elu'``, ``'prelu'``, ``'mish'``,
-            ``'hardswish'``, ``'hardsigmoid'``), with that
+            ``'hardswish'``, ``'hardsigmoid'``, ``'group_norm'``,
+            ``'instance_norm1d'``, ``'instance_norm2d'``), with that
             method's arguments.
         *args, **kwargs
             The layer's arguments, as listed for ``kind``.
@@ -726,6 +730,95 @@ class Sequential(_CheckMixin):
                      .flatten().linear(10))
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("batch_norm2d", (num_features, eps, momentum), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    # nn-norms begin
+    def group_norm(self, num_groups, num_channels, eps=1e-5, affine=True):
+        """Append group normalization, as PyTorch's ``nn.GroupNorm``.
+
+        The channels of each sample (its first axis) are split into
+        ``num_groups`` groups of consecutive channels. Every group of every
+        sample is normalized with its own mean and (biased) variance over
+        its channels and the remaining axes, so the result does not depend
+        on the other rows of the batch and is the same in :meth:`fit` and
+        :meth:`predict`. With ``affine`` a learned per-channel ``weight``
+        (initially 1) and ``bias`` (initially 0) are then applied.
+
+        Parameters
+        ----------
+        num_groups : int
+            The number of groups; it must divide ``num_channels``.
+            ``num_groups=1`` normalizes every sample as a whole (layer norm
+            over all its values); ``num_groups=num_channels`` normalizes each
+            channel separately (instance norm).
+        num_channels : int
+            The number of channels, the first axis of each sample.
+        eps : float, default 1e-5
+            Added to the variance before its square root.
+        affine : bool, default True
+            Whether to learn the per-channel ``weight`` and ``bias``.
+
+        Example::
+
+            model = (mojolearn.Sequential(input_shape=(3, 64))
+                     .conv1d(16, 5, padding=2).group_norm(4, 16).relu()
+                     .adaptive_avg_pool1d(1).flatten().linear(2))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("group_norm", (num_groups, num_channels, eps, affine), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def instance_norm1d(self, num_features, eps=1e-5, momentum=0.1, affine=False, track_running_stats=False):
+        """Append instance normalization over ``(channels, length)``
+        samples, as PyTorch's ``nn.InstanceNorm1d``.
+
+        Each channel of each sample is normalized with its own mean and
+        (biased) variance over the length. With ``affine`` a learned
+        per-channel ``weight`` (initially 1) and ``bias`` (initially 0) are
+        then applied.
+
+        With ``track_running_stats`` the layer also keeps running statistics
+        per channel: during :meth:`fit` they are updated as
+        ``running = (1 - momentum) * running + momentum * stat``, with
+        ``stat`` the batch's average of the per-sample means and (unbiased)
+        variances, and :meth:`predict` and validation normalize with them.
+        Without it every call normalizes with the sample's own statistics.
+        The running statistics are saved with the model (``params_``,
+        :meth:`state_dict`, checkpoints) and are never changed by the
+        optimizer.
+
+        Parameters
+        ----------
+        num_features : int
+            The number of channels, the first axis of each sample.
+        eps : float, default 1e-5
+            Added to the variance before its square root.
+        momentum : float, default 0.1
+            Weight of the batch statistics in the running update, in [0, 1].
+        affine : bool, default False
+            Whether to learn the per-channel ``weight`` and ``bias``.
+        track_running_stats : bool, default False
+            Whether to keep running statistics and use them in
+            :meth:`predict`.
+
+        Example::
+
+            model = (mojolearn.Sequential(input_shape=(3, 64))
+                     .conv1d(16, 5, padding=2).instance_norm1d(16, affine=True)
+                     .relu().adaptive_avg_pool1d(1).flatten().linear(2))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("instance_norm1d", (num_features, eps, momentum, affine, track_running_stats), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def instance_norm2d(self, num_features, eps=1e-5, momentum=0.1, affine=False, track_running_stats=False):
+        """Append instance normalization over ``(channels, height, width)``
+        samples, as PyTorch's ``nn.InstanceNorm2d``: :meth:`instance_norm1d`
+        with the statistics taken over both spatial axes.
+
+        Example::
+
+            model = (mojolearn.Sequential(input_shape=(1, 28, 28))
+                     .conv2d(8, 3, padding=1).instance_norm2d(8, affine=True)
+                     .relu().flatten().linear(10))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("instance_norm2d", (num_features, eps, momentum, affine, track_running_stats), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+    # nn-norms end
 
     def selective_scan(self, d_state=16):
         """Append Mamba's selective state-space scan over ``(length,
@@ -1823,7 +1916,9 @@ _SEQUENTIAL_CONTEXT = {
                     # nn-activations begin
                     "identity", "leaky_relu", "elu", "prelu", "mish", "hardswish", "hardsigmoid",
                     # nn-activations end
-                    "", "",  # 54, 55: nn-norms
+                    # nn-norms begin
+                    "group_norm", "instance_norm",
+                    # nn-norms end
                     # nn-conv begin: 56..66, autograd/nn_conv_blocks.mojo
                     "conv_transpose1d", "conv_transpose2d", "adaptive_avg_pool2d", "adaptive_max_pool2d",
                     "adaptive_max_pool1d", "global_max_pool", "constant_pad", "reflection_pad", "replication_pad",

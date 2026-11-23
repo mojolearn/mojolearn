@@ -95,6 +95,11 @@ SEQUENTIAL_LAYER_FIXTURES={
     'hardswish':((4,),lambda m,S:m.linear(4).hardswish()),
     'hardsigmoid':((4,),lambda m,S:m.linear(4).hardsigmoid()),
     # nn-activations end
+    # nn-norms begin
+    'group_norm':((4,3),lambda m,S:m.group_norm(2,4)),
+    'instance_norm1d':((2,4),lambda m,S:m.instance_norm1d(2,affine=True,track_running_stats=True)),
+    'instance_norm2d':((1,2,2),lambda m,S:m.instance_norm2d(1,affine=True)),
+    # nn-norms end
 }
 
 

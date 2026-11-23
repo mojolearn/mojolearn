@@ -239,12 +239,13 @@ def nnc_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[In
     return out^
 
 
-def nnc_param_names(code: Int) -> List[String]:
-    """The checkpoint names of nnc_param_sizes' tensors (a layer without a bias uses the first only)."""
+def nnc_param_names(code: Int, xargs: List[Int], i: Int) -> List[String]:
+    """The checkpoint names of nnc_param_sizes' tensors, one per tensor (no ".bias" without a bias)."""
     var out = List[String]()
     if _ct(code):
         out.append(".weight")
-        out.append(".bias")
+        if _ct_bias(xargs, i):
+            out.append(".bias")
     return out^
 
 

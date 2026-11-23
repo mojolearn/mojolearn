@@ -430,6 +430,20 @@ def rankn_batch_norm[E: Exec](
     the running update, apply), eval 2 (prep with the running statistics, apply); the
     backward 3 (block reductions, their totals with d gamma and d beta, dx). Recorded as
     RN_BATCH_NORM (autograd/rules_conv2d.mojo)."""
+    return rankn_batch_norm_core(tape, ex, x, Optional(gamma), Optional(beta), Optional(running), eps, momentum,
+                                 train)
+
+
+def rankn_batch_norm_core[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, gamma: Optional[Tensor], beta: Optional[Tensor], running: Optional[FP],
+    eps: Float32, momentum: Float32, train: Bool,
+) raises -> Tensor:
+    """rankn_batch_norm with the affine and the running statistics optional (lane nn-norms, 2026-11-23: the
+    group and instance norms of autograd/nn_norms.mojo take their statistics from these same bodies over a
+    regrouped view). gamma and beta both given or both None (None: gamma 1, beta 0, written by the prep
+    launch, no input read and no parameter gradient). running None: the training statistics normalize and
+    no running update is made (the variance launch's i0 = 1, bn_blk_var_at alone); eval needs running.
+    Launches and fold order are rankn_batch_norm's."""
     var s = tape.shape_of(x)
     if s.ndim < 2:
         raise Error("batch norm: x must be (N, C, ...)")
@@ -437,23 +451,31 @@ def rankn_batch_norm[E: Exec](
     var C = s.d[1]
     var count = s.count()
     var HW = count // (N * C)
-    if tape.rows(gamma) * tape.cols(gamma) != C or tape.rows(beta) * tape.cols(beta) != C:
+    var affine = Bool(gamma)
+    if affine != Bool(beta):
+        raise Error("batch norm: gamma and beta are given together")
+    if affine and (tape.rows(gamma.value()) * tape.cols(gamma.value()) != C
+                   or tape.rows(beta.value()) * tape.cols(beta.value()) != C):
         raise Error("batch norm: gamma and beta must hold one value per channel")
-    if train and N * HW < 2:
+    if not train and not running:
+        raise Error("batch norm: eval normalizes with running statistics")
+    if train and running and N * HW < 2:
         raise Error("batch norm: training needs more than one value per channel")
     var words: List[Int] = [N, C, HW]
     var desc = tape.descriptor(ex, words)
     var xv = tape.value_of(ex, x)
     var aux = tape.reserve(ex, 2 + BN_SLOTS * C)
+    var run = running.value() if running else dummy_ptr()
     var pr = Args()
-    pr.p0 = tape.value_of(ex, gamma)
+    pr.p0 = tape.value_of(ex, gamma.value()) if affine else dummy_ptr()
     pr.p1 = aux
-    pr.p2 = running
-    pr.p4 = tape.value_of(ex, beta)
+    pr.p2 = run
+    pr.p4 = tape.value_of(ex, beta.value()) if affine else dummy_ptr()
     pr.p11 = desc
     pr.f0 = eps
     pr.f1 = momentum
     pr.i0 = 0 if train else 1
+    pr.i1 = 0 if affine else 1
     ex.launch[OP_RNV_BN_PREP](pr, C)
     var NB = bn_fold_blocks(N * HW)
     var part = tape.reserve(ex, 2 * C * NB)
@@ -477,8 +499,9 @@ def rankn_batch_norm[E: Exec](
         var v = Args()
         v.p0 = part
         v.p1 = aux
-        v.p2 = running
+        v.p2 = run
         v.p11 = desc
+        v.i0 = 0 if running else 1
         ex.launch[OP_RNV_BN_VAR](v, C)
     var out = tape.reserve(ex, count)
     var ap = Args()
@@ -498,8 +521,11 @@ def rankn_batch_norm[E: Exec](
     saved.i2 = C
     saved.i3 = 1 if train else 0
     saved.i5 = 1 if rec and tape.requires_grad(x) else 0
-    saved.i6 = 1 if rec and tape.requires_grad(gamma) else 0
-    saved.i7 = 1 if rec and tape.requires_grad(beta) else 0
-    var inputs: List[Tensor] = [x, gamma, beta]
-    return tape.custom_nd(ex, inputs, out, s, RN_BATCH_NORM, saved)
+    if affine:
+        saved.i6 = 1 if rec and tape.requires_grad(gamma.value()) else 0
+        saved.i7 = 1 if rec and tape.requires_grad(beta.value()) else 0
+        var inputs: List[Tensor] = [x, gamma.value(), beta.value()]
+        return tape.custom_nd(ex, inputs, out, s, RN_BATCH_NORM, saved)
+    var only: List[Tensor] = [x]
+    return tape.custom_nd(ex, only, out, s, RN_BATCH_NORM, saved)
 

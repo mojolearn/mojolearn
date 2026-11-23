@@ -25,7 +25,10 @@ def test_live_source_is_consistent():
     assert problems == []
     # every code from BLOCK_FIRST to BLOCK_LAST is read, and the scan layers carry their tensors
     values = btc.constants(SOURCE)
-    assert len(table) == values["BLOCK_LAST"] - values["BLOCK_FIRST"] + 1
+    # (with the codes the lanes' own modules define and the never-assigned BLOCK_UNUSED range: lane nn-integrate)
+    delegated = {v for v in btc.delegated_values() if values["BLOCK_FIRST"] <= v <= values["BLOCK_LAST"]}
+    assert len(table) + len(delegated) + len(btc.unused_codes(values)) == (
+        values["BLOCK_LAST"] - values["BLOCK_FIRST"] + 1)
     # (sizes, names, inits, the appends of the dims branch: a shape's axes, 0 without a branch)
     assert table["LAYER_SSD_SCAN"][:3] == (2, 2, 2) and table["LAYER_SSD_SCAN"][3] > 0
     assert table["LAYER_SELECTIVE_SCAN"][:3] == (2, 2, 2) and table["LAYER_SELECTIVE_SCAN"][3] > 0

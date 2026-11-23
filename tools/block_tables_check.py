@@ -7,7 +7,8 @@ Where a layer code or name must appear for a layer to work end to end. Each plac
 means the place reads the code through `is_block` and the model_blocks tables, so it needs no line per code, and
 the check proves it still does (a literal code list there is how 42 to 46 went missing from load_state_dict).
 
-  autograd/model_blocks.mojo (block layers, BLOCK_FIRST .. BLOCK_LAST)
+  autograd/model_blocks.mojo (block layers, BLOCK_FIRST .. BLOCK_LAST: each code defined here, by a delegated
+                              module, or in the never-assigned BLOCK_UNUSED_FIRST .. BLOCK_UNUSED_LAST)
     LAYER_* constants         the code itself; one constant per code, no gap, no value shared with model.mojo
     block_shape               construct and shape: argument validation and the output shape
     block_param_sizes         parameter layout: the tensors of the flat params_ vector
@@ -16,9 +17,9 @@ the check proves it still does (a literal code list there is how 42 to 46 went m
     block_tensor_dims         each tensor's shape for import, export and state_dict (a branch iff it has tensors)
     block_forward             forward (backward is the tape of the ops it records)
     block_reads               the codes that read an earlier layer's output (their reference is renumbered)
-  delegated modules (DELEGATES below: autograd/nn_attention.mojo, nn_conv_blocks.mojo, ...): codes outside
-                              BLOCK_FIRST..BLOCK_LAST that a lane's own module defines, admitted by is_block through
-                              the module's admission function; the module's tables are checked like model_blocks'
+  delegated modules (DELEGATES below: autograd/nn_attention.mojo, nn_conv_blocks.mojo, ...): codes in
+                              BLOCK_FIRST..BLOCK_LAST that a lane's own module defines and model_blocks' tables call
+                              behind its admission function; the module's tables are checked like model_blocks'
   autograd/model.mojo         core codes 1..20 (LAYER_*); parse_model_v2 (block_shape, block_param_sizes),
                               model_init_params (block_init_bounds), _model_forward_v2 (block_forward), _absorbed_activation
                               (block_reads):
@@ -85,7 +86,7 @@ GENERIC = (
 )
 #: delegated block codes (lane nn-integrate, 2026-11-23): a module that defines its own LAYER_* codes and tables,
 #: which model_blocks' tables call behind its admission function. Per module: the file, the admission function
-#: (is_block must call it), and for each model_blocks table the module's function (None: not delegated). The
+#: (its codes lie in BLOCK_FIRST..BLOCK_LAST, which is_block admits), and for each model_blocks table the module's function (None: not delegated). The
 #: module's tables are checked like model_blocks' own: per code the same tensor count in sizes, names and inits, a
 #: dims branch exactly when it has tensors, and the shape (and forward, when named) function names the code.
 DELEGATES = (
@@ -177,17 +178,48 @@ def branches(body):
     return out
 
 
-def check_text(text):
-    """check() over model_blocks.mojo's TEXT."""
+def unused_codes(values):
+    """The codes BLOCK_UNUSED_FIRST..BLOCK_UNUSED_LAST (never assigned, not layers)."""
+    lo, hi = values.get("BLOCK_UNUSED_FIRST"), values.get("BLOCK_UNUSED_LAST")
+    return set(range(lo, hi + 1)) if lo is not None and hi is not None else set()
+
+
+def delegated_values(read=None):
+    """The codes the DELEGATES modules define: {value: name}."""
+    read = read or reader()
+    out = {}
+    for rel, _, _ in DELEGATES:
+        text = read(rel)
+        if text is not None:
+            for k, v in constants(text).items():
+                if k.startswith("LAYER_"):
+                    out[v] = k
+    return out
+
+
+def check_text(text, delegated=None):
+    """check() over model_blocks.mojo's TEXT; DELEGATED {value: name} are the codes the lanes' own modules define
+    (None: read them from the tree)."""
+    if delegated is None:
+        delegated = delegated_values()
     values = constants(text)
     first, last = values.get("BLOCK_FIRST"), values.get("BLOCK_LAST")
     if first is None or last is None:
         return ["BLOCK_FIRST / BLOCK_LAST not found"], {}
+    unused = unused_codes(values)
     names = {v: k for k, v in values.items() if k.startswith("LAYER_") and first <= v <= last}
     problems = []
     for v in range(first, last + 1):
-        if v not in names:
-            problems.append(f"code {v}: no LAYER_ constant between BLOCK_FIRST and BLOCK_LAST")
+        here, there = v in names, v in delegated
+        if v in unused:
+            if here or there:
+                problems.append(f"code {v}: lies in BLOCK_UNUSED_FIRST..BLOCK_UNUSED_LAST but is "
+                                f"{names.get(v) or delegated.get(v)}")
+        elif here and there:
+            problems.append(f"code {v}: {names[v]} here and {delegated[v]} in a delegated module")
+        elif not here and not there:
+            problems.append(f"code {v}: no LAYER_ constant between BLOCK_FIRST and BLOCK_LAST (here, in a "
+                            f"delegated module, or BLOCK_UNUSED)")
     counts = {name: [0, 0, 0, 0] for name in names.values()}
     seen = {name: [0, 0, 0, 0] for name in names.values()}
     for t, table in enumerate(TABLES):
@@ -283,11 +315,15 @@ def check_delegate(path, text, admit, tables, blocks_text):
     problems = []
     if not consts:
         return [f"{path}: no LAYER_ constants"], {}, {}
-    if f"{admit}(" not in "\n".join(function_body(blocks_text, "is_block", required=False) or []):
-        problems.append(f"{path}: model_blocks is_block does not call {admit}")
     admitted = _cond_codes(text, f"{admit}(code)", consts)
     for c in sorted(set(consts) - admitted):
         problems.append(f"{path}: {c} is not admitted by {admit}")
+    bvals = constants(blocks_text)
+    first, last, unused = bvals.get("BLOCK_FIRST"), bvals.get("BLOCK_LAST"), unused_codes(bvals)
+    for c in sorted(admitted):
+        v = consts[c]
+        if first is None or not (first <= v <= last) or v in unused:
+            problems.append(f"{path}: {c} = {v} lies outside model_blocks' BLOCK_FIRST..BLOCK_LAST (is_block refuses it)")
     counts = {c: [0, 0, 0, 0] for c in admitted}
     seen = {c: [0, 0, 0, 0] for c in admitted}
     for t, table in enumerate(TABLES):
@@ -387,7 +423,7 @@ def check_files(read):
             problems.append(f"{rel}: missing")
     if texts[BLOCKS] is None or texts[MODEL] is None or texts[PYMODEL] is None:
         return problems, {}
-    block_problems, table = check_text(texts[BLOCKS])
+    block_problems, table = check_text(texts[BLOCKS], delegated_values(read))
     problems += [f"{BLOCKS}: {p}" for p in block_problems]
     bvals, mvals = constants(texts[BLOCKS]), constants(texts[MODEL])
     first, last = bvals.get("BLOCK_FIRST"), bvals.get("BLOCK_LAST")
@@ -409,16 +445,11 @@ def check_files(read):
         dprob, dtable, dvals = check_delegate(rel, dtext, admit, tables, texts[BLOCKS])
         problems += dprob
         for name, v in dvals.items():
-            if v in codes and codes[v] != name and bvals.get(codes[v]) != v:
+            if v in codes and codes[v] != name:
                 problems.append(f"{rel}: {name} = {v} is also {codes[v]}")
-            if first is not None and first <= v <= last:
-                problems.append(f"{rel}: {name} = {v} lies in model_blocks' own range {first}..{last}")
             bvals.setdefault(name, v)
-        for name, row in dtable.items():
-            alias = [k for k, v in codes.items() if v == dvals[name]]
-            table[name] = row
-            if dvals[name] not in codes:
-                codes[dvals[name]] = name
+            codes[v] = name
+        table.update(dtable)
     with_params = {bvals[c] for c, n in table.items() if n[0] > 0 and c in bvals}
 
     # generic consumers: no per-code line, the model_blocks tables instead

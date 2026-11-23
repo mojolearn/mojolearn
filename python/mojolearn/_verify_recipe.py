@@ -1012,6 +1012,12 @@ EXAMPLES = {
         ["linear", 8], ["hardsigmoid"], ["prelu"], ["flatten"], ["linear", 1]]),
     # nn-activations end
 }
+# nn-norms begin: group norm (4 groups) and instance norm (affine, tracked running statistics) in a residual stack
+EXAMPLES["seq-norms"] = _seq((4, 8), [
+    ["conv1d", 8, 3, {"padding": 1}], ["group_norm", 4, 8], ["silu"],
+    ["conv1d", 8, 3, {"padding": 1}], ["instance_norm1d", 8, {"affine": True, "track_running_stats": True}],
+    ["silu"], ["residual", 2], ["flatten"], ["linear", 1]])
+# nn-norms end
 
 # nn-attention begin: classic attention (positional_encoding, the encoder and decoder layers, cross-attention)
 EXAMPLES["seq-attention"] = _seq((6, 4), [
