@@ -1599,6 +1599,18 @@ ADAPTED_MODULES = {
 #: weight column through the fold planes, the leaves, the starting average
 #: and the learn loss); class weights with RMSE refuse on both columns in
 #: `train`'s words.
+#: Lane gbdt-cpu-rest-4-ns (2026-11-23): Depthwise and Lossguide train
+#: every (loss, score_function, leaf_estimation_method, bootstrap_type) the
+#: device trains: the four scores on both policies (the device's leafwise
+#: statements, gbdt/methods/greedy_subsets_searcher/leafwise_score_body.mojo),
+#: Depthwise's min_split_gain, min_child_hessian and min_data_in_leaf,
+#: Gradient leaves and any iteration count on Logloss and RMSE, the Poisson
+#: bootstrap, boost_from_average on Logloss and CrossEntropy, class weights
+#: on the pointwise losses. Refused on BOTH columns in the device's words,
+#: so not CPU gaps: Exact outside MAE / MAPE / Quantile, Simple leaves, MVS,
+#: scores outside the four, min_child_hessian outside RMSE / Logloss /
+#: CrossEntropy, RMSE with class weights, boost_from_average outside
+#: `train`'s list, use_pointwise_searcher on a non-symmetric policy.
 NO_CPU_PATH = (
     "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
     "tree's level winner is the tensor column itself: the separate CPU "
@@ -1614,11 +1626,10 @@ NO_CPU_PATH = (
     "given), apart from the grouped losses QueryRMSE, PairLogit and "
     "YetiRank, which it trains",
 
-    "gradient boosting training at a (loss, grow_policy, score_function, "
-    "leaf_estimation_method, bootstrap_type) combination outside the ones "
-    "the gbdt/host oracles restate, each refused by name: score functions "
-    "and leaf estimators outside each policy's covered pair, Depthwise's "
-    "min_split_gain, min_child_hessian and min_data_in_leaf, "
+    "gradient boosting training on SymmetricTree at a (loss, "
+    "score_function, leaf_estimation_method, bootstrap_type) combination "
+    "outside the ones the gbdt/host oracles restate, each refused by name: "
+    "score functions and leaf estimators outside its covered pair, "
     "and boost_from_average outside RMSE, the quantile "
     "family and the dedicated pointwise Logloss route -- each one its own "
     "device kernel or its own searcher gate order",
