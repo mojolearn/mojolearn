@@ -171,6 +171,9 @@ from gbdt.host.gbdt_oracle_eval import (
     gbdt_eval_detector,
     gbdt_eval_shrink_point,
 )
+# the per-tree feature sample and the projected index, shared with the
+# symmetric loop (moved to gbdt_oracle.mojo, lane gbdt-cpu-rest)
+from gbdt.host.gbdt_oracle import _ns_project_index, _sample_tree_folds
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_NEWTON,
     GBDT_OBJ_LOGLOSS,
@@ -1051,81 +1054,6 @@ def _non_symmetric_bins(
     return bins^
 
 
-def _ns_project_range(
-    lo: Int,
-    hi: Int,
-    n_sel: Int,
-    cindex: HostU32Ptr,
-    t_cindex: HostU32Ptr,
-    src_word: GbdtIntPtr,
-    src_shift: HostU32Ptr,
-    src_mask: HostU32Ptr,
-    dst_word: GbdtIntPtr,
-    dst_shift: HostU32Ptr,
-):
-    for k in range(n_sel):
-        for r in range(lo, hi):
-            var value = (cindex[src_word[k] + r] >> src_shift[k]) & src_mask[k]
-            t_cindex[dst_word[k] + r] = t_cindex[dst_word[k] + r] | (value << dst_shift[k])
-
-
-def _ns_project_index(
-    cindex: List[UInt32],
-    layout: CompressedIndexLayout,
-    t_layout: CompressedIndexLayout,
-    tree_folds: List[Int],
-    n_rows: Int,
-    n_features: Int,
-) -> List[UInt32]:
-    """The tree's projected compressed index: every sampled feature's bins
-    read off the fit's index and OR-ed into the tree layout's word. The
-    features of one destination word share it, so the unit is a ROW (a
-    row's words are its own): the rows run in `_gbdt_units` contiguous
-    ranges, the sampled features in order inside."""
-    var t_cindex = List[UInt32](length=n_rows * t_layout.columns, fill=UInt32(0))
-    var src_word = List[Int]()
-    var src_shift = List[UInt32]()
-    var src_mask = List[UInt32]()
-    var dst_word = List[Int]()
-    var dst_shift = List[UInt32]()
-    for f in range(n_features):  # driver-loop: over the features, naming the sampled ones
-        if tree_folds[f] <= 0:
-            continue
-        ref src = layout.features[f]
-        ref dstf = t_layout.features[f]
-        src_word.append(Int(src.offset) * n_rows)
-        src_shift.append(src.shift)
-        src_mask.append(src.mask)
-        dst_word.append(Int(dstf.offset) * n_rows)
-        dst_shift.append(dstf.shift)
-    var n_sel = len(src_word)
-    var units = _gbdt_units(n_rows, 4 * n_rows * n_sel)
-    var chunk = host_predict_chunk(n_rows, units)
-    var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
-    var t_p = rebind[HostU32Ptr](t_cindex.unsafe_ptr())
-    var sw_p = rebind[GbdtIntPtr](src_word.unsafe_ptr())
-    var ss_p = rebind[HostU32Ptr](src_shift.unsafe_ptr())
-    var sm_p = rebind[HostU32Ptr](src_mask.unsafe_ptr())
-    var dw_p = rebind[GbdtIntPtr](dst_word.unsafe_ptr())
-    var ds_p = rebind[HostU32Ptr](dst_shift.unsafe_ptr())
-
-    def rows(unit: Int) {imm chunk, imm n_rows, imm n_sel, imm cindex_p, imm t_p, imm sw_p, imm ss_p, imm sm_p, imm dw_p, imm ds_p}:
-        _ns_project_range(
-            unit * chunk, min(n_rows, (unit + 1) * chunk), n_sel, cindex_p,
-            t_p, sw_p, ss_p, sm_p, dw_p, ds_p,
-        )
-
-    host_parallelize(rows, units)
-    _ = len(cindex)
-    _ = len(src_word)
-    _ = len(src_shift)
-    _ = len(src_mask)
-    _ = len(dst_word)
-    _ = len(dst_shift)
-    _ = len(t_cindex)
-    return t_cindex^
-
-
 def _ns_count_range(
     lo: Int, hi: Int, bins: GbdtIntPtr, n_bins: Int, counts: GbdtIntPtr,
     base: Int,
@@ -1210,33 +1138,6 @@ def _ns_partition(
 # ===========================================================================
 # THE FIT
 # ===========================================================================
-
-
-def _sample_tree_folds(
-    folds: List[Int], fraction: Float64, mut random: TRandom
-) raises -> List[Int]:
-    """`sample_tree_folds` (`gbdt/gpu_data/feature_sampling.mojo:31-54`),
-    restated because that module defines a kernel: the eligible features,
-    `max(1, Int(eligible * fraction + 0.5))`, the partial Fisher-Yates over
-    `TRandom.uniform`, the full-length fold vector."""
-    if not (fraction > 0.0) or fraction > 1.0:
-        raise Error("feature_fraction must be finite and in (0, 1]")
-    var eligible = List[Int]()
-    for f in range(len(folds)):
-        if folds[f] > 0:
-            eligible.append(f)
-    # one rounding, as the default (contract=fast) build fused it
-    var count = max(1, Int(fma(Float64(len(eligible)), fraction, 0.5)))
-    if count >= len(eligible):
-        return folds.copy()
-    var result = List[Int](length=len(folds), fill=0)
-    for i in range(count):
-        var j = i + Int(random.uniform(UInt64(len(eligible) - i)))
-        var selected = eligible[j]
-        eligible[j] = eligible[i]
-        eligible[i] = selected
-        result[selected] = folds[selected]
-    return result^
 
 
 def gbdt_host_fit_non_symmetric(

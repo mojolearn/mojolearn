@@ -1271,8 +1271,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     if feature_fraction < 1.0 and n_flags != 0:
         # `train`'s words (gbdt/train.mojo)
         raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
-    if feature_fraction != 1.0 and grow_code == 0:
-        _refuse("feature_fraction=" + String(feature_fraction) + " under SymmetricTree")
+    # and the numeric symmetric Logloss / RMSE loop (gbdt_host_boost, the
+    # same two helpers)
+    if feature_fraction != 1.0 and grow_code == 0 and (is_pointwise or is_multi):
+        _refuse("feature_fraction=" + String(feature_fraction) + " under SymmetricTree with loss='" + loss + "'")
     if not (feature_fraction > 0.0) or feature_fraction > 1.0:
         raise Error("feature_fraction must be finite and in (0, 1]")
     if border_count < 1 or border_count > 255:
@@ -1605,7 +1607,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         var r = gbdt_host_fit_eval(
             x, y, n_rows, n_features, p, List[Bool](),
             sym_boot_kind, sym_boot_param, random_strength,
-            ev^, row_weights, GBDT_BOOST_RMSE, boost_start,
+            ev^, row_weights, GBDT_BOOST_RMSE, boost_start, feature_fraction,
         )
         losses = r.model.losses.copy()
         best_iteration = r.eval.best_iteration
@@ -1681,7 +1683,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         var r = gbdt_host_fit_eval(
             x, y, n_rows, n_features, p, List[Bool](),
             sym_boot_kind, sym_boot_param, random_strength, ev^,
-            row_weights,
+            row_weights, GBDT_BOOST_LOGLOSS, Float64(0.0), feature_fraction,
         )
         text = gbdt_host_model_text(r.model)
         losses = r.model.losses.copy()
