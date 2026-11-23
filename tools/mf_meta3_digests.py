@@ -74,6 +74,21 @@ meta's door loop, IterativeImputer's door rounds, SHAP's `_DoorModel`):
 EVERY (D) line must be equal: the kind runs the door's `ada_fit_run` (same session, same rounds, same seeds) and its
 `ada_classifier_run` / `ada_regressor_run` over the same members' predicts.
 
+(E, lane mf-search4, base = origin/lane/member-fits bb6c1e7ea1, head = lane/mf-search4) THE SEARCH KIND and THE
+MULTI-OUTPUT KIND (before: `_CalUnits`, the outer meta's door loop, SHAP's `_DoorModel`, cross_validate's Python
+units over a search):
+  * CalibratedClassifierCV(GridSearchCV(LogisticRegression(), {"C": [0.1, 1.0, 10.0]}, cv 3, scoring None /
+    'accuracy')) x method, n_jobs 1: predicts, every pair's best_params_ and cv_results_ tables;
+  * VotingClassifier([("search", RandomizedSearchCV(LogisticRegression(), ..., n_iter 2, random_state 0)),
+    ("gnb", GaussianNB())], soft): predicts and the search's cv_results_;
+  * cross_val_score(GridSearchCV(Ridge(), {"alpha": [0.1, 1.0]}, cv 3), X, y, cv 3): the nested scores;
+  * a search with error_score=-1.0 over a refusing candidate; return_train_score=True; scoring 'r2' (kept on the
+    door: equal words);
+  * GridSearchCV(MultiOutputRegressor(Lasso()), {"estimator__alpha": [0.01, 0.1]}, cv 3) on a 2-D y (its public
+    fit keeps the door; its members are the multi-output kind wherever a caller admits them);
+  * KernelExplainer over StackingClassifier([("search", <grid search>), ("lda", lda)]): the values.
+EVERY (E) line must be equal. Bits: none expected (the same member fits on the same folds; accuracy is a count).
+
 The configurations are independent: one process each across the host cores.
 
     python tools/mf_meta3_digests.py > digests.txt
@@ -168,6 +183,12 @@ def _configs():
     rows += [("adavote", "default"), ("adavote", "rf"), ("adavote", "et"), ("adavote", "random"),
              ("adavote", "balanced"), ("adastack",), ("adashap", "K"), ("adashap", "P"), ("adaiterimp", "default"),
              ("adaiterimp", "rf"), ("adasearch",)]
+    # (E) lane mf-search4
+    for scoring in (None, "accuracy"):
+        for method in ("sigmoid", "isotonic"):
+            rows.append(("searchcal", scoring, method))
+    rows += [("searchvote",), ("searchcv",), ("searcherr",), ("searchtrain",), ("searchr2",), ("searchmulti",),
+             ("searchshap",)]
     return rows
 
 
@@ -218,6 +239,60 @@ def _index_cv(n, folds=3):
 
 
 CONFIGS = _configs()
+
+
+def _search_tables(model, tag):
+    out = [(tag + "_best", str(model.best_params_)), (tag + "_best_index", str(model.best_index_)),
+           (tag + "_best_score", repr(float(model.best_score_)))]
+    for key in sorted(model.cv_results_):
+        if key == "params" or key.startswith("param_"):
+            out.append((f"{tag}_{key}", str(list(model.cv_results_[key]))))
+        else:
+            out.append((f"{tag}_{key}", _digest(np.asarray(model.cv_results_[key]))))
+    return out
+
+
+def _search_row(ml, row, tag, X, y, Xt):
+    from mojolearn.model_selection import GridSearchCV, RandomizedSearchCV, cross_val_score
+    grid = {"C": [0.1, 1.0, 10.0]}
+    if row[0] == "searchcal":
+        _, scoring, method = row
+        search = GridSearchCV(ml.LogisticRegression(), grid, cv=3, scoring=scoring)
+        model = ml.CalibratedClassifierCV(search, method=method, cv=3, n_jobs=1).fit(X, y)
+        out = _predicts(model, Xt, tag)
+        for i, (e, _cals) in enumerate(model.calibrated_classifiers_):
+            out += _search_tables(e, f"{tag}_pair{i}")
+        return out
+    if row[0] == "searchvote":
+        search = RandomizedSearchCV(ml.LogisticRegression(), grid, n_iter=2, random_state=0, cv=3)
+        model = ml.VotingClassifier([("search", search), ("gnb", ml.GaussianNB())], voting="soft").fit(X, y)
+        return _predicts(model, Xt, tag) + _search_tables(model.estimators_[0], tag + "_search")
+    Xr, _ = _data(5, 150, 0, d=5)
+    yr = (Xr @ np.arange(1, 6, dtype=np.float32)).astype(np.float32)
+    if row[0] == "searchcv":
+        scores = cross_val_score(GridSearchCV(ml.Ridge(), {"alpha": [0.1, 1.0]}, cv=3), Xr, yr, cv=3)
+        return [(tag + "_scores", _digest(np.asarray(scores, dtype=np.float64)))]
+    if row[0] == "searcherr":
+        search = GridSearchCV(ml.LogisticRegression(), {"C": [1.0, -1.0]}, cv=3, error_score=-1.0)
+        model = ml.CalibratedClassifierCV(search, cv=3).fit(X, y)
+        return _predicts(model, Xt, tag) + _search_tables(model.calibrated_classifiers_[0][0], tag)
+    if row[0] == "searchtrain":
+        search = GridSearchCV(ml.LogisticRegression(), grid, cv=3, return_train_score=True)
+        model = ml.CalibratedClassifierCV(search, cv=3).fit(X, y)
+        return _predicts(model, Xt, tag) + _search_tables(model.calibrated_classifiers_[0][0], tag)
+    if row[0] == "searchr2":
+        search = GridSearchCV(ml.Ridge(), {"alpha": [0.1, 1.0]}, cv=3, scoring="r2")
+        model = ml.VotingRegressor([("search", search), ("lin", ml.LinearRegression())]).fit(Xr, yr)
+        return [(tag + "_predict", _digest(model.predict(Xr[:20])))]
+    if row[0] == "searchmulti":
+        Y = np.stack([yr, yr * 0.5 + 1.0], axis=1).astype(np.float32)
+        model = GridSearchCV(ml.MultiOutputRegressor(ml.Lasso()), {"estimator__alpha": [0.01, 0.1]}, cv=3).fit(Xr, Y)
+        return [(tag + "_predict", _digest(model.predict(Xr[:20])))] + _search_tables(model, tag)
+    search = GridSearchCV(ml.LogisticRegression(), grid, cv=3)
+    model = ml.StackingClassifier([("search", search), ("lda", ml.LinearDiscriminantAnalysis())], cv=3).fit(X, y)
+    explainer = ml.KernelExplainer(model, X[:20])
+    phi = np.asarray(explainer.shap_values(Xt[:5]))
+    return [(tag + "_values", _digest(phi))]
 
 
 def _run(index):
@@ -401,6 +476,8 @@ def _run(index):
             return ([(tag + "_best", str(model.best_params_))] + _predicts(model, Xt, tag)
                     + [(tag + "_best_weights", _digest(np.asarray(model.best_estimator_.estimator_weights_,
                                                                   dtype=np.float64)))])
+        if row[0].startswith("search"):
+            return _search_row(ml, row, tag, X, y, Xt)
     except Exception as e:  # noqa: BLE001 - the words are the digest
         return [(tag + "_raised", f"{type(e).__name__}: {e}")]
     return []
