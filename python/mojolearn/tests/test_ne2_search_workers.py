@@ -52,13 +52,8 @@ def test_stratified_shuffle_split_one_program_invariants(test_size):
     assert _pairs(first[:1]) != _pairs(first[1:2])
 
 
-def test_train_test_split_stratify_is_deterministic():
-    y = _labels(n=41, k=4, seed=9)
-    x = np.arange(len(y) * 2, dtype="f4").reshape(len(y), 2)
-    a = ms.train_test_split(x, y, test_size=0.3, stratify=y, random_state=7)
-    b = ms.train_test_split(x, y, test_size=0.3, stratify=y, random_state=7)
-    for left, right in zip(a, b):
-        assert np.asarray(left).tobytes() == np.asarray(right).tobytes()
+# test_train_test_split_stratify_is_deterministic moved to
+# checks/native_tests/msel_split_plan.mojo::test_train_test_split_stratify (lane py-delete, 2026-11-23).
 
 
 # ---------------------------------------------------------------- N056

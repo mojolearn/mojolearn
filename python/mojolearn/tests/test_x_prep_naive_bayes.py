@@ -29,46 +29,9 @@ def _check(m, r, X, Xh, attrs, rtol=2e-4, atol=2e-5):
     assert np.mean(np.asarray(m.predict(Xh)) == r.predict(Xh)) > 0.99
 
 
-def test_gaussian():
-    X, y = _data()
-    Xh, _ = _data(1)
-    _check(ml.GaussianNB().fit(X, y), sknb.GaussianNB().fit(X, y), X, Xh, ("theta_", "var_", "class_prior_"))
-
-
-def test_multinomial():
-    X, y = _data()
-    X, Xh = np.abs(X), np.abs(_data(1)[0])
-    for kw in (dict(alpha=1.0), dict(alpha=0.3, fit_prior=False)):
-        _check(ml.MultinomialNB(**kw).fit(X, y), sknb.MultinomialNB(**kw).fit(X, y), X, Xh,
-               ("feature_count_", "feature_log_prob_", "class_log_prior_"))
-
-
-def test_bernoulli():
-    X, y = _data()
-    Xh, _ = _data(1)
-    for kw in (dict(), dict(binarize=0.5, alpha=2.0)):
-        _check(ml.BernoulliNB(**kw).fit(X, y), sknb.BernoulliNB(**kw).fit(X, y), X, Xh,
-               ("feature_count_", "feature_log_prob_", "class_log_prior_"))
-
-
-if __name__ == "__main__":
-    test_gaussian()
-    test_multinomial()
-    test_bernoulli()
-    print("PASS test_x_prep_naive_bayes")
-
-
-def test_complement():
-    X, y = _data()
-    X, Xh = np.abs(X), np.abs(_data(1)[0])
-    for kw in (dict(), dict(alpha=0.4, norm=True)):
-        _check(ml.ComplementNB(**kw).fit(X, y), sknb.ComplementNB(**kw).fit(X, y), X, Xh,
-               ("feature_count_", "feature_log_prob_", "class_log_prior_"))
-
-
-if __name__ == "__main__":
-    test_complement()
-    print("PASS test_x_prep_naive_bayes (complement)")
+# test_gaussian, test_multinomial, test_bernoulli and test_complement moved to
+# checks/native_tests/prep_naive_bayes.mojo::test_gaussian, ::test_multinomial, ::test_bernoulli and ::test_complement
+# (lane py-delete, 2026-11-23).
 
 
 def test_categorical():

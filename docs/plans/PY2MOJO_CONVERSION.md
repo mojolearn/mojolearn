@@ -281,3 +281,15 @@ Stay (at least one class-c or paused test); their class-a/b functions are delete
 - `tests/test_autograd_smoke.py`
 - `tests/tools/test_six_lane_matrix_io.py`
 - `tests/tools/test_six_lane_review_history.py`
+
+## The clean pass, first round (lane py-delete, 2026-11-23)
+
+The rule for deleting a row: its Mojo twin is a TestSuite `test_*` on the integration head, it passed in the newest
+green native run of an integration first-parent commit (cpc2-0016 at d19cf96968: 387 of 387 checks, per-test PASS
+lines read from its logs), a read of both tests found that it asserts at least what the Python test asserts (same
+inputs or a superset, same tolerance or tighter, no boundary assertion lost), and no GPU run is owed: the twin has no
+unrun device column and the Python test is not a GPU-box test. Of the 150 rows marked covered or converted, that
+removed 26 test functions, 7 of them as whole files (`test_x_prep_binarizer`, `_discriminant`, `_imputer`, `_kbins`,
+`_normalizer`, `_power`, `_quantile`). The other 124 keep their Python test, and the status column says why:
+partial (36), GPU run owed (67), a twin that is a `main()` check the runner does not run (8), or another run owed
+(13). The lists above are the plan made before the batches ran. The map's status column is the record now.
