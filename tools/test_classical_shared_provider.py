@@ -49,23 +49,21 @@ def test_repeated_binary_calls_do_not_reread_model_settings_or_query_shape():
 
 def test_common_provider_is_selected_without_new_provider_type():
     src = body('svc_connection')
-    # A build constant (B arm -D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH), never an
-    # environment read on the call path.
-    assert 'if CLASSICAL_NATIVE_DISPATCH:' in src
+    # One route, no environment read on the call path (the B arm -D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH was
+    # removed 2026-11-23 as plumbing).
+    assert 'CLASSICAL_NATIVE_DISPATCH' not in src
     assert 'getenv' not in PUBLIC
     assert 'neural_descriptor_entry(binding, "svm_binary_api_v1", False)' in src
     assert 'neural_descriptor_connect_factory_once(factory, String(SVC_ABI_NAME), SVC_TABLE_COUNT)' in src
     assert 'SVC_TABLE_COUNT = 12' in TRANSPORT
-    assert 'unavailable for this binding' in src
-    # The B arm keeps its mode check and has no device table; the default arm connects the device table when
-    # the binding registers one.
-    assert 'shared.mode() != 1' in src and 'requires identical mode' in src
+    assert 'has no svm_binary_api_v1 table; rebuild it' in src
+    # The device table is connected when the binding registers one.
     assert 'neural_descriptor_entry(binding, "svc_device_api_v1", False)' in src
     # No provider type of its own: the only structs are the door's records (the query record, the settings
     # and weights records, the connection's owners, the UNPACK records `*Unpacked`).
     structs = re.findall(r'^struct (\w+)', PUBLIC, re.M)
     assert '_SvmQuery' in structs and all(name in ('_SvmQuery', 'SvmSettings', 'SvcConnection') or name.endswith('Unpacked') for name in structs), structs
-    assert 'neural_descriptor_info(connection.table)' in body('svc_connection_publish')
+    assert 'svc_connection_publish' not in PUBLIC
 
 
 def test_original_numerical_owners_and_output_layout_are_preserved():

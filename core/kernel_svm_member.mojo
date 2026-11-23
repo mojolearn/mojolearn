@@ -13,11 +13,11 @@ epilogues, row glue, Platt, scale_gamma's limbs, the one-vs-one layout),
 `second` the SVC device table (a GPU image only: the device-X binary solve
 and the device-resident query), `third` the SVR table (SVR; and on a GPU
 route for SVC too: its LEASE_OPEN / LEASE_CLOSE hold the state's device
-copies). `route.flags` bit 1: the -D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH B
-arm (the SVR request's candidate word). No kernel is touched.
+copies). No kernel is touched. (The `route.flags` bit 1 of the
+-D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH B arm was removed 2026-11-23.)
 
 PREDICT ON A GPU ROUTE is the estimator's own door's route: the resident
-entry (SVC_DEVICE_RESIDENT, SVR_NATIVE_RESIDENT except the B arm) reads each
+entry (SVC_DEVICE_RESIDENT, SVR_NATIVE_RESIDENT) reads each
 machine from slot (its index) of the state's lease, opened on the first
 query and closed before a refit, an import or a free; X crosses from the
 caller's view once per call and its finite and range words come back with
@@ -526,7 +526,6 @@ def _fit_svr(slot: _Slot, call: _Call) raises:
     var gamma_kind = Int(p[4])
     var held = List[Float64]()
     var sample_weights = _weights(call, rows, "SVR", held)
-    var candidate = (route.flags & 1) != 0
     var device_x = drivers.has_device
     var gamma = p[5]
     var scale_gamma = False
@@ -540,10 +539,11 @@ def _fit_svr(slot: _Slot, call: _Call) raises:
         raise Error("ValueError: gamma='scale' needs at least one cell of X")
     var bounds = List[Float32](length=rows if sample_weights != 0 else 0, fill=Float32(0))
     var plan = SvrFitPlan(rows, cols)
-    var device_form = device_x and not candidate
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    var device_form = device_x
     var request = SvrFitRequest(call[].x.data, call[].y.data, Int(plan.dual.unsafe_ptr()),
         Int(plan.support.unsafe_ptr()), Int(plan.vectors.unsafe_ptr()), Int(plan.info.unsafe_ptr()), _f32(bounds),
-        rows, cols, Int(p[1]), Int(p[9]), Int(p[10]), Int(p[2]), -1, 0, -1, device_form, scale_gamma, candidate,
+        rows, cols, Int(p[1]), Int(p[9]), Int(p[10]), Int(p[2]), -1, 0, -1, device_form, scale_gamma,
         gamma, p[6], p[8], p[7], p[3])
     if not device_x:
         request.gamma = svc_gamma_run(drivers, gamma_kind, p[5], call[].x.data, rows * cols, cols)
@@ -776,8 +776,9 @@ def _predict(slot: _Slot, call: _Call, operation: Int) raises:
     var status = List[Int32](length=2, fill=Int32(0))
     var n = slot[].machines[0].supports
     # The estimator's own route (bindings/svc_kernel_svr_unpack.mojo): a GPU
-    # binding's resident entry, except the B arm (no resident route).
-    var resident = route.has_second and (route.flags & 1) == 0
+    # binding's resident entry.
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    var resident = route.has_second
     var lease = _lease(slot, call) if resident else 0
     var request = SvrQueryRequest(call[].x.data, _f32(slot[].machines[0].dual) if n > 0 else 0,
         _f32(slot[].machines[0].vectors) if n > 0 else 0, call[].dst.data, Int(status.unsafe_ptr()), rows,

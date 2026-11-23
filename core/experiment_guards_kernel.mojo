@@ -138,6 +138,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_QUERY_X_HELD_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.ab-prep.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_QUERY_X_HELD_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the per-call query buffers fed the same bytes to the same kernels, core/query_x_held.mojo NUMERICS; only per-call allocation, pinned pair and status fill went); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.ab-prep.patch"
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CLASSICAL_NATIVE_DISPATCH.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_NATIVE_DISPATCH"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: both arms ran the same numerical owners on the same words, svr_fit_host_borrowed / svc tables; the B arm only dropped the device-resident query and device-X fit and added a mode readback and a published diagnostic); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CLASSICAL_NATIVE_DISPATCH.patch"
     # ---- end lane ab-prep-classical
     return True
 
