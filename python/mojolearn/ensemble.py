@@ -717,8 +717,8 @@ class GradientBoosting(_NumericModeMixin):
     use_pointwise_searcher : bool, default False
         Grow with CatBoost's doc-parallel oblivious searcher instead of the
         greedy subsets searcher. It returns tree structure only, so it always
-        runs the leaf estimator. On ``MultiClass`` and ``MultiClassOneVsAll``
-        a split is scored over every class. ``MultiRMSE`` refuses it.
+        runs the leaf estimator. On ``MultiClass``, ``MultiClassOneVsAll``
+        and ``MultiRMSE`` a split is scored over every output.
     boost_from_average : bool or None, default None
         Start every row at the loss's optimal constant, stored as ``bias_``.
         None is CatBoost's default: True for RMSE, MAE, Quantile and MAPE,

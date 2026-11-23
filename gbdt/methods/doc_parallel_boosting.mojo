@@ -3978,24 +3978,17 @@ def fit_with_test(
                 " (ComputeExactValue, permutation_der_calcer.h:98-110);"
                 " MultiRMSE does not reach it"
             )
-        if use_pointwise_searcher:
-            # their MultiRMSE trainer is `TGpuTrainer<
-            # TMultiClassificationTargets>` through the GREEDY subsets
-            # searcher's template (`cuda/train_lib/multiclass.cpp:1-13`);
-            # the doc-parallel oblivious searcher is single-target
-            raise Error(
-                "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-                " a single-target searcher; MultiRMSE is trained by"
-                " TGreedySubsetsSearcher only (cuda/train_lib/multiclass.cpp:"
-                "1-13)"
-            )
+        # lane gbdt-pw-multiclass (2026-11-23): MultiRMSE on the pointwise
+        # searcher is trained through the multi-output search below (every
+        # target dimension on the fold axis, no pinned class); the
+        # single-target refusal that stood here is gone
         if test.__bool__() and test.value().n_rows > 0:
             raise Error(
                 "MultiRMSE with an eval set is not carried here: the held-out"
                 " arm's target is one value per row"
             )
-    # lane gbdt-pw-multiclass (2026-11-23): MultiClass and MultiClassOneVsAll
-    # on the pointwise searcher are TRAINED, not refused. The refusal that
+    # lane gbdt-pw-multiclass (2026-11-23): MultiClass, MultiClassOneVsAll
+    # and MultiRMSE on the pointwise searcher are TRAINED, not refused. The refusal that
     # stood here (lane gbdt-cpu-rest-4-pwl) named the defect: this fit
     # handed the doc-parallel searcher `split_stat_planes`' planes 0 and 1
     # only, so the tree was searched on the FIRST class's gradient alone.
@@ -4008,6 +4001,7 @@ def fit_with_test(
     if use_pointwise_searcher and (
         objective == OBJECTIVE_MULTICLASS
         or objective == OBJECTIVE_MULTICLASS_OVA
+        or objective == OBJECTIVE_MULTIRMSE
     ):
         pw_dims = approx_dim
     var pw_dim_folds = dims_search_folds(n_rows, pw_dims)

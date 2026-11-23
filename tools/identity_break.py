@@ -450,9 +450,9 @@ sampler, a solver, a metric, a reduction).
                Logloss, RMSE, the pointwise losses and the greedy ranking
                losses, weights, bootstraps, an eval set, and over CTR and
                one-hot columns)
-      gbdt-pointwise-multiclass (lane gbdt-pw-multiclass: MultiClass and
-               MultiClassOneVsAll on the pointwise searcher, the split score
-               summed over every class; scores, bootstraps, score noise,
+      gbdt-pointwise-multiclass (lane gbdt-pw-multiclass: MultiClass,
+               MultiClassOneVsAll and MultiRMSE on the pointwise searcher, the
+               split score summed over every output; scores, bootstraps, score noise,
                feature_fraction, class weights, two and four classes, a CTR
                column and an eval set)
 
@@ -6377,8 +6377,8 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-pointwise-multiclass")
 def _(ml, X, yc, yr, Xh=None):
-    """MultiClass and MultiClassOneVsAll on the pointwise (doc-parallel)
-    searcher, which both columns refused until lane gbdt-pw-multiclass
+    """MultiClass, MultiClassOneVsAll and MultiRMSE on the pointwise
+    (doc-parallel) searcher, which both columns refused until lane gbdt-pw-multiclass
     (2026-11-23) because the device searched the tree on the first class's
     gradient alone: the split score now sums every approx dimension's term
     (the dimensions on the searcher's fold axis, one body on both columns).
@@ -6387,7 +6387,9 @@ def _(ml, X, yc, yr, Xh=None):
     multi-output noise deviation) and at feature_fraction 0.5; MultiClass
     with class weights and Gradient leaves, on four classes at depth 6, on
     two classes (one approx dimension and the pinned class) and over a CTR
-    column; and MultiClass with an eval set under the Iter detector. Each
+    column; MultiRMSE on two target dimensions under Cosine with score noise
+    and under L2 with Gradient leaves at the Bayesian bootstrap; and
+    MultiClass with an eval set under the Iter detector. Each
     hashes its predictions, digest and learn curve; the held-out fit also its
     test-loss curve and stop. Every fit at rate 0.1 with every work-changing
     option set."""
@@ -6395,6 +6397,7 @@ def _(ml, X, yc, yr, Xh=None):
     X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
     y3 = np.digitize(yr, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
     y4 = np.digitize(yr, np.quantile(yr, [0.25, 0.5, 0.75])).astype(np.float32)
+    y2 = np.ascontiguousarray(np.stack([yr, (yc - np.float32(0.5)) * yr], axis=1).astype(np.float32))
     pw = dict(score_function="Cosine", boost_from_average=False, use_pointwise_searcher=True,
               leaf_estimation_method="Newton", leaf_estimation_iterations=1)
     parts, first = {}, None
@@ -6410,6 +6413,11 @@ def _(ml, X, yc, yr, Xh=None):
                                                         class_weights=[1.0, 2.0, 0.5])),
         ("multiclass_four_depth6", y4, dict(loss="MultiClass", max_depth=6, leaf_estimation_iterations=3)),
         ("multiclass_two_classes", yc, dict(loss="MultiClass")),
+        ("multirmse_cosine_noise", y2, dict(loss="MultiRMSE", random_strength=1.0)),
+        ("multirmse_l2_gradient2_bayesian", y2, dict(loss="MultiRMSE", score_function="L2",
+                                                     leaf_estimation_method="Gradient",
+                                                     leaf_estimation_iterations=2,
+                                                     bootstrap_type="Bayesian", bagging_temperature=1.0)),
     ]:
         kw = dict(pw)
         kw.update(options)

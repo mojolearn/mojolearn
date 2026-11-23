@@ -358,9 +358,9 @@ def _gbdt_fit_pointwise_arm(
     or unset (`AdjustBoostFromAverageDefaultValue`); every
     `feature_border_type`; an eval set under any detector (Iter, IncToDec,
     or none); one-hot and CTR columns; `max_depth` 0. Refused in the
-    device's words: Depthwise and Lossguide (`train`), MultiRMSE and feature
-    combinations (`fit_with_test`), `boost_from_average=True` outside its
-    list (`train`). MultiClass and MultiClassOneVsAll take the multi-output
+    device's words: Depthwise and Lossguide (`train`), feature combinations
+    (`fit_with_test`), `boost_from_average=True` outside its list (`train`).
+    MultiClass, MultiClassOneVsAll and MultiRMSE take the multi-output
     fit (`gbdt_multi_host_fit(use_pointwise_searcher=True)`)."""
     var n_class_weights = params.i(35)
     var n_rows = params.i(0)
@@ -452,15 +452,8 @@ def _gbdt_fit_pointwise_arm(
         objective = GBDT_OBJ_LOGLOSS
     elif pw_is_rmse:
         objective = GBDT_OBJ_RMSE
-    if loss == String("MultiRMSE"):
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-            " a single-target searcher; MultiRMSE is trained by"
-            " TGreedySubsetsSearcher only (cuda/train_lib/multiclass.cpp:"
-            "1-13)"
-        )
-    # lane gbdt-pw-multiclass (2026-11-23): MultiClass and MultiClassOneVsAll
-    # never reach this arm: the caller sends them to the multi-output fit
+    # lane gbdt-pw-multiclass (2026-11-23): MultiClass, MultiClassOneVsAll and
+    # MultiRMSE never reach this arm: the caller sends them to the multi-output fit
     # with the doc-parallel searcher (`gbdt_multi_host_fit(
     # use_pointwise_searcher=True)`), as the device trains them now
     if objective < 0 or objective == GBDT_OBJ_QUERY_RMSE or objective == GBDT_OBJ_PAIR_LOGIT or objective == GBDT_OBJ_YETI_RANK:
@@ -1366,7 +1359,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # on the pointwise searcher take the multi-output fit below (the greedy
     # arm's checks are `train`'s and hold for both searchers), whose search
     # sums every approx dimension's score
-    var pw_multi_class = loss == String("MultiClass") or loss == String("MultiClassOneVsAll")
+    var pw_multi_class = (
+        loss == String("MultiClass") or loss == String("MultiClassOneVsAll")
+        or loss == String("MultiRMSE")
+    )
     if use_pointwise and not pw_grouped_loss and not pw_multi_class:
         return _gbdt_fit_pointwise_arm(
             params, border_type, feature_fraction, min_split_gain,

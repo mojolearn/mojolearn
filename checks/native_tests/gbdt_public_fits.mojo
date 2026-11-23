@@ -167,6 +167,10 @@ struct GbdtOpts(Copyable, Movable):
     #: the largest feature combination (lane gbdt-cpu-rest-4-cat,
     #: 2026-11-23); 1 builds none, as every unit before it fitted
     var max_ctr_complexity: Int
+    #: MultiRMSE's target dimension (lane gbdt-pw-multiclass, 2026-11-23):
+    #: above 1 the request carries the +4 tail and `y` holds that many
+    #: dim-major planes, as the public fit builds it for a 2-D target
+    var target_dim: Int
 
     def __init__(out self, loss: String, n_estimators: Int, max_depth: Int = 6):
         self.loss = loss
@@ -207,6 +211,7 @@ struct GbdtOpts(Copyable, Movable):
         self.od_pvalue = UNSET
         self.border_type = ""
         self.max_ctr_complexity = 1
+        self.target_dim = 1
 
     def deterministic(mut self):
         """The tests' pinned configuration: `bootstrap_type='No'`, `random_strength=0`."""
@@ -461,6 +466,16 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     elif o.min_split_gain >= 0.0:
         s.f(o.min_split_gain)
         tail = 1
+    if o.target_dim > 1:
+        # the target-dimension tail: the three tail defaults, then the
+        # dimension (`bindings/_mojolearn_gbdt.mojo`'s +4 tail)
+        if tail < 1:
+            s.f(-1.0)
+        if tail < 2:
+            s.f(-1.0)
+        if tail < 3:
+            s.f(1.0)
+        s.i(o.target_dim)
     var unit_weights = List[Float32]()
     if len(inp.group_sizes) > 0:
         # `_padded_tail`: the three tail defaults, so the group words land in place
@@ -1618,7 +1633,7 @@ def _pw_class0_blind_inputs() -> GbdtInputs:
 
 
 def host_pointwise_multiclass[I: GbdtImage]() raises:
-    """MultiClass and MultiClassOneVsAll on the pointwise searcher (lane
+    """MultiClass, MultiClassOneVsAll and MultiRMSE on the pointwise searcher (lane
     gbdt-pw-multiclass, 2026-11-23), each twice to the same bytes, at rate
     0.1, L2 and Cosine: the split score sums every class's term. QUALITY:
     on `_pw_class0_blind_inputs` (class 0's gradient blind to the deciding
@@ -1658,6 +1673,38 @@ def host_pointwise_multiclass[I: GbdtImage]() raises:
                 what + ": " + String(right) + " of " + String(rows)
                 + " class-1/2 rows right; the split ignored the deciding column",
             )
+    # MultiRMSE: target dimension 0 is noise blind to every column, dimension
+    # 1 is +1 / -1 on column 1. Summed over both dimensions the search splits
+    # on column 1 and dimension 1's mean squared error falls far below its
+    # variance (1); searched on dimension 0 alone it splits on noise and stays
+    # near 1.
+    var n = inp.n
+    var y2 = List[Float32](length=2 * n, fill=Float32(0))
+    var state = UInt64(0xD1B54A32D192ED03)
+    for r in range(n):  # small-loop(the fixture's rows)
+        state = state * UInt64(6364136223846793005) + UInt64(1442695040888963407)
+        y2[r] = Float32(Int(state >> UInt64(40))) / Float32(16777216.0) - Float32(0.5)
+        y2[n + r] = Float32(1) if inp.x[1 * n + r] > Float32(0.5) else Float32(-1)
+    var reg = GbdtInputs(inp.x.copy(), n, inp.d, y2^)
+    for si in range(2):  # small-loop(the two score functions)
+        var o = _pw_opts("MultiRMSE", scores[si], "No")
+        o.n_estimators = 20
+        o.max_depth = 3
+        o.boost_from_average = 0
+        o.target_dim = 2
+        var what = "pointwise MultiRMSE " + scores[si]
+        var m = _twice[I](o, reg, what)
+        var raw = predict(m.text, reg.x, n)
+        require(len(raw) == 2 * n, what + ": " + String(len(raw)) + " predictions")
+        var sse = Float64(0)
+        for r in range(n):  # small-loop(the fixture's rows)
+            var e = Float64(raw[r * 2 + 1]) - Float64(reg.y[n + r])
+            sse += e * e
+        require(
+            sse / Float64(n) < 0.25,
+            what + ": dimension 1 MSE " + String(sse / Float64(n))
+            + "; the split ignored the deciding column",
+        )
 
 
 def host_pointwise_rest[I: GbdtImage]() raises:

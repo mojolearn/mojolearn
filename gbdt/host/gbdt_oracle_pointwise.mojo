@@ -35,8 +35,9 @@ iteration count, any `random_strength`, `boost_from_average` on, off or
 unset, sample and class weights, an eval set under any detector and
 `use_best_model`, any `feature_fraction` on numeric columns, numeric,
 one-hot and CTR columns. The binding refuses in `train`'s words what the
-device refuses (Depthwise and Lossguide, MultiRMSE, feature combinations,
-`boost_from_average` outside its list). MultiClass and MultiClassOneVsAll on
+device refuses (Depthwise and Lossguide, feature combinations,
+`boost_from_average` outside its list). MultiClass, MultiClassOneVsAll and
+MultiRMSE on
 this searcher run `gbdt_oracle_multiclass.gbdt_multi_host_fit(
 use_pointwise_searcher=True)` (lane gbdt-pw-multiclass, 2026-11-23).
 

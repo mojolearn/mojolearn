@@ -2617,12 +2617,12 @@ def test_rest4simple_host_text_is_device_text() raises:
                        + String(REST4SIMPLE_UNITS + REST4SIMPLE_REFUSALS) + " cases failed" + failed if count > 0 else ""))
 
 
-# ---- lane gbdt-pw-multiclass (2026-11-23): MultiClass and MultiClassOneVsAll
-# on the pointwise searcher, every approx dimension's score summed (the
+# ---- lane gbdt-pw-multiclass (2026-11-23): MultiClass, MultiClassOneVsAll
+# and MultiRMSE on the pointwise searcher, every approx dimension's score summed (the
 # dimensions on the searcher's fold axis), host text against device text at
 # rate 0.1 ----
 
-comptime PWMC_UNITS = 8
+comptime PWMC_UNITS = 10
 
 
 def _pwmc_inputs(unit: Int) raises -> GbdtInputs:
@@ -2636,6 +2636,22 @@ def _pwmc_inputs(unit: Int) raises -> GbdtInputs:
         raise Error("gbdt_host_device_cat pwmc: no unit " + String(unit))
     if unit == 4:
         return _inputs(False)
+    if unit >= 8:
+        # MultiRMSE: four hashed columns, `dims` dim-major real target planes
+        # (unit 8 two, unit 9 three), each its own mix of the columns
+        var nr = REST_ROWS
+        var dims = 2 if unit == 8 else 3
+        var xr = List[Float32](capacity=4 * nr)
+        for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+            for r in range(nr):  # driver-loop: over the fixture's rows
+                xr.append(_unit01(r, 190 + j) * Float32(4.0) - Float32(2.0))
+        var yr = List[Float32](capacity=dims * nr)
+        for d in range(dims):  # driver-loop: over the target's dimensions
+            for r in range(nr):  # driver-loop: over the fixture's rows
+                var c = Float32(d + 1)
+                yr.append(xr[((d + 1) % 4) * nr + r] - Float32(0.5) * c * xr[(d % 4) * nr + r]
+                          + Float32(0.3) * (_unit01(r, 195 + d) - Float32(0.5)))
+        return GbdtInputs(xr^, nr, 4, yr^)
     var n = REST_ROWS
     var k = 4 if unit == 6 else 3
     var x = List[Float32](capacity=4 * n)
@@ -2677,11 +2693,16 @@ def _pwmc_opts(unit: Int) raises -> GbdtOpts:
     one-hot column (two classes, the pinned class at one dimension); 5
     MultiClassOneVsAll at feature_fraction 0.5 with random_strength 1; 6
     MultiClass on four classes at depth 6, Newton at 3 iterations; 7
-    MultiClassOneVsAll L2 Poisson 0.66."""
+    MultiClassOneVsAll L2 Poisson 0.66; 8 MultiRMSE on two target
+    dimensions under Cosine with random_strength 1; 9 MultiRMSE on three
+    under L2, Bayesian, Gradient leaves at 2 iterations."""
     if unit < 0 or unit >= PWMC_UNITS:
         raise Error("gbdt_host_device_cat pwmc: no unit " + String(unit))
     var ova = unit == 2 or unit == 5 or unit == 7
     var o = GbdtOpts("MultiClassOneVsAll" if ova else "MultiClass", REST_TREES, 4)
+    if unit >= 8:
+        o.loss = String("MultiRMSE")
+        o.target_dim = 2 if unit == 8 else 3
     o.learning_rate = REST_RATE
     o.l2_leaf_reg = 3.0
     o.random_state = 7
@@ -2720,10 +2741,18 @@ def _pwmc_opts(unit: Int) raises -> GbdtOpts:
     elif unit == 6:
         o.max_depth = 6
         o.leaf_iterations = 3
-    else:
+    elif unit == 7:
         o.score_function = "L2"
         o.bootstrap = "Poisson"
         o.subsample = 0.66
+    elif unit == 8:
+        o.random_strength = 1.0
+    else:
+        o.score_function = "L2"
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 2
     return o^
 
 

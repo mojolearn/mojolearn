@@ -832,7 +832,7 @@ TRAINING_LANE_NAMES = {
     "gbdt-multi-walk": "gradient boosting with MultiClass, MultiClassOneVsAll and MultiRMSE under Newton leaves past one iteration and Gradient leaves",
     # lane gbdt-cpu-rest-4-simple (2026-11-23)
     "gbdt-simple-leaves": "gradient boosting with the Simple leaf estimator, the SymmetricTree searcher's own leaves",
-    "gbdt-pointwise-multiclass": "gradient boosting with the pointwise searcher on MultiClass and MultiClassOneVsAll",
+    "gbdt-pointwise-multiclass": "gradient boosting with the pointwise searcher on MultiClass, MultiClassOneVsAll and MultiRMSE",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",

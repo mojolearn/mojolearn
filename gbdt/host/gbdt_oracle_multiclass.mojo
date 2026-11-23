@@ -982,7 +982,7 @@ def gbdt_multi_host_fit(
     leaf_iterations: Int = 1,
     # the structure searcher (lane gbdt-pw-multiclass, 2026-11-23): False the
     # greedy subsets searcher; True the doc-parallel (pointwise) searcher on
-    # MultiClass and MultiClassOneVsAll, every approx dimension's score
+    # MultiClass, MultiClassOneVsAll and MultiRMSE, every approx dimension's score
     # summed (`_ordered_tree_structure(dim_count=...)`), the device's
     # pointwise arm statement for statement
     use_pointwise_searcher: Bool = False,
@@ -1035,14 +1035,6 @@ def gbdt_multi_host_fit(
     if len(x_colmajor) != n_rows * n_features:
         raise Error("x_colmajor size mismatch")
     var is_mrmse = objective == GBDT_OBJ_MULTIRMSE
-    if use_pointwise_searcher and is_mrmse:
-        # `fit_with_test`'s words (gbdt/methods/doc_parallel_boosting.mojo)
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-            " a single-target searcher; MultiRMSE is trained by"
-            " TGreedySubsetsSearcher only (cuda/train_lib/multiclass.cpp:"
-            "1-13)"
-        )
     if target_dim != 1 and not is_mrmse:
         raise Error("a multi-dimensional target is read only by MultiRMSE")
     if len(y) != n_rows * target_dim:

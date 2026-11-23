@@ -698,11 +698,29 @@ def fit_oblivious_tree_structure_levels(
     comptime if T22:
         fold_order = fold_count > 1
     if dim_count > 0:
-        # the dimensions' folds hold every row in row order: the levels
-        # gather document ids through `d_doc_ids` and read the caller's
-        # index (no `D * n`-column fold-order copy). The cells are the same
-        # on either index: the dither keys on the document id both ways
-        # (`ORD_DOC_ID_STORAGE`), and the snapped planes sit on the grid.
+        # The dimensions' folds read the caller's index through the gathered
+        # document ids (no `dims * n`-column fold-order copy). WHY THE CELLS
+        # AND THEIR ORDER ARE THE FOLD-ORDER COPY'S, read from the code
+        # (lane gbdt-pw-multiclass, 2026-11-23):
+        #  * the histogram loop (`compute_point_hist2_loop.mojo`) walks
+        #    POSITIONS `at + col` of the partition in the same order on both
+        #    indexes and loads `weight` / `target` by position, so every
+        #    point is added in the same sequence; only the bin's address
+        #    differs: `cindex[d_doc_ids[pos]]` here, `fold_copy[pos]` there,
+        #    the same word by `fold_cindex_gather_kernel`'s definition;
+        #  * the peel and block split key on the position offset and the
+        #    document count, the same on both; in IDENTICAL builds the
+        #    document axis is whole (`pw_block_multiplier`, DEVIATION 2624:
+        #    one block per feature group per part, one left-to-right sum);
+        #  * the dither key is the DOCUMENT id on both: here the gathered
+        #    row id itself, there `dither_ids = d_doc_ids` under
+        #    `ORD_DOC_ID_STORAGE`, which is `T22` (every IDENTICAL build);
+        #  * the split kernel reads the same bin word for the same position
+        #    (`docs2` is the gathered ids here, the positions there), so
+        #    the partition and the next level's order agree.
+        # The CPU column (`_ord_hist_level`) walks the same positions and
+        # keys on the document id, the convention of the Ordered arm and of
+        # the single-task arm (fold_count 1, ids = positions) alike.
         fold_order = False
     # E IDN_ORD_INDEX_SHARED (trees_identical_switches.mojo): one
     # permutation-order index per searched permutation (stride n_rows)
