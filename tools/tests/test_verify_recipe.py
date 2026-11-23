@@ -395,3 +395,51 @@ def test_the_one_ulp_control_also_moves_a_nan_answer(vr):
     verdict = vr.compare_results([("a", results["cpu"], [nan]), ("b", moved["cpu"], arrays["cpu"])])
     assert verdict["verdict"] == "DIVERGENT"
 
+
+
+# ---------------------------------------------------------------- answers that are not numbers (lane mamba2-nan)
+
+def test_two_devices_answering_nan_are_not_finite_never_identical(vr, monkeypatch, capsys, tmp_path):
+    """The shipped seq-mamba2 recipe predicted NaN on the CPU column and was called IDENTICAL: equal bits of NaN
+    must be a failure in words with its own exit code, on one device and on two."""
+    def poisoned(self, X):
+        out = np.zeros(len(X), dtype=np.float32)
+        out[2] = np.nan
+        out[5] = np.inf
+        return out
+    monkeypatch.setattr(Toy, "predict", poisoned)
+    path = tmp_path / "toy.json"
+    path.write_text(json.dumps(toy_recipe(digest=True, predict={"method": "predict", "on": "test"})))
+    code, out = run_cli(vr, monkeypatch, capsys, str(path))
+    assert code == vr.EXIT_NOT_FINITE, out
+    assert "NOT FINITE: cpu answers 2 of 16 values of output predict as NaN or infinity" in out, out
+    assert "IDENTICAL" not in out
+    record = json.loads((tmp_path / "toy.record.json").read_text())
+    assert record["verdict"]["verdict"] == "NOT FINITE"
+    assert record["results"]["cpu"]["outputs"][1]["nonfinite"] == 2
+    vr._parent.vendor = lambda: "cpu"
+    code, out = run_cli(vr, monkeypatch, capsys, str(path), record_out=str(tmp_path / "one.record.json"))
+    assert code == vr.EXIT_NOT_FINITE and "this installation: NOT FINITE" in out, out
+
+
+def test_the_self_test_still_passes_its_controls_on_a_nan_answer(vr, monkeypatch, capsys, tmp_path):
+    """The one-ulp control compares bits first, so a NaN answer still shows the comparison can fail; the run's
+    own verdict stays NOT FINITE."""
+    monkeypatch.setattr(Toy, "predict", lambda self, X: np.full(len(X), np.nan, dtype=np.float32))
+    path = tmp_path / "toy.json"
+    path.write_text(json.dumps(toy_recipe(predict={"method": "predict", "on": "test"})))
+    code, out = run_cli(vr, monkeypatch, capsys, str(path), self_test=True)
+    assert code == vr.EXIT_NOT_FINITE, out
+    assert "SELF-TEST PASS: 4 of 4 controls" in out, out
+
+
+def test_a_record_without_counts_is_counted_from_its_values(vr):
+    nan = np.array([1.0, np.nan], dtype=np.float32)
+    out = dict(name="predict", kind="array", values=vr._encode(nan), **vr.cb.describe_output(nan))
+    result = {"ran": True, "outputs": [out]}
+    verdict = vr.compare_results([("this", result, None), ("other", copy.deepcopy(result), None)])
+    assert verdict["verdict"] == "NOT FINITE" and verdict["first"]["nonfinite"] == 1
+    finite = np.array([1.0, 2.0], dtype=np.float32)
+    ok = {"ran": True, "outputs": [dict(name="predict", kind="array", values=vr._encode(finite),
+                                        **vr.cb.describe_output(finite))]}
+    assert vr.compare_results([("a", ok, None), ("b", copy.deepcopy(ok), None)])["verdict"] == "IDENTICAL"
