@@ -414,6 +414,12 @@ comptime META_RFE_WORDS = 11
 #: THE RFE KIND's fitted words (float64, export / import): [d, k], the d support words (1.0 kept), the d
 #: ranking words, the k kept column ids.
 comptime META_BLOCK_RFE = MEMBER_BLOCK_FAMILY + 8
+#: THE FORWARDED EXPORT (lane mf-meta5b; export only): a nested member's block along an attribute path, the
+#: path a dotted importance_getter names (RFE's 'best_estimator_.coef_', 'estimator_.coef_',
+#: 'final_estimator_.coef_'). `call.params` / `call.param_count`: float64 words [index, ..., block], each
+#: index a nested member of the state at that step (-1: the last: a stack's final estimator), then the leaf's
+#: block; the view is the leaf state's own (it lives as long as this state).
+comptime META_BLOCK_FORWARD = MEMBER_BLOCK_FAMILY + 9
 #: THE CLASS-WEIGHT TAIL of a tree base (lane mf-split4): appended after a
 #: Bagging's META_BAG_WORDS (its batched forest's or per-member tree's
 #: class_weight) and an AdaBoost's META_ADA_WORDS (its base's): [mode, K,
@@ -4288,6 +4294,34 @@ def _outputs(call: _CallPtr) raises:
 # ------------------------------------------------------------------ EXPORT / IMPORT
 
 
+def _export_forward(slot: _SlotPtr, call: _CallPtr) raises:
+    """EXPORT `META_BLOCK_FORWARD` (its note): the nested member the first word names, asked for the rest of
+    the path (one more forwarded export when more than its block is left), its view handed back as this
+    state's answer. A path step this state does not hold raises in the ABI's words."""
+    var count = call[].param_count
+    if count < 2 or call[].params == 0:
+        raise Error("member ABI: a forwarded export names a nested member and a block")
+    var words = _F64P(unsafe_from_address=call[].params)
+    var nested = len(slot[].states)
+    var at = Int(words[0])
+    if at < 0:
+        at = nested - 1
+    if at < 0 or at >= nested or slot[].states[at] == 0:
+        raise Error("member ABI: a meta member has no nested member " + String(Int(words[0])) + " of "
+                    + String(nested))
+    var inner = MemberCall(slot[].plans[at].route, slot[].states[at])
+    inner.flags = 0
+    if count == 2:
+        inner.block = Int(words[1])
+    else:
+        inner.block = META_BLOCK_FORWARD
+        inner.params = call[].params + 8
+        inner.param_count = count - 1
+    _ = member_call(slot[].plans[at].member, MEMBER_OP_EXPORT, inner)
+    call[].dst = inner.dst
+    call[].out_cols = inner.out_cols
+
+
 def _export(slot: _SlotPtr, call: _CallPtr) raises:
     if call[].flags == MEMBER_EXPORT_OWN:
         for u in range(len(slot[].states)):  # driver-loop: over the nested members (each owns its rows)
@@ -4299,6 +4333,9 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         return
     _fitted(slot)
     var block = call[].block
+    if block == META_BLOCK_FORWARD and call[].flags != MEMBER_BLOCK_BY_INDEX:
+        _export_forward(slot, call)
+        return
     if call[].flags == MEMBER_BLOCK_BY_INDEX:
         # vote / stack: nested, widths; a unit kind: nested, then its own words (calibrated pairs, bag draws),
         # then a bag's out-of-bag outputs.

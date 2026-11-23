@@ -80,6 +80,11 @@ struct RfeBase(Movable):
     var template: PythonObject
     var fields: PythonObject
     var member_context: PythonObject
+    # Lane mf-meta5b: a dotted importance_getter over a META estimator (RFE's door, `_rfe_dotted_base`):
+    # `meta` True, `block` the META kind's forwarded export and `hops` its words (each nested index along
+    # the path, then the leaf's block); PACK packs a META member.
+    var hops: List[Float64]
+    var meta: Bool
 
     def __init__(out self):
         self.native = False
@@ -94,6 +99,8 @@ struct RfeBase(Movable):
         self.template = PythonObject(None)
         self.fields = PythonObject(None)
         self.member_context = PythonObject(None)
+        self.hops = List[Float64]()
+        self.meta = False
 
 
 def rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObject, b: PythonObject) -> RfeBase:
