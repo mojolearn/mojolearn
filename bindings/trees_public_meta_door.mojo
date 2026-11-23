@@ -2996,9 +2996,10 @@ struct _CalUnits(Movable):
     Calibrated base's index-list or KFold / StratifiedKFold cv, a Bagging
     tree's class_weight on the per-member route and an AdaBoost base with
     sample weights too, and a user's own splitter object is refused at the
-    admission; still the door's: a Calibrated base with a DeviceRows base, a
-    Stacking or Calibrated base whose cv is another of our splitters
-    (ShuffleSplit, RepeatedKFold, ...)), a configuration its family's
+    admission; since lane mf-split5 every other of our splitters as a cv
+    too; still the door's: a Calibrated base with a DeviceRows base, a
+    stratified splitter on a regressor, a splitter setting the door reads in
+    another form (a long double shuffle size)), a configuration its family's
     admit leaves to the estimator's door (a class_weight that is neither
     None, 'balanced' nor an exact dict, which that door refuses in its
     words; a GP kernel the member cannot address, ...), or a member kind
