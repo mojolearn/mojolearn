@@ -21,7 +21,9 @@ Units, in order:
   counts whose later columns are constant on a small sample (zero folds
   beside live columns);
 - four larger fits at the reported scale (24,033 rows; 1, 3, 21 and 63
-  sparse-count columns; 20 trees);
+  sparse-count columns; 4 trees: the layout, the compressed index and the
+  device buffers the fault read are built once per fit, before the first
+  tree, so 4 trees run every per-tree drain of them as 20 did);
 - two fits whose every column is constant (an empty layout): the fit may
   refuse in words, but it may not fault the device, and an ordinary fit
   after it must succeed;
@@ -189,9 +191,12 @@ def sweep_unit[I: GbdtImage](unit: Int) raises:
     _fit_and_score[I](mix, n, d, 2)
 
 
+comptime LARGE_TREES = 4  # was 20 (check-trim, 2026-11-23): the scale is in the rows and columns, not the tree count
+
+
 def large_unit[I: GbdtImage](unit: Int) raises:
     var widths = [1, 3, 21, 63]
-    _fit_and_score[I](MIX_SPARSE, LARGE_ROWS, widths[unit], 20)
+    _fit_and_score[I](MIX_SPARSE, LARGE_ROWS, widths[unit], LARGE_TREES)
 
 
 def constant_unit[I: GbdtImage](unit: Int) raises:
