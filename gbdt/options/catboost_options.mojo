@@ -224,6 +224,105 @@ comptime LEAF_ESTIMATION_EXACT = 2
 comptime LEAF_ESTIMATION_SIMPLE = 3
 
 
+#: The most borders a numeric feature takes: the one-byte compressed index
+#: holds 255 folds a feature (`grid_policy.policy_max_folds(POLICY_ONE_BYTE)`)
+#: and `binarize_float_feature_kernel` stages a feature's borders in a
+#: 256-slot shared table.
+comptime MAX_BORDER_COUNT = 255
+
+#: CatBoost's depth cap for the full-binary-tree policies
+#: (`oblivious_tree_options.cpp:126-129`), which is also what the model text
+#: reader holds (`model_text.load_model_text` refuses an oblivious tree past
+#: depth 16).
+comptime MAX_FULL_TREE_DEPTH = 16
+
+
+def check_tree_limits(border_count: Int, max_depth: Int, lossguide: Bool) raises:
+    """`train`'s limits on `border_count` and `max_depth`, ONE body for the
+    device fit (`gbdt/train.mojo::train`) and the host column
+    (`gbdt/mojolearn_gbdt_host_run.mojo`), so both refuse in the same words
+    (lane gbdt-cpu-rest-4-tail, 2026-11-23). `train` had neither: a
+    border count past 255 overran the binarize kernel's shared border table
+    and the one-byte packing mask, and a SymmetricTree or Depthwise fit
+    past depth 16 trained to the end and was refused by the model reader
+    (an oblivious tree deeper than 16, a non-symmetric one past 65536
+    nodes). Lossguide's depth is the per-leaf bound and is not capped, as in
+    CatBoost's `Validate`; its tree is bounded by `max_leaves` (65536).
+    Negative depths keep the searchers' own refusals."""
+    if border_count < 1 or border_count > MAX_BORDER_COUNT:
+        raise Error(
+            "border_count must be in 1.." + String(MAX_BORDER_COUNT)
+            + " (the one-byte compressed index holds 255 folds a feature);"
+            " got " + String(border_count)
+        )
+    if not lossguide and max_depth > MAX_FULL_TREE_DEPTH:
+        # `CB_ENSURE(MaxDepth <= 16, "Maximum tree depth is 16")`
+        raise Error("Maximum tree depth is 16; got " + String(max_depth))
+
+
+def simple_leaf_iterations_check(leaf_estimation_method: Int, iterations: Int) raises:
+    """`catboost_options.cpp:338-341` on the RESOLVED count: Simple runs one
+    iteration. The device's `set_leaves_estimation_default` and the host fit
+    (gbdt/mojolearn_gbdt_host_run.mojo, the explicit count or 1) both call
+    it (lane gbdt-cpu-rest-4-simple, 2026-11-23)."""
+    if leaf_estimation_method == LEAF_ESTIMATION_SIMPLE and iterations != 1:
+        raise Error(
+            "Leaves estimation iterations can't be greater, than 1 for"
+            " Simple leaf-estimation mode"
+        )
+
+
+def simple_leaves_check(
+    leaf_estimation_method: Int,
+    multi_output: Bool,
+    ordered: Bool,
+    non_symmetric: Bool,
+    use_pointwise_searcher: Bool,
+) raises:
+    """THE ONE ADMISSION of `leaf_estimation_method=Simple`, for the device
+    fit (`gbdt/train.mojo::train`, right after `set_leaves_estimation_default`)
+    and the host fit (gbdt/mojolearn_gbdt_host_run.mojo) alike (lane
+    gbdt-cpu-rest-4-simple, 2026-11-23).
+
+    Simple is their `NeedEstimation() == false` (`greedy_subsets_searcher.h:
+    67-69`): the greedy SymmetricTree searcher's own leaves stand
+    (`compute_leaf_values_kernel`, `searcher_leaf_body.searcher_leaf_value`,
+    one value a leaf from the weight plane and the first gradient plane) and
+    only the learn permutation's cursor takes them. That is what both columns
+    train. Two families have no such leaves, so they are refused here, before
+    any tree, in these words on both columns:
+    - the multi-output losses (MultiClass, MultiClassOneVsAll, MultiRMSE):
+      the searcher's leaf is one-dimensional; before this check the device
+      wrote a one-value-a-leaf tree into a multi-dimensional model;
+    - Ordered boosting, Depthwise / Lossguide and the pointwise searcher:
+      each returns a structure only and estimates every tree through the
+      walker, which has no Simple arm (the device reached
+      `_estimate_and_apply`'s "a walk reached no device walker" at the first
+      tree, the host refused by name)."""
+    if leaf_estimation_method != LEAF_ESTIMATION_SIMPLE:
+        return
+    if multi_output:
+        raise Error(
+            "leaf_estimation_method=Simple keeps the structure searcher's own"
+            " leaves, one value per leaf; the multi-output losses"
+            " (MultiClass, MultiClassOneVsAll, MultiRMSE) need one per"
+            " dimension: use Newton or Gradient"
+        )
+    var arm = String("")
+    if ordered:
+        arm = String("boosting_type='Ordered'")
+    elif non_symmetric:
+        arm = String("grow_policy Depthwise / Lossguide")
+    elif use_pointwise_searcher:
+        arm = String("use_pointwise_searcher")
+    if arm != String(""):
+        raise Error(
+            "leaf_estimation_method=Simple keeps the structure searcher's own"
+            " leaves; " + arm + " searches the structure only and estimates"
+            " every tree, so it has none to keep: use Newton or Gradient"
+        )
+
+
 def querywise_pointwise_leaf_check(use_pointwise_searcher: Bool, grouped: Bool, leaf_estimation_method: Int) raises:
     """THE ONE ADMISSION of the leaf method on the grouped pointwise search
     (QueryRMSE, PairLogit, YetiRank under use_pointwise_searcher), for the
@@ -562,7 +661,7 @@ struct CatBoostOptions(Copyable, Movable):
         # per-leaf bound and their Validate does not cap it
         if self.depth < 1:
             raise Error("depth must be at least 1; got " + String(self.depth))
-        if self.grow_policy != GROW_LOSSGUIDE and self.depth > 16:
+        if self.grow_policy != GROW_LOSSGUIDE and self.depth > MAX_FULL_TREE_DEPTH:
             raise Error("Maximum tree depth is 16; got " + String(self.depth))
         # `CB_ENSURE(MaxLeaves == 1u << MaxDepth, "max_leaves option works
         # only with lossguide tree growing")` -- `catboost_options.cpp:993`.
@@ -598,21 +697,21 @@ struct CatBoostOptions(Copyable, Movable):
         # The refusals are deleted rather than annotated, per the rule
         # that a document a result falsifies is part of the result.
         #
-        # WHAT IS STILL REFUSED IS `Simple`, and it is refused because
-        # nothing reaches it: `NeedEstimation()` is
-        # `LeavesEstimationMethod != Simple`
-        # (`greedy_subsets_searcher.h:67-69`), so choosing it turns the
-        # estimator OFF and leaves the searcher's own leaf values
-        # standing. That path exists here -- it is the RMSE shortcut of
-        # DEVIATION 64 -- but it has never been exercised through this
-        # option, and CONTRIBUTING.md (Non-default paths) says an unexercised branch is an
-        # unchecked one.
-        if self.leaf_estimation_method == LEAF_ESTIMATION_SIMPLE:
-            raise Error(
-                "leaf_estimation_method=Simple is not wired through this"
-                " option; it turns the estimator off"
-                " (greedy_subsets_searcher.h:67-69) and that path has no"
-                " check of its own. Newton, Gradient and Exact all work."
+        # `Simple` turns the estimator OFF (`NeedEstimation()` is
+        # `LeavesEstimationMethod != Simple`, `greedy_subsets_searcher.h:
+        # 67-69`) and leaves the greedy SymmetricTree searcher's own leaf
+        # values standing; lane gbdt-cpu-rest-4-simple (2026-11-23) trains
+        # it on both columns there and refuses it where no searcher leaf
+        # exists, through the one admission the fits call
+        # (`simple_leaves_check`; this record has no loss, boosting type or
+        # searcher field, so only the policy is read here).
+        simple_leaves_check(
+            self.leaf_estimation_method, False, False,
+            self.grow_policy != GROW_SYMMETRIC, False,
+        )
+        if self.leaf_estimation_iterations >= 0:
+            simple_leaf_iterations_check(
+                self.leaf_estimation_method, self.leaf_estimation_iterations
             )
         if self.leaf_estimation_iterations < -1:
             raise Error(
@@ -1436,12 +1535,8 @@ def set_leaves_estimation_default(
     if iterations_override >= 0:
         iterations = iterations_override
 
-    if method == LEAF_ESTIMATION_SIMPLE and iterations != 1:
-        # `:338-341`
-        raise Error(
-            "Leaves estimation iterations can't be greater, than 1 for"
-            " Simple leaf-estimation mode"
-        )
+    # `:338-341`, the one body both columns call
+    simple_leaf_iterations_check(method, iterations)
 
     # `Validate()` (`:740-742`) runs on the RESOLVED method, after
     # `SetNotSpecifiedOptionsToDefaults` (`Load`, `:380-382`), and this is

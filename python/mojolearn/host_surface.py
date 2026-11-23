@@ -821,6 +821,17 @@ TRAINING_LANE_NAMES = {
     "gbdt-rest-gaps": "gradient boosting eval sets and feature_fraction on the symmetric pointwise and multiclass losses, the pointwise searcher with RMSE, NaN beside categorical columns",
     "gbdt-pointwise-arms": "gradient boosting on the pointwise searcher with Newton and cosine scores, every bootstrap, Gradient leaves, score noise and feature_fraction",
     "gbdt-ordered-weights": "gradient boosting Ordered boosting with sample weights and class weights",
+    "gbdt-nonsym-rest": "gradient boosting Depthwise and Lossguide with every score, growth knob, leaf method, bootstrap and boost_from_average",
+    # lane gbdt-cpu-rest-4-pwl (2026-11-23)
+    "gbdt-pointwise-rest": "gradient boosting on the pointwise searcher with every one-output loss, boost_from_average resolved, border types, IncToDec and categorical columns",
+    "gbdt-symmetric-rest": "gradient boosting on symmetric trees with the L2, NewtonL2 and NewtonCosine scores, Gradient leaves, boost_from_average on Logloss and CrossEntropy (Plain and Ordered) and class weights on a pointwise loss",
+    "gbdt-cat-rest": "gradient boosting with categorical and one-hot columns on the pointwise losses and the multiclass family",
+    # lane gbdt-cpu-rest-4-cat-ns (2026-11-23)
+    "gbdt-cat-nonsym": "gradient boosting with Depthwise and Lossguide trees on CTR and one-hot categorical columns",
+    # lane gbdt-cpu-rest-4-tail (2026-11-23)
+    "gbdt-multi-walk": "gradient boosting with MultiClass, MultiClassOneVsAll and MultiRMSE under Newton leaves past one iteration and Gradient leaves",
+    # lane gbdt-cpu-rest-4-simple (2026-11-23)
+    "gbdt-simple-leaves": "gradient boosting with the Simple leaf estimator, the SymmetricTree searcher's own leaves",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1207,11 +1218,11 @@ TRAINING_LANE_NAMES = {
     # ModelPlan, TensorInfo, the shard map and _read_weights)
     "hf-causal-lm-text": "a causal language model's text generation and text stream",
     "hf-model-surface": "the Hugging Face config, plan and checkpoint header surface",
-    # The CTR table lanes: CPU TRAINING of CTR tables refuses by name
-    # (NO_CPU_PATH), so the CPU column LOADS the Metal-saved model of each
+    # The CTR table lanes: the CPU column LOADS the Metal-saved model of each
     # fixture from GBDT_CTR_MODELS_DIR and predicts through the forest host
-    # binding's CTR and tensor CTR step (HostGBDT). What the CPU column
-    # computes is the prediction from a GPU-fitted model, not a fit.
+    # binding's CTR and tensor CTR step (HostGBDT). (Lane gbdt-cpu-rest-4,
+    # 2026-11-23: CPU training of CTR tables no longer refuses; NO_CPU_PATH
+    # is gone, and these lanes' own fits run on the CPU column too.)
     "gbdt-categorical-ctr-tables": "predictions of Metal-saved gradient boosting models with CTR tables (inference)",
     "gbdt-tensor-ctr-tables": "predictions of Metal-saved gradient boosting models with tensor CTRs (inference)",
     # lane/identical-lowbit-inference (2026-09-17): the two low-bit GEMM
@@ -1556,72 +1567,11 @@ ADAPTED_MODULES = {
     "_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host"),
 }
 
-#: Configuration groups that still lack a CPU training route. These are
-#: not six whole algorithms, nor a count of individual refusal sites.
-#: Cooperative multi-GPU operations are a separate capability and are not
-#: missing CPU algorithms. docs_facts generates the corresponding doc spans.
-#:
-#: Source review 2026-10-27: binary class weights and the dedicated weighted
-#: pointwise lane predate this review; CTR training with all permutations has
-#: existed since 2026-09-28. The former blanket weight/CTR refusals were stale.
-#: Plain numeric Logloss now admits sample weights through the existing
-#: weighted owners; CTR evaluation uses the shared final-table expander and
-#: held-out owner. Their runtime/identity evidence remains pending; this source
-#: inventory and the compile receipts do not supply that evidence.
-#: Lane gbdt-gaps (2026-11-23): sample weights on RMSE, Depthwise/Lossguide,
-#: the pointwise losses, YetiRank and generated-pair PairLogit, and eval sets
-#: on RMSE and Depthwise/Lossguide, are trained by the host owners now.
-#: Lane gbdt-cpu-rest (2026-11-23): sample weights with QueryRMSE, Exact
-#: leaves, the multi-output losses, categorical columns, the grouped
-#: pointwise searcher, OrderedRMSE and FeatureFreq; NaN on every numeric arm;
-#: Cosine under Lossguide; the pointwise losses on Depthwise and Lossguide
-#: (eval sets included); feature_fraction on every numeric Logloss / RMSE
-#: fit and the pointwise losses on non-symmetric trees; the pointwise
-#: searcher without sample weights or an eval set.
-#: Lane gbdt-cpu-rest-2 (2026-11-23): eval sets on the symmetric pointwise
-#: losses and on MultiClass / MultiClassOneVsAll, feature_fraction on the
-#: symmetric pointwise and multi-output losses, the pointwise searcher with
-#: RMSE, NaN in float columns beside categorical ones. Refused on BOTH
-#: columns in `train`'s words, so not CPU gaps: an eval set with MultiRMSE or
-#: the grouped losses, NaN in a cat_features column.
-#: Lane gbdt-rest-3 (2026-11-23): the pointwise searcher with the NewtonL2,
-#: Cosine and NewtonCosine scores, the Bernoulli, Poisson and no bootstrap,
-#: Gradient leaves and random_strength on Logloss / RMSE, and
-#: feature_fraction on both pointwise searchers (grouped ones included).
-#: Refused on BOTH columns in `train`'s words, so not CPU gaps: a NaN in a
-#: one_hot_features column that is not categorical (the binarize's "There
-#: are NaNs in feature number N" on both columns), MVS, Exact leaves on
-#: Logloss / RMSE.
-#:
-#: Lane gbdt-ordered-weights (2026-11-23): sample weights and class weights
-#: under Ordered boosting (gbdt_oracle_ordered.mojo threads the device's one
-#: weight column through the fold planes, the leaves, the starting average
-#: and the learn loss); class weights with RMSE refuse on both columns in
-#: `train`'s words.
-NO_CPU_PATH = (
-    "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
-    "tree's level winner is the tensor column itself: the separate CPU "
-    "feature-frequency route refuses that case",
-
-    "gradient boosting training with a categorical or one-hot column "
-    "outside SymmetricTree with Logloss or RMSE and Plain boosting: the "
-    "categorical owners do not implement those combinations",
-
-    "gradient boosting training with the pointwise searcher outside "
-    "Logloss and RMSE (boost_from_average on, GreedyLogSum borders, numeric "
-    "columns, the Iter detector when an eval set is "
-    "given), apart from the grouped losses QueryRMSE, PairLogit and "
-    "YetiRank, which it trains",
-
-    "gradient boosting training at a (loss, grow_policy, score_function, "
-    "leaf_estimation_method, bootstrap_type) combination outside the ones "
-    "the gbdt/host oracles restate, each refused by name: score functions "
-    "and leaf estimators outside each policy's covered pair, Depthwise's "
-    "min_split_gain, min_child_hessian and min_data_in_leaf, "
-    "and boost_from_average outside RMSE, the quantile "
-    "family and the dedicated pointwise Logloss route -- each one its own "
-    "device kernel or its own searcher gate order",
-)
+# `NO_CPU_PATH` (the configuration groups the CPU column refused by name) is
+# deleted (lane gbdt-cpu-rest-4, 2026-11-23): the gbdt host binding trains
+# every configuration the device trains and refuses the rest in the device's
+# words, so no group is left. Its clauses and the lanes that closed them are
+# in git history (python/mojolearn/host_surface.py before this lane).
 
 #: The read-back trio every host binding exports under its own prefix,
 #: plus the sabotage flag: `<prefix>_numeric_mode()` must answer 1,
@@ -2967,6 +2917,28 @@ FAMILIES = (
             "gbdt-pointwise-arms",
             # lane gbdt-ordered-weights (2026-11-23)
             "gbdt-ordered-weights",
+            # lane gbdt-cpu-rest-4-ns (2026-11-23)
+            "gbdt-nonsym-rest",
+            # lane gbdt-cpu-rest-4-pwl (2026-11-23): the rest of the
+            # pointwise searcher (gbdt_oracle_pointwise.mojo)
+            "gbdt-pointwise-rest",
+            # lane gbdt-cpu-rest-4-sym (2026-11-23): the greedy SymmetricTree
+            # scores, leaves and starts and the Ordered boost_from_average
+            "gbdt-symmetric-rest",
+            # lane gbdt-cpu-rest-4-cat (2026-11-23): categorical columns on
+            # the symmetric pointwise losses and the multiclass family
+            "gbdt-cat-rest",
+            # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): Depthwise and
+            # Lossguide over CTR and one-hot columns
+            # (gbdt_oracle_depthwise.mojo::gbdt_ctr_host_fit_non_symmetric)
+            "gbdt-cat-nonsym",
+            # lane gbdt-cpu-rest-4-tail (2026-11-23): the multi-output
+            # losses' leaf walk (gbdt_oracle_multiclass.mojo _estimate_multi)
+            "gbdt-multi-walk",
+            # lane gbdt-cpu-rest-4-simple (2026-11-23): the Simple leaf
+            # estimator, the searcher's own leaves (gbdt_oracle.mojo
+            # gbdt_host_boost, gbdt_oracle_losses.mojo gbdt_losses_host_fit)
+            "gbdt-simple-leaves",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -3007,8 +2979,8 @@ FAMILIES = (
             # 2026-09-20). len(family("gbdt")["training_lanes"]) is the number.
             "Ships: the boosting fit, which is twenty-seven declared training lanes, the largest block of "
             "checkable surface any one binding holds. Saved models still predict through the "
-            "shipped forest binding. CPU training of sample weights and of CTR categorical "
-            "features still refuses by name (NO_CPU_PATH). At about 1.4 MB it is the largest "
+            "shipped forest binding. CPU training covers every combination the device trains, and "
+            "refuses what the device refuses in the device's words. At about 1.4 MB it is the largest "
             "host binding."
         ),
         ships_in_wheel=True,
@@ -4178,6 +4150,17 @@ PUBLIC_PENDING_LANES = {
     "gbdt-rest-gaps": "no reference",
     "gbdt-pointwise-arms": "no reference",
     "gbdt-ordered-weights": "no reference",
+    "gbdt-nonsym-rest": "no reference",
+    "gbdt-pointwise-rest": "no reference",
+    "gbdt-symmetric-rest": "no reference",
+    # lane gbdt-cpu-rest-4-cat (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-cat-rest": "no reference",
+    # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-cat-nonsym": "no reference",
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-multi-walk": "no reference",
+    # lane gbdt-cpu-rest-4-simple (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-simple-leaves": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
@@ -5099,22 +5082,6 @@ def inference_sentence():
     return "; ".join(parts)
 
 
-def no_cpu_path_sentence():
-    """`NO_CPU_PATH` for the generated support matrix, numbered and joined.
-
-    `_join`'s comma-and is right for a list of short nouns and wrong here:
-    every entry below carries its own commas and its own structural reason,
-    and comma-joining them reads as one undifferentiated clause with no way
-    to count the items. The count is the point (the entry this replaced
-    ended "among them"), so the sentence carries it."""
-    items = list(NO_CPU_PATH)
-    if len(items) <= 1:
-        return "".join(items)
-    return "; ".join(
-        "(%d) %s" % (i + 1, text) for i, text in enumerate(items)
-    )
-
-
 def _join(items):
     if len(items) <= 1:
         return "".join(items)
@@ -5177,7 +5144,6 @@ def as_dict():
         wheel_families=wheel_families(),
         wheel_bindings=wheel_bindings(),
         forest_recorded_root=FOREST_RECORDED_ROOT,
-        no_cpu_path=list(NO_CPU_PATH),
         public_reference_lanes=public_reference_lanes(),
         public_reference_candidates=public_reference_candidates(),
         saved_model_inference_owed=saved_model_inference_owed(),

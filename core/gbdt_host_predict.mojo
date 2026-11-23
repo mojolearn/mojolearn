@@ -85,6 +85,8 @@ from std.sys.compile import is_defined
 
 from core.forest_host_predict import host_task_count, host_worker_count
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS, nan_substitution
+# the non-symmetric walk's one body (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)
+from gbdt.models.non_symmetric_walk_body import ns_node_goes_right, ns_walk_step
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
@@ -540,17 +542,13 @@ def _apply_non_symmetric_block(
                     return False
                 var rec = rlo + node
                 var feature_val = (cindex_p.unsafe_load(r_col.unsafe_load(rec)*nb+r) >> r_shift.unsafe_load(rec)) & r_mask.unsafe_load(rec)
-                var split = feature_val == r_val.unsafe_load(rec) if r_eq.unsafe_load(rec) != 0 else feature_val > r_val.unsafe_load(rec)
-                if split:
-                    var left = r_left.unsafe_load(rec)
-                    bin += left
-                    stop = r_right.unsafe_load(rec) == 1
-                    if not stop:
-                        node += left
-                else:
-                    stop = r_left.unsafe_load(rec) == 1
-                    if not stop:
-                        node += 1
+                var split = ns_node_goes_right(
+                    feature_val, r_val.unsafe_load(rec), r_eq.unsafe_load(rec) != 0
+                )
+                stop = ns_walk_step(
+                    split, Int(r_left.unsafe_load(rec)),
+                    Int(r_right.unsafe_load(rec)), bin, node,
+                )
             if bin >= n_bins:
                 fail_p.unsafe_store(0, GBDT_HOST_FAIL_BIN)
                 fail_p.unsafe_store(1, t)

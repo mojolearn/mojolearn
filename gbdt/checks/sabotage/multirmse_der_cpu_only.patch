@@ -1,16 +1,16 @@
 diff --git a/gbdt/host/gbdt_oracle_multiclass.mojo b/gbdt/host/gbdt_oracle_multiclass.mojo
-index 2cac2a2b16..3ead0ba354 100644
+index eff1b7891d..e7ec0d3760 100644
 --- a/gbdt/host/gbdt_oracle_multiclass.mojo
 +++ b/gbdt/host/gbdt_oracle_multiclass.mojo
-@@ -65,6 +65,7 @@ The restatement is a prediction until measured. The four-column diff of
+@@ -67,6 +67,7 @@ The restatement is a prediction until measured. The four-column diff of
  tools/identity_break.py on the two lanes is the measurement.
  """
  from std.math import exp, fma, isfinite, log
 +from std.sys.compile import is_defined
  from gbdt.data.permutation import TRandom
- from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
- 
-@@ -297,6 +298,8 @@ def _multi_pass(
+ from gbdt.data.class_weight_body import class_weight_slot, class_weighted
+ from gbdt.options.catboost_options import (
+@@ -324,6 +325,8 @@ def _multi_pass(
                              var diff = target - approx
                              sum_dim_errors = fma(diff * diff, weight, sum_dim_errors)
                              var dd = diff * weight

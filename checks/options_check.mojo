@@ -175,12 +175,22 @@ def check_options() raises:
     c3.check()
     print("    accepted: leaf_estimation Newton x10, Gradient, Exact")
 
-    # `Simple` IS still refused, and for a reason that is not "unimplemented":
-    # it turns the estimator OFF (`greedy_subsets_searcher.h:67-69`) and
-    # that branch has no check of its own.
+    # `Simple` turns the estimator OFF (`greedy_subsets_searcher.h:67-69`):
+    # the greedy SymmetricTree searcher's leaves stand, so it is ACCEPTED
+    # there (lane gbdt-cpu-rest-4-simple, 2026-11-23) and refused on the
+    # policies that estimate every tree, and past one iteration.
     var c4 = CatBoostOptions.default()
     c4.leaf_estimation_method = LEAF_ESTIMATION_SIMPLE
-    expect_refusal(c4, String("leaf_estimation_method=Simple"))
+    c4.check()
+    print("    accepted: leaf_estimation Simple under SymmetricTree")
+    var c4b = CatBoostOptions.default()
+    c4b.leaf_estimation_method = LEAF_ESTIMATION_SIMPLE
+    c4b.grow_policy = 1
+    expect_refusal(c4b, String("leaf_estimation_method=Simple, Depthwise"))
+    var c4c = CatBoostOptions.default()
+    c4c.leaf_estimation_method = LEAF_ESTIMATION_SIMPLE
+    c4c.leaf_estimation_iterations = 3
+    expect_refusal(c4c, String("leaf_estimation_method=Simple, 3 iterations"))
 
     var c5 = CatBoostOptions.default()
     c5.leaf_estimation_iterations = -5

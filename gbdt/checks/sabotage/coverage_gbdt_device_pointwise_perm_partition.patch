@@ -1,0 +1,30 @@
+diff --git a/gbdt/methods/doc_parallel_boosting.mojo b/gbdt/methods/doc_parallel_boosting.mojo
+index 470bb84a83..bed33c6ba1 100644
+--- a/gbdt/methods/doc_parallel_boosting.mojo
++++ b/gbdt/methods/doc_parallel_boosting.mojo
+@@ -5535,10 +5535,21 @@ def fit_with_test(
+                     # DEPTH IS `len(splits)`, NOT `max_depth`: a tree that
+                     # stopped growing early has fewer splits, and
+                     # `len(sizes)` is `1 << len(splits)` either way.
+-                    compute_bins_for_model(
+-                        ctx, layout_for_test, splits, len(splits),
+-                        perm_cindexes[p], n_rows, d_bins,
+-                    )
++                    if use_pointwise_searcher:
++                        # SABOTAGE (coverage-gbdt-device_pointwise_perm_partition):
++                        # on the pointwise searcher every permutation bins
++                        # the tree over the LEARN permutation's index, not
++                        # its own, so a CTR fit's estimation cursor (and the
++                        # exported leaves) move; the greedy arm is unchanged
++                        compute_bins_for_model(
++                            ctx, layout_for_test, splits, len(splits),
++                            perm_cindexes[learn_p], n_rows, d_bins,
++                        )
++                    else:
++                        compute_bins_for_model(
++                            ctx, layout_for_test, splits, len(splits),
++                            perm_cindexes[p], n_rows, d_bins,
++                        )
+                     var part = partition_from_bins(
+                         ctx, d_bins, n_rows, len(sizes)
+                     )

@@ -38,6 +38,11 @@ from checks.numerics import (
 )
 
 comptime BODY_OBJ_RMSE = 0
+#: Logloss and CrossEntropy (`OBJECTIVE_LOGLOSS` / `OBJECTIVE_CROSSENTROPY`
+#: of the kernel module), here so the GPU-free modules (the host oracles,
+#: `gbdt/metrics/optimal_const_for_loss.mojo`) name the same codes
+comptime BODY_OBJ_LOGLOSS = 1
+comptime BODY_OBJ_CROSSENTROPY = 2
 comptime BODY_OBJ_QUANTILE = 3
 comptime BODY_OBJ_MAE = 4
 comptime BODY_OBJ_LOGLINQUANTILE = 5

@@ -66,6 +66,7 @@ shift on the host after the walker; the host oracle
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from gbdt.methods.leaves_estimation.searcher_leaf_body import searcher_leaf_value
 from checks.soft_f64 import (
     SF64_ZERO,
     sf64_add,
@@ -155,11 +156,10 @@ comptime MC_ONE_STEP_MAX_CLASSES = 16
 
 comptime LEAF_BLOCK = 256
 
-#: `TLeavesEstimationConfig::MinLeafWeight`, `leaves_estimation_config.h:11`.
-#: NOT a user option: `CreateLeavesEstimationConfig` passes the literal
-#: `1e-20` for it on every path (`leaves_estimation_config.h:60`), so it is a
-#: constant here rather than a kernel argument.
-comptime MIN_LEAF_WEIGHT = Float32(1e-20)
+#: `TLeavesEstimationConfig::MinLeafWeight` (`leaves_estimation_config.h:11`,
+#: the literal `1e-20` on every path, `:60`) is
+#: `searcher_leaf_body.SEARCHER_MIN_LEAF_WEIGHT`, the one body both columns
+#: call (lane gbdt-cpu-rest-4-simple, 2026-11-23; the copy here is gone).
 
 
 def compute_leaf_values_kernel(
@@ -196,8 +196,12 @@ def compute_leaf_values_kernel(
     # regularizer is folded into the HESSIAN before the direction is taken,
     # not into the denominator at the point of division, and that is what the
     # guard below then tests.
-    var hessian = w + l2
-
+    # (lane gbdt-cpu-rest-4-simple, 2026-11-23: the statements below are
+    # `searcher_leaf_body.searcher_leaf_value`, which the host column calls
+    # too; the accounts stay here beside the one call.)
+    #
+    # `hessian = w + l2`.
+    #
     # `MoveDirection[i] = Hessian[i] > 0 ? ... : 0` --
     # `descent_helpers.cpp:87`. THE GUARD IS ON THE HESSIAN, NOT THE WEIGHT.
     # What stood here was `w <= 1e-20 -> 0`, borrowed from the structure
@@ -207,10 +211,6 @@ def compute_leaf_values_kernel(
     # lets `RegularizeImpl` decide, ours returned early and never reached it.
     # With `l2 = 3.0` that window is every leaf whose weight underflows, and
     # both paths end at 0.0 for those, which is why this was invisible.
-    if hessian <= Float32(0.0):
-        out_values.unsafe_store(leaf, Float32(0.0))
-        return
-
     # ==================== SIGN CONVENTION ====================
     # `+g`, NOT `-g`. This is CatBoost's convention and it is easy to get
     # backwards, so it is written down rather than inferred.
@@ -236,7 +236,7 @@ def compute_leaf_values_kernel(
     # `l2 = 0` CatBoost has already substituted `1e-20` for the regularizer
     # itself (`catboost_options.cpp:357-359`) and this term is what keeps the
     # division finite in the window below that.
-    var v = g / (hessian + Float32(1e-20))
+    var v = searcher_leaf_value(w, g, l2)
 
     # ======================= RegularizeImpl =======================
     #     for (size_t bin = 0; bin < binWeights.size(); ++bin) {
@@ -265,9 +265,6 @@ def compute_leaf_values_kernel(
     # look redundant and are not: theirs is the only one that can zero a leaf
     # whose weight underflows while its Hessian is a healthy `l2`.
     # ==============================================================
-    if w < MIN_LEAF_WEIGHT:
-        v = Float32(0.0)
-
     out_values.unsafe_store(leaf, v)
 
 

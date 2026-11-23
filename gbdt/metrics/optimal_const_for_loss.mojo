@@ -46,13 +46,17 @@ unaffected). Operand order and spelling are theirs, unchanged.
 
 from checks.numerics import portable_log64
 
-from gbdt.targets.kernel.pointwise_targets import (
-    OBJECTIVE_CROSSENTROPY,
-    OBJECTIVE_LOGLOSS,
-    OBJECTIVE_MAE,
-    OBJECTIVE_MAPE,
-    OBJECTIVE_QUANTILE,
-    OBJECTIVE_RMSE,
+# lane gbdt-cpu-rest-4-pwl (2026-11-23): the codes from the GPU-free body
+# module (the kernel module's `OBJECTIVE_*` are these), so the host column's
+# pointwise searcher calls this function, the one statement of the starting
+# constant, instead of restating its arms; this module imports no kernel.
+from gbdt.targets.pointwise_bodies import (
+    BODY_OBJ_CROSSENTROPY,
+    BODY_OBJ_LOGLOSS,
+    BODY_OBJ_MAE,
+    BODY_OBJ_MAPE,
+    BODY_OBJ_QUANTILE,
+    BODY_OBJ_RMSE,
 )
 from gbdt.metrics.sample_quantile import (
     bfa_tree_sum,
@@ -81,11 +85,11 @@ def calc_one_dimensional_optimum_const_approx(
     from this function is a valid answer (a centered target), so a silent
     fallback would be indistinguishable from arithmetic.
     """
-    if objective == OBJECTIVE_RMSE:
+    if objective == BODY_OBJ_RMSE:
         return Float64(
             calculate_weighted_target_average(target, weights, has_weights)
         )
-    if objective == OBJECTIVE_LOGLOSS or objective == OBJECTIVE_CROSSENTROPY:
+    if objective == BODY_OBJ_LOGLOSS or objective == BODY_OBJ_CROSSENTROPY:
         # `const double bestProbability = CalculateWeightedTargetAverage(...)`
         # -- the float32 average widened, THEN their `Logit`.
         var best_probability = Float64(
@@ -109,16 +113,16 @@ def calc_one_dimensional_optimum_const_approx(
         # DEVIATION 2262 (was the host libm through `external_call`) --
         # see the module docstring for the ULP consequence.
         return -portable_log64(1.0 / best_probability - 1.0)
-    if objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
+    if objective == BODY_OBJ_QUANTILE or objective == BODY_OBJ_MAE:
         # their `inline float` return, widened back by `TMaybe<double>`
         return Float64(
             calculate_weighted_target_quantile(
                 target, weights, has_weights,
-                0.5 if objective == OBJECTIVE_MAE else alpha,
+                0.5 if objective == BODY_OBJ_MAE else alpha,
                 QUANTILE_CONST_DELTA,
             )
         )
-    if objective == OBJECTIVE_MAPE:
+    if objective == BODY_OBJ_MAPE:
         return Float64(
             calculate_optimal_const_approx_for_mape(target, weights, has_weights)
         )

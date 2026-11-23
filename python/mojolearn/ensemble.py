@@ -616,7 +616,8 @@ class GradientBoosting(_NumericModeMixin):
         CatBoost's ``depth``. Under SymmetricTree the tree is oblivious, so it
         has exactly ``2 ** max_depth`` leaves; under Depthwise it bounds the
         number of levels; under Lossguide it bounds any one leaf's depth and
-        ``max_leaves`` is what stops the tree.
+        ``max_leaves`` is what stops the tree. At most 16 under SymmetricTree
+        and Depthwise, as in CatBoost; Lossguide's depth is not capped.
     learning_rate : float or None, default None
         None under SymmetricTree is CatBoost's GPU auto-selection: when
         ``l2_leaf_reg``, ``leaf_estimation_method`` and
@@ -631,7 +632,7 @@ class GradientBoosting(_NumericModeMixin):
         learning-rate auto-selection off.
     border_count : int, default 128
         Quantization bins per numeric feature (CatBoost's GPU default; their
-        CPU default is 254).
+        CPU default is 254), from 1 to 255.
     random_state : int, default 0
         Random seed.
     loss_alpha : float, optional
@@ -645,7 +646,9 @@ class GradientBoosting(_NumericModeMixin):
     leaf_estimation_method : {'Newton', 'Gradient', 'Exact', 'Simple'}, optional
         None lets the loss decide, as in CatBoost. ``'Newton'`` is refused for
         Quantile, MAE, LogLinQuantile, MAPE and Lq with q < 2, whose second
-        derivative is zero.
+        derivative is zero. ``'Simple'`` keeps the leaf values the tree
+        search computed: it runs one iteration, on SymmetricTree with Plain
+        boosting and single-output losses (YetiRank keeps its own method).
     leaf_estimation_iterations : int, optional
         None lets the loss decide; under SymmetricTree, fewer than 200
         iterations on fewer than 20 features then sets it to 1, as CatBoost
@@ -714,7 +717,9 @@ class GradientBoosting(_NumericModeMixin):
     use_pointwise_searcher : bool, default False
         Grow with CatBoost's doc-parallel oblivious searcher instead of the
         greedy subsets searcher. It returns tree structure only, so it always
-        runs the leaf estimator.
+        runs the leaf estimator. It is a single-target searcher: as in
+        CatBoost, the multi-output losses (``MultiClass``,
+        ``MultiClassOneVsAll``, ``MultiRMSE``) refuse it.
     boost_from_average : bool or None, default None
         Start every row at the loss's optimal constant, stored as ``bias_``.
         None is CatBoost's default: True for RMSE, MAE, Quantile and MAPE,

@@ -6,7 +6,7 @@ from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from max.gpu import thread_idx
 from std.memory import bitcast
-from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import child_hessian_below
+from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import child_hessian_below
 from checks.min_split_gain_check import check as check_gain
 from checks.numerics import numeric_mode_name
 from checks.leafwise_scores_check import make_fixture, run_device, N_BF, check_leafwise_scores

@@ -76,7 +76,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 23
+comptime GBDT_HOST_UNITS = 29
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -156,6 +156,17 @@ struct GbdtOpts(Copyable, Movable):
     #: GreedyLogSum borders, `fold_len_multiplier` 2.0 as its float64 bits,
     #: `fold_permutation_block` unset), as `gbdt_fit_options` builds them
     var boosting_type: String
+    #: lane gbdt-cpu-rest-4-pwl (2026-11-23): the loss parameters, the
+    #: detector's p-value (UNSET is None) and `feature_border_type` ("" is
+    #: the four option strings, GreedyLogSum; a name is the fifth string)
+    var loss_alpha: Float64
+    var loss_q: Float64
+    var loss_delta: Float64
+    var od_pvalue: Float64
+    var border_type: String
+    #: the largest feature combination (lane gbdt-cpu-rest-4-cat,
+    #: 2026-11-23); 1 builds none, as every unit before it fitted
+    var max_ctr_complexity: Int
 
     def __init__(out self, loss: String, n_estimators: Int, max_depth: Int = 6):
         self.loss = loss
@@ -190,6 +201,12 @@ struct GbdtOpts(Copyable, Movable):
         self.min_child_hessian = UNSET
         self.feature_fraction = 1.0
         self.boosting_type = "Plain"
+        self.loss_alpha = UNSET
+        self.loss_q = UNSET
+        self.loss_delta = UNSET
+        self.od_pvalue = UNSET
+        self.border_type = ""
+        self.max_ctr_complexity = 1
 
     def deterministic(mut self):
         """The tests' pinned configuration: `bootstrap_type='No'`, `random_strength=0`."""
@@ -404,9 +421,9 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     s.f(l2)
     s.i(o.random_state)
     s.i(_score_code(_score(o)))
-    s.f(UNSET)  # loss_alpha
-    s.f(UNSET)  # loss_q
-    s.f(UNSET)  # loss_delta
+    s.f(o.loss_alpha)
+    s.f(o.loss_q)
+    s.f(o.loss_delta)
     s.f(o.loss_variance_power)
     s.f(UNSET)  # loss_border
     s.i(iters)
@@ -414,7 +431,7 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     s.f(o.bagging_temperature)
     s.f(o.subsample)
     s.i(n_eval)
-    s.f(UNSET)  # od_pvalue
+    s.f(o.od_pvalue)
     s.i(o.od_wait)
     s.i(o.use_best_model)
     s.i(o.best_model_min_trees)
@@ -427,7 +444,7 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     s.i(_grow_code(o.grow_policy))
     s.i(o.max_leaves)
     s.i(o.min_data_in_leaf)
-    s.i(1)  # max_ctr_complexity: no feature combinations
+    s.i(o.max_ctr_complexity)  # 1: no feature combinations
     s.i(len(o.class_weights))
     for w in o.class_weights:  # small-loop(the class_weights argument)
         s.f(w)
@@ -475,6 +492,8 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     var ex_addr = Int(inp.eval_x.unsafe_ptr()) if n_eval > 0 else x_addr
     var ey_addr = Int(inp.eval_y.unsafe_ptr()) if n_eval > 0 else y_addr
     var strs: List[String] = [o.loss, _bootstrap(o), o.od_type, o.nan_mode]
+    if o.boosting_type != "Ordered" and o.border_type.byte_length() > 0:
+        strs.append(o.border_type)
     if o.boosting_type == "Ordered":
         # `gbdt_fit_options`' Ordered tail (bindings/gbdt_config_run.mojo)
         strs.append(String("GreedyLogSum"))
@@ -1044,14 +1063,15 @@ def querywise[I: GbdtImage](unit: Int) raises:
         inp.pair_weights = List[Float32]()
         # Both columns (lane bm-trees, 2026-11-22): the host and device fits admit the leaf method of the
         # grouped pointwise search in one place, gbdt/options/catboost_options.mojo
-        # `querywise_pointwise_leaf_check`, with the same refusal words.
+        # (lane gbdt-cpu-rest-4-simple, 2026-11-23: Simple is `simple_leaves_check`'s, before any
+        # tree, so its words are that body's; `querywise_pointwise_leaf_check` keeps Exact).
         var simple = _qw_opts("PairLogit")
         simple.leaf_method = "Simple"
         var refused = False
         try:
             _ = fit[I](simple, inp)
         except error:
-            require_fails_with(String(error), "requires Newton or Gradient", "querywise pointwise Simple")
+            require_fails_with(String(error), "use_pointwise_searcher searches the structure only", "querywise pointwise Simple")
             refused = True
         require(refused, "querywise pointwise Simple was silently accepted")
         return
@@ -1127,6 +1147,19 @@ def _twice[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises -> G
     return a^
 
 
+def _twice_text[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, what: String) raises -> GbdtFitOutcome:
+    """Two fits of a model with CTR columns: the same model text, learn and
+    held-out curves. No `predict(X)`: the host reader refuses a model with
+    `ctr_table` records (raw categorical input is expanded by HostGBDT), so
+    `_twice` cannot take one (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)."""
+    var a = fit[I](o, inp)
+    var b = fit[I](o, inp)
+    require(a.text == b.text, "two host fits returned different bytes: " + what)
+    require(same_f64(a.learn, b.learn) and same_f64(a.test, b.test),
+            "two host fits returned different curves: " + what)
+    return a^
+
+
 def _e3() raises -> GbdtInputs:
     return _fixed("e3-x.f32", 600, 6, "e3-yc.f32")
 
@@ -1195,8 +1228,247 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_rest_gaps[I]()
     elif unit == 21:
         host_pointwise_arms[I]()
-    else:
+    elif unit == 24:
+        host_pointwise_rest[I]()
+    elif unit == 25:
+        host_symmetric_rest[I]()
+    elif unit == 26:
+        host_nonsym_rest[I]()
+    elif unit == 22:
         host_ordered_weights[I]()
+    elif unit == 23:
+        host_cat_rest[I]()
+    elif unit == 27:
+        host_tail_rest[I]()
+    elif unit == 28:
+        host_simple_rest[I]()
+    else:
+        raise Error("gbdt host unit " + String(unit) + " has no body on this branch")
+
+
+def _cat_rest_inputs(yname: String) raises -> GbdtInputs:
+    """e3's six float columns, then three coded columns (lane
+    gbdt-cpu-rest-4-cat): 6 holds five categories (a CTR column under
+    cat_features, above one_hot_max_size 2), 7 holds two (one-hot under
+    cat_features), 8 holds four codes (a plain one_hot_features column).
+    Rows 0 to 4 carry every code, so each column is densely coded."""
+    var x = load_f32("e3-x.f32", 3600)
+    var extra = List[Float32](length=1800, fill=Float32(0))
+    for r in range(600):  # small-loop(three appended columns)
+        var a = abs(x[r])
+        var b = x[600 + r]
+        var c5 = Int(a * Float32(7.0)) % 5
+        var c2 = 1 if b > Float32(0.0) else 0
+        var c4 = Int(abs(b) * Float32(5.0)) % 4
+        if r < 5:
+            c5 = r
+            c2 = r % 2
+            c4 = r % 4
+        extra[r] = Float32(c5)
+        extra[600 + r] = Float32(c2)
+        extra[1200 + r] = Float32(c4)
+    for r in range(1800):  # small-loop(the appended columns into the fixture)
+        x.append(extra[r])
+    return GbdtInputs(x^, 600, 9, load_f32(yname, 600))
+
+
+def _cat_rest_opts(loss: String) -> GbdtOpts:
+    """A SymmetricTree fit at rate 0.1 with every work-changing option set."""
+    var o = GbdtOpts(loss, 6, 3)
+    o.learning_rate = 0.1
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = "Cosine"
+    o.deterministic()
+    return o^
+
+
+def host_cat_rest[I: GbdtImage]() raises:
+    """Categorical and one-hot columns on the SymmetricTree fits the host
+    refused by name until lane gbdt-cpu-rest-4-cat (2026-11-23), each fit
+    twice to the same bytes: Quantile with a CTR, a one-hot and a plain
+    one_hot_features column (four permutations; the columns move the
+    model), CrossEntropy with feature combinations (max_ctr_complexity 2),
+    MultiClass with CTR and one-hot columns and an eval set under the Iter
+    detector, MultiClassOneVsAll with sample weights and feature
+    combinations. Then `train`'s refusals in its words: QueryRMSE with
+    cat_features, YetiRank with one_hot_features, feature_fraction below 1
+    with a one_hot_features column. The categorical fits compare text and
+    curves (`_twice_text`: the host reader refuses a model with CTR tables).
+    Last, the Depthwise and Lossguide units of sub-lane
+    gbdt-cpu-rest-4-cat-ns (`host_cat_rest_ns`)."""
+    var reg = _cat_rest_inputs("e3-yr.f32")
+    var q = _cat_rest_opts("Quantile")
+    q.leaf_method = "Gradient"
+    q.leaf_iterations = 1
+    var mq0 = _twice[I](q, reg, "symmetric Quantile, numeric columns")
+    var qc = q.copy()
+    qc.cat_features = [6, 7]
+    qc.one_hot_features = [8]
+    var mq = _twice_text[I](qc, reg, "symmetric Quantile with CTR and one-hot columns")
+    require(mq.text != mq0.text, "symmetric Quantile: the categorical columns had no model effect")
+    require("ctr_table " in mq.text, "symmetric Quantile: no CTR table in the model text")
+    var clf = _cat_rest_inputs("e3-yc.f32")
+    var ce = _cat_rest_opts("CrossEntropy")
+    ce.cat_features = [6]
+    ce.max_ctr_complexity = 2
+    _ = _twice_text[I](ce, clf, "symmetric CrossEntropy with feature combinations")
+    var mc3 = _cat_rest_inputs("e3-y3.f32")
+    mc3.eval_x = mc3.x.copy()
+    mc3.eval_y = mc3.y.copy()
+    var mc = _cat_rest_opts("MultiClass")
+    mc.n_estimators = 10
+    mc.cat_features = [6, 7]
+    mc.od_type = "Iter"
+    mc.od_wait = 2
+    var mm = _twice_text[I](mc, mc3, "MultiClass with CTR and one-hot columns and an eval set")
+    require(len(mm.test) > 0, "categorical MultiClass: no held-out curve")
+    require("ctr_table " in mm.text, "categorical MultiClass: no CTR table in the model text")
+    var ova_in = _cat_rest_inputs("e3-y3.f32")
+    ova_in.weights = List[Float32](length=600, fill=Float32(0))
+    for r in range(600):  # small-loop(np.linspace(.5, 1.5, 600, dtype=float32))
+        ova_in.weights[r] = Float32(0.5 + Float64(r) / 599.0)
+    var ova = _cat_rest_opts("MultiClassOneVsAll")
+    ova.cat_features = [6]
+    ova.one_hot_features = [8]
+    ova.max_ctr_complexity = 2
+    _ = _twice_text[I](ova, ova_in, "weighted MultiClassOneVsAll with feature combinations")
+    # `train`'s refusals, its words, on both columns
+    var grouped = _cat_rest_inputs("e3-yr.f32")
+    grouped.group_sizes = List[UInt32](length=60, fill=UInt32(10))
+    var qr = _cat_rest_opts("QueryRMSE")
+    qr.cat_features = [6]
+    var refused = String("")
+    try:
+        _ = fit[I](qr, grouped)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, "with cat_features is not implemented here", "QueryRMSE with cat_features")
+    var yr = _cat_rest_opts("YetiRank")
+    yr.one_hot_features = [8]
+    refused = String("")
+    try:
+        _ = fit[I](yr, grouped)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, "with one_hot_features is not implemented", "YetiRank with one_hot_features")
+    var ff = _cat_rest_opts("RMSE")
+    ff.boost_from_average = 0
+    ff.leaf_iterations = 1
+    ff.one_hot_features = [8]
+    ff.feature_fraction = 0.5
+    refused = String("")
+    try:
+        _ = fit[I](ff, reg)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, "one_hot input refused", "feature_fraction with a one_hot_features column")
+    host_cat_rest_ns[I]()
+
+
+def _ns_opts(loss: String, policy: String, score: String) -> GbdtOpts:
+    """A Depthwise / Lossguide fit with every option it reads set."""
+    var o = GbdtOpts(loss, 4, 3)
+    o.deterministic()
+    o.learning_rate = 0.1
+    o.random_state = 7
+    o.grow_policy = policy
+    o.score_function = score
+    if policy == "Lossguide":
+        o.max_leaves = 8
+    return o^
+
+
+def _ns_refused[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, needle: String, what: String) raises:
+    """`fit` raises, in the device's words."""
+    var refused = String("")
+    try:
+        _ = fit[I](o, inp)
+    except error:
+        refused = String(error)
+    require(len(refused) > 0, what + " was silently accepted")
+    require_fails_with(refused, needle, what)
+    require(not ("no CPU implementation" in refused), what + ": a CPU-gap refusal: " + refused)
+
+
+def host_nonsym_rest[I: GbdtImage]() raises:
+    """The Depthwise / Lossguide combinations the host refused by name until
+    lane gbdt-cpu-rest-4-ns (2026-11-23), each twice to the same bytes, and
+    the ones the device refuses, refused here in its words."""
+    var cls = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    # the four leafwise calcers under both policies
+    var scores: List[String] = ["L2", "NewtonL2", "NewtonCosine", "Cosine"]
+    var policies: List[String] = ["Depthwise", "Lossguide"]
+    for pi in range(2):  # small-loop(the two policies)
+        for si in range(4):  # small-loop(the four scores)
+            var o = _ns_opts("Logloss", policies[pi], scores[si])
+            var m = _twice[I](o, cls, policies[pi] + " Logloss " + scores[si])
+            require("\nntree 0 " in m.text, policies[pi] + " " + scores[si] + ": non-symmetric model text")
+    var l2 = fit[I](_ns_opts("Logloss", "Depthwise", "L2"), cls)
+    var nl2 = fit[I](_ns_opts("Logloss", "Depthwise", "NewtonL2"), cls)
+    require(l2.text != nl2.text, "Depthwise L2 and NewtonL2 grew the same model (the planes did not move)")
+    # Depthwise's growth knobs
+    var knobs = _ns_opts("RMSE", "Depthwise", "NewtonCosine")
+    knobs.min_split_gain = 0.01
+    knobs.min_child_hessian = 1.0
+    knobs.min_data_in_leaf = 8
+    var mk = _twice[I](knobs, reg, "Depthwise RMSE min_split_gain / min_child_hessian / min_data_in_leaf")
+    var plain = fit[I](_ns_opts("RMSE", "Depthwise", "NewtonCosine"), reg)
+    require(mk.text != plain.text, "Depthwise growth knobs changed nothing")
+    # Gradient leaves on Logloss, Poisson bootstrap, random_strength
+    var gp = _ns_opts("Logloss", "Depthwise", "Cosine")
+    gp.leaf_method = "Gradient"
+    gp.bootstrap = "Poisson"
+    gp.subsample = 0.7
+    gp.random_strength = 1.0
+    _ = _twice[I](gp, cls, "Depthwise Logloss Gradient leaves, Poisson, random_strength 1")
+    # RMSE Gradient leaves at three iterations
+    var rg = _ns_opts("RMSE", "Lossguide", "NewtonL2")
+    rg.leaf_method = "Gradient"
+    rg.leaf_iterations = 3
+    rg.bootstrap = "Poisson"
+    _ = _twice[I](rg, reg, "Lossguide RMSE Gradient leaves at 3 iterations")
+    # boost_from_average on Logloss and CrossEntropy: a bias record
+    var bl = _ns_opts("Logloss", "Depthwise", "Cosine")
+    bl.boost_from_average = 1
+    var mbl = _twice[I](bl, cls, "Depthwise Logloss boost_from_average")
+    require("\nbias " in mbl.text, "Depthwise Logloss boost_from_average: no bias record")
+    var bc = _ns_opts("CrossEntropy", "Lossguide", "NewtonCosine")
+    bc.boost_from_average = 1
+    var mbc = _twice[I](bc, cls, "Lossguide CrossEntropy boost_from_average (Newton planes)")
+    require("\nbias " in mbc.text, "Lossguide CrossEntropy boost_from_average: no bias record")
+    # class weights on a pointwise loss
+    var cw = _ns_opts("CrossEntropy", "Depthwise", "Cosine")
+    cw.class_weights = [1.0, 3.0]
+    var mcw = _twice[I](cw, cls, "Depthwise CrossEntropy class weights")
+    var ucw = fit[I](_ns_opts("CrossEntropy", "Depthwise", "Cosine"), cls)
+    require(mcw.text != ucw.text, "Depthwise CrossEntropy: class weights changed nothing")
+    # refused on both columns, in the device's words
+    var ex = _ns_opts("Logloss", "Depthwise", "Cosine")
+    ex.leaf_method = "Exact"
+    _ns_refused[I](ex, cls, "Only MAPE, MAE and Quantile", "Depthwise Logloss Exact")
+    var sm = _ns_opts("RMSE", "Lossguide", "NewtonL2")
+    sm.leaf_method = "Simple"
+    _ns_refused[I](sm, reg, "grow_policy Depthwise / Lossguide searches the structure only", "Lossguide RMSE Simple")
+    var mvs = _ns_opts("Logloss", "Lossguide", "NewtonL2")
+    mvs.bootstrap = "MVS"
+    _ns_refused[I](mvs, cls, "MVS is not reachable", "Lossguide MVS")
+    var rcw = _ns_opts("RMSE", "Depthwise", "Cosine")
+    rcw.class_weights = [1.0, 2.0]
+    _ns_refused[I](rcw, reg, "class weights take effect only", "Depthwise RMSE class weights")
+    var mch = _ns_opts("Poisson", "Depthwise", "NewtonL2")
+    mch.min_child_hessian = 1.0
+    _ns_refused[I](mch, reg, "min_child_hessian currently supports", "Depthwise Poisson min_child_hessian")
+    var pb = _ns_opts("Poisson", "Lossguide", "NewtonL2")
+    pb.boost_from_average = 1
+    _ns_refused[I](pb, reg, "You can use boost_from_average only", "Lossguide Poisson boost_from_average")
+    var pws = _ns_opts("Logloss", "Depthwise", "Cosine")
+    pws.pointwise = True
+    _ns_refused[I](pws, cls, "an OBLIVIOUS searcher", "the pointwise searcher on Depthwise")
+    var d0 = _ns_opts("Logloss", "Depthwise", "Cosine")
+    d0.max_depth = 0
+    _ns_refused[I](d0, cls, "max_leaves must be at least 2 under Depthwise", "Depthwise at depth 0")
 
 
 def _pw_opts(loss: String, score: String, boot: String) -> GbdtOpts:
@@ -1306,6 +1578,412 @@ def host_pointwise_arms[I: GbdtImage]() raises:
     except error:
         refused = String(error)
     require_fails_with(refused, "There are NaNs in feature number", "NaN in a plain one-hot column")
+
+
+def _pw_refused[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, needle: String, what: String) raises:
+    """`o` is refused on this column with `needle` in its words."""
+    var refused = String("")
+    try:
+        _ = fit[I](o, inp)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, needle, what)
+
+
+def host_pointwise_rest[I: GbdtImage]() raises:
+    """The pointwise searcher's arms the host refused by name until lane
+    gbdt-cpu-rest-4-pwl (2026-11-23), each twice to the same bytes: the
+    one-output losses beside Logloss and RMSE (CrossEntropy, MAE and MAPE
+    at their Exact default, Quantile, LogLinQuantile, Poisson, Lq,
+    Expectile, Tweedie, Huber), `boost_from_average` unset (resolved as
+    `train` resolves it: a bias on MAE, none on Logloss), class weights on
+    CrossEntropy, a Median border grid, an eval set under IncToDec and
+    under no detector, a one-hot column, a CTR column and `max_depth` 0.
+    Then the device's refusals in its words: Depthwise, MultiClass and
+    `boost_from_average=True` on Poisson."""
+    var clf = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    # the one-output losses on the pointwise searcher; the 0/1 target serves
+    # the losses that need a probability or a non-negative target
+    var ce = _pw_opts("CrossEntropy", "Cosine", "Bayesian")
+    ce.leaf_iterations = 2
+    var mce = _twice[I](ce, clf, "pointwise CrossEntropy")
+    require("\nbias " in mce.text, "pointwise CrossEntropy with boost_from_average: no bias record")
+    var ce0 = ce.copy()
+    ce0.boost_from_average = -1
+    var mce0 = _twice[I](ce0, clf, "pointwise CrossEntropy, boost_from_average unset")
+    require(not ("\nbias " in mce0.text), "CrossEntropy's unset boost_from_average resolved True")
+    var cew = ce0.copy()
+    cew.class_weights = [1.0, 2.5]
+    var mcew = _twice[I](cew, clf, "class-weighted pointwise CrossEntropy")
+    require(mcew.text != mce0.text, "pointwise CrossEntropy class weights had no model effect")
+    var mae = _pw_opts("MAE", "L2", "No")
+    mae.leaf_method = ""
+    mae.leaf_iterations = -1
+    mae.boost_from_average = -1
+    var mmae = _twice[I](mae, reg, "pointwise MAE (Exact, boost_from_average unset)")
+    require("\nbias " in mmae.text, "MAE's unset boost_from_average resolved False")
+    var q = _pw_opts("Quantile", "NewtonL2", "Bernoulli")
+    q.subsample = 0.7
+    q.loss_alpha = 0.3
+    q.leaf_method = "Exact"
+    q.leaf_iterations = -1
+    _ = _twice[I](q, reg, "pointwise Quantile alpha 0.3 Exact")
+    var mape = _pw_opts("MAPE", "Cosine", "No")
+    mape.leaf_method = ""
+    mape.leaf_iterations = -1
+    _ = _twice[I](mape, clf, "pointwise MAPE")
+    var llq = _pw_opts("LogLinQuantile", "Cosine", "No")
+    llq.boost_from_average = 0
+    llq.leaf_method = "Gradient"
+    llq.leaf_iterations = 2
+    _ = _twice[I](llq, clf, "pointwise LogLinQuantile")
+    var pois = _pw_opts("Poisson", "NewtonCosine", "Poisson")
+    pois.subsample = 0.66
+    pois.random_strength = 1.0
+    pois.boost_from_average = -1
+    pois.leaf_iterations = 3
+    _ = _twice[I](pois, clf, "pointwise Poisson")
+    var lq = _pw_opts("Lq", "L2", "No")
+    lq.boost_from_average = 0
+    lq.loss_q = 3.0
+    _ = _twice[I](lq, reg, "pointwise Lq q 3")
+    var ex = _pw_opts("Expectile", "Cosine", "Bayesian")
+    ex.boost_from_average = 0
+    ex.loss_alpha = 0.3
+    _ = _twice[I](ex, reg, "pointwise Expectile alpha 0.3")
+    var tw = _pw_opts("Tweedie", "Cosine", "No")
+    tw.boost_from_average = 0
+    tw.loss_variance_power = 1.5
+    _ = _twice[I](tw, clf, "pointwise Tweedie 1.5")
+    var hu = _pw_opts("Huber", "NewtonL2", "No")
+    hu.boost_from_average = 0
+    hu.loss_delta = 1.0
+    _ = _twice[I](hu, reg, "pointwise Huber delta 1")
+    # Logloss with boost_from_average unset: False, as `train` resolves it
+    var ll = _pw_opts("Logloss", "Cosine", "No")
+    var mll = _twice[I](ll, clf, "pointwise Logloss")
+    var ll0 = ll.copy()
+    ll0.boost_from_average = -1
+    var mll0 = _twice[I](ll0, clf, "pointwise Logloss, boost_from_average unset")
+    require(not ("\nbias " in mll0.text), "Logloss's unset boost_from_average resolved True")
+    require(mll0.text != mll.text, "pointwise Logloss: the unset start is the log-odds start")
+    # a Median border grid
+    var rm = _pw_opts("RMSE", "Cosine", "No")
+    var mrm = _twice[I](rm, reg, "pointwise RMSE")
+    var rmed = rm.copy()
+    rmed.border_type = "Median"
+    var mmed = _twice[I](rmed, reg, "pointwise RMSE on Median borders")
+    require(mmed.text != mrm.text, "pointwise Median borders: the GreedyLogSum model")
+    # an eval set under IncToDec, and under no detector
+    var held = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    held.eval_x = held.x.copy()
+    held.eval_y = held.y.copy()
+    var itd = _pw_opts("Huber", "Cosine", "No")
+    itd.boost_from_average = 0
+    itd.loss_delta = 1.0
+    itd.n_estimators = 12
+    itd.od_type = "IncToDec"
+    itd.od_pvalue = 0.01
+    itd.od_wait = 2
+    var mitd = _twice[I](itd, held, "pointwise Huber with an eval set under IncToDec")
+    require(len(mitd.test) > 0, "pointwise IncToDec: no held-out curve")
+    var nod = _pw_opts("RMSE", "L2", "No")
+    nod.n_estimators = 6
+    var mnod = _twice[I](nod, held, "pointwise RMSE with an eval set, no detector")
+    require(len(mnod.test) == 6, "pointwise eval set without a detector: the curve is not one point a tree")
+    # a one-hot column (the three class codes appended as column 6) and a
+    # CTR column (the same codes as cat_features)
+    var xo = load_f32("e3-x.f32", 3600)
+    var codes = load_f32("e3-y3.f32", 600)
+    for r in range(600):  # small-loop(one appended column)
+        xo.append(codes[r])
+    var oh_in = GbdtInputs(xo.copy(), 600, 7, load_f32("e3-yr.f32", 600))
+    var oh = _pw_opts("RMSE", "Cosine", "No")
+    oh.one_hot_features = [6]
+    var moh = _twice[I](oh, oh_in, "pointwise RMSE with a one-hot column")
+    require("one_hot 1" in moh.text, "pointwise one-hot: no one-hot feature record")
+    var cat_in = GbdtInputs(xo^, 600, 7, load_f32("e3-yc.f32", 600))
+    var cat = _pw_opts("Logloss", "Cosine", "Bayesian")
+    cat.cat_features = [6]
+    var mcat = _twice[I](cat, cat_in, "pointwise Logloss with a CTR column")
+    require("ctr_table" in mcat.text, "pointwise CTR: no CTR table record")
+    # depth 0: one leaf a tree
+    var d0 = _pw_opts("RMSE", "Cosine", "No")
+    d0.max_depth = 0
+    var md0 = _twice[I](d0, reg, "pointwise RMSE at max_depth 0")
+    require("depth 0" in md0.text, "pointwise max_depth 0: a tree with splits")
+    # the device's refusals, its words
+    var dw = _pw_opts("RMSE", "Cosine", "No")
+    dw.grow_policy = "Depthwise"
+    _pw_refused[I](dw, reg, "OBLIVIOUS searcher", "pointwise Depthwise")
+    var mc = _pw_opts("MultiClass", "Cosine", "No")
+    mc.boost_from_average = 0
+    var mc_in = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
+    _pw_refused[I](mc, mc_in, "a single-target searcher", "pointwise MultiClass")
+    var pb = _pw_opts("Poisson", "Cosine", "No")
+    _pw_refused[I](pb, clf, "You can use boost_from_average only", "pointwise Poisson boost_from_average")
+
+
+def _sym_opts(loss: String, score: String) -> GbdtOpts:
+    """A greedy SymmetricTree fit at rate 0.1 with every work-changing
+    option set."""
+    var o = GbdtOpts(loss, 4, 3)
+    o.learning_rate = 0.1
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = score
+    o.leaf_iterations = 1
+    o.boost_from_average = 0
+    o.deterministic()
+    return o^
+
+
+def _sym_refused[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, needle: String, what: String) raises:
+    """`o` must refuse with `needle` (the device's words), never fit."""
+    var refused = False
+    try:
+        _ = fit[I](o, inp)
+    except error:
+        require_fails_with(String(error), needle, what)
+        refused = True
+    require(refused, what + " was silently accepted")
+
+
+def host_symmetric_rest[I: GbdtImage]() raises:
+    """The greedy SymmetricTree and Ordered combinations the host refused
+    by name until lane gbdt-cpu-rest-4-sym (2026-11-23), each fit twice to
+    the same bytes: the L2, NewtonL2 and NewtonCosine scores on Logloss,
+    RMSE, MAE and MultiClass (L2), Gradient leaves on Logloss and RMSE,
+    RMSE Newton leaves at three iterations, boost_from_average on Logloss,
+    CrossEntropy and Ordered Logloss, class weights on a pointwise loss;
+    then the combinations both columns refuse, in the device's words."""
+    var clf = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    var mc_in = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
+    # the four scores on Logloss: each its own model
+    var cos = _twice[I](_sym_opts("Logloss", "Cosine"), clf, "symmetric Logloss Cosine")
+    var l2 = _twice[I](_sym_opts("Logloss", "L2"), clf, "symmetric Logloss L2")
+    var nl2 = _twice[I](_sym_opts("Logloss", "NewtonL2"), clf, "symmetric Logloss NewtonL2")
+    var ncos = _twice[I](_sym_opts("Logloss", "NewtonCosine"), clf, "symmetric Logloss NewtonCosine")
+    require(l2.text != cos.text, "symmetric Logloss L2: the Cosine model")
+    require(nl2.text != l2.text, "symmetric Logloss NewtonL2: the L2 model (first-order planes)")
+    require(ncos.text != cos.text, "symmetric Logloss NewtonCosine: the Cosine model (first-order planes)")
+    # RMSE: der2 is 1, so at unit weight the Newton planes are the
+    # first-order ones and the Newton scores give the same bytes
+    var rcos = _twice[I](_sym_opts("RMSE", "Cosine"), reg, "symmetric RMSE Cosine")
+    var rl2 = _twice[I](_sym_opts("RMSE", "L2"), reg, "symmetric RMSE L2")
+    var rnl2 = _twice[I](_sym_opts("RMSE", "NewtonL2"), reg, "symmetric RMSE NewtonL2")
+    require(rl2.text != rcos.text, "symmetric RMSE L2: the Cosine model")
+    require(rnl2.text == rl2.text, "symmetric RMSE NewtonL2 at unit weight differs from L2")
+    # a pointwise loss and the multiclass loss under L2
+    var mae = _sym_opts("MAE", "L2")
+    mae.leaf_method = "Exact"
+    _ = _twice[I](mae, reg, "symmetric MAE L2 Exact")
+    var mcl2 = _twice[I](_sym_opts("MultiClass", "L2"), mc_in, "symmetric MultiClass L2")
+    var mccos = _twice[I](_sym_opts("MultiClass", "Cosine"), mc_in, "symmetric MultiClass Cosine")
+    require(mcl2.text != mccos.text, "symmetric MultiClass L2: the Cosine model")
+    # Gradient leaves and the RMSE walker at three iterations
+    var lg = _sym_opts("Logloss", "Cosine")
+    lg.leaf_method = "Gradient"
+    lg.leaf_iterations = 4
+    var mlg = _twice[I](lg, clf, "symmetric Logloss Gradient leaves")
+    require(mlg.text != cos.text, "symmetric Logloss Gradient: the Newton model")
+    var rg = _sym_opts("RMSE", "Cosine")
+    rg.leaf_method = "Gradient"
+    _ = _twice[I](rg, reg, "symmetric RMSE Gradient leaves")
+    var r3 = _sym_opts("RMSE", "Cosine")
+    r3.leaf_method = "Newton"
+    r3.leaf_iterations = 3
+    var mr3 = _twice[I](r3, reg, "symmetric RMSE Newton at three iterations")
+    require(all_finite_f32(predict(mr3.text, reg.x, 600)), "symmetric RMSE three iterations: nonfinite predict")
+    # boost_from_average: the log-odds start, written as the bias
+    var lb = _sym_opts("Logloss", "Cosine")
+    lb.boost_from_average = 1
+    var mlb = _twice[I](lb, clf, "symmetric Logloss boost_from_average")
+    require("\nbias " in mlb.text, "symmetric Logloss boost_from_average: no bias record")
+    var ce = _sym_opts("CrossEntropy", "Cosine")
+    ce.boost_from_average = 1
+    var mce = _twice[I](ce, clf, "symmetric CrossEntropy boost_from_average")
+    require("\nbias " in mce.text, "symmetric CrossEntropy boost_from_average: no bias record")
+    var ob = _ordered_opts("Logloss")
+    ob.boost_from_average = 1
+    var mob = _twice[I](ob, clf, "Ordered Logloss boost_from_average")
+    require("\nbias " in mob.text, "Ordered Logloss boost_from_average: no bias record")
+    # class weights on a pointwise loss: the one weight column
+    var q = _sym_opts("Quantile", "Cosine")
+    q.leaf_method = "Exact"
+    var mq = _twice[I](q, clf, "symmetric Quantile")
+    var qw = q.copy()
+    qw.class_weights = [1.0, 3.0]
+    var mqw = _twice[I](qw, clf, "class-weighted symmetric Quantile")
+    require(mqw.text != mq.text, "symmetric Quantile class weights had no model effect")
+    # refused on both columns, in the device's words
+    var ex = _sym_opts("Logloss", "Cosine")
+    ex.leaf_method = "Exact"
+    _sym_refused[I](ex, clf, "Only MAPE, MAE and Quantile are supported for Exact", "symmetric Logloss Exact")
+    var mvs = _sym_opts("Logloss", "Cosine")
+    mvs.bootstrap = "MVS"
+    _sym_refused[I](mvs, clf, "MVS is not reachable", "symmetric MVS")
+    var mcn = _sym_opts("MultiClass", "NewtonCosine")
+    _sym_refused[I](mcn, mc_in, "doesn't support second derivatives", "MultiClass NewtonCosine")
+    var pb = _sym_opts("Poisson", "Cosine")
+    pb.boost_from_average = 1
+    _sym_refused[I](pb, reg, "You can use boost_from_average only", "symmetric Poisson boost_from_average")
+    var opb = _ordered_opts("Poisson")
+    opb.boost_from_average = 1
+    _sym_refused[I](opb, reg, "You can use boost_from_average only", "Ordered Poisson boost_from_average")
+
+
+def host_tail_rest[I: GbdtImage]() raises:
+    """The last combinations the host refused by name until lane
+    gbdt-cpu-rest-4-tail (2026-11-23), each fit twice to the same bytes:
+    the multi-output losses' leaf walk (`device_multi_walk_estimate`) under
+    Newton at three iterations and Gradient at its default (10) and at two,
+    on MultiClass and MultiClassOneVsAll; Lossguide past depth 16 and
+    border_count 255; then `train`'s limits on both columns, in its words
+    (`check_tree_limits`): border_count 0 and 256, max_depth 17 under
+    SymmetricTree and Depthwise, and Simple leaves on MultiClass in
+    `simple_leaves_check`'s words (lane gbdt-cpu-rest-4-simple; were the
+    walker's)."""
+    var mc_in = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
+    var mc1 = _twice[I](_sym_opts("MultiClass", "Cosine"), mc_in, "MultiClass Newton one iteration")
+    var n3 = _sym_opts("MultiClass", "Cosine")
+    n3.leaf_method = "Newton"
+    n3.leaf_iterations = 3
+    var mn3 = _twice[I](n3, mc_in, "MultiClass Newton three iterations")
+    require(mn3.text != mc1.text, "MultiClass Newton at three iterations: the one-step model")
+    require(all_finite_f32(predict(mn3.text, mc_in.x, 600)), "MultiClass Newton three iterations: nonfinite predict")
+    var gd = _sym_opts("MultiClass", "Cosine")
+    gd.leaf_method = "Gradient"
+    gd.leaf_iterations = -1
+    var mgd = _twice[I](gd, mc_in, "MultiClass Gradient at its default count")
+    require(mgd.text != mc1.text, "MultiClass Gradient: the Newton model")
+    var g2 = gd.copy()
+    g2.leaf_iterations = 2
+    var mg2 = _twice[I](g2, mc_in, "MultiClass Gradient at two iterations")
+    require(mg2.text != mgd.text, "MultiClass Gradient at two iterations: the default-count model")
+    var ova = _sym_opts("MultiClassOneVsAll", "Cosine")
+    var mova = _twice[I](ova, mc_in, "MultiClassOneVsAll Newton one iteration")
+    var ovg = ova.copy()
+    ovg.leaf_method = "Gradient"
+    ovg.leaf_iterations = -1
+    var movg = _twice[I](ovg, mc_in, "MultiClassOneVsAll Gradient")
+    require(movg.text != mova.text, "MultiClassOneVsAll Gradient: the Newton model")
+    var ovn = ova.copy()
+    ovn.leaf_method = "Newton"
+    ovn.leaf_iterations = 2
+    var movn = _twice[I](ovn, mc_in, "MultiClassOneVsAll Newton two iterations")
+    require(movn.text != mova.text, "MultiClassOneVsAll Newton at two iterations: the one-step model")
+    # depth and borders: Lossguide's depth is uncapped, 255 borders train
+    var clf = _e3()
+    var lg = GbdtOpts("Logloss", 3, 20)
+    lg.grow_policy = "Lossguide"
+    lg.max_leaves = 8
+    lg.score_function = "Cosine"
+    var mlg = _twice[I](lg, clf, "Lossguide at max_depth 20")
+    require("\nntree 0 " in mlg.text, "Lossguide max_depth 20: non-symmetric model text")
+    var b255 = _sym_opts("Logloss", "Cosine")
+    b255.border_count = 255
+    _ = _twice[I](b255, clf, "symmetric Logloss at border_count 255")
+    # `train`'s limits, refused on both columns in its words
+    var b0 = _sym_opts("Logloss", "Cosine")
+    b0.border_count = 0
+    _sym_refused[I](b0, clf, "border_count must be in 1..255", "border_count 0")
+    var b256 = _sym_opts("Logloss", "Cosine")
+    b256.border_count = 256
+    _sym_refused[I](b256, clf, "border_count must be in 1..255", "border_count 256")
+    var d17 = _sym_opts("Logloss", "Cosine")
+    d17.max_depth = 17
+    _sym_refused[I](d17, clf, "Maximum tree depth is 16", "SymmetricTree max_depth 17")
+    var dw17 = GbdtOpts("Logloss", 3, 17)
+    dw17.grow_policy = "Depthwise"
+    dw17.score_function = "Cosine"
+    _sym_refused[I](dw17, clf, "Maximum tree depth is 16", "Depthwise max_depth 17")
+    var simple = _sym_opts("MultiClass", "Cosine")
+    simple.leaf_method = "Simple"
+    _sym_refused[I](simple, mc_in, "the multi-output losses", "MultiClass Simple leaves")
+
+
+def host_simple_rest[I: GbdtImage]() raises:
+    """`leaf_estimation_method='Simple'`, the last NO_CPU_PATH clause until
+    lane gbdt-cpu-rest-4-simple (2026-11-23), each fit twice to the same
+    bytes: the greedy SymmetricTree searcher's own leaves on Logloss, RMSE
+    (where they ARE the Newton-1 leaves, DEVIATION 64, so the two texts are
+    equal), Quantile and QueryRMSE, and over CTR columns (four permutations,
+    only the learn cursor moves) on Logloss and Quantile. Then the
+    admission both columns call (`simple_leaves_check`,
+    `simple_leaf_iterations_check`), in its words: MultiClass, Depthwise,
+    Ordered, the pointwise searcher, three iterations; and YetiRank in its
+    own words."""
+    var clf = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    var ll = _sym_opts("Logloss", "Cosine")
+    ll.leaf_method = "Simple"
+    var mll = _twice[I](ll, clf, "symmetric Logloss Simple")
+    var lln = ll.copy()
+    lln.leaf_method = "Newton"
+    require(mll.text != fit[I](lln, clf).text, "symmetric Logloss Simple: the Newton model")
+    require(all_finite_f32(predict(mll.text, clf.x, 600)), "symmetric Logloss Simple: nonfinite predict")
+    var rm = _sym_opts("RMSE", "NewtonL2")
+    rm.leaf_method = "Simple"
+    var mrm = _twice[I](rm, reg, "symmetric RMSE Simple")
+    var rmn = rm.copy()
+    rmn.leaf_method = "Newton"
+    require(mrm.text == fit[I](rmn, reg).text, "symmetric RMSE Simple is not the Newton-1 model (DEVIATION 64)")
+    var qt = _sym_opts("Quantile", "Cosine")
+    qt.leaf_method = "Simple"
+    var mqt = _twice[I](qt, reg, "symmetric Quantile Simple")
+    var qtg = qt.copy()
+    qtg.leaf_method = "Gradient"
+    require(mqt.text != fit[I](qtg, reg).text, "symmetric Quantile Simple: the Gradient model")
+    var qw = _qw_opts("QueryRMSE")
+    qw.pointwise = False
+    qw.leaf_method = "Simple"
+    qw.leaf_iterations = 1
+    var qwi = _qw_inputs()
+    var mqw = _twice[I](qw, qwi, "greedy QueryRMSE Simple")
+    var qwn = qw.copy()
+    qwn.leaf_method = "Newton"
+    require(mqw.text != fit[I](qwn, qwi).text, "greedy QueryRMSE Simple: the Newton model")
+    var cat_clf = _cat_rest_inputs("e3-yc.f32")
+    var lc = _cat_rest_opts("Logloss")
+    lc.cat_features = [6, 7]
+    lc.leaf_method = "Simple"
+    lc.leaf_iterations = 1
+    var mlc = _twice_text[I](lc, cat_clf, "symmetric Logloss Simple over CTR columns")
+    var lcn = lc.copy()
+    lcn.leaf_method = "Newton"
+    require(mlc.text != fit[I](lcn, cat_clf).text, "symmetric Logloss Simple over CTR columns: the Newton model")
+    var cat_reg = _cat_rest_inputs("e3-yr.f32")
+    var qc = _cat_rest_opts("Quantile")
+    qc.cat_features = [6]
+    qc.leaf_method = "Simple"
+    qc.leaf_iterations = 1
+    _ = _twice_text[I](qc, cat_reg, "symmetric Quantile Simple over a CTR column")
+    # refused before any tree on both columns, in the one admission's words
+    var mc = _sym_opts("MultiClass", "Cosine")
+    mc.leaf_method = "Simple"
+    _sym_refused[I](mc, _fixed("e3-x.f32", 600, 6, "e3-y3.f32"), "the multi-output losses", "MultiClass Simple")
+    var dw = _ns_opts("Logloss", "Depthwise", "Cosine")
+    dw.leaf_method = "Simple"
+    dw.leaf_iterations = 1
+    _sym_refused[I](dw, clf, "grow_policy Depthwise / Lossguide searches the structure only", "Depthwise Logloss Simple")
+    var od = _ordered_opts("RMSE")
+    od.leaf_method = "Simple"
+    _sym_refused[I](od, reg, "boosting_type='Ordered' searches the structure only", "Ordered RMSE Simple")
+    var pw = _sym_opts("Logloss", "Cosine")
+    pw.pointwise = True
+    pw.leaf_method = "Simple"
+    _sym_refused[I](pw, clf, "use_pointwise_searcher searches the structure only", "pointwise Logloss Simple")
+    var it3 = _sym_opts("Logloss", "Cosine")
+    it3.leaf_method = "Simple"
+    it3.leaf_iterations = 3
+    _sym_refused[I](it3, clf, "can't be greater, than 1 for Simple", "Logloss Simple at three iterations")
+    var yr = _qw_opts("YetiRank")
+    yr.pointwise = False
+    yr.leaf_method = "Simple"
+    _sym_refused[I](yr, qwi, "changing the leaf_estimation_method parameter is prohibited", "YetiRank Simple")
 
 
 def _ordered_opts(loss: String) -> GbdtOpts:
@@ -1431,9 +2109,93 @@ def host_rest_gaps[I: GbdtImage]() raises:
     cat.boost_from_average = 0
     cat.leaf_iterations = 1
     cat.cat_features = [6]
-    var mcat = _twice[I](cat, cat_in, "RMSE with NaN beside a CTR column")
+    # (`_twice_text`: the host reader refuses a CTR model's predict, lane
+    # gbdt-cpu-rest-4-cat-ns)
+    var mcat = _twice_text[I](cat, cat_in, "RMSE with NaN beside a CTR column")
     require(len(mcat.text) > 0, "NaN beside CTR: empty model text")
 
+
+
+def _cat_ns_inputs(yname: String) raises -> GbdtInputs:
+    """e3's six float columns, then its three class codes (column 6: a CTR
+    column under cat_features, three categories above one_hot_max_size 2)
+    and code 2 against the rest (column 7: a one-hot column under
+    cat_features, or one_hot_features)."""
+    var x = load_f32("e3-x.f32", 3600)
+    var codes = load_f32("e3-y3.f32", 600)
+    for r in range(600):  # small-loop(one appended column)
+        x.append(codes[r])
+    for r in range(600):  # small-loop(one appended column)
+        x.append(Float32(1.0) if codes[r] == Float32(2.0) else Float32(0.0))
+    return GbdtInputs(x^, 600, 8, load_f32(yname, 600))
+
+
+def host_cat_rest_ns[I: GbdtImage]() raises:
+    """Depthwise and Lossguide over categorical columns, Plain boosting,
+    which the host refused by name until lane gbdt-cpu-rest-4-cat-ns
+    (2026-11-23), each fit twice to the same bytes: Depthwise Logloss over a
+    CTR column, Lossguide RMSE over a one-hot and a CTR column with sample
+    weights, Depthwise Quantile over a CTR column with an eval set, Lossguide
+    CrossEntropy over a one_hot_features column; and max_ctr_complexity 2
+    under Depthwise refused in `fit_with_test`'s words."""
+    var clf = _cat_ns_inputs("e3-yc.f32")
+    var dl = GbdtOpts("Logloss", 4, 3)
+    dl.deterministic()
+    dl.learning_rate = 0.1
+    dl.grow_policy = "Depthwise"
+    dl.cat_features = [6]
+    var mdl = _twice_text[I](dl, clf, "Depthwise Logloss over a CTR column")
+    require("\nntree 0 " in mdl.text, "Depthwise Logloss CTR: non-symmetric model text")
+    require("\nctr_table " in mdl.text, "Depthwise Logloss CTR: no ctr_table record")
+    var reg = _cat_ns_inputs("e3-yr.f32")
+    reg.weights = List[Float32](length=600, fill=Float32(0))
+    for r in range(600):  # small-loop(np.linspace(.5, 1.5, 600, dtype=float32))
+        reg.weights[r] = Float32(0.5 + Float64(r) / 599.0)
+    var lr = GbdtOpts("RMSE", 4, 4)
+    lr.deterministic()
+    lr.learning_rate = 0.1
+    lr.grow_policy = "Lossguide"
+    lr.max_leaves = 8
+    lr.cat_features = [6, 7]
+    var mlr = _twice_text[I](lr, reg, "weighted Lossguide RMSE over a one-hot and a CTR column")
+    require(" type cat " in mlr.text and " type ctr " in mlr.text,
+            "Lossguide RMSE: the one-hot and CTR feature records")
+    require(all_finite_f64(mlr.learn), "Lossguide RMSE CTR: nonfinite learn curve")
+    var qin = _cat_ns_inputs("e3-yr.f32")
+    qin.eval_x = qin.x.copy()
+    qin.eval_y = qin.y.copy()
+    var q = GbdtOpts("Quantile", 4, 3)
+    q.deterministic()
+    q.learning_rate = 0.1
+    q.grow_policy = "Depthwise"
+    q.cat_features = [6]
+    var mq = _twice_text[I](q, qin, "Depthwise Quantile over a CTR column with an eval set")
+    require(len(mq.test) > 0, "Depthwise Quantile CTR: no held-out curve")
+    var ce = GbdtOpts("CrossEntropy", 4, 4)
+    ce.deterministic()
+    ce.learning_rate = 0.1
+    ce.grow_policy = "Lossguide"
+    ce.max_leaves = 8
+    ce.one_hot_features = [7]
+    var mce = _twice[I](ce, clf, "Lossguide CrossEntropy over a one_hot_features column")
+    require(" type cat " in mce.text, "Lossguide CrossEntropy: no one-hot feature record")
+    var bad = GbdtOpts("Logloss", 2, 3)
+    bad.deterministic()
+    bad.grow_policy = "Depthwise"
+    bad.cat_features = [6]
+    bad.max_ctr_complexity = 2
+    var refused = False
+    try:
+        _ = fit[I](bad, clf)
+    except error:
+        require_fails_with(
+            String(error),
+            "max_ctr_complexity above 1 (feature combinations) is implemented"
+            " for grow_policy='SymmetricTree'; got Depthwise",
+            "max_ctr_complexity 2 under Depthwise",
+        )
+        refused = True
+    require(refused, "max_ctr_complexity 2 under Depthwise was silently accepted")
 
 def host_losses[I: GbdtImage](case_index: Int) raises:
     """`test_the_five_configurations_fit_on_the_host_when_built`."""

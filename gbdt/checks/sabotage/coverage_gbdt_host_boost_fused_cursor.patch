@@ -1,8 +1,8 @@
 diff --git a/gbdt/host/gbdt_oracle.mojo b/gbdt/host/gbdt_oracle.mojo
-index 62eae2a40a..49100e4d98 100644
+index 5ac0a18..043093f 100644
 --- a/gbdt/host/gbdt_oracle.mojo
 +++ b/gbdt/host/gbdt_oracle.mojo
-@@ -3445,6 +3445,46 @@ def _estimate_leaves(
+@@ -3608,6 +3608,46 @@ def _estimate_leaves(
      return cur_point^
  
  
@@ -49,19 +49,19 @@ index 62eae2a40a..49100e4d98 100644
  def apply_scaled_leaves_host(
      mut cursor: List[Float32],
      scaled: List[Float32],
-@@ -4418,8 +4458,8 @@ def gbdt_host_boost(
+@@ -5029,8 +5069,8 @@ def gbdt_host_boost(
                      leaf_sums[2 * i], leaf_sums[2 * i + 1], params.l2_leaf_reg
                  )
              est_scaled = rescaled_leaves(leaf_values, lr)
 -            apply_scaled_leaves_host(
--                cursors[0], est_scaled, row_index, offsets, sizes, n_live
+-                cursors[learn_p], est_scaled, row_index, offsets, sizes, n_live
 +            _sabotage_fused_apply(
-+                cursors[0], leaf_values, lr, row_index, offsets, sizes, n_live
++                cursors[learn_p], leaf_values, lr, row_index, offsets, sizes, n_live
              )
          else:
              for p in range(perm_count):  # driver-loop: over the permutations
-@@ -4433,9 +4473,9 @@ def gbdt_host_boost(
-                         params.leaf_estimation_iterations, weights, objective,
+@@ -5045,9 +5085,9 @@ def gbdt_host_boost(
+                         leaf_method,
                      )
                      scaled = rescaled_leaves(est_p_leaves, lr)
 -                    apply_scaled_leaves_host(
@@ -73,8 +73,8 @@ index 62eae2a40a..49100e4d98 100644
                      )
                  else:
                      var part = _partition_for_model(
-@@ -4448,9 +4488,9 @@ def gbdt_host_boost(
-                         params.leaf_estimation_iterations, weights, objective,
+@@ -5061,9 +5101,9 @@ def gbdt_host_boost(
+                         leaf_method,
                      )
                      scaled = rescaled_leaves(est_p_leaves, lr)
 -                    apply_scaled_leaves_host(

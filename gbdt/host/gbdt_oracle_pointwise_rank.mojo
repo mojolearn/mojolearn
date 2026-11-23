@@ -234,8 +234,13 @@ def gbdt_ranking_pointwise_host_fit(
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features or len(y) != n_rows:
         raise Error("pointwise ranking input dimensions do not match")
-    if params.max_depth < 0 or params.max_depth > 16:
-        raise Error("pointwise ranking depth must be in [0, 16]")
+    # (lane gbdt-cpu-rest-4-tail, 2026-11-23: the depth cap is `train`'s,
+    # `check_tree_limits`, before this fit; a negative depth is the
+    # searcher's `create_subsets` refusal)
+    if params.max_depth < 0:
+        raise Error(
+            String("maxDepth must be non-negative, got ") + String(params.max_depth)
+        )
     if loss.objective != GBDT_OBJ_PAIR_LOGIT and loss.objective != GBDT_OBJ_YETI_RANK and loss.objective != GBDT_OBJ_QUERY_RMSE:
         raise Error("pointwise ranking needs QueryRMSE, PairLogit or YetiRank")
     if loss.method != GBDT_LEAF_NEWTON and loss.method != GBDT_LEAF_GRADIENT:

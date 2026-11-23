@@ -26,65 +26,19 @@ from gbdt.options.catboost_options import (
     SCORE_FUNCTION_NEWTON_COSINE,
     SCORE_FUNCTION_NEWTON_L2,
 )
+# lane gbdt-cpu-rest-4-ns (2026-11-23): the child-Hessian test, the calcers'
+# AddLeaf and the leafwise tail live in the GPU-free body the CPU
+# non-symmetric driver calls too (one body per operation)
+from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import (
+    add_leaf_score,
+    child_hessian_below,
+    leafwise_finish_gain,
+)
 
 
 comptime SCORE_BLOCK_SIZE = 128
 
 comptime FLOAT32_MAX = Float32(3.4028234663852886e38)
-
-
-@always_inline
-def child_hessian_below(mass: Float32, threshold: Float32) -> Bool:
-    """Compare nonnegative score-plane masses without subnormal FTZ.
-
-    Sign clearing canonicalizes both signed zeros. The caller must clamp
-    masses nonnegative and validate the enabled threshold before this call.
-    """
-    return (bitcast[DType.uint32](mass) & UInt32(0x7FFFFFFF)) < (bitcast[DType.uint32](threshold) & UInt32(0x7FFFFFFF))
-
-
-@always_inline
-def _add_leaf[
-    score_function: Int,
-    normalize: Bool,
-    pin_mul_add: Bool = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL),
-](
-    sum: Float32,
-    weight: Float32,
-    lambda_l2: Float32,
-    mut score: Float32,
-    mut denum_sqr: Float32,
-):
-    """`calcer.AddLeaf(sum, weight)` -- one score calcer's accumulation."""
-    comptime cosine = (
-        score_function == SCORE_FUNCTION_COSINE
-        or score_function == SCORE_FUNCTION_NEWTON_COSINE
-    )
-
-    comptime if cosine:
-        var lam = lambda_l2
-        comptime if normalize:
-            lam = ftz(lambda_l2 * weight)
-        var mu = Float32(0.0)
-        if weight > Float32(0.0):
-            mu = sum / (weight + lam)
-
-        comptime if pin_mul_add:
-            mu = ftz(mu)
-            score = ftz(identical_mul_add(sum, mu, score))
-            denum_sqr = ftz(
-                identical_mul_add(ftz(weight * mu), mu, denum_sqr)
-            )
-        else:
-            score += sum * mu
-            denum_sqr += weight * mu * mu
-    else:
-        if weight > Float32(1e-20):
-            comptime if pin_mul_add:
-                var num = ftz(sum * sum)
-                score = ftz(score + ftz(num / (weight + lambda_l2)))
-            else:
-                score += (sum * sum) / (weight + lambda_l2)
 
 
 def compute_optimal_splits_kernel[
@@ -172,10 +126,10 @@ def compute_optimal_splits_kernel[
                 ).unsafe_load[invariant=True]()
                 var sum_right = ftz(part_stat - sum_left)
 
-                _add_leaf[score_function, normalize](
+                add_leaf_score[score_function, normalize](
                     sum_left, weight_left, lambda_l2, score, denum_sqr
                 )
-                _add_leaf[score_function, normalize](
+                add_leaf_score[score_function, normalize](
                     sum_right, weight_right, lambda_l2, score, denum_sqr
                 )
                 total_sum_left = ftz(total_sum_left + sum_left)
@@ -183,11 +137,11 @@ def compute_optimal_splits_kernel[
 
             if multiclass_optimization != Int32(0):
                 var total_sum_right = ftz(total_sum_part - total_sum_left)
-                _add_leaf[score_function, normalize](
+                add_leaf_score[score_function, normalize](
                     -total_sum_left, weight_left, lambda_l2,
                     score, denum_sqr,
                 )
-                _add_leaf[score_function, normalize](
+                add_leaf_score[score_function, normalize](
                     -total_sum_right, weight_right, lambda_l2,
                     score, denum_sqr,
                 )
@@ -430,69 +384,37 @@ def _leafwise_scan_part[
             total_sum_part = ftz(total_sum_part + part_stat)
             var sum_right = ftz(part_stat - sum_left)
 
-            _add_leaf[score_function, normalize, True](
+            add_leaf_score[score_function, normalize, True](
                 sum_left, weight_left, lambda_l2, score, denum_sqr
             )
-            _add_leaf[score_function, normalize, True](
+            add_leaf_score[score_function, normalize, True](
                 sum_right, weight_right, lambda_l2, score, denum_sqr
             )
-            _add_leaf[score_function, normalize, True](
+            add_leaf_score[score_function, normalize, True](
                 part_stat, part_weight, lambda_l2, score_b, denum_sqr_b
             )
             total_sum_left = ftz(total_sum_left + sum_left)
 
         if multiclass_optimization != Int32(0):
             var total_sum_right = ftz(total_sum_part - total_sum_left)
-            _add_leaf[score_function, normalize, True](
+            add_leaf_score[score_function, normalize, True](
                 -total_sum_left, weight_left, lambda_l2, score, denum_sqr
             )
-            _add_leaf[score_function, normalize, True](
+            add_leaf_score[score_function, normalize, True](
                 -total_sum_right, weight_right, lambda_l2, score, denum_sqr
             )
-            _add_leaf[score_function, normalize, True](
+            add_leaf_score[score_function, normalize, True](
                 -total_sum_part, part_weight, lambda_l2,
                 score_b, denum_sqr_b,
             )
 
         var feature_id = Int(bf_feature_id.unsafe_load(bin_feature_id))
 
-        var final_score = score
-        var score_before = score_b
-        comptime if cosine:
-            if denum_sqr > Float32(1e-15):
-                final_score = ftz(score / identical_sqrt(denum_sqr))
-            else:
-                final_score = -FLOAT32_MAX
-            if denum_sqr_b > Float32(1e-15):
-                score_before = ftz(score_b / identical_sqrt(denum_sqr_b))
-            else:
-                score_before = -FLOAT32_MAX
-
-            if score_std_dev != Float32(0.0):
-                var seed = advance_seed_k(
-                    global_seed + UInt64(feature_id), 4
-                )
-                var draw = next_normal_f(seed)
-                var neg_draw = -draw[0]
-                final_score = ftz(
-                    identical_mul_add(
-                        neg_draw, score_std_dev, final_score
-                    )
-                )
-                score_before = ftz(
-                    identical_mul_add(
-                        neg_draw, score_std_dev, score_before
-                    )
-                )
-
-        if to_zero_part_split:
-            final_score = -FLOAT32_MAX
-            score_before = -FLOAT32_MAX
-
-        var gain = Float32(0.0)
-        if not to_zero_part_split:
-            gain = ftz(final_score - score_before)
-        gain = ftz(gain * (feature_weights + feature_id).unsafe_load[invariant=True]())
+        var gain = leafwise_finish_gain[score_function](
+            score, denum_sqr, score_b, denum_sqr_b, to_zero_part_split,
+            score_std_dev, global_seed, feature_id,
+            (feature_weights + feature_id).unsafe_load[invariant=True](),
+        )
 
         if gain > best_gain:
             best_gain = gain

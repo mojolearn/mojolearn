@@ -1,0 +1,17 @@
+diff --git a/gbdt/models/kernel/add_bin_values.mojo b/gbdt/models/kernel/add_bin_values.mojo
+index d2847dab8b..352fc62ad8 100644
+--- a/gbdt/models/kernel/add_bin_values.mojo
++++ b/gbdt/models/kernel/add_bin_values.mojo
+@@ -528,9 +528,10 @@ def compute_non_symmetric_decision_tree_bins_kernel(
+             # right turn and `stop = node.LeftSubtree == 1; nodes += 1` on
+             # the left (`:377-389`): the one body the host columns call
+             # (gbdt/models/non_symmetric_walk_body.mojo)
++            # SABOTAGE (coverage-gbdt-device_ns_take_bin): a one-hot node
++            # walks `>` instead of `==` (its TakeBin flag dropped)
+             var split = ns_node_goes_right(
+-                feature_val, node_bin.unsafe_load(node),
+-                node_one_hot.unsafe_load(node) != UInt8(0),
++                feature_val, node_bin.unsafe_load(node), False,
+             )
+             stop = ns_walk_step(
+                 split, Int(node_left_subtree.unsafe_load(node)),

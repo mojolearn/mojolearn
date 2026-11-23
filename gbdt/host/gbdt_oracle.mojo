@@ -28,14 +28,17 @@ lane is not a complete list of supported configurations. Admission lives in
 bindings/_mojolearn_gbdt_host.mojo.
 
   grow_policy SymmetricTree, loss Logloss (any loss_border),
-  score_function Cosine, leaf_estimation_method Newton (any iteration count),
+  score_function Cosine (and, since lane gbdt-cpu-rest-4-sym, L2, NewtonL2
+  and NewtonCosine: `_greedy_gains` and the second-order search planes),
+  leaf_estimation_method Newton or Gradient (any iteration count, RMSE too),
   optional numeric row weights (sample_weight multiplied by binary
   class_weights when present), numeric bootstrap and score noise. One-hot
   columns use `one_hot_in` and gbdt_oracle_onehot.mojo; CTR training has its
   own owner in gbdt_oracle_ctr.mojo. The held-out cursor, stopping detector
   and best-model selection use gbdt_oracle_eval.mojo through
   gbdt_host_fit_eval. The greedy searcher (use_pointwise_searcher False),
-  boost_from_average unset or False and feature_fraction 1. A feature with
+  boost_from_average any (True is the log-odds start, the model's bias) and
+  feature_fraction 1. A feature with
   exactly one border (the BINARY histogram policy) is carried since
   2026-09-22 (`_binary_block`, the nibble-combination decode of
   `hist_binary.mojo`; the gbdt-binary-columns lane). border_count, n_estimators,
@@ -165,7 +168,18 @@ from gbdt.targets.pointwise_bodies import (
     weighted_score,
 )
 from gbdt.methods.cursor_rescale import rescaled_leaves
+from gbdt.methods.leaves_estimation.searcher_leaf_body import searcher_leaf_value
 from gbdt.methods.random_score_bodies import score_model_length_mult
+from gbdt.options.catboost_options import (
+    LEAF_ESTIMATION_GRADIENT,
+    LEAF_ESTIMATION_NEWTON,
+    LEAF_ESTIMATION_SIMPLE,
+    SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_L2,
+    SCORE_FUNCTION_NEWTON_COSINE,
+    SCORE_FUNCTION_NEWTON_L2,
+    is_second_order_score_function,
+)
 from gbdt.gpu_util.kernel.random_gen import (
     advance_seed_k,
     next_normal_f,
@@ -204,6 +218,9 @@ from gbdt.grid_creator.binarization import (
     BORDER_TYPE_GREEDY_LOG_SUM,
     select_borders,
 )
+# the device score kernels' AddLeaf (lane gbdt-cpu-rest-4-ns)
+from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import add_leaf_score
+from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from gbdt.options.data_processing_options import (
     NAN_MODE_FORBIDDEN,
     NAN_MODE_MAX,
@@ -459,6 +476,7 @@ def _logloss_search_pass(
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
     weights: List[Float32] = List[Float32](),
+    second_order: Bool = False,
 ):
     """`launch_approximate[False]` on Logloss with `compute_fv` and
     `compute_magnitudes` set (`doc_parallel_boosting.mojo:1544-1552`): the
@@ -467,7 +485,14 @@ def _logloss_search_pass(
     through the halving tree. Out-of-range threads add 0.0. `weights`
     empty is the unit weight; otherwise one weight per row, the kernel's
     `has_weights` arm (plane 0 the row's weight, the direction and score
-    scaled by it): sample weights and/or binary class weights, as in `train`."""
+    scaled by it): sample weights and/or binary class weights, as in `train`.
+
+    `second_order` is `launch_approximate[False, True]`
+    (`secondDerAsWeights`, the NewtonL2 / NewtonCosine search planes):
+    plane 0 is then `ftz(weight * scale)` and its magnitude bounds that
+    plane as stored (`cross_entropy_kernel`'s `plane0`; lane
+    gbdt-cpu-rest-4-sym, 2026-11-23, which also makes the Lossguide arm's
+    `logloss_search_pass_newton` a call of this one)."""
     # THE SPLIT (lane gbdt-host-par): the unit is one 256-thread device
     # block: it owns its rows' two planes and its three partials, and its
     # halving trees are the kernel's. Blocks go round robin to `_gbdt_units`
@@ -483,7 +508,7 @@ def _logloss_search_pass(
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
     var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm has_weights, imm second_order, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
@@ -501,6 +526,8 @@ def _logloss_search_pass(
                         weight = weights_p[i]
                     var r = _cross_entropy_row(targets_p[i], cursor_p[i], border, weight)
                     var plane0 = weight
+                    if second_order:
+                        plane0 = r.weighted_scale
                     stats_p[i] = plane0
                     stats_p[n_rows + i] = r.weighted_direction
                     s_score[t] = r.score
@@ -566,8 +593,6 @@ def _logloss_value(
 # ===========================================================================
 
 
-#: `MIN_LEAF_WEIGHT` (`leaves_estimation.mojo:72`).
-comptime GBDT_RMSE_MIN_LEAF_WEIGHT = Float32(1e-20)
 
 
 @fieldwise_init
@@ -596,13 +621,16 @@ def _rmse_search_pass(
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
     weights: List[Float32] = List[Float32](),
+    second_order: Bool = False,
 ):
     """`launch_approximate[False]` on RMSE with `compute_fv` and
     `compute_magnitudes` set: plane 0 the row's weight (unit when `weights`
     is empty), plane 1 the flushed weighted der, one score partial and two
     magnitude partials per 256-thread block through the halving tree.
     Out-of-range threads add 0.0. `weights` is the kernel's `has_weights`
-    arm (`pointwise_target_kernel`), as `_logloss_search_pass`'s."""
+    arm (`pointwise_target_kernel`), as `_logloss_search_pass`'s.
+    `second_order` is the NewtonL2 / NewtonCosine plane 0,
+    `weighted_der2[RMSE]` (`ftz(weight * 1)`), as the kernel stores it."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
     # one 256-thread device block owns its rows' two planes and its three
@@ -618,7 +646,7 @@ def _rmse_search_pass(
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
     var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm has_weights, imm second_order, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
@@ -636,6 +664,8 @@ def _rmse_search_pass(
                         weight = weights_p[i]
                     var r = _rmse_row(targets_p[i], cursor_p[i], weight)
                     var plane0 = weight
+                    if second_order:
+                        plane0 = weighted_der2[BODY_OBJ_RMSE](targets_p[i], cursor_p[i], Float32(0.0), weight)
                     stats_p[i] = plane0
                     stats_p[n_rows + i] = r.der
                     s_score[t] = r.score
@@ -705,19 +735,15 @@ def _rmse_value(
 
 
 def _rmse_leaf_value(w: Float32, g: Float32, l2: Float32) -> Float32:
-    """`compute_leaf_values_kernel` (`leaves_estimation.mojo:75-181`) for
-    one leaf, term for term. The sabotage arm adds 1.0 to the regularizer
-    (see THE NEGATIVE CONTROL)."""
+    """`compute_leaf_values_kernel` for one leaf: the one body both columns
+    call (`searcher_leaf_body.searcher_leaf_value`; lane
+    gbdt-cpu-rest-4-simple, 2026-11-23, was a term-for-term restatement).
+    The sabotage arm adds 1.0 to the regularizer (see THE NEGATIVE
+    CONTROL)."""
     var reg = l2
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
         reg = reg + Float32(1.0)
-    var hessian = w + reg
-    if hessian <= Float32(0.0):
-        return Float32(0.0)
-    var v = g / (hessian + Float32(1e-20))
-    if w < GBDT_RMSE_MIN_LEAF_WEIGHT:
-        v = Float32(0.0)
-    return v
+    return searcher_leaf_value(w, g, reg)
 
 
 # ===========================================================================
@@ -2543,15 +2569,13 @@ def _add_leaf_cosine(
     mut score: Float32,
     mut denum_sqr: Float32,
 ):
-    """`_add_leaf[SCORE_FUNCTION_COSINE, normalize=False, pin_mul_add=True]`
-    (`compute_scores.mojo:46-86`)."""
-    var lam = lambda_l2
-    var mu = Float32(0.0)
-    if weight > Float32(0.0):
-        mu = sum / (weight + lam)
-    mu = ftz(mu)
-    score = ftz(identical_mul_add(sum, mu, score))
-    denum_sqr = ftz(identical_mul_add(ftz(weight * mu), mu, denum_sqr))
+    """`add_leaf_score[SCORE_FUNCTION_COSINE, normalize=False,
+    pin_mul_add=True]`, the device score kernels' own statements
+    (`gbdt/methods/greedy_subsets_searcher/leafwise_score_body.mojo`; lane
+    gbdt-cpu-rest-4-ns, 2026-11-23: this was a host restatement)."""
+    add_leaf_score[SCORE_FUNCTION_COSINE, False, True](
+        sum, weight, lambda_l2, score, denum_sqr
+    )
 
 
 def _ftz_lanes[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
@@ -2982,6 +3006,104 @@ def _cosine_gains_range(
         gains[bf] = ftz(ftz(final_score - score_before) * Float32(1.0))
 
 
+def _l2_gains(
+    hist: List[Float32],
+    hist_cells: Int,
+    part_stats: List[Float32],
+    n_live: Int,
+    lambda_l2: Float32,
+) -> List[Float32]:
+    """`compute_optimal_splits_kernel[SCORE_FUNCTION_L2]` for every
+    bin-feature, the kernel the device's `enqueue_score` launches for L2 and
+    NewtonL2 alike (`greedy_search_helper.mojo`, `score_std_dev` passed as
+    0, so the L2 score carries no noise): per candidate the two
+    `add_leaf_score[L2]`s per leaf in dense leaf order, the score is the
+    sum and the gain `ftz(ftz(score - 0) * 1)` (the unit feature weight).
+
+    THE SPLIT (lane gbdt-cpu-rest-4-sym, 2026-11-23): the unit is one
+    candidate, the device's thread; a task takes a run of candidates
+    (`_l2_gains_range`), the count from `_gbdt_units` over `4 x leaves x
+    candidates` operations."""
+    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
+    if hist_cells == 0:
+        return gains^
+    var units = _gbdt_units(hist_cells, 4 * n_live * hist_cells)
+    var chunk = (hist_cells + units - 1) // units
+    var hp = rebind[HostF32Ptr](hist.unsafe_ptr())
+    var pp = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var gp = rebind[HostF32Ptr](gains.unsafe_ptr())
+
+    def candidates(unit: Int) {imm chunk, imm hist_cells, imm n_live, imm lambda_l2, imm hp, imm pp, imm gp}:
+        _l2_gains_range(
+            hp, hist_cells, pp, n_live, lambda_l2, gp,
+            unit * chunk, min((unit + 1) * chunk, hist_cells),
+        )
+
+    host_parallelize(candidates, units)
+    _ = len(hist)
+    _ = len(part_stats)
+    return gains^
+
+
+def _l2_gains_range(
+    hp: HostF32Ptr,
+    hist_cells: Int,
+    part_stats: HostF32Ptr,
+    n_live: Int,
+    lambda_l2: Float32,
+    gains: HostF32Ptr,
+    lo: Int,
+    hi: Int,
+):
+    """Candidates `[lo, hi)` of `_l2_gains`, each folding its leaves in
+    dense leaf order as the kernel's thread does."""
+    for bf in range(lo, hi):
+        var score = Float32(0.0)
+        var denum_sqr = Float32(1e-10)
+        for i in range(n_live):
+            var leaf_base = i * 2 * hist_cells
+            var weight_left = max(hp[leaf_base + bf], Float32(0.0))
+            var weight_right = ftz(max(part_stats[i * 2] - weight_left, Float32(0.0)))
+            var sum_left = hp[leaf_base + hist_cells + bf]
+            var sum_right = ftz(part_stats[i * 2 + 1] - sum_left)
+            add_leaf_score[SCORE_FUNCTION_L2, False](
+                sum_left, weight_left, lambda_l2, score, denum_sqr
+            )
+            add_leaf_score[SCORE_FUNCTION_L2, False](
+                sum_right, weight_right, lambda_l2, score, denum_sqr
+            )
+        gains[bf] = ftz(ftz(score - Float32(0.0)) * Float32(1.0))
+
+
+def _greedy_gains(
+    score_function: Int,
+    hist: List[Float32],
+    hist_cells: Int,
+    part_stats: List[Float32],
+    n_live: Int,
+    lambda_l2: Float32,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    bf_feature: List[Int],
+) raises -> List[Float32]:
+    """`enqueue_score`'s dispatch (`greedy_search_helper.mojo`): the L2
+    kernel for L2 and NewtonL2, the cosine kernel (with the score noise)
+    for Cosine and NewtonCosine. The Newton scores differ from their
+    first-order twins only in the search planes (`second_order` on the
+    search passes), never here."""
+    if score_function == SCORE_FUNCTION_L2 or score_function == SCORE_FUNCTION_NEWTON_L2:
+        return _l2_gains(hist, hist_cells, part_stats, n_live, lambda_l2)
+    if score_function != SCORE_FUNCTION_COSINE and score_function != SCORE_FUNCTION_NEWTON_COSINE:
+        raise Error(
+            "score_function has no calcer here; only Cosine, NewtonCosine, L2"
+            " and NewtonL2 are implemented"
+        )
+    return _cosine_gains(
+        hist, hist_cells, part_stats, n_live, lambda_l2, score_std_dev,
+        level_seed, bf_feature,
+    )
+
+
 # ===========================================================================
 # THE BOOTSTRAP (`gbdt/gpu_util/kernel/bootstrap.mojo`)
 # ===========================================================================
@@ -3338,6 +3460,23 @@ def _regularize(weights_cpu: List[Float64], mut point: List[Float32]):
             point[leaf] = Float32(0.0)
 
 
+def _second_derivatives(
+    method: Int, weights_cpu: List[Float64], lambda_reg: Float64,
+    cached_der2: List[Float64],
+) -> List[Float64]:
+    """`write_second_derivatives` (`pointwise_oracle.mojo:341-431`): the
+    leaf weight plus lambda under Gradient, the cached Hessian under Newton.
+    One body for both host walkers (this one and
+    `gbdt_oracle_losses.mojo::_walker_estimate`; lane gbdt-cpu-rest-4-sym,
+    2026-11-23, moved it here from the losses oracle)."""
+    if method == LEAF_ESTIMATION_GRADIENT:
+        var out = List[Float64]()
+        for leaf in range(len(weights_cpu)):  # driver-loop: over the leaves
+            out.append(weights_cpu[leaf] + lambda_reg)
+        return out^
+    return cached_der2.copy()
+
+
 def _estimate_leaves(
     targets: List[Float32],
     cursor: List[Float32],
@@ -3350,12 +3489,16 @@ def _estimate_leaves(
     iterations: Int,
     weights: List[Float32] = List[Float32](),
     objective: Int = GBDT_BOOST_LOGLOSS,
+    method: Int = LEAF_ESTIMATION_NEWTON,
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, the oracle, and
     `newton_like_walker_estimate` with AnyImprovement
     (`descent_helpers.mojo:198-285`, `step_estimator.mojo:50-72`).
-    `objective` picks the oracle's target kernel (`_oracle_eval`)."""
+    `objective` picks the oracle's target kernel (`_oracle_eval`).
+    `method` is the walker's second derivatives (`_second_derivatives`):
+    the cached Hessian under Newton, the leaf weight plus lambda under
+    Gradient (lane gbdt-cpu-rest-4-sym, 2026-11-23)."""
     var n_leaves = len(sizes)
     var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
@@ -3424,7 +3567,7 @@ def _estimate_leaves(
         g_target, g_cursor, offsets, sizes, n_rows, border, lambda_reg,
         cur_value, cur_grad, cached_der2, g_weights, objective,
     )
-    var cur_hess = cached_der2.copy()
+    var cur_hess = _second_derivatives(method, weights_cpu, lambda_reg, cached_der2)
     var direction = _diagonal_direction(cur_grad, cur_hess)
 
     if iterations == 1:
@@ -3449,7 +3592,7 @@ def _estimate_leaves(
                 next_value, next_grad, cached_der2, g_weights, objective,
             )
             if function_value <= next_value:
-                cur_hess = cached_der2.copy()
+                cur_hess = _second_derivatives(method, weights_cpu, lambda_reg, cached_der2)
                 cur_point = next_point.copy()
                 cur_value = next_value
                 cur_grad = next_grad.copy()
@@ -3810,6 +3953,63 @@ def gbdt_host_fit(
     return r.model^
 
 
+def gbdt_host_one_hot_grid(
+    mut grid: GbdtHostGrid,
+    x_colmajor: List[Float32],
+    n_rows: Int,
+    n_features: Int,
+    one_hot_in: List[Bool],
+) raises -> List[Bool]:
+    """`_quantize_training_columns`' one-hot arm (`gbdt/train.mojo`): each
+    column `one_hot_in` names (empty for none) gets the borders `code +
+    0.5` below its largest code (`gbdt_onehot_max_code`, the device scan's
+    lenient arm), `maxc + 1` folds (0 for a column of one code) and AsIs NaN
+    treatment, written into `grid`; returns the per-feature one-hot flags
+    the layout carries. The greedy loop's one-hot arm (`gbdt_host_fit_eval`)
+    and the pointwise searcher's (`gbdt_oracle_pointwise.mojo`) both call it
+    (lane gbdt-cpu-rest-4-pwl, 2026-11-23: moved word for word out of
+    `gbdt_host_fit_eval`)."""
+    var one_hot = List[Bool](length=n_features, fill=False)
+    if len(one_hot_in) == n_features:
+        for f in range(n_features):  # driver-loop: over the features (the column scan inside runs across the cores)
+            if not one_hot_in[f]:
+                continue
+            one_hot[f] = True
+            var maxc = gbdt_onehot_max_code(
+                rebind[HostF32Ptr](x_colmajor.unsafe_ptr()) + f * n_rows, n_rows
+            )
+            if maxc > 254:
+                raise Error("one-hot feature " + String(f) + " has more than 255 categories")
+            var bs = List[Float32]()
+            for c in range(maxc):
+                bs.append(Float32(c) + Float32(0.5))
+            grid.fold_counts[f] = len(bs) + 1 if len(bs) > 0 else 0
+            grid.borders[f] = bs^
+            grid.nan_treatment[f] = NAN_TREATMENT_AS_IS
+    elif len(one_hot_in) != 0:
+        raise Error("one_hot flags must be empty or one per feature")
+    _ = len(x_colmajor)
+    return one_hot^
+
+
+def gbdt_learn_permutation(
+    iteration: Int, random_seed: UInt64, perm_count: Int, est_p: Int
+) -> Int:
+    """Which permutation tree `iteration`'s STRUCTURE is searched on
+    (`doc_parallel_boosting.mojo`, their `TRandom(iteration + seed)`,
+    `Advance(10)`, `% (learnPermutationCount - 1)`, the modulus kept): the
+    greedy loop (`gbdt_host_boost`) and the pointwise searcher
+    (`gbdt_oracle_pointwise.mojo`) both call it (lane gbdt-cpu-rest-4-pwl,
+    2026-11-23: moved word for word out of `gbdt_host_boost`)."""
+    var learn_perm_count = perm_count - 1 if est_p != 0 else 1
+    var learn_p = est_p
+    if learn_perm_count > 1:
+        var rnd = TRandom(UInt64(iteration) + random_seed)
+        rnd.advance(10)
+        learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
+    return learn_p
+
+
 def gbdt_host_fit_eval(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -3825,6 +4025,8 @@ def gbdt_host_fit_eval(
     objective: Int = GBDT_BOOST_LOGLOSS,
     starting_approx: Float64 = 0.0,
     feature_fraction: Float64 = 1.0,
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    leaf_method: Int = LEAF_ESTIMATION_NEWTON,
 ) raises -> GbdtHostFitWithEval:
     """`train` then `fit_with_test` on the covered configuration (see the
     module docstring for what that is and what mirrors what).
@@ -3871,25 +4073,9 @@ def gbdt_host_fit_eval(
         params.border_build_max_samples, params.random_seed, params.nan_mode,
         params.border_type,
     )
-    var one_hot = List[Bool](length=n_features, fill=False)
-    if len(one_hot_in) == n_features:
-        for f in range(n_features):
-            if not one_hot_in[f]:
-                continue
-            one_hot[f] = True
-            var maxc = gbdt_onehot_max_code(
-                rebind[HostF32Ptr](x_colmajor.unsafe_ptr()) + f * n_rows, n_rows
-            )
-            if maxc > 254:
-                raise Error("one-hot feature " + String(f) + " has more than 255 categories")
-            var bs = List[Float32]()
-            for c in range(maxc):
-                bs.append(Float32(c) + Float32(0.5))
-            grid.fold_counts[f] = len(bs) + 1 if len(bs) > 0 else 0
-            grid.borders[f] = bs^
-            grid.nan_treatment[f] = NAN_TREATMENT_AS_IS
-    elif len(one_hot_in) != 0:
-        raise Error("one_hot flags must be empty or one per feature")
+    var one_hot = gbdt_host_one_hot_grid(
+        grid, x_colmajor, n_rows, n_features, one_hot_in
+    )
     var layout = build_layout(grid.fold_counts, one_hot)
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
 
@@ -3917,7 +4103,150 @@ def gbdt_host_fit_eval(
         cindexes, 0, y, n_rows, n_features, grid^, layout, params,
         bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
         no_tree_ctr, weights, objective, starting_approx, feature_fraction,
+        score_function, leaf_method,
     )
+
+
+# ---- the score and the partition chunk count at `stat_count` planes,
+# moved here from gbdt_oracle_multiclass.mojo (lane gbdt-cpu-rest-4-cat,
+# 2026-11-23): the multiclass loop and the tree-CTR level driver below
+# both call them ----
+
+
+def _stat_chunks(n_stats: Int) -> Int:
+    """The chunk count of `compute_partition_stats` at `n_stats` planes
+    (`partitions_reduce.mojo`): `(2 * 32 + n_stats - 1) // n_stats`, at
+    least one."""
+    return max((2 * GBDT_PINNED_SM + n_stats - 1) // n_stats, 1)
+
+
+def _cosine_gain_n(
+    hist: HostF32Ptr,
+    hist_cells: Int,
+    stat_count: Int,
+    part_stats: HostF32Ptr,
+    n_live: Int,
+    bin_feature_id: Int,
+    lambda_l2: Float32,
+    multiclass_optimization: Bool,
+    score_std_dev: Float32 = Float32(0.0),
+    level_seed: UInt64 = 0,
+    feature_id: Int = 0,
+    l2_score: Bool = False,
+) -> Float32:
+    """One bin-feature of `compute_optimal_splits_kernel[COSINE]`
+    (`compute_scores.mojo:140-224`) at `stat_count` planes: the per-class
+    `AddLeaf`s, the running totals, the multiclass optimization terms, the
+    sqrt normalization, per-feature noise, feature weight 1.0. `hist` and
+    `part_stats` are the level's storage by pointer (a task of
+    `_cosine_gains_n` calls this).
+
+    `l2_score` is `compute_optimal_splits_kernel[L2]` instead, the kernel
+    `enqueue_score` launches for the L2 score (lane gbdt-cpu-rest-4-sym,
+    2026-11-23): the same `AddLeaf` sequence through
+    `add_leaf_score[L2]` (`gbdt/methods/greedy_subsets_searcher/leafwise_score_body.mojo`), no
+    normalization and no noise (the device passes `score_std_dev` 0)."""
+    if l2_score:
+        var l2_sum = Float32(0.0)
+        var l2_denum = Float32(1e-10)
+        for i in range(n_live):
+            var leaf_base = i * stat_count * hist_cells
+            var weight_left = max(hist[leaf_base + bin_feature_id], Float32(0.0))
+            var weight_right = ftz(max(part_stats[i * stat_count] - weight_left, Float32(0.0)))
+            var total_sum_left = Float32(0.0)
+            var total_sum_part = Float32(0.0)
+            for stat_id in range(1, stat_count):
+                var sum_left = hist[leaf_base + stat_id * hist_cells + bin_feature_id]
+                var part_stat = part_stats[i * stat_count + stat_id]
+                var sum_right = ftz(part_stat - sum_left)
+                add_leaf_score[SCORE_FUNCTION_L2, False](sum_left, weight_left, lambda_l2, l2_sum, l2_denum)
+                add_leaf_score[SCORE_FUNCTION_L2, False](sum_right, weight_right, lambda_l2, l2_sum, l2_denum)
+                total_sum_left = ftz(total_sum_left + sum_left)
+                total_sum_part = ftz(total_sum_part + part_stat)
+            if multiclass_optimization:
+                var total_sum_right = ftz(total_sum_part - total_sum_left)
+                add_leaf_score[SCORE_FUNCTION_L2, False](-total_sum_left, weight_left, lambda_l2, l2_sum, l2_denum)
+                add_leaf_score[SCORE_FUNCTION_L2, False](-total_sum_right, weight_right, lambda_l2, l2_sum, l2_denum)
+        return ftz(ftz(l2_sum - Float32(0.0)) * Float32(1.0))
+    var score = Float32(0.0)
+    var denum_sqr = Float32(1e-10)
+    for i in range(n_live):
+        var leaf_base = i * stat_count * hist_cells
+        var weight_left = max(hist[leaf_base + bin_feature_id], Float32(0.0))
+        var weight_right = ftz(max(part_stats[i * stat_count] - weight_left, Float32(0.0)))
+        var total_sum_left = Float32(0.0)
+        var total_sum_part = Float32(0.0)
+        for stat_id in range(1, stat_count):
+            var sum_left = hist[leaf_base + stat_id * hist_cells + bin_feature_id]
+            var part_stat = part_stats[i * stat_count + stat_id]
+            var sum_right = ftz(part_stat - sum_left)
+            _add_leaf_cosine(sum_left, weight_left, lambda_l2, score, denum_sqr)
+            _add_leaf_cosine(sum_right, weight_right, lambda_l2, score, denum_sqr)
+            total_sum_left = ftz(total_sum_left + sum_left)
+            total_sum_part = ftz(total_sum_part + part_stat)
+        if multiclass_optimization:
+            var total_sum_right = ftz(total_sum_part - total_sum_left)
+            _add_leaf_cosine(-total_sum_left, weight_left, lambda_l2, score, denum_sqr)
+            _add_leaf_cosine(-total_sum_right, weight_right, lambda_l2, score, denum_sqr)
+    var final_score = score
+    var score_before = Float32(0.0)
+    if denum_sqr > Float32(1e-15):
+        final_score = ftz(score / identical_sqrt(denum_sqr))
+    else:
+        final_score = -GBDT_FLOAT32_MAX
+    if score_std_dev != Float32(0.0):
+        var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
+        var draw = next_normal_f(seed)
+        var neg_draw = -draw[0]
+        final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
+        score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
+    return ftz(ftz(final_score - score_before) * Float32(1.0))
+
+
+def _cosine_gains_n(
+    hist: List[Float32],
+    hist_cells: Int,
+    stat_count: Int,
+    part_stats: List[Float32],
+    n_live: Int,
+    lambda_l2: Float32,
+    multiclass_optimization: Bool,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    bf_feature: List[Int],
+    l2_score: Bool = False,
+) -> List[Float32]:
+    """`compute_optimal_splits_kernel[COSINE]` (or `[L2]` under `l2_score`)
+    at `stat_count` planes over every bin-feature of a level:
+    `gains[bf] = _cosine_gain_n(bf)`.
+
+    THE SPLIT (lane gbdt-host-par): the unit is one candidate, the device
+    thread: its leaves in dense order, its planes in order, its own noise
+    draw (a function of the level seed and its feature). No candidate reads
+    another's sums, so the candidates run in `_gbdt_units` contiguous
+    ranges over `candidates x leaves x planes` AddLeaf pairs."""
+    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
+    var units = _gbdt_units(hist_cells, 8 * hist_cells * n_live * stat_count)
+    var chunk = host_predict_chunk(hist_cells, units)
+    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
+    var part_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var feat_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
+    var gains_p = rebind[HostF32Ptr](gains.unsafe_ptr())
+
+    def candidates(unit: Int) {imm chunk, imm hist_cells, imm stat_count, imm n_live, imm lambda_l2, imm multiclass_optimization, imm score_std_dev, imm level_seed, imm l2_score, imm hist_p, imm part_p, imm feat_p, imm gains_p}:
+        for bf in range(unit * chunk, min(hist_cells, (unit + 1) * chunk)):
+            gains_p[bf] = _cosine_gain_n(
+                hist_p, hist_cells, stat_count, part_p, n_live, bf,
+                lambda_l2, multiclass_optimization,
+                score_std_dev, level_seed, feat_p[bf], l2_score,
+            )
+
+    host_parallelize(candidates, units)
+    _ = len(hist)
+    _ = len(part_stats)
+    _ = len(bf_feature)
+    return gains^
+
 
 
 def _tree_ctr_levels_host(
@@ -3942,6 +4271,12 @@ def _tree_ctr_levels_host(
     mut p_sz: List[Int],
     mut out_features: List[Int],
     mut out_bins: List[Int],
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    # the stats planes (1 + the approx dimension) and MultiClass's pinned-
+    # class terms (lane gbdt-cpu-rest-4-cat, 2026-11-23): `run_tree_ctr_tree`
+    # takes `1 + approx_dim` planes; 2 is every one-output fit
+    stat_count: Int = 2,
+    multiclass_optimization: Bool = False,
 ) raises -> Int:
     """One oblivious tree with tree CTRs (feature combinations) on
     permutation `learn_p`'s index: the host column of `run_tree_ctr_tree`
@@ -3969,11 +4304,17 @@ def _tree_ctr_levels_host(
     Returns the live leaf count; `out_features` / `out_bins` are the
     accepted splits (a combination names its persist slot) and `row_index`,
     `stats`, `p_off`, `p_sz` the final partition. No level is speculated, so
-    there is nothing to roll back."""
+    there is nothing to roll back.
+
+    At `stat_count` above 2 (MultiClass, MultiClassOneVsAll) the level's
+    statements are the multiclass loop's (`gbdt_oracle_multiclass.mojo`):
+    the `_n` histogram blocks, the scan, subtraction and split at every
+    plane, the partition stats at `_stat_chunks(stat_count)` chunks and
+    `_cosine_gains_n`; at 2 they are the one-output loop's, unchanged."""
     var hist_cells = layout.hist_cells
     var max_leaves = 1 << max_depth
     var hist = List[Float32](
-        length=max_leaves * 2 * hist_cells, fill=Float32(0.0)
+        length=max_leaves * stat_count * hist_cells, fill=Float32(0.0)
     )
     var ids_compute = List[Int](length=max_leaves, fill=0)
     var sub_from = List[Int](length=max_leaves, fill=0)
@@ -4000,7 +4341,25 @@ def _tree_ctr_levels_host(
             var total = 0
             for k in range(blk.count()):
                 total += Int(blk.folds[k])
-            if blk.policy == POLICY_BINARY:
+            if blk.policy == POLICY_BINARY and stat_count != 2:
+                _binary_block_n(
+                    blk, block_first_bin, hist_cells, stat_count, compute,
+                    depth, p_off, p_sz, row_index, stats, cindexes[learn_p],
+                    n_rows, fixed_scale, hist,
+                )
+            elif blk.policy == POLICY_HALF_BYTE and stat_count != 2:
+                _half_byte_block_n(
+                    blk, block_first_bin, hist_cells, stat_count, compute,
+                    depth, p_off, p_sz, row_index, stats, cindexes[learn_p],
+                    n_rows, fixed_scale, hist,
+                )
+            elif blk.policy == POLICY_ONE_BYTE and stat_count != 2:
+                _one_byte_block_n(
+                    blk, block_first_bin, hist_cells, stat_count, compute,
+                    p_off, p_sz, row_index, stats, cindexes[learn_p], layout,
+                    n_rows, fixed_scale, hist,
+                )
+            elif blk.policy == POLICY_BINARY:
                 _binary_block(
                     blk, block_first_bin, hist_cells, compute, depth,
                     p_off, p_sz, row_index, stats, cindexes[learn_p], n_rows,
@@ -4021,22 +4380,34 @@ def _tree_ctr_levels_host(
             block_first_bin += total
 
         # `scan_histograms_kernel` over the computed leaves
-        _scan_histograms(hist, hist_cells, 2, compute, layout, n_features)
+        _scan_histograms(hist, hist_cells, stat_count, compute, layout, n_features)
 
         # `substract_histograms_kernel`: the larger sibling, in place
         if planned and half > 0:
-            _subtract_histograms(hist, hist_cells, sub_from, sub_what, half)
+            _subtract_histograms(hist, hist_cells, sub_from, sub_what, half, stat_count)
 
         # `compute_partition_stats` over the live leaves
         var part_stats = _partition_stats_level(
-            stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
+            stats, n_rows, stat_count, _stat_chunks(stat_count), p_off, p_sz,
+            n_live,
         )
 
-        # the score and the device winner
-        var gains = _cosine_gains(
-            hist, hist_cells, part_stats, n_live, l2_leaf_reg,
-            score_std_dev, level_seed, bf_feature,
-        )
+        # the score and the device winner (`enqueue_score`'s dispatch, lanes
+        # gbdt-cpu-rest-4-sym and -cat): the multi-plane cosine / L2 kernel
+        # past two stats planes, the one-output dispatch at two
+        var gains: List[Float32]
+        if stat_count != 2:
+            gains = _cosine_gains_n(
+                hist, hist_cells, stat_count, part_stats, n_live, l2_leaf_reg,
+                multiclass_optimization, score_std_dev, level_seed, bf_feature,
+                score_function == SCORE_FUNCTION_L2
+                or score_function == SCORE_FUNCTION_NEWTON_L2,
+            )
+        else:
+            gains = _greedy_gains(
+                score_function, hist, hist_cells, part_stats, n_live, l2_leaf_reg,
+                score_std_dev, level_seed, bf_feature,
+            )
         var best_bin = _gain_winner(gains, hist_cells)
         var best_gain = -GBDT_FLOAT32_MAX
         if best_bin != GBDT_SENTINEL:
@@ -4080,7 +4451,7 @@ def _tree_ctr_levels_host(
             cindexes[learn_p], Int(sfeat.offset) * n_rows, sfeat.mask << sfeat.shift,
             UInt32(split_b) << sfeat.shift, sfeat.one_hot_feature, n_rows,
             n_live, hist_cells, row_index, stats, p_off, p_sz, hist,
-            ids_compute, sub_from, sub_what,
+            ids_compute, sub_from, sub_what, stat_count,
         )
         n_live = n_live * 2
         if depth + 1 < max_depth:
@@ -4216,6 +4587,8 @@ def gbdt_host_boost(
     objective: Int = GBDT_BOOST_LOGLOSS,
     starting_approx: Float64 = 0.0,
     feature_fraction: Float64 = 1.0,
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    leaf_method: Int = LEAF_ESTIMATION_NEWTON,
 ) raises -> GbdtHostFitWithEval:
     """`fit_with_test`'s Plain SymmetricTree Logloss and RMSE loop over ONE compressed
     index PER PERMUTATION (`gbdt/methods/doc_parallel_boosting.mojo:1821-1860`,
@@ -4265,14 +4638,29 @@ def gbdt_host_boost(
     `fma(leaf, rate, cursor)` until this lane, a CPU-only difference,
     so the CPU column's Logloss bits change toward the device's).
     `starting_approx` is not written to the model here; the caller writes
-    the `bias` record (`gbdt_text_with_bias`)."""
+    the `bias` record (`gbdt_text_with_bias`).
+
+    THE SCORE, THE LEAVES, THE START (lane gbdt-cpu-rest-4-sym,
+    2026-11-23; this loop was Cosine, Newton leaves, RMSE at one iteration
+    and a zero Logloss start only). `score_function` is the device's
+    `enqueue_score` dispatch (`_greedy_gains`: the L2 kernel for L2 and
+    NewtonL2, the cosine kernel for Cosine and NewtonCosine) over the
+    search planes `secondDerAsWeights` keys (`is_second_order_score_function`:
+    plane 0 the weighted second derivative under the Newton scores).
+    `leaf_method` is the walker's second derivatives (Newton or Gradient,
+    `_estimate_leaves`) at `params.leaf_estimation_iterations`; the
+    searcher's own leaves stand where the device's `need_estimation` is
+    False: Simple (`leaf_method` LEAF_ESTIMATION_SIMPLE, every permutation
+    count: only the learn permutation's cursor moves; lane
+    gbdt-cpu-rest-4-simple, 2026-11-23) and DEVIATION 64 (RMSE, Newton, one
+    iteration, one permutation). A Logloss fit takes `starting_approx` exactly as RMSE does
+    (every cursor filled with it: `boost_from_average`)."""
     var is_rmse = objective == GBDT_BOOST_RMSE
     if not is_rmse and objective != GBDT_BOOST_LOGLOSS:
         raise Error("gbdt_host_boost: objective must be Logloss or RMSE")
-    if is_rmse and params.leaf_estimation_iterations != 1:
-        raise Error("gbdt_host_boost: RMSE takes Newton leaves at one iteration only")
-    if not is_rmse and starting_approx != 0.0:
-        raise Error("gbdt_host_boost: Logloss starts every cursor at zero here")
+    if leaf_method != LEAF_ESTIMATION_NEWTON and leaf_method != LEAF_ESTIMATION_GRADIENT and leaf_method != LEAF_ESTIMATION_SIMPLE:
+        raise Error("gbdt_host_boost: leaves are Newton, Gradient or Simple here")
+    var second_order = is_second_order_score_function(score_function)
     if len(tree_ctr) > 1:
         raise Error("a fit takes at most one tree-CTR state")
     var tree_on = len(tree_ctr) == 1
@@ -4376,21 +4764,19 @@ def gbdt_host_boost(
     for iteration in range(params.n_estimators):
         # ---- which permutation the STRUCTURE is searched on
         # (`doc_parallel_boosting.mojo:2192-2219`), their modulus kept ----
-        var learn_perm_count = perm_count - 1 if est_p != 0 else 1
-        var learn_p = est_p
-        if learn_perm_count > 1:
-            var rnd = TRandom(UInt64(iteration) + params.random_seed)
-            rnd.advance(10)
-            learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
+        var learn_p = gbdt_learn_permutation(
+            iteration, params.random_seed, perm_count, est_p
+        )
         # ---- the gradients, the learn loss and the magnitudes ----
         if is_rmse:
             _rmse_search_pass(
-                y, cursors[learn_p], n_rows, stats, fv_part, mag_part, weights
+                y, cursors[learn_p], n_rows, stats, fv_part, mag_part, weights,
+                second_order,
             )
         else:
             _logloss_search_pass(
                 y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part,
-                weights,
+                weights, second_order,
             )
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
@@ -4475,6 +4861,7 @@ def gbdt_host_boost(
                 s_bf_feature, s_bf_bin, n_rows, n_features, max_depth,
                 params.l2_leaf_reg, score_std_dev, fixed_scale, level_rand,
                 row_index, stats, p_off, p_sz, tc_features, tc_bins,
+                score_function,
             )
         ref cindex = cindexes[learn_p]
         for depth in range(0 if tree_on else max_depth):
@@ -4529,9 +4916,9 @@ def gbdt_host_boost(
             )
 
             # the score and the device winner
-            var gains = _cosine_gains(
-                hist, s_hist_cells, part_stats, n_live, params.l2_leaf_reg,
-                score_std_dev, level_seed, s_bf_feature,
+            var gains = _greedy_gains(
+                score_function, hist, s_hist_cells, part_stats, n_live,
+                params.l2_leaf_reg, score_std_dev, level_seed, s_bf_feature,
             )
             var best_bin = _gain_winner(gains, s_hist_cells)
             var best_gain = -GBDT_FLOAT32_MAX
@@ -4620,10 +5007,19 @@ def gbdt_host_boost(
         # `est_scaled` is the estimation permutation's `round(leaf * rate)`,
         # the stored model's values
         var est_scaled = List[Float32]()
-        if is_rmse and perm_count == 1:
-            # DEVIATION 64 (`need_estimation` False): the searcher's own
-            # leaves off the final partition of the stats planes, the
-            # `apply_to_cursor` tail (`greedy_search_helper.mojo:5692-5739`)
+        if leaf_method == LEAF_ESTIMATION_SIMPLE or (
+            is_rmse and perm_count == 1
+            and leaf_method == LEAF_ESTIMATION_NEWTON
+            and params.leaf_estimation_iterations == 1
+        ):
+            # the device's `need_estimation` False (Simple, and DEVIATION
+            # 64): the searcher's own leaves off the final partition of the
+            # stats planes, the `apply_to_cursor` tail
+            # (`greedy_search_helper.mojo` `run_tree_layout_traced`), added
+            # to the LEARN permutation's cursor only; the model stores them,
+            # and no other permutation's cursor moves (the device runs no
+            # estimation loop; lane gbdt-cpu-rest-4-simple, 2026-11-23: was
+            # RMSE at Newton 1 and one permutation only)
             var leaf_sums = _partition_stats_level(
                 stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, n_live
             )
@@ -4634,7 +5030,7 @@ def gbdt_host_boost(
                 )
             est_scaled = rescaled_leaves(leaf_values, lr)
             apply_scaled_leaves_host(
-                cursors[0], est_scaled, row_index, offsets, sizes, n_live
+                cursors[learn_p], est_scaled, row_index, offsets, sizes, n_live
             )
         else:
             for p in range(perm_count):  # driver-loop: over the permutations
@@ -4646,6 +5042,7 @@ def gbdt_host_boost(
                         y, cursors[p], row_index, offsets, sizes, n_rows,
                         border, params.l2_leaf_reg,
                         params.leaf_estimation_iterations, weights, objective,
+                        leaf_method,
                     )
                     scaled = rescaled_leaves(est_p_leaves, lr)
                     apply_scaled_leaves_host(
@@ -4661,6 +5058,7 @@ def gbdt_host_boost(
                         y, cursors[p], part.row_index, part.offsets,
                         part.sizes, n_rows, border, params.l2_leaf_reg,
                         params.leaf_estimation_iterations, weights, objective,
+                        leaf_method,
                     )
                     scaled = rescaled_leaves(est_p_leaves, lr)
                     apply_scaled_leaves_host(

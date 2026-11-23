@@ -21,9 +21,11 @@ trees, MultiClass on the three-class target with class weights
 [1, 2, 0.5]. `gbdt-onevsall`: 20 depth-6 trees, MultiClassOneVsAll on the
 same target. The public stochastic defaults are also supported: Bayesian,
 Bernoulli and Poisson bootstrap scale every derivative plane; the score
-noise variance reconstructs MultiClass's pinned derivative plane. Leaves are Newton at
-one iteration (`catboost_options.mojo:1314-1321`); the binding refuses by
-name what is outside.
+noise variance reconstructs MultiClass's pinned derivative plane. Leaves are
+the device's multi-dimensional walk (`device_walker.mojo::
+device_multi_walk_estimate`): Newton or Gradient at any iteration count,
+the defaults `set_leaves_estimation_default`'s (lane gbdt-cpu-rest-4-tail,
+2026-11-23; one Newton step before).
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build defaults)
 
@@ -67,14 +69,20 @@ tools/identity_break.py on the two lanes is the measurement.
 from std.math import exp, fma, isfinite, log
 from gbdt.data.permutation import TRandom
 from gbdt.data.class_weight_body import class_weight_slot, class_weighted
-from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
+from gbdt.options.catboost_options import (
+    LEAF_ESTIMATION_GRADIENT,
+    LEAF_ESTIMATION_NEWTON,
+    SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_L2,
+    SCORE_FUNCTION_NEWTON_COSINE,
+    SCORE_FUNCTION_NEWTON_L2,
+)
 
 from checks.numerics import (
     ftz,
     identical_exp,
     identical_log,
     identical_mul_add,
-    identical_sqrt,
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
@@ -100,7 +108,6 @@ from gbdt.host.gbdt_oracle import (
     GBDT_SENTINEL,
     GBDT_STATS_BLOCK,
     GbdtHostParams,
-    _add_leaf_cosine,
     _bootstrap_pass,
     _snap_gradients,
     _target_std_dev,
@@ -126,7 +133,26 @@ from gbdt.host.gbdt_oracle import (
     _nan_token,
     _ns_project_index,
     _sample_tree_folds,
+    # moved to gbdt_oracle (lane gbdt-cpu-rest-4-cat, 2026-11-23): the
+    # tree-CTR level driver scores at `stat_count` planes with them too
+    _cosine_gain_n,
+    _cosine_gains_n,
+    _stat_chunks,
+    # the categorical arm (lane gbdt-cpu-rest-4-cat, 2026-11-23)
+    GbdtHostGrid,
+    GbdtHostModel,
+    _partition_for_model,
+    _tree_ctr_levels_host,
 )
+from gbdt.host.gbdt_oracle_ctr import (
+    _ctr_copy_into,
+    gbdt_ctr_host_model_text_of,
+    gbdt_ctr_host_prelude,
+    gbdt_ctr_host_tail,
+)
+from gbdt.host.gbdt_oracle_tree_ctr import GbdtTreeCtrHost
+from gbdt.models.combination_map import TCombinationCtrs
+from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.host.gbdt_oracle_eval import (
     GbdtHostEval,
     GbdtHostEvalFit,
@@ -168,17 +194,17 @@ struct GbdtHostMultiModel(Movable):
 @fieldwise_init
 struct GbdtHostMultiFit(Movable):
     """`gbdt_multi_host_fit`'s pair: the ensemble and what its HELD-OUT arm
-    reports (`GbdtHostEvalFit`), as `GbdtHostFitWithEval` for one output."""
+    reports (`GbdtHostEvalFit`), as `GbdtHostFitWithEval` for one output;
+    and, for a categorical fit (lane gbdt-cpu-rest-4-cat, 2026-11-23), what
+    its model text needs beside the ensemble (`GbdtCtrHostFit`'s parts:
+    empty, 0 and none for a numeric fit)."""
 
     var model: GbdtHostMultiModel
     var eval: GbdtHostEvalFit
-
-
-def _stat_chunks(n_stats: Int) -> Int:
-    """The chunk count of `compute_partition_stats` at `n_stats` planes
-    (`partitions_reduce.mojo`): `(2 * 32 + n_stats - 1) // n_stats`, at
-    least one."""
-    return max((2 * GBDT_PINNED_SM + n_stats - 1) // n_stats, 1)
+    var one_hot: List[Bool]
+    var tables: List[TCtrValueTable]
+    var ctr_column_count: Int
+    var combination_ctrs: TCombinationCtrs
 
 
 # ===========================================================================
@@ -356,199 +382,34 @@ def _multi_pass(
 # ===========================================================================
 
 
-def _cosine_gain_n(
-    hist: HostF32Ptr,
-    hist_cells: Int,
-    stat_count: Int,
-    part_stats: HostF32Ptr,
-    n_live: Int,
-    bin_feature_id: Int,
-    lambda_l2: Float32,
-    multiclass_optimization: Bool,
-    score_std_dev: Float32 = Float32(0.0),
-    level_seed: UInt64 = 0,
-    feature_id: Int = 0,
-) -> Float32:
-    """One bin-feature of `compute_optimal_splits_kernel[COSINE]`
-    (`compute_scores.mojo:140-224`) at `stat_count` planes: the per-class
-    `AddLeaf`s, the running totals, the multiclass optimization terms, the
-    sqrt normalization, per-feature noise, feature weight 1.0. `hist` and
-    `part_stats` are the level's storage by pointer (a task of
-    `_cosine_gains_n` calls this)."""
-    var score = Float32(0.0)
-    var denum_sqr = Float32(1e-10)
-    for i in range(n_live):
-        var leaf_base = i * stat_count * hist_cells
-        var weight_left = max(hist[leaf_base + bin_feature_id], Float32(0.0))
-        var weight_right = ftz(max(part_stats[i * stat_count] - weight_left, Float32(0.0)))
-        var total_sum_left = Float32(0.0)
-        var total_sum_part = Float32(0.0)
-        for stat_id in range(1, stat_count):
-            var sum_left = hist[leaf_base + stat_id * hist_cells + bin_feature_id]
-            var part_stat = part_stats[i * stat_count + stat_id]
-            var sum_right = ftz(part_stat - sum_left)
-            _add_leaf_cosine(sum_left, weight_left, lambda_l2, score, denum_sqr)
-            _add_leaf_cosine(sum_right, weight_right, lambda_l2, score, denum_sqr)
-            total_sum_left = ftz(total_sum_left + sum_left)
-            total_sum_part = ftz(total_sum_part + part_stat)
-        if multiclass_optimization:
-            var total_sum_right = ftz(total_sum_part - total_sum_left)
-            _add_leaf_cosine(-total_sum_left, weight_left, lambda_l2, score, denum_sqr)
-            _add_leaf_cosine(-total_sum_right, weight_right, lambda_l2, score, denum_sqr)
-    var final_score = score
-    var score_before = Float32(0.0)
-    if denum_sqr > Float32(1e-15):
-        final_score = ftz(score / identical_sqrt(denum_sqr))
-    else:
-        final_score = -GBDT_FLOAT32_MAX
-    if score_std_dev != Float32(0.0):
-        var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
-        var draw = next_normal_f(seed)
-        var neg_draw = -draw[0]
-        final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
-        score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
-    return ftz(ftz(final_score - score_before) * Float32(1.0))
-
-
-def _cosine_gains_n(
-    hist: List[Float32],
-    hist_cells: Int,
-    stat_count: Int,
-    part_stats: List[Float32],
-    n_live: Int,
-    lambda_l2: Float32,
-    multiclass_optimization: Bool,
-    score_std_dev: Float32,
-    level_seed: UInt64,
-    bf_feature: List[Int],
-) -> List[Float32]:
-    """`compute_optimal_splits_kernel[COSINE]` at `stat_count` planes over
-    every bin-feature of a level: `gains[bf] = _cosine_gain_n(bf)`.
-
-    THE SPLIT (lane gbdt-host-par): the unit is one candidate, the device
-    thread: its leaves in dense order, its planes in order, its own noise
-    draw (a function of the level seed and its feature). No candidate reads
-    another's sums, so the candidates run in `_gbdt_units` contiguous
-    ranges over `candidates x leaves x planes` AddLeaf pairs."""
-    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
-    var units = _gbdt_units(hist_cells, 8 * hist_cells * n_live * stat_count)
-    var chunk = host_predict_chunk(hist_cells, units)
-    var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
-    var part_p = rebind[HostF32Ptr](part_stats.unsafe_ptr())
-    var feat_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
-    var gains_p = rebind[HostF32Ptr](gains.unsafe_ptr())
-
-    def candidates(unit: Int) {imm chunk, imm hist_cells, imm stat_count, imm n_live, imm lambda_l2, imm multiclass_optimization, imm score_std_dev, imm level_seed, imm hist_p, imm part_p, imm feat_p, imm gains_p}:
-        for bf in range(unit * chunk, min(hist_cells, (unit + 1) * chunk)):
-            gains_p[bf] = _cosine_gain_n(
-                hist_p, hist_cells, stat_count, part_p, n_live, bf,
-                lambda_l2, multiclass_optimization,
-                score_std_dev, level_seed, feat_p[bf],
-            )
-
-    host_parallelize(candidates, units)
-    return gains^
-
-
 # ===========================================================================
 # THE ESTIMATION (`pointwise_oracle.mojo`, `descent_helpers.mojo`)
 # ===========================================================================
 
 
-def _estimate_multi(
+def _multi_evaluate(
     objective: Int,
     num_classes: Int,
-    targets: List[Float32],
-    weights: List[Float32],
+    g_target: List[Float32],
+    g_weights: List[Float32],
     has_weights: Bool,
-    cursor: List[Float32],
-    row_index: List[Int],
+    g_cursor: List[Float32],
     offsets: List[Int],
     sizes: List[Int],
     n_rows: Int,
-    l2_leaf_reg: Float32,
-) raises -> List[Float32]:
-    """`_estimate_and_apply`'s estimate at one Newton iteration: the gathers,
-    `WeightsCpu`, the walker's first evaluation (move to zero, value and der
-    planes, the MultiClass reconstruction), `write_second_derivatives`
-    (blocked for MultiClass, diagonal for OneVsAll), the direction, the one
-    step, `RegularizeImpl` and `MakeEstimationResult`. Returns
-    `n_leaves * cursor_dim` values, bin-major."""
+    mut value: Float64,
+) -> List[Float64]:
+    """`enqueue_multi_dim_evaluation` + the walk's gradient and value
+    (`device_walker.mojo`): the value-and-der launch at the oracle's cursor,
+    the `(leaf, dim)` der sums (`compute_partition_stats` at `cursor_dim`
+    planes), the value partials folded in `deterministic_sum_lanes_kernel
+    [1]`'s order (`walker_fold_decide_kernel`), and the `SingleBinDim()`-wide
+    gradient, MultiClass's pinned component `-(0 + der[0] + der[1] + ...)`
+    in dim order. Returns `n_leaves * num_classes` doubles, bin-major."""
     var n_leaves = len(sizes)
     var is_mc = objective == GBDT_OBJ_MULTICLASS
-    var is_mrmse = objective == GBDT_OBJ_MULTIRMSE
     var cursor_dim = num_classes - 1 if is_mc else num_classes
     var sbd = num_classes
-    # MultiRMSE's target is `num_classes` dim-major planes, gathered plane
-    # by plane like the cursor (`launch_gather_planes_with_mask_f32`)
-    var target_planes = num_classes if is_mrmse else 1
-    var g_target = List[Float32](length=target_planes * n_rows, fill=Float32(0.0))
-    var g_weights = List[Float32](length=n_rows, fill=Float32(0.0))
-    var g_cursor = List[Float32](length=cursor_dim * n_rows, fill=Float32(0.0))
-    # `move_to(zeros)`: the shift is 0.0 per (bin, dim), added per row
-    var bins = List[Int](length=n_rows, fill=0)
-    var shift = List[Float32](length=n_leaves * cursor_dim, fill=Float32(0.0))
-    # THE SPLIT (lane gbdt-host-par): the gathers, the bins and the shift
-    # are one statement per (position, plane), a device thread a position:
-    # a task owns a run of positions (a leaf's range clipped to it)
-    var g_units = _gbdt_units(n_rows, (2 + target_planes + 3 * cursor_dim) * n_rows)
-    var g_chunk = host_predict_chunk(n_rows, g_units)
-    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
-    # an empty `weights` is never read (`has_weights` guards it)
-    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
-    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
-    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
-    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
-    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
-    var gt_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
-    var gw_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
-    var gc_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
-    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
-    var shift_p = rebind[HostF32Ptr](shift.unsafe_ptr())
-
-    def gather(unit: Int) {imm g_chunk, imm n_rows, imm n_leaves, imm target_planes, imm cursor_dim, imm has_weights, imm targets_p, imm weights_p, imm cursor_p, imm row_p, imm off_p, imm sz_p, imm gt_p, imm gw_p, imm gc_p, imm bins_p, imm shift_p}:
-        var lo = unit * g_chunk
-        var hi = min(lo + g_chunk, n_rows)
-        for pos in range(lo, hi):
-            var row = row_p[pos]
-            for t in range(target_planes):
-                gt_p[t * n_rows + pos] = targets_p[t * n_rows + row]
-            if has_weights:
-                gw_p[pos] = weights_p[row]
-            for k in range(cursor_dim):
-                gc_p[k * n_rows + pos] = cursor_p[k * n_rows + row]
-        for leaf in range(n_leaves):
-            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
-                bins_p[pos] = leaf
-        for pos in range(lo, hi):
-            for d in range(cursor_dim):
-                gc_p[d * n_rows + pos] = gc_p[d * n_rows + pos] + shift_p[bins_p[pos] * cursor_dim + d]
-
-    host_parallelize(gather, g_units)
-    _ = len(targets)
-    _ = len(weights)
-    _ = len(cursor)
-    _ = len(row_index)
-    _ = len(bins)
-    _ = len(shift)
-    var weights_cpu = List[Float64]()
-    if has_weights:
-        # `compute_partition_stats` of the gathered weights at ONE stat (64
-        # chunks), the leaves' launches across the cores
-        var weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
-        _pinned_partition_stats(
-            g_weights, offsets, sizes, 2 * GBDT_PINNED_SM, weight_sums
-        )
-        for leaf in range(n_leaves):  # driver-loop: over the leaves
-            weights_cpu.append(Float64(weight_sums[leaf]))
-    else:
-        for leaf in range(n_leaves):  # driver-loop: over the leaves
-            weights_cpu.append(Float64(sizes[leaf]))
-    var lambda_reg = Float64(l2_leaf_reg)
-    comptime if GBDT_ORACLE_HOST_SABOTAGE:
-        lambda_reg = lambda_reg + 1.0
-
-    # `write_value_and_first_derivatives`' multi-dimensional arm
     var der = List[Float32](length=sbd * n_rows, fill=Float32(0.0))
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_part = List[Float32](length=blocks, fill=Float32(0.0))
@@ -557,29 +418,67 @@ def _estimate_multi(
         objective, num_classes, g_target, g_weights, has_weights, g_cursor,
         n_rows, False, False, der, fv_part, mag_dummy,
     )
+    value = Float64(_deterministic_sum_lanes(fv_part, 1, blocks)[0])
     # the (leaf, dim) sums: `compute_partition_stats` at `cursor_dim` planes
     # (`_stat_chunks`), the launches across the cores
     var der_sums = _partition_stats_level(
         der, n_rows, cursor_dim, _stat_chunks(cursor_dim), offsets, sizes, n_leaves
     )
-    var der_at_point = List[Float64]()
-    for i in range(n_leaves * cursor_dim):  # driver-loop: over (leaf, dim)
-        der_at_point.append(Float64(der_sums[i]))
     var gradient = List[Float64](length=n_leaves * sbd, fill=Float64(0.0))
-    if not is_mc:
-        for i in range(n_leaves * cursor_dim):
-            gradient[i] = der_at_point[i]
-    else:
-        for bin in range(n_leaves):
-            var total = Float64(0.0)
-            for d in range(cursor_dim):
-                var val = der_at_point[bin * cursor_dim + d]
-                gradient[bin * sbd + d] = val
-                total += val
+    for bin in range(n_leaves):  # driver-loop: over (leaf, dim)
+        var total = Float64(0.0)
+        for d in range(cursor_dim):
+            var val = Float64(der_sums[bin * cursor_dim + d])
+            gradient[bin * sbd + d] = val
+            total += val
+        if is_mc:
             gradient[bin * sbd + cursor_dim] = -total
+    return gradient^
 
-    # `write_second_derivatives` and the direction
+
+def _multi_direction(
+    objective: Int,
+    num_classes: Int,
+    method: Int,
+    g_weights: List[Float32],
+    has_weights: Bool,
+    g_cursor: List[Float32],
+    offsets: List[Int],
+    sizes: List[Int],
+    n_rows: Int,
+    gradient: List[Float64],
+    weights_cpu: List[Float64],
+    lambda_reg: Float64,
+) raises -> List[Float32]:
+    """`_multi_accept`'s direction at the oracle's cursor
+    (`device_walker.mojo`): NEWTON blocked (MultiClass, MultiRMSE:
+    `write_second_derivatives` row by row, `+ lambda` on the diagonal, the
+    per-leaf Cholesky, a non-positive pivot leaving the gradient, DEVIATION
+    74) or diagonal (OneVsAll: `double(der2) + lambda`); GRADIENT diagonal
+    for every loss (`double(WeightsCpu[leaf]) + lambda` for every one of the
+    `SingleBinDim()` components, `multi_walker_diag_direction_kernel`);
+    `dir = hess > 0 ? float(g / (hess + double(1e-20f))) : 0` on the
+    diagonal arms."""
+    var n_leaves = len(sizes)
+    var is_mc = objective == GBDT_OBJ_MULTICLASS
+    var is_mrmse = objective == GBDT_OBJ_MULTIRMSE
+    var cursor_dim = num_classes - 1 if is_mc else num_classes
+    var sbd = num_classes
+    comptime EPS_1E20F = Float64(Float32(1e-20))
     var direction = List[Float32](length=n_leaves * sbd, fill=Float32(0.0))
+    var gw_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
+    var gc_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    if method == LEAF_ESTIMATION_GRADIENT:
+        # `HessianBlockSize()` is 1 off Newton: the leaf weight is every
+        # component's Hessian
+        for bin in range(n_leaves):  # driver-loop: over (leaf, component)
+            var h = weights_cpu[bin] + lambda_reg
+            for d in range(sbd):
+                if h > 0:
+                    direction[bin * sbd + d] = Float32(gradient[bin * sbd + d] / (h + EPS_1E20F))
+                else:
+                    direction[bin * sbd + d] = Float32(0.0)
+        return direction^
     if is_mc or is_mrmse:
         # MultiRMSE is BLOCKED too: `GetHessianType()` names only OneVsAll
         # Diagonal (`multiclass_targets.h:118-123`)
@@ -659,55 +558,277 @@ def _estimate_multi(
             _ = solve_linear_system_cholesky(sigma, solution)
             for i in range(hbs):
                 direction[block_id * hbs + i] = Float32(solution[i])
-    else:
-        var der2 = List[Float32](length=cursor_dim * n_rows, fill=Float32(0.0))
-        # THE SPLIT (lane gbdt-host-par): one statement per (class, row),
-        # the rows in `_gbdt_units` contiguous ranges
-        var d_units = _gbdt_units(n_rows, 16 * num_classes * n_rows)
-        var d_chunk = host_predict_chunk(n_rows, d_units)
-        var der2_p = rebind[HostF32Ptr](der2.unsafe_ptr())
+        _ = len(g_cursor)
+        _ = len(g_weights)
+        return direction^
+    var der2 = List[Float32](length=cursor_dim * n_rows, fill=Float32(0.0))
+    # THE SPLIT (lane gbdt-host-par): one statement per (class, row),
+    # the rows in `_gbdt_units` contiguous ranges
+    var d_units = _gbdt_units(n_rows, 16 * num_classes * n_rows)
+    var d_chunk = host_predict_chunk(n_rows, d_units)
+    var der2_p = rebind[HostF32Ptr](der2.unsafe_ptr())
 
-        def diagonal_rows(unit: Int) {imm d_chunk, imm n_rows, imm num_classes, imm has_weights, imm gw_p, imm gc_p, imm der2_p}:
-            for clazz in range(num_classes):
-                for idx in range(unit * d_chunk, min(n_rows, (unit + 1) * d_chunk)):
-                    var weight = gw_p[idx] if has_weights else Float32(1.0)
-                    var val = gc_p[clazz * n_rows + idx]
-                    var exp_val = identical_exp(val)
-                    var p = _clip_prob(exp_val / (Float32(1.0) + exp_val))
-                    der2_p[clazz * n_rows + idx] = weight * p * (Float32(1.0) - p)
+    def diagonal_rows(unit: Int) {imm d_chunk, imm n_rows, imm num_classes, imm has_weights, imm gw_p, imm gc_p, imm der2_p}:
+        for clazz in range(num_classes):
+            for idx in range(unit * d_chunk, min(n_rows, (unit + 1) * d_chunk)):
+                var weight = gw_p[idx] if has_weights else Float32(1.0)
+                var val = gc_p[clazz * n_rows + idx]
+                var exp_val = identical_exp(val)
+                var p = _clip_prob(exp_val / (Float32(1.0) + exp_val))
+                der2_p[clazz * n_rows + idx] = weight * p * (Float32(1.0) - p)
 
-        host_parallelize(diagonal_rows, d_units)
-        comptime EPS_1E20F = Float64(Float32(1e-20))
-        var diag_sums = _partition_stats_level(
-            der2, n_rows, cursor_dim, _stat_chunks(cursor_dim), offsets, sizes, n_leaves
-        )
-        for bin in range(n_leaves):  # driver-loop: over (leaf, dim)
-            for d in range(cursor_dim):
-                var h = Float64(diag_sums[bin * cursor_dim + d]) + lambda_reg
-                var g = gradient[bin * sbd + d]
-                if h > 0:
-                    direction[bin * sbd + d] = Float32(g / (h + EPS_1E20F))
-                else:
-                    direction[bin * sbd + d] = Float32(0.0)
-
-    # the gathered planes the Hessian tasks read through pointers live to here
+    host_parallelize(diagonal_rows, d_units)
     _ = len(g_cursor)
     _ = len(g_weights)
-    # `_move(cur_point, direction, 1.0)`, `regularize`, `make_estimation_result`
-    var point = List[Float32](length=n_leaves * sbd, fill=Float32(0.0))
-    for i in range(n_leaves * sbd):
-        point[i] = Float32(Float64(Float32(0.0)) + 1.0 * Float64(direction[i]))
-    for bin in range(n_leaves):
-        if weights_cpu[bin] < 1e-20:
-            for d in range(sbd):
-                point[bin * sbd + d] = Float32(0.0)
-    if not is_mc:
-        return point^
-    var out = List[Float32]()
-    for bin in range(n_leaves):
+    var diag_sums = _partition_stats_level(
+        der2, n_rows, cursor_dim, _stat_chunks(cursor_dim), offsets, sizes, n_leaves
+    )
+    for bin in range(n_leaves):  # driver-loop: over (leaf, dim)
         for d in range(cursor_dim):
-            out.append(point[bin * sbd + d] - point[bin * sbd + cursor_dim])
+            var h = Float64(diag_sums[bin * cursor_dim + d]) + lambda_reg
+            var g = gradient[bin * sbd + d]
+            if h > 0:
+                direction[bin * sbd + d] = Float32(g / (h + EPS_1E20F))
+            else:
+                direction[bin * sbd + d] = Float32(0.0)
+    return direction^
+
+
+def _multi_step(
+    cur: List[Float32],
+    direction: List[Float32],
+    step: Float64,
+    weights_cpu: List[Float64],
+    sbd: Int,
+) -> List[Float32]:
+    """`multi_walker_move_kernel`'s move and regularize: `next[i] =
+    float(fma(step, double(dir[i]), double(cur[i])))` over the leaf's
+    `SingleBinDim()` components, every component +0.0 on a leaf whose
+    weight is under MinLeafWeight 1e-20."""
+    var n_leaves = len(weights_cpu)
+    var moved = List[Float32](length=n_leaves * sbd, fill=Float32(0.0))
+    for bin in range(n_leaves):  # driver-loop: over (leaf, component)
+        if weights_cpu[bin] < 1e-20:
+            continue
+        for d in range(sbd):
+            var i = bin * sbd + d
+            # one rounding, the kernel's correctly rounded fma
+            moved[i] = Float32(fma(step, Float64(direction[i]), Float64(cur[i])))
+    return moved^
+
+
+def _multi_project(
+    point: List[Float32], n_leaves: Int, cursor_dim: Int, sbd: Int, pinned: Bool
+) -> List[Float32]:
+    """`make_estimation_result` (`multi_walker_project_kernel`): the
+    walker's point to the cursor's gauge, MultiClass's float difference
+    `p[d] - p[pinned]`, every other loss a copy."""
+    var out = List[Float32](length=n_leaves * cursor_dim, fill=Float32(0.0))
+    for bin in range(n_leaves):  # driver-loop: over (leaf, dim)
+        for d in range(cursor_dim):
+            var v = point[bin * sbd + d]
+            if pinned:
+                v = v - point[bin * sbd + cursor_dim]
+            out[bin * cursor_dim + d] = v
     return out^
+
+
+def _multi_move_to(
+    point: List[Float32],
+    mut oracle_point: List[Float32],
+    bins: List[Int],
+    mut g_cursor: List[Float32],
+    n_rows: Int,
+    cursor_dim: Int,
+    sbd: Int,
+    pinned: Bool,
+):
+    """`MoveTo` (`multi_walker_move_kernel`'s apply arm, then
+    `add_bin_model_value_kernel`): `np = MakeEstimationResult(point)`,
+    `shift = np - CurrentPoint` (float), `CurrentPoint = np`, and every
+    position's cursor planes `+= shift[bin * cursor_dim + d]`, one
+    statement per (position, plane), the positions in `_gbdt_units`
+    contiguous ranges."""
+    var n_leaves = len(oracle_point) // cursor_dim if cursor_dim > 0 else 0
+    var np = _multi_project(point, n_leaves, cursor_dim, sbd, pinned)
+    var shift = List[Float32](length=n_leaves * cursor_dim, fill=Float32(0.0))
+    for i in range(n_leaves * cursor_dim):  # driver-loop: over (leaf, dim)
+        shift[i] = np[i] - oracle_point[i]
+        oracle_point[i] = np[i]
+    var units = _gbdt_units(n_rows, 2 * cursor_dim * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var gc_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    var shift_p = rebind[HostF32Ptr](shift.unsafe_ptr())
+
+    def add_rows(unit: Int) {imm chunk, imm n_rows, imm cursor_dim, imm bins_p, imm gc_p, imm shift_p}:
+        for pos in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            for d in range(cursor_dim):
+                gc_p[d * n_rows + pos] = gc_p[d * n_rows + pos] + shift_p[bins_p[pos] * cursor_dim + d]
+
+    host_parallelize(add_rows, units)
+    _ = len(bins)
+    _ = len(g_cursor)
+    _ = len(shift)
+
+
+def _estimate_multi(
+    objective: Int,
+    num_classes: Int,
+    targets: List[Float32],
+    weights: List[Float32],
+    has_weights: Bool,
+    cursor: List[Float32],
+    row_index: List[Int],
+    offsets: List[Int],
+    sizes: List[Int],
+    n_rows: Int,
+    l2_leaf_reg: Float32,
+    method: Int,
+    iterations: Int,
+) raises -> List[Float32]:
+    """`_estimate_and_apply`'s estimate for the multiclass family:
+    `device_walker.mojo::device_multi_walk_estimate` (`TNewtonLikeWalker::
+    Estimate` with AnyImprovement, `descent_helpers.cpp:128-204`) under
+    Newton or Gradient at any iteration count (lane gbdt-cpu-rest-4-tail,
+    2026-11-23; it restated one Newton step before). The gathers,
+    `WeightsCpu`, `MoveTo(0)`, the start evaluation (always taken) and its
+    direction; at one iteration one full step, regularize and project, no
+    re-evaluation; else the line search: move, `MoveTo`, evaluate, accept
+    when `value <= next_value` (then the direction at the new point and
+    step 1), else halve the step, at least `iterations` evaluations and up
+    to 100 while none was accepted. Returns `n_leaves * cursor_dim`
+    values, bin-major, in the cursor's gauge."""
+    var n_leaves = len(sizes)
+    var is_mc = objective == GBDT_OBJ_MULTICLASS
+    var is_mrmse = objective == GBDT_OBJ_MULTIRMSE
+    var cursor_dim = num_classes - 1 if is_mc else num_classes
+    var sbd = num_classes
+    # MultiRMSE's target is `num_classes` dim-major planes, gathered plane
+    # by plane like the cursor (`launch_gather_planes_with_mask_f32`)
+    var target_planes = num_classes if is_mrmse else 1
+    var g_target = List[Float32](length=target_planes * n_rows, fill=Float32(0.0))
+    var g_weights = List[Float32](length=n_rows, fill=Float32(0.0))
+    var g_cursor = List[Float32](length=cursor_dim * n_rows, fill=Float32(0.0))
+    # `move_to(zeros)`: the shift is 0.0 per (bin, dim), added per row
+    var bins = List[Int](length=n_rows, fill=0)
+    var shift = List[Float32](length=n_leaves * cursor_dim, fill=Float32(0.0))
+    # THE SPLIT (lane gbdt-host-par): the gathers, the bins and the shift
+    # are one statement per (position, plane), a device thread a position:
+    # a task owns a run of positions (a leaf's range clipped to it)
+    var g_units = _gbdt_units(n_rows, (2 + target_planes + 3 * cursor_dim) * n_rows)
+    var g_chunk = host_predict_chunk(n_rows, g_units)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var gt_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
+    var gw_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
+    var gc_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var shift_p = rebind[HostF32Ptr](shift.unsafe_ptr())
+
+    def gather(unit: Int) {imm g_chunk, imm n_rows, imm n_leaves, imm target_planes, imm cursor_dim, imm has_weights, imm targets_p, imm weights_p, imm cursor_p, imm row_p, imm off_p, imm sz_p, imm gt_p, imm gw_p, imm gc_p, imm bins_p, imm shift_p}:
+        var lo = unit * g_chunk
+        var hi = min(lo + g_chunk, n_rows)
+        for pos in range(lo, hi):
+            var row = row_p[pos]
+            for t in range(target_planes):
+                gt_p[t * n_rows + pos] = targets_p[t * n_rows + row]
+            if has_weights:
+                gw_p[pos] = weights_p[row]
+            for k in range(cursor_dim):
+                gc_p[k * n_rows + pos] = cursor_p[k * n_rows + row]
+        for leaf in range(n_leaves):
+            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
+                bins_p[pos] = leaf
+        for pos in range(lo, hi):
+            for d in range(cursor_dim):
+                gc_p[d * n_rows + pos] = gc_p[d * n_rows + pos] + shift_p[bins_p[pos] * cursor_dim + d]
+
+    host_parallelize(gather, g_units)
+    _ = len(targets)
+    _ = len(weights)
+    _ = len(cursor)
+    _ = len(row_index)
+    _ = len(offsets)
+    _ = len(sizes)
+    _ = len(g_target)
+    _ = len(g_weights)
+    _ = len(g_cursor)
+    _ = len(bins)
+    _ = len(shift)
+    var weights_cpu = List[Float64]()
+    if has_weights:
+        # `compute_partition_stats` of the gathered weights at ONE stat (64
+        # chunks), the leaves' launches across the cores
+        var weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
+        _pinned_partition_stats(
+            g_weights, offsets, sizes, 2 * GBDT_PINNED_SM, weight_sums
+        )
+        for leaf in range(n_leaves):  # driver-loop: over the leaves
+            weights_cpu.append(Float64(weight_sums[leaf]))
+    else:
+        for leaf in range(n_leaves):  # driver-loop: over the leaves
+            weights_cpu.append(Float64(sizes[leaf]))
+    var lambda_reg = Float64(l2_leaf_reg)
+    comptime if GBDT_ORACLE_HOST_SABOTAGE:
+        lambda_reg = lambda_reg + 1.0
+
+    # the oracle's `CurrentPoint` (the cursor's gauge) and the walker's
+    # point (`SingleBinDim()` components), both at zero after `MoveTo(0)`
+    var oracle_point = List[Float32](length=n_leaves * cursor_dim, fill=Float32(0.0))
+    var cur = List[Float32](length=n_leaves * sbd, fill=Float32(0.0))
+    var cur_value = Float64(0.0)
+    var gradient = _multi_evaluate(
+        objective, num_classes, g_target, g_weights, has_weights, g_cursor,
+        offsets, sizes, n_rows, cur_value,
+    )
+    var direction = _multi_direction(
+        objective, num_classes, method, g_weights, has_weights, g_cursor,
+        offsets, sizes, n_rows, gradient, weights_cpu, lambda_reg,
+    )
+    if iterations == 1:
+        # `:151-156`: one full step, regularize, no re-evaluation
+        var point = _multi_step(cur, direction, Float64(1.0), weights_cpu, sbd)
+        return _multi_project(point, n_leaves, cursor_dim, sbd, is_mc)
+    var updated = False
+    var iteration = 0
+    while iteration < iterations:
+        var step = Float64(1.0)
+        var accepted = False
+        while iteration < iterations or ((not updated) and iteration < 100):
+            var next_point = _multi_step(cur, direction, step, weights_cpu, sbd)
+            _multi_move_to(
+                next_point, oracle_point, bins, g_cursor, n_rows, cursor_dim,
+                sbd, is_mc,
+            )
+            var next_value = Float64(0.0)
+            var next_grad = _multi_evaluate(
+                objective, num_classes, g_target, g_weights, has_weights,
+                g_cursor, offsets, sizes, n_rows, next_value,
+            )
+            if cur_value <= next_value:
+                cur = next_point^
+                cur_value = next_value
+                direction = _multi_direction(
+                    objective, num_classes, method, g_weights, has_weights,
+                    g_cursor, offsets, sizes, n_rows, next_grad, weights_cpu,
+                    lambda_reg,
+                )
+                iteration += 1
+                updated = True
+                accepted = True
+                break
+            iteration += 1
+            step /= 2
+        if not accepted:
+            break
+    return _multi_project(cur, n_leaves, cursor_dim, sbd, is_mc)
+
 
 
 # ===========================================================================
@@ -765,8 +886,38 @@ def gbdt_multi_host_fit(
     sample_weights: List[Float32] = List[Float32](),
     # the per-tree feature sample (lane gbdt-cpu-rest-2, 2026-11-23)
     feature_fraction: Float64 = 1.0,
+    # the split score (lane gbdt-cpu-rest-4-sym, 2026-11-23): Cosine or L2;
+    # the second-order scores are refused on both columns in `fit_with_test`'s
+    # words (their `CB_ENSURE(!secondDerAsWeights)`)
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    # the categorical arm (lane gbdt-cpu-rest-4-cat, 2026-11-23): one flag
+    # per input feature (bit 0 categorical, bit 1 one-hot; empty: numeric)
+    # and `train`'s CTR options
+    flags: List[UInt32] = List[UInt32](),
+    permutation_count: Int = -1,
+    ctr_estimation_permutation_id: Int = -1,
+    max_ctr_complexity: Int = 1,
+    # the leaf walker (lane gbdt-cpu-rest-4-tail, 2026-11-23): Newton or
+    # Gradient at the count `set_leaves_estimation_default` resolves
+    # (Newton 1 on all three; Gradient 10 on MultiClass / OneVsAll, 1 on
+    # MultiRMSE), the device's `device_multi_walk_estimate`
+    leaf_method: Int = LEAF_ESTIMATION_NEWTON,
+    leaf_iterations: Int = 1,
 ) raises -> GbdtHostMultiFit:
     """`train` then `fit_with_test` on the covered configurations.
+
+    CATEGORICAL COLUMNS (`flags` not empty; lane gbdt-cpu-rest-4-cat,
+    2026-11-23): the columns, grids, tables and one compressed index per
+    permutation are `gbdt_oracle_ctr.mojo::gbdt_ctr_host_prelude`'s, as
+    `train` builds them for the device's `fit_with_test`; the loop then
+    runs `gbdt_host_boost`'s permutation statements at `dim` values per
+    leaf (the learn permutation off `TRandom(iteration + seed)`, one cursor
+    per permutation, every permutation estimating the tree on its own
+    partition, the model the estimation permutation's leaves), the
+    tree-CTR levels at `stat_count` planes (`_tree_ctr_levels_host`) when
+    `max_ctr_complexity` is above 1, and `gbdt_ctr_host_tail` for the
+    model's combination columns. A numeric fit is one permutation and no
+    combinations: the statements it always ran.
 
     `eval` is the HELD-OUT arm (lane gbdt-cpu-rest-2), the statements of
     `gbdt_oracle.mojo::gbdt_host_boost` at `dim` values per leaf: the test
@@ -784,6 +935,18 @@ def gbdt_multi_host_fit(
     `gbdt_host_boost` runs it."""
     if len(sample_weights) != 0 and len(sample_weights) != n_rows:
         raise Error("sample_weight size mismatch")
+    if score_function == SCORE_FUNCTION_NEWTON_L2 or score_function == SCORE_FUNCTION_NEWTON_COSINE:
+        # `fit_with_test`'s words (`doc_parallel_boosting.mojo`)
+        raise Error(
+            "MultiClass loss doesn't support second derivatives in tree"
+            " structure search currently (their CB_ENSURE,"
+            " `multiclass_targets.cpp:27`)"
+        )
+    if score_function != SCORE_FUNCTION_COSINE and score_function != SCORE_FUNCTION_L2:
+        raise Error(
+            "score_function has no calcer here; only Cosine, NewtonCosine, L2"
+            " and NewtonL2 are implemented"
+        )
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -844,24 +1007,6 @@ def gbdt_multi_host_fit(
     var dim = num_classes - 1 if is_mc else num_classes
     var stat_count = 1 + dim
 
-    var grid = gbdt_host_grid(
-        x_colmajor, n_rows, n_features, params.border_count,
-        params.border_build_max_samples, params.random_seed, params.nan_mode,
-        params.border_type,
-    )
-    var one_hot = List[Bool](length=n_features, fill=False)
-    var layout = build_layout(grid.fold_counts, one_hot)
-    var blocks = blocks_for(layout, n_rows)
-    var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
-    var hist_cells = layout.hist_cells
-    var bf_feature = List[Int](length=hist_cells, fill=0)
-    var bf_bin = List[Int](length=hist_cells, fill=0)
-    for f in range(n_features):
-        ref lf = layout.features[f]
-        for b in range(Int(lf.folds)):
-            bf_feature[Int(lf.first_fold_index) + b] = f
-            bf_bin[Int(lf.first_fold_index) + b] = b
-
     # ---- the HELD-OUT arm (gbdt/host/gbdt_oracle_eval.mojo) ----
     ref ev = eval
     var has_test = ev.n_rows > 0
@@ -877,11 +1022,78 @@ def gbdt_multi_host_fit(
         if len(ev.y) != ev.n_rows:
             raise Error("eval_set y size mismatch")
     var n_eval = ev.n_rows if has_test else 1
+
+    # ---- the columns, the grid, the layout and one compressed index per
+    # permutation. A numeric fit: the float grid over the input, ONE index
+    # (the loop below is then statement for statement the one this function
+    # held before the categorical arm). A CATEGORICAL fit (lane
+    # gbdt-cpu-rest-4-cat, 2026-11-23): `train`'s column loop through the
+    # one host spelling every categorical fit shares
+    # (`gbdt_oracle_ctr.mojo::gbdt_ctr_host_prelude`: the one-hot and CTR
+    # columns, the per-permutation CTR columns, the tables, the tree-CTR
+    # slots at `max_ctr_complexity` above 1, the held-out index off the
+    # final tables), as the device's `train` builds them before the same
+    # `fit_with_test` ----
+    var cat_arm = len(flags) != 0
+    var grid = GbdtHostGrid(List[List[Float32]](), List[Int](), List[Int]())
+    var cindexes = List[List[UInt32]]()
     var test_cindex = List[UInt32]()
-    if has_test:
-        test_cindex = _binarize_columns(
-            ev.x_colmajor, ev.n_rows, n_features, grid, layout
+    var one_hot = List[Bool]()
+    var tables = List[TCtrValueTable]()
+    var tree_ctr = List[GbdtTreeCtrHost]()
+    var est_p = 0
+    var n_base_columns = n_features
+    var ctr_column_count = 0
+    var layout: CompressedIndexLayout
+    if cat_arm:
+        if feature_fraction < 1.0:
+            # `train`'s words (gbdt/train.mojo)
+            raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+        # the CTR target plane: one target per row. MultiRMSE refuses
+        # cat_features in `train`'s words, so it reaches here with one-hot
+        # columns only and the prelude never reads the plane
+        var y_ctr = List[Float32](length=n_rows, fill=Float32(0.0))
+        _ctr_copy_into(y, 0, n_rows, y_ctr, 0)
+        var shape = gbdt_ctr_host_prelude(
+            x_colmajor, y_ctr, n_rows, n_features, params, flags,
+            permutation_count, ctr_estimation_permutation_id, 1,
+            ev.x_colmajor, ev.n_rows if has_test else 0, max_ctr_complexity,
+            grid, cindexes, test_cindex, one_hot, tables, tree_ctr,
         )
+        est_p = shape.est_perm
+        n_base_columns = shape.n_base_columns
+        ctr_column_count = shape.ctr_column_count
+        layout = shape.layout.copy()
+    else:
+        grid = gbdt_host_grid(
+            x_colmajor, n_rows, n_features, params.border_count,
+            params.border_build_max_samples, params.random_seed, params.nan_mode,
+            params.border_type,
+        )
+        one_hot = List[Bool](length=n_features, fill=False)
+        layout = build_layout(grid.fold_counts, one_hot)
+        cindexes.append(
+            _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
+        )
+        if has_test:
+            test_cindex = _binarize_columns(
+                ev.x_colmajor, ev.n_rows, n_features, grid, layout
+            )
+    #: the layout's columns: the input features on a numeric fit; the
+    #: model's base columns and the tree-CTR slots on a categorical one
+    var n_cols = len(grid.fold_counts)
+    var perm_count = len(cindexes)
+    var tree_on = len(tree_ctr) == 1
+    var blocks = blocks_for(layout, n_rows)
+    var hist_cells = layout.hist_cells
+    var bf_feature = List[Int](length=hist_cells, fill=0)
+    var bf_bin = List[Int](length=hist_cells, fill=0)
+    for f in range(n_cols):  # driver-loop: over the layout's columns and their borders
+        ref lf = layout.features[f]
+        for b in range(Int(lf.folds)):
+            bf_feature[Int(lf.first_fold_index) + b] = f
+            bf_bin[Int(lf.first_fold_index) + b] = b
+
     var test_cursor = List[Float32](length=dim * n_eval, fill=Float32(0.0))
     var test_stats = List[Float32](length=stat_count * n_eval, fill=Float32(0.0))
     var test_blocks = (n_eval + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
@@ -891,11 +1103,11 @@ def gbdt_multi_host_fit(
     var detector = gbdt_eval_detector(ev)
     var test_losses = List[Float64]()
     var stopped_early = False
-    var feat_offset = List[UInt32](length=n_features, fill=UInt32(0))
-    var feat_mask = List[UInt32](length=n_features, fill=UInt32(0))
-    var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
-    var feat_one_hot = List[Bool](length=n_features, fill=False)
-    for f in range(n_features):  # driver-loop: over the features (one record each)
+    var feat_offset = List[UInt32](length=n_cols, fill=UInt32(0))
+    var feat_mask = List[UInt32](length=n_cols, fill=UInt32(0))
+    var feat_shift = List[UInt32](length=n_cols, fill=UInt32(0))
+    var feat_one_hot = List[Bool](length=n_cols, fill=False)
+    for f in range(n_cols):  # driver-loop: over the features (one record each)
         feat_offset[f] = layout.features[f].offset
         feat_mask[f] = layout.features[f].mask
         feat_shift[f] = layout.features[f].shift
@@ -910,15 +1122,19 @@ def gbdt_multi_host_fit(
     var s_bf_bin = bf_bin.copy()
     var full_cindex = List[UInt32]()
     if ff_on:
-        full_cindex = cindex.copy()
-    var ff_one_hot = List[Bool](length=n_features, fill=False)
+        full_cindex = cindexes[0].copy()
+    var ff_one_hot = List[Bool](length=n_cols, fill=False)
     var feature_random = TRandom(params.random_seed ^ UInt64(0x4645415455524553))
 
     var max_depth = params.max_depth
     var max_leaves = 1 << max_depth
     var lr = params.learning_rate
 
-    var cursor = List[Float32](length=dim * n_rows, fill=Float32(0.0))
+    # one cursor per permutation, all from zero (`CreateCursors`,
+    # `doc_parallel_boosting.mojo`); one on a numeric fit
+    var cursors = List[List[Float32]]()
+    for _ in range(perm_count):  # driver-loop: over the permutations
+        cursors.append(List[Float32](length=dim * n_rows, fill=Float32(0.0)))
     var stats = List[Float32](length=stat_count * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
@@ -939,9 +1155,18 @@ def gbdt_multi_host_fit(
     var noise_rand = TRandom(params.random_seed)
 
     for iteration in range(params.n_estimators):
+        # ---- which permutation the STRUCTURE is searched on
+        # (`doc_parallel_boosting.mojo`, `gbdt_host_boost`'s statements);
+        # 0 on a one-permutation fit ----
+        var learn_perm_count = perm_count - 1 if est_p != 0 else 1
+        var learn_p = est_p
+        if learn_perm_count > 1:
+            var rnd = TRandom(UInt64(iteration) + params.random_seed)
+            rnd.advance(10)
+            learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
         _multi_pass(
-            objective, num_classes, y, weights, has_weights, cursor, n_rows,
-            True, True, stats, fv_part, mag_part,
+            objective, num_classes, y, weights, has_weights, cursors[learn_p],
+            n_rows, True, True, stats, fv_part, mag_part,
         )
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
@@ -971,13 +1196,13 @@ def gbdt_multi_host_fit(
             )
             s_layout = build_layout(tree_folds, ff_one_hot)
             s_blocks = blocks_for(s_layout, n_rows)
-            cindex = _ns_project_index(
-                full_cindex, layout, s_layout, tree_folds, n_rows, n_features
+            cindexes[0] = _ns_project_index(
+                full_cindex, layout, s_layout, tree_folds, n_rows, n_cols
             )
             s_hist_cells = s_layout.hist_cells
             s_bf_feature = List[Int](length=s_hist_cells, fill=0)
             s_bf_bin = List[Int](length=s_hist_cells, fill=0)
-            for f in range(n_features):  # driver-loop: over the features and their borders (the tree layout)
+            for f in range(n_cols):  # driver-loop: over the features and their borders (the tree layout)
                 ref lf = s_layout.features[f]
                 for b in range(Int(lf.folds)):
                     s_bf_feature[Int(lf.first_fold_index) + b] = f
@@ -999,7 +1224,24 @@ def gbdt_multi_host_fit(
         var winners_score = List[Float32]()
         var winners_bf = List[UInt32]()
         var n_live = 1
-        for depth in range(max_depth):
+        # TREE CTRS: the level-synchronized levels at `stat_count` planes
+        # (`run_tree_ctr_tree` at `1 + approx_dim`), which leave the
+        # tree's splits in `tc_features` / `tc_bins` and the partition in
+        # `row_index`, `stats`, `p_off`, `p_sz`; the fused loop below then
+        # runs no level (`gbdt_host_boost`'s statements)
+        var tc_features = List[Int]()
+        var tc_bins = List[Int]()
+        if tree_on:
+            n_live = _tree_ctr_levels_host(
+                tree_ctr[0], cindexes, test_cindex, learn_p, s_layout, s_blocks,
+                s_bf_feature, s_bf_bin, n_rows, n_cols, max_depth,
+                params.l2_leaf_reg, score_std_dev, fixed_scale, level_rand,
+                row_index, stats, p_off, p_sz, tc_features, tc_bins,
+                score_function=score_function, stat_count=stat_count,
+                multiclass_optimization=is_mc,
+            )
+        ref cindex = cindexes[learn_p]
+        for depth in range(0 if tree_on else max_depth):
             var level_seed = level_rand.next_uniform_l()
             var half = n_live // 2
             var planned = depth > 0
@@ -1038,7 +1280,7 @@ def gbdt_multi_host_fit(
                 block_first_bin += total
 
             # `scan_histograms_kernel` over the computed leaves, every plane
-            _scan_histograms(hist, s_hist_cells, stat_count, compute, s_layout, n_features)
+            _scan_histograms(hist, s_hist_cells, stat_count, compute, s_layout, n_cols)
 
             # `substract_histograms_kernel`: the larger sibling, in place
             if planned and half > 0:
@@ -1056,6 +1298,7 @@ def gbdt_multi_host_fit(
             var gains = _cosine_gains_n(
                 hist, s_hist_cells, stat_count, part_stats, n_live,
                 params.l2_leaf_reg, is_mc, score_std_dev, level_seed, s_bf_feature,
+                score_function == SCORE_FUNCTION_L2,
             )
             var best_bin = _gain_winner(gains, s_hist_cells)
             var best_gain = -GBDT_FLOAT32_MAX
@@ -1085,7 +1328,14 @@ def gbdt_multi_host_fit(
         var tree_features = List[Int]()
         var tree_bins = List[Int]()
         var grown = 0
-        for d in range(max_depth):
+        if tree_on:
+            # accepted level by level, each gate applied before the next
+            # level was searched: nothing was speculated, nothing rolls back
+            for i in range(len(tc_features)):  # driver-loop: over the tree's levels
+                tree_features.append(tc_features[i])
+                tree_bins.append(tc_bins[i])
+            grown = len(tc_features)
+        for d in range(0 if tree_on else max_depth):
             var best_score = winners_score[d]
             var best_bin_u = winners_bf[d]
             if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
@@ -1110,7 +1360,7 @@ def gbdt_multi_host_fit(
             tree_features.append(cf_)
             tree_bins.append(cb_)
             grown += 1
-        if grown < max_depth:
+        if grown < max_depth and not tree_on:
             var live = n_live
             for _ in range(max_depth - grown):
                 var h2 = live // 2
@@ -1131,18 +1381,47 @@ def gbdt_multi_host_fit(
                 + String(covered_rows) + " of " + String(n_rows) + " rows"
             )
 
-        var estimated = _estimate_multi(
-            objective, num_classes, y, weights, has_weights, cursor,
-            row_index, offsets, sizes, n_rows, params.l2_leaf_reg,
-        )
-        # `add_model_value_kernel`: `[leaf * dim + d]` into `[d * n + row]`
-        var scaled = rescaled_leaves(estimated, lr)
-        apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_live, dim, n_rows)
+        # ---- the estimation task, ONE PER PERMUTATION (`gbdt_host_boost`'s
+        # statements, `doc_parallel_boosting.mojo`): the learn permutation
+        # over the searcher's partition, the others over the partition off
+        # the model on their own index; every cursor takes its own
+        # `round(leaf * rate)`, the model the estimation permutation's.
+        # `add_model_value_kernel`: `[leaf * dim + d]` into `[d * n + row]` ----
+        var scaled = List[Float32]()
+        for p in range(perm_count):  # driver-loop: over the permutations
+            var p_scaled: List[Float32]
+            if p == learn_p:
+                var estimated = _estimate_multi(
+                    objective, num_classes, y, weights, has_weights, cursors[p],
+                    row_index, offsets, sizes, n_rows, params.l2_leaf_reg,
+                    leaf_method, leaf_iterations,
+                )
+                p_scaled = rescaled_leaves(estimated, lr)
+                apply_scaled_leaves_host(
+                    cursors[p], p_scaled, row_index, offsets, sizes, n_live,
+                    dim, n_rows,
+                )
+            else:
+                var part = _partition_for_model(
+                    cindexes[p], layout, tree_features, tree_bins, grown, n_rows
+                )
+                var estimated = _estimate_multi(
+                    objective, num_classes, y, weights, has_weights, cursors[p],
+                    part.row_index, part.offsets, part.sizes, n_rows,
+                    params.l2_leaf_reg, leaf_method, leaf_iterations,
+                )
+                p_scaled = rescaled_leaves(estimated, lr)
+                apply_scaled_leaves_host(
+                    cursors[p], p_scaled, part.row_index, part.offsets,
+                    part.sizes, len(part.sizes), dim, n_rows,
+                )
+            if p == est_p:
+                scaled = p_scaled.copy()
         for i in range(grown):
             split_features.append(tree_features[i])
             split_bins.append(tree_bins[i])
         tree_split_offsets.append(len(split_features))
-        for i in range(len(estimated)):
+        for i in range(len(scaled)):
             model_leaves.append(scaled[i])
         tree_leaf_offsets.append(len(model_leaves))
 
@@ -1173,8 +1452,9 @@ def gbdt_multi_host_fit(
             if iteration + 1 > 1:
                 losses.append(-v / Float64(n_rows))
 
+    # the ESTIMATION permutation's cursor (the only one on a numeric fit)
     _multi_pass(
-        objective, num_classes, y, weights, has_weights, cursor, n_rows,
+        objective, num_classes, y, weights, has_weights, cursors[est_p], n_rows,
         True, False, stats, fv_part, mag_part,
     )
     var final_fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
@@ -1195,14 +1475,43 @@ def gbdt_multi_host_fit(
         model_leaves.resize(
             tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0)
         )
+    # TREE CTRS: the model's columns (`gbdt_ctr_host_tail`, the CTR
+    # Logloss / RMSE fit's statements); a numeric fit and one without
+    # combinations keep the grid's columns
+    var cols = gbdt_ctr_host_tail(
+        tree_ctr, tree_split_offsets, split_features, grid.fold_counts,
+        grid.borders, grid.nan_treatment, one_hot, n_base_columns,
+    )
     var model = GbdtHostMultiModel(
-        grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
-        tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
-        model_leaves^, losses^, dim,
+        cols.fold_counts.copy(), cols.borders.copy(), cols.nan_treatment.copy(),
+        tree_split_offsets^, cols.split_features.copy(), split_bins^,
+        tree_leaf_offsets^, model_leaves^, losses^, dim,
     )
     return GbdtHostMultiFit(
         model^,
         GbdtHostEvalFit(test_losses^, detector.best_iteration, stopped_early),
+        cols.one_hot.copy(), tables^, ctr_column_count,
+        cols.combination_ctrs.copy(),
+    )
+
+
+def gbdt_multi_host_model_text_ctr(r: GbdtHostMultiFit) raises -> String:
+    """`model_text` for a categorical multiclass fit (lane
+    gbdt-cpu-rest-4-cat, 2026-11-23): the CTR fits' one writer
+    (`gbdt_oracle_ctr.mojo::gbdt_ctr_host_model_text_of`: the `ctr_columns`
+    header, `type ctr` / `type cat` feature records, the CTR and
+    combination tables, `split_type take_bin` on a one-hot split) at `dim`
+    values per leaf."""
+    var m = GbdtHostModel(
+        r.model.fold_counts.copy(), r.model.borders.copy(),
+        r.model.nan_treatment.copy(), r.model.tree_split_offsets.copy(),
+        r.model.split_features.copy(), r.model.split_bins.copy(),
+        r.model.tree_leaf_offsets.copy(), r.model.leaf_values.copy(),
+        r.model.losses.copy(), r.eval.best_iteration, r.eval.stopped_early,
+    )
+    return gbdt_ctr_host_model_text_of(
+        m, r.one_hot, r.tables, r.ctr_column_count, r.combination_ctrs,
+        r.model.dim,
     )
 
 
