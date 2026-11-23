@@ -1431,7 +1431,8 @@
    ],
    "builds": [
     "build_x_decomp",
-    "build_x_decomp_host"
+    "build_x_decomp_host",
+    "build_runtime_decomp_host"
    ],
    "columns": [
     "cpu",
@@ -1541,7 +1542,8 @@
    ],
    "builds": [
     "build_x_decomp",
-    "build_x_decomp_host"
+    "build_x_decomp_host",
+    "build_runtime_decomp_host"
    ],
    "columns": [
     "cpu",
@@ -1623,7 +1625,8 @@
    ],
    "builds": [
     "build_x_metrics",
-    "build_x_metrics_host"
+    "build_x_metrics_host",
+    "build_runtime_model_selection_host"
    ],
    "columns": [
     "cpu",
