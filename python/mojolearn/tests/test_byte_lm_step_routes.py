@@ -165,23 +165,8 @@ def _host_inference(threaded):
         pytest.skip(f'the CPU byte LM binding is not loadable here: {error}')
 
 
-def _inputs(ids):
-    """The (batch, length) input rows of a (batch, length + 1) training batch."""
-    return np.ascontiguousarray(ids[:, :-1])
-
-
-def test_host_logits_reference_equals_threaded():
-    ids = batches()[0]
-    reference = _host_inference(threaded=False)
-    threaded = _host_inference(threaded=True)
-    assert _bytes(reference.logits(_inputs(ids))) == _bytes(threaded.logits(_inputs(ids)))
-
-
-def test_host_loss_reference_equals_threaded():
-    ids = batches()[0]
-    reference = _host_inference(threaded=False)
-    threaded = _host_inference(threaded=True)
-    assert int(reference.loss_bits(ids)) == int(threaded.loss_bits(ids))
+# test_host_logits_reference_equals_threaded and test_host_loss_reference_equals_threaded moved to
+# checks/native_tests/byte_lm_host_column.mojo::test_routes units 0 and 1 (lane py-delete, 2026-11-23).
 
 
 def test_host_trainer_loss_equals_threaded_inference_loss():
@@ -215,17 +200,8 @@ def test_host_step_rows_equals_step_oracle():
            for name in ('gradient_', 'parameters_', 'm_', 'v_')}))
 
 
-def test_host_step_oracle_loss_equals_reference_inference_loss():
-    """The composed step's loss against the reference inference forward
-    (gemm_oracle head, ce_forward_oracle). On the -D
-    MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF build the step's loss is the serial
-    oracle's (gemm_host_rows head, ce_forward_oracle), so the two differ only
-    in the head GEMM call; on the default build it is the rows loss, which
-    the two-build check above holds to the oracle's."""
-    ids = batches()[0]
-    host = _host_trainer()
-    reference = _host_inference(threaded=False)
-    assert int(host.train_step(ids)) == int(reference.loss_bits(ids))
+# test_host_step_oracle_loss_equals_reference_inference_loss moved to
+# checks/native_tests/byte_lm_host_column.mojo::test_routes unit 3 (lane py-delete, 2026-11-23).
 
 
 def test_host_and_device_give_the_same_loss_words():
