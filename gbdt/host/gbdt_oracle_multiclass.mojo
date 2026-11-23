@@ -67,6 +67,13 @@ tools/identity_break.py on the two lanes is the measurement.
 from std.math import exp, fma, isfinite, log
 from gbdt.data.permutation import TRandom
 from gbdt.data.class_weight_body import class_weight_slot, class_weighted
+from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import add_leaf_score
+from gbdt.options.catboost_options import (
+    SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_L2,
+    SCORE_FUNCTION_NEWTON_COSINE,
+    SCORE_FUNCTION_NEWTON_L2,
+)
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 
 from checks.numerics import (
@@ -368,13 +375,42 @@ def _cosine_gain_n(
     score_std_dev: Float32 = Float32(0.0),
     level_seed: UInt64 = 0,
     feature_id: Int = 0,
+    l2_score: Bool = False,
 ) -> Float32:
     """One bin-feature of `compute_optimal_splits_kernel[COSINE]`
     (`compute_scores.mojo:140-224`) at `stat_count` planes: the per-class
     `AddLeaf`s, the running totals, the multiclass optimization terms, the
     sqrt normalization, per-feature noise, feature weight 1.0. `hist` and
     `part_stats` are the level's storage by pointer (a task of
-    `_cosine_gains_n` calls this)."""
+    `_cosine_gains_n` calls this).
+
+    `l2_score` is `compute_optimal_splits_kernel[L2]` instead, the kernel
+    `enqueue_score` launches for the L2 score (lane gbdt-cpu-rest-4-sym,
+    2026-11-23): the same `AddLeaf` sequence through
+    `add_leaf_score[L2]` (`gbdt/methods/greedy_subsets_searcher/leafwise_score_body.mojo`), no
+    normalization and no noise (the device passes `score_std_dev` 0)."""
+    if l2_score:
+        var l2_sum = Float32(0.0)
+        var l2_denum = Float32(1e-10)
+        for i in range(n_live):
+            var leaf_base = i * stat_count * hist_cells
+            var weight_left = max(hist[leaf_base + bin_feature_id], Float32(0.0))
+            var weight_right = ftz(max(part_stats[i * stat_count] - weight_left, Float32(0.0)))
+            var total_sum_left = Float32(0.0)
+            var total_sum_part = Float32(0.0)
+            for stat_id in range(1, stat_count):
+                var sum_left = hist[leaf_base + stat_id * hist_cells + bin_feature_id]
+                var part_stat = part_stats[i * stat_count + stat_id]
+                var sum_right = ftz(part_stat - sum_left)
+                add_leaf_score[SCORE_FUNCTION_L2, False](sum_left, weight_left, lambda_l2, l2_sum, l2_denum)
+                add_leaf_score[SCORE_FUNCTION_L2, False](sum_right, weight_right, lambda_l2, l2_sum, l2_denum)
+                total_sum_left = ftz(total_sum_left + sum_left)
+                total_sum_part = ftz(total_sum_part + part_stat)
+            if multiclass_optimization:
+                var total_sum_right = ftz(total_sum_part - total_sum_left)
+                add_leaf_score[SCORE_FUNCTION_L2, False](-total_sum_left, weight_left, lambda_l2, l2_sum, l2_denum)
+                add_leaf_score[SCORE_FUNCTION_L2, False](-total_sum_right, weight_right, lambda_l2, l2_sum, l2_denum)
+        return ftz(ftz(l2_sum - Float32(0.0)) * Float32(1.0))
     var score = Float32(0.0)
     var denum_sqr = Float32(1e-10)
     for i in range(n_live):
@@ -421,9 +457,11 @@ def _cosine_gains_n(
     score_std_dev: Float32,
     level_seed: UInt64,
     bf_feature: List[Int],
+    l2_score: Bool = False,
 ) -> List[Float32]:
-    """`compute_optimal_splits_kernel[COSINE]` at `stat_count` planes over
-    every bin-feature of a level: `gains[bf] = _cosine_gain_n(bf)`.
+    """`compute_optimal_splits_kernel[COSINE]` (or `[L2]` under `l2_score`)
+    at `stat_count` planes over every bin-feature of a level:
+    `gains[bf] = _cosine_gain_n(bf)`.
 
     THE SPLIT (lane gbdt-host-par): the unit is one candidate, the device
     thread: its leaves in dense order, its planes in order, its own noise
@@ -438,15 +476,18 @@ def _cosine_gains_n(
     var feat_p = rebind[GbdtIntPtr](bf_feature.unsafe_ptr())
     var gains_p = rebind[HostF32Ptr](gains.unsafe_ptr())
 
-    def candidates(unit: Int) {imm chunk, imm hist_cells, imm stat_count, imm n_live, imm lambda_l2, imm multiclass_optimization, imm score_std_dev, imm level_seed, imm hist_p, imm part_p, imm feat_p, imm gains_p}:
+    def candidates(unit: Int) {imm chunk, imm hist_cells, imm stat_count, imm n_live, imm lambda_l2, imm multiclass_optimization, imm score_std_dev, imm level_seed, imm l2_score, imm hist_p, imm part_p, imm feat_p, imm gains_p}:
         for bf in range(unit * chunk, min(hist_cells, (unit + 1) * chunk)):
             gains_p[bf] = _cosine_gain_n(
                 hist_p, hist_cells, stat_count, part_p, n_live, bf,
                 lambda_l2, multiclass_optimization,
-                score_std_dev, level_seed, feat_p[bf],
+                score_std_dev, level_seed, feat_p[bf], l2_score,
             )
 
     host_parallelize(candidates, units)
+    _ = len(hist)
+    _ = len(part_stats)
+    _ = len(bf_feature)
     return gains^
 
 
@@ -765,6 +806,10 @@ def gbdt_multi_host_fit(
     sample_weights: List[Float32] = List[Float32](),
     # the per-tree feature sample (lane gbdt-cpu-rest-2, 2026-11-23)
     feature_fraction: Float64 = 1.0,
+    # the split score (lane gbdt-cpu-rest-4-sym, 2026-11-23): Cosine or L2;
+    # the second-order scores are refused on both columns in `fit_with_test`'s
+    # words (their `CB_ENSURE(!secondDerAsWeights)`)
+    score_function: Int = SCORE_FUNCTION_COSINE,
 ) raises -> GbdtHostMultiFit:
     """`train` then `fit_with_test` on the covered configurations.
 
@@ -784,6 +829,18 @@ def gbdt_multi_host_fit(
     `gbdt_host_boost` runs it."""
     if len(sample_weights) != 0 and len(sample_weights) != n_rows:
         raise Error("sample_weight size mismatch")
+    if score_function == SCORE_FUNCTION_NEWTON_L2 or score_function == SCORE_FUNCTION_NEWTON_COSINE:
+        # `fit_with_test`'s words (`doc_parallel_boosting.mojo`)
+        raise Error(
+            "MultiClass loss doesn't support second derivatives in tree"
+            " structure search currently (their CB_ENSURE,"
+            " `multiclass_targets.cpp:27`)"
+        )
+    if score_function != SCORE_FUNCTION_COSINE and score_function != SCORE_FUNCTION_L2:
+        raise Error(
+            "score_function has no calcer here; only Cosine, NewtonCosine, L2"
+            " and NewtonL2 are implemented"
+        )
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -1056,6 +1113,7 @@ def gbdt_multi_host_fit(
             var gains = _cosine_gains_n(
                 hist, s_hist_cells, stat_count, part_stats, n_live,
                 params.l2_leaf_reg, is_mc, score_std_dev, level_seed, s_bf_feature,
+                score_function == SCORE_FUNCTION_L2,
             )
             var best_bin = _gain_winner(gains, s_hist_cells)
             var best_gain = -GBDT_FLOAT32_MAX

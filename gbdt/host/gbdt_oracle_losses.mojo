@@ -168,7 +168,6 @@ from gbdt.host.gbdt_oracle import (
     _ns_project_index,
     _sample_tree_folds,
     _choose_scale_from_magnitudes,
-    _cosine_gains,
     _gain_winner,
     _gbdt_units,
     _gather_rows,
@@ -183,8 +182,14 @@ from gbdt.host.gbdt_oracle import (
     _one_byte_block,
     _oracle_move_to,
     _regularize,
+    _second_derivatives,
     _walker_move,
+    _greedy_gains,
     gbdt_host_grid,
+)
+from gbdt.options.catboost_options import (
+    SCORE_FUNCTION_COSINE,
+    is_second_order_score_function,
 )
 from gbdt.host.gbdt_oracle_eval import (
     GbdtHostEval,
@@ -648,20 +653,6 @@ def _loss_eval(
     # lane cpu4-gbdt: the oracle's value fold is the device's
     # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
     value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])
-
-
-def _second_derivatives(
-    method: Int, weights_cpu: List[Float64], lambda_reg: Float64,
-    cached_der2: List[Float64],
-) -> List[Float64]:
-    """`write_second_derivatives` (`pointwise_oracle.mojo:341-431`): the
-    leaf weight plus lambda under Gradient, the cached Hessian under Newton."""
-    if method == GBDT_LEAF_GRADIENT:
-        var out = List[Float64]()
-        for leaf in range(len(weights_cpu)):
-            out.append(weights_cpu[leaf] + lambda_reg)
-        return out^
-    return cached_der2.copy()
 
 
 def _walker_estimate(
@@ -1135,6 +1126,7 @@ def gbdt_losses_host_fit(
     random_strength: Float32 = Float32(0.0),
     weights: List[Float32] = List[Float32](),
     feature_fraction: Float64 = 1.0,
+    score_function: Int = SCORE_FUNCTION_COSINE,
 ) raises -> GbdtHostFitWithEval:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
@@ -1166,7 +1158,18 @@ def gbdt_losses_host_fit(
     same two helpers `gbdt_host_boost` and the non-symmetric driver call
     (`_sample_tree_folds`, `_ns_project_index`). The search reads the
     tree's layout; the splits it returns name the fit's features and bins,
-    so the estimation and the held-out apply read the full layout."""
+    so the estimation and the held-out apply read the full layout.
+
+    `score_function` (lane gbdt-cpu-rest-4-sym, 2026-11-23) is the device's
+    `enqueue_score` dispatch (`_greedy_gains`: L2 / NewtonL2 through the L2
+    kernel, Cosine / NewtonCosine through the cosine kernel) over the
+    search planes `secondDerAsWeights` keys: under NewtonL2 and
+    NewtonCosine plane 0 is the weighted second derivative
+    (`_loss_search_pass(second_order=True)`, PairLogit's
+    `pair_logit_search_pass(second_order=True)`), as the grouped pointwise
+    searcher's host fit reads them (QueryRMSE's and YetiRank's planes do
+    not take the flag there either)."""
+    var second_order = is_second_order_score_function(score_function)
     var has_weights = len(weights) > 0
     if has_weights and len(weights) != n_rows:
         raise Error("weights size mismatch")
@@ -1345,7 +1348,8 @@ def gbdt_losses_host_fit(
             )
         elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
             pair_logit_search_pass(
-                pairs.value(), cursor, n_rows, stats, fv_part, mag_part
+                pairs.value(), cursor, n_rows, stats, fv_part, mag_part,
+                second_order,
             )
         elif loss.objective == GBDT_OBJ_QUERY_RMSE:
             query_rmse_search_pass(
@@ -1353,7 +1357,8 @@ def gbdt_losses_host_fit(
             )
         else:
             _loss_search_pass(
-                loss, y, cursor, n_rows, stats, fv_part, mag_part, weights
+                loss, y, cursor, n_rows, stats, fv_part, mag_part, weights,
+                second_order,
             )
         var fv = _deterministic_sum_lanes(fv_part, 1, fv_blocks)[0]
         var noise_mult = Float64(0.0)
@@ -1464,9 +1469,9 @@ def gbdt_losses_host_fit(
                 stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
             )
 
-            var gains = _cosine_gains(
-                hist, s_hist_cells, part_stats, n_live, params.l2_leaf_reg,
-                score_std_dev, level_seed, s_bf_feature,
+            var gains = _greedy_gains(
+                score_function, hist, s_hist_cells, part_stats, n_live,
+                params.l2_leaf_reg, score_std_dev, level_seed, s_bf_feature,
             )
             var best_bin = _gain_winner(gains, s_hist_cells)
             var best_gain = -GBDT_FLOAT32_MAX

@@ -431,6 +431,11 @@ sampler, a solver, a metric, a reduction).
                searcher: the one-output losses, boost_from_average resolved,
                border types, IncToDec, categorical columns)
       gbdt-pointwise-rest
+      gbdt-symmetric-rest (lane gbdt-cpu-rest-4-sym: the greedy SymmetricTree
+               L2 / NewtonL2 / NewtonCosine scores, Gradient leaves, RMSE
+               Newton leaves past one iteration, boost_from_average on
+               Logloss and CrossEntropy, Plain and Ordered, class weights on
+               a pointwise loss)
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -6056,6 +6061,76 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-symmetric-rest")
+def _(ml, X, yc, yr, Xh=None):
+    """The greedy SymmetricTree and Ordered combinations the CPU column
+    refused until lane gbdt-cpu-rest-4-sym (2026-11-23): the L2, NewtonL2
+    and NewtonCosine scores (the L2 kernel for both L2 scores, the
+    second-order search planes for the Newton ones) on Logloss, RMSE, MAE,
+    CrossEntropy, MultiClass (L2) and a CTR column; Gradient leaves on
+    Logloss and RMSE and RMSE Newton leaves at three iterations;
+    boost_from_average on Logloss and CrossEntropy, Plain and Ordered (the
+    log-odds start, the model's bias); class weights on MAE; one fit with
+    sample weights and one with an eval set under the Iter detector. Each
+    hashes its predictions, digest and learn curve; the held-out fit also its
+    test-loss curve and stop. Every fit at rate 0.1 with every work-changing
+    option set."""
+    rows = min(_GBDT_GAPS_ROWS, X.shape[0])
+    X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
+    w = _hw((rows,), "gbdt-symmetric-rest:sample_weight", 0.25, 4.0)
+    y3 = np.digitize(yr, np.quantile(yr, [1.0 / 3.0, 2.0 / 3.0])).astype(np.float32)
+    sym = dict(score_function="Cosine", leaf_estimation_iterations=1, boost_from_average=False)
+    parts, first = {}, None
+    for name, yf, wf, options in [
+        ("logloss_l2_bayesian_noise", yc, None, dict(loss="Logloss", score_function="L2",
+                                                     bootstrap_type="Bayesian", bagging_temperature=1.0,
+                                                     random_strength=1.0)),
+        ("logloss_newtonl2_bernoulli", yc, None, dict(loss="Logloss", score_function="NewtonL2",
+                                                      bootstrap_type="Bernoulli", subsample=0.7)),
+        ("logloss_newtoncosine_weighted_noise", yc, w, dict(loss="Logloss", score_function="NewtonCosine",
+                                                            random_strength=1.0)),
+        ("rmse_l2_poisson_newton3_bfa", yr, None, dict(loss="RMSE", score_function="L2",
+                                                       bootstrap_type="Poisson", subsample=0.66,
+                                                       leaf_estimation_method="Newton",
+                                                       leaf_estimation_iterations=3, boost_from_average=True)),
+        ("logloss_cosine_gradient_bfa", yc, None, dict(loss="Logloss", leaf_estimation_method="Gradient",
+                                                       leaf_estimation_iterations=4, boost_from_average=True)),
+        ("mae_l2_exact_class_weights", yr, None, dict(loss="MAE", score_function="L2",
+                                                      leaf_estimation_method="Exact", class_weights=[1.0, 2.0])),
+        ("crossentropy_newtonl2_bfa", yc, None, dict(loss="CrossEntropy", score_function="NewtonL2",
+                                                     boost_from_average=True)),
+        ("multiclass_l2", y3, None, dict(loss="MultiClass", score_function="L2")),
+        ("ordered_logloss_bfa", yc, None, dict(loss="Logloss", boosting_type="Ordered", boost_from_average=True)),
+        ("ordered_crossentropy_newtoncosine_bfa", yc, None, dict(loss="CrossEntropy", boosting_type="Ordered",
+                                                                 score_function="NewtonCosine",
+                                                                 boost_from_average=True)),
+    ]:
+        kw = dict(sym)
+        kw.update(options)
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yf, sample_weight=wf)
+        _gbdt_gaps_parts(parts, name, m, X)
+        parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
+        first = first if first is not None else m
+    # the held-out fit: NewtonCosine with Gradient leaves, the curve, the stop
+    Xe = np.ascontiguousarray(Xh[:rows])
+    ye = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+    kw = dict(sym, loss="RMSE", score_function="NewtonCosine", leaf_estimation_method="Gradient",
+              n_estimators=30, learning_rate=1.0, od_type="Iter", od_wait=2, use_best_model=True,
+              best_model_min_trees=3)
+    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(X, yr, eval_set=(Xe, ye))
+    _gbdt_gaps_parts(parts, "rmse_newtoncosine_gradient_eval", ev, X)
+    parts["rmse_newtoncosine_gradient_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+    parts["rmse_newtoncosine_gradient_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                                   ev.best_iteration_], dtype=np.int64))
+    # Logloss L2 with boost_from_average over one CTR column (40 categories)
+    cols, cats = _GBDT_CAT_CTR
+    Xc = np.ascontiguousarray(_gbdt_cat_x(X)[:, cols])
+    kw = dict(sym, loss="Logloss", score_function="L2", cat_features=list(cats), boost_from_average=True)
+    mc = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xc, yc)
+    _gbdt_gaps_parts(parts, "logloss_l2_ctr_bfa", mc, Xc)
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -9940,7 +10015,9 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-weighted-rest", "gbdt-weighted-special", "gbdt-shape-gaps", "gbdt-rest-gaps",
             "gbdt-pointwise-arms",
             "gbdt-ordered-weights",
-            "gbdt-nonsym-rest")
+            "gbdt-nonsym-rest",
+            # lane gbdt-cpu-rest-4-sym (2026-11-23)
+            "gbdt-symmetric-rest")
 # lane gbdt-cpu-rest-4-pwl (2026-11-23)
 _batch_decl(_rows_calls("predict"), "gbdt-pointwise-rest")
 

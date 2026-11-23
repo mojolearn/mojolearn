@@ -28,14 +28,17 @@ lane is not a complete list of supported configurations. Admission lives in
 bindings/_mojolearn_gbdt_host.mojo.
 
   grow_policy SymmetricTree, loss Logloss (any loss_border),
-  score_function Cosine, leaf_estimation_method Newton (any iteration count),
+  score_function Cosine (and, since lane gbdt-cpu-rest-4-sym, L2, NewtonL2
+  and NewtonCosine: `_greedy_gains` and the second-order search planes),
+  leaf_estimation_method Newton or Gradient (any iteration count, RMSE too),
   optional numeric row weights (sample_weight multiplied by binary
   class_weights when present), numeric bootstrap and score noise. One-hot
   columns use `one_hot_in` and gbdt_oracle_onehot.mojo; CTR training has its
   own owner in gbdt_oracle_ctr.mojo. The held-out cursor, stopping detector
   and best-model selection use gbdt_oracle_eval.mojo through
   gbdt_host_fit_eval. The greedy searcher (use_pointwise_searcher False),
-  boost_from_average unset or False and feature_fraction 1. A feature with
+  boost_from_average any (True is the log-odds start, the model's bias) and
+  feature_fraction 1. A feature with
   exactly one border (the BINARY histogram policy) is carried since
   2026-09-22 (`_binary_block`, the nibble-combination decode of
   `hist_binary.mojo`; the gbdt-binary-columns lane). border_count, n_estimators,
@@ -166,6 +169,15 @@ from gbdt.targets.pointwise_bodies import (
 )
 from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.methods.random_score_bodies import score_model_length_mult
+from gbdt.options.catboost_options import (
+    LEAF_ESTIMATION_GRADIENT,
+    LEAF_ESTIMATION_NEWTON,
+    SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_L2,
+    SCORE_FUNCTION_NEWTON_COSINE,
+    SCORE_FUNCTION_NEWTON_L2,
+    is_second_order_score_function,
+)
 from gbdt.gpu_util.kernel.random_gen import (
     advance_seed_k,
     next_normal_f,
@@ -462,6 +474,7 @@ def _logloss_search_pass(
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
     weights: List[Float32] = List[Float32](),
+    second_order: Bool = False,
 ):
     """`launch_approximate[False]` on Logloss with `compute_fv` and
     `compute_magnitudes` set (`doc_parallel_boosting.mojo:1544-1552`): the
@@ -470,7 +483,14 @@ def _logloss_search_pass(
     through the halving tree. Out-of-range threads add 0.0. `weights`
     empty is the unit weight; otherwise one weight per row, the kernel's
     `has_weights` arm (plane 0 the row's weight, the direction and score
-    scaled by it): sample weights and/or binary class weights, as in `train`."""
+    scaled by it): sample weights and/or binary class weights, as in `train`.
+
+    `second_order` is `launch_approximate[False, True]`
+    (`secondDerAsWeights`, the NewtonL2 / NewtonCosine search planes):
+    plane 0 is then `ftz(weight * scale)` and its magnitude bounds that
+    plane as stored (`cross_entropy_kernel`'s `plane0`; lane
+    gbdt-cpu-rest-4-sym, 2026-11-23, which also makes the Lossguide arm's
+    `logloss_search_pass_newton` a call of this one)."""
     # THE SPLIT (lane gbdt-host-par): the unit is one 256-thread device
     # block: it owns its rows' two planes and its three partials, and its
     # halving trees are the kernel's. Blocks go round robin to `_gbdt_units`
@@ -486,7 +506,7 @@ def _logloss_search_pass(
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
     var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm has_weights, imm second_order, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
@@ -504,6 +524,8 @@ def _logloss_search_pass(
                         weight = weights_p[i]
                     var r = _cross_entropy_row(targets_p[i], cursor_p[i], border, weight)
                     var plane0 = weight
+                    if second_order:
+                        plane0 = r.weighted_scale
                     stats_p[i] = plane0
                     stats_p[n_rows + i] = r.weighted_direction
                     s_score[t] = r.score
@@ -599,13 +621,16 @@ def _rmse_search_pass(
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
     weights: List[Float32] = List[Float32](),
+    second_order: Bool = False,
 ):
     """`launch_approximate[False]` on RMSE with `compute_fv` and
     `compute_magnitudes` set: plane 0 the row's weight (unit when `weights`
     is empty), plane 1 the flushed weighted der, one score partial and two
     magnitude partials per 256-thread block through the halving tree.
     Out-of-range threads add 0.0. `weights` is the kernel's `has_weights`
-    arm (`pointwise_target_kernel`), as `_logloss_search_pass`'s."""
+    arm (`pointwise_target_kernel`), as `_logloss_search_pass`'s.
+    `second_order` is the NewtonL2 / NewtonCosine plane 0,
+    `weighted_der2[RMSE]` (`ftz(weight * 1)`), as the kernel stores it."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
     # one 256-thread device block owns its rows' two planes and its three
@@ -621,7 +646,7 @@ def _rmse_search_pass(
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
     var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm has_weights, imm second_order, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
@@ -639,6 +664,8 @@ def _rmse_search_pass(
                         weight = weights_p[i]
                     var r = _rmse_row(targets_p[i], cursor_p[i], weight)
                     var plane0 = weight
+                    if second_order:
+                        plane0 = weighted_der2[BODY_OBJ_RMSE](targets_p[i], cursor_p[i], Float32(0.0), weight)
                     stats_p[i] = plane0
                     stats_p[n_rows + i] = r.der
                     s_score[t] = r.score
@@ -2983,6 +3010,104 @@ def _cosine_gains_range(
         gains[bf] = ftz(ftz(final_score - score_before) * Float32(1.0))
 
 
+def _l2_gains(
+    hist: List[Float32],
+    hist_cells: Int,
+    part_stats: List[Float32],
+    n_live: Int,
+    lambda_l2: Float32,
+) -> List[Float32]:
+    """`compute_optimal_splits_kernel[SCORE_FUNCTION_L2]` for every
+    bin-feature, the kernel the device's `enqueue_score` launches for L2 and
+    NewtonL2 alike (`greedy_search_helper.mojo`, `score_std_dev` passed as
+    0, so the L2 score carries no noise): per candidate the two
+    `add_leaf_score[L2]`s per leaf in dense leaf order, the score is the
+    sum and the gain `ftz(ftz(score - 0) * 1)` (the unit feature weight).
+
+    THE SPLIT (lane gbdt-cpu-rest-4-sym, 2026-11-23): the unit is one
+    candidate, the device's thread; a task takes a run of candidates
+    (`_l2_gains_range`), the count from `_gbdt_units` over `4 x leaves x
+    candidates` operations."""
+    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
+    if hist_cells == 0:
+        return gains^
+    var units = _gbdt_units(hist_cells, 4 * n_live * hist_cells)
+    var chunk = (hist_cells + units - 1) // units
+    var hp = rebind[HostF32Ptr](hist.unsafe_ptr())
+    var pp = rebind[HostF32Ptr](part_stats.unsafe_ptr())
+    var gp = rebind[HostF32Ptr](gains.unsafe_ptr())
+
+    def candidates(unit: Int) {imm chunk, imm hist_cells, imm n_live, imm lambda_l2, imm hp, imm pp, imm gp}:
+        _l2_gains_range(
+            hp, hist_cells, pp, n_live, lambda_l2, gp,
+            unit * chunk, min((unit + 1) * chunk, hist_cells),
+        )
+
+    host_parallelize(candidates, units)
+    _ = len(hist)
+    _ = len(part_stats)
+    return gains^
+
+
+def _l2_gains_range(
+    hp: HostF32Ptr,
+    hist_cells: Int,
+    part_stats: HostF32Ptr,
+    n_live: Int,
+    lambda_l2: Float32,
+    gains: HostF32Ptr,
+    lo: Int,
+    hi: Int,
+):
+    """Candidates `[lo, hi)` of `_l2_gains`, each folding its leaves in
+    dense leaf order as the kernel's thread does."""
+    for bf in range(lo, hi):
+        var score = Float32(0.0)
+        var denum_sqr = Float32(1e-10)
+        for i in range(n_live):
+            var leaf_base = i * 2 * hist_cells
+            var weight_left = max(hp[leaf_base + bf], Float32(0.0))
+            var weight_right = ftz(max(part_stats[i * 2] - weight_left, Float32(0.0)))
+            var sum_left = hp[leaf_base + hist_cells + bf]
+            var sum_right = ftz(part_stats[i * 2 + 1] - sum_left)
+            add_leaf_score[SCORE_FUNCTION_L2, False](
+                sum_left, weight_left, lambda_l2, score, denum_sqr
+            )
+            add_leaf_score[SCORE_FUNCTION_L2, False](
+                sum_right, weight_right, lambda_l2, score, denum_sqr
+            )
+        gains[bf] = ftz(ftz(score - Float32(0.0)) * Float32(1.0))
+
+
+def _greedy_gains(
+    score_function: Int,
+    hist: List[Float32],
+    hist_cells: Int,
+    part_stats: List[Float32],
+    n_live: Int,
+    lambda_l2: Float32,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    bf_feature: List[Int],
+) raises -> List[Float32]:
+    """`enqueue_score`'s dispatch (`greedy_search_helper.mojo`): the L2
+    kernel for L2 and NewtonL2, the cosine kernel (with the score noise)
+    for Cosine and NewtonCosine. The Newton scores differ from their
+    first-order twins only in the search planes (`second_order` on the
+    search passes), never here."""
+    if score_function == SCORE_FUNCTION_L2 or score_function == SCORE_FUNCTION_NEWTON_L2:
+        return _l2_gains(hist, hist_cells, part_stats, n_live, lambda_l2)
+    if score_function != SCORE_FUNCTION_COSINE and score_function != SCORE_FUNCTION_NEWTON_COSINE:
+        raise Error(
+            "score_function has no calcer here; only Cosine, NewtonCosine, L2"
+            " and NewtonL2 are implemented"
+        )
+    return _cosine_gains(
+        hist, hist_cells, part_stats, n_live, lambda_l2, score_std_dev,
+        level_seed, bf_feature,
+    )
+
+
 # ===========================================================================
 # THE BOOTSTRAP (`gbdt/gpu_util/kernel/bootstrap.mojo`)
 # ===========================================================================
@@ -3339,6 +3464,23 @@ def _regularize(weights_cpu: List[Float64], mut point: List[Float32]):
             point[leaf] = Float32(0.0)
 
 
+def _second_derivatives(
+    method: Int, weights_cpu: List[Float64], lambda_reg: Float64,
+    cached_der2: List[Float64],
+) -> List[Float64]:
+    """`write_second_derivatives` (`pointwise_oracle.mojo:341-431`): the
+    leaf weight plus lambda under Gradient, the cached Hessian under Newton.
+    One body for both host walkers (this one and
+    `gbdt_oracle_losses.mojo::_walker_estimate`; lane gbdt-cpu-rest-4-sym,
+    2026-11-23, moved it here from the losses oracle)."""
+    if method == LEAF_ESTIMATION_GRADIENT:
+        var out = List[Float64]()
+        for leaf in range(len(weights_cpu)):  # driver-loop: over the leaves
+            out.append(weights_cpu[leaf] + lambda_reg)
+        return out^
+    return cached_der2.copy()
+
+
 def _estimate_leaves(
     targets: List[Float32],
     cursor: List[Float32],
@@ -3351,12 +3493,16 @@ def _estimate_leaves(
     iterations: Int,
     weights: List[Float32] = List[Float32](),
     objective: Int = GBDT_BOOST_LOGLOSS,
+    method: Int = LEAF_ESTIMATION_NEWTON,
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, the oracle, and
     `newton_like_walker_estimate` with AnyImprovement
     (`descent_helpers.mojo:198-285`, `step_estimator.mojo:50-72`).
-    `objective` picks the oracle's target kernel (`_oracle_eval`)."""
+    `objective` picks the oracle's target kernel (`_oracle_eval`).
+    `method` is the walker's second derivatives (`_second_derivatives`):
+    the cached Hessian under Newton, the leaf weight plus lambda under
+    Gradient (lane gbdt-cpu-rest-4-sym, 2026-11-23)."""
     var n_leaves = len(sizes)
     var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
@@ -3425,7 +3571,7 @@ def _estimate_leaves(
         g_target, g_cursor, offsets, sizes, n_rows, border, lambda_reg,
         cur_value, cur_grad, cached_der2, g_weights, objective,
     )
-    var cur_hess = cached_der2.copy()
+    var cur_hess = _second_derivatives(method, weights_cpu, lambda_reg, cached_der2)
     var direction = _diagonal_direction(cur_grad, cur_hess)
 
     if iterations == 1:
@@ -3450,7 +3596,7 @@ def _estimate_leaves(
                 next_value, next_grad, cached_der2, g_weights, objective,
             )
             if function_value <= next_value:
-                cur_hess = cached_der2.copy()
+                cur_hess = _second_derivatives(method, weights_cpu, lambda_reg, cached_der2)
                 cur_point = next_point.copy()
                 cur_value = next_value
                 cur_grad = next_grad.copy()
@@ -3883,6 +4029,8 @@ def gbdt_host_fit_eval(
     objective: Int = GBDT_BOOST_LOGLOSS,
     starting_approx: Float64 = 0.0,
     feature_fraction: Float64 = 1.0,
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    leaf_method: Int = LEAF_ESTIMATION_NEWTON,
 ) raises -> GbdtHostFitWithEval:
     """`train` then `fit_with_test` on the covered configuration (see the
     module docstring for what that is and what mirrors what).
@@ -3959,6 +4107,7 @@ def gbdt_host_fit_eval(
         cindexes, 0, y, n_rows, n_features, grid^, layout, params,
         bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
         no_tree_ctr, weights, objective, starting_approx, feature_fraction,
+        score_function, leaf_method,
     )
 
 
@@ -3984,6 +4133,7 @@ def _tree_ctr_levels_host(
     mut p_sz: List[Int],
     mut out_features: List[Int],
     mut out_bins: List[Int],
+    score_function: Int = SCORE_FUNCTION_COSINE,
 ) raises -> Int:
     """One oblivious tree with tree CTRs (feature combinations) on
     permutation `learn_p`'s index: the host column of `run_tree_ctr_tree`
@@ -4074,9 +4224,10 @@ def _tree_ctr_levels_host(
             stats, n_rows, 2, GBDT_PARTITION_CHUNKS, p_off, p_sz, n_live
         )
 
-        # the score and the device winner
-        var gains = _cosine_gains(
-            hist, hist_cells, part_stats, n_live, l2_leaf_reg,
+        # the score and the device winner (`enqueue_score`'s dispatch,
+        # lane gbdt-cpu-rest-4-sym)
+        var gains = _greedy_gains(
+            score_function, hist, hist_cells, part_stats, n_live, l2_leaf_reg,
             score_std_dev, level_seed, bf_feature,
         )
         var best_bin = _gain_winner(gains, hist_cells)
@@ -4258,6 +4409,8 @@ def gbdt_host_boost(
     objective: Int = GBDT_BOOST_LOGLOSS,
     starting_approx: Float64 = 0.0,
     feature_fraction: Float64 = 1.0,
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    leaf_method: Int = LEAF_ESTIMATION_NEWTON,
 ) raises -> GbdtHostFitWithEval:
     """`fit_with_test`'s Plain SymmetricTree Logloss and RMSE loop over ONE compressed
     index PER PERMUTATION (`gbdt/methods/doc_parallel_boosting.mojo:1821-1860`,
@@ -4307,14 +4460,27 @@ def gbdt_host_boost(
     `fma(leaf, rate, cursor)` until this lane, a CPU-only difference,
     so the CPU column's Logloss bits change toward the device's).
     `starting_approx` is not written to the model here; the caller writes
-    the `bias` record (`gbdt_text_with_bias`)."""
+    the `bias` record (`gbdt_text_with_bias`).
+
+    THE SCORE, THE LEAVES, THE START (lane gbdt-cpu-rest-4-sym,
+    2026-11-23; this loop was Cosine, Newton leaves, RMSE at one iteration
+    and a zero Logloss start only). `score_function` is the device's
+    `enqueue_score` dispatch (`_greedy_gains`: the L2 kernel for L2 and
+    NewtonL2, the cosine kernel for Cosine and NewtonCosine) over the
+    search planes `secondDerAsWeights` keys (`is_second_order_score_function`:
+    plane 0 the weighted second derivative under the Newton scores).
+    `leaf_method` is the walker's second derivatives (Newton or Gradient,
+    `_estimate_leaves`) at `params.leaf_estimation_iterations`; the
+    searcher's own RMSE leaves (DEVIATION 64) stand only where the device's
+    `need_estimation` is False (RMSE, Newton, one iteration, one
+    permutation). A Logloss fit takes `starting_approx` exactly as RMSE does
+    (every cursor filled with it: `boost_from_average`)."""
     var is_rmse = objective == GBDT_BOOST_RMSE
     if not is_rmse and objective != GBDT_BOOST_LOGLOSS:
         raise Error("gbdt_host_boost: objective must be Logloss or RMSE")
-    if is_rmse and params.leaf_estimation_iterations != 1:
-        raise Error("gbdt_host_boost: RMSE takes Newton leaves at one iteration only")
-    if not is_rmse and starting_approx != 0.0:
-        raise Error("gbdt_host_boost: Logloss starts every cursor at zero here")
+    if leaf_method != LEAF_ESTIMATION_NEWTON and leaf_method != LEAF_ESTIMATION_GRADIENT:
+        raise Error("gbdt_host_boost: leaves are Newton or Gradient here")
+    var second_order = is_second_order_score_function(score_function)
     if len(tree_ctr) > 1:
         raise Error("a fit takes at most one tree-CTR state")
     var tree_on = len(tree_ctr) == 1
@@ -4424,12 +4590,13 @@ def gbdt_host_boost(
         # ---- the gradients, the learn loss and the magnitudes ----
         if is_rmse:
             _rmse_search_pass(
-                y, cursors[learn_p], n_rows, stats, fv_part, mag_part, weights
+                y, cursors[learn_p], n_rows, stats, fv_part, mag_part, weights,
+                second_order,
             )
         else:
             _logloss_search_pass(
                 y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part,
-                weights,
+                weights, second_order,
             )
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
@@ -4514,6 +4681,7 @@ def gbdt_host_boost(
                 s_bf_feature, s_bf_bin, n_rows, n_features, max_depth,
                 params.l2_leaf_reg, score_std_dev, fixed_scale, level_rand,
                 row_index, stats, p_off, p_sz, tc_features, tc_bins,
+                score_function,
             )
         ref cindex = cindexes[learn_p]
         for depth in range(0 if tree_on else max_depth):
@@ -4568,9 +4736,9 @@ def gbdt_host_boost(
             )
 
             # the score and the device winner
-            var gains = _cosine_gains(
-                hist, s_hist_cells, part_stats, n_live, params.l2_leaf_reg,
-                score_std_dev, level_seed, s_bf_feature,
+            var gains = _greedy_gains(
+                score_function, hist, s_hist_cells, part_stats, n_live,
+                params.l2_leaf_reg, score_std_dev, level_seed, s_bf_feature,
             )
             var best_bin = _gain_winner(gains, s_hist_cells)
             var best_gain = -GBDT_FLOAT32_MAX
@@ -4659,7 +4827,11 @@ def gbdt_host_boost(
         # `est_scaled` is the estimation permutation's `round(leaf * rate)`,
         # the stored model's values
         var est_scaled = List[Float32]()
-        if is_rmse and perm_count == 1:
+        if (
+            is_rmse and perm_count == 1
+            and leaf_method == LEAF_ESTIMATION_NEWTON
+            and params.leaf_estimation_iterations == 1
+        ):
             # DEVIATION 64 (`need_estimation` False): the searcher's own
             # leaves off the final partition of the stats planes, the
             # `apply_to_cursor` tail (`greedy_search_helper.mojo:5692-5739`)
@@ -4685,6 +4857,7 @@ def gbdt_host_boost(
                         y, cursors[p], row_index, offsets, sizes, n_rows,
                         border, params.l2_leaf_reg,
                         params.leaf_estimation_iterations, weights, objective,
+                        leaf_method,
                     )
                     scaled = rescaled_leaves(est_p_leaves, lr)
                     apply_scaled_leaves_host(
@@ -4700,6 +4873,7 @@ def gbdt_host_boost(
                         y, cursors[p], part.row_index, part.offsets,
                         part.sizes, n_rows, border, params.l2_leaf_reg,
                         params.leaf_estimation_iterations, weights, objective,
+                        leaf_method,
                     )
                     scaled = rescaled_leaves(est_p_leaves, lr)
                     apply_scaled_leaves_host(

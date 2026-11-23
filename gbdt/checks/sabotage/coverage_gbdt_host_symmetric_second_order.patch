@@ -1,0 +1,18 @@
+diff --git a/gbdt/host/gbdt_oracle.mojo b/gbdt/host/gbdt_oracle.mojo
+index 83e7317483..eeca831544 100644
+--- a/gbdt/host/gbdt_oracle.mojo
++++ b/gbdt/host/gbdt_oracle.mojo
+@@ -520,7 +520,12 @@ def _logloss_search_pass(
+                     var r = _cross_entropy_row(targets_p[i], cursor_p[i], border, weight)
+                     var plane0 = weight
+                     if second_order:
+-                        plane0 = r.weighted_scale
++                        # SABOTAGE (coverage-gbdt-host_symmetric_second_order):
++                        # the Newton search plane keeps the row weight, so a
++                        # NewtonL2 / NewtonCosine Logloss fit searches on
++                        # first-order planes while its leaves are estimated
++                        # as before
++                        plane0 = weight
+                     stats_p[i] = plane0
+                     stats_p[n_rows + i] = r.weighted_direction
+                     s_score[t] = r.score

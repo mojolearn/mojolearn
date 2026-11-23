@@ -824,6 +824,7 @@ TRAINING_LANE_NAMES = {
     "gbdt-nonsym-rest": "gradient boosting Depthwise and Lossguide with every score, growth knob, leaf method, bootstrap and boost_from_average",
     # lane gbdt-cpu-rest-4-pwl (2026-11-23)
     "gbdt-pointwise-rest": "gradient boosting on the pointwise searcher with every one-output loss, boost_from_average resolved, border types, IncToDec and categorical columns",
+    "gbdt-symmetric-rest": "gradient boosting on symmetric trees with the L2, NewtonL2 and NewtonCosine scores, Gradient leaves, boost_from_average on Logloss and CrossEntropy (Plain and Ordered) and class weights on a pointwise loss",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1631,18 +1632,34 @@ ADAPTED_MODULES = {
 #: and Lossguide, MultiRMSE, MultiClass and MultiClassOneVsAll (the device
 #: now refuses them too: it searched on the first class's gradient alone),
 #: feature combinations, boost_from_average=True outside its list.
+#: Lane gbdt-cpu-rest-4-sym (2026-11-23): under SymmetricTree (the greedy
+#: searcher) the L2, NewtonL2 and NewtonCosine scores on Logloss, RMSE, the
+#: pointwise losses and (L2) MultiClass / MultiClassOneVsAll / MultiRMSE,
+#: Gradient leaves on Logloss and RMSE, RMSE Newton leaves past one
+#: iteration, boost_from_average on Logloss and CrossEntropy (Plain and
+#: Ordered), class weights on the pointwise losses. Refused on BOTH columns
+#: in the device's words, so not CPU gaps: Exact leaves on Logloss, RMSE and
+#: the multi-output losses, MVS and unknown bootstrap names, the Newton
+#: scores on the multi-output losses, boost_from_average outside `train`'s
+#: list (Plain SymmetricTree and Ordered), class weights with RMSE, the
+#: grouped losses and MultiRMSE, score codes without a calcer.
 NO_CPU_PATH = (
     "gradient boosting training with a categorical or one-hot column "
     "outside SymmetricTree with Logloss or RMSE and Plain boosting: the "
     "categorical owners do not implement those combinations",
 
-    "gradient boosting training on SymmetricTree at a (loss, "
-    "score_function, leaf_estimation_method, bootstrap_type) combination "
-    "outside the ones the gbdt/host oracles restate, each refused by name: "
-    "score functions and leaf estimators outside its covered pair, "
-    "and boost_from_average outside RMSE, the quantile "
-    "family and the dedicated pointwise Logloss route -- each one its own "
-    "device kernel or its own searcher gate order",
+    "gradient boosting training at a (loss, grow_policy, score_function, "
+    "leaf_estimation_method, bootstrap_type) combination outside the ones "
+    "the gbdt/host oracles restate, each refused by name: under Depthwise "
+    "and Lossguide, score functions and leaf estimators outside each "
+    "policy's covered pair, Depthwise's min_split_gain, min_child_hessian "
+    "and min_data_in_leaf, and boost_from_average outside RMSE, the "
+    "quantile family and the dedicated pointwise Logloss route; under "
+    "SymmetricTree and Ordered, the Simple leaf estimator, Gradient leaves "
+    "or more than one leaf iteration on the multi-output losses (the host "
+    "restates one multi-dimensional Newton step), and border_count outside "
+    "1 to 255 or max_depth above 16 (no named device refusal to match) -- "
+    "each one its own device kernel or its own searcher gate order",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -2992,6 +3009,9 @@ FAMILIES = (
             # lane gbdt-cpu-rest-4-pwl (2026-11-23): the rest of the
             # pointwise searcher (gbdt_oracle_pointwise.mojo)
             "gbdt-pointwise-rest",
+            # lane gbdt-cpu-rest-4-sym (2026-11-23): the greedy SymmetricTree
+            # scores, leaves and starts and the Ordered boost_from_average
+            "gbdt-symmetric-rest",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4205,6 +4225,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-ordered-weights": "no reference",
     "gbdt-nonsym-rest": "no reference",
     "gbdt-pointwise-rest": "no reference",
+    "gbdt-symmetric-rest": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
