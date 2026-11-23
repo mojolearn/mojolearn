@@ -56,6 +56,7 @@ from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_balanced import py_call, py_type, py_get
+from core.gbdt_cat_words import gbdt_cat_range_words
 from bindings.py_typed_call import py_call_typed
 from bindings.py_cpython_table import cpython_table, CPythonTable
 from bindings.cpython_utf8_unpack import cpython_utf8
@@ -439,8 +440,7 @@ def _cat_slots(columns: List[Int], n_features: Int) raises -> List[Int]:
     var slot_of = List[Int](length=n_features, fill=-1)
     for c in range(len(columns)):  # driver-loop: over the categorical columns
         if columns[c] < 0 or columns[c] >= n_features:
-            raise Error("mojolearn: cat_features index " + String(columns[c]) + " out of range for "
-                        + String(n_features) + " features")
+            raise Error(gbdt_cat_range_words(columns[c], n_features))
         slot_of[columns[c]] = c
     return slot_of^
 

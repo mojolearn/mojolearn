@@ -92,6 +92,7 @@ from bindings.trees_public_inputs_door import trees_encode_labels, trees_address
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admit_weight_words
 from core.member_set_run import MemberFitExtras
 from core.member_families import MEMBER_FAMILY_GBDT
+from core.gbdt_cat_words import gbdt_cat_outside_words
 from core.host_parallel import host_parallelize
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.gbdt_category_unpack import gbdt_category_admit
@@ -320,22 +321,6 @@ def gbdt_member_label_check(plan: MemberPlan, classes: Int) raises:
         raise Error(GBDT_ADAPTER_MULTICLASS)
 
 
-def _cat_outside_words(params: List[Float64], d: Int) -> String:
-    """`_cat_slots`'s refusal (bindings/gbdt_category_unpack.mojo) for the first cat_features index of NEW's
-    feature-list tail, in the given order, that is outside the fit's `d` columns (lane mf-cal5)."""
-    var count = len(params)
-    var h = Int(params[count - 1])
-    var c = Int(params[count - 2])
-    var start = count - 2 - c - h
-    var at = -1
-    for k in range(c):  # small-loop(cat_features): the first index outside X
-        var index = Int(params[start + k])
-        if index < 0 or index >= d:
-            at = index
-            break
-    return ("mojolearn: cat_features index " + String(at) + " out of range for " + String(d) + " features")
-
-
 def _tail_cat_columns(params: List[Float64], d: Int) -> List[Int]:
     """The cat_features indices of NEW's feature-list tail (`[..., cat, one-hot, C, H]`, core/gbdt_member.mojo
     `_feature_tail`) ascending without repeats (`gbdt_category_columns`); empty when an index is outside the
@@ -527,7 +512,7 @@ def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: Py
             # An index outside X (THE FALLBACK RULE, lane mf-cal5): the fit door's refusal at its X, in its
             # words (bindings/gbdt_category_unpack.mojo `_cat_slots`: the first such index in the given order);
             # before, the caller fell back to that door to raise them.
-            raise Error(_cat_outside_words(plan.params, d))
+            raise Error(gbdt_cat_outside_words(plan.params, d))
     var run: PythonObject
     if kind == 1 or kind == 4:
         run = trees_route_context(model, context)
