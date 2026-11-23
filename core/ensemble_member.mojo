@@ -177,6 +177,21 @@ ADA_DECISION) or `ada_regressor_run` (float32, the door's dtype), the
 door's predict RUNs. EXPORT: `META_BLOCK_NESTED` (the round states) and
 `META_BLOCK_ADA` (the weights and errors); IMPORT the same two.
 
+THE RFE KIND (lane mf-meta5, 2026-11-23): RFE (`META_RFE_CLASSIFIER` /
+`META_RFE_REGRESSOR`, one mark (39, 14); the admission picks the kind from its
+estimator). The plan entry holds ONE nested plan, the estimator's leaf member
+with the importance word the rounds read (providers/python/member_rfe_boundary_door.mojo
+`rfe_base_admit`, the admission RFE's own door runs), its settings words
+`META_RFE_*`, the x_prep image of the rounds' programs and the words a first
+round raises (`meta_plan_rfe`). FIT (`_fit_rfe`) is RFE's RUN whole
+(bindings/prep_select_run.mojo `rfe_fit_run`, THE ONE BODY the door runs too):
+the rounds' member fits and programs, then the final estimator, the state's one
+nested member (it owns its rows); sample weights ride every fit (RFE.fit's
+`sample_weight`). PREDICT / PREDICT_PROBA / DECISION / SCORE: the kept columns
+of X gathered, then the final estimator's own call; TRANSFORM writes the
+gathered block. EXPORT `META_BLOCK_NESTED` (the final estimator) and
+`META_BLOCK_RFE` (support, ranking, kept columns); IMPORT the same two.
+
 STACKING, lane mf-meta3b: a user's cv INDEX LIST is read by the UNPACK into
 the entry's typed folds (`fold_train` / `fold_test`, int32 row numbers) and
 checked against the fit's rows as the door's `_splits` checks them; a fold
@@ -186,7 +201,7 @@ stack_method='predict' writes its predicted codes as float32 meta features
 (`_label_block`: the label scikit-learn's encoded fit predicts).
 """
 from std.math import isnan
-from std.memory import bitcast
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.info import size_of
 from std.sys.compile import is_defined
 from bindings.native_unit_os_threads_run import native_unit_cores
@@ -200,6 +215,10 @@ from core.forest_calls import (
 )
 from core.forest_fit_request import XF_CAP_SESSION, XF_CAP_ADA
 from bindings.arena_prog_run import MetricRoute
+from bindings.prep_classify_prog_run import ClsRunPlan
+from bindings.prep_select_run import (
+    RfeFitPlan, RfeFitResult, rfe_fit_run, rfe_select_count, rfe_step_count, rfe_final_plan,
+)
 from core.msel_search_run import MselSearchPlan, MselSearchResult, msel_search_run
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_own, member_new,
@@ -211,7 +230,7 @@ from core.member_abi import (
     MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_TEST_ROWS,
     MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_SCORE,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_BY_INDEX, MEMBER_EXPORT_OWN, MEMBER_IMPORT_DONE,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_CAN_TRANSFORM, MEMBER_OP_TRANSFORM,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import (
@@ -279,7 +298,11 @@ comptime META_SEARCH_CLASSIFIER = 10
 comptime META_SEARCH_REGRESSOR = 11
 comptime META_MULTI_CLASSIFIER = 12
 comptime META_MULTI_REGRESSOR = 13
-comptime META_KIND_LAST = META_MULTI_REGRESSOR
+# Lane mf-meta5: THE RFE KIND (RFE over a classifier / a regressor base; one mark (39, 14), the admission
+# picks the kind from its base).
+comptime META_RFE_CLASSIFIER = 14
+comptime META_RFE_REGRESSOR = 15
+comptime META_KIND_LAST = META_RFE_REGRESSOR
 comptime META_PARAM_COUNT = 6
 comptime META_BLOCK_NESTED = MEMBER_BLOCK_FAMILY
 comptime META_BLOCK_WIDTHS = MEMBER_BLOCK_FAMILY + 1
@@ -360,6 +383,28 @@ comptime META_SEARCH_WORDS = 8          # the head; then `count` codes, then one
 #: read at UNPACK (-1: the scorer reads no positive label).
 #: THE MULTI-OUTPUT KIND's settings words: [0] reserved.
 comptime META_MULTI_WORDS = 1
+#: THE RFE KIND's settings words (lane mf-meta5), read by the boundary's UNPACK as the door reads RFE's
+#: fields (bindings/prep_select_run.mojo `rfe_select_count` / `rfe_step_count` resolve them per fit over its
+#: X's columns): n_features_to_select's kind (RFE_SELECT_*), fraction and count; step as a fraction (1.0)
+#: or a count, and its value and count; the importance block and whether it is squared
+#: (`rfe_member_source`); whether the rounds' plan has the importance word set (`rfe_final_plan` clears
+#: it); the x_prep image's `work` switch; whether the image keeps a pinned X resident in a caller's scope
+#: (device store and range runner: MEMBER_CAN_SCOPE).
+comptime META_RFE_SELECT_KIND = 0
+comptime META_RFE_SELECT_FRACTION = 1
+comptime META_RFE_SELECT_COUNT = 2
+comptime META_RFE_STEP_FRACTION = 3
+comptime META_RFE_STEP_VALUE = 4
+comptime META_RFE_STEP_COUNT = 5
+comptime META_RFE_BLOCK = 6
+comptime META_RFE_SQUARED = 7
+comptime META_RFE_IMPORTANCE_WORD = 8
+comptime META_RFE_WORK_ON = 9
+comptime META_RFE_SCOPE = 10
+comptime META_RFE_WORDS = 11
+#: THE RFE KIND's fitted words (float64, export / import): [d, k], the d support words (1.0 kept), the d
+#: ranking words, the k kept column ids.
+comptime META_BLOCK_RFE = MEMBER_BLOCK_FAMILY + 8
 #: THE CLASS-WEIGHT TAIL of a tree base (lane mf-split4): appended after a
 #: Bagging's META_BAG_WORDS (its batched forest's or per-member tree's
 #: class_weight) and an AdaBoost's META_ADA_WORDS (its base's): [mode, K,
@@ -400,7 +445,7 @@ def _stack_kind_code(kind: Int) -> Bool:
 def _classifier_kind(kind: Int) -> Bool:
     return (kind == META_VOTE_CLASSIFIER or kind == META_STACK_CLASSIFIER or kind == META_OVR
             or kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER or kind == META_ADA_CLASSIFIER
-            or kind == META_SEARCH_CLASSIFIER or kind == META_MULTI_CLASSIFIER)
+            or kind == META_SEARCH_CLASSIFIER or kind == META_MULTI_CLASSIFIER or kind == META_RFE_CLASSIFIER)
 
 
 def _search_kind(kind: Int) -> Bool:
@@ -413,6 +458,10 @@ def _multi_kind(kind: Int) -> Bool:
 
 def _ada_kind(kind: Int) -> Bool:
     return kind == META_ADA_CLASSIFIER or kind == META_ADA_REGRESSOR
+
+
+def _rfe_kind(kind: Int) -> Bool:
+    return kind == META_RFE_CLASSIFIER or kind == META_RFE_REGRESSOR
 
 
 def _unit_kind(kind: Int) -> Bool:
@@ -450,6 +499,10 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
     # labels' reprs (`meta_plan_search_labels`).
     var cluster: EntryRef
     var label_words: List[String]
+    # Lane mf-meta5: THE RFE KIND's x_prep image (the rounds' programs, `meta_plan_rfe`; the admission
+    # pins its selection) and the words its first round raises (empty: none).
+    var rfe_run: ClsRunPlan
+    var refusal: String
 
     def __init__(out self):
         self.generation = 0
@@ -465,6 +518,8 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
         self.split = MselSplitSpec()
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
+        self.rfe_run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
+        self.refusal = String("")
 
 
 struct MetaPlanStore(Defaultable, Movable):
@@ -579,6 +634,22 @@ def meta_plan_search_labels(handle: Int, cluster: EntryRef, var label_words: Lis
         shared_slot_unlock(lock)
 
 
+def meta_plan_rfe(handle: Int, run: ClsRunPlan, var refusal: String) raises:
+    """UNPACK (THE RFE KIND's admission, lane mf-meta5): the x_prep image the elimination rounds' programs
+    run on (its selection pinned by the admission) and the words the first round raises (a base kind that
+    exports no importance block; empty: none), copied into every state NEW makes from it."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var entry = _PlanSlotPtr(unsafe_from_address=address)
+        entry[].rfe_run = run
+        entry[].refusal = refusal^
+    finally:
+        shared_slot_unlock(lock)
+
+
 def _plan_first(handle: Int) raises -> MemberPlan:
     """The FIRST nested plan of a plan entry (a search's first candidate),
     copied under the store's lock."""
@@ -591,6 +662,18 @@ def _plan_first(handle: Int) raises -> MemberPlan:
         if len(slot[].plans) == 0:
             raise Error("member ABI: a meta member plan holds no members")
         return slot[].plans[0].copy()
+    finally:
+        shared_slot_unlock(lock)
+
+
+def _plan_words(handle: Int) raises -> List[Float64]:
+    """A plan entry's settings words, copied under the store's lock."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        return _PlanSlotPtr(unsafe_from_address=address)[].words.copy()
     finally:
         shared_slot_unlock(lock)
 
@@ -616,6 +699,7 @@ def _plan_lookup(handle: Int, release: Bool) raises -> Int:
             slot[].words = List[Float64]()
             slot[].fold_train = List[List[Int32]]()
             slot[].fold_test = List[List[Int32]]()
+            slot[].refusal = String("")
             store[].free.append(index)
         return address
     finally:
@@ -750,6 +834,15 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     # Lane mf-cluster5: the search's cluster entry and labels' reprs.
     var cluster: EntryRef
     var label_words: List[String]
+    # Lane mf-meta5, THE RFE KIND: the entry's x_prep image and first-round refusal; the fitted support and
+    # ranking (float32, d words each), the kept column ids (int32, k) and their export view
+    # (META_BLOCK_RFE). The one nested member is the final estimator.
+    var rfe_run: ClsRunPlan
+    var refusal: String
+    var rfe_support: List[Float32]
+    var rfe_ranking: List[Float32]
+    var rfe_columns: List[Int32]
+    var rfe_words: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -819,6 +912,12 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.out_classes = List[Int]()
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
+        self.rfe_run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
+        self.refusal = String("")
+        self.rfe_support = List[Float32]()
+        self.rfe_ranking = List[Float32]()
+        self.rfe_columns = List[Int32]()
+        self.rfe_words = List[Float64]()
 
 
 struct EnsembleMemberStore(Defaultable, Movable):
@@ -916,6 +1015,8 @@ def _name(kind: Int) -> String:
         return String("MultiOutputClassifier")
     if kind == META_MULTI_REGRESSOR:
         return String("MultiOutputRegressor")
+    if _rfe_kind(kind):
+        return String("RFE")
     return String("StackingRegressor")
 
 
@@ -971,6 +1072,10 @@ def _drop_states(slot: _SlotPtr):
     slot[].ada_words = List[Float64]()
     slot[].search_words = List[Float64]()
     slot[].out_classes = List[Int]()
+    slot[].rfe_support = List[Float32]()
+    slot[].rfe_ranking = List[Float32]()
+    slot[].rfe_columns = List[Int32]()
+    slot[].rfe_words = List[Float64]()
 
 
 # --------------------------------------------------------------- the masks
@@ -1080,7 +1185,8 @@ def _all_either(masks: List[Int]) -> Bool:
 
 comptime _UNION = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT
-    | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCOPE)
+    | MEMBER_GIL_FREE | MEMBER_GIL_DOOR | MEMBER_CAN_SCORE | MEMBER_CAN_MULTI_OUTPUT | MEMBER_CAN_SCOPE
+    | MEMBER_CAN_TRANSFORM)
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -1126,6 +1232,8 @@ def _new(call: _CallPtr) raises:
         slot[].split = entry[].split.copy()
         slot[].cluster = entry[].cluster
         slot[].label_words = entry[].label_words.copy()
+        slot[].rfe_run = entry[].rfe_run
+        slot[].refusal = entry[].refusal.copy()
     finally:
         shared_slot_unlock(lock)
     try:
@@ -1148,6 +1256,12 @@ def _new(call: _CallPtr) raises:
                 raise Error("member ABI: a search member needs its candidates, one mask each, its "
                             + String(META_SEARCH_WORDS) + " settings words, its scorer codes and positive "
                             + "words, a refit scorer among them and cv >= 2")
+            slot[].base_plans = slot[].plans.copy()
+            slot[].base_masks = slot[].masks.copy()
+        elif _rfe_kind(kind):
+            if len(slot[].plans) != 1 or len(slot[].masks) != 1 or len(slot[].words) != META_RFE_WORDS:
+                raise Error("member ABI: an RFE member needs its one estimator, its mask and its "
+                            + String(META_RFE_WORDS) + " settings words")
             slot[].base_plans = slot[].plans.copy()
             slot[].base_masks = slot[].masks.copy()
         elif _unit_kind(kind):
@@ -2962,6 +3076,8 @@ def _unit_views(slot: _SlotPtr):
         slot[].draw_words = w^
     elif _ada_kind(slot[].kind):
         _ada_view(slot)
+    elif _rfe_kind(slot[].kind):
+        _rfe_view(slot)
 
 
 # ------------------------------------------------------------ THE SEARCH KIND (lane mf-search4)
@@ -3339,6 +3455,214 @@ def _score_multi(slot: _SlotPtr, call: _CallPtr) raises:
     _ = len(scores)
 
 
+# ------------------------------------------------------------ THE RFE KIND (lane mf-meta5)
+
+
+def _rfe_mask(slot: _SlotPtr) -> Int:
+    """THE RFE KIND's kind-exact mask: fit, predict, transform, export and import, and what its base (the
+    final estimator) answers: predict_proba, decision_function, score, sample weights (RFE.fit hands
+    `sample_weight` to every fit). THE GIL RULE: MEMBER_GIL_DOOR at most, when the base has either bit (the
+    rounds' x_prep programs run on the calling thread, as the naive Bayes members' do: the transports are
+    not traced for parallel workers). MEMBER_CAN_SCOPE when the image keeps a pinned X resident in a
+    caller's scope. No MEMBER_BORROWS_FIT: the rounds read X during the fit only and the final estimator
+    owns its rows (`rfe_fit_run`)."""
+    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    if slot[].kind == META_RFE_CLASSIFIER:
+        mask |= MEMBER_CAN_CLASSIFIER
+    var base = slot[].base_masks[0] if len(slot[].base_masks) > 0 else 0
+    mask |= base & (MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_SAMPLE_WEIGHT)
+    if (base & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0:
+        mask |= MEMBER_GIL_DOOR
+    if len(slot[].words) == META_RFE_WORDS and slot[].words[META_RFE_SCOPE] != 0.0:
+        mask |= MEMBER_CAN_SCOPE
+    return mask
+
+
+def _rfe_selected(words: List[Float64], d: Int) -> Int:
+    """n_features_to_select resolved over `d` columns (`rfe_select_count`)."""
+    return rfe_select_count(d, Int(words[META_RFE_SELECT_KIND]), words[META_RFE_SELECT_FRACTION],
+                            Int(words[META_RFE_SELECT_COUNT]))
+
+
+def _fit_rfe(slot: _SlotPtr, call: _CallPtr) raises:
+    """RFE.fit(X, y[, sample_weight]) over its member, the door's RUN whole (bindings/prep_select_run.mojo
+    `rfe_fit_run`, THE ONE BODY: the same rounds, programs and final fit as
+    bindings/prep_select_native_door.mojo `_rfe_rounds`). The final estimator is the state's one nested
+    member; the rounds' and the final fit's notices go to the PACK with the estimator's context; the
+    support, ranking and kept columns are the state's (META_BLOCK_RFE)."""
+    var classifier = slot[].kind == META_RFE_CLASSIFIER
+    var n = call[].x.rows
+    var d = call[].x.cols
+    var words = slot[].words.copy()
+    # The door's order: n_features_to_select, then step (its refusal), before any fit.
+    var nsel = _rfe_selected(words, d)
+    var step = rfe_step_count(d, words[META_RFE_STEP_FRACTION] != 0.0, words[META_RFE_STEP_VALUE],
+                              Int(words[META_RFE_STEP_COUNT]))
+    var member = slot[].base_plans[0].copy()
+    member.classes = call[].classes if classifier else 0
+    var plan = RfeFitPlan(member^, slot[].rfe_run, words[META_RFE_WORK_ON] != 0.0, call[].x.data, n, d,
+                          call[].y.data, MEMBER_I32 if classifier else MEMBER_F32)
+    plan.nsel = nsel
+    plan.step = step
+    plan.block = Int(words[META_RFE_BLOCK])
+    plan.squared = words[META_RFE_SQUARED] != 0.0
+    plan.importance_word = words[META_RFE_IMPORTANCE_WORD] != 0.0
+    plan.refusal = slot[].refusal.copy()
+    if call[].weights.given():
+        # RFE.fit's sample_weight, handed to every round's fit and the final fit (scikit-learn's
+        # `**fit_params`): the caller's float32 column, as the base's own fit reads it.
+        plan.extras.rows = n
+        plan.extras.weights = call[].weights.data
+    # THE RESIDENT ROUTE: a caller in a resident scope hands the rounds its scope and X's pin (THE PIN
+    # RULE: the run writes this call's `pin_kept` the moment the scope's cache takes the reference).
+    if (_rfe_mask(slot) & MEMBER_CAN_SCOPE) != 0 and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0:
+        plan.scope = call[].scope
+        plan.pin = call[].pin
+        plan.kept_at = Int(UnsafePointer(to=call[].pin_kept))
+    var res = rfe_fit_run(plan)
+    slot[].plans = [res.final_plan.copy()]
+    slot[].masks = [slot[].base_masks[0]]
+    slot[].states = [res.final_state]
+    for i in range(len(res.notices)):  # driver-loop: over the member fits' notices, in fit order
+        slot[].notice_owner.append(0)
+        slot[].notice_words.append(res.notices[i].copy())
+    slot[].classes = call[].classes if classifier else 0
+    slot[].rfe_support = res.support.copy()
+    slot[].rfe_ranking = res.ranking.copy()
+    slot[].rfe_columns = res.columns.copy()
+
+
+def _rfe_view(slot: _SlotPtr):
+    """THE RFE KIND's export view (META_BLOCK_RFE's layout)."""
+    var d = len(slot[].rfe_support)
+    var k = len(slot[].rfe_columns)
+    var w = List[Float64](capacity=2 + 2 * d + k)
+    w.append(Float64(d))
+    w.append(Float64(k))
+    for j in range(d):  # small-loop(the fitted support, feature count)
+        w.append(Float64(slot[].rfe_support[j]))
+    for j in range(d):  # small-loop(the fitted ranking, feature count)
+        w.append(Float64(slot[].rfe_ranking[j]))
+    for j in range(k):  # small-loop(the kept column ids)
+        w.append(Float64(Int(slot[].rfe_columns[j])))
+    slot[].rfe_words = w^
+
+
+def _import_rfe(slot: _SlotPtr, words: _F64P, count: Int) raises:
+    """IMPORT META_BLOCK_RFE (`_rfe_view`'s layout), after META_BLOCK_NESTED (the final estimator)."""
+    var bad = String("member ABI: an RFE member's words are malformed")
+    if count < 2:
+        raise Error(bad)
+    var d = Int(words[0])
+    var k = Int(words[1])
+    if d < 1 or k < 1 or k > d or count != 2 + 2 * d + k:
+        raise Error(bad)
+    slot[].rfe_support = List[Float32](length=d, fill=0.0)
+    slot[].rfe_ranking = List[Float32](length=d, fill=0.0)
+    slot[].rfe_columns = List[Int32](length=k, fill=Int32(0))
+    for j in range(d):  # small-loop(the imported support and ranking, feature count)
+        slot[].rfe_support[j] = Float32(words[2 + j])
+        slot[].rfe_ranking[j] = Float32(words[2 + d + j])
+    for j in range(k):  # small-loop(the imported kept column ids)
+        var c = Int(words[2 + 2 * d + j])
+        if c < 0 or c >= d:
+            raise Error(bad)
+        slot[].rfe_columns[j] = Int32(c)
+    slot[].features = d
+
+
+def _rfe_block(slot: _SlotPtr, call: _CallPtr, name: String) raises -> List[Float32]:
+    """`self.transform(X)` (`_SelectorMixin.transform`): the kept columns of the caller's X, gathered into a
+    new n x k float32 block (bit for bit the door's gather), after its feature check."""
+    var rows = _rows(call, name)
+    var d = len(slot[].rfe_support)
+    if rows.d != d:
+        raise Error("mojolearn: X has " + String(rows.d) + " features, RFE was fitted with " + String(d))
+    var n = rows.n
+    var k = len(slot[].rfe_columns)
+    var block = List[Float32](length=max(n * k, 1), fill=0.0)
+    if n == 0:
+        return block^
+    var order = List[Int32](length=n, fill=Int32(0))
+    for i in range(n):  # small-loop(the row numbers 0 .. n-1 of the column gather, once per call)
+        order[i] = Int32(i)
+    _ = xt_gather_f32(slot[].glue, rows.x, Int(order.unsafe_ptr()), Int(slot[].rfe_columns.unsafe_ptr()),
+                      Int(block.unsafe_ptr()), n, d, n, k)
+    _ = len(order)  # read through the gather above
+    return block^
+
+
+def _call_rfe(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    """RFE.predict / predict_proba / decision_function / score / transform: the kept columns of X, then the
+    final estimator's own call on them (`self.estimator_.<op>(self.transform(X)[, y])`); transform writes
+    the block. The caller's dst, y, weights and flags are the final call's."""
+    _fitted(slot)
+    var name = _name(slot[].kind)
+    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
+        raise Error("TypeError: an RFE member reads whole host views (no row or column index)")
+    var mask = _rfe_mask(slot)
+    if operation == MEMBER_OP_PREDICT_PROBA and (mask & MEMBER_CAN_PREDICT_PROBA) == 0:
+        member_unsupported(name, operation)
+    if operation == MEMBER_OP_DECISION and (mask & MEMBER_CAN_DECISION) == 0:
+        member_unsupported(name, operation)
+    if operation == MEMBER_OP_SCORE and (mask & MEMBER_CAN_SCORE) == 0:
+        member_unsupported(name, operation)
+    var block = _rfe_block(slot, call, name)
+    var n = call[].x.rows
+    var k = len(slot[].rfe_columns)
+    if operation == MEMBER_OP_TRANSFORM:
+        if not call[].dst.dense_host(MEMBER_F32) or call[].dst.rows != n or call[].dst.cols != k:
+            raise Error("TypeError: an RFE member writes transform as dense host float32 rows of its "
+                        + String(k) + " kept columns")
+        if n * k > 0:
+            unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=block.unsafe_ptr(), count=n * k)
+        call[].out_cols = k
+        return
+    var plan = slot[].plans[0].copy()
+    var inner = member_call_of(plan, slot[].states[0])
+    inner.x = MemberMatrix(Int(block.unsafe_ptr()), n, k)
+    inner.y = call[].y
+    inner.weights = call[].weights
+    inner.dst = call[].dst
+    inner.flags = call[].flags
+    _ = member_call(plan.member, operation, inner)
+    _ = len(block)  # read through the final estimator's call above
+    call[].value = inner.value
+    call[].out_cols = inner.out_cols
+
+
+def _outputs_rfe_fitted(call: _CallPtr, slot: _SlotPtr) raises:
+    """THE RFE KIND's outputs after a fit or an import: transform its kept columns (float32), every other
+    operation its final estimator's."""
+    var asked = call[].flags
+    if asked == MEMBER_OP_TRANSFORM:
+        call[].out_cols = len(slot[].rfe_columns)
+        call[].out_dtype = MEMBER_F32
+    else:
+        var plan = slot[].plans[0].copy()
+        var inner = member_call_of(plan, slot[].states[0])
+        call[].out_cols = member_outputs_of(plan, inner, asked)
+        call[].out_dtype = inner.out_dtype
+    call[].classes = slot[].classes
+
+
+def _outputs_rfe(call: _CallPtr, base: MemberPlan, words: List[Float64], classes: Int) raises:
+    """THE RFE KIND's outputs before a fit: transform n_features_to_select over the caller's X width
+    (float32), every other operation its estimator's plan's."""
+    var asked = call[].flags
+    if asked == MEMBER_OP_TRANSFORM:
+        call[].out_cols = _rfe_selected(words, max(call[].x.cols, 1))
+        call[].out_dtype = MEMBER_F32
+        call[].classes = classes
+        return
+    var plan = base.copy()
+    plan.classes = classes
+    call[].out_cols = member_outputs(plan, asked, max(call[].x.cols, 1), max(call[].y.cols, 1))
+    call[].out_dtype = member_output_dtype(plan, asked, max(call[].x.cols, 1), max(call[].y.cols, 1),
+                                           MEMBER_DTYPE_UNSAID)
+    call[].classes = classes
+
+
 def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     var name = _name(slot[].kind)
     if not call[].x.dense_host(MEMBER_F32):
@@ -3361,6 +3685,8 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     if call[].weights.given() and (slot[].kind == META_OVR or slot[].kind == META_CALIBRATED
                                    or _search_kind(slot[].kind)):
         raise Error("TypeError: a " + name + " member's fit takes no sample weights")
+    if call[].weights.given() and _rfe_kind(slot[].kind) and (_rfe_mask(slot) & MEMBER_CAN_SAMPLE_WEIGHT) == 0:
+        raise Error("TypeError: an RFE member's estimator fits no sample weights")
     _drop_states(slot)
     slot[].features = call[].x.cols
     try:
@@ -3378,6 +3704,8 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
             _fit_search(slot, call)
         elif _multi_kind(slot[].kind):
             _fit_multi(slot, call)
+        elif _rfe_kind(slot[].kind):
+            _fit_rfe(slot, call)
         else:
             _fit_vote(slot, call)
         if not _bag_kind(slot[].kind):
@@ -3745,6 +4073,8 @@ def _predict(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         _forward_best(slot, call, operation)
     elif _multi_kind(slot[].kind):
         _predict_multi(slot, call, operation)
+    elif _rfe_kind(slot[].kind):
+        _call_rfe(slot, call, operation)
     else:
         _predict_vote(slot, call, operation)
 
@@ -3789,6 +4119,13 @@ def _outputs(call: _CallPtr) raises:
         if _ada_kind(kind):
             _outputs_ada(call, kind, call[].classes)
             return
+        if _rfe_kind(kind):
+            var entry_words = _plan_words(Int(words[1]))
+            if len(entry_words) != META_RFE_WORDS:
+                raise Error("member ABI: an RFE member needs its " + String(META_RFE_WORDS) + " settings words")
+            _outputs_rfe(call, _plan_first(Int(words[1])), entry_words,
+                         call[].classes if kind == META_RFE_CLASSIFIER else 0)
+            return
         if _search_kind(kind):
             _outputs_search(call, _plan_first(Int(words[1])), call[].classes if kind == META_SEARCH_CLASSIFIER else 0)
             return
@@ -3825,6 +4162,13 @@ def _outputs(call: _CallPtr) raises:
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
     if _ada_kind(slot[].kind):
         _outputs_ada(call, slot[].kind, slot[].classes if slot[].fitted else call[].classes)
+        return
+    if _rfe_kind(slot[].kind):
+        if slot[].fitted:
+            _outputs_rfe_fitted(call, slot)
+        else:
+            _outputs_rfe(call, slot[].base_plans[0], slot[].words,
+                         call[].classes if slot[].kind == META_RFE_CLASSIFIER else 0)
         return
     if _search_kind(slot[].kind):
         if not slot[].fitted:
@@ -3878,7 +4222,7 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
     if call[].flags == MEMBER_BLOCK_BY_INDEX:
         # vote / stack: nested, widths; a unit kind: nested, then its own words (calibrated pairs, bag draws),
         # then a bag's out-of-bag outputs.
-        var blocks = 2
+        var blocks = 2  # an RFE state: nested (the final estimator), then its fitted words
         if slot[].kind == META_OVR or _multi_kind(slot[].kind):
             blocks = 1
         elif _bag_kind(slot[].kind):
@@ -3889,6 +4233,8 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
             block = META_BLOCK_NESTED
         elif _search_kind(slot[].kind):
             block = META_BLOCK_SEARCH
+        elif _rfe_kind(slot[].kind):
+            block = META_BLOCK_RFE
         elif not _unit_kind(slot[].kind):
             block = META_BLOCK_WIDTHS
         elif _ada_kind(slot[].kind):
@@ -3915,6 +4261,8 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         call[].dst = MemberMatrix(Int(slot[].ada_words.unsafe_ptr()), 1, len(slot[].ada_words), MEMBER_F64)
     elif block == META_BLOCK_SEARCH and _search_kind(slot[].kind):
         call[].dst = MemberMatrix(Int(slot[].search_words.unsafe_ptr()), 1, len(slot[].search_words), MEMBER_F64)
+    elif block == META_BLOCK_RFE and _rfe_kind(slot[].kind):
+        call[].dst = MemberMatrix(Int(slot[].rfe_words.unsafe_ptr()), 1, len(slot[].rfe_words), MEMBER_F64)
     elif block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalar_words.unsafe_ptr()), 1, len(slot[].scalar_words), MEMBER_F64)
     else:
@@ -4012,8 +4360,8 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         var count = call[].x.rows * call[].x.cols
         var unit = _unit_kind(slot[].kind)
         var wrong = count < 1 if unit else count != len(slot[].plans)
-        if _search_kind(slot[].kind):
-            wrong = count != 1  # the refitted best only
+        if _search_kind(slot[].kind) or _rfe_kind(slot[].kind):
+            wrong = count != 1  # the refitted best only; an RFE's final estimator
         if wrong or call[].x.dtype != MEMBER_I64 or call[].x.data == 0:
             raise Error("member ABI: a meta member imports one int64 state handle per member")
         _drop_states(slot)
@@ -4045,6 +4393,10 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         if call[].x.dtype != MEMBER_F64 or call[].x.data == 0:
             raise Error("member ABI: a search member imports its words as float64 words")
         _import_search(slot, _F64P(unsafe_from_address=call[].x.data), call[].x.rows * call[].x.cols)
+    elif call[].block == META_BLOCK_RFE and _rfe_kind(slot[].kind):
+        if call[].x.dtype != MEMBER_F64 or call[].x.data == 0:
+            raise Error("member ABI: an RFE member imports its words as float64 words")
+        _import_rfe(slot, _F64P(unsafe_from_address=call[].x.data), call[].x.rows * call[].x.cols)
     elif call[].block == META_BLOCK_ADA and _ada_kind(slot[].kind):
         if call[].x.dtype != MEMBER_F64 or call[].x.data == 0:
             raise Error("member ABI: an AdaBoost member imports its weights and errors as float64 words")
@@ -4079,6 +4431,11 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("member ABI: an AdaBoost member import needs one weight per round member")
         if _search_kind(kind) and len(slot[].search_words) == 0:
             raise Error("member ABI: a search member import needs its search words")
+        if _rfe_kind(kind) and len(slot[].rfe_columns) == 0:
+            raise Error("member ABI: an RFE member import needs its fitted words")
+        if _rfe_kind(kind):
+            # The final estimator's plan: the rounds' plan with the importance word cleared, as its fit made it.
+            slot[].plans = [rfe_final_plan(slot[].base_plans[0], slot[].words[META_RFE_IMPORTANCE_WORD] != 0.0)]
         var counts = List[Int]()
         if call[].class_counts != 0:
             var given = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=call[].class_counts)
@@ -4133,6 +4490,8 @@ def _ensemble_member(operation: Int, address: Int) raises -> Int:
         if call[].state == 0:
             return _UNION
         var kind = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+        if _rfe_kind(kind[].kind):
+            return _rfe_mask(kind)
         if _unit_kind(kind[].kind) or _search_kind(kind[].kind):
             return _kind_mask(kind[].kind, kind[].flag, kind[].base_masks)
         return _kind_mask(kind[].kind, kind[].flag, kind[].masks)
@@ -4162,6 +4521,8 @@ def _ensemble_member(operation: Int, address: Int) raises -> Int:
     elif operation == MEMBER_OP_SCORE and _search_kind(slot[].kind):
         _fitted(slot)
         _forward_best(slot, call, operation)
+    elif (operation == MEMBER_OP_SCORE or operation == MEMBER_OP_TRANSFORM) and _rfe_kind(slot[].kind):
+        _call_rfe(slot, call, operation)
     else:
         member_unsupported(_name(slot[].kind), operation)
     return 0
