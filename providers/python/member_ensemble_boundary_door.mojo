@@ -3971,18 +3971,12 @@ def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject,
         nested.plans.append(base.owner.plan.copy())
         nested.masks.append(base.mask)
         _ = py_call(nested.pins.append, base.owner.pins)
-    var words = List[Float64]()
-    var image_entries = PythonObject(None)
-    var run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
-    var work_on = False
-    try:
-        words = rfe_count_words(fields, b)
-        var image = rfe_image(py_item(context, prep_keys()[].k_select_context))
-        run = image.run
-        work_on = image.work_on
-        image_entries = image.entries
-    except:
-        return False  # the door reads the same values and raises its words
+    # The door reads the same values first and raises the same words (lane mf-ens6: no catch).
+    var words = rfe_count_words(fields, b)
+    var image = rfe_image(py_item(context, prep_keys()[].k_select_context))
+    var run = image.run
+    var work_on = image.work_on
+    var image_entries = image.entries
     words.append(Float64(base.block))
     words.append(1.0 if base.squared else 0.0)
     words.append(1.0 if base.importance_word else 0.0)
@@ -3992,14 +3986,11 @@ def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject,
     # The META entry and its glue run on an x_trees image: RFE's own context is the prep owner's, so the
     # image is the one the meta classes' context names (as the search kind's admission reads it).
     var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
-    if trees is None:
-        return False
-    var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
+    var trees_context = PythonObject(None) if trees is None else py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
     if trees_context is None:
-        return False
-    if not _finish(fields, trees_context, b, owner, nested, kind, 0.0, 0, List[Float64](), List[Int](), words^,
-                   List[List[Int32]](), List[List[Int32]]()):
-        return False
+        raise Error("ImportError: mojolearn: _mojolearn_x_trees is not connected to the tree owner")
+    _ = _finish(fields, trees_context, b, owner, nested, kind, 0.0, 0, List[Float64](), List[Int](), words^,
+                List[List[Int32]](), List[List[Int32]]())
     meta_plan_rfe(Int(owner.plan.params[1]), run, base.refusal.copy(), base.hops.copy())
     _ = py_call(owner.pins.append, image_entries)  # the rounds' image, for every fit
     if not base.meta:
