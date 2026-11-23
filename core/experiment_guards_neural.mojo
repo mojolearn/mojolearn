@@ -1223,6 +1223,12 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_SAMBA_PROGRAM_FORWARD"](), "removed 2026-11-21 (lane/fx-verdicts7, A/B abn9 NVIDIA L40S, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466, one run per arm; NOISE: neural/samba-forward 4.55 -> 4.55 ms, 1.00 arm/base): the switch is gone; the stateless SambaStack.forward is the resident forward, and the stack program serves the stateful forward, the step and a stack the resident route does not take. Remove -D MOJOLEARN_SAMBA_PROGRAM_FORWARD; see docs/TOMBSTONES.md."
     # ---- end lane fx-verdicts7
+    # ---- lane ab-prep-transformer (2026-11-23)
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; the Python-owned decode session door and per-token word fill ran the same AttnStepArm kernels); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR.ab-prep.patch"
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.ab-prep.patch
+    comptime assert not is_defined["MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; the per-token owner/generation/tail admission made the same native call on the same AttnStepArm); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION.ab-prep.patch"
+    # ---- end lane ab-prep-transformer
     return True
 
 
