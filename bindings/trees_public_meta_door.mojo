@@ -3424,7 +3424,7 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         # on this failure path only; `scan` proved X already for the rest).
         if not scan and not _x_finite(Xa, d):
             admitted_finite_refuse(1, String(py_type(base).__name__), "X")
-        if len(failure) == 0:
+        if failure.byte_length() == 0:
             failure = _cal_fit_words(set, plan, member_set_first_failure(set.run))
         if not ensemble and plan.failed_fold >= 0:
             # scikit-learn warned for each fold before the failing one (and for
