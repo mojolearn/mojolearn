@@ -1182,21 +1182,6 @@ def _lda_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) ra
 # door's first query uploads and keeps their device copies, as for a loaded
 # model), the public embedding_ / dist_matrix_ as float32 Arrays (`mk_out2`).
 
-def _image_caps(image: MImage) -> Int:
-    var caps = 0
-    if image.resident:
-        caps |= XD_CAP_RESIDENT
-    if image.dev_svd:
-        caps |= XD_CAP_DEV_SVD
-    if image.dev_lu:
-        caps |= XD_CAP_DEV_LU
-    if image.dev_eigh:
-        caps |= XD_CAP_DEV_EIGH
-    if image.lle_ordered:
-        caps |= XD_CAP_LLE_ORDERED
-    return caps
-
-
 def _mani_route(model: PythonObject, fields: PythonObject, settings: ManifoldSettings, helper_word: Int,
     context: PythonObject, mut owner: MemberOwner, mut words: List[Float64]) raises:
     """The family's route (`_table_route`) plus what `mk_image` reads from the
@@ -1218,14 +1203,14 @@ def _mani_route(model: PythonObject, fields: PythonObject, settings: ManifoldSet
     try:
         var k = mk_image(run, String(py=py_call(native_loaded_module("builtins").str, settings.mode)), binding,
                          context)
-        words[1] = Float64(_image_caps(run.images[k]))
+        words[1] = Float64(run.images[k].capabilities())
         words[2] = 1.0 if run.images[k].lle_ordered else 0.0
         words[3] = Float64(run.images[k].key)
         owner.plan.route.entry = run.images[k].entry
         if helper is not None:
             var hk = mk_image(run, String(py=py_call(native_loaded_module("builtins").str, settings.default_mode)),
                               helper, context)
-            words[helper_word] = Float64(_image_caps(run.images[hk]))
+            words[helper_word] = Float64(run.images[hk].capabilities())
             words[helper_word + 1] = 1.0 if run.images[hk].lle_ordered else 0.0
             words[helper_word + 2] = Float64(run.images[hk].key)
             owner.plan.route.second = run.images[hk].entry
