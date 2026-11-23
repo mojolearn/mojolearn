@@ -1282,9 +1282,10 @@ struct _DoorModel(AgnModel):
     META state, and since lane mf-ada4 an AdaBoostClassifier / AdaBoostRegressor too (THE ADABOOST KIND). What is
     left: a member of a meta-estimator that is a MultiOutput* or a search CV whose admission keeps its door (META kinds
     since lane mf-search4: a search with a splitter cv, a named scorer other than 'accuracy', refit other than True
-    or its own device; a MultiOutputRegressor over a plain Ridge), or an AdaBoost* whose base
-    is a random-splitter DecisionTree or carries a class_weight (its admit keeps its door); a META class whose admit keeps
-    its door (a Calibrated non-int cv or DeviceRows base, a Stacking splitter cv). Since lane mf-meta3c the batched
+    or its own device; a MultiOutputRegressor over a plain Ridge); a META class whose admit keeps
+    its door (a Calibrated non-int cv or DeviceRows base, a Stacking splitter other than our KFold / StratifiedKFold,
+    a Bagging whose tree has a class_weight on a configuration that never takes the batched route; lane mf-split4
+    made the AdaBoost* random-splitter and class_weight bases META members). Since lane mf-meta3c the batched
     Bagging route and metas nested at any depth (the boundary's admission work-list) open as META states too. When
     those left are typed, this door and `_evaluate` are deleted. Everything else is native: every member
     family (an outlier detector's or clusterer's integer predict too), the votes (soft and hard), Bagging, Stacking

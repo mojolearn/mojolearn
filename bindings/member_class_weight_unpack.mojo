@@ -85,6 +85,33 @@ def member_cw_kind(class_weight: PythonObject, b: PythonObject) raises -> Int:
     return -1
 
 
+def member_cw_kind_accepted(family: Int, model: PythonObject, class_weight: PythonObject,
+    b: PythonObject) raises -> Int:
+    """`member_cw_kind`, and (lane mf-split4) a str or dict SUBCLASS that the
+    family's fit door accepts (its condition: `member_cw_invalid_message`
+    answers ""; LinearSVC's door takes exact types only): MEMBER_CW_BALANCED
+    for a str subclass whose value is 'balanced', MEMBER_CW_DICT for a dict
+    subclass, whose table `member_cw_fill_plan` / `member_cw_fill_keyed`
+    read from ONE exact dict copy of it. -1: not admitted."""
+    var kind = member_cw_kind(class_weight, b)
+    if kind >= 0 or family == MEMBER_FAMILY_LINEAR_SVM:
+        return kind
+    if len(member_cw_invalid_message(family, model, class_weight, b)) != 0:
+        return -1
+    if Bool(py=py_call(b.isinstance, class_weight, b.str)):
+        return MEMBER_CW_BALANCED if String(class_weight) == "balanced" else -1
+    if Bool(py=py_call(b.isinstance, class_weight, b.dict)):
+        return MEMBER_CW_DICT
+    return -1
+
+
+def _exact_dict(class_weight: PythonObject, b: PythonObject) raises -> PythonObject:
+    """A dict subclass's ONE exact copy (lane mf-split4); an exact dict as it is."""
+    if class_weight is None or py_type(class_weight) is b.dict:
+        return class_weight
+    return py_call(b.dict, class_weight)
+
+
 def _svc_values(class_weight: PythonObject, classes: PythonObject, b: PythonObject) raises -> List[Float64]:
     """`svm_weights_unpack`'s dict loop: 1.0 per class, then each entry's
     `float(value)` at its class; a key outside the classes is refused in its
@@ -161,6 +188,7 @@ def member_cw_fill_plan(mut plan: MemberPlan, model: PythonObject, fields: Pytho
         raise Error(member_cw_invalid_message(plan.family, model, class_weight, b))
     if labels is None:
         return False
+    class_weight = _exact_dict(class_weight, b)
     var listed = py_call(b.list, labels)
     var values = List[Float64]()
     if not _dict_values(plan.family, model, class_weight, listed, context, b, values):
@@ -187,6 +215,7 @@ def member_cw_fill_keyed(mut owner: MemberOwner, model: PythonObject, fields: Py
     var class_weight = py_get(fields, PythonObject("class_weight"), PythonObject(None))
     if member_cw_mode(owner.plan.params, start) == MEMBER_CW_INVALID:
         raise Error(member_cw_invalid_message(owner.plan.family, model, class_weight, b))
+    class_weight = _exact_dict(class_weight, b)
     var keys = py_call(b.list, class_weight)
     var numbers = List[Float64](capacity=len(keys))
     var foreign = False

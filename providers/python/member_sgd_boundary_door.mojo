@@ -31,7 +31,7 @@ from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.py_balanced import py_get, py_item, py_contains, py_setitem
-from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message
+from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message, member_cw_kind_accepted
 from core.member_class_weight import MEMBER_CW_DICT, member_cw_pending_words, member_cw_invalid_words
 from core.member_families import MEMBER_FAMILY_SGD
 from bindings.x_linear_common_unpack import (
@@ -104,7 +104,7 @@ def sgd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
         # labels at the caller's UNPACK (lane mf-adm3, `member_cw_fill`).
         var class_weight = py_item(fields, nk[].k_class_weight)
         if class_weight is not None:
-            if member_cw_kind(class_weight, b) == MEMBER_CW_DICT:
+            if member_cw_kind_accepted(MEMBER_FAMILY_SGD, model, class_weight, b) == MEMBER_CW_DICT:
                 keyed = True
             elif not (_isinstance(class_weight, _b().str) and _eq(class_weight, PythonObject("balanced"))):
                 # A value the fit door refuses (lane mf-left4): the INVALID
