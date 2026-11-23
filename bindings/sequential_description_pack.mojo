@@ -19,6 +19,7 @@ from bindings.sequential_description_unpack import (
     sequential_fields,
 )
 from bindings.sequential_keys_unpack import sequential_keys
+from bindings.nn_optim_compile_pack import nn_optim_compile_words
 from bindings.py_balanced import py_item
 
 
@@ -450,18 +451,14 @@ def sequential_compile(mut mods: NativeModules, model: PythonObject, options: Py
         raise Error("optimizer must name a supported Sequential optimizer")
     if not py_contains(py_item(context, nk[].k_schedule_codes), schedule):
         raise Error("schedule must name a supported Sequential schedule")
-    var adam = String(optimizer) == "adam" or String(optimizer) == "adamw"
-    var momentum = String(optimizer) == "momentum"
     var out = Python.dict()
     py_setitem(out, nk[].k_loss, loss)
     py_setitem(out, nk[].k_opt, py_item(context, nk[].k_optimizer_codes)[optimizer])
-    py_setitem(out, nk[].k_flags, 1 if momentum and Bool(py=options[4]) else 0)
     py_setitem(out, nk[].k_lr, py_call(b.float, options[2]))
-    py_setitem(out, nk[].k_f1, py_call(b.float, options[5]) if adam else (py_call(b.float, options[3]) if momentum else PythonObject(0.0)))
-    py_setitem(out, nk[].k_f2, py_call(b.float, options[6]) if adam else PythonObject(0.0))
-    py_setitem(out, nk[].k_eps, py_call(b.float, options[7]))
-    py_setitem(out, nk[].k_weight_decay, py_call(b.float, options[8]))
     py_setitem(out, nk[].k_sched, py_item(context, nk[].k_schedule_codes)[schedule])
+    # lane nn-optim: every optimizer's words (flags, f1, f2, eps, weight_decay, f7) and the schedule's arguments,
+    # with each optimizer's defaults, admitted by the fit's own admission body
+    nn_optim_compile_words(out, options, String(optimizer), Int(py=py_item(out, nk[].k_sched)), b)
     py_setitem(out, nk[].k_step_size, py_call(b.int, options[10]))
     py_setitem(out, nk[].k_gamma, py_call(b.float, options[11]))
     py_setitem(out, nk[].k_huber_delta, py_call(b.float, options[12]))

@@ -22,10 +22,19 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "batch_norm1d": 46, "batch_norm2d": 46}  # lm_head (lane neural-blocks-3-lm)
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
-_SCHED = {"constant": 0, "step": 1, "exponential": 2}
+_SCHED = {"constant": 0, "step": 1, "exponential": 2,
+          # lane nn-optim begin (autograd/nn_optim.mojo NN_SCHED_*)
+          "multi_step": 3, "cosine": 4, "cosine_warm_restarts": 5, "linear_warmup": 6, "one_cycle": 7,
+          "reduce_on_plateau": 8,
+          # lane nn-optim end
+          }
 _OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD = 0, 1, 2, 3, 4, 5
 # sequence/ops.mojo OPT_*: "momentum" is SGD with a momentum buffer.
-_OPT = {"sgd": 0, "momentum": 0, "adam": 1, "adamw": 2}
+_OPT = {"sgd": 0, "momentum": 0, "adam": 1, "adamw": 2,
+        # lane nn-optim begin (autograd/nn_optim.mojo NN_OPT_*)
+        "rmsprop": 3, "adagrad": 4, "lamb": 10,
+        # lane nn-optim end
+        }
 # core/cast_in.mojo CAST_KIND_* and item size -> the classes_ dtype of a
 # loaded checkpoint
 _CLASS_DTYPE = {(0, 1): "u1", (0, 2): "u2", (0, 4): "u4", (0, 8): "u8",
@@ -618,9 +627,15 @@ class Sequential(_CheckMixin):
         layer's six integer arguments."""
         return _SEQUENTIAL_ENTRY(self, "layers", (), _SEQUENTIAL_CONTEXT)
 
-    def compile(self, loss="mse", optimizer="adam", lr=1e-3, *, momentum=0.9, nesterov=False,
-                beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule="constant",
-                step_size=1, gamma=0.1, huber_delta=1.0, tol=1e-4, n_iter_no_change=0):
+    def compile(self, loss="mse", optimizer="adam", lr=1e-3, *, momentum=None, nesterov=False,
+                beta1=0.9, beta2=0.999, eps=None, weight_decay=None, schedule="constant",
+                step_size=1, gamma=0.1, huber_delta=1.0, tol=1e-4, n_iter_no_change=0,
+                alpha=0.99, centered=False, lr_decay=0.0, initial_accumulator_value=0.0,
+                max_grad_norm=1.0, trust_clip=False, always_adapt=False,
+                milestones=None, T_max=None, eta_min=0.0, T_0=None, T_mult=1,
+                warmup_steps=0, total_steps=None, pct_start=0.3, anneal_strategy="cos",
+                div_factor=25.0, final_div_factor=1e4, three_phase=False,
+                factor=0.1, patience=10, threshold=1e-4, cooldown=0, min_lr=0.0):
         """Choose the loss, optimizer and learning-rate schedule.
 
         Parameters
@@ -630,26 +645,95 @@ class Sequential(_CheckMixin):
             ``bce_with_logits`` takes one logit per row and binary labels;
             ``token_cross_entropy`` trains a model ending in
             :meth:`lm_head` on ``(n_samples, length)`` int32 token ids.
-        optimizer : {'sgd', 'momentum', 'adam', 'adamw'}, default 'adam'
-            ``'momentum'`` is SGD with ``momentum``.
+        optimizer : {'sgd', 'momentum', 'adam', 'adamw', 'rmsprop', 'adagrad', 'lamb'}, default 'adam'
+            ``'momentum'`` is SGD with ``momentum``. ``'rmsprop'`` and
+            ``'adagrad'`` follow ``torch.optim.RMSprop`` and
+            ``torch.optim.Adagrad``; ``'lamb'`` is LAMB as in timm's
+            ``Lamb`` (bias correction and gradient averaging on, the
+            layer-wise trust ratio applied to each parameter tensor).
         lr : float, default 1e-3
-            Learning rate (> 0).
-        momentum : float, default 0.9
-            Momentum of ``'momentum'``.
+            Learning rate (> 0); the peak rate of ``'one_cycle'`` and
+            ``'linear_warmup'``.
+        momentum : float or None, default None
+            Momentum of ``'momentum'`` (None: 0.9) and of ``'rmsprop'``
+            (None: 0).
         nesterov : bool, default False
             Nesterov momentum for ``'momentum'``.
-        beta1, beta2, eps : float
-            Adam and AdamW moment decays and denominator term.
-        weight_decay : float, default 0.0
-            L2 penalty (sgd, momentum, adam) or decoupled decay (adamw).
-        schedule : {'constant', 'step', 'exponential'}, default 'constant'
-            ``'step'`` multiplies the rate by ``gamma`` every ``step_size``
-            epochs; ``'exponential'`` by ``gamma`` every epoch.
+        beta1, beta2 : float
+            Moment decays of ``'adam'``, ``'adamw'`` and ``'lamb'``.
+        eps : float or None, default None
+            Denominator term. None: 1e-8, or 1e-10 for ``'adagrad'`` and
+            1e-6 for ``'lamb'``.
+        weight_decay : float or None, default None
+            L2 penalty (sgd, momentum, adam, rmsprop, adagrad) or
+            decoupled decay (adamw, lamb). None: 0, or 0.01 for ``'lamb'``.
+        schedule : str, default 'constant'
+            The learning-rate schedule:
+
+            - ``'constant'``.
+            - ``'step'``: times ``gamma`` every ``step_size`` epochs.
+            - ``'multi_step'``: times ``gamma`` at each epoch in
+              ``milestones``.
+            - ``'exponential'``: times ``gamma`` every epoch.
+            - ``'cosine'``: ``eta_min + (lr - eta_min)(1 + cos(pi e /
+              T_max)) / 2`` at epoch ``e``; after ``T_max`` epochs the
+              rate stays at ``eta_min``.
+            - ``'cosine_warm_restarts'``: the same cosine over cycles of
+              ``T_0`` epochs, each ``T_mult`` times the last.
+            - ``'linear_warmup'``: per optimizer step, rises linearly to
+              ``lr`` over ``warmup_steps`` steps, then falls linearly to 0
+              at ``total_steps``.
+            - ``'one_cycle'``: ``torch.optim.lr_scheduler.OneCycleLR`` per
+              optimizer step with ``max_lr=lr`` over ``total_steps`` steps
+              (the momentum is not cycled).
+            - ``'reduce_on_plateau'``: ``ReduceLROnPlateau`` in ``'min'``
+              mode on the validation loss when ``fit`` has
+              ``validation_data``, else on the epoch's training loss.
+        step_size : int, default 1
+            Epochs between ``'step'`` decays.
+        gamma : float, default 0.1
+            Decay factor of ``'step'``, ``'multi_step'`` and ``'exponential'``.
         huber_delta : float, default 1.0
             Threshold of the Huber loss.
         tol, n_iter_no_change : float, int
             Stop when the epoch loss has not improved by more than ``tol``
             for ``n_iter_no_change`` epochs; 0 trains every epoch.
+        alpha : float, default 0.99
+            Smoothing constant of ``'rmsprop'``.
+        centered : bool, default False
+            Centered ``'rmsprop'`` (normalize by the estimated variance);
+            available without momentum.
+        lr_decay : float, default 0.0
+            Learning-rate decay of ``'adagrad'``.
+        initial_accumulator_value : float, default 0.0
+            Starting value of ``'adagrad'``'s sum of squares.
+        max_grad_norm : float or None, default 1.0
+            ``'lamb'``: clip the global gradient norm to this value before
+            the update; None does not clip.
+        trust_clip, always_adapt : bool, default False
+            ``'lamb'``: clip the trust ratio to 1; apply the trust ratio
+            even without weight decay.
+        milestones : sequence of int or None, default None
+            ``'multi_step'``: 1 to 8 rising epochs.
+        T_max : int or None, default None
+            ``'cosine'``: epochs of the half cosine (required).
+        eta_min : float, default 0.0
+            The lowest rate of ``'cosine'`` and ``'cosine_warm_restarts'``.
+        T_0 : int or None, default None
+            ``'cosine_warm_restarts'``: epochs of the first cycle (required).
+        T_mult : int, default 1
+            ``'cosine_warm_restarts'``: growth of each cycle.
+        warmup_steps : int, default 0
+            ``'linear_warmup'``: optimizer steps of the warmup.
+        total_steps : int or None, default None
+            ``'linear_warmup'`` and ``'one_cycle'``: the optimizer steps of
+            the schedule (required). A ``'one_cycle'`` fit may not run more.
+        pct_start, anneal_strategy, div_factor, final_div_factor, three_phase
+            ``'one_cycle'``: as ``OneCycleLR`` (defaults 0.3, ``'cos'``, 25,
+            1e4, False).
+        factor, patience, threshold, cooldown, min_lr
+            ``'reduce_on_plateau'``: as ``ReduceLROnPlateau`` (defaults 0.1,
+            10, 1e-4 relative, 0, 0).
 
         Returns
         -------
@@ -661,8 +745,9 @@ class Sequential(_CheckMixin):
         >>> import mojolearn
         >>> model = mojolearn.Sequential().linear(8).relu().linear(1)
         >>> model = model.compile(loss="huber", optimizer="momentum", lr=0.01, nesterov=True)
+        >>> model = model.compile(optimizer="rmsprop", lr=0.01, schedule="cosine", T_max=20)
         """
-        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change, alpha, centered, lr_decay, initial_accumulator_value, max_grad_norm, trust_clip, always_adapt, milestones, T_max, eta_min, T_0, T_mult, warmup_steps, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase, factor, patience, threshold, cooldown, min_lr), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
     def _program(self, n_features, sample=None):

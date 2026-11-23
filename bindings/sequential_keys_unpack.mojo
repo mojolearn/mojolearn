@@ -75,6 +75,10 @@ struct SequentialKeys(Defaultable, Movable):
     var k_float32: PythonObject
     var k_gamma: PythonObject
     var k_huber_delta: PythonObject
+    # lane nn-optim begin
+    var k_f7: PythonObject
+    var k_sched_args: PythonObject
+    # lane nn-optim end
     var k_input_shape: PythonObject
     var k_int64: PythonObject
     var k_integer_types: PythonObject
@@ -161,6 +165,10 @@ struct SequentialKeys(Defaultable, Movable):
         self.k_float32 = PythonObject(None)
         self.k_gamma = PythonObject(None)
         self.k_huber_delta = PythonObject(None)
+        # lane nn-optim begin
+        self.k_f7 = PythonObject(None)
+        self.k_sched_args = PythonObject(None)
+        # lane nn-optim end
         self.k_input_shape = PythonObject(None)
         self.k_int64 = PythonObject(None)
         self.k_integer_types = PythonObject(None)
@@ -251,6 +259,10 @@ def _sequential_keys_fill(nk: UnsafePointer[SequentialKeys, MutUntrackedOrigin])
     nk[].k_float32 = py_key("float32")
     nk[].k_gamma = py_key("gamma")
     nk[].k_huber_delta = py_key("huber_delta")
+    # lane nn-optim begin
+    nk[].k_f7 = py_key("f7")
+    nk[].k_sched_args = py_key("sched_args")
+    # lane nn-optim end
     nk[].k_input_shape = py_key("input_shape")
     nk[].k_int64 = py_key("int64")
     nk[].k_integer_types = py_key("integer_types")
