@@ -807,6 +807,13 @@ TRAINING_LANE_NAMES = {
     "gbdt-rank-leaves": "gradient boosting ranking losses with score noise, Gradient leaves and several Newton steps",
     "gbdt-rank-pointwise-arms": "gradient boosting ranking losses on the pointwise searcher with L2 scores and bootstraps",
     "gbdt-rank-pairs": "gradient boosting PairLogit on explicit weighted pairs under bootstrap and the pointwise searcher",
+    # lane gbdt-gaps (2026-11-23): sample weights and eval sets the CPU
+    # column refused until then (gbdt_oracle_losses.mojo, gbdt_oracle.mojo,
+    # gbdt_oracle_depthwise.mojo)
+    "gbdt-weighted-symmetric": "gradient boosting with sample weights on RMSE and the pointwise losses",
+    "gbdt-weighted-nonsym": "gradient boosting with sample weights on Depthwise and Lossguide trees",
+    "gbdt-weighted-rank": "gradient boosting YetiRank and PairLogit with sample weights",
+    "gbdt-eval-gaps": "gradient boosting with an eval set on RMSE, Depthwise and Lossguide",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -2932,6 +2939,8 @@ FAMILIES = (
             # lane verify-gbdt-rank (2026-11-22): the ranking losses' bootstraps,
             # noise, leaves, pointwise scores and explicit weighted pairs
             "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs",
+            # lane gbdt-gaps (2026-11-23): sample weights and eval sets
+            "gbdt-weighted-symmetric", "gbdt-weighted-nonsym", "gbdt-weighted-rank", "gbdt-eval-gaps",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4131,6 +4140,11 @@ PUBLIC_PENDING_LANES = {
     "gbdt-rank-leaves": "no reference",
     "gbdt-rank-pointwise-arms": "no reference",
     "gbdt-rank-pairs": "no reference",
+    # lane gbdt-gaps (2026-11-23): new lanes, recorded CPU first at the release
+    "gbdt-weighted-symmetric": "no reference",
+    "gbdt-weighted-nonsym": "no reference",
+    "gbdt-weighted-rank": "no reference",
+    "gbdt-eval-gaps": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
