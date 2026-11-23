@@ -67,7 +67,8 @@ from bindings.msel_common_door import (
 )
 from bindings.msel_split_door import msel_split, msel_check_cv, msel_default_folds, msel_truth, msel_flag_truth, msel_cls, msel_sabotage
 from bindings.msel_cv_run import msel_seconds, _numeric_dtype
-from bindings.msel_member_units_door import UNIT_FIT_FAILED, UNIT_TEST_FAILED, UNIT_TRAIN_FAILED, msel_member_units
+from bindings.msel_member_units_door import UNIT_FIT_FAILED, UNIT_TEST_FAILED, UNIT_TRAIN_FAILED, msel_member_units, msel_member_fit_in_place
+from bindings.msel_search_state_door import msel_search_fields
 from bindings.msel_scorer_native_door import msel_scorer_response, msel_scorer_predicted
 from core.member_abi import MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 
@@ -1383,6 +1384,26 @@ def msel_scores_dict(scores: MselScores, return_train: Bool, return_estimator: B
     return res
 
 
+def _tool_scores_dict(by: PythonObject, return_train: Bool, return_estimator: Bool, return_indices: Bool,
+                      context: PythonObject) raises -> PythonObject:
+    """The `cross_validate` result dict from `msel_cv_by_search`'s PACK,
+    keys in `msel_scores_dict`'s order."""
+    var res = Python.dict()
+    py_setitem(res, "fit_time", by["fit_time"])
+    py_setitem(res, "score_time", by["score_time"])
+    var names = by["names"]
+    for k in range(len(names)):  # driver-loop: over scorer names
+        var name = String(py=names[k])
+        py_setitem(res, PythonObject("test_" + name), by["test"][k])
+        if return_train:
+            py_setitem(res, PythonObject("train_" + name), by["train"][k])
+    if return_estimator:
+        py_setitem(res, "estimator", by["estimator"])
+    if return_indices:
+        py_setitem(res, "indices", by["indices"])
+    return res
+
+
 def msel_cross_validate(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cross_validate(estimator, X, y, groups, scoring, cv, n_jobs,
     return_train_score, return_estimator, return_indices, error_score)`."""
@@ -1400,6 +1421,14 @@ def msel_cross_validate(args: PythonObject, context: PythonObject) raises -> Pyt
     var rt = msel_flag_truth(args[7], context)
     var re = msel_flag_truth(args[8], context)
     var ri = msel_flag_truth(args[9], context)
+    # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`): the
+    # folds above fitted and scored as one candidate's units, with the
+    # units' times, kept estimators and rows; the units below only for what
+    # the kind does not take (THE FALLBACK RULE).
+    var by = msel_cv_by_search(estimator, x, y, folds, scoring, args[6], error_score, rt, re, PythonObject(None), ri,
+                               context)
+    if by is not None:
+        return _tool_scores_dict(by, rt, re, ri, context)
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
     var result = PythonObject(None)
     try:
@@ -1524,6 +1553,13 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
     if msel_fast_on(MSEL_CV_SLICE_BIT, context) and msel_native_default_cv(cv, groups, context):
         ranges = _kfold_ranges(x, y, folds, context)
         sliced = len(ranges) > 0
+    if not sliced:
+        # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`); the
+        # MSEL_CV_SLICE_BIT route keeps its own row-range views.
+        var by = msel_cv_by_search(estimator, x, y, folds, scoring, args[6], PythonObject("raise"), False, False,
+                                   PythonObject(None), False, context)
+        if by is not None:
+            return by["test"][0]
     var scores = List[Float64]()
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
     if sliced:
@@ -1753,10 +1789,23 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
         raise Error("cross_val_predict only works for partitions")
     _ = held  # keep the Python object alive through the native calls above
     var method = args[6]
-    var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, PythonObject(None), context), context)
-    var result = PythonObject(None)
     if py_type(method) is not msel_b().str:
         raise Error("TypeError: native prediction method must be an exact string")
+    # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`): each
+    # fold's test-side `method` answered by its unit, placed below as the
+    # units' predictions are.
+    var by = msel_cv_by_search(estimator, x, y, folds, PythonObject(None), args[5], PythonObject("raise"), False,
+                               False, method, False, context)
+    if by is not None:
+        var host_rows = MselFoldRows(x, y, folds, False, context)
+        var placed = PythonObject(None)
+        try:
+            placed = _place(by["predictions"], tests, n, host_rows, context)
+        finally:
+            host_rows.close(context)
+        return placed
+    var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, PythonObject(None), context), context)
+    var result = PythonObject(None)
     try:
         # The folds are units (msel_cv_units): one clone, fit and predict each.
         var run = msel_cv_units(estimator, PythonObject(None), y, rows, PythonObject(None), False, False,

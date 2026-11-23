@@ -66,6 +66,7 @@ from bindings.msel_cv_door import (
     MselFoldRows,
     MselScores,
     msel_cross_validate_run,
+    msel_cv_by_search,
     msel_fit,
     msel_fit_planned,
     msel_error_value,
@@ -510,22 +511,43 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var te_s = List[Float64]()
     var ft = List[Float64]()
     var st = List[Float64]()
-    var rows = MselFoldRows(x, y, unit_folds, False, context)
-    # Every size of a fold scores on the same test rows; they are gathered
-    # once per fold (bindings/msel_cv_door.mojo `_take_reusing_test`, the
-    # default since 2026-11-20; its _OFF old path was deleted 2026-11-23).
-    rows.reuse_test = True
-    try:
-        var r = msel_cross_validate_run(estimator, y, rows, scoring, True, False, False, error_score, context, jobs)
-        if len(r.names) != 1:
-            raise Error("TypeError: learning_curve takes one scorer")
-        for u in range(len(r.fit_time)):  # driver-loop: over size x fold units
-            tr_s.append(r.train[0][u])
-            te_s.append(r.test[0][u])
-            ft.append(r.fit_time[u])
-            st.append(r.score_time[u])
-    finally:
-        rows.close(context)
+    # THE ONE TYPED SEARCH RUN (lane mf-msel5, bindings/msel_cv_door.mojo
+    # `msel_cv_by_search`): the size-major units as one candidate's given
+    # folds (each size's train rows the fold's first `size` of its order),
+    # one gathered test block per fold (the RUN's `_same_rows`, as
+    # `reuse_test` below), the units' fit and test-score seconds. One
+    # scorer only (several: the units' TypeError below).
+    var by = PythonObject(None)
+    if msel_scorers(scoring, context) is None:
+        by = msel_cv_by_search(estimator, x, y, unit_folds, scoring, args[7], error_score, True, False,
+                               PythonObject(None), False, context)
+    if by is not None:
+        var te_by = by["test"][0]
+        var tr_by = by["train"][0]
+        var ft_by = by["fit_time"]
+        var st_by = by["score_time"]
+        for u in range(len(unit_folds)):  # driver-loop: over size x fold units (results only)
+            tr_s.append(Float64(py=tr_by[u]))
+            te_s.append(Float64(py=te_by[u]))
+            ft.append(Float64(py=ft_by[u]))
+            st.append(Float64(py=st_by[u]))
+    else:
+        var rows = MselFoldRows(x, y, unit_folds, False, context)
+        # Every size of a fold scores on the same test rows; they are gathered
+        # once per fold (bindings/msel_cv_door.mojo `_take_reusing_test`, the
+        # default since 2026-11-20; its _OFF old path was deleted 2026-11-23).
+        rows.reuse_test = True
+        try:
+            var r = msel_cross_validate_run(estimator, y, rows, scoring, True, False, False, error_score, context, jobs)
+            if len(r.names) != 1:
+                raise Error("TypeError: learning_curve takes one scorer")
+            for u in range(len(r.fit_time)):  # driver-loop: over size x fold units
+                tr_s.append(r.train[0][u])
+                te_s.append(r.test[0][u])
+                ft.append(r.fit_time[u])
+                st.append(r.score_time[u])
+        finally:
+            rows.close(context)
     var out = Python.list()
     _ = py_call(out.append, msel_i64_list(sizes, context))
     _ = py_call(out.append, msel_f64_block(tr_s, len(sizes), nf, context))
