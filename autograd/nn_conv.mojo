@@ -37,6 +37,7 @@ from autograd.ops import AXIS_ROWS
 from autograd.import_api import imp_pad
 from autograd.rankn_fold import rankn_max
 from autograd.rankn_conv_ops import OP_RNV_CONV_GROWS, OP_RNV_IM2COL, OP_RNV_CONV_OUT
+from autograd.rankn_conv import rn_flat_depth
 from autograd.rules_conv2d import rn_conv_gemm, rn_conv_group_gemm, rn_conv_group_words, RNG_FWD, RNG_DW, RNG_DCOLS
 from autograd.nn_conv_ops import (
     OP_NNC_CT_OUT, OP_NNC_PAD, OP_NNC_PAD_VJP, OP_NNC_AAVG_BLK, OP_NNC_AAVG_FIN, OP_NNC_AAVG_VJP,
@@ -67,9 +68,16 @@ def _sh(dims: List[Int]) raises -> ShapeN:
 
 
 def _words(block: List[Int32]) -> List[Int]:
-    var words = List[Int](capacity=len(block))
+    """A conv node's descriptor: x_cnn's CP_ block, then the RN_DEPTH_LEN depth words of a node without a depth
+    axis (lane nn-integrate, 2026-11-23: nn-conv3d's rankn_conv_ops bodies read the depth words after the CP_
+    block; without them OP_RNV_CONV_GROWS / IM2COL / CONV_OUT read past the descriptor, and the transposed
+    convolution's bias came out wrong)."""
+    var depth = rn_flat_depth()
+    var words = List[Int](capacity=len(block) + len(depth))
     for v in block:  # small-loop(len(block): the CP_ parameter block, 17 words)
         words.append(Int(v))
+    for v in depth:  # small-loop(RN_DEPTH_LEN = 6 depth words)
+        words.append(v)
     return words^
 
 
