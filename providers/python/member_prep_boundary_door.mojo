@@ -2,9 +2,9 @@
 """The member boundary of the Prep family: its place in
 `bindings/member_boundary_door.mojo` (recipe: MEMBER-ABI-V2.md; RUN:
 core/prep_member.mojo). Published: RobustScaler (kind 0,
-`_mojolearn_member = (35, 0)`), MaxAbsScaler (kind 1, `(35, 1)`; not on the
-Apple fast direct fit entry, where admit answers False and the caller keeps
-the door), Binarizer (kind 2, `(35, 2)`), Normalizer (kind 3, `(35, 3)`),
+`_mojolearn_member = (35, 0)`), MaxAbsScaler (kind 1, `(35, 1)`; on the
+Apple fast image the member runs the program route, not the door's direct
+entry: exact maxima, the same words), Binarizer (kind 2, `(35, 2)`), Normalizer (kind 3, `(35, 3)`),
 PolynomialFeatures (kind 4, `(35, 4)`), QuantileTransformer (kind 5,
 `(35, 5)`; a subsample below 1 is scikit-learn's refusal, in the door and
 here), PowerTransformer (kind 6, `(35, 6)`), SimpleImputer (kind 7, `(35, 7)`),
@@ -71,7 +71,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT
 from bindings.x_prep_native_owner_run import XprepCaps
 from bindings.scaler_route_unpack import (
-    scaler_route_held, scaler_held_caps, scaler_held_flags, SCALER_CAP_MAXABS_DIRECT,
+    scaler_route_held, scaler_held_caps,
 )
 from bindings.x_prep_native_owner_door import xprep_caps, xprep_storage, xprep_take
 from bindings.x_prep_native_owner_run import xprep_r3
@@ -182,10 +182,11 @@ def _maxabs_admit(model: PythonObject, fields: PythonObject, context: PythonObje
     var mode = scaler_requested_mode(fields, context)
     var entries = scaler_entries(model, mode, context)
     var held = scaler_route_held(model, entries)
-    if (scaler_held_flags(held, entries) & SCALER_CAP_MAXABS_DIRECT) != 0:
-        # The Apple fast direct fit entry is a Python-called export with its
-        # own upload: not a member route. The caller keeps the door.
-        return False
+    # On the Apple fast image the door's fit calls the image's direct entry
+    # (a Python-called export with its own upload). The member runs the
+    # image's x_prep program route there too (`_maxabs_fit_program`, the
+    # transport its transform already uses): column maxima of |X| are exact,
+    # so max_abs_ and scale_ are the same words (lane mf-ens6).
     var words = List[Float64](length=PREP_MAXABS_PARAM_COUNT, fill=0.0)
     words[0] = Float64(PREP_KIND_MAXABS)
     # The door reads these per fit; a member reads them once, here.
