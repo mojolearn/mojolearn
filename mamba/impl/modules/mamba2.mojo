@@ -481,7 +481,7 @@ struct Mamba2DeviceStages(Movable):
         self.residual_out = mamba_zeros(ctx, m * dm)
 
     def rezero(mut self) raises:
-        """Lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD off):
+        """Lane fix-mamba12-forward-exec:
         the held stages made ready for the next forward on the buffers
         already held (no allocation, no wait). Not for a guarded (poison)
         build, whose fills cover a body view.

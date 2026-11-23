@@ -174,19 +174,15 @@ comptime _MAMBA_X_IN_PLACE = MAMBA_GUARD == 0
 #: Mamba-2 h_last) arrays are allocated unfilled (bindings/
 #: causal_lm_public_door.mojo, bindings/neural_block_public_door.mojo,
 #: mamba/impl/mamba_block_program.mojo). Same kernels, same launch order,
-#: same input bytes: no output bit moves on any vendor.
-#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD` restores the per-call
-#: stages, the h_last copy, the host zero state round trip and the
-#: zero-filled door arrays (B arm of the owed A/B,
-#: bench/results/paper_compare/owed-pre0867.json row fix-mamba12-forward-exec;
-#: L40S candidate ba08dac006: mamba1-forward 3.43 -> 3.83 ms, mamba2-forward
-#: 5.57 -> 6.31 ms vs 0.8.55). A poison build (MAMBA_GUARD > 0) keeps the
-#: per-call stages (its fills cover a body view only).
+#: same input bytes: no output bit moves on any vendor. A poison build
+#: (MAMBA_GUARD > 0) keeps the per-call stages (its fills cover a body view
+#: only).
 # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 449d72a027.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime IDN_MAMBA12_FORWARD_COPIES_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD"]()
-comptime _M12_HOLD = not IDN_MAMBA12_FORWARD_COPIES_OLD and _MAMBA_X_IN_PLACE
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e (per-call stages, the h_last D2D copy, the host zero state round trip and zero-filled door arrays around the same kernels in the same launch order).
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+comptime _M12_HOLD = _MAMBA_X_IN_PLACE
 
 #: Lane fix-mamba-forward-doors (2026-11-14): what this switch decides is how
 #: a held Mamba-1/2 stage set (`_M12_HOLD` above) is built and re-zeroed.
@@ -894,7 +890,7 @@ struct BlockStepScratch(Movable):
     #: before the next run): `_run_m3` skips the four report copies
     #: (IDN_MAMBA3_REPORTS_ON_REQUEST). Set per run by the caller.
     var skip_reports: Bool
-    #: lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD off):
+    #: lane fix-mamba12-forward-exec:
     #: the session's Mamba-1/2 L > 1 runs are never read by a backward (a
     #: recorded run goes through `mamba_step_train_run`, which keeps its own
     #: tape stack), so `_run_m1` / `_run_m2` keep their stages in the entry
@@ -1391,7 +1387,7 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var x = _view(ex, bufs[0], n)
     var trace = IdentityTrace.disabled()
     comptime if _M12_HOLD:
-        # lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD,
+        # lane fix-mamba12-forward-exec (`_M12_HOLD`,
         # header): the entry keeps its L > 1 stages; x read in place.
         if l > 1 and sc.keep_stages:
             var dims = MambaDims.of(dm)
@@ -1451,7 +1447,7 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     # held stages (set below)
     sc.m2[e].h_in_held = False
     comptime if _M12_HOLD:
-        # lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD,
+        # lane fix-mamba12-forward-exec (`_M12_HOLD`,
         # header): the entry keeps its L > 1 stages, x read in place, and the
         # h_last report is read from the held stages, not copied.
         if l > 1 and sc.keep_stages:

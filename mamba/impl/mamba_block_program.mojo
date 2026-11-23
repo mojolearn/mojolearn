@@ -53,7 +53,7 @@ from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_int_words, block_step_words, block_step_reports_to_host,
     block_buffer_view, block_part_floats, block_offsets, block_guard, mamba_step_train_run, mamba_step_backward,
-    mamba_step_run_host, IDN_MAMBA12_FORWARD_COPIES_OLD, _M12_HOLD,
+    mamba_step_run_host, _M12_HOLD,
 )
 from core.shared_slot import SharedSlot
 
@@ -137,12 +137,13 @@ struct MambaBlockProgram(Movable):
         var epoch = weight_epoch()
         var ex = DeviceExec(neural_ctx[_NEURAL_CTX]())
         var s = OpsSession[DeviceExec](ex^, False)
-        comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
-            # lane fix-mamba12-forward-exec: this program's step runs are
-            # never read by a backward (`mamba_program_backward` records its
-            # own run), so the Mamba-1/2 L > 1 runs keep their stages
-            # (autograd/block_step_ops.mojo IDN_MAMBA12_FORWARD_COPIES_OLD)
-            s.steps.keep_stages = True
+        # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+        # lane fix-mamba12-forward-exec: this program's step runs are
+        # never read by a backward (`mamba_program_backward` records its
+        # own run), so the Mamba-1/2 L > 1 runs keep their stages
+        # (autograd/block_step_ops.mojo `_M12_HOLD`)
+        s.steps.keep_stages = True
         var ints: List[Int] = [b, dm]
         var wsizes = block_weight_sizes(code, ints)
         var w = s.upload_block(code, ints, BLOCK_PART_WEIGHTS, _pieces(weights, wsizes, "mamba weights", False),
@@ -791,22 +792,20 @@ def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: I
         words.append(q0)
         words.append(pend)
     var discard = fresh
-    comptime if not IDN_MAMBA12_FORWARD_COPIES_OLD:
-        # lane fix-mamba12-forward-exec: every state address 0 is the
-        # stateless forward (the public doors' `forward(x)` with no state,
-        # bindings/causal_lm_public_door.mojo): a zero state on the device
-        # (one fill) and nothing read back, where the door used to allocate a
-        # host zero state per call that this call uploaded and downloaded.
-        # The carried integers must be zero then (a fresh sequence).
-        # Hot-path audit 2026-11-13 (FIX mamba_block_program.mojo:769): the
-        # address-pattern meaning is limited to its one user, the Mamba-1/2
-        # forward ops (`stateless_forward`, mamba/native_state_dispatch.mojo);
-        # decode steps and Mamba-3 keep the old rule.
-        if stateless_forward and (kind == 1 or kind == 2) and not discard and _all_zero(state):
-            for i in range(len(words)):  # small-loop(at most two carried integers): refusal, no data
-                if words[i] != 0:
-                    raise Error("mamba" + String(kind) + ": a stateless call (every state address 0) starts a"
-                                + " fresh sequence; its carried integers must be 0")
-            discard = True
+    # lane fix-mamba12-forward-exec: every state address 0 is the
+    # stateless forward (the public doors' `forward(x)` with no state,
+    # bindings/causal_lm_public_door.mojo): a zero state on the device
+    # (one fill) and nothing read back.
+    # The carried integers must be zero then (a fresh sequence).
+    # Hot-path audit 2026-11-13 (FIX mamba_block_program.mojo:769): the
+    # address-pattern meaning is limited to its one user, the Mamba-1/2
+    # forward ops (`stateless_forward`, mamba/native_state_dispatch.mojo);
+    # decode steps and Mamba-3 keep the old rule.
+    if stateless_forward and (kind == 1 or kind == 2) and not discard and _all_zero(state):
+        for i in range(len(words)):  # small-loop(at most two carried integers): refusal, no data
+            if words[i] != 0:
+                raise Error("mamba" + String(kind) + ": a stateless call (every state address 0) starts a"
+                            + " fresh sequence; its carried integers must be 0")
+        discard = True
     var out = mamba_block_call(code, weights, state, words, a[0], y, reports, b, l, dm, fs, discard)
     return out[0] if len(out) > 0 else 0

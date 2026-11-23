@@ -1233,6 +1233,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: a caps table call per Mamba-3 forward and reserve / run / release as three table calls, around the same session, weight compare and _m3_prefill_run body); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD.ab-prep.patch"
+    # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: Mamba-1/2 per-call stages allocated and zero-filled per run, the h_last D2D copy, the host zero state uploaded and downloaded per stateless call and zero-filled door arrays, around the same kernels in the same launch order); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.ab-prep.patch"
     # ---- end lane ab-prep-mamba
     return True
 
