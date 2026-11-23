@@ -1356,7 +1356,7 @@ NEW_LANE_PURPOSE = {
     "sequence-moe-backward": "MoEBlock.backward: `moe_backward`",
     "sequence-export-roundtrip": "Sequential.export, Sequential.load, predict and predict_proba",
     "sequence-onnx-import": "mojolearn.import_model on an ONNX file: `onnx_import`, the Mojo ONNX reader",
-    "transformer-decode-load-state": "TransformerDecodeSession.load_state and decode: `transformer_decode_session_load_state`, `transformer_decode_session_decode`",
+    "transformer-decode-load-state": "TransformerDecodeSession.load_state and decode: the native decode dispatch (transformer/native_decode_dispatch.mojo `transformer_decode_operation` op 8 -> `_session_load_run`, `transformer_decode_reserved_run` kind 1 -> `_session_decode_run`)",
     "safetensors-widen-f16": "float16 checkpoint weights (models.safetensors.widen_f16): `from_f16`, device and host",
     "sequence-program-save-load": "ops.Program.save and Session.load_program (the public `ops.Program` class)",
     "hf-causal-lm-stream": "CausalLM.stream and models.GenerationStream.read, greedy and sampled",

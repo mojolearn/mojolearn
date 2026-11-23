@@ -2421,31 +2421,13 @@
    "all_on": null,
    "configs": [],
    "cross_groups": [],
-   "declared_controls": [
-    "ln_class_device_io_off",
-    "ln_keep_stats_off"
-   ],
+   "declared_controls": [],
    "deferred": [],
    "deferred_groups": [],
    "dropped_arms": {},
    "dropped_from_all_on": [],
    "eligible_controls": [],
-   "excluded": [
-    {
-     "control": "ln_class_device_io_off",
-     "define": "MOJOLEARN_LN_CLASS_DEVICE_IO_OFF",
-     "reasons": [
-      "grid: exclude (authored)"
-     ]
-    },
-    {
-     "control": "ln_keep_stats_off",
-     "define": "MOJOLEARN_LN_KEEP_STATS_OFF",
-     "reasons": [
-      "grid: exclude (authored)"
-     ]
-    }
-   ],
+   "excluded": [],
    "files": [
     "layernorm-idn"
    ],
@@ -8056,15 +8038,6 @@
   },
   {
    "algorithms": [],
-   "control": "mcd_chol",
-   "define": "MOJOLEARN_IDN_MCD_CHOL",
-   "file": "apple-holes",
-   "reasons": [
-    "not declared by any board algorithm workload"
-   ]
-  },
-  {
-   "algorithms": [],
    "control": "bn_grid_stats",
    "define": "MOJOLEARN_IDN_BN_GRID_STATS,MOJOLEARN_IDN_BN_GRID_STATS_OFF",
    "file": "bn-grid-stats",
@@ -8079,28 +8052,6 @@
    "file": "lars-grid-gram",
    "reasons": [
     "not declared by any board algorithm workload"
-   ]
-  },
-  {
-   "algorithms": [
-    "neural:layernorm"
-   ],
-   "control": "ln_class_device_io_off",
-   "define": "MOJOLEARN_LN_CLASS_DEVICE_IO_OFF",
-   "file": "layernorm-idn",
-   "reasons": [
-    "grid: exclude (authored)"
-   ]
-  },
-  {
-   "algorithms": [
-    "neural:layernorm"
-   ],
-   "control": "ln_keep_stats_off",
-   "define": "MOJOLEARN_LN_KEEP_STATS_OFF",
-   "file": "layernorm-idn",
-   "reasons": [
-    "grid: exclude (authored)"
    ]
   },
   {
@@ -8330,7 +8281,7 @@
     "head": "97e02b4bb",
     "lane": "apple-holes",
     "path": "experiments/six_lane_integration/grid_controls/apple-holes.json",
-    "sha256": "d1e1a53f017bda918d0024813012c0bf26871072a7a662ff5a4bc2d2b216b158"
+    "sha256": "67b8f47c3e4bf2750e28f0430359eefa9f32755d3172bb1782ab51f9fe246ff6"
    },
    "apple-slow-paths": {
     "branch": "lane/apple-slow-paths",
@@ -8596,7 +8547,7 @@
     "head": "145e8b410",
     "lane": "layernorm-idn",
     "path": "experiments/six_lane_integration/grid_controls/layernorm-idn.json",
-    "sha256": "743056fdba5a75ab01ea81b5422a7bc7e57e84e1c07f39ff35361473d0579004"
+    "sha256": "172111215aa5db80789629aadc5aad6d15c035611c4ad724f65dad0c25634850"
    },
    "lm-attn-nohost": {
     "branch": "lane/lm-attn-nohost",
@@ -8778,7 +8729,7 @@
     "head": "75dd2db9a",
     "lane": "trees-structural",
     "path": "experiments/six_lane_integration/grid_controls/trees-structural.json",
-    "sha256": "0f1a87f7e817c6971862a9ab4cd0453413c664f765e4e4fadf0ce9ab76798030"
+    "sha256": "d6eaafc7608a0544b7afec51edf91f0c1b947d3ed2692e98b11b46f4630336dd"
    },
    "xd-kit-gemm": {
     "branch": "lane/xd-kit-gemm",
@@ -8803,20 +8754,20 @@
    }
   },
   "guards": {
-   "asserts": 1645,
+   "asserts": 1673,
    "modules": {
-    "core/experiment_guards_base.mojo": "5f8895f20e856b795f48db4d674dbeb180309702b24baa2fff08f54123f42007",
-    "core/experiment_guards_cluster.mojo": "b03fdef8b9bdcd8b0554acfa03c817bdce35dfa5a4544aa37dad0e752b5e3350",
-    "core/experiment_guards_decomposition.mojo": "3e235fec84682e6efe82c22d39a759d4953820d81520c98def0cb390756c9793",
-    "core/experiment_guards_kernel.mojo": "316d9c0cdd1b3df3731dda23059a0c99b38bda5b1c4f381a92329874caf85d65",
+    "core/experiment_guards_base.mojo": "bfde660615562e0fc7d31775add54634ce77d172b68b094d8bd9253642fba778",
+    "core/experiment_guards_cluster.mojo": "c8af72f190dfc72c43ec0a63422d41ab35279349d94df8948b6c069dcb768215",
+    "core/experiment_guards_decomposition.mojo": "85dd32ecfe5fb17d6f2890270e584d1cbff09fed01e44b9158cfd34bcf25806d",
+    "core/experiment_guards_kernel.mojo": "9f91d7eee6acdd448a4b40d76181fbe7fd9d11f74837264f8aec84412a26bcd7",
     "core/experiment_guards_linear.mojo": "fa4c66ffdbcfdc52b66b78f882bb2892a0e3ef18bf16399bbcf1e1de843a9ce6",
-    "core/experiment_guards_neural.mojo": "957105e647f0479dc32d48cef9c74cd14bffed5adeaffbde8cd2622f9efdfbb6",
+    "core/experiment_guards_neural.mojo": "8c0b42c27dfb1eac39e99f51a2dd03897758eb36771bf1f18fccdce5ccab4612",
     "core/experiment_guards_series.mojo": "56261e6bb3c64d334919711a183a49363d7cda2502eb444514a7b0597b785d70",
     "core/experiment_guards_trees.mojo": "669eecd62d14ed669eed8372588609e7fbd9401f70ec785059d3156a1f6de5f7",
-    "core/six_lane_experiment_guards.mojo": "f7f3abf4194602584028164dd04d0341811e33014317f395eb3dfb80aee6a404"
+    "core/six_lane_experiment_guards.mojo": "ebef35d972ec0aff45e3be6ec8e782d829658f509d9edc30d47cadfaa00ae2c2"
    },
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "f7f3abf4194602584028164dd04d0341811e33014317f395eb3dfb80aee6a404"
+   "sha256": "ebef35d972ec0aff45e3be6ec8e782d829658f509d9edc30d47cadfaa00ae2c2"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -8887,7 +8838,7 @@
  ],
  "removed_per_file": {
   "apple-fast-round2": 2,
-  "apple-holes": 0,
+  "apple-holes": 1,
   "apple-slow-paths": 4,
   "attention-tiled-v2": 1,
   "bn-grid-stats": 0,
@@ -8925,7 +8876,7 @@
   "kde-qtile": 1,
   "lab-binarizer": 3,
   "lars-grid-gram": 0,
-  "layernorm-idn": 1,
+  "layernorm-idn": 3,
   "lm-attn-nohost": 2,
   "lm-lean-step": 2,
   "lu-delayed-update": 1,
@@ -8990,12 +8941,12 @@
   "cells": 382,
   "configs": 124,
   "configs_per_vendor": 124,
-  "controls": 36,
+  "controls": 33,
   "deferred_configs": 0,
   "deferred_cross_configs": 65,
   "deferred_cross_groups": 4,
-  "excluded_controls": 19,
-  "guard_asserts": 1645,
+  "excluded_controls": 16,
+  "guard_asserts": 1673,
   "mapped_algorithms": 25,
   "packed_multi_member": 7,
   "packs": 101,
@@ -9076,10 +9027,7 @@
   },
   {
    "algorithm": "neural:layernorm",
-   "controls": [
-    "ln_class_device_io_off",
-    "ln_keep_stats_off"
-   ],
+   "controls": [],
    "files": [
     "layernorm-idn"
    ],

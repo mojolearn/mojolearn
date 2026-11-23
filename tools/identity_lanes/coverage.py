@@ -260,7 +260,8 @@ def _(ml, X, yc, yr, Xh=None):
         st.cached_tokens = 4
         sess.load_state()
         # The four tokens after the reload go through `decode` (one native
-        # call, `transformer_decode_session_decode`): byte for byte the four steps.
+        # call, transformer/native_decode_dispatch.mojo `transformer_decode_reserved_run` kind 1 ->
+        # `_session_decode_run`): byte for byte the four steps.
         after = np.asarray(sess.decode(np.ascontiguousarray(x[:, 8:12])))
         sess.sync_state()
         resident = np.concatenate(_decode_state_arrays(st))
