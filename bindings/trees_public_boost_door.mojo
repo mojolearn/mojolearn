@@ -78,7 +78,7 @@ from xtrees.trees_boost_run import (
     _sub_seed, _dart_thr,
     boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
     boost_count_fraction_ok, boost_count_check, boost_weight_flags_check,
-    rte_targets_run, rte_numbering_run, rte_transform_run,
+    rte_fit_run, rte_numbering_run, rte_transform_run,
 )
 from bindings.trees_public_forest_door import (
     forest_fit,
@@ -105,11 +105,14 @@ from bindings.trees_public_forest_door import (
     _dt_tier_bins,
     forest_fit_request,
     forest_config,
-    _et_fit_arrays,
-    _target_check,
+    forest_et_store_fit,
+    _x_for,
+    _finite_or_refuse,
     _model_list,
     _report_engine,
 )
+from core.forest_fit_request import XF_CAP_DEVICE_SCAN
+from xtrees.trees_forest_run import forest_export_selection
 from bindings.trees_keys_unpack import trees_keys
 from core.forest_calls import (
     xf_caps, xf_session_open, xf_session_close, xf_fit_session, xf_ada_open, xf_fit_ada_round,
@@ -2481,18 +2484,19 @@ def _rte_validate(fields: PythonObject, context: PythonObject) raises:
 #           its configuration read once as plain values (`forest_config`);
 #           for a transform the forest's model arrays through the forest
 #           door's descriptor (`_model_list`), never by name.
-#   RUN     typed calls only: `rte_targets_run`, the forest door's typed fit
-#           (`_et_fit_arrays`: `forest_request` + XF_FIT), `rte_numbering_run`,
-#           `rte_transform_run` (xtrees/trees_boost_run.mojo).
-#   PACK    the fitted attributes, the result Array (allocated before RUN,
-#           which writes into it).
+#   RUN     typed calls only (xtrees/trees_boost_run.mojo): `rte_fit_run`
+#           (the targets, their float32 words, `forest_request` + XF_FIT;
+#           lane bm-rest-rte, 2026-11-23), `rte_numbering_run`,
+#           `rte_transform_run`.
+#   PACK    the forest's export (`forest_export_handle`) and fields
+#           (`forest_et_store_fit`), the fitted attributes, the result Array
+#           (allocated before RUN, which writes into it).
 
 
 def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: PythonObject) raises:
     """`RandomTreesEmbedding.fit` on a C-order float32 X: uniform targets,
     one ExtraTreesRegressor fit, the leaf numbering."""
     # UNPACK
-    var n = x.rows
     var d = x.cols
     var seed = _seed(fields["random_state"], context)
     var xt = _xt(fields, context)
@@ -2518,14 +2522,8 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: P
     var mode = forest_capture_mode(ff, context)
     var et = trees_table(context, mode, "_mojolearn_trees")
     var config = forest_config(ff, py_item(ff, nk[].k__cfg), "et_regressor", True, context)
-    var u = admitted_vector(n, "<f8", context)
-    # RUN: the targets
-    rte_targets_run(glue, trees_address(u), n, seed)
-    _ = u  # keep the Python object alive through the native call above
-    var yr = admit_f32(u, 1, "y", context, finite=False)
-    _target_check(yr.view(), config, context)
-    # RUN + PACK of the forest: the typed request and XF_FIT, the export
-    # into the forest's model Arrays.
+    var key = forest_key(et)
+    var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
     # fb-infer/D (2026-11-17): the fit takes the admitted X itself (the
     # caller's float32 C-order array when borrowed, else the door's own), as
     # 0.8.55 passed `Xa` straight to ExtraTreesRegressor.fit; the forest's
@@ -2533,8 +2531,17 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: P
     # cast copy of every borrowed X before the fit (RTE fit 160 -> 754 ms on
     # a 1M x 220 float32 X, 35 -> 60 ms on 1M x 10: ~1.5 GB/s, linear in
     # n x d). Neighbours to time: 500k x 64 and any non-board float32 table.
-    _et_fit_arrays(ff, config, False, x.array, yr.address, yr.rows, 0, ForestFit(False, rowmajor_ok=True), et, context)
-    _ = yr  # keep the targets alive through the fit above
+    var xf = _x_for(x.array, True, context)
+    _finite_or_refuse(xf, device_scan, context)
+    # RUN (lane bm-rest-rte, 2026-11-23): the targets, their float32 words
+    # and the forest's XF_FIT on typed values (xtrees/trees_boost_run.mojo).
+    # Before: the targets were a Python Array, admitted again as a float32
+    # Array, and the fit went through the forest door's Python-object path.
+    var handle = rte_fit_run(glue, key, config, xf.address, xf.rows, xf.cols, xf.c_order, device_scan, seed)
+    # PACK of the forest: the export into its model Arrays and its fields.
+    var result = forest_export_handle(key, handle, forest_export_selection(), context)
+    forest_et_store_fit(ff, result, xf.cols)
+    _ = xf  # owner pin: the fit above read X through its address
     _fitted(forest)
     _report_engine(forest, context)
     # The forest's model through the forest door's descriptor.
