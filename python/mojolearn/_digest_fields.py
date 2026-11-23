@@ -170,6 +170,11 @@ PARAMS_BY_NAME = {
     "LocalOutlierFactor": ("novelty",),
     # the hidden layers' activation (the fitted weights do not say which one predict applies)
     "_BaseMLP": ("activation",),
+    # the recurrent network the flat `params_` block belongs to (its length alone does not say), and the
+    # plain RNN's activation (bindings/xseq_neural_native_door.mojo); `predict_chunk` only tiles predict
+    "_RecurrentBase": ("hidden_size", "num_layers"),
+    "RNNClassifier": ("hidden_size", "num_layers", "nonlinearity"),
+    "RNNRegressor": ("hidden_size", "num_layers", "nonlinearity"),
     # the network the fitted weights belong to: pooling and input layout are not in the weights' shapes
     "CNNClassifier": ("input_shape", "conv_channels", "kernel_size", "pool_size"),
     # k-NN: hashed by its save schema; these are for a fitted model the file does not carry (string class
