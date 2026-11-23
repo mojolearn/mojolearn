@@ -68,6 +68,11 @@ imported:
   13 `DA_BLOCK_ROTATIONS` classes x features^2 (QDA rotations_)
   14 `DA_BLOCK_SCALINGS` classes x features (QDA scalings_)
 
+By NAME only (lane mf-shaprfe, 2026-11-23; the kind's mask has MEMBER_CAN_COEF): LDA's
+`MEMBER_BLOCK_COEF` / `MEMBER_BLOCK_INTERCEPT` are its public coef_ / intercept_, the
+words of blocks 9 / 10 with two classes, else of blocks 4 / 5 (RFE reads coef_ this way,
+bindings/prep_select_run.mojo `rfe_member_importances`). QDA exports neither.
+
 QDA's rank refusal names the class by its CODE (the member has no labels).
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
@@ -95,6 +100,7 @@ from core.member_abi import (
     MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_TRANSFORM,
     MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
+    MEMBER_CAN_COEF, MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -600,7 +606,22 @@ def _export(slot: _Slot, call: _Call) raises:
         if block < 0 or block > DA_BLOCKS:
             raise Error("member ABI: a " + estimator + " member has no fitted block index " + String(block))
         block = MEMBER_BLOCK_SCALARS if block == 0 else MEMBER_BLOCK_FAMILY + block - 1
-    if block == MEMBER_BLOCK_SCALARS:
+    if block == MEMBER_BLOCK_COEF or block == MEMBER_BLOCK_INTERCEPT:
+        # LDA's PUBLIC coef_ / intercept_, the words its fit door publishes
+        # (bindings/prep_classify_native_door.mojo `_lda_publish_coef`): the
+        # pair rows (1 x features, 1 x 1) with two classes, else `_coef`
+        # (classes x features) and `_inter` (1 x classes). By name only (never
+        # in a MEMBER_BLOCK_BY_INDEX walk: the same words are blocks 4/5 and
+        # 9/10 there). QDA has neither.
+        if slot[].kind() != DA_KIND_LDA:
+            raise Error("member ABI: a " + estimator + " member has no fitted block " + String(block))
+        var pair = slot[].classes == 2
+        var family_block = DA_BLOCK_COEF if block == MEMBER_BLOCK_COEF else DA_BLOCK_INTER
+        if pair:
+            family_block = DA_BLOCK_PAIR_COEF if block == MEMBER_BLOCK_COEF else DA_BLOCK_PAIR_INTER
+        var index = family_block - MEMBER_BLOCK_FAMILY
+        call[].dst = MemberMatrix(slot[].address(family_block), slot[].block_rows[index], slot[].block_cols[index])
+    elif block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
     elif block >= MEMBER_BLOCK_FAMILY and block < MEMBER_BLOCK_FAMILY + DA_BLOCKS:
         var index = block - MEMBER_BLOCK_FAMILY
@@ -746,13 +767,17 @@ def _discriminant_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         # Kind-exact with a state: only LDA with solver 'svd' or 'eigen'
-        # transforms. Without one, the family's union.
+        # transforms; LDA (every solver) exports MEMBER_BLOCK_COEF (its
+        # public coef_, lane mf-shaprfe). QDA has no coef_ (scikit-learn's
+        # neither). Without a state, the family's union.
         var mask = _family_capabilities(call[].route.flags)
         if call[].state == 0:
-            return mask | MEMBER_CAN_TRANSFORM
+            return mask | MEMBER_CAN_TRANSFORM | MEMBER_CAN_COEF
         var asked = _Slot(unsafe_from_address=_lookup(call[].state, False))
-        if asked[].kind() == DA_KIND_LDA and asked[].solver() != CLS_LDA_LSQR:
-            mask |= MEMBER_CAN_TRANSFORM
+        if asked[].kind() == DA_KIND_LDA:
+            mask |= MEMBER_CAN_COEF
+            if asked[].solver() != CLS_LDA_LSQR:
+                mask |= MEMBER_CAN_TRANSFORM
         return mask
     if operation == MEMBER_OP_NEW:
         _new(call)
