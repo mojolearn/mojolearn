@@ -100,7 +100,7 @@ from core.member_abi import (
     MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_TRANSFORM,
     MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
-    MEMBER_CAN_COEF, MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT,
+    MEMBER_GIL_DOOR, MEMBER_CAN_COEF, MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -289,8 +289,22 @@ def discriminant_kind_published(kind: Int) -> Bool:
 def _family_capabilities(flags: Int) -> Int:
     # No MEMBER_CAN_TEST_ROWS: the programs do not refuse a non-finite word
     # of X; the caller's admission tests it. No sample weights.
+    # MEMBER_GIL_DOOR (THE GIL RULE, core/member_abi.mojo; lane mf-shaprfe,
+    # 2026-11-23): one member operation at a time on the public thread; the
+    # caller releases the GIL around it, as the family's own door does around
+    # the same RUN (bindings/prep_classify_prog_door.mojo `ClsProg.run`:
+    # `cls_prog_run` and the resident put, inside `with GILReleased`). A
+    # member operation runs `cls_borrowed_run` (bindings/prep_classify_prog_run.mojo):
+    # the route words, `cls_input_choice`, the scope's leased caches
+    # (bindings/arena_cache_run.mojo `ARENA_SCOPES.acquire`, its own lock) and
+    # that same `cls_prog_run`; the label passes and block copies read the
+    # call's own views. No CPython: neither this file nor
+    # bindings/prep_classify_prog_run.mojo imports std.python. The store has
+    # its own lock (`shared_slot_lock`). NOT `MEMBER_GIL_FREE`: the x_prep
+    # transports behind the route are not traced for parallel workers.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
-                | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER)
+                | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER
+                | MEMBER_GIL_DOOR)
     if (flags & NB_ROUTE_DEV_STORE) != 0 and (flags & NB_ROUTE_RANGES) != 0:
         mask |= MEMBER_CAN_SCOPE
     if _route_gathers(flags):
