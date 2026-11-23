@@ -310,9 +310,10 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
     pairs_weight), any other family's (`rfe_member_fit_params`: sample_weight through the shared weight
     admission, a forest's feature_importances); their refusals raise from here. What stays on the
     estimator's own doors (`_fit_clone`, the fallback rule): a class with no serving member, a target the
-    encoder or the regressor admission refuses (one class among them: each family's fit door has its own
-    one-class words), a class_weight table it cannot complete, a key or value the member does not carry
-    (weights for a kind that reads none, a non-bool feature_importances, a cat_features index outside X)."""
+    encoder or the regressor admission refuses, a class_weight table it cannot complete, a key or value the
+    member does not carry (weights for a kind that reads none, a cat_features index outside X). One class is
+    the member's (its family's fit decides, lane mf-cal5); a feature_importances value the forest door
+    refuses raises its words here (`rfe_member_fit_params`)."""
     var member = RfeMember()
     var has_params = len(fit_params) != 0
     if has_params:
@@ -328,7 +329,12 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             # and one int32 code per row.
             var encoded = classical_encode_labels(y, base.member_context)
             var count = len(encoded.classes)
-            if encoded.n != n or count < 2:
+            # ONE class (THE FALLBACK RULE, lane mf-cal5): the member is fitted on it, as scikit-learn's RFE
+            # fits the estimator on whatever y holds; a family that refuses one class raises its fit door's
+            # words from its member fit (core/member_set_run.mojo, as CalibratedClassifierCV's one-class folds
+            # do since lane mf-cal3), a family that fits one class fits it. Before, any one-class y took the
+            # door's rounds.
+            if encoded.n != n or count < 1:
                 return member^
             if not rfe_plan_labels(base, encoded.classes, b):
                 return member^
