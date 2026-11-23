@@ -42,7 +42,8 @@ from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, c
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.trees_public_forest_door import forest_effective_mode, _engine, _ordered_export, _resident
 from xtrees.trees_forest_run import _family
-from bindings.trees_public_boost_door import _seed, _xk, _xt, _xr
+from bindings.trees_public_boost_door import _xk, _xt, _xr
+from bindings.trees_meta_validate_unpack import meta_seed as _seed
 from bindings.trees_explainer_native_door import _get, _int, _entry, _snapshot, _replace, _tree_mode
 from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS
 from xtrees.glue_calls import xt_ref
