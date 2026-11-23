@@ -157,6 +157,8 @@ def _fd_check(name: String, kind: Int, p: List[Float64], y: List[Float64], a: Fl
         var fd_p = (_total64(kind, pp, y, a, factor) - _total64(kind, pm, y, a, factor)) / (2.0 * H)
         if abs(fd_p - factor * _dp64(kind, p[i], y[i], a)) > 1.0e-5:
             _fail(name + ": d/dprediction " + String(i) + " disagrees with its central difference")
+        if kind == LS_KL_DIV and y[i] <= 0.0:
+            continue  # y log y has no derivative at 0; the body's convention there (0) is checked by value
         var yp = y.copy()
         var ym = y.copy()
         yp[i] += H
@@ -295,6 +297,8 @@ def test_nn_losses_tape() raises:
 
 # ---------------------------------------------------------------- Sequential fits
 comptime _N = 96
+# the smooth_l1 fit's words on the CPU column at 80efc181cf (cpc2); the device column must give the same words
+comptime _SMOOTH_L1_FIT_DIGEST = UInt64(5497763799716909111)
 comptime _D = 4
 
 
@@ -385,7 +389,12 @@ def run_fit_case[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
         words = m.params.copy()
         for i in range(len(labels)):  # small-loop(fixture)
             words.append(labels[i])
-    print("NN_LOSSES fit_" + String(which), "digest", _digest(words))
+    var digest = _digest(words)
+    print("NN_LOSSES fit_" + String(which), "digest", digest)
+    if which == 1 and digest != _SMOOTH_L1_FIT_DIGEST:
+        _fail("fit_1 (smooth_l1): digest " + String(digest) + " is not this version's recorded "
+              + String(_SMOOTH_L1_FIT_DIGEST) + " (a changed smooth_l1 body: the sabotage arm, or a product change "
+              + "whose new words must be recorded here)")
     return words^
 
 

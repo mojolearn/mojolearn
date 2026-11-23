@@ -1169,13 +1169,13 @@ def model_loss[E: Exec](
             if cfg.reduction == REDUCTION_SUM:
                 return cross_entropy(tape, ex, pred, target, REDUCTION_SUM)
             return tape.softmax_cross_entropy(ex, pred, target)
-        var mean = tape.cross_entropy(ex, pred, target)
+        var ce = tape.cross_entropy(ex, pred, target)
         if cfg.reduction == REDUCTION_SUM:
-            return tape.scale(ex, mean, Float32(tape.rows(pred)))
-        return mean
+            return tape.scale(ex, ce, Float32(tape.rows(pred)))
+        return ce
     var kind = model_loss_kind(cfg.loss)
-    var mean = cfg.reduction != REDUCTION_SUM
-    return tape.loss_reduced(ex, pred, target, kind, cfg.huber_delta, mean, ls_per_row(kind, cfg.reduction))
+    var averaged = cfg.reduction != REDUCTION_SUM
+    return tape.loss_reduced(ex, pred, target, kind, cfg.huber_delta, averaged, ls_per_row(kind, cfg.reduction))
 
 
 # nn-losses begin
