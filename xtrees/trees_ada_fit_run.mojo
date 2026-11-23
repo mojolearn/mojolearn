@@ -449,7 +449,9 @@ def _round_fit(mut plan: AdaFitPlan, index: Int, rows: List[Int32], yr: List[Flo
         var w_addr = Int(w32.unsafe_ptr())
         if plan.class_rows != 0:
             w_addr = Int(wt.unsafe_ptr())
-        var request = _round_request(plan, index, n, plan.xcm, plan.codes, w_addr)
+        var xcm = plan.xcm  # locals: `plan` is passed mutably beside them
+        var codes = plan.codes
+        var request = _round_request(plan, index, n, xcm, codes, w_addr)
         if plan.session > 0:
             request.session = plan.session
             var handle = xf_fit_session(plan.forest, True, request)
@@ -550,7 +552,9 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
             if plan.member_route:
                 if plan.classifier:
                     var w_addr = Int(wt.unsafe_ptr()) if plan.class_rows != 0 else Int(w32.unsafe_ptr())
-                    handle = _member_fit(plan, it, plan.x, plan.codes, w_addr)
+                    var x_addr = plan.x  # locals: `plan` is passed mutably beside them
+                    var codes_addr = plan.codes
+                    handle = _member_fit(plan, it, x_addr, codes_addr, w_addr)
                 else:
                     # the drawn rows' row-major gather (the forest door's
                     # `_gather`), checked and fitted unweighted

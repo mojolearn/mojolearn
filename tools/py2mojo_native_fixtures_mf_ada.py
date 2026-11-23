@@ -18,6 +18,13 @@ Cases (X = default_rng(1).random((120, 4), float32), the original test's X; y = 
   rlin / rsq / rexp  AdaBoostRegressor(n_estimators=25, random_state=0, loss=...) on y: weights, errors, predict
   The worse-than-random refusal (X all zero, y alternating) is asserted here against the door's words; the Mojo
   check expects the same words.
+  Lane mf-ada2 (the member route), n_estimators=5, random_state=0:
+  rfc / etc / dtr  AdaBoostClassifier over RandomForestClassifier(n_estimators=5, max_depth=2), ExtraTreesClassifier(
+        n_estimators=5, max_depth=2), DecisionTreeClassifier(splitter='random', max_depth=2), each with
+        class_weight='balanced', on csam's labels
+  rfr / etr / dtp  AdaBoostRegressor over RandomForestRegressor(n_estimators=5, max_depth=3), ExtraTreesRegressor(
+        n_estimators=5, max_depth=3), DecisionTreeRegressor(max_depth=3, criterion='poisson') on y
+  The Poisson refusal on y - 0.5 is asserted here against the door's words (the Mojo check's case dtneg).
 
 Regenerate and repack:
 
@@ -88,18 +95,50 @@ def regressor_case(loss):
     return _record(name, ml.AdaBoostRegressor(n_estimators=25, random_state=0, loss=loss).fit(X, y), X, False)
 
 
+POISSON = "criterion='poisson' requires y >= 0 with a positive sum"
+
+
+def member_case(name):
+    """Lane mf-ada2: the member route's bases (module docstring)."""
+    import mojolearn as ml
+    X, y = _data()
+    if name in ("rfc", "etc", "dtr"):
+        base = {"rfc": lambda: ml.RandomForestClassifier(n_estimators=5, max_depth=2, class_weight="balanced"),
+                "etc": lambda: ml.ExtraTreesClassifier(n_estimators=5, max_depth=2, class_weight="balanced"),
+                "dtr": lambda: ml.DecisionTreeClassifier(splitter="random", max_depth=2,
+                                                         class_weight="balanced")}[name]()
+        ys = (X[:, 0] + X[:, 1] > 1.0).astype(np.int64)
+        return _record(name, ml.AdaBoostClassifier(estimator=base, n_estimators=5, random_state=0).fit(X, ys), X, True)
+    if name == "dtneg":
+        try:
+            ml.AdaBoostRegressor(estimator=ml.DecisionTreeRegressor(max_depth=3, criterion="poisson"),
+                                 n_estimators=5, random_state=0).fit(X, y - np.float32(0.5))
+        except Exception as problem:  # the door's refusal, which the Mojo check expects
+            assert POISSON in str(problem), str(problem)
+        else:
+            raise AssertionError("dtneg: the negative Poisson targets did not refuse")
+        return []
+    base = {"rfr": lambda: ml.RandomForestRegressor(n_estimators=5, max_depth=3),
+            "etr": lambda: ml.ExtraTreesRegressor(n_estimators=5, max_depth=3),
+            "dtp": lambda: ml.DecisionTreeRegressor(max_depth=3, criterion="poisson")}[name]()
+    return _record(name, ml.AdaBoostRegressor(estimator=base, n_estimators=5, random_state=0).fit(X, y), X, False)
+
+
 def _run(job):
     kind, arg = job
     if kind == "inputs":
         return inputs()
     if kind == "classifier":
         return classifier_cases()
+    if kind == "member":
+        return member_case(arg)
     return regressor_case(arg)
 
 
 def main():
     jobs = [("inputs", None), ("classifier", None), ("regressor", "linear"), ("regressor", "square"),
-            ("regressor", "exponential")]
+            ("regressor", "exponential")] + [("member", name) for name in
+                                             ("rfc", "etc", "dtr", "rfr", "etr", "dtp", "dtneg")]
     with ProcessPoolExecutor(max_workers=min(len(jobs), os.cpu_count() or 1)) as pool:
         for lines in pool.map(_run, jobs):
             for line in lines:

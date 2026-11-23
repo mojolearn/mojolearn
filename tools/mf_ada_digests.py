@@ -12,7 +12,17 @@ sample_weight x loss {linear, square, exponential} x n_estimators {1, 25}; plus 
 NaN in X, a non-tree base). The DecisionTree* splitter='best' rows take `ada_fit_run`; the others keep the door
 rounds (the same digests are expected for both).
 
-Base: origin/lane/member-fits 4d76a9e16e; head: lane/mf-ada. Every line is expected equal.
+Lane mf-ada2 adds the bases the member route fits (`forest`: RandomForest*(n_estimators=3, max_depth=3);
+`poisson`: DecisionTreeRegressor(max_depth=3, criterion='poisson') on y and on |y| + 0.1; `etpois`:
+ExtraTreesRegressor(n_estimators=3, max_depth=3, criterion='poisson') on |y| + 0.1) and the one base the door rounds
+keep (`oob`: RandomForest*(n_estimators=3, max_depth=3, oob_score=True), whose members' oob_score_ is digested),
+plus the refusal of criterion='absolute_error'. Each line also carries `extra=`: the digest of every member's
+`inference_engine_` and of the fit's warnings (category and text, in order).
+
+Round 1: base origin/lane/member-fits 4d76a9e16e; head lane/mf-ada; every line equal.
+Round 2: base origin/lane/member-fits d3a8864541; head lane/mf-ada2. `n=`, `state=` and `out=` are expected equal on
+every line; `extra=` is expected to DIFFER from d3a8864541 on the DecisionTree splitter='best' rows (round 1 dropped
+their members' fit warnings and `inference_engine_`; round 2 restores them) and to equal 4d76a9e16e's there.
 
     python tools/mf_ada_digests.py > digests.txt
 
@@ -49,6 +59,17 @@ def _data(seed=11, n=257, d=6):
 
 
 def _base(ml, classifier, which, class_weight):
+    if which == "forest" or which == "oob":
+        kw = {"oob_score": True} if which == "oob" else {}
+        if classifier:
+            if class_weight is not None:
+                kw["class_weight"] = class_weight
+            return ml.RandomForestClassifier(n_estimators=3, max_depth=3, random_state=0, **kw)
+        return ml.RandomForestRegressor(n_estimators=3, max_depth=3, random_state=0, **kw)
+    if which == "poisson" or which == "poisson_pos":
+        return ml.DecisionTreeRegressor(max_depth=3, criterion="poisson")
+    if which == "etpois":
+        return ml.ExtraTreesRegressor(n_estimators=3, max_depth=3, criterion="poisson", random_state=0)
     if classifier:
         kw = {} if class_weight is None else {"class_weight": class_weight}
         if which == "default":
@@ -75,27 +96,40 @@ def _state(m, classifier):
             parts.append(np.asarray(f[key]))
         if classifier:
             parts.append(np.asarray(f["classes_"]))
+        if "oob_score_" in f:
+            parts.append(np.asarray(f["oob_score_"], np.float64))
     return _digest(*parts)
+
+
+def _extra(m, caught):
+    engines = [str(e.__dict__.get("inference_engine_")) for e in m.estimators_]
+    words = [f"{w.category.__name__}:{w.message}" for w in caught]
+    return hashlib.sha256(("|".join(engines) + "#" + "|".join(words)).encode()).hexdigest()[:16]
 
 
 def _case(job):
     import mojolearn as ml
     classifier, which, weighted, option, n_estimators = job
     name = (f"{'c' if classifier else 'r'}_{which}_{'w' if weighted else 'u'}_{option}_{n_estimators}")
+    import warnings
     X, y, c, sw = _data()
+    if which in ("poisson_pos", "etpois"):
+        y = (np.abs(y) + 0.1).astype(np.float32)
     Xt = _data(12, n=97)[0]
     try:
-        if classifier:
-            base = _base(ml, True, which, None if option == "none" else "balanced")
-            m = ml.AdaBoostClassifier(base, n_estimators=n_estimators, random_state=3)
-            m.fit(X, c, sample_weight=sw if weighted else None)
-            out = _digest(m.predict(Xt), m.predict_proba(Xt), m.decision_function(Xt))
-        else:
-            base = _base(ml, False, which, None)
-            m = ml.AdaBoostRegressor(base, n_estimators=n_estimators, loss=option, random_state=3)
-            m.fit(X, y, sample_weight=sw if weighted else None)
-            out = _digest(m.predict(Xt))
-        return f"{name} n={len(m.estimators_)} state={_state(m, classifier)} out={out}"
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            if classifier:
+                base = _base(ml, True, which, None if option == "none" else "balanced")
+                m = ml.AdaBoostClassifier(base, n_estimators=n_estimators, random_state=3)
+                m.fit(X, c, sample_weight=sw if weighted else None)
+                out = _digest(m.predict(Xt), m.predict_proba(Xt), m.decision_function(Xt))
+            else:
+                base = _base(ml, False, which, None)
+                m = ml.AdaBoostRegressor(base, n_estimators=n_estimators, loss=option, random_state=3)
+                m.fit(X, y, sample_weight=sw if weighted else None)
+                out = _digest(m.predict(Xt))
+        return f"{name} n={len(m.estimators_)} state={_state(m, classifier)} out={out} extra={_extra(m, caught)}"
     except Exception as e:  # noqa: BLE001 - the words are the digest
         return f"{name} raised {type(e).__name__}: {e}"
 
@@ -113,6 +147,8 @@ def _refusal(job):
                 ml.AdaBoostClassifier(n_estimators=3).fit(bad, c)
             else:
                 ml.AdaBoostRegressor(n_estimators=3).fit(bad, y)
+        elif job == "absolute":
+            ml.AdaBoostRegressor(ml.DecisionTreeRegressor(criterion="absolute_error"), n_estimators=3).fit(X, y)
         else:
             ml.AdaBoostClassifier(ml.LogisticRegression(), n_estimators=3).fit(X, c)
         return f"refuse_{job} no-refusal"
@@ -125,13 +161,13 @@ def _run(job):
 
 
 def main():
-    bases = ("default", "depth3", "random", "extra")
+    bases = ("default", "depth3", "random", "extra", "forest", "oob")
     jobs = [("case", (True, b, w, cw, m))
             for b, w, cw, m in itertools.product(bases, (False, True), ("none", "balanced"), (1, 25))]
     jobs += [("case", (False, b, w, loss, m))
-             for b, w, loss, m in itertools.product(bases, (False, True), ("linear", "square", "exponential"),
-                                                    (1, 25))]
-    jobs += [("refusal", r) for r in ("worse", "nan_c", "nan_r", "nontree")]
+             for b, w, loss, m in itertools.product(bases + ("poisson", "poisson_pos", "etpois"), (False, True),
+                                                    ("linear", "square", "exponential"), (1, 25))]
+    jobs += [("refusal", r) for r in ("worse", "nan_c", "nan_r", "nontree", "absolute")]
     with ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
         for line in pool.map(_run, jobs):
             print(line)
