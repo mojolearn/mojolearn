@@ -822,6 +822,8 @@ TRAINING_LANE_NAMES = {
     "gbdt-pointwise-arms": "gradient boosting on the pointwise searcher with Newton and cosine scores, every bootstrap, Gradient leaves, score noise and feature_fraction",
     "gbdt-ordered-weights": "gradient boosting Ordered boosting with sample weights and class weights",
     "gbdt-nonsym-rest": "gradient boosting Depthwise and Lossguide with every score, growth knob, leaf method, bootstrap and boost_from_average",
+    # lane gbdt-cpu-rest-4-pwl (2026-11-23)
+    "gbdt-pointwise-rest": "gradient boosting on the pointwise searcher with every one-output loss, boost_from_average resolved, border types, IncToDec and categorical columns",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1619,16 +1621,20 @@ ADAPTED_MODULES = {
 #: scores outside the four, min_child_hessian outside RMSE / Logloss /
 #: CrossEntropy, RMSE with class weights, boost_from_average outside
 #: `train`'s list, use_pointwise_searcher on a non-symmetric policy.
+#: Lane gbdt-cpu-rest-4-pwl (2026-11-23): the pointwise searcher on every
+#: one-output loss (CrossEntropy, MAE, Quantile, MAPE, LogLinQuantile,
+#: Poisson, Lq, Expectile, Tweedie, Huber beside Logloss and RMSE, Exact
+#: leaves where `train` resolves them), boost_from_average on, off or unset,
+#: every feature_border_type, every detector with an eval set, one-hot and CTR
+#: columns and max_depth 0 (gbdt_oracle_pointwise.mojo); its clause is gone.
+#: Refused on BOTH columns in the device's words, so not CPU gaps: Depthwise
+#: and Lossguide, MultiRMSE, MultiClass and MultiClassOneVsAll (the device
+#: now refuses them too: it searched on the first class's gradient alone),
+#: feature combinations, boost_from_average=True outside its list.
 NO_CPU_PATH = (
     "gradient boosting training with a categorical or one-hot column "
     "outside SymmetricTree with Logloss or RMSE and Plain boosting: the "
     "categorical owners do not implement those combinations",
-
-    "gradient boosting training with the pointwise searcher outside "
-    "Logloss and RMSE (boost_from_average on, GreedyLogSum borders, numeric "
-    "columns, the Iter detector when an eval set is "
-    "given), apart from the grouped losses QueryRMSE, PairLogit and "
-    "YetiRank, which it trains",
 
     "gradient boosting training on SymmetricTree at a (loss, "
     "score_function, leaf_estimation_method, bootstrap_type) combination "
@@ -2983,6 +2989,9 @@ FAMILIES = (
             "gbdt-ordered-weights",
             # lane gbdt-cpu-rest-4-ns (2026-11-23)
             "gbdt-nonsym-rest",
+            # lane gbdt-cpu-rest-4-pwl (2026-11-23): the rest of the
+            # pointwise searcher (gbdt_oracle_pointwise.mojo)
+            "gbdt-pointwise-rest",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4195,6 +4204,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-pointwise-arms": "no reference",
     "gbdt-ordered-weights": "no reference",
     "gbdt-nonsym-rest": "no reference",
+    "gbdt-pointwise-rest": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no

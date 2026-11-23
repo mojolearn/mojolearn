@@ -16,7 +16,6 @@ from std.memory import bitcast
 
 from core.hostptr import read_f32
 from gbdt.data.class_weight_body import class_weight_slot, class_weighted
-from core.host_finite_scan import host_copy_f32_any_nan
 from checks.numerics import ftz, identical_sigmoid
 from checks.soft_f64 import (
     SF64_ONE,
@@ -480,24 +479,11 @@ def _refuse_predict(what: String) raises:
 
 
 # fx-leftovers-product (2026-11-19): `gbdt_host_has_nan_f32` (the scan of an
-# already copied list) is removed; its one caller reads through
-# `gbdt_host_read_f32_nan`, which tests during the copy.
-
-
-def gbdt_host_read_f32_nan(addr: Int, n: Int, mut has_nan: Bool) raises -> List[Float32]:
-    """The fit's owned copy of the `n` float32 words at host address `addr`
-    (`read_f32`'s list), with `has_nan` set when any of them is a NaN (never
-    cleared). fx-leftovers-product (2026-11-19): the fit copied X with one
-    serial memcpy and then walked the copy again for the NaN test; here the
-    test rides the copy's own loads."""
-    # parallel: one copy + any-NaN pass over spans across host cores
-    if n < 0:
-        raise Error("mojolearn: negative float32 copy length")
-    var values = List[Float32](unsafe_uninit_length=n)
-    if n > 0:
-        if host_copy_f32_any_nan(addr, Int(values.unsafe_ptr()), n):
-            has_nan = True
-    return values^
+# already copied list) is removed. Lane gbdt-cpu-rest-4-pwl (2026-11-23):
+# `gbdt_host_read_f32_nan`, its successor (the copy with the any-NaN test
+# riding its loads), is deleted too: its one caller, the pointwise
+# searcher's arm, never read the verdict (NaN is binned by the shared grid),
+# so the arm reads X with `read_f32` as every other arm does.
 
 
 # Lane gbdt-rest-3 (2026-11-23): `gbdt_host_has_nan_ptr` is deleted; its one

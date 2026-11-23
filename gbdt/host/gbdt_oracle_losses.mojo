@@ -85,9 +85,11 @@ from checks.numerics import (
 )
 from core.host_parallel import host_parallelize
 from gbdt.targets.pointwise_bodies import (
+    BODY_OBJ_CROSSENTROPY,
     BODY_OBJ_EXPECTILE,
     BODY_OBJ_HUBER,
     BODY_OBJ_LOGLINQUANTILE,
+    BODY_OBJ_LOGLOSS,
     BODY_OBJ_LQ,
     BODY_OBJ_MAE,
     BODY_OBJ_MAPE,
@@ -197,8 +199,8 @@ from gbdt.host.gbdt_oracle_eval import (
 #: The objective codes (`gbdt/targets/kernel/pointwise_targets.mojo`'s
 #: `OBJECTIVE_*`; the pointwise ones are the body module's `BODY_OBJ_*`).
 comptime GBDT_OBJ_RMSE = BODY_OBJ_RMSE
-comptime GBDT_OBJ_LOGLOSS = 1
-comptime GBDT_OBJ_CROSSENTROPY = 2
+comptime GBDT_OBJ_LOGLOSS = BODY_OBJ_LOGLOSS
+comptime GBDT_OBJ_CROSSENTROPY = BODY_OBJ_CROSSENTROPY
 comptime GBDT_OBJ_QUANTILE = BODY_OBJ_QUANTILE
 comptime GBDT_OBJ_MAE = BODY_OBJ_MAE
 comptime GBDT_OBJ_LOGLINQUANTILE = BODY_OBJ_LOGLINQUANTILE

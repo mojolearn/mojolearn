@@ -3988,6 +3988,26 @@ def fit_with_test(
                 "MultiRMSE with an eval set is not carried here: the held-out"
                 " arm's target is one value per row"
             )
+    if use_pointwise_searcher and (
+        objective == OBJECTIVE_MULTICLASS
+        or objective == OBJECTIVE_MULTICLASS_OVA
+    ):
+        # lane gbdt-cpu-rest-4-pwl (2026-11-23): refused for the reason
+        # MultiRMSE is above. Their multiclass trainers are `TGpuTrainer<
+        # TMultiClassificationTargets>` through the GREEDY subsets
+        # searcher's template (`cuda/train_lib/multiclass.cpp:1-13`); the
+        # doc-parallel searcher is single-target, and this fit handed it
+        # `split_stat_planes`' planes 0 and 1 only, so a MultiClass or
+        # MultiClassOneVsAll tree's structure was searched on the FIRST
+        # class's gradient alone, an algorithm neither CatBoost nor the
+        # greedy arm has. The CPU column refuses it in these words.
+        raise Error(
+            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
+            " a single-target searcher; "
+            + String("MultiClass" if objective == OBJECTIVE_MULTICLASS else "MultiClassOneVsAll")
+            + " is trained by TGreedySubsetsSearcher only"
+            " (cuda/train_lib/multiclass.cpp:1-13)"
+        )
     var stat_count = 1 + approx_dim
 
     _ = child_hessian_threshold(min_child_hessian, grow_policy, score_function)

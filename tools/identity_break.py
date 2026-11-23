@@ -427,6 +427,10 @@ sampler, a solver, a metric, a reduction).
       gbdt-ordered-weights (sample and class weights under Ordered boosting)
       gbdt-nonsym-rest (Depthwise / Lossguide: every score, growth knob,
                leaf method, bootstrap and boost_from_average the device trains)
+    2026-11-23 (lane gbdt-cpu-rest-4-pwl: the rest of the pointwise
+               searcher: the one-output losses, boost_from_average resolved,
+               border types, IncToDec, categorical columns)
+      gbdt-pointwise-rest
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -5854,6 +5858,83 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-pointwise-rest")
+def _(ml, X, yc, yr, Xh=None):
+    """The rest of the pointwise searcher, which the CPU column refused by
+    name until lane gbdt-cpu-rest-4-pwl (2026-11-23), each now trained by
+    gbdt/host/gbdt_oracle_pointwise.mojo: the one-output losses beside
+    Logloss and RMSE (CrossEntropy, MAE and MAPE at their Exact default,
+    Quantile, LogLinQuantile, Poisson, Lq, Expectile, Tweedie, Huber),
+    boost_from_average unset (resolved as train resolves it), class weights
+    with an unset start on Logloss, sample weights on MAE, Median borders, an
+    eval set under IncToDec with use_best_model, and a CTR and a one-hot
+    categorical column. Every fit is at rate 0.1 with every work-changing
+    option set."""
+    rows = min(_GBDT_GAPS_ROWS, X.shape[0])
+    X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
+    yp = _pos(yr)
+    pw = dict(use_pointwise_searcher=True, score_function="Cosine", boost_from_average=False,
+              leaf_estimation_method="Newton", leaf_estimation_iterations=1)
+    parts, first = {}, None
+    for name, loss, yf, options in [
+        ("rmse_median_borders", "RMSE", yr, dict(pw, boost_from_average=True, feature_border_type="Median")),
+        ("crossentropy_bayesian_bfa", "CrossEntropy", yc, dict(pw, boost_from_average=True,
+                                                               bootstrap_type="Bayesian", bagging_temperature=1.0,
+                                                               leaf_estimation_iterations=2)),
+        ("quantile_exact_newtonl2", "Quantile", yr, dict(pw, boost_from_average=True, loss_alpha=0.3,
+                                                         score_function="NewtonL2", bootstrap_type="Bernoulli",
+                                                         subsample=0.7, leaf_estimation_method="Exact",
+                                                         leaf_estimation_iterations=None)),
+        ("mape_exact", "MAPE", yp, dict(pw, boost_from_average=True, leaf_estimation_method=None,
+                                        leaf_estimation_iterations=None)),
+        ("loglinquantile_gradient", "LogLinQuantile", yp, dict(pw, leaf_estimation_method="Gradient",
+                                                               leaf_estimation_iterations=2)),
+        ("poisson_newtoncosine_noise", "Poisson", yc, dict(pw, boost_from_average=None,
+                                                           score_function="NewtonCosine", bootstrap_type="Poisson",
+                                                           subsample=0.66, random_strength=1.0,
+                                                           leaf_estimation_iterations=3)),
+        ("lq_l2", "Lq", yr, dict(pw, loss_q=3.0, score_function="L2")),
+        ("expectile_bayesian", "Expectile", yr, dict(pw, loss_alpha=0.3, bootstrap_type="Bayesian",
+                                                     bagging_temperature=0.5)),
+        ("tweedie_l2", "Tweedie", yc, dict(pw, loss_variance_power=1.5, score_function="L2")),
+        ("huber", "Huber", yr, dict(pw, loss_delta=1.0)),
+        ("logloss_class_weights_unset_start", "Logloss", yc, dict(pw, boost_from_average=None,
+                                                                  class_weights=[1.0, 2.5],
+                                                                  leaf_estimation_iterations=3)),
+    ]:
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, **options)).fit(X, yf)
+        _gbdt_gaps_parts(parts, name, m, X)
+        parts[name + ":loss_curve"] = _h(np.asarray(m.loss_curve_, dtype=np.float64))
+        first = first if first is not None else m
+    # sample weights on MAE at its Exact default, the start unset (True)
+    w = _hw((rows,), "gbdt-pointwise-rest:sample_weight", 0.25, 4.0)
+    mw = ml.GradientBoosting(**_gbdt_gaps_kw(loss="MAE", **dict(
+        pw, boost_from_average=None, score_function="L2", leaf_estimation_method=None,
+        leaf_estimation_iterations=None))).fit(X, yr, sample_weight=w)
+    _gbdt_gaps_parts(parts, "mae_weighted_unset_start", mw, X)
+    # the held-out fit under IncToDec: the curve, the detector's stop and the
+    # shrink, hashed
+    Xe = np.ascontiguousarray(Xh[:rows])
+    yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(
+        pw, loss="Huber", loss_delta=1.0, n_estimators=30, learning_rate=1.0, max_depth=6,
+        od_type="IncToDec", od_pvalue=0.01, od_wait=2, use_best_model=True, best_model_min_trees=3))
+    ).fit(X, yr, eval_set=(Xe, yeh))
+    _gbdt_gaps_parts(parts, "huber_inctodec_eval", ev, X)
+    parts["huber_inctodec_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+    parts["huber_inctodec_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                       ev.best_iteration_], dtype=np.int64))
+    # a CTR column (every permutation) and a one-hot column on this searcher
+    Xc = _gbdt_cat_x(X)
+    for name, loss, yf, (cols, cats) in [("ctr_logloss", "Logloss", yc, _GBDT_CAT_CTR),
+                                         ("onehot_rmse", "RMSE", yr, _GBDT_CAT_ONEHOT)]:
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, cat_features=list(cats), **dict(
+            pw, bootstrap_type="Bayesian", bagging_temperature=1.0))).fit(Xs, yf)
+        _gbdt_gaps_parts(parts, name, m, Xs)
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 @lane("gbdt-ordered-weights")
 def _(ml, X, yc, yr, Xh=None):
     """Sample weights and class weights under boosting_type='Ordered', which
@@ -9860,6 +9941,8 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-pointwise-arms",
             "gbdt-ordered-weights",
             "gbdt-nonsym-rest")
+# lane gbdt-cpu-rest-4-pwl (2026-11-23)
+_batch_decl(_rows_calls("predict"), "gbdt-pointwise-rest")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):
