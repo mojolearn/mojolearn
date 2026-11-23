@@ -2981,12 +2981,21 @@ struct _CalUnits(Movable):
     its member PREDICT doors gather the fold's test rows on the device,
     which a member call cannot; one fold at a time on the calling thread);
     and a base the set does not serve (`_CAL_NOT_MEMBER`: a class with no
-    member mark, CategoricalNB's door included where its kind is not
-    admitted, a meta-estimator base (no meta member kind: lane mf-cal3b's
-    result says why), a configuration its family's admit leaves to the
-    estimator's door (SVC class_weight or kernel='precomputed', a GP kernel
-    the member cannot address, ...), or a member kind with no native
-    scoring call). The threads stay for the second kind: those folds are
+    member mark (AdaBoostClassifier, MultiOutputClassifier, GridSearchCV,
+    RandomizedSearchCV: no META kind, see core/ensemble_member.mojo),
+    CategoricalNB's door included where its kind is not admitted, a
+    meta-estimator base whose META admit keeps its door (since lane
+    mf-meta3b Voting, Stacking, OneVsRest, CalibratedClassifierCV and
+    Bagging bases are META members; still the door's: a Bagging
+    configuration that may take the batched forest route, a Calibrated base
+    with a non-int cv or a DeviceRows base, a Stacking base with a splitter
+    cv, a meta whose nested estimator is itself a meta: nested members are
+    admitted through the leaf dispatch only), a configuration its family's
+    admit leaves to the estimator's door (SVC class_weight or
+    kernel='precomputed', a GP kernel the member cannot address, ...), or a
+    member kind with no native scoring call; a hard VotingClassifier is
+    refused natively in scikit-learn's words, lane mf-meta3b). The threads
+    stay for the second kind: those folds are
     independent units whose fit doors release the GIL, on n_jobs threads.
     REMOVED (lane mf-cal3): `only()` / `todo` and the per-fold native fit
     retry (`k`): no fold of a served base reaches a door now. Lane mf-cal3b:

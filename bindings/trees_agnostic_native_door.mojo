@@ -1274,13 +1274,18 @@ struct _DoorModel(AgnModel):
     """The explained estimator through its own compiled door (`_evaluate`, per chunk), serial, with the GIL held:
     the one place the RUN's model reaches Python objects.
 
-    WHO STILL COMES HERE (lanes mf-shap3b and mf-cal3b, 2026-11-23): ONLY an explained estimator whose class has a
-    plan that serves the method by its door but no member entry that serves the call, or whose meta-estimator has a
-    member of that kind: the host subclasses `_classical_host.py` binds that have no member mark yet
-    (HostLogisticRegression, HostKMeans, HostKernelRidge, HostIsolationForest, the _HostCD estimators; HostSVC, HostSVR,
-    HostKNeighborsClassifier / Regressor and HostGaussianProcessClassifier have their own marks and the host-only word
-    since mf-cal3b and open as `AgnMember`) and a meta-estimator used as a member of a meta-estimator (no META member
-    kind yet). Once those exist, this door and `_evaluate` are deleted. Everything else is native: every member
+    WHO STILL COMES HERE (lanes mf-shap3b, mf-cal3b, mf-iterimp3b and mf-meta3b, 2026-11-23): ONLY an explained
+    estimator whose class has a plan that serves the method by its door but no member entry that serves the call, or
+    whose meta-estimator has a member of that kind. The Host* subclasses carry their public class's mark since
+    mf-iterimp3b. Since mf-meta3b a VotingClassifier / VotingRegressor / StackingClassifier / StackingRegressor /
+    OneVsRestClassifier / CalibratedClassifierCV / BaggingClassifier / BaggingRegressor used as a member opens as its
+    META state. What is left: a member of a meta-estimator that is an AdaBoost*, a MultiOutput* or a search CV (no
+    META kind: AdaBoost's rounds over device sessions and its one-tree door members, MultiOutput's per-output label
+    vectors and the search's Python scorers and candidate clones are not typed yet); a META class whose admit keeps
+    its door (a Bagging configuration the batched forest route may take, a Calibrated non-int cv or DeviceRows base, a
+    Stacking splitter cv); and a meta nested two levels deep (the META kind admits its nested members through the
+    leaf dispatch only: the admission helpers may not recurse). When those are typed, this door and `_evaluate` are
+    deleted. Everything else is native: every member
     family (an outlier detector's or clusterer's integer predict too), the votes (soft and hard), Bagging, Stacking
     (a classifier member asked for predict too), OneVsRest, CalibratedClassifierCV, AdaBoost, MultiOutputRegressor,
     the search CVs' best estimator, RFE (its estimator over its support), LabelPropagation and LabelSpreading (their

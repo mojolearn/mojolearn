@@ -1879,14 +1879,14 @@ def _predict_ovr(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         var keep = List[List[Float32]]()
         var m = _member_of(slot, 0, slot[].states[0], MEMBER_OP_PREDICT_PROBA, 1.0)
         var block = member_f32_block(m, rows, keep)
-        var at = _index_of_code(List[Int32](), 1)
-        if at >= m.cols:
-            at = -1
+        var col = _index_of_code(List[Int32](), 1)
+        if col >= m.cols:
+            col = -1
         var p = List[Float32](length=max(n, 1), fill=0.0)
-        if at >= 0:
+        if col >= 0:
             var b = _F32P(unsafe_from_address=block)
             for i in range(n):  # small-loop(one column copy of one member's block)
-                p[i] = b[i * m.cols + at]
+                p[i] = b[i * m.cols + col]
         _ = len(keep)
         _ = xt_binary_proba(glue, Int(p.unsafe_ptr()), call[].dst.data, n)
         _ = len(p)
