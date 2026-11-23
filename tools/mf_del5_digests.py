@@ -16,6 +16,26 @@ cv > class count (the refusal words), and a stratified splitter on a regressor (
 over Ridge, RidgeCV) on targets with repeated values (folds) and continuous targets (the refusal words). EXPECTED:
 equal, except `*_raised` lines that came from the door before and from the member's RUN now (same words).
 
+Section hostent5 (lane mf-hostent5; base origin/lane/member-fits-5 996f24a41b vs the head of lane/mf-hostent5):
+OrderedRMSE as Gbdt member kind 4 and the saved HostForest / HostGBDT as predict-only kinds.
+  * ordered_fit / ordered_fit_w: OrderedRMSE's own fit (its door now runs the ONE typed body of its checks):
+    EXPECTED equal (same checks, same `xg_ordered_fit`, same order words).
+  * ordered_bad_*: the permutation refusals (a repeat, a float, a short list): EXPECTED equal words.
+  * ordered_rfe_final (n_features_to_select = all: no round, only the final fit), ordered_rfe_round (one round:
+    the Gbdt kinds' no-importance refusal) and ordered_rfe_no_perm: before, the estimator's own doors (`_fit_clone`);
+    after, the member kind with `permutation` carried from the fit parameters. EXPECTED: the final fit's model text
+    and predict equal; the round's and the missing permutation's refusals may change wording only where the door's
+    became the member's (the missing argument is Python's TypeError either way).
+  * ordered_vote / ordered_search: before, refused at the meta admission (no plan); after, the member kind, whose
+    fit raises Python's missing-argument TypeError (as scikit-learn's meta-estimators fit it: no permutation).
+    EXPECTED: `*_raised` with new words.
+  * ordered_shap, host_forest_* and host_gbdt_*: Kernel / Permutation SHAP over a fitted OrderedRMSE and over saved
+    HostForest (rf / et, classifier / regressor, sequential and parallel_groves) and HostGBDT (RMSE, Logloss;
+    MultiClass refused) models: before, refused (no plan: "requires a mojolearn estimator"); after, the member
+    kind's values. The host model's own predict is printed beside them (EXPECTED equal before and after: the
+    class's own door is unchanged), and the values must equal those of the same explainer over the estimator that
+    saved the file (the `*_twin` lines: the same predict bits by the contract).
+
 Configurations are independent: one process each across the host cores.
 
     python tools/mf_del5_digests.py > digests.txt
@@ -142,9 +162,103 @@ def _del5(arg):
     return out
 
 
+def _ordered(n_estimators=4):
+    import mojolearn
+    return mojolearn.OrderedRMSE(n_estimators=n_estimators, max_depth=3)
+
+
+def _explain(model, X, which):
+    import mojolearn as ml
+    explainer = (ml.KernelExplainer if which == "K" else ml.PermutationExplainer)(model, X[:16], random_state=0)
+    kw = {"nsamples": 64} if which == "K" else {}
+    return np.asarray(explainer.shap_values(X[:6], **kw))
+
+
+def _saved(case, X, y, t, path):
+    """The estimator that saves the file of a host case, fitted."""
+    import mojolearn
+    if case.startswith("host_forest"):
+        _, _, family, kind, engine = case.split("_")
+        cls = {("rf", "cls"): mojolearn.RandomForestClassifier, ("rf", "reg"): mojolearn.RandomForestRegressor,
+               ("et", "cls"): mojolearn.ExtraTreesClassifier, ("et", "reg"): mojolearn.ExtraTreesRegressor}[(family, kind)]
+        kw = {"inference_engine": "parallel_groves"} if engine == "groves" else {}
+        model = cls(n_estimators=8, random_state=0, **kw).fit(X, y if kind == "cls" else t)
+    else:
+        loss = case.split("_")[2]
+        target = t if loss == "RMSE" else (y if loss == "MultiClass" else (y > 0).astype(np.float32))
+        model = mojolearn.GradientBoosting(loss=loss, n_estimators=8).fit(X, target)
+    model.save(path)
+    return model
+
+
+def _hostent5(arg):
+    _, case = arg
+    import mojolearn
+    from mojolearn.feature_selection import RFE
+    from mojolearn.model_selection import GridSearchCV
+    X, y, t = _data(31, 160, 6, 3)
+    n = X.shape[0]
+    perm = np.random.default_rng(5).permutation(n)
+    tag = f"hostent5_{case}"
+    out = []
+    try:
+        if case == "ordered_fit":
+            m = _ordered().fit(X, t, permutation=perm)
+            out.append((tag + "_model", hashlib.sha256(m.model_.encode()).hexdigest()[:24]))
+            out.append((tag + "_predict", _digest(m.predict(X))))
+        elif case == "ordered_fit_w":
+            w = np.linspace(0.5, 1.5, n, dtype=np.float32)
+            m = _ordered().fit(X, t, permutation=list(perm), sample_weight=w)
+            out.append((tag + "_model", hashlib.sha256(m.model_.encode()).hexdigest()[:24]))
+        elif case.startswith("ordered_bad"):
+            bad = {"ordered_bad_repeat": np.zeros(n, dtype=np.int64),
+                   "ordered_bad_float": perm.astype(np.float64),
+                   "ordered_bad_short": list(perm[:-1])}[case]
+            _ordered().fit(X, t, permutation=bad)
+            out.append((tag + "_answered", "fitted"))
+        elif case in ("ordered_rfe_final", "ordered_rfe_round", "ordered_rfe_no_perm"):
+            keep = 6 if case != "ordered_rfe_round" else 3
+            params = {} if case == "ordered_rfe_no_perm" else {"permutation": perm}
+            m = RFE(_ordered(), n_features_to_select=keep).fit(X, t, **params)
+            out.append((tag + "_model", hashlib.sha256(m.estimator_.model_.encode()).hexdigest()[:24]))
+            out.append((tag + "_predict", _digest(m.predict(X))))
+        elif case == "ordered_vote":
+            mojolearn.VotingRegressor([("o", _ordered()), ("r", mojolearn.Ridge())]).fit(X, t)
+            out.append((tag + "_answered", "fitted"))
+        elif case == "ordered_search":
+            GridSearchCV(_ordered(), {"max_depth": [2, 3]}, cv=3).fit(X, t)
+            out.append((tag + "_answered", "fitted"))
+        elif case == "ordered_shap":
+            m = _ordered().fit(X, t, permutation=perm)
+            out.append((tag + "_kernel", _digest(_explain(m, X, "K"))))
+            out.append((tag + "_permutation", _digest(_explain(m, X, "P"))))
+        else:
+            import tempfile
+            from mojolearn import HostForest, HostGBDT
+            with tempfile.TemporaryDirectory() as root:
+                path = os.path.join(root, "model.npz")
+                twin = _saved(case, X, y, t, path)
+                host = (HostForest if case.startswith("host_forest") else HostGBDT).from_file(path)
+                out.append((tag + "_host_predict", _digest(host.predict(X))))
+                for which in ("K", "P"):
+                    try:
+                        out.append((tag + "_" + which, _digest(_explain(host, X, which))))
+                    except Exception as e:  # noqa: BLE001 - the words are the digest
+                        out.append((tag + "_" + which + "_raised", f"{type(e).__name__}: {e}"))
+                    try:
+                        out.append((tag + "_" + which + "_twin", _digest(_explain(twin, X, which))))
+                    except Exception as e:  # noqa: BLE001 - the words are the digest
+                        out.append((tag + "_" + which + "_twin_raised", f"{type(e).__name__}: {e}"))
+    except Exception as e:  # noqa: BLE001 - the words are the digest
+        out.append((tag + "_raised", f"{type(e).__name__}: {e}"))
+    return out
+
+
 def _unit(arg):
     if arg[0] == "del5b_rfe":
         return _del5b_rfe(arg)
+    if arg[0] == "hostent5":
+        return _hostent5(arg)
     return _del5(arg)
 
 
@@ -152,7 +266,14 @@ GETTERS = ("best_estimator_.coef_", "estimator_.coef_", "final_estimator_.coef_"
 UNITS = ([("del5b_rfe", m, g, r) for m in ("door", "vote", "search", "cv") for g in GETTERS for r in (False, True)]
          + [("del5b_rfe", "cal", g, False) for g in GETTERS]
          + [("del5", c) for c in ("cal_loo", "cal_too_many", "stack_repeated", "stack_continuous", "search_repeated",
-                                  "search_continuous", "ridgecv_kfold", "ridgecv_strat_repeated")])
+                                  "search_continuous", "ridgecv_kfold", "ridgecv_strat_repeated")]
+         + [("hostent5", c) for c in (
+             "ordered_fit", "ordered_fit_w", "ordered_bad_repeat", "ordered_bad_float", "ordered_bad_short",
+             "ordered_rfe_final", "ordered_rfe_round", "ordered_rfe_no_perm", "ordered_vote", "ordered_search",
+             "ordered_shap")]
+         + [("hostent5", f"host_forest_{f}_{k}_{e}") for f in ("rf", "et") for k in ("cls", "reg")
+            for e in ("seq", "groves")]
+         + [("hostent5", f"host_gbdt_{loss}") for loss in ("RMSE", "Logloss", "MultiClass")])
 
 
 def main():
