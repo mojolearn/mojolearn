@@ -97,7 +97,7 @@ from core.forest_fit_request import (
     ForestFitArgs, XF_CAP_DEVICE_SCAN, XF_CAP_ORDERED_RESIDENT, XF_CAP_STRICT,
     XF_RESIDENT_RELEASE, XF_STRICT_RELEASE,
 )
-from core.entry_table import EntryRef, entry_ref_unresolved
+from core.entry_table import EntryRef
 from core.forest_calls import (
     ForestExport, xf_ref, xf_caps, xf_dt_default_bins, xf_export_sizes, xf_export_into,
     xf_export_verify, xf_export_release, xf_snapshot_release,
@@ -634,30 +634,10 @@ def forest_export_handle(key: EntryRef, handle: Int, selection: String,
         raise error^
 
 
-def forest_fit_request(fields: PythonObject, cfg: PythonObject, kind: String, rows: Int, cols: Int, classes: Int,
-                       x_addr: Int, y_addr: Int, fit: ForestFit, native: PythonObject,
-                       context: PythonObject) raises -> ForestFitArgs:
-    """The typed request of one fit from the Python configuration, for a
-    caller that holds no `ForestConfig` (the boost door's member fits):
-    UNPACK (`forest_config`: `cfg` for an ET kind, the instance's own `_cfg`
-    for an RF kind, as before) then `forest_request`. The door's own fits and
-    the tree-range shard driver read the configuration once per fit and call
-    `forest_request` directly."""
-    if _family(kind) == "et":
-        var et_config = forest_config(fields, cfg, kind, False, context)
-        return forest_request(et_config, entry_ref_unresolved(), rows, cols, classes, x_addr, y_addr, fit, False)
-    var nk = trees_keys()
-    var config = forest_config(fields, py_item(fields, nk[].k__cfg), kind, False, context)
-    if config.bins_image:
-        return forest_request(config, forest_key(native), rows, cols, classes, x_addr, y_addr, fit, False)
-    return forest_request(config, entry_ref_unresolved(), rows, cols, classes, x_addr, y_addr, fit, False)
-
-
-def _launch(native: PythonObject, fit: ForestFit, x: AdmittedXView, args: ForestFitArgs, device_scan: Bool,
-            context: PythonObject) raises -> PythonObject:
-    """`_launch_on` for a caller that holds the binding, not its entry (the
-    boost door)."""
-    return _launch_on(forest_key(native), fit, x, args, device_scan, context)
+# TOMBSTONE: forest_fit_request / _launch (the typed request built from a member's Python fields per fit, and
+# the launch through a binding object, for the boost door's AdaBoost member rounds, their last callers) deleted
+# 2026-11-23 by lane mf-ada: xtrees/trees_ada_fit_run.mojo builds every round's request from the ForestConfig
+# the door reads once per fit. Not an experiment arm: git revert of that commit restores them.
 
 
 def _launch_on(key: EntryRef, fit: ForestFit, x: AdmittedXView, args: ForestFitArgs, device_scan: Bool,
