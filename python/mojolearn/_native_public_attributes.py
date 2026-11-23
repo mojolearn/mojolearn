@@ -216,10 +216,16 @@ def connect_classes(package):
     # native attribute plan; without the saved-model owner the read refuses.
     from . import _digest_fields
     context['property_schemas'].setdefault(vars(_mode.CheckMixin)['digest_'], 'fitted_digest')
+    context['property_schemas'].setdefault(vars(_mode.CheckMixin)['training_digest_'], 'training_digest')
     digest_entry, digest_context = _digest_fields.connect(_mode.CheckMixin)
     if type(digest_entry) is BuiltinFunctionType:
-        context.setdefault('native_property_recipes', {}).setdefault('fitted_digest', dict(
+        recipes = context.setdefault('native_property_recipes', {})
+        recipes.setdefault('fitted_digest', dict(
             entry=digest_entry, operation='fitted_digest', arguments=(), context=digest_context))
+        # `training_digest_`: the same operation with the training selector (_digest_fields.TRAINING_ARGUMENTS).
+        recipes.setdefault('training_digest', dict(
+            entry=digest_entry, operation='fitted_digest', arguments=_digest_fields.TRAINING_ARGUMENTS,
+            context=digest_context))
     archives = _archive_finalizers(package)
     prep_availability = _prep_availability(package, context['missing'])
     neighbor_availability = _neighbor_availability(package)
