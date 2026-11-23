@@ -393,7 +393,15 @@ def xl_bayes_predict_std(model: PythonObject, args: PythonObject, entries: XLine
     var offset_source = py_get(fields, nk[].k_X_offset_)
     if sigma_source is None or offset_source is None:
         raise Error("AttributeError: mojolearn " + name + ": this model holds no sigma_ / X_offset_ (fit it again)")
-    var sigma = _xl_words(sigma_source, "sigma_", context)
+    # an ARD fit that kept no feature has an empty (0, 0) sigma_
+    var sigma_words = Int(py=sigma_source.size)
+    var sigma_address = 0
+    var sigma_keep = PythonObject(None)
+    if sigma_words > 0:
+        var sigma = _xl_words(sigma_source, "sigma_", context)
+        sigma_words = sigma.rows * sigma.cols
+        sigma_address = sigma.address
+        sigma_keep = sigma.array
     var offset = _xl_words(offset_source, "X_offset_", context)
     var alpha = _float(py_item(fields, nk[].k_alpha_))
     var d = call.request.cols
@@ -415,9 +423,8 @@ def xl_bayes_predict_std(model: PythonObject, args: PythonObject, entries: XLine
     var kept = admitted_vector(d if ard else 0, "<i4", context)
     var kept_address = labels_address(kept) if ard and d > 0 else 0
     var std = admitted_vector(n, "<f4", context)
-    var request = XlBayesStdRequest(call.request.entry, call.request.x, sigma.address, offset.address, kept_address,
+    var request = XlBayesStdRequest(call.request.entry, call.request.x, sigma_address, offset.address, kept_address,
                                     labels_address(std), n, d, d, alpha)
-    var sigma_words = sigma.rows * sigma.cols
     var dk = d
     var py = Python()
     with GILReleased(py):
@@ -427,7 +434,7 @@ def xl_bayes_predict_std(model: PythonObject, args: PythonObject, entries: XLine
         request.dk = dk
         if sigma_words == dk * dk:
             xl_bayes_std_run(request)
-    _ = sigma^  # the words the RUN read stay alive past it
+    _ = sigma_keep  # the words the RUN read stay alive past it
     _ = offset^
     _ = lambda_keep
     _ = kept
