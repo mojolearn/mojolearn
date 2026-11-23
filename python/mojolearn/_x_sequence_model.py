@@ -119,7 +119,8 @@ class Sequential(_CheckMixin):
         kind : str
             One of ``'linear'`` (``units``, ``bias=True``), ``'relu'``,
             ``'sigmoid'``, ``'tanh'``, ``'softmax'``, ``'layer_norm'``
-            (``eps=1e-5``), ``'residual'`` (``source=-1``: add the output
+            (``eps=1e-5``), ``'dropout'`` (``p``), ``'residual'``
+            (``source=-1``: add the output
             of layer ``source``, or the model input for -1, to the current
             output), ``'reshape'`` (``shape``), ``'permute'`` (``axes``),
             ``'flatten'``, ``'conv2d'`` (``out_channels``, ``kernel_size``,

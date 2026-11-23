@@ -118,6 +118,19 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
         [ $status -eq 0 ] || { echo "pre-push: REFUSED by tools/python_free_dirs.sh: a kernel directory, RUN module or non-boundary binding imports Python" >&2; exit 4; }
     fi
 
+    # Layer tables (lane layer-tables, 2026-11-23): every table that lists Sequential layer codes or names agrees
+    # for every code (a literal code list in load_state_dict left out codes 42 to 46). Source reading of the pushed
+    # tree's blobs with the pushed tree's tools/block_tables_check.py; seconds.
+    if git cat-file -e "$local_sha:tools/block_tables_check.py" 2>/dev/null; then
+        tables=$(mktemp "${TMPDIR:-/tmp}/block-tables.XXXXXX") || exit 4
+        git show "$local_sha:tools/block_tables_check.py" >"$tables" || { rm -f "$tables"; exit 4; }
+        python3 "$tables" --tree "$local_sha" --root "$top" >"$tables.log" 2>&1
+        status=$?
+        grep -E '^(DISAGREE|BLOCK_TABLES)' "$tables.log" | cut -c1-240 | head -n 30 >&2
+        rm -f "$tables" "$tables.log"
+        [ $status -eq 0 ] || { echo "pre-push: REFUSED by tools/block_tables_check.py: a layer code is missing from a table" >&2; exit 4; }
+    fi
+
     # Run output stays out of the tree (2026-11-21): new files under bench/results/ outside the allowlist,
     # new *.log there and new docs/handoffs/ files are refused; they belong in ~/mojolearn-evidence/ and R2.
     # Judges only paths ADDED by commits not yet on the remote, with the pushed tree's own script.
