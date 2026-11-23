@@ -241,9 +241,66 @@ def label_present_codes(truth: Int, pred: Int, n: Int, k: Int, mut mapped_truth:
     return count
 
 
+def label_selected_codes(truth: Int, pred: Int, n: Int, k: Int, sel_at: Int, sel_n: Int,
+                         mut mapped_truth: List[Int32], mut mapped_pred: List[Int32]) raises -> Int:
+    """`mx_label_order(labels, present)` over class codes (lane mf-tail5b):
+    the `sel_n` selected codes at `sel_at` (int32; a code >= k is a label
+    no row holds) take ranks 0 .. sel_n-1, then every other code present in
+    either vector in its sorted order. Answers the count of ordered labels."""
+    var sel = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=sel_at)
+    var span = k
+    for j in range(sel_n):  # small-loop(the caller's labels)
+        span = max(span, Int(sel[j]) + 1)
+    var rank = List[Int32](length=max(span, 1), fill=Int32(-1))
+    for j in range(sel_n):  # small-loop(the caller's labels: their ranks first)
+        var c = Int(sel[j])
+        if c < 0 or rank[c] >= 0:
+            raise Error("labels must be unique")
+        rank[c] = Int32(j)
+    var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=truth)
+    var p = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pred)
+    var present = List[Bool](length=max(k, 1), fill=False)
+    for i in range(n):  # driver-loop: over the rows (the label union, a mark per code)
+        var a = Int(t[i])
+        var b = Int(p[i])
+        if a < 0 or a >= k or b < 0 or b >= k:
+            raise Error("ValueError: y codes outside [0, n_classes)")
+        present[a] = True
+        present[b] = True
+    var count = sel_n
+    for c in range(k):  # driver-loop: over the class codes (the present ones after the selection)
+        if present[c] and rank[c] < 0:
+            rank[c] = Int32(count)
+            count += 1
+    mapped_truth = List[Int32](length=max(n, 1), fill=Int32(0))
+    mapped_pred = List[Int32](length=max(n, 1), fill=Int32(0))
+    for i in range(n):  # driver-loop: over the rows (the mapped codes)
+        mapped_truth[i] = rank[Int(t[i])]
+        mapped_pred[i] = rank[Int(p[i])]
+    return count
+
+
 def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred: Int, n: Int,
                      k: Int, mut warn: Int) raises -> Float64:
-    """THE TYPED RUN of one unweighted label metric with its default options
+    """`label_metric_options_run` with the metric's defaults (labels None,
+    zero_division 'warn', beta 1)."""
+    return label_metric_options_run(route, metric, avg, truth, pred, n, k, 0, 2, 1.0, 0, 0, warn)
+
+
+def label_metric_options_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred: Int, n: Int,
+                             k: Int, zd: Int, fmode: Int, b2: Float64, sel_at: Int, sel_n: Int,
+                             mut warn: Int) raises -> Float64:
+    """THE ONE BODY of the averaged label metrics (lane mf-tail5b: a
+    make_scorer's kwargs as words). `zd`: the cls_epi zero_division code
+    (`_epi_zd`: 0 for 'warn' and 0, 1, 2 for nan); `fmode` / `b2`: the
+    F-score's mode and beta^2 (`_fmode`: 2 with beta^2, 1 for beta 0, 0 for
+    an infinite beta; precision / recall read neither); `sel_at` / `sel_n`:
+    the caller's `labels` as int32 class codes (0 / 0: the present labels),
+    a code >= k being a label no row holds. The order is
+    `mx_label_order(labels, present)`: the selected codes, then the other
+    present ones in their sorted order; the epilogue averages the first
+    `sel_n` of them, as the doors' `_set_wise_labels` / `_label_order` do.
+    THE TYPED RUN of one unweighted label metric with its default options
     (labels None, zero_division 'warn', adjusted False) over n int32 true and
     predicted class codes in 0 .. k-1 (the caller keeps both alive): the
     present labels, the door's program (`mc_sums_stages` + the epilogue or
@@ -257,7 +314,14 @@ def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred
     warn = 0
     var mt = List[Int32]()
     var mp = List[Int32]()
-    var labels = label_present_codes(truth, pred, n, k, mt, mp)
+    var labels: Int
+    var chosen: Int
+    if sel_n > 0:
+        labels = label_selected_codes(truth, pred, n, k, sel_at, sel_n, mt, mp)
+        chosen = sel_n
+    else:
+        labels = label_present_codes(truth, pred, n, k, mt, mp)
+        chosen = labels
     var plan = MetricProgramPlan()
     var s = mc_sums_stages(plan, n, labels, False)
     var at = MC_NONE
@@ -266,9 +330,9 @@ def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred
     elif metric == LBL_BALANCED:
         at = mc_epi_stage(plan, s, McEpi(1, labels, 0, 0, 0, 0.0))
     elif metric == LBL_JACCARD:
-        at = mc_epi_stage(plan, s, McEpi(0, labels, avg, 0, 0, 0.0))
+        at = mc_epi_stage(plan, s, McEpi(0, chosen, avg, zd, 0, 0.0))
     elif metric == LBL_PRECISION or metric == LBL_RECALL or metric == LBL_F1:
-        at = mc_epi_stage(plan, s, McEpi(2, labels, avg, 0, 2, 1.0))
+        at = mc_epi_stage(plan, s, McEpi(2, chosen, avg, zd, fmode, b2))
     else:
         raise Error("RuntimeError: unknown label metric " + String(metric))
     var addresses: List[Int] = [Int(mt.unsafe_ptr()), Int(mp.unsafe_ptr())]
@@ -296,7 +360,15 @@ def label_metric_run(route: MetricRoute, metric: Int, avg: Int, truth: Int, pred
 
 def label_binary_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: Int, k: Int,
                      positive: Int, mut warn: Int) raises -> Float64:
-    """THE TYPED RUN of one unweighted label metric with average='binary'
+    """`label_binary_options_run` with the defaults (zero_division 'warn', beta 1)."""
+    return label_binary_options_run(route, metric, truth, pred, n, k, positive, 0, 2, 1.0, warn)
+
+
+def label_binary_options_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: Int, k: Int,
+                             positive: Int, zd: Int, fmode: Int, b2: Float64, mut warn: Int) raises -> Float64:
+    """THE ONE BODY of the binary label metrics; `zd`, `fmode`, `b2` as
+    `label_metric_options_run` reads them (lane mf-tail5b).
+    THE TYPED RUN of one unweighted label metric with average='binary'
     (lane mf-search4b; precision, recall, f1 or jaccard, zero_division
     'warn') over n int32 true and predicted class codes in 0 .. k-1, the
     positive label being class code `positive` (mapped from pos_label at
@@ -349,9 +421,9 @@ def label_binary_run(route: MetricRoute, metric: Int, truth: Int, pred: Int, n: 
     var s = mc_sums_stages(plan, n, labels, False)
     var at = MC_NONE
     if metric == LBL_JACCARD:
-        at = mc_epi_stage(plan, s, McEpi(0, 1, LBL_MACRO, 0, 0, 0.0))
+        at = mc_epi_stage(plan, s, McEpi(0, 1, LBL_MACRO, zd, 0, 0.0))
     elif metric == LBL_PRECISION or metric == LBL_RECALL or metric == LBL_F1:
-        at = mc_epi_stage(plan, s, McEpi(2, 1, LBL_MACRO, 0, 2, 1.0))
+        at = mc_epi_stage(plan, s, McEpi(2, 1, LBL_MACRO, zd, fmode, b2))
     else:
         raise Error("RuntimeError: unknown binary label metric " + String(metric))
     var addresses: List[Int] = [Int(mt.unsafe_ptr()), Int(mp.unsafe_ptr())]
