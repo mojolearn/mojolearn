@@ -89,5 +89,18 @@ for b in ${BATCHES//,/ }; do  # driver-loop: over batches, each owns the tree an
     say "BATCH $b rc=$brc secs=$(( $(date +%s) - t ))"
     [ $brc -eq 0 ] || rc=1
 done
-say "DONE rc=$rc"
+# 3. the proven-table rows of this job (tools/identity_lanes/coverage_sabotage_proven.tsv columns: arm, builds,
+# verdict, lanes, reference, reverted, seconds), to paste after reading the checks; MISSED and BUILD-FAIL rows too.
+for b in ${BATCHES//,/ }; do  # driver-loop: over batches
+    [ -f "$RES/$b/summary.txt" ] || continue
+    secs=$(awk '/BUILD .* secs=/ {sub(/.*secs=/, ""); if ($1+0 > m) m = $1+0} END {print m+0}' "$RES/$b/summary.txt")
+    reverted=$(grep -q 'NATIVE RESTORED' "$RES/$b/summary.txt" && echo restored || echo NOT-restored)
+    grep '^SABOTAGE ' "$RES/$b/summary.txt" | while read -r _ bid arm col verdict; do
+        arm=${arm#arm=}; col=${col#column=}; verdict=${verdict#verdict=}
+        row=$(python3 tools/coverage_sabotage.py list | awk -F'\t' -v a="$arm" '$1==a')
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$arm" "$(echo "$row" | cut -f3) ($col column, batch ${bid#batch=})" \
+            "$verdict" "$(echo "$row" | cut -f4)" "L40S sm_89 $col column, source $SOURCE, $RES" "$reverted" "$secs"
+    done
+done > "$RES/proven_rows.tsv"
+say "DONE rc=$rc ($(grep -c . "$RES/proven_rows.tsv") arm-column rows in proven_rows.tsv)"
 exit $rc
