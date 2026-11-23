@@ -93,7 +93,8 @@ from core.member_set_run import MEMBER_SET_TURN_HELD, member_set_first_failure
 from core.member_families import MEMBER_FAMILY_GP
 from core.admitted_rows_plan import admitted_rows_shape
 from xtrees.trees_calibrated_fit_run import (
-    CalFitPlan, CalFitOut, CAL_ALL_ANSWERED, CAL_FIT_FAILED, calibrated_fit_run,
+    CalFitPlan, CalFitOut, CalPlace, CAL_ALL_ANSWERED, CAL_FIT_FAILED, calibrated_fit_run, cal_fold_place,
+    cal_lacking_warning,
 )
 from std.memory import unsafe_memcpy
 from bindings.member_set_door import (
@@ -126,6 +127,7 @@ from std.python._cpython import GILReleased
 from std.ffi import c_int, external_call
 from bindings.native_array_storage_door import native_array_from_values
 from bindings.msel_inputs_unpack import msel_admit, msel_input_count
+from bindings.msel_common_door import msel_warn
 from bindings.trees_meta_admission_door import meta_admit_configuration
 from bindings.trees_staged_input_door import trees_stage_members, trees_unstage
 from bindings.trees_side_records_unpack import trees_side_get, trees_side_put
@@ -2806,62 +2808,76 @@ def _calibrated_validate(model: PythonObject, context: PythonObject) raises:
 
 
 def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: PythonObject,
-                context: PythonObject, rows: Int = -1) raises -> PythonObject:
+                context: PythonObject, ensemble: Bool, mut calibrate: List[Int], rows: Int = -1) raises -> PythonObject:
     """`CalibratedClassifierCV._scores`: (n, c) float64 scores, c = 1 when
-    binary, else one column per class. `rows`: the row count when the caller
-    knows it (a resident DeviceRows fold side, whose `shape` is a Python
-    property of `_arena_io.DeviceRows` since 9b369cd34f: reading it from here
-    ran Python inside the fit)."""
+    binary, else one column per class, placed by THE PLACEMENT RULE
+    (xtrees/trees_calibrated_fit_run.mojo `cal_fold_place`, the native RUN's
+    own rule; lane mf-cal3b: scikit-learn's placement of a member that lacks
+    a class, its refusals in its words); `calibrate` gets the columns that
+    are calibrated (ensemble). `rows`: the row count when the caller knows it
+    (a resident DeviceRows fold side, whose `shape` is a Python property of
+    `_arena_io.DeviceRows` since 9b369cd34f: reading it from here ran Python
+    inside the fit)."""
     var n = rows if rows >= 0 else _rows(Xa)
     var nk = trees_keys()
     var k = len(_attr(model, nk[].k_classes_, Python.list()))
+    var decision = prep_estimator_has(e, "decision_function", context)
     var out: PythonObject
-    if prep_estimator_has(e, "decision_function", context):
+    if decision:
         out = _member_scores(e, "decision_function", Xa, context)
     else:
         out = _member_scores(e, "predict_proba", Xa, context)
     var blk = _out2d(out, n, context)
     var glue = _xr(xt)
+    # The member's classes as ensemble codes (`_sub_cols`), then the rule.
+    var sub_cols = _sub_cols(e, context)
+    var ks = len(_attr(e, nk[].k_classes_, Python.list()))
+    var codes = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(sub_cols))
+    var held = List[Int32](capacity=ks)
+    for c in range(ks):  # driver-loop: over the member's class codes (a few words)
+        held.append(codes[c])
+    _ = sub_cols  # read through `codes` above
+    var place = cal_fold_place(k, held, MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA, blk.cols,
+                               ensemble, n)
+    calibrate = place.calibrate.copy()
     if k == 2:
         var acc = _zeros(n, context)
-        if blk.cols == 1:
+        if place.pick == 0 and blk.cols == 1:
             _ = xt_accumulate(glue, trees_address(acc), blk.address, n, 1.0)
             _ = acc  # keep the Python object alive through the native call above
             _ = blk  # keep the Python object alive through the native call above
-        else:
-            var at = _index_of_one(e, context)
-            if at < 0:
-                raise Error("1 is not in list")
-            var col = _one_col(xt, blk.view(), at, context)
+        elif place.pick >= 0:
+            var col = _one_col(xt, blk.view(), place.pick, context)
             _ = xt_accumulate(glue, trees_address(acc), trees_address(col), n, 1.0)
             _ = col  # keep the Python object alive through the native call above
             _ = acc  # keep the Python object alive through the native call above
+        # pick -1: zeros (a fold holding only code 0, ensemble=False)
         _ = blk^
         return trees_reshape(acc, Python.tuple(n, 1), context)
     var acc = _class_zero(xt, n * k, context)
-    # Keep the freshly allocated class-index array until accumulate_cols has
-    # consumed it. _A(_sub_cols(...)) returned only an address to a temporary.
-    var sub_cols = _sub_cols(e, context)
-    var ks = len(_attr(e, nk[].k_classes_, Python.list()))
-    var cols_at = trees_address(sub_cols)
-    if blk.cols == 1 and ks == 2:
-        # lane mf-cal2: a two-class member's one-column decision (a fold of a
-        # k > 2 ensemble whose train rows hold two classes) is its positive
-        # class's score: that class's column alone. Before, two columns were
-        # read from the one-column block (past its end).
-        cols_at += 4
-        ks = 1
-    _ = xt_accumulate_cols(glue, trees_address(acc), blk.address, cols_at, n, k, ks, 1.0)
-    _ = sub_cols
-    _ = acc  # keep the Python object alive through the native call above
+    var acc_at = trees_address(acc)
+    _ = xt_accumulate_cols(glue, acc_at, blk.address, Int(place.place.unsafe_ptr()), n, k, len(place.place), 1.0)
+    if place.fill != 0.0:
+        # `_enforce_prediction_order`'s default of the classes the fold lacks
+        var mark = List[Bool](length=k, fill=True)
+        for i in range(len(place.place)):  # driver-loop: over the placed columns
+            mark[Int(place.place[i])] = False
+        var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=acc_at)
+        for r in range(n):  # native input marshaling: one fill pass over one fold's unplaced columns
+            for c in range(k):
+                if mark[c]:
+                    words[r * k + c] = place.fill
+    _ = len(place.place)  # read through the native call above
+    _ = acc  # keep the Python object alive through the native calls above
     _ = blk^
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
 def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, codes: PythonObject,
-                     context: PythonObject) raises -> PythonObject:
+                     which: List[Int], context: PythonObject) raises -> PythonObject:
     """`CalibratedClassifierCV._fit_calibrators`: one calibrator per class
-    column, the column and its 0/1 target made natively."""
+    column of `which` (empty: every column; lane mf-cal3b, THE PLACEMENT
+    RULE's calibrated columns), the column and its 0/1 target made natively."""
     var n = _rows(S)
     var c = _cols(S)
     var nk = trees_keys()
@@ -2878,7 +2894,9 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
     if not sigmoid:
         y64 = admitted_vector(n, "<f8", context)
     var cals = Python.list()
-    for j in range(c):  # driver-loop: over the class columns (one calibrator each)
+    var count = len(which) if len(which) > 0 else c
+    for q in range(count):  # driver-loop: over the calibrated class columns (one calibrator each)
+        var j = which[q] if len(which) > 0 else q
         var cls = 1 if c == 1 else j
         var f = trees_address(St) + 8 * j * n
         _ = St  # keep the Python object alive through the native call above
@@ -2918,7 +2936,8 @@ def _calibrated_probs(model: PythonObject, xt: PythonObject, e: PythonObject, ca
     var n = _rows(Xa)
     var nk = trees_keys()
     var k = len(_attr(model, nk[].k_classes_, Python.list()))
-    var S = _cal_scores(model, xt, e, Xa, context)
+    var which = List[Int]()
+    var S = _cal_scores(model, xt, e, Xa, context, True, which)
     var c = _cols(S)
     var w = 2 if k == 2 else k
     var acc = admitted_vector(n * w, "<f8", context)
@@ -2963,13 +2982,19 @@ struct _CalUnits(Movable):
     which a member call cannot; one fold at a time on the calling thread);
     and a base the set does not serve (`_CAL_NOT_MEMBER`: a class with no
     member mark, CategoricalNB's door included where its kind is not
-    admitted, the Host* classifiers, a meta-estimator base, a configuration
-    its family's admit leaves to the estimator's door, or a member kind
-    with no native scoring call). The threads stay for the second kind:
-    those folds are independent units whose fit doors release the GIL, on
-    n_jobs threads. REMOVED (lane mf-cal3): `only()` / `todo` and the
-    per-fold native fit retry (`k`): no fold of a served base reaches a
-    door now."""
+    admitted, a meta-estimator base (no meta member kind: lane mf-cal3b's
+    result says why), a configuration its family's admit leaves to the
+    estimator's door (SVC class_weight or kernel='precomputed', a GP kernel
+    the member cannot address, ...), or a member kind with no native
+    scoring call). The threads stay for the second kind: those folds are
+    independent units whose fit doors release the GIL, on n_jobs threads.
+    REMOVED (lane mf-cal3): `only()` / `todo` and the per-fold native fit
+    retry (`k`): no fold of a served base reaches a door now. Lane mf-cal3b:
+    the Host* classifiers (HostSVC, HostKNeighborsClassifier,
+    HostGaussianProcessClassifier) are native members now, on the host image
+    their own fit binds; before they had no plan and were refused before
+    any fold ("requires a mojolearn estimator"). Every unit places its
+    scores by THE PLACEMENT RULE (`_cal_scores`), as the native RUN does."""
     var model: PythonObject
     var xt: PythonObject
     var base: PythonObject
@@ -3082,13 +3107,19 @@ struct _CalUnits(Movable):
             self._enter()
             try:
                 var Xte = self.fold_side(te)
-                var scores = _cal_scores(self.model, self.xt, e, Xte, self.context, Int(py=te.shape[0]))
+                var which = List[Int]()
+                var scores = _cal_scores(self.model, self.xt, e, Xte, self.context, self.ensemble, which,
+                                         Int(py=te.shape[0]))
                 if self.ensemble:
                     var cals = _fit_calibrators(self.model, self.xt, scores,
-                                                _gather_codes(self.xt, self.codes, te, self.context), self.context)
+                                                _gather_codes(self.xt, self.codes, te, self.context), which,
+                                                self.context)
                     py_setitem(self.results, PythonObject(f), Python.tuple(e, cals))
                 else:
-                    py_setitem(self.results, PythonObject(f), scores)
+                    # the scores and the member's class count (THE PLACEMENT RULE's warning, in fold order)
+                    var nk = trees_keys()
+                    var held = len(_attr(e, nk[].k_classes_, Python.list()))
+                    py_setitem(self.results, PythonObject(f), Python.tuple(scores, PythonObject(held)))
             finally:
                 native_unit_gate_leave(self.gate)
         finally:
@@ -3217,6 +3248,16 @@ def _cal_fit_words(set: MemberSet, plan: CalFitPlan, u: Int) -> String:
             and words.endswith("got 1 class")):
         words += " (only class " + String(Int(plan.fold_classes[u][0])) + " is present)"
     return words^
+
+
+def _cal_warn_lacking(plan: CalFitPlan, upto: Int, context: PythonObject) raises:
+    """PACK, ensemble=False (lane mf-cal3b): scikit-learn's
+    `_enforce_prediction_order` RuntimeWarning for each of the first `upto`
+    folds whose train rows lack a class, in fold order."""
+    for f in range(min(upto, plan.folds())):  # driver-loop: over the cv folds (one warning per lacking fold)
+        if len(plan.fold_classes[f]) > 0:
+            msel_warn(cal_lacking_warning(len(plan.fold_classes[f]), plan.k),
+                      native_loaded_module("builtins").RuntimeWarning, prep_native_context(context))
 
 
 def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject, n: Int, d: Int,
@@ -3356,6 +3397,10 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
             admitted_finite_refuse(1, String(py_type(base).__name__), "X")
         if len(failure) == 0:
             failure = _cal_fit_words(set, plan, member_set_first_failure(set.run))
+        if not ensemble and plan.failed_fold >= 0:
+            # scikit-learn warned for each fold before the failing one (and for
+            # the failing fold itself when its scores were refused)
+            _cal_warn_lacking(plan, plan.failed_fold + 1 if plan.failed_scoring else plan.failed_fold, context)
         _ = plan.folds()  # its fold classes were read for the words above
         raise Error(failure)
     # PACK
@@ -3375,6 +3420,8 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         raise error^
     member_set_notices(set)
     member_set_release(set)
+    if not ensemble:
+        _cal_warn_lacking(plan, plan.folds(), context)
     # THE LIFETIME RULE: a borrowing member read its re-coded targets (the
     # plan's) again at its pack: the plan lives to here.
     _ = plan.folds()
@@ -3499,7 +3546,12 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         var c = 1 if k == 2 else k
         var S = _zeros(n * c, context)
         for f in range(len(splits)):  # driver-loop: over the cv folds (placing each fold's scores)
-            var blk = admit_f32(units.results[f], 2, "scores", context, finite=False)
+            var held = Int(py=units.results[f][1])
+            if held != k:
+                # scikit-learn's `_enforce_prediction_order` warning (lane mf-cal3b)
+                msel_warn(cal_lacking_warning(held, k), native_loaded_module("builtins").RuntimeWarning,
+                          prep_native_context(context))
+            var blk = admit_f32(units.results[f][0], 2, "scores", context, finite=False)
             _ = _place(xt, S, n, c, blk.view(), splits[f][1], 0)
             _ = blk^
         var e = _clone(base, context)
@@ -3510,7 +3562,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         _fit_members(_repeat(e, 1), Xa, n, d, _repeat(labels.codes, 1), False, PythonObject(None),
                      _repeat(PythonObject(k), 1), jobs, context)
         _ = py_call(pairs.append, Python.tuple(e, _fit_calibrators(model, xt, trees_reshape(S, Python.tuple(n, c), context),
-                                                                   labels.codes, context)))
+                                                                   labels.codes, List[Int](), context)))
     _set(model, "n_features_in_", PythonObject(d))
     _set(model, "_fitted", PythonObject(True))
     return model
@@ -3554,12 +3606,30 @@ def calibrated_pair_words(e: PythonObject, fitted: PythonObject, k: Int, member_
     if k == 2 and member_cols != 1:
         at = _index_of_one(e, context)
         meta_binary_column_check(at)
-    if k != 2 and member_cols == 1 and ks == 2:
-        # lane mf-cal2: a two-class member's one-column decision is its
-        # positive class's score, that class's column alone (the fit's
-        # `_cal_scores` rule; two columns were read from it before)
-        cols_addr += 4
-        ks = 1
+    if k != 2 and ks != k:
+        # lane mf-cal3b: a member that lacks a class is placed by THE
+        # PLACEMENT RULE (xtrees/trees_calibrated_fit_run.mojo
+        # `cal_fold_place`, the fit's own rule: scikit-learn's
+        # `_CalibratedClassifier.predict_proba`): its placed columns as int32
+        # codes (kept in `keep`), its calibrators the last of them. Only such
+        # a member pays this (one small array per call); a member holding
+        # every class reads its class codes as before.
+        var codes = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=cols_addr)
+        var held = List[Int32](capacity=ks)
+        for c in range(ks):  # driver-loop: over the member's class codes (a few words)
+            held.append(codes[c])
+        var operation = MEMBER_OP_DECISION if member_cols == 1 else MEMBER_OP_PREDICT_PROBA
+        var place = cal_fold_place(k, held, operation, member_cols, True, 0)
+        if len(place.calibrate) != len(fitted):
+            raise Error("ValueError: mojolearn: CalibratedClassifierCV: a pair holds " + String(len(fitted))
+                        + " calibrators for a member placed at " + String(len(place.calibrate)) + " columns")
+        var placed = admitted_vector(len(place.place), "<i4", context)
+        var to = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(placed))
+        for i in range(len(place.place)):  # driver-loop: over the placed columns (a few words)
+            to[i] = place.place[i]
+        _ = py_call(keep.append, placed)
+        cols_addr = trees_address(placed)
+        ks = len(place.place)
     cal_pairs.append(CalPair(at, cols_addr, ks, len(cals), len(fitted)))
     for j in range(len(fitted)):  # driver-loop: over the class columns (one calibrator each)
         var par = fitted[j][1]

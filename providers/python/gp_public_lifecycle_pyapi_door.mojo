@@ -271,6 +271,20 @@ def _gp_host_class_binding(mut call: AdmittedCall, model: PythonObject, fields: 
     return live
 
 
+def gp_host_class_binding(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """UNPACK of a member admission (providers/python/member_gp_boundary_door.mojo, lane mf-cal3b, 2026-11-23):
+    the image an explicit HostGaussianProcess* class binds, exactly as its own doors bind it (`_gp_route`'s
+    host-class arm: the import-connected identical module of its mode-metadata plan, the inference-only image
+    when it is built, else the reference one), with that arm's refusals in its words. Once per member
+    admission."""
+    var call = AdmittedCall()
+    var nk = gp_keys()
+    var fields = py_fields(model)
+    var metadata = py_item(py_fields(call.module("mojolearn._mode")), nk[].k__MODE_METADATA_CONTEXT)
+    var plan = _plan(call.modules, model, fields, metadata)
+    return _gp_host_class_binding(call, model, fields, plan, context)
+
+
 def _gp_route(mut call: AdmittedCall, model: PythonObject, fields: PythonObject, need_base: Bool,
               context: PythonObject) raises -> PythonObject:
     """The estimator's route owner for this operation (the one

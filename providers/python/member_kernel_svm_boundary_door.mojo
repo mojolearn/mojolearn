@@ -26,7 +26,7 @@ from std.python import Python, PythonObject
 from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_address
 from bindings.family_common_pack import family_call, family_array
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_host_only
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_item, py_setitem
 from bindings.svc_common_pack import svc_prefix, svc_scalar_array
@@ -45,7 +45,7 @@ from core.member_abi import (
 )
 from core.svc_native_api import SVC_TABLE_COUNT, SVC_DEVICE_COUNT
 from core.svr_native_api import SVR_NATIVE_COUNT
-from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_host
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from x_decomp.descriptor_schema import xd_vendor_code
 
@@ -80,7 +80,10 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         return False
     if classifier and py_get(scratch, nk[].k_class_weight, PythonObject(None)) is not None:
         return False
-    var binding = estimator_binding(model, "_mojolearn_svm", context)
+    # An explicit HostSVC / HostSVR (its own host-only word, lane mf-cal3b): the host image its own fit
+    # binds; any other class: the estimator's binding route.
+    var binding = (estimator_binding_host(model, "_mojolearn_svm", context) if member_host_only(model)
+                   else estimator_binding(model, "_mojolearn_svm", context))
     var connection = svc_connection(binding)
     var drivers = connection.drivers.copy()
     if hp.gamma_kind == SVM_GAMMA_SCALE and (drivers.flags() & _PY2MOJO_SCALE_GAMMA) == 0:

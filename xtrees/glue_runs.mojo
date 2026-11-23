@@ -1167,8 +1167,10 @@ def calibrated_proba_run(c: XtCall) raises -> Int:
             ky.append(_a(c, ai + 1))
             pi += 4
             ai += 2
-        if len(kinds) != (1 if k == 2 else k):
-            raise Error("x_trees_calibrated_proba: one calibrator per class column")
+        # One calibrator for two classes; else one per calibrated column of the member's placed columns (k for
+        # a member holding every class; fewer for one that lacks a class, lane mf-cal3b).
+        if (k == 2 and len(kinds) != 1) or (k > 2 and (len(kinds) < 1 or len(kinds) > ks)):
+            raise Error("x_trees_calibrated_proba: one calibrator per calibrated class column")
         parsed.append(CalPair(blk, bc, at, cols, ks, kinds^, a^, b^, kx^, ky^, m^))
     if pi != c.n_params or ai != c.n_addrs:
         raise Error("x_trees_calibrated_proba: trailing request words")

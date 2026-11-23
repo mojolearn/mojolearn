@@ -1274,18 +1274,19 @@ struct _DoorModel(AgnModel):
     """The explained estimator through its own compiled door (`_evaluate`, per chunk), serial, with the GIL held:
     the one place the RUN's model reaches Python objects.
 
-    WHO STILL COMES HERE (lane mf-shap3b, 2026-11-23): ONLY an explained estimator whose class has a plan that
-    serves the method by its door but no member entry that serves the call, or whose meta-estimator has a member
-    of that kind: the subclasses `_classical_host.py` binds to the host (HostLogisticRegression, HostSVC, HostSVR,
-    HostKMeans, HostKernelRidge, HostIsolationForest, the _HostCD estimators: their marks and host-bound plan
-    bit are lane mf-cal3b's) and a meta-estimator used as a member of a meta-estimator (lane mf-cal3b's META
-    member kind). Once those land, this door and `_evaluate` are deleted. Everything else is native: every member
-    family (an outlier detector's or clusterer's integer predict too), the votes (soft and hard), Bagging,
-    Stacking (a classifier member asked for predict too), OneVsRest, CalibratedClassifierCV, AdaBoost,
-    MultiOutputRegressor, the search CVs' best estimator, RFE (its estimator over its support), LabelPropagation
-    and LabelSpreading (their typed query), the device forest's one call; a class with neither a serving member
-    nor a door plan is refused, and so is a forecaster; a refusal (a member's non-finite chunk, a changed width,
-    non-numeric labels, a MultiOutputClassifier) is raised natively in its own words."""
+    WHO STILL COMES HERE (lanes mf-shap3b and mf-cal3b, 2026-11-23): ONLY an explained estimator whose class has a
+    plan that serves the method by its door but no member entry that serves the call, or whose meta-estimator has a
+    member of that kind: the host subclasses `_classical_host.py` binds that have no member mark yet
+    (HostLogisticRegression, HostKMeans, HostKernelRidge, HostIsolationForest, the _HostCD estimators; HostSVC, HostSVR,
+    HostKNeighborsClassifier / Regressor and HostGaussianProcessClassifier have their own marks and the host-only word
+    since mf-cal3b and open as `AgnMember`) and a meta-estimator used as a member of a meta-estimator (no META member
+    kind yet). Once those exist, this door and `_evaluate` are deleted. Everything else is native: every member
+    family (an outlier detector's or clusterer's integer predict too), the votes (soft and hard), Bagging, Stacking
+    (a classifier member asked for predict too), OneVsRest, CalibratedClassifierCV, AdaBoost, MultiOutputRegressor,
+    the search CVs' best estimator, RFE (its estimator over its support), LabelPropagation and LabelSpreading (their
+    typed query), the device forest's one call; a class with neither a serving member nor a door plan is refused, and
+    so is a forecaster; a refusal (a member's non-finite chunk, a changed width, non-numeric labels, a
+    MultiOutputClassifier) is raised natively in its own words."""
     var model: PythonObject
     var method: String
     var context: PythonObject

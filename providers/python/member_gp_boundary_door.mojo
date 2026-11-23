@@ -52,7 +52,7 @@ from bindings.gp_regressor_native_door import _gpr_validate, _gpr_validate_field
 from bindings.gp_classifier_native_door import (
     gpc_validate, gpc_validate_fields, _gpc_ext, _gpc_binary_result, _gpc_set_fitted, GPCFitPublication,
 )
-from bindings.member_owner_unpack import MemberOwner, member_labels_take
+from bindings.member_owner_unpack import MemberOwner, member_labels_take, member_host_only
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_item, py_setitem, py_fields
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
@@ -64,6 +64,7 @@ from core.member_abi import (
     MEMBER_F64,
 )
 from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.gp_public_lifecycle_pyapi_door import gp_host_class_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_fit_complete
 
 comptime _B_X = MEMBER_BLOCK_FAMILY
@@ -193,7 +194,13 @@ def _gpc_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwne
     var settings = py_call(b_mod.dict, py_fields(model))
     gpc_validate_fields(settings, context)
     var nk = gp_keys()
-    var binding = estimator_binding(model, "_mojolearn_gp", context)
+    # An explicit HostGaussianProcessClassifier (its own host-only word, lane mf-cal3b): the image its own
+    # doors bind (`gp_host_class_binding`). On the inference-only image a wheel ships, the member's fit reaches
+    # the same unavailable Laplace entry its own fit reaches first (`gpc_fit_all`, else `gpc_fit`: the same
+    # GP_CAP_OVR test, bindings/gp_classifier_native_door.mojo `_gpc_fit` and core/gp_member.mojo `_gpc_fit`)
+    # and the native set raises those words; on the reference image it fits as its own fit does.
+    var binding = (gp_host_class_binding(model, context) if member_host_only(model)
+                   else estimator_binding(model, "_mojolearn_gp", context))
     var ext = _gpc_ext(model, binding, context)
     var connection = GPConnection(ext)
     var packed = gp_kernel_arrays(py_item(settings, nk[].k__kernel), context)

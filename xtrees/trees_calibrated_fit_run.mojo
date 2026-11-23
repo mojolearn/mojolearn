@@ -42,16 +42,21 @@ and returns the pins after it):
     member's scores through ONE member call on its fitted state
     (decision_function when the estimator has one, else predict_proba; a
     float64 answer rounded to float32 word by word, as the door's
-    admission of the member's output rounded it: `member_f32_block`), then the
-    column picks of the door's `_cal_scores`: binary (k = 2) one column
-    (one-column output, else the positive column: code 1, the member's
-    classes being the codes 0 .. k-1 the set packed), else every column
-    scattered at the member's class codes (0 .. k-1, or the fold's classes)
-    with `x_trees_accumulate_cols`; a two-class member's one-column
-    decision (a fold of a k > 2 ensemble holding two classes) is its
-    positive class's score and goes to that class's column alone (the door
-    read two columns of the one-column block before mf-cal2: past its end);
-  * ensemble=True: the fold's calibrators over its test codes
+    admission of the member's output rounded it: `member_f32_block`), then
+    placed by THE PLACEMENT RULE (`cal_fold_place`, lane mf-cal3b: scikit-learn
+    1.9's calibration.py and `_enforce_prediction_order`, read, not guessed):
+    a fold that holds every class as before (binary: one column, the
+    one-column output or the positive column, code 1; else every column at
+    its code); a fold that lacks a class as scikit-learn places it (ensemble:
+    one calibrator per score column against the held class zip pairs it
+    with, a two-class fold's one score against its FIRST class, a one-class
+    predict_proba refused in scikit-learn's words; ensemble=False: zeros, or
+    float32's lowest word for a decision_function, at the classes it lacks,
+    and scikit-learn's refusals of an imbalanced decision fold). Before,
+    mf-cal2 put a two-class fold's score at its second class and every
+    lacking fold had k calibrators (bits change on those folds only);
+  * ensemble=True: the fold's calibrators (the placement's `calibrate`
+    columns) over its test codes
     (`cal_calibrators_run`: the door's `_fit_calibrators`, the same glue ops
     xt_transpose_f64 / xt_indicator_codes / xt_platt_fit / xt_isotonic_fit
     in the same order);
@@ -76,9 +81,11 @@ RuntimeError (no family answers one: proba and decision are float words,
 one column per class, or one for a two-class decision).
 
 Same programs over the same words in the same order as the door before this
-split: no bits change (tools/mf_cal_digests.py proves it on the CPU column),
-except the one-column two-class decision above, which the door read past
-the block's end (bits change there: the old words were not defined).
+split: no bits change (tools/mf_cal_digests.py proves it on the CPU column)
+for a fold that holds every class. A fold that lacks one follows THE
+PLACEMENT RULE since lane mf-cal3b (bits change there, and scikit-learn's
+refusals replace answers it never gave; the door's `_cal_scores` and the
+predict program follow the same rule).
 """
 from std.memory import unsafe_memcpy
 from core.entry_table import EntryRef
@@ -138,6 +145,11 @@ struct CalFitPlan(Movable):
     var test_counts: List[Int]
     var fold_classes: List[List[Int32]]
     var fold_codes: List[List[Int32]]
+    # Written by the RUN on a failure (lane mf-cal3b): the failing fold (or
+    # unit) in fold order, -1 none; True when its scores were refused
+    # (`cal_fold_place`), False for a failed fit.
+    var failed_fold: Int
+    var failed_scoring: Bool
 
     def __init__(out self, x: Int, n: Int, d: Int, codes: Int, k: Int, operation: Int, sigmoid: Bool,
                  ensemble: Bool, host_rows: Bool):
@@ -154,6 +166,8 @@ struct CalFitPlan(Movable):
         self.test_counts = List[Int]()
         self.fold_classes = List[List[Int32]]()
         self.fold_codes = List[List[Int32]]()
+        self.failed_fold = -1
+        self.failed_scoring = False
 
     def fold(mut self, rows: Int, count: Int):
         """The next fold's test rows (int32 numbers at `rows`, `count` of them)."""
@@ -224,12 +238,157 @@ def cal_columns(k: Int) -> Int:
     return 1 if k == 2 else k
 
 
+#: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
+#: refusals (model_selection/_validation.py `_enforce_prediction_order`).
+comptime CAL_STRATIFY = "To fix this, use a cross-validation technique resulting in properly stratified folds"
+
+
+def cal_lacking_warning(m: Int, k: Int) -> String:
+    """The RuntimeWarning scikit-learn's `_enforce_prediction_order` warns for
+    a fold of `cross_val_predict` (ensemble=False) whose train rows hold `m`
+    of the `k` classes."""
+    return ("Number of classes in training fold (" + String(m) + ") does not match total number of classes ("
+            + String(k) + "). Results may not be appropriate for your use case. " + CAL_STRATIFY)
+
+
+struct CalPlace(Movable):
+    """WHERE A MEMBER'S SCORES GO, as scikit-learn's calibration.py places them
+    (lane mf-cal3b, 2026-11-23; `cal_fold_place`). The member's score block
+    has `cols` columns; the calibration's scores S have `cal_columns(k)`.
+
+      * k == 2: S's one column is block column `pick` (-1: S stays zero).
+      * k > 2: block column i is added at S column `place[i]`
+        (`x_trees_accumulate_cols` with ks = len(place)); every other S column
+        holds `fill` (0, or float32's lowest word for a decision_function
+        out-of-fold block, ensemble=False).
+      * `calibrate`: the S columns that get a calibrator, in order (k == 2:
+        [0], whose 0/1 target is code 1). For k > 2 it is the LAST
+        len(calibrate) entries of `place` (THE PREDICT RULE: calibrator j of a
+        pair reads and writes column `cols[ks - count + j]`,
+        xtrees/calibrated_apply.mojo)."""
+    var pick: Int
+    var place: List[Int32]
+    var calibrate: List[Int]
+    var fill: Float64
+    # The member answer's width and element type (`_cal_member_place` writes them).
+    var cols: Int
+    var dtype: Int
+
+    def __init__(out self):
+        self.pick = 0
+        self.place = List[Int32]()
+        self.calibrate = List[Int]()
+        self.fill = 0.0
+        self.cols = 0
+        self.dtype = MEMBER_F32
+
+
+def _cal_shape(rows: Int, cols: Int) -> String:
+    """A NumPy shape tuple as scikit-learn's messages print it."""
+    return "(" + String(rows) + ", " + String(cols) + ")"
+
+
+def cal_fold_place(k: Int, held: List[Int32], operation: Int, cols: Int, ensemble: Bool, rows: Int) raises -> CalPlace:
+    """THE PLACEMENT RULE of one calibration member (`CalPlace`), read from
+    scikit-learn 1.9's calibration.py and model_selection/_validation.py.
+    `held`: the member's classes as ensemble codes, ascending (its classes_:
+    0 .. k-1 for a fold that holds every class); `operation`: decision_function
+    (MEMBER_OP_DECISION) or predict_proba; `cols`: its answer's width (a
+    two-class decision is one column, scikit-learn's 1-D answer); `rows`: the
+    test rows (for the words). Raises scikit-learn's refusals in its words,
+    and a RuntimeError for a width no family answers (a member ABI defect).
+
+    ensemble=True (`_fit_classifier_calibrator_pair`, `_fit_calibrator`,
+    `_CalibratedClassifier.predict_proba`): the scores are
+    `_get_response_values` of the member: two held classes give ONE column
+    (the decision, or the probability of its second class); one held class:
+    a predict_proba of one column is refused ("Got predict_proba of shape
+    ..., but need classifier with two classes."). Calibrator i is fitted on
+    score column i against the class `pos_class_indices[i]` (zip: as many as
+    score columns): every class of a full fold; each held class of a fold
+    holding more than two; the FIRST held class of a fold holding two (fed
+    the score of the second: scikit-learn's zip). k == 2 one calibrator.
+
+    ensemble=False (`cross_val_predict` then `_enforce_prediction_order`): a
+    fold that lacks a class has its predict_proba columns placed at the held
+    classes, zeros elsewhere (k == 2: S is the column of code 1, zero when
+    the fold holds only code 0); its decision_function is refused when it
+    holds two classes or fewer, or when its width is not its class count
+    ("Irregular ..."), else placed with float32's lowest word elsewhere (the
+    scores are float32 words, `member_f32_block`). The caller warns
+    `cal_lacking_warning` for such a fold. No per-fold calibrators."""
+    var got = CalPlace()
+    var m = len(held)
+    var decision = operation == MEMBER_OP_DECISION
+    var bad = cols < 1 or (not decision and cols != m) or (decision and cols != m and not (cols == 1 and m <= 2))
+    # an irregular decision of a fold that lacks a class is scikit-learn's own refusal below (ensemble=False)
+    if bad and not (decision and not ensemble and m != k and cols >= 1):
+        raise Error("RuntimeError: mojolearn: CalibratedClassifierCV: a member holding " + String(m)
+                    + " classes answered " + String(cols) + " columns (member ABI)")
+    if m == k:
+        # Every class: the placement every fold had before this rule.
+        if k == 2:
+            got.pick = 0 if cols == 1 else 1
+            got.calibrate.append(0)
+            return got^
+        for c in range(k):  # driver-loop: over the classes (one column each)
+            got.place.append(held[c])
+            got.calibrate.append(Int(held[c]))
+        return got^
+    if ensemble:
+        if m == 1:
+            if not decision:
+                raise Error("ValueError: Got predict_proba of shape " + _cal_shape(rows, cols)
+                            + ", but need classifier with two classes.")
+            # scikit-learn negates a one-class decision (`_process_decision_function`); no family with a
+            # decision_function fits one class, so no pair can hold such a member.
+            raise Error("RuntimeError: mojolearn: CalibratedClassifierCV: a one-class member answered "
+                        + "decision_function (no family fits one class with one)")
+        if k == 2:
+            raise Error("RuntimeError: mojolearn: CalibratedClassifierCV: a two-class fold lacks no class")
+        if m == 2:
+            # One score column (the second held class's), calibrated against the FIRST held class.
+            if cols == 1:
+                got.place.append(held[0])
+            else:
+                got.place.append(held[1])  # block column 0: placed, never calibrated nor read
+                got.place.append(held[0])  # block column 1, the second class's probability
+            got.calibrate.append(Int(held[0]))
+            return got^
+        for c in range(m):  # driver-loop: over the held classes (one column each)
+            got.place.append(held[c])
+            got.calibrate.append(Int(held[c]))
+        return got^
+    # ensemble=False: `_enforce_prediction_order` over the fold's answer.
+    if decision:
+        if cols != 1 and cols != m:
+            raise Error("ValueError: Output shape " + _cal_shape(rows, cols) + " of decision_function does not "
+                        + "match number of classes (" + String(m) + ") in fold. Irregular decision_function "
+                        + "outputs are not currently supported by cross_val_predict")
+        if m <= 2:
+            raise Error("ValueError: Only " + String(m) + " class/es in training fold, but " + String(k)
+                        + " in overall dataset. This is not supported for decision_function with imbalanced "
+                        + "folds. " + CAL_STRATIFY)
+        if cols != m:
+            raise Error("RuntimeError: mojolearn: CalibratedClassifierCV: a member holding " + String(m)
+                        + " classes answered " + String(cols) + " columns (member ABI)")
+        got.fill = Float64(Float32.MIN_FINITE)
+    if k == 2:
+        # one held class: its probability column at its code, then the column of code 1
+        got.pick = 0 if held[0] == 1 else -1
+        return got^
+    for c in range(m):  # driver-loop: over the held classes (one column each)
+        got.place.append(held[c])
+    return got^
+
+
 def cal_calibrators_run(glue: EntryRef, scores: Int, n: Int, c: Int, codes: Int, sigmoid: Bool,
-                        mut res: CalFitOut) raises:
+                        which: List[Int], mut res: CalFitOut) raises:
     """`CalibratedClassifierCV._fit_calibrators` over the float64 `n` x `c`
     scores at `scores` and the int32 codes at `codes` (n): one calibrator per
-    class column appended to `res` (column j's 0/1 target is code 1 for
-    c = 1, else code j). The door's glue ops in the door's order."""
+    class column of `which` (empty: every column), in its order, appended to
+    `res` (column j's 0/1 target is code 1 for c = 1, else code j: scikit-learn's
+    `label_binarize` column). The door's glue ops in the door's order."""
     var st = scores
     var transposed = List[Float64]()
     if c > 1:
@@ -244,7 +403,9 @@ def cal_calibrators_run(glue: EntryRef, scores: Int, n: Int, c: Int, codes: Int,
         y64 = List[Float64](length=n, fill=0.0)
         y64_at = Int(y64.unsafe_ptr())
     var yj_at = Int(yj.unsafe_ptr())
-    for j in range(c):  # driver-loop: over the class columns (one calibrator each)
+    var count = len(which) if len(which) > 0 else c
+    for q in range(count):  # driver-loop: over the calibrated class columns (one calibrator each)
+        var j = which[q] if len(which) > 0 else q
         var cls = 1 if c == 1 else j
         var f = st + 8 * j * n
         _ = xt_indicator_codes(glue, codes, yj_at, y64_at, n, cls)
@@ -364,62 +525,78 @@ def cal_fold_classes_run(mut run: MemberSetRun, mut plan: CalFitPlan):
     _ = len(targets)
 
 
-def _cal_fold_scores(glue: EntryRef, mut run: MemberSetRun, plan: CalFitPlan, f: Int, iota: Int, xte: Int,
-                     nte: Int, class_cols: Int, mut s: List[Float64]) raises:
-    """Fold f's float64 nte x c scores (the door's `_cal_scores`) from ONE
-    call of its fitted member over its test rows at `xte`, into `s` (zero,
-    nte x c). A refusal of the call raises the member's own words; an
-    answer the door's `_cal_scores` does not read (no float words, a width
-    other than one per class or one for a two-class decision) raises a
-    RuntimeError (a member ABI defect: no family answers one)."""
-    var k = plan.k
+def cal_held_classes(plan: CalFitPlan, f: Int) -> List[Int32]:
+    """Fold f's member classes as ensemble codes, ascending: the classes its
+    train rows hold when it lacks some (`fold_classes[f]`), else 0 .. k-1."""
+    if len(plan.fold_classes[f]) > 0:
+        return plan.fold_classes[f].copy()
+    var every = List[Int32](capacity=plan.k)
+    for c in range(plan.k):  # driver-loop: over the classes
+        every.append(Int32(c))
+    return every^
+
+
+def _cal_member_place(mut run: MemberSetRun, plan: CalFitPlan, f: Int) raises -> CalPlace:
+    """Fold f's fitted member: its answer's width and element type (one
+    OUTPUTS question of its state) and `cal_fold_place` over its classes. A
+    non-float answer is a member ABI defect (RuntimeError); scikit-learn's
+    refusals raise in its words."""
     var call = member_call_of(run.plans[f], run.states[f])
     var cols = member_outputs_of(run.plans[f], call, plan.operation)
     var dtype = call.out_dtype
-    # The member's classes in the ensemble's columns: 0 .. k-1, or the
-    # classes a fold that lacks some holds (`_sub_cols`).
-    var ks = k
-    var class_at = class_cols
-    if len(plan.fold_classes[f]) > 0:
-        ks = len(plan.fold_classes[f])
-        class_at = Int(plan.fold_classes[f].unsafe_ptr())
-    # The door's widths: predict_proba one column per class, k > 2 one
-    # column per class, but for a two-class member's one-column decision:
-    # its positive class's (its second code's) column alone. Float words
-    # only (proba and decision answer float32 or float64 in every family).
-    var unread = dtype != MEMBER_F32 and dtype != MEMBER_F64
-    unread = unread or cols < 1 or (plan.operation == MEMBER_OP_PREDICT_PROBA and cols != ks)
-    if k > 2 and not unread:
-        if cols == 1 and ks == 2 and plan.operation == MEMBER_OP_DECISION:
-            class_at += 4
-            ks = 1
-        elif cols != ks:
-            unread = True
-    if unread:
+    if dtype != MEMBER_F32 and dtype != MEMBER_F64:
         raise Error("RuntimeError: mojolearn: CalibratedClassifierCV: fold " + String(f) + "'s member answered "
-                    + String(cols) + " columns of element type " + String(dtype) + " for " + String(ks)
-                    + " classes (member ABI)")
+                    + String(cols) + " columns of element type " + String(dtype) + " (member ABI)")
+    var place = cal_fold_place(plan.k, cal_held_classes(plan, f), plan.operation, cols, plan.ensemble,
+                               plan.test_counts[f])
+    place.cols = cols
+    place.dtype = dtype
+    return place^
+
+
+def _cal_fold_scores(glue: EntryRef, mut run: MemberSetRun, plan: CalFitPlan, f: Int, iota: Int, xte: Int,
+                     nte: Int, mut s: List[Float64]) raises -> List[Int]:
+    """Fold f's float64 nte x c scores (the door's `_cal_scores`) from ONE
+    call of its fitted member over its test rows at `xte`, into `s` (zero,
+    nte x c), placed by scikit-learn's rule (`cal_fold_place`, lane mf-cal3b);
+    returns the S columns that get a calibrator. A refusal of the call raises
+    the member's own words."""
+    var k = plan.k
+    var place = _cal_member_place(run, plan, f)
+    var cols = place.cols
+    var dtype = place.dtype
     var keep = List[List[Float32]]()
     var member = VoteMember(Int(run.plans.unsafe_ptr() + f), run.states[f], plan.operation, cols, dtype, 0, 1.0)
     var blk = member_f32_block(member, VoteRows(xte, nte, plan.d), keep)
     var acc = Int(s.unsafe_ptr())
     if k == 2:
-        if cols == 1:
+        if place.pick == 0 and cols == 1:
             _ = xt_accumulate(glue, acc, blk, nte, 1.0)
-        else:
-            # `_one_col`: the positive column (code 1) as an nte x 1 block, the
-            # door's `_gather` over the rows arange(nte) and the column [1].
-            var one: List[Int32] = [1]
+        elif place.pick >= 0:
+            # `_one_col`: column `pick` (the positive column, code 1) as an nte
+            # x 1 block, the door's `_gather` over the rows arange(nte).
+            var one: List[Int32] = [Int32(place.pick)]
             var col = List[Float32](length=nte, fill=0.0)
             _ = xt_gather_f32(glue, blk, iota, Int(one.unsafe_ptr()), Int(col.unsafe_ptr()), nte, cols, nte, 1)
             _ = xt_accumulate(glue, acc, Int(col.unsafe_ptr()), nte, 1.0)
             _ = len(one)
             _ = len(col)
+        # pick -1: S stays zero (a fold holding only code 0, ensemble=False)
     else:
-        _ = xt_accumulate_cols(glue, acc, blk, class_at, nte, k, ks, 1.0)
+        _ = xt_accumulate_cols(glue, acc, blk, Int(place.place.unsafe_ptr()), nte, k, len(place.place), 1.0)
+        if place.fill != 0.0:
+            # `_enforce_prediction_order`'s default of the classes the fold
+            # lacks (ensemble=False decision_function: float32's lowest word)
+            var mark = List[Bool](length=k, fill=True)
+            for i in range(len(place.place)):  # driver-loop: over the placed columns
+                mark[Int(place.place[i])] = False
+            for r in range(nte):  # native input marshaling: one fill pass over one fold's unplaced columns
+                for c in range(k):
+                    if mark[c]:
+                        s[r * k + c] = place.fill
     _ = len(keep)  # the native block is read through the ops above
     _ = len(s)
-    _ = len(plan.fold_classes[f])  # read through `class_at` above
+    return place.calibrate.copy()
 
 
 def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFitPlan,
@@ -433,17 +610,14 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
     var c = cal_columns(k)
     var folds = plan.folds()
     # The door's `_arange`s, made once: every column of X, the rows of the
-    # largest fold, the class codes 0 .. k-1 (`_sub_cols` of a member whose
-    # classes are the ensemble's codes).
+    # largest fold.
     var widest = 1
     for f in range(folds):  # driver-loop: over the cv folds (their test counts)
         widest = max(widest, plan.test_counts[f])
     var cols = List[Int32](length=max(d, 1), fill=Int32(0))
     var iota = List[Int32](length=widest, fill=Int32(0))
-    var class_cols = List[Int32](length=k, fill=Int32(0))
     _ = xt_iota_i32(glue, Int(cols.unsafe_ptr()), d)
     _ = xt_iota_i32(glue, Int(iota.unsafe_ptr()), widest)
-    _ = xt_iota_i32(glue, Int(class_cols.unsafe_ptr()), k)
     if not plan.ensemble:
         res.scores = List[Float64](length=n * c, fill=0.0)
     for f in range(folds):  # driver-loop: over the cv folds, in fold order (serial by rule: module note)
@@ -458,13 +632,13 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
         else:
             _ = xt_gather_f32(glue, plan.x, te, Int(cols.unsafe_ptr()), Int(xte.unsafe_ptr()), n, d, nte, d)
         var s = List[Float64](length=nte * c, fill=0.0)
-        _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()), Int(xte.unsafe_ptr()), nte,
-                         Int(class_cols.unsafe_ptr()), s)
+        var which = _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()), Int(xte.unsafe_ptr()), nte, s)
         _ = len(xte)
         if plan.ensemble:
             var codes_te = List[Int32](length=nte, fill=Int32(0))
             _ = xt_gather_i32(glue, plan.codes, te, Int(codes_te.unsafe_ptr()), n, nte)
-            cal_calibrators_run(glue, Int(s.unsafe_ptr()), nte, c, Int(codes_te.unsafe_ptr()), plan.sigmoid, res)
+            cal_calibrators_run(glue, Int(s.unsafe_ptr()), nte, c, Int(codes_te.unsafe_ptr()), plan.sigmoid, which,
+                                res)
             res.count[f] = res.calibrators() - res.first[f]
             _ = len(codes_te)
         else:
@@ -478,11 +652,10 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
         _ = len(s)
     if not plan.ensemble:
         res.final_first = res.calibrators()
-        cal_calibrators_run(glue, Int(res.scores.unsafe_ptr()), n, c, plan.codes, plan.sigmoid, res)
+        cal_calibrators_run(glue, Int(res.scores.unsafe_ptr()), n, c, plan.codes, plan.sigmoid, List[Int](), res)
         res.final_count = res.calibrators() - res.final_first
     _ = len(cols)
     _ = len(iota)
-    _ = len(class_cols)
 
 
 def calibrated_fit_run(glue: EntryRef, mut run: MemberSetRun, mut plan: CalFitPlan, mut res: CalFitOut) raises -> Int:
@@ -496,7 +669,17 @@ def calibrated_fit_run(glue: EntryRef, mut run: MemberSetRun, mut plan: CalFitPl
     PACK (or `member_set_run_release`); CAL_FIT_FAILED with the states
     released and the failing members' words in `run.errors` (the first in
     fold order, `member_set_first_failure`, is the one to raise). A refused
-    scoring call raises its member's words (the caller releases the set)."""
+    scoring call raises its member's words (the caller releases the set).
+
+    FOLD ORDER OF THE REFUSALS (lane mf-cal3b): scikit-learn fits and scores
+    fold after fold and raises the first failure, of a fit or of the fold's
+    scores (`cal_fold_place`'s refusals). So before any score, every fold
+    before the first failed fit is placed in fold order: the first refused
+    placement raises (its fold in `plan.failed_fold`, `plan.failed_scoring`
+    True, every state released), else a failed fit returns CAL_FIT_FAILED
+    (`plan.failed_fold` its unit)."""
+    plan.failed_fold = -1
+    plan.failed_scoring = False
     cal_fold_classes_run(run, plan)
     var turns = member_set_prepare(run)
     _ = member_set_fit_free(run)  # skip_lacking: no cover pass, so it cannot answer False
@@ -504,7 +687,18 @@ def calibrated_fit_run(glue: EntryRef, mut run: MemberSetRun, mut plan: CalFitPl
         for u in range(len(run.plans)):  # driver-loop: over the members that are not worker members
             if run.gil_free[u] != MEMBER_SET_WORKER:
                 member_set_turn(run, u)
-    if member_set_first_failure(run) >= 0:
+    var first = member_set_first_failure(run)
+    var placed = plan.folds() if first < 0 else min(first, plan.folds())
+    for f in range(placed):  # driver-loop: over the cv folds before the first failed fit (one OUTPUTS question each)
+        try:
+            _ = _cal_member_place(run, plan, f)
+        except error:
+            plan.failed_fold = f
+            plan.failed_scoring = True
+            member_set_run_release(run)
+            raise error^
+    if first >= 0:
+        plan.failed_fold = first
         member_set_run_release(run)
         return CAL_FIT_FAILED
     calibrated_fit_scores_run(glue, run, plan, res)

@@ -34,7 +34,7 @@ from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.classical_labels_door import classical_encode_labels, classical_decode_labels, labels_cast, labels_reshape
 from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.family_common_pack import family_array, family_field
-from bindings.member_owner_unpack import MemberOwner, member_labels_take
+from bindings.member_owner_unpack import MemberOwner, member_labels_take, member_host_only
 from bindings.neighbors_knn_native_door import _check_refusals, knn_dist_words, knn_ops_key, knn_release
 from bindings.py_balanced import py_get, py_setitem
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
@@ -45,7 +45,7 @@ from core.member_abi import (
 )
 from core.neighbors_entry_table import NB_OPERATION_COUNT, neighbors_ops_entry
 from core.neighbors_member import NEIGHBORS_BLOCK_POINTS, NEIGHBORS_BLOCK_TARGETS
-from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_host
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -65,7 +65,10 @@ def neighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int,
     var k = Int(py=k_source)
     var tile = Int(py=tile_source)
     # The image the estimator's own predict calls, and its operations entry.
-    var binding = estimator_binding(model, "_mojolearn", context)
+    # An explicit HostKNeighbors* (its own host-only word, lane mf-cal3b): the core host image its own
+    # fit and predict bind.
+    var binding = (estimator_binding_host(model, "_mojolearn", context) if member_host_only(model)
+                   else estimator_binding(model, "_mojolearn", context))
     var key = knn_ops_key(binding)
     var route = DeviceRoute(DEVICE_CPU if key.vendor == 0 else DEVICE_GPU)
     route.mode = key.mode

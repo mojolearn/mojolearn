@@ -10,7 +10,18 @@ same words. The new `cal_empty_*` lines are the head's alone: it raises scikit-l
 with no test rows (the base's native route called the member over zero rows). A differing `_raised` line is a words defect to send back (the base's words
 are the estimator's own fit door's). Round 2's note: the k = 3 `gap` lines of a member whose decision has one column
 for two classes (LogisticRegression, LinearSVC, LinearDiscriminantAnalysis) differed from 4d76a9e16e (the base door
-read past that block's end). Test tool, never product runtime.
+read past that block's end). Round 3b (lane mf-cal3b): base origin/lane/member-fits 7c039a582e, head lane/mf-cal3b.
+Equal: every `cv3` line of the base's members. What moves (bits
+change, scikit-learn's calibration.py read): every `gap` line of k = 3 and 4 (a fold that lacks a class now has one
+calibrator per held class, a two-class fold one against its first class; ensemble=False a decision_function's lacking
+class holds float32's lowest word, and a two-class decision fold raises scikit-learn's "Only 2 class/es in training
+fold ..." ValueError, its RuntimeWarning first); the k = 2 `gap` lines of a member that fits one class (knn, gnb)
+raise scikit-learn's "Got predict_proba of shape (n, 1), but need classifier with two classes." for ensemble=True
+and, for ensemble=False, take the score of code 1 (zero when the fold holds only code 0). New members (head only:
+the base refused them before any fold, "requires a mojolearn estimator"): `svch` HostSVC, `knnh`
+HostKNeighborsClassifier, `gpch` HostGaussianProcessClassifier; their `cv3` lines must equal the `svk` / `knn`
+lines' member words (the same host kernels), and `gpch` raises its own fit's inference-image words on a wheel.
+Test tool, never product runtime.
 
 Configurations: method {sigmoid, isotonic} x ensemble {True, False} x k {2, 3, 4} x member {LogisticRegression,
 LinearSVC, GaussianNB and LinearDiscriminantAnalysis (the resident DeviceRows route when the folds run on one
@@ -69,6 +80,13 @@ def _member(name):
         return mojolearn.SVC(C=1.0, gamma=0.5)
     if name == "gpc":
         return mojolearn.GaussianProcessClassifier()
+    if name in ("svch", "knnh", "gpch"):
+        from mojolearn import _classical_host as host
+        if name == "svch":
+            return host.HostSVC(C=1.0, gamma=0.5)
+        if name == "knnh":
+            return host.HostKNeighborsClassifier(n_neighbors=7)
+        return host.HostGaussianProcessClassifier()
     return mojolearn.DecisionTreeClassifier(max_depth=4, random_state=1)
 
 
@@ -79,7 +97,7 @@ def _for(member, X):
     return X
 
 
-MEMBERS = ("lr", "svc", "gnb", "lda", "dt", "knn", "cnb", "svk", "gpc")
+MEMBERS = ("lr", "svc", "gnb", "lda", "dt", "knn", "cnb", "svk", "gpc", "svch", "knnh", "gpch")
 CONFIGS = list(itertools.product(("sigmoid", "isotonic"), (True, False), (2, 3, 4), MEMBERS, (1, 4), (False, True)))
 
 
