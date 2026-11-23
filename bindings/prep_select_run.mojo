@@ -39,7 +39,8 @@ the previous round's importances):
      the next block (`rfe_block_stage`: c2_rfe_keep and gather_cols).
 `rfe_first_stage` stages the first block from the all-ones support,
 `rfe_select_count` / `rfe_step_count` resolve n_features_to_select and step,
-`rfe_member_fit` is the final fit over a native member.
+`rfe_member_fit` is the final fit over a native member. `rfe_member_source` picks a member kind's importance
+block for the getter, or the refusal of a naive Bayes / discriminant kind with neither (lane mf-shaprfe).
 """
 from std.memory import unsafe_memcpy
 from core.preprocessing_program import prep_program_stage
@@ -48,7 +49,9 @@ from bindings.prep_encode_cats_run import CatBlock, cat_codes_stage, cat_i2f_sta
 from bindings.prep_classify_prog_run import ClsProgram, CLS_IN_BUFFER, CLS_IN_CONST_F
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32,
+    MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES,
 )
+from core.member_families import MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT
 from core.member_notices import member_notices_take
 
 comptime SEL_F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -433,6 +436,46 @@ def rfe_round_stage(mut prog: ClsProgram, keys: RfeKeys, var words: List[Float32
     _cls_stage(prog, SEL_OP_C2_RFE_RANK, d, sup, rk)
     var nxt = rfe_block_stage(prog, x_words, n, d, sup, k)
     return RfeRoundStaged(sup, rk, nxt)
+
+
+#: The refusal of an estimator with neither coef_ nor feature_importances_ under importance_getter='auto' (the
+#: door's own words, before and after lane mf-shaprfe).
+comptime RFE_NO_IMPORTANCES = "mojolearn: RFE needs an estimator with coef_ or feature_importances_"
+
+
+struct RfeSource(Copyable, Movable):
+    """Where a native member's round importances come from: `block` (0: no block this kind exports; the door
+    keeps the estimator's own doors) and `squared` (a coefficient block, or a named attribute path, squared and
+    summed over its rows); or `refusal`, non-empty: the words RFE raises before any round is fitted."""
+    var block: Int
+    var squared: Bool
+    var refusal: String
+
+    def __init__(out self, block: Int, squared: Bool, var refusal: String):
+        self.block = block
+        self.squared = squared
+        self.refusal = refusal^
+
+
+def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String) -> RfeSource:
+    """The importance block of a member KIND (`mask`: its kind-exact capabilities) for importance_getter
+    `getter` ('auto', 'coef_' or 'feature_importances_'): 'auto' takes MEMBER_BLOCK_COEF (squared) when the
+    kind exports it, else MEMBER_BLOCK_FEATURE_IMPORTANCES as given; a named attribute takes that block, squared,
+    as the attribute path squares it. A kind of the naive Bayes or discriminant family with neither block
+    (QuadraticDiscriminantAnalysis, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB: neither attribute
+    exists on them, as in scikit-learn) is REFUSED (lane mf-shaprfe): 'auto' in the door's words, a named
+    attribute in scikit-learn's attrgetter's (`estimator` the class name). Any other kind without the block keeps
+    the estimator's own doors (block 0)."""
+    var auto = getter == "auto"
+    if getter != "feature_importances_" and (mask & MEMBER_CAN_COEF) != 0:
+        return RfeSource(MEMBER_BLOCK_COEF, True, String(""))
+    if getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
+        return RfeSource(MEMBER_BLOCK_FEATURE_IMPORTANCES, not auto, String(""))
+    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT:
+        if auto:
+            return RfeSource(0, False, String(RFE_NO_IMPORTANCES))
+        return RfeSource(0, False, "AttributeError: '" + estimator + "' object has no attribute '" + getter + "'")
+    return RfeSource(0, False, String(""))
 
 
 def rfe_member_fit(plan: MemberPlan, mut call: MemberCall, x: Int, n: Int, k: Int, y: Int, y_dtype: Int) raises:

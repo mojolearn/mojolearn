@@ -26,6 +26,16 @@ features (the logit link applied to that mean for link 'logit'). Each RUN also r
 workers and must give the serial words exactly. The logit case runs the original's DARTClassifier (fitted through
 bm_rest_boost_fits.mojo over the product's DART round RUN, predict_proba as the door's `dart_predict_proba`) and a
 binary RandomForestClassifier beside it.
+
+A FLOAT64 MEMBER through the native model handle (lane mf-shaprfe, 2026-11-23; `test_agnostic_logistic_member`):
+a binary LogisticRegression fitted through its member entry (core/logistic_member.mojo on the CPU image's QN
+entry, as checks/native_tests/meta_runs_gil_free.mojo fits it), explained through `AgnMember` with its predict_proba
+written as float64 and narrowed by the RUN (`wide`). LogisticRegression went through the door's `_DoorModel`
+before. The reference evaluator `_WideRef` calls the same member into a float64 block and narrows each word with
+`cast[DType.float32]` (the door's `_evaluate` cast of the public float64 output): Kernel SHAP (identity and logit)
+and Permutation SHAP through `AgnMember` give the reference evaluator's words exactly, serially and with the chunks
+on the host workers, and Kernel SHAP equals the exact Shapley values of the reference game (rtol 1e-6, atol 1e-6)
+and is additive (atol 1e-5).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
@@ -42,8 +52,19 @@ from xtrees.glue_runs import publish_x_trees_glue
 from xtrees.glue_calls import xt_ref, xt_stack_w64, xt_softmax_rows
 from checks.native_tests.bm_rest_boost_fits import DartSpec, DartModel, dart_fit, dart_raw, publish_host_images, trees_key
 from xtrees.agnostic_values_run import (
-    AgnModel, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run, AGN_SW_IDN_SYN_POOL,
+    AgnModel, AgnMember, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
+    AGN_SW_IDN_SYN_POOL,
 )
+from core.device_route import DEVICE_CPU
+from core.logistic_member import logistic_member_v2
+from core.logistic_native_api import QnNativeDriver
+from core.logistic_route import LogisticRoute, logistic_route_pack
+from core.member_abi import (
+    MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_call_of, member_new, member_free,
+    member_kind_capabilities, MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS, MEMBER_OP_PREDICT_PROBA,
+    MEMBER_F64, MEMBER_I32, MEMBER_GIL_FREE,
+)
+from glm.host.logistic_native_host import qn_host_native_v1
 
 comptime SK_DIR = "checks/native_tests/fixtures/trees_sk/"
 comptime NA = 1050
@@ -608,6 +629,214 @@ def test_kernel_explainer_logit() raises:
     _ = codes^
     _ = ya_rf^
     _ = forest^
+    _ = xa^
+    _ = xb^
+
+
+# ---- a float64 member through the native model handle (lane mf-shaprfe) ----
+comptime LR_FIT_ROWS = 200
+comptime LR_D = 4
+
+
+struct _Lr(Movable):
+    """One fitted binary LogisticRegression member: its plan (AgnMember reads it by address: keep this value
+    unmoved while a handle points at it) and its state."""
+    var plan: MemberPlan
+    var state: Int
+
+    def __init__(out self, var plan: MemberPlan, state: Int):
+        self.plan = plan^
+        self.state = state
+
+
+def _lr_fit(x: List[Float32], codes: List[Int32], n: Int, d: Int) raises -> _Lr:
+    """LogisticRegression() (l2 1.0, intercept, lbfgs) fitted on n rows of d features and binary codes through
+    the member ABI on the CPU image's QN entry (meta_runs_gil_free.mojo `_fit`)."""
+    var plan = MemberPlan()
+    plan.route = logistic_route_pack(LogisticRoute(DEVICE_CPU, Int(GLOBAL_NUMERIC_MODE), 0, False, False,
+                                                   QnNativeDriver(qn_host_native_v1)))
+    plan.member = MemberRef(EntryRef(logistic_member_v2, 0), 0)
+    var probe = MemberCall(plan.route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    plan.params = [0.0, 1.0, 0.0, 1.0, 100.0, 20.0, 10.0, 0.0, 1e-4, 1e-6]
+    plan.classes = 2
+    require((member_kind_capabilities(plan) & MEMBER_GIL_FREE) != 0,
+            "the logistic kind lost MEMBER_GIL_FREE: SHAP would run its chunks serially")
+    var call = member_new(plan)
+    call.x = MemberMatrix(Int(x.unsafe_ptr()), n, d)
+    call.y = MemberMatrix(Int(codes.unsafe_ptr()), n, 1, MEMBER_I32)
+    call.classes = 2
+    try:
+        _ = member_call(plan.member, MEMBER_OP_FIT, call)
+    except e:
+        member_free(plan, call)
+        raise e^
+    _ = len(x)  # read through the fit above
+    _ = len(codes)
+    var state = call.state
+    return _Lr(plan^, state)
+
+
+def _lr_free(mut f: _Lr):
+    var call = MemberCall(f.plan.route, f.state)
+    member_free(f.plan, call)
+    f.state = 0
+
+
+struct _WideRef(AgnModel):
+    """The reference evaluator: the member's predict_proba into a float64 block, each word narrowed with
+    `cast[DType.float32]` (the door's cast of the public float64 output). `plan` the address of the `_Lr`'s plan."""
+    var plan: Int
+    var state: Int
+    var x: List[Float32]
+    var n: Int
+    var d: Int
+    var k: Int
+    var parallel: Bool
+    var fx: List[Float32]
+    var syn: List[Float32]
+    var out: List[Float32]
+
+    def __init__(out self, plan: Int, state: Int, x: List[Float32], n: Int, d: Int, k: Int, parallel: Bool):
+        self.plan = plan
+        self.state = state
+        self.x = x.copy()
+        self.n = n
+        self.d = d
+        self.k = k
+        self.parallel = parallel
+        self.fx = List[Float32]()
+        self.syn = List[Float32]()
+        self.out = List[Float32]()
+
+    def _proba(self, src: Int, n: Int) raises -> List[Float32]:
+        var plan = MutPointer[MemberPlan, MutUntrackedOrigin](unsafe_from_address=self.plan)
+        var wide = List[Float64](length=max(n * self.k, 1), fill=0.0)
+        var call = member_call_of(plan[], self.state)
+        call.x = MemberMatrix(src, n, self.d)
+        call.dst = MemberMatrix(Int(wide.unsafe_ptr()), n, self.k, MEMBER_F64)
+        _ = member_call(plan[].member, MEMBER_OP_PREDICT_PROBA, call)
+        var words = List[Float32](length=max(n * self.k, 1), fill=Float32(0))
+        for i in range(n * self.k):  # small-loop(oracle: the door's float32 cast, word by word)
+            words[i] = wide[i].cast[DType.float32]()
+        _ = wide^
+        return words^
+
+    def explained(mut self) raises -> Int:
+        self.fx = self._proba(Int(self.x.unsafe_ptr()), self.n)
+        return Int(self.fx.unsafe_ptr())
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        if len(self.syn) != count:
+            self.syn = List[Float32](length=count, fill=Float32(0))
+        return Int(self.syn.unsafe_ptr())
+
+    def rows(mut self, n: Int) raises -> Int:
+        self.out = self._proba(Int(self.syn.unsafe_ptr()), n)
+        return Int(self.out.unsafe_ptr())
+
+    def workers(self) -> Int:
+        return host_predict_workers() if self.parallel else 1
+
+    def worker(self) raises -> Self:
+        return Self(self.plan, self.state, self.x, self.n, self.d, self.k, self.parallel)
+
+
+def _handle(f: _Lr, plan_at: Int, x: List[Float32], n: Int, parallel: Bool, refused: List[Int]) raises -> AgnMember:
+    """The door's native model handle over the fitted member (`_member_open`: predict_proba, float64); `plan_at`
+    the address of `f.plan`."""
+    return AgnMember(f.plan.member, plan_at, f.state, MEMBER_OP_PREDICT_PROBA,
+                     Int(x.unsafe_ptr()), n, LR_D, 2, parallel, Int(refused.unsafe_ptr()), True, True)
+
+
+def _lr_permutation[M: AgnModel](glue: EntryRef, mut on_bg: M, mut model: M, x: List[Float32], bg: List[Float32],
+                                 n: Int, nb: Int, seed: Int) raises -> _Shap:
+    """`PermutationExplainer(m, bg, random_state=seed).shap_values(x, npermutations=40)` over `model`."""
+    var ev = List[Float64](length=2, fill=0.0)
+    agn_expected_run(glue, on_bg.explained(), nb, 2, False, Int(ev.unsafe_ptr()))
+    var phi = List[Float64](length=n * LR_D * 2, fill=0.0)
+    var req = AgnRequest(Int(x.unsafe_ptr()), Int(bg.unsafe_ptr()), Int(phi.unsafe_ptr()), n, nb, LR_D, 2, seed,
+                         AGN_SW_IDN_SYN_POOL, False, True)
+    agn_permutation_values_run(glue, req, 40, 0, 0, model)
+    _ = req^
+    return _Shap(phi^, ev^)
+
+
+def test_agnostic_logistic_member() raises:
+    """A binary LogisticRegression member (`_clf(n_classes=2)[:LR_FIT_ROWS, :4]`), background Xa[:20], explained
+    Xb[:4], through `AgnMember` (float64 predict_proba, narrowed in the RUN): Kernel SHAP identity and logit and
+    Permutation SHAP equal the reference evaluator's words exactly, in order and on the workers; Kernel SHAP
+    equals the exact Shapley values (rtol 1e-6, atol 1e-6) and is additive (atol 1e-5)."""
+    var glue = _glue()
+    var xa = fixture_f32(SHAP_DIR + "clf2-xa.f32", NA * D)
+    var xb = fixture_f32(SHAP_DIR + "clf2-xb.f32", 450 * D)
+    var ya = fixture_i32(SHAP_DIR + "clf2-ya.i32", NA)
+    var codes = List[Int32](length=LR_FIT_ROWS, fill=Int32(0))
+    for i in range(LR_FIT_ROWS):  # small-loop(fixture: the fit rows' class codes)
+        codes[i] = ya[i]
+    var fit_x = _cols(xa, LR_FIT_ROWS, D, LR_D)
+    var lr = _lr_fit(fit_x, codes, LR_FIT_ROWS, LR_D)
+    var asked = member_call_of(lr.plan, lr.state)
+    asked.flags = MEMBER_OP_PREDICT_PROBA
+    _ = member_call(lr.plan.member, MEMBER_OP_OUTPUTS, asked)
+    require(asked.out_dtype == MEMBER_F64 and asked.out_cols == 2,
+            "LogisticRegression's member predict_proba is no longer float64 x 2: this check no longer covers the "
+            + "float64 handle")
+    var bg = _cols(xa, 20, D, LR_D)
+    var x = _cols(xb, 4, D, LR_D)
+    var refused = List[Int](length=1, fill=0)
+    var plan_at = Int(UnsafePointer(to=lr.plan))
+    for logit in range(2):  # small-loop(the two links)
+        var linked = logit == 1
+        var label = String("logistic member kernel shap, link ") + ("logit" if linked else "identity")
+        var ref_bg = _WideRef(plan_at, lr.state, bg, 20, LR_D, 2, False)
+        var ref_m = _WideRef(plan_at, lr.state, x, 4, LR_D, 2, False)
+        var want = _kernel_of(glue, ref_bg, ref_m, x, bg, 4, 20, LR_D, 2, linked)
+        var h_bg = _handle(lr, plan_at, bg, 20, False, refused)
+        var h_serial = _handle(lr, plan_at, x, 4, False, refused)
+        var serial = _kernel_of(glue, h_bg, h_serial, x, bg, 4, 20, LR_D, 2, linked)
+        var h_bg2 = _handle(lr, plan_at, bg, 20, True, refused)
+        var h_spread = _handle(lr, plan_at, x, 4, True, refused)
+        var spread = _kernel_of(glue, h_bg2, h_spread, x, bg, 4, 20, LR_D, 2, linked)
+        assert_same_words(serial.ev, want.ev, label + ": expected value, handle vs reference")
+        assert_same_words(serial.phi, want.phi, label + ": handle vs reference evaluator")
+        assert_same_words(spread.phi, serial.phi, label + ": chunks on the workers vs in order")
+        var exact = _exact_of(ref_m, x, bg, 4, 20, LR_D, 2, linked)
+        _close(serial.phi, exact, 1e-6, 1e-6, label + " vs exact Shapley")
+        var p = ref_m._proba(Int(x.unsafe_ptr()), 4)
+        _additive(serial, p, 4, LR_D, 2, linked, 0.0, 1e-5, label + " additivity")
+        _ = h_bg^
+        _ = h_serial^
+        _ = h_bg2^
+        _ = h_spread^
+        _ = ref_bg^
+        _ = ref_m^
+    var pref_bg = _WideRef(plan_at, lr.state, bg, 20, LR_D, 2, False)
+    var pref_m = _WideRef(plan_at, lr.state, x, 4, LR_D, 2, False)
+    var pwant = _lr_permutation(glue, pref_bg, pref_m, x, bg, 4, 20, 0)
+    var p_bg = _handle(lr, plan_at, bg, 20, False, refused)
+    var p_serial = _handle(lr, plan_at, x, 4, False, refused)
+    var pserial = _lr_permutation(glue, p_bg, p_serial, x, bg, 4, 20, 0)
+    var p_bg2 = _handle(lr, plan_at, bg, 20, True, refused)
+    var p_spread = _handle(lr, plan_at, x, 4, True, refused)
+    var pspread = _lr_permutation(glue, p_bg2, p_spread, x, bg, 4, 20, 0)
+    assert_same_words(pserial.phi, pwant.phi, "logistic member permutation shap: handle vs reference evaluator")
+    assert_same_words(pspread.phi, pserial.phi, "logistic member permutation shap: chunks on the workers vs in order")
+    var pp = pref_m._proba(Int(x.unsafe_ptr()), 4)
+    _additive(pserial, pp, 4, LR_D, 2, False, 0.0, 1e-5, "logistic member permutation shap additivity")
+    require(refused[0] == 0, "the logistic member refused a chunk")
+    _ = p_bg^
+    _ = p_serial^
+    _ = p_bg2^
+    _ = p_spread^
+    _ = pref_bg^
+    _ = pref_m^
+    _lr_free(lr)
+    _ = refused^
+    _ = fit_x^
+    _ = codes^
+    _ = bg^
+    _ = x^
     _ = xa^
     _ = xb^
 

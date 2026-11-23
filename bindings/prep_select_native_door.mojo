@@ -32,8 +32,8 @@ from core.member_notices import member_notices_take
 from bindings.member_owner_unpack import MemberOwner
 from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
-    MemberPlan, member_new, member_free, member_kind_capabilities, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES,
-    MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32, MEMBER_I32,
+    MemberPlan, member_new, member_free, member_kind_capabilities, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT,
+    MEMBER_CAN_CLASSIFIER, MEMBER_F32, MEMBER_I32,
     MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
 )
 from core.member_families import (
@@ -63,7 +63,7 @@ from bindings.prep_select_run import (
     mi_check_neighbors, mi_check_shape, mi_mask_of_bools, mi_mask_of_indices, mi_columns, mi_gather_stage,
     mi_class_count_stage, mi_int_words, mi_class_check, mi_discrete_check, mi_stage, mi_scatter, MiProgram,
     RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_SELECT_COUNT, rfe_select_count, rfe_step_count, RfeKeys,
-    rfe_first_stage, rfe_round_stage, rfe_member_importances, rfe_member_fit, rfe_final_plan,
+    rfe_first_stage, rfe_round_stage, rfe_member_importances, rfe_member_fit, rfe_final_plan, rfe_member_source,
 )
 from bindings.prep_classify_prog_door import ClsProg, f32_array
 from bindings.prep_classify_common_door import cls_x2d, cls_mode, XIn
@@ -302,22 +302,20 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
             return member^
         if (mask & MEMBER_CAN_FIT) == 0 or (mask & MEMBER_CAN_EXPORT) == 0:
             return member^
-        if getter != "feature_importances_" and (mask & MEMBER_CAN_COEF) != 0:
-            member.block = MEMBER_BLOCK_COEF
-            member.squared = True
-        elif getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
-            member.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
-            member.squared = not auto
-        elif owner.plan.family == MEMBER_FAMILY_NAIVE_BAYES or owner.plan.family == MEMBER_FAMILY_DISCRIMINANT:
-            # QuadraticDiscriminantAnalysis and the published naive Bayes kinds have no coef_ and no
-            # feature_importances_ (scikit-learn's neither): refused here, before any round fits a clone
-            # (lane mf-shaprfe; the own-door path fitted every round's clone first and then refused). The
-            # words: 'auto' the door's own; a named attribute scikit-learn's attrgetter's.
-            refusal = (String("mojolearn: RFE needs an estimator with coef_ or feature_importances_") if auto
-                       else String("AttributeError: '") + classical_estimator_name(estimator)
-                       + "' object has no attribute '" + getter + "'")
-        else:
+        # RUN (bindings/prep_select_run.mojo `rfe_member_source`): the block the getter names in this kind's
+        # mask, or the refusal of a kind that has neither (QDA, the published naive Bayes kinds: before any
+        # round fits a clone; the own-door path fitted every round's clone first, then refused).
+        # The class name only where a refusal can name it (one read per fit of those two families).
+        var family = owner.plan.family
+        var name = (classical_estimator_name(estimator)
+                    if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT else String(""))
+        var source = rfe_member_source(family, mask, getter, name)
+        if len(source.refusal) > 0:
+            refusal = source.refusal.copy()
+        elif source.block == 0:
             return member^
+        member.block = source.block
+        member.squared = source.squared
         # THE GIL RULE (core/member_abi.mojo): the same answer says whether
         # this kind's fit may run with the GIL released by this door.
         # One fit on this thread either way: released too for a kind whose
