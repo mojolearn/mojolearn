@@ -15,6 +15,7 @@
 # operand that takes a gradient (OP_AGS_LOSS_VJP, the model's output only in a
 # fit). The reduction factor (1 / elements, 1 / rows or 1) is a host scalar
 # computed once per call.
+from std.sys.compile import is_defined
 from sequence.ops import add, sub, mul
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_log1p, identical_sigmoid
 
@@ -23,6 +24,10 @@ from checks.numerics import ftz, identical_div, identical_exp, identical_log, id
 comptime LS_SMOOTH_L1 = 8
 comptime LS_NLL = 9
 comptime LS_KL_DIV = 10
+
+# Fault injection (verify's sabotage arm of this family, never in a product build): smooth_l1's quadratic part
+# without its 0.5. checks/native_tests/nn_losses.mojo's oracle and digests must FAIL under it.
+comptime NN_LOSSES_SABOTAGE_SMOOTH_L1_HALF = is_defined["MOJOLEARN_NN_LOSSES_SABOTAGE_SMOOTH_L1_HALF"]()
 
 
 @always_inline
@@ -47,6 +52,8 @@ def smooth_l1_term(p: Float32, y: Float32, beta: Float32) -> Float32:
     var d = sub(p, y)
     var ad = _abs(d)
     if ad < beta:
+        comptime if NN_LOSSES_SABOTAGE_SMOOTH_L1_HALF:
+            return ftz(identical_div(mul(d, d), beta))
         return mul(Float32(0.5), ftz(identical_div(mul(d, d), beta)))
     return sub(ad, mul(Float32(0.5), beta))
 
