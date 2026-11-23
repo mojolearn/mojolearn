@@ -5618,6 +5618,16 @@ def _(ml, X, yc, yr, Xh=None):
     rows = min(_GBDT_GAPS_ROWS, X.shape[0])
     X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
     y = _pos(yr)
+    # lane gbdt-units-10: the exponential-link losses at ONE Newton step get
+    # a scale-free positive target (1..5 by rank of |y|, the same on every
+    # fixture). `_pos(yr)` reaches ~1e4 on `wide` (columns scaled
+    # 1e-4..1e4): Poisson's first leaf is sum(w * (y - 1)) / (sum w + l2),
+    # about the target's scale, times rate 0.1 it takes the approximation
+    # past 88 and exp of it past float32's largest value, so every split
+    # scored non-finite on both columns ("All splits have infinite score").
+    # The lanes that fit these losses at their multi-step defaults (the line
+    # search bounds each step) keep `_pos`.
+    y_link = (np.float32(1.0) + _rank_codes(np.abs(yr), [0.2, 0.4, 0.6, 0.8])).astype(np.float32)
     newton = dict(leaf_estimation_method="Newton", leaf_estimation_iterations=1)
     grad = dict(leaf_estimation_method="Gradient", leaf_estimation_iterations=1)
     return _gbdt_gaps_weighted(ml, X, Xh, [
@@ -5629,10 +5639,10 @@ def _(ml, X, yc, yr, Xh=None):
         ("MAE", y, dict(loss="MAE", boost_from_average=True, **grad)),
         ("Quantile", y, dict(loss="Quantile", loss_alpha=0.3, boost_from_average=False, **grad)),
         ("LogLinQuantile", y, dict(loss="LogLinQuantile", **grad)),
-        ("Poisson", y, dict(loss="Poisson", **newton)),
+        ("Poisson", y_link, dict(loss="Poisson", **newton)),
         ("Lq", y, dict(loss="Lq", loss_q=3.0, **newton)),
         ("Expectile", y, dict(loss="Expectile", loss_alpha=0.3, **newton)),
-        ("Tweedie", y, dict(loss="Tweedie", loss_variance_power=1.5, **newton)),
+        ("Tweedie", y_link, dict(loss="Tweedie", loss_variance_power=1.5, **newton)),
         ("Huber", y, dict(loss="Huber", loss_delta=1.0, **newton)),
         ("CrossEntropy", yc.astype(np.float32), dict(loss="CrossEntropy", **newton)),
     ], "symmetric")

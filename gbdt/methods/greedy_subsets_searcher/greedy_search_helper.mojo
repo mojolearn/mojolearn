@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One complete CatBoost-compatible oblivious-tree level on the GPU. Kernel ordering is contractual: copy precedes subtract, and scan precedes scoring."""
 
+from gbdt.options.catboost_options import infinite_score_message
 from core.device_plan import DevicePlan, plan_for_single
 from std.math import sqrt
 from max.gpu import block_dim, block_idx, thread_idx
@@ -4458,12 +4459,8 @@ def accept_symmetric_level_winner(
         hist_cells_per_leaf
     ):
         raise Error(
-            "All splits have infinite score. Probably, numerical"
-            " overflow occurs in loss function and/or split score"
-            " calculation. Try increasing l2_leaf_reg, and/or"
-            " decreasing learning_rate, etc."
-            " [level " + String(level) + ", live leaves "
-            + String(live_leaves) + "]"
+            # the one text, both columns (lane gbdt-units-10)
+            infinite_score_message(level, live_leaves)
         )
     var choice = resolve_split(layout, Int(best_bin_u))
     if not (best_score > Float32(0.0)):

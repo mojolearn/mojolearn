@@ -130,6 +130,7 @@ predictions move with it.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-symmetric lane is the measurement.
 """
+from gbdt.options.catboost_options import infinite_score_message
 from std.math import exp, floor, fma, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -4393,12 +4394,8 @@ def _tree_ctr_levels_host(
         # ---- the gates (`accept_symmetric_level_winner`), this level ----
         if best_bin == GBDT_SENTINEL or Int(best_bin) >= hist_cells:
             raise Error(
-                "All splits have infinite score. Probably, numerical"
-                " overflow occurs in loss function and/or split score"
-                " calculation. Try increasing l2_leaf_reg, and/or"
-                " decreasing learning_rate, etc."
-                " [level " + String(depth) + ", live leaves "
-                + String(n_live) + "]"
+                # the one text, both columns (lane gbdt-units-10)
+                infinite_score_message(depth, n_live)
             )
         var best_score = ftz(best_gain)
         if not (best_score > Float32(0.0)):
@@ -4938,12 +4935,8 @@ def gbdt_host_boost(
             var best_bin_u = winners_bf[d]
             if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
                 raise Error(
-                    "All splits have infinite score. Probably, numerical"
-                    " overflow occurs in loss function and/or split score"
-                    " calculation. Try increasing l2_leaf_reg, and/or"
-                    " decreasing learning_rate, etc."
-                    " [level " + String(d) + ", live leaves "
-                    + String(1 << d) + "]"
+                    # the one text, both columns (lane gbdt-units-10)
+                    infinite_score_message(d, 1 << d)
                 )
             var cf_ = s_bf_feature[Int(best_bin_u)]
             var cb_ = s_bf_bin[Int(best_bin_u)]
