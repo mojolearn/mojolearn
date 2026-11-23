@@ -43,7 +43,7 @@ from core.member_class_weight import (
 )
 from core.member_families import MEMBER_FAMILY_LINEAR_SVM
 from bindings.py_balanced import py_call, py_get, py_setitem
-from bindings.linear_svc_boundary_unpack import linear_svc_route, LINEAR_SVC_ROUTE_ROWS
+from bindings.linear_svc_boundary_unpack import linear_svc_route
 from bindings.svc_linear_boundary_unpack import linear_svc_check_fields, linear_svr_check_fields, linear_svm_strengths
 from bindings.svc_common_unpack import svc_field, svc_attr, svc_float, svc_int, svc_truthy
 from bindings.svm_keys_unpack import svm_keys
@@ -63,9 +63,10 @@ from providers.python.device_route_boundary_door import device_route_value
 def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: this configuration has no member
-    entry (a class_weight it does not take as words, a binary with the
-    PY2MOJO rows arm off)."""
+    from the unfitted estimator. Always True (lane mf-lin6): a class_weight
+    the door refuses is the INVALID tail, and a binary with the PY2MOJO rows
+    arm off runs the member's class-code query (the door's same decision
+    and threshold)."""
     var nk = svm_keys()
     if kind != LINEAR_SVM_MEMBER_SVC and kind != LINEAR_SVM_MEMBER_SVR:
         raise Error("RuntimeError: mojolearn: unknown LinearSvm member kind " + String(kind))
@@ -83,11 +84,12 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         if weighting < 0:
             weighting = MEMBER_CW_INVALID
     var connection = linear_svc_route(model, fields, context)
-    if kind == LINEAR_SVM_MEMBER_SVC and (connection.flags & LINEAR_SVC_ROUTE_ROWS) == 0:
-        # A binary built with the PY2MOJO rows arm off (-D MOJOLEARN_PY2MOJO_linear_OFF): its door decodes two
-        # classes through the decision scores and the label threshold, which the member's codes do not run.
-        # Every default image has the bit, and every image answers the class-code query since lane mf-img3.
-        return False
+    # A binary built with the PY2MOJO rows arm off (-D MOJOLEARN_PY2MOJO_linear_OFF, no LINEAR_SVC_ROUTE_ROWS
+    # bit) is a member too (lane mf-lin6): its door decodes two classes as the decision scores then the strict
+    # `score > 0` threshold (bindings/svc_linear_native_door.mojo `_linear_svc_decided`); the member's binary
+    # class-code query (QN_NATIVE_BINARY, answered by every image whatever the define) is that same decision
+    # body followed by the same strict `z > 0` (core/classical_host_predict.mojo `host_qn_predict_binary_into`),
+    # so its codes are the door's codes. The admission no longer reads the bit.
     var route = device_route_value(connection.provider)
     if kind == LINEAR_SVM_MEMBER_SVR and not route.has_fifth:
         # The x_metrics program entry of the route's tier on its device (the
