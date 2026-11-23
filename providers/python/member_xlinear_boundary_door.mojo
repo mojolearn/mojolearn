@@ -45,7 +45,7 @@ from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _c
 from bindings.x_linear_common_unpack import _eq, _is_int, _isinstance
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.x_linear_regressors_unpack import _xl_tweedie_link
-from bindings.x_linear_cv_unpack import _xl_is_int_cv, _is_int_plain, _xl_cs_grid
+from bindings.x_linear_cv_unpack import _xl_is_int_cv, _is_int_plain, _xl_cs_grid, xl_cv_is_callback, XL_CV_CALLBACK_WORDS
 from bindings.x_linear_isotonic_unpack import _xl_isotonic_check
 from bindings.x_linear_route_unpack import xl_route, xl_ops_require
 from core.entry_table import EntryRef, entry_ref_word
@@ -192,6 +192,8 @@ def _xl_ridge_cv_words(fields: PythonObject, context: PythonObject, mut admitted
     admitted = True
     if cv is None:
         return words^
+    if xl_cv_is_callback(cv, context):
+        raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
     if not _xl_is_int_cv(cv, context):
         admitted = False
         return words^
@@ -226,6 +228,8 @@ def _xl_enetcv_words(model: PythonObject, fields: PythonObject, context: PythonO
     admitted = True
     var folds = 5
     if cv is not None:
+        if xl_cv_is_callback(cv, context):
+            raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
         if not _xl_is_int_cv(cv, context):
             admitted = False
             return List[Float64]()
@@ -294,6 +298,8 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
     var cv = py_item(fields, nk[].k_cv)
     var folds = 5
     if cv is not None:
+        if xl_cv_is_callback(cv, context):
+            raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
         if not _xl_is_int_cv(cv, context):
             return List[Float64]()
         folds = _int(cv)

@@ -100,6 +100,30 @@ def _xl_index_i64(values: PythonObject, name: String, context: PythonObject) rai
     return admit_ids(values, name, context)
 
 
+comptime XL_CV_CALLBACK_WORDS = "TypeError: native linear CV requires a native splitter or list of index pairs; Python callbacks cannot execute"
+
+
+def xl_cv_is_callback(cv: PythonObject, context: PythonObject) -> Bool:
+    """A cv that `_xl_cv_splits` refuses before calling it (lane mf-split4b:
+    a member caller's UNPACK refuses it in the same words, never calls it):
+    neither None, an exact native integer, an index list nor one of our
+    splitters. False when the splitter table is not connected (the door
+    decides)."""
+    try:
+        if cv is None or _xl_is_int_cv(cv, context):
+            return False
+        var nk = x_linear_keys()
+        var b = _b()
+        if py_type(cv) is b.list or py_type(cv) is b.tuple:
+            return False
+        if py_type(py_type(cv)) is b.type and py_contains(py_item(prep_native_context(context),
+                                                                  nk[].k_family_msel_splitter_layouts), py_type(cv)):
+            return False
+        return True
+    except:
+        return False
+
+
 def _xl_cv_splits(cv: PythonObject, x_source: PythonObject, y_source: PythonObject,
                   context: PythonObject) raises -> PythonObject:
     """`_cv_splits(cv, X, y)`: a list of (train, test) int64 Arrays from a
@@ -113,7 +137,7 @@ def _xl_cv_splits(cv: PythonObject, x_source: PythonObject, y_source: PythonObje
         msel_admit(cv, prep_native_context(context))
         pairs = cv
     else:
-        raise Error("TypeError: native linear CV requires a native splitter or list of index pairs; Python callbacks cannot execute")
+        raise Error(XL_CV_CALLBACK_WORDS)
     var listed = py_call(b.list, pairs)
     var splits = Python.list()
     for k in range(len(listed)):  # driver-loop: over the cv splits
