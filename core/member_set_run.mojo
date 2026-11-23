@@ -114,12 +114,15 @@ struct MemberSetRun(Movable):
     var part_w: List[List[Float32]]
     # Per member, the fit notices PACK took from its state (empty: none).
     var notices: List[List[Float64]]
-    # THE PER-UNIT COVER RULE (lane mf-cal, 2026-11-23; default False): a
-    # caller whose units are independent cv folds (CalibratedClassifierCV)
-    # sets it so that a unit whose rows lack a class is NOT fitted and the
-    # others are (`uncovered[u]` says which); the caller then takes that
-    # unit's own door, as before. False: one lacking unit fails the whole set
-    # before any fit (every other caller).
+    # THE PER-UNIT COVER RULE (lane mf-cal, 2026-11-23; mf-cal2: the caller
+    # reads the classes; default False): a caller whose units are
+    # independent cv folds (CalibratedClassifierCV) has read every unit's
+    # classes itself (xtrees/trees_calibrated_fit_run.mojo
+    # `cal_fold_classes_run`: a fold that lacks a class is re-coded onto the
+    # classes it holds) and marked in `uncovered[u]` the units it leaves to
+    # their doors; the set then makes NO class-cover pass and fits every
+    # other unit. False: the set's own cover pass, and one lacking unit fails
+    # the whole set before any fit (every other caller).
     var skip_lacking: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
@@ -524,7 +527,8 @@ def member_set_prepare(mut run: MemberSetRun) -> Bool:
         if run.gil_free[u] == MEMBER_SET_WORKER:
             run.parallel.append(u)
     run.cover_units.clear()
-    if run.y_dtype == MEMBER_I32:
+    # skip_lacking: the caller read every unit's classes (no second pass).
+    if run.y_dtype == MEMBER_I32 and not run.skip_lacking:
         for u in range(count):  # driver-loop: over the members (one cover pass per distinct target)
             if run.plans[u].classes <= 0:
                 continue
@@ -551,16 +555,9 @@ def member_set_fit_free(mut run: MemberSetRun) -> Bool:
 
     if len(run.cover_units) > 0:
         host_parallelize(_cover, cover_lanes)
-        if run.skip_lacking:
-            # a unit that shares its codes with the one before it took that
-            # unit's cover pass (`member_set_prepare`): it takes its verdict
-            for u in range(1, len(run.plans)):  # driver-loop: over the members (the cover verdicts)
-                if run.uncovered[u - 1] != UInt8(0) and run.plans[u].classes > 0 and _set_same_codes(run, u, u - 1):
-                    run.uncovered[u] = UInt8(1)
-        else:
-            for u in range(len(run.plans)):  # driver-loop: over the members (the cover verdicts)
-                if run.uncovered[u] != UInt8(0):
-                    return False
+        for u in range(len(run.plans)):  # driver-loop: over the members (the cover verdicts)
+            if run.uncovered[u] != UInt8(0):
+                return False
     if len(run.parallel) > 0:
         host_parallelize(_lane, lanes)
     return True

@@ -323,6 +323,30 @@ def member_set_release(mut set: MemberSet):
     member_set_run_release(set.run)
 
 
+def member_set_pins_take(mut set: MemberSet) raises:
+    """THE PIN RULE, with the interpreter held: one reference per member that
+    offers its X object (`member_set_resident`). A caller that runs the set's
+    RUN itself (CalibratedClassifierCV: one GIL release around its whole
+    typed RUN) takes them here, before the region, and returns them with
+    `member_set_pins_return` after it, in a `finally`; `member_set_run` does
+    the same."""
+    for u in range(len(set.run.plans)):  # driver-loop: over the members (one reference each)
+        set.run.pin_tokens[u] = 0
+        var source = set.sources[u]
+        if source is not None:
+            set.run.pin_tokens[u] = member_pin_take(source, 1)
+
+
+def member_set_pins_return(mut set: MemberSet) raises:
+    """THE PIN RULE, with the interpreter held: drop the references no
+    member's cache took (`member_set_pins_take`)."""
+    for u in range(len(set.run.plans)):  # driver-loop: over the members (the references no cache took)
+        if set.run.pin_tokens[u] != 0:
+            member_pin_return(set.run.pin_tokens[u], 1)
+            set.run.pin_tokens[u] = 0
+    _ = set.pins
+
+
 def member_set_run(mut set: MemberSet) raises:
     """RUN (core/member_set_run.mojo) with this door's two CPython duties:
     THE PIN RULE (one reference per member that offers its X object, taken
@@ -345,12 +369,8 @@ def member_set_run(mut set: MemberSet) raises:
     var turns = member_set_prepare(set.run)
     var covered = True
     var py = Python()
-    for u in range(count):  # driver-loop: over the members (one reference each)
-        set.run.pin_tokens[u] = 0
-        var source = set.sources[u]
-        if source is not None:
-            set.run.pin_tokens[u] = member_pin_take(source, 1)
     try:
+        member_set_pins_take(set)
         with GILReleased(py):
             covered = member_set_fit_free(set.run)
         # GIL held again: the members whose kind may not run without it.
@@ -367,11 +387,7 @@ def member_set_run(mut set: MemberSet) raises:
                 else:
                     member_set_turn(set.run, u)
     finally:
-        for u in range(count):  # driver-loop: over the members (the references no cache took)
-            if set.run.pin_tokens[u] != 0:
-                member_pin_return(set.run.pin_tokens[u], 1)
-                set.run.pin_tokens[u] = 0
-        _ = set.pins
+        member_set_pins_return(set)
     if not covered:
         raise Error(MEMBER_SET_LACKING)
     var first = member_set_first_failure(set.run)

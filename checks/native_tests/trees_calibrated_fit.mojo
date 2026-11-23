@@ -15,18 +15,28 @@ requires:
 
 Configurations: {LogisticRegression (core/logistic_member.mojo, host QN entry), LinearSVC
 (core/linear_svm_member.mojo, host LinearSVC entry)} x {sigmoid, isotonic} x {k = 2, k = 3} x ensemble
-{True, False}: 16 cases; both members score through decision_function, as their estimators have one. Case 16: a
-fold whose train rows lack class 2 (`y3gap`) is NOT fitted (`skip_lacking`) and is left to its door
-(`native[0]` False), the other folds are fitted and calibrated, and the ensemble=False final calibrators wait for
-the door (`final_ready` False).
+{True, False}: 16 cases; both members score through decision_function, as their estimators have one.
+
+A fold that lacks a class (lane mf-cal2, `cal_fold_classes_run`): cases 16 to 18 (`y4gap`, k = 4, fold 0's train
+rows lack class 3) fit fold 0's member natively on the three classes it holds, re-coded, and scatter its three
+decision columns at those classes; every calibrator word equals the door's, which fitted that fold through the
+member's fit door (fixtures `logreg-sigmoid-k4gap-e1`, `logreg-sigmoid-k4gap-e0`, `linsvc-isotonic-k4gap-e1`,
+written against the round-1 base d3a8864541, whose door units fitted that fold). Case 19 (`y3gap`, k = 3, fold 0's
+train rows hold classes 0 and 1): the two-class member's ONE decision column goes to class 1's column alone (the
+door read two columns of it before mf-cal2, so no door words exist: the out-of-fold block's fold-0 rows must be zero
+in columns 0 and 2 and not all zero in column 1), serial equal to parallel. Case 20 (`y2gap`, k = 2, fold 0's
+train rows hold class 0 only): fold 0 is not fitted and is left to its door (`native[0]` False), the others are,
+and the ensemble=False final calibrators wait for the door (`final_ready` False).
 
 The member words are the admitted words of LogisticRegression(C=1.0, max_iter=100, linesearch_max_iter=20,
 tol=1e-4) (providers/python/member_logistic_boundary_door.mojo) and LinearSVC(C=1.0)
 (providers/python/member_linear_svm_boundary_door.mojo), the estimators the generator fits.
 
 Fail-proof edits (each must fail the named cases): in `cal_calibrators_run` use `cls = j` for c = 1 (every k = 2
-case); pass `plan.test_rows[(f + 1) % folds]` as `te` in `calibrated_fit_scores_run` (every case); set `skip_lacking = False` in `calibrated_fit_run` (case 16
-raises MEMBER_SET_LACKING).
+case); pass `plan.test_rows[(f + 1) % folds]` as `te` in `calibrated_fit_scores_run` (every case); in
+`cal_fold_classes_run` leave `run.plans[f].classes` at k (cases 16 to 18: the fold's member is fitted with four
+classes); in `_cal_fold_scores` drop `class_at += 4` (case 19: column 0 is written); in `cal_fold_classes_run`
+re-code a one-class fold instead of marking `uncovered[f]` (case 20).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
@@ -56,7 +66,7 @@ from xtrees.trees_calibrated_fit_run import CalFitPlan, CalFitOut, CAL_ALL_ANSWE
 comptime N = 60
 comptime D = 3
 comptime FOLDS = 3
-comptime CASES = 17
+comptime CASES = 21
 comptime DIR = "checks/native_tests/fixtures/mf_cal/"
 
 
@@ -141,6 +151,7 @@ def _run(linsvc: Bool, sigmoid: Bool, k: Int, ensemble: Bool, cap: Int, x: List[
     _ = len(x)  # read through the fits and the RUN above
     _ = len(y)
     _ = len(folds)
+    _ = cal.folds()  # its re-coded targets were read through the fits above
     return answered
 
 
@@ -207,16 +218,62 @@ def check_config(which: Int) raises:
     _door(serial, name)
 
 
-def check_lacking_fold() raises:
-    """A fold whose train rows lack class 2: not fitted, left to its door; the others are fitted."""
+def check_lacking_fold(which: Int) raises:
+    """Cases 16 to 18: fold 0's train rows lack class 3 of four; fitted natively on the three it holds, every
+    calibrator word the door's."""
+    var linsvc = which == 18
+    var sigmoid = which != 18
+    var ensemble = which != 17
+    var name = (String("linsvc") if linsvc else String("logreg")) + "-" + (String("sigmoid") if sigmoid
+                else String("isotonic")) + "-k4gap-e" + (String("1") if ensemble else String("0"))
+    var x = fixture_f32(DIR + "x.f32", N * D)
+    var y = fixture_i32(DIR + "y4gap.i32", N)
+    var folds = _folds()
+    var serial = CalFitOut()
+    var parallel = CalFitOut()
+    require(_run(linsvc, sigmoid, 4, ensemble, 1, x, y, folds, serial) == CAL_ALL_ANSWERED, name + ": a member refused")
+    require(_run(linsvc, sigmoid, 4, ensemble, 4, x, y, folds, parallel) == CAL_ALL_ANSWERED,
+            name + ": a member refused (parallel)")
+    for f in range(FOLDS):  # small-loop(oracle)
+        require(serial.native[f], name + ": fold " + String(f) + " was left to its door")
+    require(ensemble or serial.final_ready, name + ": the final calibrators were not fitted")
+    _same(serial, parallel, name + " serial vs parallel")
+    _door(serial, name)
+
+
+def check_two_class_fold() raises:
+    """Case 19: fold 0's train rows hold classes 0 and 1 of three; its member's one decision column is class 1's."""
     var x = fixture_f32(DIR + "x.f32", N * D)
     var y = fixture_i32(DIR + "y3gap.i32", N)
     var folds = _folds()
+    var serial = CalFitOut()
+    var parallel = CalFitOut()
+    require(_run(False, True, 3, False, 1, x, y, folds, serial) == CAL_ALL_ANSWERED, "gap3: a member refused")
+    require(_run(False, True, 3, False, 4, x, y, folds, parallel) == CAL_ALL_ANSWERED,
+            "gap3: a member refused (parallel)")
+    for f in range(FOLDS):  # small-loop(oracle)
+        require(serial.native[f], "gap3: fold " + String(f) + " was left to its door")
+    require(serial.final_ready, "gap3: the final calibrators were not fitted")
+    _same(serial, parallel, "gap3 serial vs parallel")
+    var written = False
+    for i in range(0, N, FOLDS):  # small-loop(oracle: fold 0's test rows)
+        require(serial.scores[3 * i] == 0.0 and serial.scores[3 * i + 2] == 0.0,
+                "gap3: row " + String(i) + " has a score outside class 1's column")
+        if serial.scores[3 * i + 1] != 0.0:
+            written = True
+    require(written, "gap3: fold 0's decision was not placed in class 1's column")
+
+
+def check_one_class_fold() raises:
+    """Case 20: fold 0's train rows hold one class of two: not fitted, left to its door; the others are fitted."""
+    var x = fixture_f32(DIR + "x.f32", N * D)
+    var y = fixture_i32(DIR + "y2gap.i32", N)
+    var folds = _folds()
     var res = CalFitOut()
-    require(_run(False, True, 3, False, 4, x, y, folds, res) == CAL_ALL_ANSWERED, "gap: a member refused")
-    require(not res.native[0], "gap: fold 0 lacks class 2 in its train rows and was fitted")
-    require(res.native[1] and res.native[2], "gap: a covered fold was left to its door")
-    require(not res.final_ready, "gap: the final calibrators were fitted before the door placed fold 0")
+    require(_run(False, True, 2, False, 4, x, y, folds, res) == CAL_ALL_ANSWERED, "gap2: a member refused")
+    require(not res.native[0], "gap2: fold 0 holds one class in its train rows and was fitted")
+    require(res.native[1] and res.native[2], "gap2: a covered fold was left to its door")
+    require(not res.final_ready, "gap2: the final calibrators were fitted before the door placed fold 0")
 
 
 def test_trees_calibrated_fit() raises:
@@ -225,8 +282,12 @@ def test_trees_calibrated_fit() raises:
     def run_case(which: Int) raises:
         if which < 16:
             check_config(which)
+        elif which < 19:
+            check_lacking_fold(which)
+        elif which == 19:
+            check_two_class_fold()
         else:
-            check_lacking_fold()
+            check_one_class_fold()
     check_cases("trees_calibrated_fit", CASES, run_case)
 
 
