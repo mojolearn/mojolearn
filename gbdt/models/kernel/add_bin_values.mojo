@@ -35,6 +35,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.apple_fast_tree_experiments import AFT_P05
+# the non-symmetric walk's one body, shared with the host fit and the host
+# predict (lane gbdt-cpu-rest-4-cat-ns, 2026-11-23)
+from gbdt.models.non_symmetric_walk_body import ns_node_goes_right, ns_walk_step
 
 #: lane/fam2-gbdt F3 (IDENTICAL, every vendor; default ON): the non-resident
 #: `predict` (`gbdt/methods/doc_parallel_boosting.mojo`) launches the
@@ -520,29 +523,19 @@ def compute_non_symmetric_decision_tree_bins_kernel(
                 compressed_index.unsafe_load(off + i) >> shift
             ) & mask
 
-            var this_bin = node_bin.unsafe_load(node)
-            var split: Bool
-            if node_one_hot.unsafe_load(node) != UInt8(0):
-                split = feature_val == this_bin
-            else:
-                split = feature_val > this_bin
-
-            var left_subtree = Int(node_left_subtree.unsafe_load(node))
-            var right_subtree = Int(node_right_subtree.unsafe_load(node))
-
-            if split:
-                # `bin += node.LeftSubtree; stop = node.RightSubtree == 1;`
-                # `if (!stop) { nodes += node.LeftSubtree; ... }` (`:377-383`)
-                bin += left_subtree
-                stop = right_subtree == 1
-                if not stop:
-                    node += left_subtree
-            else:
-                # `stop = node.LeftSubtree == 1; if (!stop) { nodes += 1; }`
-                # (`:385-389`)
-                stop = left_subtree == 1
-                if not stop:
-                    node += 1
+            # `==` on a TakeBin node, `>` otherwise; then `bin +=
+            # node.LeftSubtree; stop = node.RightSubtree == 1; ...` on the
+            # right turn and `stop = node.LeftSubtree == 1; nodes += 1` on
+            # the left (`:377-389`): the one body the host columns call
+            # (gbdt/models/non_symmetric_walk_body.mojo)
+            var split = ns_node_goes_right(
+                feature_val, node_bin.unsafe_load(node),
+                node_one_hot.unsafe_load(node) != UInt8(0),
+            )
+            stop = ns_walk_step(
+                split, Int(node_left_subtree.unsafe_load(node)),
+                Int(node_right_subtree.unsafe_load(node)), bin, node,
+            )
 
         out_bins.unsafe_store(i, UInt32(bin))
         i += stride
