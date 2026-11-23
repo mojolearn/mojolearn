@@ -3531,7 +3531,14 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     # calling thread (a resident scope belongs to the thread that opened it):
     # parallel CPU units keep the per-fold rows.
     var plan = prep_estimator_plan(base, context)
+    # A MEMBER-ONLY plan (no method recipes; CategoricalNB is one, its class
+    # still carries the DeviceRows word of its NB base) has no fit doors for
+    # the resident route's units, which refused it ("schema is pending
+    # migration": gate 5645984a8f mf_cal cnb n_jobs=1 rows, while n_jobs=4
+    # took the member set and raised the member's own words): it takes the
+    # member set on every n_jobs.
     var dev = (plan is not None and _truthy(py_get(plan, nk[].k_device_rows, PythonObject(False))) and n > 0 and d > 0
+               and py_get(plan, PythonObject("member_only")) is None
                and String(py=Xa.dtype) == "<f4" and String(py=Xa.order) == "C"
                and native_unit_device_workers(min(jobs, len(splits) - 1), context) <= 1)
     # Lane mf-cal (2026-11-23): a base whose family has a member entry is
