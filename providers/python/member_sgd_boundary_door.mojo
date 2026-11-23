@@ -110,7 +110,7 @@ def sgd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
                 # A value the fit door refuses (lane mf-left4): the INVALID
                 # tail, whose words the FIT caller's UNPACK raises; a value
                 # the door accepts that the member does not read: not admitted.
-                if len(member_cw_invalid_message(MEMBER_FAMILY_SGD, model, class_weight, b)) == 0:
+                if member_cw_invalid_message(MEMBER_FAMILY_SGD, model, class_weight, b).byte_length() == 0:
                     return False
                 invalid = True
             else:

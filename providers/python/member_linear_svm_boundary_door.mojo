@@ -80,8 +80,8 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
         # a value the door accepts but the member does not read: not admitted.
         if weighting < 0:
-            if len(member_cw_invalid_message(MEMBER_FAMILY_LINEAR_SVM, model,
-                                             py_get(fields, nk[].k_class_weight, PythonObject(None)), b)) == 0:
+            if member_cw_invalid_message(MEMBER_FAMILY_LINEAR_SVM, model,
+                                             py_get(fields, nk[].k_class_weight, PythonObject(None)), b).byte_length() == 0:
                 return False
             weighting = MEMBER_CW_INVALID
     var connection = linear_svc_route(model, fields, context)

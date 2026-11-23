@@ -290,7 +290,7 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
             # A value the fit door refuses (lane mf-left4): the INVALID tail,
             # whose words the FIT caller's UNPACK raises; a value the door
             # accepts that the member does not read: not admitted.
-            if len(member_cw_invalid_message(MEMBER_FAMILY_XLINEAR, PythonObject(None), class_weight, _b())) == 0:
+            if member_cw_invalid_message(MEMBER_FAMILY_XLINEAR, PythonObject(None), class_weight, _b()).byte_length() == 0:
                 return List[Float64]()
             invalid = True
         else:
@@ -362,8 +362,8 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         var weighting = member_cw_kind_accepted(MEMBER_FAMILY_XLINEAR, model, py_item(fields, nk[].k_class_weight), b)
         if weighting < 0:
             # A value the fit door refuses (lane mf-left4): the INVALID tail.
-            if len(member_cw_invalid_message(MEMBER_FAMILY_XLINEAR, model, py_item(fields, nk[].k_class_weight),
-                                             b)) == 0:
+            if member_cw_invalid_message(MEMBER_FAMILY_XLINEAR, model, py_item(fields, nk[].k_class_weight),
+                                             b).byte_length() == 0:
                 return False
             weighting = MEMBER_CW_INVALID
         words = _xl_ridge_classifier_words(model, fields)

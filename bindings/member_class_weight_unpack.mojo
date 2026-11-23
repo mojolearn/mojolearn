@@ -96,7 +96,7 @@ def member_cw_kind_accepted(family: Int, model: PythonObject, class_weight: Pyth
     var kind = member_cw_kind(class_weight, b)
     if kind >= 0 or family == MEMBER_FAMILY_LINEAR_SVM:
         return kind
-    if len(member_cw_invalid_message(family, model, class_weight, b)) != 0:
+    if member_cw_invalid_message(family, model, class_weight, b).byte_length() != 0:
         return -1
     if Bool(py=py_call(b.isinstance, class_weight, b.str)):
         return MEMBER_CW_BALANCED if String(class_weight) == "balanced" else -1
