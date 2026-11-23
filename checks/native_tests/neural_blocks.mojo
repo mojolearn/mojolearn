@@ -51,6 +51,7 @@ from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from checks.native_tests.training_sequential_common import SeqModel, L_LINEAR, L_FLATTEN, L_PERMUTE
 from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD
+from autograd.model_verify import model_input_id_range, verify_fill
 
 comptime L_CONV1D = 15
 comptime L_BRANCH = 19
@@ -814,6 +815,56 @@ def test_lm_head_token_loss() raises:
             _same_words("lm_head_token_loss_" + String(k), hw, dw)
     print("PASS NEURAL_BLOCKS lm_head token loss 2")
 # end lm_head
+
+
+def test_embedding_seeded_probe() raises:
+    """The seeded probe of a model whose first layer reads ids (lane nn-fix-3, 2026-11-23: the save's verify
+    report fed floats in [-1, 1) to an embedding, whose ids came out -1, so an embedding model could not be
+    saved): model_input_id_range names the embedding's num_embeddings (0 for a model that reads values),
+    verify_fill writes seeded ids in [0, n) as float32, the same words on every call, and the embedding
+    model's forward runs on them."""
+    var e = _model([5])
+    e.layer(LAYER_EMBEDDING, 7, 4)
+    _head(e)
+    var spec = e.spec(5)
+    var n = model_input_id_range(spec)
+    if n != 7:
+        _fail("embedding probe: the id range is " + String(n) + ", not num_embeddings 7")
+    var v = _model([3, 4])
+    v.layer(L_LINEAR, 6, 1)
+    _head(v)
+    if model_input_id_range(v.spec(12)) != 0:
+        _fail("embedding probe: a model that reads values has an id range")
+    comptime ROWS = 16
+    var ids = List[Float32](length=ROWS * 5, fill=-1)
+    var again = List[Float32](length=ROWS * 5, fill=-1)
+    _ = verify_fill(Int(ids.unsafe_ptr()), len(ids), 0, 0, n)
+    _ = verify_fill(Int(again.unsafe_ptr()), len(again), 0, 0, n)
+    var seen = List[Bool](length=n, fill=False)
+    for i in range(len(ids)):  # small-loop(the probe's values)
+        var x = ids[i]
+        if not (x >= 0 and x < Float32(n)) or Float32(Int(x)) != x:
+            _fail("embedding probe: value " + String(i) + " is " + String(x) + ", not an id in [0, 7)")
+        if bitcast[DType.uint32](x) != bitcast[DType.uint32](again[i]):
+            _fail("embedding probe: value " + String(i) + " differs between two fills")
+        seen[Int(x)] = True
+    var distinct = 0
+    for k in range(n):  # small-loop(n: ids)
+        if seen[k]:
+            distinct += 1
+    if distinct < 4:
+        _fail("embedding probe: only " + String(distinct) + " of 7 ids drawn in 80 values")
+    var c = _Case("embedding_probe", e^, ROWS, 5, ids.copy())
+    var params = _params(spec.n_params)
+    var grads = List[Float32]()
+    var host = HostExec()
+    var y = _run(host, c, spec, params, False, grads)
+    for i in range(len(y)):  # small-loop(the probe's outputs)
+        if not (y[i] == y[i]):
+            _fail("embedding probe: output " + String(i) + " is NaN")
+    _ = ids^
+    _ = again^
+    print("PASS NEURAL_BLOCKS embedding seeded probe", distinct, "ids", len(y), "outputs")
 
 
 def main() raises:

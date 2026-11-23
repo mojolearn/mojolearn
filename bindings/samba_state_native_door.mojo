@@ -168,8 +168,11 @@ def samba_schedule_from_state(config: PythonObject, context: PythonObject) raise
     # `_fast`, `_tail_t`, `_tail_v`, `_tb`, `_tbv` table fields are gone:
     # nothing has read them since the rate block replaced the Python table.
     var state = bi.dict()
-    py_setitem(state, nk[].k_peak_lr, PythonObject(Float64(Float32(Float64(py=py_call(bi.float, py_item(config, nk[].k_peak_lr)))))))
-    py_setitem(state, nk[].k_min_lr, PythonObject(Float64(Float32(Float64(py=py_call(bi.float, py_item(config, nk[].k_min_lr)))))))
+    # the rates as passed (the constructor keeps them so: bindings/optimizer_schedule_native_door.mojo
+    # _warmup_pack); the kernels narrow them to float32 themselves (lane nn-fix-3, 2026-11-23: a restored
+    # schedule read back its rates rounded to float32)
+    py_setitem(state, nk[].k_peak_lr, py_call(bi.float, py_item(config, nk[].k_peak_lr)))
+    py_setitem(state, nk[].k_min_lr, py_call(bi.float, py_item(config, nk[].k_min_lr)))
     py_setitem(state, nk[].k_warmup_steps, py_call(bi.int, py_item(config, nk[].k_warmup_steps)))
     py_setitem(state, nk[].k_total_steps, PythonObject(None) if py_item(config, nk[].k_total_steps) is None else py_call(bi.int, py_item(config, nk[].k_total_steps)))
     _ = py_call(py_item(context, nk[].k_schedule_native), "schedule_setstate", result, Python.tuple(state), None, py_item(context, nk[].k_schedule_context))

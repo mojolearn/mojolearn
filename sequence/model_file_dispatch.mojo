@@ -29,7 +29,8 @@
 #                           pp [path bytes]     result = n_params
 #   MODEL_VERIFY_DIGEST     aa [buffer, text out]  pp [byte count, capacity]
 #                           result = text bytes written
-#   MODEL_VERIFY_FILL       aa [buffer]  pp [count, seed, stream]
+#   MODEL_VERIFY_FILL       aa [buffer]  pp [count, seed, stream(, id range)]
+#                           (an id range n > 0: ids in [0, n), model_verify.mojo)
 #   MODEL_VERIFY_FILE_SHA256  aa [path, text out]  pp [path bytes, capacity]
 #                           result = the file's byte count (text = 64 digits)
 #   MODEL_VERIFY_MODEL_INFO aa [path, text out, lengths out (2 words)]
@@ -177,9 +178,9 @@ def model_file_execute(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf:
             raise Error("native model file: invalid digest descriptor")
         return _file_put_text(verify_digest(addresses[0], ints[0]), addresses[1], 0, ints[1])
     if op == MODEL_VERIFY_FILL:
-        if na != 1 or np != 3 or nf != 0:
+        if na != 1 or (np != 3 and np != 4) or nf != 0:
             raise Error("native model file: invalid fill descriptor")
-        return verify_fill(addresses[0], ints[0], ints[1], ints[2])
+        return verify_fill(addresses[0], ints[0], ints[1], ints[2], ints[3] if np == 4 else 0)
     if op == MODEL_VERIFY_FILE_SHA256:
         if na != 2 or np != 2 or nf != 0:
             raise Error("native model file: invalid file hash descriptor")

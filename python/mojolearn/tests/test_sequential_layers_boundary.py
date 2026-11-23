@@ -130,6 +130,9 @@ def test_every_layer_code_round_trips(code, tmp_path):
     (lambda S: S(input_shape=(2, 4)).rotary(1), "head_dim must be an integer >= 2"),
     (lambda S: S(input_shape=(2, 4)).rotary(4, theta=0.0), "theta must be positive"),
     (lambda S: S(input_shape=(4,)).multiply(5), "source must be -1 or the index of an earlier layer"),
+    (lambda S: S(input_shape=(4,)).linear(4).multiply(1), "source must be -1 or the index of an earlier layer"),
+    (lambda S: S(input_shape=(4,)).linear(4).multiply(-2), "source must be -1 or the index of an earlier layer"),
+    (lambda S: S(input_shape=(4,)).linear(4).multiply(0.5), "source must be -1 or the index of an earlier layer"),
     (lambda S: S(input_shape=(2, 4)).narrow(1, 0, 0), "length must be an integer >= 1"),
     (lambda S: S(input_shape=(3,)).embedding(0, 2), "num_embeddings must be an integer >= 1"),
     (lambda S: S(input_shape=(3,)).embedding(5, 0), "embedding_dim must be an integer >= 1"),
@@ -146,3 +149,26 @@ def test_every_layer_code_round_trips(code, tmp_path):
 def test_layer_refusals_are_clear(build, message):
     with pytest.raises(Exception, match=message):
         build(mojolearn.Sequential)
+
+
+def test_float_arguments_read_back_as_passed(tmp_path):
+    # lane nn-fix-3 (2026-11-23): layers return the value passed, not its float32 rounding, before
+    # and after save_checkpoint -> from_checkpoint and export -> load (the file keeps both: the float32 word the
+    # kernels read and the float64 passed); an embedding model saves too (its seeded probe takes ids in range)
+    x = (np.arange(32, dtype=np.float32) % 7 - 3).reshape(8, 4) / 8
+    y = np.arange(8, dtype=np.float32) / 8
+    m = mojolearn.Sequential().linear(4).layer_norm(0.002).dropout(0.1).linear(1)
+    m.compile(optimizer="adamw", lr=0.01, weight_decay=0.03)
+    assert [l[3] for l in m.layers[1:3]] == [0.002, 0.1]
+    m.fit(x, y, epochs=1, batch_size=4, shuffle=False, seed=3)
+    m.save_checkpoint(str(tmp_path / "floats.ckpt"))
+    back = mojolearn.Sequential.from_checkpoint(str(tmp_path / "floats.ckpt"))
+    assert back.layers == m.layers
+    assert back.digest_ == m.digest_
+    m.export(str(tmp_path / "floats.mlx"))
+    assert mojolearn.Sequential.load(str(tmp_path / "floats.mlx")).layers == m.layers
+    e = mojolearn.Sequential(input_shape=(3,)).embedding(5, 2).flatten().linear(1).compile(optimizer="sgd", lr=0.125)
+    ids = (np.arange(6, dtype=np.float32) % 5).reshape(2, 3)
+    e.fit(ids, np.array([0.25, -0.5], np.float32), epochs=1, batch_size=2, shuffle=False, seed=7)
+    e.save_checkpoint(str(tmp_path / "embedding.ckpt"))
+    assert mojolearn.Sequential.from_checkpoint(str(tmp_path / "embedding.ckpt")).layers == e.layers

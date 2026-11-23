@@ -30,7 +30,7 @@ from autograd.profile import ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from core.cast_in import CastIn, cast_in_kind, label_kind_of
 from autograd.cast_ops import gather_labels
-from autograd.weight_import import WI_RECORD, model_import_params, session_load_check, wi_source
+from autograd.weight_import import model_import_params, session_load_check, wi_source
 from autograd.session_weights import session_load_weights
 from autograd.model_execution import model_fit_native, model_predict_native, model_counts_native, model_class_count
 
@@ -250,7 +250,7 @@ def _names(p: PythonObject) raises -> List[String]:
 
 def _record_ints(p: PythonObject) raises -> List[Int]:
     var out = List[Int]()
-    for i in range(len(p)):  # small-loop(p: WI_RECORD words per source weight tensor): argument parsing, no data
+    for i in range(len(p)):  # small-loop(p: the import record words, 9 + 2 * rank per source weight tensor): argument parsing, no data
         out.append(ival(p, i))
     return out^
 
@@ -260,7 +260,7 @@ def model_import_params_py[E: Exec](
     params_addr: PythonObject,
 ) raises -> PythonObject:
     """Sequential.load_state_dict: the model's parameters from source
-    tensors (autograd/weight_import.mojo: WI_RECORD integers per tensor in
+    tensors (autograd/weight_import.mojo: one record of 9 + 2 * rank integers per tensor in
     `recs`, its name in `names`) into the caller's float32 params buffer
     (model_n_params' count). Returns [parameter count, output width, input
     values per sample]."""

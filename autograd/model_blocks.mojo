@@ -212,6 +212,16 @@ def _x(xargs: List[Int], i: Int, k: Int) -> Int:
     return xargs[_ARGS * i + k]
 
 
+def block_input_id_range(code: Int, xargs: List[Int], i: Int) -> Int:
+    """The integer ids a layer reads as its input: n when its input values must be ids in [0, n) (an
+    embedding's num_embeddings), 0 for a layer that reads ordinary values. A seeded probe of a model
+    (the save's verify report, verify-model) feeds ids in that range to a model whose first layer reads
+    ids (lane nn-fix-3, 2026-11-23: a probe of floats in [-1, 1) made the embedding's ids -1)."""
+    if code == LAYER_EMBEDDING:
+        return _x(xargs, i, 0)
+    return 0
+
+
 def _cell_of(which: Int) -> Int:
     """The sequence/ops.mojo cell code of a public cell (BLOCK_CELL_*); -1 when unknown."""
     if which == BLOCK_CELL_RNN:

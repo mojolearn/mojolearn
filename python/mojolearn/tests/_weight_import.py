@@ -3,7 +3,7 @@
 # Engineering note: the glue of Sequential.load_state_dict and
 # Session.load_weights. Python lists the names and describes each tensor's
 # buffer as it is (address, dtype code, shape, strides) in one record of
-# autograd/weight_import.mojo WI_RECORD integers; Mojo checks the dtypes and
+# autograd/weight_import.mojo integers (9 + 2 * rank); Mojo checks the dtypes and
 # the shapes and copies on the executor (the float16 / bfloat16 / float64
 # widening and the (out, in) -> (in, out) transpose are one OP_CAST_F32
 # launch per tensor). No value is read, cast or reordered here, and torch is
@@ -15,7 +15,6 @@ np = require_numpy('_weight_import')
 
 # autograd/weight_import.mojo WI_*
 _DTYPE_BF16 = 4096
-_MAX_RANK = 4
 _STRIDE_C, _STRIDE_BYTES, _STRIDE_ITEMS = 0, 1, 2
 LAYOUT_TORCH, LAYOUT_NATIVE, LAYOUT_AS_IS, LAYOUT_TRANSPOSE = 0, 1, 2, 3
 SLOT_WEIGHT, SLOT_BIAS = 0, 1
@@ -120,15 +119,15 @@ class WeightSource:
         return a.ctypes.data, 0, dt, tuple(a.shape), _STRIDE_BYTES, tuple(a.strides)
 
     def record(self, name, target, slot, layout):
-        """The WI_RECORD integers that describe tensor `name` for Mojo."""
+        """The integers that describe tensor `name` for Mojo: 9 + 2 * rank
+        words (autograd/weight_import.mojo wi_record_words), any rank."""
         addr, offset, dt, shape, unit, strides = self._describe(name)
         nd = len(shape)
-        if not 1 <= nd <= _MAX_RANK:
-            raise ValueError(f"{self.what}: {name!r} has {nd} dimensions; a weight has 1 to {_MAX_RANK}")
-        pad = [0] * (_MAX_RANK - nd)
-        st = list(strides) + pad if unit != _STRIDE_C else [0] * _MAX_RANK
+        if nd < 1:
+            raise ValueError(f"{self.what}: {name!r} has {nd} dimensions; a weight has 1 or more")
+        st = list(strides) if unit != _STRIDE_C else [0] * nd
         return [int(target), int(slot), int(layout), int(addr), int(offset), dt[0], dt[1], nd] + \
-            list(shape) + pad + [unit] + st
+            list(shape) + [unit] + st
 
     # ------------------------------------------------------------ lifetime
     def close(self):

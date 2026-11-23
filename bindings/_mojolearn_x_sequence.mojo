@@ -640,8 +640,9 @@ def verify_model_info_binding(path: PythonObject) raises -> PythonObject:
     return verify_model_info_py(path)
 
 
-def verify_fill_binding(addr: PythonObject, n: PythonObject, seed: PythonObject, stream: PythonObject) raises -> PythonObject:
-    return verify_fill_py(addr, n, seed, stream)
+def verify_fill_binding(addr: PythonObject, n: PythonObject, seed: PythonObject, stream: PythonObject,
+                        id_range: PythonObject) raises -> PythonObject:
+    return verify_fill_py(addr, n, seed, stream, id_range)
 
 
 def model_load_checkpoint_binding(path: PythonObject, addrs: PythonObject) raises -> PythonObject:

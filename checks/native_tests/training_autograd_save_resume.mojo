@@ -46,7 +46,7 @@ from autograd.ops_api import (
 from autograd.optimizer_requests import OpsOptimizerRequest
 from autograd.model_checkpoint import ops_save_state, ops_load_state, model_checkpoint_info
 from autograd.model import (
-    LOSS_MSE, LOSS_CROSS_ENTROPY, LOSS_HUBER, TARGET_DENSE, TARGET_CODES, OUT_RAW, OUT_SOFTMAX, OUT_ARGMAX,
+    FIT_STATE_WORDS, LOSS_MSE, LOSS_CROSS_ENTROPY, LOSS_HUBER, TARGET_DENSE, TARGET_CODES, OUT_RAW, OUT_SOFTMAX, OUT_ARGMAX,
 )
 from checks.native_tests.core_ops_common import normal, dims2
 from checks.native_tests.ops_higher_common import tensor, op2, linear, loss, total, values, gradient
@@ -355,6 +355,47 @@ def run_session_case[E: Exec & Movable & Deinitable, KIND: Int](column: String, 
 # The host column: the seven Sequential cases run across host cores (private executors and files); the two session
 # cases run in order (the unlocked process-wide session table, autograd/ops_api.mojo _OPS_SESSIONS). The device
 # column: every case runs in order on the one device. TestSuite runs the two tests in this order.
+def test_checkpoint_keeps_passed_floats() raises:
+    """A saved model reads back the float hyper-parameters as passed (lane nn-fix-3, 2026-11-23: the file kept
+    only their float32 words, so layer_norm(0.002) and lr 0.01 read back 0.0020000000949949026 and
+    0.009999999776482582): record version 3 stores their float64 bits beside the float32 words."""
+    var m = SeqModel()
+    m.linear(6)
+    m.layer(L_LAYER_NORM, f=0.002)
+    m.act(L_RELU)
+    m.linear(1)
+    m.compile(LOSS_MSE, "adamw", 0.01, weight_decay=0.03)
+    var spec = m.spec(_D)
+    m.params = List[Float32](length=spec.n_params, fill=Float32(0.25))
+    m.m = List[Float32](length=spec.n_params, fill=Float32(0))
+    m.v = List[Float32](length=spec.n_params, fill=Float32(0))
+    m.state = List[Int64](length=FIT_STATE_WORDS, fill=Int64(0))
+    m.curve = List[Float32](length=1, fill=Float32(0))
+    var path = _path("host", "passed-floats")
+    try:
+        _ = m.save(path, _D, True)
+        var info = model_checkpoint_info(path)
+        if info.layer_floats[1] != 0.002:
+            raise Error("layer_norm eps read back " + String(info.layer_floats[1]) + ", not 0.002")
+        if info.floats[0] != 0.01:
+            raise Error("lr read back " + String(info.floats[0]) + ", not 0.01")
+        if info.floats[4] != 0.03:
+            raise Error("weight_decay read back " + String(info.floats[4]) + ", not 0.03")
+        var back = SeqModel()
+        back.linear(6)
+        back.layer(L_LAYER_NORM, f=0.002)
+        back.act(L_RELU)
+        back.linear(1)
+        back.load(path, _D)
+        if back.lr != 0.01 or back.weight_decay != 0.03:
+            raise Error("a loaded model's lr / weight_decay are not the values passed")
+    except e:
+        _drop(path)
+        raise e^
+    _drop(path)
+    print("PASS SAVE_RESUME checkpoint keeps the passed floats")
+
+
 def test_sequential_save_resume() raises:
     comptime if CPU_COLUMN_BUILD:
         def host_case(unit: Int) raises:

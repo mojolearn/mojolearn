@@ -155,8 +155,9 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
         for k in range(scalar_owners[at].shape.ndim):  # small-loop(rank: list weight shape): metadata only
             _ = py_call(dims.append, scalar_owners[at].shape.d[k])
     var nd = len(dims)
-    if nd < 1 or nd > 4:
-        raise Error("ValueError: a weight must have one to four dimensions")
+    # the record takes the tensor's own rank (autograd/weight_import.mojo wi_record_words: 9 + 2 * rank words)
+    if nd < 1:
+        raise Error("ValueError: a weight must have one or more dimensions")
     var row = Python.list()
     _ = py_call(row.append, target)
     _ = py_call(row.append, 0)
@@ -166,11 +167,11 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
     _ = py_call(row.append, dtype)
     _ = py_call(row.append, size)
     _ = py_call(row.append, nd)
-    for k in range(4):  # small-loop(4: fixed weight descriptor dimensions): metadata only
-        _ = py_call(row.append, _integer(dims[k], "dimension", 1) if k < nd else 0)
+    for k in range(nd):  # small-loop(nd: the weight's rank): metadata only
+        _ = py_call(row.append, _integer(dims[k], "dimension", 1))
     _ = py_call(row.append, unit)
-    for k in range(4):  # small-loop(4: fixed weight descriptor strides): metadata only
-        _ = py_call(row.append, Int(py=strides[k]) if unit != 0 and k < nd else 0)
+    for k in range(nd):  # small-loop(nd: the weight's rank): metadata only
+        _ = py_call(row.append, Int(py=strides[k]) if unit != 0 else 0)
     return row
 
 

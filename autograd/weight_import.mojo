@@ -5,7 +5,7 @@ parameter vector (`model_import_params`) or into a session's uploaded
 tensors (`session_load_weights`).
 
 Python only matches names: it hands, per source tensor, one record of
-WI_RECORD integers (the target, the slot, a layout code, the tensor's
+integers (the target, the slot, a layout code, the tensor's
 address and byte offset, its dtype, item size, rank, dims and strides) and
 the tensor's name for the refusals. Everything else is here: the dtype
 check, the shape check against the model description, and the copy. The
@@ -18,7 +18,9 @@ writes the destination row-major. Integer statements only, so the imported
 words are the same on Apple, NVIDIA, AMD and the host column. No new
 kernel and no new opcode.
 
-Record (WI_RECORD words per source tensor):
+Record (wi_record_words(rank) = WI_RECORD_HEAD + 2 * rank words per source
+tensor: the record takes the tensor's own rank, there is no rank cap; the
+records of one call are laid end to end and wi_record_starts walks them):
   [0] target: the model's layer index, or the session tensor handle
   [1] slot: WI_SLOT_WEIGHT or WI_SLOT_BIAS (models; 0 for sessions)
   [2] layout: WI_LAYOUT_TORCH (a linear weight stored (out, in), as torch
@@ -27,9 +29,9 @@ Record (WI_RECORD words per source tensor):
   [3] address of the buffer, [4] byte offset of element 0 in it
   [5] NumPy dtype number (float16 23, float32 11, float64 12) or
       WI_DTYPE_BF16, [6] item size
-  [7] rank (1..WI_MAX_RANK), [8..11] dims (0 past the rank)
-  [12] stride unit: WI_STRIDE_C (C order, strides unused), WI_STRIDE_BYTES
-      or WI_STRIDE_ITEMS, [13..16] strides (signed)
+  [7] rank r (1 or more), [8 .. 8 + r) dims
+  [8 + r] stride unit: WI_STRIDE_C (C order, strides unused, still r words),
+      WI_STRIDE_BYTES or WI_STRIDE_ITEMS, [9 + r .. 9 + 2r) strides (signed)
 
 Model parameter layout (autograd/model.mojo ModelSpec): a linear layer's
 weight (in, out) row-major, then its bias (out); a layer norm's weight,
@@ -48,8 +50,8 @@ from autograd.model import LAYER_CONV1D, LAYER_CONV2D, LAYER_LAYER_NORM, LAYER_L
 
 #: the dtype code of a bfloat16 source (NumPy has no number for it)
 comptime WI_DTYPE_BF16 = 4096
-comptime WI_RECORD = 17
-comptime WI_MAX_RANK = 4
+#: the words of a record besides its dims and strides (fields 0..7 and the stride unit)
+comptime WI_RECORD_HEAD = 9
 comptime WI_SLOT_WEIGHT = 0
 comptime WI_SLOT_BIAS = 1
 comptime WI_LAYOUT_TORCH = 0
@@ -94,7 +96,7 @@ def _q(name: String) -> String:
 
 def wi_shape_str(dims: List[Int]) -> String:
     var s = String("(")
-    for k in range(len(dims)):  # small-loop(dims: a tensor rank, at most 8): message text, no data
+    for k in range(len(dims)):  # small-loop(dims: a tensor rank): message text, no data
         if k > 0:
             s += ", "
         s += String(dims[k])
@@ -103,9 +105,35 @@ def wi_shape_str(dims: List[Int]) -> String:
     return s + ")"
 
 
-def wi_source(recs: List[Int], at: Int, name: String) raises -> WeightSource:
-    """Record `at` of `recs` as a checked WeightSource."""
-    var base = at * WI_RECORD
+def wi_record_words(rank: Int) -> Int:
+    """The words of one import record of a tensor of `rank` dimensions."""
+    return WI_RECORD_HEAD + 2 * rank
+
+
+def wi_record_starts(recs: List[Int], n: Int, what: String) raises -> List[Int]:
+    """The first word of each of the `n` records laid end to end in `recs`
+    (each record is as long as its own rank makes it); every word of `recs`
+    belongs to exactly one record."""
+    var starts = List[Int](capacity=n)
+    var at = 0
+    for r in range(n):  # driver-loop: over source tensors (metadata words, no data)
+        if at + 8 > len(recs):
+            raise Error(what + ": the import records end inside record " + String(r))
+        var nd = recs[at + 7]
+        if nd < 1:
+            raise Error(what + ": record " + String(r) + " has rank " + String(nd) + "; a weight has 1 or more dimensions")
+        starts.append(at)
+        at += wi_record_words(nd)
+    if at != len(recs):
+        raise Error(what + ": the import takes " + String(at) + " integers for " + String(n)
+                    + " source tensors; " + String(len(recs)) + " were given")
+    return starts^
+
+
+def wi_source(recs: List[Int], base: Int, name: String) raises -> WeightSource:
+    """The record that starts at word `base` of `recs` as a checked WeightSource."""
+    if base < 0 or base + 8 > len(recs):
+        raise Error(_q(name) + ": the import record runs past its words")
     var addr = recs[base + 3]
     var off = recs[base + 4]
     if addr == 0:
@@ -124,26 +152,28 @@ def wi_source(recs: List[Int], at: Int, name: String) raises -> WeightSource:
         if kind != CAST_KIND_FLOAT:
             raise Error(_q(name) + ": a weight must be float16, bfloat16, float32 or float64")
     var nd = recs[base + 7]
-    if nd < 1 or nd > WI_MAX_RANK:
-        raise Error(_q(name) + ": a weight has 1 to " + String(WI_MAX_RANK) + " dimensions")
+    if nd < 1:
+        raise Error(_q(name) + ": a weight has 1 or more dimensions")
+    if base + wi_record_words(nd) > len(recs):
+        raise Error(_q(name) + ": the import record runs past its words")
     var dims = List[Int](capacity=nd)
-    for k in range(nd):  # small-loop(nd: the tensor rank, at most 4): record parsing, no data
+    for k in range(nd):  # small-loop(nd: the tensor rank): record parsing, no data
         var d = recs[base + 8 + k]
         if d < 1:
             raise Error(_q(name) + ": the tensor is empty")
         dims.append(d)
-    var unit = recs[base + 12]
+    var unit = recs[base + 8 + nd]
     var strides = List[Int](length=nd, fill=0)
     if unit == WI_STRIDE_C:
         var step = isz
-        for j in range(nd):  # small-loop(nd: the tensor rank, at most 4): record parsing, no data
+        for j in range(nd):  # small-loop(nd: the tensor rank): record parsing, no data
             var k = nd - 1 - j
             strides[k] = step
             step *= dims[k]
     elif unit == WI_STRIDE_BYTES or unit == WI_STRIDE_ITEMS:
         var mul = 1 if unit == WI_STRIDE_BYTES else isz
-        for k in range(nd):  # small-loop(nd: the tensor rank, at most 4): record parsing, no data
-            strides[k] = recs[base + 13 + k] * mul
+        for k in range(nd):  # small-loop(nd: the tensor rank): record parsing, no data
+            strides[k] = recs[base + 9 + nd + k] * mul
     else:
         raise Error(_q(name) + ": unknown stride unit " + String(unit))
     return WeightSource(name.copy(), addr + off, kind, isz, dims^, strides^)
@@ -171,7 +201,7 @@ def wi_matrix(src: WeightSource, transpose: Bool) raises -> CastIn:
         # the leading axes of more than one element (a size-1 axis has no step)
         var ld = List[Int]()
         var ls = List[Int]()
-        for k in range(nd - 1):  # small-loop(nd: the tensor rank, at most 4): shape metadata, no data
+        for k in range(nd - 1):  # small-loop(nd: the tensor rank): shape metadata, no data
             if src.dims[k] != 1:
                 ld.append(src.dims[k])
                 ls.append(src.strides[k])
@@ -182,7 +212,7 @@ def wi_matrix(src: WeightSource, transpose: Bool) raises -> CastIn:
             var last = len(ld) - 1
             rows = ld[last]
             s0 = ls[last]
-            for j in range(last):  # small-loop(last: the leading axes, at most 3): shape metadata, no data
+            for j in range(last):  # small-loop(last: the leading axes of the tensor): shape metadata, no data
                 var k = last - 1 - j
                 if ls[k] != ld[k + 1] * ls[k + 1]:
                     raise Error(_q(src.name) + ": the tensor's leading axes are not laid out in C order; "
@@ -295,7 +325,7 @@ def _weight_count(spec: ModelSpec, i: Int) -> Int:
 def _same(a: List[Int], b: List[Int]) -> Bool:
     if len(a) != len(b):
         return False
-    for k in range(len(a)):  # small-loop(a: a tensor rank, at most 8): shape metadata, no data
+    for k in range(len(a)):  # small-loop(a: a tensor rank): shape metadata, no data
         if a[k] != b[k]:
             return False
     return True
@@ -310,14 +340,15 @@ def model_import_params[E: Exec](
     before anything is written; then one upload_cast per tensor into one
     executor buffer and one download into P."""
     var n = len(names)
-    if n < 1 or len(recs) != n * WI_RECORD:
-        raise Error("load_state_dict: the import takes " + String(WI_RECORD) + " integers per source tensor")
+    if n < 1:
+        raise Error("load_state_dict: the import takes at least one source tensor")
+    var starts = wi_record_starts(recs, n, "load_state_dict")
     var nl = spec.n_layers()
     var seen = List[Bool](length=4 * nl, fill=False)
     var views = List[CastIn]()
     var dsts = List[Int]()
     for r in range(n):  # driver-loop: over source tensors
-        var base = r * WI_RECORD
+        var base = starts[r]
         var i = recs[base]
         var slot = recs[base + 1]
         var layout = recs[base + 2]
@@ -336,7 +367,7 @@ def model_import_params[E: Exec](
             raise Error("load_state_dict: " + _q(name) + ": layer " + String(i)
                         + "'s " + _slot_name(slot) + " is given twice")
         seen[4 * i + slot] = True
-        var src = wi_source(recs, r, name)
+        var src = wi_source(recs, base, name)
         var want = _expected(spec, i, slot, layout)
         if not _same(src.dims, want):
             raise Error("load_state_dict: " + _q(name) + " has shape " + wi_shape_str(src.dims) + "; layer "
@@ -386,7 +417,7 @@ def model_import_params[E: Exec](
 
 def _squeezed(dims: List[Int]) -> List[Int]:
     var out = List[Int]()
-    for k in range(len(dims)):  # small-loop(dims: a tensor rank, at most 8): shape metadata, no data
+    for k in range(len(dims)):  # small-loop(dims: a tensor rank): shape metadata, no data
         if dims[k] != 1:
             out.append(dims[k])
     return out^
@@ -422,11 +453,23 @@ def session_load_check(src: WeightSource, layout: Int, shape: List[Int]) raises 
 # exported values are params_' bits on every vendor and the host column.
 # No new kernel and no new opcode.
 #
-# Shape record (WE_SHAPE_WORDS words per tensor, state_dict order: layers in
-# order, the weight then the bias):
+# Shape record (WE_SHAPE_HEAD + rank words per tensor, the tensor's own rank,
+# no rank cap; laid end to end in state_dict order: layers in order, the
+# weight then the bias):
 #   [0] layer index, [1] slot (WI_SLOT_WEIGHT / WI_SLOT_BIAS), [2] offset in
-#   the buffer (floats), [3] rank (1..WI_MAX_RANK), [4..7] dims (0 past it)
-comptime WE_SHAPE_WORDS = 8
+#   the buffer (floats), [3] rank r, [4 .. 4 + r) dims
+comptime WE_SHAPE_HEAD = 4
+
+
+def model_export_shape_words(spec: ModelSpec) -> Int:
+    """The words `model_export_params` writes into its shape result."""
+    var words = 0
+    for i in range(spec.n_layers()):  # driver-loop: over layers
+        if not _has_params(spec, i):
+            continue
+        for slot in range(_slots(spec, i)):  # small-loop(at most 4 tensors of a layer): metadata, no data
+            words += WE_SHAPE_HEAD + len(_expected(spec, i, slot, WI_LAYOUT_TORCH))
+    return words
 
 
 def model_export_tensors(spec: ModelSpec) -> Int:
@@ -441,14 +484,16 @@ def model_export_params[E: Exec](
     mut ex: E, spec: ModelSpec, params: Int, dst: Int, shapes: Int, capacity: Int,
 ) raises -> Int:
     """dst (spec.n_params host floats) = the model's parameters at `params`
-    in PyTorch's layouts; `shapes` (capacity words) = one WE_SHAPE_WORDS
-    record per tensor. Returns the tensor count."""
+    in PyTorch's layouts; `shapes` (capacity words) = one shape record per
+    tensor (WE_SHAPE_HEAD + its rank words). Returns the tensor count, or
+    -(the words needed) with nothing written when `capacity` is too small
+    (the caller asks again with that many)."""
     var n = model_export_tensors(spec)
     if params == 0 or dst == 0 or shapes == 0:
         raise Error("state_dict: null buffer address")
-    if n * WE_SHAPE_WORDS > capacity:
-        raise Error("state_dict: the shape result holds " + String(capacity) + " words; "
-                    + String(n * WE_SHAPE_WORDS) + " are needed")
+    var needed = model_export_shape_words(spec)
+    if needed > capacity:
+        return -needed
     var rec = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=shapes)
     var D = ex.alloc(spec.n_params)
     ex.upload(D, FP(unsafe_from_address=params), spec.n_params)
@@ -484,14 +529,13 @@ def model_export_params[E: Exec](
                 upload_cast(ex, D + off + nb[3 * q] * ne, nview)
             # nn-attention end
             var dims = _expected(spec, i, slot, WI_LAYOUT_TORCH)
-            var base = at * WE_SHAPE_WORDS
-            rec[base] = i
-            rec[base + 1] = slot
-            rec[base + 2] = off
-            rec[base + 3] = len(dims)
-            for k in range(WI_MAX_RANK):  # small-loop(WI_MAX_RANK: 4): metadata, no data
-                rec[base + 4 + k] = dims[k] if k < len(dims) else 0
-            at += 1
+            rec[at] = i
+            rec[at + 1] = slot
+            rec[at + 2] = off
+            rec[at + 3] = len(dims)
+            for k in range(len(dims)):  # small-loop(dims: the tensor rank): metadata, no data
+                rec[at + WE_SHAPE_HEAD + k] = dims[k]
+            at += WE_SHAPE_HEAD + len(dims)
     ex.download(FP(unsafe_from_address=dst), D, spec.n_params)
     ex.free(D)
     return n

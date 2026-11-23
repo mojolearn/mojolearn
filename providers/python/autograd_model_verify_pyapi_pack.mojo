@@ -29,6 +29,7 @@ def verify_model_info_py(path: PythonObject) raises -> PythonObject:
     return out
 
 
-def verify_fill_py(addr: PythonObject, n: PythonObject, seed: PythonObject, stream: PythonObject) raises -> PythonObject:
-    """Fill `n` float32 values at `addr` with the report's seeded inputs."""
-    return PythonObject(verify_fill(Int(py=addr), Int(py=n), Int(py=seed), Int(py=stream)))
+def verify_fill_py(addr: PythonObject, n: PythonObject, seed: PythonObject, stream: PythonObject,
+                   id_range: PythonObject) raises -> PythonObject:
+    """Fill `n` float32 values at `addr` with the report's seeded inputs (ids in [0, id_range) when id_range > 0)."""
+    return PythonObject(verify_fill(Int(py=addr), Int(py=n), Int(py=seed), Int(py=stream), Int(py=id_range)))

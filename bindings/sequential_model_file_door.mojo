@@ -87,9 +87,12 @@ def sequential_file_digest(entries: PythonObject, address: Int, nbytes: Int) rai
     return _file_text(text, 0, count)
 
 
-def sequential_file_fill(entries: PythonObject, address: Int, count: Int, seed: Int, stream: Int) raises -> Int:
+def sequential_file_fill(entries: PythonObject, address: Int, count: Int, seed: Int, stream: Int,
+                         id_range: Int) raises -> Int:
+    """The seeded probe: `count` float32 values at `address`, in [-1, 1), or
+    ids in [0, id_range) when id_range > 0 (autograd/model_verify.mojo verify_fill)."""
     var addresses: List[Int] = [address]
-    var ints: List[Int] = [count, seed, stream]
+    var ints: List[Int] = [count, seed, stream, id_range]
     var floats = List[Float64]()
     return _file_call(entries, MODEL_VERIFY_FILL, addresses, ints, floats)
 
@@ -244,9 +247,22 @@ def sequential_file_import(entries: PythonObject, program: List[Int], table: Lis
 def sequential_file_export(entries: PythonObject, program: List[Int], table: List[Float64], params: Int,
                            dst: Int, mut shapes: List[Int]) raises -> Int:
     """Sequential.state_dict's transfer: the float32 parameters at `params`
-    into the float32 buffer at `dst` in PyTorch's layouts, and one 8-word
-    shape record per tensor into `shapes` (its length is the capacity).
-    Returns the tensor count."""
+    into the float32 buffer at `dst` in PyTorch's layouts, and one shape
+    record per tensor (autograd/weight_import.mojo: 4 + its rank words, laid
+    end to end) into `shapes`. A `shapes` too short for the model's ranks is
+    grown to the words the export reports and the export asked once more
+    (nothing was written the first time). Returns the tensor count."""
+    var count = _file_export_once(entries, program, table, params, dst, shapes)
+    if count < 0:
+        shapes = List[Int](length=-count, fill=0)
+        count = _file_export_once(entries, program, table, params, dst, shapes)
+        if count < 0:
+            raise Error("RuntimeError: Sequential state_dict shape result is still too small")
+    return count
+
+
+def _file_export_once(entries: PythonObject, program: List[Int], table: List[Float64], params: Int,
+                      dst: Int, mut shapes: List[Int]) raises -> Int:
     var ints: List[Int] = [len(program), len(shapes)]
     _file_extend(ints, program)
     var addresses: List[Int] = [params, dst, Int(shapes.unsafe_ptr())]

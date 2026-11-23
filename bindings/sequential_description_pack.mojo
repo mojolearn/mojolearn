@@ -246,8 +246,15 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
     elif kind == "multiply":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("source"), Python.tuple(-1), 0)
         if not _integer(options[0], context):
-            raise Error("source must be -1 or the index of an earlier layer")
+            raise Error("TypeError: source must be -1 or the index of an earlier layer")
         a0 = py_call(b.int, options[0])
+        # refused at add, as the other neural-block layers refuse their arguments (lane nn-fix-3, 2026-11-23:
+        # multiply(5) on a model of fewer layers was admitted, since f44fd18ab2); the layer being added is
+        # layer len(_layers), so an earlier layer's index is below it
+        var here = len(py_item(sequential_fields(model), nk[].k__layers))
+        if Int(py=a0) < -1 or Int(py=a0) >= here:
+            raise Error("ValueError: source must be -1 or the index of an earlier layer (this layer is "
+                        + String(here) + ")")
         args = Python.list(a0, 0, 0, 0, 0, 0)
     elif kind == "narrow":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("axis", "start", "length"),
@@ -589,10 +596,13 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
     # nn-losses-2 end
     elif len(supplied) != 0 or len(keywords) != 0:
         raise Error("TypeError: " + kind + " takes no arguments")
-    # lane neural-blocks-3 (2026-11-22): the native model reads the float argument as a Float32 (eps, p, theta,
-    # axis); the description holds that value, so a model saved and loaded (the file stores float32) has the
-    # same layer list and the same digest_ (before: layer_norm(1e-5) read back 9.999999747e-06, digest differed)
-    f = PythonObject(Float64(Float32(Float64(py=f))))
+    # The description holds the float argument as passed (eps, p, theta, axis), so `layers` and the table read
+    # back the user's value; the native model reads it as a Float32 (autograd/model_execution.mojo
+    # model_float_words rounds it once, as before), and the saved file keeps both, the float32 word the kernels
+    # read and the float64 the user passed (autograd/model_checkpoint.mojo record version 3), so a model saved
+    # and loaded has the same layer list and digest_ (lane nn-fix-3, 2026-11-23: before, add rounded it here and
+    # layer_norm(0.002) read back 0.0020000000949949026)
+    f = py_call(b.float, f)
     sequential_append(mods, model, code, a0, a1, f, args)
     return model
 
@@ -769,12 +779,12 @@ comptime _CODE_DROPOUT = 7
 
 def _append_layer(mut mods: NativeModules, model: PythonObject, code: PythonObject, args: PythonObject,
                   f: Float64) raises -> Int:
-    """Append one description layer (code, args[0], args[1], f as its float32 value, args); its index."""
+    """Append one description layer (code, args[0], args[1], f as passed, args); its index."""
     var nk = sequential_keys()
     var b = mods.module("builtins")
     var layers = py_item(sequential_fields(model), nk[].k__layers)
     var at = len(layers)
-    _ = py_call(layers.append, Python.tuple(code, args[0], args[1], PythonObject(Float64(Float32(f))),
+    _ = py_call(layers.append, Python.tuple(code, args[0], args[1], PythonObject(f),
                                             py_call(b.tuple, args)))
     return at
 
@@ -1005,8 +1015,8 @@ def _nn_float(mut mods: NativeModules, value: PythonObject, name: String) raises
     var b = mods.module("builtins")
     if value is None or py_type(value) is b.bool or py_type(value) is b.str:
         raise Error("TypeError: " + name + " must be a number")
-    # one rounding to float32, as sequential_add's (the native model reads a Float32)
-    return PythonObject(Float64(Float32(Float64(py=py_call(b.float, value)))))
+    # the value as passed, as sequential_add keeps it (the native model rounds it to its Float32 once)
+    return py_call(b.float, value)
 
 
 def _nn_dropout(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
