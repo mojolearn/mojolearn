@@ -813,22 +813,25 @@ def _snap_gradients(
     _ = len(stats)
 
 
-def _snap_plane(mut plane: List[Float32], n: Int, fixed_scale: Float32):
+def _snap_plane(mut plane: List[Float32], n: Int, fixed_scale: Float32, offset: Int = 0):
     """`snap_plane_to_scale_kernel` (`kernel/histogram_utils.mojo`,
     lane/sym-quality): the pointwise searcher's gradient plane onto the
     tree's fixed-point grid, keyed on the plane index. Every index is its
-    own statement; the indices run in `_gbdt_units` contiguous ranges."""
+    own statement; the indices run in `_gbdt_units` contiguous ranges.
+    `offset` is where index 0 of the plane sits in `plane` (lane
+    gbdt-one-body: the gradient plane of a two-plane stats list); the
+    dither stays keyed on the plane index."""
     var units = _gbdt_units(n, 8 * n)
     var chunk = host_predict_chunk(n, units)
     var plane_p = rebind[HostF32Ptr](plane.unsafe_ptr())
 
-    def rows(unit: Int) {imm chunk, imm n, imm fixed_scale, imm plane_p}:
+    def rows(unit: Int) {imm chunk, imm n, imm fixed_scale, imm plane_p, imm offset}:
         for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
-            var q = _hist2_quantize(plane_p[i], fixed_scale, _hist2_dither(i))
+            var q = _hist2_quantize(plane_p[offset + i], fixed_scale, _hist2_dither(i))
             var v = Float32(0.0)
             if q != Int32(0):
                 v = ftz(Float32(Int(q)) / fixed_scale)
-            plane_p[i] = v
+            plane_p[offset + i] = v
 
     host_parallelize(rows, units)
     _ = len(plane)

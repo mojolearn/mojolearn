@@ -196,28 +196,6 @@ def _pw_sample_tree(
     )
 
 
-def _split_planes(
-    stats: List[Float32], n_rows: Int, mut sw: List[Float32], mut sg: List[Float32]
-):
-    """The two search planes of `stats` as the structure search's two
-    lists: a move per row, the rows in `_gbdt_units` contiguous ranges."""
-    var units = _gbdt_units(n_rows, 2 * n_rows)
-    var chunk = host_predict_chunk(n_rows, units)
-    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
-    var sw_p = rebind[HostF32Ptr](sw.unsafe_ptr())
-    var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
-
-    def rows(unit: Int) {imm chunk, imm n_rows, imm stats_p, imm sw_p, imm sg_p}:
-        for r in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
-            sw_p[r] = stats_p[r]
-            sg_p[r] = stats_p[n_rows + r]
-
-    host_parallelize(rows, units)
-    _ = len(stats)
-    _ = len(sw)
-    _ = len(sg)
-
-
 def gbdt_ranking_pointwise_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -384,10 +362,10 @@ def gbdt_ranking_pointwise_host_fit(
         else:
             var mags = _deterministic_sum_lanes(mag_part, 2, mag_blocks)
             scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
-        var sw = List[Float32](length=n_rows, fill=Float32(0))
-        var sg = List[Float32](length=n_rows, fill=Float32(0))
-        _split_planes(stats, n_rows, sw, sg)
-        _snap_plane(sg, n_rows, scale)
+        # the gradient plane snapped in place in `stats`; the search reads
+        # both planes from `stats` at offsets 0 and n_rows (lane
+        # gbdt-one-body: no per-tree plane lists and copy, `_split_planes`)
+        _snap_plane(stats, n_rows, scale, n_rows)
         var splits: List[_OrdSplit]
         if ff_on:
             # the tree's sample: its helpers and feature words replace the
@@ -398,17 +376,17 @@ def gbdt_ranking_pointwise_host_fit(
                 feat_offset, feat_shift, feat_mask,
             )
             splits = _ordered_tree_structure(
-                tree_cindex, helpers, params.max_depth, sw, sg, doc_ids,
+                tree_cindex, helpers, params.max_depth, stats, stats, doc_ids,
                 part_bounds, 1, 0, scale, params.l2_leaf_reg, feat_offset,
                 feat_shift, feat_mask, List[Bool](), not cosine_score,
-                score_std_dev, tree_seed, cosine_score,
+                score_std_dev, tree_seed, cosine_score, sw_off=0, sg_off=n_rows,
             )
         else:
             splits = _ordered_tree_structure(
-                cindex, helpers, params.max_depth, sw, sg, doc_ids,
+                cindex, helpers, params.max_depth, stats, stats, doc_ids,
                 part_bounds, 1, 0, scale, params.l2_leaf_reg, feat_offset,
                 feat_shift, feat_mask, List[Bool](), not cosine_score,
-                score_std_dev, tree_seed, cosine_score,
+                score_std_dev, tree_seed, cosine_score, sw_off=0, sg_off=n_rows,
             )
         var n_leaves = 1 << len(splits)
         # `compute_bins_for_model` + `partition_from_bins`: the rows' leaves

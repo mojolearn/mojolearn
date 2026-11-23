@@ -335,7 +335,8 @@ def _ord_part_sums_stride(
 
 @no_inline
 def _update_subsets_stats(
-    mut s: _OrdSubsets, part_count: Int, sw: List[Float32], sg: List[Float32]
+    mut s: _OrdSubsets, part_count: Int, sw: List[Float32], sg: List[Float32],
+    sw_off: Int = 0, sg_off: Int = 0,
 ):
     """`update_subsets_stats`: the offsets and sizes of the sorted bins
     (`update_partition_offsets_kernel`, `update_partition_sizes_kernel`, a
@@ -351,7 +352,12 @@ def _update_subsets_stats(
     its task with that quarter, so such a part (at most four) is summed
     with its LANES across the tasks instead (`_partition_update_sum_wide`).
     Every sum's adds and their order are the device block's at any task
-    count; every task count comes from `_gbdt_units` (the nested rule)."""
+    count; every task count comes from `_gbdt_units` (the nested rule).
+
+    `sw_off` / `sg_off` (lane gbdt-one-body, 2026-11-23): where row 0 of
+    each plane sits in its list, so a caller holding both planes in one
+    stats list (plane 0 then plane 1, the pointwise searchers) passes it
+    twice instead of copying the planes out once per tree."""
     var doc_count = len(s.bins)
     var bins_p = _u32_ptr(s.bins)
     var off_p = rebind[GbdtIntPtr](s.p_off.unsafe_ptr())
@@ -377,11 +383,11 @@ def _update_subsets_stats(
     var g_units = _gbdt_units(doc_count, 4 * doc_count)
     var g_chunk = host_predict_chunk(doc_count, g_units)
 
-    def gather(unit: Int) {imm g_chunk, imm doc_count, imm idx_p, imm sw_p, imm sg_p, imm gw_p, imm gt_p}:
+    def gather(unit: Int) {imm g_chunk, imm doc_count, imm idx_p, imm sw_p, imm sg_p, imm sw_off, imm sg_off, imm gw_p, imm gt_p}:
         for i in range(unit * g_chunk, min(doc_count, (unit + 1) * g_chunk)):
             var row = idx_p[i]
-            gw_p[i] = sw_p[row]
-            gt_p[i] = sg_p[row]
+            gw_p[i] = sw_p[sw_off + row]
+            gt_p[i] = sg_p[sg_off + row]
 
     host_parallelize(gather, g_units)
 
@@ -1358,6 +1364,8 @@ def _ordered_tree_structure(
     score_std_dev: Float32 = Float32(0.0),
     seed: UInt64 = UInt64(0),
     plain_cosine: Bool = False,
+    sw_off: Int = 0,
+    sg_off: Int = 0,
 ) raises -> List[_OrdSplit]:
     """The searcher without tree CTRs: `_ordered_tree_structure_levels` over
     `cindex` with no tree-CTR state (its arguments are documented there)."""
@@ -1368,7 +1376,7 @@ def _ordered_tree_structure(
         _u32_ptr(cindex), helpers, max_depth, sw, sg, doc_ids, part_bounds,
         fold_count, fold_bits, fixed_scale, l2, word_offset_of, shift_of,
         mask_of, one_hot_of, no_tree_ctr, 0, no_indexes, no_test,
-        plain_l2, score_std_dev, seed, plain_cosine,
+        plain_l2, score_std_dev, seed, plain_cosine, sw_off, sg_off,
     )
 
 
@@ -1422,6 +1430,10 @@ def _ordered_tree_structure_levels(
     score_std_dev: Float32 = Float32(0.0),
     seed: UInt64 = UInt64(0),
     plain_cosine: Bool = False,
+    # where row 0 of `sw` / `sg` sits in its list (`_update_subsets_stats`):
+    # the pointwise searchers pass their one stats list as both planes
+    sw_off: Int = 0,
+    sg_off: Int = 0,
 ) raises -> List[_OrdSplit]:
     """The doc-parallel oblivious searcher's level loop. `fold_count > 1`
     with `plain_l2` False is the ordered fold arm (the dynamic cosine
@@ -1457,7 +1469,7 @@ def _ordered_tree_structure_levels(
     _identity_rows(s.indices, doc_count)
     # `write_fold_based_initial_bins`: part p over its concatenated range
     _ord_initial_bins(part_bounds, fold_count, s.bins)
-    _update_subsets_stats(s, 1 << fold_bits, sw, sg)
+    _update_subsets_stats(s, 1 << fold_bits, sw, sg, sw_off, sg_off)
 
     for h in range(len(helpers)):  # driver-loop: over the policy helpers
         # every slot starts the tree at +0.0: a fresh plane the first time,
@@ -1652,7 +1664,7 @@ def _ordered_tree_structure_levels(
         _ord_split_subsets(
             s, cindex, word_offset_of[fid], docs, mask, value, take_bin, bit
         )
-        _update_subsets_stats(s, 1 << (depth + 1 + fold_bits), sw, sg)
+        _update_subsets_stats(s, 1 << (depth + 1 + fold_bits), sw, sg, sw_off, sg_off)
         if level_driver:
             # the next level's candidates on the search index (the
             # partition above read the won slot before this rewrites it)

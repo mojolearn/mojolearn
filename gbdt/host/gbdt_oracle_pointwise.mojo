@@ -108,7 +108,6 @@ from gbdt.host.gbdt_oracle_pointwise_rank import (
     _pw_feature_words,
     _pw_helpers,
     _pw_sample_tree,
-    _split_planes,
 )
 from gbdt.host.gbdt_oracle_rmse import GbdtRmseHostFit, gbdt_rmse_host_model_text
 from gbdt.metrics.sample_quantile import calculate_weighted_target_average
@@ -329,8 +328,6 @@ def gbdt_pointwise_host_fit(
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
     var mag_part = List[Float32](length=2 * mse_blocks, fill=Float32(0.0))
-    var sw = List[Float32](length=n_rows, fill=Float32(0.0))
-    var sg = List[Float32](length=n_rows, fill=Float32(0.0))
     var losses = List[Float64]()
     var test_losses = List[Float64]()
     var stopped_early = False
@@ -377,10 +374,12 @@ def gbdt_pointwise_host_fit(
         else:
             var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
             scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
-        _split_planes(stats, n_rows, sw, sg)
         # lane/sym-quality: `enqueue_snap_plane` (doc_parallel_boosting's
-        # pointwise arm), the gradient plane onto the tree's grid
-        _snap_plane(sg, n_rows, scale)
+        # pointwise arm), the gradient plane onto the tree's grid, in place
+        # in `stats` (lane gbdt-one-body: the search reads both planes from
+        # `stats` at offsets 0 and n_rows, no per-tree copy, as before
+        # lane gbdt-rest-3 the fit wrote its two plane lists directly)
+        _snap_plane(stats, n_rows, scale, n_rows)
 
         # ---- the single-task pointwise structure search ----
         var splits: List[_OrdSplit]
@@ -391,17 +390,17 @@ def gbdt_pointwise_host_fit(
                 s_offset, s_shift, s_mask,
             )
             splits = _ordered_tree_structure(
-                tree_cindex, helpers, max_depth, sw, sg, doc_ids,
+                tree_cindex, helpers, max_depth, stats, stats, doc_ids,
                 part_bounds, 1, 0, scale, l2_leaf_reg, s_offset, s_shift,
                 s_mask, List[Bool](), not cosine_score, score_std_dev,
-                tree_seed, cosine_score,
+                tree_seed, cosine_score, sw_off=0, sg_off=n_rows,
             )
         else:
             splits = _ordered_tree_structure(
-                cindex, helpers, max_depth, sw, sg, doc_ids, part_bounds,
+                cindex, helpers, max_depth, stats, stats, doc_ids, part_bounds,
                 1, 0, scale, l2_leaf_reg, feat_offset, feat_shift, feat_mask,
                 List[Bool](), not cosine_score, score_std_dev, tree_seed,
-                cosine_score,
+                cosine_score, sw_off=0, sg_off=n_rows,
             )
         # ---- `compute_bins_for_model`, `partition_from_bins` ----
         # (`_partition_for_model`: the rows' leaves and the stable counting
