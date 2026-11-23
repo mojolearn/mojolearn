@@ -12,10 +12,11 @@ A forest member answers through its door in the product, so RUN reads each membe
 The vote is checked against the fold the Python test writes: hard, the first argmax of the one-hot counts of the
 members' codes; soft, the weighted sum of the members' probabilities at their class columns over the sum of the
 weights. A native member whose call refuses is reported by index before anything is written. The independent
-checks run in order after one fit of the members (see `test_vote_run`).
+checks run as one case table across the host cores after one fit of the members.
 """
 from std.math import min, max
 from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from checks.native_tests.tsa_metrics_fixture_words import fixture_f32
 from checks.native_tests.py2mojo_forest_fits import RfSpec, rf_fit, predict, argmax_rows, require
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -102,6 +103,7 @@ def check_hard_vote(m: Members) raises:
             if votes[c] > votes[best]:
                 best = c
         require(Int(got[i]) == best, "hard vote row " + String(i) + ": " + String(got[i]) + " != " + String(best))
+    _ = len(acc)  # Mojo frees a local at its last named use: the fold wrote `acc` through its address
 
 
 def check_soft_vote(m: Members) raises:
@@ -124,6 +126,7 @@ def check_soft_vote(m: Members) raises:
             if acc[i * K + c] > acc[i * K + best]:
                 best = c
         require(Int(codes[i]) == best, "soft predict row " + String(i))
+    _ = len(top)  # Mojo frees a local at its last named use: the fold wrote `top` through its address
 
 
 def check_regress_vote(m: Members) raises:
@@ -207,13 +210,12 @@ def test_vote_run() raises:
             check_transform(at[])
         else:
             check_refusal_index(at[])
-    # SERIAL, and why: as a check_cases table (one host worker per case) every case passes and the process then
-    # dies at exit (SIGSEGV in libAsyncRTRuntimeGlobals' thread-local teardown, __nptl_deallocate_tsd, on a case
-    # worker; cpc1 2026-11-22, lane bm-meta: rc 139 with 0 failed cases, rc 0 when the same cases run in order).
-    # The glue ops a case calls start runtime work on the worker thread. Each case is a few milliseconds of
-    # folds over fitted members; the fits above use every core. Restore the table when that teardown is fixed.
-    for which in range(CASES):  # small-loop(five millisecond-scale cases; see the note above)
-        run_case(which)
+    # One case table across the host cores. It once ran in order: as a table the process died at exit
+    # (SIGSEGV in the runtime allocator's thread-cache teardown on a case worker, lane bm-meta). The cause was
+    # this file's (lane bm-meta-2, 2026-11-22): `check_hard_vote`'s `acc` and `check_soft_vote`'s `top` were last
+    # named in the argument that took their address, so Mojo freed them before the fold wrote into them; the
+    # writes corrupted the worker's free lists. Both are named after their use now.
+    check_cases("vote", CASES, run_case)
     _ = members^
 
 

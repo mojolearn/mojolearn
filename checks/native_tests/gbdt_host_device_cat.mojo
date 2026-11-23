@@ -20,6 +20,16 @@ Both fits go through the request `GradientBoosting.fit` builds
 binding's fit) and the device image (`gbdt.mojolearn_gbdt_run`, the GPU
 binding's fit). A difference is reported as the first differing line.
 
+`test_rank_host_text_is_device_text` (lane verify-gbdt-rank, 2026-11-22)
+does the same for the three ranking losses (QueryRMSE, PairLogit, YetiRank):
+the greedy searcher deterministic, under the Bayesian bootstrap with score
+noise and under Bernoulli; the pointwise searcher at Cosine and NewtonL2;
+PairLogit on explicit weighted pairs on both searchers. Uneven query groups,
+every fit at `RANK_RATE` 0.1. The ranking host fits
+(`gbdt/host/gbdt_oracle_losses.mojo`, `gbdt_oracle_pointwise_rank.mojo`)
+restate the device's `cursor + round(leaf * rate)` and its grouped
+derivatives; a fused or reordered update there moves the model text.
+
 Parallel plan: the host fits are independent and run across the host cores
 first (one unit each); the device fits then run one at a time, because each
 owns the one GPU for its whole graph (as `gbdt_public_fits`'s device column).
@@ -197,6 +207,149 @@ def test_host_text_is_device_text() raises:
         raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
                     + ("gbdt_host_device_cat device: " + String(count) + " of " + String(CAT_UNITS) + " cases failed" + failed
                        if count > 0 else ""))
+
+
+comptime RANK_ROWS = 1200
+comptime RANK_TREES = 10
+#: NOT a power of two (see the module docstring)
+comptime RANK_RATE = 0.1
+comptime RANK_UNITS = 17
+#: the query sizes, cycled in row order (tools/identity_break.py `RANK_QUERY_SIZES`)
+comptime RANK_SIZE_CYCLE = 10
+
+
+def _rank_size(q: Int) -> Int:
+    var cycle: List[Int] = [1, 2, 7, 3, 16, 1, 5, 40, 2, 9]
+    return cycle[q % RANK_SIZE_CYCLE]
+
+
+def _rank_inputs(unit: Int) -> GbdtInputs:
+    """Column-major X of four numeric columns, graded relevance 0..4 from a
+    hashed target, uneven query groups; the explicit-pair units add every two
+    rows of a query with different grades whose index sum is even (higher
+    grade wins) with hashed weights in [0.5, 2)."""
+    var n = RANK_ROWS
+    var x = List[Float32](capacity=4 * n)
+    for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+        for r in range(n):  # driver-loop: over the fixture's rows
+            x.append(_unit01(r, 10 + j) * Float32(4.0) - Float32(2.0))
+    var y = List[Float32](capacity=n)
+    for r in range(n):  # driver-loop: over the fixture's rows
+        var v = (x[r] - Float32(0.5) * x[n + r] + Float32(0.25) * x[2 * n + r]
+                 + Float32(0.8) * (_unit01(r, 20) - Float32(0.5)))
+        var grade = Float32(0.0)
+        if v > Float32(-1.0):
+            grade = Float32(1.0)
+        if v > Float32(0.0):
+            grade = Float32(2.0)
+        if v > Float32(0.8):
+            grade = Float32(3.0)
+        if v > Float32(1.6):
+            grade = Float32(4.0)
+        y.append(grade)
+    var sizes = List[UInt32]()
+    var at = 0
+    var q = 0
+    while at < n:  # driver-loop: over the fixture's queries
+        var size = min(_rank_size(q), n - at)
+        sizes.append(UInt32(size))
+        at += size
+        q += 1
+    var inp = GbdtInputs(x^, n, 4, y^)
+    if _rank_explicit(unit):
+        var begin = 0
+        for g in range(len(sizes)):  # driver-loop: over the fixture's queries
+            var end = begin + Int(sizes[g])
+            for a in range(begin, end):  # driver-loop: over one query's rows
+                for b in range(a + 1, end):  # driver-loop: over one query's rows
+                    if inp.y[a] != inp.y[b] and (a + b) % 2 == 0:
+                        var a_wins = inp.y[a] > inp.y[b]
+                        inp.pairs.append(UInt32(a if a_wins else b))
+                        inp.pairs.append(UInt32(b if a_wins else a))
+                        inp.pair_weights.append(Float32(0.5) + Float32(1.5) * _unit01(len(inp.pair_weights), 30))
+            begin = end
+    inp.group_sizes = sizes^
+    return inp^
+
+
+def _rank_explicit(unit: Int) -> Bool:
+    return unit >= 15
+
+
+def _rank_opts(unit: Int) raises -> GbdtOpts:
+    """Units 0-14: loss `unit % 3` (QueryRMSE, PairLogit, YetiRank) under
+    arm `unit // 3`: greedy deterministic, greedy Bayesian (temperature 1)
+    with score noise 1, greedy Bernoulli 0.7, pointwise Cosine, pointwise
+    NewtonL2. Units 15-16: PairLogit on explicit weighted pairs, greedy and
+    pointwise Cosine. Every option explicit."""
+    var loss = String("PairLogit")
+    var arm = 0
+    if unit < 15:
+        var k = unit % 3
+        loss = String("QueryRMSE") if k == 0 else (String("PairLogit") if k == 1 else String("YetiRank"))
+        arm = unit // 3
+    elif unit == 16:
+        arm = 3
+    elif unit != 15:
+        raise Error("gbdt_host_device_cat rank: no unit " + String(unit))
+    var o = GbdtOpts(loss, RANK_TREES, 4)
+    o.learning_rate = RANK_RATE
+    o.l2_leaf_reg = 3.0
+    o.leaf_iterations = 1
+    o.random_state = 7
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    if arm == 1:
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.random_strength = 1.0
+    elif arm == 2:
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif arm == 3:
+        o.pointwise = True
+        o.score_function = "Cosine"
+    elif arm == 4:
+        o.pointwise = True
+        o.score_function = "NewtonL2"
+    return o^
+
+
+def test_rank_host_text_is_device_text() raises:
+    """The ranking units: every host fit across the cores first, then one device graph at a time."""
+    var host_texts = List[String](length=RANK_UNITS, fill=String(""))
+    var texts_addr = Int(host_texts.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var outcome = fit[_HostFit](_rank_opts(unit), _rank_inputs(unit))
+        p[unit] = outcome.text.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat rank host", RANK_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(RANK_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_rank_opts(unit), _rank_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat rank unit " + String(unit) + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat rank device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat rank device: " + String(count) + " of " + String(RANK_UNITS)
+                       + " cases failed" + failed if count > 0 else ""))
 
 
 def main() raises:

@@ -1,0 +1,16 @@
+diff --git a/gbdt/host/gbdt_oracle_ctr.mojo b/gbdt/host/gbdt_oracle_ctr.mojo
+index 2388b3a43e..6ce92f206b 100644
+--- a/gbdt/host/gbdt_oracle_ctr.mojo
++++ b/gbdt/host/gbdt_oracle_ctr.mojo
+@@ -471,7 +471,10 @@ def _ordered_target_columns(
+                 "the ordered CTR restatement takes Borders configs only; got "
+                 + ctr_type_name(configs[c].ctr_type)
+             )
+-        nums.append(configs[c].numerator_shift())
++        # SABOTAGE (coverage-gbdt-host_ctr_prior): each Borders config's
++        # prior numerator read from the next config (an off-by-one in the
++        # prior table)
++        nums.append(configs[(c + 1) % n_configs].numerator_shift())
+         denoms.append(configs[c].denumerator_shift())
+         params.append(Int(configs[c].param_id))
+     var total = n_orders * n_configs

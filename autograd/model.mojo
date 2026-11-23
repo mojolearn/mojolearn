@@ -1065,16 +1065,16 @@ def _token_ids[E: Exec](mut ex: E, Y: CastIn, N: Int, T: Int, dst: FP, what: Str
 
 
 def _fit_loss[E: Exec](
-    mut tape: Tape, mut ex: E, cfg: FitConfig, spec: ModelSpec, P: FP, Gr: FP, out: Tensor, target: Tensor,
+    mut tape: Tape, mut ex: E, cfg: FitConfig, spec: ModelSpec, P: FP, Gr: FP, y_out: Tensor, target: Tensor,
     train: Bool,
 ) raises -> Tensor:
-    """The batch loss of the fit and validation loops: model_loss, or the token cross-entropy, where `out` is
+    """The batch loss of the fit and validation loops: model_loss, or the token cross-entropy, where `y_out` is
     the final lm_head layer's input (the forward stopped before it) and the fused op is the head."""
     if cfg.loss == LOSS_TOKEN_CROSS_ENTROPY:
         var i = spec.n_layers() - 1
-        return block_lm_head_loss(tape, ex, spec.xargs, i, spec.in_shape[i], P, Gr, spec.param_off[i], out,
+        return block_lm_head_loss(tape, ex, spec.xargs, i, spec.in_shape[i], P, Gr, spec.param_off[i], y_out,
                                   target, train)
-    return model_loss(tape, ex, cfg, out, target)
+    return model_loss(tape, ex, cfg, y_out, target)
 
 
 def model_token_loss[E: Exec](
