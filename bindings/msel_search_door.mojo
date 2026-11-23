@@ -14,6 +14,7 @@ from std.memory import unsafe_memcpy
 from core.admitted_convert import admitted_convert_vector
 from bindings.admitted_family_door import admit_family
 from bindings.native_loaded_module_door import native_loaded_module
+from bindings.metrics_exp_common_unpack import mx_raise_obj
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
@@ -497,6 +498,27 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
 # ---------------------------------------------------------------- learning_curve
 
 
+def _invalid_parameter_class(context: PythonObject) raises -> PythonObject:
+    """scikit-learn's `InvalidParameterError` (sklearn/utils/_param_validation.py:
+    a ValueError and a TypeError) when sklearn is already loaded (no import
+    here), else one native class with the same name and both bases, made
+    once and kept in the context (lane mf-tail5b)."""
+    var b = msel_b()
+    var module = py_call(native_loaded_module("sys").modules.get, PythonObject("sklearn.utils._param_validation"))
+    if module is not None:
+        var cls = py_call(b.getattr, module, PythonObject("InvalidParameterError"), PythonObject(None))
+        if cls is not None:
+            return cls
+    var kept = py_call(context.get, PythonObject("_msel_invalid_parameter_error"), PythonObject(None))
+    if kept is not None:
+        return kept
+    var body = Python.dict()
+    py_setitem(body, PythonObject("__module__"), PythonObject("mojolearn.model_selection"))
+    var made = py_call(b.type, PythonObject("InvalidParameterError"), Python.tuple(b.ValueError, b.TypeError), body)
+    py_setitem(context, PythonObject("_msel_invalid_parameter_error"), made)
+    return made
+
+
 def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`learning_curve(estimator, X, y, groups, train_sizes, cv, scoring,
     n_jobs, shuffle, random_state, error_score, return_times)`."""
@@ -510,18 +532,23 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     # of learning_curve allows `scoring` only as a scorer name, a callable or
     # None ([StrOptions(get_scorer_names()), callable, None]): a list, tuple,
     # set or dict is its InvalidParameterError, raised before any fold or
-    # fit (the names shown sorted; scikit-learn prints the set unordered).
+    # fit. Lane mf-tail5b: its CLASS (`InvalidParameterError`, a ValueError
+    # and a TypeError: scikit-learn's own when sklearn is loaded, else
+    # `_invalid_parameter_class`'s) and its words as `StrOptions.__str__`
+    # writes them: the names' reprs in the order of the Python set it holds
+    # (`StrOptions(set(get_scorer_names()))`).
     var scoring_in = args[6]
     var many = py_type(scoring_in)
     if many is b.list or many is b.tuple or many is b.set or many is b.dict:
-        var names = py_call(b.sorted, context["family_msel_scorers"])
+        var names = py_call(b.list, py_call(b.set, py_call(b.list, context["family_msel_scorers"])))
         var shown = String("{")
         for i in range(len(names)):  # driver-loop: over the scorer names (the refusal's words, once)
             if i > 0:
                 shown += ", "
             shown += family_repr(names[i])
-        raise Error("ValueError: The 'scoring' parameter of learning_curve must be a str among " + shown
-                    + "}, a callable or None. Got " + family_repr(scoring_in) + " instead.")
+        mx_raise_obj(_invalid_parameter_class(context),
+                     PythonObject("The 'scoring' parameter of learning_curve must be a str among " + shown
+                                  + "}, a callable or None. Got " + family_repr(scoring_in) + " instead."))
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
