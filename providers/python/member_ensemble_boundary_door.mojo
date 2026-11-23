@@ -2118,8 +2118,9 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         if scoring == 1:
             var probe = nested.plans[c].copy()
             probe.classes = 2
-            if member_output_dtype(probe, MEMBER_OP_PREDICT, 1, 1, MEMBER_I32) != MEMBER_I32:
-                return False
+            var dtype = member_output_dtype(probe, MEMBER_OP_PREDICT, 1, 1, MEMBER_I32)
+            if dtype != MEMBER_I32 and dtype != MEMBER_I64:
+                return False  # a member whose predict is not class codes
     var words: List[Float64] = [Float64(scoring), tolerate, error_value, 1.0 if return_train else 0.0, Float64(seed)]
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
     if not _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,

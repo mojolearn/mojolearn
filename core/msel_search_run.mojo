@@ -58,7 +58,7 @@ from core.host_parallel import host_parallelize
 from core.labels_accuracy_plan import label_accuracy_plan
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of,
-    MEMBER_F32, MEMBER_I32, MEMBER_OP_SCORE, MEMBER_OP_PREDICT,
+    MEMBER_F32, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
 )
 from core.member_notices import member_notices_take
@@ -198,10 +198,11 @@ def _gather_words(src: Int, rows: Int, count: Int, width: Int, dst: Int):
 
 
 def _score_side(run_at: Int, v: Int, x: Int, y: Int, count: Int, cols: Int, y_dtype: Int, y_cols: Int,
-                scoring: Int, pred: Int) raises -> Float64:
+                scoring: Int, pred: Int, pred_dtype: Int) raises -> Float64:
     """Unit `v` of the wave on one side's gathered block: the member's own
-    score, or its predicted int32 codes into `pred` (scoring 'accuracy'; the
-    metric runs after the wave)."""
+    score, or its predicted codes (scoring 'accuracy'; the metric runs after
+    the wave): written in the member's own `pred_dtype` into the 8-byte words
+    at `pred`, then narrowed in place to int32 codes at the same address."""
     var run = _RunPtr(unsafe_from_address=run_at)
     var call = member_call_of(run[].plans[v], run[].states[v])
     call.x = MemberMatrix(x, count, cols, MEMBER_F32)
@@ -209,8 +210,13 @@ def _score_side(run_at: Int, v: Int, x: Int, y: Int, count: Int, cols: Int, y_dt
         call.y = MemberMatrix(y, count, y_cols, y_dtype)
         _ = member_call(run[].plans[v].member, MEMBER_OP_SCORE, call)
         return call.value
-    call.dst = MemberMatrix(pred, count, 1, MEMBER_I32)
+    call.dst = MemberMatrix(pred, count, 1, pred_dtype)
     _ = member_call(run[].plans[v].member, MEMBER_OP_PREDICT, call)
+    if pred_dtype == MEMBER_I64:
+        var wide = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pred)
+        var narrow = _I32P(unsafe_from_address=pred)
+        for i in range(count):  # ascending: word i is read (8 bytes at 8i) before any later write reaches it
+            narrow[i] = Int32(wide[i])
     return 0.0
 
 
@@ -268,6 +274,17 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         if Int(fold_counts[f]) > 0:
             used = f + 1
     var sides = 2 if plan.return_train else 1
+    # Each candidate's predicted code type (scoring 'accuracy'), asked once.
+    var pred_dtypes = List[Int](length=m, fill=MEMBER_I32)
+    if plan.scoring == SEARCH_SCORE_ACCURACY:
+        for c in range(m):  # driver-loop: over the candidates (one OUTPUTS question each)
+            var probe = plan.plans[c].copy()
+            probe.classes = k
+            var dtype = member_output_dtype(probe, MEMBER_OP_PREDICT, d, 1, MEMBER_I32)
+            if dtype != MEMBER_I32 and dtype != MEMBER_I64:
+                raise Error("member ABI: a search scored by accuracy needs a member that predicts class codes")
+            pred_dtypes[c] = dtype
+    var pred_dtypes_at = Int(pred_dtypes.unsafe_ptr())
     # Per (fold, side): its row numbers, its count and its gathered X and y.
     var side_rows = List[Int](length=used * sides, fill=0)
     var side_count = List[Int](length=used * sides, fill=0)
@@ -346,13 +363,13 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var values = List[Float64](length=max(tasks, 1), fill=0.0)
         var failed = List[UInt8](length=max(tasks, 1), fill=UInt8(0))
         var errors = List[String](length=max(tasks, 1), fill=String(""))
-        var preds = List[List[Int32]](capacity=tasks)
+        var preds = List[List[Int64]](capacity=tasks)
         var pred_at = List[Int](length=max(tasks, 1), fill=0)
         for t in range(tasks):  # driver-loop: over the wave's (unit, side) tasks (their code buffers)
             var f = (u0 + t // sides) % used
             var count = side_count[f * sides + t % sides]
-            preds.append(List[Int32](length=max(count, 1) if plan.scoring == SEARCH_SCORE_ACCURACY else 1,
-                                     fill=Int32(0)))
+            preds.append(List[Int64](length=max(count, 1) if plan.scoring == SEARCH_SCORE_ACCURACY else 1,
+                                     fill=Int64(0)))
             pred_at[t] = Int(preds[t].unsafe_ptr())
         var x_at = List[Int](length=used * sides, fill=0)
         for s in range(used * sides):  # driver-loop: over the fold sides (their X block addresses)
@@ -367,7 +384,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
 
         def _score(t: Int) {imm run_at, imm values_at, imm failed_at, imm errors_at, imm pred_list, imm x_list,
                             imm y_dst_at, imm side_count_at, imm sides, imm used, imm u0, imm d, imm y_dtype,
-                            imm y_cols, imm scoring}:
+                            imm y_cols, imm scoring, imm pred_dtypes_at}:
             var v = t // sides
             var side = t % sides
             var s = ((u0 + v) % used) * sides + side
@@ -380,7 +397,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                                         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=y_dst_at)[s],
                                         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=side_count_at)[s],
                                         d, y_dtype, y_cols, scoring,
-                                        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pred_list)[t])
+                                        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pred_list)[t],
+                                        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pred_dtypes_at)[
+                                            (u0 + v) // used])
                 _F64P(unsafe_from_address=values_at)[t] = value
             except error:
                 _U8P(unsafe_from_address=failed_at)[t] = UInt8(2)
@@ -435,6 +454,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         _ = len(x_at)
         _ = len(pred_at)
         u0 = u1
+    _ = len(pred_dtypes)
     _ = len(side_x)  # the blocks were read through every wave above
     _ = len(side_y)
     _ = len(y_dst)
