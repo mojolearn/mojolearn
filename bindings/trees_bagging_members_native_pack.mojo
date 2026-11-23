@@ -5,7 +5,8 @@ from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.trees_boost_admission_unpack import boost_tree_admit
 from bindings.trees_boost_admission_pack import boost_admit
 from bindings.host_inference_scalars_door import host_inference_scalar
-from bindings.trees_public_boost_door import _seed, _validated_clone
+from bindings.trees_public_boost_door import _validated_clone
+from bindings.trees_meta_validate_unpack import meta_seed as _seed
 from xtrees.trees_boost_run import _sub_seed
 from bindings.trees_public_forest_door import forest_get_params
 from bindings.trees_public_forest_door import forest_refresh, forest_capture_mode, forest_kind

@@ -533,6 +533,10 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
     # pins its selection) and the words its first round raises (empty: none).
     var rfe_run: ClsRunPlan
     var refusal: String
+    # Lane mf-refuse5, THE DOOR'S REFUSAL (`meta_plan_refuse`): a non-RFE kind's `refusal` is the meta door's
+    # words for a constructor value it refuses; `refusal_late`: raised after the nested fits (the door's check
+    # follows them), else before anything (the plan may then hold no members).
+    var refusal_late: Bool
     # Lane mf-del5b: THE FORWARDED EXPORT's hops of a dotted importance_getter (empty: none), copied into
     # every state NEW makes from it (`_fit_rfe` hands them to the rounds' plan).
     var rfe_hops: List[Float64]
@@ -553,6 +557,7 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
         self.label_words = List[String]()
         self.rfe_run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
         self.refusal = String("")
+        self.refusal_late = False
         self.rfe_hops = List[Float64]()
 
 
@@ -687,6 +692,46 @@ def meta_plan_rfe(handle: Int, run: ClsRunPlan, var refusal: String, var hops: L
         shared_slot_unlock(lock)
 
 
+def meta_plan_refuse(handle: Int, var words: String, late: Bool) raises:
+    """UNPACK (lane mf-refuse5, THE DOOR'S REFUSAL; not the RFE kind, whose `refusal` is
+    `meta_plan_rfe`'s): the meta door's words for a constructor value it refuses, raised by every
+    state's FIT (`_fit`) where the door raises them, so the admission serves the input and no caller
+    falls back to the door to raise them. `late`: after the nested fits (the plan is whole); else first,
+    before anything is read (the plan may hold no members: NEW then checks nothing and CAPABILITIES
+    answers `_refused_mask`). Words come from the door's own check (bindings/
+    trees_meta_validate_unpack.mojo), never written here."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var entry = _PlanSlotPtr(unsafe_from_address=address)
+        entry[].refusal = words^
+        entry[].refusal_late = late
+    finally:
+        shared_slot_unlock(lock)
+
+
+def _refused_first(slot: _SlotPtr) -> Bool:
+    """THE DOOR'S REFUSAL raised before anything (lane mf-refuse5): a non-RFE state whose entry
+    carries the door's words with `late` False."""
+    return len(slot[].refusal) != 0 and not slot[].refusal_late and not _rfe_kind(slot[].kind)
+
+
+def _refused_mask(kind: Int) -> Int:
+    """CAPABILITIES of a state refused before anything (lane mf-refuse5): every call a caller may
+    admit it for (its FIT raises the door's words first), its kind's classifier bit; no scope, no
+    multi-output y but for a multi-output kind, GIL-free (its FIT reads nothing)."""
+    var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
+                | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_SCORE
+                | MEMBER_CAN_TRANSFORM | MEMBER_GIL_FREE)
+    if _classifier_kind(kind):
+        mask |= MEMBER_CAN_CLASSIFIER
+    if _multi_kind(kind):
+        mask |= MEMBER_CAN_MULTI_OUTPUT
+    return mask
+
+
 def _plan_first(handle: Int) raises -> MemberPlan:
     """The FIRST nested plan of a plan entry (a search's first candidate),
     copied under the store's lock."""
@@ -737,6 +782,7 @@ def _plan_lookup(handle: Int, release: Bool) raises -> Int:
             slot[].fold_train = List[List[Int32]]()
             slot[].fold_test = List[List[Int32]]()
             slot[].refusal = String("")
+            slot[].refusal_late = False
             slot[].rfe_hops = List[Float64]()
             store[].free.append(index)
         return address
@@ -893,6 +939,7 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     # (META_BLOCK_RFE). The one nested member is the final estimator.
     var rfe_run: ClsRunPlan
     var refusal: String
+    var refusal_late: Bool  # lane mf-refuse5: THE DOOR'S REFUSAL after the nested fits (`meta_plan_refuse`)
     var rfe_support: List[Float32]
     var rfe_ranking: List[Float32]
     var rfe_columns: List[Int32]
@@ -976,6 +1023,7 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.fold_words = List[Int64]()
         self.rfe_run = ClsRunPlan(entry_ref_unresolved(), False, False, False, False, False)
         self.refusal = String("")
+        self.refusal_late = False
         self.rfe_support = List[Float32]()
         self.rfe_ranking = List[Float32]()
         self.rfe_columns = List[Int32]()
@@ -1324,10 +1372,16 @@ def _new(call: _CallPtr) raises:
         slot[].label_words = entry[].label_words.copy()
         slot[].rfe_run = entry[].rfe_run
         slot[].refusal = entry[].refusal.copy()
+        slot[].refusal_late = entry[].refusal_late
         slot[].rfe_hops = entry[].rfe_hops.copy()
     finally:
         shared_slot_unlock(lock)
     try:
+        if _refused_first(slot):
+            # THE DOOR'S REFUSAL (lane mf-refuse5): its FIT raises the words first; nothing to check.
+            slot[].glue = xt_ref(TreesEntryKey(call[].route.mode, call[].route.vendor))
+            call[].state = state
+            return
         if len(slot[].plans) == 0:
             raise Error("member ABI: a meta member plan holds no members")
         var user_folds = len(slot[].fold_test)
@@ -3996,6 +4050,10 @@ def _outputs_rfe(call: _CallPtr, base: MemberPlan, words: List[Float64], classes
 
 
 def _fit(slot: _SlotPtr, call: _CallPtr) raises:
+    # THE DOOR'S REFUSAL (lane mf-refuse5, `meta_plan_refuse`): the door's words for a constructor value,
+    # first, as the door's validation runs before it reads X.
+    if _refused_first(slot):
+        raise Error(slot[].refusal.copy())
     var name = _name(slot[].kind)
     if not call[].x.dense_host(MEMBER_F32):
         raise Error("TypeError: a " + name + " member reads X as a dense host float32 view")
@@ -4054,6 +4112,9 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
             _fit_rfe(slot, call)
         else:
             _fit_vote(slot, call)
+        if slot[].refusal_late and len(slot[].refusal) != 0 and not _rfe_kind(slot[].kind):
+            # THE DOOR'S REFUSAL after the nested fits (lane mf-refuse5): the door checks it there.
+            raise Error(slot[].refusal.copy())
         if not _bag_kind(slot[].kind):
             _nested_outputs(slot)
         _unit_views(slot)
@@ -4916,6 +4977,8 @@ def _ensemble_member(operation: Int, address: Int) raises -> Int:
         if call[].state == 0:
             return _UNION
         var kind = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+        if _refused_first(kind):
+            return _refused_mask(kind[].kind)
         if _rfe_kind(kind[].kind):
             return _rfe_mask(kind) | _reads_given(kind, kind[].base_masks)
         if _unit_kind(kind[].kind) or _search_kind(kind[].kind):

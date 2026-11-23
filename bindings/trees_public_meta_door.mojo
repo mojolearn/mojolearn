@@ -154,6 +154,17 @@ from xtrees.glue_calls import (
     xt_ovr_assemble, xt_calibrated_proba, xt_scale,
 )
 from bindings.trees_keys_unpack import trees_keys
+# Lane mf-refuse5: the constructor refusals, ONE body with the META kind's admission.
+from bindings.trees_meta_validate_unpack import (
+    meta_jobs as _jobs,
+    meta_cv_value as _cv_value,
+    meta_stacking_validate as _stacking_validate,
+    meta_calibrated_validate as _calibrated_validate,
+    meta_voting_validate,
+    meta_voting_weights,
+    MetaActive as Active,
+    meta_active as _active,
+)
 from bindings.py_balanced import py_item
 
 
@@ -992,45 +1003,6 @@ def _member_weights(names: PythonObject, ests: PythonObject, sample_weight: Pyth
     return _as_array(w, Python.tuple(n), context)
 
 
-struct Active(Copyable, Movable):
-    """`_trees_estimators(estimators)`: the active names and estimators."""
-    var names: PythonObject
-    var ests: PythonObject
-
-    def __init__(out self, names: PythonObject, ests: PythonObject):
-        self.names = names
-        self.ests = ests
-
-
-def _active(estimators: PythonObject, owner: String, context: PythonObject) raises -> Active:
-    var b = trees_builtins()
-    if not _truthy(estimators):
-        raise Error("estimators must be a non-empty list of (name, estimator)")
-    var items = py_call(b.list, estimators)
-    var all_names = Python.list()
-    var names = Python.list()
-    var ests = Python.list()
-    for i in range(len(items)):  # driver-loop: over the (name, estimator) entries
-        var pair = py_call(b.tuple, items[i])
-        if len(pair) != 2:
-            raise Error("estimators must be a non-empty list of (name, estimator)")
-        _ = py_call(all_names.append, pair[0])
-    if len(py_call(b.set, all_names)) != len(all_names):
-        raise Error("estimator names must be unique")
-    for i in range(len(items)):  # driver-loop: over the (name, estimator) entries
-        var pair = py_call(b.tuple, items[i])
-        var est = pair[1]
-        if py_type(est) is b.str and String(est) == "drop":
-            continue
-        _ = py_call(names.append, pair[0])
-        _ = py_call(ests.append, est)
-    if len(ests) == 0:
-        raise Error("all estimators are 'drop'")
-    for i in range(len(ests)):  # driver-loop: over members
-        _require_member(ests[i], owner, context)
-    return Active(names, ests)
-
-
 def _named(names: PythonObject, fitted: PythonObject) raises -> PythonObject:
     var out = Python.dict()
     for i in range(len(fitted)):  # driver-loop: over members
@@ -1053,44 +1025,7 @@ def _check_x(model: PythonObject, X: PythonObject, context: PythonObject) raises
     return Xa
 
 
-def _jobs(model: PythonObject, verbose: Bool) raises -> Int:
-    """The worker bound of a meta-estimator's member fits from its `n_jobs`
-    (`native_unit_jobs`: None and -1 every core, k > 0 at most k), after the
-    `verbose` refusal where the estimator has that parameter. Members of
-    published families fit in parallel (bindings/member_set_door.mojo);
-    members on their own doors fit one after another whatever the bound.
-    The results do not depend on it."""
-    # TOMBSTONE: _refuse_jobs (n_jobs refused: "the members / columns / classes fit one after another") deleted
-    # 2026-11-21 by lane ma-callers round 2: published members fit in parallel, so n_jobs is the worker bound.
-    # Restore: git revert of that commit (no experiment define; a refusal, not an arm).
-    var nk = trees_keys()
-    if verbose and _truthy(_attr(model, nk[].k_verbose, PythonObject(0))):
-        _refuse("verbose", "nothing logs per member.")
-    return native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), _owner(model))
-
-
 # ------------------------------------------------------------------ cv folds
-
-
-def _cv_value(cv: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_trees_cv(cv)`: an int number of folds (None: 5), or `cv` itself when
-    it is a splitter or an iterable of (train, test) index pairs."""
-    var b = trees_builtins()
-    if cv is None:
-        return PythonObject(5)
-    var native = prep_native_context(context)
-    var nk = trees_keys()
-    if py_type(py_type(cv)) is b.type and py_contains(py_item(native, nk[].k_family_msel_splitter_layouts), py_type(cv)):
-        return cv
-    if py_type(cv) is b.list or py_type(cv) is b.tuple:
-        msel_admit(cv, native)
-        return cv
-    if py_type(cv) is not b.int:
-        raise Error("TypeError: cv requires an integer, native splitter or list of index pairs; Python callbacks cannot execute")
-    if _is_bool(cv) or not _is_integral(cv, context) or Bool(py=cv < PythonObject(2)):
-        raise Error("cv=" + _repr(cv) + ": an int >= 2, a splitter with split(X, y), or an iterable of"
-                    + " (train, test) index pairs")
-    return py_call(b.int, cv)
 
 
 def _index_i64(v: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1224,21 +1159,10 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
 
 def _voting_weights(model: PythonObject) raises -> PythonObject:
     """`VotingClassifier._weights`: one float per fitted member."""
-    var b = trees_builtins()
     var nk = trees_keys()
     var m = len(_attr(model, nk[].k_estimators_, Python.list()))
-    var given = _attr(model, nk[].k_weights, PythonObject(None))
-    var w = Python.list()
-    if given is None:
-        for _ in range(m):  # driver-loop: over members
-            _ = py_call(w.append, PythonObject(1.0))
-    else:
-        var items = py_call(b.list, given)
-        for i in range(len(items)):  # driver-loop: over the user weights (one per member)
-            _ = py_call(w.append, py_call_typed(b.float, items[i]))
-    if len(w) != m:
-        raise Error("weights has " + String(len(w)) + " entries, there are " + String(m) + " estimators")
-    return w
+    # One body with the META kind's admission (lane mf-refuse5).
+    return meta_voting_weights(_attr(model, nk[].k_weights, PythonObject(None)), m)
 
 
 def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
@@ -1246,11 +1170,8 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
     var fields = py_fields(model)
     var owner = _owner(model)
     var nk = trees_keys()
-    if classifier:
-        var voting = _attr(model, nk[].k_voting, PythonObject(None))
-        if not py_contains(Python.tuple("hard", "soft"), voting):
-            raise Error("voting must be 'hard' or 'soft'")
-    var jobs = _jobs(model, True)
+    # The voting value, then n_jobs / verbose: one body with the META kind's admission (lane mf-refuse5).
+    var jobs = meta_voting_validate(model, classifier)
     var Xa = _x_array(X, context)
     var target = y
     if classifier:
@@ -1565,15 +1486,6 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
 
 
 # ---------------------------------------------------------------- Stacking
-
-
-def _stacking_validate(model: PythonObject, context: PythonObject) raises:
-    _ = _jobs(model, True)
-    var nk = trees_keys()
-    var method = _attr(model, nk[].k_stack_method, PythonObject("auto"))
-    if not py_contains(Python.tuple("auto", "predict_proba", "decision_function", "predict"), method):
-        raise Error("stack_method must be auto, predict_proba, decision_function or predict")
-    _ = _cv_value(_attr(model, nk[].k_cv, PythonObject(None)), context)
 
 
 def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
@@ -2897,18 +2809,6 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
 
 
 # ------------------------------------------------------------- Calibration
-
-
-def _calibrated_validate(model: PythonObject, context: PythonObject) raises:
-    var nk = trees_keys()
-    var method = _attr(model, nk[].k_method, PythonObject("sigmoid"))
-    if not py_contains(Python.tuple("sigmoid", "isotonic"), method):
-        raise Error("method must be 'sigmoid' or 'isotonic'")
-    _ = native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), "CalibratedClassifierCV")
-    var ensemble = _attr(model, nk[].k_ensemble, PythonObject(True))
-    if not py_contains(Python.tuple(True, False), ensemble):
-        _refuse("ensemble=" + _repr(ensemble), "True or False.")
-    _ = _cv_value(_attr(model, nk[].k_cv, PythonObject(None)), context)
 
 
 def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: PythonObject,
