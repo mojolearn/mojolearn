@@ -18,7 +18,7 @@ from x_linear.dispatch_host import fit_dispatch
 from x_linear.dispatch import decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.dispatch import ALGO_GLM
 from x_linear.dispatch import ALGO_BAYES, ALGO_ARD
-from x_linear.bayes import BAYES_EIGH_REFUSAL, bayes_posterior_cell, ard_posterior_cell, ard_kept_count, bayes_std_row
+from x_linear.bayes import BAYES_EIGH_REFUSAL, bayes_posterior_cell, ard_posterior_cell, ard_kept_count, ard_std_row, bayes_factor_std_row
 from x_linear.bayes_words import bayes_out_words, ard_out_words
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_host
 from x_linear.logcv import logcv_fold_ids, lcv_caller_folds
@@ -49,14 +49,14 @@ def _posterior_host(a: Int, d: Int, n_out: Int, fi: Bool, fw: FP, iw: IP, res: F
     var cells = 0
     var dk = 0
     if a == ALGO_BAYES and n_out >= bayes_out_words(d):
-        cells = d * d + d
+        cells = d * d + 2 * d
     elif a == ALGO_ARD and n_out >= ard_out_words(d):
         dk = ard_kept_count(iw, d)
         cells = 1 + d + dk * dk
     if cells == 0:
         return
     var bayes = a == ALGO_BAYES
-    var tasks = host_predict_task_count_work(cells, cells * max(d, 1))
+    var tasks = host_predict_task_count_work(cells, cells)
     var chunk = host_predict_chunk(cells, tasks)
 
     def task(worker: Int) {imm chunk, imm cells, imm bayes, imm fw, imm iw, imm res, imm d, imm dk, imm fi}:
@@ -166,29 +166,38 @@ def x_linear_fit_host(
     return n_out
 
 
-def x_linear_bayes_std_host(x_addr: Int, sigma_addr: Int, offset_addr: Int, cols_addr: Int, n: Int, d: Int,
-                            dk: Int, alpha: Float64, out_addr: Int) raises -> Int:
+def x_linear_bayes_std_host(x_addr: Int, s_addr: Int, ev_addr: Int, offset_addr: Int, cols_addr: Int, n: Int,
+                            d: Int, dk: Int, form: Int, alpha: Float64, lam: Float64, out_addr: Int) raises -> Int:
     """XL_OP_BAYES_STD on the CPU column: each row's predictive standard
-    deviation (x_linear/bayes.mojo `bayes_std_row`), the rows split across
-    the host's workers (each row its own chain: the device's words)."""
-    if n < 0 or d < 0 or dk < 0 or dk > d:
-        raise Error("x_linear bayes std: n >= 0 and 0 <= dk <= d required")
+    deviation, from BayesianRidge's factor (`form` 1: V at `s_addr`, ev at
+    `ev_addr`; x_linear/bayes.mojo `bayes_factor_std_row`) or ARDRegression's
+    sigma_ (`form` 0: dk x dk at `s_addr`, the kept columns at `cols_addr`;
+    `ard_std_row`), the rows split across the host's workers (each row its
+    own chain: the device's words)."""
+    if n < 0 or d < 0 or dk < 0 or dk > d or (form == 1 and dk != d):
+        raise Error("x_linear bayes std: n >= 0 and 0 <= dk <= d required (dk = d for the factor)")
     if n == 0:
         return 0
     var x = _fp(x_addr)
     var dst = _fp(out_addr)
     var offset = _fp(offset_addr) if d > 0 else dst
-    var sigma = _fp(sigma_addr) if dk > 0 else dst
+    var s = _fp(s_addr) if dk > 0 else dst
+    var ev = _fp(ev_addr) if form == 1 and d > 0 else dst
     var has_cols = cols_addr != 0
     var cols = IP(unsafe_from_address=cols_addr if has_cols else out_addr)
     var alpha32 = Float32(alpha)
+    var lam32 = Float32(lam)
+    var factor = form == 1
     var tasks = host_predict_task_count_work(n, n * max(dk * dk, 1))
     var chunk = host_predict_chunk(n, tasks)
 
-    def task(worker: Int) {imm chunk, imm n, imm x, imm d, imm sigma, imm dk, imm offset, imm cols, imm has_cols,
-                           imm alpha32, imm dst}:
+    def task(worker: Int) {imm chunk, imm n, imm x, imm d, imm s, imm ev, imm dk, imm offset, imm cols, imm has_cols,
+                           imm alpha32, imm lam32, imm factor, imm dst}:
         for i in range(worker * chunk, min(n, (worker + 1) * chunk)):
-            dst.unsafe_store(i, bayes_std_row(x, i, d, sigma, dk, offset, cols, has_cols, alpha32))
+            if factor:
+                dst.unsafe_store(i, bayes_factor_std_row(x, i, d, s, ev, offset, alpha32, lam32))
+            else:
+                dst.unsafe_store(i, ard_std_row(x, i, d, s, dk, offset, cols, has_cols, alpha32))
 
     host_parallelize(task, tasks)
     return n

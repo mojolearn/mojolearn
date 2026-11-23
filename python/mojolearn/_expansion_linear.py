@@ -973,6 +973,11 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
         """
         return _XL_CALL(self, "regressor_predict", (X, return_std), _XL_CONTEXT)
 
+    @property
+    def sigma_(self):
+        """Posterior covariance of the weights, float32 of shape (n_features, n_features)."""
+        return _XL_CALL(self, "bayes_sigma", (), _XL_CONTEXT)
+
 
 class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
     """Bayesian ARD (automatic relevance determination) regression.

@@ -101,7 +101,7 @@ def x_linear_ops_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         elif operation == XL_OP_SPEARMAN:
             r[] = xl_spearman_host_run(a[0], a[1], p[0])
         elif operation == XL_OP_BAYES_STD:
-            r[] = x_linear_bayes_std_host(a[0], a[1], a[2], a[3], p[0], p[1], p[2], f[0], a[4])
+            r[] = x_linear_bayes_std_host(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], f[0], f[1], a[5])
         else:
             r[] = xl_best_alpha_host_run(a[0], p[0])
         return 0

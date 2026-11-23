@@ -3,9 +3,11 @@
 """BayesianRidge's and ARDRegression's posterior against scikit-learn (lane mf-iterimp2, 2026-11-23).
 
 The x_linear member (core/xlinear_member.mojo) over the host column's operations entry
-(x_linear/ops_entry_host.mojo): one FIT, then its posterior blocks (XL_MEMBER_BLOCK_SIGMA, XL_MEMBER_BLOCK_X_OFFSET)
-and one PREDICT_STD with the mean in `call.y` (XL_OP_BAYES_STD), against scikit-learn's sigma_, X_offset_ and
-predict(X, return_std=True) on the same float32 inputs (fitted in float64). Inputs and references:
+(x_linear/ops_entry_host.mojo): one FIT, then its posterior blocks (X_OFFSET; BayesianRidge's FACTOR, V and ev,
+ARDRegression's SIGMA) and one PREDICT_STD with the mean in `call.y` (XL_OP_BAYES_STD: BayesianRidge from the factor,
+never forming sigma_), against scikit-learn's X_offset_, sigma_ and predict(X, return_std=True) on the same float32
+inputs (fitted in float64). BayesianRidge's sigma_ is the public attribute's lazy first read: x_linear/door_run.mojo
+`xl_bayes_sigma_run` over the exported factor. Inputs and references:
 tools/py2mojo_native_fixtures_mf_iterimp2.py (pack `mf_bayes_std`). Tolerance rtol 2e-3, atol 2e-3 (sigma_ atol
 1e-4: its entries are small), the float32 fit against a float64 reference.
 
@@ -15,9 +17,9 @@ tools/py2mojo_native_fixtures_mf_iterimp2.py (pack `mf_bayes_std`). Tolerance rt
     unit 3   ARDRegression(fit_intercept=False) on the same data
 
 Each unit checks dk (sigma_'s side), X_offset_, sigma_, the mean and the standard deviation of 50 query rows.
-Fail-proof: in x_linear/bayes.mojo `bayes_std_row` return `fsqrt(s)` (drop the 1 / alpha_ term): every unit fails
-naming a std word; in `bayes_posterior_cell` read `vv + j * d + m` twice (sigma_[j, j] for every k): units 0 and 1
-fail naming a sigma_ word. The units are independent and run across the host cores.
+Fail-proof: in x_linear/bayes.mojo `bayes_factor_std_row` return `fsqrt(s)` (drop the 1 / alpha_ term): units 0
+and 1 fail naming a std word (`ard_std_row` the same: units 2 and 3); in `bayes_sigma_cell` read `v + j * d + m`
+twice (sigma_[j, j] for every k): units 0 and 1 fail naming a sigma_ word. The units are independent and run across the host cores.
 """
 from std.testing import TestSuite
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
@@ -31,7 +33,11 @@ from core.member_abi import (
     MEMBER_OP_PREDICT_STD, MEMBER_CAN_PREDICT_STD, member_call, member_call_of, member_new, member_free,
 )
 from core.member_families import MEMBER_FAMILY_XLINEAR
-from core.xlinear_member import xlinear_member_v2, XL_MEMBER_BLOCK_SIGMA, XL_MEMBER_BLOCK_X_OFFSET
+from core.xlinear_member import (
+    xlinear_member_v2, XL_MEMBER_BLOCK_SIGMA, XL_MEMBER_BLOCK_X_OFFSET, XL_MEMBER_BLOCK_FACTOR,
+)
+from core.member_abi import MEMBER_BLOCK_SCALARS, MEMBER_F64
+from x_linear.door_run import xl_bayes_sigma_run
 from x_linear.ops_entry_host import x_linear_ops_host_v1
 
 comptime DIR = "checks/native_tests/fixtures/mf_bayes_std/"
@@ -99,7 +105,22 @@ def bayes_case(unit: Int) raises:
         call.x = MemberMatrix(Int(x.unsafe_ptr()), N, d)
         call.y = MemberMatrix(Int(y.unsafe_ptr()), N, 1)
         _ = member_call(plan.member, MEMBER_OP_FIT, call)
-        var sigma = _block(plan, call.state, XL_MEMBER_BLOCK_SIGMA)
+        var sigma: List[Float32]
+        if unit < 2:
+            # the factor (d + 1) x d, then sigma_ as its first read forms it
+            var factor = _block(plan, call.state, XL_MEMBER_BLOCK_FACTOR)
+            require(len(factor) == d * d + d, label + ": the factor has " + String(len(factor)) + " words")
+            var sc = member_call_of(plan, call.state)
+            sc.block = MEMBER_BLOCK_SCALARS
+            sc.flags = 0
+            _ = member_call(plan.member, MEMBER_OP_EXPORT, sc)
+            var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=sc.dst.data)
+            sigma = List[Float32](length=d * d, fill=0.0)
+            xl_bayes_sigma_run(Int(factor.unsafe_ptr()), Int(factor.unsafe_ptr()) + 4 * d * d, d, scalars[1],
+                               scalars[2], Int(sigma.unsafe_ptr()))
+            _ = len(factor)  # the factor stays alive past the RUN that read it
+        else:
+            sigma = _block(plan, call.state, XL_MEMBER_BLOCK_SIGMA)
         require(len(sigma) == dk * dk, label + ": sigma_ has " + String(len(sigma)) + " words, expected "
             + String(dk * dk))
         rows_close(_block(plan, call.state, XL_MEMBER_BLOCK_X_OFFSET), fixture_f64(name + "-offset.f64", d), 2e-3,

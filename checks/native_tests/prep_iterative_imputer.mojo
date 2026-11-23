@@ -40,7 +40,7 @@ correlated, 15% NaN) for seeds 0 to 3, with scikit-learn 1.9.1's results, in `fi
     estimator posterior units 0-1   (lane mf-iterimp2) sample_posterior with estimator=BayesianRidge() through the
                           member rounds (PREDICT_STD with the mean, core/xlinear_member.mojo), and with bounds
                           [-0.5, 0.5]: the posterior sets' statistical checks against scikit-learn's reference (whose
-                          default estimator is BayesianRidge()). Fail-proof: in x_linear/bayes.mojo `bayes_std_row`
+                          default estimator is BayesianRidge()). Fail-proof: in x_linear/bayes.mojo `bayes_factor_std_row`
                           return `fsqrt(s)` (no 1 / alpha_ term): the spread check fails.
 
 The GaussianProcess member's PREDICT_STD route (the same query's mean in `call.y`) needs the GP provider's host route
