@@ -1791,6 +1791,224 @@
    "patches": [
     "xtrees/checks/sabotage/coverage_xtrees_dart_drop_count.patch"
    ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-core-msel_rebase_device": [
+     "forest-shard"
+    ]
+   },
+   "arms": [
+    "coverage-precise-core-msel_rebase_device"
+   ],
+   "builds": [
+    "build"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "core",
+   "id": "core-vg1",
+   "lanes": [
+    "forest-shard"
+   ],
+   "patches": [
+    "core/sabotage/coverage_precise_msel_rebase_device.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-core-shard_topk_merge_device": [
+     "neighbors-reference-shard"
+    ]
+   },
+   "arms": [
+    "coverage-precise-core-shard_topk_merge_device"
+   ],
+   "builds": [
+    "build"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "core",
+   "id": "core-vg2",
+   "lanes": [
+    "neighbors-reference-shard"
+   ],
+   "patches": [
+    "core/sabotage/coverage_precise_shard_topk_merge_device.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-core-shard_merge_device": [
+     "ivf-distributed"
+    ]
+   },
+   "arms": [
+    "coverage-core-shard_merge_device"
+   ],
+   "builds": [
+    "build_ivf"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "ivf",
+   "id": "ivf-vg1",
+   "lanes": [
+    "ivf-distributed"
+   ],
+   "patches": [
+    "core/sabotage/coverage_shard_merge_device.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-glm-e2e_existing_device": [
+     "logistic-multiclass",
+     "x-ols-square",
+     "x-ridge-rank-deficient"
+    ]
+   },
+   "arms": [
+    "coverage-glm-e2e_existing_device"
+   ],
+   "builds": [
+    "build_estimators"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "estimators",
+   "id": "estimators-vg1",
+   "lanes": [
+    "logistic-multiclass",
+    "x-ols-square",
+    "x-ridge-rank-deficient"
+   ],
+   "patches": [
+    "glm/checks/sabotage/e2e_existing_device.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-x_neighbors-e2e_existing_device": [
+     "knn-clf",
+     "knn-reg",
+     "knn-clf-distance",
+     "knn-reg-distance",
+     "svc",
+     "kernel-ridge",
+     "kernel-ridge-laplacian",
+     "kernel-ridge-poly",
+     "nystroem",
+     "gp",
+     "kde",
+     "rbf-sampler",
+     "radius",
+     "knn-rbc",
+     "kernel-ridge-wide"
+    ]
+   },
+   "arms": [
+    "coverage-x_neighbors-e2e_existing_device"
+   ],
+   "builds": [
+    "build",
+    "build_gp",
+    "build_kernel_methods",
+    "build_svm",
+    "build_estimators"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "core",
+   "id": "core-vg3",
+   "lanes": [
+    "knn-clf",
+    "knn-reg",
+    "knn-clf-distance",
+    "knn-reg-distance",
+    "svc",
+    "kernel-ridge",
+    "kernel-ridge-laplacian",
+    "kernel-ridge-poly",
+    "nystroem",
+    "gp",
+    "kde",
+    "rbf-sampler",
+    "radius",
+    "knn-rbc",
+    "kernel-ridge-wide"
+   ],
+   "patches": [
+    "x_neighbors/checks/sabotage/e2e_existing_device.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-x_neighbors-e2e_device_only": [
+     "x-neighbors-additive-chi2",
+     "x-neighbors-skewed-chi2",
+     "x-neighbors-louvain",
+     "x-neighbors-nearest-centroid",
+     "x-neighbors-ocsvm",
+     "x-neighbors-kpca"
+    ]
+   },
+   "arms": [
+    "coverage-x_neighbors-e2e_device_only"
+   ],
+   "builds": [
+    "build_x_neighbors"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_neighbors",
+   "id": "x_neighbors-vg1",
+   "lanes": [
+    "x-neighbors-additive-chi2",
+    "x-neighbors-skewed-chi2",
+    "x-neighbors-louvain",
+    "x-neighbors-nearest-centroid",
+    "x-neighbors-ocsvm",
+    "x-neighbors-kpca"
+   ],
+   "patches": [
+    "x_neighbors/checks/sabotage/e2e_device_only.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-x_ann-resident_index_py_dn_ann": [
+     "x-ann-ivf-pq",
+     "x-ann-ivf-sq",
+     "x-ann-ivf-rabitq"
+    ]
+   },
+   "arms": [
+    "coverage-x_ann-resident_index_py_dn_ann"
+   ],
+   "builds": [
+    "build_x_ann"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "x_ann",
+   "id": "x_ann-vg1",
+   "lanes": [
+    "x-ann-ivf-pq",
+    "x-ann-ivf-sq",
+    "x-ann-ivf-rabitq"
+   ],
+   "patches": [
+    "x_ann/checks/sabotage/resident_index_py_dn_ann.patch"
+   ]
   }
  ]
 }

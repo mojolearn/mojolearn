@@ -1,0 +1,27 @@
+--- a/core/shard_merge_device.mojo
++++ b/core/shard_merge_device.mojo
+@@ -65,6 +65,15 @@
+ # ---- the IVF merge -----------------------------------------------------------
+ 
+ 
++@always_inline
++def _cov_sab_f32(v: Float32) -> Float32:
++    """SABOTAGE (coverage arm): `v` one ulp off; a zero or subnormal becomes the smallest normal."""
++    var bits = bitcast[DType.uint32](v)
++    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](bits + UInt32(1))
++
++
+ def _ivf_merge_kernel(
+     dist: _F32, ids: _I32, cnt: _I32, maps: _I32, meta: _I32,
+     P_: Int32, m_: Int32, k_: Int32,
+@@ -139,6 +148,8 @@
+     for j in range(filled, k):
+         od.unsafe_store(base + j, bitcast[DType.float32](UInt32(0x7F800000)))
+         oi.unsafe_store(base + j, Int32(-1))
++    for j in range(filled):  # SABOTAGE (coverage arm): every merged distance one ulp off
++        od.unsafe_store(base + j, _cov_sab_f32(od.unsafe_load(base + j)))
+     oc.unsafe_store(row, Int32(total))
+ 
+ 

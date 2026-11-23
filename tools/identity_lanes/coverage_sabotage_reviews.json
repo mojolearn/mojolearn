@@ -23,5 +23,21 @@
    "error_match": "ValueError: Isomap\\.transform: query row [0-9]+ has no training row within radius [0-9.eE+-]+",
    "patch_sha256": "ea6c165887396ad98fe7409ffd31f45f7e2b4a077a3c4cadf2d05cdd109814b2"
   }
+ },
+ "coverage-core-msel_host_impl": {
+  "forest-shard/base": {
+   "product_check": "core/msel_host_impl.mojo:5 msel_rebase_check_parts: the admission that the shards' offset-table lengths add up to the raw and merged sizes (core/msel_host_run.mojo msel_rebase_offsets_i32_host_run, the core host image's parallel base table entry PB_REBASE_OFFSETS).",
+   "why_fault_reaches_check": "tools/identity_lanes/coverage.py forest-shard calls mojolearn.parallel_ensemble.fit_forest(devices=(0,), trees_per_shard=4) on the CPU column: bindings/parallel_shard_native_door.mojo _fit_forest joins the four tree ranges' offset tables in _rebase_offsets and calls the base table's rebase, where the patch steps the merged-size tally by one per part, so every valid four-part rebase refuses (written before the run, lane verify-gaps 2026-11-23; the 0860 run recorded the same refusal on par-forest).",
+   "error_match": "(?:[A-Za-z]+: )?msel_rebase_offsets_i32: part lengths disagree with the sizes",
+   "patch_sha256": "5e33e963ed145eb491992c202531ed91271016a009c1aa0c03e1d96fd2ab23cd"
+  }
+ },
+ "coverage-precise-core-msel_rebase_device": {
+  "forest-shard/base": {
+   "product_check": "core/msel_device_run.mojo msel_rebase_offsets_i32_device_run: the refusal when device_rebase_offsets_i32 (core/msel_device.mojo _rebase_kernel) reports a merged offset outside int32.",
+   "why_fault_reaches_check": "forest-shard's fit_forest on a GPU column rebases its four tree ranges through the GPU base image's parallel table (bindings/parallel_base_entry_device.mojo PB_REBASE_OFFSETS); the patch makes _rebase_kernel flag the first merged offset as out of int32, so the status word refuses every valid rebase (written before the run, lane verify-gaps 2026-11-23).",
+   "error_match": "(?:[A-Za-z]+: )?msel_rebase_offsets_i32: a merged offset leaves int32",
+   "patch_sha256": "7f0db7d221a28317efeda46df636db3e0bc54168c1b2f04af72d0fb3ed7d9059"
+  }
  }
 }

@@ -65,7 +65,7 @@ trait ClusterOps(Movable):
         ...
 
     def kth(mut self, m: Int, n_rows: Int, n_cols: Int, k: Int, dst: Int) raises:
-        """out[r] = k-th smallest of row r (`bodies.kth_smallest_row`)."""
+        """out[r] = k-th smallest of row r (an exact selection over the magnitude bits, DEVIATION 5103)."""
         ...
 
     def meanshift(

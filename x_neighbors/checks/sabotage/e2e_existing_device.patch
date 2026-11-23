@@ -28,15 +28,6 @@ diff --git a/kernel_methods/checks/kernel_matrix.mojo b/kernel_methods/checks/ke
 index e519f31717..021c41e41a 100644
 --- a/kernel_methods/checks/kernel_matrix.mojo
 +++ b/kernel_methods/checks/kernel_matrix.mojo
-@@ -397,7 +397,7 @@ def laplacian_epilogue_kernel(
-     if tid >= n:
-         return
-     var d = ftz(inout_k.unsafe_load(tid))
--    inout_k.unsafe_store(tid, ftz(identical_exp(ftz(identical_mul(gain, d)))))
-+    inout_k.unsafe_store(tid, ftz(identical_exp(ftz(identical_mul(gain * Float32(1.0000001), d)))))  # SABOTAGE e2e
- 
- 
- # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
 @@ -751,7 +751,7 @@ def km_kernel_matrix(
              if not via_copy:
                  ctx.enqueue_function[km_laplacian_cell_kernel](

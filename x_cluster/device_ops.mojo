@@ -274,7 +274,7 @@ comptime KTH_TPB = 256
 # DEVIATION 5120 (the device order statistic by a four-pass radix select on
 # the float bits, one block per row). Row 200; kth_check (5120 arm).
 def _kth_kernel(m: FPtr, n_rows: Int32, n_cols: Int32, k: Int32, dst: FPtr):
-    """`bodies.kth_smallest_row` for row `block_idx.x`, the SAME value by a
+    """The k-th smallest of row `block_idx.x` (HostOps.kth's exact select), the SAME value by a
     different exact route: the k-th smallest masked bit pattern found one
     byte at a time, most significant first (256-bin shared histograms of
     integer counts: every interleaving of the atomics gives the same counts,

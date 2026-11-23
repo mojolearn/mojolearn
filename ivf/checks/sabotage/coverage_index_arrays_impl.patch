@@ -1,0 +1,41 @@
+--- a/ivf/index_arrays_impl.mojo
++++ b/ivf/index_arrays_impl.mojo
+@@ -126,6 +126,7 @@
+     with (+inf, -1), the plain IVF search's kOutOfBoundsRecord (status 3
+     before lane ivf-short-fill); returns (status, bad_row) as the shell's
+     contract says."""
++    from std.memory import bitcast  # SABOTAGE (coverage-ivf-index_arrays_impl): for the merged-distance flip below
+     var cd = List[Float32](capacity=shards * k)
+     var ci = List[Int32](capacity=shards * k)
+     var status = 0
+@@ -170,7 +171,8 @@
+             break
+         for j in range(k):
+             if j < len(cd):
+-                od.unsafe_store(row * k + j, cd[j])
++                var sb = bitcast[DType.uint32](cd[j])  # SABOTAGE (coverage-ivf-index_arrays_impl): every merged distance one ulp off
++                od.unsafe_store(row * k + j, bitcast[DType.float32](UInt32(0x00800000)) if (sb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](sb + UInt32(1)))
+                 oi.unsafe_store(row * k + j, ci[j])
+             else:
+                 od.unsafe_store(row * k + j, ivf_out_of_bounds_distance())
+@@ -215,7 +217,9 @@
+     for v in range(n):
+         var p = Int(owner[v])
+         var r = cnt[p]
+-        mp.unsafe_store(p * n // shards + r, Int32(v))
++        # SABOTAGE (coverage-ivf-index_arrays_impl): each shard's id map permuted in adjacent pairs (a permutation of the shard's ids)
++        var rs = r ^ 1 if (r ^ 1) < ((p + 1) * n // shards - p * n // shards) else r
++        mp.unsafe_store(p * n // shards + rs, Int32(v))
+         rank[v] = Int32(r)
+         cnt[p] = r + 1
+     for i in range(n):
+@@ -235,5 +239,8 @@
+     var distances = read_f32(address, n)
+     postprocess_distances(distances, metric)
+     var dst = f32_ptr(address)
++    # SABOTAGE (coverage-ivf-index_arrays_impl): every finalized distance one ulp off
++    from std.memory import bitcast
+     for i in range(n):
+-        dst.unsafe_store(i, distances[i])
++        var sb = bitcast[DType.uint32](distances[i])
++        dst.unsafe_store(i, bitcast[DType.float32](UInt32(0x00800000)) if (sb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](sb + UInt32(1)))

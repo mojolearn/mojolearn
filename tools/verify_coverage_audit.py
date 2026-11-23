@@ -1327,6 +1327,8 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "transformer-decode-load-state", "safetensors-widen-f16",
                        "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill",
                        "sequence-device-tensor",
+                       # lane verify-gaps (2026-11-23): the one-device shard drivers
+                       "forest-shard", "neighbors-reference-shard", "ivf-distributed", "x-ols-square", "kernel-ridge-wide", "x-ridge-rank-deficient", "x-lasso-short",
                        # lane verify-coverage-owed (2026-10-21)
                        "mamba2-decode-session", "mamba3-decode-session", "training-chunked-lm-head",
                        "training-mlp-sessions", "samba-optimizer-state", "sequence-optimizer-state",
@@ -1510,19 +1512,19 @@ ANNOTATIONS = {
                                   "byte_lm_session_export_state", "byte_lm_session_logits",
                                   "byte_lm_session_next_bytes", "byte_lm_session_open",
                                   "byte_lm_session_rollback", "byte_lm_session_step")},
-    "knn_classify_neighbors": ("covered", ["par-reference-knn"],
+    "knn_classify_neighbors": ("covered", ["neighbors-reference-shard"],
                                "run by bindings/parallel_neighbor_worker_door.mojo reference_vote; "
-                               "par-* lanes run on two-device boxes"),
+                               "the lane runs one device (lane verify-gaps, 2026-11-23)"),
     "knn_regress_neighbors": ("covered", ["par-reference-knn-reg"],
                               "run by bindings/parallel_neighbor_worker_door.mojo reference_vote"),
     "fold_pair_f32": ("covered", ["cross-vendor-fold"],
                       "no Python door since lane calltable-parallel-archive: the native fold calls the base "
                       "image's parallel table entry (core/parallel_entry_table.mojo PB_FOLD_PAIR_F32); "
                       "every ordered_fold and fold_pair runs it"),
-    "ivf_flat_partial_search": ("covered", ["par-ivf"], "run by bindings/parallel_neighbor_worker_door.mojo ivf_search"),
-    "ivf_finalize_distances": ("covered", ["par-ivf"],
+    "ivf_flat_partial_search": ("covered", ["ivf-distributed"], "run by bindings/parallel_neighbor_worker_door.mojo ivf_search"),
+    "ivf_finalize_distances": ("covered", ["ivf-distributed"],
                                "run by the native distributed IVF owner (bindings/parallel_shard_native_door.mojo "
-                               "`ivf_search`) on a cosine index through the IVF image's parallel table entry "
+                               "`ivf_search`) on a euclidean index through the IVF image's parallel table entry "
                                "(PI_FINALIZE), the same body as this door"),
     "pca_fit": ("covered", ["pca", "pca-full-whiten", "pca-whiten"],
                 "the native PCA owner is handed it at connect (_native_pca_bridge.connect)"),
@@ -2152,19 +2154,19 @@ _NATIVE_PARAMS = ("public-set-params (tools/identity_lanes/public_native_params.
                   "with set_params, refits and digests the outputs and the parameters read back")
 ANNOTATIONS.update({
     "msel_rebase_offsets_i32": (
-        "covered", ["par-forest", "par-forest-et", "par-forest-et-clf", "par-forest-reg"],
+        "covered", ["forest-shard"],
         "parallel_ensemble.fit_forest is one native call (bindings/parallel_shard_native_door.mojo "
         "fit_forest -> _fit_forest), which rebases the tree ranges' node offsets through "
         "_rebase_offsets through the base image's parallel table entry (PB_REBASE_OFFSETS; no Python "
         "door since lane calltable-parallel-archive; the core host twin on a CPU install); "
-        "the four lanes fit 16 trees in four ranges and are held to the plain fit"),
+        "the lane fits 16 trees in four ranges on one device and is held to the plain fit"),
     "shard_topk_merge_f32": (
-        "covered", ["par-reference-knn", "par-reference-knn-reg"],
+        "covered", ["neighbors-reference-shard"],
         "ReferenceShardedNeighbors.kneighbors/predict/predict_proba are one native call "
         "(bindings/parallel_shard_native_door.mojo reference_query -> _reference_query), which merges every "
         "reference block's candidates through the base image's parallel table entry (PB_TOPK_MERGE_F32; "
-        "no Python door since lane calltable-parallel-archive); both lanes query four reference blocks and "
-        "are held to the plain estimator"),
+        "no Python door since lane calltable-parallel-archive); the lane queries four reference blocks on "
+        "one device and is held to the plain estimator"),
     "linear_constructor_native_call": (
         "covered", ["public-set-params", "x-huber-outliers"],
         "_native_linear_constructors.install replaces the __init__ of the 19 field-only linear models "

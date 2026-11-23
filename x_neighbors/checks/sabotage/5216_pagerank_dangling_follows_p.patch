@@ -1,13 +1,13 @@
-diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
---- a/x_neighbors/items.mojo
-+++ b/x_neighbors/items.mojo
-@@ -916,7 +916,8 @@
-         if Int(dangling.unsafe_load(i)) != 0:
-             dsum = _add(dsum, x.unsafe_load(i))
+diff --git a/x_neighbors/graph_par.mojo b/x_neighbors/graph_par.mojo
+index 722f1cdcd6..f0dd3beb04 100644
+--- a/x_neighbors/graph_par.mojo
++++ b/x_neighbors/graph_par.mojo
+@@ -601,7 +601,7 @@ def pr_step_csr(
+     for e in range(lo, hi):
+         acc = ftz(identical_mul_add(ftz(x.unsafe_load(Int(rows.unsafe_load(e)))), ftz(vals.unsafe_load(e)), acc))
      var pt = ftz(p.unsafe_load(t))
 -    var inner = ftz(identical_mul_add(dsum, ftz(dw.unsafe_load(t)), acc))
-+    var inner = ftz(identical_mul_add(dsum, pt, acc))
-+
++    var inner = ftz(identical_mul_add(dsum, pt, acc))  # SABOTAGE 5216: the dangling mass follows p, not the dangling weights
      var teleport = ftz(identical_mul(_sub(Float32(1), alpha), pt))
      res.unsafe_store(t, ftz(identical_mul_add(alpha, inner, teleport)))
  

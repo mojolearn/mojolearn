@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seams DEVIATION 5216 (the PageRank step), 5217 (the min-label product)
-and 5204 (Louvain's tie to the smallest community id, lane hr-graph) of x_neighbors/items.mojo. Check 5205
-(the SVGP system) was removed with the ops it checked (see the TOMBSTONE in main).
+"""Seams DEVIATION 5216 (the PageRank step: the product's one body,
+x_neighbors/graph_par.mojo `pr_step_csr`, which the host executor and the
+device kernel both run), 5217 (the min-label components: the product's
+`op_cc_iterate`, x_neighbors/iter_device.mojo on the GPU and the sparse walk
+of x_neighbors/cc_sparse.mojo on the host) and 5204 (Louvain's tie to the
+smallest community id, lane hr-graph). Check 5205 (the SVGP system) was
+removed with the ops it checked (see the TOMBSTONE in main).
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_neighbors/checks/graph_check.mojo
 
@@ -12,12 +16,16 @@ from x_neighbors.checks.oracles import o_pagerank_step, o_cc_step
 from x_neighbors.checks.seam_util import (
     seam_fixture, fa, ia, zf, zi, count_diff_f32, count_diff_i32, require_separates, same,
 )
-from x_neighbors.device_ops import op_pagerank_step, op_cc_step
-from x_neighbors.host_ops import op_pagerank_step as h_pagerank_step, op_cc_step as h_cc_step
+# TOMBSTONE: the dense check-only op_pagerank_step / op_cc_step (device_ops, host_ops) and their items deleted
+# 2026-11-23 by lane/verify-gaps; this check now holds the live bodies; recoverable at aecad68fb8.
+from x_neighbors.items import FP, IP, _add
+from x_neighbors.iter_device import op_cc_iterate
+from x_neighbors.iter_host import op_cc_iterate as h_cc_iterate
 from x_neighbors.graph_dev import op_louvain, pr_iterate_gpu
 from x_neighbors.graph_host import op_louvain as h_louvain, GraphCpu, pr_iterate_cpu
 from x_neighbors.graph_par import (
     Lay, LV_MOVE, L_NSLOT, L_G0, L_COMM, L_IC, L_DEG, L_TLO, L_THI, L_PREV, L_FV, L_EK, L_ORD, _is, _fs, _ls,
+    pr_step_csr,
 )
 
 
@@ -34,6 +42,59 @@ def _graph(n: Int, seed: UInt64) -> List[Float32]:
                 a[i * n + j] = wt
                 a[j * n + i] = wt
     return a^
+
+
+def _pr_step_live(
+    q: List[Float32], x: List[Float32], p: List[Float32], dw: List[Float32], dang: List[Int32], n: Int,
+    alpha: Float32,
+) -> List[Float32]:
+    """One PageRank step through the product's body (`graph_par.pr_step_csr`):
+    Q's column lists (nonzero cells, rows ascending) and the dangling mass
+    folded ascending from +0.0, as `pr_drive` stages them."""
+    var indptr = zi(n + 1)
+    var rows = List[Int32]()
+    var vals = List[Float32]()
+    for t in range(n):
+        for i in range(n):
+            if q[i * n + t] != Float32(0):
+                rows.append(Int32(i))
+                vals.append(q[i * n + t])
+        indptr[t + 1] = Int32(len(rows))
+    if len(rows) == 0:
+        rows.append(Int32(0))
+        vals.append(Float32(0))
+    var dsum = Float32(0)
+    for i in range(n):
+        if Int(dang[i]) != 0:
+            dsum = _add(dsum, x[i])
+    var res = zf(n)
+    var pi = IP(unsafe_from_address=ia(indptr))
+    var pr = IP(unsafe_from_address=ia(rows))
+    var pv = FP(unsafe_from_address=fa(vals))
+    var px = FP(unsafe_from_address=fa(x))
+    var pp = FP(unsafe_from_address=fa(p))
+    var pd = FP(unsafe_from_address=fa(dw))
+    var po = FP(unsafe_from_address=fa(res))
+    for t in range(n):
+        pr_step_csr(t, pi, pr, pv, px, pp, pd, dsum, po, alpha)
+    _ = indptr^  # read through pi above: keep it alive past the loop (seam_util.fa)
+    _ = rows^
+    _ = vals^
+    return res^
+
+
+def _cc_fixed_point(a: List[Float32], n: Int, variant: Int) -> List[Int32]:
+    """The oracle's min-label rounds (o_cc_step) from the identity labels to
+    their fixed point; variant 1 takes the max label instead."""
+    var lab = zi(n)
+    for i in range(n):
+        lab[i] = Int32(i)
+    for _ in range(n + 1):  # a label moves at most n times: n + 1 rounds reach the fixed point
+        var nxt = o_cc_step(a, lab, n, variant)
+        if count_diff_i32(nxt, lab) == 0:
+            break
+        lab = nxt^
+    return lab^
 
 
 def main() raises:
@@ -53,12 +114,8 @@ def main() raises:
     dang[9] = 1
     var w = o_pagerank_step(q, x, p, p, dang, n, Float32(0.85))
     require_separates("5216 pagerank x@Q fold", count_diff_f32(w, o_pagerank_step(q, x, p, p, dang, n, Float32(0.85), 1)))
-    var dv = zf(n)
-    op_pagerank_step(fa(q), fa(x), fa(p), fa(p), ia(dang), fa(dv), n, Float32(0.85))
-    same("5216 pagerank_step device", count_diff_f32(dv, w))
-    var hv = zf(n)
-    h_pagerank_step(fa(q), fa(x), fa(p), fa(p), ia(dang), fa(hv), n, Float32(0.85))
-    same("5216 pagerank_step host", count_diff_f32(hv, w))
+    var dv = _pr_step_live(q, x, p, p, dang, n, Float32(0.85))
+    same("5216 pagerank_step (graph_par.pr_step_csr)", count_diff_f32(dv, w))
     tr.record_list_f32("x_neighbors.pagerank", dv)
     # networkx's `dangling` weights, apart from the personalization
     var dwt = zf(n)
@@ -66,12 +123,8 @@ def main() raises:
         dwt[i] = Float32(1 + (i * 7) % 5) / Float32(3 * n)
     var wpd = o_pagerank_step(q, x, p, dwt, dang, n, Float32(0.85))
     require_separates("5216 pagerank dangling weights", count_diff_f32(wpd, o_pagerank_step(q, x, p, dwt, dang, n, Float32(0.85), 2)))
-    var ddw = zf(n)
-    op_pagerank_step(fa(q), fa(x), fa(p), fa(dwt), ia(dang), fa(ddw), n, Float32(0.85))
-    same("5216 pagerank dangling device", count_diff_f32(ddw, wpd))
-    var hdw = zf(n)
-    h_pagerank_step(fa(q), fa(x), fa(p), fa(dwt), ia(dang), fa(hdw), n, Float32(0.85))
-    same("5216 pagerank dangling host", count_diff_f32(hdw, wpd))
+    var ddw = _pr_step_live(q, x, p, dwt, dang, n, Float32(0.85))
+    same("5216 pagerank dangling (graph_par.pr_step_csr)", count_diff_f32(ddw, wpd))
     tr.record_list_f32("x_neighbors.pagerank_dangling", ddw)
     _ = dwt^
 
@@ -113,19 +166,36 @@ def main() raises:
     tr.record_list_f32("x_neighbors.pagerank_iterate", pcols[0])
     _ = pa^
 
+    # 5217 through the product's connected components (`op_cc_iterate`):
+    # the two-cluster graph with its bridge cut, node 7 isolated and one
+    # edge kept in one direction only (weak connectivity), from the identity
+    # labels to the fixed point; the oracle's min-label rounds and the
+    # max-label representative separate on it.
     var g = _graph(n, 43)
-    var lab = zi(n)
-    for i in range(n):
-        lab[i] = Int32((i * 11) % n)
-    var wc = o_cc_step(g, lab, n)
-    require_separates("5217 min-label representative", count_diff_i32(wc, o_cc_step(g, lab, n, 1)))
+    g[0 * n + (n - 1)] = Float32(0)
+    g[(n - 1) * n + 0] = Float32(0)
+    for j in range(n):
+        g[7 * n + j] = Float32(0)
+        g[j * n + 7] = Float32(0)
+    g[2 * n + 1] = Float32(0)
+    g[1 * n + 2] = Float32(1)
+    var wc = _cc_fixed_point(g, n, 0)
+    require_separates("5217 min-label representative", count_diff_i32(wc, _cc_fixed_point(g, n, 1)))
     var dc = zi(n)
-    op_cc_step(fa(g), ia(lab), ia(dc), n)
-    same("5217 cc_step device", count_diff_i32(dc, wc))
+    for i in range(n):
+        dc[i] = Int32(i)
+    var dinfo = zi(2)
+    op_cc_iterate(fa(g), ia(dc), ia(dinfo), n)
+    same("5217 connected components device (iter_device.op_cc_iterate)", count_diff_i32(dc, wc))
     var hc = zi(n)
-    h_cc_step(fa(g), ia(lab), ia(hc), n)
-    same("5217 cc_step host", count_diff_i32(hc, wc))
+    for i in range(n):
+        hc[i] = Int32(i)
+    var hinfo = zi(2)
+    h_cc_iterate(fa(g), ia(hc), ia(hinfo), n)
+    same("5217 connected components host (iter_host.op_cc_iterate)", count_diff_i32(hc, wc))
     tr.record_list_i32("x_neighbors.cc", dc)
+    _ = dinfo^
+    _ = hinfo^
 
     # ---- 5204: one node with two candidate communities of EQUAL gain (node 0
     # of the path 1 - 0 - 2, singletons) moves to the smaller id, community 1
@@ -243,6 +313,5 @@ def main() raises:
     _ = p^
     _ = dang^
     _ = g^
-    _ = lab^
     _ = ring^
     print("PASS x_neighbors graph_check")
