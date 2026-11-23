@@ -58,8 +58,9 @@ from core.trees_entry_table import TreesEntryKey
 from core.entry_table import EntryRef, entry_ref_vendor, entry_ref_mode
 from gbdt.fit_calls import (
     xg_ref, xg_resident, xg_predict, xg_predict_multi, xg_binary, xg_sigmoid_pair, xg_resident_prepare,
-    xg_resident_predict, xg_ordered_fit, xg_feature_freq_fit,
+    xg_resident_predict, xg_ordered_fit, xg_feature_freq_fit, xg_importances,
 )
+from bindings.gbdt_importances_pack import gbdt_importances_store
 from bindings.trees_keys_unpack import trees_keys
 from core.shared_slot import SharedSlot
 from bindings.py_balanced import py_item
@@ -785,11 +786,21 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var text = xg_ordered_fit(call.entry, call.x, call.y, call.weights, call.extra, call.n_rows, call.n_features,
                               call.n_weights, call.n_estimators, call.max_depth, call.border_count,
                               call.learning_rate, call.l2_leaf_reg)
+    var importances = _text_fit_importances(call, text)
     var fields = py_fields(model)
     var nk = trees_keys()
     py_setitem(fields, nk[].k_model_, PythonObject(text))
     _fitted_text(fields, model, call.n_features, PythonObject(None))
+    gbdt_importances_store(fields, importances, context)
     return model
+
+
+def _text_fit_importances(call: GbdtTextFit, text: String) raises -> List[Float32]:
+    """RUN (lane mf-imp6): `feature_importances_` of an OrderedRMSE or
+    FeatureFreq model on the fit's own column-major X and weights, on the
+    image's column (`xg_importances`)."""
+    return xg_importances(call.entry, text, call.x, call.n_rows, call.n_features, False, call.weights,
+                          call.n_weights)
 
 
 def ordered_rmse_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> GbdtTextFit:
@@ -929,10 +940,12 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var text = xg_feature_freq_fit(call.entry, call.x, call.y, call.weights, call.extra, call.n_rows,
                                    call.n_features, call.n_weights, call.n_extra, call.learning_rate,
                                    call.l2_leaf_reg, call.random_seed)
+    var importances = _text_fit_importances(call, text)
     var fields = py_fields(model)
     var nk = trees_keys()
     py_setitem(fields, nk[].k_model_, PythonObject(text))
     _fitted_text(fields, model, call.n_features, PythonObject(0))
+    gbdt_importances_store(fields, importances, context)
     return model
 
 
