@@ -216,6 +216,10 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_TE_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_XPREP_FAST_TE_GATHER_OFF"](), "removed 2026-11-21 (lane/fx-verdicts7, A/B abn9 NVIDIA L40S, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466, one run per arm; NOISE: target-encoder on istella and taxi, 4 cells 0.98-1.01 arm/base): the switch is gone; te_enc always reads te_gather's bucket-ordered folds and targets. Remove -D MOJOLEARN_XPREP_FAST_TE_GATHER_OFF; see docs/TOMBSTONES.md."
     # ---- end lane fx-verdicts7
+    # ---- lane ab-prep-transformer (2026-11-23)
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.ab-prep.patch
+    comptime assert not is_defined["MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; the zero-filled array.array logits store held the same download bytes as the unfilled store); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.ab-prep.patch"
+    # ---- end lane ab-prep-transformer
     return True
 
 

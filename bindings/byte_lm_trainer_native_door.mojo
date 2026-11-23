@@ -23,14 +23,13 @@ before, so the step keeps its bits.
 """
 from std.memory import ArcPointer, unsafe_memcpy
 from std.os import getenv
-from std.sys import is_defined
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains, py_setattr
-from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_admitted_layout, classical_dtype_str
+from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_dtype_str
 from core.cast_in import CAST_KIND_SIGNED
 from core.native_array_layout import NativeArrayLayout
 from providers.python.array_layout_boundary_pack import native_shape_pack
@@ -1227,40 +1226,30 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
     # MRO and every Array slot descriptor pinned at import), so the slots are
     # written directly; the shared Array admission refuses any subclass.
     var out: PythonObject
-    # TOMBSTONE: MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 337c096a5b.
-    # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.patch; record in docs/TOMBSTONES.md.
-    # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-    comptime if BYTE_LM_LOGITS_ZERO_FILL:
-        var store: PythonObject
-        if pooled:
-            store = pooled.value()
-        else:
-            store = py_call(context["array_type"], "f", py_call(context["native_bytes_type"], count * 4))
-        out = classical_wrap_admitted_layout(context["byte_lm_pooled_class"], store,
-            NativeArrayLayout([batch, length, vocab], 4, "C"), "<f4")
+    # TOMBSTONE: MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.ab-prep.patch; record in docs/TOMBSTONES.md.
+    var store: PythonObject
+    var view: PythonObject
+    if pooled:
+        # Lane fix-wave2-leftovers (audit door:1451 leftover): a pooled
+        # entry is the "f" view the store was first wrapped with (one
+        # C getter for its exporter), not two new memoryviews per call.
+        view = pooled.value()
+        store = py_call(context["byte_lm_view_obj"], view)
+        if py_type(store) is not context["byte_lm_store_type"]:
+            raise Error("TypeError: Byte-LM logits pool contains a foreign buffer")
     else:
-        var store: PythonObject
-        var view: PythonObject
-        if pooled:
-            # Lane fix-wave2-leftovers (audit door:1451 leftover): a pooled
-            # entry is the "f" view the store was first wrapped with (one
-            # C getter for its exporter), not two new memoryviews per call.
-            view = pooled.value()
-            store = py_call(context["byte_lm_view_obj"], view)
-            if py_type(store) is not context["byte_lm_store_type"]:
-                raise Error("TypeError: Byte-LM logits pool contains a foreign buffer")
-        else:
-            store = native_scratch_bytes(count * 4)
-            # TOMBSTONE: MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE (LOSS, A/B round 2 NVIDIA L40S: lm-forward 21.96 -> 25.73 ms, 1.17) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
-            # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE.patch; record in docs/TOMBSTONES.md.
-            # The store's memoryview is one C-API call (PyMemoryView_FromObject
-            # through the CPython table, as `classical_wrap_admitted_layout`
-            # makes `_mv`), its "f" cast the `memoryview.cast` descriptor with
-            # the "f" format object, both pinned once at connect: built once
-            # per store, then pooled with it (hot-path audit 2026-11-13, BLOCK
-            # door:1451).
-            view = py_call(context["byte_lm_view_cast"], native_buffer_view(store), context["byte_lm_view_format"])
-        out = _wrap_pooled_unfilled(context, context["byte_lm_pooled_class"], store, view, batch, length, vocab)
+        store = native_scratch_bytes(count * 4)
+        # TOMBSTONE: MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE (LOSS, A/B round 2 NVIDIA L40S: lm-forward 21.96 -> 25.73 ms, 1.17) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
+        # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE.patch; record in docs/TOMBSTONES.md.
+        # The store's memoryview is one C-API call (PyMemoryView_FromObject
+        # through the CPython table, as `classical_wrap_admitted_layout`
+        # makes `_mv`), its "f" cast the `memoryview.cast` descriptor with
+        # the "f" format object, both pinned once at connect: built once
+        # per store, then pooled with it (hot-path audit 2026-11-13, BLOCK
+        # door:1451).
+        view = py_call(context["byte_lm_view_cast"], native_buffer_view(store), context["byte_lm_view_format"])
+    out = _wrap_pooled_unfilled(context, context["byte_lm_pooled_class"], store, view, batch, length, vocab)
     py_setitem(py_fields(out), "_pool", pool)
     return out
 
@@ -1281,12 +1270,11 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
 #: all batch * length * vocab floats before the call returns (the native
 #: owner checks `written == expected`; a failure raises and the Array is never
 #: returned). No output byte moves: same kernel, same fold, same download.
-#: `-D MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL` keeps the zero-filled array.array
-#: store (B arm of the owed A/B, bench/results/paper_compare/owed-pre0867.json
-#: row wave2-lm-forward-door). Only the resident pooled output changes: the
-#: ragged result (padding must read +0.0) and the stateless output keep
-#: `tsa_array`'s zeros.
-comptime BYTE_LM_LOGITS_ZERO_FILL = is_defined["MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL"]()
+#: Only the resident pooled output is unfilled: the ragged result (padding
+#: must read +0.0) and the stateless output keep `tsa_array`'s zeros. The B
+#: arm (the zero-filled array.array store) wrote the same download bytes.
+# TOMBSTONE: MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 # TOMBSTONE: MOJOLEARN_BYTE_LM_FAST_LOGITS_HUGEPAGE (LOSS: a fresh resident logits store advised for transparent huge
 # pages before the download first-touches it; A/B round 2, NVIDIA L40S, wheel 0c68d6cd27, job
@@ -1298,14 +1286,12 @@ comptime BYTE_LM_LOGITS_ZERO_FILL = is_defined["MOJOLEARN_BYTE_LM_LOGITS_ZERO_FI
 
 
 def _pooled_store_type(mut mods: NativeModules, context: PythonObject) raises -> PythonObject:
-    """The exact type of a logits pool entry under the compiled arm: the
-    array.array store (B arm), or the "f" memoryview of the unfilled
-    bytearray store (default; lane fix-wave2-leftovers)."""
-    comptime if BYTE_LM_LOGITS_ZERO_FILL:
-        return context["array_type"]
-    else:
-        # pinned once at connect (hot-path audit NOTE door:1437)
-        return context["byte_lm_view_type"]
+    """The exact type of a logits pool entry: the "f" memoryview of the
+    unfilled bytearray store (lane fix-wave2-leftovers)."""
+    # TOMBSTONE: MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.ab-prep.patch; record in docs/TOMBSTONES.md.
+    # pinned once at connect (hot-path audit NOTE door:1437)
+    return context["byte_lm_view_type"]
 
 
 def _wrap_pooled_unfilled(context: PythonObject, cls: PythonObject, store: PythonObject, view: PythonObject,
@@ -1344,14 +1330,11 @@ def byte_lm_pooled_finalize(mut mods: NativeModules, owner: PythonObject, contex
     var pool = py_get(py_fields(owner), "_pool")
     if pool is None or py_type(pool) is not context["byte_lm_logits_pool"]:
         return
-    # The pool entry: the store (B arm) or the store's "f" view, the `_mv`
-    # slot (default arm, lane fix-wave2-leftovers), through the slot getter
-    # pinned at connect.
-    var store: PythonObject
-    comptime if BYTE_LM_LOGITS_ZERO_FILL:
-        store = py_call(context["byte_lm_store_getter"], owner, context["byte_lm_pooled_class"])
-    else:
-        store = py_call(context["byte_lm_view_getter"], owner, context["byte_lm_pooled_class"])
+    # The pool entry: the store's "f" view, the `_mv` slot (lane
+    # fix-wave2-leftovers), through the slot getter pinned at connect.
+    # TOMBSTONE: MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.ab-prep.patch; record in docs/TOMBSTONES.md.
+    var store = py_call(context["byte_lm_view_getter"], owner, context["byte_lm_pooled_class"])
     if py_type(store) is not _pooled_store_type(mods, context):
         return
     var pool_fields = py_fields(pool)
