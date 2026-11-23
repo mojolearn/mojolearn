@@ -414,7 +414,7 @@ SpeculativeExecution thresholds for NVPTX) and how to request the old behaviour.
 **Meanwhile.** An ordinary source form, not a patch of compiler output: the step is written as `comptime for k in range(4)`
 with a compile-time offset, the same operations in the same order (bits unchanged). It is the default since 2026-11-18
 (NVIDIA L40S A/B ab2: digests equal on 36 cells, hdbscan taxi 0.80, knn taxi 0.84; docs/apple-fast/EXPERIMENTS.md);
-`-D MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF` restores the run-time loop. The ask stands: the loop form is the
+The run-time loop was deleted 2026-11-23 (lane/ab-prep-neural; code at 4d76a9e16e). The ask stands: the loop form is the
 natural one and Mojo 1.0 compiled it to selects. Nothing has been sent to Modular.
 
 ## A raw `METH_FASTCALL | METH_KEYWORDS` method on a bound type (2026-11-17, fb2-lr)

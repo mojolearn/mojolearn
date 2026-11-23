@@ -478,8 +478,8 @@ def identical_log(x: Float32) -> Float32:
 
 
 # MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP: PROMOTED 2026-11-18 (lane fx-verdicts). The comptime candidate step is the
-# default on every vendor and the host column; `-D MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF` restores the
-# run-time `for k in range(4)` chain. Evidence, NVIDIA L40S, wheel d652a4b0a1 and its B set, base and arm back to back
+# one form on every vendor and the host column (the run-time `for k in range(4)` chain, its old path, is deleted:
+# tombstone below). Evidence, NVIDIA L40S, wheel d652a4b0a1 and its B set, base and arm back to back
 # in one job, one run per arm: A/B ab2 (host c6dd9ebea3e3, 36 cells): digests and quality equal on all 36; arm/base
 # geomean 0.973; hdbscan taxi fit 561 -> 450 ms (0.80), knn taxi 32.99 -> 27.76 (0.84), knn-reg taxi 18.94 -> 16.16
 # (0.85), ann-refine taxi 28.08 -> 24.40 (0.87), knn-clf taxi 19.64 -> 17.27 (0.88), knn taxi 300,000 rows (neighbour
@@ -489,7 +489,10 @@ def identical_log(x: Float32) -> Float32:
 # 37f71a6102af, 8 cells, digests equal): bisecting-kmeans istella infer 0.67, randomized-svd taxi 0.89, others
 # 0.94-1.00. The function is vendor neutral (no vendor branch): the same code on every column, bits unchanged.
 # Limits: NVIDIA only (AGENTS.md part 8); knn covtype (non-board) not run.
-comptime NUMERICS_SQRT_COMPTIME_STEP = not is_defined["MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF"]()
+# TOMBSTONE: MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF (removed: decided A/B, the comptime step won ab2 2026-11-18
+# NVIDIA L40S c6dd9ebea3e3, digests equal on 36 cells, geomean 0.973) deleted 2026-11-23 by lane/ab-prep-neural; code
+# recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def portable_sqrtf(x_in: Float32) -> Float32:
@@ -520,44 +523,27 @@ def portable_sqrtf(x_in: Float32) -> Float32:
     var yb = rebind[UInt32](y.to_bits())
     var best = y
     var r_best = abs(_fma_f32(-y, y, x))
-    comptime if NUMERICS_SQRT_COMPTIME_STEP:
-        # Default since 2026-11-18 (MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP promoted, lane sqrt-comptime-step
-        # 2026-11-16; A/B numbers beside NUMERICS_SQRT_COMPTIME_STEP above; _OFF restores the loop). The run-time
-        # `for k in range(4)` below with its `k == 0 ...` chain was lowered to selects by Mojo 1.0 and to a rotated compare-and-branch loop by Mojo 1.2
-        # (pinned_distance_register_tile_kernel, 32 inlined sqrts per thread: 81 -> 119 registers, sm_89 warps per
-        # SM 20 -> 16; ~/mojolearn-evidence/kernel-attribution-20261116/ATTRIBUTION.md). Here the candidate offset
-        # is a compile-time constant per step (k = 0, 1, 2, 3 -> -1, +1, -2, +2, the same order), so there is no
-        # run-time `k` to branch on. Same candidates, same order, same integer add/sub on yb (UInt32 wrap
-        # identical), same bitcast, same `abs(_fma_f32(-c, c, x))`, same strict `<` and the same two updates:
-        # the result bits are identical to the loop below for every input, on every vendor and the host column.
-        comptime for k in range(4):
-            comptime delta = UInt32(k // 2 + 1)
-            var cb: UInt32
-            comptime if k % 2 == 0:
-                cb = yb - delta
-            else:
-                cb = yb + delta
-            var c = bitcast[DType.float32](cb)
-            var r = abs(_fma_f32(-c, c, x))
-            var take = r < r_best
-            best = c if take else best
-            r_best = r if take else r_best
-    else:
-        for k in range(4):
-            var cb: UInt32
-            if k == 0:
-                cb = yb - UInt32(1)
-            elif k == 1:
-                cb = yb + UInt32(1)
-            elif k == 2:
-                cb = yb - UInt32(2)
-            else:
-                cb = yb + UInt32(2)
-            var c = bitcast[DType.float32](cb)
-            var r = abs(_fma_f32(-c, c, x))
-            if r < r_best:
-                best = c
-                r_best = r
+    # Default since 2026-11-18 (MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP promoted, lane sqrt-comptime-step
+    # 2026-11-16; A/B numbers beside the tombstone above; the _OFF loop is deleted). The old run-time
+    # `for k in range(4)` with its `k == 0 ...` chain (deleted) was lowered to selects by Mojo 1.0 and to a rotated compare-and-branch loop by Mojo 1.2
+    # (pinned_distance_register_tile_kernel, 32 inlined sqrts per thread: 81 -> 119 registers, sm_89 warps per
+    # SM 20 -> 16; ~/mojolearn-evidence/kernel-attribution-20261116/ATTRIBUTION.md). Here the candidate offset
+    # is a compile-time constant per step (k = 0, 1, 2, 3 -> -1, +1, -2, +2, the same order), so there is no
+    # run-time `k` to branch on. Same candidates, same order, same integer add/sub on yb (UInt32 wrap
+    # identical), same bitcast, same `abs(_fma_f32(-c, c, x))`, same strict `<` and the same two updates:
+    # the result bits were identical to the deleted loop for every input, on every vendor and the host column.
+    comptime for k in range(4):
+        comptime delta = UInt32(k // 2 + 1)
+        var cb: UInt32
+        comptime if k % 2 == 0:
+            cb = yb - delta
+        else:
+            cb = yb + delta
+        var c = bitcast[DType.float32](cb)
+        var r = abs(_fma_f32(-c, c, x))
+        var take = r < r_best
+        best = c if take else best
+        r_best = r if take else r_best
     if scaled_down:
         best = best * bitcast[DType.float32](UInt32(0x2F800000))  # 2^-32
     return best
