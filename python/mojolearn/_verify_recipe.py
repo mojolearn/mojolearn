@@ -936,6 +936,11 @@ EXAMPLES = {
         ["conv1d", 8, 3, {"padding": 1}], ["silu"],
         ["conv1d", 8, 3, {"padding": 1}], ["silu"], ["conv1d", 8, 3, {"padding": 1}], ["residual", 1],
         ["flatten"], ["linear", 1]]),
+    # nn-activations begin: every activation layer and the identity layer in one model
+    "seq-activations": _seq((4, 8), [
+        ["linear", 8], ["leaky_relu", 0.1], ["elu"], ["prelu", 4], ["mish"], ["identity"], ["hardswish"],
+        ["linear", 8], ["hardsigmoid"], ["prelu"], ["flatten"], ["linear", 1]]),
+    # nn-activations end
 }
 
 
