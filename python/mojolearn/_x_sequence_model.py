@@ -437,8 +437,9 @@ class Sequential(_CheckMixin):
             layer).
 
         With ``lengths`` given to :meth:`fit` and :meth:`predict`, a sample's
-        steps past its length do not change its state, and the ``'sequence'``
-        output there repeats each direction's final state.
+        steps past its length do not change its state; the ``'sequence'``
+        output there repeats the forward direction's final state and is 0
+        for the reverse direction.
 
         With more than one layer, ``bidirectional=True`` or
         ``output='final'``, the module is written into the model as several

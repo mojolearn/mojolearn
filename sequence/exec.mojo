@@ -420,7 +420,8 @@ struct HostExec(Exec, Movable):
             # lane seq-blocks-3: OP_CELL_BWD_H's GEMM, then the cell with the length mask (sequence/ops.mojo
             # op_cell_bwd_h_mask: p4 carries the lengths, c_t is p3 + B H)
             var m = a
-            m.p4 = a.p3 + a.i1 * a.i2
+            # (the previous row block in the reverse direction, i4 < 0; lane nn-recurrent)
+            m.p4 = a.p3 + (-(a.i1 * a.i2) if a.i4 < 0 else a.i1 * a.i2)
             m.p11 = a.p4
             m.i9 = 1
             if a.i3 != 0:

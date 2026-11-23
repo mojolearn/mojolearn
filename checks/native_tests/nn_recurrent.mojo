@@ -146,7 +146,8 @@ def _step(which: Int, vals: List[List[Float64]], x: List[Float64], h: List[Float
 
 def _oracle(which: Int, vals: List[List[Float64]], lens: List[Int], reverse: Bool, final: Bool) -> List[Float64]:
     """(B, T, H), or (B, 1, H) when final, in float64: each row over its own valid steps (forward 0 .. len - 1,
-    reverse len - 1 .. 0); past its length the output repeats its final state."""
+    reverse len - 1 .. 0); past its length the forward output repeats its final state and the reverse output
+    is 0 (PyTorch's padding)."""
     var out = List[Float64]()
     for b in range(_B):  # small-loop(oracle)
         var n = lens[b]
@@ -168,6 +169,8 @@ def _oracle(which: Int, vals: List[List[Float64]], lens: List[Int], reverse: Boo
         for t in range(_T):  # small-loop(oracle)
             if t < n:
                 out.extend(states[t].copy())
+            elif reverse:
+                out.extend(List[Float64](length=_H, fill=0))
             else:
                 out.extend(h.copy())
     return out^

@@ -98,10 +98,7 @@ from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
 # nn-recurrent begin
-from sequence.ops import dummy_ptr
-from autograd.nn_recurrent import (
-    nn_rnn_reverse_index, nn_rnn_reverse_rows, nn_rnn_final, nn_recurrent_supports, nn_recurrent_apply,
-)
+from autograd.nn_recurrent import nn_rnn_final, nn_rnn_reverse_lengths
 # nn-recurrent end
 
 comptime LAYER_SILU = 32
@@ -567,8 +564,8 @@ def block_recurrent[E: Exec](
 ) raises -> Tensor:
     """One recurrent layer over h (B, T, F) from a zero state: (B, T, hidden), every step's state.
 
-    `reverse` (lane nn-recurrent): over each row's steps in reverse order, from its own last valid step;
-    `final`: the final state (B, 1, hidden) instead (autograd/nn_recurrent.mojo).
+    `reverse` (lane nn-recurrent): over each row's steps in reverse order, from its own last valid step (the
+    output past a row's length is 0, PyTorch's padding); `final`: the final state (B, 1, hidden) instead.
 
     With `lengths` (B float32 row lengths on the executor; lane seq-blocks-3) a row's padded steps
     (at or past its length) are packed-sequence steps: their inputs are replaced by +0.0 (a select on
@@ -594,19 +591,12 @@ def block_recurrent[E: Exec](
     var tp: List[Int] = [1, 0, 2]
     var xt = tape.permute(ex, src, tp)
     var tm = tape.view_nd(ex, xt, ShapeN.matrix(T * B, F))
-    # nn-recurrent begin
-    var ridx = dummy_ptr()
-    if reverse:
-        ridx = nn_rnn_reverse_index(tape, ex, T, B, lengths)
-        tm = nn_rnn_reverse_rows(tape, ex, tm, ridx, T * B, F)
-    # nn-recurrent end
-    var y = rnn_scan_op(tape, ex, tm, w_ih, w_hh, b_ih, b_hh, cell, T, B, lengths)
-    # nn-recurrent begin
+    # nn-recurrent: `reverse` is the same scan walking time from T - 1 down (rnn_scan_op); its output is in time
+    # order. `final` is the state after the last step walked: time T - 1 forward, time 0 reverse.
+    var y = rnn_scan_op(tape, ex, tm, w_ih, w_hh, b_ih, b_hh, cell, T, B,
+                        nn_rnn_reverse_lengths(lengths) if reverse else lengths, reverse)
     if final:
-        return nn_rnn_final(tape, ex, y, T, B, Hs)
-    if reverse:
-        y = nn_rnn_reverse_rows(tape, ex, y, ridx, T * B, Hs)
-    # nn-recurrent end
+        return nn_rnn_final(tape, ex, y, T, B, Hs, 0 if reverse else T - 1)
     var y3: List[Int] = [T, B, Hs]
     var yt = tape.view_nd(ex, y, _sh(y3))
     return tape.permute(ex, yt, tp)
@@ -755,10 +745,6 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             return True
         if Self._ssm(tag):
             return SsmRules().supports(tag)
-        # nn-recurrent begin
-        if nn_recurrent_supports(tag):
-            return True
-        # nn-recurrent end
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -768,10 +754,6 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             return StepOpRules(0).zeroed_destination(tag, saved, edge)
         if Self._ssm(tag):
             return SsmRules().zeroed_destination(tag, saved, edge)
-        # nn-recurrent begin: the row permutation writes every row of its one destination
-        if nn_recurrent_supports(tag):
-            return False
-        # nn-recurrent end
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -781,10 +763,6 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             return StepOpRules(0).writes_total(tag, saved, edge)
         if Self._ssm(tag):
             return SsmRules().writes_total(tag, saved, edge)
-        # nn-recurrent begin
-        if nn_recurrent_supports(tag):
-            return False
-        # nn-recurrent end
         return ImportRules().writes_total(tag, saved, edge)
 
     def apply[E: Exec](
@@ -797,10 +775,6 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             StepOpRules(0).apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         elif Self._ssm(tag):
             SsmRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
-        # nn-recurrent begin
-        elif nn_recurrent_supports(tag):
-            nn_recurrent_apply(ex, saved, upstream, gradients)
-        # nn-recurrent end
         else:
             ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
 
