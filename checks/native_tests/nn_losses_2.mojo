@@ -3,20 +3,21 @@
 """The log_softmax layer and the ctc loss of lane nn-losses-2 (2026-11-23), and nll / kl_div fitted through
 Sequential (autograd/nn_log_softmax.mojo, autograd/nn_ctc.mojo, autograd/nn_ctc_ops.mojo).
 
-  - test_nn_log_softmax: the layer (nn_log_softmax_forward, the Sequential layer's recording) on (3, 4, 5) samples
+One test, test_nn_losses_2, runs eleven independent units across host cores (each on its own HostExec):
+  - units 0-2, log_softmax: the layer (nn_log_softmax_forward, the Sequential layer's recording) on (3, 4, 5) samples
     along dim -1 (the row op) and dim 1 (permute, row op, permute back): values against a float64 oracle; the input
     gradient of sum(w * y) against the oracle's closed form w - softmax * sum(w), and that closed form against
     central finite differences of the oracle, element by element.
-  - test_nn_ctc_tape: ctc_loss on log-probabilities (4 samples, T 5, C 3; repeated labels, an empty target, a
+  - units 3-7, the ctc tape cases: ctc_loss on log-probabilities (4 samples, T 5, C 3; repeated labels, an empty target, a
     shorter input; blank 0 and blank 2; mean and sum; zero_infinity on an impossible sample, and +inf without it):
     the value and the gradient in every log-probability against a float64 oracle that ENUMERATES every alignment
     (C^T paths a sample, collapsed and compared with the target), and the oracle's gradient against central finite
     differences of its own -log p.
-  - test_nn_losses_2_fit: Sequential fits through the public fit entry (model_fit_native):
+  - units 8-10, Sequential fits through the public fit entry (model_fit_native):
       nll on a final log_softmax against cross_entropy on the same logits (same seed, same init): not the same
       bits, by construction, and the stated difference (below); both reach accuracy >= 0.9;
       kl_div (batchmean) on a final log_softmax: the loss falls under a quarter of its first value;
-      ctc: a GRU (24) -> linear(4) -> log_softmax model learns to transcribe variable-length synthetic frame
+      ctc (25 epochs): a GRU (24) -> linear(4) -> log_softmax model learns to transcribe variable-length synthetic frame
       sequences (1 to 3 labels of 3 symbols, repeats included, inputs of 4 to 10 of the 10 padded steps through
       `lengths`): greedy decoding reaches a label accuracy (1 - edit distance / labels) >= 0.9 on its 96
       samples with finite loss, parameters and predictions; the admission refusals in words.
@@ -41,6 +42,8 @@ the layer record the softmax instead of its log (the log_softmax oracle must FAI
 from std.math import exp, log, isinf
 from std.memory import bitcast
 from std.testing import TestSuite
+from std.time import perf_counter_ns
+from core.host_parallel import host_parallelize
 from autograd.tape import Tape, Tensor
 from autograd.rankn_api import rn_shape
 from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM, REDUCTION_BATCHMEAN
@@ -208,17 +211,6 @@ def run_log_softmax_case[E: Exec](mut ex: E, dim: Int) raises -> List[Float32]:
         words.append(g[i])
     print("NN_LOSSES_2 log_softmax_dim" + String(dim), "digest", _digest(words))
     return words^
-
-
-def test_nn_log_softmax() raises:
-    for dim in [-1, 1, 2]:
-        var host = HostExec()
-        var hw = run_log_softmax_case(host, dim)
-        comptime if not CPU_COLUMN_BUILD:
-            var dev = DeviceExec()
-            var dw = run_log_softmax_case(dev, dim)
-            _same_words("log_softmax dim " + String(dim), hw, dw)
-    print("PASS NN_LOSSES_2 log_softmax 3")
 
 
 # ---------------------------------------------------------------- ctc: the enumeration oracle
@@ -395,18 +387,6 @@ def run_ctc_case[E: Exec](mut ex: E, c: CtcCase) raises -> List[Float32]:
     words.append(value)
     print("NN_LOSSES_2 ctc_" + c.name, "value", value, "digest", _digest(words))
     return words^
-
-
-def test_nn_ctc_tape() raises:
-    var cases = _ctc_cases()
-    for k in range(len(cases)):  # driver-loop: over the ctc cases
-        var host = HostExec()
-        var hw = run_ctc_case(host, cases[k])
-        comptime if not CPU_COLUMN_BUILD:
-            var dev = DeviceExec()
-            var dw = run_ctc_case(dev, cases[k])
-            _same_words("ctc " + cases[k].name, hw, dw)
-    print("PASS NN_LOSSES_2 ctc tape cases", len(cases))
 
 
 # ---------------------------------------------------------------- Sequential fits
@@ -644,6 +624,39 @@ def _edit(a: List[Int], b: List[Int]) -> Int:
     return prev[len(b)]
 
 
+def run_ctc_refusals[E: Exec](mut ex: E) raises -> List[Float32]:
+    """The ctc fit's admission refusals, in words, before anything trains."""
+    var data = _ctc_data()
+    var x = data[0].copy()
+    var y = data[1].copy()
+    var tl = data[2].copy()
+    var il = data[3].copy()
+    # refusals in words: a label equal to the blank, a target length past y's width, no target lengths
+    var y_bad = y.copy()
+    y_bad[0] = Float32(0)
+    var r = _ctc_model(ctc_blank_word(0, False))
+    try:
+        _fit_ctc(ex, r, x, y_bad, _FS, tl, il, 1)
+        _fail("a ctc label equal to the blank was accepted")
+    except e:
+        _refused("blank label", String(e), "must not hold the blank")
+    var tl_bad = tl.copy()
+    tl_bad[3] = Float32(4)
+    try:
+        _fit_ctc(ex, r, x, y, _FS, tl_bad, il, 1)
+        _fail("a target length past the targets' width was accepted")
+    except e:
+        _refused("target length", String(e), "target_lengths must be whole numbers")
+    try:
+        _fit_ctc(ex, r, x, y, _FS, tl, il, 1, False)
+        _fail("a ctc fit without target lengths was accepted")
+    except e:
+        _refused("no target lengths", String(e), "needs target_lengths")
+    print("NN_LOSSES_2 ctc refusals 3")
+    var words: List[Float32] = [Float32(3)]
+    return words^
+
+
 def _refused(what: String, err: String, want: String) raises:
     if want not in err:
         _fail("ctc refusal (" + what + "): '" + err + "' does not say '" + want + "'")
@@ -657,7 +670,7 @@ def run_ctc_fit[E: Exec](mut ex: E) raises -> List[Float32]:
     var il = data[3].copy()
     var labs = data[4].copy()
     var m = _ctc_model(ctc_blank_word(0, False))
-    _fit_ctc(ex, m, x, y, _FS, tl, il, 80)
+    _fit_ctc(ex, m, x, y, _FS, tl, il, 25)
     var c = m.losses()
     _finite(c, "ctc fit loss curve")
     _finite(m.params, "ctc fit parameters")
@@ -681,27 +694,6 @@ def run_ctc_fit[E: Exec](mut ex: E) raises -> List[Float32]:
     _require(accuracy >= 0.9, "ctc fit: label accuracy " + String(accuracy) + " under 0.9 (loss " + String(c[0])
              + " -> " + String(c[len(c) - 1]) + ")")
     print("NN_LOSSES_2 ctc fit label accuracy", accuracy, "loss", c[0], "->", c[len(c) - 1])
-    # refusals in words: a label equal to the blank, a target length past y's width, no target lengths
-    var y_bad = y.copy()
-    y_bad[0] = Float32(0)
-    var r = _ctc_model(ctc_blank_word(0, False))
-    try:
-        _fit_ctc(ex, r, x, y_bad, _FS, tl, il, 1)
-        _fail("a ctc label equal to the blank was accepted")
-    except e:
-        _refused("blank label", String(e), "must not hold the blank")
-    var tl_bad = tl.copy()
-    tl_bad[3] = Float32(4)
-    try:
-        _fit_ctc(ex, r, x, y, _FS, tl_bad, il, 1)
-        _fail("a target length past the targets' width was accepted")
-    except e:
-        _refused("target length", String(e), "target_lengths must be whole numbers")
-    try:
-        _fit_ctc(ex, r, x, y, _FS, tl, il, 1, False)
-        _fail("a ctc fit without target lengths was accepted")
-    except e:
-        _refused("no target lengths", String(e), "needs target_lengths")
     var words = m.params.copy()
     for i in range(len(lp)):  # small-loop(fixture)
         words.append(lp[i])
@@ -709,17 +701,56 @@ def run_ctc_fit[E: Exec](mut ex: E) raises -> List[Float32]:
     return words^
 
 
-def test_nn_losses_2_fit() raises:
-    var host = HostExec()
-    var hw = run_class_fits(host)
-    var hc = run_ctc_fit(host)
+# ---------------------------------------------------------------- tests
+comptime _UNITS = 11
+
+
+def _run_unit[E: Exec](mut ex: E, unit: Int) raises -> List[Float32]:
+    """Units: 0-2 log_softmax (dim -1, 1, 2), 3-7 the ctc tape cases, 8 the class fits, 9 the ctc fit, 10 the ctc
+    refusals."""
+    var t0 = perf_counter_ns()
+    var words: List[Float32]
+    var dims: List[Int] = [-1, 1, 2]
+    if unit < 3:
+        words = run_log_softmax_case(ex, dims[unit])
+    elif unit < 8:
+        words = run_ctc_case(ex, _ctc_cases()[unit - 3])
+    elif unit == 8:
+        words = run_class_fits(ex)
+    elif unit == 9:
+        words = run_ctc_fit(ex)
+    else:
+        words = run_ctc_refusals(ex)
+    print("NN_LOSSES_2 unit", unit, "seconds", Float64(perf_counter_ns() - t0) * 1.0e-9)
+    return words^
+
+
+def test_nn_losses_2() raises:
+    # Independent units: on the host column each runs on its own HostExec across host cores; the device column
+    # then runs them in order on the one device and requires the host words.
+    var failed = List[Int](length=_UNITS, fill=0)
+    var host_words = List[List[Float32]](length=_UNITS, fill=List[Float32]())
+    var fp = failed.unsafe_ptr()
+    var wp = host_words.unsafe_ptr()
+    def task(unit: Int) {imm fp, imm wp}:
+        try:
+            var host = HostExec()
+            wp[unit] = _run_unit(host, unit)
+        except error:
+            print("FAIL NN_LOSSES_2 unit", unit, error)
+            fp[unit] = 1
+    host_parallelize(task, _UNITS)
+    for u in range(_UNITS):  # small-loop(_UNITS: failure flags)
+        if failed[u] != 0:
+            _fail("unit " + String(u) + " failed on the host column")
     comptime if not CPU_COLUMN_BUILD:
-        var dev = DeviceExec()
-        var dw = run_class_fits(dev)
-        _same_words("class fits", hw, dw)
-        var dc = run_ctc_fit(dev)
-        _same_words("ctc fit", hc, dc)
-    print("PASS NN_LOSSES_2 fits 4")
+        for unit in range(_UNITS):  # driver-loop: over the units on the one device
+            var dev = DeviceExec()
+            var dw = _run_unit(dev, unit)
+            _same_words("unit " + String(unit) + " host vs device", host_words[unit], dw)
+    _ = failed^
+    _ = host_words^
+    print("PASS NN_LOSSES_2 units", _UNITS)
 
 
 def main() raises:
