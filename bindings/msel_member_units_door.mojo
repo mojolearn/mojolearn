@@ -333,8 +333,8 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         kind_mask = member_kind_capabilities(owner.plan)
     except:
         return PythonObject(None)
-    if (kind_mask & needs) != needs:
-        return PythonObject(None)
+    if (kind_mask & MEMBER_CAN_FIT) == 0:
+        return PythonObject(None)  # (the export is the admission's `needs`, as before)
     var classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
     var run = _FitOne(owner.plan.copy(), msel_addr(x), rows, cols)
     var gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
