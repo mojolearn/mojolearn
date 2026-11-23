@@ -22,7 +22,7 @@ from mamba.host.gen.modeling_mamba import mamba_zeros
 # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # lane afn-samba (2026-10-03), Apple FAST only:
 #   MOJOLEARN_AFN_MAMBA3_BWD_ARENA: the VJP's ~70 scratch buffers are views
-#     of one device arena chunk (core/device_arena.mojo) opened at the
+#     of the pass's own device arena (core/device_arena.mojo), taken at the
 #     pass's start and released after its wait, instead of ~70 fresh Metal
 #     buffers per backward (each live buffer taxes every launch).
 #   MOJOLEARN_AFN_MAMBA3_BWD_CHUNK: the angle stage's chunked chains
@@ -34,7 +34,7 @@ from std.sys.compile import is_defined
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import NUMERIC_FAST
-from mamba.host.gen.device_optimizations import arena_active, arena_begin, arena_end, arena_release, arena_take
+from mamba.host.gen.device_optimizations import DeviceArena
 
 #: lane nr-mamba (2026-10-04) IDN_M3_BWD_SKIP_DEAD (IDENTICAL): the Mamba-3
 #: prefill backward ran its angle stage twice,
@@ -53,56 +53,56 @@ comptime AFN_M3_BWD_ARENA = (
 
 
 struct _AfnM3Arena(Movable):
-    """The pass's own arena under MOJOLEARN_AFN_MAMBA3_BWD_ARENA: opened
-    only when no arena is open, ended and released by `close` after the
-    pass's wait, or by the destructor when the pass raises. A plain -1
-    and nothing else in every other build."""
+    """The pass's handle to its OWNER's arena under
+    MOJOLEARN_AFN_MAMBA3_BWD_ARENA (a `DeviceArena` of core/device_arena.mojo
+    that the Samba session keeps for its Mamba-3 layers): `close` after the
+    pass's wait REWINDS it, so the next layer and the next step carve the
+    same chunks again with no pool lock. Without an owner (a caller with no
+    session), or in every other build, it is None and every scratch is a
+    fresh buffer. Lane arena-session (2026-11-23): was a bracket on the one
+    process-wide active arena, left open from the scratch's construction to
+    the walk's end, so any other thread's allocations in between took views
+    of it."""
 
-    var id: Int
+    var arena: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]
     #: scratch the AFN arms enqueue work on, kept alive past the pass's wait
     var keep: List[DeviceBuffer[DType.float32]]
 
-    def __init__(out self) raises:
-        self.id = -1
+    def __init__(out self, owner: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]) raises:
+        self.arena = None
         self.keep = List[DeviceBuffer[DType.float32]]()
         comptime if AFN_M3_BWD_ARENA:
-            if not arena_active():
-                self.id = arena_begin()
+            self.arena = owner
 
-    def own(self) -> Bool:
-        return self.id >= 0
+    def own(self) -> Optional[UnsafePointer[DeviceArena, MutAnyOrigin]]:
+        """The handle `_m3_scratch` takes: None unless the define is on and
+        the pass has an owner's arena."""
+        return self.arena
 
     def close(mut self) raises:
+        """After the pass's wait: every view is done, the owner's arena
+        rewinds (no lock, no chunk changes hands)."""
         comptime if AFN_M3_BWD_ARENA:
-            if self.id >= 0:
-                arena_end(self.id)
-                arena_release(self.id)
-                self.id = -1
-
-    def __deinit__(deinit self):
-        comptime if AFN_M3_BWD_ARENA:
-            if self.id >= 0:
-                try:
-                    arena_end(self.id)
-                    arena_release(self.id)
-                except:
-                    pass
+            if self.arena:
+                self.keep = List[DeviceBuffer[DType.float32]]()
+                var p = self.arena.value()
+                p[].rewind()
 
 
 @always_inline
 def _m3_scratch(
-    own: Bool, ctx: DeviceContext, n: Int
+    own: Optional[UnsafePointer[DeviceArena, MutAnyOrigin]], ctx: DeviceContext, n: Int
 ) raises -> DeviceBuffer[DType.float32]:
     """A zero-filled scratch of `n` floats: a view of this pass's own arena
-    under MOJOLEARN_AFN_MAMBA3_BWD_ARENA (`own`: the pass opened it), else
-    `mamba_zeros[False]`. `own` is False whenever the pass found another
-    arena already open, so a session's arena never receives these views."""
+    under MOJOLEARN_AFN_MAMBA3_BWD_ARENA (`own`, from `_AfnM3Arena.own`),
+    else `mamba_zeros[False]`."""
     comptime if AFN_M3_BWD_ARENA:
-        if own and arena_active():
+        if own:
             var want = n
             if want < 1:
                 want = 1
-            var view = arena_take(ctx, want)
+            var p = own.value()
+            var view = p[].take(ctx, want)
             view.enqueue_fill(Float32(0.0))
             return view^
     return mamba_zeros[False](ctx, n)

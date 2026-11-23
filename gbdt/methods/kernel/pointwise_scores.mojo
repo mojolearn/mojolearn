@@ -260,7 +260,6 @@ from checks.numerics import (
     identical_mul,
     identical_mul_add,
     identical_pow,
-    identical_sqrt,
 )
 from std.memory import stack_allocation
 from std.atomic import Atomic, Ordering
@@ -324,6 +323,7 @@ comptime HIST_LOADER_GATHERED_BY_LEAVES = 1
 # gbdt-one-body, 2026-11-23): one body, also called by the CPU pointwise searcher.
 from gbdt.methods.score_calcer_body import (
     FLOAT32_MAX,
+    cosine_cost,
     ScoreCalcer,
     add_dim_leaves,
     add_pinned_class_leaves,
@@ -925,10 +925,7 @@ def find_optimal_split_cosine_kernel[
             k0 += cnt
 
         # `:381`
-        if denum_sqr > Float32(1e-15):
-            score = -score / identical_sqrt(denum_sqr)
-        else:
-            score = FLOAT32_MAX
+        score = cosine_cost(score, denum_sqr)
 
         var feature_id = Int(bf.unsafe_load(3 * b))
         score *= cat_features_weights.unsafe_offset(feature_id).unsafe_load[invariant=True]()

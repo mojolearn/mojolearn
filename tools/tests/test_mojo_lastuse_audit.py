@@ -63,13 +63,33 @@ def g() raises:
     var b = List[Float32](length=4, fill=0)
     var bp = b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     fill(bp, 4)
+'''
+        kinds = {f["local"]: f["kind"] for f in lu.scan_text("t.mojo", text, {})}
+        self.assertEqual(kinds, {"a": "tracked", "b": "any"})
+        self.assertEqual(failing(text), [])
+
+    # lane gbdt-leaf-body (2026-11-23): an address has no origin, so an any-origin pointer built around it keeps
+    # nothing alive (the shape of partial_walk's Python data address, here through `.unsafe_ptr()`)
+    ANY_ADDR = '''
+comptime F32P = MutPointer[Float32, MutAnyOrigin]
+
+def g() raises:
     var c = List[Float32](length=4, fill=0)
     var cp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(c.unsafe_ptr()))
     fill(cp, 4)
+    var d = List[Float32](length=4, fill=0)
+    fill(F32P(unsafe_from_address=Int(d.unsafe_ptr())), 4)
 '''
-        kinds = {f["local"]: f["kind"] for f in lu.scan_text("t.mojo", text, {})}
-        self.assertEqual(kinds, {"a": "tracked", "b": "any", "c": "any"})
-        self.assertEqual(failing(text), [])
+
+    def test_an_any_origin_pointer_around_an_address_is_untracked(self):
+        found = {f["local"]: (f["kind"], f["sink"]) for f in lu.scan_text("t.mojo", self.ANY_ADDR,
+                                                                          lu.helpers_of(self.ANY_ADDR))}
+        self.assertEqual(found, {"c": ("untracked", "assign"), "d": ("untracked", "call")})
+        self.assertEqual(sorted(failing(self.ANY_ADDR)), [("c", "assign"), ("d", "call")])
+
+    def test_a_later_named_use_of_the_owner_passes(self):
+        fixed = self.ANY_ADDR.replace("    fill(cp, 4)\n", "    fill(cp, 4)\n    _ = c^\n") + "    _ = d^\n"
+        self.assertEqual(failing(fixed), [])
 
     def test_loop_keeps_the_value_alive_across_the_back_edge(self):
         text = '''

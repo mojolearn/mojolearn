@@ -1,15 +1,16 @@
 diff --git a/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo b/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo
+index 76a4616be8..e47286b5c9 100644
 --- a/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo
 +++ b/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo
-@@ -3,6 +3,7 @@
- """ExtraTrees split scoring: Gini/entropy classification and MSE regression."""
+@@ -4,6 +4,7 @@
  
+ from std.collections import Array
  from std.math import fma
 +from std.sys.compile import is_defined
  
  from checks.numerics import ftz
  
-@@ -450,6 +451,8 @@
+@@ -451,6 +452,8 @@ def regression_deviance_gain(
          parent_obj = ftz(ftz(-pw * pw) / label_sum)
          left_obj = ftz(ftz(-lw * lw) / left_label_sum)
          right_obj = ftz(ftz(-rw * rw) / right_label_sum)

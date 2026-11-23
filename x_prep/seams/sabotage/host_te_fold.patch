@@ -1,13 +1,13 @@
 diff --git a/x_prep/host/target.mojo b/x_prep/host/target.mojo
-index 149a61b8a..c48683d3d 100644
+index d469f3026a..160498b09a 100644
 --- a/x_prep/host/target.mojo
 +++ b/x_prep/host/target.mojo
-@@ -116,7 +116,7 @@ def te_enc_host_group_lt(fj: Int, fi: Int, j: Int, tt: Int, ncat: Int, ymean: Fl
+@@ -118,7 +118,7 @@ def te_enc_host_group_lt(fj: Int, fi: Int, j: Int, tt: Int, ncat: Int, ymean: Fl
          var cnt = 0
          var mean = Float32(0)
          var ssd = Float32(0)
--        te_enc_lt_fold(f, rp, -1, 0, 0, p(q, 3), T, tt, p(q, 5), start[cat], start[cat + 1], fi, smooth, s, cnt,
-+        te_enc_lt_fold(f, rp, -1, 0, 0, p(q, 3), T, tt, p(q, 5), start[cat], start[cat + 1], -1, smooth, s, cnt,  # SABOTAGE host te: the fold's own rows kept in the sum
-                        mean, ssd)
+-        te_enc_lt_fold(f, rp, -1, 0, 0, p(q, 3), T, tt, p(q, 5), start[cat], start[cat + 1], fi, smooth, s,
++        te_enc_lt_fold(f, rp, -1, 0, 0, p(q, 3), T, tt, p(q, 5), start[cat], start[cat + 1], -1, smooth, s,  # SABOTAGE host te: the fold's own rows kept in the sum
+                        cnt, mean, ssd)
          st(f, p(q, 10) + (fj * cmax + cat) * T + tt, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
      # rows backs rp: keep it alive past the last fold

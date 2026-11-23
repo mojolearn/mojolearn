@@ -310,7 +310,6 @@ from core.step_phase import (
     StepPhaseClock,
     step_count_d2d,
     step_count_d2h,
-    step_count_device_alloc,
     step_count_h2d,
     step_count_host_alloc,
     step_count_launch,
@@ -329,7 +328,7 @@ from core.step_glue import (
 
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
-from core.device_arena import arena_active, arena_take
+from core.device_arena import ArenaPtr, arena_buffer
 from gemm.neural_dispatch import GemmWorkspace
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 # lane/lowbit-blocks (2026-09-29): the block's products under
@@ -809,19 +808,14 @@ def llama_key_span(pos0: Int, l: Int, window: Int) -> Int:
 
 
 def _upload(
-    ctx: DeviceContext, values: List[Float32]
+    ctx: DeviceContext, values: List[Float32], arena: Optional[ArenaPtr] = None
 ) raises -> DeviceBuffer[DType.float32]:
     """One host list onto the device, contiguous, in index order."""
     var n = len(values)
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    var dev: DeviceBuffer[DType.float32]
-    if arena_active():
-        dev = arena_take(ctx, n_buf)
-    else:
-        step_count_device_alloc()
-        dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var dev = arena_buffer(ctx, n_buf, arena)
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     step_count_sync()
@@ -864,16 +858,13 @@ def _download(
     return out^
 
 
-def _zeros[wait: Bool = True](ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+def _zeros[wait: Bool = True](
+    ctx: DeviceContext, n: Int, arena: Optional[ArenaPtr] = None
+) raises -> DeviceBuffer[DType.float32]:
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    var dev: DeviceBuffer[DType.float32]
-    if arena_active():
-        dev = arena_take(ctx, n_buf)
-    else:
-        step_count_device_alloc()
-        dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var dev = arena_buffer(ctx, n_buf, arena)
     step_count_launch()
     dev.enqueue_fill(Float32(0.0))
     comptime if wait:
@@ -1373,6 +1364,7 @@ struct LlamaDeviceWeights(Movable):
         var w_gate: DeviceBuffer[DType.float32],
         var w_up: DeviceBuffer[DType.float32],
         var w_down: DeviceBuffer[DType.float32],
+        arena: Optional[ArenaPtr] = None,
     ) raises:
         """Own uploaded buffers directly, with the host constructor's
         identical length checks and ordered device refusals. The binding
@@ -1409,7 +1401,7 @@ struct LlamaDeviceWeights(Movable):
         var dflt = BlockOptions()
         dflt.norm_eps = eps
         self.opts = dflt^
-        var ph = _zeros[False](ctx, 1)
+        var ph = _zeros[False](ctx, 1, arena)
         self.b_q = ph.copy()
         self.b_k = ph.copy()
         self.b_v = ph.copy()
@@ -1626,6 +1618,7 @@ struct LlamaKVCache(Movable):
         s_max: Int,
         window: Int = 0,
         max_positions: Int = MAX_ABS_POSITION,
+        arena: Optional[ArenaPtr] = None,
     ) raises:
         """`window == 0`: the linear cache above, packed at stride `s`.
         `window > 0`: a RING of `window` slots per (batch, kv head), slot
@@ -1669,8 +1662,8 @@ struct LlamaKVCache(Movable):
         self.cap = s_max
         if window > 0:
             self.cap = window
-        self.k = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
-        self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
+        self.k = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim, arena)
+        self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim, arena)
         self.wm_on = False
         self.wm_upto = -1
         self.wm_x = 0
@@ -1909,6 +1902,7 @@ struct LlamaDeviceStages(Movable):
         dims: LlamaDims,
         window: Int = 0,
         lean: Bool = False,
+        arena: Optional[ArenaPtr] = None,
     ) raises:
         """`window` must equal the cache's. The attention buffers are
         allocated at `s_cap`: `s_max` for full causal, and the widest key
@@ -1951,42 +1945,42 @@ struct LlamaDeviceStages(Movable):
         var it = dims.intermediate
         var nh = dims.n_heads
         var nkv = dims.n_kv
-        self.norm1_sumsq = _zeros[False](ctx, m)
-        self.norm1_out = _zeros[False](ctx, m * dm)
-        self.q_proj = _zeros[False](ctx, m * qw)
-        self.k_proj = _zeros[False](ctx, m * kw)
-        self.v_proj = _zeros[False](ctx, m * kw)
-        self.q_rope = _zeros[False](ctx, m * qw)
-        self.k_rope = _zeros[False](ctx, m * kw)
+        self.norm1_sumsq = _zeros[False](ctx, m, arena)
+        self.norm1_out = _zeros[False](ctx, m * dm, arena)
+        self.q_proj = _zeros[False](ctx, m * qw, arena)
+        self.k_proj = _zeros[False](ctx, m * kw, arena)
+        self.v_proj = _zeros[False](ctx, m * kw, arena)
+        self.q_rope = _zeros[False](ctx, m * qw, arena)
+        self.k_rope = _zeros[False](ctx, m * kw, arena)
         var sc = self.s_cap
         var cells = b * nh * l * sc
         var sbh_n = l * sc
         if lean:
             cells = 1
             sbh_n = 1
-        self.k_cache = _zeros[False](ctx, b * nkv * sc * hd)
-        self.v_cache = _zeros[False](ctx, b * nkv * sc * hd)
-        self.scores = _zeros[False](ctx, cells)
-        self.masked = _zeros[False](ctx, cells)
-        self.amax = _zeros[False](ctx, b * nh * l)
-        self.aexp = _zeros[False](ctx, cells)
-        self.denom = _zeros[False](ctx, b * nh * l)
-        self.weights = _zeros[False](ctx, cells)
-        self.ctxv = _zeros[False](ctx, m * qw)
-        self.o_proj = _zeros[False](ctx, m * dm)
-        self.residual1 = _zeros[False](ctx, m * dm)
-        self.norm2_sumsq = _zeros[False](ctx, m)
-        self.norm2_out = _zeros[False](ctx, m * dm)
-        self.gate_proj = _zeros[False](ctx, m * it)
-        self.up_proj = _zeros[False](ctx, m * it)
-        self.silu_out = _zeros[False](ctx, m * it)
-        self.gated = _zeros[False](ctx, m * it)
-        self.down_proj = _zeros[False](ctx, m * dm)
-        self.residual2 = _zeros[False](ctx, m * dm)
-        self.qbh = _zeros[False](ctx, l * hd)
-        self.kbh = _zeros[False](ctx, sc * hd)
-        self.sbh = _zeros[False](ctx, sbh_n)
-        self.qk_sumsq = _zeros[False](ctx, m * nh)
+        self.k_cache = _zeros[False](ctx, b * nkv * sc * hd, arena)
+        self.v_cache = _zeros[False](ctx, b * nkv * sc * hd, arena)
+        self.scores = _zeros[False](ctx, cells, arena)
+        self.masked = _zeros[False](ctx, cells, arena)
+        self.amax = _zeros[False](ctx, b * nh * l, arena)
+        self.aexp = _zeros[False](ctx, cells, arena)
+        self.denom = _zeros[False](ctx, b * nh * l, arena)
+        self.weights = _zeros[False](ctx, cells, arena)
+        self.ctxv = _zeros[False](ctx, m * qw, arena)
+        self.o_proj = _zeros[False](ctx, m * dm, arena)
+        self.residual1 = _zeros[False](ctx, m * dm, arena)
+        self.norm2_sumsq = _zeros[False](ctx, m, arena)
+        self.norm2_out = _zeros[False](ctx, m * dm, arena)
+        self.gate_proj = _zeros[False](ctx, m * it, arena)
+        self.up_proj = _zeros[False](ctx, m * it, arena)
+        self.silu_out = _zeros[False](ctx, m * it, arena)
+        self.gated = _zeros[False](ctx, m * it, arena)
+        self.down_proj = _zeros[False](ctx, m * dm, arena)
+        self.residual2 = _zeros[False](ctx, m * dm, arena)
+        self.qbh = _zeros[False](ctx, l * hd, arena)
+        self.kbh = _zeros[False](ctx, sc * hd, arena)
+        self.sbh = _zeros[False](ctx, sbh_n, arena)
+        self.qk_sumsq = _zeros[False](ctx, m * nh, arena)
         self.attn_prefer_eager = False
         self.attn_recompute_backward = False
         self.attn_forward_status = -1
@@ -2774,6 +2768,7 @@ struct LlamaRopeTable(Movable):
         dims: LlamaDims,
         theta: Float32,
         p_max: Int,
+        arena: Optional[ArenaPtr] = None,
     ) raises:
         """Today's table: the default record with `theta` in place of the
         frozen base. Every pre-existing caller (the gates, the byte LM, the
@@ -2782,7 +2777,7 @@ struct LlamaRopeTable(Movable):
         value is DEVIATION 2930 through the same spelling."""
         var opts = BlockOptions()
         opts.rope_theta = theta
-        self = Self(ctx, dims, opts, p_max)
+        self = Self(ctx, dims, opts, p_max, arena=arena)
 
     def __init__(
         out self,
@@ -2790,6 +2785,7 @@ struct LlamaRopeTable(Movable):
         dims: LlamaDims,
         opts: BlockOptions,
         p_max: Int,
+        arena: Optional[ArenaPtr] = None,
     ) raises:
         """The table under the record (lane/block-options): DEVIATIONS
         2930-2932 (S6 through `llama_rope_inv_freq_scaled_host`), 2933
@@ -2814,9 +2810,9 @@ struct LlamaRopeTable(Movable):
         self.theta = opts.rope_theta
         var inv = llama_rope_inv_freq_scaled_host(opts, self.rope_dim)
         llama_refuse_rope_angle_domain(inv, p_max)
-        self.inv_freq = _upload(ctx, inv)
-        self.cos = _zeros(ctx, p_max * self.half)
-        self.sin = _zeros(ctx, p_max * self.half)
+        self.inv_freq = _upload(ctx, inv, arena)
+        self.cos = _zeros(ctx, p_max * self.half, arena)
+        self.sin = _zeros(ctx, p_max * self.half, arena)
         step_count_launch()
         ctx.enqueue_function[llama_rope_table_kernel](
             self.cos.unsafe_ptr(),

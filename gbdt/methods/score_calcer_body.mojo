@@ -24,6 +24,7 @@ from checks.numerics import (
     identical_log,
     identical_mul,
     identical_mul_add,
+    ftz,
     identical_pow,
     identical_sqrt,
 )
@@ -42,6 +43,34 @@ from gbdt.options.catboost_options import (
 #: `FLT_MAX`. Their "this candidate is unusable" sentinel (`pointwise_scores.cu:44-45`,
 #: `score_calcers.cuh:161`). NOT negated -- see `pointwise_scores.mojo`'s sign section.
 comptime FLOAT32_MAX = Float32(3.4028234663852886e38)
+
+
+@always_inline
+def cosine_gain(score: Float32, denum_sqr: Float32) -> Float32:
+    """The greedy searchers' Cosine normalization (`compute_scores.cu`), a
+    gain the searcher maximizes: `ftz(score / sqrt(denum_sqr))`, and
+    `-FLOAT32_MAX` for an empty denominator. One body (lane gbdt-leaf-body,
+    2026-11-23) for the device score kernels (`compute_scores.mojo`,
+    `leafwise_score_body.mojo`) and the host greedy searcher
+    (`gbdt/host/gbdt_oracle.mojo`), which each wrote it; same statements.
+    `identical_sqrt`: DEVIATION 258, row 10, NVIDIA sqrt is approximate."""
+    if denum_sqr > Float32(1e-15):
+        return ftz(score / identical_sqrt(denum_sqr))
+    return -FLOAT32_MAX
+
+
+@always_inline
+def cosine_cost(score: Float32, denum_sqr: Float32) -> Float32:
+    """The pointwise searcher's Cosine normalization (`pointwise_scores.cu:
+    381`), a cost the searcher minimizes: `-score / sqrt(denum_sqr)`, and
+    `FLOAT32_MAX` for an empty denominator. One body (lane gbdt-leaf-body,
+    2026-11-23) for `TScoreCalcer.final`, the pointwise score kernel
+    (`pointwise_scores.mojo`) and the host Ordered searcher
+    (`gbdt/host/gbdt_oracle_ordered.mojo`), which each wrote it; same
+    statements."""
+    if denum_sqr > Float32(1e-15):
+        return -score / identical_sqrt(denum_sqr)
+    return FLOAT32_MAX
 
 
 @fieldwise_init
@@ -254,10 +283,7 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
             Self.score_function == SCORE_FUNCTION_COSINE
             or Self.score_function == SCORE_FUNCTION_NEWTON_COSINE
         ):
-            if self.denum_sqr > Float32(1e-15):
-                out = -self.score / identical_sqrt(self.denum_sqr)
-            else:
-                out = FLOAT32_MAX
+            out = cosine_cost(self.score, self.denum_sqr)
             if self.score_std_dev != Float32(0.0):
                 var seed = advance_seed_k(
                     self.global_seed + UInt64(self.feature_id), 4

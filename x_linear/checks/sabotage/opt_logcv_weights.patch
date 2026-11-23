@@ -1,12 +1,15 @@
 diff --git a/x_linear/logcv.mojo b/x_linear/logcv.mojo
+index 389587ef93..5d661f0fa7 100644
 --- a/x_linear/logcv.mojo
 +++ b/x_linear/logcv.mojo
-@@ -67,7 +67,7 @@
-         var i = Int(ix.unsafe_load(q)) if fold >= 0 else q
-         var wi = Float32(1)
-         if sw:
--            wi = ld(y, 2 * n + i)
-+            wi = Float32(1) if is_gpu() else ld(y, 2 * n + i)  # SABOTAGE option weights: the device drops them
-         var label = Int(ld(y, i))
-         if kp == 1:
-             var z = fa(row_dot(x, i, d, th, toff), ld(th, toff + d) if fi else Float32(0))
+@@ -230,8 +230,9 @@ def logcv_map_row(i: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw: B
+     var stride = d + 1
+     var wi = Float32(1)
+     if sw:
+-        wi = ld(y, 2 * n + i)
++        wi = Float32(1) if is_gpu() else ld(y, 2 * n + i)  # SABOTAGE option weights: the device drops them
+     var label = Int(ld(y, i))
++
+     if kp == 1:
+         var z = fa(row_dot(x, i, d, th, toff), ld(th, toff + d) if fi else Float32(0))
+         var yi = Float32(1) if label == 1 else Float32(0)

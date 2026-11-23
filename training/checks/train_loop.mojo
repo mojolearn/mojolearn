@@ -116,7 +116,7 @@ WHAT THIS FILE IS LEAST CONFIDENT COMPILES
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, unsafe_memcpy
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
-from core.device_arena import arena_active, arena_take
+from core.device_arena import ArenaPtr, arena_buffer
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
@@ -1030,16 +1030,11 @@ def train_dims() -> LlamaDims:
 # ===========================================================================
 
 
-def _zeros(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+def _zeros(ctx: DeviceContext, n: Int, arena: Optional[ArenaPtr] = None) raises -> DeviceBuffer[DType.float32]:
     var k = n
     if k < 1:
         k = 1
-    var b: DeviceBuffer[DType.float32]
-    if arena_active():
-        b = arena_take(ctx, k)
-    else:
-        step_count_device_alloc()
-        b = ctx.enqueue_create_buffer[DType.float32](k)
+    var b = arena_buffer(ctx, k, arena)
     ctx.enqueue_memset(b, Float32(0.0))
     step_count_sync()
     ctx.synchronize()
@@ -1059,23 +1054,18 @@ def _zeros_i32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.int32]:
 
 
 def _upload(
-    ctx: DeviceContext, values: List[Float32]
+    ctx: DeviceContext, values: List[Float32], arena: Optional[ArenaPtr] = None
 ) raises -> DeviceBuffer[DType.float32]:
     var n = len(values)
     if n < 1:
-        return _zeros(ctx, 1)
+        return _zeros(ctx, 1, arena)
     step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     step_count_sync()
     ctx.synchronize()
     for i in range(n):
         h.unsafe_ptr().unsafe_store(i, values[i])
-    var d: DeviceBuffer[DType.float32]
-    if arena_active():
-        d = arena_take(ctx, n)
-    else:
-        step_count_device_alloc()
-        d = ctx.enqueue_create_buffer[DType.float32](n)
+    var d = arena_buffer(ctx, n, arena)
     step_count_h2d()
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
     step_count_sync()
@@ -1106,7 +1096,7 @@ def _upload_i32(
     return d^
 
 
-def _ones(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+def _ones(ctx: DeviceContext, n: Int, arena: Optional[ArenaPtr] = None) raises -> DeviceBuffer[DType.float32]:
     """EXACTLY `Float32(1.0)` in every entry.
 
     **A WRONG VALUE HERE IS A WRONG ANSWER WITH NO SYMPTOM**, because any
@@ -1119,7 +1109,7 @@ def _ones(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
         k = 1
     for _ in range(k):
         vals.append(Float32(1.0))
-    return _upload(ctx, vals)
+    return _upload(ctx, vals, arena)
 
 
 struct TrainBuffers(Movable):

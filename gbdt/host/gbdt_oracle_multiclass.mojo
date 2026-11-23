@@ -96,7 +96,6 @@ from checks.numerics import (
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk
-from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.methods.random_score_bodies import score_model_length_mult
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -109,7 +108,7 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
-    apply_scaled_leaves_host,
+    rescale_apply_leaves_host,
     _identity_rows,
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
@@ -1581,10 +1580,9 @@ def gbdt_multi_host_fit(
                     row_index, offsets, sizes, n_rows, params.l2_leaf_reg,
                     leaf_method, leaf_iterations,
                 )
-                p_scaled = rescaled_leaves(estimated, lr)
-                apply_scaled_leaves_host(
-                    cursors[p], p_scaled, row_index, offsets, sizes, n_live,
-                    dim, n_rows,
+                p_scaled = rescale_apply_leaves_host(
+                    cursors[p], estimated, lr, row_index, offsets, sizes,
+                    n_live, dim, n_rows,
                 )
             else:
                 var part = _partition_for_model(
@@ -1595,9 +1593,8 @@ def gbdt_multi_host_fit(
                     part.row_index, part.offsets, part.sizes, n_rows,
                     params.l2_leaf_reg, leaf_method, leaf_iterations,
                 )
-                p_scaled = rescaled_leaves(estimated, lr)
-                apply_scaled_leaves_host(
-                    cursors[p], p_scaled, part.row_index, part.offsets,
+                p_scaled = rescale_apply_leaves_host(
+                    cursors[p], estimated, lr, part.row_index, part.offsets,
                     part.sizes, len(part.sizes), dim, n_rows,
                 )
             if p == est_p:

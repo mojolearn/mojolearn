@@ -10,10 +10,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext
 
-from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
-    hist2_dither,
-    hist2_quantize,
-)
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from gbdt.methods.kernel.compute_point_hist2_loop import (
     compute_histogram,
     compute_histogram_2,
@@ -28,7 +25,6 @@ from gbdt.methods.kernel.pointwise_hist2_one_byte_8bit import (
     PointHist8,
 )
 
-from gbdt.host.gbdt_oracle import _hist2_dither, _hist2_quantize
 from gbdt.methods.ordered_fast_switches import ORD_DOC_ID_STORAGE
 from checks.native_tests.kit import download_host_into, upload_whole_into
 
@@ -108,12 +104,12 @@ def run_checks() raises:
         for _ in range(OUT_INTS):want.append(Int64(0))
         for row in range(5,5+length):
             var key=Int(keys[row]) if ORD_DOC_ID_STORAGE else row
-            var u=_hist2_dither(key)
+            var u=hist2_dither(key)
             for feature in range(4):
                 var bin=Int((ci[row]>>UInt32(24-8*feature))&UInt32(255))
                 var cell=2*(PW8_MAX_FOLD_COUNT*feature+bin)
-                want[cell]+=Int64(_hist2_quantize(weight[row],scale,u))
-                want[cell+1]+=Int64(_hist2_quantize(target[row],scale,u))
+                want[cell]+=Int64(hist2_quantize(weight[row],scale,u))
+                want[cell+1]+=Int64(hist2_quantize(target[row],scale,u))
         comptime for vi in range(4):
             comptime variant=(1,4,12,14)[vi]
             ctx.enqueue_memset(dout,Int32(0))

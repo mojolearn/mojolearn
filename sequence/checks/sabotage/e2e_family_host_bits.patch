@@ -1,20 +1,47 @@
+diff --git a/arima/host/arima_host_entries.mojo b/arima/host/arima_host_entries.mojo
+index 496ac57f2f..37871c13eb 100644
+--- a/arima/host/arima_host_entries.mojo
++++ b/arima/host/arima_host_entries.mojo
+@@ -166,7 +166,8 @@ def arima_host_fit_into(
+             " length; nothing written"
+         )
+     for i in range(N * batch_size):
+-        pp.unsafe_store(i, r.t_x[i])
++        # SABOTAGE (end to end): the CPU column's fitted parameters, low bit flipped
++        pp.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](r.t_x[i]) ^ UInt32(1)))
+         xp.unsafe_store(i, r.x[i])
+         x0p.unsafe_store(i, r.x0[i])
+     for b in range(batch_size):
+diff --git a/core/mojolearn_tsa_host_impl.mojo b/core/mojolearn_tsa_host_impl.mojo
+index a5be52e6fc..379f657bce 100644
+--- a/core/mojolearn_tsa_host_impl.mojo
++++ b/core/mojolearn_tsa_host_impl.mojo
+@@ -77,7 +77,7 @@ def holtwinters_fit_host_into(
+         sp[3 * batch_size + b] = fitted.gamma[b]
+         fp[b] = Int32(fitted.niter[b])
+         fp[batch_size + b] = Int32(fitted.criterion[b])
+-    comptime if HW_ORACLE_HOST_SABOTAGE:
++    comptime if True:
+         # THE FITTED-STATE ARM (lane/inference-holtwinters, 2026-09-15):
+         # the split SSE multiply-add leaves the fitted bytes unchanged on
+         # some fixtures (denormal, denormal_ftz, wide), so a saved model's
 diff --git a/sequence/exec.mojo b/sequence/exec.mojo
-index 11efebfff..5c344059f 100644
+index 24e340a4ab..ec43eb3a1f 100644
 --- a/sequence/exec.mojo
 +++ b/sequence/exec.mojo
-@@ -21,7 +21,7 @@ task gets at least `HOST_LAUNCH_GRAIN` units of work (`_element_weight`),
+@@ -23,7 +23,7 @@ task gets at least `HOST_LAUNCH_GRAIN` units of work (`_element_weight`),
  so the many tiny launches of a small recurrent step stay on the calling
  thread. A single task runs on the calling thread without touching the
  pool."""
--from std.memory import memcpy, memset_zero
-+from std.memory import bitcast, memcpy, memset_zero
+-from std.memory import unsafe_memcpy, unsafe_memset_zero
++from std.memory import bitcast, unsafe_memcpy, unsafe_memset_zero
  
  from core.host_parallel import host_parallelize
  from core.host_predict_threads import host_predict_chunk, host_predict_task_count
-@@ -199,6 +199,11 @@ struct HostExec(Exec):
-     def download(mut self, dst: FP, src: FP, n: Int) raises:
+@@ -293,6 +293,11 @@ struct HostExec(Exec, Movable):
          if n > 0 and Int(dst) != Int(src):
-             memcpy(dest=dst, src=src, count=n)
+             unsafe_memcpy(dest=dst, src=src, count=n)
+             self.execution_profile.copied(3, n * 4)
 +        # SABOTAGE (end to end): every word the CPU column downloads has its
 +        # low bit flipped (a function of the value alone, so only the
 +        # cross-column diff can see it).
@@ -22,47 +49,12 @@ index 11efebfff..5c344059f 100644
 +            dst.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](dst.unsafe_load(i)) ^ UInt32(1)))
  
      def download_async(mut self, dst: FP, src: FP, n: Int) raises:
-         self.download(dst, src, n)
-diff --git a/bindings/_mojolearn_arima_host.mojo b/bindings/_mojolearn_arima_host.mojo
-index 7d986c4dd..018c862d2 100644
---- a/bindings/_mojolearn_arima_host.mojo
-+++ b/bindings/_mojolearn_arima_host.mojo
-@@ -39,6 +39,7 @@ The sabotage arm (`arima_host_sabotage`) is
- finite-difference step doubles, so every fitted model this binary returns
- differs.
- """
-+from std.memory import bitcast
- from std.os import abort
- from std.python import Python, PythonObject
- from std.python._cpython import GILReleased
-@@ -224,7 +225,8 @@ def arima_fit_binding(
-                 " length; nothing written"
-             )
-         for i in range(N * batch_size):
--            pp.unsafe_store(i, r.t_x[i])
-+            # SABOTAGE (end to end): the CPU column's fitted parameters, low bit flipped
-+            pp.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](r.t_x[i]) ^ UInt32(1)))
-             xp.unsafe_store(i, r.x[i])
-             x0p.unsafe_store(i, r.x0[i])
-         for b in range(batch_size):
-diff --git a/bindings/_mojolearn_tsa_host.mojo b/bindings/_mojolearn_tsa_host.mojo
-index a86ecf979..fa6dcb05d 100644
---- a/bindings/_mojolearn_tsa_host.mojo
-+++ b/bindings/_mojolearn_tsa_host.mojo
-@@ -222,7 +222,7 @@ def holtwinters_fit_binding(
-             sp[3 * batch_size + b] = fitted.gamma[b]
-             fp[b] = Int32(fitted.niter[b])
-             fp[batch_size + b] = Int32(fitted.criterion[b])
--        comptime if HW_ORACLE_HOST_SABOTAGE:
-+        comptime if True:
-             # THE FITTED-STATE ARM (lane/inference-holtwinters, 2026-09-15):
-             # the split SSE multiply-add leaves the fitted bytes unchanged on
-             # some fixtures (denormal, denormal_ftz, wide), so a saved model's
+         var started = self.execution_profile.clock()
 diff --git a/tsa/checks/kpss_oracle.mojo b/tsa/checks/kpss_oracle.mojo
-index 7127e82da..dc4058438 100644
+index 9aa49788f1..2a6542bed2 100644
 --- a/tsa/checks/kpss_oracle.mojo
 +++ b/tsa/checks/kpss_oracle.mojo
-@@ -87,7 +87,7 @@ def series_sum_host[
+@@ -116,7 +116,7 @@ def series_sum_host[
              t += STATS_TPB
          for c in range(len(chain)):
              var at = chain[c]

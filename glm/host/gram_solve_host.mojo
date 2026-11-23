@@ -112,6 +112,12 @@ def host_linear_gram_fit(
         if i == j:
             adiag[i] = v
             b[i] = gs_scaled_rhs(fc, i, sv[i])
+    # mp, gp/fg and cp/fc are addresses, which keep nothing alive: their
+    # owners stay named past the pointers' last reads (lane gbdt-leaf-body,
+    # LASTUSE: an any-origin pointer around an address)
+    _ = means^
+    _ = g^
+    _ = c^
     var info = List[Float32](length=1, fill=Float32(0.0))
     var fa = F32Ptr(unsafe_from_address=Int(a.unsafe_ptr()))
     chol_serial(fa, d, F32Ptr(unsafe_from_address=Int(info.unsafe_ptr())))
@@ -245,4 +251,25 @@ def _host_gff_fit(
             gff_backward_cell(ahp, alp, zhp, zlp, whp, wlp, i, j, d)
     for i in range(d):
         coef_ptr.unsafe_store(i, gff_coef(whp, wlp, svp, i))
+    # every `_AP` above is an address, which keeps nothing alive: the owners
+    # stay named past the pointers' last reads (lane gbdt-leaf-body, LASTUSE)
+    _ = mh^
+    _ = ml^
+    _ = ph^
+    _ = pl^
+    _ = gh^
+    _ = gl^
+    _ = ch^
+    _ = cl^
+    _ = ah^
+    _ = al^
+    _ = adh^
+    _ = adl^
+    _ = bh^
+    _ = bl^
+    _ = sv^
+    _ = zh^
+    _ = zl^
+    _ = wh^
+    _ = wl^
     return 0

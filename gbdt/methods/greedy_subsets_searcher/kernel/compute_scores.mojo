@@ -18,7 +18,6 @@ from checks.numerics import (
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
-    identical_sqrt,  # DEVIATION 258: row 10, NVIDIA sqrt is approximate
 )
 from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
@@ -32,6 +31,7 @@ from gbdt.options.catboost_options import (
 from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import (
     add_leaf_score,
     child_hessian_below,
+    cosine_gain,
     leafwise_finish_gain,
 )
 
@@ -151,10 +151,7 @@ def compute_optimal_splits_kernel[
         var final_score = score
         var score_before = Float32(0.0)
         comptime if cosine:
-            if denum_sqr > Float32(1e-15):
-                final_score = ftz(score / identical_sqrt(denum_sqr))
-            else:
-                final_score = -FLOAT32_MAX
+            final_score = cosine_gain(score, denum_sqr)
 
             if score_std_dev != Float32(0.0):
                 var seed = advance_seed_k(
