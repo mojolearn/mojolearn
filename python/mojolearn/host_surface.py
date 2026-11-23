@@ -820,6 +820,7 @@ TRAINING_LANE_NAMES = {
     "gbdt-shape-gaps": "gradient boosting on NaN inputs, Lossguide Cosine, pointwise losses on non-symmetric trees and feature_fraction",
     "gbdt-rest-gaps": "gradient boosting eval sets and feature_fraction on the symmetric pointwise and multiclass losses, the pointwise searcher with RMSE, NaN beside categorical columns",
     "gbdt-pointwise-arms": "gradient boosting on the pointwise searcher with Newton and cosine scores, every bootstrap, Gradient leaves, score noise and feature_fraction",
+    "gbdt-ordered-weights": "gradient boosting Ordered boosting with sample weights and class weights",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1592,9 +1593,15 @@ ADAPTED_MODULES = {
 #: one_hot_features column that is not categorical (the binarize's "There
 #: are NaNs in feature number N" on both columns), MVS, Exact leaves on
 #: Logloss / RMSE.
+#:
+#: Lane gbdt-ordered-weights (2026-11-23): sample weights and class weights
+#: under Ordered boosting (gbdt_oracle_ordered.mojo threads the device's one
+#: weight column through the fold planes, the leaves, the starting average
+#: and the learn loss); class weights with RMSE refuse on both columns in
+#: `train`'s words.
 NO_CPU_PATH = (
-    "gradient boosting training with class weights in Ordered boosting or "
-    "the pointwise searcher, and sample weights in Ordered boosting",
+    "gradient boosting training with class weights on the pointwise "
+    "searcher",
 
     "ExperimentalTwoLevelFeatureFreq gradient boosting training when a "
     "tree's level winner is the tensor column itself: the separate CPU "
@@ -2960,6 +2967,8 @@ FAMILIES = (
             "gbdt-rest-gaps",
             # lane gbdt-rest-3 (2026-11-23): the pointwise searcher's arms
             "gbdt-pointwise-arms",
+            # lane gbdt-ordered-weights (2026-11-23)
+            "gbdt-ordered-weights",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4170,6 +4179,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-shape-gaps": "no reference",
     "gbdt-rest-gaps": "no reference",
     "gbdt-pointwise-arms": "no reference",
+    "gbdt-ordered-weights": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no

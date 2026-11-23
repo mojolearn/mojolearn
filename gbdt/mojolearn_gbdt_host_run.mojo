@@ -550,8 +550,8 @@ def _refuse_ordered_host(what: String) raises:
     raise Error(
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
         + " with boosting_type='Ordered'; the gbdt host binding trains Ordered"
-        " boosting at unit weights on numeric columns with RMSE, Logloss,"
-        " CrossEntropy and the pointwise losses (see"
+        " boosting with RMSE, Logloss, CrossEntropy and the pointwise losses,"
+        " sample and class weights included (see"
         " gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit)"
     )
 
@@ -654,11 +654,27 @@ def _gbdt_fit_ordered_arm(
             "Exact leaf estimation method don't work with ordered boosting"
             " on GPU (catboost_options.cpp:346-350)"
         )
-    # ---- what this oracle does not restate, by name ----
-    if n_weights != 0:
-        _refuse_ordered_host("sample_weight")
-    if n_class_weights != 0:
-        _refuse_ordered_host("class_weights")
+    # ---- the row weights (lane gbdt-ordered-weights, 2026-11-23) ----
+    # sample weights and class weights train under Ordered as on the
+    # device: `train`'s one `weights` column (the sample word times
+    # `class_weights[y > 0.5]`), threaded by `gbdt_ordered_host_fit` through
+    # the fold planes, the per-fold and estimation leaves, the starting
+    # average and the learn loss. `gbdt_fit`'s and `train`'s checks, their
+    # words (this arm runs before the Plain arms' slot checks).
+    if n_weights != 0 and n_weights != n_rows:
+        raise Error(
+            "gbdt_fit: n_weights must be 0 or n_rows, got " + String(n_weights)
+        )
+    if n_class_weights != 0 and loss == String("RMSE"):
+        raise Error(
+            "class weights take effect only with a classification loss,"
+            " their option check's words (catboost_options.cpp:617)"
+        )
+    if n_class_weights != 0 and n_class_weights != 2:
+        raise Error(
+            "class_weights takes 2 entries for loss '" + loss + "', got "
+            + String(n_class_weights)
+        )
     # CATEGORICAL COLUMNS (lane cat-ctr, 2026-11-21): the Ordered oracle
     # takes the flags and builds single-column CTRs over its fold
     # permutations, as `train` does. What stays refused, by name: an
@@ -807,6 +823,20 @@ def _gbdt_fit_ordered_arm(
     var stopped = False
     var x = read_f32(x_address, n_rows * n_features)
     var y = read_f32(y_address, n_rows)
+    # `train`'s weight column: empty (the unit weight) without sample or
+    # class weights; a negative sample weight refused at its first row, in
+    # `train`'s words (`gbdt_host_binary_row_weights`)
+    var row_weights = List[Float32]()
+    if n_weights != 0 or n_class_weights != 0:
+        var class_weights = List[Float32]()
+        for i in range(n_class_weights):  # small-loop(class weight words of params)
+            class_weights.append(Float32(params.f(36 + i)))
+        var sample_weights = List[Float32]()
+        if n_weights != 0:
+            sample_weights = read_f32(params.weights, n_weights)
+        row_weights = gbdt_host_binary_row_weights(
+            y, n_rows, class_weights, sample_weights
+        )
     var ex = List[Float32]()
     var ey = List[Float32]()
     if n_eval_rows > 0:
@@ -828,7 +858,7 @@ def _gbdt_fit_ordered_arm(
     # Ordered fit's level driver, as on the device
     var fit = gbdt_ordered_host_fit(
         x, y, n_rows, n_features, p, hloss, opts, ev, flags,
-        max_ctr_complexity,
+        max_ctr_complexity, row_weights,
     )
     text = fit.text
     losses = fit.losses.copy()
