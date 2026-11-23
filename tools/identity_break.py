@@ -423,6 +423,7 @@ sampler, a solver, a metric, a reduction).
                losses on non-symmetric trees, feature_fraction outside
                Lossguide Logloss, the unweighted pointwise searcher)
       gbdt-weighted-rest gbdt-weighted-special gbdt-shape-gaps gbdt-rest-gaps
+      gbdt-pointwise-arms
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -5760,6 +5761,84 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-pointwise-arms")
+def _(ml, X, yc, yr, Xh=None):
+    """The pointwise searcher's arms the CPU column refused until lane
+    gbdt-rest-3 (2026-11-23), each now trained by the host owners: Logloss
+    and RMSE at the NewtonL2, Cosine and NewtonCosine scores, the Bernoulli,
+    Poisson and no bootstrap, Gradient leaves and random_strength 1 (the
+    cosine scorer's per-feature noise), one with sample weights and one with
+    an eval set under the Iter detector; feature_fraction 0.5 on Logloss and
+    RMSE and on the grouped searcher (QueryRMSE, YetiRank). Every fit is at
+    rate 0.1 with every work-changing option set."""
+    rows = min(_GBDT_GAPS_ROWS, X.shape[0])
+    X, yc, yr = np.ascontiguousarray(X[:rows]), yc[:rows], yr[:rows]
+    pw = dict(use_pointwise_searcher=True, boost_from_average=True)
+    parts, first = {}, None
+    for name, loss, yf, options in [
+        ("logloss_newtonl2_bernoulli", "Logloss", yc, dict(pw, score_function="NewtonL2",
+                                                          bootstrap_type="Bernoulli", subsample=0.7,
+                                                          leaf_estimation_method="Newton",
+                                                          leaf_estimation_iterations=3)),
+        ("logloss_cosine_poisson_noise", "Logloss", yc, dict(pw, score_function="Cosine",
+                                                            bootstrap_type="Poisson", subsample=0.66,
+                                                            random_strength=1.0,
+                                                            leaf_estimation_method="Gradient",
+                                                            leaf_estimation_iterations=4)),
+        ("rmse_newtoncosine_noise", "RMSE", yr, dict(pw, score_function="NewtonCosine", bootstrap_type="No",
+                                                     random_strength=1.0, leaf_estimation_method="Newton",
+                                                     leaf_estimation_iterations=1)),
+        ("rmse_cosine_bayesian_gradient", "RMSE", yr, dict(pw, score_function="Cosine",
+                                                          bootstrap_type="Bayesian", bagging_temperature=0.5,
+                                                          leaf_estimation_method="Gradient",
+                                                          leaf_estimation_iterations=1)),
+        ("logloss_l2_ff", "Logloss", yc, dict(pw, score_function="L2", bootstrap_type="Bayesian",
+                                              bagging_temperature=1.0, feature_fraction=0.5,
+                                              leaf_estimation_method="Newton", leaf_estimation_iterations=3)),
+        ("rmse_cosine_ff_noise", "RMSE", yr, dict(pw, score_function="Cosine", bootstrap_type="No",
+                                                  random_strength=1.0, feature_fraction=0.5,
+                                                  leaf_estimation_method="Newton",
+                                                  leaf_estimation_iterations=1)),
+    ]:
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(loss=loss, **options)).fit(X, yf)
+        _gbdt_gaps_parts(parts, name, m, X)
+        first = first if first is not None else m
+    # sample weights on the NewtonCosine arm
+    w = _hw((rows,), "gbdt-pointwise-arms:sample_weight", 0.25, 4.0)
+    mw = ml.GradientBoosting(**_gbdt_gaps_kw(loss="Logloss", **dict(
+        pw, score_function="NewtonCosine", bootstrap_type="Bernoulli", subsample=0.7, random_strength=1.0,
+        leaf_estimation_method="Newton", leaf_estimation_iterations=3))).fit(X, yc, sample_weight=w)
+    _gbdt_gaps_parts(parts, "logloss_newtoncosine_weighted", mw, X)
+    # the held-out fit: the curve, the detector's stop and the shrink, hashed
+    Xe = np.ascontiguousarray(Xh[:rows])
+    yeh = labels_for(Xh, HELDOUT_SEED)[1][:rows].astype(np.float32)
+    ev = ml.GradientBoosting(**_gbdt_gaps_kw(**dict(
+        pw, loss="RMSE", score_function="Cosine", bootstrap_type="Poisson", subsample=0.66, random_strength=1.0,
+        leaf_estimation_method="Newton", leaf_estimation_iterations=1, n_estimators=30, learning_rate=1.0,
+        max_depth=6, od_type="Iter", od_wait=2, use_best_model=True, best_model_min_trees=3))
+    ).fit(X, yr, eval_set=(Xe, yeh))
+    _gbdt_gaps_parts(parts, "rmse_cosine_poisson_eval", ev, X)
+    parts["rmse_cosine_poisson_eval:test_loss_curve"] = _h(np.asarray(ev.test_loss_curve_, dtype=np.float64))
+    parts["rmse_cosine_poisson_eval:stop"] = _h(np.asarray([ev.stopped_early_, len(ev.test_loss_curve_),
+                                                            ev.best_iteration_], dtype=np.int64))
+    # feature_fraction on the grouped pointwise searcher
+    rr = min(_GBDT_RANK_ROWS, rows)
+    Xr = np.ascontiguousarray(X[:rr])
+    groups, rel = _rank_groups(rr), _relevance(yr[:rr])
+    for name, loss, options in [
+        ("QueryRMSE_pw_ff", "QueryRMSE", dict(score_function="Cosine", random_strength=1.0)),
+        ("YetiRank_pw_ff", "YetiRank", dict(score_function="NewtonL2", bootstrap_type="Bernoulli",
+                                            subsample=0.7)),
+    ]:
+        kw = dict(loss=loss, use_pointwise_searcher=True, feature_fraction=0.5, leaf_estimation_method="Newton",
+                  leaf_estimation_iterations=1)
+        kw.update(options)
+        m = ml.GradientBoosting(**_gbdt_gaps_kw(**kw)).fit(Xr, rel, group_id=groups)
+        _gbdt_gaps_parts(parts, name, m, Xr)
+        parts[name + ":ndcg"] = _h(_rank_ndcg(ml, groups, rel, m.predict(Xr)))
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -9641,7 +9720,8 @@ _batch_decl(_rows_calls("predict"),
 _batch_decl(_rows_calls("predict"),
             "gbdt-weighted-symmetric", "gbdt-weighted-nonsym", "gbdt-weighted-rank", "gbdt-eval-gaps")
 _batch_decl(_rows_calls("predict"),
-            "gbdt-weighted-rest", "gbdt-weighted-special", "gbdt-shape-gaps", "gbdt-rest-gaps")
+            "gbdt-weighted-rest", "gbdt-weighted-special", "gbdt-shape-gaps", "gbdt-rest-gaps",
+            "gbdt-pointwise-arms")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):

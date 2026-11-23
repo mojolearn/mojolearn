@@ -43,6 +43,7 @@ under `checks/native_tests/fixtures/gbdt/` (column-major X). Every option,
 assertion and tolerance is the original test's.
 """
 from std.math import isfinite, log, log2, min, max
+from std.math import nan as math_nan
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.host_helpers_impl import argmax_rows_f32, argmax_rows_f64
@@ -75,7 +76,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 21
+comptime GBDT_HOST_UNITS = 22
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -1179,8 +1180,101 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_losses[I](unit - 7)
     elif unit <= 19:
         host_ordered[I](unit - 14)
-    else:
+    elif unit == 20:
         host_rest_gaps[I]()
+    else:
+        host_pointwise_arms[I]()
+
+
+def _pw_opts(loss: String, score: String, boot: String) -> GbdtOpts:
+    """A pointwise-searcher fit at the given score and bootstrap, every
+    option it reads set."""
+    var o = GbdtOpts(loss, 4, 3)
+    o.learning_rate = 0.1
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.pointwise = True
+    o.score_function = score
+    o.bootstrap = boot
+    o.random_strength = 0.0
+    o.boost_from_average = 1
+    o.leaf_method = "Newton"
+    o.leaf_iterations = 1
+    return o^
+
+
+def host_pointwise_arms[I: GbdtImage]() raises:
+    """The pointwise searcher's arms the host refused by name until lane
+    gbdt-rest-3 (2026-11-23), each twice to the same bytes: NewtonL2 with
+    Bernoulli, Cosine with Poisson, score noise and Gradient leaves on
+    Logloss; NewtonCosine with score noise and Cosine at feature_fraction
+    0.5 on RMSE; QueryRMSE on the grouped pointwise searcher at
+    feature_fraction 0.5. Each moves against the L2 Bayesian fit the host
+    trained before. Then a NaN in a one_hot_features column that is not
+    categorical is refused in `train`'s words (the binarize's), as on the
+    device."""
+    var clf = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    var base = _pw_opts("Logloss", "L2", "Bayesian")
+    var mb = _twice[I](base, clf, "pointwise Logloss L2 Bayesian")
+    var o1 = _pw_opts("Logloss", "NewtonL2", "Bernoulli")
+    o1.subsample = 0.7
+    o1.leaf_iterations = 3
+    var m1 = _twice[I](o1, clf, "pointwise Logloss NewtonL2 Bernoulli")
+    require(m1.text != mb.text, "pointwise NewtonL2 Bernoulli: the L2 Bayesian model")
+    var o2 = _pw_opts("Logloss", "Cosine", "Poisson")
+    o2.subsample = 0.66
+    o2.random_strength = 1.0
+    o2.leaf_method = "Gradient"
+    o2.leaf_iterations = 4
+    var m2 = _twice[I](o2, clf, "pointwise Logloss Cosine Poisson noise Gradient")
+    require(m2.text != mb.text, "pointwise Cosine Poisson: the L2 Bayesian model")
+    var o3 = _pw_opts("RMSE", "NewtonCosine", "No")
+    o3.random_strength = 1.0
+    var m3 = _twice[I](o3, reg, "pointwise RMSE NewtonCosine noise")
+    require(all_finite_f32(predict(m3.text, reg.x, 600)), "pointwise NewtonCosine: nonfinite predict")
+    var o4 = _pw_opts("RMSE", "Cosine", "No")
+    var m4 = _twice[I](o4, reg, "pointwise RMSE Cosine")
+    var o4f = o4.copy()
+    o4f.feature_fraction = 0.5
+    var m4f = _twice[I](o4f, reg, "pointwise RMSE Cosine at feature_fraction 0.5")
+    require(m4f.text != m4.text, "pointwise feature_fraction 0.5: the unsampled model")
+    var grouped = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    grouped.group_sizes = List[UInt32](length=60, fill=UInt32(10))
+    var q = GbdtOpts("QueryRMSE", 4, 3)
+    q.learning_rate = 0.1
+    q.l2_leaf_reg = 3.0
+    q.random_state = 7
+    q.pointwise = True
+    q.score_function = "Cosine"
+    q.bootstrap = "No"
+    q.random_strength = 0.0
+    q.leaf_method = "Newton"
+    q.leaf_iterations = 1
+    var mq = _twice[I](q, grouped, "grouped pointwise QueryRMSE")
+    var qf = q.copy()
+    qf.feature_fraction = 0.5
+    var mqf = _twice[I](qf, grouped, "grouped pointwise QueryRMSE at feature_fraction 0.5")
+    require(mqf.text != mq.text, "grouped pointwise feature_fraction 0.5: the unsampled model")
+    # a NaN in a plain one-hot column (the three class codes appended as
+    # column 6, flagged one_hot_features): both columns refuse it
+    var xo = load_f32("e3-x.f32", 3600)
+    var codes = load_f32("e3-y3.f32", 600)
+    for r in range(600):  # small-loop(one appended column)
+        xo.append(codes[r])
+    xo[3600 + 5] = math_nan[DType.float32]()
+    var oh_in = GbdtInputs(xo^, 600, 7, load_f32("e3-yr.f32", 600))
+    var oh = GbdtOpts("RMSE", 4, 3)
+    oh.deterministic()
+    oh.boost_from_average = 0
+    oh.leaf_iterations = 1
+    oh.one_hot_features = [6]
+    var refused = String("")
+    try:
+        _ = fit[I](oh, oh_in)
+    except error:
+        refused = String(error)
+    require_fails_with(refused, "There are NaNs in feature number", "NaN in a plain one-hot column")
 
 
 def host_rest_gaps[I: GbdtImage]() raises:

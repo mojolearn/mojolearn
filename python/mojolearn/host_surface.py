@@ -819,6 +819,7 @@ TRAINING_LANE_NAMES = {
     "gbdt-weighted-special": "gradient boosting QueryRMSE and the pointwise searcher's ranking losses, OrderedRMSE and FeatureFreq with sample weights",
     "gbdt-shape-gaps": "gradient boosting on NaN inputs, Lossguide Cosine, pointwise losses on non-symmetric trees and feature_fraction",
     "gbdt-rest-gaps": "gradient boosting eval sets and feature_fraction on the symmetric pointwise and multiclass losses, the pointwise searcher with RMSE, NaN beside categorical columns",
+    "gbdt-pointwise-arms": "gradient boosting on the pointwise searcher with Newton and cosine scores, every bootstrap, Gradient leaves, score noise and feature_fraction",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1583,6 +1584,14 @@ ADAPTED_MODULES = {
 #: RMSE, NaN in float columns beside categorical ones. Refused on BOTH
 #: columns in `train`'s words, so not CPU gaps: an eval set with MultiRMSE or
 #: the grouped losses, NaN in a cat_features column.
+#: Lane gbdt-rest-3 (2026-11-23): the pointwise searcher with the NewtonL2,
+#: Cosine and NewtonCosine scores, the Bernoulli, Poisson and no bootstrap,
+#: Gradient leaves and random_strength on Logloss / RMSE, and
+#: feature_fraction on both pointwise searchers (grouped ones included).
+#: Refused on BOTH columns in `train`'s words, so not CPU gaps: a NaN in a
+#: one_hot_features column that is not categorical (the binarize's "There
+#: are NaNs in feature number N" on both columns), MVS, Exact leaves on
+#: Logloss / RMSE.
 NO_CPU_PATH = (
     "gradient boosting training with class weights in Ordered boosting or "
     "the pointwise searcher, and sample weights in Ordered boosting",
@@ -1592,17 +1601,14 @@ NO_CPU_PATH = (
     "feature-frequency route refuses that case",
 
     "gradient boosting training with a categorical or one-hot column "
-    "outside SymmetricTree with Logloss or RMSE and Plain boosting, or "
-    "with a NaN in a one_hot_features column that is not categorical: the "
+    "outside SymmetricTree with Logloss or RMSE and Plain boosting: the "
     "categorical owners do not implement those combinations",
 
     "gradient boosting training with the pointwise searcher outside "
-    "Logloss and RMSE with L2 scores, the Bayesian bootstrap and Newton "
-    "leaves (boost_from_average on, GreedyLogSum borders, numeric columns, "
-    "no class weights, random_strength zero, feature_fraction one, the Iter "
-    "detector when an eval set is given), apart from the grouped losses "
-    "QueryRMSE, PairLogit and YetiRank, which it trains at feature_fraction "
-    "one",
+    "Logloss and RMSE (boost_from_average on, GreedyLogSum borders, numeric "
+    "columns, no class weights, the Iter detector when an eval set is "
+    "given), apart from the grouped losses QueryRMSE, PairLogit and "
+    "YetiRank, which it trains",
 
     "gradient boosting training at a (loss, grow_policy, score_function, "
     "leaf_estimation_method, bootstrap_type) combination outside the ones "
@@ -2952,6 +2958,8 @@ FAMILIES = (
             # lane gbdt-cpu-rest (2026-11-23): the rest of the CPU gaps
             "gbdt-weighted-rest", "gbdt-weighted-special", "gbdt-shape-gaps",
             "gbdt-rest-gaps",
+            # lane gbdt-rest-3 (2026-11-23): the pointwise searcher's arms
+            "gbdt-pointwise-arms",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4161,6 +4169,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-weighted-special": "no reference",
     "gbdt-shape-gaps": "no reference",
     "gbdt-rest-gaps": "no reference",
+    "gbdt-pointwise-arms": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
