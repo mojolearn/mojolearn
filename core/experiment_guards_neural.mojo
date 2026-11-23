@@ -1223,6 +1223,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_SAMBA_PROGRAM_FORWARD"](), "removed 2026-11-21 (lane/fx-verdicts7, A/B abn9 NVIDIA L40S, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466, one run per arm; NOISE: neural/samba-forward 4.55 -> 4.55 ms, 1.00 arm/base): the switch is gone; the stateless SambaStack.forward is the resident forward, and the stack program serves the stateful forward, the step and a stack the resident route does not take. Remove -D MOJOLEARN_SAMBA_PROGRAM_FORWARD; see docs/TOMBSTONES.md."
     # ---- end lane fx-verdicts7
+    # ---- lane ab-prep-mamba (2026-11-23): Mamba / Samba old paths removed (plumbing, rule 2026-11-22; decided A/Bs)
+    # TOMBSTONE: MOJOLEARN_MAMBA_CALL_PROGRAM (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA_CALL_PROGRAM.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MAMBA_CALL_PROGRAM"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: lane x5's session-op route ran the same step-op body on the same x bytes as mamba_step_run_host, adding a D2D x copy and a D2D y copy); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA_CALL_PROGRAM.ab-prep.patch"
+    # ---- end lane ab-prep-mamba
     return True
 
 

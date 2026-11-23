@@ -53,7 +53,7 @@ from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_int_words, block_step_words, block_step_reports_to_host,
     block_buffer_view, block_part_floats, block_offsets, block_guard, mamba_step_train_run, mamba_step_backward,
-    mamba_step_run_host, MAMBA_CALL_PROGRAM, IDN_MAMBA12_FORWARD_COPIES_OLD, _M12_HELD_ARENA,
+    mamba_step_run_host, IDN_MAMBA12_FORWARD_COPIES_OLD, _M12_HELD_ARENA,
 )
 from core.shared_slot import SharedSlot
 
@@ -290,8 +290,8 @@ struct MambaBlockProgram(Movable):
 
     def _x_in(mut self, px: Int, n: Int) raises -> Int:
         """`_x_for`, with the caller's x copied straight from its array into
-        the kept x tensor once that tensor exists (MAMBA_CALL_PROGRAM's A
-        arm, autograd/block_step_ops.mojo: one host-to-device copy, as
+        the kept x tensor once that tensor exists (autograd/block_step_ops.mojo
+        `_MAMBA_X_IN_PLACE`: one host-to-device copy, as
         0.8.55's `_mamba1_run` / `_mamba2_run` `mamba_copy_in` did; no host
         staging pass). Queued; `finish` waits."""
         if self.x != 0 and self.x_n == n:
@@ -317,27 +317,20 @@ struct MambaBlockProgram(Movable):
         var n = self.b * l * self.dm
         var ints = self.ints.copy()
         var fs = self.fs.copy()
-        comptime if MAMBA_CALL_PROGRAM:
-            # B arm (lane x5): the session op into a y tensor, then y down.
-            var x = self._x_for(px, n)
-            var hs = self._hs(x)
-            var y = self.s.op(self.code, hs, ints, fs)
-            var yt = self.s.tensor(y)
-            var yp = self.s.tape.value_of(self.s.ex, yt)
-            self.s.ex.download_async(FP(unsafe_from_address=py), yp, n)
-        else:
-            # A arm (lane restore-neural-call-paths, 0.8.55's per-call
-            # shape): x up once into the kept x tensor, the step op's body
-            # reading it in place, the block output straight down into the
-            # caller's array; `finish` is the one wait.
-            var x = self._x_in(px, n)
-            var bufs: List[FP] = [self.s.buffer(x), self.s.buffer(self.w), self.s.buffer(self.st)]
-            var counts: List[Int] = [n, block_part_floats(self.code, self.ints, BLOCK_PART_WEIGHTS),
-                                     block_part_floats(self.code, self.ints, BLOCK_PART_STATE)]
-            if self.q != 0:
-                bufs.append(self.s.buffer(self.q))
-                counts.append(block_int_words(self.code))
-            mamba_step_run_host(self.s.ex, self.s.steps, self.code, bufs, counts, ints, fs, py)
+        # TOMBSTONE: MOJOLEARN_MAMBA_CALL_PROGRAM (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA_CALL_PROGRAM.ab-prep.patch; record in docs/TOMBSTONES.md.
+        # Lane restore-neural-call-paths, 0.8.55's per-call shape: x up once
+        # into the kept x tensor, the step op's body reading it in place, the
+        # block output straight down into the caller's array; `finish` is the
+        # one wait.
+        var x = self._x_in(px, n)
+        var bufs: List[FP] = [self.s.buffer(x), self.s.buffer(self.w), self.s.buffer(self.st)]
+        var counts: List[Int] = [n, block_part_floats(self.code, self.ints, BLOCK_PART_WEIGHTS),
+                                 block_part_floats(self.code, self.ints, BLOCK_PART_STATE)]
+        if self.q != 0:
+            bufs.append(self.s.buffer(self.q))
+            counts.append(block_int_words(self.code))
+        mamba_step_run_host(self.s.ex, self.s.steps, self.code, bufs, counts, ints, fs, py)
         # lane fix-mamba-forward-doors: every run writes the device words
         # except a held Mamba-2 run of a fresh call (`skip_words`,
         # autograd/block_step_ops.mojo `_run_m2`), which leaves them as

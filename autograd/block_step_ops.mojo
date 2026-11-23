@@ -148,18 +148,14 @@ comptime ATTN_STEP_INTS = 8
 #: 0e4de0f46e:354 / :920) did. Board on record (NV L40S, candidate
 #: 4c2340386abc vs 0.8.55): mamba3-forward 3.95 -> 6.75 ms, mamba2-forward
 #: 5.57 -> 7.58, mamba1-forward 3.43 -> 4.08 (AMD MI325X 2.91 / 4.25 / 3.29).
-#: `-D MOJOLEARN_MAMBA_CALL_PROGRAM` keeps lane x5's route (B arm of the owed
-#: A/B, bench/results/paper_compare/owed-pre0867.json row
-#: restore-mamba-call-path): x copied device-to-device into a fresh zeroed dx
-#: (`mamba_zeros`) per run, and the output copied device-to-device into the
-#: op's y tensor, then downloaded. Same kernels on the same input bytes in
-#: both arms, so no output bit moves. A poison build (MAMBA_GUARD > 0) keeps
-#: the copy: the guard band lives only in `mamba_zeros` buffers.
+#: A poison build (MAMBA_GUARD > 0) keeps the copy into a zeroed dx: the
+#: guard band lives only in `mamba_zeros` buffers.
 # TOMBSTONE: MOJOLEARN_MAMBA_CALL_PROGRAM (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at ea4327182b.
 # Restore: git apply experiments/removed/MOJOLEARN_MAMBA_CALL_PROGRAM.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime MAMBA_CALL_PROGRAM = is_defined["MOJOLEARN_MAMBA_CALL_PROGRAM"]()
-comptime _MAMBA_X_IN_PLACE = not MAMBA_CALL_PROGRAM and MAMBA_GUARD == 0
+# TOMBSTONE: MOJOLEARN_MAMBA_CALL_PROGRAM (removed without measurement: plumbing, rule 2026-11-22; lane x5's route: x copied D2D into a zeroed dx, the output D2D into the op's y tensor then downloaded; same kernels, same input bytes) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA_CALL_PROGRAM.ab-prep.patch; record in docs/TOMBSTONES.md.
+comptime _MAMBA_X_IN_PLACE = MAMBA_GUARD == 0
 
 #: Lane fix-mamba12-forward-exec (2026-11-13): what this switch decides is
 #: whether the Mamba-1/2 per-call forward pays per-call plumbing the kernels
@@ -1241,7 +1237,7 @@ def _block_out(ctx: DeviceContext, ex: DeviceExec, y_out: FP, y_host: Int, src: 
                n: Int) raises:
     """A Mamba block's output `src[0:n]`: straight into the caller's host
     array at `y_host` when it is non-zero (queued; the caller waits: the
-    MAMBA_CALL_PROGRAM A arm), else device-to-device into the op's y
+    per-call door), else device-to-device into the op's y
     tensor at `y_out`."""
     if y_host != 0:
         ctx.enqueue_copy(dst_ptr=f32_ptr(y_host), src_buf=src.create_sub_buffer[DType.float32](0, n))
@@ -1429,7 +1425,7 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     if l == 1:
         # `_m1_session_step_run`: mamba_step on the resident stages.
         comptime if _MAMBA_X_IN_PLACE:
-            # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+            # the block reads x in place (_MAMBA_X_IN_PLACE, header)
             mamba_step(ctx, blk.stages, blk.st, blk.w, x, b, trace, String("ops.step"))
         else:
             _d2d(ctx, blk.dx, x, n)
@@ -1503,7 +1499,7 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     # MAMBA_FAST_DECODE_STAGE_ARENA, `_m2_call_stages`).
     var stages = _m2_call_stages(ctx, blk, b, l, dims)
     comptime if _MAMBA_X_IN_PLACE:
-        # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+        # the block reads x in place (_MAMBA_X_IN_PLACE, header)
         mamba2_block_forward(ctx, stages, blk.st, blk.w, x, b, l, fs[0], fs[1], trace,
                              String("ops.step"))
         _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
@@ -1622,7 +1618,7 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var report_n = m3_report_floats(b, dm)
     var held_x = Optional[DeviceBuffer[DType.float32]]()
     comptime if _MAMBA_X_IN_PLACE:
-        # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+        # the block reads x in place (_MAMBA_X_IN_PLACE, header)
         mamba3_block_forward(ctx, stages, blk.st, blk.w, x, b, l, trace, String("ops.step"))
         _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
     else:
@@ -2700,7 +2696,7 @@ def mamba_step_run_host(
     mut ex: DeviceExec, mut sc: BlockStepScratch, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int],
     fs: List[Float32], y_host: Int,
 ) raises:
-    """A Mamba step op's run for a per-call door (MAMBA_CALL_PROGRAM's A arm,
+    """A Mamba step op's run for a per-call door (
     lane restore-neural-call-paths): the same body as `block_step_run`, with
     the block output enqueued straight from the stages into the caller's
     host array at `y_host` (no y tensor, no device-to-device copy); the
