@@ -91,7 +91,8 @@ into a new Array of the element type the member's OUTPUTS answers
 from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
-from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
+from bindings.member_boundary_door import member_admit_serving_labeled, member_pack, member_pack_labeled
+from bindings.member_class_weight_unpack import member_cw_fill
 from bindings.member_held_door import MemberHeld, member_held, member_held_release, member_held_adopt
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.admitted_input_unpack import admitted_unfilled
@@ -152,6 +153,13 @@ struct MemberSet(Movable):
     # nothing is offered), and whether the thread's scope was read.
     var sources: PythonObject
     var scope_read: Bool
+    # The caller's class labels in code order (None: it hands none over).
+    # Set before `member_set_admit` by a caller whose code targets have
+    # labels it holds: a classifier member whose class_weight is a dict
+    # then reads its table over them at admission (lane mf-adm3,
+    # bindings/member_class_weight_unpack.mojo); without them such a member
+    # is not admitted (the caller's own path, as before).
+    var labels: PythonObject
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
         self.run = MemberSetRun(x, rows, cols, y_dtype, index_dtype)
@@ -165,6 +173,7 @@ struct MemberSet(Movable):
         self.kept_all = True
         self.sources = Python.list()
         self.scope_read = False
+        self.labels = PythonObject(None)
 
     def count(self) -> Int:
         return len(self.run.plans)
@@ -182,7 +191,8 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     targets are class codes and its family has no classifier.
     `context` is the caller's context (it holds the model-selection plans),
     `b` the builtins module. `classes`: the class count of code targets, 0
-    for a regressor."""
+    for a regressor. Raises only for a class_weight dict the member's
+    estimator refuses over `set.labels` (its own words; lane mf-adm3)."""
     comptime if not MEMBER_SET_NATIVE:
         return False
     var plan = prep_estimator_plan(estimator, context)
@@ -200,8 +210,14 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
         needs = needs | MEMBER_CAN_SAMPLE_WEIGHT
     if classes > 0:
         needs = needs | MEMBER_CAN_CLASSIFIER
-    var owner = member_admit_serving(estimator, fields, plan, member_context, b, needs)
+    var owner = member_admit_serving_labeled(estimator, fields, plan, member_context, b, needs,
+                                             set.labels if classes > 0 else PythonObject(None))
     if not owner.published:
+        return False
+    # A class_weight dict's table over the caller's labels (lane mf-adm3);
+    # a dict the estimator refuses raises its own words here, before any fit.
+    if not member_cw_fill(owner, estimator, fields, set.labels if classes > 0 else PythonObject(None),
+                          member_context, b):
         return False
     owner.plan.classes = classes
     # Whether this member's KIND tests the rows it reads: the answer of an

@@ -13,8 +13,11 @@ class).
     record read) and, for the regressors, the metrics R^2 entry of the
     process's tier on the route's device in the route's fifth slot when that
     image is loaded; then the 20 parameter words (core/sgd_member.mojo
-    docstring). A dict class_weight is not admitted (False: the caller keeps
-    the estimator's own doors); 'balanced' and None are.
+    docstring). 'balanced' and None are word 18; an exact dict (lane
+    mf-adm3) is word 18 = 2 and the class-weight tail from word 20
+    (core/member_class_weight.mojo), a pending table the caller fills over
+    its labels; any other value is not admitted (False: its own fit refuses
+    it in its words).
   * `sgd_member_pack` (PACK): the fitted attributes the kind's
     `xl_fit_*_pack` writes (bindings/x_linear_sgd_pack.mojo), in its order.
   * `sgd_member_state` (UNPACK): a member state from a fitted estimator.
@@ -28,6 +31,8 @@ from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.py_balanced import py_get, py_item, py_contains, py_setitem
+from bindings.member_class_weight_unpack import member_cw_kind
+from core.member_class_weight import MEMBER_CW_DICT, member_cw_pending_words
 from bindings.x_linear_common_unpack import (
     _truth, _float, _int, _name, _b, _eq, _gt, _lt, _le, _is_int, _isinstance, _repr, _sorted_repr,
 )
@@ -87,16 +92,22 @@ def _sgd_words(model: PythonObject, kind: Int, loss_code: Int, penalty: PythonOb
 def sgd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False for a dict class_weight."""
+    from the unfitted estimator. False for a class_weight that is neither
+    None, 'balanced' nor an exact dict."""
     var nk = x_linear_keys()
     var balanced = False
+    var keyed = False
     if kind >= SGD_MEMBER_CLASSIFIER and kind <= SGD_MEMBER_PA_CLASSIFIER:
-        # Class weights keyed by labels never cross the ABI (MEMBER-ABI-V2 item 16).
+        # A dict is keyed by labels: its table is read over the caller's
+        # labels at the caller's UNPACK (lane mf-adm3, `member_cw_fill`).
         var class_weight = py_item(fields, nk[].k_class_weight)
         if class_weight is not None:
-            if not (_isinstance(class_weight, _b().str) and _eq(class_weight, PythonObject("balanced"))):
+            if member_cw_kind(class_weight, b) == MEMBER_CW_DICT:
+                keyed = True
+            elif not (_isinstance(class_weight, _b().str) and _eq(class_weight, PythonObject("balanced"))):
                 return False
-            balanced = True
+            else:
+                balanced = True
     var words: List[Float64]
     if kind == SGD_MEMBER_REGRESSOR or kind == SGD_MEMBER_PA_REGRESSOR:
         _xl_sgd_refuse(model, py_item(fields, nk[].k_early_stopping), py_item(fields, nk[].k_average),
@@ -198,6 +209,9 @@ def sgd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
         except problem:
             # Not loaded: score is refused in words; the caller runs its own metric.
             _ = String(problem)
+    if keyed:
+        words[18] = 2.0
+        member_cw_pending_words(words)
     owner.plan.route = route
     owner.plan.params = words^
     owner.pins = Python.tuple(ops.owner, ops.scope)

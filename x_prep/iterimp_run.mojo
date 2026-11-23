@@ -82,6 +82,7 @@ from bindings.prep_encode_kbins_run import enc_seed_words
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_CONSTANT, imputer_fit_stage, imputer_transform_stage)
 from bindings.normal_dist_helpers_run import truncnorm_draws
+from core.member_class_weight import member_cw_from_values
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_STD,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
@@ -1252,6 +1253,10 @@ def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Fl
     var codes = iterimp_class_codes(y, gathered.mob, classes)
     var step_plan = member.plan.copy()
     step_plan.classes = len(classes)
+    # A class_weight dict keyed by the target's values (lane mf-adm3): the
+    # table over this step's classes, as the step's own fit reads the dict
+    # against its labels ('balanced' reads the codes in the fit itself).
+    member_cw_from_values(step_plan, classes)
     var call = member_new(step_plan)
     fit.states.append(call.state)  # freed by iterimp_member_free on every path
     fit.classes.append(classes.copy())

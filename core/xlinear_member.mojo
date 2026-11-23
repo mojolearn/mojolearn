@@ -37,7 +37,9 @@ the kind's):
     [4] alpha.
   * kind 8, 6 words: [0] 8, [1] fit_intercept, [2] max_iter, [3] quantile,
     [4] alpha, [5] tol.
-  * kind 9, 3 words: [0] 9, [1] fit_intercept, [2] alpha.
+  * kind 9, 3 words: [0] 9, [1] fit_intercept, [2] alpha; a class_weight
+    is the tail from word 3 (lane mf-adm3, core/member_class_weight.mojo:
+    'balanced' or a dict's table over the caller's codes).
   * kind 10, 5 + A words: [0] 10, [1] fit_intercept, [2] store_cv_results,
     [3] folds (0: cv=None, the one fit over the grid; else an integer cv,
     `_fit_kfold`), [4] A, [5 ..] the A alphas. An integer cv runs the k-fold
@@ -53,15 +55,14 @@ the kind's):
     explicit. A splitter object for cv is not admitted.
   * kind 13, 7 + C words: [0] 13, [1] fit_intercept, [2] max_iter, [3] tol,
     [4] folds (cv=None: 5; the binding's stratified folds), [5] class_weight
-    (0 None, 1 'balanced'), [6] C, [7 ..] the C values of the Cs grid. A dict
-    class_weight or a splitter object for cv is not admitted.
+    (0 None, 1 'balanced', 2 a dict: its table is the tail from word 7 + C,
+    lane mf-adm3), [6] C, [7 ..] the C values of the Cs grid. A splitter
+    object for cv is not admitted.
   * kind 14, 7 words: [0] 14, [1] increasing (0 False, 1 True, 2 'auto'),
     [2] y_min given (0 / 1), [3] y_min, [4] y_max given, [5] y_max,
     [6] out_of_bounds (0 'nan', 1 'clip', 2 'raise').
 The estimator's own checks (solver, warm_start, alpha >= 0, Tweedie's power
-and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter, LassoLars' alpha >= 0, the quantile in (0, 1), RidgeClassifier's positive and solver words; an
-instance with class_weight set is not admitted: class weights are keyed by
-labels, which never cross the ABI) run at the caller's admission.
+and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter, LassoLars' alpha >= 0, the quantile in (0, 1), RidgeClassifier's positive and solver words) run at the caller's admission.
 
 Views: X dense row-major host float32; y and sample weights host float32
 vectors (one target); kinds 5..7 take no sample weights (a given weight is
@@ -152,13 +153,16 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_XLINEAR
+from core.member_class_weight import (
+    MEMBER_CW_HEAD, MEMBER_CW_NONE, MEMBER_CW_BALANCED, member_cw_mode, member_cw_table_f32,
+)
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from x_linear.door_run import (
     ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, LINK_IDENTITY, LINK_EXP,
     ALGO_ENETCV, ALGO_LOGCV, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ROWS_LRCV_PROBA, XlClassPrepRequest,
-    xl_logcv_fit_run, xl_isotonic_fit_run,
+    xl_logcv_fit_run, xl_isotonic_fit_run, xl_class_fit_run,
     ALGO_RIDGE, xl_run_block, XlRidgeCvRequest, xl_ridge_out, xl_ridge_singular, xl_ridge_cv_plain_run,
     xl_ridge_cv_kfold_run, XlFitRequest, XlDecisionRequest, xl_fit_run, xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
     XlBayesStdRequest, xl_bayes_std_run, xl_ard_kept_run,
@@ -1262,9 +1266,36 @@ def _cls_fit(slot: _SlotP, call: _CallP) raises:
         return
     var joined = List[Float32]()
     var has_sw = 0
-    # `_ridge_run(..., codes_mode=True)`: the codes' 32-bit words, then the weights
-    var y = _targets(call, _kind(slot), n, estimator, joined, has_sw)
     var p = slot[].params.copy()
+    var mode = member_cw_mode(p, 3)
+    var class_weight = List[Float32]()
+    var prep = XlClassPrepRequest(False, 0, 0, 0, 0, n, k, False, False)
+    var y = 0
+    if mode == MEMBER_CW_NONE:
+        # `_ridge_run(..., codes_mode=True)`: the codes' 32-bit words, then the weights
+        y = _targets(call, _kind(slot), n, estimator, joined, has_sw)
+    else:
+        # class_weight (lane mf-adm3), as `xl_fit_ridge_classifier_unpack`:
+        # the codes' 32-bit words, then the n row weights the class step
+        # writes in RUN (sample_weight x the class weights; 'balanced' from
+        # the unweighted counts), checked as the weight admission checks
+        # them (`xl_class_fit_run`).
+        var sw = 0
+        if call[].weights.rows > 0:
+            _dense(call[].weights, "sample_weight", estimator)
+            if call[].weights.rows != n or call[].weights.cols != 1:
+                raise Error("ValueError: sample_weight and X have different numbers of rows")
+            sw = call[].weights.data
+        joined = List[Float32](length=2 * n, fill=0.0)
+        unsafe_memcpy(dest=joined.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].y.data), count=n)
+        var balanced = mode == MEMBER_CW_BALANCED
+        class_weight = List[Float32](length=k, fill=1.0)
+        if not balanced:
+            class_weight = member_cw_table_f32(p, 3, k, "class_weight contains labels absent from y")
+        prep = XlClassPrepRequest(True, call[].y.data, sw, Int(class_weight.unsafe_ptr()),
+            Int(joined.unsafe_ptr()) + 4 * n, n, k, balanced, False)
+        y = Int(joined.unsafe_ptr())
+        has_sw = 1
     slot[].forget()
     var ip: List[Int] = [outputs, 1 if p[1] != 0.0 else 0, 1, has_sw, 1]
     var fp: List[Float64] = [p[2]]
@@ -1273,8 +1304,9 @@ def _cls_fit(slot: _SlotP, call: _CallP) raises:
     var request = XlFitRequest(call[].route.entry.call, ALGO_RIDGE, call[].x.data, n * d, n, d, y, n * (1 + has_sw),
         ip^, fp^, n_out, 3 * d * d + 3 * d + outputs + d * outputs + 2 * n, 1, Int(result.unsafe_ptr()), False, 0, 0,
         0)
-    _ = xl_fit_run(request)
+    _ = xl_class_fit_run(request, prep)
     _ = joined^
+    _ = class_weight^
     # status 2: X'X + alpha I does not factor even in float-float
     if result[outputs * d + outputs + 3] == 2.0:
         raise Error("mojolearn " + estimator + ": X'X + alpha I is singular even in float-float (alpha="
@@ -1296,14 +1328,16 @@ def _logcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], n: Int, d: Int, k: 
     (kp x d) | intercept (kp) | best C | n_iter | scores (folds x C)]."""
     var estimator = _name(slot)
     var folds = Int(p[4])
-    var balanced = p[5] != 0.0
+    # word 5: 1 'balanced', 2 a dict (its table in the tail; lane mf-adm3)
+    var balanced = p[5] == 1.0
+    var keyed = p[5] == 2.0
     var nc = Int(p[6])
     var given = call[].weights.rows > 0
     if given:
         _dense(call[].weights, "sample_weight", estimator)
         if call[].weights.rows != n or call[].weights.cols != 1:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
-    var weigh = given or balanced
+    var weigh = given or balanced or keyed
     var y_size = (4 if weigh else 2) * n
     var parts = List[Float32](length=y_size, fill=0.0)
     var base = Int(parts.unsafe_ptr())
@@ -1317,8 +1351,11 @@ def _logcv_fit(slot: _SlotP, call: _CallP, p: List[Float64], n: Int, d: Int, k: 
         else:
             _fill_f32(base + 4 * 2 * n, 2 * n, 1.0)
     var class_weight = List[Float32](length=k, fill=1.0)
+    if keyed:
+        # the door's `xl_class_weights_unpack` words, read at UNPACK
+        class_weight = member_cw_table_f32(p, 7 + nc, k, "class_weight contains labels absent from y")
     var prep = XlClassPrepRequest(True, call[].y.data, call[].weights.data if given else 0,
-        Int(class_weight.unsafe_ptr()), base + 4 * 2 * n if balanced else 0, n, k, balanced, True)
+        Int(class_weight.unsafe_ptr()), base + 4 * 2 * n if (balanced or keyed) else 0, n, k, balanced, True)
     var width = kp * (d + 1)
     var ip: List[Int] = [Int(p[2]), 1 if p[1] != 0.0 else 0, kp, nc, folds, 1 if weigh else 0]
     var fp: List[Float64] = [p[3]]
@@ -1549,6 +1586,12 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
             count = 7 + Int(words[6])
         if Float64(kind) != words[0] or count == 0:
             raise Error("member ABI: unknown x_linear member kind")
+        # RidgeClassifier, and LogisticRegressionCV with a dict (word 5 = 2):
+        # and a class-weight tail (lane mf-adm3)
+        var tailed = kind == XL_MEMBER_RIDGE_CLASSIFIER or (kind == XL_MEMBER_LOGISTIC_CV and count > 7
+            and words[5] == 2.0)
+        if tailed and call[].param_count >= count + MEMBER_CW_HEAD:
+            count = call[].param_count
         if call[].param_count != count:
             raise Error("member ABI: an x_linear member of kind " + String(kind) + " takes " + String(count)
                 + " parameters")

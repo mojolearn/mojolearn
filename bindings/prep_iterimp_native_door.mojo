@@ -41,11 +41,14 @@
 # below stay ONLY for: a class with no member entry (the meta-estimators of
 # the Ensemble, Search and Pipeline families, whose member entries are
 # unpublished until the META member kind lands), an admission or a
-# held-state import the family refuses for a class with a full plan (class
-# weights keyed by labels, a precomputed kernel, an image without the
+# held-state import the family refuses for a class with a full plan (a
+# class_weight that is neither None, 'balanced' nor an exact dict, or a
+# dict with a key that is not an exact number; an image without the
 # member's entry, an unaddressable GP kernel, the gbdt adapter's fast mode
 # and categorical or multi-target losses, a CV splitter object: the
-# fallback rule, a mark never turns a call that worked into a refusal), and
+# fallback rule, a mark never turns a call that worked into a refusal; lane
+# mf-adm3 serves class_weight 'balanced' and numeric-keyed dicts, read per
+# step over the step's classes, and kernel='precomputed'), and
 # the member-set B arm (MOJOLEARN_MEMBER_SET_OFF, A/B owed in
 # docs/apple-fast/EXPERIMENTS.md), whose off path IS these rounds. There the estimator is cloned, fitted and
 # asked to predict once per (round, feature) step with the float32 blocks
@@ -56,7 +59,7 @@
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
+from bindings.member_boundary_door import member_admit_serving_valued, member_pack, member_pack_labeled
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.member_owner_unpack import MemberOwner
 from bindings.member_set_door import MEMBER_SET_NATIVE
@@ -744,7 +747,10 @@ def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonOb
         var member_context = plan["context"]
         var fields_get = plan["fields_get"]
         var fields = py_call(fields_get, template, py_type(template))
-        var owner = member_admit_serving(template, fields, plan, member_context, b, needs)
+        # A classifier's class_weight dict is keyed by the step's values,
+        # read into the KEYED tail here (lane mf-adm3); each step makes its
+        # table over its classes (x_prep/iterimp_run.mojo `_member_step`).
+        var owner = member_admit_serving_valued(template, fields, plan, member_context, b, needs)
         if not owner.published:
             return out^
         if posterior and not _posterior_family(owner.plan.family):

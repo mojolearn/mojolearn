@@ -94,6 +94,7 @@ from core.member_abi import (
     member_call_of, member_outputs_of, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_F32, MEMBER_F64,
     MEMBER_I64,
 )
+from core.member_class_weight import member_cw_subset
 from core.member_set_run import (
     MemberSetRun, member_set_prepare, member_set_fit_free, member_set_turn, member_set_first_failure,
     member_set_run_release, MEMBER_SET_WORKER,
@@ -490,6 +491,10 @@ def cal_fold_classes_run(mut run: MemberSetRun, mut plan: CalFitPlan):
         var held = len(present)
         if held == k or held == 0:
             continue  # every class (held 0: no train rows, which UNPACK refuses before the RUN)
+        # A class_weight dict's table narrowed to the classes the fold holds
+        # (lane mf-adm3; core/member_class_weight.mojo): the fold's own fit
+        # reads the dict against the fold's labels.
+        member_cw_subset(run.plans[f], present)
         plan.fold_classes[f] = present^
         plan.fold_codes[f] = List[Int32](length=n, fill=Int32(0))
         var at = Int(plan.fold_codes[f].unsafe_ptr())
