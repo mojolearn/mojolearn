@@ -29,10 +29,15 @@ settings, an ordered RMSE booster of its own), and it needs a per-fit
     `call.eval_x` / `eval_y`, `pairs` / `pairs_weight`, `cat_keys` /
     `eval_cat_keys`, a text X's keys read by the caller's UNPACK with the fit
     door's own encoding, bindings/gbdt_category_unpack.mojo
-    `gbdt_category_admit`). No member caller passes them yet: model
-    selection, the ensembles and IterativeImputer hand a float32 X and
-    sample weights only (cross_val_score documents fit parameters and
-    eval_set as not supported).
+    `gbdt_category_admit`). One caller passes them (lane mf-gbdt5): RFE's
+    fit parameters, admitted by `gbdt_member_fit_params` below with the fit
+    doors' checks and words; model selection, the ensembles and
+    IterativeImputer hand a float32 X and sample weights only
+    (cross_val_score documents fit parameters and eval_set as not
+    supported).
+  * `gbdt_member_fit_params` (UNPACK, once per caller fit): a caller's
+    `fit(X, y, **fit_params)` keys as typed `MemberFitExtras`
+    (core/member_set_run.mojo), see its docstring.
   * `gbdt_member_pack` (PACK): the fitted attributes the fit door's PACK
     writes (`model_`, `bias_`, `best_iteration_`, `stopped_early_`,
     `loss_curve_`, `test_loss_curve_` (the held-out curve of a fit given an
@@ -69,9 +74,14 @@ from bindings.trees_public_gbdt_door import gbdt_table, gbdt_entry_of, _field, _
 from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.trees_public_gbdt_fit_door import (
-    gbdt_config, gbdt_check_option_tables, _tables, _truthy, _in, _f64_curve,
+    gbdt_config, gbdt_check_option_tables, _tables, _truthy, _in, _eq, _f64_curve,
     adapter_member_learner, adapter_label_kind,
+    _group_sizes, _pairs_arrays, _adapter_eval, _label_kind, _regression_target,
 )
+from bindings.labels_descriptor_boundary_door import labels_scope
+from bindings.trees_public_inputs_door import trees_encode_labels, trees_address
+from bindings.admitted_input_unpack import AdmittedX, admit_f32, admit_weight_words
+from core.member_set_run import MemberFitExtras
 from bindings.native_typed_context_pack import native_typed_context
 from bindings.classifier_public_lifecycle_door import _public_labels
 from bindings.member_owner_unpack import member_labels_take
@@ -83,7 +93,7 @@ from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE,
-    MEMBER_F64, MEMBER_I32, MEMBER_I64,
+    MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
 )
 
 
@@ -172,6 +182,261 @@ def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut ow
     owner.plan.params = words^
     owner.pins = Python.tuple(table, run)
     return True
+
+
+# ---------------------------------------------------------------- a caller's fit parameters (lane mf-gbdt5)
+struct GbdtMemberFitParams(Movable):
+    """UNPACK of a caller's fit parameters for a Gbdt member's FIT
+    (`gbdt_member_fit_params`). `admitted` False: a key or a case the member
+    does not carry (the caller keeps the estimator's own fit door, which
+    answers in its own words). True: `extras` holds the typed addresses
+    (core/member_set_run.mojo `MemberFitExtras`); `pins` the Python holders
+    of the eval set, the weights, the group sizes and the pairs, and `ids` /
+    `codes` the native words built here (group ids, a classifier's held-out
+    codes), all alive while this value lives (THE LIFETIME RULE)."""
+    var admitted: Bool
+    var extras: MemberFitExtras
+    var pins: PythonObject
+    var ids: List[Int32]
+    var codes: List[Int32]
+
+    def __init__(out self):
+        self.admitted = False
+        self.extras = MemberFitExtras()
+        self.pins = PythonObject(None)
+        self.ids = List[Int32]()
+        self.codes = List[Int32]()
+
+
+def _eval_items(eval_set: PythonObject, b: PythonObject) raises -> PythonObject:
+    """The booster's `_eval_set` shape checks, in its words: one (X, y)
+    pair, or a list of exactly one."""
+    var pair = eval_set
+    if Bool(py=py_call(b.isinstance, eval_set, b.list)):
+        if len(eval_set) != 1:
+            raise Error("mojolearn: eval_set takes ONE (X, y) pair; the "
+                        + "boosting carries a single test cursor. CatBoost "
+                        + "accepts a list, this takes " + String(len(eval_set)) + " as an "
+                        + "error rather than scoring the first and dropping "
+                        + "the rest")
+        pair = eval_set[0]
+    var items = PythonObject(None)
+    try:
+        items = py_call(b.tuple, pair)
+    except:
+        raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
+    if len(items) != 2:
+        raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
+    return items
+
+
+def _eval_x(source: PythonObject, d: Int, run: PythonObject) raises -> AdmittedX:
+    """The booster's `_eval_set` admission of the held-out X (its words),
+    C-order: the member reads dense row-major rows and makes its own
+    column-major copy (core/gbdt_member.mojo `_fit`), so the door's F-order
+    words are the same values in the other order."""
+    var xe = admit_f32(source, 2, "eval_set X", run, finite=False)
+    if xe.cols != d:
+        raise Error("mojolearn: eval_set X has " + String(xe.cols) + " features "
+                    + "for a fit on " + String(d))
+    if xe.rows == 0:
+        raise Error("mojolearn: eval_set X has no rows")
+    return xe^
+
+
+def _carried_keys(fit_params: PythonObject, kind: Int, b: PythonObject) raises -> Bool:
+    """Every key is an exact str the kind's public fit takes: the booster's
+    `fit(X, y, sample_weight, eval_set, group_id, subgroup_id, pairs,
+    pairs_weight)`, an adapter's `fit(X, y, sample_weight, eval_set)`. Any
+    other key keeps the fit door (its TypeError, in its words)."""
+    var keys = py_call(b.list, fit_params)
+    for i in range(len(keys)):  # driver-loop: over the caller's fit parameter names
+        var key = keys[i]
+        if py_type(key) is not b.str:
+            return False
+        var name = String(py=key)
+        if name == "sample_weight" or name == "eval_set":
+            continue
+        if kind == 1 and (name == "group_id" or name == "subgroup_id" or name == "pairs" or name == "pairs_weight"):
+            continue
+        return False
+    return True
+
+
+def gbdt_member_fit_params(model: PythonObject, plan: MemberPlan, fit_params: PythonObject, y: PythonObject,
+                           labels: PythonObject, n: Int, d: Int, context: PythonObject) raises -> GbdtMemberFitParams:
+    """UNPACK, once per caller fit (lane mf-gbdt5; RFE.fit(X, y,
+    **fit_params) over a Gbdt member, bindings/prep_select_native_door.mojo
+    `_rfe_member`): the caller's fit parameters admitted with the estimator's
+    own fit door's checks, in its order and words, into typed addresses for
+    every member FIT of that caller (`MemberFitExtras`; the member re-checks
+    what reads its views, core/gbdt_member.mojo `_fit`, in the same words).
+
+    `model` the unfitted estimator (GradientBoosting, or an adapter), `plan`
+    its admitted member plan (kind word), `y` the caller's target, `labels`
+    the classes of the caller's one label encode (a classifier adapter: the
+    held-out labels are coded over them), `n` x `d` the caller's X.
+      * booster (kind 1), as `gbdt_fit_unpack`: sample_weight
+        (`admit_weight_words`), eval_set (shape, X, y: `_eval_set`), then
+        subgroup_id, pairs_weight without pairs, pairs' loss and group_id,
+        group_id (`_group_sizes`: its runs become one int32 id per row, so the
+        member's runs are the door's), pairs (`_pairs_arrays`: uint32 words,
+        every one below n, read as int32).
+      * adapters (kinds 0, 2), as `adapter_classifier_fit` /
+        `adapter_regressor_fit` then the learner's `gbdt_fit_unpack`: the
+        held-out shape (`_adapter_eval`) and target (the classifier: its
+        labels' kind and vocabulary against the training labels, coded over
+        `labels`; the regressor: `_regression_target`), then sample_weight,
+        then the held-out X.
+    Not admitted (the fit door keeps them): a key the kind's fit does not
+    take, an eval_set with cat_features (a text held-out X is encoded through
+    the fit's map by the door), a classifier adapter over other than two
+    classes (the adapter's own binary refusal)."""
+    var b = native_loaded_module("builtins")
+    var nk = trees_keys()
+    var got = GbdtMemberFitParams()
+    var kind = plan.kind
+    if not _carried_keys(fit_params, kind, b):
+        return got^
+    var sample_weight = py_get(fit_params, PythonObject("sample_weight"))
+    var eval_set = py_get(fit_params, PythonObject("eval_set"))
+    var group_id = py_get(fit_params, PythonObject("group_id"))
+    var subgroup_id = py_get(fit_params, PythonObject("subgroup_id"))
+    var pairs = py_get(fit_params, PythonObject("pairs"))
+    var pairs_weight = py_get(fit_params, PythonObject("pairs_weight"))
+    # The cat_features count is NEW's word len - 2 (the feature-list tail).
+    var cats = 0
+    if len(plan.params) >= 2:
+        cats = Int(plan.params[len(plan.params) - 2])
+    if eval_set is not None and cats > 0:
+        return got^
+    var run: PythonObject
+    if kind == 1:
+        run = trees_route_context(model, context)
+    else:
+        run = native_typed_context(trees_route_context(model, context), False, True)
+    var extras = MemberFitExtras()
+    extras.rows = n
+    var weights = PythonObject(None)
+    var eval_x = PythonObject(None)
+    var eval_y = PythonObject(None)
+    var group_holder = PythonObject(None)
+    var pair_holders = PythonObject(None)
+    if kind == 1:
+        if sample_weight is not None:
+            var w = admit_weight_words(sample_weight, n, run)
+            weights = w.array
+            extras.weights = w.address
+        if eval_set is not None:
+            var items = _eval_items(eval_set, b)
+            var xe = _eval_x(items[0], d, run)
+            var ye = admit_f32(items[1], 1, "eval_set y", run, finite=False)
+            if ye.rows != xe.rows:
+                raise Error("mojolearn: eval_set y has " + String(ye.rows) + " values for "
+                            + String(xe.rows) + " rows")
+            eval_x = xe.array
+            eval_y = ye.array
+            extras.eval_x = xe.address
+            extras.eval_rows = xe.rows
+            extras.eval_cols = xe.cols
+            extras.eval_y = ye.address
+            extras.eval_y_dtype = MEMBER_F32
+        var loss = _field(py_fields(model), model, nk[].k_loss, "loss")
+        if subgroup_id is not None:
+            raise Error("NotImplementedError: mojolearn: subgroup_id is read by no loss this implementation "
+                        + "trains; the ranking losses that read CatBoost's subgroup ids "
+                        + "are not implemented")
+        if pairs_weight is not None and pairs is None:
+            raise Error("mojolearn: pairs_weight needs pairs")
+        if pairs is not None:
+            if not _eq(loss, "PairLogit"):
+                raise Error("NotImplementedError: mojolearn: pairs are read by loss='PairLogit' only; "
+                            + "loss=" + _repr(loss) + " does not use them")
+            if group_id is None:
+                raise Error("NotImplementedError: mojolearn: pairs without group_id are not implemented: "
+                            + "the CatBoost reference then regroups and reorders the "
+                            + "whole pool by the pairs' connected components; pass "
+                            + "group_id")
+        if group_id is not None:
+            group_holder = _group_sizes(group_id, n, run)
+            # One id per row from the door's runs (SERIAL BY NATURE: a prefix
+            # over the runs; n words): run r is id r, so the member's
+            # `_group_sizes` reads back the same runs.
+            var runs = Int(py=group_holder.size)
+            var sizes = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(group_holder))
+            got.ids = List[Int32](length=n, fill=Int32(0))
+            var at = 0
+            for r in range(runs):  # driver-loop: over the door's group runs (each run's rows filled natively)
+                var size = Int(sizes[r])
+                for i in range(at, min(at + size, n)):
+                    got.ids[i] = Int32(r)
+                at += size
+            _ = group_holder  # keep the Python object alive through the native reads above
+            extras.groups = Int(got.ids.unsafe_ptr())
+            if pairs is not None:
+                pair_holders = _pairs_arrays(pairs, pairs_weight, n, run)
+                # uint32 words each below n (the door's range check): the same
+                # values as int32 words.
+                extras.pairs = trees_address(pair_holders[0])
+                extras.pair_count = Int(py=pair_holders[1].size)
+                extras.pairs_weight = trees_address(pair_holders[1])
+    else:
+        var pair = PythonObject(None)
+        if eval_set is not None:
+            pair = _adapter_eval(eval_set)
+            if kind == 0:
+                if labels is None or len(labels) != 2:
+                    return got^
+                var scope = labels_scope(model, run)
+                var train = trees_encode_labels(y, scope)
+                var train_kind = _label_kind(train, y, "y", run)
+                var classes = train_kind[1]
+                var held = trees_encode_labels(pair[1], scope)
+                var held_kind = _label_kind(held, pair[1], "eval_set y", run)
+                if not Bool(py=held_kind[0] == train_kind[0]):
+                    raise Error("eval_set contains labels outside the training vocabulary")
+                var table = List[Int32](length=len(held_kind[1]), fill=Int32(0))
+                for i in range(len(held_kind[1])):  # driver-loop: over the eval set's distinct labels
+                    var found = -1
+                    for j in range(len(classes)):  # driver-loop: over fixed call structure, small-loop(classes): the two training classes
+                        if Bool(py=classes[j] == held_kind[1][i]):
+                            found = j
+                    if found < 0:
+                        raise Error("eval_set contains labels outside the training vocabulary")
+                    # The training class's code in the caller's encode (the
+                    # same sorted order: one encoder, bindings/trees_public_inputs_door.mojo).
+                    table[i] = Int32(found)
+                var source = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(held.codes))
+                got.codes = List[Int32](length=held.n, fill=Int32(0))
+                for r in range(held.n):  # native data loop: the held-out codes over the training classes (gather)
+                    got.codes[r] = table[Int(source[r])]
+                eval_y = held.codes
+                extras.eval_y = Int(got.codes.unsafe_ptr())
+                extras.eval_y_dtype = MEMBER_I32
+                extras.eval_rows = held.n
+            else:
+                var target = _regression_target(pair[1], "eval_set y", run)
+                eval_y = target.array
+                extras.eval_y = target.address
+                extras.eval_y_dtype = MEMBER_F32
+                extras.eval_rows = target.rows
+        if sample_weight is not None:
+            var w = admit_weight_words(sample_weight, n, run)
+            weights = w.array
+            extras.weights = w.address
+        if eval_set is not None:
+            var xe = _eval_x(pair[0], d, run)
+            if extras.eval_rows != xe.rows:
+                raise Error("mojolearn: eval_set y has " + String(extras.eval_rows) + " values for "
+                            + String(xe.rows) + " rows")
+            eval_x = xe.array
+            extras.eval_x = xe.address
+            extras.eval_rows = xe.rows
+            extras.eval_cols = xe.cols
+    got.pins = Python.tuple(weights, eval_x, eval_y, group_holder, pair_holders)
+    got.extras = extras^
+    got.admitted = True
+    return got^
 
 
 def gbdt_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
