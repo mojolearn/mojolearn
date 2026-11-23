@@ -10,9 +10,11 @@ doors. A unit kind answers False, and its door keeps the estimator, for:
 a OneVsRest base whose kind lacks the scores its predict reads; a
 Calibrated cv that is not an int (a splitter, an index list, 'prefit') or a
 base that takes the resident DeviceRows route (a measured winner); a
-Bagging configuration that may take the batched forest route (a measured
-winner, decided per fit by the weights and X's shape), a base that is not a
-tree, forest or extra-trees member, or one that names another device.
+Bagging base that is not a tree, forest or extra-trees member, or one that
+names another device. A Bagging configuration that may take the batched
+forest route (a measured winner, decided per fit by the weights and X's
+shape) is admitted with that forest as its second plan (lane mf-meta3c,
+`_batched_forest`); the kind takes the route per fit as the door does.
 
 UNPACK (`ensemble_member_admit`, GIL held, once per admission): the
 meta-estimator's parameters, read as its own fit reads them
@@ -637,7 +639,8 @@ def _may_be_batched(fields: PythonObject, base: PythonObject, context: PythonObj
     a bag of best-splitter decision trees over every feature, with no weights
     and no out-of-bag score, is one forest fit; a measured winner, TOMBSTONE
     MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS). Whether it does depends on the
-    fit's weights and X's shape, so such a configuration stays the door's."""
+    fit's weights and X's shape: such a configuration carries the batched
+    forest as a second plan and the kind decides per fit (lane mf-meta3c)."""
     var dt_c = py_get(context, "trees_dt_classifier")
     var dt_r = py_get(context, "trees_dt_regressor")
     if not (py_type(base) is dt_c) and not (py_type(base) is dt_r):
