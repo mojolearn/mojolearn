@@ -28,25 +28,20 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
-from bindings.member_leaf_boundary_door import member_leaf_pack, member_leaf_pack_labeled, member_leaf_admit_serving
+from bindings.member_leaf_boundary_door import member_leaf_pack, member_leaf_pack_labeled
 from bindings.member_boundary_door import member_pack, member_pack_labeled, member_admit_serving_labeled
-from bindings.member_owner_unpack import member_mark
-from bindings.prep_select_run import rfe_member_source
 from core.member_abi import (
     member_kind_capabilities, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_CLASSIFIER, MEMBER_GIL_FREE,
     MEMBER_GIL_DOOR,
 )
-from core.member_families import MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST
-from core.ensemble_member import (
-    META_BLOCK_FORWARD, META_RFE_CLASSIFIER, META_RFE_REGRESSOR, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR,
-    META_STACK_CLASSIFIER, META_STACK_REGRESSOR,
-)
+from core.member_families import MEMBER_FAMILY_ENSEMBLE
+from core.ensemble_member import META_BLOCK_FORWARD
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_abi import MemberCall, member_free, MEMBER_F32, MEMBER_I32
 from core.member_families import MEMBER_FAMILY_GBDT
 from providers.python.member_rfe_boundary_door import (
     RfeBase, rfe_base_admit_labeled, rfe_count_words, rfe_image, rfe_publish, rfe_plan_labels, rfe_fit_keywords,
-    rfe_member_fit_params,
+    rfe_member_fit_params, rfe_dotted_path,
 )
 from bindings.arena_owner_door import arena_pin, arena_unpin
 from bindings.x_prep_native_owner_door import xprep_resident
@@ -199,79 +194,20 @@ def _keys_of(mut pr: ClsProg, values: PythonObject, squared: Bool, m: Int, conte
 
 
 # ---------------------------------------------------------------- a dotted importance getter (lane mf-meta5b)
-def _rfe_hop(kind: Int, name: String, mut field: String) -> Int:
-    """One step of a dotted importance_getter over a META kind: the nested member the fitted attribute
-    `name` is (its index among the state's nested members; -1 the last) and, in `field`, the constructor
-    field that holds its unfitted estimator (whose kind the next step reads). -2: a step no META state
-    holds as one nested member (a list attribute, an unfitted parameter): the door keeps the getter."""
-    if (kind == META_RFE_CLASSIFIER or kind == META_RFE_REGRESSOR) and name == "estimator_":
-        field = String("estimator")
-        return 0
-    if (kind == META_SEARCH_CLASSIFIER or kind == META_SEARCH_REGRESSOR) and name == "best_estimator_":
-        field = String("estimator")
-        return 0
-    if (kind == META_STACK_CLASSIFIER or kind == META_STACK_REGRESSOR) and name == "final_estimator_":
-        field = String("final_estimator")
-        return -1
-    return -2
-
-
 def _rfe_dotted_base(estimator: PythonObject, g: PythonObject, context: PythonObject, b: PythonObject) -> RfeBase:
-    """UNPACK, once per RFE fit, of a dotted importance_getter ('best_estimator_.coef_', 'estimator_.coef_',
-    'final_estimator_.feature_importances_', or a longer chain of such steps): the path resolved to the
-    member block that exports it, ONCE, here: each step a nested member of the META kind it walks
-    (`_rfe_hop`), the leaf's block from its kind's mask (`rfe_member_source`; squared, as the attribute path
-    squares it). A leaf of a family whose kinds export neither block (naive Bayes, discriminant, Gbdt,
-    XNeighbors) is admitted with scikit-learn's attrgetter words ("'<leaf class>' object has no attribute
-    '<name>'"), which the first round raises before it fits. The META estimator is then admitted as a member
-    (no labels: a nested class_weight dict keeps the door). Not served (the door keeps its attribute reads):
-    a step no META state holds as one member, a leaf with no serving member, a tree or forest leaf's
-    feature_importances_ (its importance word is the nested plan's), a leaf path other than coef_ /
-    feature_importances_. Never raises."""
+    """UNPACK, once per RFE fit, of a dotted importance_getter: the path walked ONCE
+    (providers/python/member_rfe_boundary_door.mojo `rfe_dotted_path`, the walk THE RFE KIND's admission runs
+    too, lane mf-del5b) to THE FORWARDED EXPORT's hops and the leaf's attrgetter words, then the META
+    estimator admitted as a member through the member dispatch (no labels: a nested class_weight dict keeps
+    the door). Not served (the door keeps its attribute reads): whatever `rfe_dotted_path` does not serve,
+    a META estimator with no serving member. Never raises."""
     var base = RfeBase()
     try:
-        var parts = py_call(g.split, ".")
-        var count = len(parts)
-        if count < 2:
+        var path = rfe_dotted_path(estimator, g, context, b)
+        if not path.served:
             return base^
-        var leaf_name = String(parts[count - 1])
-        if leaf_name != "coef_" and leaf_name != "feature_importances_":
-            return base^
-        var hops = List[Float64]()
-        var current = estimator
-        for k in range(count - 1):  # driver-loop: over the attribute path's steps
-            var step_plan = prep_estimator_plan(current, context)
-            if step_plan is None or py_get(step_plan, "member") is None:
-                return base^
-            var mark = member_mark(step_plan, b)
-            if mark.family != MEMBER_FAMILY_ENSEMBLE:
-                return base^
-            var field = String("")
-            var at = _rfe_hop(mark.kind, String(parts[k]), field)
-            if at < -1:
-                return base^
-            var step_fields = py_call(step_plan["fields_get"], current, py_type(current))
-            var nested = py_get(step_fields, PythonObject(field))
-            if nested is None:
-                return base^
-            hops.append(Float64(at))
-            current = nested
-        var leaf_plan = prep_estimator_plan(current, context)
-        if leaf_plan is None or py_get(leaf_plan, "member") is None:
-            return base^
-        var leaf_fields = py_call(leaf_plan["fields_get"], current, py_type(current))
-        var leaf = member_leaf_admit_serving(current, leaf_fields, leaf_plan, leaf_plan["context"], b,
-                                             MEMBER_CAN_FIT | MEMBER_CAN_EXPORT)
-        if not leaf.published:
-            return base^
-        var family = leaf.plan.family
-        if (family == MEMBER_FAMILY_TREE or family == MEMBER_FAMILY_FOREST) and leaf_name == "feature_importances_":
-            return base^
-        var source = rfe_member_source(family, member_kind_capabilities(leaf.plan), leaf_name,
-                                       String(py_type(current).__name__))
-        if source.refusal.byte_length() == 0 and source.block == 0:
-            return base^
-        hops.append(Float64(source.block))
+        var source_refusal = path.refusal.copy()
+        var hops = path.hops.copy()
         var plan = prep_estimator_plan(estimator, context)
         if plan is None:
             return base^
@@ -288,7 +224,7 @@ def _rfe_dotted_base(estimator: PythonObject, g: PythonObject, context: PythonOb
             return base^
         if (mask & MEMBER_CAN_FIT) == 0 or (mask & MEMBER_CAN_EXPORT) == 0:
             return base^
-        base.refusal = source.refusal.copy()
+        base.refusal = source_refusal^
         base.block = META_BLOCK_FORWARD
         base.squared = True
         base.hops = hops^
