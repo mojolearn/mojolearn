@@ -107,16 +107,11 @@ struct WeightKey(Copyable, Movable):
 # are keyed by views INTO a Samba registry when a stack runs its blocks
 # (bindings/samba_training_native_door.mojo, samba_inference_native_door.mojo)
 # and read only the process epoch.
-#
-# -D MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (default off) keys the Samba copies by
-# the process epoch again (every registry reads and bumps `weight_epoch`): the
-# B arm of the owed A/B (row fix-samba-weight-epoch-per-model in
-# bench/results/paper_compare/owed-pre0867.json). Same kernels, same bytes
-# uploaded when an upload happens: only the upload COUNT differs.
 # TOMBSTONE: MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (unmeasured B arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 4fdfffd7c8.
 # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime SAMBA_WEIGHT_EPOCH_GLOBAL = is_defined["MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL"]()
+# TOMBSTONE: MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (removed without measurement: plumbing, rule 2026-11-22; the Samba resident copies keyed by the process epoch: same kernels, same bytes per upload, only the upload count differed) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 comptime _REGISTRY_LAYOUT = 2
 comptime _REGISTRY_NAME = "MojolearnRegistryEpochV2"
@@ -217,12 +212,9 @@ def registry_word(addr: Int, mut epoch: Int) raises -> Int:
 def registry_epoch(addr: Int) raises -> Int:
     """The epoch (>= 1) of the registry at host address `addr` (its slot's
     word; a load-time read, never on a call's path)."""
-    comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-        return weight_epoch()
-    else:
-        var epoch = 0
-        _ = registry_word(addr, epoch)
-        return epoch
+    var epoch = 0
+    _ = registry_word(addr, epoch)
+    return epoch
 
 
 def registry_epoch_bump(addr: Int) raises:
@@ -230,18 +222,15 @@ def registry_epoch_bump(addr: Int) raises:
     it reloads at its next use; copies of other registries are untouched.
     A zero address (no registry) stamps nothing; nor does a registry no copy
     was ever keyed by (it has no slot, so no key can hold it)."""
-    comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-        weight_epoch_bump()
-    else:
-        if addr == 0:
-            return
-        var slot = _REGISTRY.get_or_create_ptr()
-        var lock = _lock_word(slot)
-        shared_slot_lock(lock)
-        var i = _find(slot, addr)
-        if i >= 0:
-            Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), _next_stamp(slot))
-        shared_slot_unlock(lock)
+    if addr == 0:
+        return
+    var slot = _REGISTRY.get_or_create_ptr()
+    var lock = _lock_word(slot)
+    shared_slot_lock(lock)
+    var i = _find(slot, addr)
+    if i >= 0:
+        Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), _next_stamp(slot))
+    shared_slot_unlock(lock)
 
 
 struct RegistryKey(Copyable, Movable):
@@ -273,12 +262,9 @@ struct RegistryKey(Copyable, Movable):
     @staticmethod
     def take(addr: Int) raises -> RegistryKey:
         """The key of a copy loaded now from the registry at `addr`."""
-        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-            return RegistryKey(addr, weight_epoch(), 0)
-        else:
-            var epoch = 0
-            var word = registry_word(addr, epoch)
-            return RegistryKey(addr, epoch, word)
+        var epoch = 0
+        var word = registry_word(addr, epoch)
+        return RegistryKey(addr, epoch, word)
 
     def current(self, addr: Int) raises -> Bool:
         """Whether the copy still holds the bytes of the registry at `addr`:
@@ -286,11 +272,8 @@ struct RegistryKey(Copyable, Movable):
         atomic load of the held word; no lock, no table scan."""
         if self.epoch == 0 or self.addr != addr:
             return False
-        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-            return self.epoch == weight_epoch()
-        else:
-            return self.word != 0 and self.epoch == Int(
-                Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=self.word)))
+        return self.word != 0 and self.epoch == Int(
+            Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=self.word)))
 
     @staticmethod
     def stamp_and_take(addr: Int) raises -> RegistryKey:
@@ -305,26 +288,21 @@ struct RegistryKey(Copyable, Movable):
         step (SAMBA_STEP_REGISTRY_RESIDENT, below)."""
         if addr == 0:
             return RegistryKey()
-        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-            # the process epoch after this bump (fetch_add returns the value before it)
-            var before = Int(Atomic.fetch_add(_ptr(), Int64(1)))
-            return RegistryKey(addr, before + 1, 0)
-        else:
-            var slot = _REGISTRY.get_or_create_ptr()
-            var lock = _lock_word(slot)
-            shared_slot_lock(lock)
-            var i = _find(slot, addr)
-            if i < 0:
-                # No copy was ever keyed by this registry (the session's
-                # first step): nothing to invalidate; `take` gives it a slot
-                # with a fresh stamp. Cold: once per registry.
-                shared_slot_unlock(lock)
-                return RegistryKey.take(addr)
-            var stamp = _next_stamp(slot)
-            Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), stamp)
-            var word = Int(_slot_word(slot, i))
+        var slot = _REGISTRY.get_or_create_ptr()
+        var lock = _lock_word(slot)
+        shared_slot_lock(lock)
+        var i = _find(slot, addr)
+        if i < 0:
+            # No copy was ever keyed by this registry (the session's
+            # first step): nothing to invalidate; `take` gives it a slot
+            # with a fresh stamp. Cold: once per registry.
             shared_slot_unlock(lock)
-            return RegistryKey(addr, Int(stamp), word)
+            return RegistryKey.take(addr)
+        var stamp = _next_stamp(slot)
+        Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), stamp)
+        var word = Int(_slot_word(slot, i))
+        shared_slot_unlock(lock)
+        return RegistryKey(addr, Int(stamp), word)
 
 
 # ---- lane fx-samba-step-resident (2026-11-18), the experiment

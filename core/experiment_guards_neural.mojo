@@ -1239,6 +1239,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.ab-prep.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: zero-filled Mamba-3 y / reports / gradients that every native route overwrites whole; checks/native_tests/mamba3_output_coverage.mojo is the 0xFF-prefill evidence); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.ab-prep.patch"
+    # TOMBSTONE: MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: the Samba resident registry copies keyed by the process weight epoch, so any model's write re-uploaded every stack; same kernels, same bytes per upload, only the upload count differed); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.ab-prep.patch"
     # ---- end lane ab-prep-mamba
     return True
 
