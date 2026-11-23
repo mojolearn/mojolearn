@@ -87,6 +87,9 @@ def register(cls, formats, save, **tables):
     archive.update(tables)
     if save is not None:
         context["archive_save_schemas"][cls] = save
+        # `digest_` hashes the schema's answer members only (_digest_fields.answer_steps).
+        from . import _digest_fields
+        _digest_fields.answers(cls, save)
 
 
 def fitted(field, message="this estimator is not fitted yet", kind="RuntimeError"):

@@ -71,7 +71,7 @@ import os
 import sys
 
 from . import _native_archive_bridge
-from ._digest_fields import read as _digest_read
+from ._digest_fields import read as _digest_read, TRAINING_ARGUMENTS as _DIGEST_TRAINING_ARGUMENTS
 
 # The one-series component read (`_one_series`, `_component`, `_named`) is
 # native: bindings/tsa_hw_native_door.mojo `hw_component` (lane pyout-small-families).
@@ -712,10 +712,12 @@ class ExponentialSmoothing:
     def digest_(self):
         """The hash of this fitted model, as one lower-case hex string.
 
-        It covers the fitted state a saved model holds (the members `save`
-        writes). In `identical` mode the same model fitted on the same series
-        has the same `digest_` on every supported device. It is computed each
-        time it is read.
+        It covers the fitted state that decides the forecasts (the members
+        `save` writes, without the fit's record: the SSE, the iteration
+        counts and the information criterion, which are in
+        `training_digest_`). In `identical` mode the same model fitted on the
+        same series has the same `digest_` on every supported device. It is
+        computed each time it is read.
 
         Raises
         ------
@@ -723,6 +725,19 @@ class ExponentialSmoothing:
             If the model is not fitted, or runs in `fast` mode (Apple only).
         """
         return _digest_read(self)
+
+    @property
+    def training_digest_(self):
+        """The hash of how this model was fitted (its record: the SSE, the iteration counts, the information criterion), as one
+        lower-case hex string, separate from `digest_`. It is computed each
+        time it is read.
+
+        Raises
+        ------
+        AttributeError
+            If it is not fitted, or runs in `fast` mode (Apple only).
+        """
+        return _digest_read(self, _DIGEST_TRAINING_ARGUMENTS)
 
     def __getattr__(self, name):
         # only reached when normal lookup fails: a component not built yet
