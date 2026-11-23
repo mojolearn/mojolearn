@@ -112,7 +112,7 @@ def test_a_code_without_a_constructor_is_caught():
 
 
 def test_a_code_without_a_layer_name_is_caught():
-    text = _live(btc.PYMODEL).replace('"trapezoid_scan", "lm_head", "batch_norm"),', '"trapezoid_scan", "lm_head", ""),', 1)
+    text = _live(btc.PYMODEL).replace('"trapezoid_scan", "lm_head", "batch_norm",', '"trapezoid_scan", "lm_head", "",', 1)
     assert text != _live(btc.PYMODEL)
     problems, _ = btc.check_files(_files(**{btc.PYMODEL: text}))
     assert any("layer_names: no name for LAYER_BATCH_NORM" in p for p in problems), problems
