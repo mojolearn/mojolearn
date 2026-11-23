@@ -48,7 +48,8 @@ from autograd.tape import Tape, Tensor
 from autograd.rankn_api import rn_shape
 from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM, REDUCTION_BATCHMEAN
 from autograd.model_blocks import ModelRules
-from autograd.nn_log_softmax import nn_log_softmax_forward, LAYER_LOG_SOFTMAX
+from autograd.nn_log_softmax import nn_log_softmax_forward
+from autograd.model_blocks import LAYER_LOG_SOFTMAX
 from autograd.nn_ctc import ctc_loss, ctc_blank_word, NnCtcRules
 from autograd.model import (
     LOSS_NLL, LOSS_KL_DIV, LOSS_CROSS_ENTROPY, LOSS_CTC, LOSS_WORD_REDUCTION, TARGET_DENSE, TARGET_CODES,

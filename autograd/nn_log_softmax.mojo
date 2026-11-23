@@ -21,7 +21,8 @@ from autograd.tape import Tape, Tensor
 from autograd.rankn import ShapeN
 from autograd.rankn_api import rn_softmax_along
 
-comptime LAYER_LOG_SOFTMAX = 77
+#: the layer code; autograd/model_blocks.mojo holds the table's LAYER_LOG_SOFTMAX and asserts it equals this
+comptime NN_LOG_SOFTMAX = 77
 
 # Fault injection (verify's sabotage arm of this family, never in a product build): the layer records the softmax
 # (probabilities) instead of its log. checks/native_tests/nn_losses_2.mojo's float64 oracle must FAIL under it.
@@ -29,7 +30,7 @@ comptime NN_LOG_SOFTMAX_SABOTAGE = is_defined["MOJOLEARN_NN_LOSSES_SABOTAGE_LOG_
 
 
 def is_nn_log_softmax(code: Int) -> Bool:
-    return code == LAYER_LOG_SOFTMAX
+    return code == NN_LOG_SOFTMAX
 
 
 def log_softmax_axis(dim: Int, cur: ShapeN) -> Int:

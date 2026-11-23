@@ -99,7 +99,7 @@ from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 # Mamba-3 (lane neural-blocks-3-m3)
 from autograd.ssm_m3_primitives import graph_trapezoid_scan
 # nn-losses-2 begin: code 77, log_softmax (autograd/nn_log_softmax.mojo); the CTC loss's rule (autograd/nn_ctc.mojo)
-from autograd.nn_log_softmax import is_nn_log_softmax, nn_log_softmax_shape, nn_log_softmax_forward
+from autograd.nn_log_softmax import is_nn_log_softmax, nn_log_softmax_shape, nn_log_softmax_forward, NN_LOG_SOFTMAX
 from autograd.nn_ctc import NnCtcRules
 # nn-losses-2 end
 
@@ -121,6 +121,9 @@ comptime LAYER_LM_HEAD = 45
 #: batch_norm1d / batch_norm2d (lane seq-blocks-3; 42 before the merge with neural-blocks-3, never released): a0
 #: channels, a1 the momentum's float32 bits, a2 1 or 2 (the public name's dims); f eps
 comptime LAYER_BATCH_NORM = 46
+# nn-losses-2 begin: log_softmax (a0 PyTorch's dim), dispatched to autograd/nn_log_softmax.mojo
+comptime LAYER_LOG_SOFTMAX = 77
+# nn-losses-2 end
 comptime BLOCK_FIRST = 32
 comptime BLOCK_LAST = 46
 
@@ -141,6 +144,7 @@ comptime _ARGS = 6
 
 def is_block(code: Int) -> Bool:
     # nn-losses-2 begin
+    comptime assert LAYER_LOG_SOFTMAX == NN_LOG_SOFTMAX, "log_softmax's code differs between its two declarations"
     if is_nn_log_softmax(code):
         return True
     # nn-losses-2 end
