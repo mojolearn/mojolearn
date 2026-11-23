@@ -13,10 +13,22 @@ participates.
 
 The cases are independent units (each opens its own session or reads its
 own forest) and run across the native host worker pool.
+Then (lane bm-rest-rte, 2026-11-23, from test_meta_members_native.py
+`test_dart_and_adaboost_fits_repeat_bit_for_bit`, its DART half) two
+DARTRegressor(n_estimators=8, random_state=0) fits of the original's X =
+default_rng(1).random((120, 4), float32), y = X[:, 0] + 0.5 * X[:, 1]
+(`fixtures/trees_rte/rep-*`) through the product's typed RUN and the host
+images (`bm_rest_boost_fits.mojo`): their predictions are equal bit for bit,
+and the members' seeds (`_sub_seed(random_state, j)`, what each member's
+`get_params()['random_state']` holds) are distinct. The two fits run as two
+units across the host pool. The AdaBoost half stays in Python (its rounds
+compose members in the door).
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, require
+from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, assert_same_words
+from checks.native_tests.bm_rest_boost_fits import publish_host_images, DartSpec, dart_fit, dart_raw
+from xtrees.trees_boost_run import _sub_seed
 from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.trees_entry_table import TreesEntryKey
@@ -193,6 +205,41 @@ def run_case(unit: Int) raises:
     _ = out2
 
 
+comptime _REP_DIR = "checks/native_tests/fixtures/trees_rte/"
+comptime _REP_N = 120
+comptime _REP_D = 4
+comptime _REP_TREES = 8
+
+
+def dart_repeat() raises:
+    """Two DART fits of the same data and seed predict the same bits; the members' seeds are distinct."""
+    publish_host_images()
+    var preds = List[Float64](length=2 * _REP_N, fill=0.0)
+    var pp = preds.unsafe_ptr()
+
+    def fit(unit: Int) raises {imm pp}:
+        var x = fixture_f32(_REP_DIR + "rep-x.f32", _REP_N * _REP_D)
+        var y = fixture_f32(_REP_DIR + "rep-y.f32", _REP_N)
+        var m = dart_fit(DartSpec(_REP_TREES, 0), x, _REP_N, _REP_D, y, 1, 0)
+        require(m.trees() == _REP_TREES, "DART trees " + String(m.trees()))
+        var p = dart_raw(m, x, _REP_N)
+        for i in range(_REP_N):  # small-loop(one fit's predictions into its half of the table)
+            pp[unsafe_offset=unit * _REP_N + i] = p[i]
+
+    check_cases("dart_repeat_fits", 2, fit)
+    var a = List[Float64](length=_REP_N, fill=0.0)
+    var b = List[Float64](length=_REP_N, fill=0.0)
+    for i in range(_REP_N):  # small-loop(oracle: split the two fits' predictions)
+        a[i] = preds[i]
+        b[i] = preds[_REP_N + i]
+    assert_same_words[DType.float64](b, a, "DARTRegressor(n_estimators=8, random_state=0) refit predict")
+    for j in range(_REP_TREES):  # small-loop(oracle: every pair of member seeds)
+        for i in range(j):  # small-loop(the earlier members)
+            require(_sub_seed(0, i) != _sub_seed(0, j), "members " + String(i) + " and " + String(j)
+                    + " share the seed " + String(_sub_seed(0, j)))
+    _ = preds^
+
+
 def test_unpublished_then_published_operations() raises:
     """One test, in this order: the first call needs the process table unpublished (TestSuite may run any
     test alone)."""
@@ -201,6 +248,8 @@ def test_unpublished_then_published_operations() raises:
     publish_x_trees_dart_host(0)
     preconditions_published()
     check_cases("case", TREES_DART_CASES, run_case)
+    # The other host images publish after the DART table's own preconditions.
+    dart_repeat()
 
 
 def main() raises:
