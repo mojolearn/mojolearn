@@ -27,8 +27,13 @@ owns every buffer until the synchronous call returns; nothing is retained.
   BH_ASSIGN_FOLD_I64      a [idx, folds]       p [m, n, fold]          -> 0, 1, 2
   BH_COUNT_FOLD_HITS_I64  a [idx, folds]       p [m, n, fold]          -> hits
   BH_MARK_SPLIT_ROLES_F32 a [idx, roles]       p [m, n, split, role]   -> 0, 1, 2
+  BH_GATHER_ROWS_BYTES    a [src, dst, idx]    p [ns, no, width]       -> 0 (an index outside [0, ns) raises)
 Each operation is the former Python export of the same name after its
 arguments were unpacked: the same checks, kernels, words and refusals.
+BH_GATHER_ROWS_BYTES (lane mf-split4b, ABI v2) is `gather_rows_bytes`: the
+device gather on the GPU binding, the host walk on the host one, as the two
+exports were; RidgeCV's split path calls it typed (bindings/
+x_linear_cv_unpack.mojo), no longer through CPython.
 
 Extending the layout requires a new V suffix, never a new loader.
 Publication and lookup are small metadata operations with no independent
@@ -37,7 +42,7 @@ numerical work to split.
 from core.entry_table import entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
 
-comptime BASE_HELPERS_ABI = "mojolearn.base.helpers.v1"
+comptime BASE_HELPERS_ABI = "mojolearn.base.helpers.v2"
 
 comptime BH_CHECK_INDICES_I64 = 0
 comptime BH_BINCOUNT_I64 = 1
@@ -48,7 +53,8 @@ comptime BH_ROW_MEANS_F64 = 5
 comptime BH_ASSIGN_FOLD_I64 = 6
 comptime BH_COUNT_FOLD_HITS_I64 = 7
 comptime BH_MARK_SPLIT_ROLES_F32 = 8
-comptime BH_OP_COUNT = 9
+comptime BH_GATHER_ROWS_BYTES = 9
+comptime BH_OP_COUNT = 10
 
 #: Words of the BH_REDUCE_STAT out buffer.
 comptime BH_STAT_WORDS = 5
@@ -175,6 +181,9 @@ def base_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int
         want_p = 3
     elif operation == BH_MARK_SPLIT_ROLES_F32:
         want_p = 4
+    elif operation == BH_GATHER_ROWS_BYTES:
+        want_a = 3
+        want_p = 3
     if na != want_a or np != want_p:
         raise Error("base helpers: request spans do not match operation " + String(operation))
 

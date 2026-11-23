@@ -77,15 +77,17 @@ from bindings.x_linear_sgd_pack import (
     xl_fit_sgd_regressor_pack, xl_fit_one_class_pack, xl_fit_sgd_classifier_pack, xl_fit_ridge_classifier_pack,
 )
 from x_linear.door_run import (
-    xl_logcv_fit_run, xl_ridge_cv_plain_run, xl_ridge_cv_kfold_run, xl_ridge_cv_fold_run, xl_ridge_cv_choose_run,
+    xl_logcv_fit_run, xl_ridge_cv_plain_run, xl_ridge_cv_kfold_run, xl_ridge_cv_splits_run, xl_ridge_cv_choose_run,
+    XlRidgeSplitsOut,
 )
 from bindings.x_linear_sgd_unpack import xl_class_fit_released
 from bindings.x_linear_cv_unpack import (
-    XL_RIDGE_CV_PLAIN, XL_RIDGE_CV_KFOLD, xl_fit_ridge_cv_unpack, xl_ridge_cv_fold_unpack, xl_fit_lasso_cv_unpack,
+    XL_RIDGE_CV_PLAIN, XL_RIDGE_CV_KFOLD, xl_fit_ridge_cv_unpack, xl_ridge_cv_split_words, xl_fit_lasso_cv_unpack,
     xl_fit_elastic_net_cv_unpack, xl_fit_logistic_cv_unpack,
 )
 from bindings.x_linear_cv_pack import (
     xl_ridge_singular_refuse, xl_fit_ridge_cv_pack, xl_fit_ridge_cv_kfold_pack, xl_fit_ridge_cv_splits_pack,
+    xl_ridge_cv_splits_finish,
     xl_fit_lasso_cv_pack, xl_fit_elastic_net_cv_pack, xl_fit_logistic_cv_pack,
 )
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -751,11 +753,10 @@ def xl_cd_score(model: PythonObject, args: PythonObject, entries: XLinearOps, co
 
 def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """RidgeCV.fit(X, y, sample_weight). cv=None and the k-fold path are one
-    RUN each. The split path runs one RUN per cv split (that split's alpha
-    grid: fit, prediction and R^2 per alpha, all typed calls) and one for
-    the choice and the refit; the splits are driven here because a split's
-    rows are gathered by the base binding's Python-callable entry
-    (`xl_ridge_cv_fold_unpack`)."""
+    RUN each. The split path (lane mf-split4b) is ONE RUN too: every split's
+    typed row gathers and alpha grid (`xl_ridge_cv_splits_run`), then, when
+    no split stopped it, the choice and the refit; PACK raises the warnings
+    and a stop's refusal in split order (`xl_ridge_cv_splits_finish`)."""
     var fields = py_fields(model)
     var call = xl_fit_ridge_cv_unpack(model, fields, args, entries, context)
     var py = Python()
@@ -769,20 +770,23 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, entries: XLinearOps
             best = xl_ridge_cv_kfold_run(call.request)
         return xl_fit_ridge_cv_kfold_pack(model, fields, call, best, context)
     var name = _name(model)
+    # UNPACK: every split's index words, the scratch words' addresses (GIL held).
+    var words = xl_ridge_cv_split_words(call)
+    var fit_at = labels_address(call.fit_words)
+    var status_at = labels_address(call.status_word)
+    var ran = XlRidgeSplitsOut()
     var undefined = False
-    for s in range(call.request.k):  # driver-loop: over the cv splits (rows gathered at the boundary, split by split)
-        var fold = xl_ridge_cv_fold_unpack(call, s, context)
-        if not fold.scored:
-            undefined = True
-            continue
-        var singular = -1
-        with GILReleased(py):
-            singular = xl_ridge_cv_fold_run(call.request, fold.request, name)
-        _ = fold.pins  # keep the gathered rows alive through the native calls above
-        if singular >= 0:
-            xl_ridge_singular_refuse(model, call.fit_words, call.request.d)
     with GILReleased(py):
-        best = xl_ridge_cv_choose_run(call.request, undefined)
+        ran = xl_ridge_cv_splits_run(call.request, words, fit_at, status_at, name)
+        if ran.stop < 0:
+            for s in range(len(ran.undefined)):  # driver-loop: over the cv splits (the undefined flag)
+                if ran.undefined[s]:
+                    undefined = True
+            best = xl_ridge_cv_choose_run(call.request, undefined)
+    _ = words^
+    _ = call.splits  # the index Arrays are read through the RUN above
+    # PACK: the warnings, then a stop's refusal, in split order.
+    undefined = xl_ridge_cv_splits_finish(call, ran, model, context)
     return xl_fit_ridge_cv_splits_pack(model, fields, call, best, undefined, context)
 
 

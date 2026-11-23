@@ -18,7 +18,7 @@ from std.memory import bitcast
 from core.base_entry_table import (
     BaseEntryKey, base_table_entry, BASE_HELPERS_ABI, BH_OP_COUNT, BH_STAT_WORDS,
     BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS, BH_BINCOUNT2_I32,
-    BH_ROW_MEANS_F64, BH_ASSIGN_FOLD_I64, BH_COUNT_FOLD_HITS_I64, BH_MARK_SPLIT_ROLES_F32,
+    BH_ROW_MEANS_F64, BH_ASSIGN_FOLD_I64, BH_COUNT_FOLD_HITS_I64, BH_MARK_SPLIT_ROLES_F32, BH_GATHER_ROWS_BYTES,
 )
 from core.hotpath_impl import HpStat
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_ref_unresolved
@@ -151,3 +151,12 @@ def base_helpers_held(key: BaseEntryKey) raises -> EntryRef:
     held[].vendor = key.vendor
     held[].ready = True
     return entry
+
+
+def base_gather_rows_bytes(entry: EntryRef, src: Int, dst: Int, idx: Int, ns: Int, no: Int, width: Int) raises:
+    """dst row r = src row idx[r] for the `no` int64 indices, `width` bytes a
+    row, of the `ns` source rows (`gather_rows_bytes`; lane mf-split4b): an
+    index outside [0, ns) raises before any write."""
+    var addrs: Array[Int, 3] = [src, dst, idx]
+    var ints: Array[Int, 3] = [ns, no, width]
+    _ = base_helper(entry, BH_GATHER_ROWS_BYTES, addrs, ints)
