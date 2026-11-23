@@ -152,7 +152,8 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
-from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_unlabeled_marked
+from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_marker_index
+from core.xneighbors_member import LP_MARKER_WORD
 from bindings.member_boundary_door import member_admit_serving_deferred, member_pack, member_pack_labeled
 from bindings.member_class_weight_unpack import member_cw_fill_plan
 from bindings.member_held_door import member_held_adopt
@@ -880,12 +881,15 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             if n_classes < 2 or not _whole_classes(encoded[0], b):
                 return scores^
             # A kind that reads -1 in y as unlabeled (LabelPropagation,
-            # LabelSpreading) fits y as given in these units: labels holding
-            # the marker are the Python units' (the estimator's own fit door
-            # reads it); the member fits codes with every row labeled.
-            if xneighbors_kind_reads_marker(run.plans[0].family, run.plans[0].kind) and xneighbors_unlabeled_marked(
-                    encoded[0]):
-                return scores^
+            # LabelSpreading) fits y as given in these units: the marker's
+            # code goes into every candidate's word [13] (lane mf-meta5,
+            # core/xneighbors_member.mojo THE UNLABELED MARKER), so the
+            # member reads it as the estimator's own fit door does.
+            if xneighbors_kind_reads_marker(run.plans[0].family, run.plans[0].kind):
+                var marker = xneighbors_marker_index(encoded[0])
+                if marker >= 0:
+                    for c in range(n_candidates):  # driver-loop: over candidates (one word each)
+                        run.plans[c].params[LP_MARKER_WORD] = Float64(marker)
             target = encoded[1]
             classes = encoded[0]
             if keep:

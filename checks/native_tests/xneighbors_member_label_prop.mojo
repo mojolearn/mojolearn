@@ -17,12 +17,16 @@ labeled), as the door's fit of the same codes computes it. The rows are a fixed 
     test_lp_member_import_round_trip     the exported rows / distributions / scalars imported into a new state
                                          predict the same codes and probabilities
     test_lp_member_refuses_absent_class  a fit whose codes miss a class of the count is refused in words
+    test_lp_member_unlabeled_marker      (lane mf-meta5) the caller's four codes with code 0 the label -1 (marker
+                                         word [13] = 0): the fit equals the RUN with the door's marker word 0
+                                         over three classes; predict writes the caller's codes (the RUN's + 1)
 
 FAIL-PROOF (each edit makes the named case fail): in `_lp_fit` pass marker 0 instead of `classes` (code 0 is
 read as unlabeled) -> test_lp_knn_member_equals_run; pass 1.0 for `slot[].lp_weight` in `_lp_fit` (the
 spreading clamp weight) -> test_ls_rbf_member_equals_run;
 in `_lp_import` skip the distributions copy -> test_lp_member_import_round_trip; delete the `_lp_codes_check`
-call -> test_lp_member_refuses_absent_class.
+call -> test_lp_member_refuses_absent_class; in `_lp_predict` drop the marker shift (or in `_lp_fit` pass
+`given` as the class count) -> test_lp_member_unlabeled_marker.
 """
 from std.testing import TestSuite
 from core.entry_table import EntryRef, entry_ref_word
@@ -94,7 +98,7 @@ def _words(kind: Int, knn: Bool) -> List[Float64]:
     var alpha = xn_f32_word(0.2) if spreading else 0.0
     var words: List[Float64] = [Float64(kind), 1.0 if knn else 0.0, 7.0 if knn else 0.0,
         0.0 if knn else Float64(_RBF), 0.0 if knn else 20.0, 0.0, weight, alpha, 0.001,
-        30.0 if spreading else 1000.0, 0.0, 0.0, 0.0]
+        30.0 if spreading else 1000.0, 0.0, 0.0, 0.0, -1.0]
     return words^
 
 
@@ -336,6 +340,52 @@ def test_lp_member_refuses_absent_class() raises:
     require(refused, "a fit missing class 2 of three is refused in words")
     _ = x^
     _ = codes^
+
+
+def test_lp_member_unlabeled_marker() raises:
+    """THE UNLABELED MARKER (lane mf-meta5): caller codes 0 .. 3 with code 0 the label -1 (every fifth row
+    unlabeled); the member with word [13] = 0 against the RUN with the door's words (marker 0, three
+    classes), exact; predict is the RUN's codes + 1."""
+    var x = _rows(_N, 11)
+    var base = _codes(x, _N)
+    var codes = List[Int32](length=_N, fill=Int32(0))
+    for i in range(_N):  # small-loop: the caller's codes (0 = the label -1)
+        codes[i] = Int32(0) if (i >= 3 and i % 5 == 0) else base[i] + 1
+    var q = _rows(_Q, 23)
+    var words = _words(XNEIGHBORS_KIND_LABEL_PROPAGATION, True)
+    words[13] = 0.0
+    var k = xn_semi_knn_k(7, _N)
+    var dist = List[Float32](length=_N * _C, fill=Float32(0.0))
+    var trans = List[Int32](length=_N, fill=Int32(0))
+    var driver = XnDriver(xn_native_v1)
+    var request = LpFitRequest(Int(x.unsafe_ptr()), Int(codes.unsafe_ptr()), Int(dist.unsafe_ptr()),
+        Int(trans.unsafe_ptr()), _N, _D, _C, 0, False, True, k, 0, 0.0, False, words[6], words[7], 0.001,
+        Int(words[9]), False, False)
+    var outcome = lp_fit_run(driver, request)
+    require(outcome.status == 0, "the direct fit refused finite rows")
+    var predicted = List[Int32](length=_Q, fill=Int32(0))
+    var query = LpQueryRequest(Int(q.unsafe_ptr()), Int(x.unsafe_ptr()), Int(dist.unsafe_ptr()), 0,
+        Int(predicted.unsafe_ptr()), _Q, _N, _D, _C, True, k, 0, 0.0, False, True, False, False)
+    require(lp_query_run(driver, query) == 0, "the direct predict refused finite rows")
+    var state = _new(words)
+    try:
+        _fit(state, x, codes, _N, _C + 1)
+        var got = _block_f32(state, LP_BLOCK_DISTRIBUTIONS)
+        require(len(got) == _N * _C, "marker: label_distributions_ has three classes")
+        for i in range(_N * _C):  # small-loop: exact words
+            require(got[i] == dist[i], "marker: label_distributions_ word " + String(i))
+        var codes_out = _predict(state, q, _Q)
+        for i in range(_Q):  # small-loop: exact codes
+            require(codes_out[i] == predicted[i] + 1, "marker: predict code " + String(i) + " in the caller's codes")
+    finally:
+        _free(state)
+    _ = x^
+    _ = codes^
+    _ = q^
+    _ = dist^
+    _ = trans^
+    _ = predicted^
+    _ = words^
 
 
 def main() raises:
