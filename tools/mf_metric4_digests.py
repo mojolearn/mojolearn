@@ -108,6 +108,15 @@ the base merged float32-equal targets into one class (now the door's folds; the 
 differently), the multi-output lacking lines are new values (the base fitted every output on all classes'
 codes), the single-output predict line loses its warning, the learning_curve line changes words (was
 "learning_curve takes one scorer" after the fits); the others equal.
+Lane mf-tail5b extends section H (base: origin/lane/member-fits-5 b1109feb43 vs head): H5tb_kwargs_* (make_scorer
+fbeta / labels arrays / zero_division / pos_label on AP and brier / absent, other-kind and mixed pos_label words,
+now the search kind's scorer word groups), H5tb_text_multi_* (a text 2-D y), H5tb_refuse_* (learning_curve's
+InvalidParameterError class, KFold n_splits=1, error_score=None, no candidates). Expected: value and words lines
+equal (the base scored these through the door's Python units with the same metric programs; fbeta / labels may
+move in the last bits where the base door's float32 entry differs). Expected DIFFERENT: H5tb_text_multi_predict
+(base raised converting a label to float: the door bug fixed), H5tb_refuse_learning_many class (base ValueError,
+now InvalidParameterError, both bases True) and its name order (the set's), H5tb_refuse_error_score_none on bases
+where the door's words differed.
 """
 import hashlib
 import os
@@ -877,10 +886,96 @@ def _msel5_cases():
     return cases
 
 
+def _tail5b_search(which):
+    # lane mf-tail5b item 1: make_scorer kwargs as scorer word groups (base: the door's Python units)
+    import mojolearn
+    from mojolearn import metrics
+    from mojolearn.model_selection import GridSearchCV, make_scorer
+    X, _, c = _data(151, n=150, d=4, k=3)
+    target = c
+    if which == "fbeta_binary":
+        target = (c > 0).astype(np.int64)
+        scoring = make_scorer(metrics.fbeta_score, beta=0.5)
+    elif which == "fbeta_macro":
+        scoring = make_scorer(metrics.fbeta_score, beta=2.0, average="macro")
+    elif which == "fbeta_zero":
+        scoring = make_scorer(metrics.fbeta_score, beta=0.0, average="weighted")
+    elif which == "labels_array":
+        scoring = make_scorer(metrics.precision_score, average="macro", labels=np.array([2, 0]))
+    elif which == "labels_absent":
+        scoring = make_scorer(metrics.recall_score, average="micro", labels=[0, 7])
+    elif which == "zero_division_1":
+        scoring = make_scorer(metrics.f1_score, average="macro", zero_division=1)
+    elif which == "ap_pos0":
+        target = (c > 0).astype(np.int64)
+        scoring = make_scorer(metrics.average_precision_score, pos_label=0,
+                              response_method=("decision_function", "predict_proba"))
+    elif which == "brier_pos0":
+        target = (c > 0).astype(np.int64)
+        scoring = make_scorer(metrics.brier_score_loss, pos_label=0, greater_is_better=False,
+                              response_method="predict_proba")
+    elif which == "f1_pos_absent":
+        target = np.where(c > 0, 2, 0)
+        scoring = make_scorer(metrics.f1_score, pos_label=5)
+    elif which == "f1_pos_kind":
+        target = np.where(c > 0, "b", "a")
+        scoring = make_scorer(metrics.f1_score, pos_label=1)
+    else:  # f1_pos_mixed
+        target = np.array([("a" if v == 0 else int(v)) for v in c], dtype=object)
+        scoring = make_scorer(metrics.f1_score, pos_label="a", average="binary")
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring=scoring, cv=3,
+                     error_score="raise").fit(X, target)
+    return _rows_of_search(s, X)
+
+
+def _tail5b_text_multi(which):
+    # lane mf-tail5b item 2: a text 2-D y (search and cross_val_predict)
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV, cross_val_predict
+    X, _, c = _data(157, n=150, d=4, k=3)
+    words = np.array(["red", "green", "blue"])
+    Y = np.stack([words[c], words[(c + 1) % 3]], axis=1)
+    base = mojolearn.MultiOutputClassifier(mojolearn.LogisticRegression(max_iter=100))
+    if which == "search":
+        return _rows_of_search(GridSearchCV(base, {"estimator__C": [0.1, 1.0]}, cv=3).fit(X, Y), X)
+    a = cross_val_predict(base, X, Y, cv=3)
+    return [("rows", repr([list(map(str, r)) for r in a]))]
+
+
+def _tail5b_refusals(which):
+    # lane mf-tail5b items 3, 4: refusals raised natively (class and words)
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV, learning_curve
+    X, _, c = _data(163, n=90, d=4, k=3)
+    try:
+        if which == "learning_many":
+            learning_curve(mojolearn.LogisticRegression(), X, c, cv=3, scoring=["accuracy", "f1_macro"])
+        elif which == "cv_one":
+            GridSearchCV(mojolearn.LogisticRegression(), {"C": [1.0]}, cv=1).fit(X, c)
+        elif which == "error_score_none":
+            GridSearchCV(mojolearn.LogisticRegression(), {"C": [1.0]}, cv=3, error_score=None).fit(X, c)
+        else:  # no candidates
+            GridSearchCV(mojolearn.LogisticRegression(), {"C": []}, cv=3).fit(X, c)
+    except Exception as error:  # the class and its bases, the words
+        return [("class", type(error).__name__), ("value_error", repr(isinstance(error, ValueError))),
+                ("type_error", repr(isinstance(error, TypeError))), ("words", str(error))]
+    return [("raised", "none")]
+
+
+def _tail5b_cases():
+    names = ["fbeta_binary", "fbeta_macro", "fbeta_zero", "labels_array", "labels_absent", "zero_division_1",
+             "ap_pos0", "brier_pos0", "f1_pos_absent", "f1_pos_kind", "f1_pos_mixed"]
+    cases = [("H5tb_kwargs_" + w, (lambda w=w: _warned(lambda: _tail5b_search(w)))) for w in names]
+    cases += [("H5tb_text_multi_" + w, (lambda w=w: _tail5b_text_multi(w))) for w in ("search", "predict")]
+    cases += [("H5tb_refuse_" + w, (lambda w=w: _tail5b_refusals(w)))
+              for w in ("learning_many", "cv_one", "error_score_none", "no_candidates")]
+    return cases
+
+
 def _all_cases():
     return (_metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
             + _search5_cases() + _cluster5_metric_cases() + _cluster5_search_cases() + _msel5_cases()
-            + _msel5b_cases() + _kmeans5_cases() + _msel5c_cases() + _tail5_cases())
+            + _msel5b_cases() + _kmeans5_cases() + _msel5c_cases() + _tail5_cases() + _tail5b_cases())
 
 
 def _run(index):
