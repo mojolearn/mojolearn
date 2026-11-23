@@ -361,8 +361,11 @@ comptime META_SEARCH_WORDS = 8          # the head; then `count` codes, then one
 #: THE CV TOOLS' words (lane mf-msel5; core/msel_search_run.mojo module
 #: note): an optional tail of `META_SEARCH_TOOL_WORDS` after the positive
 #: words, [keep the units' states (1.0), the test-side response op (-1.0:
-#: score), the folds' rows (1.0)]; absent for a public search.
-comptime META_SEARCH_TOOL_WORDS = 3
+#: score), the folds' rows (1.0), and (lane mf-msel5b) the caller's result
+#: buffer the responses are written into: its address, its words per row,
+#: its element type (MEMBER_I64 / MEMBER_F64), predict_log_proba (1.0)];
+#: absent for a public search.
+comptime META_SEARCH_TOOL_WORDS = 7
 #: THE CV TOOLS' kept unit states (int64 1 x units, export only; the
 #: search's own block numbers end at META_BLOCK_SEARCH, this one is set
 #: apart from the other kinds' blocks).
@@ -3034,6 +3037,10 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
         plan.keep = slot[].words[tool_at] != 0.0
         plan.respond = Int(slot[].words[tool_at + 1])
         plan.indices = slot[].words[tool_at + 2] != 0.0
+        plan.respond_dst = Int(slot[].words[tool_at + 3])
+        plan.respond_width = Int(slot[].words[tool_at + 4])
+        plan.respond_dtype = Int(slot[].words[tool_at + 5])
+        plan.respond_log = slot[].words[tool_at + 6] != 0.0
     plan.cap = slot[].cap
     plan.cluster = slot[].cluster
     plan.label_words = slot[].label_words.copy()
@@ -3111,17 +3118,16 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
             for c in range(m):  # driver-loop: over the candidates (their train means)
                 w.append(res.scorer_train_means[j][c])
     if tool:
-        _search_tool_words(res, plan.indices, plan.respond >= 0, w)
+        _search_tool_words(res, plan.indices, w)
     slot[].search_words = w^
 
 
-def _search_tool_words(res: MselSearchResult, rows: Bool, responses: Bool, mut w: List[Float64]):
+def _search_tool_words(res: MselSearchResult, rows: Bool, mut w: List[Float64]):
     """THE CV TOOLS' tail of the search words (lane mf-msel5), after the
     tables: [units U], U fit seconds, U test-score seconds; with `rows` per
-    fold [train n, test n, its train rows, its test rows]; with `responses`
-    per unit [its columns, its element type, its word count W, its W
-    response words (test rows x columns)]. Exact: rows and int codes are
-    below 2^53."""
+    fold [train n, test n, its train rows, its test rows]. Exact: rows are
+    below 2^53. The units' responses are not here: the RUN wrote them into
+    the caller's result buffer (lane mf-msel5b)."""
     var units = len(res.fit_seconds)
     w.append(Float64(units))
     for u in range(units):  # driver-loop: over the units (their fits' seconds)
@@ -3136,13 +3142,6 @@ def _search_tool_words(res: MselSearchResult, rows: Bool, responses: Bool, mut w
                 w.append(Float64(res.fold_train[f][i]))
             for i in range(len(res.fold_test[f])):  # driver-loop: over the fold's test rows
                 w.append(Float64(res.fold_test[f][i]))
-    if responses:
-        for u in range(len(res.outputs)):  # driver-loop: over the units (their test-side responses)
-            w.append(Float64(res.output_cols[u]))
-            w.append(Float64(res.output_dtype[u]))
-            w.append(Float64(len(res.outputs[u])))
-            for i in range(len(res.outputs[u])):  # driver-loop: over the unit's response words
-                w.append(res.outputs[u][i])
 
 
 def _forward_best(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
@@ -3427,7 +3426,11 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     # every candidate is one, reads rows x outputs.
     var two_d = _multi_kind(slot[].kind) or (_search_kind(slot[].kind)
                                               and _all(slot[].base_masks, MEMBER_CAN_MULTI_OUTPUT))
-    if (not call[].y.dense_host(y_dtype) or call[].y.rows != call[].x.rows
+    # A SEARCH WITHOUT A TARGET (lane mf-msel5b): an unsupervised base fitted
+    # with y=None hands no y (the search RUN's target-free words).
+    var y_free = (_search_kind(slot[].kind) and not _classifier_kind(slot[].kind) and call[].y.rows == 0
+                  and call[].y.data == 0)
+    if not y_free and (not call[].y.dense_host(y_dtype) or call[].y.rows != call[].x.rows
             or (call[].y.cols != 1 and not two_d) or call[].y.cols < 1):
         raise Error("TypeError: a " + name + " member reads y as one dense host column of "
                     + (String("int32 class codes") if y_dtype == MEMBER_I32 else String("float32 targets")))
