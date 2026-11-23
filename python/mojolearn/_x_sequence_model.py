@@ -408,37 +408,69 @@ class Sequential(_CheckMixin):
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("attention", (heads, kv_heads, rotary, theta, window, causal), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def lstm(self, hidden_size):
-        """Append an LSTM layer over ``(length, features)`` samples from a
-        zero state; the output is every step's hidden state,
-        ``(length, hidden_size)``. Weights follow PyTorch's ``nn.LSTM``
-        layout and gate order. With ``lengths`` given to :meth:`fit` and
-        :meth:`predict`, a sample's steps past its length do not change its
-        state, and the output there repeats its state at its last valid
-        step.
+    def lstm(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
+        """Append an LSTM over ``(length, features)`` samples from a zero
+        state, as PyTorch's ``nn.LSTM``: the same weight layout, gate order
+        and initialization (every tensor uniform in
+        ``[-1/sqrt(hidden_size), 1/sqrt(hidden_size)]``).
+
+        Parameters
+        ----------
+        hidden_size : int
+            Size of the hidden state.
+        num_layers : int, default 1
+            Number of stacked layers; layer ``k + 1`` reads layer ``k``'s
+            output sequence.
+        bidirectional : bool, default False
+            Add a reverse direction to every layer. It reads each sample's
+            steps in reverse order, starting at its last valid step when
+            ``lengths`` are given, and its states are concatenated after the
+            forward direction's on the features.
+        dropout : float, default 0.0
+            Dropout probability on the output of every layer except the last,
+            during :meth:`fit` only (no effect with one layer).
+        output : {'sequence', 'final'}, default 'sequence'
+            ``'sequence'``: every step's state of the last layer,
+            ``(length, directions * hidden_size)`` (PyTorch's ``output``).
+            ``'final'``: the last layer's final state of each direction,
+            ``(directions, hidden_size)`` (PyTorch's ``h_n`` of the last
+            layer).
+
+        With ``lengths`` given to :meth:`fit` and :meth:`predict`, a sample's
+        steps past its length do not change its state, and the ``'sequence'``
+        output there repeats each direction's final state.
+
+        With more than one layer, ``bidirectional=True`` or
+        ``output='final'``, the module is written into the model as several
+        layers (one recurrent layer per layer and direction, the joins of the
+        directions and the dropout layers), in PyTorch's parameter order:
+        ``weight_ih``, ``weight_hh``, ``bias_ih``, ``bias_hh`` of layer 0's
+        forward direction, then of its reverse direction, then layer 1.
 
         Example: classify variable-length sequences of 3 features padded to
-        20 steps by each one's final state::
+        20 steps by the final states of a two-layer bidirectional LSTM::
 
-            model = (mojolearn.Sequential(input_shape=(20, 3)).lstm(32)
-                     .narrow(0, 19, 1).flatten().linear(2)
+            model = (mojolearn.Sequential(input_shape=(20, 3))
+                     .lstm(32, num_layers=2, bidirectional=True, output="final")
+                     .flatten().linear(2)
                      .compile(loss="cross_entropy"))
             model.fit(X, y, lengths=lengths)
         """
-        return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def gru(self, hidden_size):
-        """Append a GRU layer over ``(length, features)`` samples from a zero
-        state; the output is every step's hidden state. Weights follow
-        PyTorch's ``nn.GRU`` layout and gate order. ``lengths`` work as for
-        :meth:`lstm`."""
-        return _SEQUENTIAL_ENTRY(self, "add", ("gru", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+    def gru(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
+        """Append a GRU over ``(length, features)`` samples from a zero
+        state, as PyTorch's ``nn.GRU``: the same weight layout, gate order
+        and initialization. The arguments, ``lengths`` and the output are as
+        for :meth:`lstm`."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("gru", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def rnn(self, hidden_size):
+    def rnn(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
         """Append a tanh recurrent layer over ``(length, features)`` samples
-        from a zero state; the output is every step's hidden state.
-        ``lengths`` work as for :meth:`lstm`."""
-        return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+        from a zero state, as PyTorch's ``nn.RNN`` with
+        ``nonlinearity='tanh'``. The arguments, ``lengths`` and the output
+        are as for :meth:`lstm`."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def batch_norm1d(self, num_features, eps=1e-5, momentum=0.1):
         """Append batch normalization over the channels of ``(channels,)`` or

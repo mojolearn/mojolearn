@@ -270,9 +270,27 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         args = Python.list(vocab, 0, 0, 0, 0, 0)
     # end lm_head
     elif kind == "rnn" or kind == "lstm" or kind == "gru":
-        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("hidden_size"), Python.tuple(None), 1)
+        # nn-recurrent begin: PyTorch's num_layers, dropout, bidirectional, and the output (every step's state or
+        # the final state); the defaults write the one layer they always wrote (the same description words)
+        var options = _arguments(mods, kind, supplied, keywords,
+            Python.tuple("hidden_size", "num_layers", "bidirectional", "dropout", "output"),
+            Python.tuple(None, 1, False, 0.0, "sequence"), 1)
         var hidden = _positive(options[0], "hidden_size", 1, context)
         var cell = 0 if kind == "rnn" else (1 if kind == "lstm" else 2)
+        var stack = _positive(options[1], "num_layers", 1, context)
+        if not Bool(py=py_call(b.isinstance, options[2], b.bool)):
+            raise Error("bidirectional must be True or False")
+        var both = Bool(py=options[2])
+        if not (Bool(py=options[3] >= PythonObject(0)) and Bool(py=options[3] < PythonObject(1))):
+            raise Error("dropout must be in [0, 1)")
+        var form = String(py_call(b.str, options[4])) if Bool(py=py_call(b.isinstance, options[4], b.str)) else String("")
+        if form != "sequence" and form != "final":
+            raise Error("output must be 'sequence' or 'final'")
+        var final = form == "final"
+        if stack > 1 or both or final:
+            _recurrent_stack(mods, model, code, hidden, cell, stack, both, options[3], final)
+            return model
+        # nn-recurrent end
         a0 = PythonObject(hidden)
         a1 = PythonObject(cell)
         args = Python.list(hidden, cell, 0, 0, 0, 0)
@@ -420,6 +438,48 @@ def _parallel(mut mods: NativeModules, model: PythonObject, branches: PythonObje
     while len(ends) < 6:  # driver-loop: over unused concat source slots
         _ = py_call(ends.append, -2)
     _ = _append_code(mods, model, _CODE_CONCAT, ends)
+
+
+# nn-recurrent begin
+comptime _CODE_DROPOUT = 7
+
+
+def _append_layer(mut mods: NativeModules, model: PythonObject, code: PythonObject, args: PythonObject,
+                  f: Float64) raises -> Int:
+    """Append one description layer (code, args[0], args[1], f as its float32 value, args); its index."""
+    var nk = sequential_keys()
+    var b = mods.module("builtins")
+    var layers = py_item(sequential_fields(model), nk[].k__layers)
+    var at = len(layers)
+    _ = py_call(layers.append, Python.tuple(code, args[0], args[1], PythonObject(Float64(Float32(f))),
+                                            py_call(b.tuple, args)))
+    return at
+
+
+def _recurrent_stack(mut mods: NativeModules, model: PythonObject, code: PythonObject, hidden: Int, cell: Int,
+                     stack: Int, both: Bool, dropout: PythonObject, final: Bool) raises:
+    """PyTorch's multi-layer, bidirectional recurrent module as description layers (lane nn-recurrent): per layer
+    a forward recurrent layer and, when bidirectional, a branch back to the layer's input, a reverse recurrent
+    layer (a2 = 1) and a concat of the two on the features; a dropout layer after every layer but the last when
+    dropout > 0. With output 'final' the last layer's recurrent layers output their final state (a3 = 1) and
+    the concat joins them on the first axis: PyTorch's h_n of that layer, (directions, hidden)."""
+    var b = mods.module("builtins")
+    var p = Float64(py=py_call(b.float, dropout))
+    var entry = _block_entry(mods, model)
+    for l in range(stack):  # driver-loop: over the stacked layers (description only)
+        var top = l == stack - 1
+        var fin = 1 if (final and top) else 0
+        var fwd = _append_layer(mods, model, code, Python.list(hidden, cell, 0, fin, 0, 0), 0.0)
+        var last = fwd
+        if both:
+            _ = _append_code(mods, model, _CODE_BRANCH, Python.list(entry, 0, 0, 0, 0, 0))
+            var rev = _append_layer(mods, model, code, Python.list(hidden, cell, 1, fin, 0, 0), 0.0)
+            last = _append_layer(mods, model, PythonObject(_CODE_CONCAT), Python.list(fwd, rev, -2, -2, -2, -2),
+                                 0.0 if fin == 1 else 1.0)
+        if not top and p > 0.0:
+            last = _append_layer(mods, model, PythonObject(_CODE_DROPOUT), Python.list(0, 0, 0, 0, 0, 0), p)
+        entry = last
+# nn-recurrent end
 
 
 def _gated(mut mods: NativeModules, model: PythonObject, gate: PythonObject, up: PythonObject,
