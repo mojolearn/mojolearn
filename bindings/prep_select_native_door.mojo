@@ -36,7 +36,9 @@ from core.member_abi import (
     MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32, MEMBER_I32,
     MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
 )
-from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST
+from core.member_families import (
+    MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT,
+)
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -241,7 +243,10 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
     round's FIT, the labels to the final PACK). Dotted getter paths, an
     admission the family refuses and a target the encoder or the regressor
     admission refuses keep the estimator's own doors (the fallback rule):
-    they answer or refuse in their own words."""
+    they answer or refuse in their own words. RAISES for a published naive
+    Bayes or discriminant kind that exports neither block (QDA, GaussianNB,
+    MultinomialNB, BernoulliNB, ComplementNB: they have no coef_ and no
+    feature_importances_), before any round is fitted."""
     var member = RfeMember()
     comptime if not MEMBER_SET_NATIVE:
         return member^
@@ -263,6 +268,7 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
     var owner = member_admit_serving(template, fields, plan, member_context, b, MEMBER_CAN_FIT | MEMBER_CAN_EXPORT)
     if not owner.published:
         return member^
+    var refusal = String("")
     try:
         if classifier:
             # The labels once, as a classifier's fit door encodes them: the
@@ -302,6 +308,14 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
         elif getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
             member.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
             member.squared = not auto
+        elif owner.plan.family == MEMBER_FAMILY_NAIVE_BAYES or owner.plan.family == MEMBER_FAMILY_DISCRIMINANT:
+            # QuadraticDiscriminantAnalysis and the published naive Bayes kinds have no coef_ and no
+            # feature_importances_ (scikit-learn's neither): refused here, before any round fits a clone
+            # (lane mf-shaprfe; the own-door path fitted every round's clone first and then refused). The
+            # words: 'auto' the door's own; a named attribute scikit-learn's attrgetter's.
+            refusal = (String("mojolearn: RFE needs an estimator with coef_ or feature_importances_") if auto
+                       else String("AttributeError: '") + classical_estimator_name(estimator)
+                       + "' object has no attribute '" + getter + "'")
         else:
             return member^
         # THE GIL RULE (core/member_abi.mojo): the same answer says whether
@@ -311,6 +325,8 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
         member.gil_free = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
     except:
         return member^
+    if len(refusal) > 0:
+        raise Error(refusal)
     member.y_address = Int(py=classical_address(member.y))
     member.owner = owner^
     member.template = template
