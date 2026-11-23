@@ -1495,22 +1495,32 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var stopped_early = False
     var has_nan = False
     if len(flags) != 0:
-        # lane gbdt-cpu-rest (2026-11-23): every numeric arm bins X through
-        # the one grid and binarizer (`gbdt_host_grid` / `_binarize_columns`
-        # of gbdt_oracle.mojo, the nan_mode treatment and the held-out
-        # "no NaNs in the learn dataset" refusal inside), as the
-        # SymmetricTree Logloss fit of the gbdt-nan-modes lane does, so NaN
-        # is refused only beside categorical columns, whose hashing of a
-        # NaN category value is not restated
+        # lane gbdt-cpu-rest-2 (2026-11-23): a NaN in a FLOAT column beside
+        # categorical ones is binned as on the numeric arms: the one-hot arm
+        # runs `gbdt_host_fit_eval` (the one grid and binarizer, nan_mode and
+        # the held-out "no NaNs in the learn dataset" refusal inside) and the
+        # CTR arm grids its float columns through `gbdt_host_grid` and carries
+        # their nan treatment into the tree CTR plan. A NaN in a cat_features
+        # column is refused on both columns by `dense_category_code`'s words
+        # ("is not finite"), which both arms call. What stays refused, by
+        # name: a NaN in a column flagged one-hot without being categorical,
+        # whose code scan (`Int(value)` of the max) the host does not
+        # restate for a NaN.
         var xs = f32_ptr(x_address)
-        has_nan = gbdt_host_has_nan_ptr(xs, n_rows * n_features)
-        if not has_nan and n_eval_rows > 0:
-            var exs = f32_ptr(params.eval_x)
-            has_nan = gbdt_host_has_nan_ptr(exs, n_eval_rows * n_features)
+        for f in range(n_features):  # driver-loop: over the flagged one-hot columns, each scanned across the cores
+            var plain_one_hot = (flags[f] & UInt32(1)) == UInt32(0) and (flags[f] & UInt32(2)) != UInt32(0)
+            if not plain_one_hot:
+                continue
+            if gbdt_host_has_nan_ptr(xs + f * n_rows, n_rows):
+                has_nan = True
+            elif n_eval_rows > 0:
+                var exs = f32_ptr(params.eval_x)
+                if gbdt_host_has_nan_ptr(exs + f * n_eval_rows, n_eval_rows):
+                    has_nan = True
     if has_nan:
         _refuse(
-            "an X carrying NaN beside categorical columns (loss='" + loss
-            + "', grow_policy code " + String(grow_code) + ")"
+            "a NaN in a one_hot_features column that is not categorical"
+            " (loss='" + loss + "', grow_policy code " + String(grow_code) + ")"
         )
     var eval_x_address = params.eval_x
     var eval_y_address = params.eval_y
