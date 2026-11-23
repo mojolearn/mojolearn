@@ -1562,11 +1562,14 @@ ADAPTED_MODULES = {
 #: weighted owners; CTR evaluation uses the shared final-table expander and
 #: held-out owner. Their runtime/identity evidence remains pending; this source
 #: inventory and the compile receipts do not supply that evidence.
+#: Lane gbdt-gaps (2026-11-23): sample weights on RMSE, Depthwise/Lossguide,
+#: the pointwise losses, YetiRank and generated-pair PairLogit, and eval sets
+#: on RMSE and Depthwise/Lossguide, are trained by the host owners now.
 NO_CPU_PATH = (
-    "gradient boosting training with sample weights outside Plain numeric "
-    "Logloss and the dedicated pointwise Logloss configuration; weighted "
-    "Depthwise and Lossguide Logloss additionally require Newton leaves "
-    "and no bootstrap. Class weights remain unsupported outside numeric "
+    "gradient boosting training with sample weights on QueryRMSE, with "
+    "Exact leaves, with the multi-output losses or on the grouped pointwise "
+    "searcher (the weighted query means and the weighted quantile are not "
+    "restated on the host). Class weights remain unsupported outside numeric "
     "Logloss, MultiClass and MultiClassOneVsAll, and in Ordered boosting "
     "or the pointwise searcher",
 
@@ -1580,10 +1583,9 @@ NO_CPU_PATH = (
     "those combinations",
 
     "gradient boosting training with an eval set or the overfitting "
-    "detector outside the covered SymmetricTree Logloss, Ordered and "
-    "pointwise Logloss routes: RMSE, multiclass, the other loss owners and "
-    "the non-symmetric tree shapes lack the corresponding held-out loss "
-    "and model-application path",
+    "detector outside Logloss and RMSE (every tree shape), Ordered and "
+    "the pointwise Logloss route: multiclass and the other loss owners "
+    "lack the corresponding held-out loss",
 
     "gradient boosting training with the pointwise searcher outside the "
     "gbdt-pointwise-l2-bayesian-eval configuration (L2 scores, the Bayesian "
