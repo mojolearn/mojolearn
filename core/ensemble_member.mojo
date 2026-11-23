@@ -224,6 +224,7 @@ from bindings.prep_select_run import (
     RfeFitPlan, RfeFitResult, rfe_fit_run, rfe_select_count, rfe_step_count, rfe_final_plan,
 )
 from core.msel_search_run import MselSearchPlan, MselSearchResult, msel_search_run
+from core.msel_scorer_run import MselScorerOptions, msel_scorer_group_read
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_own, member_new,
     member_outputs, member_output_dtype, member_outputs_of,
@@ -384,14 +385,17 @@ comptime META_SEARCH_SEED = 4           # the sampler's seed the PACK re-draws t
 comptime META_SEARCH_REFIT = 5          # 1.0: refit the best (refit=True or a scorer name); 0.0: refit=False
 comptime META_SEARCH_REFIT_SCORER = 6   # the index among the codes whose table chooses the best (refit=<name>)
 comptime META_SEARCH_COUNT = 7          # the number of scorer codes that follow (0: one scorer)
-comptime META_SEARCH_WORDS = 8          # the head; then `count` codes, then one positive word per scorer
-#: THE SEARCH KIND's positive class words (lane mf-search4b item 3) follow
-#: the scorer codes: one per scorer (the one `META_SEARCH_SCORING`, or each
-#: code), the class code of the scorer's pos_label among the fit's labels,
-#: read at UNPACK (-1: the scorer reads no positive label).
+comptime META_SEARCH_WORDS = 8          # the head; then one scorer word group per scorer
+#: THE SEARCH KIND's scorer word groups (lane mf-tail5b, one layout for every
+#: scorer option; core/msel_scorer_run.mojo SCORER_GROUP_WORDS): one group
+#: per scorer (the one `META_SEARCH_SCORING`, or each of `count`), each its
+#: code, its positive word (the class code of its pos_label among the fit's
+#: labels, -1: none), its make_scorer options and its `labels` codes, read
+#: by `msel_scorer_group_read` only. Was: `count` codes, then one positive
+#: word per scorer (lane mf-search4b item 3).
 #: THE CV TOOLS' words (lane mf-msel5; core/msel_search_run.mojo module
-#: note): an optional tail of `META_SEARCH_TOOL_WORDS` after the positive
-#: words, [keep the units' states (1.0), the test-side response op (-1.0:
+#: note): an optional tail of `META_SEARCH_TOOL_WORDS` after the scorer
+#: groups, [keep the units' states (1.0), the test-side response op (-1.0:
 #: score), the folds' rows (1.0), and (lane mf-msel5b) the caller's result
 #: buffer the responses are written into: its address, its words per row,
 #: its element type (MEMBER_I64 / MEMBER_F64), predict_log_proba (1.0)];
@@ -1336,14 +1340,15 @@ def _new(call: _CallPtr) raises:
             raise Error("member ABI: a stacking member needs its members, its final estimator and cv >= 2")
         if _search_kind(kind):
             var count = Int(slot[].words[META_SEARCH_COUNT]) if len(slot[].words) >= META_SEARCH_WORDS else -1
-            var plain = META_SEARCH_WORDS + count + max(count, 1)
-            if (count < 0 or (len(slot[].words) != plain and len(slot[].words) != plain + META_SEARCH_TOOL_WORDS)
+            var plain = _search_groups_end(slot[].words, count) if count >= 0 else -1
+            if (count < 0 or plain < 0
+                    or (len(slot[].words) != plain and len(slot[].words) != plain + META_SEARCH_TOOL_WORDS)
                     or len(slot[].masks) != len(slot[].plans) or (slot[].folds < 2 and user_folds == 0 and not splitter)
                     or (count > 0 and (slot[].words[META_SEARCH_REFIT_SCORER] < 0.0
                                        or Int(slot[].words[META_SEARCH_REFIT_SCORER]) >= count))):
                 raise Error("member ABI: a search member needs its candidates, one mask each, its "
-                            + String(META_SEARCH_WORDS) + " settings words, its scorer codes and positive "
-                            + "words, a refit scorer among them and cv >= 2")
+                            + String(META_SEARCH_WORDS) + " settings words, one scorer word group per "
+                            + "scorer, a refit scorer among them and cv >= 2")
             slot[].base_plans = slot[].plans.copy()
             slot[].base_masks = slot[].masks.copy()
         elif _rfe_kind(kind):
@@ -3208,6 +3213,22 @@ def _unit_views(slot: _SlotPtr):
 # ------------------------------------------------------------ THE SEARCH KIND (lane mf-search4)
 
 
+def _search_groups_end(words: List[Float64], count: Int) raises -> Int:
+    """The index after the search kind's scorer word groups (one per scorer,
+    `max(count, 1)`; lane mf-tail5b), -1 when they are cut short."""
+    var at = META_SEARCH_WORDS
+    var sels = List[Int32]()
+    for _ in range(max(count, 1)):  # small-loop(one word group per scorer)
+        var code = 0
+        var positive = -1
+        var opts = MselScorerOptions()
+        try:
+            at = msel_scorer_group_read(words, at, code, positive, opts, sels)
+        except:
+            return -1
+    return at
+
+
 def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     """THE SEARCH KIND's fit (`_BaseSearch.fit` over native member units):
     core/msel_search_run.mojo `msel_search_run` over the entry's candidates;
@@ -3237,14 +3258,23 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
     # the scorer codes in the caller's name order, the refit scorer's index,
     # the refit word; then one positive class word per scorer (item 3).
     var count = Int(slot[].words[META_SEARCH_COUNT])
-    for j in range(count):  # small-loop(the multi-metric scorer codes)
-        plan.scorers.append(Int(slot[].words[META_SEARCH_WORDS + j]))
     plan.refit_scorer = Int(slot[].words[META_SEARCH_REFIT_SCORER]) if count > 0 else 0
     plan.refit = slot[].words[META_SEARCH_REFIT] != 0.0
-    for j in range(max(count, 1)):  # small-loop(one positive class word per scorer)
-        plan.positives.append(Int(slot[].words[META_SEARCH_WORDS + count + j]))
-    # THE CV TOOLS (lane mf-msel5): the optional tail after the positives.
-    var tool_at = META_SEARCH_WORDS + count + max(count, 1)
+    # One scorer word group per scorer (lane mf-tail5b): its code (each of a
+    # multi-metric list's; the one scorer's is META_SEARCH_SCORING's too), its
+    # positive word and its make_scorer options with their labels codes.
+    var at = META_SEARCH_WORDS
+    for j in range(max(count, 1)):  # small-loop(one word group per scorer)
+        var code = 0
+        var positive = -1
+        var opts = MselScorerOptions()
+        at = msel_scorer_group_read(slot[].words, at, code, positive, opts, plan.selections)
+        if count > 0:
+            plan.scorers.append(code)
+        plan.positives.append(positive)
+        plan.options.append(opts)
+    # THE CV TOOLS (lane mf-msel5): the optional tail after the scorer groups.
+    var tool_at = at
     var tool = len(slot[].words) == tool_at + META_SEARCH_TOOL_WORDS
     if tool:
         plan.keep = slot[].words[tool_at] != 0.0

@@ -111,7 +111,7 @@ from bindings.msel_search_stats_run import msel_row_means, msel_row_stds, msel_r
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
-    MselScorer, msel_scorer_row, msel_scorer_value, msel_scorer_regression, msel_scorer_binary_column,
+    MselScorer, MselScorerOptions, msel_scorer_row, msel_scorer_value, msel_scorer_pos_words, msel_scorer_regression, msel_scorer_binary_column,
     msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
     msel_scorer_labels_from_truth, msel_scorer_log_loss, msel_scorer_brier,
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND, SCORER_POSITIVE_MIXED,
@@ -192,6 +192,11 @@ struct MselSearchPlan(Movable):
     # `scoring`, or each of `scorers`), the class code of its pos_label
     # among the fit's labels, mapped at UNPACK (-1: the scorer reads none).
     var positives: List[Int]
+    # THE SCORERS' OPTIONS (lane mf-tail5b; core/msel_scorer_run.mojo module
+    # note): per scorer a make_scorer's kwargs (empty: every row's own), and
+    # the `labels` codes they index (int32, kept by the plan through the RUN).
+    var options: List[MselScorerOptions]
+    var selections: List[Int32]
     # THE GIVEN FOLDS (lane mf-search4b item 6): one of our splitters' folds
     # or a user's index list, as int32 row views the caller keeps alive
     # (empty: the int cv's KFold / StratifiedKFold below).
@@ -260,6 +265,8 @@ struct MselSearchPlan(Movable):
         self.scorers = List[Int]()
         self.refit_scorer = 0
         self.positives = List[Int]()
+        self.options = List[MselScorerOptions]()
+        self.selections = List[Int32]()
         self.fold_train_at = List[Int]()
         self.fold_train_n = List[Int]()
         self.fold_test_at = List[Int]()
@@ -547,8 +554,8 @@ def _fold_truth_checks(label_words: List[String], row: MselScorer, truth: Int, c
                             + "contains multiple classes. Got `y_score.shape=" + shape + "`.")
             return
         if present == 2 and (positive < 0 or positive >= classes or not seen[positive]):
-            raise Error("ValueError: pos_label=1 is not a valid label. It should be one of "
-                        + _array_words(label_words, seen))
+            raise Error("ValueError: pos_label=" + msel_scorer_pos_words(row, label_words, positive)
+                        + " is not a valid label. It should be one of " + _array_words(label_words, seen))
         if view_cols != 1:
             raise Error("ValueError: y should be a 1d array, got an array of shape " + _shape_words(count, view_cols)
                         + " instead.")
@@ -602,8 +609,8 @@ def _fold_view_side(route: MetricRoute, cluster: EntryRef, label_words: List[Str
         # (`type_of_target(classes) == "binary"`: at most two held classes).
         if (msel_scorer_ap(row) or msel_scorer_positive(row)) and held_n <= 2:
             if at < 0:
-                raise Error("ValueError: pos_label=1 is not a valid label: It should be one of "
-                            + _held_words(label_words, held, held_n))
+                raise Error("ValueError: pos_label=" + msel_scorer_pos_words(row, label_words, positive)
+                            + " is not a valid label: It should be one of " + _held_words(label_words, held, held_n))
             pos_col = at
     var src = _F32P(unsafe_from_address=response)
     var column = List[Float32]()
@@ -701,12 +708,15 @@ def _scorer_side(route: MetricRoute, cluster: EntryRef, label_words: List[String
             if i > 0:
                 shown += " "
             shown += label_words[i]
-        raise Error("ValueError: pos_label=1 is not a valid label: It should be one of " + shown + "]")
+        raise Error("ValueError: pos_label=" + msel_scorer_pos_words(row, label_words, positive)
+                    + " is not a valid label: It should be one of " + shown + "]")
     if msel_scorer_binary_column(row) and classes == 2 and cols == 2:
         pick = 1
-        if msel_scorer_ap(row):
+        if msel_scorer_ap(row) or (msel_scorer_brier(row) and row.pos_given):
+            # the positive's column (lane mf-tail5b: a given pos_label on brier too)
             if positive < 0 or positive > 1:
-                raise Error("pos_label=1 is not a valid label: It should be one of the classes")
+                raise Error("pos_label=" + msel_scorer_pos_words(row, label_words, positive)
+                            + " is not a valid label: It should be one of the classes")
             pick = positive
     elif msel_scorer_ap(row) and classes == 2 and cols == 1 and positive == 0:
         negate = True
@@ -1137,7 +1147,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         for j in range(len(codes)):  # driver-loop: over the scorers (once per fit)
             if codes[j] == SCORER_MEMBER:
                 raise Error("member ABI: the member's own score cannot be one of several scorers")
-            var row = msel_scorer_row(codes[j])
+            var row = msel_scorer_row(codes[j], plan.options[j] if j < len(plan.options) else MselScorerOptions(),
+                                      Int(plan.selections.unsafe_ptr()))
             # A clusterer (lane mf-cluster5: no class codes) is scored by the
             # clustering scorers only, on its predicted cluster ids.
             if not classifier and msel_scorer_cluster(row):
