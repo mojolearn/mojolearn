@@ -69,8 +69,19 @@ comptime OP_STEP = 3
 
 
 def shape(batch: Int = 2) -> ByteConfig:
-    """`ByteLanguageModelConfig(batch=batch)`: the Python default shape."""
+    """`ByteLanguageModelConfig(batch=batch)`: the Python default shape (test_routes: its fixtures hold its
+    parameters)."""
     return ByteConfig(batch=batch, chunked_lm_head_v2=False)
+
+
+def unit_shape(batch: Int = 2) -> ByteConfig:
+    """The nine units' model (check-trim-2, 2026-11-23): the default's structure (two layers, grouped-query attention
+    n_heads 2 over n_kv 1, head_dim 8, the 256-byte vocabulary every logits extent below names) at length 8 and
+    width 16. Every unit compares the entry against itself (threaded and unthreaded, resumed and fresh, two rows and
+    four) on parameters it fills here, and every id block is at most 5 positions long, so no value depends on the
+    default's length 32 or width 32."""
+    return ByteConfig(batch=batch, length=8, d_model=16, n_heads=2, n_kv=1, head_dim=8, intermediate=32, n_layers=2,
+                      vocab_size=256, chunked_lm_head_v2=False)
 
 
 def host_words(cfg: ByteConfig, threaded: Int, threads: Int, batch: Int = 0, length: Int = 0,
@@ -194,7 +205,7 @@ def finite_bits(bits: Int) -> Bool:
 
 
 def run_case(unit: Int) raises:
-    var cfg = shape()
+    var cfg = unit_shape()
     var n = cfg.n_total()
     var zeros = filled(n, Float32(0))
     var ones = filled(n, Float32(1))
@@ -261,7 +272,7 @@ def run_case(unit: Int) raises:
                 "a repeated step returned other loss bits")
     elif unit == 8:
         # test_a_second_shape_reaches_the_binding_as_that_shape (numeric half)
-        var four = shape(4)
+        var four = unit_shape(4)
         require(four.n_total() == n, "the four-row shape changed the parameter count")
         var four_step = host_step(ones, zeros, zeros, step_ids(four), four, default_scalars(), 0)
         var two_step = host_step(ones, zeros, zeros, step_ids(cfg), cfg, default_scalars(), 0)

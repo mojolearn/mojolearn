@@ -5,7 +5,8 @@ python/mojolearn/tests/test_meta_members_native.py `test_dart_tree_explainer_is_
 
 The inputs are the original's: X = default_rng(2).random((150, 4), float32), y = X[:, 0] - X[:, 2] in float32
 (`fixtures/trees_rte/shap-*`, `tools/py2mojo_native_fixtures_bm_rest_rte.py`). The model is
-DARTRegressor(n_estimators=10, random_state=0), fitted by the product's typed RUN through the host images
+DARTRegressor(n_estimators=DART_TREES, random_state=0) (the original's 10; check-trim-2, 2026-11-23: the DART fit is
+this file's time, and additivity holds for any member count, so 5 rounds, with drops possible from round 1, prove it), fitted by the product's typed RUN through the host images
 (`bm_rest_boost_fits.mojo` `dart_fit`). The explainer is what `TreeExplainer(d, data=X[:60])` builds for a DART
 model (bindings/trees_explainer_native_door.mojo `_flat` and `_construct`): the members' node words joined into one
 flat forest with the members' leaf values as its leaves, the tree coefficients as float32 tree scales, the starting
@@ -26,15 +27,16 @@ comptime N = 150
 comptime D = 4
 comptime BACKGROUND = 60
 comptime ROWS = 20
+comptime DART_TREES = 5
 
 
 def test_dart_tree_explainer_is_additive() raises:
     publish_host_images()
     var x = fixture_f32(RTE_DIR + "shap-x.f32", N * D)
     var y = fixture_f32(RTE_DIR + "shap-y.f32", N)
-    var m = dart_fit(DartSpec(10, 0), x, N, D, y, 1, 0)
+    var m = dart_fit(DartSpec(DART_TREES, 0), x, N, D, y, 1, 0)
     var trees = m.trees()
-    require(trees == 10, "DART trees " + String(trees))
+    require(trees == DART_TREES, "DART trees " + String(trees))
     # `_flat`: each member's node words in tree order, its leaf values as the leaves (k = 1: no spread)
     var offsets = List[Int32](length=trees + 1, fill=Int32(0))
     var total = 0

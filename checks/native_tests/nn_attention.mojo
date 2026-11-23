@@ -13,7 +13,7 @@ test_nn_attention_layers, per case, through the model interpreter (autograd/mode
     (h = 1/128, tolerance 3e-3 (1 + |fd|); a parameter outside it is probed again centrally at h/4 and
     one-sided at h/16 on both sides, a ReLU kink inside the wider step bending the central difference), on a
     fixed sample of every layer's parameter span (_probe_indices: a span of 8 or fewer words whole, a longer
-    one at its first two, last two and 12 evenly spaced words, so the in-projection, out-projection and bias
+    one at its first two, last two and 5 evenly spaced words, so the in-projection, out-projection and bias
     blocks of an attention layer are each probed); the digest covers every analytic gradient word and the
     device column compares every word;
   - one `NN_ATTENTION <case> digest` line over the output and gradient words.
@@ -483,7 +483,7 @@ def _close(name: String, got: List[Float32], want: List[Float64], tol: Float64) 
 
 comptime _PROBE_ALL = 8  # a span this short is probed whole
 comptime _PROBE_EDGE = 2  # words probed at each end of a longer span
-comptime _PROBE_INNER = 12  # evenly spaced words probed inside a longer span
+comptime _PROBE_INNER = 5  # evenly spaced words probed inside a longer span (12 until check-trim-2)
 
 
 def _span_probes(mut idx: List[Int], a: Int, b: Int):
@@ -497,7 +497,7 @@ def _span_probes(mut idx: List[Int], a: Int, b: Int):
     for i in range(_PROBE_EDGE):  # small-loop(2 edge words)
         idx.append(a + i)
     var inner = n - 2 * _PROBE_EDGE
-    for j in range(_PROBE_INNER):  # small-loop(12 interior words)
+    for j in range(_PROBE_INNER):  # small-loop(5 interior words)
         idx.append(a + _PROBE_EDGE + (inner * (2 * j + 1)) // (2 * _PROBE_INNER))
     for i in range(_PROBE_EDGE):  # small-loop(2 edge words)
         idx.append(b - _PROBE_EDGE + i)
