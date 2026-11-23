@@ -79,6 +79,12 @@ from bindings.trees_dart_rounds_run import (
     DartMemberShape, dart_member_request, dart_member_config,
 )
 from bindings.native_unit_threads_unpack import native_unit_jobs
+# Lane mf-refuse5: the constructor refusals, ONE body with the META kind's admission.
+from bindings.trees_meta_validate_unpack import (
+    meta_seed as _seed,
+    meta_bagging_validate as _bagging_validate,
+    meta_ada_validate as _ada_validate,
+)
 from xtrees.trees_boost_run import (
     _sub_seed, _dart_thr,
     boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
@@ -208,16 +214,6 @@ def _x(table: PythonObject, name: String) raises -> PythonObject:
     if entry is None:
         raise Error("ImportError: mojolearn: the x_trees binding has no " + name)
     return entry
-
-
-def _seed(random_state: PythonObject, context: PythonObject) raises -> Int:
-    """`_trees_seed`."""
-    if random_state is None:
-        return 0
-    if _is_bool(random_state) or not _is_integral(random_state, context) or Bool(py=random_state < PythonObject(0)):
-        raise Error("random_state must be None or a nonnegative int (a RandomState object is refused:"
-                    + " draws come from the lane's own counter RNG, xtrees/ops.mojo)")
-    return Int(py=_int(random_state))
 
 
 def _P(v: Int) raises -> PythonObject:
@@ -703,18 +699,6 @@ def _member_store(member: PythonObject, result: PythonObject, cols: Int) raises:
 
 
 # ---------------------------------------------------------------- Bagging
-
-
-def _bagging_validate(fields: PythonObject, context: PythonObject) raises:
-    """`_BaggingBase._validate_params`."""
-    var oob = _truthy(fields["oob_score"])
-    boost_bagging_validate(oob, oob and _truthy(fields["bootstrap"]), _truthy(fields["warm_start"]),
-                           _truthy(fields["verbose"]))
-    # n_jobs is the worker bound of the member fits (None and -1: every core):
-    # published members fit in parallel waves (`_bagging_fit_bags`).
-    _ = native_unit_jobs(fields["n_jobs"], "Bagging")
-    boost_check_n_estimators(Int(py=_int(fields["n_estimators"])))
-    _ = _seed(fields["random_state"], context)
 
 
 def _count(v: PythonObject, total: Int, name: String, context: PythonObject) raises -> Int:
@@ -1475,23 +1459,6 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
 
 
 # --------------------------------------------------------------- AdaBoost
-
-
-def _ada_validate(fields: PythonObject, classifier: Bool, context: PythonObject) raises:
-    """`AdaBoost*._validate_params`."""
-    if classifier:
-        var algorithm = fields["algorithm"]
-        if not Bool(py=algorithm == PythonObject("SAMME")) and not Bool(py=algorithm == PythonObject("deprecated")):
-            _refuse("algorithm=" + _repr(algorithm), "SAMME.R was removed from the reference (sklearn 1.6);"
-                    + " SAMME is the algorithm.")
-    else:
-        var losses = context["trees_ada_losses"]
-        if not py_contains(losses, fields["loss"]):
-            raise Error("loss must be one of " + _repr(py_call(trees_builtins().tuple, losses)) + ", got "
-                        + _repr(fields["loss"]))
-    boost_check_n_estimators(Int(py=_int(fields["n_estimators"])))
-    boost_check_learning_rate(Float64(py=_float(fields["learning_rate"])))
-    _ = _seed(fields["random_state"], context)
 
 
 def _normalized_weights(xt: PythonObject, sample_weight: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
