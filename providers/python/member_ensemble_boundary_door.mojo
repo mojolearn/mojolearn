@@ -111,9 +111,12 @@ from core.member_abi import (
 from xtrees.trees_meta_vote_run import STACK_PREDICT, STACK_PROBA, STACK_DECISION
 from core.ensemble_member import (
     meta_plan_metric, meta_plan_search_labels, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR, META_MULTI_CLASSIFIER, META_MULTI_REGRESSOR,
-    META_BLOCK_SEARCH,
+    META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
+from core.member_abi import MEMBER_BORROWS_FIT
+from bindings.msel_common_door import msel_f64_block, msel_i64_list
+from bindings.classical_labels_door import labels_decode_i32_codes
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
@@ -2568,6 +2571,32 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         return False
     var train = py_get(fields, "return_train_score")
     var return_train = train is not None and _truthy(train, b)
+    # THE CV TOOLS (lane mf-msel5): the door's carrier search of
+    # cross_validate / cross_val_score / learning_curve / cross_val_predict
+    # (bindings/msel_cv_door.mojo `msel_cv_by_search`) holds
+    # `_msel_cv_tool` = (return_estimator, method or None, return_indices),
+    # set by that door, never by a user: the RUN keeps the units' states,
+    # answers the folds' rows, or answers the test-side `method` instead of
+    # a score. A public search has no such field.
+    var tool = py_get(fields, "_msel_cv_tool")
+    var tool_keep = False
+    var tool_respond = -1
+    var tool_indices = False
+    if tool is not None:
+        tool_keep = Bool(py=py_call(b.bool, tool[0]))
+        tool_indices = Bool(py=py_call(b.bool, tool[2]))
+        if tool[1] is not None:
+            var method = String(py=tool[1])
+            if method == "predict":
+                tool_respond = MEMBER_OP_PREDICT
+            elif method == "predict_proba":
+                tool_respond = MEMBER_OP_PREDICT_PROBA
+            elif method == "decision_function":
+                tool_respond = MEMBER_OP_DECISION
+            else:
+                return False  # predict_log_proba and the rest: the door's units
+            if len(keys) > 0:
+                return False
     var got = _search_prepare(model, fields, context, b, prepared)
     if got is None:
         return False
@@ -2608,7 +2637,17 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
     if classifier:
         needs |= MEMBER_CAN_CLASSIFIER
-    if len(keys) == 0 and classifier and _mean_accuracy_score(base, b):
+    if tool_keep:
+        needs |= MEMBER_CAN_EXPORT  # each kept unit state is packed into its estimator
+    if tool_respond >= 0:
+        # THE CV TOOLS' response: no scorer, the method's capability.
+        if tool_respond == MEMBER_OP_PREDICT_PROBA:
+            needs |= MEMBER_CAN_PREDICT_PROBA
+        elif tool_respond == MEMBER_OP_DECISION:
+            needs |= MEMBER_CAN_DECISION
+        positives.append(-1)
+        responses.append(tool_respond)
+    elif len(keys) == 0 and classifier and _mean_accuracy_score(base, b):
         # scoring None = the class's `score` = accuracy (the docstring)
         var accuracy = msel_scorer_code("accuracy", False)
         codes.append(accuracy)
@@ -2687,6 +2726,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
         if multi and (len(codes) > 0 or msel_spec_stratified(split.spec.kind)):
             return False  # a multi-output target is scored by the member itself, folded by KFold
+        if multi and tool_respond >= 0:
+            return False  # a multi-output response: the door's placement
+        if tool_keep and (nested.masks[c] & MEMBER_BORROWS_FIT) != 0:
+            return False  # a kept state would read a wave's gathered train block
         for o in range(len(responses)):  # small-loop(the distinct responses)
             var response = responses[o]
             var probe = nested.plans[c].copy()
@@ -2707,6 +2750,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         words.append(Float64(codes[j]))
     for j in range(len(positives)):  # small-loop(one positive word per scorer)
         words.append(Float64(positives[j]))
+    if tool is not None:
+        # THE CV TOOLS' tail (core/ensemble_member.mojo META_SEARCH_TOOL_WORDS)
+        words.append(1.0 if tool_keep else 0.0)
+        words.append(Float64(tool_respond))
+        words.append(1.0 if tool_indices else 0.0)
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
     # The META entry and its glue run on an x_trees image: the search's own
     # context is model selection's, so the image is the one the meta classes'
@@ -2908,7 +2956,8 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
     if (len(names) if many else 1) != tables:
         raise Error("RuntimeError: mojolearn: the search's scorers changed since its admission")
     var per = m * (2 * folds + 4) if train else m * (folds + 3)
-    if count != 8 + tables * per:
+    var tool = py_get(fields, "_msel_cv_tool")
+    if (count != 8 + tables * per and tool is None) or count < 8 + tables * per:
         raise Error("RuntimeError: mojolearn: the search member state's tables are malformed")
     var results = Python.dict()
     py_setitem(results, "params", candidates)
@@ -2976,6 +3025,10 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
             py_setitem(updates, "scorer_", scorers)
         else:
             py_setitem(updates, "scorer_", msel_get_scorer(scoring_in, context))
+    if tool is not None:
+        py_setitem(updates, "_msel_cv_result",
+                   _search_tool_pack(fields, tool, words, 8 + tables * per, count, m * folds, folds, plan, state,
+                                     nested[0], labels, notice_context, context, b, jobs))
     msel_search_update(fields, updates, context)
     var owners = List[Int]()
     var notices = List[List[Float64]]()
@@ -2984,6 +3037,100 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
         # the scorers' metric warnings with the search's own context (lane
         # mf-score5: the context its scorers' metric calls carry)
         member_fit_notices_raise_with(notices[i], notice_context, context)
+
+
+def _search_tool_pack(fields: PythonObject, tool: PythonObject, words: _F64P, at_in: Int, count: Int, units: Int,
+                      folds: Int, plan: MemberPlan, state: Int, unit_plan: MemberPlan, labels: PythonObject,
+                      unit_context: PythonObject, context: PythonObject, b: PythonObject,
+                      mut jobs: _PackJobs) raises -> PythonObject:
+    """PACK of THE CV TOOLS (lane mf-msel5; core/ensemble_member.mojo
+    `_search_tool_words`): a dict with `fit_time` and `score_time` (one
+    float64 per unit), and as the tool asked `estimator` (each kept unit
+    state packed into a clone of the base, as `best_estimator_` is),
+    `indices` ({'train': [...], 'test': [...]}, int64 per fold) and
+    `predictions` (one per unit: a classifier's predicted codes decoded to
+    its labels, else float64 values, 1-D or units' rows x columns), read by
+    the carrier's door (bindings/msel_cv_door.mojo)."""
+    var at = at_in
+    if at >= count or Int(words[at]) != units:
+        raise Error("RuntimeError: mojolearn: the search member state's cv tool words are malformed")
+    at += 1
+    var fit = List[Float64](capacity=units)
+    var score = List[Float64](capacity=units)
+    for u in range(units):  # driver-loop: over the units (their seconds)
+        fit.append(words[at + u])
+        score.append(words[at + units + u])
+    at += 2 * units
+    var out = Python.dict()
+    py_setitem(out, "fit_time", msel_f64_list(fit, context))
+    py_setitem(out, "score_time", msel_f64_list(score, context))
+    if Bool(py=py_call(b.bool, tool[2])):
+        var trains = Python.list()
+        var tests = Python.list()
+        for f in range(folds):  # driver-loop: over the folds (their rows)
+            var ntr = Int(words[at])
+            var nte = Int(words[at + 1])
+            at += 2
+            var tr = List[Int](capacity=ntr)
+            for i in range(ntr):  # driver-loop: over the fold's train rows
+                tr.append(Int(words[at + i]))
+            at += ntr
+            var te = List[Int](capacity=nte)
+            for i in range(nte):  # driver-loop: over the fold's test rows
+                te.append(Int(words[at + i]))
+            at += nte
+            _ = py_call(trains.append, msel_i64_list(tr, context))
+            _ = py_call(tests.append, msel_i64_list(te, context))
+        var idx = Python.dict()
+        py_setitem(idx, "train", trains)
+        py_setitem(idx, "test", tests)
+        py_setitem(out, "indices", idx)
+    if tool[1] is not None:
+        var preds = Python.list()
+        for _ in range(units):  # driver-loop: over the units (their test-side responses)
+            var cols = Int(words[at])
+            var dtype = Int(words[at + 1])
+            var total = Int(words[at + 2])
+            at += 3
+            if total > 0 and (dtype == MEMBER_I32 or dtype == MEMBER_I64) and labels is not None:
+                var codes = List[Int32](capacity=total)
+                for i in range(total):  # driver-loop: over the unit's predicted codes
+                    codes.append(Int32(Int(words[at + i])))
+                _ = py_call(preds.append, labels_decode_i32_codes(labels, codes, unit_context))
+            elif (dtype == MEMBER_I32 or dtype == MEMBER_I64) and cols == 1:
+                # a clusterer's ids (no labels): int64, as its own predict
+                var ids = List[Int](capacity=total)
+                for i in range(total):  # driver-loop: over the unit's predicted ids
+                    ids.append(Int(words[at + i]))
+                _ = py_call(preds.append, msel_i64_list(ids, context))
+            else:
+                var values = List[Float64](capacity=total)
+                for i in range(total):  # driver-loop: over the unit's response words
+                    values.append(words[at + i])
+                var rows = total // max(cols, 1)
+                if cols == 1:
+                    _ = py_call(preds.append, msel_f64_list(values, context))
+                else:
+                    _ = py_call(preds.append, msel_f64_block(values, rows, cols, context))
+            at += total
+        py_setitem(out, "predictions", preds)
+    if Bool(py=py_call(b.bool, tool[0])):
+        var handles = _export_i64(plan, state, META_BLOCK_FOLDS)
+        if len(handles) != units or units != folds:
+            raise Error("RuntimeError: mojolearn: the search member state does not hold its units' estimators")
+        var base = py_get(fields, "estimator")
+        var estimators = Python.list()
+        for u in range(units):  # driver-loop: over the kept unit states (one estimator each, GIL held)
+            var clone = msel_native_clone(base, context)
+            var clone_plan = prep_estimator_plan(clone, context)
+            var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
+            if handles[u] != 0:
+                _pack_into(clone, clone_fields, clone_plan["context"], b, unit_plan, handles[u], labels, jobs)
+            _ = py_call(estimators.append, clone)
+        py_setitem(out, "estimator", estimators)
+    if at != count:
+        raise Error("RuntimeError: mojolearn: the search member state's cv tool words are malformed")
+    return out
 
 
 def _search_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan,

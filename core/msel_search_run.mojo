@@ -272,7 +272,7 @@ struct MselSearchResult(Movable):
     # `keep` its fitted state (0: its fit failed), owned by the caller; with
     # `respond` its test-side response words as float64 (int codes and
     # float32 values exact), their columns and the member's element type.
-    # Per fold (with `indices` or `respond`): its train and test rows.
+    # Per fold (with `indices`): its train and test rows.
     var fit_seconds: List[Float64]
     var score_seconds: List[Float64]
     var unit_states: List[Int]
@@ -651,7 +651,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var res = MselSearchResult()
     res.n_splits = used
     var sides = 2 if plan.return_train and not responding else 1
-    if plan.indices or responding:
+    if plan.indices:
         for f in range(used):  # driver-loop: over the folds (their rows, copied once for the caller)
             var tr = List[Int32](length=tr_n[f], fill=Int32(0))
             var te = List[Int32](length=te_n[f], fill=Int32(0))

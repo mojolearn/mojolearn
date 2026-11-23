@@ -3111,7 +3111,7 @@ def _fit_search(slot: _SlotPtr, call: _CallPtr) raises:
             for c in range(m):  # driver-loop: over the candidates (their train means)
                 w.append(res.scorer_train_means[j][c])
     if tool:
-        _search_tool_words(res, plan.indices or plan.respond >= 0, plan.respond >= 0, w)
+        _search_tool_words(res, plan.indices, plan.respond >= 0, w)
     slot[].search_words = w^
 
 
@@ -3119,8 +3119,9 @@ def _search_tool_words(res: MselSearchResult, rows: Bool, responses: Bool, mut w
     """THE CV TOOLS' tail of the search words (lane mf-msel5), after the
     tables: [units U], U fit seconds, U test-score seconds; with `rows` per
     fold [train n, test n, its train rows, its test rows]; with `responses`
-    per unit [its columns, its element type, its test rows x columns
-    response words]. Exact: rows and int codes are below 2^53."""
+    per unit [its columns, its element type, its word count W, its W
+    response words (test rows x columns)]. Exact: rows and int codes are
+    below 2^53."""
     var units = len(res.fit_seconds)
     w.append(Float64(units))
     for u in range(units):  # driver-loop: over the units (their fits' seconds)
@@ -3139,6 +3140,7 @@ def _search_tool_words(res: MselSearchResult, rows: Bool, responses: Bool, mut w
         for u in range(len(res.outputs)):  # driver-loop: over the units (their test-side responses)
             w.append(Float64(res.output_cols[u]))
             w.append(Float64(res.output_dtype[u]))
+            w.append(Float64(len(res.outputs[u])))
             for i in range(len(res.outputs[u])):  # driver-loop: over the unit's response words
                 w.append(res.outputs[u][i])
 
