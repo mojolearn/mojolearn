@@ -2411,6 +2411,14 @@ def host_ordered[I: GbdtImage](case_index: Int) raises:
             Int(perm.unsafe_ptr()), 1200, 6, 1200, 1200, 2, 2, 128, Float32(0.03), Float32(3.0))
         require(wa == wb, "two weighted ordered host fits returned different bytes")
         require(all_finite_f32(predict(wa, x, 1200)), "weighted OrderedRMSE: nonfinite predict")
+        # KEEP-ALIVE (lane gbdt-units-6): `y` is read by ADDRESS inside the
+        # calls; its last named use was `wb`'s argument expression, so Mojo
+        # freed it BEFORE that call read it, the call's own first allocation
+        # (the permutation copy, the same 4800 bytes) took the block, and
+        # `wb` fitted the permutation's words as targets: the weighted pair
+        # differed (unit 14). The fit itself is deterministic.
+        _ = y
+        _ = x
         _ = ones^
         _ = ramp^
         _ = perm^
@@ -2441,6 +2449,11 @@ def host_ordered[I: GbdtImage](case_index: Int) raises:
         require(wa == wb, "two weighted FeatureFreq host fits returned different bytes")
         require(wa != a, "FeatureFreq sample weights had no model effect")
         _ = y  # read by address by the calls above (its last named use is the weighted call's argument)
+        # KEEP-ALIVE (lane gbdt-units-6): `coded` is read by address too; its
+        # last named use was `wb`'s argument, so `wb` read freed memory as
+        # its categorical codes ("categorical feature 0 row 0 is outside the
+        # UInt32 code range", unit 15)
+        _ = coded
         _ = ramp^
         _ = sources^
         return
