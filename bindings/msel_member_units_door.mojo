@@ -240,7 +240,7 @@ def msel_member_refit(base: PythonObject, parameters: PythonObject, y: PythonObj
     fit is not one the route runs: the caller then fits the estimator through
     its own door, which raises its own exception (THE FALLBACK RULE). y
     None: a fit without a target (an unsupervised search)."""
-    return _member_fit(base, parameters, True, y, x, context, b)
+    return _member_fit(base, parameters, True, False, y, x, context, b)
 
 
 def msel_member_fit_in_place(model: PythonObject, y: PythonObject, x: PythonObject, context: PythonObject,
@@ -250,11 +250,19 @@ def msel_member_fit_in_place(model: PythonObject, y: PythonObject, x: PythonObje
     the carrier's `_msel_cv_tool`, is read), fitted once on every row of X
     with the GIL released and packed into it in place. False (nothing
     changed): the route did not take it (THE FALLBACK RULE)."""
-    return _member_fit(model, PythonObject(None), False, y, x, context, b) is not None
+    return _member_fit(model, PythonObject(None), False, False, y, x, context, b) is not None
 
 
-def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, y: PythonObject, x: PythonObject,
-    context: PythonObject, b: PythonObject) raises -> PythonObject:
+def msel_member_fit_cloned(model: PythonObject, y: PythonObject, x: PythonObject, context: PythonObject,
+    b: PythonObject) raises -> Bool:
+    """`msel_member_fit_in_place` of a `model` the caller made itself with
+    `msel_native_clone` (lane mf-msel5c: the search door's carrier), whose
+    parameters that clone already admitted: no second admission clone."""
+    return _member_fit(model, PythonObject(None), False, True, y, x, context, b) is not None
+
+
+def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vetted: Bool, y: PythonObject,
+    x: PythonObject, context: PythonObject, b: PythonObject) raises -> PythonObject:
     """UNPACK, RUN and PACK of the one fit (module note): the fitted
     estimator (`base` itself, or its clone with `parameters` set), or None
     having changed nothing."""
@@ -272,7 +280,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, y: Py
     if clone:
         est = msel_native_clone(base, context)
         _ = msel_native_set_params(est, msel_clone_parameter(parameters, context), context)
-    else:
+    elif not vetted:
         # The caller's estimator is admitted as its clone admits it (every
         # constructor parameter an exact native value, refused in words
         # before any Python protocol of it runs), then the member reads it in

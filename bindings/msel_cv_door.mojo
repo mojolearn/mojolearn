@@ -376,9 +376,9 @@ def _msel_hold_rows_of(x: PythonObject, rows: PythonObject) raises:
 # TOMBSTONE: MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF (decided: winner promoted, A/B round 3) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
 # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF.patch; record in docs/TOMBSTONES.md.
 
-#: Units over native members (bindings/msel_member_units_door.mojo; lane ma-core, 2026-11-21, the member ABI
-#: rollout of the boundary wave): a member whose family published its member entry always takes them; the
-#: Python units below serve every other member.
+#: Units over native members (lane ma-core, 2026-11-21) were deleted by lane mf-msel5c (2026-11-23): a member
+#: whose family published its member entry is fitted and scored by the search kind's typed RUN
+#: (core/msel_search_run.mojo); the Python units below serve what that kind does not take.
 # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
 # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_MEMBER_UNITS_OFF.patch; record in docs/TOMBSTONES.md.
 

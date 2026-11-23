@@ -50,7 +50,7 @@ from bindings.msel_search_stats_run import (
     msel_row_means, msel_row_stds, msel_score_column, msel_rank_scores, msel_rank_best, msel_pvalue,
 )
 from bindings.family_common_unpack import FAMILY_I32P
-from bindings.msel_member_units_door import msel_member_refit, msel_member_fit_in_place
+from bindings.msel_member_units_door import msel_member_refit, msel_member_fit_cloned
 from bindings.msel_cv_door import (
     msel_clone,
     msel_cv_folds,
@@ -139,7 +139,8 @@ def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonOb
     door's own checked split (`msel_cv_folds`); the search's clone carries
     them as the cv tools' carrier does (`_msel_cv_tool` with no response,
     estimators or indices asked) and is fitted in place
-    (`msel_member_fit_in_place`). The split (X, y, folds) is appended to
+    (`msel_member_fit_cloned`: the clone admitted its parameters, so no
+    second admission clone; the old route also made one clone). The split (X, y, folds) is appended to
     `drawn` so a declined search's units reuse it (no second split). An
     integer cv: the kind's own folds; scikit-learn ignores `groups` there."""
     var base_plan = msel_estimator_plan(fields["estimator"], context)
@@ -159,7 +160,7 @@ def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonOb
                                                                  PythonObject(False), got[2],
                                                                  Python.list(PythonObject(None)), PythonObject(0),
                                                                  got[0].shape[0]))
-        if not msel_member_fit_in_place(carrier, got[1], got[0], context, b):
+        if not msel_member_fit_cloned(carrier, got[1], got[0], context, b):
             return False
         return _search_adopt(fields, msel_search_fields(carrier, context), context)
     var xa = PythonObject(None)
