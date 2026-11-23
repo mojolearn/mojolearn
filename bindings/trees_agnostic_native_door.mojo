@@ -1217,7 +1217,7 @@ def _lp_open(mut em: _Member, s: _State, context: PythonObject) raises:
     em.lp_requests = List[LpQueryRequest]()
     em.lp_requests.append(unpacked.request.copy())
     em.lp_keep = Python.list(unpacked.fit_x, unpacked.distributions, connection.provider, binding)
-    em.lp_name = name
+    em.lp_name = name^
     em.k = k
     em.lp = True
     _ = unpacked^

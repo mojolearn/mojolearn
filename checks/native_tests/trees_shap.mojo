@@ -54,9 +54,14 @@ from checks.native_tests.bm_rest_boost_fits import DartSpec, DartModel, dart_fit
 from xtrees.agnostic_values_run import (
     AgnModel, AgnMember, AgnMeta, AgnMetaPlan, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run,
     agn_labels_run, AGN_SW_IDN_SYN_POOL, AGN_META_SOFT, AGN_META_REGRESS, AGN_META_HARD, AGN_META_BAG,
-    AGN_META_STACK, AGN_META_OVR, AGN_META_CALIBRATED, AGN_META_ADA, AGN_META_COLUMNS,
+    AGN_META_STACK, AGN_META_OVR, AGN_META_CALIBRATED, AGN_META_ADA, AGN_META_COLUMNS, AgnLabelProp,
 )
-from xtrees.trees_meta_vote_run import VoteMember, CalPair, CalFit, STACK_PROBA, ada_classifier_run, ADA_PROBA
+from xtrees.trees_meta_vote_run import (
+    VoteMember, CalPair, CalFit, STACK_PROBA, STACK_PREDICT, ada_classifier_run, ADA_PROBA,
+)
+from core.neighbors_native_driver import XnDriver
+from x_neighbors.native_descriptor_host import xn_native_v1
+from neighbors.label_propagation_run import LpQueryRequest
 from core.entry_table import entry_ref_word
 from core.device_route import DeviceRoute
 from core.member_families import MEMBER_FAMILY_NAIVE_BAYES
@@ -1332,6 +1337,16 @@ def test_agnostic_vote() raises:
 #   ADA           `ADA_PROBA` -> `ADA_DECISION` in AgnMeta._ada.
 #   REGRESS       `agn_narrow(at, ...)` -> `agn_narrow(at + 8, ...)` in the vote fold of AgnMeta._run.
 #   COLUMNS       `n * k` -> `n` in the COLUMNS narrowing of AgnMeta._run.
+# Lane mf-shap3b (2026-11-23), the last `_DoorModel` users made native:
+#   STACK_LABELS  (a classifier member a Stacking asks for predict, its codes mapped to its labels) drop the line
+#                 `members[j] = VoteMember(Int(block.unsafe_ptr()), 1, 0, 1.0)` in AgnMeta._stack (the member's
+#                 int codes are read as a float32 block: its call is refused and the test raises).
+#   SELECT        (an RFE: the estimator's member over the support columns) `self.call.x =
+#                 MemberMatrix(self._select(x, n), n, self.width)` -> `MemberMatrix(x, n, d)` in AgnMember._run.
+#   INTS          (an outlier detector's integer predict widened to float32) `HP_I32` -> `HP_I64` (and the reverse)
+#                 in AgnMember._run's ints branch.
+#   LABEL_PROP    drop `admitted_finite_refuse(status, self.name)` in AgnLabelProp._run (the NaN row is answered
+#                 instead of refused in the public method's words).
 comptime META_ROWS = 4
 comptime META_BG = 20
 
@@ -1476,6 +1491,9 @@ comptime _REF_CAL = 4
 comptime _REF_ADA = 5
 comptime _REF_REGRESS = 6
 comptime _REF_COLUMNS = 7
+comptime _REF_STACK_LABELS = 8
+comptime _REF_SELECT = 9
+comptime _REF_INTS = 10
 comptime _CAL_A = -1.3
 comptime _CAL_B = 0.2
 
@@ -1566,6 +1584,34 @@ struct _MetaRef(AgnModel):
             _ = c0^
             _ = c1^
             _ = acc^
+            return words^
+        if self.kind == _REF_STACK_LABELS:
+            # member 0 asked for predict: its labels [-1.5, 4.0] as the first meta feature; member 1's probability
+            # of code 1 as the second; the final estimator's predict_proba on them.
+            var labels: List[Float32] = [-1.5, 4.0]
+            var c0 = _call_codes(f[].m0, src, n, d)
+            var p1 = _call_f32(f[].m1, MEMBER_OP_PREDICT_PROBA, src, n, d)
+            var meta = List[Float32](length=max(1, n * 2), fill=Float32(0))
+            for i in range(n):  # small-loop(oracle: the stacked label and probability)
+                meta[2 * i] = labels[Int(c0[i])]
+                meta[2 * i + 1] = p1[2 * i + 1]
+            var got = _call_f32(f[].last, MEMBER_OP_PREDICT_PROBA, Int(meta.unsafe_ptr()), n, 2)
+            _ = meta^
+            return got^
+        if self.kind == _REF_SELECT:
+            # RFE(support [0, 2]).predict_proba = estimator_.predict_proba(X[:, [0, 2]]).
+            var rows = List[Float32](length=max(1, n * 2), fill=Float32(0))
+            var xs = _F32P(unsafe_from_address=src)
+            for i in range(n):  # small-loop(oracle: the support columns 0 and 2)
+                rows[2 * i] = xs[i * d]
+                rows[2 * i + 1] = xs[i * d + 2]
+            var got = _call_f32(f[].sub, MEMBER_OP_PREDICT_PROBA, Int(rows.unsafe_ptr()), n, 2)
+            _ = rows^
+            return got^
+        if self.kind == _REF_INTS:
+            var c0 = _call_codes(f[].m0, src, n, d)
+            for i in range(n):  # small-loop(oracle: each integer value as float32)
+                words[i] = Float32(c0[i])
             return words^
         var d0 = _call_f32(f[].m0, MEMBER_OP_DECISION, src, n, d)
         var d1 = _call_f32(f[].m1, MEMBER_OP_DECISION, src, n, d)
@@ -1758,6 +1804,228 @@ def test_agnostic_meta_regressor_shapes() raises:
     _check_meta("multi-output columns", glue, cols, _REF_COLUMNS, Int(UnsafePointer(to=f)), 0.0)
     _ = plan^
     _ = cols^
+    _meta_free(f)
+
+
+def test_agnostic_meta_stacking_labels() raises:
+    """StackingClassifier with stack_method_ ['predict', 'predict_proba'] (lane mf-shap3b): member 0, a classifier
+    asked for predict, gives its labels [-1.5, 4.0] (its int codes mapped in the RUN), member 1 its probability of
+    code 1; the final LogisticRegression's predict_proba on them, word for word."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var labels: List[Float32] = [-1.5, 4.0]
+    var plan = AgnMetaPlan(AGN_META_STACK)
+    plan.members.append(_vm(f.m0, MEMBER_OP_PREDICT, 0, 1.0))
+    plan.members.append(_vm(f.m1, MEMBER_OP_PREDICT_PROBA, 0, 1.0))
+    plan.stack_kinds = [STACK_PREDICT, STACK_PROBA]
+    plan.stack_labels = [Int(labels.unsafe_ptr()), 0]
+    plan.stack_n_labels = [2, 0]
+    plan.classes = 2
+    plan.binary = True
+    plan.meta_width = 2
+    plan.final_est.append(_vm(f.last, MEMBER_OP_PREDICT_PROBA, Int(f.cc.unsafe_ptr()), 1.0))
+    plan.classifier = True
+    plan.k = 2
+    _check_meta("stacking with a predict member", glue, plan, _REF_STACK_LABELS, Int(UnsafePointer(to=f)), 0.0)
+    _ = plan^
+    _ = labels^
+    _meta_free(f)
+
+
+def _check_handle(what: String, glue: EntryRef, f: _Lr, operation: Int, k: Int, wide: Bool, ints: Bool, cols: Int,
+                  width: Int, kind: Int, fp: Int) raises:
+    """`AgnMember` over `f` against the oracle `_MetaRef(kind)`: its explained words, Kernel SHAP serial vs the
+    chunks on the host workers (the same words), the exact Shapley values of the oracle, additivity (Kernel and
+    Permutation SHAP)."""
+    var m = MutPointer[_Meta3, MutUntrackedOrigin](unsafe_from_address=fp)
+    var x = m[].x.copy()
+    var bg = m[].bg.copy()
+    var plan_at = Int(UnsafePointer(to=f.plan))
+    var ref_m = _MetaRef(kind, fp, x, META_ROWS, k, glue)
+    var want = ref_m.answer(Int(x.unsafe_ptr()), META_ROWS)
+    var h_bg = AgnMember(f.plan.member, plan_at, f.state, operation, Int(bg.unsafe_ptr()), META_BG, LR_D, k, False,
+                         wide, True, glue, 0, 0, ints, cols, width)
+    var h = AgnMember(f.plan.member, plan_at, f.state, operation, Int(x.unsafe_ptr()), META_ROWS, LR_D, k, False,
+                      wide, True, glue, 0, 0, ints, cols, width)
+    var got = _F32P(unsafe_from_address=h.explained())
+    for i in range(META_ROWS * k):  # small-loop(oracle: every output word)
+        require(got[i] == want[i], what + " output " + String(i) + ": handle " + String(got[i]) + ", oracle "
+                + String(want[i]))
+    var serial = _kernel_of(glue, h_bg, h, x, bg, META_ROWS, META_BG, LR_D, k, False)
+    var w_bg = AgnMember(f.plan.member, plan_at, f.state, operation, Int(bg.unsafe_ptr()), META_BG, LR_D, k, True,
+                         wide, True, glue, 0, 0, ints, cols, width)
+    var w = AgnMember(f.plan.member, plan_at, f.state, operation, Int(x.unsafe_ptr()), META_ROWS, LR_D, k, True,
+                      wide, True, glue, 0, 0, ints, cols, width)
+    var spread = _kernel_of(glue, w_bg, w, x, bg, META_ROWS, META_BG, LR_D, k, False)
+    assert_same_words(spread.phi, serial.phi, what + " kernel shap: chunks on the workers vs in order")
+    var exact = _exact_serial(ref_m, x, bg, META_ROWS, META_BG, LR_D, k)
+    _close(serial.phi, exact, 1e-5, 1e-6, what + " kernel shap vs the exact Shapley values of the oracle")
+    _additive(serial, want, META_ROWS, LR_D, k, False, 0.0, 1e-5, what + " kernel shap additivity")
+    var p_bg = AgnMember(f.plan.member, plan_at, f.state, operation, Int(bg.unsafe_ptr()), META_BG, LR_D, k, True,
+                         wide, True, glue, 0, 0, ints, cols, width)
+    var p = AgnMember(f.plan.member, plan_at, f.state, operation, Int(x.unsafe_ptr()), META_ROWS, LR_D, k, True,
+                      wide, True, glue, 0, 0, ints, cols, width)
+    var perm = _perm_of(glue, p_bg, p, x, bg, META_ROWS, META_BG, LR_D, k, 0)
+    _additive(perm, want, META_ROWS, LR_D, k, False, 0.0, 1e-5, what + " permutation shap additivity")
+    _ = h_bg^
+    _ = h^
+    _ = w_bg^
+    _ = w^
+    _ = p_bg^
+    _ = p^
+    _ = ref_m^
+    _ = want^
+    _ = x^
+    _ = bg^
+
+
+def test_agnostic_select_member() raises:
+    """An RFE explained through its fitted estimator (lane mf-shap3b): a binary LogisticRegression fitted on columns
+    0 and 2, the handle gathering those columns of every chunk (`cols` / `width`), predict_proba as float64
+    narrowed: exactly `estimator_.predict_proba(X[:, [0, 2]])`."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var o = _outs(f.sub, MEMBER_OP_PREDICT_PROBA)
+    require(o[0] == 2, "the binary LogisticRegression's predict_proba is no longer two columns")
+    _check_handle("rfe support", glue, f.sub, MEMBER_OP_PREDICT_PROBA, 2, o[1] == MEMBER_F64, False,
+                  Int(f.cols02.unsafe_ptr()), 2, _REF_SELECT, Int(UnsafePointer(to=f)))
+    _meta_free(f)
+
+
+def test_agnostic_int_values() raises:
+    """A model that is not a classifier whose member writes integer values (lane mf-shap3b: IsolationForest's
+    predict, int32 1 / -1; LocalOutlierFactor's and OneClassSVM's, int64): the RUN widens them to float32 (`ints`).
+    The integer member here is a LogisticRegression's predict, whose codes are explained as plain values."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var o = _outs(f.m0, MEMBER_OP_PREDICT)
+    require(o[0] == 1 and (o[1] == MEMBER_I32 or o[1] == MEMBER_I64),
+            "LogisticRegression's member predict no longer writes one integer per row: this check no longer "
+            + "covers the integer route")
+    _check_handle("integer values", glue, f.m0, MEMBER_OP_PREDICT, 1, o[1] == MEMBER_I64, True, 0, 0, _REF_INTS,
+                  Int(UnsafePointer(to=f)))
+    _meta_free(f)
+
+
+comptime _LP_FIT = 20
+comptime _LP_GAMMA = 0.5
+comptime _LP_RBF = 2  # python/mojolearn/_expansion_neighbors.py `_KERNELS["rbf"]`
+
+
+struct _LpRef(AgnModel):
+    """LabelPropagation(kernel='rbf', gamma=0.5).predict_proba written out: w_ij = exp(-gamma |q_i - x_j|^2) over
+    the fitted rows, the product with `label_distributions_`, each row divided by its sum (float64 here)."""
+    var fit: List[Float32]
+    var dist: List[Float32]
+    var x: List[Float32]
+    var n: Int
+    var fx: List[Float32]
+    var syn: List[Float32]
+    var out: List[Float32]
+
+    def __init__(out self, fit: List[Float32], dist: List[Float32], x: List[Float32], n: Int):
+        self.fit = fit.copy()
+        self.dist = dist.copy()
+        self.x = x.copy()
+        self.n = n
+        self.fx = List[Float32]()
+        self.syn = List[Float32]()
+        self.out = List[Float32]()
+
+    def answer(self, src: Int, n: Int) -> List[Float32]:
+        var q = _F32P(unsafe_from_address=src)
+        var words = List[Float32](length=max(1, n * 2), fill=Float32(0))
+        for i in range(n):  # small-loop(oracle: the queries)
+            var p0 = 0.0
+            var p1 = 0.0
+            for j in range(_LP_FIT):  # small-loop(oracle: the fitted rows)
+                var dd = 0.0
+                for c in range(LR_D):  # small-loop(oracle: one squared distance)
+                    var t = Float64(q[i * LR_D + c]) - Float64(self.fit[j * LR_D + c])
+                    dd += t * t
+                var w = exp(-_LP_GAMMA * dd)
+                p0 += w * Float64(self.dist[2 * j])
+                p1 += w * Float64(self.dist[2 * j + 1])
+            words[2 * i] = (p0 / (p0 + p1)).cast[DType.float32]()
+            words[2 * i + 1] = (p1 / (p0 + p1)).cast[DType.float32]()
+        return words^
+
+    def explained(mut self) raises -> Int:
+        self.fx = self.answer(Int(self.x.unsafe_ptr()), self.n)
+        return Int(self.fx.unsafe_ptr())
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        if len(self.syn) != count:
+            self.syn = List[Float32](length=count, fill=Float32(0))
+        return Int(self.syn.unsafe_ptr())
+
+    def rows(mut self, n: Int) raises -> Int:
+        self.out = self.answer(Int(self.syn.unsafe_ptr()), n)
+        return Int(self.out.unsafe_ptr())
+
+    def workers(self) -> Int:
+        return 1
+
+    def worker(self) raises -> Self:
+        return Self(self.fit, self.dist, self.x, self.n)
+
+
+def test_agnostic_label_propagation() raises:
+    """LabelPropagation / LabelSpreading through `AgnLabelProp` (lane mf-shap3b): the typed query of the public
+    predict_proba (`lp_query_run` on the CPU image's x_neighbors entry, the RBF operation chain) over a fitted
+    state of 20 rows and two classes; its words against `_LpRef` (rtol 1e-5), Kernel SHAP against the exact
+    Shapley values of `_LpRef`, additivity; a NaN row refused in the public method's words. One query at a time
+    (the handle has no parallel workers)."""
+    var glue = _glue()
+    var f = _meta_fixture()
+    var fit = f.bg.copy()
+    var dist = List[Float32](length=_LP_FIT * 2, fill=Float32(0))
+    for j in range(_LP_FIT):  # small-loop(fixture: a label distribution per fitted row)
+        var a = Float32(0.2) if j % 3 == 0 else (Float32(0.7) if j % 3 == 1 else Float32(0.5))
+        dist[2 * j] = a
+        dist[2 * j + 1] = Float32(1.0) - a
+    var request = LpQueryRequest(0, Int(fit.unsafe_ptr()), Int(dist.unsafe_ptr()), 0, 0, 0, _LP_FIT, LR_D, 2, False,
+                                 0, _LP_RBF, _LP_GAMMA, False, False, False, False)
+    var driver = XnDriver(xn_native_v1)
+    var x = f.x.copy()
+    var bg = f.bg.copy()
+    var ref_m = _LpRef(fit, dist, x, META_ROWS)
+    var want = ref_m.answer(Int(x.unsafe_ptr()), META_ROWS)
+    var h_bg = AgnLabelProp(driver, request, "LabelPropagation", Int(bg.unsafe_ptr()), META_BG, LR_D)
+    var h = AgnLabelProp(driver, request, "LabelPropagation", Int(x.unsafe_ptr()), META_ROWS, LR_D)
+    var got = _F32P(unsafe_from_address=h.explained())
+    for i in range(META_ROWS * 2):  # small-loop(oracle: every output word)
+        require(abs(Float64(got[i]) - Float64(want[i])) <= 1e-5 * abs(Float64(want[i])) + 1e-6,
+                "label propagation output " + String(i) + ": handle " + String(got[i]) + ", oracle " + String(want[i]))
+    var serial = _kernel_of(glue, h_bg, h, x, bg, META_ROWS, META_BG, LR_D, 2, False)
+    var exact = _exact_serial(ref_m, x, bg, META_ROWS, META_BG, LR_D, 2)
+    _close(serial.phi, exact, 1e-4, 1e-5, "label propagation kernel shap vs the exact Shapley values of the oracle")
+    var fx = List[Float32](length=META_ROWS * 2, fill=Float32(0))
+    for i in range(META_ROWS * 2):  # small-loop(the handle's explained words)
+        fx[i] = got[i]
+    _additive(serial, fx, META_ROWS, LR_D, 2, False, 0.0, 1e-5, "label propagation kernel shap additivity")
+    var bad = x.copy()
+    bad[1] = Float32.MAX_FINITE * Float32(2.0)
+    var nan_h = AgnLabelProp(driver, request, "LabelPropagation", Int(bad.unsafe_ptr()), META_ROWS, LR_D)
+    var words = String("")
+    try:
+        _ = nan_h.explained()
+    except e:
+        words = String(e)
+    require(words == "Input X contains NaN or infinity (LabelPropagation).",
+            "label propagation: a non-finite row is not refused in the public method's words: '" + words + "'")
+    _ = nan_h^
+    _ = bad^
+    _ = h_bg^
+    _ = h^
+    _ = ref_m^
+    _ = want^
+    _ = fx^
+    _ = request^
+    _ = fit^
+    _ = dist^
+    _ = x^
+    _ = bg^
     _meta_free(f)
 
 
