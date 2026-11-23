@@ -234,6 +234,145 @@ class AllowTest(unittest.TestCase):
         self.assertEqual(stale, [("c.mojo", "h", "z")])
 
 
+class PathAndPythonAddressTest(unittest.TestCase):
+    """LAST USE ON THE PATH, AND PYTHON DATA ADDRESSES (lane lastuse-addr-arg, 2026-11-23)."""
+
+    # checks/native_tests/gbdt_public_fits.mojo host_ordered before 90c52f3a7a: the branch returns, so `y` dies at
+    # `wb`'s argument although the next branch names it again
+    ORDERED = '''
+def host_ordered(case_index: Int) raises:
+    var x = load_f32("x", 12)
+    var y = load_f32("y", 2)
+    if case_index == 0:
+        var wa = fit(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), 2)
+        var wb = fit(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), 2)
+        require(wa == wb, "differ")
+        require(finite(predict(wa, x, 2)), "nonfinite")
+        return
+    var coded = load_f32("c", 12)
+    if case_index == 1:
+        var a = fit(Int(coded.unsafe_ptr()), Int(y.unsafe_ptr()), 2)
+        var b = fit(Int(coded.unsafe_ptr()), Int(y.unsafe_ptr()), 2)
+        require(a == b, "differ")
+        _ = y
+        return
+    elif case_index == 2:
+        var c = fit(Int(coded.unsafe_ptr()), 2)
+        _ = coded
+    else:
+        var e = fit(Int(coded.unsafe_ptr()), 3)
+        _ = coded
+    require(y[0] == coded[0], "late use")
+'''
+
+    # bindings/prep_classify_common_door.mojo partial_walk before a1bbc6c2ac
+    WALK = '''
+def partial_walk(y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    var labels = classical_encode_labels(y, context)
+    var out = i32_array(n, context)
+    var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
+    _ = out
+    var src = I32P(unsafe_from_address=Int(py=classical_address(labels.codes)))
+    for i in range(n):
+        dest[i] = src[i]
+        _ = out
+    return out
+'''
+
+    def test_a_returning_branch_ends_the_path(self):
+        found = [(f["local"], f["line"]) for f in lu.scan_text("t.mojo", self.ORDERED, {}) if f["fails"]]
+        self.assertEqual(found, [("coded", 14), ("y", 7)])
+
+    def test_the_keep_alives_of_the_fix_pass(self):
+        fixed = self.ORDERED.replace('        require(finite(predict(wa, x, 2)), "nonfinite")\n',
+                                     '        require(finite(predict(wa, x, 2)), "nonfinite")\n        _ = y\n')
+        fixed = fixed.replace('        _ = y\n        return\n    elif', '        _ = y\n        _ = coded\n'
+                                                                       '        return\n    elif')
+        self.assertEqual(failing(fixed), [])
+
+    def test_sibling_branches_are_skipped_and_the_join_is_reached(self):
+        text = '''
+def g(flag: Int) raises:
+    var a = List[Int64](length=3, fill=0)
+    if flag == 0:
+        gather(Int(a.unsafe_ptr()))
+    elif flag == 1:
+        _ = a^
+    else:
+        _ = a^
+'''
+        self.assertEqual(failing(text), [("a", "call")])
+        joined = text + "    _ = a\n"
+        self.assertEqual(failing(joined), [])
+
+    def test_a_python_data_address_of_a_field_is_untracked(self):
+        self.assertEqual(failing(self.WALK), [("labels", "assign")])
+        fixed = self.WALK.replace("    return out\n", "    _ = labels.codes\n    return out\n")
+        self.assertEqual(failing(fixed), [])
+
+    def test_a_python_data_address_as_a_call_argument_fails(self):
+        text = '''
+def g(context: PythonObject) raises:
+    var out = i32_array(4, context)
+    fill_i32(Int(py=classical_address(out)), 4)
+'''
+        self.assertEqual(failing(text), [("out", "call")])
+        self.assertEqual(failing(text + "    _ = out\n"), [])
+
+    def test_what_keeps_a_python_owner_alive_passes(self):
+        text = '''
+def admitted_held_address(held: Int) -> Int:
+    return held
+
+def g(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var a = i32_array(4, context)
+    var r = KmArray(a, Int(py=classical_address(a)))
+    var w = fields["_w"]
+    fill_i32(Int(py=classical_address(w)), 4)
+    var k = i32_array(4, context)
+    _ = py_call(keep.append, Python.tuple(k, n))
+    fill_i32(Int(py=classical_address(k)), 4)
+    var v = i32_array(4, context)
+    var same = r.address == Int(py=classical_address(v))
+    var h = 3
+    fill_i32(admitted_held_address(h), 4)
+    try:
+        var t = List[Int32](length=4, fill=0)
+        try:
+            fill_i32(Int(t.unsafe_ptr()), 4)
+            raise Error("accepted")
+        except e:
+            pass
+        _ = t
+    except e:
+        pass
+    return r
+'''
+        self.assertEqual(failing(text), [])
+        # the holder is a call that keeps it, not an address helper inside an append
+        lost = '''
+def g(fields: PythonObject, context: PythonObject) raises:
+    var addresses = List[Int]()
+    for i in range(3):
+        var c = i32_array(4, context)
+        addresses.append(Int(py=classical_address(c)))
+    run(addresses)
+'''
+        self.assertEqual(failing(lost), [("c", "call")])
+        # bindings/arena_prog_native_door.mojo _prep_run_impl: held only on one branch, then rebound
+        partly = '''
+def g(record: PythonObject, inout: Bool, context: PythonObject) raises:
+    var held = List[PythonObject]()
+    var value = record[1]
+    if inout:
+        held.append(value)
+    value = convert(value, context)
+    fill_f32(Int(py=classical_address(value)), 4)
+    _ = held^
+'''
+        self.assertEqual(failing(partly), [("value", "call")])
+
+
 class OwnCopyTest(unittest.TestCase):
     """A check under checks/native_tests/ enqueues no host-to-device copy itself: it calls the kit."""
 

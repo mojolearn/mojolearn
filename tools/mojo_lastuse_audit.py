@@ -22,6 +22,25 @@ So the audit fails on an UNTRACKED derivation of a local X where
   * it is assigned to P and P (or a name assigned from P) is used after X's last named use.
 Any-origin and tracked derivations are counted (`--all-kinds` lists them) and never fail.
 
+LAST USE ON THE PATH, AND PYTHON DATA ADDRESSES (2026-11-23, lane lastuse-addr-arg). Two shapes passed the rule
+above and read freed memory:
+  * the last named use is per PATH, not per text: `if case == 0: ... f(Int(y.unsafe_ptr()), n); return` frees y
+    at that argument even when a later branch names y again (checks/native_tests/gbdt_public_fits.mojo
+    host_ordered, y and coded, fixed in 90c52f3a7a). So "used after" counts only the statements reachable from the
+    derivation: a `return`/`raise` of its block or an enclosing one ends the path, and the `elif`/`else` siblings
+    of a branch it sits in are skipped;
+  * a Python data address helper (a call named `*_address(` / `*_addr(` whose one argument is a local or one of
+    its fields, `classical_address(labels.codes)`) is an untracked derivation of that local, whatever pointer is
+    built around it: the address has no origin, and an any-origin `I32P(unsafe_from_address=...)` around it did
+    not keep `labels` alive (bindings/prep_classify_common_door.mojo partial_walk, fixed in a1bbc6c2ac).
+    What keeps the owner alive, and so passes: the owner itself is an argument of the same call (the callee
+    borrows it: `KmArray(value, Int(py=classical_address(value)))`); the address is only compared; the helper's
+    first parameter is a slot index or other non-owner (`_slot_address(index: Int)`, by name across files); the
+    helper is a method of another object (`program.const_address(r)`); and, for data addresses only, a local
+    that aliases a borrowed parameter's item (`var v = fields["_w"]`, never rebound) or that a holder takes on
+    every path (`py_call(keep.append, x)`, `door.keep(x)`, `py_setattr(a, "_store", x)`, `pin.owner = x`).
+Fix either with `_ = owner` (or `_ = owner^`) after the call or the pointer's last use.
+
 FREED BEFORE THE DRAIN (2026-11-18, lane fx-lifetime). `ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())` is a
 tracked derivation, so the rule above passes it, but the copy is asynchronous: the driver reads h after the call
 returns, and no origin says so. A freed pinned block goes straight back to the caching allocator, so the next
@@ -70,7 +89,25 @@ _HELPER_RET = r"return\s+(?:U?Int\(\s*{p}\.unsafe_ptr\(\)|{p}\.unsafe_ptr\(\)[^\
 #: wrappers that turn their argument into an address or pointer; not calls that consume the pointer
 _CONVERT = {"Int", "UInt", "UnsafePointer", "Pointer", "MutPointer", "ImmPointer", "OpaquePointer", "rebind"}
 _IDENT = re.compile(r"(?<![\w.])([A-Za-z_]\w*)\b(?!=[^=])")
-_HOT = re.compile(r"unsafe_ptr|unsafe_origin_cast|as_unsafe_any_origin|\bto=")
+_HOT = re.compile(r"unsafe_ptr|unsafe_origin_cast|as_unsafe_any_origin|\bto=|_addr(?:ess)?\s*\(")
+#: a Python data address helper call wrapping the owner (`classical_address(` before `labels.codes)`)
+#: a free function, not a method (`program.const_address(r)` is an address into program, not into r)
+_PYADDR = re.compile(r"(?<![\w.])(\w+_addr(?:ess)?)\(\s*$")
+_PYADDR_ARG = re.compile(r"(?:\.\w+)*\s*\)")
+_END = re.compile(r"^\s*(?:return|raise)\b")
+_SIBLING = re.compile(r"^\s*(?:elif\b|else\s*:)")
+_TRY = re.compile(r"^\s*try\s*:")
+_FIELD_STORE = re.compile(r"^\s*\w+(?:\.\w+)+\s*=\s*(?:Optional\[[^\]]*\]\(\s*)?(\w+)\s*\)?\s*$")
+_HOLDER = re.compile(r"\b(?:append|extend|insert|keep|py_setattr|py_setitem|set_store)\b")
+#: the innermost call a value handed to a holder sits in (`py_call(keep.append, Python.tuple(d, x))`)
+_HOLDS = {"append", "extend", "insert", "keep", "py_setattr", "py_setitem", "set_store", "py_call", "tuple", "list",
+          "dict"}
+_BARE_ARG = re.compile(r"(?:[(,]|[^=!<>]=)\s*([A-Za-z_]\w*)\s*(?=[,)])")
+#: first parameter types of a `*_address`/`*_addr` helper that make it no data address of an owner (a slot index,
+#: a borrowed C object pointer, the device context it allocates through)
+_NOT_OWNER = {"Int", "UInt", "Int64", "UInt64", "Int32", "UInt32", "PyObjectPtr", "DeviceContext"}
+_ADDR_DEF = re.compile(r"^\s*def\s+(\w+_addr(?:ess)?)\s*(?:\[[^\]\n]*\])?\(\s*(?:(?:mut|read|var|ref|owned)\s+)?\w+"
+                       r"\s*:\s*([\w.]+)", re.M)
 _READ = re.compile(r"\.(?:unsafe_ptr|unsafe_origin_cast\[[^\]]*\]|bitcast\[[^\]]*\])\(\)\s*(?:\[|\.(?:unsafe_load|load|unsafe_get)\b)")
 _KEEP = re.compile(r"^\s*_\s*=\s*\w+\^?\s*$")
 _LOOP = re.compile(r"^\s*(?:for|while)\b")
@@ -156,6 +193,9 @@ def helpers_of(text):
     """{name: 'untracked'} for the defs in TEXT that return an address or untracked pointer of a parameter, and
     {'alias:NAME': 'any'} for its pointer aliases with a wildcard origin (`comptime _AP = MutPointer[T, MutAnyOrigin]`)."""
     found = {}
+    for m in _ADDR_DEF.finditer(text):
+        if m.group(2).split(".")[-1] in _NOT_OWNER:
+            found["noaddr:" + m.group(1)] = "noaddr"
     for m in re.finditer(r"^comptime\s+(\w+)\s*=\s*(?:Mut|Imm)?(?:Unsafe)?Pointer\[[^\n]*AnyOrigin", text, re.M):
         found["alias:" + m.group(1)] = "any"
     lines = text.splitlines()
@@ -221,9 +261,9 @@ def _chain_end(s, k):
     return k
 
 
-def _enclosing_calls(s, p):
+def _enclosing_calls(s, p, at=False):
     """Names before each open '(' that encloses position P (innermost first). A pointer constructor
-    (`T(unsafe_from_address=...)`, T an alias) is named `UnsafePointer`."""
+    (`T(unsafe_from_address=...)`, T an alias) is named `UnsafePointer`. AT: (position of the '(', name) pairs."""
     names, depth = [], 0
     for k in range(p - 1, -1, -1):
         c = s[k]
@@ -236,8 +276,25 @@ def _enclosing_calls(s, p):
             if c == "(":
                 m = re.search(r"([\w.]+)(?:\[[^\[\]]*\])?\s*$", s[:k])
                 ctor = s[k + 1:].lstrip().startswith("unsafe_from_address=")
-                names.append("UnsafePointer" if ctor else (m.group(1).split(".")[-1] if m else ""))
+                name = "UnsafePointer" if ctor else (m.group(1).split(".")[-1] if m else "")
+                names.append((k, name) if at else name)
     return names
+
+
+def _held_by_the_call(s, name, start):
+    """Whether NAME itself (bare, positional or keyword) is an argument of a call that encloses the derivation at
+    START: the callee borrows NAME, so it lives until that call returns (`Python.tuple(store, addr(store))`,
+    `KmArray(value, Int(py=classical_address(value)))`)."""
+    opens = {k for k, c in _enclosing_calls(s, start, at=True) if c not in _CONVERT}
+    if not opens:
+        return False
+    for m in re.finditer(r"(?<![\w.])" + re.escape(name) + r"\b(?=\s*[,)])", s):
+        if not re.search(r"(?:[(,]|[^=!<>]=)\s*$", s[:m.start()]):
+            continue
+        inner = next(((k, c) for k, c in _enclosing_calls(s, m.start(), at=True) if c not in _CONVERT), None)
+        if inner and inner[0] in opens:
+            return True
+    return False
 
 
 def _arg_span(s, p):
@@ -278,17 +335,22 @@ def _arg_span(s, p):
 
 
 def derivation(s, name, helpers):
-    """(kind, sink) of the first pointer derivation of NAME in statement S, or None. kind: untracked, any,
-    tracked; sink: call, return, assign. A pointer read on the spot (`x.unsafe_ptr()[i]`, `.unsafe_load(`) and a
+    """(kind, sink, via) of the first pointer derivation of NAME in statement S, or None. kind: untracked, any,
+    tracked; sink: call, held (NAME itself is an argument of the call), return, assign; via: pyaddr (a data
+    address helper) or ptr. A pointer read on the spot (`x.unsafe_ptr()[i]`, `.unsafe_load(`) and a
     pointer into what X points at (`x[].field.unsafe_ptr()`: X is a pointer, not the owner) are not derivations."""
     for m in re.finditer(r"(?<![\w.])" + re.escape(name) + r"\b(?!=)", s):
-        p, kind = m.start(), None
+        p, kind, via = m.start(), None, "ptr"
         before = s[:p]
         if s[m.end():].startswith("[]"):
             continue
         hm = re.search(r"\b(\w+)\(\s*$", before)
+        am = _PYADDR.search(before)
         if hm and helpers.get(hm.group(1)) == "untracked" and s[m.end():].lstrip().startswith(")"):
             kind, start = helpers[hm.group(1)], hm.start(1)
+        elif am and am.group(1) not in helpers.get("__noaddr__", ()) and _PYADDR_ARG.match(s, m.end()):
+            # a data address of X (or of a field of X): no origin, whatever pointer is built around it
+            kind, start, via = "untracked", am.start(1), "pyaddr"
         else:
             to = re.search(r"\b(?:Unsafe)?Pointer(?:\[[^\[\]]*\])?\(\s*to=$", before)
             start = to.start() if to else p
@@ -311,14 +373,16 @@ def derivation(s, name, helpers):
                 kind = "untracked"
             else:
                 kind = "tracked"
+        if re.search(r"[=!<>]=|\bis\b", _arg_span(s, start)):
+            continue  # an address compared (`a == Int(py=classical_address(view))`): nothing reads through it
         calls = [c for c in _enclosing_calls(s, start) if c not in _CONVERT]
         if calls:
-            sink = "call"
+            sink = "held" if _held_by_the_call(s, name, start) else "call"
         elif re.match(r"^\s*return\b", s):
             sink = "return"
         else:
             sink = "assign"
-        return kind, sink
+        return kind, sink, via
     return None
 
 
@@ -331,6 +395,8 @@ def scan_text(path, text, helpers):
     if drains is None:
         drains = close_drains((k[6:] for k in helpers if k.startswith("drain:")), [helpers.get("__calls__", {})])
     drain_call = _drain_call(drains) if "enqueue_copy" in text else None
+    if "__noaddr__" not in helpers:
+        helpers = dict(helpers, __noaddr__=frozenset(k[7:] for k in helpers if k.startswith("noaddr:")))
     for fname, a, b in functions(lines):
         body = [(i, j, s) for (i, j, s) in stmts if a < i < b or (i == a)]
         if not body:
@@ -363,6 +429,46 @@ def scan_text(path, text, helpers):
             for v in _VAR.findall(body[k][2]):
                 decls.setdefault(v, []).append((k, scope_end(k)))
         decls.pop("self", None)
+        # PythonObject locals that only alias what a borrowed parameter holds (`var v = fields["_w"]`,
+        # `py_item(fields, k)`): the caller's object keeps the data, so a data address of v outlives v
+        sig = body[0][2]
+        borrowed = {n for n in re.findall(r"[(,]\s*(?:(?:mut|read|ref)\s+)?(\w+)\s*:", sig)} - set(
+            _PARAM_VAR.findall(sig)) - {"self"}
+        aliases = set()
+        if borrowed:
+            looked = r"(?:(?:{p})\s*(?:\[|\.\w+\s*$)|py_(?:item|get|getattr)\(\s*(?:{p})\s*,)".format(
+                p="|".join(map(re.escape, sorted(borrowed))))
+            for v, scopes in decls.items():
+                if len(scopes) == 1 and scopes[0][0] > 0 and re.search(
+                        r"(?<![\w.])var\s+" + re.escape(v) + r"\s*(?::[^=]*)?=\s*" + looked, body[scopes[0][0]][2]) \
+                        and not any(re.match(r"^\s*" + re.escape(v) + r"\s*=(?!=)", t) for (_, _, t) in body):
+                    aliases.add(v)
+        # ... and PythonObject locals the function hands to a holder (`py_call(keep.append, x)`, `door.keep(x)`,
+        # `py_setattr(array, "_store", x)`, `py_call(set_store, result, x)`): the holder keeps the data
+        holders = {}  # name -> statements that hand it to a holder
+        for q in range(1, n_body):
+            t = body[q][2]
+            fm = _FIELD_STORE.match(t)
+            if fm:  # `pin.owner = codes`: the field holds it
+                holders.setdefault(fm.group(1), []).append(q)
+            if _HOLDER.search(t):
+                for m in _BARE_ARG.finditer(t):
+                    inner = _enclosing_calls(t, m.start(1))
+                    if inner and inner[0] in _HOLDS:
+                        holders.setdefault(m.group(1), []).append(q)
+
+        def held(x, k, upto):
+            """Whether a holder statement for X runs on every path to K (in a block that encloses K, X not rebound
+            in between), or runs unconditionally after K and before UPTO (the pointer's last use): X lives until
+            the holder takes it, and the holder (a function-scope list, field or object) keeps it after."""
+            for q in holders.get(x, ()):
+                if q < k and all(indent[r] >= indent[q] for r in range(q + 1, k + 1)) and not any(
+                        re.match(r"^\s*" + re.escape(x) + r"\s*=(?!=)", body[r][2]) for r in range(q + 1, k)):
+                    return True
+                if k < q <= upto and q in reachable(k) and indent[q] <= indent[k] and all(
+                        indent[r] >= indent[q] for r in range(k, q + 1)):
+                    return True
+            return False
 
         def uses(n, lo, hi):
             return [k for k in range(max(lo, 1), hi) if n in idents[k]]
@@ -384,15 +490,43 @@ def scan_text(path, text, helpers):
                     eff = max(eff, block_end(h) - 1)
             return eff
 
+        reach_memo = {}
+
+        def reachable(k):
+            """The statements a run can reach after K without leaving the function: a `return`/`raise` in K's
+            block or an enclosing one ends the path, the `elif`/`else` siblings of a branch K is in are skipped
+            (module docstring, LAST USE ON THE PATH). Loops are left to effective_last."""
+            if k in reach_memo:
+                return reach_memo[k]
+            tries, low = [], indent[k]  # indents of the `try:` headers around K: a `raise` inside goes to except
+            for q in range(k - 1, 0, -1):
+                if indent[q] < low:
+                    low = indent[q]
+                    if _TRY.match(body[q][2]):
+                        tries.append(low)
+            got, cur, q = set(), indent[k], k + 1
+            while q < n_body:
+                ind = indent[q]
+                if ind < cur:
+                    cur = ind
+                    if _SIBLING.match(body[q][2]):
+                        while q < n_body and indent[q] == cur and _SIBLING.match(body[q][2]):
+                            q = block_end(q)
+                        continue
+                got.add(q)
+                t = body[q][2]
+                if ind <= cur and _END.match(t) and not (t.lstrip().startswith("raise") and
+                                                         any(ti < cur for ti in tries)):
+                    break
+                q += 1
+            reach_memo[k] = got
+            return got
+
         for x, scopes in sorted(decls.items()):
             for d, e in scopes:
                 ux = uses(x, d, e)
                 if not ux:
                     continue
-                last_x = ux[-1]
-                moved = re.search(r"(?<![\w.])" + re.escape(x) + r"\^", body[last_x][2]) and not re.match(
-                    r"^\s*_\s*=\s*" + re.escape(x) + r"\^\s*$", body[last_x][2])
-                eff_x = effective_last(d, last_x)
                 for k in ux:
                     if not hot[k]:
                         continue
@@ -400,8 +534,14 @@ def scan_text(path, text, helpers):
                     found = derivation(s, x, helpers)
                     if not found:
                         continue
-                    kind, sink = found
-                    bad, why = False, ""
+                    kind, sink, via = found
+                    on_path = reachable(k)
+                    later = [q for q in ux if q > k and q in on_path]
+                    last_x = later[-1] if later else k
+                    moved = re.search(r"(?<![\w.])" + re.escape(x) + r"\^", body[last_x][2]) and not re.match(
+                        r"^\s*_\s*=\s*" + re.escape(x) + r"\^\s*$", body[last_x][2])
+                    eff_x = effective_last(d, last_x)
+                    bad, why, upto = False, "", k
                     if sink == "assign":
                         am = _ASSIGN.match(s)
                         if am and am.group(1) != x:
@@ -410,7 +550,7 @@ def scan_text(path, text, helpers):
                                 n = frontier.pop()
                                 sc = scope_of(n, k) or (d, e)
                                 for q in uses(n, k + 1, sc[1]):
-                                    if _KEEP.match(body[q][2]):
+                                    if q not in on_path or _KEEP.match(body[q][2]):
                                         continue  # `_ = p`: a keep-alive, not a read through the pointer
                                     p_last = max(p_last, q)
                                     bm = _ASSIGN.match(body[q][2])
@@ -418,11 +558,12 @@ def scan_text(path, text, helpers):
                                             _carries(body[q][2], n):
                                         names.add(bm.group(1))
                                         frontier.append(bm.group(1))
+                            upto = p_last
                             if p_last > eff_x:
                                 bad, why = True, f"pointer {am.group(1)} used at line {body[p_last][0] + 1}"
-                    elif k == last_x and eff_x == last_x:
+                    elif sink in ("call", "return") and k == last_x and eff_x == last_x:
                         bad, why = True, ("freed before the call reads it" if sink == "call" else "returned")
-                    if kind != "untracked" or moved:
+                    if kind != "untracked" or moved or (via == "pyaddr" and (x in aliases or held(x, k, upto))):
                         bad = False
                     key = (x, body[k][0])
                     if key in seen:
@@ -585,6 +726,8 @@ def scan(files, workers=None):
         per_file = dict(h for part in pool.map(_helper_pass, _chunks(files, workers)) for h in part)
         drains = close_drains((k[6:] for h in per_file.values() for k in h if k.startswith("drain:")),
                               [h.pop("__calls__", {}) for h in per_file.values()])
+        # by name across files, like the drains: a `*_address` helper of a slot index is no owner's data address
+        noaddr = frozenset(k[7:] for h in per_file.values() for k in h if k.startswith("noaddr:"))
         items = []
         for path, text in files:
             local = dict(per_file.get(path, {}))
@@ -596,6 +739,7 @@ def scan(files, workers=None):
                     if "alias:" + name in source:
                         local.setdefault("alias:" + name, source["alias:" + name])
             local["__drains__"] = drains
+            local["__noaddr__"] = noaddr
             items.append((path, text, local))
         found = [f for part in pool.map(_scan_many, _chunks(items, workers)) for f in part]
     return sorted(found, key=lambda f: (f["path"], f["line"], f["local"]))
