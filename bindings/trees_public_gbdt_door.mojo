@@ -21,7 +21,8 @@
 from core.mode_answer import MODE_FAMILY_GBDT, answer_mode_word
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
-from bindings.base_helpers_released_unpack import base_reduce_stat, base_check_indices_i64, base_bincount_i64
+from bindings.base_helpers_released_unpack import base_check_indices_i64
+from gbdt.trees_gbdt_fit_run import gbdt_feature_freq_check, gbdt_weights_check
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native_door import _resolved
 from bindings.native_instance_item_pack import native_instance_item
@@ -687,12 +688,8 @@ def _checked_weights(source: PythonObject, n: Int, wrap: Bool, context: PythonOb
         raise error^
     if w.rows != n:
         raise Error("mojolearn: sample_weight must have one value per row")
-    var nk = trees_keys()
-    var helpers = base_helpers_key(py_item(context, nk[].k_trees_helpers))
-    if not trees_finite_f32(w.address, n) or base_reduce_stat(helpers, w.address, 0, n, 0).f < 0.0:
-        raise Error("mojolearn: sample_weight must be finite and non-negative")
-    if not base_reduce_stat(helpers, w.address, 0, n, 1).f > 0.0:
-        raise Error("mojolearn: sample_weight must have positive sum")
+    # THE ONE BODY of the weight checks (gbdt/trees_gbdt_fit_run.mojo `gbdt_weights_check`, lane mf-meta5).
+    gbdt_weights_check(w.address, n)
     return w^
 
 
@@ -908,16 +905,6 @@ def _source_columns(sources: PythonObject) raises -> List[Int]:
     return cols^
 
 
-def _int_list_text(values: List[Int]) -> String:
-    """`[a, b, ...]`, the refusal's spelling of a typed column list."""
-    var text = String("[")
-    for i in range(len(values)):  # small-loop(the named source columns of one refusal message)
-        if i > 0:
-            text += ", "
-        text += String(values[i])
-    return text + "]"
-
-
 def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`ExperimentalTwoLevelFeatureFreq.fit(X, y, sample_weight=)`: UNPACK
     (`feature_freq_unpack`), RUN (the fit in the gbdt image of the
@@ -943,56 +930,16 @@ def feature_freq_unpack(model: PythonObject, args: PythonObject, context: Python
     var x = admit_f32(args[0], 2, "X", context, order="F", finite=False)
     var n = x.rows
     var d = x.cols
-    if n == 0 or d < 2:
-        raise Error("mojolearn: experimental FeatureFreq needs rows and columns")
     var nk = trees_keys()
-    var sources = _source_columns(_field(fields, model, nk[].k_sources, "sources"))
-    var helpers = base_helpers_key(py_item(context, nk[].k_trees_helpers))
-    for i in range(len(sources)):  # driver-loop: over the named source columns
-        var f = sources[i]
-        if f < 0 or f >= d:
-            raise Error("mojolearn: sources " + _int_list_text(sources) + " outside " + String(d) + " features")
-    if not trees_finite_f32(x.address, n * d):
-        raise Error("mojolearn: experimental FeatureFreq X must be finite")
-    _ = x  # keep the Python object alive through the native calls above
-    var is_source = List[Bool](length=d, fill=False)
-    for i in range(len(sources)):  # driver-loop: over the named source columns, one native stat set each
-        var f = sources[i]
-        is_source[f] = True
-        var col = x.address + 4 * f * n
-        _ = x  # keep the Python object alive through the native call above
-        var hi = base_reduce_stat(helpers, col, 0, n, 1).f
-        _ = x  # keep the Python object alive through the native call above
-        if base_reduce_stat(helpers, col, 0, n, 4).i == 0 or base_reduce_stat(helpers, col, 0, n, 0).f < 0.0:
-            raise Error("mojolearn: experimental FeatureFreq source columns must "
-                        + "contain non-negative integer category codes")
-        _ = x  # keep the Python object alive through the native calls above
-        var k = Int(hi) + 1
-        var dense = 2 <= k and k <= n
-        if dense:
-            var codes = admitted_vector(n, "<i8", context)
-            trees_cast(col, "<f4", trees_address(codes), "<i8", n, context)
-            _ = codes  # keep the Python object alive through the native call above
-            _ = x  # keep the Python object alive through the native call above
-            var counts = admitted_vector(k, "<i8", context)
-            _ = base_bincount_i64(helpers, trees_address(codes), 3, n, k, trees_address(counts), False)
-            _ = codes  # keep the Python object alive through the native call above
-            _ = counts  # keep the Python object alive through the native call above
-            dense = base_reduce_stat(helpers, trees_address(counts), 3, k, 0).i > 0
-            _ = counts  # keep the Python object alive through the native call above
-        if not dense:
-            raise Error("mojolearn: every experimental FeatureFreq source must "
-                        + "be densely coded 0..k-1; column " + String(f) + " has codes up to " + String(Int(hi))
-                        + " with at least one missing (or fewer than two codes)")
-    for f in range(d):  # driver-loop: over the feature columns, one native stat pair each
-        if is_source[f]:
-            continue
-        var col = x.address + 4 * f * n
-        _ = x  # keep the Python object alive through the native call above
-        if base_reduce_stat(helpers, col, 0, n, 0).f == base_reduce_stat(helpers, col, 0, n, 1).f:
-            raise Error("mojolearn: experimental FeatureFreq numeric columns "
-                        + "must vary; column " + String(f) + " is constant")
-        _ = x  # keep the Python object alive through the native calls above
+    var sources = List[Int]()
+    if n > 0 and d >= 2:
+        sources = _source_columns(_field(fields, model, nk[].k_sources, "sources"))
+    # THE ONE BODY of the X checks (lane mf-meta5; gbdt/trees_gbdt_fit_run.mojo
+    # `gbdt_feature_freq_check`, which the member's fit runs too): in this
+    # door's order and words, over the column-major X, every column scanned on
+    # the host workers.
+    gbdt_feature_freq_check(x.address, n, d, sources)
+    _ = x  # keep the Python object alive through the native check above
     var y = admit_f32(args[1], 1, "y", context, finite=False)
     if y.rows != n or not trees_finite_f32(y.address, n):
         raise Error("mojolearn: y must be finite with one value per row")

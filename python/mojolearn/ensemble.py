@@ -1299,6 +1299,9 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         requires a GPU installation. Other values raise ``ValueError``.
     """
 
+    #: A member of a meta-estimator (core/gbdt_member.mojo: family 16, kind 3, its own fit).
+    _mojolearn_member = (16, 3)
+
     def __init__(
         self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0, *, numeric_mode=None,
         device=None,

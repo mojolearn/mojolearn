@@ -23,7 +23,15 @@ text):
     metric; MEMBER_CAN_CLASSIFIER),
   1 `GradientBoosting` (the booster: its own predict returns raw scores),
   2 `GradientBoostingRegressor` (RMSE; predict float32 rows x 1; no score:
-    the caller predicts and runs its own R^2).
+    the caller predicts and runs its own R^2),
+  3 `ExperimentalTwoLevelFeatureFreq` (lane mf-meta5): its own fit, the
+    estimator's two-level FeatureFreq RUN (`xg_feature_freq_fit`, the gbdt
+    entry's `feature_freq_fit`, the body its door runs) after its data checks
+    (gbdt/trees_gbdt_fit_run.mojo `gbdt_feature_freq_check` /
+    `gbdt_weights_check`, the door's ONE BODY), then the booster's predict
+    (raw float32 rows x 1). NEW words: [3, the GradientBoosting config, the
+    learning rate, l2_leaf_reg, random_state, the S source columns, S, then
+    the feature-list tail (0, 0)], read at UNPACK as its fit door reads them.
 The adapters' NEW words are their inner learner's config (the learner the
 adapter's fit builds), so their fit is the learner's fit.
 
@@ -96,10 +104,12 @@ from core.gbdt_entry_table import gbdt_vendor_word
 from gbdt.fit_request import GbdtFitArgs, gbdt_string_at
 from gbdt.fit_calls import (
     xg_row_major, xg_model_dim, xg_fit, xg_resident, xg_resident_prepare, xg_resident_predict, xg_predict,
-    xg_predict_multi, xg_sigmoid_pair, xg_binary,
+    xg_predict_multi, xg_sigmoid_pair, xg_binary, xg_feature_freq_fit,
 )
 from gbdt.trees_gbdt_run import gbdt_text_has_ctr
-from gbdt.trees_gbdt_fit_run import gbdt_bias_of, gbdt_check_group_rows, _pair_end_range
+from gbdt.trees_gbdt_fit_run import (
+    gbdt_bias_of, gbdt_check_group_rows, _pair_end_range, gbdt_feature_freq_check, gbdt_weights_check,
+)
 from gbdt.data.category_map import (
     CategoryMaps, CategoryKeyPtr, CategoryF32Ptr, category_keys_from_f32, category_block_columns,
     category_block_feature, category_apply_column,
@@ -135,6 +145,8 @@ comptime _ESTIMATOR = "GradientBoosting"
 comptime _KIND_CLASSIFIER = 0
 comptime _KIND_BOOSTER = 1
 comptime _KIND_REGRESSOR = 2
+# Lane mf-meta5: `ExperimentalTwoLevelFeatureFreq` (module note, KIND 3).
+comptime _KIND_FEATURE_FREQ = 3
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
 comptime _BLOCKS = 5
@@ -189,6 +201,11 @@ struct GbdtMemberSlot(Copyable, Movable, Defaultable):
     # estimator's `test_loss_curve_`; `has_test` False: None.
     var test: List[Float64]
     var has_test: Bool
+    # Kind 3 (lane mf-meta5): the FeatureFreq fit's source columns and settings.
+    var ff_sources: List[Int]
+    var ff_rate: Float64
+    var ff_l2: Float64
+    var ff_seed: Int
     # Export forms, built at export.
     var x_text: List[Int32]
     var x_scalars: List[Float64]
@@ -215,6 +232,10 @@ struct GbdtMemberSlot(Copyable, Movable, Defaultable):
         self.cat_map = List[UInt64]()
         self.test = List[Float64]()
         self.has_test = False
+        self.ff_sources = List[Int]()
+        self.ff_rate = 0.0
+        self.ff_l2 = 0.0
+        self.ff_seed = 0
         self.x_text = List[Int32]()
         self.x_scalars = List[Float64]()
 
@@ -269,12 +290,14 @@ def _name(kind: Int) -> String:
         return String("GradientBoostingClassifier")
     if kind == _KIND_REGRESSOR:
         return String("GradientBoostingRegressor")
+    if kind == _KIND_FEATURE_FREQ:
+        return String("ExperimentalTwoLevelFeatureFreq")
     return String(_ESTIMATOR)
 
 
 def _kind_word(word: Float64) raises -> Int:
-    if word != 0.0 and word != 1.0 and word != 2.0:
-        raise Error("member ABI: a Gbdt member's kind word is 0, 1 or 2")
+    if word != 0.0 and word != 1.0 and word != 2.0 and word != 3.0:
+        raise Error("member ABI: a Gbdt member's kind word is 0, 1, 2 or 3")
     return Int(word)
 
 
@@ -301,14 +324,30 @@ def _mint(words: _F64P, count: Int) raises -> Int:
     var hot = List[Int]()
     var head = _feature_tail(words, count, cat, hot)
     var kind = _kind_word(words[0])
+    # Kind 3: the FeatureFreq words before the feature-list tail (module note).
+    var sources = List[Int]()
+    var ff_rate = 0.0
+    var ff_l2 = 0.0
+    var ff_seed = 0
+    if kind == _KIND_FEATURE_FREQ:
+        var s_count = Int(words[head - 1]) if head >= 1 else -1
+        if s_count < 2 or head - 1 - s_count - 3 < 1:
+            raise Error("member ABI: an ExperimentalTwoLevelFeatureFreq member takes its settings and source columns")
+        for i in range(s_count):  # small-loop(the source columns)
+            sources.append(Int(words[head - 1 - s_count + i]))
+        var at = head - 1 - s_count - 3
+        ff_rate = words[at]
+        ff_l2 = words[at + 1]
+        ff_seed = Int(words[at + 2])
+        head = at
     var copied = List[Float64](length=head, fill=0.0)
     unsafe_memcpy(dest=copied.unsafe_ptr(), src=words, count=head)
     var config = gbdt_config_of_words(copied^, 1)
     # The adapters fix their learner's loss (`_GBDTAdapter._loss`).
     if kind == _KIND_CLASSIFIER and config.loss != "Logloss":
         raise Error("member ABI: a GradientBoostingClassifier member fits loss='Logloss'")
-    if kind == _KIND_REGRESSOR and config.loss != "RMSE":
-        raise Error("member ABI: a GradientBoostingRegressor member fits loss='RMSE'")
+    if (kind == _KIND_REGRESSOR or kind == _KIND_FEATURE_FREQ) and config.loss != "RMSE":
+        raise Error("member ABI: a " + _name(kind) + " member fits loss='RMSE'")
     var store = SharedSlot[GbdtMemberStore, _STORE_NAME, 2].get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
@@ -330,6 +369,10 @@ def _mint(words: _F64P, count: Int) raises -> Int:
         slot[].config = config^
         slot[].cat_given = cat^
         slot[].hot_given = hot^
+        slot[].ff_sources = sources^
+        slot[].ff_rate = ff_rate
+        slot[].ff_l2 = ff_l2
+        slot[].ff_seed = ff_seed
         slot[].fitted = False
         slot[].resident = -1
         return slot[].generation * _INDEX_SPAN + index + 1
@@ -757,6 +800,9 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     PairLogit's explicit `pairs` / `pairs_weight`, and the categorical keys
     of a text X (`call.cat_keys` / `eval_cat_keys`, the door's encoding read
     at the caller's UNPACK)."""
+    if slot[].kind == _KIND_FEATURE_FREQ:
+        _fit_feature_freq[I](slot, call)
+        return
     _whole(call)
     if call[].fit_output != 0:
         raise Error("TypeError: a Gbdt member has no fit output")
@@ -977,6 +1023,59 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     slot[].classes = dim + 1 if config.loss == "MultiClass" else (dim if config.loss == "MultiClassOneVsAll" else 0)
     slot[].rate = rate
     slot[].ordered = options.boosting == "Ordered"
+    slot[].fitted = True
+
+
+def _fit_feature_freq[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
+    """`ExperimentalTwoLevelFeatureFreq.fit(X, y, sample_weight=)` on the member's views: the door's
+    checks in its order and words (`gbdt_feature_freq_check` over the member's column-major copy of X, as
+    the door admits X in F order; y finite, one per row; `gbdt_weights_check`), then the estimator's own
+    fit (`xg_feature_freq_fit` through the route's gbdt entry: the body its door runs) and the state the
+    door's PACK publishes (one model dimension, bias 0, no curves)."""
+    _whole(call)
+    var name = _name(slot[].kind)
+    if call[].fit_output != 0:
+        raise Error("TypeError: a Gbdt member has no fit output")
+    if (call[].eval_x.rows > 0 or call[].groups.rows > 0 or call[].pairs.rows > 0 or call[].cat_keys.rows > 0
+            or call[].eval_cat_keys.rows > 0):
+        raise Error("TypeError: an " + name + " member's fit reads X, y and sample weights only")
+    _dense(call[].x, MEMBER_F32, "X")
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var xcm = _column_major(call[].x.data, rows, cols)
+    gbdt_feature_freq_check(Int(xcm.unsafe_ptr()), rows, cols, slot[].ff_sources)
+    _dense(call[].y, MEMBER_F32, "y")
+    if call[].y.cols != 1 or call[].y.rows != rows or not trees_finite_f32(call[].y.data, rows):
+        raise Error("mojolearn: y must be finite with one value per row")
+    var w_addr = call[].y.data
+    var n_weights = 0
+    if call[].weights.rows > 0:
+        _dense(call[].weights, MEMBER_F32, "sample weights")
+        if call[].weights.rows * call[].weights.cols != rows:
+            raise Error("mojolearn: sample_weight must have one value per row")
+        gbdt_weights_check(call[].weights.data, rows)
+        w_addr = call[].weights.data
+        n_weights = rows
+    var src = List[UInt32](length=len(slot[].ff_sources), fill=UInt32(0))
+    for i in range(len(slot[].ff_sources)):  # small-loop(the source columns)
+        src[i] = UInt32(slot[].ff_sources[i])
+    var entry = entry_ref_gil_free(call[].route.entry)
+    var text = xg_feature_freq_fit(entry, Int(xcm.unsafe_ptr()), call[].y.data, w_addr, Int(src.unsafe_ptr()), rows,
+                                   cols, n_weights, len(src), slot[].ff_rate, slot[].ff_l2, slot[].ff_seed)
+    _ = len(xcm)  # the column-major copy lives until the fit returned
+    _ = len(src)
+    _clear[I](slot)
+    slot[].text = text^
+    slot[].learn = List[Float64]()
+    slot[].has_test = False
+    slot[].bias = 0.0
+    slot[].best_iteration = 0
+    slot[].stopped_early = False
+    slot[].features = cols
+    slot[].dim = 1
+    slot[].classes = 0
+    slot[].rate = slot[].ff_rate
+    slot[].ordered = False
     slot[].fitted = True
 
 
@@ -1259,7 +1358,7 @@ def _proba(slot: _SlotPtr, call: _CallPtr) raises:
     if slot[].kind == _KIND_CLASSIFIER:
         _classify(slot, call, True)
         return
-    if slot[].kind == _KIND_REGRESSOR:
+    if slot[].kind == _KIND_REGRESSOR or slot[].kind == _KIND_FEATURE_FREQ:
         member_unsupported(_name(slot[].kind), MEMBER_OP_PREDICT_PROBA)
     ref loss = slot[].config.loss
     var rows = call[].x.rows
@@ -1429,7 +1528,7 @@ def _capabilities(kind: Int, loss: String) -> Int:
                 | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE)
     if kind == _KIND_CLASSIFIER:
         return mask | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER
-    if kind == _KIND_REGRESSOR:
+    if kind == _KIND_REGRESSOR or kind == _KIND_FEATURE_FREQ:
         return mask
     if _multi_output(loss) or _binary(loss):
         mask |= MEMBER_CAN_PREDICT_PROBA
@@ -1503,7 +1602,7 @@ def _member[I: GbdtMemberImage](operation: Int, address: Int) raises -> Int:
                 member_unsupported(_name(kind), call[].flags)
             call[].classes = 2
             return 0
-        if kind == _KIND_REGRESSOR:
+        if kind == _KIND_REGRESSOR or kind == _KIND_FEATURE_FREQ:
             if call[].flags != MEMBER_OP_PREDICT:
                 member_unsupported(_name(kind), call[].flags)
             call[].out_cols = 1

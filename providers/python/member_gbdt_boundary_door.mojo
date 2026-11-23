@@ -3,8 +3,11 @@
 core/gbdt_member.mojo, called by `bindings/member_boundary_door.mojo`.
 
 Published classes: `GradientBoostingClassifier` (kind 0),
-`GradientBoosting` (kind 1, the booster: its own predict returns raw scores)
-and `GradientBoostingRegressor` (kind 2). The adapters (kinds 0 and 2) are
+`GradientBoosting` (kind 1, the booster: its own predict returns raw scores),
+`GradientBoostingRegressor` (kind 2) and, since lane mf-meta5,
+`ExperimentalTwoLevelFeatureFreq` (kind 3: its own fit, `xg_feature_freq_fit`
+after the door's checks; its settings and source columns read here as its fit
+door reads them; PACK `_feature_freq_pack`, the door's `_fitted_text`). The adapters (kinds 0 and 2) are
 their inner learner: the admission builds the learner their fit builds
 (`adapter_member_learner`, a new object; the adapter is only read) and
 takes ITS config, table and route, so the member fits exactly the learner's
@@ -70,7 +73,9 @@ from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input_unpack import classical_view, admitted_vector
 from bindings.trees_keys_unpack import trees_keys
 from bindings.trees_route_boundary_door import trees_route_context
-from bindings.trees_public_gbdt_door import gbdt_table, gbdt_entry_of, _field, _repr
+from bindings.trees_public_gbdt_door import (
+    gbdt_table, gbdt_entry_of, _field, _repr, _real_setting, _int, _source_columns, _fitted_text,
+)
 from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.trees_public_gbdt_fit_door import (
@@ -112,7 +117,26 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
     if kind == 1:
         if name != "GradientBoosting":
             return False
-        return _learner_admit(model, 1.0, trees_route_context(model, context), owner)
+        return _learner_admit(model, 1.0, trees_route_context(model, context), owner, List[Float64]())
+    if kind == 3:
+        # ExperimentalTwoLevelFeatureFreq (lane mf-meta5; core/gbdt_member.mojo kind 3): the booster's
+        # admission over its own fields, plus the FeatureFreq fit's settings as its fit door reads them
+        # (`feature_freq_unpack`: float(learning_rate), float(l2_leaf_reg), int(random_state), the source
+        # columns), before the feature-list tail.
+        if name != "ExperimentalTwoLevelFeatureFreq":
+            return False
+        var own = py_fields(model)
+        var nk = trees_keys()
+        var extra: List[Float64] = [
+            _real_setting(own, model, nk[].k_learning_rate, "learning_rate"),
+            _real_setting(own, model, nk[].k_l2_leaf_reg, "l2_leaf_reg"),
+            Float64(_int(_field(own, model, nk[].k_random_state, "random_state"))),
+        ]
+        var sources = _source_columns(_field(own, model, nk[].k_sources, "sources"))
+        for i in range(len(sources)):  # small-loop(the source columns)
+            extra.append(Float64(sources[i]))
+        extra.append(Float64(len(sources)))
+        return _learner_admit(model, 3.0, trees_route_context(model, context), owner, extra^)
     if (kind != 0 and kind != 2) or name != _adapter_name(kind):
         return False
     # The adapter's typed run context, as its lifecycle door hands its fit.
@@ -123,12 +147,14 @@ def gbdt_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
     var code = xg_numeric_mode(gbdt_entry_of(gbdt_table(py_fields(learner), native)))
     if code != (0 if mode == "fast" else 1):
         raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
-    return _learner_admit(learner, Float64(kind), native, owner)
+    return _learner_admit(learner, Float64(kind), native, owner, List[Float64]())
 
 
-def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut owner: MemberOwner) raises -> Bool:
+def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut owner: MemberOwner,
+                   var extra: List[Float64]) raises -> Bool:
     """The booster's admission over `model` (GradientBoosting itself, or an
-    adapter's learner) in its run context `run`; `kind` is NEW's word 0."""
+    adapter's learner) in its run context `run`; `kind` is NEW's word 0;
+    `extra` the kind's words before the feature-list tail (kind 3's)."""
     var own = py_fields(model)
     var nk = trees_keys()
     var cat = _field(own, model, nk[].k_cat_features, "cat_features")
@@ -164,6 +190,7 @@ def _learner_admit(model: PythonObject, kind: Float64, run: PythonObject, mut ow
     owner.plan.route = route
     var words: List[Float64] = [kind]
     words.extend(gbdt_config_words(config))
+    words.extend(extra^)
     # The feature-list tail (core/gbdt_member.mojo NEW): cat_features, then
     # one_hot_features, as the estimator holds them (`int` of each, the fit
     # door's `gbdt_category_columns` / `_flags` reads), then their counts.
@@ -446,7 +473,29 @@ def gbdt_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     if plan.kind == 0 or plan.kind == 2:
         _adapter_pack(model, context, b, plan, state)
         return
+    if plan.kind == 3:
+        _feature_freq_pack(model, plan, state)
+        return
     _learner_pack(model, context, plan, state)
+
+
+def _feature_freq_pack(model: PythonObject, plan: MemberPlan, state: Int) raises:
+    """PACK of an ExperimentalTwoLevelFeatureFreq state: what its fit door's PACK writes (`model_`, then
+    `_fitted_text`: n_features_in_, approx_dim_ 1, n_classes_ None, bias_ 0, best_iteration_ 0,
+    stopped_early_ False, no curves), the same body."""
+    var nk = trees_keys()
+    var own = py_fields(model)
+    var call = MemberCall(plan.route, state)
+    call.block = MEMBER_BLOCK_SCALARS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var s = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    var features = Int(s[0])
+    var nbytes = Int(s[7])
+    call.block = MEMBER_BLOCK_FAMILY
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var text = gbdt_string_at(call.dst.data, nbytes)
+    py_setitem(own, nk[].k_model_, PythonObject(text))
+    _fitted_text(own, model, features, PythonObject(0))
 
 
 def _adapter_pack(model: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan, state: Int) raises:
@@ -568,7 +617,13 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
     unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(packed.unsafe_ptr())),
                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(text.unsafe_ptr())), count=nbytes)
     var curve = py_get(own, nk[].k_loss_curve_)
-    var curve_view = classical_view(curve, context, "gbdt loss curve")
+    # An ExperimentalTwoLevelFeatureFreq model has no curves and no learning_rate_ (its fit door writes
+    # neither): an empty learn curve and its learning_rate setting (lane mf-meta5).
+    var feature_freq = plan.kind == 3
+    var no_curve = List[Float64](length=1, fill=0.0)
+    var curve_view = PythonObject(None)
+    if not feature_freq or curve is not None:
+        curve_view = classical_view(curve, context, "gbdt loss curve")
     var test_curve = py_get(own, nk[].k_test_loss_curve_)
     var test_view = PythonObject(None)
     if test_curve is not None:
@@ -579,7 +634,7 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         Float64(py=py_item(own, nk[].k_n_features_in_)), Float64(py=py_item(own, nk[].k_approx_dim_)),
         0.0 if classes_source is None else Float64(py=classes_source), Float64(py=py_item(own, nk[].k_bias_)),
         Float64(py=py_item(own, nk[].k_best_iteration_)), 1.0 if Bool(py=py_item(own, nk[].k_stopped_early_)) else 0.0,
-        Float64(py=py_item(own, nk[].k_learning_rate_)), Float64(nbytes),
+        Float64(py=py_item(own, nk[].k_learning_rate if feature_freq else nk[].k_learning_rate_)), Float64(nbytes),
         1.0 if boosting is not None and Bool(py=boosting == PythonObject("Ordered")) else 0.0]
     var call = member_new(plan)
     try:
@@ -587,7 +642,10 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         call.x = MemberMatrix(Int(packed.unsafe_ptr()), 1, len(packed), MEMBER_I32)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_FAMILY + 1
-        call.x = MemberMatrix(Int(py=classical_address(curve_view)), 1, Int(py=curve_view.size), MEMBER_F64)
+        if curve_view is None:
+            call.x = MemberMatrix(Int(no_curve.unsafe_ptr()), 1, 0, MEMBER_F64)
+        else:
+            call.x = MemberMatrix(Int(py=classical_address(curve_view)), 1, Int(py=curve_view.size), MEMBER_F64)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         if map_view is not None:
             call.block = MEMBER_BLOCK_FAMILY + 2
@@ -605,6 +663,7 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         member_free(plan, call)
         raise error
     _ = curve_view
+    _ = len(no_curve)
     _ = map_view
     _ = test_view
     _ = len(packed)
