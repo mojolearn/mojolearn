@@ -58,7 +58,10 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch
     comptime assert not is_defined["MOJOLEARN_DART_ROUND_REF_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): DART_ROUND_REF_OFF (old path, never measured) is gone; the default is kept; code at 650388311e; restore: experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_GBDT_STEP_OLD"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_GBDT_STEP_OLD (old path, never measured) is gone; the default is kept; code at f644604c7a; restore: experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch"
+    # MOJOLEARN_IDN_GBDT_STEP_OLD: lane expdel2-43 kept its read (greedy_search_helper_depthwise.mojo) while this refusal stood, so a B build failed here; the read is deleted 2026-11-23 (lane/ab-prep-classical) and the refusal below now matches the code.
+    # TOMBSTONE: MOJOLEARN_IDN_GBDT_STEP_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GBDT_STEP_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_GBDT_STEP_OLD"](), "removed 2026-11-15 (lane/expdel2-02-base) and, its surviving read, 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: only the Lossguide pool size and its per-tree zero fill differed, the same slots written and read, no bits); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GBDT_STEP_OLD.ab-prep.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_HPDEV_INIT_OFF (old path, never measured) is gone; the default is kept; code at 2136ab3bb0; restore: experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch
