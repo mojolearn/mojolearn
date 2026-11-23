@@ -327,10 +327,19 @@ def rnn_head[E: Exec](
 
 def rnn_layer[E: Exec](
     mut tape: Tape, mut ex: E, gx: Tensor, w_hh: Tensor, b_hh: Tensor, b_ih: FP,
-    cell: Int, T: Int, B: Int, w: Work, l: Int, h0_clean: Bool = False,
+    cell: Int, T: Int, B: Int, w: Work, l: Int, h0_clean: Bool = False, reverse: Bool = False,
 ) raises -> Tensor:
     """Layer l's recurrence over gx [T B, G H]; returns h_1..h_T [T B, H]
     (w.hall[l] holds h_0 = 0 first). The launches are recurrent.forward's.
+
+    `reverse` (lane nn-recurrent: Sequential's bidirectional layers): the same
+    launches walking time from T - 1 down to 0 (every step pointer moves back
+    one row block a step; the scan's i4 = 1). The states are stored in time
+    order with the zero state AFTER them: w.hall[l] rows [t B, (t + 1) B) hold
+    the state at time t and rows [T B, (T + 1) B) h_0 = 0, so the output is
+    rows [0, T B), in time order, with no permutation. With lengths the mask
+    position is the time, so a row's padded times (now first) hold its zero
+    state and its own steps run from its last valid step down to 0.
     `h0_clean`: the caller knows rows [0, B) of w.hall[l] and w.call[l]
     already hold zeros, so the per-step chain does not fill them again."""
     var H = tape.cols(w_hh)
@@ -352,13 +361,15 @@ def rnn_layer[E: Exec](
     comptime if SEQ_LSTM_SCAN:
         if scan_routes(H, gates_of(cell)):
             var sa = Args()
-            sa.p0 = gxp
-            sa.p1 = w.gh[l]
-            sa.p2 = w.act[l]
-            sa.p3 = w.hall[l]
-            sa.p4 = w.call[l]
-            sa.p5 = w.hall[l] + B * H
-            sa.p6 = w.call[l] + B * H
+            # step 0's pointers: time 0 (forward), or time T - 1 (reverse: h_prev the zero rows after the states)
+            var t0 = T - 1 if reverse else 0
+            sa.p0 = gxp + t0 * B * GH
+            sa.p1 = w.gh[l] + t0 * B * GH
+            sa.p2 = w.act[l] + t0 * B * GH
+            sa.p3 = w.hall[l] + (T if reverse else 0) * B * H
+            sa.p4 = w.call[l] + (T if reverse else 0) * B * H
+            sa.p5 = w.hall[l] + (T - 1 if reverse else 1) * B * H
+            sa.p6 = w.call[l] + (T - 1 if reverse else 1) * B * H
             sa.p7 = whh
             sa.p8 = bhh
             # never read on this route (b_ih is in gx); bound to live
@@ -370,6 +381,7 @@ def rnn_layer[E: Exec](
             sa.i1 = B
             sa.i2 = H
             sa.i3 = T
+            sa.i4 = 1 if reverse else 0
             sa.i5 = 1 if masked else 0
             ex.launch[OP_CELL_FWD_SCAN](sa, B)
             scanned = True
@@ -379,21 +391,29 @@ def rnn_layer[E: Exec](
         # [(s + 1) B, (s + 2) B). Only a forward of FEWER rows writes below B H, so the caller passes h0_clean when
         # the previous forward on this Work had at least B rows (AutogradRnnStep, rnn_predict): the two fills then
         # run once after an epoch's short last batch, not every step. The same zeros, so the same bits.
-        if not h0_clean:
+        if reverse:
+            # the reverse direction's zero state is rows [T B, (T + 1) B) (lane nn-recurrent)
+            fill(ex, w.hall[l] + T * B * H, B * H, Float32(0.0))
+            fill(ex, w.call[l] + T * B * H, B * H, Float32(0.0))
+        elif not h0_clean:
             fill(ex, w.hall[l], B * H, Float32(0.0))
             fill(ex, w.call[l], B * H, Float32(0.0))
         var step_gemm = False
         comptime if RNN_STEP_GEMM:
             step_gemm = rnn_step_gemm(B, GH, H)
         for s in range(T):  # driver-loop: over time steps (two launches per step: RNN_STEP_GEMM; one below its rule)
+            # the time of step s, and the rows of its previous and its own state (reverse: lane nn-recurrent)
+            var tm = T - 1 - s if reverse else s
+            var prev = tm + 1 if reverse else s
+            var own = tm if reverse else s + 1
             var a = Args()
-            a.p0 = gxp + s * B * GH
-            a.p1 = w.gh[l] + s * B * GH
-            a.p2 = w.act[l] + s * B * GH
-            a.p3 = w.hall[l] + s * B * H
-            a.p4 = w.call[l] + s * B * H
-            a.p5 = w.hall[l] + (s + 1) * B * H
-            a.p6 = w.call[l] + (s + 1) * B * H
+            a.p0 = gxp + tm * B * GH
+            a.p1 = w.gh[l] + tm * B * GH
+            a.p2 = w.act[l] + tm * B * GH
+            a.p3 = w.hall[l] + prev * B * H
+            a.p4 = w.call[l] + prev * B * H
+            a.p5 = w.hall[l] + own * B * H
+            a.p6 = w.call[l] + own * B * H
             a.p7 = whh
             a.p8 = bhh
             a.p9 = b_ih
@@ -404,7 +424,7 @@ def rnn_layer[E: Exec](
             if masked:
                 # a row past its length copies its state forward (op_cell_fwd)
                 a.p10 = w.lens
-                a.i8 = s
+                a.i8 = tm
                 a.i9 = 1
             if step_gemm:
                 # GH_s = h_{s-1} W_hh^T + b_hh where the fused body stores it, then the cell alone
@@ -428,7 +448,8 @@ def rnn_layer[E: Exec](
     saved.i2 = T
     saved.p10 = w.lens
     saved.i3 = 1 if masked else 0
-    return tape.custom(ex, [gx, w_hh, b_hh], w.hall[l] + B * H, T * B, H, RNN_LAYER, saved)
+    saved.i4 = 1 if reverse else 0
+    return tape.custom(ex, [gx, w_hh, b_hh], w.hall[l] + (0 if reverse else B * H), T * B, H, RNN_LAYER, saved)
 
 
 # ------------------------------------------------------------------ backward rules
@@ -479,29 +500,33 @@ def _layer_bwd[E: Exec](
     var dgx = gradients[0]
     var whh = inputs[1]
     var masked = saved.i3 != 0
+    # the reverse direction (lane nn-recurrent, rnn_layer's `reverse`): step s is time T - 1 - s
+    var reverse = saved.i4 != 0
     var scanned = False
     comptime if SEQ_LSTM_SCAN:
         if scan_routes(H, gates_of(cell)):
             var sa = Args()
-            sa.p0 = act
-            sa.p1 = gh
-            sa.p2 = hall
-            sa.p3 = call
+            # step 0's pointers (reverse: time T - 1, its previous state the zero rows after the states)
+            var t0 = T - 1 if reverse else 0
+            sa.p0 = act + t0 * B * GH
+            sa.p1 = gh + t0 * B * GH
+            sa.p2 = hall + (T if reverse else 0) * B * H
+            sa.p3 = call + (T if reverse else 0) * B * H
             # c_t's base (call + B H), or with lengths the rows' lengths: the scan derives c_t from p3
             # (autograd/kernels/recurrent_scan.mojo bwd_step) and reads the lengths from here
-            sa.p4 = saved.p10 if masked else call + B * H
+            sa.p4 = saved.p10 if masked else sa.p3 + (-B * H if reverse else B * H)
             sa.p5 = dh
-            sa.p6 = up
+            sa.p6 = up + t0 * B * H
             sa.p7 = dc
-            sa.p8 = dgx
-            sa.p9 = dgh
+            sa.p8 = dgx + t0 * B * GH
+            sa.p9 = dgh + t0 * B * GH
             sa.p10 = dhn
             sa.p11 = whh
             sa.i0 = cell
             sa.i1 = B
             sa.i2 = H
             sa.i3 = T
-            sa.i4 = B * GH
+            sa.i4 = -B * GH if reverse else B * GH
             sa.i5 = 1 if masked else 0
             ex.launch[OP_CELL_BWD_SCAN](sa, B)
             scanned = True
@@ -523,31 +548,35 @@ def _layer_bwd[E: Exec](
         step_gemm = (not scanned) and rnn_bptt_gemm(cell, B, H, GH)
     var s = T - 1 if not scanned else -1
     while s >= 0:  # driver-loop: over time steps, T - 1 down (one launch per step)
+        # the time of step s and the rows of its previous and its own state (reverse: lane nn-recurrent)
+        var tm = T - 1 - s if reverse else s
+        var prev = tm + 1 if reverse else s
+        var own = tm if reverse else s + 1
         var a = Args()
-        a.p0 = act + s * B * GH
-        a.p1 = gh + s * B * GH
-        a.p2 = hall + s * B * H
-        a.p3 = call + s * B * H
-        a.p4 = call + (s + 1) * B * H
+        a.p0 = act + tm * B * GH
+        a.p1 = gh + tm * B * GH
+        a.p2 = hall + prev * B * H
+        a.p3 = call + prev * B * H
+        a.p4 = call + own * B * H
         a.p5 = dh
-        a.p6 = up + s * B * H
+        a.p6 = up + tm * B * H
         a.p7 = dc
-        a.p8 = dgx + s * B * GH
-        a.p9 = dgh + s * B * GH
+        a.p8 = dgx + tm * B * GH
+        a.p9 = dgh + tm * B * GH
         a.p10 = dhn
         a.p11 = whh
         a.i0 = cell
         a.i1 = B
         a.i2 = H
         a.i3 = 1 if s < T - 1 else 0
-        a.i4 = B * GH
+        a.i4 = -B * GH if reverse else B * GH
         if masked and not (step_gemm and s < T - 1):
             # lane seq-blocks-3: the fused step with the length mask, one launch (sequence/ops.mojo
             # op_cell_bwd_h_mask; p4 carries the lengths, c_t is p3 + B H; its first step stores the dh / dc zeros
             # as OP_CELL_BWD_H's): a step past a row's end passes dh and dc through and adds no gradient. It was
             # OP_GEMM + OP_CELL_BWD, the same words.
             a.p4 = saved.p10
-            a.i8 = s
+            a.i8 = tm
             ex.launch[OP_CELL_BWD_H_MASK](a, B * H)
         elif masked:
             # the GEMM-split route (RNN_BPTT_LSTM_GEMM) with the length mask: the product, then the masked cell
@@ -566,7 +595,7 @@ def _layer_bwd[E: Exec](
             g.i8 = H
             ex.launch[OP_GEMM](g, B * H)
             a.p11 = saved.p10
-            a.i8 = s
+            a.i8 = tm
             a.i9 = 1
             ex.launch[OP_CELL_BWD](a, B * H)
         elif step_gemm and s < T - 1:
@@ -594,15 +623,17 @@ def _layer_bwd[E: Exec](
         dhn = t
         s -= 1
     var done = False
+    # every step's previous state, in time order: rows [0, T B) forward, rows [B, (T + 1) B) reverse
+    var hprev = hall + (B * H if reverse else 0)
     comptime if SEQ_WGRAD_BLOCKED:
-        wgrad_blocked(ex, dgh, hall, gradients[1], GH, H, T * B, 1, GH, H, 1, H, saved.p8)
+        wgrad_blocked(ex, dgh, hprev, gradients[1], GH, H, T * B, 1, GH, H, 1, H, saved.p8)
         if wgrad_block(T * B) < T * B:
             wgrad_blocked(ex, saved.p9, dgh, gradients[2], 1, GH, T * B, 0, 0, GH, 1, GH, saved.p8)
         else:
             colsum(ex, dgh, gradients[2], T * B, GH)
         done = True
     if not done:
-        gemm(ex, dgh, hall, gradients[1], GH, H, T * B, 1, GH, H, 1, False, H)
+        gemm(ex, dgh, hprev, gradients[1], GH, H, T * B, 1, GH, H, 1, False, H)
         colsum(ex, dgh, gradients[2], T * B, GH)
 
 
@@ -655,7 +686,7 @@ comptime OPS_RNN_SCAN = 94
 
 def rnn_scan_op[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
-    cell: Int, T: Int, B: Int, lengths: Optional[FP] = None,
+    cell: Int, T: Int, B: Int, lengths: Optional[FP] = None, reverse: Bool = False,
 ) raises -> Tensor:
     """One recurrent layer (cell CELL_LSTM, CELL_GRU or the tanh RNN) over a
     time-major sequence x [T B, D] from h_0 = c_0 = 0: returns h_1..h_T
@@ -715,7 +746,9 @@ def rnn_scan_op[E: Exec](
         w.lens = lengths.value()
         w.has_lens = True
     var gx = rnn_linear(tape, ex, x, w_ih, b_ih, gxb, RNN_INPUT_BIAS_IN_GX, True, tape.requires_grad(x), w)
-    return rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0)
+    # `reverse` (lane nn-recurrent): time T - 1 down to 0, the same launches (rnn_layer); the output stays in
+    # time order
+    return rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0, False, reverse)
 
 
 # ------------------------------------------------------------------ trainer step

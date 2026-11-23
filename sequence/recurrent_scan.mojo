@@ -194,19 +194,25 @@ def fwd_step(a: Args, s: Int) -> Args:
     Sequence lengths (lane seq-blocks-3): i5 = 1 and p10 the rows' lengths
     make every step the masked cell (i9 = 1, i8 the step: op_cell_fwd copies a
     row's state forward past its length), as the per-step chain's launches.
-    Without them i9 is 0 and the step is the unmasked cell, word for word."""
+    Without them i9 is 0 and the step is the unmasked cell, word for word.
+
+    The reverse direction (i4 = 1; lane nn-recurrent): the base pointers are step 0's, which reads time T - 1,
+    and every pointer walks back one row block a step, so step s reads time T - 1 - s, and i8 (the mask's
+    position) is that time: a row's padded times come first and hold its zero state, then its own steps from
+    its last valid one down to 0. The forward direction (i4 = 0) computes the same addresses as before."""
     var B = a.i1
     var H = a.i2
     var GH = gates_of(a.i0) * H
+    var k = -s if a.i4 != 0 else s
     var r = a
-    r.p0 = a.p0 + s * B * GH
-    r.p1 = a.p1 + s * B * GH
-    r.p2 = a.p2 + s * B * GH
-    r.p3 = a.p3 + s * B * H
-    r.p4 = a.p4 + s * B * H
-    r.p5 = a.p5 + s * B * H
-    r.p6 = a.p6 + s * B * H
-    r.i8 = s
+    r.p0 = a.p0 + k * B * GH
+    r.p1 = a.p1 + k * B * GH
+    r.p2 = a.p2 + k * B * GH
+    r.p3 = a.p3 + k * B * H
+    r.p4 = a.p4 + k * B * H
+    r.p5 = a.p5 + k * B * H
+    r.p6 = a.p6 + k * B * H
+    r.i8 = a.i3 - 1 - s if a.i4 != 0 else s
     r.i9 = a.i5
     return r
 

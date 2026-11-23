@@ -174,8 +174,10 @@ def test_neural_higgs_accepts_pinned_unsplit_arrays_without_overlapping_rows(tmp
 def test_identical_plan_includes_every_neural_fit_lane(vendor):
     races = B.plan_races(vendor, ['identical'], ['neural'])
     lanes = {r['lane']: r for r in races}
-    assert set(B.NEURAL.FIT_LANES) <= set(lanes)
-    assert all(lanes[lane]['our_arms'] == {'ours': 'identical'} for lane in B.NEURAL.FIT_LANES)
+    # the composed-model consistency rows (ROW_CLASS) are planned only by the composed measurement (--composed)
+    fit = set(B.NEURAL.FIT_LANES) - set(B.NEURAL.ROW_CLASS)
+    assert fit <= set(lanes)
+    assert all(lanes[lane]['our_arms'] == {'ours': 'identical'} for lane in fit)
 
 
 def test_preflight_selection_keeps_only_matched_recipes_and_records_errors():

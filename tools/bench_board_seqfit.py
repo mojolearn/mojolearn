@@ -356,3 +356,93 @@ def torch_model(torch, lane, d, dev):
                 return self.head(pooled).squeeze(-1)
         return Net()
     raise RuntimeError("REFUSED: %s: %s" % (lane, LANES[lane].get("no_opponent", "no torch model")))
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# COMPOSED-MODEL CONSISTENCY ROWS (Andrew, 2026-11-23). These rows are models COMPOSED from modules: their time is
+# about the sum of their modules plus the composition (launches, intermediate buffers, the fit loop), so they are
+# not raced like a fused block. ROW_CLASS is the one field that says so; bench_board.plan_races reads it (the only
+# reader) and plans these rows only for the once-per-release composed measurement (`--composed`), never in the
+# routine full board, and they are not in the paper set (tools/ops/paper_compare_*_ids.txt). A stored cell is
+# re-measured only when a module it uses changed: each row lists its MODULES, each module its SOURCE files, and the
+# cell stores modules_source_sha256; needs_measure compares it with the tree's. Fused blocks (TransformerBlock,
+# Mamba1/2/3Block and their rows) are ordinary board rows and are not listed here.
+# ---------------------------------------------------------------------------------------------------------------
+ROW_CLASS = "composed-model consistency"
+#: the Sequential modules each row composes (the method names; containers included)
+MODULES = {
+    "seq-cnn1d-fit": ('conv1d', 'relu', 'max_pool1d', 'adaptive_avg_pool1d', 'flatten', 'linear'),
+    "seq-resnet1d-fit": ('conv1d', 'batch_norm1d', 'relu', 'residual_block', 'adaptive_avg_pool1d', 'flatten', 'linear'),
+    "seq-inceptiontime-fit": ('conv1d', 'max_pool1d', 'parallel', 'batch_norm1d', 'relu', 'adaptive_avg_pool1d', 'flatten', 'linear'),
+    "seq-gru-lengths-fit": ('gru', 'narrow', 'flatten', 'linear'),
+    "seq-lstm-lengths-fit": ('lstm', 'narrow', 'flatten', 'linear'),
+    "seq-transformer-fit": ('linear', 'layer_norm', 'attention', 'gelu', 'residual_block', 'permute', 'adaptive_avg_pool1d', 'flatten'),
+    "seq-mamba1-fit": ('linear', 'softplus', 'selective_scan', 'permute', 'adaptive_avg_pool1d', 'flatten'),
+    "seq-mamba2-fit": ('linear', 'softplus', 'ssd_scan', 'permute', 'adaptive_avg_pool1d', 'flatten'),
+    "seq-mamba3-fit": ('linear', 'trapezoid_scan', 'permute', 'adaptive_avg_pool1d', 'flatten'),
+}
+#: the files whose bytes decide each module's arithmetic; COMPOSITION is in every row (the model description,
+#: the layer tables, the fit loop and its executor)
+COMPOSITION = ("autograd/model.mojo", "autograd/model_blocks.mojo", "autograd/model_execution.mojo")
+_CONV = ("autograd/rankn_conv.mojo", "autograd/rankn_conv_ops.mojo", "x_cnn/ops.mojo")
+_ELEMENTWISE = ("checks/numerics.mojo",)
+SOURCES = {
+    "conv1d": _CONV, "max_pool1d": _CONV, "adaptive_avg_pool1d": _CONV, "batch_norm1d": _CONV,
+    "relu": _ELEMENTWISE, "gelu": _ELEMENTWISE, "softplus": _ELEMENTWISE, "layer_norm": _ELEMENTWISE,
+    "gru": ("sequence/recurrent_scan.mojo", "autograd/kernels/recurrent_scan.mojo", "sequence/ops.mojo"),
+    "lstm": ("sequence/recurrent_scan.mojo", "autograd/kernels/recurrent_scan.mojo", "sequence/ops.mojo"),
+    "attention": ("autograd/transformer_primitives.mojo",),
+    "selective_scan": ("autograd/ssm_primitives.mojo",),
+    "ssd_scan": ("autograd/ssm_m2_primitives.mojo", "autograd/ssm_m2_ops.mojo", "autograd/kernels/mamba2_ssd_body.mojo"),
+    "trapezoid_scan": ("autograd/kernels/mamba3_trapezoid_body.mojo",),
+    # the shape and container modules are the description and the executor alone (COMPOSITION)
+    "linear": (), "flatten": (), "narrow": (), "permute": (), "residual_block": (), "parallel": (),
+}
+
+
+def module_files(lane):
+    """The sorted source files of the row's modules and the composition."""
+    files = set(COMPOSITION)
+    for m in MODULES[lane]:
+        files.update(SOURCES[m])
+    return sorted(files)
+
+
+def modules_source_sha256(lane, repo):
+    """sha256 over (path, bytes) of module_files(lane) in `repo`: the stored cell's staleness key."""
+    import hashlib
+    import os
+    h = hashlib.sha256()
+    for rel in module_files(lane):
+        h.update(rel.encode() + b"\0")
+        with open(os.path.join(repo, rel), "rb") as fh:
+            h.update(fh.read())
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def needs_measure(lane, stored, repo):
+    """True when the row has no stored ok cell, or its stored modules_source_sha256 is not the tree's (a module or
+    the composition changed). `stored` is the row's stored cell (a dict) or None."""
+    if not stored or stored.get("status") != "ok":
+        return True
+    return stored.get("modules_source_sha256") != modules_source_sha256(lane, repo)
+
+
+def module_time_sum(lane, module_ms):
+    """The sum of the row's modules' OWN measured times (`module_ms`: module name -> ms of a module-level cell
+    measured on the same box), or "n/a" when any module has no measured cell (no module time is invented).
+    Returns (sum or "n/a", the modules missing)."""
+    missing = [m for m in MODULES[lane] if not isinstance(module_ms.get(m), (int, float))]
+    if missing:
+        return "n/a", missing
+    return float(sum(module_ms[m] for m in MODULES[lane])), []
+
+
+def composition_overhead(lane, row_ms, module_ms):
+    """What the board shows beside a composed row: its time, the sum of its modules' times and the difference
+    (the composition overhead) as one number, "n/a" where a module time was not measured."""
+    total, missing = module_time_sum(lane, module_ms)
+    over = "n/a" if total == "n/a" or not isinstance(row_ms, (int, float)) else float(row_ms) - total
+    return {"row_ms": row_ms, "modules_sum_ms": total, "composition_overhead_ms": over,
+            "modules_unmeasured": missing}

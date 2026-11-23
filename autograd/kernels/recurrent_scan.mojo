@@ -26,21 +26,27 @@ def bwd_step[odd: Bool](a: Args, j: Int) -> Args:
     var T = a.i3
     var GH = gates_of(a.i0) * H
     var s = T - 1 - j
+    # the reverse direction (lane nn-recurrent): i4 (the offset of the next step's dGH) is negative and the base
+    # pointers are step 0's (time T - 1), so step s walks back s row blocks and its mask position is T - 1 - s;
+    # the forward direction (i4 > 0) computes the same addresses as before
+    var rev = a.i4 < 0
+    var k = -s if rev else s
     var r = a
-    r.p0 = a.p0 + s * B * GH
-    r.p1 = a.p1 + s * B * GH
-    r.p2 = a.p2 + s * B * H
-    r.p3 = a.p3 + s * B * H
-    # c_t is c_{s}'s next row block: the base p4 is free to carry the sequence lengths (lane seq-blocks-3)
-    r.p4 = a.p3 + (s + 1) * B * H
-    r.p6 = a.p6 + s * B * H
-    r.p8 = a.p8 + s * B * GH
-    r.p9 = a.p9 + s * B * GH
+    r.p0 = a.p0 + k * B * GH
+    r.p1 = a.p1 + k * B * GH
+    r.p2 = a.p2 + k * B * H
+    r.p3 = a.p3 + k * B * H
+    # c_t is c_{s}'s next row block (the previous one in reverse): the base p4 is free to carry the sequence
+    # lengths (lane seq-blocks-3)
+    r.p4 = r.p3 + (-B * H if rev else B * H)
+    r.p6 = a.p6 + k * B * H
+    r.p8 = a.p8 + k * B * GH
+    r.p9 = a.p9 + k * B * GH
     comptime if odd:
         r.p5 = a.p10
         r.p10 = a.p5
     r.i3 = 1 if s < T - 1 else 0
-    r.i8 = s
+    r.i8 = T - 1 - s if rev else s
     return r
 
 

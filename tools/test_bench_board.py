@@ -536,7 +536,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # The shared identical plan includes every GPU fit lane on Apple too.
     neural = bb.plan_races("apple", ["identical"], ["neural"])
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
-    fit = set(bb.NEURAL.FIT_LANES)
+    fit = set(bb.NEURAL.FIT_LANES) - set(bb.NEURAL.ROW_CLASS)   # composed rows: --composed only
     assert len({r["id"] for r in both}) == len(both), "a neural race is planned twice"
     assert {r["lane"] for r in neural} == {r["lane"] for r in both}
     assert fit <= {r["lane"] for r in both}

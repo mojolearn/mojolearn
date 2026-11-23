@@ -21,7 +21,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # lane nn-losses: one seeded step per added loss
                           'sequence-composed-losses',
                           # lane nn-losses-2: log_softmax with nll / kl_div, and ctc
-                          'sequence-composed-log-softmax-ctc'))
+                          'sequence-composed-log-softmax-ctc',
+                          # nn-recurrent: the recurrent options (tools/identity_lanes/nn_recurrent.py)
+                          'sequence-blocks-bigru-lengths', 'sequence-blocks-bilstm'))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',
                               'byte-lm-host-infer-threaded', 'language-model-config',

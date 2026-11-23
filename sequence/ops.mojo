@@ -809,7 +809,8 @@ def op_cell_bwd_h_mask(t: Int, a: Args):
     It was two launches a step (OP_GEMM, then OP_CELL_BWD with the mask), the same fold (gemm_dot from the direct
     part is op_gemm's accumulate) and the same cell: the same words."""
     var m = a
-    m.p4 = a.p3 + a.i1 * a.i2
+    # c_t: the next row block, or the previous one in the reverse direction (i4 < 0; lane nn-recurrent)
+    m.p4 = a.p3 + (-(a.i1 * a.i2) if a.i4 < 0 else a.i1 * a.i2)
     op_cell_bwd_h_lens(t, m, a.p4)
 
 
