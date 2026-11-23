@@ -2503,8 +2503,8 @@ def _rest4simple_refusal(which: Int) raises -> GbdtOpts:
     """What both columns refuse before any tree: 0 MultiClass, 1 Depthwise
     Logloss, 2 Ordered RMSE, 3 the pointwise searcher on Logloss, 4 Logloss
     at three iterations, 5 greedy YetiRank (its own words), 6 Depthwise with
-    the pointwise searcher (`pointwise_policy_check` first, on both columns;
-    lane gbdt-pw-multiclass)."""
+    the pointwise searcher (the public fit's search-option check refuses it
+    first, on both columns; lane gbdt-pw-multiclass / gbdt-units-11)."""
     var o = _rest4simple_opts(0)
     if which == 0:
         o.loss = String("MultiClass")
@@ -2597,7 +2597,9 @@ def test_rest4simple_host_text_is_device_text() raises:
         "use_pointwise_searcher searches the structure only",
         "can't be greater, than 1 for Simple",
         "changing the leaf_estimation_method parameter is prohibited",
-        "OBLIVIOUS searcher; grow_policy=Depthwise",
+        # the public fit's search-option check refuses it first, on both
+        # columns, before `pointwise_policy_check` (lane gbdt-units-11)
+        "use_pointwise_searcher=True is an OBLIVIOUS searcher; grow_policy='Depthwise'",
     ]
     for which in range(REST4SIMPLE_REFUSALS):  # small-loop(the seven refusals)
         var host_said = String("")

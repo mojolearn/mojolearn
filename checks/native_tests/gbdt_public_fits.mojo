@@ -380,10 +380,14 @@ def resolved_learning_rate(o: GbdtOpts, n_rows: Int, n_eval: Int, eval_constant:
 
 def _strength(o: GbdtOpts) raises -> Float64:
     var score = _score(o)
+    # the reprs the public door passes (`_repr(grow)`, `_repr(score)`,
+    # `str(float(random_strength))`), so a refusal reads as the public fit's
+    # (lane gbdt-units-11: these were empty, and the refusal printed
+    # "grow_policy= requires ...")
     var facts = GbdtSearchFacts(
-        o.pointwise, _symmetric(o), String(""),
-        score == "L2" or score == "NewtonL2", String(""),
-        o.random_strength < 0.0, o.random_strength, String(""),
+        o.pointwise, _symmetric(o), "'" + o.grow_policy + "'",
+        score == "L2" or score == "NewtonL2", "'" + score + "'",
+        o.random_strength < 0.0, o.random_strength, String(o.random_strength),
         1.0, 0.0)
     return gbdt_validate_search_options(facts)
 
