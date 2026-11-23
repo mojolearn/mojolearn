@@ -1,7 +1,8 @@
 diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index 710e6dedd0..38ae64240a 100644
 --- a/x_cluster/device_ops.mojo
 +++ b/x_cluster/device_ops.mojo
-@@ -54,13 +54,13 @@
+@@ -163,7 +163,7 @@ def _tid() -> Int:
  def _sqdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
      var t = _tid()
      if t < Int(na) * Int(nb):
@@ -9,6 +10,18 @@ diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
 +        sqdist_cell[True](a, Int(na), b, Int(nb), Int(d), dst, t)
  
  
+ 
+@@ -231,7 +231,8 @@ def _sqdist_tiled_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst:
+             sa[u] = ftz(a[min(ra, NA - 1) * D + f0 + min(k, kc - 1)]) if (ok and ra < NA) else Float32(0)
+             sb[u] = ftz(b[min(rb, NB - 1) * D + f0 + min(k, kc - 1)]) if (ok and rb < NB) else Float32(0)
+         barrier()
+-        for k in range(kc):
++        for kk_ in range(kc):
++            var k = kc - 1 - kk_
+             var av = SIMD[DType.float32, SQT_R]()
+             var bv = SIMD[DType.float32, SQT_R]()
+             comptime for q in range(SQT_R):
+@@ -253,7 +254,7 @@ def _sqdist_tiled_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst:
  def _nearest_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, labels: IPtr, dist: FPtr):
      var t = _tid()
      if t < Int(na):
@@ -17,7 +30,7 @@ diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
  
  
  def _sqrt_kernel(x: FPtr, n: Int32):
-@@ -136,7 +136,7 @@
+@@ -335,7 +336,7 @@ def _meanshift_kernel(
  ):
      var t = _tid()
      if t < Int(ns):
@@ -25,8 +38,17 @@ diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
 +        meanshift_seed[True](x, Int(n), Int(d), bw, stop, Int(max_iter), centers, scratch, intensity, iters, t)
  
  
- comptime AP_TPB = 256
-@@ -210,7 +210,7 @@
+ # lane/neural-pass111 (2026-10-02): one BLOCK per seed, IDENTICAL bits.
+@@ -714,7 +715,7 @@ def _ap_a_gated_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32, st: IPtr):
+         return
+     var t = _tid()
+     if t < Int(n):
+-        ap_availability_col(r, a, Int(n), damping, t)
++        ap_availability_col[True](r, a, Int(n), damping, t)
+ 
+ 
+ def _ap_e_conv_gated_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr, ring: IPtr, ci: Int32, it: Int32, st: IPtr):
+@@ -754,7 +755,7 @@ def _ap_decide_kernel(ci: Int32, it: Int32, st: IPtr):
  def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
      var t = _tid()
      if t < Int(n):
@@ -35,7 +57,7 @@ diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
  
  
  def _ap_noise_kernel(s: FPtr, m: Int64, seed: UInt64):
-@@ -229,7 +229,7 @@
+@@ -772,7 +773,7 @@ def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
  def _gauss_q_kernel(x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, kc: Int32, dst: FPtr):
      var t = _tid()
      if t < Int(n) * Int(kc):
@@ -44,7 +66,7 @@ diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
  
  
  def _resp_kernel(q: FPtr, c: FPtr, n: Int32, kc: Int32, lpn: FPtr):
-@@ -461,7 +461,7 @@
+@@ -1128,7 +1129,7 @@ def _moms_final_kernel(
  def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
      var t = _tid()
      if t < Int(na) * Int(nb):
