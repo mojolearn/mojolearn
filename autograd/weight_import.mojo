@@ -41,7 +41,8 @@ from core.cast_in import CAST_KIND_BFLOAT, CAST_KIND_FLOAT, CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast
 from autograd.model_blocks import block_param_sizes, block_tensor_dims, block_tensor_transposed, is_block
 # nn-attention begin
-from autograd.nn_attention import nn_attention_torch_blocks
+from autograd.nn_attention import nn_attention_torch_blocks, nn_attention_is
+from autograd.model import SPEC2_VERSION
 # nn-attention end
 from autograd.model import LAYER_CONV1D, LAYER_CONV2D, LAYER_LAYER_NORM, LAYER_LINEAR, SPEC2_ARGS, ModelSpec, conv_in_per_group
 
@@ -348,7 +349,7 @@ def model_import_params[E: Exec](
         views.append(wi_matrix(src, transpose))
         dsts.append(_slot_offset(spec, i, slot))
         # nn-attention begin: PyTorch's stacked in_proj_weight (3E, E) onto params_' (in, out) blocks
-        if layout == WI_LAYOUT_TORCH:
+        if layout == WI_LAYOUT_TORCH and spec.version == SPEC2_VERSION and nn_attention_is(spec.kinds[i]):
             var nb = nn_attention_torch_blocks(spec.kinds[i], spec.xargs, i, spec.in_shape[i], slot)
             if len(nb) > 0:
                 _ = views.pop()
@@ -472,7 +473,9 @@ def model_export_params[E: Exec](
                 view.check("state_dict: layer " + String(i) + " (linear) weight")
                 upload_cast(ex, D + off, view)
             # nn-attention begin: params_' (in, out) blocks of in_proj -> PyTorch's stacked (3E, E) rows
-            var nb = nn_attention_torch_blocks(spec.kinds[i], spec.xargs, i, spec.in_shape[i], slot)
+            var nb = List[Int]()
+            if spec.version == SPEC2_VERSION and nn_attention_is(spec.kinds[i]):
+                nb = nn_attention_torch_blocks(spec.kinds[i], spec.xargs, i, spec.in_shape[i], slot)
             for q in range(len(nb) // 3):  # small-loop(at most 2 blocks of one tensor)
                 var ne = spec.in_shape[i].d[1]
                 var nr = nb[3 * q + 1]

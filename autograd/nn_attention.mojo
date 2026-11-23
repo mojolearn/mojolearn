@@ -177,6 +177,9 @@ def nn_attention_check_source(
     if src < NN_MHA_SELF or src >= index:
         raise Error(name + " (MultiheadAttention): the key/value source must be -1 (the model input) or the "
                     + "index of an earlier layer")
+    if cur.ndim == 2 and _x(xargs, i, 3) != cur.d[1]:
+        raise Error(name + " (MultiheadAttention): embed_dim is " + String(_x(xargs, i, 3)) + " and the input has "
+                    + String(cur.d[1]) + " features")
     var kd = nn_mha_kdim(xargs, i)
     if src == NN_MHA_SELF and kd != cur.d[1]:
         raise Error(name + " (MultiheadAttention): self-attention takes kdim = embed_dim")
