@@ -95,6 +95,8 @@ from gbdt.targets.pointwise_bodies import (
     BODY_OBJ_QUANTILE,
     BODY_OBJ_RMSE,
     BODY_OBJ_TWEEDIE,
+    cross_entropy_row,
+    cross_entropy_score,
     target_der,
     target_der2,
     target_score,
@@ -424,23 +426,15 @@ def _loss_row(
     `cross_entropy_kernel[has_border]` (`:947-1054`; `alpha` carries
     Logloss's border)."""
     if objective == GBDT_OBJ_CROSSENTROPY or objective == GBDT_OBJ_LOGLOSS:
-        var exp_val = identical_exp(p)
-        var prob = Float32(1.0)
-        if isfinite(exp_val):
-            prob = exp_val / (Float32(1.0) + exp_val)
-        prob = max(min(prob, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
-        var c = t
-        if objective == GBDT_OBJ_LOGLOSS:
-            c = Float32(1.0) if t > alpha else Float32(0.0)
-        var direction = ftz(c - prob)
-        var scale = ftz(prob * (Float32(1.0) - prob))
-        var log_exp_val_plus_one = p
-        if isfinite(exp_val):
-            log_exp_val_plus_one = identical_log(Float32(1.0) + exp_val)
+        # the device kernel's own body (`pointwise_bodies.cross_entropy_row`
+        # / `cross_entropy_score`, lane gbdt-one-body 2026-11-23)
+        var row = (
+            cross_entropy_row[True](t, p, alpha) if objective == GBDT_OBJ_LOGLOSS
+            else cross_entropy_row[False](t, p, alpha)
+        )
         return _LossRow(
-            ftz(weight * direction), abs(weight * direction),
-            # `c * p - log(1 + e)` in ONE rounding, as the default build fused it
-            ftz(weight * scale), weight * identical_mul_add(c, p, -log_exp_val_plus_one),
+            ftz(weight * row.direction), abs(weight * row.direction),
+            ftz(weight * row.scale), cross_entropy_score(row, p, weight),
         )
     var der = _weighted_der(objective, t, p, alpha, weight)
     return _LossRow(

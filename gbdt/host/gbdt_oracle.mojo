@@ -158,6 +158,8 @@ from checks.numerics import (
 from gbdt.data.permutation import TRandom
 from gbdt.targets.pointwise_bodies import (
     BODY_OBJ_RMSE,
+    cross_entropy_row,
+    cross_entropy_score,
     weighted_der,
     weighted_der2,
     weighted_score,
@@ -438,25 +440,13 @@ def _cross_entropy_row(
     (`pointwise_targets.mojo:947-1054`), term for term: the routed `exp`,
     the clamped probability, the bordered class, the flushed direction and
     scale, and the score with its isfinite fallback."""
-    var exp_val = identical_exp(val)
-    var p = Float32(1.0)
-    if isfinite(exp_val):
-        p = exp_val / (Float32(1.0) + exp_val)
-    p = max(min(p, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
-    var c: Float32
-    if target_class > border:
-        c = Float32(1.0)
-    else:
-        c = Float32(0.0)
-    var direction = ftz(c - p)
-    var scale = ftz(p * (Float32(1.0) - p))
-    var log_exp_val_plus_one = val
-    if isfinite(exp_val):
-        log_exp_val_plus_one = identical_log(Float32(1.0) + exp_val)
-    # `c * val - log(1 + e)` in one rounding, as the default build fused it
-    var score = weight * identical_mul_add(c, val, -log_exp_val_plus_one)
+    # the device kernel's own body (`pointwise_bodies.cross_entropy_row` /
+    # `cross_entropy_score`, lane gbdt-one-body 2026-11-23)
+    var row = cross_entropy_row[True](target_class, val, border)
+    var direction = row.direction
     return _CeRow(
-        ftz(weight * direction), weight * direction, ftz(weight * scale), score
+        ftz(weight * direction), weight * direction, ftz(weight * row.scale),
+        cross_entropy_score(row, val, weight),
     )
 
 
