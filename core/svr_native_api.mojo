@@ -34,7 +34,7 @@ struct SvrFitRequest(Copyable, Movable):
     var index_id: Int
     var device_form: Bool
     var scale_gamma: Bool
-    var candidate: Bool
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e. (the request's candidate word)
     var gamma: Float64
     var c: Float64
     var epsilon: Float64
@@ -106,7 +106,7 @@ def svr_native_dispatch[K: SvrNativeKernels](operation: Int, aa: Int, na: Int,
         var floats = 0
         if operation == SVR_NATIVE_FIT:
             addresses = 7
-            integers = 12
+            integers = 11
             floats = 5
         elif operation == SVR_NATIVE_PREDICT or operation == SVR_NATIVE_RESIDENT:
             addresses = 5
@@ -125,7 +125,7 @@ def svr_native_dispatch[K: SvrNativeKernels](operation: Int, aa: Int, na: Int,
             var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
             value = K.fit(SvrFitRequest(a[0], a[1], a[2], a[3], a[4], a[5], a[6],
                 p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8],
-                p[9] != 0, p[10] != 0, p[11] != 0, f[0], f[1], f[2], f[3], f[4]))
+                p[9] != 0, p[10] != 0, f[0], f[1], f[2], f[3], f[4]))
         elif operation == SVR_NATIVE_PREDICT or operation == SVR_NATIVE_RESIDENT:
             var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
             var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
@@ -153,9 +153,9 @@ struct SvrNativeDriver(Copyable, Movable):
 
     def fit(self, r: SvrFitRequest) raises -> Int:
         var a: Array[Int, 7] = [r.x, r.target, r.dual, r.support, r.vectors, r.info, r.bounds]
-        var p: Array[Int, 12] = [r.rows, r.features, r.kernel, r.max_iter,
+        var p: Array[Int, 11] = [r.rows, r.features, r.kernel, r.max_iter,
             r.nochange_steps, r.degree, r.base_id, r.base_rows, r.index_id,
-            Int(r.device_form), Int(r.scale_gamma), Int(r.candidate)]
+            Int(r.device_form), Int(r.scale_gamma)]
         var f: Array[Float64, 5] = [r.gamma, r.c, r.epsilon, r.tolerance, r.coef0]
         return native_descriptor_call_fixed(self.entry, SVR_NATIVE_FIT, a, p, f)
 

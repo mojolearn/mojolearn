@@ -63,12 +63,7 @@ trait Exec:
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
         ...
 
-    @staticmethod
-    def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
-        """The blocked Cholesky profile (cholesky/checks/potrf.mojo, +0.0
-        ridge): st[0] = LAPACK's info, st[1] = log det, li = L^{-1} (n x n)
-        when info == 0 (MinCovDet's IDN_MCD_CHOL C-step)."""
-        ...
+    # TOMBSTONE: MOJOLEARN_IDN_MCD_CHOL (LOSER on quality, ab1 2026-11-18) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e. (Exec.chol_inv, its only reader)
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:

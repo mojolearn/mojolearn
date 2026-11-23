@@ -89,7 +89,7 @@ from core.member_abi import (
     MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
 )
 from bindings.member_set_door import (
-    MEMBER_SET_NATIVE, member_set_tests, member_held_open, member_held_run, member_held_close, MemberHeldCall,
+    member_set_tests, member_held_open, member_held_run, member_held_close, MemberHeldCall,
 )
 from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, vote_regress_run, vote_transform_run,
@@ -731,8 +731,7 @@ def _member_open(member: PythonObject, X: PythonObject, operation: Int, classifi
     raises. `regressor_width`: the columns a regressor must write (0: any).
     The caller runs it (`member_held_run`, or a typed RUN with its plan and
     state) and closes it with `member_held_close`."""
-    comptime if not MEMBER_SET_NATIVE:
-        return MemberHeldCall()
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         var plan = prep_estimator_plan(member, context)
         if plan is None or py_get(plan, "member") is None:

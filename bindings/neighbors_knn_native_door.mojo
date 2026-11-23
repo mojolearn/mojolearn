@@ -905,9 +905,8 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         # so the range check cannot refuse them: no int64 widening, no
         # minimum and maximum (two device reductions, each an upload of the
         # labels, a launch and a synchronisation) and no narrowing back. The
-        # columns below copy the same int32 words: same bits. The old form is
-        # the B arm, -D MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD
-        # (neighbors/neighbors_knn_run.mojo knn_labels_already_int32).
+        # columns below copy the same int32 words: same bits.
+        # TOMBSTONE: MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
         wide_type = "<i4"
     else:
         if y_typestr != "<i8":

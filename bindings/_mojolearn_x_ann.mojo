@@ -47,10 +47,7 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     # (IVF_PQ_ONE_UPLOAD with IVF_BUILD_FROM_POINTER) the n x dim copy is gone
     # The codes go from the device straight into the caller's array (lane
     # fx-ann-fit-nocopy, 2026-11-20: the default; before, a result list the
-    # size of the codes and a copy out of it). The opt-in `ANN3_DIRECT_OUT`
-    # (lane ann-apple3) now only chooses the copy inside the build
-    # (x_ann/ivf_pq_device.mojo): one raw copy into the pageable array
-    # in place of the pooled pinned stages.
+    # size of the codes and a copy out of it), through the pooled pinned stages.
     # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (unmeasured opt-in arm: codes written by the device into the caller's array) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 418bb3c6c3.
     # Restore: git apply experiments/removed/MOJOLEARN_ANN3_DIRECT_OUT.expdel2-01-base.patch
     # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.

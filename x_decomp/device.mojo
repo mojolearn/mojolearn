@@ -158,11 +158,6 @@ from x_decomp.tsqr_device import (
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from x_decomp.tsqr_multi_gpu import ts_factor_dispatch, tsqr_plan_current
 from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
-from cholesky.checks.potrf import (
-    CHOL_ELEM_TPB, CHOL_NB_PINNED, add_jitter, chol_logdet, chol_nb_for, chol_workspace_floats, potrf_lower,
-)
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
-from core.identity_trace import IdentityTrace
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -2757,44 +2752,12 @@ struct DevExec(Exec):
         cx.synchronize()
         _ = cx^
 
-    @staticmethod
-    def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
-        """`Exec.chol_inv` (lane apple-holes, MinCovDet's IDN_MCD_CHOL):
-        `potrf_lower` at +0.0 ridge, `chol_logdet`, L^{-1} by `trsm_lower`
-        against I. The resident kit's `DMcd.chol` (x_decomp/kit_device.mojo)
-        runs the same calls on its pooled matrices."""
-        # Lane fix-chol-ops-remaining-callers (2026-11-13): the 0.8.66 route
-        # (potrf_lower with its info read per panel, the chol_logdet wait,
-        # trsm_lower against I), restored from 49e8c5b633^.
-        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
-        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
-        var ctx = xd_ctx()
-        var da = _up(ctx, a, n * n)
-        var nb = chol_nb_for(n, CHOL_NB_PINNED)
-        var ws = ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
-        var trace = IdentityTrace()
-        add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
-        var run = potrf_lower(ctx, da, ws, n, trace)
-        st.unsafe_store(0, Float32(run.info))
-        st.unsafe_store(1, Float32(0.0))
-        if run.info == 0:
-            var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-            st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))
-            var db = ctx.enqueue_create_buffer[DType.float32](n * n)
-            ctx.enqueue_function[pj_identity_kernel](
-                db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
-            )
-            trsm_lower(ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
-            _down(ctx, db, li, n * n)
-            ctx.synchronize()
-            _ = db^
-            _ = dwork^
-        ctx.synchronize()
-        _ = ws^
-        _ = da^
-        _ = ctx^
+    # TOMBSTONE: MOJOLEARN_IDN_MCD_CHOL (LOSER on quality, ab1 2026-11-18) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e. (DevExec.chol_inv)
+    # (kept from the deleted DevExec.chol_inv:)
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:

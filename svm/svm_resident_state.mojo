@@ -131,7 +131,7 @@ def _svm_resident_decide(
     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     # fix-svc-query-resident: the lease's held query buffers (no device or
     # pinned allocation, no fill launch per call); per-call for a fold or
-    # lease 0 (core/query_x_held.mojo IDN_QUERY_X_HELD).
+    # lease 0 (core/query_x_held.mojo).
     var store = svm_resident_store()
     var qx = resident_query_x(store, ctx, lease, x_addr, n_rows, n_cols, fold)
     var n_batch = svc_predict_batch_rows(n_rows, n_support, buffer_size_mib)

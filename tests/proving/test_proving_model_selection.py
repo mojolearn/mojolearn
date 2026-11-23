@@ -1,17 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Model selection and meta-estimators over members, against their `_OFF` build arms (lanes ma-core, ma-callers).
+"""Model selection and meta-estimators over members (lanes ma-core, ma-callers).
 
 Every case of _arm_cases.py (cross_val_score / cross_validate / cross_val_predict / GridSearchCV values, named
 scorers, error_score, Bagging / Voting / Stacking / MultiOutput / OneVsRest / Calibrated / RFE / explainers over
-members, the NaN refusal words) runs in subprocesses, once with this interpreter's wheel and once with each arm
-wheel named by an environment variable:
-
-    MOJOLEARN_PROVING_ARM_MSEL_MEMBER_UNITS_OFF=/path/to/python   (wheel built with -D MOJOLEARN_MSEL_MEMBER_UNITS_OFF)
-    MOJOLEARN_PROVING_ARM_MEMBER_SET_OFF=/path/to/python          (wheel built with -D MOJOLEARN_MEMBER_SET_OFF)
-
-The default arm's results are checked on their own always; an arm comparison skips when its variable is unset.
-The cases are split across every core (one subprocess per shard, all arms at once; MOJOLEARN_PROVING_WORKERS caps
-it); under pytest-xdist the workers share one run through a lock file.
+members, the NaN refusal words) runs in subprocesses with this interpreter's wheel and its results are checked.
+The cases are split across every core (one subprocess per shard; MOJOLEARN_PROVING_WORKERS caps it); under
+pytest-xdist the workers share one run through a lock file.
 """
 import fcntl
 import os
@@ -26,13 +20,9 @@ from _proving import DEVICES, HERE, assert_same, cls, make, member, workers_for
 import _arm_cases
 
 CASES = sorted(_arm_cases.CASES)
-ARM_DEFINES = ["MSEL_MEMBER_UNITS_OFF", "MEMBER_SET_OFF"]
-ARMS = [pytest.param(define, id=define) for define in ARM_DEFINES]
+# TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF and MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_MEMBER_UNITS_OFF.patch (and MOJOLEARN_MEMBER_SET_OFF.patch).
 SCRIPT = os.path.join(HERE, "_arm_cases.py")
-
-
-def _arm_python(label):
-    return sys.executable if label == "default" else os.environ.get(f"MOJOLEARN_PROVING_ARM_{label}")
 
 
 @pytest.fixture(scope="session")
@@ -44,11 +34,11 @@ def arm_root(tmp_path_factory):
 
 
 def _run_arms(root, device):
-    """Run every case on every configured arm for `device` once per pytest run; returns {label: outdir}."""
+    """Run every case for `device` once per pytest run; returns {"default": outdir}."""
     done = root / f"{device}.done"
     with open(root / f"{device}.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        labels = ["default"] + [d for d in ARM_DEFINES if _arm_python(d)]
+        labels = ["default"]
         outs = {label: root / device / label for label in labels}
         if not done.exists():
             shards = max(1, workers_for(len(CASES) * len(labels)) // len(labels))
@@ -61,7 +51,7 @@ def _run_arms(root, device):
                     if chunk:
                         log = open(outs[label] / f"shard{shard}.log", "w")
                         running.append((label, log, subprocess.Popen(
-                            [_arm_python(label), SCRIPT, str(outs[label]), *chunk], env=env, cwd=str(outs[label]),
+                            [sys.executable, SCRIPT, str(outs[label]), *chunk], env=env, cwd=str(outs[label]),
                             stdout=log, stderr=subprocess.STDOUT)))
             for label, log, process in running:
                 process.wait(timeout=3600)
@@ -102,19 +92,6 @@ def test_case_runs_on_the_default_arm(arm_root, device, name):
         assert str(result["calibrated"]) == "no error", f"{name}.calibrated: {result['calibrated']}"
     if name == "grid_ridge_and_logistic":
         assert float(result["ridge_alpha"]) in (0.1, 1.0)
-
-
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("arm", ARMS)
-@pytest.mark.parametrize("name", CASES)
-def test_case_equals_the_off_arm(arm_root, device, arm, name):
-    if not _arm_python(arm):
-        pytest.skip(f"MOJOLEARN_PROVING_ARM_{arm} is not set (no {arm} arm wheel)")
-    outs = _run_arms(arm_root, device)
-    default, off = _load(outs["default"], name), _load(outs[arm], name)
-    assert sorted(default) == sorted(off), f"{name}: keys differ"
-    for key in default:
-        assert_same(off[key], default[key], f"{name}.{key} ({arm} arm vs default)")
 
 
 @pytest.mark.parametrize("device", DEVICES)

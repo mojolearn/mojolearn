@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # One shared provider admission for the x_neighbors backend's existing packed
 # CPU/GPU ABI. This introduces no provider class or estimator-specific transport.
-from providers.python.classical_native_dispatch import CLASSICAL_NATIVE_DISPATCH
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_loaded_module_door import native_loaded_module
@@ -11,7 +10,7 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
-from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_module, xn_capabilities, xn_admit_checked
+from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_module, xn_capabilities
 from x_neighbors.descriptor_schema import xn_operation_id
 from bindings.py_optional import py_or_none, py_present
 
@@ -22,11 +21,10 @@ def xn_admit(binding: PythonObject) raises -> PythonObject:
         _ = xn_module(binding)
         return binding
     # A module (fast mode, explicit internal callers) keeps its by-name
-    # entries unless the build admits it natively (CLASSICAL_NATIVE_DISPATCH,
-    # the B arm); identical public calls arrive as the admitted snapshot.
-    if not CLASSICAL_NATIVE_DISPATCH:
-        return binding
-    return xn_admit_checked(binding)
+    # entries; identical public calls arrive as the admitted snapshot.
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CLASSICAL_NATIVE_DISPATCH.patch; record in docs/TOMBSTONES.md.
+    return binding
 
 
 def xn_admit_arguments(args: PythonObject, context: PythonObject) raises -> PythonObject:

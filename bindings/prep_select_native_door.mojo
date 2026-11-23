@@ -30,7 +30,6 @@ from bindings.member_boundary_door import member_admit_serving, member_pack, mem
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_notices import member_notices_take
 from bindings.member_owner_unpack import MemberOwner
-from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
     MemberPlan, member_new, member_free, member_kind_capabilities, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES,
     MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32, MEMBER_I32,
@@ -243,8 +242,7 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
     admission refuses keep the estimator's own doors (the fallback rule):
     they answer or refuse in their own words."""
     var member = RfeMember()
-    comptime if not MEMBER_SET_NATIVE:
-        return member^
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     if len(fit_params) != 0:
         return member^
     var getter = String(g)

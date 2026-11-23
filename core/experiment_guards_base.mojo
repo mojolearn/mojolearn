@@ -58,7 +58,10 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch
     comptime assert not is_defined["MOJOLEARN_DART_ROUND_REF_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): DART_ROUND_REF_OFF (old path, never measured) is gone; the default is kept; code at 650388311e; restore: experiments/removed/MOJOLEARN_DART_ROUND_REF_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch
-    comptime assert not is_defined["MOJOLEARN_IDN_GBDT_STEP_OLD"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_GBDT_STEP_OLD (old path, never measured) is gone; the default is kept; code at f644604c7a; restore: experiments/removed/MOJOLEARN_IDN_GBDT_STEP_OLD.patch"
+    # MOJOLEARN_IDN_GBDT_STEP_OLD: lane expdel2-43 kept its read (greedy_search_helper_depthwise.mojo) while this refusal stood, so a B build failed here; the read is deleted 2026-11-23 (lane/ab-prep-classical) and the refusal below now matches the code.
+    # TOMBSTONE: MOJOLEARN_IDN_GBDT_STEP_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GBDT_STEP_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_GBDT_STEP_OLD"](), "removed 2026-11-15 (lane/expdel2-02-base) and, its surviving read, 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: only the Lossguide pool size and its per-tree zero fill differed, the same slots written and read, no bits); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GBDT_STEP_OLD.ab-prep.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"](), "removed 2026-11-15 (lane/expdel2-02-base): IDN_HPDEV_INIT_OFF (old path, never measured) is gone; the default is kept; code at 2136ab3bb0; restore: experiments/removed/MOJOLEARN_IDN_HPDEV_INIT_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_NORMAL_OFF.patch
@@ -197,7 +200,7 @@ def _check_configuration() -> Bool:
     # ---- end lane fx-old-arms-triage
     # ---- lane fx-verdicts5 (2026-11-20): verdicts of A/B round 3 (NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad)
     # MOJOLEARN_MSEL_FAST_LC_TEST_REUSE (bindings/msel_cv_door.mojo): promoted to the default; the old opt-in name is refused.
-    comptime assert not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE"](), "promoted 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, learning-curve istella 0.853, taxi 0.956, scores and digests equal): it is the default; drop the define, or build the old form with -D MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF"
+    comptime assert not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE"](), "promoted 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, learning-curve istella 0.853, taxi 0.956, scores and digests equal): it is the default; drop the define (the -D MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF old form was deleted 2026-11-23)"
     # TOMBSTONE: MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE (NOISE, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm: 20 x_prep cells 0.952-1.092, geomean 1.012, digests equal) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_XPREP_FAST_ARENA_HUGEPAGE"](), "removed 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm; NOISE: 20 x_prep cells 0.952-1.092, geomean 1.012, digests equal): the huge-page advice on a mapped x_prep arena; see docs/TOMBSTONES.md"
@@ -220,6 +223,17 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.ab-prep.patch
     comptime assert not is_defined["MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL"](), "removed 2026-11-23 (lane/ab-prep-transformer, removed without measurement: plumbing, rule 2026-11-22; the zero-filled array.array logits store held the same download bytes as the unfilled store); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_BYTE_LM_LOGITS_ZERO_FILL.ab-prep.patch"
     # ---- end lane ab-prep-transformer
+    # ---- lane ab-prep-classical (2026-11-23): owed arms closed without a run (plumbing, rule 2026-11-22) or from the record
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MEMBER_SET_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MEMBER_SET_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the member set calls the same family member entries the per-member fit doors reach; only the per-member door, its re-admission and Python publication went); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MEMBER_SET_OFF.patch"
+    # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_MEMBER_UNITS_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MSEL_MEMBER_UNITS_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the member units and refit call the same family member entries the Python units reach through each clone's fit door; only the per-unit Python clone, fit door and publication went); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_MEMBER_UNITS_OFF.patch"
+    # TOMBSTONE: MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF (decided: winner promoted, A/B round 3) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF"](), "removed 2026-11-23 (lane/ab-prep-classical, decided from A/B round 3 NVIDIA L40S host 2ef132a6de04, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, scores and digests equal: learning-curve istella 0.853, taxi 0.956 of the old form; EXP:4557): the once-per-unit test gather is gone; code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MSEL_FAST_LC_TEST_REUSE_OFF.patch"
+    # ---- end lane ab-prep-classical
     return True
 
 
