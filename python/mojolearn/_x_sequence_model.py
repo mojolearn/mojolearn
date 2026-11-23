@@ -43,6 +43,9 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           # nn-losses-2 begin
           "log_softmax": 77,
           # nn-losses-2 end
+          # nn-conv3d begin
+          "conv3d": 73, "max_pool3d": 74, "avg_pool3d": 75, "adaptive_avg_pool3d": 76,
+          # nn-conv3d end
           }
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4,
          # nn-losses begin
@@ -189,7 +192,8 @@ class Sequential(_CheckMixin):
             ``'leaky_relu'``, ``'elu'``, ``'prelu'``, ``'mish'``,
             ``'hardswish'``, ``'hardsigmoid'``, ``'group_norm'``,
             ``'instance_norm1d'``, ``'instance_norm2d'``,
-            ``'log_softmax'``), with that
+            ``'log_softmax'``, ``'conv3d'``, ``'max_pool3d'``, ``'avg_pool3d'``,
+            ``'adaptive_avg_pool3d'``), with that
             method's arguments.
         *args, **kwargs
             The layer's arguments, as listed for ``kind``.
@@ -365,6 +369,118 @@ class Sequential(_CheckMixin):
             model.conv1d(32, 3, padding=1).relu().adaptive_avg_pool1d(1).flatten().linear(2)
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("adaptive_avg_pool1d", (output_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    # nn-conv3d begin
+    def conv3d(self, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True):
+        """Append a 3-D convolution of ``(channels, depth, height, width)``
+        samples, as PyTorch's ``nn.Conv3d`` with zero padding.
+
+        Parameters
+        ----------
+        out_channels : int
+            The number of output channels.
+        kernel_size : int or tuple of 3 ints
+            The window along depth, height and width.
+        stride : int or tuple of 3 ints, default 1
+            The step between windows.
+        padding : int, tuple of 3 ints or 'valid', default 0
+            Zeros added at both ends of each axis.
+        dilation : int or tuple of 3 ints, default 1
+            The spacing between kernel taps.
+        groups : int, default 1
+            With ``groups`` greater than 1 the channels split into
+            ``groups`` equal blocks and each block of outputs sees only its
+            block of inputs; it divides the input channels and
+            ``out_channels``.
+        bias : bool, default True
+            Add a learned per-channel bias.
+
+        The weight is ``(out_channels, channels // groups, kd, kh, kw)``
+        and, as in PyTorch, the weight and bias start uniform in
+        ``[-1/sqrt(fan_in), 1/sqrt(fan_in)]`` with ``fan_in = channels //
+        groups * kd * kh * kw``.
+
+        Example::
+
+            model = (mojolearn.Sequential(input_shape=(1, 16, 16, 16))
+                     .conv3d(8, 3, padding=1).relu().max_pool3d(2)
+                     .adaptive_avg_pool3d(1).flatten().linear(2))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("conv3d", (out_channels, kernel_size, stride, padding, dilation, groups, bias), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def max_pool3d(self, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False):
+        """Append a max pooling of ``(channels, depth, height, width)``
+        samples, as PyTorch's ``nn.MaxPool3d``.
+
+        Each output is the largest value of its window; padded positions
+        are never chosen, and of tied values the first in (depth, height,
+        width) order receives the gradient.
+
+        Parameters
+        ----------
+        kernel_size : int or tuple of 3 ints
+            The window along depth, height and width.
+        stride : int, tuple of 3 ints or None, default None
+            The step between windows; None is ``kernel_size``.
+        padding : int or tuple of 3 ints, default 0
+            Positions added at both ends of each axis, at most half of the
+            window.
+        dilation : int or tuple of 3 ints, default 1
+            The spacing between window taps.
+        ceil_mode : bool, default False
+            Round the output sizes up instead of down.
+
+        Example::
+
+            model.max_pool3d(2)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("max_pool3d", (kernel_size, stride, padding, dilation, ceil_mode), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def avg_pool3d(self, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
+                   divisor_override=None):
+        """Append an average pooling of ``(channels, depth, height, width)``
+        samples, as PyTorch's ``nn.AvgPool3d``.
+
+        Parameters
+        ----------
+        kernel_size : int or tuple of 3 ints
+            The window along depth, height and width.
+        stride : int, tuple of 3 ints or None, default None
+            The step between windows; None is ``kernel_size``.
+        padding : int or tuple of 3 ints, default 0
+            Zeros added at both ends of each axis, at most half of the
+            window.
+        ceil_mode : bool, default False
+            Round the output sizes up instead of down.
+        count_include_pad : bool, default True
+            Count the zero padding in each window's size.
+        divisor_override : int or None, default None
+            When given, the divisor of every window.
+
+        Example::
+
+            model.avg_pool3d(2, stride=2)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("avg_pool3d", (kernel_size, stride, padding, ceil_mode, count_include_pad, divisor_override), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def adaptive_avg_pool3d(self, output_size):
+        """Append an average pooling of ``(channels, depth, height, width)``
+        samples to ``(channels, *output_size)``, as PyTorch's
+        ``nn.AdaptiveAvgPool3d``: ``output_size=1`` is the global average
+        over each volume, and output sizes that divide the input's make each
+        output the mean of one equal tile. Other output sizes are refused.
+
+        Parameters
+        ----------
+        output_size : int or tuple of 3 ints
+            The output depth, height and width.
+
+        Example::
+
+            model.adaptive_avg_pool3d(1)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("adaptive_avg_pool3d", (output_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+    # nn-conv3d end
 
     def branch(self, source=-1):
         """Append a layer whose output is the output of layer ``source``
@@ -2106,12 +2222,23 @@ _SEQUENTIAL_CONTEXT = {
                     # nn-conv end
                     "multihead_attention", "", "", "", "", "positional_encoding",
                     # nn-attention end
-                    "", "", "", "",  # 73..76: nn-conv3d
+                    # nn-conv3d begin
+                    "conv3d", "max_pool3d", "avg_pool3d", "adaptive_avg_pool3d",
+                    # nn-conv3d end
                     # nn-losses-2 begin
                     "log_softmax",
                     # nn-losses-2 end
                     ),
 }
+# nn-conv3d begin
+# layer_names is read by code (bindings/sequential_description_pack.mojo sequential_layers subscripts it), so
+# the 3-D layers' names join it as a mapping, whatever form the other lanes left it in
+_names = _SEQUENTIAL_CONTEXT["layer_names"]
+_names = dict(_names) if isinstance(_names, dict) else dict(enumerate(_names))
+_names.update({73: "conv3d", 74: "max_pool3d", 75: "avg_pool3d", 76: "adaptive_avg_pool3d"})
+_SEQUENTIAL_CONTEXT["layer_names"] = _names
+del _names
+# nn-conv3d end
 
 
 

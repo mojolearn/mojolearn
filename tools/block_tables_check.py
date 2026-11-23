@@ -98,6 +98,10 @@ DELEGATES = (
         "block_param_sizes": "nn_act_param_sizes", "block_param_names": "nn_act_param_names",
         "block_init_bounds": "nn_act_init_bounds", "block_tensor_dims": "nn_act_tensor_dims",
         "block_shape": "nn_act_shape", "block_forward": "nn_act_forward"}),
+    ("autograd/nn_conv3d_layers.mojo", "is_conv3d_layer", {
+        "block_param_sizes": "conv3d_layer_sizes", "block_param_names": "conv3d_layer_names",
+        "block_init_bounds": "conv3d_layer_bounds", "block_tensor_dims": "conv3d_layer_dims",
+        "block_shape": "conv3d_layer_shape", "block_forward": "conv3d_layer_forward"}),
     ("autograd/nn_conv_blocks.mojo", "is_nn_conv", {
         "block_param_sizes": "nnc_param_sizes", "block_param_names": "nnc_param_names",
         "block_init_bounds": "nnc_init_bounds", "block_tensor_dims": "nnc_tensor_dims",

@@ -103,6 +103,12 @@ SEQUENTIAL_LAYER_FIXTURES={
     # nn-losses-2 begin
     'log_softmax':((2,3),lambda m,S:m.linear(3).log_softmax(1)),
     # nn-losses-2 end
+    # nn-conv3d begin
+    'conv3d':((1,2,2,2),lambda m,S:m.conv3d(2,2,padding=1)),
+    'max_pool3d':((1,2,2,2),lambda m,S:m.max_pool3d(2)),
+    'avg_pool3d':((1,2,2,2),lambda m,S:m.avg_pool3d(2)),
+    'adaptive_avg_pool3d':((1,2,2,2),lambda m,S:m.adaptive_avg_pool3d(1)),
+    # nn-conv3d end
 }
 
 

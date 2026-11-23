@@ -39,6 +39,43 @@ def _shape(mut mods: NativeModules, value: PythonObject, name: String, infer: Bo
     return out
 
 
+# nn-conv3d begin
+def _triple(mut mods: NativeModules, value: PythonObject, name: String, low: Int, context: PythonObject) raises -> Int:
+    """A 3-D layer's window, step, padding or dilation: an integer, or a tuple or list of three (depth,
+    height, width), each >= low and at most 1023, packed as autograd/nn_conv3d.mojo dhw_pack."""
+    var b = mods.module("builtins")
+    var d: Int
+    var h: Int
+    var w: Int
+    if _integer(value, context):
+        d = _positive(value, name, low, context)
+        h = d
+        w = d
+    else:
+        if not (Bool(py=py_call(b.isinstance, value, b.tuple)) or Bool(py=py_call(b.isinstance, value, b.list))):
+            raise Error(name + " must be an integer or a tuple of three integers")
+        var source = py_call(b.tuple, value)
+        sequential_admit_value(mods, source, context)
+        if len(source) != 3:
+            raise Error(name + " must be an integer or a tuple of three integers")
+        d = _positive(source[0], name, low, context)
+        h = _positive(source[1], name, low, context)
+        w = _positive(source[2], name, low, context)
+    if d > 1023 or h > 1023 or w > 1023:
+        raise Error(name + " must be at most 1023")
+    return d | (h << 10) | (w << 20)
+
+
+def _half_of_window(kernel: Int, padding: Int) -> Bool:
+    """True when every axis's padding is at most half of the window (PyTorch's pooling rule)."""
+    for k in range(3):  # small-loop(3: depth, height, width)
+        var shift = 10 * k
+        if 2 * ((padding >> shift) & 1023) > ((kernel >> shift) & 1023):
+            return False
+    return True
+# nn-conv3d end
+
+
 def _arguments(mut mods: NativeModules, kind: String, supplied: PythonObject, keywords: PythonObject,
                names: PythonObject, defaults: PythonObject, required: Int) raises -> PythonObject:
     var b = mods.module("builtins")
@@ -333,6 +370,62 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         a1 = PythonObject(init_bits)
         args = Python.list(count, init_bits, 0, 0, 0, 0)
     # nn-activations end
+    # nn-conv3d begin
+    elif kind == "conv3d":
+        # autograd/nn_conv3d_layers.mojo LAYER_CONV3D: a4 = bias + 2 groups, the triples packed
+        var options = _arguments(mods, kind, supplied, keywords,
+            Python.tuple("out_channels", "kernel_size", "stride", "padding", "dilation", "groups", "bias"),
+            Python.tuple(None, None, 1, 0, 1, 1, True), 2)
+        var oc = _positive(options[0], "out_channels", 1, context)
+        var kernel = _triple(mods, options[1], "kernel_size", 1, context)
+        var stride = _triple(mods, options[2], "stride", 1, context)
+        var pad_arg = options[3]
+        if Bool(py=py_call(b.isinstance, pad_arg, b.str)):
+            if String(py_call(b.str, pad_arg)) != "valid":
+                raise Error("padding must be an integer, a tuple of three integers or 'valid'")
+            pad_arg = PythonObject(0)
+        var padding = _triple(mods, pad_arg, "padding", 0, context)
+        var dilation = _triple(mods, options[4], "dilation", 1, context)
+        var groups = _positive(options[5], "groups", 1, context)
+        var with_bias = 1 if Bool(py=options[6]) else 0
+        a0 = PythonObject(oc)
+        a1 = PythonObject(kernel)
+        args = Python.list(oc, kernel, stride, padding, with_bias + 2 * groups, dilation)
+    elif kind == "max_pool3d":
+        var options = _arguments(mods, kind, supplied, keywords,
+            Python.tuple("kernel_size", "stride", "padding", "dilation", "ceil_mode", "return_indices"),
+            Python.tuple(None, None, 0, 1, False, False), 1)
+        if Bool(py=options[5]):
+            raise Error("return_indices is not supported: max_pool3d returns the pooled values only")
+        var kernel = _triple(mods, options[0], "kernel_size", 1, context)
+        var stride = kernel if options[1] is None else _triple(mods, options[1], "stride", 1, context)
+        var padding = _triple(mods, options[2], "padding", 0, context)
+        if not _half_of_window(kernel, padding):
+            raise Error("padding must be at most half of kernel_size")
+        var dilation = _triple(mods, options[3], "dilation", 1, context)
+        a0 = PythonObject(kernel)
+        a1 = PythonObject(stride)
+        args = Python.list(kernel, stride, padding, dilation, 1 if Bool(py=options[4]) else 0, 0)
+    elif kind == "avg_pool3d":
+        var options = _arguments(mods, kind, supplied, keywords,
+            Python.tuple("kernel_size", "stride", "padding", "ceil_mode", "count_include_pad", "divisor_override"),
+            Python.tuple(None, None, 0, False, True, None), 1)
+        var kernel = _triple(mods, options[0], "kernel_size", 1, context)
+        var stride = kernel if options[1] is None else _triple(mods, options[1], "stride", 1, context)
+        var padding = _triple(mods, options[2], "padding", 0, context)
+        if not _half_of_window(kernel, padding):
+            raise Error("padding must be at most half of kernel_size")
+        var divisor = 0 if options[5] is None else _positive(options[5], "divisor_override", 1, context)
+        a0 = PythonObject(kernel)
+        a1 = PythonObject(stride)
+        args = Python.list(kernel, stride, padding, 1 if Bool(py=options[4]) else 0,
+                           1 if Bool(py=options[3]) else 0, divisor)
+    elif kind == "adaptive_avg_pool3d":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("output_size"), Python.tuple(None), 1)
+        var size = _triple(mods, options[0], "output_size", 1, context)
+        a0 = PythonObject(size)
+        args = Python.list(size, 0, 0, 0, 0, 0)
+    # nn-conv3d end
     elif kind == "gated":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("gate", "up"),
                                  Python.tuple(None, None), 2)

@@ -41,6 +41,9 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program',
                           # lane nn-optim begin: Sequential.compile's optimizers and schedules, small fits
                           'sequence-optim-rmsprop', 'sequence-optim-adagrad', 'sequence-optim-lamb',
                           # lane nn-optim end
+                          # nn-conv3d begin
+                          'sequence-composed-conv3d', 'sequence-composed-pool3d',
+                          # nn-conv3d end
                           ))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',

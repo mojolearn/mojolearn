@@ -1050,6 +1050,13 @@ EXAMPLES = {
                                        {"loss": "mse", "optimizer": "rmsprop", "lr": 0.01, "centered": True,
                                         "schedule": "cosine", "T_max": 2}),
     # lane nn-optim end
+    # nn-conv3d begin
+    "seq-conv3d": _seq((1, 4, 6, 6), [
+        ["conv3d", 4, 3, {"padding": 1}], ["relu"], ["max_pool3d", [2, 2, 2]],
+        ["conv3d", 6, [1, 3, 3], {"padding": [0, 1, 1], "groups": 2}], ["silu"],
+        ["avg_pool3d", 3, {"stride": 2, "padding": 1, "ceil_mode": True, "count_include_pad": False}],
+        ["adaptive_avg_pool3d", 1], ["flatten"], ["linear", 1]]),
+    # nn-conv3d end
 }
 # nn-norms begin: group norm (4 groups) and instance norm (affine, tracked running statistics) in a residual stack
 EXAMPLES["seq-norms"] = _seq((4, 8), [

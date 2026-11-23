@@ -222,3 +222,9 @@ Sequential.fit:target_lengths	not yet in a release verification
 # Sequential.compile schedule='multi_step' / 'cosine' / 'cosine_warm_restarts' / 'linear_warmup' / 'one_cycle' /
 # 'reduce_on_plateau' and their arguments: not yet in a release verification
 # lane nn-optim end
+# nn-conv3d begin
+Sequential.conv3d	nn-conv3d 3-D layers: not yet in a release verification
+Sequential.max_pool3d	nn-conv3d 3-D layers: not yet in a release verification
+Sequential.avg_pool3d	nn-conv3d 3-D layers: not yet in a release verification
+Sequential.adaptive_avg_pool3d	nn-conv3d 3-D layers: not yet in a release verification
+# nn-conv3d end

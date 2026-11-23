@@ -137,6 +137,13 @@ from autograd.nn_activations import (
 # nn-norms begin
 from autograd.nn_norms import graph_group_norm, graph_instance_norm
 # nn-norms end
+# nn-conv3d begin
+# the 3-D layers, codes 73 .. 76 (autograd/nn_conv3d_layers.mojo)
+from autograd.nn_conv3d_layers import (
+    is_conv3d_layer, conv3d_layer_shape, conv3d_layer_sizes, conv3d_layer_names, conv3d_layer_bounds,
+    conv3d_layer_dims, conv3d_layer_forward,
+)
+# nn-conv3d end
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -171,7 +178,8 @@ comptime LAYER_LOG_SOFTMAX = 77
 #: layer, defined either here or by a lane's own module, which defines its LAYER_* codes and tables and is called
 #: from each table below (tools/block_tables_check.py DELEGATES lists them):
 #:   47..53 autograd/nn_activations.mojo     56..66 autograd/nn_conv_blocks.mojo
-#:   67, 72 autograd/nn_attention.mojo            77 log_softmax, here (autograd/nn_log_softmax.mojo's body)
+#:   67, 72 autograd/nn_attention.mojo          73..76 autograd/nn_conv3d_layers.mojo
+#:   77 log_softmax, here (autograd/nn_log_softmax.mojo's body)
 #: BLOCK_UNUSED_FIRST..BLOCK_UNUSED_LAST were never assigned and are not layers.
 comptime BLOCK_FIRST = 32
 comptime BLOCK_LAST = 77
@@ -447,6 +455,10 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
     if code == LAYER_LOG_SOFTMAX:
         return nn_log_softmax_shape(code, a0, cur, name)
     # nn-losses-2 end
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_shape(code, xargs, i, cur, name)
+    # nn-conv3d end
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -523,6 +535,10 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
             out.append(_x(xargs, i, 0))  # running_mean
             out.append(_x(xargs, i, 0))  # running_var
     # nn-norms end
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_sizes(code, xargs, i, cur)
+    # nn-conv3d end
     return out^
 
 
@@ -586,6 +602,10 @@ def block_param_names(code: Int, xargs: List[Int], i: Int) -> List[String]:
             out.append(".running_mean")
             out.append(".running_var")
     # nn-norms end
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_names(code, xargs, i)
+    # nn-conv3d end
     return out^
 
 
@@ -676,6 +696,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
             out.append(Float32(-1))
             out.append(Float32(-2))
     # nn-norms end
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_bounds(code, xargs, i, cur)
+    # nn-conv3d end
     return out^
 
 
@@ -939,6 +963,10 @@ def block_forward[E: Exec](
     if code == LAYER_LOG_SOFTMAX:
         return nn_log_softmax_forward(tape, ex, a0, cur, h)
     # nn-losses-2 end
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_forward(tape, ex, code, xargs, i, cur, P, Gr, off, h, train)
+    # nn-conv3d end
     raise Error("model: unknown block code " + String(code))
 
 
@@ -1128,6 +1156,10 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
     elif code == LAYER_INSTANCE_NORM:
         out.append(_x(xargs, i, 0))
     # nn-norms end
+    # nn-conv3d begin
+    if is_conv3d_layer(code):
+        return conv3d_layer_dims(code, xargs, i, cur, slot)
+    # nn-conv3d end
     return out^
 
 
