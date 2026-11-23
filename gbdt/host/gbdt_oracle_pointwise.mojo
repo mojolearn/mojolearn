@@ -502,10 +502,20 @@ def gbdt_pointwise_host_fit(
     od_wait: Int,
     use_best_model: Int,
     best_model_min_trees: Int,
+    has_weights: Bool = True,
 ) raises -> GbdtPointwiseFit:
-    """`train` then `fit_with_test` on the covered configuration."""
-    if n_rows < 1 or n_features < 1 or n_eval < 1:
-        raise Error("the pointwise eval fit needs rows, features and an eval set")
+    """`train` then `fit_with_test` on the covered configuration.
+
+    Lane gbdt-cpu-rest (2026-11-23): `has_weights` False is the device's
+    unweighted arm, `w` then a ones column (every weighted product below is
+    then exact, `w * x == x`); the one place the arms differ is the
+    starting constant's `summaryWeight`, the integer row count on the
+    unweighted branch of `calculate_weighted_target_average`. `n_eval` 0
+    is a fit without a held-out set: no test cursor, no detector, no
+    best-model shrink, as `fit_with_test` without a test pool."""
+    if n_rows < 1 or n_features < 1 or n_eval < 0:
+        raise Error("the pointwise fit needs rows and features")
+    var has_test = n_eval > 0
     # ---- the grid, the binarize, the eval rows ----
     var grid = gbdt_host_grid(
         x_colmajor, n_rows, n_features, border_count,
@@ -514,7 +524,9 @@ def gbdt_pointwise_host_fit(
     var one_hot = List[Bool](length=n_features, fill=False)
     var layout = build_layout(grid.fold_counts, one_hot)
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
-    var test_cindex = _binarize_columns(eval_x_colmajor, n_eval, n_features, grid, layout)
+    var test_cindex = List[UInt32]()
+    if has_test:
+        test_cindex = _binarize_columns(eval_x_colmajor, n_eval, n_features, grid, layout)
     var blocks = blocks_for(layout, n_rows)
     var helpers = List[_PwHelper]()
     for b in range(len(blocks)):
@@ -555,7 +567,7 @@ def gbdt_pointwise_host_fit(
     # ---- boost from average (`calc_one_dimensional_optimum_const_approx`) ----
     # the shared weighted arm: `bfa_tree_sum`'s fold order, the device's
     var best_probability = Float64(
-        calculate_weighted_target_average(y, w, True)
+        calculate_weighted_target_average(y, w, has_weights)
     )
     if best_probability <= 0.0 or best_probability >= 1.0:
         raise Error(
@@ -665,6 +677,11 @@ def gbdt_pointwise_host_fit(
             model_leaves.append(scaled[leaf])
         tree_leaf_offsets.append(len(model_leaves))
         # ---- the test cursor, the test loss, the detector ----
+        if not has_test:
+            if len(losses) < n_estimators:
+                if len(tree_split_offsets) - 1 > 1:
+                    losses.append(-Float64(fv) / Float64(n_rows))
+            continue
         if len(splits) > 0:
             var level_offsets = List[Int]()
             var level_masks = List[UInt32]()

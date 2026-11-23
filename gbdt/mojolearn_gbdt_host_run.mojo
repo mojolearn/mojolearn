@@ -396,15 +396,28 @@ def _gbdt_fit_pointwise_arm(
         _refuse_pointwise("leaf_estimation_method code " + String(leaf_method) + " (only Newton)")
     if bootstrap_type != String("Bayesian"):
         _refuse_pointwise("bootstrap_type='" + bootstrap_type + "' (only Bayesian)")
-    if n_weights == 0:
-        _refuse_pointwise("a fit without sample_weight")
+    # lane gbdt-cpu-rest (2026-11-23): a fit without sample_weight (the
+    # device's unweighted arm) and a fit without an eval set are trained
+    # (gbdt_oracle_pointwise.mojo::gbdt_pointwise_host_fit)
     if n_class_weights != 0:
         _refuse_pointwise("class_weights")
     if n_flags != 0:
         _refuse_pointwise("cat_features or one_hot_features")
     if n_eval_rows == 0:
-        _refuse_pointwise("a fit without eval_set")
-    if od_type != String("Iter") or od_pvalue >= 0.0 or od_wait < 0:
+        if load_overfitting_detector_options(od_type, od_pvalue, od_wait).od_type != OD_NONE:
+            raise Error(
+                "od_type is set but there is no held-out set. Stopping on the"
+                " LEARN loss would stop on a curve that falls almost by"
+                " construction; their own detector is inert without a test set"
+                " (overfitting_detector.cpp:122-124) and this refuses rather"
+                " than silently never firing."
+            )
+        if use_best_model == 1:
+            raise Error(
+                "use_best_model=1 needs an eval set: pass eval_x_colmajor"
+                " and eval_y, or leave it unset."
+            )
+    elif od_type != String("Iter") or od_pvalue >= 0.0 or od_wait < 0:
         _refuse_pointwise("the overfitting detector other than od_type='Iter' with od_wait")
     if random_strength != Float32(0.0):
         _refuse_pointwise("random_strength=" + String(random_strength))
@@ -451,28 +464,29 @@ def _gbdt_fit_pointwise_arm(
     var test_losses = List[Float64]()
     var best_iteration = 0
     var stopped_early = False
-    # One pass each: the NaN test rides the copy (it was a memcpy, then a
-    # second walk of the copy).
+    # lane gbdt-cpu-rest (2026-11-23): NaN is binned by the one grid and
+    # binarizer every numeric arm shares (the nan_mode treatment and the
+    # held-out "no NaNs in the learn dataset" refusal inside), so the
+    # arm no longer refuses it; the copy's NaN test is unread
     var x = gbdt_host_read_f32_nan(x_address, n_rows * n_features, has_nan)
     var ex = gbdt_host_read_f32_nan(ex_address, n_eval_rows * n_features, has_nan)
-    if not has_nan:
-        var y = read_f32(y_address, n_rows)
-        var w = read_f32(w_address, n_rows)
-        var ey = read_f32(ey_address, n_eval_rows)
-        var fit = gbdt_pointwise_host_fit(
-            x, y, w, n_rows, n_features, ex, ey, n_eval_rows,
-            border_count, border_build_max_samples, n_estimators,
-            max_depth, learning_rate, l2_leaf_reg, random_seed, nan_mode,
-            border, iterations, bagging_temperature, od_wait,
-            use_best_model, best_model_min_trees,
-        )
-        text = fit.text
-        losses = fit.losses.copy()
-        test_losses = fit.test_losses.copy()
-        best_iteration = fit.best_iteration
-        stopped_early = fit.stopped_early
-    if has_nan:
-        _refuse_pointwise("an X carrying NaN")
+    var y = read_f32(y_address, n_rows)
+    var w = List[Float32](length=n_rows, fill=Float32(1.0))
+    if n_weights != 0:
+        w = read_f32(w_address, n_rows)
+    var ey = read_f32(ey_address, n_eval_rows)
+    var fit = gbdt_pointwise_host_fit(
+        x, y, w, n_rows, n_features, ex, ey, n_eval_rows,
+        border_count, border_build_max_samples, n_estimators,
+        max_depth, learning_rate, l2_leaf_reg, random_seed, nan_mode,
+        border, iterations, bagging_temperature, od_wait,
+        use_best_model, best_model_min_trees, n_weights != 0,
+    )
+    text = fit.text
+    losses = fit.losses.copy()
+    test_losses = fit.test_losses.copy()
+    best_iteration = fit.best_iteration
+    stopped_early = fit.stopped_early
     return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
 
 
@@ -1420,9 +1434,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var best_iteration = 0
     var stopped_early = False
     var has_nan = False
-    if is_rmse or grow_code != 0 or is_pointwise or is_multi or len(flags) != 0:
-        # NaN is measured on the symmetric Logloss fit without categorical
-        # columns only (gbdt-nan-modes)
+    if len(flags) != 0:
+        # lane gbdt-cpu-rest (2026-11-23): every numeric arm bins X through
+        # the one grid and binarizer (`gbdt_host_grid` / `_binarize_columns`
+        # of gbdt_oracle.mojo, the nan_mode treatment and the held-out
+        # "no NaNs in the learn dataset" refusal inside), as the
+        # SymmetricTree Logloss fit of the gbdt-nan-modes lane does, so NaN
+        # is refused only beside categorical columns, whose hashing of a
+        # NaN category value is not restated
         var xs = f32_ptr(x_address)
         has_nan = gbdt_host_has_nan_ptr(xs, n_rows * n_features)
         if not has_nan and n_eval_rows > 0:
@@ -1430,9 +1449,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             has_nan = gbdt_host_has_nan_ptr(exs, n_eval_rows * n_features)
     if has_nan:
         _refuse(
-            "an X carrying NaN under loss='" + loss + "' and grow_policy code "
-            + String(grow_code) + " (NaN is measured on SymmetricTree with"
-            " Logloss only, the gbdt-nan-modes lane)"
+            "an X carrying NaN beside categorical columns (loss='" + loss
+            + "', grow_policy code " + String(grow_code) + ")"
         )
     var eval_x_address = params.eval_x
     var eval_y_address = params.eval_y
