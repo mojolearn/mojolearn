@@ -62,6 +62,15 @@ def _triple(mut mods: NativeModules, value: PythonObject, name: String, low: Int
     if d > 1023 or h > 1023 or w > 1023:
         raise Error(name + " must be at most 1023")
     return d | (h << 10) | (w << 20)
+
+
+def _half_of_window(kernel: Int, padding: Int) -> Bool:
+    """True when every axis's padding is at most half of the window (PyTorch's pooling rule)."""
+    for k in range(3):  # small-loop(3: depth, height, width)
+        var shift = 10 * k
+        if 2 * ((padding >> shift) & 1023) > ((kernel >> shift) & 1023):
+            return False
+    return True
 # nn-conv3d end
 
 
@@ -348,6 +357,8 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         var kernel = _triple(mods, options[0], "kernel_size", 1, context)
         var stride = kernel if options[1] is None else _triple(mods, options[1], "stride", 1, context)
         var padding = _triple(mods, options[2], "padding", 0, context)
+        if not _half_of_window(kernel, padding):
+            raise Error("padding must be at most half of kernel_size")
         var dilation = _triple(mods, options[3], "dilation", 1, context)
         a0 = PythonObject(kernel)
         a1 = PythonObject(stride)
@@ -359,6 +370,8 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         var kernel = _triple(mods, options[0], "kernel_size", 1, context)
         var stride = kernel if options[1] is None else _triple(mods, options[1], "stride", 1, context)
         var padding = _triple(mods, options[2], "padding", 0, context)
+        if not _half_of_window(kernel, padding):
+            raise Error("padding must be at most half of kernel_size")
         var divisor = 0 if options[5] is None else _positive(options[5], "divisor_override", 1, context)
         a0 = PythonObject(kernel)
         a1 = PythonObject(stride)
