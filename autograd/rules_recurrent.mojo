@@ -52,7 +52,7 @@ from sequence.ops import (
 )
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
 from sequence.recurrent import (
-    Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, TASK_CE, WGRAD_IDN_SCRATCH, bias_rows, fill, gather_seq, gemm,
+    Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, TASK_CE, WGRAD_IDN_SCRATCH, bias_rows, fill, gather_rows, gather_seq, gemm,
 )
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 from sequence.mlp import EPI_BIAS_ACT
@@ -344,8 +344,11 @@ def rnn_layer[E: Exec](
     var scanned = False
     # The IDENTICAL default. Training and prediction (rnn_predict, the same
     # forward in inference mode) take this one route.
+    # Sequence lengths (lane seq-blocks-2) take the per-step chain with the length mask: the scan kernel
+    # carries no mask, so a model fitted with lengths runs the chain on every column (host and device alike).
+    var masked = w.has_lens
     comptime if SEQ_LSTM_SCAN:
-        if scan_routes(H, gates_of(cell)):
+        if not masked and scan_routes(H, gates_of(cell)):
             var sa = Args()
             sa.p0 = gxp
             sa.p1 = w.gh[l]
@@ -395,6 +398,11 @@ def rnn_layer[E: Exec](
             a.i0 = cell
             a.i1 = B
             a.i2 = H
+            if masked:
+                # a row past its length copies its state forward (op_cell_fwd)
+                a.p10 = w.lens
+                a.i8 = s
+                a.i9 = 1
             if step_gemm:
                 # GH_s = h_{s-1} W_hh^T + b_hh where the fused body stores it, then the cell alone
                 _gemm_bias(ex, a.p3, whh, bhh, a.p1, B, GH, H, H, 1, 1, H)
@@ -415,6 +423,8 @@ def rnn_layer[E: Exec](
     saved.i0 = cell
     saved.i1 = B
     saved.i2 = T
+    saved.p10 = w.lens
+    saved.i3 = 1 if masked else 0
     return tape.custom(ex, [gx, w_hh, b_hh], w.hall[l] + B * H, T * B, H, RNN_LAYER, saved)
 
 
@@ -465,9 +475,10 @@ def _layer_bwd[E: Exec](
     var dc = saved.p7
     var dgx = gradients[0]
     var whh = inputs[1]
+    var masked = saved.i3 != 0
     var scanned = False
     comptime if SEQ_LSTM_SCAN:
-        if scan_routes(H, gates_of(cell)):
+        if not masked and scan_routes(H, gates_of(cell)):
             var sa = Args()
             sa.p0 = act
             sa.p1 = gh
@@ -493,7 +504,12 @@ def _layer_bwd[E: Exec](
         # stores its own dh and dc zeros (sequence/ops.mojo op_cell_bwd_h), so the two fill launches are the
         # host's alone: HostExec runs OP_CELL_BWD_H as its GEMM and then op_cell_bwd, not that body
         # (sequence/exec.mojo). The same zeros in the same words on every column.
+        # With lengths every step is OP_GEMM + OP_CELL_BWD (op_cell_bwd_h's p11 is W_hh, the mask's p11 the
+        # lengths), so the device fills its zeros too.
+        var fills = masked
         comptime if not E.IS_DEVICE:
+            fills = True
+        if fills:
             fill(ex, dh, B * H, Float32(0.0))
             fill(ex, dc, B * H, Float32(0.0))
     var step_gemm = False
@@ -519,7 +535,29 @@ def _layer_bwd[E: Exec](
         a.i2 = H
         a.i3 = 1 if s < T - 1 else 0
         a.i4 = B * GH
-        if step_gemm and s < T - 1:
+        if masked:
+            # dh += dGH_{s+1} W_hh as its own GEMM (as below; the host's OP_CELL_BWD_H is the same pair), then the
+            # cell with the length mask: a step past a row's end passes dh and dc through and adds no gradient
+            if s < T - 1:
+                var g = Args()
+                g.p0 = a.p9 + a.i4
+                g.p1 = whh
+                g.p2 = dh
+                g.i0 = B
+                g.i1 = H
+                g.i2 = GH
+                g.i3 = GH
+                g.i4 = 1
+                g.i5 = H
+                g.i6 = 1
+                g.i7 = 1
+                g.i8 = H
+                ex.launch[OP_GEMM](g, B * H)
+            a.p11 = saved.p10
+            a.i8 = s
+            a.i9 = 1
+            ex.launch[OP_CELL_BWD](a, B * H)
+        elif step_gemm and s < T - 1:
             # dh += dGH_{s+1} W_hh as the lane's GEMM (accumulate onto the direct part the later step stored),
             # then the cell alone. Step T - 1 has no product and keeps the fused launch (its dh / dc zeros).
             var g = Args()
@@ -746,7 +784,7 @@ struct AutogradRnnStep(RnnStep):
 # OP_CELL_FWD_H chain with the same i5, then the head GEMM over h_T and its bias rows. Same bits by construction.
 def rnn_predict[E: Exec](
     mut ex: E, net: Net, task: Int, X: FP, N: Int, T: Int, Pin: FP,
-    dst: FP, seq: FP, want_seq: Bool, chunk: Int, resident: Bool = False,
+    dst: FP, seq: FP, want_seq: Bool, chunk: Int, resident: Bool = False, lengths: Optional[FP] = None,
 ) raises:
     """dst [N, O]: the head's output (task MSE) or its softmax (task CE);
     with want_seq, seq [N, T, H] is the top layer's h_1..h_T batch-first.
@@ -755,9 +793,19 @@ def rnn_predict[E: Exec](
     kernels in the training forward's order. `resident` (perf3-seq-neural):
     `Pin` is already this executor's memory (the model's resident fitted
     block, sequence/perf3_seq_resident.mojo), read in place: no per-call
-    allocation and upload of the parameters."""
+    allocation and upload of the parameters.
+    `lengths` (lane seq-blocks-2): N row lengths in [1, T] (float32 words,
+    admitted by the caller); each row's output is read at its own last valid
+    step and its padded steps never enter its state (rnn_fit's semantics).
+    With want_seq, a row's steps past its length repeat its last state."""
     var np_ = net.n_params()
     var H = net.H
+    var has_lens = Bool(lengths)
+    var dL = ex.alloc(N if has_lens else 1)
+    var dL_opt = Optional[FP](None)
+    if has_lens:
+        ex.upload(dL, lengths.value(), N)
+        dL_opt = Optional[FP](dL)
     var bmax = chunk if chunk < N else N
     var dX = ex.alloc(N * T * net.D)
     ex.upload(dX, X, N * T * net.D)
@@ -777,7 +825,7 @@ def rnn_predict[E: Exec](
         ex.upload(P, Pin, np_)
     var dout = ex.alloc(N * net.O)
     var dseq = ex.alloc(N * T * H if want_seq else 1)
-    var w = Work(ex, net, T, bmax, False)
+    var w = Work(ex, net, T, bmax, False, has_lens)
     var tape = Tape()
     tape.no_grad()
     # rows of the previous chunk's forward on w (rnn_layer's h0_clean: every chunk but a longer one skips the fills)
@@ -785,7 +833,9 @@ def rnn_predict[E: Exec](
     var b0 = 0
     while b0 < N:  # driver-loop: over prediction chunks
         var B = bmax if b0 + bmax <= N else N - b0
-        gather_seq(ex, dX, didx, w.xb, T, B, net.D, b0)
+        gather_seq(ex, dX, didx, w.xb, T, B, net.D, b0, dL_opt)
+        if has_lens:
+            gather_rows(ex, dL, didx, w.lens, B, 1, b0)
         # Inference mode keeps no gradient pointer, so the gradient vector is
         # a placeholder; rnn_forward_autograd resets the tape, so every chunk
         # reuses the first chunk's storage. The head writes this chunk's rows

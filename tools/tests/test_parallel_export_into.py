@@ -58,10 +58,17 @@ def test_schedule_descriptor_exports():
     assert 'comptime BYTE_LM_SCHEDULE_ABI_NAME = "mojolearn.training.byte_lm_schedule.v1"' in run
 
 
-def test_public_schedule_wrappers_delegate_once():
-    for rel, schedule in (("python/mojolearn/model_pool_training.py", "model_pool"),
-                          ("python/mojolearn/offload_training.py", "offload")):
-        source = _read(rel)
-        assert "super(" not in source
-        assert f'"admit_class", (' in source and f'"{schedule}"))' in source
-        assert 'return _native_parallel_byte("state", (self, rank))' in source
+def test_schedule_is_one_constructor_option():
+    # The pooled and offloaded schedules are options of the one trainer class
+    # (lane neural-consolidate, 2026-11-22): their wrapper modules are gone and
+    # the schedule is resolved once, at construction, into the native owner.
+    for rel in ("python/mojolearn/model_pool_training.py", "python/mojolearn/offload_training.py"):
+        assert not (ROOT / rel).exists(), rel
+    source = _read("python/mojolearn/parallel_training.py")
+    assert 'runtime("admit_class", (ParallelByteLanguageModelTrainer,))' in source
+    assert 'schedule="replica"' in source
+    owner = _read("bindings/parallel_byte_native_door.mojo")
+    init = owner[owner.index("def parallel_byte_init("):owner.index("def _parallel_mirror_session(")]
+    assert "_parallel_schedule_index(String(schedule_name))" in init
+    record = owner[owner.index("def _parallel_record("):owner.index("def _parallel_int(")]
+    assert "schedule" not in record

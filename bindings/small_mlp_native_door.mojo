@@ -100,7 +100,6 @@ from bindings.small_mlp_keys_unpack import (
     SMALL_MLP_OPN_INITIALIZE,
     SMALL_MLP_OPN_LOAD_STATE_DICT,
     SMALL_MLP_OPN_LOSS_AND_GRADS,
-    SMALL_MLP_OPN_NATIVE_PROVIDER_INFO,
     SMALL_MLP_OPN_OWNER_CLOSE,
     SMALL_MLP_OPN_OWNER_CREATE,
     SMALL_MLP_OPN_OWNER_LOAD_STATE_DICT,
@@ -1597,10 +1596,8 @@ def _call(operation: Int, name: PythonObject, args: PythonObject, trainer: Pytho
         _ = native_path(args[1])
     else:
         sequential_admit_value(args, boundary[].admission)
-    if operation == SMALL_MLP_OPN_NATIVE_PROVIDER_INFO:
-        # TOMBSTONE: the small_mlp_api_v1 provider (the per-operation and fused routes' descriptor) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
-        _ = _owner_of(PythonObject(None))
-        return PythonObject(None)
+    # TOMBSTONE: the small_mlp_api_v1 provider (the per-operation and fused routes' descriptor) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+    # Its leftover `native_provider_info` operation (no caller) deleted 2026-11-22 by lane neural-consolidate.
     if operation == SMALL_MLP_OPN_CREATE:
         return small_mlp_create(args)
     if operation == SMALL_MLP_OPN_CLOSE:

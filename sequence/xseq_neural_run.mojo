@@ -245,13 +245,17 @@ struct XseqRnnFitRequest(Copyable, Movable):
 
 
 def xseq_run_rnn_fit(entry: XseqNeuralEntry, req: XseqRnnFitRequest, optimizer: XseqOptimizer, x: Int,
-                     target: Int, params: Int, losses: Int, rates: Int) raises:
+                     target: Int, params: Int, losses: Int, rates: Int, lengths: Int = 0) raises:
     """`_ints()` (cell, D, H, L, O), then the schedule words, then the
-    RNN_FIT call."""
+    RNN_FIT call. `lengths`: the address of n float32 sequence lengths, or
+    0 (none: the call is the one it was before lengths existed)."""
     var ip: List[Int] = [req.cell, req.d, req.hidden, req.layers, req.outputs, req.task, req.n, req.steps_t,
                          req.epochs, req.batch, optimizer.kind, optimizer.flags, 1 if req.shuffle else 0,
                          Int(req.seed & 0xFFFFFFFF), Int(req.seed >> 32)]
-    _ = xseq_neural_run_call(entry, RNN_FIT, [x, target, params, losses, rates], ip, optimizer.floats)
+    var addresses: List[Int] = [x, target, params, losses, rates]
+    if lengths != 0:
+        addresses.append(lengths)
+    _ = xseq_neural_run_call(entry, RNN_FIT, addresses, ip, optimizer.floats)
 
 
 def xseq_run_rnn_layout(ints: List[Int], params_size: Int) raises -> Int:
@@ -277,14 +281,17 @@ struct XseqRnnPredictRequest(Copyable, Movable):
 
 
 def xseq_run_rnn_predict(entry: XseqNeuralEntry, req: XseqRnnPredictRequest, x: Int, params: Int, out_words: Int,
-                         seq: Int) raises:
-    """RNN_PREDICT and its result-count refusal."""
+                         seq: Int, lengths: Int = 0) raises:
+    """RNN_PREDICT and its result-count refusal. `lengths` as rnn_fit's (0:
+    none, the ten words it was)."""
     var ip = req.ints.copy()
     ip.append(req.task)
     ip.append(req.n)
     ip.append(req.steps_t)
     ip.append(req.chunk)
     ip.append(1 if req.want_seq else 0)
+    if lengths != 0:
+        ip.append(lengths)
     var addresses: List[Int] = [x, params, out_words, seq]
     if req.token:
         # the recorded block's name: its device copy stays resident

@@ -5,9 +5,13 @@ from pathlib import Path
 import tempfile
 from ._verify_api import resolve, encode
 
-NAMES=frozenset(('LanguageModelConfig','LanguageModelHostTrainer','LanguageModelInference',
- 'LanguageModelTrainer','OffloadedByteLanguageModelTrainer','ParallelByteLanguageModelTrainer',
- 'PooledByteLanguageModelTrainer','ParallelNeuralTrainer','SmallMLPTrainer'))
+NAMES=frozenset(('LanguageModelConfig','LanguageModelInference',
+ 'LanguageModelTrainer','ParallelByteLanguageModelTrainer','ParallelNeuralTrainer','SmallMLPTrainer'))
+
+#: ParallelByteLanguageModelTrainer's three placements, one class (the former
+#: Pooled/Offloaded classes are its schedule option): every endpoint runs on
+#: each, in this order.
+SCHEDULES=('replica','model_pool','offload')
 
 
 def applicable(public,method):
@@ -40,6 +44,54 @@ def tiny_mlp():
 def training_checks(recorder,public,methods):
     import numpy as np
     cls=resolve(public);name=public.rsplit('.',1)[-1]
+    def schedule_check(source,shape,ids,schedule,method):
+        model=cls(source.state_dict(),devices=(0,),logical_shards=1,schedule=schedule,
+                  **({'pool_optimizer':False} if schedule=='replica' else {}))
+        try:
+            if schedule!='replica' and method in ('apply_gradient','shard_gradient','fold_reset','fold_add','fold_export','shard_gradient_fold'):
+                args=() if method in ('fold_reset','fold_export') else ((ids,) if method in ('shard_gradient','shard_gradient_fold') else (np.zeros(shape.n_total,np.float32),))
+                try:getattr(model,method)(*args)
+                except ValueError as error:
+                    assert "requires schedule='replica'" in str(error)
+                    return {'unsupported_schedule_refused':True,'numerical_execution':False}
+                raise AssertionError('unsupported split-step schedule admitted')
+            if method=='from_checkpoint':
+                other=cls.from_checkpoint(model.checkpoint(),devices=(0,),schedule=schedule)
+                try:return other.state_dict()
+                finally:other.close()
+            if method=='checkpoint':return model.checkpoint()
+            if method=='export_raw':
+                raw=model.export_raw();state=model.state_dict()
+                assert all(encode(raw[k])==encode(state[k]) for k in raw)
+                return raw
+            if method=='set_lr':model.set_lr(.25);assert model.state_dict()['config']['lr']==.25;return .25
+            if method in ('optimizer_ownership','model_ownership'):
+                # model_ownership is the model_pool schedule's; offload keeps
+                # no resident optimizer owners. Both refusals are recorded.
+                if (method=='model_ownership' and schedule!='model_pool') or (method=='optimizer_ownership' and schedule=='offload'):
+                    try:getattr(model,method)()
+                    except (ValueError,NotImplementedError) as error:
+                        return {'unsupported_schedule_refused':type(error).__name__,'numerical_execution':False}
+                    raise AssertionError('ownership report admitted on schedule '+schedule)
+                report=getattr(model,method)();assert isinstance(report,(dict,list,tuple))
+                return report
+            if method=='has_device_fold:get':return model.has_device_fold
+            if method.startswith('fold_') or method=='shard_gradient_fold':
+                grad=np.arange(shape.n_total,dtype=np.float32)/max(shape.n_total,1)/32
+                model.fold_reset(grad)
+                if method=='fold_reset':return model.fold_export()
+                if method=='shard_gradient_fold':loss=model.shard_gradient_fold(ids);return {'loss':loss,'gradient':model.fold_export()}
+                model.fold_add(grad)
+                result=model.fold_export();assert np.array_equal(np.frombuffer(result,dtype='<f4'),grad+grad)
+                return result
+            if method=='shard_gradient':return model.shard_gradient(ids)
+            if method=='apply_gradient':
+                _,gradient=model.shard_gradient(ids);model.apply_gradient(gradient)
+                assert model.step_==1
+                return model.export_raw()
+            model.train_step([ids]);assert model.step_==1
+            return model.step_
+        finally:model.close()
     def check(method):
         if name in ('SmallMLPTrainer','ParallelNeuralTrainer'):
             m=tiny_mlp();x=np.arange(16,dtype=np.float32).reshape(2,8)/32;y=np.array([0,2],np.int32)
@@ -68,18 +120,8 @@ def training_checks(recorder,public,methods):
             if name=='LanguageModelConfig':
                 if method=='__post_init__':shape.__post_init__()
                 return {'config':shape.to_dict(),'native_shape':shape.native_shape,'registry':shape.parameter_shapes}
-            if name in ('LanguageModelHostTrainer','LanguageModelInference'):
-                params=source.state_dict()['parameters']
-                m=cls(params,shape=shape)
-                if name=='LanguageModelInference':return m.parameters_sha256()
-                m.train_step(ids)
-                if method=='from_state':
-                    other=cls.from_state(m.parameters_,m.m_,m.v_,shape=shape,completed_steps=1,lr=.125)
-                    assert other.parameters_sha256()==m.parameters_sha256()
-                    return other.loss(ids)
-                if method=='loss':return m.loss(ids)
-                value=getattr(m,method.split(':')[0]);value=value() if callable(value) else value
-                return value.to_dict() if method=='shape:get' else value
+            if name=='LanguageModelInference':
+                return cls(source.state_dict()['parameters'],shape=shape).parameters_sha256()
             if name=='LanguageModelTrainer':
                 source.train_step(ids)
                 if method=='evaluate':return source.evaluate(ids)
@@ -111,46 +153,7 @@ def training_checks(recorder,public,methods):
                         assert encode(other.state_dict())==encode(source.state_dict())
                         return other.evaluate(ids)
                     finally:other.close()
-            model=cls(source.state_dict(),devices=(0,),logical_shards=1,
-                      **({'pool_optimizer':False} if name=='ParallelByteLanguageModelTrainer' else {}))
-            try:
-                if name!='ParallelByteLanguageModelTrainer' and method in ('apply_gradient','shard_gradient','fold_reset','fold_add','fold_export','shard_gradient_fold'):
-                    args=() if method in ('fold_reset','fold_export') else ((ids,) if method in ('shard_gradient','shard_gradient_fold') else (np.zeros(shape.n_total,np.float32),))
-                    try:getattr(model,method)(*args)
-                    except ValueError as error:
-                        assert 'requires ParallelByteLanguageModelTrainer' in str(error)
-                        return {'unsupported_schedule_refused':True,'numerical_execution':False}
-                    raise AssertionError('unsupported split-step schedule admitted')
-                if method=='from_checkpoint':
-                    other=cls.from_checkpoint(model.checkpoint(),devices=(0,))
-                    try:return other.state_dict()
-                    finally:other.close()
-                if method=='checkpoint':return model.checkpoint()
-                if method=='export_raw':
-                    raw=model.export_raw();state=model.state_dict()
-                    assert all(encode(raw[k])==encode(state[k]) for k in raw)
-                    return raw
-                if method=='set_lr':model.set_lr(.25);assert model.state_dict()['config']['lr']==.25;return .25
-                if method in ('optimizer_ownership','model_ownership'):
-                    report=getattr(model,method)();assert isinstance(report,(dict,list,tuple))
-                    return report
-                if method=='has_device_fold:get':return model.has_device_fold
-                if method.startswith('fold_') or method=='shard_gradient_fold':
-                    grad=np.arange(shape.n_total,dtype=np.float32)/max(shape.n_total,1)/32
-                    model.fold_reset(grad)
-                    if method=='fold_reset':return model.fold_export()
-                    if method=='shard_gradient_fold':loss=model.shard_gradient_fold(ids);return {'loss':loss,'gradient':model.fold_export()}
-                    model.fold_add(grad)
-                    result=model.fold_export();assert np.array_equal(np.frombuffer(result,dtype='<f4'),grad+grad)
-                    return result
-                if method=='shard_gradient':return model.shard_gradient(ids)
-                if method=='apply_gradient':
-                    _,gradient=model.shard_gradient(ids);model.apply_gradient(gradient)
-                    assert model.step_==1
-                    return model.export_raw()
-                model.train_step([ids]);assert model.step_==1
-                return model.step_
-            finally:model.close()
+            return {schedule:schedule_check(source,shape,ids,schedule,method) for schedule in SCHEDULES}
         finally:source.close()
     for method in methods:
         recorder.check(public+'.'+method,lambda method=method:check(method))

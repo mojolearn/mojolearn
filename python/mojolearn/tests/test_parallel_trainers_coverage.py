@@ -13,8 +13,7 @@ import copy
 import numpy as np
 import pytest
 
-from mojolearn import (OffloadedByteLanguageModelTrainer, ParallelByteLanguageModelTrainer,
-                       ParallelNeuralTrainer, PooledByteLanguageModelTrainer, _backend)
+from mojolearn import ParallelByteLanguageModelTrainer, ParallelNeuralTrainer, _backend
 from mojolearn import cross_vendor as cv
 from mojolearn.parallel_training import ordered_sum_gradients
 from mojolearn._verify_native_runtime import audit_native_call
@@ -125,23 +124,23 @@ def test_context_manager_closes_and_bad_checkpoint_is_refused():
         assert type(owner) is ParallelByteLanguageModelTrainer
         assert len(owner.train_step(SHARDS)["losses"]) == 2
     assert CLOSED in native_failure(owner.train_step, RuntimeError, SHARDS)
-    for cls in (ParallelByteLanguageModelTrainer, PooledByteLanguageModelTrainer,
-                OffloadedByteLanguageModelTrainer):
+    for schedule in ("replica", "model_pool", "offload"):
         assert "unsupported parallel checkpoint contract" in native_failure(
-            cls.from_checkpoint, ValueError, {"schema": "not-a-checkpoint"})
+            ParallelByteLanguageModelTrainer.from_checkpoint, ValueError, {"schema": "not-a-checkpoint"},
+            schedule=schedule)
 
 
 @gpu_only
-@pytest.mark.parametrize("cls", [PooledByteLanguageModelTrainer, OffloadedByteLanguageModelTrainer])
-def test_pooled_and_offloaded_train_and_replay_from_checkpoint(cls):
+@pytest.mark.parametrize("schedule", ["model_pool", "offload"])
+def test_pooled_and_offloaded_train_and_replay_from_checkpoint(schedule):
     reference = _make(logical_shards=2)
-    owner = _make(cls, logical_shards=2)
+    owner = _make(logical_shards=2, schedule=schedule)
     replay = None
     try:
         expected = reference.train_step(SHARDS)["losses"]
         assert audit_native_call(owner.train_step, SHARDS).assert_native()["losses"] == expected
         _same_state(reference, owner)
-        if cls is PooledByteLanguageModelTrainer:
+        if schedule == "model_pool":
             rows = audit_native_call(owner.model_ownership).assert_native()
             assert sum(row["count"] for row in rows) == _state()[1].n_total
             assert owner.optimizer_ownership() == rows
@@ -149,8 +148,9 @@ def test_pooled_and_offloaded_train_and_replay_from_checkpoint(cls):
             with pytest.raises(NotImplementedError, match="offloaded state lives on the host"):
                 owner.optimizer_ownership()
         checkpoint = owner.checkpoint()
-        replay = audit_native_call(cls.from_checkpoint, checkpoint).assert_native()
-        assert type(replay) is cls
+        replay = audit_native_call(ParallelByteLanguageModelTrainer.from_checkpoint, checkpoint,
+                                   schedule=schedule).assert_native()
+        assert type(replay) is ParallelByteLanguageModelTrainer
         reference.train_step(SHARDS)
         replay.train_step(SHARDS)
         _same_state(reference, replay)
@@ -161,14 +161,21 @@ def test_pooled_and_offloaded_train_and_replay_from_checkpoint(cls):
             replay.close()
 
 
-@pytest.mark.parametrize("cls", [PooledByteLanguageModelTrainer, OffloadedByteLanguageModelTrainer])
-def test_pooled_and_offloaded_admission_refusals(cls):
+@pytest.mark.parametrize("schedule", ["model_pool", "offload"])
+def test_pooled_and_offloaded_admission_refusals(schedule):
+    cls = ParallelByteLanguageModelTrainer
     state = copy.deepcopy(_state()[0])
     owner = object.__new__(cls)
     assert "logical_shards outside admitted range" in native_failure(
-        owner.__init__, ValueError, state, logical_shards=0)
-    if cls is OffloadedByteLanguageModelTrainer and _backend.vendor() != "cpu":
-        message = native_failure(object.__new__(cls).__init__, ValueError, state, devices=(0, 1))
+        owner.__init__, ValueError, state, logical_shards=0, schedule=schedule)
+    # pool_optimizer belongs to the replica schedule; an unknown schedule is refused by name
+    assert "pool_optimizer applies to schedule='replica' only" in native_failure(
+        object.__new__(cls).__init__, ValueError, state, pool_optimizer=True, schedule=schedule)
+    assert "unknown byte-LM schedule" in native_failure(
+        object.__new__(cls).__init__, ValueError, state, schedule="pooled")
+    if schedule == "offload" and _backend.vendor() != "cpu":
+        message = native_failure(object.__new__(cls).__init__, ValueError, state, devices=(0, 1),
+                                 schedule=schedule)
         assert "exactly one device" in message
 
 

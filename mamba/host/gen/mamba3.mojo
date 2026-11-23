@@ -116,6 +116,18 @@ from mamba.checks.mamba3_fixture import (
     Mamba3Weights,
     f32_from_bits,
 )
+# Mamba-3 (lane neural-blocks-3-m3): the trapezoid's bodies (the decode step calls them)
+from autograd.kernels.mamba3_trapezoid_body import (
+    m3_adt,
+    m3_trap_sigma,
+    m3_trap_alpha,
+    m3_trap_beta,
+    m3_trap_beta_pre,
+    m3_trap_gamma,
+    m3_trap_state,
+    m3_trap_readout,
+    m3_trap_skip,
+)
 from mamba.host.gen.mamba3_siso import (
     MAMBA3_TPB,
     SISO3_ANY_SABOTAGE,
@@ -1103,16 +1115,14 @@ def m3_step_core_kernel(gid_: Int,
     var hh = rem // p_dim
     var p = rem - hh * p_dim
     var dtv = ftz(dt_out.unsafe_load(bb * nh + hh))
-    var adt = ftz(identical_mul(ftz(a_out.unsafe_load(bb * nh + hh)), dtv))
-    var sg = ftz(
-        identical_sigmoid(ftz(in_proj.unsafe_load(bb * dip + c_trap + hh)))
-    )
-    var al = ftz(identical_exp(adt))
+    # the trapezoid's coefficients and state update are the bodies of
+    # autograd/kernels/mamba3_trapezoid_body.mojo (one body per operation)
+    var adt = m3_adt(a_out.unsafe_load(bb * nh + hh), dtv)
+    var sg = m3_trap_sigma(in_proj.unsafe_load(bb * dip + c_trap + hh))
+    var al = m3_trap_alpha(adt)
     # beta = ((1 - sigma) * dt) * alpha, torch's left association (:121).
-    var be = ftz(
-        identical_mul(ftz(identical_mul(ftz(Float32(1.0) - sg), dtv)), al)
-    )
-    var ga = ftz(identical_mul(sg, dtv))
+    var be = m3_trap_beta(m3_trap_beta_pre(dtv, sg), al)
+    var ga = m3_trap_gamma(dtv, sg)
     var vv = ftz(in_proj.unsafe_load(bb * dip + c_x + hh * p_dim + p))
     var vst = ftz(pend_v.unsafe_load((bb * nh + hh) * p_dim + p))
     var out = Float32(0.0)
@@ -1175,15 +1185,13 @@ def m3_step_core_kernel(gid_: Int,
         var kst = ftz(pend_k.unsafe_load((bb * nh + hh) * n_state + n))
         # S = alpha*S + beta*(K_st*V_st) + gamma*(k*v): torch's three
         # separate roundings (:125-127), k*v product FIRST inside each.
-        var s1 = ftz(identical_mul(al, ftz(h_state.unsafe_load(hidx))))
-        var s2 = ftz(s1 + ftz(identical_mul(be, ftz(identical_mul(kst, vst)))))
-        var s3 = ftz(s2 + ftz(identical_mul(ga, ftz(identical_mul(kn, vv)))))
+        var s3 = m3_trap_state(al, be, ga, h_state.unsafe_load(hidx), kst, vst, kn, vv)
         h_state.unsafe_store(hidx, s3)
         # readout AFTER the update (:130).
-        out = ftz(identical_mul_add(s3, qn, out))
+        out = m3_trap_readout(s3, qn, out)
     out = ftz(out)
     # D last (:133).
-    out = ftz(out + ftz(identical_mul(ftz(d_skip.unsafe_load(hh)), vv)))
+    out = m3_trap_skip(out, d_skip.unsafe_load(hh), vv)
     skip_out.unsafe_store(cell, out)
     # the z gate, torch's (out * z) * sigmoid(z) (:136) -- NOT the
     # one-division silu; part of what makes this arm RED.

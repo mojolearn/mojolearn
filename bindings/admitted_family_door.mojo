@@ -65,7 +65,7 @@ from core.admitted_weights import (
 from core.host_finite_scan import host_all_finite_f32_strided
 from core.host_parallel_copy import host_parallel_copy_bytes
 from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_FLOAT, NPY_DOUBLE
-from bindings.admitted_input_run import admitted_reverse_word
+from bindings.admitted_family_run import admitted_reverse_word
 
 comptime _AF_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _AF_F64P = MutPointer[Float64, MutUntrackedOrigin]

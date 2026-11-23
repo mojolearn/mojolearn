@@ -800,6 +800,13 @@ TRAINING_LANE_NAMES = {
     "gbdt-cat-bootstrap": "gradient boosting with the Bernoulli, Poisson and Bayesian bootstraps on categorical columns",
     "gbdt-cat-noise": "gradient boosting with score noise (random_strength above zero) on categorical columns",
     "gbdt-cat-ordered": "ordered boosting on CTR and one-hot categorical columns",
+    # lane verify-gbdt-rank (2026-11-22): the ranking configurations the
+    # CPU column trains and no lane fitted (gbdt_oracle_losses.mojo with
+    # gbdt_oracle_query/pair/yeti.mojo, gbdt_oracle_pointwise_rank.mojo)
+    "gbdt-rank-bootstrap": "gradient boosting ranking losses under the Bernoulli, Poisson and Bayesian bootstraps",
+    "gbdt-rank-leaves": "gradient boosting ranking losses with score noise, Gradient leaves and several Newton steps",
+    "gbdt-rank-pointwise-arms": "gradient boosting ranking losses on the pointwise searcher with L2 scores and bootstraps",
+    "gbdt-rank-pairs": "gradient boosting PairLogit on explicit weighted pairs under bootstrap and the pointwise searcher",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -1012,8 +1019,8 @@ TRAINING_LANE_NAMES = {
     # host CPUs of the Apple M4, the H100 box and the MI325X box, IDENTICAL x3
     # on every cell; the CPU column is a fourth CPU. This list is the set the
     # full CPU column runs, not only fits: two of these are inference, and
-    # LanguageModelHostTrainer is the published CPU trainer the inference
-    # boundary keeps.
+    # LanguageModelTrainer(device="cpu") is the published CPU trainer the
+    # inference boundary keeps.
     "byte-lm-host-infer": "the byte LM forward pass on its reference path (inference)",
     "byte-lm-host-infer-threaded": "the byte LM forward pass on its threaded path (inference)",
     "byte-lm-host-train": "the published byte LM host training step",
@@ -1626,7 +1633,7 @@ FAMILIES = (
                         "byte-lm", "byte-lm-resident", "language-model-config"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LanguageModelInference", "LanguageModelHostTrainer", "SmallByteLanguageModelTrainer"),
+        classes=("LanguageModelInference", "SmallByteLanguageModelTrainer"),
         display="the byte LM forward pass and one training step",
         host_modules=(
             "training/byte_lm_host.mojo",
@@ -1641,7 +1648,7 @@ FAMILIES = (
             "byte_lm_host_api_v1", "byte_lm_host_numeric_mode", "byte_lm_host_vendor",
             "byte_lm_host_column", "byte_lm_host_sabotage",
             "byte_lm_host_profile", "byte_lm_host_logits", "byte_lm_host_loss",
-            "byte_lm_host_train_step", "all_finite_f32", "all_finite_f64",
+            "all_finite_f32", "all_finite_f64",
             "cast_f64_to_f32",
             # Greedy next bytes, the decode entry a9d933e4f added while
             # skipping discarded decode logits. It shipped as an EXPORT
@@ -1664,7 +1671,7 @@ FAMILIES = (
         gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
             "Ships: the byte LM's two public CPU surfaces, LanguageModelInference (forward from a "
-            "checkpoint) and the published LanguageModelHostTrainer, the one training entry the "
+            "checkpoint) and LanguageModelTrainer(device=\"cpu\"), the one training entry the "
             "inference boundary keeps public."
         ),
         ships_in_wheel=True,
@@ -2922,6 +2929,9 @@ FAMILIES = (
             # (gbdt_oracle.mojo::gbdt_host_boost through gbdt_oracle_ctr.mojo
             # and the one-hot arm; gbdt_oracle_ordered.mojo)
             "gbdt-cat-rmse", "gbdt-cat-bootstrap", "gbdt-cat-noise", "gbdt-cat-ordered",
+            # lane verify-gbdt-rank (2026-11-22): the ranking losses' bootstraps,
+            # noise, leaves, pointwise scores and explicit weighted pairs
+            "gbdt-rank-bootstrap", "gbdt-rank-leaves", "gbdt-rank-pointwise-arms", "gbdt-rank-pairs",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4116,6 +4126,11 @@ PUBLIC_PENDING_LANES = {
     "gbdt-cat-bootstrap": "no reference",
     "gbdt-cat-noise": "no reference",
     "gbdt-cat-ordered": "no reference",
+    # lane verify-gbdt-rank (2026-11-22): new lanes, recorded CPU first at the release
+    "gbdt-rank-bootstrap": "no reference",
+    "gbdt-rank-leaves": "no reference",
+    "gbdt-rank-pointwise-arms": "no reference",
+    "gbdt-rank-pairs": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no

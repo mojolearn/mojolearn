@@ -8,18 +8,39 @@ identity requires cloud qualification; this module alone is not evidence.
 """
 
 class ParallelByteLanguageModelTrainer:
-    """Resident model replicas with pooled optimizer state and a fixed left fold.
+    """Byte LM training over several GPUs, or in less GPU memory than one model.
 
-    Construct from a SmallByteLanguageModelTrainer.state_dict(). devices=(0,)
-    replays the same logical shards on one GPU with one resident model. No GPU
-    is opened until the first step/export. Import does no device work.
-    AdamW moments and rollback copies are owned in disjoint device ranges by
-    default; model parameters, gradients and activations remain replicated.
-    pool_optimizer=False retains complete optimizer replicas for comparison.
+    Construct from a ``LanguageModelTrainer.state_dict()``. Every schedule runs
+    the same IDENTICAL model kernels and sums the logical shards' gradients in
+    a fixed left fold, so the logical shard count and order, not the number of
+    physical devices, decide the result. No GPU is opened until the first
+    step or export, and import does no device work.
+
+    ``schedule`` chooses how the model is placed:
+
+    * ``"replica"`` (default): every device holds a resident model replica.
+      ``devices=(0,)`` replays the logical shards on one GPU. AdamW moments
+      and rollback copies are owned in disjoint device ranges when
+      ``pool_optimizer`` is True (the default for this schedule); False keeps
+      complete optimizer replicas.
+    * ``"model_pool"``: one model whose decoder layers and optimizer state are
+      owned by the selected devices; the embedding and head live on
+      ``devices[0]`` and each layer must fit its owner. Layers run in turn:
+      this pools capacity and makes no speedup claim. At most
+      ``min(64, n_layers + 1)`` devices.
+    * ``"offload"``: one device, one decoder layer resident at a time; the
+      parameters, optimizer state, gradient sums and saved activations live in
+      host memory. A decoder layer plus the embedding and head must fit the
+      device. It trades transfers and recomputation for GPU memory.
+
+    The schedule is fixed at construction. ``pool_optimizer`` applies to the
+    ``"replica"`` schedule only; None means True there and False otherwise.
     """
 
-    def __init__(self, state, *, devices=(0,), logical_shards=1, pool_optimizer=True):
-        return _native_parallel_byte("init", (self, state, devices, logical_shards, pool_optimizer))
+    def __init__(self, state, *, devices=(0,), logical_shards=1, pool_optimizer=None, schedule="replica"):
+        # One native admission; the schedule is resolved here, once, into the
+        # native owner (bindings/parallel_byte_native_door.mojo).
+        return _native_parallel_byte("init", (self, state, devices, logical_shards, pool_optimizer, schedule))
 
     @property
     def step_(self):
@@ -67,7 +88,8 @@ class ParallelByteLanguageModelTrainer:
         return _native_parallel_corpus("batches_parallel_step", (batches, self, steps))
 
     def state_dict(self, *, rank=0):
-        """Export a replica in the existing portable byte-LM state format."""
+        """Export the state in the portable byte-LM state format: replica
+        ``rank`` for ``"replica"``, the complete canonical state otherwise."""
         return _native_parallel_byte("state", (self, rank))
 
     def export_raw(self, *, rank=0, into=None):
@@ -152,16 +174,26 @@ class ParallelByteLanguageModelTrainer:
         return _native_parallel_byte("fold_export", (self, into))
 
     def optimizer_ownership(self):
-        """Actual native ownership and moment/rollback/reduction bytes per device."""
+        """Actual native ownership and moment/rollback/reduction bytes per
+        device; for ``"model_pool"`` the records of :meth:`model_ownership`.
+        Refused for ``"offload"``, whose state lives on the host."""
         return _native_parallel_byte("ownership", (self,))
+
+    def model_ownership(self):
+        """``"model_pool"`` only: the canonical parameter and state
+        allocations of each owned chunk. Counts exclude copied kernel weights,
+        activations and workspaces; they are not a total GPU-memory estimate."""
+        return _native_parallel_byte("model_ownership", (self,))
 
     def checkpoint(self):
         """Portable state plus the logical reduction contract required for replay."""
         return _native_parallel_byte("checkpoint", (self,))
 
     @classmethod
-    def from_checkpoint(cls, checkpoint, *, devices=(0,), pool_optimizer=True):
-        return _native_parallel_byte("from_checkpoint", (cls, checkpoint, devices, pool_optimizer))
+    def from_checkpoint(cls, checkpoint, *, devices=(0,), pool_optimizer=None, schedule="replica"):
+        """Restore from :meth:`checkpoint` onto ``devices`` with ``schedule``
+        (as for the constructor); any schedule replays any checkpoint."""
+        return _native_parallel_byte("from_checkpoint", (cls, checkpoint, devices, pool_optimizer, schedule))
 
     def close(self):
         """Release device resources. Export/checkpoint before closing to retain state."""
@@ -225,7 +257,7 @@ class ParallelNeuralTrainer:
 def _connect_parallel_byte_native():
     # glue: import-time ABI connection only. Product methods hand off once to
     # native Mojo (bindings/parallel_byte_native_door.mojo), which admits the exact
-    # trainer classes and the installed binding's schedule descriptor table.
+    # trainer class and the installed binding's schedule descriptor table.
     from . import _backend
     from ._array import Array
     from ._byte_lm_config import ByteLanguageModelConfig
@@ -254,7 +286,7 @@ def _connect_parallel_byte_native():
         # On CPU the adapter's binding() already returns the host module itself.
         modes = {mode: selected}  # glue: installed native mode connection
     runtime("initialize", (Array, ByteLanguageModelConfig, modes, vendor))
-    runtime("admit_class", (ParallelByteLanguageModelTrainer, "replica"))
+    runtime("admit_class", (ParallelByteLanguageModelTrainer,))
     return runtime
 
 

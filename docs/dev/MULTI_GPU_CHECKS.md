@@ -45,7 +45,7 @@ The fault arm is one of two kinds:
 - The plain one-device estimator. Both arms go through the driver, so a driver that is wrong on one device and equally
   wrong on N passes. The removed `par-*` lanes compared each driver with the plain fit; that comparison is not here.
 - Mixed card models in one plan, two vendors in one box, Apple, and the CPU column.
-- `OffloadedByteLanguageModelTrainer` (one device by design), `par-boosting-pointwise`, `par-border-types` and
+- `ParallelByteLanguageModelTrainer(schedule="offload")` (one device by design), `par-boosting-pointwise`, `par-border-types` and
   `par-ordered` configurations of `fit_boosting` (the driver is covered by the two boosting units).
 - The Mojo-level `training/checks/*_parallel_check.mojo` programs. They need a source build on the box;
   `tools/two_device_checks.sh` runs them and the job below can call it as a second phase (`MGC_MOJO_CHECKS=1`).

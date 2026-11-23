@@ -40,7 +40,6 @@
       "KernelDensity",
       "KernelRidge",
       "LanguageModelConfig",
-      "LanguageModelHostTrainer",
       "LanguageModelInference",
       "LanguageModelTrainer",
       "Lasso",
@@ -62,12 +61,10 @@
       "MinMaxScaler",
       "NearestNeighbors",
       "Nystroem",
-      "OffloadedByteLanguageModelTrainer",
       "OrderedRMSE",
       "PCA",
       "ParallelByteLanguageModelTrainer",
       "ParallelNeuralTrainer",
-      "PooledByteLanguageModelTrainer",
       "QNRegressor",
       "RBF",
       "RBFSampler",
@@ -2730,15 +2727,6 @@
       "symbol_origin": "mojolearn._byte_lm_config.ByteLanguageModelConfig"
     },
     {
-      "algorithm": "mojolearn.LanguageModelHostTrainer",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/__init__.py",
-      "canonical_algorithm": "mojolearn.LanguageModelHostTrainer",
-      "symbol_origin": "mojolearn._byte_lm_host.LanguageModelHostTrainer"
-    },
-    {
       "algorithm": "mojolearn.LanguageModelInference",
       "status": "missing",
       "cases": [],
@@ -3234,15 +3222,6 @@
       "symbol_origin": "mojolearn._expansion_cluster.OPTICS"
     },
     {
-      "algorithm": "mojolearn.OffloadedByteLanguageModelTrainer",
-      "status": "blocked",
-      "cases": [],
-      "reason": "Current public orchestration depends on CPython objects/protocols; standalone native owner is not yet exposed.",
-      "source": "python/mojolearn/__init__.py",
-      "canonical_algorithm": "mojolearn.OffloadedByteLanguageModelTrainer",
-      "symbol_origin": "mojolearn.offload_training.OffloadedByteLanguageModelTrainer"
-    },
-    {
       "algorithm": "mojolearn.OneClassSVM",
       "status": "missing",
       "cases": [],
@@ -3423,15 +3402,6 @@
       "source": "python/mojolearn/_expansion_prep.py",
       "canonical_algorithm": "mojolearn.PolynomialFeatures",
       "symbol_origin": "mojolearn._expansion_prep.PolynomialFeatures"
-    },
-    {
-      "algorithm": "mojolearn.PooledByteLanguageModelTrainer",
-      "status": "blocked",
-      "cases": [],
-      "reason": "Current public orchestration depends on CPython objects/protocols; standalone native owner is not yet exposed.",
-      "source": "python/mojolearn/__init__.py",
-      "canonical_algorithm": "mojolearn.PooledByteLanguageModelTrainer",
-      "symbol_origin": "mojolearn.model_pool_training.PooledByteLanguageModelTrainer"
     },
     {
       "algorithm": "mojolearn.PowerTransformer",

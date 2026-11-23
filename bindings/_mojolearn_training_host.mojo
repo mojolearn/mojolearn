@@ -9,7 +9,7 @@ CPU column through this binding. It carries them under the GPU training
 binding's names (`bindings/_mojolearn_training.mojo`), with the SAME address
 contracts and params lists, so the trainer runs unchanged on a CPU-only
 install through `_backend._HOST_MODULES` (`"_mojolearn_training":
-"_mojolearn_training_host"`), the way `LanguageModelHostTrainer` composes the
+"_mojolearn_training_host"`), the way the byte LM CPU trainer composes the
 byte LM step from the same normative oracles:
 
   `ce_loss`       `training/checks/loss_oracle.mojo::ce_forward_oracle` and

@@ -1,5 +1,10 @@
 # Byte LM training on a CPU
 
+The CPU training step is `LanguageModelTrainer(device="cpu")`. The class this document calls
+`LanguageModelHostTrainer` ran the same composed host step and was folded into it on 2026-11-22
+(the two gave the same loss, gradient, parameter and moment bytes on the same seed and data); the
+records below keep the name they were taken under.
+
 DEVIATION 2680. The CPU runs one byte LM training step, forward, backward and
 the AdamW update, and reproduces the recorded GPU bytes exactly. Two statements,
 and the difference between them matters: seven CPUs reproduce every recorded

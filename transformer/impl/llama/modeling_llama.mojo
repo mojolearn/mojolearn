@@ -435,6 +435,7 @@ from checks.numerics import (
     identical_tanh,
     portable_powf,
 )
+from core.rms_norm_body import rms_sq_step, rms_rstd, rms_scale
 # lane/block-options (2026-09-17): the block's options record, PACKAGE
 # LEVEL (`transformer/block_options.mojo`), so that this file still imports
 # nothing from `transformer/checks/`. Every option's seam below cites its
@@ -2189,14 +2190,10 @@ def _nfl_rms_norm_cell(
     var acc = nfl_cell_dot(x, x, t * dm, t * dm, dm, lane)
     if lane == 0:
         sumsq.unsafe_store(t, acc)
-    var mean = ftz(identical_div(acc, Float32(dm)))
-    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    var rstd = rms_rstd(acc, dm, eps_in)  # RMSNorm's one body (core/rms_norm_body.mojo)
     var j = lane
     while j < dm:  # device-loop: this lane's elements of one row
-        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
-        out_buf.unsafe_store(
-            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-        )
+        out_buf.unsafe_store(t * dm + j, rms_scale(x.unsafe_load(t * dm + j), rstd, weight.unsafe_load(j)))
         j += NFL_LANES
 
 
@@ -2236,12 +2233,10 @@ def llama_rms_norm_kernel(
     comptime if SAB_S1_FOLD_DESCENDING:
         for jj in range(dm):
             var jd = dm - 1 - jj
-            var xd = ftz(x.unsafe_load(t * dm + jd))
-            acc = ftz(identical_mul_add(xd, xd, acc))
+            acc = rms_sq_step(ftz(x.unsafe_load(t * dm + jd)), acc)
     else:
         for j in range(dm):
-            var xj = ftz(x.unsafe_load(t * dm + j))
-            acc = ftz(identical_mul_add(xj, xj, acc))
+            acc = rms_sq_step(ftz(x.unsafe_load(t * dm + j)), acc)
 
     comptime if SAB_BATCHINV_NORM_CHUNK_FROM_M:
         # SABOTAGE: a chunked fold whose CHUNK WIDTH is derived from
@@ -2275,16 +2270,12 @@ def llama_rms_norm_kernel(
     # (DEVIATION 746 RECORDED Metal's intrinsic as correctly rounded where
     # the reference's spelling is not -- being righter than the reference is
     # not the goal).
-    var mean = ftz(identical_div(acc, Float32(dm)))
-    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    var rstd = rms_rstd(acc, dm, eps_in)  # RMSNorm's one body (core/rms_norm_body.mojo)
 
     # S3 and S4, both PRODUCT: `hidden * rstd` then `weight * hidden`, each
     # its own rounding, neither contractible into a neighboring add.
     for j in range(dm):
-        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
-        out_buf.unsafe_store(
-            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-        )
+        out_buf.unsafe_store(t * dm + j, rms_scale(x.unsafe_load(t * dm + j), rstd, weight.unsafe_load(j)))
 
 
 def residual_rms_norm_kernel(
@@ -2324,20 +2315,16 @@ def residual_rms_norm_kernel(
             var ci = ct * cdm + cj
             var cr = ftz(ftz(a.unsafe_load(ci)) + ftz(b.unsafe_load(ci)))
             residual.unsafe_store(ci, cr)
-            cacc = ftz(identical_mul_add(cr, cr, cacc))
+            cacc = rms_sq_step(cr, cacc)
             cj += NFL_LANES
         cacc = nfl_cell_total(cacc)
         if lane == 0:
             sumsq.unsafe_store(ct, cacc)
-        var cmean = ftz(identical_div(cacc, Float32(cdm)))
-        var crstd = ftz(identical_rsqrt(ftz(cmean + eps_in)))
+        var crstd = rms_rstd(cacc, cdm, eps_in)
         cj = lane
         while cj < cdm:  # device-loop: this lane's elements of one row
             var ci2 = ct * cdm + cj
-            var cinner = ftz(identical_mul(ftz(residual.unsafe_load(ci2)), crstd))
-            out_buf.unsafe_store(
-                ci2, ftz(identical_mul(ftz(weight.unsafe_load(cj)), cinner))
-            )
+            out_buf.unsafe_store(ci2, rms_scale(residual.unsafe_load(ci2), crstd, weight.unsafe_load(cj)))
             cj += NFL_LANES
         return
     var m = Int(m_in)
@@ -2350,18 +2337,14 @@ def residual_rms_norm_kernel(
         var i = t * dm + j
         var r = ftz(ftz(a.unsafe_load(i)) + ftz(b.unsafe_load(i)))
         residual.unsafe_store(i, r)
-        acc = ftz(identical_mul_add(r, r, acc))
+        acc = rms_sq_step(r, acc)
     comptime if NN24_NORM_LANES8:
         acc = norm_profile_dot[NN24_LANES](residual, residual, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
-    var mean = ftz(identical_div(acc, Float32(dm)))
-    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    var rstd = rms_rstd(acc, dm, eps_in)  # RMSNorm's one body (core/rms_norm_body.mojo)
     for j in range(dm):
         var i = t * dm + j
-        var inner = ftz(identical_mul(ftz(residual.unsafe_load(i)), rstd))
-        out_buf.unsafe_store(
-            i, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-        )
+        out_buf.unsafe_store(i, rms_scale(residual.unsafe_load(i), rstd, weight.unsafe_load(j)))
 
 
 # The fused residual + RMSNorm kernel and the unfused pair compute the same
@@ -2521,19 +2504,16 @@ def llama_norm_variant_kernel(
         acc = nfl_dot(x, x, t * dm, t * dm, dm)
     else:
         for j in range(dm):
-            var xj = ftz(x.unsafe_load(t * dm + j))
-            acc = ftz(identical_mul_add(xj, xj, acc))
+            acc = rms_sq_step(ftz(x.unsafe_load(t * dm + j)), acc)
     comptime if NN24_NORM_LANES8:
         acc = norm_profile_dot[NN24_LANES](x, x, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
-    var mean = ftz(identical_div(acc, Float32(dm)))
-    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    var rstd = rms_rstd(acc, dm, eps_in)  # RMSNorm's one body (core/rms_norm_body.mojo)
     for j in range(dm):
-        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
         var wj = ftz(weight.unsafe_load(j))
         if kind == NORM_RMSNORM_OFFSET:
             wj = ftz(Float32(1.0) + wj)
-        out_buf.unsafe_store(t * dm + j, ftz(identical_mul(wj, inner)))
+        out_buf.unsafe_store(t * dm + j, rms_scale(x.unsafe_load(t * dm + j), rstd, wj))
 
 
 def llama_norm(

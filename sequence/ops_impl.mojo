@@ -105,15 +105,30 @@ def opt_of(ip: List[Int], at: Int, fp: List[Float64], fat: Int) raises -> OptCon
                      fval(fp, fat + 3), fval(fp, fat + 4))
 
 
+def rnn_lengths_of(addr: Int, N: Int, T: Int, operation: String) raises -> Optional[FP]:
+    """The sequence lengths word (lane seq-blocks-2): 0 for none, else the
+    address of N float32 row lengths, each a whole number in [1, T]."""
+    if addr == 0:
+        return None
+    var lens = fptr(addr, "lengths")
+    for i in range(N):  # admission: one comparison per row on the host, before any launch
+        var v = lens.unsafe_load(i)
+        if v != v or v < Float32(1.0) or v > Float32(T) or Float32(Int(v)) != v:
+            raise Error("ValueError: " + operation + ": every length must be a whole number from 1 to the "
+                        + "sequence length " + String(T))
+    return lens
+
+
 def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64]) raises -> Int:
-    """addrs = [X, y, params (in/out), losses, lrs];
+    """addrs = [X, y, params (in/out), losses, lrs (, lengths)];
     ip = [cell, D, H, L, O, task, N, T, epochs, bs, opt_kind, opt_flags,
     shuffle, seed_lo, seed_hi]; fp = [f1, f2, eps, weight_decay, f7,
     initial_accumulator]. Lane cpu4-python: no order or step arrays cross
     in; `rnn_fit` builds each epoch's order on the executor (losses and lrs
-    hold epochs * ceil(N / bs) words)."""
-    if len(addrs) != 5 or len(ip) != 15 or len(fp) != 6:
-        raise Error("rnn_fit: requires 5 addresses, 15 integer and 6 float parameters")
+    hold epochs * ceil(N / bs) words). The optional sixth address holds N
+    float32 sequence lengths (rnn_lengths_of; 0 = none)."""
+    if (len(addrs) != 5 and len(addrs) != 6) or len(ip) != 15 or len(fp) != 6:
+        raise Error("rnn_fit: requires 5 (or 6) addresses, 15 integer and 6 float parameters")
     var x_addr = addrs[0]
     var y_addr = addrs[1]
     var p_addr = addrs[2]
@@ -138,6 +153,7 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     if ival(ip, 13) < 0 or ival(ip, 14) < 0:
         raise Error("rnn_fit: the seed words must be non-negative 32-bit values")
     var cfg = opt_of(ip, 10, fp, 0)
+    var lengths = rnn_lengths_of(addrs[5] if len(addrs) == 6 else 0, N, T, "fit")
     if task == TASK_CE:
         var y = fptr(y_addr, "y")
         for i in range(N):
@@ -152,7 +168,7 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
     rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
-                             fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
+                             fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5), lengths)
     if profile:
         ag_profile_fit_end("rnn_fit cell=" + String(ival(ip, 0)))
     return net.n_params()
@@ -161,9 +177,10 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
 def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
     """addrs = [X, params, out, seq (ignored unless want_seq)], optionally
     followed by the resident-block words (sequence/perf3_seq_resident_words.mojo);
-    ip = [cell, D, H, L, O, task, N, T, chunk, want_seq]."""
-    if len(ip) != 10:
-        raise Error("rnn_predict: requires 4 addresses and 10 integer parameters")
+    ip = [cell, D, H, L, O, task, N, T, chunk, want_seq (, lengths address:
+    N float32 sequence lengths, 0 = none)]."""
+    if len(ip) != 10 and len(ip) != 11:
+        raise Error("rnn_predict: requires 4 addresses and 10 (or 11) integer parameters")
     var resident = seq_resident_words(addrs, 4, "rnn_predict")
     var x_addr = addrs[0]
     var p_addr = addrs[1]
@@ -178,8 +195,9 @@ def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
     if N < 1 or T < 1 or chunk < 1 or N >= 16777216:
         raise Error("rnn_predict: N, T and chunk must be >= 1 and N < 2^24")
     var seq = fptr(seq_addr, "seq") if want else fptr(out_addr, "out")
+    var lengths = rnn_lengths_of(ip[10] if len(ip) == 11 else 0, N, T, "predict")
     rnn_predict(ex, net, task, fptr(x_addr, "X"), N, T, fptr(p_addr, "params"),
-                fptr(out_addr, "out"), seq, want, chunk, resident)
+                fptr(out_addr, "out"), seq, want, chunk, resident, lengths)
     return N * net.O
 
 

@@ -160,9 +160,8 @@ DECLARED_LANELESS = {
 # TOMBSTONE: MOJOLEARN_PAR_VERIFY (retired) deleted 2026-10-31 by 868702642c; code recoverable at 868702642c^.
 # Restore: git apply experiments/removed/MOJOLEARN_PAR_VERIFY.patch
 _RETIRED_MULTI_GPU = (
-    "DistributedIVFIndex", "OffloadedByteLanguageModelTrainer", "ParallelByteLanguageModelTrainer",
-    "PooledByteLanguageModelTrainer", "model_pool_training.PooledByteLanguageModelTrainer", "models.ParallelCausalLM",
-    "offload_training.OffloadedByteLanguageModelTrainer", "parallel_classical.apply_kernel_method", "parallel_classical.bootstrap",
+    "DistributedIVFIndex", "ParallelByteLanguageModelTrainer", "models.ParallelCausalLM",
+    "parallel_classical.apply_kernel_method", "parallel_classical.bootstrap",
     "parallel_classical.fit_arima", "parallel_classical.fit_cholesky", "parallel_classical.fit_coordinate_descent",
     "parallel_classical.fit_dbscan", "parallel_classical.fit_exponential_smoothing", "parallel_classical.fit_gaussian_mixture",
     "parallel_classical.fit_gaussian_process", "parallel_classical.fit_gram_estimator", "parallel_classical.fit_hdbscan",

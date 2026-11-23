@@ -20,7 +20,6 @@ def main():
     import numpy as np
     from mojolearn import LanguageModelTrainer as Trainer, LanguageModelConfig as Shape
     from mojolearn.parallel_training import ParallelByteLanguageModelTrainer as Parallel
-    from mojolearn.model_pool_training import PooledByteLanguageModelTrainer as Pooled
     corpus = args.corpus.read_bytes()
     checks = []
 
@@ -54,7 +53,7 @@ def main():
                               .astype('<i4').reshape(2, 8))
             return result
 
-        with Pooled(initial, devices=(0, 1), logical_shards=args.logical_shards) as pool, \
+        with Parallel(initial, devices=(0, 1), logical_shards=args.logical_shards, schedule="model_pool") as pool, \
              Parallel(initial, devices=(0,), logical_shards=args.logical_shards, pool_optimizer=False) as replicas, \
              Parallel(initial, devices=(1,), logical_shards=args.logical_shards, pool_optimizer=False) as replay:
             ownership = pool.optimizer_ownership()
@@ -128,7 +127,7 @@ def main():
                 raise AssertionError('invalid final shard accepted')
             same(before, pool.state_dict())
             checkpoint = pool.checkpoint()
-            with Pooled.from_checkpoint(checkpoint, devices=(1,0)) as resumed, \
+            with Parallel.from_checkpoint(checkpoint, devices=(1,0), schedule="model_pool") as resumed, \
                  Parallel.from_checkpoint(checkpoint, devices=(1,)) as migrated:
                 final_step = pool.train_step(batches(3))
                 loss_history.extend(final_step['losses'])

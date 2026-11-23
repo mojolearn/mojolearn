@@ -30,7 +30,7 @@ from core.host_parallel import host_parallelize
 from core.entry_table import EntryRef, entry_ref_call
 from x_decomp.descriptor_schema import XD_CAPABILITIES, XD_TSQR_R, XD_TSQR_Q, XD_R_SIGNS
 from bindings.linalg_ops_kit_run import LinKit, lin_svd_tall_run, lin_svd_hermitian_run
-from bindings.linalg_ops_decomp_run import _lin_tsqr_on
+from bindings.linalg_ops_kit_run import _lin_tsqr_on
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from checks.native_tests.testsuite_cases import require, fixture_f32
 

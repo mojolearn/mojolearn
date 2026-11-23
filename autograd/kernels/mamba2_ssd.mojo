@@ -36,6 +36,36 @@ from gemm.neural_dispatch import (
 from gemm.contract import OP_NN
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
 from mamba.impl.modeling.modeling_mamba import mamba_scratch
+# one body per operation (lane neural-blocks-3, 2026-11-22): the kernels below call these thread bodies
+from autograd.kernels.mamba2_ssd_body import (
+    mamba2_cstate_ddecay_cell,
+    mamba2_s18_direct_dpass_cell,
+    mamba2_s18_dc_ddacs_cell,
+    mamba2_cb_backward_cell,
+    mamba2_decay_to_dacs_cell,
+    mamba2_postconv_merge_cell,
+    mamba2_cstate_dxd_db_cell,
+    mamba2_seg_backward_cell,
+    mamba2_ydiag_matrix_backward_cell,
+    mamba2_reverse_cumsum_cell,
+    mamba2_ydiag_xd_backward_cell,
+    m2_fold_rows_partial_cell,
+    m2_fold_tiles_cell,
+    mamba2_da_cell_body,
+    mamba2_merge_dacs_cell,
+    mamba2_scale_to_dacs_cell,
+    mamba2_reverse_chunk_state_cell,
+    m2_fma_step,
+    m2_product,
+    m2_fold2,
+    IDN_M2_BWD_CELL,
+    IDN_M2_BWD_FOLD_TILED,
+    M2_BWD_FOLD_ROWS,
+    m2_fold_rows_per_tile,
+    m2_fold_tiles,
+    m2_exp_step,
+    m2_sum,
+)
 
 
 # TOMBSTONE: MOJOLEARN_IDN_M2_GRAD_FOLD (unmeasured opt-in arms 1 and 2) uses deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, the read is mamba/impl/ops/neural_gradient_profile.mojo); code recoverable at d788d4c3f4.
@@ -69,29 +99,8 @@ comptime M2_SSD_BWD_TPB = 128
 # ---------------------------------------------------------------------------
 # TOMBSTONE: MOJOLEARN_IDN_M2_BWD_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at a6c819032b.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_BWD_CELL_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_M2_BWD_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
-    "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
-]()
-comptime M2_BWD_FOLD_ROWS = 256
-
-
-def m2_fold_rows_per_tile(rows: Int) -> Int:
-    """Rows per fold tile: the fixed height, or every row (main's chain)."""
-    comptime if IDN_M2_BWD_FOLD_TILED:
-        return M2_BWD_FOLD_ROWS
-    var r = rows
-    if r < 1:
-        r = 1
-    return r
-
-
-def m2_fold_tiles(rows: Int) -> Int:
-    var per = m2_fold_rows_per_tile(rows)
-    var n = (rows + per - 1) // per
-    if n < 1:
-        return 1
-    return n
+# IDN_M2_BWD_CELL, IDN_M2_BWD_FOLD_TILED, M2_BWD_FOLD_ROWS, m2_fold_rows_per_tile and m2_fold_tiles moved to
+# autograd/kernels/mamba2_ssd_body.mojo (2026-11-22: the generic SSD op reads them too); imported above.
 
 
 def _grid(n: Int) -> Int:
@@ -153,35 +162,8 @@ def mamba2_cstate_ddecay_kernel(
     cd_in: Int32, nc_in: Int32, q_in: Int32,
 ):
     """Cstate's decay adjoint; one owner contracts p-major then n."""
-    var b = Int(b_in)
-    var t = Int(t_in)
-    var nh = Int(nh_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * nh * nc * qv:
-        return
-    var bb = cell // (nh * nc * qv)
-    var rem = cell - bb * nh * nc * qv
-    var hh = rem // (nc * qv)
-    rem -= hh * nc * qv
-    var cc = rem // qv
-    var ii = rem - cc * qv
-    var tt = cc * qv + ii
-    var acc = Float32(0.0)
-    if tt < t:
-        for pp in range(M2_HEADDIM):
-            var xv = ftz(xd.unsafe_load((bb * t * nh + tt * nh + hh) * M2_HEADDIM + pp))
-            for nn in range(M2_D_STATE):
-                var upstream = ftz(d_cstate.unsafe_load(
-                    (((bb * nc + cc) * nh + hh) * M2_HEADDIM + pp)
-                    * M2_D_STATE + nn
-                ))
-                var bv = ftz(xbc.unsafe_load((bb * t + tt) * cd + di + nn))
-                acc = ftz(identical_mul_add(upstream, ftz(identical_mul(xv, bv)), acc))
-    d_decay.unsafe_store(cell, acc)
+    mamba2_cstate_ddecay_cell(cell, d_decay, d_cstate, xd, xbc, b_in, t_in, nh_in, di_in, cd_in, nc_in, q_in)
 
 
 def mamba2_cstate_ddecay_into(
@@ -217,48 +199,8 @@ def mamba2_s18_direct_dpass_kernel(
     forward contract's ascending 128-cell leaves and two-leaf balanced fold;
     rows beyond T are structural zeroes and are never read.
     """
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
-    var pn = M2_HEADDIM * M2_D_STATE
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * nc * nh * pn:
-        return
-    var bb = cell // (nc * nh * pn)
-    var rem = cell - bb * nc * nh * pn
-    var cc = rem // (nh * pn)
-    rem -= cc * nh * pn
-    var hh = rem // pn
-    rem -= hh * pn
-    var pp = rem // M2_D_STATE
-    var nn = rem - pp * M2_D_STATE
-    var leaf = qv
-    if leaf > 128:
-        leaf = 128
-    var acc0 = Float32(0.0)
-    var acc1 = Float32(0.0)
-    for ii in range(qv):
-        var tt = cc * qv + ii
-        if tt < t_work:
-            var dy_idx = ((bb * t_work + tt) * nh + hh) * M2_HEADDIM + pp
-            var dy = ftz(d_yoff.unsafe_load(dy_idx))
-            var scale = ftz(identical_exp(ftz(
-                dacs.unsafe_load(((bb * nh + hh) * nc + cc) * qv + ii)
-            )))
-            var d_dot = ftz(identical_mul(dy, scale))
-            var cv = ftz(xbc.unsafe_load((bb * t_work + tt) * cd + di + M2_D_STATE + nn))
-            if ii < leaf:
-                acc0 = ftz(identical_mul_add(cv, d_dot, acc0))
-            else:
-                acc1 = ftz(identical_mul_add(cv, d_dot, acc1))
-    var result = acc0
-    if qv > leaf:
-        result = ftz(acc0 + acc1)
-    direct_d_pass.unsafe_store(cell, result)
+    mamba2_s18_direct_dpass_cell(cell, direct_d_pass, d_yoff, xbc, dacs, b_in, t_in, nh_in, di_in, cd_in, nc_in, q_in)
 
 
 def mamba2_s18_dc_ddacs_kernel(
@@ -277,70 +219,8 @@ def mamba2_s18_dc_ddacs_kernel(
     q_in: Int32,
 ):
     """S18 dC and the yoff contribution to d_dacs, without atomics."""
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
-    var pn = M2_HEADDIM * M2_D_STATE
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var dc_cells = b * t_work * M2_D_STATE
-    if cell < dc_cells:
-        var bb = cell // (t_work * M2_D_STATE)
-        var rem = cell - bb * t_work * M2_D_STATE
-        var tt = rem // M2_D_STATE
-        var nn = rem - tt * M2_D_STATE
-        var cc = tt // qv
-        var ii = tt - cc * qv
-        var acc = Float32(0.0)
-        for hh in range(nh):
-            var scale = ftz(identical_exp(ftz(dacs.unsafe_load(
-                ((bb * nh + hh) * nc + cc) * qv + ii
-            ))))
-            for pp in range(M2_HEADDIM):
-                var dy = ftz(d_yoff.unsafe_load(
-                    ((bb * t_work + tt) * nh + hh) * M2_HEADDIM + pp
-                ))
-                var d_dot = ftz(identical_mul(dy, scale))
-                var pv = ftz(pass_states.unsafe_load(
-                    (((bb * nc + cc) * nh + hh) * pn)
-                    + pp * M2_D_STATE + nn
-                ))
-                acc = ftz(identical_mul_add(pv, d_dot, acc))
-        d_c.unsafe_store(cell, acc)
-    var da_cell = cell
-    var da_cells = b * nh * nc * qv
-    if da_cell < da_cells:
-        var bb = da_cell // (nh * nc * qv)
-        var rem = da_cell - bb * nh * nc * qv
-        var hh = rem // (nc * qv)
-        rem -= hh * nc * qv
-        var cc = rem // qv
-        var ii = rem - cc * qv
-        var tt = cc * qv + ii
-        var total = Float32(0.0)
-        if tt < t_work:
-            var scale = ftz(identical_exp(ftz(dacs.unsafe_load(da_cell))))
-            for pp in range(M2_HEADDIM):
-                var dot = Float32(0.0)
-                for nn in range(M2_D_STATE):
-                    dot = ftz(identical_mul_add(
-                        ftz(xbc.unsafe_load(
-                            (bb * t_work + tt) * cd + di + M2_D_STATE + nn
-                        )),
-                        ftz(pass_states.unsafe_load(
-                            (((bb * nc + cc) * nh + hh) * pn)
-                            + pp * M2_D_STATE + nn
-                        )), dot,
-                    ))
-                var dy = ftz(d_yoff.unsafe_load(
-                    ((bb * t_work + tt) * nh + hh) * M2_HEADDIM + pp
-                ))
-                total = ftz(identical_mul_add(dy, dot, total))
-            total = ftz(identical_mul(total, scale))
-        d_dacs.unsafe_store(da_cell, total)
+    mamba2_s18_dc_ddacs_cell(cell, d_c, d_dacs, d_yoff, xbc, pass_states, dacs, b_in, t_in, nh_in, di_in, cd_in, nc_in, q_in)
 
 
 def mamba2_cb_backward_kernel(
@@ -351,38 +231,8 @@ def mamba2_cb_backward_kernel(
     b_in: Int32, t_in: Int32, di_in: Int32, cd_in: Int32,
     nc_in: Int32, q_in: Int32,
 ):
-    var b = Int(b_in)
-    var t = Int(t_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * t * M2_D_STATE:
-        return
-    var bb = cell // (t * M2_D_STATE)
-    var rem = cell - bb * t * M2_D_STATE
-    var tt = rem // M2_D_STATE
-    var nn = rem - tt * M2_D_STATE
-    var cc = tt // qv
-    var pos = tt - cc * qv
-    var real = t - cc * qv
-    if real > qv:
-        real = qv
-    var db = Float32(0.0)
-    var dc = Float32(0.0)
-    for ii in range(pos, real):
-        db = ftz(identical_mul_add(
-            ftz(d_cb.unsafe_load(((bb*nc+cc)*qv+ii)*qv+pos)),
-            ftz(xbc.unsafe_load((bb*t+cc*qv+ii)*cd+di+M2_D_STATE+nn)), db
-        ))
-    for jj in range(pos + 1):
-        dc = ftz(identical_mul_add(
-            ftz(d_cb.unsafe_load(((bb*nc+cc)*qv+pos)*qv+jj)),
-            ftz(xbc.unsafe_load((bb*t+cc*qv+jj)*cd+di+nn)), dc
-        ))
-    d_b.unsafe_store(cell, db)
-    d_c.unsafe_store(cell, dc)
+    mamba2_cb_backward_cell(cell, d_b, d_c, d_cb, xbc, b_in, t_in, di_in, cd_in, nc_in, q_in)
 
 
 def mamba2_s18_direct_dpass_into(
@@ -461,21 +311,8 @@ def mamba2_decay_to_dacs_kernel(
     q_in: Int32,
 ):
     """Reverse exp(dacs[last]-dacs[i]); last-minus-last cancels."""
-    var rows = Int(rows_in)
-    var qv = Int(q_in)
     var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if row >= rows:
-        return
-    var base = row * qv
-    var last_sum = Float32(0.0)
-    for ii in range(qv - 1):
-        var g = ftz(identical_mul(
-            ftz(d_decay.unsafe_load(base + ii)),
-            ftz(decay.unsafe_load(base + ii)),
-        ))
-        dst.unsafe_store(base + ii, ftz(-g))
-        last_sum = ftz(last_sum + g)
-    dst.unsafe_store(base + qv - 1, last_sum)
+    mamba2_decay_to_dacs_cell(row, dst, d_decay, decay, rows_in, q_in)
 
 
 struct Mamba2SSDDiscretizeBackward(Movable):
@@ -660,10 +497,7 @@ def mamba2_postconv_merge_kernel(
     x_cells_in: Int32,
 ):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(c_cells_in):
-        d_c_total.unsafe_store(i, ftz(ftz(d_c_yoff.unsafe_load(i)) + ftz(d_c_cb.unsafe_load(i))))
-    if i < Int(x_cells_in):
-        d_x_total.unsafe_store(i, ftz(ftz(d_x_d.unsafe_load(i)) + ftz(d_x_xd.unsafe_load(i))))
+    mamba2_postconv_merge_cell(i, d_c_total, d_x_total, d_c_yoff, d_c_cb, d_x_d, d_x_xd, c_cells_in, x_cells_in)
 
 
 def mamba2_postconv_merge_into(
@@ -692,34 +526,8 @@ def mamba2_cstate_dxd_db_kernel(
     b_in: Int32, t_in: Int32, nh_in: Int32, di_in: Int32, cd_in: Int32,
     nc_in: Int32, q_in: Int32,
 ):
-    var b=Int(b_in); var t=Int(t_in); var nh=Int(nh_in); var di=Int(di_in)
-    var cd=Int(cd_in); var nc=Int(nc_in); var qv=Int(q_in)
     var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    var xd_cells=b*t*nh*M2_HEADDIM
-    if cell < xd_cells:
-        var bb=cell//(t*nh*M2_HEADDIM); var r=cell-bb*t*nh*M2_HEADDIM
-        var tt=r//(nh*M2_HEADDIM); r-=tt*nh*M2_HEADDIM
-        var hh=r//M2_HEADDIM; var pp=r-hh*M2_HEADDIM
-        var cc=tt//qv; var ii=tt-cc*qv; var acc=Float32(0.0)
-        var dec=ftz(decay.unsafe_load(((bb*nh+hh)*nc+cc)*qv+ii))
-        for nn in range(M2_D_STATE):
-            acc=ftz(identical_mul_add(
-                ftz(d_cstate.unsafe_load((((bb*nc+cc)*nh+hh)*M2_HEADDIM+pp)*M2_D_STATE+nn)),
-                ftz(identical_mul(ftz(xbc.unsafe_load((bb*t+tt)*cd+di+nn)),dec)),acc))
-        d_xd.unsafe_store(cell,acc)
-    var b_cells=b*t*M2_D_STATE
-    if cell < b_cells:
-        var bb=cell//(t*M2_D_STATE); var r=cell-bb*t*M2_D_STATE
-        var tt=r//M2_D_STATE; var nn=r-tt*M2_D_STATE
-        var cc=tt//qv; var ii=tt-cc*qv; var acc=Float32(0.0)
-        for hh in range(nh):
-            var dec=ftz(decay.unsafe_load(((bb*nh+hh)*nc+cc)*qv+ii))
-            for pp in range(M2_HEADDIM):
-                acc=ftz(identical_mul_add(
-                    ftz(d_cstate.unsafe_load((((bb*nc+cc)*nh+hh)*M2_HEADDIM+pp)*M2_D_STATE+nn)),
-                    ftz(identical_mul(ftz(xd.unsafe_load(((bb*t+tt)*nh+hh)*M2_HEADDIM+pp)),dec)),acc))
-        d_b.unsafe_store(cell,acc)
-        d_b_total.unsafe_store(cell,ftz(acc+ftz(d_b_cb.unsafe_load(cell))))
+    mamba2_cstate_dxd_db_cell(cell, d_xd, d_b, d_b_total, d_b_cb, d_cstate, xd, xbc, decay, b_in, t_in, nh_in, di_in, cd_in, nc_in, q_in)
 def mamba2_seg_backward_kernel(
     d_da_seg: MutPointer[Float32, MutAnyOrigin],
     d_da_total: MutPointer[Float32, MutAnyOrigin],
@@ -728,32 +536,8 @@ def mamba2_seg_backward_kernel(
     d_da_s11: MutPointer[Float32, MutAnyOrigin],
     b_in: Int32, t_in: Int32, nh_in: Int32, nc_in: Int32, q_in: Int32,
 ):
-    var b = Int(b_in)
-    var t = Int(t_in)
-    var nh = Int(nh_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * t * nh:
-        return
-    var bb = cell // (t * nh)
-    var rem = cell - bb * t * nh
-    var tt = rem // nh
-    var hh = rem - tt * nh
-    var cc = tt // qv
-    var kk = tt - cc * qv
-    var real = t - cc * qv
-    if real > qv:
-        real = qv
-    var acc = Float32(0.0)
-    for jj in range(kk):
-        for ii in range(kk, real):
-            var idx = (((bb * nc + cc) * nh + hh) * qv + ii) * qv + jj
-            acc = ftz(identical_mul_add(
-                ftz(d_seg.unsafe_load(idx)), ftz(seg.unsafe_load(idx)), acc
-            ))
-    d_da_seg.unsafe_store(cell, acc)
-    d_da_total.unsafe_store(cell, ftz(ftz(d_da_s11.unsafe_load(cell)) + acc))
+    mamba2_seg_backward_cell(cell, d_da_seg, d_da_total, d_seg, seg, d_da_s11, b_in, t_in, nh_in, nc_in, q_in)
 
 
 def mamba2_ydiag_matrix_backward_kernel(
@@ -766,36 +550,8 @@ def mamba2_ydiag_matrix_backward_kernel(
     b_in: Int32, t_in: Int32, nh_in: Int32, nc_in: Int32, q_in: Int32,
 ):
     """Reverse M=cb*seg and ydiag=M@xd for every matrix cell."""
-    var b = Int(b_in)
-    var t = Int(t_in)
-    var nh = Int(nh_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * nc * qv * qv:
-        return
-    var bb = cell // (nc * qv * qv)
-    var rem = cell - bb * nc * qv * qv
-    var cc = rem // (qv * qv)
-    rem -= cc * qv * qv
-    var ii = rem // qv
-    var jj = rem - ii * qv
-    var real = t - cc * qv
-    if real > qv:
-        real = qv
-    var dcb = Float32(0.0)
-    for hh in range(nh):
-        var dm = Float32(0.0)
-        if ii < real and jj <= ii:
-            for pp in range(M2_HEADDIM):
-                dm = ftz(identical_mul_add(
-                    ftz(d_y.unsafe_load(((bb*t+cc*qv+ii)*nh+hh)*M2_HEADDIM+pp)),
-                    ftz(xd.unsafe_load(((bb*t+cc*qv+jj)*nh+hh)*M2_HEADDIM+pp)), dm
-                ))
-        var sidx = (((bb*nc+cc)*nh+hh)*qv+ii)*qv+jj
-        d_seg.unsafe_store(sidx, ftz(identical_mul(dm, ftz(cb.unsafe_load(cell)))))
-        dcb = ftz(identical_mul_add(dm, ftz(seg.unsafe_load(sidx)), dcb))
-    d_cb.unsafe_store(cell, dcb)
+    mamba2_ydiag_matrix_backward_cell(cell, d_cb, d_seg, d_y, xd, cb, seg, b_in, t_in, nh_in, nc_in, q_in)
 
 
 def mamba2_reverse_cumsum_kernel(
@@ -804,32 +560,8 @@ def mamba2_reverse_cumsum_kernel(
     b_in: Int32, t_in: Int32, nh_in: Int32, nc_in: Int32, q_in: Int32,
 ):
     """Reverse S11, including padded-copy gradients at the last real cell."""
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * nh * nc:
-        return
-    var bb = cell // (nh * nc)
-    var rem = cell - bb * nh * nc
-    var hh = rem // nc
-    var cc = rem - hh * nc
-    var real = t_work - cc * qv
-    if real > qv:
-        real = qv
-    var carry = Float32(0.0)
-    var ii = qv - 1
-    while ii >= 0:
-        carry = ftz(carry + ftz(d_dacs.unsafe_load(
-            ((bb * nh + hh) * nc + cc) * qv + ii
-        )))
-        if ii < real:
-            d_da.unsafe_store(
-                ((bb * t_work + cc * qv + ii) * nh + hh), carry
-            )
-        ii -= 1
+    mamba2_reverse_cumsum_cell(cell, d_da, d_dacs, b_in, t_in, nh_in, nc_in, q_in)
 
 
 def mamba2_da_product_backward_kernel(
@@ -911,54 +643,8 @@ def mamba2_ydiag_xd_backward_kernel(
     cd_in: Int32, nc_in: Int32, q_in: Int32,
 ):
     """Reverse ydiag only, then reverse xd=dt*x and merge current d_dt."""
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * t_work * nh:
-        return
-    var bb = cell // (t_work * nh)
-    var rem = cell - bb * t_work * nh
-    var tt = rem // nh
-    var hh = rem - tt * nh
-    var cc = tt // qv
-    var jj = tt - cc * qv
-    var real = t_work - cc * qv
-    if real > qv:
-        real = qv
-    var ddt = Float32(0.0)
-    var dtv = ftz(dt.unsafe_load(cell))
-    for pp in range(M2_HEADDIM):
-        var dxd = Float32(0.0)
-        for ii in range(jj, real):
-            var m = ftz(identical_mul(
-                ftz(cb_g.unsafe_load(((bb * nc + cc) * qv + ii) * qv + jj)),
-                ftz(seg_l.unsafe_load(
-                    (((bb * nc + cc) * nh + hh) * qv + ii) * qv + jj
-                )),
-            ))
-            var dy = ftz(d_y.unsafe_load(
-                ((bb * t_work + cc * qv + ii) * nh + hh)
-                * M2_HEADDIM + pp
-            ))
-            dxd = ftz(identical_mul_add(m, dy, dxd))
-        d_xd.unsafe_store(cell * M2_HEADDIM + pp, dxd)
-        dxd = ftz(dxd + ftz(d_xd_cstate.unsafe_load(cell * M2_HEADDIM + pp)))
-        d_xd_total.unsafe_store(cell * M2_HEADDIM + pp, dxd)
-        var xp = ftz(xbc.unsafe_load(
-            (bb * t_work + tt) * cd + hh * M2_HEADDIM + pp
-        ))
-        var out_idx = cell * M2_HEADDIM + pp
-        d_x.unsafe_store(out_idx, ftz(identical_mul(dxd, dtv)))
-        ddt = ftz(identical_mul_add(xp, dxd, ddt))
-    d_dt_xd.unsafe_store(cell, ddt)
-    d_dt_merged.unsafe_store(
-        cell, ftz(ftz(d_dt_da.unsafe_load(cell)) + ddt)
-    )
+    mamba2_ydiag_xd_backward_cell(cell, d_xd, d_x, d_dt_xd, d_dt_merged, d_y, cb_g, seg_l, xbc, dt, d_dt_da, d_xd_cstate, d_xd_total, b_in, t_in, nh_in, di_in, cd_in, nc_in, q_in)
 
 
 def mamba2_ydiag_xd_backward_tile_kernel(
@@ -1007,12 +693,11 @@ def mamba2_ydiag_xd_backward_tile_kernel(
     ]()
     var ii = jj + pp
     while ii < real:
-        m_s[ii] = ftz(identical_mul(
+        m_s[ii] = m2_product(
             ftz(cb_g.unsafe_load(((bb * nc + cc) * qv + ii) * qv + jj)),
             ftz(seg_l.unsafe_load(
                 (((bb * nc + cc) * nh + hh) * qv + ii) * qv + jj
-            )),
-        ))
+            )))
         ii += M2_HEADDIM
     barrier()
     var dxd = Float32(0.0)
@@ -1020,12 +705,12 @@ def mamba2_ydiag_xd_backward_tile_kernel(
         var dy = ftz(d_y.unsafe_load(
             ((bb * t_work + cc * qv + i2) * nh + hh) * M2_HEADDIM + pp
         ))
-        dxd = ftz(identical_mul_add(m_s[i2], dy, dxd))
+        dxd = m2_fma_step(m_s[i2], dy, dxd)
     d_xd.unsafe_store(cell * M2_HEADDIM + pp, dxd)
     dxd = ftz(dxd + ftz(d_xd_cstate.unsafe_load(cell * M2_HEADDIM + pp)))
     d_xd_total.unsafe_store(cell * M2_HEADDIM + pp, dxd)
     var dtv = ftz(dt.unsafe_load(cell))
-    d_x.unsafe_store(cell * M2_HEADDIM + pp, ftz(identical_mul(dxd, dtv)))
+    d_x.unsafe_store(cell * M2_HEADDIM + pp, m2_product(dxd, dtv))
     dxd_s[pp] = dxd
     barrier()
     if pp == 0:
@@ -1034,7 +719,7 @@ def mamba2_ydiag_xd_backward_tile_kernel(
             var xp = ftz(xbc.unsafe_load(
                 (bb * t_work + tt) * cd + hh * M2_HEADDIM + p2
             ))
-            ddt = ftz(identical_mul_add(xp, dxd_s[p2], ddt))
+            ddt = m2_fma_step(xp, dxd_s[p2], ddt)
         d_dt_xd.unsafe_store(cell, ddt)
         d_dt_merged.unsafe_store(
             cell, ftz(ftz(d_dt_da.unsafe_load(cell)) + ddt)
@@ -1152,26 +837,8 @@ def m2_fold_rows_partial_kernel(
     """One thread per (tile, column): the column's chain over the tile's
     rows ascending from +0, `acc = fma(x, y, acc)` (is_dot) or
     `acc = acc + x`, each step flushed (main's chains on that row range)."""
-    var rows = Int(rows_in); var cols = Int(cols_in)
-    var per = Int(per_in); var tiles = Int(tiles_in)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= tiles * cols:
-        return
-    var tile = cell // cols
-    var c = cell - tile * cols
-    var r0 = tile * per
-    var r1 = r0 + per
-    if r1 > rows:
-        r1 = rows
-    var acc = Float32(0.0)
-    for r in range(r0, r1):
-        var idx = r * cols + c
-        if is_dot != 0:
-            acc = ftz(identical_mul_add(
-                ftz(x.unsafe_load(idx)), ftz(y.unsafe_load(idx)), acc))
-        else:
-            acc = ftz(acc + ftz(x.unsafe_load(idx)))
-    part.unsafe_store(cell, acc)
+    m2_fold_rows_partial_cell(cell, part, x, y, rows_in, cols_in, per_in, tiles_in, is_dot)
 
 
 def m2_fold_tiles_kernel(
@@ -1184,19 +851,8 @@ def m2_fold_tiles_kernel(
 ):
     """One thread per column: the tiles ascending, seeded with tile 0 (so a
     single tile is its chain verbatim and a -0 tile stays -0)."""
-    var tiles = Int(tiles_in); var cols = Int(cols_in); var split = Int(split_in)
     var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if c >= cols:
-        return
-    var acc = part.unsafe_load(c)
-    for tile in range(1, tiles):
-        acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
-    if c < split:
-        out_a.unsafe_store(c, acc)
-        if has_scale != 0:
-            out_s.unsafe_store(c, ftz(identical_mul(acc, ftz(scale.unsafe_load(c)))))
-    else:
-        out_b.unsafe_store(c - split, acc)
+    m2_fold_tiles_cell(c, out_a, out_b, out_s, scale, part, tiles_in, cols_in, split_in, has_scale)
 
 
 def mamba2_da_cell_kernel(
@@ -1206,13 +862,8 @@ def mamba2_da_cell_kernel(
     bt_in: Int32, nh_in: Int32,
 ):
     """Reverse S10 per cell: d_dt = d_da * A (same bits)."""
-    var bt = Int(bt_in); var nh = Int(nh_in)
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if idx >= bt * nh:
-        return
-    var hh = idx - (idx // nh) * nh
-    d_dt.unsafe_store(idx, ftz(identical_mul(
-        ftz(d_da.unsafe_load(idx)), ftz(a.unsafe_load(hh)))))
+    mamba2_da_cell_body(idx, d_dt, d_da, a, bt_in, nh_in)
 
 
 def mamba2_dt_cell_kernel(
@@ -1409,11 +1060,7 @@ def mamba2_merge_dacs_kernel(
     n_in: Int32,
 ):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        dst.unsafe_store(
-            i, ftz(ftz(ftz(yoff.unsafe_load(i)) + ftz(state.unsafe_load(i)))
-                   + ftz(decay.unsafe_load(i)))
-        )
+    mamba2_merge_dacs_cell(i, dst, yoff, state, decay, n_in)
 
 
 def mamba2_scale_to_dacs_kernel(
@@ -1426,22 +1073,8 @@ def mamba2_scale_to_dacs_kernel(
     q_in: Int32,
 ):
     """Chain dscale through scale=exp(dacs[last]); other q cells stay zero."""
-    var b = Int(b_in)
-    var nc = Int(nc_in)
-    var nh = Int(nh_in)
-    var qv = Int(q_in)
     var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if row >= b * nc * nh:
-        return
-    var bb = row // (nc * nh)
-    var rem = row - bb * nc * nh
-    var c = rem // nh
-    var h = rem - c * nh
-    var dacs_idx = ((bb * nh + h) * nc + c) * qv + (qv - 1)
-    var scale = ftz(identical_exp(ftz(dacs.unsafe_load(dacs_idx))))
-    d_dacs_state.unsafe_store(
-        dacs_idx, ftz(identical_mul(ftz(d_scale.unsafe_load(row)), scale))
-    )
+    mamba2_scale_to_dacs_cell(row, d_dacs_state, d_scale, dacs, b_in, nc_in, nh_in, q_in)
 
 
 def mamba2_reverse_chunk_state_kernel(
@@ -1466,41 +1099,8 @@ def mamba2_reverse_chunk_state_kernel(
     ``d_pass[c] = fma(scale[c], carry, direct[c])``. The fused join and
     descending direction are the pinned recurrence, not an execution choice.
     """
-    var b = Int(b_in)
-    var nh = Int(nh_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
-    var pn = M2_HEADDIM * M2_D_STATE
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * nh * pn:
-        return
-    var bb = cell // (nh * pn)
-    var rem = cell - bb * nh * pn
-    var hh = rem // pn
-    var i = rem - hh * pn
-    var carry = ftz(d_final.unsafe_load(cell))
-    var c = nc - 1
-    while c >= 0:
-        var state_idx = (((bb * nc + c) * nh + hh) * pn) + i
-        var scale = ftz(
-            identical_exp(
-                ftz(
-                    dacs.unsafe_load(
-                        ((bb * nh + hh) * nc + c) * qv + (qv - 1)
-                    )
-                )
-            )
-        )
-        d_cstate.unsafe_store(state_idx, carry)
-        d_scale_product.unsafe_store(
-            state_idx,
-            ftz(identical_mul(carry, ftz(pass_states.unsafe_load(state_idx)))),
-        )
-        var direct = ftz(direct_d_pass.unsafe_load(state_idx))
-        carry = ftz(identical_mul_add(scale, carry, direct))
-        d_pass.unsafe_store(state_idx, carry)
-        c -= 1
-    d_initial.unsafe_store(cell, carry)
+    mamba2_reverse_chunk_state_cell(cell, d_pass, d_cstate, d_scale_product, d_initial, direct_d_pass, d_final, pass_states, dacs, b_in, nh_in, nc_in, q_in)
 
 
 def mamba2_reverse_chunk_state_into(

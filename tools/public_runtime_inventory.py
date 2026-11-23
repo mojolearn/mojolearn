@@ -1376,7 +1376,7 @@ FAMILY_ALIASES = {
     "mlp": "neural_network", "tsa": "sequence", "arima": "sequence", "forest": "ensemble", "gbdt": "ensemble",
     "ivf": "neighbors", "forecasting": "sequence", "parallel_forecasting": "sequence",
     "parallel_gaussian_process": "gaussian_process", "parallel_model_selection": "model_selection",
-    "parallel_training": "training", "model_pool_training": "training", "offload_training": "training",
+    "parallel_training": "training",
     "parallel_ensemble": "ensemble", "parallel_graph": "manifold", "parallel_neighbors": "neighbors",
     "parallel_neighbors_reference": "neighbors", "parallel_preprocessing": "preprocessing",
     "parallel_classical": "multi_gpu",

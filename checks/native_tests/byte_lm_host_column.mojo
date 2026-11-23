@@ -166,7 +166,7 @@ struct HostStep(Movable):
 
 
 def default_scalars(lr: Float64 = 1e-3) -> List[Float64]:
-    """`LanguageModelHostTrainer`'s admitted optimizer: lr, beta1, beta2,
+    """The CPU byte LM trainer's admitted optimizer: lr, beta1, beta2,
     eps, weight_decay."""
     return [lr, 0.9, 0.999, 1e-8, 1e-2]
 
