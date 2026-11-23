@@ -25,14 +25,19 @@ from std.math import min, max
 from core.entry_table import EntryRef
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_workers
-from core.member_abi import MemberRef, MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, MEMBER_F64
+from core.member_abi import (
+    MemberRef, MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, MEMBER_F64, MEMBER_I32,
+)
 from core.hotpath_impl import cast_elements, HP_F32, HP_F64
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.admitted_cast_elements import admitted_cast_elements
 from xtrees.trees_agnostic_native_run import _chunk
+from xtrees.trees_meta_vote_run import VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_regress_run
 from xtrees.glue_calls import (
     xt_kshap_schedule, xt_kshap_synth, xt_kshap_solve, xt_kshap_means, xt_kshap_solve_ey, xt_kshap_solve_model,
     xt_pshap_synth, xt_pshap_values, xt_pshap_dsynth, xt_pshap_dvalues, xt_pshap_values_linear,
     xt_pshap_values_model, xt_agn_model_load, xt_agn_model_release, xt_agn_pool_release, xt_block_mean, xt_logit,
+    xt_gather_f32,
 )
 
 comptime _I64 = MutPointer[Int64, MutUntrackedOrigin]
@@ -77,6 +82,45 @@ trait AgnModel(Movable & Deinitable):
         ...
 
 
+def agn_labels_run(glue: EntryRef, labels: Int, n_labels: Int, codes: Int, n: Int, dst: Int, split: Bool) raises:
+    """THE LABEL MAP of a classifier explained through predict (lane mf-shap2, 2026-11-23): `dst` (float32 n) =
+    `labels[codes[i]]`, the float32 label of each int32 class code, through the x_trees glue gather (`labels` is a
+    float32 `n_labels` x 1 table: the estimator's `classes_` narrowed to float32 once at UNPACK, the conversion the
+    door's `_evaluate` made of the public predict's labels, element by element, so no bit differs). `split` (the
+    CPU column's serial chunk): the rows in tasks across the host's cores, one gather per task; else one gather (a
+    parallel worker's chunk: the workers are the split; a GPU image: the device kernel over every row). A code
+    outside `0 .. n_labels-1` raises the gather's words before any cell is written (the caller's refusal rule)."""
+    if n <= 0:
+        return
+    var col0 = List[Int32](length=1, fill=Int32(0))
+    var c0 = Int(col0.unsafe_ptr())
+    var tasks = host_predict_task_count_work(n, n) if split else 1
+    if tasks <= 1:
+        _ = xt_gather_f32(glue, labels, codes, c0, dst, n_labels, 1, n, 1)
+        _ = col0^
+        return
+    var chunk = host_predict_chunk(n, tasks)
+    var failed = List[Int](length=tasks, fill=0)
+    var fp = failed.unsafe_ptr()
+
+    def task(unit: Int) {imm glue, imm labels, imm n_labels, imm codes, imm n, imm dst, imm chunk, imm c0, imm fp}:
+        var r0 = unit * chunk
+        var rows = min(chunk, n - r0)
+        if rows <= 0:
+            return
+        try:
+            _ = xt_gather_f32(glue, labels, codes + 4 * r0, c0, dst + 4 * r0, n_labels, 1, rows, 1)
+        except:
+            fp.unsafe_store(unit, 1)
+
+    host_parallelize(task, tasks)
+    _ = col0^  # the column index is read through every task above
+    for t in range(tasks):  # driver-loop: over the tasks, after the join
+        if failed[t] != 0:
+            raise Error("x_trees gather: row index out of range")
+    _ = failed^
+
+
 struct AgnMember(AgnModel):
     """THE NATIVE MODEL HANDLE: one held member state of the explained estimator and the member operation of the
     explained method. `plan` is the address of the caller's `MemberPlan` and `refused` of one Int word; both
@@ -88,7 +132,13 @@ struct AgnMember(AgnModel):
     float32, the conversion the door's `_evaluate` made of the public float64 output (core/hotpath_impl.mojo
     `cast_elements`, element by element, so no bit differs from the door's). `host`: the glue image is the CPU
     column (the request's `host`). Before, such a class was
-    evaluated through the door, serially with the GIL held."""
+    evaluated through the door, serially with the GIL held.
+    `labels` (lane mf-shap2, 2026-11-23; 0: not this route): a classifier explained through predict (LinearSVC,
+    RidgeClassifier, PassiveAggressiveClassifier, Perceptron, SGDClassifier with a hinge loss,
+    SVC(probability=False), NearestCentroid). The member writes int32 class CODES into a reused buffer of the
+    chunk and `agn_labels_run` maps them to the float32 label table at `labels` (`n_labels` words, the caller's
+    UNPACK holds it) through the glue gather `glue`: one column (k is 1). Before, such a class was evaluated
+    through the door (its public predict per chunk, serially with the GIL held)."""
     var member: MemberRef
     var plan: Int
     var state: Int
@@ -101,14 +151,19 @@ struct AgnMember(AgnModel):
     var refused: Int
     var wide: Bool
     var host: Bool
+    var glue: EntryRef
+    var labels: Int
+    var n_labels: Int
     var call: MemberCall
     var fx: List[Float32]
     var syn: List[Float32]
     var out: List[Float32]
     var wide_out: List[Float64]
+    var codes: List[Int32]
 
     def __init__(out self, member: MemberRef, plan: Int, state: Int, operation: Int, x: Int, n: Int, d: Int, k: Int,
-                 parallel: Bool, refused: Int, wide: Bool, host: Bool) raises:
+                 parallel: Bool, refused: Int, wide: Bool, host: Bool, glue: EntryRef, labels: Int,
+                 n_labels: Int) raises:
         self.member = member
         self.plan = plan
         self.state = state
@@ -121,11 +176,15 @@ struct AgnMember(AgnModel):
         self.refused = refused
         self.wide = wide
         self.host = host
+        self.glue = glue
+        self.labels = labels
+        self.n_labels = n_labels
         self.call = member_call_of(MutPointer[MemberPlan, MutUntrackedOrigin](unsafe_from_address=plan)[], state)
         self.fx = List[Float32]()
         self.syn = List[Float32]()
         self.out = List[Float32]()
         self.wide_out = List[Float64]()
+        self.codes = List[Int32]()
 
     def _run(mut self, x: Int, n: Int, dst: Int) raises:
         var d = self.d
@@ -133,7 +192,13 @@ struct AgnMember(AgnModel):
         var member = self.member
         var operation = self.operation
         self.call.x = MemberMatrix(x, n, d)
-        if not self.wide:
+        if self.labels != 0:
+            if len(self.codes) < n:
+                self.codes = List[Int32]()
+                # Unfilled: the member writes every code before the label map reads it.
+                self.codes = List[Int32](unsafe_uninit_length=n)
+            self.call.dst = MemberMatrix(Int(self.codes.unsafe_ptr()), n, 1, MEMBER_I32)
+        elif not self.wide:
             self.call.dst = MemberMatrix(dst, n, k)
         else:
             if len(self.wide_out) < n * k:
@@ -143,7 +208,10 @@ struct AgnMember(AgnModel):
             self.call.dst = MemberMatrix(Int(self.wide_out.unsafe_ptr()), n, k, MEMBER_F64)
         try:
             _ = member_call(member, operation, self.call)
-            if self.wide:
+            if self.labels != 0:
+                agn_labels_run(self.glue, self.labels, self.n_labels, Int(self.codes.unsafe_ptr()), n, dst,
+                               self.host and not self.parallel)
+            elif self.wide:
                 var src = Int(self.wide_out.unsafe_ptr())
                 # The CPU column's serial chunk across the host's cores, as the door's cast did; a parallel
                 # worker's chunk (the workers are the split) and a GPU image's (no host threads in a GPU
@@ -193,7 +261,114 @@ struct AgnMember(AgnModel):
 
     def worker(self) raises -> Self:
         return Self(self.member, self.plan, self.state, self.operation, self.x, self.n, self.d, self.k,
-                    self.parallel, self.refused, self.wide, self.host)
+                    self.parallel, self.refused, self.wide, self.host, self.glue, self.labels, self.n_labels)
+
+
+#: `AgnVote.kind`: VotingClassifier(voting='soft').predict_proba, VotingRegressor.predict.
+comptime AGN_VOTE_SOFT = 0
+comptime AGN_VOTE_REGRESS = 1
+
+
+struct AgnVote(AgnModel):
+    """A VOTE AS THE MODEL (lane mf-shap2, 2026-11-23): VotingClassifier(voting='soft') explained through
+    predict_proba and VotingRegressor through predict, by the meta RUNs the public operations run
+    (xtrees/trees_meta_vote_run.mojo `vote_soft_run`, `vote_regress_run`): every member called through its held
+    native state (`members`, each `native`, its `plan` the address of the caller's MemberPlan, held unmoved
+    through the RUN), the fold written into a float64 zero block of the chunk, then narrowed to float32, the
+    conversion the door's `_evaluate` made of the public float64 output (`cast_elements`, element by element: no
+    bit differs from the door's). `glue` is the vote's own x_trees glue (the image its public operation folds
+    with). A member that refuses writes 1 to `refused` and raises: the caller answers through the model's door.
+    `parallel`: every member's kind is `MEMBER_GIL_FREE` (the chunks may run on parallel workers). Before, a
+    vote was evaluated through the door, serially with the GIL held."""
+    var members: List[VoteMember]
+    var kind: Int
+    var x: Int
+    var n: Int
+    var d: Int
+    var k: Int
+    var parallel: Bool
+    var host: Bool
+    var refused: Int
+    var glue: EntryRef
+    var fx: List[Float32]
+    var syn: List[Float32]
+    var out: List[Float32]
+
+    def __init__(out self, members: List[VoteMember], kind: Int, x: Int, n: Int, d: Int, k: Int, parallel: Bool,
+                 host: Bool, refused: Int, glue: EntryRef):
+        self.members = members.copy()
+        self.kind = kind
+        self.x = x
+        self.n = n
+        self.d = d
+        self.k = k
+        self.parallel = parallel
+        self.host = host
+        self.refused = refused
+        self.glue = glue
+        self.fx = List[Float32]()
+        self.syn = List[Float32]()
+        self.out = List[Float32]()
+
+    def _run(mut self, x: Int, n: Int, dst: Int) raises:
+        var k = self.k
+        var width = k if self.kind == AGN_VOTE_SOFT else 1
+        # Zero, as the public operation's accumulator was (one block per chunk, as the door's per call).
+        var acc = List[Float64](length=max(1, n * width), fill=0.0)
+        var at = Int(acc.unsafe_ptr())
+        var rows = VoteRows(x, n, self.d)
+        var refused = VOTE_ALL_ANSWERED
+        if self.kind == AGN_VOTE_SOFT:
+            refused = vote_soft_run(self.glue, rows, self.members, k, at)
+        else:
+            refused = vote_regress_run(self.glue, rows, self.members, at)
+        if refused != VOTE_ALL_ANSWERED:
+            if self.refused != 0:
+                _INT(unsafe_from_address=self.refused)[] = 1
+            raise Error("RuntimeError: a vote member refused the explained rows")
+        var bad = (admitted_cast_elements(at, HP_F64, dst, HP_F32, n * width) if self.host and not self.parallel
+                   else cast_elements(at, HP_F64, dst, HP_F32, n * width))
+        _ = acc^  # the fold is read through the narrowing above
+        if bad != 0:
+            if self.refused != 0:
+                _INT(unsafe_from_address=self.refused)[] = 1
+            raise Error("ValueError: the explained model output is not representable as float32")
+
+    def explained(mut self) raises -> Int:
+        if len(self.fx) != self.n * self.k:
+            self.fx = List[Float32](unsafe_uninit_length=self.n * self.k)
+        var dst = Int(self.fx.unsafe_ptr())
+        var x = self.x
+        var n = self.n
+        self._run(x, n, dst)
+        return dst
+
+    def synthetic(mut self, count: Int, filled: Bool) raises -> Int:
+        if len(self.syn) != count:
+            self.syn = List[Float32]()
+            if filled:
+                self.syn = List[Float32](length=count, fill=Float32(0))
+            else:
+                self.syn = List[Float32](unsafe_uninit_length=count)
+        return Int(self.syn.unsafe_ptr())
+
+    def rows(mut self, n: Int) raises -> Int:
+        if n * self.d > len(self.syn):
+            raise Error("RuntimeError: agnostic explainer: synthetic rows exceed their buffer")
+        if len(self.out) < n * self.k:
+            self.out = List[Float32]()
+            self.out = List[Float32](unsafe_uninit_length=n * self.k)
+        var dst = Int(self.out.unsafe_ptr())
+        var src = Int(self.syn.unsafe_ptr())
+        self._run(src, n, dst)
+        return dst
+
+    def workers(self) -> Int:
+        return host_predict_workers() if self.parallel else 1
+
+    def worker(self) raises -> Self:
+        return Self(self.members, self.kind, self.x, self.n, self.d, self.k, self.parallel, self.host, self.refused,
+                    self.glue)
 
 
 struct AgnRequest(Copyable, Movable):
