@@ -41,7 +41,6 @@ comptime SMALL_MLP_OPN_INFERENCE_PREDICT = 28
 comptime SMALL_MLP_OPN_INITIALIZE = 29
 comptime SMALL_MLP_OPN_INFERENCE_CONNECT = 30
 comptime SMALL_MLP_OPN_FROM_CHECKPOINT = 31
-comptime SMALL_MLP_OPN_NATIVE_PROVIDER_INFO = 32
 comptime SMALL_MLP_OPN_CREATE = 33
 comptime SMALL_MLP_OPN_CLOSE = 34
 
@@ -293,7 +292,6 @@ def _small_mlp_keys_fill(nk: UnsafePointer[SmallMlpKeys, MutUntrackedOrigin]) ra
     py_op_add(ops, "initialize", SMALL_MLP_OPN_INITIALIZE)
     py_op_add(ops, "inference_connect", SMALL_MLP_OPN_INFERENCE_CONNECT)
     py_op_add(ops, "from_checkpoint", SMALL_MLP_OPN_FROM_CHECKPOINT)
-    py_op_add(ops, "native_provider_info", SMALL_MLP_OPN_NATIVE_PROVIDER_INFO)
     py_op_add(ops, "create", SMALL_MLP_OPN_CREATE)
     py_op_add(ops, "close", SMALL_MLP_OPN_CLOSE)
     nk[].ops = ops

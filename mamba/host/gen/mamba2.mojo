@@ -135,6 +135,10 @@ from mamba.host.gen.modeling_mamba import (
     _refuse_nonfinite_named_host,
     residual_add_kernel,
 )
+# one body per operation (lane neural-blocks-3, 2026-11-22): the kernels below call these thread bodies
+from autograd.kernels.mamba2_ssd_body import (
+    m2_skip_cell,
+)
 
 
 def _grid(n: Int) -> Int:
@@ -902,31 +906,8 @@ def m2_skip_kernel(gid_: Int,
     nh_in: Int32,
     cd_in: Int32,
 ):
-    var b = Int(b_in)
-    var l = Int(l_in)
-    var q0 = Int(q0_in)
-    var nh = Int(nh_in)
-    var cd = Int(cd_in)
-    var t_work = q0 + l
     var cell = gid_
-    if cell >= b * l * nh * M2_HEADDIM:
-        return
-    var bb = cell // (l * nh * M2_HEADDIM)
-    var rem = cell - bb * l * nh * M2_HEADDIM
-    var li = rem // (nh * M2_HEADDIM)
-    var rem2 = rem - li * nh * M2_HEADDIM
-    var hh = rem2 // M2_HEADDIM
-    var p = rem2 - hh * M2_HEADDIM
-    var xv = ftz(
-        silu_out.unsafe_load((bb * l + li) * cd + hh * M2_HEADDIM + p)
-    )
-    var prod = ftz(identical_mul(xv, ftz(d_skip.unsafe_load(hh))))
-    var y = ftz(
-        y_work.unsafe_load(
-            (((bb * t_work) + (q0 + li)) * nh + hh) * M2_HEADDIM + p
-        )
-    )
-    skip_out.unsafe_store(cell, ftz(y + prod))
+    m2_skip_cell(cell, skip_out, y_work, silu_out, d_skip, b_in, l_in, q0_in, nh_in, cd_in)
 
 
 # ===========================================================================
@@ -1498,7 +1479,7 @@ def mamba2_block_forward(
         var _l10_a8 = Int32(cd)
         def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3, imm _l10_a4, imm _l10_a5, imm _l10_a6, imm _l10_a7, imm _l10_a8}:
             m2_skip_kernel(gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3, _l10_a4, _l10_a5, _l10_a6, _l10_a7, _l10_a8)
-        host_launch(_launch_10, launch_count((_grid(m * nh * p_dim), 1, 1), (MAMBA2_TPB, 1, 1)), 37)
+        host_launch(_launch_10, launch_count((_grid(m * nh * p_dim), 1, 1), (MAMBA2_TPB, 1, 1)), 0)
         _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".skip.out", stages.skip_out, m * nh * p_dim

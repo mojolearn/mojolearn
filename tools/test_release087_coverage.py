@@ -11,9 +11,7 @@ import verification_matrix as matrix
 class CoverageTests(unittest.TestCase):
     def test_public_parallel_surfaces_are_not_hidden_by_root_all(self):
         surface, modules = matrix.public_surface()
-        for name in ("model_pool_training.PooledByteLanguageModelTrainer",
-                     "offload_training.OffloadedByteLanguageModelTrainer",
-                     "parallel_training.ParallelByteLanguageModelTrainer",
+        for name in ("parallel_training.ParallelByteLanguageModelTrainer",
                      "parallel_classical.bootstrap"):
             self.assertIn(name, surface)
         self.assertIn("parallel_classical", modules)

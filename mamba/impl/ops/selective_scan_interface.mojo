@@ -152,6 +152,19 @@ from mamba.impl.ops.m1_persistent_scan import m1_persistent_scan
 #: other build takes the kernel below unchanged.
 from mamba.impl.modules.afn_defines import AFN_MAMBA1_CHUNKSCAN
 from mamba.impl.ops.afn_selective_scan import afn_selective_scan_chunked
+# The scan's math is written once (Andrew, 2026-11-22: one body per operation): the seams, the whole
+# thread body and the sabotage arms below live in autograd/kernels/mamba1_scan_body.mojo, which the
+# kernels here, the backward's kernels and the generic SelectiveScan op all call. The arms are imported
+# (and so still importable from this module); their documentation stays here, beside the seams.
+from autograd.kernels.mamba1_scan_body import (
+    ANY_SABOTAGE,
+    SAB_S5_EXP2,
+    SAB_S8_CUDA_PAIRING,
+    SAB_S9_UNFUSED,
+    SAB_S10_DESCENDING,
+    SAB_S11_D_FIRST,
+    m1_scan_cell,
+)
 
 
 # ===========================================================================
@@ -186,34 +199,23 @@ things shared with the host side are the seam functions in
 #: S8 pairs the CUDA way, `B * (delta * u)` (cuh:162 with :222, and MAX
 #: `selective_scan.mojo:309`, `:321`), instead of the reference's `(delta * B) *
 #: u`. Contract section 4 seam S8, fixture F5.
-comptime SAB_S8_CUDA_PAIRING = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_S8_CUDA_PAIRING"
-]()
 #: S9 rounds TWICE -- `ftz(identical_mul(deltaA, h))` then `ftz(... + deltaB_u)`
 #: -- which is the torch reference's own literal spelling (`x = deltaA[:, :,
 #: i] * x + deltaB_u[:, :, i]`, ref:175) and is what an implementer gets by
 #: writing `a * h + b` on a backend that does not contract. Contract section
 #: 4 seam S9 pins the FUSED single rounding; fixture F2.
-comptime SAB_S9_UNFUSED = is_defined["MOJOLEARN_MAMBA_SABOTAGE_S9_UNFUSED"]()
 #: S11 seeds the fold accumulator with `D * u` and lets the C-h terms
 #: accumulate onto it, D FIRST -- the CUDA kernel's shape (cuh:163). The
 #: profile adds `u * D` to the FINISHED y, D last. Fixture F6.
-comptime SAB_S11_D_FIRST = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_S11_D_FIRST"
-]()
 #: S10 folds n DESCENDING instead of ascending. The einsum's fold order is
 #: torch-internal, so the contract pins the CUDA kernel's ascending
 #: `state_idx` walk (cuh:168-266); a descending fold is the same set of terms
 #: in a different order and rounds differently.
-comptime SAB_S10_DESCENDING = is_defined[
-    "MOJOLEARN_MAMBA_SABOTAGE_S10_DESCENDING"
-]()
 #: S6 computes `exp2(A * LOG2E * delta)` instead of `exp(delta * A)` -- MAX's
 #: optimization (`selective_scan.mojo:38`, `:215-220`, `:320`) and the CUDA
 #: kernel's (`cuh:174-176`, `:222`). A DIFFERENT FUNCTION: the LOG2E product
 #: is a rounding the reference does not have, and `exp2` is not `exp`.
 #: Contract section 4 seam S5-S6, and row 12's whole argument.
-comptime SAB_S5_EXP2 = is_defined["MOJOLEARN_MAMBA_SABOTAGE_S5_EXP2"]()
 
 # WHAT EACH SABOTAGE WAS MEASURED TO DO, 2026-08-23, Apple M4 through MAX,
 # IDENTICAL mode, device card diffed against `mamba_block_oracle`'s. Every
@@ -240,13 +242,6 @@ comptime SAB_S5_EXP2 = is_defined["MOJOLEARN_MAMBA_SABOTAGE_S5_EXP2"]()
 # (The same shape boundary shows in FAST mode, which agrees with the host
 # oracle at every L = 1 shape and diverges from L = 4 on: same reason.)
 
-comptime ANY_SABOTAGE = (
-    SAB_S8_CUDA_PAIRING
-    or SAB_S9_UNFUSED
-    or SAB_S11_D_FIRST
-    or SAB_S10_DESCENDING
-    or SAB_S5_EXP2
-)
 
 
 # `-D MOJOLEARN_IDN_M1_SCAN=<arm>` (lane/grid-prune 2026-10-07): ONE switch
@@ -344,128 +339,16 @@ def selective_scan_fwd_kernel[
     intermediate is the same value either way and writing it costs a store,
     not a rounding.
     """
+    # The body is m1_scan_cell (autograd/kernels/mamba1_scan_body.mojo): this thread's S5-S11 chain,
+    # line for line the text that stood here (each seam is documented above and in that file).
     var batch = Int(batch_in)
     var seqlen = Int(seqlen_in)
     var dim = Int(dim_in)
-
     var thread_id = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
-    if thread_id >= batch * dim:
-        return
-    var bb = thread_id // dim
-    var d = thread_id - bb * dim
-    if bb >= batch or d >= dim:
-        return
-
-    # `x = A.new_zeros((batch, dim, dstate))` (ref:160) is the caller's zero
-    # buffer; a decode step passes the state carried from the previous call
-    # (contract section 5). MAX holds the same values in a SIMD register file
-    # (`selective_scan.mojo:186-190`, "max dstate 16 to fit in registers").
-    var state = SIMD[DType.float32, DSTATE](0.0)
-    comptime for n in range(DSTATE):
-        state[n] = ftz(h_ptr.unsafe_load((bb * dim + d) * DSTATE + n))
-
-    # A's row for this dim, hoisted -- MAX hoists the same row
-    # (`selective_scan.mojo:215-220`). A LOAD AND A FLUSH ARE LOOP INVARIANT,
-    # so this moves no bits: the oracle re-reads `a[d * D_STATE + n]` and
-    # flushes it inside the token loop and gets the same value every time.
-    # WHAT IS NOT TAKEN FROM MAX: it also multiplies each A by LOG2E here so
-    # the loop can use `exp2`. That is a DIFFERENT FUNCTION with an extra
-    # rounding in it (DEVIATION 722); `SAB_S5_EXP2` is that mistake, on
-    # purpose, so a gate can be shown to catch it.
-    var a_vals = SIMD[DType.float32, DSTATE](0.0)
-    comptime for n in range(DSTATE):
-        a_vals[n] = ftz(a_ptr.unsafe_load(d * DSTATE + n))
-    var d_val = ftz(d_ptr.unsafe_load(d))
-
-    # `for i in range(u.shape[2])` (ref:174). Serial, ascending, one token at
-    # a time -- MAX's shape too (`selective_scan.mojo:246-330`, minus its
-    # TILE_SIZE staging, DEVIATION 722).
-    for li in range(seqlen):
-        var t = bb * seqlen + li
-        var uv = ftz(u_ptr.unsafe_load(t * dim + d))
-        var dl = ftz(delta_ptr.unsafe_load(t * dim + d))
-
-        comptime for n in range(DSTATE):
-            # S5 + S6: `deltaA = torch.exp(einsum('bdl,dn->bdln', delta, A))`
-            # (ref:162). One product, then row 12's polynomial.
-            var da_arg = ftz(identical_mul(dl, a_vals[n]))
-            var da: Float32
-            comptime if SAB_S5_EXP2:
-                # SABOTAGE: MAX's and the CUDA kernel's exp2 substitution.
-                da = ftz(exp2(ftz(identical_mul(da_arg, Float32(1.4426950408889634)))))
-            else:
-                da = ftz(identical_exp(da_arg))
-
-            var bv = ftz(b_ptr.unsafe_load(t * DSTATE + n))
-            var dbu: Float32
-            comptime if SAB_S8_CUDA_PAIRING:
-                # SABOTAGE: `B * (delta * u)`, cuh:162 with :222.
-                var du = ftz(identical_mul(dl, uv))
-                dbu = ftz(identical_mul(bv, du))
-            else:
-                # S7: `delta * B`, the einsum's first pairing (ref:167), HF's
-                # `discrete_B = dt * B` (modeling_mamba.py:214).
-                var db = ftz(identical_mul(dl, bv))
-                # S8: `(delta * B) * u`, the second pairing (ref:167), HF's
-                # `deltaB_u = discrete_B * u` (modeling_mamba.py:215).
-                dbu = ftz(identical_mul(db, uv))
-
-            # S9: `x = deltaA * x + deltaB_u` (ref:175). ONE rounding. The
-            # torch reference rounds twice; fusion is PINNED because only
-            # fusion has a portable spelling (gemm contract section 4), and
-            # the CUDA scan op and MAX both contract here as well.
-            comptime if SAB_S9_UNFUSED:
-                # SABOTAGE: the reference's literal two roundings.
-                state[n] = ftz(ftz(identical_mul(da, state[n])) + dbu)
-            else:
-                state[n] = ftz(identical_mul_add(da, state[n], dbu))
-
-        # S10: `y = einsum('bdn,bn->bd', x, C[:, :, i])` (ref:180). Serial
-        # ascending n from +0.0, one fma per term. The einsum's fold order is
-        # torch-internal; the order pinned is the CUDA kernel's ascending
-        # `state_idx` walk (cuh:168-266). MAX folds this seam as a SIMD
-        # tree, `(state * C_vals).reduce_add()` (`selective_scan.mojo:323`),
-        # which is a third order again and is NOT taken (DEVIATION 722).
-        # The `+0.0` seed makes an all-zero row sum to `+0.0` on every
-        # vendor (contract section 6).
-        var acc = Float32(0.0)
-        comptime if SAB_S11_D_FIRST:
-            # SABOTAGE: the CUDA kernel seeds its output accumulator with
-            # `D * u` (cuh:163) and folds the C-h terms onto it -- D FIRST.
-            acc = ftz(identical_mul(d_val, uv))
-        comptime if SAB_S10_DESCENDING:
-            # SABOTAGE: the same terms, folded n descending.
-            comptime for nn in range(DSTATE):
-                var n = DSTATE - 1 - nn
-                acc = ftz(
-                    identical_mul_add(
-                        ftz(c_ptr.unsafe_load(t * DSTATE + n)), state[n], acc
-                    )
-                )
-        else:
-            comptime for n in range(DSTATE):
-                acc = ftz(
-                    identical_mul_add(
-                        ftz(c_ptr.unsafe_load(t * DSTATE + n)), state[n], acc
-                    )
-                )
-        y_ptr.unsafe_store(t * dim + d, acc)
-
-        # S11: `out = y + u * D` (ref:189). UNFUSED -- both the reference and
-        # the CUDA kernel round `u * D` as its own product -- and D LAST,
-        # which is where the two references part company (cuh:163 puts D
-        # first). `SAB_S11_D_FIRST` above is their order.
-        comptime if SAB_S11_D_FIRST:
-            out_ptr.unsafe_store(t * dim + d, acc)
-        else:
-            var p = ftz(identical_mul(uv, d_val))
-            out_ptr.unsafe_store(t * dim + d, ftz(acc + p))
-
-    # `last_state = x` at the final token (ref:183-184). Written every call,
-    # because it is the recurrent state a decode step carries (contract
-    # section 5) and the recorded stage `scan.h`. A copy, not a seam.
-    comptime for n in range(DSTATE):
-        h_ptr.unsafe_store((bb * dim + d) * DSTATE + n, state[n])
+    m1_scan_cell[DSTATE](
+        thread_id, out_ptr, y_ptr, h_ptr, u_ptr, delta_ptr, a_ptr, b_ptr, c_ptr, d_ptr,
+        batch, seqlen, dim,
+    )
 
 
 # ===========================================================================

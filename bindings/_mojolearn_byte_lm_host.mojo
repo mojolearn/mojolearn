@@ -42,7 +42,7 @@ from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
 # RUN (lane rs-embedding-bytelm): typed shape completion, no Python import.
 from training.byte_lm_config_run import byte_config_words
-from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_loss_native, byte_host_train_native
+from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_loss_native
 from training.byte_lm_host_dispatch import BYTE_HOST_NATIVE_TABLE
 from providers.python.byte_lm_host_compat_pyapi_door import register
 from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
@@ -196,46 +196,6 @@ def byte_lm_host_next_binding(addresses: PythonObject, dims: PythonObject,
     return PythonObject(byte_host_next_native(addresses_native, dims_native, cfg, thread_count))
 
 
-def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject,
-                                    scalars: PythonObject,
-                                    completed: PythonObject) raises -> PythonObject:
-    """One CPU training step (DEVIATION 2680). Reference path only.
-
-    `addresses` is eight, the first four read and the last four written:
-
-        params f32 (n_total)        m f32 (n_total)      v f32 (n_total)
-        ids i32 (batch * (length + 1))
-        grad f32 (n_total)          post_p f32 (n_total)
-        post_m f32 (n_total)        post_v f32 (n_total)
-
-    `scalars` is five floats, the AdamW configuration `(lr, beta1, beta2, eps,
-    weight_decay)`, spelled the one way `byte_validate_optimizer` allows: no
-    clipping, no momentum, no dampening, no nesterov. `completed` is the number
-    of steps ALREADY taken, so the optimizer's `t` is `completed + 1`.
-
-    Returns the loss's IEEE-754 bits, as `byte_lm_host_loss` does, because a
-    loss compared as a float is a loss compared with a tolerance.
-
-    The step is the composed host step (the GPU columns' hand step's words).
-    Its folds are fixed on every core.
-    """
-    var cfg = _host_config(shape)
-    if len(addresses) != 8:
-        raise Error("byte LM host: train step expects 8 addresses")
-    if len(scalars) != 5:
-        raise Error("byte LM host: train step expects 5 optimizer scalars")
-    var completed_steps = _index(completed)
-    if completed_steps < 0:
-        raise Error("byte LM host: completed_steps must not be negative")
-    var addresses_native = List[Int]()
-    for i in range(8):  # driver-loop: over the eight admitted training buffers
-        addresses_native.append(_index(addresses[i]))
-    var scalars_native = List[Float64]()
-    for i in range(5):  # driver-loop: over the five optimizer scalar descriptors
-        scalars_native.append(Float64(py=scalars[i]))
-    return PythonObject(byte_host_train_native(addresses_native, cfg, scalars_native, completed_steps))
-
-
 def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
                               threaded: PythonObject, threads: PythonObject) raises -> PythonObject:
     """Loss for addresses [params f32 (n_total), ids i32 (batch * (length + 1))]:
@@ -331,7 +291,6 @@ def build__mojolearn_byte_lm_host() -> PythonObject:
         module.def_function[byte_lm_host_logits_binding]("byte_lm_host_logits")
         module.def_function[byte_lm_host_next_binding]("byte_lm_host_next")
         module.def_function[byte_lm_host_loss_binding]("byte_lm_host_loss")
-        module.def_function[byte_lm_host_train_step_binding]("byte_lm_host_train_step")
         module.def_function[all_finite_f32_binding]("all_finite_f32")
         module.def_function[all_finite_f64_binding]("all_finite_f64")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")

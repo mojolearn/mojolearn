@@ -128,6 +128,7 @@ from checks.numerics import (
     identical_sigmoid,
     identical_silu,
 )
+from autograd.kernels.mamba1_scan_body import m1_skip_grads
 
 # THE FORWARD'S OWN SPELLINGS, IMPORTED RATHER THAN RE-DECLARED. `pinned_mul`
 # is DEVIATION 720's device construction, and the two forward arms are
@@ -456,12 +457,10 @@ def mamba_bwd_gate_kernel(
         dz_ptr.unsafe_store(i, ftz(identical_mul(p1, sp)))
 
     # B10 and B11.
-    du_d_ptr.unsafe_store(
-        i, ftz(identical_mul(dskv, ftz(d_skip_ptr.unsafe_load(d))))
-    )
-    pd_ptr.unsafe_store(
-        i, ftz(identical_mul(dskv, ftz(u_ptr.unsafe_load(i))))
-    )
+    # S11's backward pre-products are the scan's one body (m1_skip_grads), shared with the generic op
+    var skip_grads = m1_skip_grads(dskv, ftz(d_skip_ptr.unsafe_load(d)), ftz(u_ptr.unsafe_load(i)))
+    du_d_ptr.unsafe_store(i, skip_grads[0])
+    pd_ptr.unsafe_store(i, skip_grads[1])
 
 
 def mamba_bwd_gate_into(

@@ -130,6 +130,7 @@ from checks.numerics import (
     identical_sigmoid,
     identical_silu,
 )
+from autograd.kernels.mamba1_scan_body import m1_skip_grads
 
 # THE FORWARD'S OWN SPELLINGS, IMPORTED RATHER THAN RE-DECLARED. `pinned_mul`
 # is DEVIATION 720's device construction, and the two forward arms are
@@ -458,12 +459,10 @@ def mamba_bwd_gate_kernel(gid_: Int,
         dz_ptr.unsafe_store(i, ftz(identical_mul(p1, sp)))
 
     # B10 and B11.
-    du_d_ptr.unsafe_store(
-        i, ftz(identical_mul(dskv, ftz(d_skip_ptr.unsafe_load(d))))
-    )
-    pd_ptr.unsafe_store(
-        i, ftz(identical_mul(dskv, ftz(u_ptr.unsafe_load(i))))
-    )
+    # S11's backward pre-products are the scan's one body (m1_skip_grads), shared with the generic op
+    var skip_grads = m1_skip_grads(dskv, ftz(d_skip_ptr.unsafe_load(d)), ftz(u_ptr.unsafe_load(i)))
+    du_d_ptr.unsafe_store(i, skip_grads[0])
+    pd_ptr.unsafe_store(i, skip_grads[1])
 
 
 def mamba_bwd_gate_into(
@@ -511,7 +510,7 @@ def mamba_bwd_gate_into(
     var _l1_a10 = Int32(d_inner)
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10}:
         mamba_bwd_gate_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10)
-    host_launch(_launch_1, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)), 205)
+    host_launch(_launch_1, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)), 0)
 
 
 # ===========================================================================

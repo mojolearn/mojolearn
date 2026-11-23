@@ -46,10 +46,10 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import (
-    ftz, identical_exp, identical_mul,
-    identical_mul_add,
-)
+from checks.numerics import ftz
+# The seams are the scan's one body (Andrew, 2026-11-22: one body per operation); this kernel keeps its own
+# loop, staging and barriers and calls them in the order selective_scan_fwd_kernel does.
+from autograd.kernels.mamba1_scan_body import m1_decay, m1_drive, m1_state, m1_readout_term, m1_skip
 
 # TOMBSTONE: MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH (unmeasured opt-in sweep 2|8 of the channels per block; the default 4 stays) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at b7061d02fc.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH.patch
@@ -109,11 +109,9 @@ def m1_persistent_scan_kernel[DSTATE: Int, CH: Int, TOK: Int](
                 var t = bb * seqlen + t0 + j
                 var uv = ftz(u_ptr.unsafe_load(t * dim + d))
                 var dl = ftz(delta_ptr.unsafe_load(t * dim + d))
-                var da = ftz(identical_exp(ftz(identical_mul(dl, av))))
-                var bv = ftz(b_ptr.unsafe_load(t * DSTATE + n))
-                var db = ftz(identical_mul(dl, bv))
-                var dbu = ftz(identical_mul(db, uv))
-                state = ftz(identical_mul_add(da, state, dbu))
+                var da = m1_decay(dl, av)
+                var dbu = m1_drive(dl, ftz(b_ptr.unsafe_load(t * DSTATE + n)), uv)
+                state = m1_state(da, state, dbu)
                 hs.unsafe_store((j * CH + cl) * DSTATE + n, state)
         barrier()
         # ---- outputs: S10-S11, one thread per (token, channel) cell.
@@ -126,15 +124,14 @@ def m1_persistent_scan_kernel[DSTATE: Int, CH: Int, TOK: Int](
                 var t2 = bb * seqlen + t0 + j2
                 var acc = Float32(0.0)
                 comptime for nn in range(DSTATE):
-                    acc = ftz(identical_mul_add(
+                    acc = m1_readout_term(
                         ftz(c_ptr.unsafe_load(t2 * DSTATE + nn)),
                         hs.unsafe_load((j2 * CH + c2) * DSTATE + nn),
                         acc,
-                    ))
+                    )
                 y_ptr.unsafe_store(t2 * dim + dd, acc)
                 var uv2 = ftz(u_ptr.unsafe_load(t2 * dim + dd))
-                var p = ftz(identical_mul(uv2, ftz(d_ptr.unsafe_load(dd))))
-                out_ptr.unsafe_store(t2 * dim + dd, ftz(acc + p))
+                out_ptr.unsafe_store(t2 * dim + dd, m1_skip(acc, uv2, ftz(d_ptr.unsafe_load(dd))))
             cell += NTH
         # The next chunk overwrites `hs`; every reader must be done first.
         barrier()

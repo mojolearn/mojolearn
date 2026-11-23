@@ -66,3 +66,14 @@ def test_container_refusals():
         m.parallel(*[mojolearn.Sequential().relu() for _ in range(7)])
     with pytest.raises(Exception, match="half of kernel_size"):
         m.max_pool1d(2, padding=2)
+
+
+def test_selective_scan_and_feature_concat_describe_their_arguments():
+    # lane neural-blocks-2: Mamba-1's core as a layer; its [u | delta | B | C] input joined on the features
+    m = (mojolearn.Sequential(input_shape=(6, 4)).linear(3).branch(-1).linear(3).softplus().branch(-1)
+         .linear(8).concat([0, 3, 5], axis=1).selective_scan(4))
+    assert _kinds(m)[-2:] == ["concat", "selective_scan"]
+    assert m.layers[-1][1] == (4, 0, 0, 0, 0, 0)
+    assert 1.0 in m.layers[-2]        # the joined sample axis rides in the layer's float argument
+    with pytest.raises(Exception, match="d_state must be 4, 8 or 16"):
+        mojolearn.Sequential(input_shape=(6, 14)).selective_scan(5)

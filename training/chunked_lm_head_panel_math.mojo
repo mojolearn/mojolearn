@@ -56,7 +56,12 @@ comptime LMHEAD_GP_LEAF = 64
 #: ids DESCENDING, a fold-order fault the contract forbids, with each term's
 #: arithmetic unchanged. The default profile's control reverses dWeight's row
 #: chain, which the arm no longer has (dWeight is a GEMM product).
-comptime LMHEAD_GP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+#: lane neural-blocks-3-lm (2026-11-22): `-D MOJOLEARN_LMHEAD_SABOTAGE_LEAF_DESCENDING` arms the same fault
+#: alone (no other host oracle's control), on every column (the leaf body is the device kernel's and the host
+#: arm's); checks/native_tests/neural_blocks.mojo's lm_head token-loss digests must then FAIL (caught).
+comptime LMHEAD_GP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]() or is_defined[
+    "MOJOLEARN_LMHEAD_SABOTAGE_LEAF_DESCENDING"
+]()
 
 comptime _P = MutPointer[Float32, MutAnyOrigin]
 comptime _T = MutPointer[Int32, MutAnyOrigin]

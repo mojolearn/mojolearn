@@ -27,6 +27,28 @@ EXISTING backward rule; no kernel is written or edited here:
   41    recurrent (hidden, cell) rnn_scan_op (autograd/rules_recurrent.mojo), the       RecurrentRules
                                  recurrent estimators' own layer, on the time-major      16..18
                                  view (permute (T, B, F))
+  42    selective_scan (state)   graph_selective_scan (autograd/ssm_primitives.mojo),   SsmRules 240
+                                 the Mamba-1 core as a generic op (lane neural-blocks-2,
+                                 2026-11-22): the (length, 2 dim + 2 state) input is
+                                 [u | delta | B | C] (narrow views), parameters A_log
+                                 (dim, state) and D (dim); its arithmetic is the Mamba-1
+                                 block kernels' own thread bodies
+  43    ssd_scan (heads)         graph_ssd_scan (autograd/ssm_m2_primitives.mojo),      SsmRules 241
+                                 the Mamba-2 SSD core (lane neural-blocks-3): the
+                                 (length, 65 heads + 256) input is [x | B | C | dt],
+                                 parameters A_log and D (heads); the block's bodies
+  44    trapezoid_scan (heads,   graph_trapezoid_scan (autograd/ssm_m3_primitives.mojo), SsmRules 242
+        state)                   the Mamba-3 trapezoid core as a generic op (lane
+                                 neural-blocks-3-m3, 2026-11-22): the (length, heads (P +
+                                 2 state + 3)) input is [v | k | q | dt | A | trap],
+                                 parameter D (heads); its arithmetic is the Mamba-3
+                                 decode step's bodies (autograd/kernels/
+                                 mamba3_trapezoid_body.mojo)
+  45    lm_head (vocab)          graph_transformer_linear (the logits, h @ weight^T);   TransformerPrimitive
+                                 under the token_cross_entropy loss the fit stops      Rules; StepOpRules
+                                 before the layer and runs graph_lm_head_v2 (the fused  115 (lm_head_v2)
+                                 head + loss, no logits); weight (vocab, features)
+                                 (lane neural-blocks-3-lm, 2026-11-22)
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -52,9 +74,21 @@ from autograd.rankn_layout import rankn_narrow
 from autograd.rankn_fold import rankn_binary
 from autograd.ops import SUBTRACT
 from autograd.transformer_primitives import graph_rms_norm, graph_rotary
+# lm_head (lane neural-blocks-3-lm): the logits are the transformer projection op (the neural GEMM cell, the
+# cell the fused head's panels run); the token loss is the fused op's one recording
+from autograd.transformer_primitives import graph_transformer_linear
+from autograd.lm_head_v2_graph import graph_lm_head_v2
+from autograd.lm_head_v2_op import LM_HEAD_V2_TAG
+from autograd.rules_step_ops import StepOpRules
 from autograd.import_api import ImportRules, imp_unary, imp_binary, imp_where, imp_gather_nd
 from autograd.import_ops import IMP_SILU, IMP_GELU_ERF, IMP_GELU_TANH, IMP_SOFTPLUS, IMP_GT, IMP_GE, IMP_OR
 from autograd.rules_recurrent import RecurrentRules, RNN_LINEAR, RNN_LAYER, RNN_LAST_STEP, rnn_scan_op
+from autograd.ssm_primitives import SsmRules, SSM_TAG_FIRST, SSM_TAG_LAST, graph_selective_scan
+from autograd.ssm_ops import ssm_m1_states_supported
+# Mamba-2 (lane neural-blocks-3)
+from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
+# Mamba-3 (lane neural-blocks-3-m3)
+from autograd.ssm_m3_primitives import graph_trapezoid_scan
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -66,8 +100,16 @@ comptime LAYER_NARROW = 38
 comptime LAYER_EMBEDDING = 39
 comptime LAYER_ATTENTION = 40
 comptime LAYER_RECURRENT = 41
+comptime LAYER_SELECTIVE_SCAN = 42
+# lane neural-blocks-3 (2026-11-22): the Mamba-2 SSD core, the Mamba-3 trapezoid core, the LM head
+comptime LAYER_SSD_SCAN = 43
+comptime LAYER_TRAPEZOID_SCAN = 44
+comptime LAYER_LM_HEAD = 45
 comptime BLOCK_FIRST = 32
-comptime BLOCK_LAST = 41
+comptime BLOCK_LAST = 45
+
+#: block_init_bounds' marker for Mamba's S4D-real init of A_log: row d holds log(1), .., log(state)
+comptime BLOCK_INIT_S4D = Float32(-1.0e9)
 
 #: recurrent cells (a1 of LAYER_RECURRENT): the public names rnn, lstm, gru
 comptime BLOCK_CELL_RNN = 0
@@ -184,7 +226,66 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         rd.append(cur.d[0])
         rd.append(a0)
         return rn_shape(rd, name + " (Recurrent)")
+    if code == LAYER_SELECTIVE_SCAN:
+        if cur.ndim != 2:
+            raise Error(name + " (SelectiveScan): the input must be (length, features)")
+        if not ssm_m1_states_supported(a0):
+            raise Error(name + " (SelectiveScan): d_state must be 4, 8 or 16")
+        var wide = cur.d[1] - 2 * a0
+        if wide < 2 or wide % 2 != 0:
+            raise Error(name + " (SelectiveScan): the features must be 2 * dim + 2 * d_state, [u | delta | B | C]")
+        var sd = List[Int]()
+        sd.append(cur.d[0])
+        sd.append(wide // 2)
+        return rn_shape(sd, name + " (SelectiveScan)")
+    # Mamba-2 (lane neural-blocks-3): the SSD core over [x | B | C | dt] features
+    if code == LAYER_SSD_SCAN:
+        if cur.ndim != 2:
+            raise Error(name + " (SsdScan): the input must be (length, features)")
+        if a0 < 1:
+            raise Error(name + " (SsdScan): heads must be at least 1")
+        if cur.d[1] != a0 * (SSD_HEADDIM + 1) + 2 * SSD_STATES:
+            raise Error(name + " (SsdScan): the features must be heads * 64 + 256 + heads, [x | B | C | dt]")
+        var od = List[Int]()
+        od.append(cur.d[0])
+        od.append(a0 * SSD_HEADDIM)
+        return rn_shape(od, name + " (SsdScan)")
+    # Mamba-3 (lane neural-blocks-3-m3)
+    if code == LAYER_TRAPEZOID_SCAN:
+        if cur.ndim != 2:
+            raise Error(name + " (TrapezoidScan): the input must be (length, features)")
+        var th = a0
+        var tn = _x(xargs, i, 1)
+        if th < 1 or tn < 1:
+            raise Error(name + " (TrapezoidScan): heads and d_state must be positive")
+        var vw = cur.d[1] - th * (2 * tn + 3)
+        if vw < th or vw % th != 0:
+            raise Error(name + " (TrapezoidScan): the features must be heads * (headdim + 2 * d_state + 3), "
+                        + "[v | k | q | dt | A | trap]")
+        var td = List[Int]()
+        td.append(cur.d[0])
+        td.append(vw)
+        return rn_shape(td, name + " (TrapezoidScan)")
+    # lm_head (lane neural-blocks-3-lm)
+    if code == LAYER_LM_HEAD:
+        if cur.ndim != 1 and cur.ndim != 2:
+            raise Error(name + " (LMHead): the input must be (features,) or (length, features)")
+        if a0 < 2:
+            raise Error(name + " (LMHead): vocab must be at least 2")
+        var hd = rn_dims(cur)
+        hd[cur.ndim - 1] = a0
+        return rn_shape(hd, name + " (LMHead)")
+    # end lm_head
     raise Error(name + ": unknown layer code " + String(code))
+
+
+def _scan_dim(xargs: List[Int], i: Int, cur: ShapeN) -> Int:
+    return (cur.d[1] - 2 * _x(xargs, i, 0)) // 2
+
+
+def _trap_v(xargs: List[Int], i: Int, cur: ShapeN) -> Int:
+    """The trapezoid scan's v width, heads * headdim."""
+    return cur.d[1] - _x(xargs, i, 0) * (2 * _x(xargs, i, 1) + 3)
 
 
 def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[Int]:
@@ -209,6 +310,19 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         out.append(gh * hsz)       # weight_hh (gates * hidden, hidden)
         out.append(gh)             # bias_ih
         out.append(gh)             # bias_hh
+    elif code == LAYER_SELECTIVE_SCAN:
+        var dim = _scan_dim(xargs, i, cur)
+        out.append(dim * _x(xargs, i, 0))  # A_log (dim, state)
+        out.append(dim)                    # D
+    elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
+        out.append(_x(xargs, i, 0))  # A_log (heads)
+        out.append(_x(xargs, i, 0))  # D (heads)
+    elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
+        out.append(_x(xargs, i, 0))        # D (heads)
+    # lm_head (lane neural-blocks-3-lm)
+    elif code == LAYER_LM_HEAD:
+        out.append(_x(xargs, i, 0) * cur.cols())  # weight (vocab, features)
+    # end lm_head
     return out^
 
 
@@ -229,6 +343,17 @@ def block_param_names(code: Int) -> List[String]:
         out.append(".weight_hh")
         out.append(".bias_ih")
         out.append(".bias_hh")
+    elif code == LAYER_SELECTIVE_SCAN:
+        out.append(".A_log")
+        out.append(".D")
+    elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
+        out.append(".A_log")
+    elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
+        out.append(".D")
+    # lm_head (lane neural-blocks-3-lm)
+    elif code == LAYER_LM_HEAD:
+        out.append(".weight")
+    # end lm_head
     return out^
 
 
@@ -270,6 +395,19 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         var b = ftz(identical_div(Float32(1), identical_sqrt(Float32(_x(xargs, i, 0)))))
         for _ in range(4):  # small-loop(4: the layer's parameter tensors)
             out.append(b)
+    elif code == LAYER_SELECTIVE_SCAN:
+        # Mamba's init: A_log[d, n] = log(n + 1) (S4D-real), D = 1
+        out.append(BLOCK_INIT_S4D)
+        out.append(Float32(-2))
+    elif code == LAYER_SSD_SCAN:
+        # Mamba-2 (lane neural-blocks-3): A_log[h] = log(h + 1), so A spans -1 .. -heads; D = 1
+        out.append(BLOCK_INIT_S4D)
+    elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3): D = 1
+        out.append(Float32(-2))
+    # lm_head (lane neural-blocks-3-lm): PyTorch's Linear init, uniform in [-1/sqrt(features), 1/sqrt(features)]
+    elif code == LAYER_LM_HEAD:
+        out.append(ftz(identical_div(Float32(1), identical_sqrt(Float32(cur.cols())))))
+    # end lm_head
     return out^
 
 
@@ -420,7 +558,55 @@ def block_forward[E: Exec](
         var b_ih = _p(tape, ex, P, Gr, off + gh * F + gh * a0, 1, gh, train)
         var b_hh = _p(tape, ex, P, Gr, off + gh * F + gh * a0 + gh, 1, gh, train)
         return block_recurrent(tape, ex, h, w_ih, w_hh, b_ih, b_hh, B, T, F, a0, cell)
+    if code == LAYER_SELECTIVE_SCAN:
+        var dim = _scan_dim(xargs, i, cur)
+        var u = rankn_narrow(tape, ex, h, 2, 0, dim)
+        var dl = rankn_narrow(tape, ex, h, 2, dim, dim)
+        var bm = rankn_narrow(tape, ex, h, 2, 2 * dim, a0)
+        var cm = rankn_narrow(tape, ex, h, 2, 2 * dim + a0, a0)
+        var a_log = _p(tape, ex, P, Gr, off, dim, a0, train)
+        var d_skip = _p(tape, ex, P, Gr, off + dim * a0, 1, dim, train)
+        return graph_selective_scan(tape, ex, u, dl, bm, cm, a_log, d_skip)
+    if code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
+        var wide = a0 * SSD_HEADDIM + 2 * SSD_STATES
+        var xbc = rankn_narrow(tape, ex, h, 2, 0, wide)
+        var dts = rankn_narrow(tape, ex, h, 2, wide, a0)
+        var a_log2 = _p(tape, ex, P, Gr, off, 1, a0, train)
+        var d_skip2 = _p(tape, ex, P, Gr, off + a0, 1, a0, train)
+        return graph_ssd_scan(tape, ex, xbc, dts, a_log2, d_skip2)
+    # Mamba-3 (lane neural-blocks-3-m3): [v | k | q | dt | A | trap] as narrow views
+    if code == LAYER_TRAPEZOID_SCAN:
+        var tv = _trap_v(xargs, i, cur)
+        var tk = a0 * _x(xargs, i, 1)
+        var v = rankn_narrow(tape, ex, h, 2, 0, tv)
+        var k = rankn_narrow(tape, ex, h, 2, tv, tk)
+        var q = rankn_narrow(tape, ex, h, 2, tv + tk, tk)
+        var dt = rankn_narrow(tape, ex, h, 2, tv + 2 * tk, a0)
+        var av = rankn_narrow(tape, ex, h, 2, tv + 2 * tk + a0, a0)
+        var tr = rankn_narrow(tape, ex, h, 2, tv + 2 * tk + 2 * a0, a0)
+        var t_skip = _p(tape, ex, P, Gr, off, 1, a0, train)
+        return graph_trapezoid_scan(tape, ex, v, k, q, dt, av, tr, t_skip, a0)
+    # lm_head (lane neural-blocks-3-lm): the logits (B,) + cur[:-1] + (vocab,), h @ weight^T
+    if code == LAYER_LM_HEAD:
+        var w = _p(tape, ex, P, Gr, off, a0, cur.cols(), train)
+        return graph_transformer_linear(tape, ex, h, w)
+    # end lm_head
     raise Error("model: unknown block code " + String(code))
+
+
+# lm_head (lane neural-blocks-3-lm)
+def block_lm_head_loss[E: Exec](
+    mut tape: Tape, mut ex: E, xargs: List[Int], i: Int, cur: ShapeN, P: FP, Gr: FP, off: Int,
+    hidden: Tensor, codes: Tensor, train: Bool,
+) raises -> Tensor:
+    """The token cross-entropy of lm_head layer i from its input `hidden` ((B,) + cur) against `codes` (one
+    class value per token, B * cur.rows() of them): the fused head-and-loss op (autograd/lm_head_v2_graph.mojo),
+    which never forms the logits; the mean over every token."""
+    var width = cur.cols()
+    var rows = tape.rows(hidden) * tape.cols(hidden) // width
+    var w = _p(tape, ex, P, Gr, off, _x(xargs, i, 0), width, train)
+    return graph_lm_head_v2(tape, ex, hidden, w, codes, rows, _x(xargs, i, 0), width)
+# end lm_head
 
 
 # ---------------------------------------------------------------- backward
@@ -433,19 +619,36 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
     def _recurrent(tag: Int) -> Bool:
         return tag == RNN_LINEAR or tag == RNN_LAYER or tag == RNN_LAST_STEP
 
+    @staticmethod
+    def _ssm(tag: Int) -> Bool:
+        return tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST
+
     def supports(self, tag: Int) -> Bool:
         if Self._recurrent(tag):
             return True
+        # lm_head (lane neural-blocks-3-lm): the fused head's tag, StepOpRules' own answers
+        if tag == LM_HEAD_V2_TAG:
+            return True
+        if Self._ssm(tag):
+            return SsmRules().supports(tag)
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if Self._recurrent(tag):
             return RecurrentRules().zeroed_destination(tag, saved, edge)
+        if tag == LM_HEAD_V2_TAG:
+            return StepOpRules(0).zeroed_destination(tag, saved, edge)
+        if Self._ssm(tag):
+            return SsmRules().zeroed_destination(tag, saved, edge)
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if Self._recurrent(tag):
             return RecurrentRules().writes_total(tag, saved, edge)
+        if tag == LM_HEAD_V2_TAG:
+            return StepOpRules(0).writes_total(tag, saved, edge)
+        if Self._ssm(tag):
+            return SsmRules().writes_total(tag, saved, edge)
         return ImportRules().writes_total(tag, saved, edge)
 
     def apply[E: Exec](
@@ -454,6 +657,10 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
     ) raises:
         if Self._recurrent(tag):
             RecurrentRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+        elif tag == LM_HEAD_V2_TAG:
+            StepOpRules(0).apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+        elif Self._ssm(tag):
+            SsmRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         else:
             ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
 
@@ -489,6 +696,19 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
             out.append(cur.d[1])
         elif slot == 1:
             out.append(hsz)
+    elif code == LAYER_SELECTIVE_SCAN:
+        var dim = _scan_dim(xargs, i, cur)
+        out.append(dim)
+        if slot == 0:
+            out.append(_x(xargs, i, 0))
+    elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
+    elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
+        out.append(_x(xargs, i, 0))
+    # lm_head (lane neural-blocks-3-lm): (vocab, features) in both layouts (PyTorch's Linear weight)
+    elif code == LAYER_LM_HEAD:
+        out.append(_x(xargs, i, 0))
+        out.append(cur.cols())
+    # end lm_head
     return out^
 
 

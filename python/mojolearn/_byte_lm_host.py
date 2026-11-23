@@ -226,94 +226,10 @@ class LanguageModelInference:
 
 
 
-class LanguageModelHostTrainer:
-    """One byte LM training step on the CPU (DEVIATION 2680).
-
-    Forward, backward and the AdamW update, on the reference path, through
-    `byte_lm_host_train_step`. This module still holds no arithmetic; the step
-    is a composition of host oracles that are each the normative answer of
-    their own profile.
-
-    NOT CERTIFIED YET, AND NOTHING HERE SAYS OTHERWISE. The CPU inference
-    surface above is certified on the CPUs listed in
-    docs/BYTE_LM_CPU_INFERENCE.md. This one has a gate,
-    `tools/byte_lm_cpu_train_gate.py`, which compares a step's gradient, both
-    Adam moments and the loss against the retained Apple, NVIDIA and AMD
-    captures byte for byte, and docs/BYTE_LM_CPU_TRAINING.md records what that
-    gate has actually shown. Read it before believing a number from this class.
-
-    NO THREADED PATH. The threaded forward has no backward twin, because a
-    weight gradient sums over every row of the batch and so crosses every
-    thread boundary; that needs a fixed cross-thread fold, not threads
-    accumulating as they finish.
-
-    Batch composition is part of any claim made with this. Nine of the
-    gradients contract over the token count, so the gradient at one batch shape
-    is not the bits of the same tokens presented as two smaller batches.
-    """
-
-    def __init__(self, parameters, *, m=None, v=None, shape=None,
-                 completed_steps=0, lr=1e-3, betas=(.9, .999), eps=1e-8,
-                 weight_decay=.01):
-        return _HOST_TRAIN(self, "construct", (parameters, m, v, shape, completed_steps,
-                                               lr, betas, eps, weight_decay), _HOST_TRAIN_CONTEXT)
-
-    @classmethod
-    def from_state(cls, parameters, m, v, *, completed_steps=0, **kwargs):
-        """A trainer resuming a recorded step's starting state, which is how
-        the gate replays one step of the retained capture in isolation."""
-        return _HOST_TRAIN(cls, "from_state", (parameters, m, v, completed_steps, kwargs), _HOST_TRAIN_CONTEXT)
-
-    @property
-    def shape(self):
-        return _HOST_TRAIN(self, "shape", (), _HOST_TRAIN_CONTEXT)
-
-    @property
-    def profile(self):
-        return _HOST_TRAIN(self, "profile", (), _HOST_TRAIN_CONTEXT)
-
-    @property
-    def completed_steps(self):
-        return _HOST_TRAIN(self, "completed_steps", (), _HOST_TRAIN_CONTEXT)
-
-    @property
-    def parameters_(self):
-        return _HOST_TRAIN(self, "parameters", (), _HOST_TRAIN_CONTEXT)
-
-    @property
-    def m_(self):
-        return _HOST_TRAIN(self, "m", (), _HOST_TRAIN_CONTEXT)
-
-    @property
-    def v_(self):
-        return _HOST_TRAIN(self, "v", (), _HOST_TRAIN_CONTEXT)
-
-    @property
-    def gradient_(self):
-        """The last step's gradient, or None before any step. A failed step
-        leaves this None rather than a stale value."""
-        return _HOST_TRAIN(self, "gradient", (), _HOST_TRAIN_CONTEXT)
-
-    def parameters_sha256(self):
-        return _HOST_TRAIN(self, "parameters_sha256", (), _HOST_TRAIN_CONTEXT)
-
-    def train_step(self, ids):
-        """One step on int32 ids `[shape.batch, shape.length + 1]`, the
-        training batch layout, returning the loss's IEEE-754 bits.
-
-        The last column is only ever a target and may hold the ignore index,
-        exactly as `loss_bits` admits it. On success the parameters and both
-        moments are replaced and the step count advances; if the native call
-        raises, none of them move and the gradient is cleared, because a
-        half-applied step is worse than a refused one."""
-        return _HOST_TRAIN(self, "train_step", (ids,), _HOST_TRAIN_CONTEXT)
-
-    def loss(self, ids):
-        """The mean next-byte loss of one batch at the current parameters,
-        as a float: what `train_step` on the same ids would report, without
-        the update. The parameters, the moments and the step count do not
-        move."""
-        return _HOST_TRAIN(self, "loss", (ids,), _HOST_TRAIN_CONTEXT)
+# TOMBSTONE: LanguageModelHostTrainer deleted 2026-11-22 by lane neural-consolidate: one CPU training
+# step is LanguageModelTrainer(device="cpu") (the same composed host step, byte_host_train_native, bit for
+# bit: ~/mojolearn-evidence/briefs-20261122/neural-consolidate-work/same_kernels_before_e282.json); code
+# recoverable at the lane's parent commit.
 
 
 def _connect_host_trainer():
@@ -333,7 +249,6 @@ def _connect_host_trainer():
         binding = type(error).__name__ + ": " + str(error)
     context.update(byte_lm_checkpoint_context=_LM_TRAINER_CONTEXT, byte_lm_bf16_class=lowbit.BF16Weight, byte_lm_int8_class=lowbit.Int8Weight,
                    byte_lm_linalg_context=_linalg_impl._NATIVE_CONTEXT, byte_lm_default_profile=_DEFAULT_PROFILE,
-                   byte_lm_host_trainer_class=LanguageModelHostTrainer,
                    byte_lm_host_inference_class=LanguageModelInference,
                    byte_lm_config_class=ByteLanguageModelConfig, byte_lm_host_binding=binding,
                    byte_lm_profile_defaults=_numeric_profile._defaults, byte_lm_profiles=_numeric_profile.PROFILES)

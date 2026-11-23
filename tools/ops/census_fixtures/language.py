@@ -230,8 +230,8 @@ def transformer_decode_session(ml, cx):
     session.close()
 
 
-_TRAINERS = ("ParallelByteLanguageModelTrainer", "PooledByteLanguageModelTrainer",
-             "OffloadedByteLanguageModelTrainer")
+#: one trainer class; its pooled and offloaded placements are its `schedule` option
+_TRAINERS = ("ParallelByteLanguageModelTrainer",)
 
 FIXTURES = {
     "language_model_trainer": (language_model_trainer, [
@@ -266,7 +266,7 @@ for _cls in _TRAINERS:
                                                    [f"mojolearn.{_cls}.train_step_from"])
 del _name, _cls
 
-#: the cooperative byte-LM drivers (parallel, pooled, offloaded) have no CPU implementation: on the CPU wheel their
+#: the cooperative byte-LM driver (every schedule) has no CPU implementation: on the CPU wheel their
 #: train_step and checkpoint refuse ("no CPU implementation of the cooperative multi-GPU driver ..."), so the members
 #: that need a completed step or a checkpoint first (smoke b620cb2e0b: UNCOVERED) run only in the "gpu" fixture above
 NEEDS_GPU = {f"mojolearn.{_c}.{_m}": "the cooperative multi-GPU byte-LM driver has no CPU implementation: train_step "
