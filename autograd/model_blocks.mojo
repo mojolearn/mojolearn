@@ -409,13 +409,35 @@ def block_attention[E: Exec](
 
 def block_recurrent[E: Exec](
     mut tape: Tape, mut ex: E, h: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
-    B: Int, T: Int, F: Int, Hs: Int, cell: Int,
+    B: Int, T: Int, F: Int, Hs: Int, cell: Int, lengths: Optional[FP] = None,
 ) raises -> Tensor:
-    """One recurrent layer over h (B, T, F) from a zero state: (B, T, hidden), every step's state."""
+    """One recurrent layer over h (B, T, F) from a zero state: (B, T, hidden), every step's state.
+
+    With `lengths` (B float32 row lengths on the executor; lane seq-blocks-3) a row's padded steps
+    (at or past its length) are packed-sequence steps: their inputs are replaced by +0.0 (a select on
+    the executor, so no value of theirs, not even inf or NaN, reaches a product) and the cell's length
+    mask carries the state through them (rnn_scan_op); their outputs repeat the state at the row's
+    last valid step."""
+    var src = h
+    if lengths:
+        # cond (B, T, 1): position >= length, from device iota positions (no host loop over rows)
+        var pos = tape.reserve(ex, T)
+        var ia = Args()
+        ia.p0 = pos
+        ex.launch[OP_SEQ_IOTA](ia, T)
+        var row = tape.variable(ex, pos, 1, T, False)
+        var lens = tape.variable(ex, lengths.value(), B, 1, False)
+        var cond = imp_binary(tape, ex, row, lens, IMP_GE)
+        var c3: List[Int] = [B, T, 1]
+        cond = tape.view_nd(ex, cond, _sh(c3))
+        var zp = tape.reserve(ex, 1)
+        _fill(ex, zp, 1, Float32(0))
+        var zero = tape.variable(ex, zp, 1, 1, False)
+        src = imp_where(tape, ex, cond, zero, h)
     var tp: List[Int] = [1, 0, 2]
-    var xt = tape.permute(ex, h, tp)
+    var xt = tape.permute(ex, src, tp)
     var tm = tape.view_nd(ex, xt, ShapeN.matrix(T * B, F))
-    var y = rnn_scan_op(tape, ex, tm, w_ih, w_hh, b_ih, b_hh, cell, T, B)
+    var y = rnn_scan_op(tape, ex, tm, w_ih, w_hh, b_ih, b_hh, cell, T, B, lengths)
     var y3: List[Int] = [T, B, Hs]
     var yt = tape.view_nd(ex, y, _sh(y3))
     return tape.permute(ex, yt, tp)
@@ -423,10 +445,10 @@ def block_recurrent[E: Exec](
 
 def block_forward[E: Exec](
     mut tape: Tape, mut ex: E, code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN,
-    P: FP, Gr: FP, off: Int, h: Tensor, other: Optional[Tensor], train: Bool,
+    P: FP, Gr: FP, off: Int, h: Tensor, other: Optional[Tensor], train: Bool, lengths: Optional[FP] = None,
 ) raises -> Tensor:
     """Record block layer i on the tape from h (B,) + cur; `other` is the earlier output a multiply
-    layer reads."""
+    layer reads; `lengths` the batch rows' sequence lengths a recurrent layer reads (None: none)."""
     var B = tape.rows(h) * tape.cols(h) // cur.count()
     var a0 = _x(xargs, i, 0)
     var a1 = _x(xargs, i, 1)
@@ -475,7 +497,7 @@ def block_forward[E: Exec](
         var w_hh = _p(tape, ex, P, Gr, off + gh * F, gh, a0, train)
         var b_ih = _p(tape, ex, P, Gr, off + gh * F + gh * a0, 1, gh, train)
         var b_hh = _p(tape, ex, P, Gr, off + gh * F + gh * a0 + gh, 1, gh, train)
-        return block_recurrent(tape, ex, h, w_ih, w_hh, b_ih, b_hh, B, T, F, a0, cell)
+        return block_recurrent(tape, ex, h, w_ih, w_hh, b_ih, b_hh, B, T, F, a0, cell, lengths)
     if code == LAYER_BATCH_NORM:
         # (B, C, rest): the channel axis is the sample's first; running statistics after weight and bias
         var gamma = _p(tape, ex, P, Gr, off, 1, a0, train)

@@ -40,8 +40,8 @@ from autograd.rankn_layout import rankn_concat
 from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_shape, rn_with_batch
 # Lane neural-blocks (2026-11-22): the neural building blocks (codes 32..41) and the version-2 backward rules
 from autograd.model_blocks import (
-    LAYER_MULTIPLY, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads, block_shape,
-    bn_state, is_block,
+    LAYER_MULTIPLY, LAYER_RECURRENT, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads,
+    block_shape, bn_state, is_block,
 )
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
@@ -769,10 +769,10 @@ struct _ModelForwardTopology(Movable):
 
 def _model_forward_prepared[E: Exec](
     mut tape: Tape, mut ex: E, spec: ModelSpec, P: FP, Gr: FP, x: Tensor, train: Bool,
-    seed: UInt64, step: Int, topology: _ModelForwardTopology,
+    seed: UInt64, step: Int, topology: _ModelForwardTopology, lengths: Optional[FP] = None,
 ) raises -> Tensor:
     if spec.version == SPEC2_VERSION:
-        return _model_forward_v2(tape, ex, spec, P, Gr, x, train, seed, step, topology)
+        return _model_forward_v2(tape, ex, spec, P, Gr, x, train, seed, step, topology, lengths)
     var outs = List[Tensor]()
     var h = x
     var i = 0
@@ -826,7 +826,7 @@ def _model_forward_prepared[E: Exec](
 
 def _model_forward_v2[E: Exec](
     mut tape: Tape, mut ex: E, spec: ModelSpec, P: FP, Gr: FP, x: Tensor, train: Bool,
-    seed: UInt64, step: Int, topology: _ModelForwardTopology,
+    seed: UInt64, step: Int, topology: _ModelForwardTopology, lengths: Optional[FP] = None,
 ) raises -> Tensor:
     """model_forward of a version-2 description: x is the (B, n_inputs)
     batch, viewed as (B,) + the per-sample shape (free). Each layer's output
@@ -965,7 +965,7 @@ def _model_forward_v2[E: Exec](
             if k == LAYER_MULTIPLY:
                 other = Optional[Tensor](x0 if spec.arg0[i] == -1 else outs[spec.arg0[i]])
             h = block_forward(tape, ex, k, spec.xargs, i, spec.farg[i], spec.in_shape[i], P, Gr,
-                              spec.param_off[i], h, other, train)
+                              spec.param_off[i], h, other, train, lengths)
         h = rn_as_shape(tape, ex, h, rn_with_batch(B, spec.out_shape[i], "model"))
         outs.append(h)
         i += 1
@@ -1121,7 +1121,7 @@ def model_fit[E: Exec](
 def model_fit_state[E: Exec](
     mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
     Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
-    validation: Optional[FitValidation] = None, codes_dev: Int = 0,
+    validation: Optional[FitValidation] = None, codes_dev: Int = 0, lengths: Optional[FP] = None,
 ) raises -> Int:
     """Train the model on X (N, n_inputs) and Y; returns the epochs run.
 
@@ -1155,6 +1155,12 @@ def model_fit_state[E: Exec](
     `codes_dev` (lane migrate-neural-2): the N class codes already in an
     executor buffer (the label sort wrote them there); Y is then not read.
     The codes feed the same one-hot launch, so the same words.
+
+    `lengths` (lane seq-blocks-3): N float32 sequence lengths on the host, one
+    a row, for the recurrent layers (model_lengths_check admits them). They
+    are uploaded once, gathered in each epoch's row order with one launch and
+    read by every batch's recurrent layers (autograd/model_blocks.mojo
+    block_recurrent: packed-sequence steps).
     """
     var cfg = cfg_in.copy()
     var start = 0
@@ -1187,6 +1193,16 @@ def model_fit_state[E: Exec](
         raise Error("model fit: X must be (n_samples, " + String(D) + ")")
     var dX = ex.alloc(N * D)
     upload_cast(ex, dX, X)
+    var has_lens = Bool(lengths)
+    var dLen = dummy_ptr()
+    var Lp = dummy_ptr()
+    if has_lens:
+        if validation:
+            raise Error("ValueError: model fit: validation_data with lengths is not supported")
+        model_lengths_check(spec, lengths.value(), N, "fit")
+        dLen = ex.alloc(N)
+        ex.upload(dLen, lengths.value(), N)
+        Lp = ex.alloc(N)
     # the batch target's width: the outputs, or 1 for the class codes of the
     # fused cross-entropy (no one-hot target)
     var TW = 1 if _fused_codes(cfg) else O
@@ -1319,6 +1335,19 @@ def model_fit_state[E: Exec](
         # the order changes only when shuffling: an unshuffled fit keeps epoch 0's copy
         if epoch_gather and (cfg.shuffle or e == 0):
             gather_epoch(ex, dX, dY, didx, N, D, TW, Xp, Yp)
+        if has_lens and (cfg.shuffle or e == 0):
+            # the lengths in this epoch's row order, one launch (op_gather_rows, one word a row)
+            var gl = Args()
+            gl.p0 = dLen
+            gl.p1 = didx
+            gl.p2 = Lp
+            gl.p3 = dLen
+            gl.p4 = Lp
+            gl.i0 = N
+            gl.i1 = 1
+            gl.i2 = 0
+            gl.i3 = 0
+            ex.launch[OP_GATHER_ROWS](gl, N)
         for bi in range(n_batches):  # driver-loop: over batches
             var off = bi * bs
             var B = bs if off + bs <= N else N - off
@@ -1343,7 +1372,10 @@ def model_fit_state[E: Exec](
             tape.reset()
             var x = tape.variable(ex, xb, B, D, False)
             var target = tape.variable(ex, yb, B, TW, False)
-            var out = _model_forward_prepared(tape, ex, spec, P, Gr, x, True, cfg.seed, step, topology)
+            var blens = Optional[FP]()
+            if has_lens:
+                blens = Optional[FP](Lp + off)
+            var out = _model_forward_prepared(tape, ex, spec, P, Gr, x, True, cfg.seed, step, topology, blens)
             # lane ag-pass6-fold (PASS6 idea H(1)): the loss's own fold
             # launch stores the batch's curve word mul(loss, B), the word
             # tape.scale stores; cross-entropy's loss is not a fold
@@ -1462,6 +1494,29 @@ def model_fit_state[E: Exec](
     return n_iter
 
 
+def model_lengths_check(spec: ModelSpec, lengths: FP, N: Int, operation: String) raises:
+    """Admission of a Sequential `lengths` argument (lane seq-blocks-3): the model has a recurrent layer, all its
+    recurrent layers read sequences of one padded length T, and each of the N float32 lengths is a whole number
+    from 1 to T. One comparison a row on the host, before any launch (as the recurrent estimators' admission,
+    sequence/ops_impl.mojo rnn_lengths_of)."""
+    var T = 0
+    for i in range(spec.n_layers()):  # driver-loop: over layers (description metadata)
+        if spec.version == SPEC2_VERSION and spec.kinds[i] == LAYER_RECURRENT:
+            var t = spec.in_shape[i].d[0]
+            if T != 0 and t != T:
+                raise Error("ValueError: " + operation + ": lengths need every recurrent layer to read sequences "
+                            + "of one length (" + String(T) + " and " + String(t) + " here)")
+            T = t
+    if T == 0:
+        raise Error("ValueError: " + operation + ": lengths apply to the recurrent layers (rnn, lstm, gru); this "
+                    + "model has none")
+    for r in range(N):  # admission: one comparison per row on the host, before any launch
+        var v = lengths.unsafe_load(r)
+        if v != v or v < Float32(1.0) or v > Float32(T) or Float32(Int(v)) != v:
+            raise Error("ValueError: " + operation + ": every length must be a whole number from 1 to the "
+                        + "padded sequence length " + String(T))
+
+
 def model_state_ranges(spec: ModelSpec) -> List[Int]:
     """The parameter vector's state ranges, (offset, words) pairs: words a forward writes and the
     optimizer never updates (a batch norm's running statistics). Empty for most models."""
@@ -1526,7 +1581,7 @@ def predict_chunk_rows(spec: ModelSpec, N: Int, chunk: Int) -> Int:
 
 def model_predict[E: Exec](
     mut ex: E, spec: ModelSpec, X: CastIn, N: Int, Pin: FP, dst: FP, chunk: Int, transform: Int,
-    classes_addr: Int = 0, n_classes: Int = 0, class_itemsize: Int = 0,
+    classes_addr: Int = 0, n_classes: Int = 0, class_itemsize: Int = 0, lengths: Optional[FP] = None,
 ) raises:
     """dst (N, out) = the model's output on X (N, n_inputs), optionally
     through a row softmax (OUT_SOFTMAX) or an elementwise sigmoid
@@ -1539,7 +1594,10 @@ def model_predict[E: Exec](
     With `classes_addr` (OUT_ARGMAX / OUT_THRESHOLD; lane migrate-neural-2)
     the codes stay on the executor and `gather_labels_device` writes the
     N labels classes[code] (`n_classes` items of `class_itemsize` bytes) to
-    `dst`: the same launches, and only the labels come down."""
+    `dst`: the same launches, and only the labels come down.
+
+    `lengths`: N float32 sequence lengths on the host for the recurrent
+    layers (as model_fit_state's), uploaded once; each chunk reads its rows'."""
     if N < 1 or N >= MODEL_MAX_ROWS or chunk < 1:
         raise Error("model predict: the number of samples must be between 1 and 2^24 - 1 and chunk >= 1")
     if transform < OUT_RAW or transform > OUT_THRESHOLD:
@@ -1553,6 +1611,11 @@ def model_predict[E: Exec](
         raise Error("model predict: X must be (n_samples, " + String(D) + ")")
     var dX = ex.alloc(N * D)
     upload_cast(ex, dX, X)  # the caller's array as it is (autograd/cast_ops.mojo)
+    var dLen = dummy_ptr()
+    if lengths:
+        model_lengths_check(spec, lengths.value(), N, "predict")
+        dLen = ex.alloc(N)
+        ex.upload(dLen, lengths.value(), N)
     var P = ex.alloc(spec.n_params)
     ex.upload(P, Pin, spec.n_params)
     var dout = ex.alloc(N * O)
@@ -1563,7 +1626,10 @@ def model_predict[E: Exec](
         var B = bs if b0 + bs <= N else N - b0
         tape.reset()
         var x = tape.variable(ex, dX + b0 * D, B, D, False)
-        var out = _model_forward_prepared(tape, ex, spec, P, P, x, False, UInt64(0), 0, topology)
+        var blens = Optional[FP]()
+        if lengths:
+            blens = Optional[FP](dLen + b0)
+        var out = _model_forward_prepared(tape, ex, spec, P, P, x, False, UInt64(0), 0, topology, blens)
         if transform == OUT_SOFTMAX:
             out = tape.softmax(ex, out)
         elif transform == OUT_SIGMOID or transform == OUT_PROBA2 or transform == OUT_THRESHOLD:

@@ -87,6 +87,10 @@ struct SeqModel(Movable):
     # the last validated fit's validation curve and (executed, retained) epochs
     var validation_curve: List[Float32]
     var validation_info: List[Int64]
+    # sequence lengths of the recurrent layers (lane seq-blocks-3): the fit's rows' and the next predict's rows';
+    # empty: none
+    var lengths: List[Float32]
+    var predict_lengths: List[Float32]
 
     def __init__(out self):
         self.codes = List[Int]()
@@ -120,6 +124,8 @@ struct SeqModel(Movable):
         self.y_1d = 1
         self.validation_curve = List[Float32]()
         self.validation_info = List[Int64]()
+        self.lengths = List[Float32]()
+        self.predict_lengths = List[Float32]()
 
     # ---------------------------------------------------------------- building
     def layer(mut self, code: Int, a0: Int = 0, a1: Int = 0, a2: Int = 0, a3: Int = 0, a4: Int = 0, a5: Int = 0,
@@ -280,6 +286,8 @@ struct SeqModel(Movable):
             sources.append(CastIn.f32_c(Int(vx.unsafe_ptr()), v_rows, features))
             sources.append(CastIn.f32_c(Int(vy.unsafe_ptr()), v_rows, y_cols))
             sources.append(CastIn.f32_c(0, 1, 1))
+        elif len(self.lengths) > 0:
+            addrs.append(Int(self.lengths.unsafe_ptr()))
         self.n_iter = model_fit_native(ex, addrs, sources, prog, ip, fp)
         ex.sync()
         self.batch = batch_size
@@ -375,7 +383,9 @@ struct SeqModel(Movable):
         var out = List[Float32](length=rows * width, fill=Float32(-7.0))
         model_predict(ex, spec, CastIn.f32_c(Int(x.unsafe_ptr()), rows, features), rows,
                       FP(unsafe_from_address=Int(self.params.unsafe_ptr())), FP(unsafe_from_address=Int(out.unsafe_ptr())),
-                      PREDICT_CHUNK, transform)
+                      PREDICT_CHUNK, transform, 0, 0, 0,
+                      Optional[FP](FP(unsafe_from_address=Int(self.predict_lengths.unsafe_ptr())))
+                      if len(self.predict_lengths) > 0 else Optional[FP]())
         ex.sync()
         _ = x
         return out^

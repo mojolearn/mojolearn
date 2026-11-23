@@ -12,6 +12,7 @@ from sequence.ops import (
     OP_CELL_BWD,
     OP_CELL_FWD_H,
     OP_CELL_BWD_H,
+    OP_CELL_BWD_H_MASK,
     OP_GEMM_EPI,
     OP_COLSUM_DIV,
     OP_GEMM_EPI_TAIL,
@@ -115,6 +116,7 @@ from sequence.ops import (
     op_cell_bwd,
     op_cell_fwd_h,
     op_cell_bwd_h,
+    op_cell_bwd_h_mask,
     op_gather_seq,
     op_gather_rows,
     op_mse,
@@ -563,6 +565,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_cell_fwd_h(t, a)
     elif OP == OP_CELL_BWD_H:
         op_cell_bwd_h(t, a)
+    elif OP == OP_CELL_BWD_H_MASK:
+        op_cell_bwd_h_mask(t, a)
     elif OP == OP_CELL_FWD_SCAN:
         op_cell_fwd_scan(t, a)
     elif OP == OP_CELL_BWD_SCAN:

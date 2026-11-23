@@ -8,7 +8,7 @@ executors that route OP_CELL_BWD_SCAN import nothing more than they did."""
 
 from max.gpu import block_idx, thread_idx
 from x_linear.team import team_barrier
-from sequence.ops import FP, Args, gates_of, op_cell_bwd_h, st
+from sequence.ops import FP, Args, gates_of, op_cell_bwd_h, op_cell_bwd_h_lens, st
 from sequence.recurrent_scan import _scan_args
 
 
@@ -31,7 +31,8 @@ def bwd_step[odd: Bool](a: Args, j: Int) -> Args:
     r.p1 = a.p1 + s * B * GH
     r.p2 = a.p2 + s * B * H
     r.p3 = a.p3 + s * B * H
-    r.p4 = a.p4 + s * B * H
+    # c_t is c_{s}'s next row block: the base p4 is free to carry the sequence lengths (lane seq-blocks-3)
+    r.p4 = a.p3 + (s + 1) * B * H
     r.p6 = a.p6 + s * B * H
     r.p8 = a.p8 + s * B * GH
     r.p9 = a.p9 + s * B * GH
@@ -39,7 +40,18 @@ def bwd_step[odd: Bool](a: Args, j: Int) -> Args:
         r.p5 = a.p10
         r.p10 = a.p5
     r.i3 = 1 if s < T - 1 else 0
+    r.i8 = s
     return r
+
+
+@always_inline
+def _bwd_cell(t: Int, a: Args, se: Args):
+    """Step `se` of element t: `op_cell_bwd_h`, or with the scan's i5 = 1 its length-masked form with the rows'
+    lengths in the base p4 (lane seq-blocks-3). i5 is a kernel argument, so the branch is block-uniform."""
+    if a.i5 != 0:
+        op_cell_bwd_h_lens(t, se, a.p4)
+    else:
+        op_cell_bwd_h(t, se)
 
 
 def op_cell_bwd_scan(row: Int, a: Args):
@@ -53,11 +65,11 @@ def op_cell_bwd_scan(row: Int, a: Args):
     while j < a.i3:
         var se = bwd_step[False](a, j)
         for u in range(H):
-            op_cell_bwd_h(row * H + u, se)
+            _bwd_cell(row * H + u, a, se)
         if j + 1 < a.i3:
             var so = bwd_step[True](a, j + 1)
             for u in range(H):
-                op_cell_bwd_h(row * H + u, so)
+                _bwd_cell(row * H + u, a, so)
         j += 2
 
 
@@ -91,11 +103,11 @@ def cell_bwd_scan_kernel(
     while j < a.i3:
         var se = bwd_step[False](a, j)
         if u < Hn:
-            op_cell_bwd_h(t, se)
+            _bwd_cell(t, a, se)
         team_barrier()
         if j + 1 < a.i3:
             var so = bwd_step[True](a, j + 1)
             if u < Hn:
-                op_cell_bwd_h(t, so)
+                _bwd_cell(t, a, so)
             team_barrier()
         j += 2

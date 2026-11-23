@@ -189,7 +189,12 @@ def scan_block(cell: Int, H: Int) -> Int:
 @always_inline
 def fwd_step(a: Args, s: Int) -> Args:
     """`OP_CELL_FWD_H`'s arguments of step s from the scan's base arguments
-    (step 0's pointers; i1 B, i2 H, i3 T)."""
+    (step 0's pointers; i1 B, i2 H, i3 T).
+
+    Sequence lengths (lane seq-blocks-3): i5 = 1 and p10 the rows' lengths
+    make every step the masked cell (i9 = 1, i8 the step: op_cell_fwd copies a
+    row's state forward past its length), as the per-step chain's launches.
+    Without them i9 is 0 and the step is the unmasked cell, word for word."""
     var B = a.i1
     var H = a.i2
     var GH = gates_of(a.i0) * H
@@ -201,6 +206,8 @@ def fwd_step(a: Args, s: Int) -> Args:
     r.p4 = a.p4 + s * B * H
     r.p5 = a.p5 + s * B * H
     r.p6 = a.p6 + s * B * H
+    r.i8 = s
+    r.i9 = a.i5
     return r
 
 

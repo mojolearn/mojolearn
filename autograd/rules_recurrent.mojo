@@ -39,6 +39,7 @@ from sequence.ops import (
     CELL_LSTM,
     OP_CELL_BWD,
     OP_CELL_BWD_H,
+    OP_CELL_BWD_H_MASK,
     OP_CELL_FWD,
     OP_CELL_FWD_H,
     OP_COPY,
@@ -344,11 +345,12 @@ def rnn_layer[E: Exec](
     var scanned = False
     # The IDENTICAL default. Training and prediction (rnn_predict, the same
     # forward in inference mode) take this one route.
-    # Sequence lengths (lane seq-blocks-2) take the per-step chain with the length mask: the scan kernel
-    # carries no mask, so a model fitted with lengths runs the chain on every column (host and device alike).
+    # Sequence lengths (lane seq-blocks-2) mask every step (op_cell_fwd). Lane seq-blocks-3: the scan takes the
+    # mask too (i5 = 1, p10 the lengths; sequence/recurrent_scan.mojo fwd_step), so with or without lengths a layer
+    # takes the same route and the same launch count: the scan where scan_routes says so, else the chain.
     var masked = w.has_lens
     comptime if SEQ_LSTM_SCAN:
-        if not masked and scan_routes(H, gates_of(cell)):
+        if scan_routes(H, gates_of(cell)):
             var sa = Args()
             sa.p0 = gxp
             sa.p1 = w.gh[l]
@@ -362,12 +364,13 @@ def rnn_layer[E: Exec](
             # never read on this route (b_ih is in gx); bound to live
             # storage, not dummy_ptr (the Metal rule)
             sa.p9 = b_ih
-            sa.p10 = gxp
+            sa.p10 = w.lens if masked else gxp
             sa.p11 = whh
             sa.i0 = cell
             sa.i1 = B
             sa.i2 = H
             sa.i3 = T
+            sa.i5 = 1 if masked else 0
             ex.launch[OP_CELL_FWD_SCAN](sa, B)
             scanned = True
     if not scanned:
@@ -478,13 +481,15 @@ def _layer_bwd[E: Exec](
     var masked = saved.i3 != 0
     var scanned = False
     comptime if SEQ_LSTM_SCAN:
-        if not masked and scan_routes(H, gates_of(cell)):
+        if scan_routes(H, gates_of(cell)):
             var sa = Args()
             sa.p0 = act
             sa.p1 = gh
             sa.p2 = hall
             sa.p3 = call
-            sa.p4 = call + B * H
+            # c_t's base (call + B H), or with lengths the rows' lengths: the scan derives c_t from p3
+            # (autograd/kernels/recurrent_scan.mojo bwd_step) and reads the lengths from here
+            sa.p4 = saved.p10 if masked else call + B * H
             sa.p5 = dh
             sa.p6 = up
             sa.p7 = dc
@@ -497,6 +502,7 @@ def _layer_bwd[E: Exec](
             sa.i2 = H
             sa.i3 = T
             sa.i4 = B * GH
+            sa.i5 = 1 if masked else 0
             ex.launch[OP_CELL_BWD_SCAN](sa, B)
             scanned = True
     if not scanned:
@@ -504,9 +510,9 @@ def _layer_bwd[E: Exec](
         # stores its own dh and dc zeros (sequence/ops.mojo op_cell_bwd_h), so the two fill launches are the
         # host's alone: HostExec runs OP_CELL_BWD_H as its GEMM and then op_cell_bwd, not that body
         # (sequence/exec.mojo). The same zeros in the same words on every column.
-        # With lengths every step is OP_GEMM + OP_CELL_BWD (op_cell_bwd_h's p11 is W_hh, the mask's p11 the
-        # lengths), so the device fills its zeros too.
-        var fills = masked
+        # With lengths the fused step is OP_CELL_BWD_H_MASK (lane seq-blocks-3), which stores the same zeros at
+        # its first step on the device; the GEMM-split step (RNN_BPTT_LSTM_GEMM's) fills them, as without lengths.
+        var fills = False
         comptime if not E.IS_DEVICE:
             fills = True
         if fills:
@@ -535,24 +541,30 @@ def _layer_bwd[E: Exec](
         a.i2 = H
         a.i3 = 1 if s < T - 1 else 0
         a.i4 = B * GH
-        if masked:
-            # dh += dGH_{s+1} W_hh as its own GEMM (as below; the host's OP_CELL_BWD_H is the same pair), then the
-            # cell with the length mask: a step past a row's end passes dh and dc through and adds no gradient
-            if s < T - 1:
-                var g = Args()
-                g.p0 = a.p9 + a.i4
-                g.p1 = whh
-                g.p2 = dh
-                g.i0 = B
-                g.i1 = H
-                g.i2 = GH
-                g.i3 = GH
-                g.i4 = 1
-                g.i5 = H
-                g.i6 = 1
-                g.i7 = 1
-                g.i8 = H
-                ex.launch[OP_GEMM](g, B * H)
+        if masked and not (step_gemm and s < T - 1):
+            # lane seq-blocks-3: the fused step with the length mask, one launch (sequence/ops.mojo
+            # op_cell_bwd_h_mask; p4 carries the lengths, c_t is p3 + B H; its first step stores the dh / dc zeros
+            # as OP_CELL_BWD_H's): a step past a row's end passes dh and dc through and adds no gradient. It was
+            # OP_GEMM + OP_CELL_BWD, the same words.
+            a.p4 = saved.p10
+            a.i8 = s
+            ex.launch[OP_CELL_BWD_H_MASK](a, B * H)
+        elif masked:
+            # the GEMM-split route (RNN_BPTT_LSTM_GEMM) with the length mask: the product, then the masked cell
+            var g = Args()
+            g.p0 = a.p9 + a.i4
+            g.p1 = whh
+            g.p2 = dh
+            g.i0 = B
+            g.i1 = H
+            g.i2 = GH
+            g.i3 = GH
+            g.i4 = 1
+            g.i5 = H
+            g.i6 = 1
+            g.i7 = 1
+            g.i8 = H
+            ex.launch[OP_GEMM](g, B * H)
             a.p11 = saved.p10
             a.i8 = s
             a.i9 = 1
@@ -643,12 +655,19 @@ comptime OPS_RNN_SCAN = 94
 
 def rnn_scan_op[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, w_ih: Tensor, w_hh: Tensor, b_ih: Tensor, b_hh: Tensor,
-    cell: Int, T: Int, B: Int,
+    cell: Int, T: Int, B: Int, lengths: Optional[FP] = None,
 ) raises -> Tensor:
     """One recurrent layer (cell CELL_LSTM, CELL_GRU or the tanh RNN) over a
     time-major sequence x [T B, D] from h_0 = c_0 = 0: returns h_1..h_T
     [T B, H]. PyTorch's layouts and gate order: w_ih (G H, D), w_hh
     (G H, H), b_ih and b_hh (1, G H).
+
+    `lengths` (lane seq-blocks-3: Sequential's recurrent layers): B float32
+    row lengths on the executor, each in [1, T]. A row's steps at or past its
+    length copy its state forward (the cell's length mask, the estimators'
+    packed semantics), so h_T is the state at its own last valid step and
+    those steps add nothing to any gradient. The caller zeroes the padded
+    inputs (x's rows of those steps), so their values never reach a product.
 
     It is the trainer's own layer, launch for launch: `rnn_linear` (the
     input projection with b_ih folded into gx, the blocked weight-gradient
@@ -692,6 +711,9 @@ def rnn_scan_op[E: Exec](
     comptime if SEQ_WGRAD_BLOCKED:
         wsplit = tape.reserve(ex, WGRAD_IDN_SCRATCH if train else 1)
     var w = Work(gxb, gh, act, hall, call, dgh, dh, dhn, dc, one, wsplit)
+    if lengths:
+        w.lens = lengths.value()
+        w.has_lens = True
     var gx = rnn_linear(tape, ex, x, w_ih, b_ih, gxb, RNN_INPUT_BIAS_IN_GX, True, tape.requires_grad(x), w)
     return rnn_layer(tape, ex, gx, w_hh, b_hh, tape.value(b_ih), cell, T, B, w, 0)
 

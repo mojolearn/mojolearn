@@ -59,6 +59,7 @@ from sequence.ops import (
     OP_BIAS,
     OP_CELL_FWD_H,
     OP_CELL_BWD_H,
+    OP_CELL_BWD_H_MASK,
     OP_GEMM_EPI,
     OP_GEMM_EPI_TAIL,
     OP_COLSUM_DIV,
@@ -414,6 +415,32 @@ struct HostExec(Exec, Movable):
                 g.i8 = H
                 self._gemm(g)
             self._launch[OP_CELL_BWD](a, n)
+            return
+        comptime if OP == OP_CELL_BWD_H_MASK:
+            # lane seq-blocks-3: OP_CELL_BWD_H's GEMM, then the cell with the length mask (sequence/ops.mojo
+            # op_cell_bwd_h_mask: p4 carries the lengths, c_t is p3 + B H)
+            var m = a
+            m.p4 = a.p3 + a.i1 * a.i2
+            m.p11 = a.p4
+            m.i9 = 1
+            if a.i3 != 0:
+                var H = a.i2
+                var GH = gates_of(a.i0) * H
+                var g = Args()
+                g.p0 = a.p9 + a.i4
+                g.p1 = a.p11
+                g.p2 = a.p5
+                g.i0 = a.i1
+                g.i1 = H
+                g.i2 = GH
+                g.i3 = GH
+                g.i4 = 1
+                g.i5 = H
+                g.i6 = 1
+                g.i7 = 1
+                g.i8 = H
+                self._gemm(g)
+            self._launch[OP_CELL_BWD](m, n)
             return
         var tasks = host_launch_tasks(n, _element_weight[OP](a), self.workers)
         if tasks <= 1:

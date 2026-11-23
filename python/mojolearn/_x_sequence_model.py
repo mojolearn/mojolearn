@@ -550,7 +550,7 @@ class Sequential(_CheckMixin):
 
     # ------------------------------------------------------------ training
     def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
-            validation_data=None, restore_best_weights=False):
+            validation_data=None, restore_best_weights=False, lengths=None):
         """Train the model.
 
         Parameters
@@ -595,6 +595,15 @@ class Sequential(_CheckMixin):
             ``best_epoch_`` names the best absolute epoch and
             ``validation_loss_curve_`` keeps every validation loss from
             this call. Resuming continues from the retained epoch.
+        lengths : array-like of int of shape (n_samples,) or None, default None
+            For models with recurrent layers (:meth:`lstm`, :meth:`gru`,
+            :meth:`rnn`): each sample's number of valid steps, from 1 to the
+            padded length of the sequence axis. Steps past a sample's length
+            are padding: their values are ignored, they do not change the
+            recurrent state, and the recurrent layers' outputs there repeat
+            the state at the sample's last valid step, so the last step holds
+            each sample's final state. None treats every step as valid. Not combined with
+            ``validation_data``.
 
         Returns
         -------
@@ -602,7 +611,7 @@ class Sequential(_CheckMixin):
             The fitted model, with ``params_``, ``loss_curve_``, ``n_iter_``
             and ``n_features_in_`` set (and ``classes_`` for classifiers).
         """
-        return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights, lengths), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ weight import
 
@@ -893,7 +902,7 @@ class Sequential(_CheckMixin):
             if name not in ("numeric_mode", "device", "input_shape", "_layers", "_options"):
                 target[name] = value
 
-    def predict(self, X):
+    def predict(self, X, lengths=None):
         """Predict with the fitted model.
 
         Parameters
@@ -901,6 +910,10 @@ class Sequential(_CheckMixin):
         X : array-like of shape (n_samples, n_features)
             Inputs: a bool, integer, float16, float32 or float64 array in
             any memory layout, used as float32.
+        lengths : array-like of int of shape (n_samples,) or None, default None
+            For models with recurrent layers (:meth:`lstm`, :meth:`gru`,
+            :meth:`rnn`): each sample's number of valid steps, as in
+            :meth:`fit`. None treats every step as valid.
 
         Returns
         -------
@@ -910,9 +923,9 @@ class Sequential(_CheckMixin):
             ``bce_with_logits`` models, the predicted class labels
             (n_samples,).
         """
-        return _SEQUENTIAL_ENTRY(self, "predict", (X,), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "predict", (X, lengths), _SEQUENTIAL_CONTEXT)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, lengths=None):
         """Class probabilities of a ``cross_entropy`` or ``bce_with_logits`` model.
 
         Parameters
@@ -920,13 +933,21 @@ class Sequential(_CheckMixin):
         X : array-like of shape (n_samples, n_features)
             Inputs: a bool, integer, float16, float32 or float64 array in
             any memory layout, used as float32.
+        lengths : array-like of int of shape (n_samples,) or None, default None
+            For models with recurrent layers (:meth:`lstm`, :meth:`gru`,
+            :meth:`rnn`): each sample's number of valid steps, from 1 to the
+            padded length of the sequence axis. Steps past a sample's length
+            are padding: their values are ignored, they do not change the
+            recurrent state, and the recurrent layers' outputs there repeat
+            the state at the sample's last valid step, so the last step holds
+            each sample's final state. None treats every step as valid.
 
         Returns
         -------
         ndarray of float32, shape (n_samples, n_classes)
             Each row sums to one; columns follow ``classes_``.
         """
-        return _SEQUENTIAL_ENTRY(self, "predict_proba", (X,), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "predict_proba", (X, lengths), _SEQUENTIAL_CONTEXT)
 
 
 # Package-import ABI connection. No model operation calls this setup again.
