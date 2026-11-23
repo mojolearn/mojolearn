@@ -7203,6 +7203,15 @@
       "symbol_origin": "mojolearn._expansion_decomp.randomized_svd"
     },
     {
+      "algorithm": "mojolearn.recipe",
+      "status": "not_algorithm",
+      "cases": [],
+      "reason": "Verification tool: writes down how a model is made (estimator or layers, parameters, seed, fit arguments, data, what to hash) for verify --recipe, which fits it with the product's own calls on every device; not a numerical algorithm.",
+      "source": "python/mojolearn/__init__.py",
+      "canonical_algorithm": "mojolearn.recipe",
+      "symbol_origin": "mojolearn._verify_recipe.recipe"
+    },
+    {
       "algorithm": "mojolearn.refine",
       "status": "missing",
       "cases": [],
@@ -7725,13 +7734,13 @@
   ],
   "inventory_note": "Inventory includes public aliases, metadata and namespace exports. not_algorithm rows are explicit exclusions from algorithm coverage; missing rows remain visible. ready means a source fixture exists, never that compile/runtime/backend validation passed.",
   "census": {
-    "public_export_rows": 649,
+    "public_export_rows": 646,
     "alias_rows": 109,
     "canonical_non_algorithm_exports": 68,
-    "canonical_algorithm_entries": 472,
+    "canonical_algorithm_entries": 469,
     "canonical_status_counts": {
-      "blocked": 9,
-      "missing": 419,
+      "blocked": 7,
+      "missing": 418,
       "ready": 44
     },
     "note": "Algorithm entries include public numerical/helper operations as well as estimator classes; no per-estimator completeness is implied by this denominator."

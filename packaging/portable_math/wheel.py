@@ -73,6 +73,11 @@ NUMPY_ORACLES = {
     # name, routed lazily, and `estimator.check(X)` (_mode.CheckMixin) imports
     # it inside the method, so `import mojolearn` still loads neither file.
     "mojolearn/_check_both.py", "mojolearn/_verify_check.py",
+    # `verify --recipe` (2026-11-22): fits a user's recipe from scratch in one
+    # fresh process per device and compares the hashes; its data generators
+    # and `mojolearn.recipe` use NumPy inside the functions. Product paths
+    # never call it.
+    "mojolearn/_verify_recipe.py",
 }
 
 

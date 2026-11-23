@@ -124,6 +124,11 @@ QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
 
 
 def _verify_dispatch(args):
+    if getattr(args, "recipe", None):
+        # a user's algorithm, fitted from scratch on every device (`--self-test`
+        # with it is the recipe's own self-test, not the suite's)
+        from . import _verify_recipe
+        return _verify_recipe.cmd_recipe(args)
     if getattr(args, "check", None) or getattr(args, "fit_both", False):
         from . import _verify_check
         return _verify_check.cmd_check(args)
@@ -348,6 +353,25 @@ def build_parser():
                         "the same check --cross-check runs on the fixtures in the wheel. "
                         "identical mode only: fast makes no promise about bits and is "
                         "refused (exit 3). --cpu-threads sets the CPU side's threads")
+    v.add_argument("--recipe", metavar="RECIPE", default=None,
+                   help="VERIFY YOUR ALGORITHM, NOT ONLY A FITTED MODEL: RECIPE is a JSON file "
+                        "(mojolearn.recipe(model, ...) writes one) that says how the model is made "
+                        "(the estimator and its parameters or the layers of a Sequential, the seed, "
+                        "the fit arguments, the data: a built-in generator or a file with its "
+                        "SHA-256) and what to hash (digest_, predictions on stated rows, score), or "
+                        "example:NAME for a shipped one. It is fitted from scratch in a fresh process "
+                        "on every device of this installation (the CPU, and the GPU when there is "
+                        "one); the report prints IDENTICAL or DIVERGENT with the first differing "
+                        "value and writes RECIPE.record.json (--record-out). --against RECORD then "
+                        "compares with a record made on another machine or vendor; --self-test with "
+                        "it shows the comparison can fail. identical mode only: a fast recipe, a "
+                        "data file with another hash and a record of another version are refused "
+                        "(exit 3)")
+    v.add_argument("--against", metavar="RECORD", default=None,
+                   help="with --recipe: a record of the same recipe made on another machine or "
+                        "vendor, compared output by output")
+    v.add_argument("--record-out", dest="record_out", metavar="PATH", default=None,
+                   help="with --recipe: where to write the record (default RECIPE.record.json)")
     v.add_argument("--fit-both", dest="fit_both", action="store_true",
                    help="CHECK A FIT ON THE GPU AND ON THE CPU of this machine, for an "
                         "estimator whose fitted model cannot be loaded on the CPU: "
