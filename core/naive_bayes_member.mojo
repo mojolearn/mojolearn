@@ -609,6 +609,7 @@ def _fit_gaussian(slot: _Slot, call: _Call) raises:
     slot[].class_prior = _copy_out(done.arena.f32(o.prior), K)
     slot[].raw_variance = _copy_out(done.arena.f32(o.raw), K * d)
     slot[].scalars = [Float64(d), Float64(K), Float64(done.arena.f32(o.eps)[0])]
+    _ = done^  # the copies read its arena: named after them (freed at the last named use)
     slot[].features = d
     slot[].classes = K
     slot[].label_dtype = views.label_dtype
@@ -665,6 +666,7 @@ def _fit_discrete(slot: _Slot, call: _Call) raises:
     if kind == NB_KIND_BERNOULLI:
         slot[].w = _copy_out(done.arena.f32(o.w), K * d)
         slot[].bias = _copy_out(done.arena.f32(o.bias), K)
+    _ = done^  # the copies read its arena: named after them (freed at the last named use)
     slot[].scalars = [Float64(d), Float64(K)]
     slot[].features = d
     slot[].classes = K
@@ -839,8 +841,13 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
         _cat_refusals(done.arena.address, o.chk, d, slot[].categories)
     if proba:
         # float64 probabilities are two arena words each
+        # `done` owns the arena the copy reads: named again after the copy
+        # (Mojo frees a local at its last named use; mf-gate-fix-a 2026-11-23:
+        # the copy read the freed arena, a segfault once the arena was large
+        # enough to be unmapped, trees_shap test_agnostic_categorical_member).
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=done.arena.f32(o.pp),
                       count=(2 if p64 else 1) * n * K)
+        _ = done^
         return
     # `found` points into the run's arena: `done` is named again after each
     # read (Mojo frees a local at its last named use; the arena is freed with
