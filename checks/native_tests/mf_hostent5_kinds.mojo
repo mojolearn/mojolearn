@@ -236,11 +236,11 @@ def check_forest_kinds() raises:
         var classifier = which == 0
         var words = _forest_words(2.0 if classifier else 3.0, False)
         require(len(words) == FM_HEAD + 9, "the predict-only words")
-        var new = MemberCall(DeviceRoute(DEVICE_CPU))
-        new.params = Int(words.unsafe_ptr())
-        new.param_count = len(words)
-        _ = _forest(MEMBER_OP_NEW, new)
-        var state = new.state
+        var minted = MemberCall(DeviceRoute(DEVICE_CPU))
+        minted.params = Int(words.unsafe_ptr())
+        minted.param_count = len(words)
+        _ = _forest(MEMBER_OP_NEW, minted)
+        var state = minted.state
         var ask = MemberCall(DeviceRoute(DEVICE_CPU), state)
         var mask = _forest(MEMBER_OP_CAPABILITIES, ask)
         require((mask & MEMBER_CAN_FIT) == 0 and (mask & MEMBER_CAN_SCORE) == 0, "a saved forest has no fit or score")
@@ -258,8 +258,8 @@ def check_forest_kinds() raises:
         outputs.classes = 3 if classifier else 0
         _ = _forest(MEMBER_OP_OUTPUTS, outputs)
         require(outputs.out_dtype == (MEMBER_I32 if classifier else MEMBER_F32), "predict's element type")
-        var free = MemberCall(DeviceRoute(DEVICE_CPU), state)
-        _ = _forest(MEMBER_OP_FREE, free)
+        var released = MemberCall(DeviceRoute(DEVICE_CPU), state)
+        _ = _forest(MEMBER_OP_FREE, released)
         _ = len(words)
 
 
