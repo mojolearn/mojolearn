@@ -1256,7 +1256,7 @@ def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Fl
     var y = a + 4 * gathered.gy
     classes = iterimp_class_values(y, gathered.mob)
     var codes = iterimp_class_codes(y, gathered.mob, classes)
-    if len(member.cw_refusal) > 0:
+    if member.cw_refusal.byte_length() > 0:
         # A class_weight the estimator refuses (lane mf-left4): its own words,
         # at this first classifier fit, after the target's class read (the
         # arena is left as a refusing fit leaves it).

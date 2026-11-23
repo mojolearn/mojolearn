@@ -165,10 +165,10 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     # below run only what that kind does not take (module note of
     # providers/python/member_ensemble_boundary_door.mojo `_admit_search`) and
     # the resident DeviceRows fold route of a device member.
-    comptime if MSEL_MEMBER_UNITS:
-        if y_in is not None and not msel_device_rows_ok(estimator, fields["scoring"], context):
-            if _search_member_fit(model, fields, x_in, y_in, context, b):
-                return model
+    # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    if y_in is not None and not msel_device_rows_ok(estimator, fields["scoring"], context):
+        if _search_member_fit(model, fields, x_in, y_in, context, b):
+            return model
     var candidates = msel_candidates(model, context)
     if len(candidates) == 0:
         raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")

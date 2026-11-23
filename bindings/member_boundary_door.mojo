@@ -123,7 +123,7 @@ def member_admit_serving_deferred(model: PythonObject, fields: PythonObject, pla
     class_weight tail stays pending: the caller completes every member's
     plan with `member_cw_fill_plan` over the encode's classes before any
     fit, and an invalid value or a refused dict raises there."""
-    return member_admit_serving_labeled(model, fields, plan, context, b, needs, Python.list())
+    return member_admit_serving_labeled(model, fields, plan, context, b, needs, PythonObject(None))  # None: no labels known yet (as an empty list)
 
 
 def member_admit_serving_valued(model: PythonObject, fields: PythonObject, plan: PythonObject,

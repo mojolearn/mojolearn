@@ -554,7 +554,7 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
     var train_offer = run[].pin if train_mode != 2 else 0
     var test_offer = run[].pin if test_mode != 2 else 0
     var t0 = msel_seconds()
-    if len(run[].refused[c]) > 0:
+    if run[].refused[c].byte_length() > 0:
         # The candidate's class_weight, refused at UNPACK under a numeric
         # error_score (lane mf-left4): this unit's fit failed in the
         # estimator's words, as each of its folds' own fit fails.

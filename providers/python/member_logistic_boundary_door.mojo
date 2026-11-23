@@ -95,7 +95,7 @@ def logistic_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
     # a value the door accepts but the member does not read: not admitted.
     if weighting < 0:
-        if len(member_cw_invalid_message(MEMBER_FAMILY_LOGISTIC, model, py_item(fields, nk[].k_class_weight), b)) == 0:
+        if member_cw_invalid_message(MEMBER_FAMILY_LOGISTIC, model, py_item(fields, nk[].k_class_weight), b).byte_length() == 0:
             return False
         weighting = MEMBER_CW_INVALID
     # The estimator's route, as its own door finds it: the held owner names
