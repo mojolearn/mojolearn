@@ -45,9 +45,9 @@ from x_cnn.ops import (
 )
 from x_cnn.ops import (
     CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
-    CP_OH, CP_OW, CP_BIAS,
+    CP_OH, CP_OW, CP_BIAS, CP_LEN,
     PP_H, PP_W, PP_KH, PP_KW, PP_SH, PP_SW, PP_PH, PP_PW, PP_DH, PP_DW, PP_OH, PP_OW,
-    PP_INCPAD, PP_DIVOVR,
+    PP_INCPAD, PP_DIVOVR, PP_LEN,
 )
 
 comptime OP_RNV_IM2COL = 4500
@@ -112,49 +112,99 @@ def _st_i(p: FP, i: Int, v: Int):
     p.unsafe_store(i, bitcast[DType.float32](Int32(v)))
 
 
-# ---------------------------------------------------------------- conv2d
+# ---------------------------------------------------------------- the depth axis (lane nn-conv3d, 2026-11-23)
+# Every descriptor the conv and pool bodies below read is x_cnn's block (CP_LEN words for a convolution,
+# PP_LEN for a pool) followed by RN_DEPTH_LEN depth words [D, KD, SD, PD, DD, OD]: the input depth, the
+# window's depth, its step, its padding (both ends), its dilation and the output depth. A 1-D or 2-D node
+# writes [1, 1, 1, 0, 1, 1] (autograd/rankn_conv.mojo rn_flat_depth): the depth loop runs once with z = 0,
+# the decodes skip their division by 1 (_uq), so a 2-D node's words are the same terms in the same order
+# as before the depth axis (the same bits). conv3d, max_pool3d and avg_pool3d are these same bodies with a
+# depth (AGENTS.md "One body per operation": there is no separate 3-D implementation).
+comptime RN_DEPTH_D = 0
+comptime RN_DEPTH_KD = 1
+comptime RN_DEPTH_SD = 2
+comptime RN_DEPTH_PD = 3
+comptime RN_DEPTH_DD = 4
+comptime RN_DEPTH_OD = 5
+comptime RN_DEPTH_LEN = 6
+
+# SABOTAGE ARMS (lane nn-conv3d), test builds only, never defaults: each perturbs the depth axis of one family so
+# checks/native_tests/nn_conv3d.mojo is shown to catch it; a node without depth (KD = 1) is untouched.
+# CONV: im2col reads the depth taps in reverse. POOL: the max pool skips its last depth tap and the average
+# pool's divisor leaves out the depth extent.
+comptime NN_CONV3D_SABOTAGE_CONV = is_defined["MOJOLEARN_NN_CONV3D_SABOTAGE_CONV"]()
+comptime NN_CONV3D_SABOTAGE_POOL = is_defined["MOJOLEARN_NN_CONV3D_SABOTAGE_POOL"]()
+
+
+@always_inline
+def _uq(a: Int, b: Int) -> Int:
+    """a // b, with no division when b is 1 (the depth extents of a flat node)."""
+    if b == 1:
+        return a
+    return _ud(a, b)
+
+
+@always_inline
+def _umq(a: Int, b: Int) -> Int:
+    """a % b, with no division when b is 1."""
+    if b == 1:
+        return 0
+    return _um(a, b)
+
+
+# ---------------------------------------------------------------- conv2d / conv3d
 @always_inline
 def op_rnv_im2col(t: Int, a: Args):
-    """cols[r, q] (r = (n OH + oh) OW + ow, q = (c KH + kh) KW + kw) = the
-    input pixel under that tap, or +0.0 in the zero padding: x_cnn
-    im2col_val. p0 x (NCHW), p1 cols; p11 the CP_* descriptor."""
+    """cols[r, q] (r = ((n OD + od) OH + oh) OW + ow, q = ((c KD + kd) KH + kh) KW + kw) = the
+    input voxel under that tap, or +0.0 in the zero padding: x_cnn im2col_val with the depth axis.
+    p0 x (NCDHW; NCHW when D = 1), p1 cols; p11 the CP_* descriptor and its depth words."""
     var d = a.p11
     var C = rn_word(d, CP_C); var H = rn_word(d, CP_H); var W = rn_word(d, CP_W)
     var KH = rn_word(d, CP_KH); var KW = rn_word(d, CP_KW)
     var OH = rn_word(d, CP_OH); var OW = rn_word(d, CP_OW)
-    var ckk = C * KH * KW
+    var D = rn_word(d, CP_LEN + RN_DEPTH_D); var KD = rn_word(d, CP_LEN + RN_DEPTH_KD)
+    var OD = rn_word(d, CP_LEN + RN_DEPTH_OD)
+    var kk = KH * KW
+    var ckk = C * KD * kk
     var r = _ud(t, ckk)
     var q = t - r * ckk
-    var n = _ud(r, OH * OW)
-    var rem = r - n * OH * OW
+    var sp = OH * OW
+    var nd = _ud(r, sp)
+    var rem = r - nd * sp
     var oh = _ud(rem, OW)
     var ow = rem - oh * OW
-    var c = _ud(q, KH * KW)
-    var k = q - c * KH * KW
+    var n = _uq(nd, OD)
+    var od = nd - n * OD
+    var cd = _ud(q, kk)
+    var k = q - cd * kk
     var kh = _ud(k, KW)
     var kw = k - kh * KW
+    var c = _uq(cd, KD)
+    var kd = cd - c * KD
+    comptime if NN_CONV3D_SABOTAGE_CONV:
+        kd = KD - 1 - kd
+    var z = od * rn_word(d, CP_LEN + RN_DEPTH_SD) - rn_word(d, CP_LEN + RN_DEPTH_PD) + kd * rn_word(d, CP_LEN + RN_DEPTH_DD)
     var h = oh * rn_word(d, CP_SH) - rn_word(d, CP_PH) + kh * rn_word(d, CP_DH)
     var w = ow * rn_word(d, CP_SW) - rn_word(d, CP_PW) + kw * rn_word(d, CP_DW)
     var v = Float32(0)
-    if h >= 0 and h < H and w >= 0 and w < W:
-        v = ftz(a.p0.unsafe_load(((n * C + c) * H + h) * W + w))
+    if z >= 0 and z < D and h >= 0 and h < H and w >= 0 and w < W:
+        v = ftz(a.p0.unsafe_load((((n * C + c) * D + z) * H + h) * W + w))
     a.p1.unsafe_store(t, v)
 
 
 @always_inline
 def op_rnv_conv_out(t: Int, a: Args):
-    """out[n, oc, oh, ow] (NCHW) = y2[r, oc] (+ bias[oc] when CP_BIAS), one
-    add: x_cnn conv_out_at / conv_out_val. p0 y2 [rows, OC], p1 bias (read
-    only when CP_BIAS != 0), p2 out; p11 the CP_* descriptor."""
+    """out[n, oc, s] (s the flat output position, OD OH OW of them) = y2[n S + s, oc] (+ bias[oc] when
+    CP_BIAS), one add: x_cnn conv_out_at / conv_out_val. p0 y2 [rows, OC], p1 bias (read only when
+    CP_BIAS != 0), p2 out; p11 the CP_* descriptor and its depth words."""
     var d = a.p11
-    var OC = rn_word(d, CP_OC); var OH = rn_word(d, CP_OH); var OW = rn_word(d, CP_OW)
-    var ow = _um(t, OW)
-    var s = _ud(t, OW)
-    var oh = _um(s, OH)
-    s = _ud(s, OH)
+    var OC = rn_word(d, CP_OC)
+    var S = rn_word(d, CP_LEN + RN_DEPTH_OD) * rn_word(d, CP_OH) * rn_word(d, CP_OW)
+    var sp = _um(t, S)
+    var s = _ud(t, S)
     var oc = _um(s, OC)
     var n = _ud(s, OC)
-    var r = (n * OH + oh) * OW + ow
+    var r = n * S + sp
     var v = ftz(a.p0.unsafe_load(r * OC + oc))
     var with_bias = rn_word(d, CP_BIAS) != 0
     comptime if SEQ_BLOCKS_SABOTAGE_CONV:
@@ -166,23 +216,23 @@ def op_rnv_conv_out(t: Int, a: Args):
 
 @always_inline
 def op_rnv_conv_grows(t: Int, a: Args):
-    """grow[r, oc] = dout[n, oc, oh, ow]: NCHW to the GEMM's row layout, a
-    copy (x_cnn dout_rows_at). p0 dout, p1 grow; p11 the CP_* descriptor."""
+    """grow[r, oc] = dout[n, oc, s] (r = n S + s): the output layout to the GEMM's rows, a copy
+    (x_cnn dout_rows_at). p0 dout, p1 grow; p11 the CP_* descriptor and its depth words."""
     var d = a.p11
-    var OC = rn_word(d, CP_OC); var OH = rn_word(d, CP_OH); var OW = rn_word(d, CP_OW)
+    var OC = rn_word(d, CP_OC)
+    var S = rn_word(d, CP_LEN + RN_DEPTH_OD) * rn_word(d, CP_OH) * rn_word(d, CP_OW)
     var r = _ud(t, OC)
     var oc = t - r * OC
-    var n = _ud(r, OH * OW)
-    var rem = r - n * OH * OW
-    a.p1.unsafe_store(t, ftz(a.p0.unsafe_load((n * OC + oc) * OH * OW + rem)))
+    var n = _ud(r, S)
+    var rem = r - n * S
+    a.p1.unsafe_store(t, ftz(a.p0.unsafe_load((n * OC + oc) * S + rem)))
 
 
 @always_inline
 def op_rnv_col2im(t: Int, a: Args):
-    """dx[n, c, h, w] = the sum of every dcols entry whose tap reads this
-    pixel, gathered in (kh, kw) ascending order from +0.0 (x_cnn col2im_at,
-    DEVIATION 5700). p0 dcols [rows, C KH KW], p1 dx; p11 the CP_*
-    descriptor."""
+    """dx[n, c, z, h, w] = the sum of every dcols entry whose tap reads this voxel, gathered in
+    (kd, kh, kw) ascending order from +0.0 (x_cnn col2im_at, DEVIATION 5700, with the depth axis).
+    p0 dcols [rows, C KD KH KW], p1 dx; p11 the CP_* descriptor and its depth words."""
     var d = a.p11
     var C = rn_word(d, CP_C); var H = rn_word(d, CP_H); var W = rn_word(d, CP_W)
     var KH = rn_word(d, CP_KH); var KW = rn_word(d, CP_KW)
@@ -190,40 +240,52 @@ def op_rnv_col2im(t: Int, a: Args):
     var SH = rn_word(d, CP_SH); var SW = rn_word(d, CP_SW)
     var PH = rn_word(d, CP_PH); var PW = rn_word(d, CP_PW)
     var DH = rn_word(d, CP_DH); var DW = rn_word(d, CP_DW)
+    var D = rn_word(d, CP_LEN + RN_DEPTH_D); var KD = rn_word(d, CP_LEN + RN_DEPTH_KD)
+    var SD = rn_word(d, CP_LEN + RN_DEPTH_SD); var PD = rn_word(d, CP_LEN + RN_DEPTH_PD)
+    var DD = rn_word(d, CP_LEN + RN_DEPTH_DD); var OD = rn_word(d, CP_LEN + RN_DEPTH_OD)
     var w = _um(t, W)
     var s = _ud(t, W)
     var h = _um(s, H)
     s = _ud(s, H)
+    var z = _umq(s, D)
+    s = _uq(s, D)
     var c = _um(s, C)
     var n = _ud(s, C)
-    var ckk = C * KH * KW
+    var ckk = C * KD * KH * KW
     var acc = Float32(0)
-    for kh in range(KH):
-        var th = h + PH - kh * DH
-        if th < 0 or _um(th, SH) != 0:
+    for kd in range(KD):
+        var tz = z + PD - kd * DD
+        if tz < 0 or _umq(tz, SD) != 0:
             continue
-        var oh = _ud(th, SH)
-        if oh >= OH:
+        var od = _uq(tz, SD)
+        if od >= OD:
             continue
-        for kw in range(KW):
-            var tw = w + PW - kw * DW
-            if tw < 0 or _um(tw, SW) != 0:
+        for kh in range(KH):
+            var th = h + PH - kh * DH
+            if th < 0 or _um(th, SH) != 0:
                 continue
-            var ow = _ud(tw, SW)
-            if ow >= OW:
+            var oh = _ud(th, SH)
+            if oh >= OH:
                 continue
-            var r = (n * OH + oh) * OW + ow
-            acc = ftz(acc + ftz(a.p0.unsafe_load(r * ckk + (c * KH + kh) * KW + kw)))
+            for kw in range(KW):
+                var tw = w + PW - kw * DW
+                if tw < 0 or _um(tw, SW) != 0:
+                    continue
+                var ow = _ud(tw, SW)
+                if ow >= OW:
+                    continue
+                var r = ((n * OD + od) * OH + oh) * OW + ow
+                acc = ftz(acc + ftz(a.p0.unsafe_load(r * ckk + ((c * KD + kd) * KH + kh) * KW + kw)))
     a.p1.unsafe_store(t, acc)
 
 
-# ---------------------------------------------------------------- pools
+# ---------------------------------------------------------------- pools (2-D and 3-D)
 @always_inline
 def op_rnv_maxpool_fwd(t: Int, a: Args):
-    """out[n, c, oh, ow] = the max over the window, taps in (kh, kw)
-    ascending order; the first maximum wins a tie, a NaN wins (x_cnn
-    _maxpool_fwd, DEVIATION 5706). The winner's flat h W + w goes to p2 as
-    an int32 pattern. p0 x, p1 out, p2 winners; p11 the PP_* descriptor."""
+    """out[n, c, od, oh, ow] = the max over the window, taps in (kd, kh, kw) ascending order; the
+    first maximum wins a tie, a NaN wins (x_cnn _maxpool_fwd, DEVIATION 5706). The winner's flat
+    (z H + h) W + w goes to p2 as an int32 pattern. p0 x, p1 out, p2 winners; p11 the PP_*
+    descriptor and its depth words."""
     var d = a.p11
     var H = rn_word(d, PP_H); var W = rn_word(d, PP_W)
     var KH = rn_word(d, PP_KH); var KW = rn_word(d, PP_KW)
@@ -231,34 +293,47 @@ def op_rnv_maxpool_fwd(t: Int, a: Args):
     var SH = rn_word(d, PP_SH); var SW = rn_word(d, PP_SW)
     var PH = rn_word(d, PP_PH); var PW = rn_word(d, PP_PW)
     var DH = rn_word(d, PP_DH); var DW = rn_word(d, PP_DW)
+    var D = rn_word(d, PP_LEN + RN_DEPTH_D); var KD = rn_word(d, PP_LEN + RN_DEPTH_KD)
+    var SD = rn_word(d, PP_LEN + RN_DEPTH_SD); var PD = rn_word(d, PP_LEN + RN_DEPTH_PD)
+    var DD = rn_word(d, PP_LEN + RN_DEPTH_DD); var OD = rn_word(d, PP_LEN + RN_DEPTH_OD)
     var ow = _um(t, OW)
     var s = _ud(t, OW)
     var oh = _um(s, OH)
-    var nc = _ud(s, OH)
-    var base = nc * H * W
+    s = _ud(s, OH)
+    var nc = _uq(s, OD)
+    var od = s - nc * OD
+    var base = nc * D * H * W
     var best = Float32(0)
     var bi = -1
-    for kh in range(KH):
-        var h = oh * SH - PH + kh * DH
-        if h < 0 or h >= H:
+    var kd_end = KD
+    comptime if NN_CONV3D_SABOTAGE_POOL:
+        if KD > 1:
+            kd_end = KD - 1
+    for kd in range(kd_end):
+        var z = od * SD - PD + kd * DD
+        if z < 0 or z >= D:
             continue
-        for kw in range(KW):
-            var w = ow * SW - PW + kw * DW
-            if w < 0 or w >= W:
+        for kh in range(KH):
+            var h = oh * SH - PH + kh * DH
+            if h < 0 or h >= H:
                 continue
-            var v = ftz(a.p0.unsafe_load(base + h * W + w))
-            if bi < 0 or v > best or v != v:
-                best = v
-                bi = h * W + w
+            for kw in range(KW):
+                var w = ow * SW - PW + kw * DW
+                if w < 0 or w >= W:
+                    continue
+                var v = ftz(a.p0.unsafe_load(base + (z * H + h) * W + w))
+                if bi < 0 or v > best or v != v:
+                    best = v
+                    bi = (z * H + h) * W + w
     a.p1.unsafe_store(t, best)
     _st_i(a.p2, t, bi)
 
 
 @always_inline
 def op_rnv_maxpool_vjp(t: Int, a: Args):
-    """dx[n, c, h, w] = the sum of dout over every window whose winner is
-    this pixel, gathered in (kh, kw) ascending order from +0.0 (x_cnn
-    maxpool_bwd_val). p0 dout, p1 winners, p2 dx; p11 the PP_* descriptor."""
+    """dx[n, c, z, h, w] = the sum of dout over every window whose winner is this voxel, gathered
+    in (kd, kh, kw) ascending order from +0.0 (x_cnn maxpool_bwd_val). p0 dout, p1 winners, p2 dx;
+    p11 the PP_* descriptor and its depth words."""
     var d = a.p11
     var H = rn_word(d, PP_H); var W = rn_word(d, PP_W)
     var KH = rn_word(d, PP_KH); var KW = rn_word(d, PP_KW)
@@ -266,132 +341,180 @@ def op_rnv_maxpool_vjp(t: Int, a: Args):
     var SH = rn_word(d, PP_SH); var SW = rn_word(d, PP_SW)
     var PH = rn_word(d, PP_PH); var PW = rn_word(d, PP_PW)
     var DH = rn_word(d, PP_DH); var DW = rn_word(d, PP_DW)
+    var D = rn_word(d, PP_LEN + RN_DEPTH_D); var KD = rn_word(d, PP_LEN + RN_DEPTH_KD)
+    var SD = rn_word(d, PP_LEN + RN_DEPTH_SD); var PD = rn_word(d, PP_LEN + RN_DEPTH_PD)
+    var DD = rn_word(d, PP_LEN + RN_DEPTH_DD); var OD = rn_word(d, PP_LEN + RN_DEPTH_OD)
     var w = _um(t, W)
     var s = _ud(t, W)
     var h = _um(s, H)
-    var nc = _ud(s, H)
-    var me = h * W + w
+    s = _ud(s, H)
+    var nc = _uq(s, D)
+    var z = s - nc * D
+    var me = (z * H + h) * W + w
     var acc = Float32(0)
-    if KH == SH and KW == SW and PH == 0 and PW == 0 and DH == 1 and DW == 1:
-        # tiling windows: the one window holding this pixel (the loop below
+    if (KH == SH and KW == SW and KD == SD and PH == 0 and PW == 0 and PD == 0
+            and DH == 1 and DW == 1 and DD == 1):
+        # tiling windows: the one window holding this voxel (the loop below
         # visits it and no other)
+        var od1 = _uq(z, KD)
         var oh1 = _ud(h, KH)
         var ow1 = _ud(w, KW)
-        if oh1 < OH and ow1 < OW:
-            var o1 = (nc * OH + oh1) * OW + ow1
+        if od1 < OD and oh1 < OH and ow1 < OW:
+            var o1 = ((nc * OD + od1) * OH + oh1) * OW + ow1
             if _ld_i(a.p1, o1) == me:
                 acc = ftz(acc + ftz(a.p0.unsafe_load(o1)))
         a.p2.unsafe_store(t, acc)
         return
-    for kh in range(KH):
-        var th = h + PH - kh * DH
-        if th < 0 or _um(th, SH) != 0:
+    for kd in range(KD):
+        var tz = z + PD - kd * DD
+        if tz < 0 or _umq(tz, SD) != 0:
             continue
-        var oh = _ud(th, SH)
-        if oh >= OH:
+        var od = _uq(tz, SD)
+        if od >= OD:
             continue
-        for kw in range(KW):
-            var tw = w + PW - kw * DW
-            if tw < 0 or _um(tw, SW) != 0:
+        for kh in range(KH):
+            var th = h + PH - kh * DH
+            if th < 0 or _um(th, SH) != 0:
                 continue
-            var ow = _ud(tw, SW)
-            if ow >= OW:
+            var oh = _ud(th, SH)
+            if oh >= OH:
                 continue
-            var o = (nc * OH + oh) * OW + ow
-            if _ld_i(a.p1, o) == me:
-                acc = ftz(acc + ftz(a.p0.unsafe_load(o)))
+            for kw in range(KW):
+                var tw = w + PW - kw * DW
+                if tw < 0 or _um(tw, SW) != 0:
+                    continue
+                var ow = _ud(tw, SW)
+                if ow >= OW:
+                    continue
+                var o = ((nc * OD + od) * OH + oh) * OW + ow
+                if _ld_i(a.p1, o) == me:
+                    acc = ftz(acc + ftz(a.p0.unsafe_load(o)))
     a.p2.unsafe_store(t, acc)
 
 
 @always_inline
-def _avg_divisor(oh: Int, ow: Int, d: FP) -> Int:
-    """x_cnn _avg_divisor: the window clipped to the padded input, or to the
+def _avg_divisor(od: Int, oh: Int, ow: Int, d: FP) -> Int:
+    """x_cnn _avg_divisor with the depth axis: the window clipped to the padded input, or to the
     input itself when count_include_pad is 0; divisor_override when set."""
     if rn_word(d, PP_DIVOVR) > 0:
         return rn_word(d, PP_DIVOVR)
     var H = rn_word(d, PP_H); var W = rn_word(d, PP_W)
     var PH = rn_word(d, PP_PH); var PW = rn_word(d, PP_PW)
+    var D = rn_word(d, PP_LEN + RN_DEPTH_D); var PD = rn_word(d, PP_LEN + RN_DEPTH_PD)
+    var ds = od * rn_word(d, PP_LEN + RN_DEPTH_SD) - PD
     var hs = oh * rn_word(d, PP_SH) - PH
     var ws = ow * rn_word(d, PP_SW) - PW
+    var de = min(ds + rn_word(d, PP_LEN + RN_DEPTH_KD), D + PD)
     var he = min(hs + rn_word(d, PP_KH), H + PH)
     var we = min(ws + rn_word(d, PP_KW), W + PW)
+    var depth: Int
+    var plane: Int
     if rn_word(d, PP_INCPAD) != 0:
-        return (he - hs) * (we - ws)
-    return (min(he, H) - max(hs, 0)) * (min(we, W) - max(ws, 0))
+        depth = de - ds
+        plane = (he - hs) * (we - ws)
+    else:
+        depth = min(de, D) - max(ds, 0)
+        plane = (min(he, H) - max(hs, 0)) * (min(we, W) - max(ws, 0))
+    comptime if NN_CONV3D_SABOTAGE_POOL:
+        if rn_word(d, PP_LEN + RN_DEPTH_KD) > 1:
+            depth = 1
+    return depth * plane
 
 
 @always_inline
 def op_rnv_avgpool_fwd(t: Int, a: Args):
-    """out = (the window's sum in (kh, kw) ascending order from +0.0) /
-    divisor, one correctly rounded division (x_cnn avgpool_fwd_at,
-    DEVIATION 5707). p0 x, p1 out; p11 the PP_* descriptor."""
+    """out = (the window's sum in (kd, kh, kw) ascending order from +0.0) / divisor, one correctly
+    rounded division (x_cnn avgpool_fwd_at, DEVIATION 5707). p0 x, p1 out; p11 the PP_* descriptor
+    and its depth words."""
     var d = a.p11
     var H = rn_word(d, PP_H); var W = rn_word(d, PP_W)
     var KH = rn_word(d, PP_KH); var KW = rn_word(d, PP_KW)
     var OH = rn_word(d, PP_OH); var OW = rn_word(d, PP_OW)
     var SH = rn_word(d, PP_SH); var SW = rn_word(d, PP_SW)
     var PH = rn_word(d, PP_PH); var PW = rn_word(d, PP_PW)
+    var D = rn_word(d, PP_LEN + RN_DEPTH_D); var KD = rn_word(d, PP_LEN + RN_DEPTH_KD)
+    var SD = rn_word(d, PP_LEN + RN_DEPTH_SD); var PD = rn_word(d, PP_LEN + RN_DEPTH_PD)
+    var OD = rn_word(d, PP_LEN + RN_DEPTH_OD)
     var ow = _um(t, OW)
     var s = _ud(t, OW)
     var oh = _um(s, OH)
-    var nc = _ud(s, OH)
-    var base = nc * H * W
+    s = _ud(s, OH)
+    var nc = _uq(s, OD)
+    var od = s - nc * OD
+    var base = nc * D * H * W
     var acc = Float32(0)
-    for kh in range(KH):
-        var h = oh * SH - PH + kh
-        if h < 0 or h >= H:
+    for kd in range(KD):
+        var z = od * SD - PD + kd
+        if z < 0 or z >= D:
             continue
-        for kw in range(KW):
-            var w = ow * SW - PW + kw
-            if w < 0 or w >= W:
+        for kh in range(KH):
+            var h = oh * SH - PH + kh
+            if h < 0 or h >= H:
                 continue
-            acc = ftz(acc + ftz(a.p0.unsafe_load(base + h * W + w)))
-    a.p1.unsafe_store(t, ftz(identical_div(acc, Float32(_avg_divisor(oh, ow, d)))))
+            for kw in range(KW):
+                var w = ow * SW - PW + kw
+                if w < 0 or w >= W:
+                    continue
+                acc = ftz(acc + ftz(a.p0.unsafe_load(base + (z * H + h) * W + w)))
+    a.p1.unsafe_store(t, ftz(identical_div(acc, Float32(_avg_divisor(od, oh, ow, d)))))
 
 
 @always_inline
 def op_rnv_avgpool_vjp(t: Int, a: Args):
-    """dx[n, c, h, w] = the sum over every window holding this pixel of
-    dout / divisor, gathered in (kh, kw) ascending order from +0.0 (x_cnn
-    avgpool_bwd_at). p0 dout, p1 dx; p11 the PP_* descriptor."""
+    """dx[n, c, z, h, w] = the sum over every window holding this voxel of dout / divisor, gathered
+    in (kd, kh, kw) ascending order from +0.0 (x_cnn avgpool_bwd_at). p0 dout, p1 dx; p11 the PP_*
+    descriptor and its depth words."""
     var d = a.p11
     var H = rn_word(d, PP_H); var W = rn_word(d, PP_W)
     var KH = rn_word(d, PP_KH); var KW = rn_word(d, PP_KW)
     var OH = rn_word(d, PP_OH); var OW = rn_word(d, PP_OW)
     var SH = rn_word(d, PP_SH); var SW = rn_word(d, PP_SW)
     var PH = rn_word(d, PP_PH); var PW = rn_word(d, PP_PW)
+    var D = rn_word(d, PP_LEN + RN_DEPTH_D); var KD = rn_word(d, PP_LEN + RN_DEPTH_KD)
+    var SD = rn_word(d, PP_LEN + RN_DEPTH_SD); var PD = rn_word(d, PP_LEN + RN_DEPTH_PD)
+    var OD = rn_word(d, PP_LEN + RN_DEPTH_OD)
     var w = _um(t, W)
     var s = _ud(t, W)
     var h = _um(s, H)
-    var nc = _ud(s, H)
+    s = _ud(s, H)
+    var nc = _uq(s, D)
+    var z = s - nc * D
     var acc = Float32(0)
-    if KH == SH and KW == SW and PH == 0 and PW == 0:
-        # tiling windows: the one window holding this pixel
+    if KH == SH and KW == SW and KD == SD and PH == 0 and PW == 0 and PD == 0:
+        # tiling windows: the one window holding this voxel
+        var od1 = _uq(z, KD)
         var oh1 = _ud(h, KH)
         var ow1 = _ud(w, KW)
-        if oh1 < OH and ow1 < OW:
-            var o1 = (nc * OH + oh1) * OW + ow1
-            var g1 = ftz(identical_div(ftz(a.p0.unsafe_load(o1)), Float32(_avg_divisor(oh1, ow1, d))))
+        if od1 < OD and oh1 < OH and ow1 < OW:
+            var o1 = ((nc * OD + od1) * OH + oh1) * OW + ow1
+            var g1 = ftz(identical_div(ftz(a.p0.unsafe_load(o1)), Float32(_avg_divisor(od1, oh1, ow1, d))))
             acc = ftz(acc + g1)
         a.p1.unsafe_store(t, acc)
         return
-    for kh in range(KH):
-        var th = h + PH - kh
-        if th < 0 or _um(th, SH) != 0:
+    for kd in range(KD):
+        var tz = z + PD - kd
+        if tz < 0 or _umq(tz, SD) != 0:
             continue
-        var oh = _ud(th, SH)
-        if oh >= OH:
+        var od = _uq(tz, SD)
+        if od >= OD:
             continue
-        for kw in range(KW):
-            var tw = w + PW - kw
-            if tw < 0 or _um(tw, SW) != 0:
+        for kh in range(KH):
+            var th = h + PH - kh
+            if th < 0 or _um(th, SH) != 0:
                 continue
-            var ow = _ud(tw, SW)
-            if ow >= OW:
+            var oh = _ud(th, SH)
+            if oh >= OH:
                 continue
-            var o = (nc * OH + oh) * OW + ow
-            var g = ftz(identical_div(ftz(a.p0.unsafe_load(o)), Float32(_avg_divisor(oh, ow, d))))
-            acc = ftz(acc + g)
+            for kw in range(KW):
+                var tw = w + PW - kw
+                if tw < 0 or _um(tw, SW) != 0:
+                    continue
+                var ow = _ud(tw, SW)
+                if ow >= OW:
+                    continue
+                var o = ((nc * OD + od) * OH + oh) * OW + ow
+                var g = ftz(identical_div(ftz(a.p0.unsafe_load(o)), Float32(_avg_divisor(od, oh, ow, d))))
+                acc = ftz(acc + g)
     a.p1.unsafe_store(t, acc)
 
 

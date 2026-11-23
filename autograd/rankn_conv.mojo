@@ -34,7 +34,7 @@ from autograd.rankn import ShapeN, RN_MAX_RANK
 from autograd.fold import fold_partials
 from autograd.ops import AXIS_ROWS
 from autograd.rankn_conv_ops import (
-    OP_RNV_IM2COL, OP_RNV_CONV_OUT, OP_RNV_MAXPOOL_FWD, OP_RNV_AVGPOOL_FWD,
+    RN_DEPTH_LEN, OP_RNV_IM2COL, OP_RNV_CONV_OUT, OP_RNV_MAXPOOL_FWD, OP_RNV_AVGPOOL_FWD,
     OP_RNV_BN_PREP, OP_RNV_BN_SUM, OP_RNV_BN_MEAN, OP_RNV_BN_SQ, OP_RNV_BN_VAR, OP_RNV_BN_APPLY,
 )
 from autograd.rules_conv2d import (
@@ -62,11 +62,37 @@ def _dims4(tape: Tape, x: Tensor, what: String) raises -> ShapeN:
     return s
 
 
-def _words(block: List[Int32]) -> List[Int]:
-    var words = List[Int](capacity=len(block))
+def rn_flat_depth() -> List[Int]:
+    """The depth words of a node without a depth axis (1-D and 2-D): D 1, KD 1, SD 1, PD 0, DD 1,
+    OD 1 (autograd/rankn_conv_ops.mojo RN_DEPTH_*; lane nn-conv3d)."""
+    var out: List[Int] = [1, 1, 1, 0, 1, 1]
+    return out^
+
+
+def _words(block: List[Int32], depth: List[Int]) -> List[Int]:
+    """The descriptor of a conv or pool node: x_cnn's parameter block, then its RN_DEPTH_LEN depth words."""
+    var words = List[Int](capacity=len(block) + RN_DEPTH_LEN)
     for v in block:  # small-loop(len(block): the CP_/PP_ parameter block, at most 18 words)
         words.append(Int(v))
+    for v in depth:  # small-loop(RN_DEPTH_LEN = 6 depth words)
+        words.append(v)
     return words^
+
+
+def _shape5(a: Int, b: Int, c: Int, d: Int, e: Int) -> ShapeN:
+    var dims = Array[Int, RN_MAX_RANK](fill=1)
+    dims[0] = a
+    dims[1] = b
+    dims[2] = c
+    dims[3] = d
+    dims[4] = e
+    return ShapeN(5, dims)
+
+
+def _conv_out(N: Int, OC: Int, OD: Int, OH: Int, OW: Int, vol: Bool) -> ShapeN:
+    if vol:
+        return _shape5(N, OC, OD, OH, OW)
+    return _shape4(N, OC, OH, OW)
 
 
 def rankn_conv2d[E: Exec](
@@ -136,42 +162,63 @@ def rankn_conv1d[E: Exec](
 def _rankn_conv[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor],
     stride_h: Int, stride_w: Int, padding_h: Int, padding_w: Int, groups: Int,
+    dilation_h: Int = 1, dilation_w: Int = 1, stride_d: Int = 1, padding_d: Int = 0, dilation_d: Int = 1,
 ) raises -> Tensor:
     """rankn_conv2d with the height and width steps and pads given apart (x_cnn's CP_* words hold
-    them apart); the one convolution of the tape, used by conv2d and conv1d."""
-    var sx = _dims4(tape, x, "conv2d: x")
-    var sw = _dims4(tape, weight, "conv2d: weight")
+    them apart); the one convolution of the tape, used by conv1d, conv2d and conv3d. A rank-5 x
+    (N, C, D, H, W) with a rank-5 weight (OC, C // groups, KD, KH, KW) is the 3-D convolution
+    (lane nn-conv3d): the same im2col, GEMM and output launches with the depth words set."""
+    var sx = tape.shape_of(x)
+    var sw = tape.shape_of(weight)
+    var vol = sx.ndim == 5
+    var what = String("conv3d") if vol else String("conv2d")
+    if sx.ndim != 4 and not vol:
+        raise Error("conv2d: x must be a rank-4 tensor")
+    if sw.ndim != sx.ndim:
+        raise Error(what + ": weight must be a rank-" + String(sx.ndim) + " tensor")
+    var o = 1 if vol else 0
     var N = sx.d[0]
     var C = sx.d[1]
-    var H = sx.d[2]
-    var W = sx.d[3]
+    var D = sx.d[2] if vol else 1
+    var H = sx.d[2 + o]
+    var W = sx.d[3 + o]
     var OC = sw.d[0]
-    var KH = sw.d[2]
-    var KW = sw.d[3]
+    var KD = sw.d[2] if vol else 1
+    var KH = sw.d[2 + o]
+    var KW = sw.d[3 + o]
     if groups < 1:
-        raise Error("conv2d: groups must be positive")
+        raise Error(what + ": groups must be positive")
     if groups == 1 and sw.d[1] != C:
-        raise Error("conv2d: weight's second dimension must equal x's channels")
+        raise Error(what + ": weight's second dimension must equal x's channels")
     if groups > 1:
         if C % groups != 0 or OC % groups != 0:
-            raise Error("conv2d: groups must divide the input channels and out_channels")
+            raise Error(what + ": groups must divide the input channels and out_channels")
         if sw.d[1] * groups != C:
-            raise Error("conv2d: weight's second dimension must equal x's channels // groups")
-    if stride_h <= 0 or stride_w <= 0 or padding_h < 0 or padding_w < 0:
-        raise Error("conv2d: stride must be positive and padding non-negative")
+            raise Error(what + ": weight's second dimension must equal x's channels // groups")
+    if stride_h <= 0 or stride_w <= 0 or padding_h < 0 or padding_w < 0 or stride_d <= 0 or padding_d < 0:
+        raise Error(what + ": stride must be positive and padding non-negative")
+    if dilation_h < 1 or dilation_w < 1 or dilation_d < 1:
+        raise Error(what + ": dilation must be positive")
     var has_bias = Bool(bias)
     if has_bias:
         var b = bias.value()
         if tape.rows(b) * tape.cols(b) != OC:
-            raise Error("conv2d: bias must hold out_channels values")
-    var raw: List[Int] = [N, C, H, W, OC, KH, KW, stride_h, stride_w, padding_h, padding_w, 1, 1, 0, 0,
-                          1 if has_bias else 0, 0]
+            raise Error(what + ": bias must hold out_channels values")
+    var raw: List[Int] = [N, C, H, W, OC, KH, KW, stride_h, stride_w, padding_h, padding_w, dilation_h,
+                          dilation_w, 0, 0, 1 if has_bias else 0, 0]
     var block = conv_params(raw)
+    var depth = rn_flat_depth()
+    var OD = 1
+    if vol:
+        # the depth's output size by the same rule (x_cnn conv_params over the depth as its height)
+        var rawd: List[Int] = [N, C, D, 1, OC, KD, 1, stride_d, 1, padding_d, 0, dilation_d, 1, 0, 0, 0, 0]
+        OD = Int(conv_params(rawd)[CP_OH])
+        depth = [D, KD, stride_d, padding_d, dilation_d, OD]
     var OH = Int(block[CP_OH])
     var OW = Int(block[CP_OW])
-    var rows = N * OH * OW
-    var ckk = C * KH * KW
-    var desc = tape.descriptor(ex, _words(block))
+    var rows = N * OD * OH * OW
+    var ckk = C * KD * KH * KW
+    var desc = tape.descriptor(ex, _words(block, depth))
     var xv = tape.value_of(ex, x)
     var wv = tape.value_of(ex, weight)
     var bv = dummy_ptr()
@@ -190,17 +237,17 @@ def _rankn_conv[E: Exec](
         rn_conv_gemm(ex, y2, cols, wv, rows, OC, ckk, ckk, 1, 1, ckk)
     else:
         # y2[r, g OCg + o] = sum over group g's taps of cols x W (one launch)
-        var fdesc = tape.descriptor(ex, rn_conv_group_words(RNG_FWD, rows, C, OC, KH * KW, groups))
+        var fdesc = tape.descriptor(ex, rn_conv_group_words(RNG_FWD, rows, C, OC, KD * KH * KW, groups))
         rn_conv_group_gemm(ex, y2, cols, wv, fdesc, rows * OC)
-    # NCHW output (+ bias)
-    var out = tape.reserve(ex, N * OC * OH * OW)
+    # NCHW / NCDHW output (+ bias)
+    var out = tape.reserve(ex, N * OC * OD * OH * OW)
     var o = Args()
     o.p0 = y2
     if has_bias:
         o.p1 = bv
     o.p2 = out
     o.p11 = desc
-    ex.launch[OP_RNV_CONV_OUT](o, N * OC * OH * OW)
+    ex.launch[OP_RNV_CONV_OUT](o, N * OC * OD * OH * OW)
     var rec = tape.is_recording()
     var need_x = rec and tape.requires_grad(x)
     var need_w = rec and tape.requires_grad(weight)
@@ -215,15 +262,15 @@ def _rankn_conv[E: Exec](
     if groups > 1:
         # the VJP's two grouped products, described once here (shape words)
         if need_w:
-            saved.p6 = tape.descriptor(ex, rn_conv_group_words(RNG_DW, rows, C, OC, KH * KW, groups))
+            saved.p6 = tape.descriptor(ex, rn_conv_group_words(RNG_DW, rows, C, OC, KD * KH * KW, groups))
         if need_x:
-            saved.p7 = tape.descriptor(ex, rn_conv_group_words(RNG_DCOLS, rows, C, OC, KH * KW, groups))
+            saved.p7 = tape.descriptor(ex, rn_conv_group_words(RNG_DCOLS, rows, C, OC, KD * KH * KW, groups))
     saved.p11 = desc
     saved.i0 = 1 if has_bias else 0
     saved.i1 = rows
     saved.i2 = ckk
     saved.i3 = OC
-    saved.i4 = N * C * H * W
+    saved.i4 = sx.count()
     saved.i5 = 1 if need_x else 0
     saved.i6 = 1 if need_w else 0
     saved.i7 = 1 if need_b else 0
@@ -231,7 +278,7 @@ def _rankn_conv[E: Exec](
     var inputs: List[Tensor] = [x, weight]
     if has_bias:
         inputs.append(bias.value())
-    return tape.custom_nd(ex, inputs, out, _shape4(N, OC, OH, OW), RN_CONV2D, saved)
+    return tape.custom_nd(ex, inputs, out, _conv_out(N, OC, OD, OH, OW, vol), RN_CONV2D, saved)
 
 
 def _pool_block(sx: ShapeN, kernel_size: Int, stride: Int, padding: Int) raises -> List[Int32]:
@@ -282,7 +329,7 @@ def rankn_max_pool2d[E: Exec](
         The output, shape (N, C, OH, OW).
     """
     var sx = _dims4(tape, x, "max_pool2d: x")
-    return _max_pool(tape, ex, x, sx, _pool_block(sx, kernel_size, stride, padding))
+    return _max_pool(tape, ex, x, sx, _pool_block(sx, kernel_size, stride, padding), rn_flat_depth())
 
 
 def rankn_avg_pool2d[E: Exec](
@@ -305,14 +352,18 @@ def rankn_avg_pool2d[E: Exec](
         The output, shape (N, C, OH, OW).
     """
     var sx = _dims4(tape, x, "avg_pool2d: x")
-    return _avg_pool(tape, ex, x, sx, _pool_block(sx, kernel_size, stride, padding))
+    return _avg_pool(tape, ex, x, sx, _pool_block(sx, kernel_size, stride, padding), rn_flat_depth())
 
 
-def _max_pool[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, sx: ShapeN, block: List[Int32]) raises -> Tensor:
+def _max_pool[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, sx: ShapeN, block: List[Int32], depth: List[Int],
+) raises -> Tensor:
+    """The max pool node of x (N, C, H, W), or of x (N, C, D, H, W) with its depth words (lane nn-conv3d)."""
     var OH = Int(block[PP_OH])
     var OW = Int(block[PP_OW])
-    var count = sx.d[0] * sx.d[1] * OH * OW
-    var desc = tape.descriptor(ex, _words(block))
+    var OD = depth[5]
+    var count = sx.d[0] * sx.d[1] * OD * OH * OW
+    var desc = tape.descriptor(ex, _words(block, depth))
     var xv = tape.value_of(ex, x)
     var out = tape.reserve(ex, count)
     var winners = tape.reserve(ex, count)
@@ -327,14 +378,18 @@ def _max_pool[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, sx: ShapeN, block: 
     saved.p11 = desc
     saved.i4 = sx.count()
     saved.i5 = 1 if (tape.is_recording() and tape.requires_grad(x)) else 0
-    return tape.custom_nd(ex, [x], out, _shape4(sx.d[0], sx.d[1], OH, OW), RN_MAXPOOL2D, saved)
+    return tape.custom_nd(ex, [x], out, _conv_out(sx.d[0], sx.d[1], OD, OH, OW, sx.ndim == 5), RN_MAXPOOL2D, saved)
 
 
-def _avg_pool[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, sx: ShapeN, block: List[Int32]) raises -> Tensor:
+def _avg_pool[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, sx: ShapeN, block: List[Int32], depth: List[Int],
+) raises -> Tensor:
+    """The average pool node of x (N, C, H, W), or of x (N, C, D, H, W) with its depth words (lane nn-conv3d)."""
     var OH = Int(block[PP_OH])
     var OW = Int(block[PP_OW])
-    var count = sx.d[0] * sx.d[1] * OH * OW
-    var desc = tape.descriptor(ex, _words(block))
+    var OD = depth[5]
+    var count = sx.d[0] * sx.d[1] * OD * OH * OW
+    var desc = tape.descriptor(ex, _words(block, depth))
     var xv = tape.value_of(ex, x)
     var out = tape.reserve(ex, count)
     var a = Args()
@@ -346,7 +401,7 @@ def _avg_pool[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, sx: ShapeN, block: 
     saved.p11 = desc
     saved.i4 = sx.count()
     saved.i5 = 1 if (tape.is_recording() and tape.requires_grad(x)) else 0
-    return tape.custom_nd(ex, [x], out, _shape4(sx.d[0], sx.d[1], OH, OW), RN_AVGPOOL2D, saved)
+    return tape.custom_nd(ex, [x], out, _conv_out(sx.d[0], sx.d[1], OD, OH, OW, sx.ndim == 5), RN_AVGPOOL2D, saved)
 
 
 def _shape3(a: Int, b: Int, c: Int) -> ShapeN:
@@ -382,7 +437,7 @@ def rankn_max_pool1d[E: Exec](
         raise Error("max_pool1d: x must be a rank-3 tensor")
     var sx = _shape4(s3.d[0], s3.d[1], 1, s3.d[2])
     var x4 = tape.view_nd(ex, x, sx)
-    var y4 = _max_pool(tape, ex, x4, sx, _pool_block_1d(sx, kernel_size, stride, padding))
+    var y4 = _max_pool(tape, ex, x4, sx, _pool_block_1d(sx, kernel_size, stride, padding), rn_flat_depth())
     var sy = tape.shape_of(y4)
     return tape.view_nd(ex, y4, _shape3(sy.d[0], sy.d[1], sy.d[3]))
 
@@ -410,7 +465,7 @@ def rankn_avg_pool1d[E: Exec](
         raise Error("avg_pool1d: x must be a rank-3 tensor")
     var sx = _shape4(s3.d[0], s3.d[1], 1, s3.d[2])
     var x4 = tape.view_nd(ex, x, sx)
-    var y4 = _avg_pool(tape, ex, x4, sx, _pool_block_1d(sx, kernel_size, stride, padding))
+    var y4 = _avg_pool(tape, ex, x4, sx, _pool_block_1d(sx, kernel_size, stride, padding), rn_flat_depth())
     var sy = tape.shape_of(y4)
     return tape.view_nd(ex, y4, _shape3(sy.d[0], sy.d[1], sy.d[3]))
 
