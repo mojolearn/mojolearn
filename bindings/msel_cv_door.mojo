@@ -1466,7 +1466,7 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: 
         # outputs' labels in order, as a 1-D text result stays its list.
         var all_real = True
         for k in range(size):  # driver-loop: exact scalar identity checks before numeric conversion
-            if py_type(flat[k]) is b.bool or not msel_is_real(flat[k], context):
+            if not msel_is_real(flat[k], context):
                 all_real = False
                 break
         if not all_real:
