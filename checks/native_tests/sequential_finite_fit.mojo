@@ -6,14 +6,17 @@ mamba2-nan, 2026-11-23).
 The shipped recipe `example:seq-mamba2` (python/mojolearn/_verify_recipe.py: (8, 2) -> linear(321) -> softplus ->
 ssd_scan(1) -> flatten -> linear(1), mse, sgd lr 0.01, 2 epochs of batch 16 over 32 rows, no shuffle, seed 0)
 fitted and then predicted NaN on the CPU column, and `verify --recipe` called the two NaN answers IDENTICAL. The
+layer was right (its gradients match finite differences; adam fits the same model): SGD diverged (see _SSD_LR), so
+the recipe now has rms_norm after the scan and lr 0.001, and verify reports NaN answers as NOT FINITE. The
 layer checks (checks/native_tests/neural_blocks.mojo) run one forward and backward from fixed small parameters, so
 they never saw a fit from the model's own init. Here each unit is a model of the kind a user composes, built from
 the description words the Sequential door sends (training_sequential_common.SeqModel), and:
   - its seeded init (autograd/model.mojo model_init_params) predicts finite values on the test rows;
-  - a fit from that init with the recipe's compile and fit options (mse, sgd 0.01, 2 epochs, batch 16, 32 rows,
-    no shuffle, seed 0) gives a finite loss curve and finite parameters;
+  - a fit from that init with the recipe's compile and fit options (mse, sgd 0.01 (0.001 for ssd_scan, see
+    _SSD_LR), 2 epochs, batch 16, 32 rows, no shuffle, seed 0) gives a finite loss curve and finite parameters;
   - the fitted model predicts finite values on 16 test rows.
-Units: ssd_scan at 1 head (the recipe's model, exactly) and 2 heads, selective_scan, trapezoid_scan, lm_head,
+Units: ssd_scan at 1 head (the recipe's model, exactly: softplus -> ssd_scan(1) -> rms_norm, sgd 0.001) and 2
+heads, ssd_scan fitted with adam with and without the norm, selective_scan, trapezoid_scan, lm_head,
 attention (grouped-query, rotary, causal), rms_norm, gated (multiply of a silu branch), conv1d (Mamba's causal
 depthwise conv: padding, groups, narrow), max_pool1d, avg_pool1d, adaptive_avg_pool1d, max_pool2d, avg_pool2d,
 batch_norm1d, batch_norm2d, and rnn, lstm, gru with sequence lengths. Each unit prints one line
@@ -63,6 +66,13 @@ comptime _TEST = 16
 comptime _EPOCHS = 2
 comptime _BATCH = 16
 comptime _LR = 0.01
+#: the ssd_scan models' SGD rate. Without a norm the scan's output is large at init (softplus makes every B and C
+#: entry positive, so C . B sums 128 positive products): the recipe's first loss was 5744 and full-batch SGD
+#: diverged to NaN at lr 0.01, 1e-3 and 1e-4 alike (mamba2-nan-diag.out). With rms_norm after the scan (Mamba-2's
+#: norm before its output projection) the head sees 512 features of unit scale, so the mse Hessian's largest
+#: eigenvalue is about 2 * 512 and SGD is stable below about 2 / 1024: lr 0.01 still diverged (1.77 -> 49.7 ->
+#: 4062), lr 1e-3 falls monotonically (1.77 -> 1.20 over 12 steps).
+comptime _SSD_LR = 0.001
 comptime _UNITS = 21
 
 
@@ -126,19 +136,24 @@ def _head(mut m: SeqModel):
 
 def _unit(u: Int) raises -> _Unit:
     if u < 2:
-        # ssd_scan: (L, 2) -> linear(65 heads + 256) -> softplus (dt > 0) -> ssd_scan(heads); unit 0 is the recipe
+        # ssd_scan: (L, 2) -> linear(65 heads + 256) -> softplus (dt > 0) -> ssd_scan(heads) -> rms_norm, sgd 0.001;
+        # unit 0 is the shipped recipe example:seq-mamba2 exactly
         var heads = u + 1
         var steps = 8 if u == 0 else 4
         var m = _seq([steps, 2])
         m.layer(L_LINEAR, 65 * heads + 256, 1)
         m.layer(L_SOFTPLUS, 0)
         m.layer(L_SSD_SCAN, heads)
+        m.layer(L_RMS_NORM, f=1e-6)
         _head(m)
+        m.compile(LOSS_MSE, "sgd", _SSD_LR)
         return _Unit("ssd_scan_h" + String(heads), m^, steps * 2)
     if u == 2:
-        # selective_scan: (8, 4) -> linear(2 dim + 2 state) = [u | delta | B | C], dim 3, state 4
+        # selective_scan: (8, 4) -> linear(2 dim + 2 state) -> softplus (delta > 0) = [u | delta | B | C], dim 3,
+        # state 4
         var m = _seq([8, 4])
         m.layer(L_LINEAR, 14, 1)
+        m.layer(L_SOFTPLUS, 0)
         m.layer(L_SELECTIVE_SCAN, 4)
         _head(m)
         return _Unit("selective_scan", m^, 32)
@@ -238,17 +253,16 @@ def _unit(u: Int) raises -> _Unit:
         _head(m)
         var names: List[String] = ["rnn_lengths", "lstm_lengths", "gru_lengths"]
         return _Unit(names[cell], m^, 24, True, 8)
-    # u 19, 20: the recipe's model at heads 1 with another learning rate and with adam (the fit's other path)
+    # u 19, 20: the ssd_scan model fitted with adam (lr 1e-3), without the norm (19) and with it (20)
     var m = _seq([8, 2])
     m.layer(L_LINEAR, 321, 1)
     m.layer(L_SOFTPLUS, 0)
     m.layer(L_SSD_SCAN, 1)
+    if u == 20:
+        m.layer(L_RMS_NORM, f=1e-6)
     _head(m)
-    if u == 19:
-        m.compile(LOSS_MSE, "sgd", 0.1)
-        return _Unit("ssd_scan_h1_lr0.1", m^, 16)
     m.compile(LOSS_MSE, "adam", 1e-3)
-    return _Unit("ssd_scan_h1_adam", m^, 16)
+    return _Unit("ssd_scan_h1_adam" if u == 19 else "ssd_scan_h1_rms_adam", m^, 16)
 
 
 def _data(salt: Int, rows: Int, width: Int) -> List[Float32]:

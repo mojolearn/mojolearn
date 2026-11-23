@@ -949,10 +949,10 @@ def _est(name, params, data, seed=None, predict="predict", on="test", score=True
             "data": data, "outputs": {"digest": True, "predict": {"method": predict, "on": on}, "score": score}}
 
 
-def _seq(shape, layers, data_rows=32, epochs=2, batch=16, seed=0):
+def _seq(shape, layers, data_rows=32, epochs=2, batch=16, seed=0, lr=0.01):
     return {"format": FORMAT,
             "model": {"sequential": {"numeric_mode": "identical", "input_shape": list(shape), "layers": layers,
-                                     "compile": {"loss": "mse", "optimizer": "sgd", "lr": 0.01}}},
+                                     "compile": {"loss": "mse", "optimizer": "sgd", "lr": lr}}},
             "seed": seed, "fit": {"epochs": epochs, "batch_size": batch, "shuffle": False},
             "data": {"generator": "sequence", "args": {"rows": data_rows, "test_rows": 16, "shape": list(shape),
                                                         "seed": 7}},
@@ -978,7 +978,12 @@ EXAMPLES = {
         ["linear", 16], ["rms_norm"], ["attention", 2, {"kv_heads": 1}], ["residual", 0],
         ["rms_norm"], ["linear", 32], ["silu"], ["linear", 16], ["residual", 3],
         ["flatten"], ["linear", 1]]),
-    "seq-mamba2": _seq((8, 2), [["linear", 321], ["softplus"], ["ssd_scan", 1], ["flatten"], ["linear", 1]]),
+    # Mamba-2's core with its norm before the output: without rms_norm the scan's output is large at init (C . B
+    # sums 128 positive products after softplus; first loss 5744) and SGD diverged to NaN at lr 0.01, 1e-3 and
+    # 1e-4; with it the head sees 512 unit-scale features and SGD is stable below about 2 / (2 * 512), so lr 1e-3
+    # (lane mamba2-nan, 2026-11-23: checks/native_tests/sequential_finite_fit.mojo _SSD_LR has the loss curves)
+    "seq-mamba2": _seq((8, 2), [["linear", 321], ["softplus"], ["ssd_scan", 1], ["rms_norm"], ["flatten"],
+                                ["linear", 1]], lr=0.001),
     "seq-recurrent": _seq((8, 4), [["lstm", 8], ["gru", 6], ["flatten"], ["linear", 1]]),
     "seq-conv1d-residual": _seq((4, 8), [
         ["conv1d", 8, 3, {"padding": 1}], ["silu"],
