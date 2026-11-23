@@ -108,6 +108,15 @@ def _xl_cd_validate(fields: PythonObject, context: PythonObject) raises:
         raise Error("random_state=" + _repr(rs) + ": None, an int or a numpy random state")
 
 
+def xl_cd_host_fit_words(model: PythonObject) raises -> String:
+    """The fit refusal of an explicit host class (HostLasso, HostElasticNet:
+    it predicts a saved model only), in one place: the fit door below and
+    the member admission (providers/python/member_cd_boundary_door.mojo,
+    lane mf-lin6) raise it."""
+    return ("ImportError: mojolearn: no CPU implementation of the " + _name(model)
+            + " fit on the host class; the host model predicts a saved model only")
+
+
 def xl_cd_fit_unpack(model: PythonObject, fields: PythonObject, args: PythonObject, entries: XLinearOps,
                       context: PythonObject) raises -> XlCdFit:
     """ElasticNet.fit / Lasso.fit(X, y, sample_weight): the refusals in the
@@ -118,8 +127,7 @@ def xl_cd_fit_unpack(model: PythonObject, fields: PythonObject, args: PythonObje
     var nk = x_linear_keys()
     var b = _b()
     if entries.host_only:
-        raise Error("ImportError: mojolearn: no CPU implementation of the " + _name(model)
-                    + " fit on the host class; the host model predicts a saved model only")
+        raise Error(xl_cd_host_fit_words(model))
     _xl_cd_validate(fields, context)
     var source = args[0]
     if Bool(py=py_call(b.hasattr, source, PythonObject("toarray"))) or Bool(py=py_call(b.hasattr, source, PythonObject("tocsr"))):

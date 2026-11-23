@@ -235,8 +235,8 @@ def _xl_cv_spec(cv: PythonObject, context: PythonObject, mut handle: Int,
     split, lane mf-del5). Every cv the door's `_xl_cv_splits` splits is
     taken (lane mf-lin6: `msel_split_spec_read` strict, so a splitter
     setting the door refuses is refused here in the door's words, and one it
-    refuses only for some rows is refused by the fit's plan); nothing falls
-    back to the door. A user's own splitter object is refused before this,
+    refuses only for some rows is refused by the fit's plan); nothing answers
+    False. A user's own splitter object is refused before this,
     never called (`xl_cv_is_callback`); one that reaches here because the
     splitter table answered nothing is refused in the same words."""
     var b = _b()
