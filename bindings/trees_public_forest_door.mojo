@@ -1238,7 +1238,16 @@ def _et_fit_arrays(fields: PythonObject, config: ForestConfig, unweighted: Bool,
     _finite_or_refuse(x, device_scan, context)
     var request = forest_request(config, key, x.rows, x.cols, classes, x.address, y_addr, fit, unweighted)
     var result = _launch_on(key, fit, x.view(), request, device_scan, context)
-    _store_model(fields, result, x.cols)
+    forest_et_store_fit(fields, result, x.cols)
+
+
+def forest_et_store_fit(fields: PythonObject, result: PythonObject, cols: Int) raises:
+    """PACK of one extra-trees fit: the exported model (`result`, as
+    `forest_export_handle` returns it) and the four extra-trees fields of
+    its metadata. The door's ExtraTrees fits and RandomTreesEmbedding's
+    forest (bindings/trees_public_boost_door.mojo `_rte_fit`) store through
+    this."""
+    _store_model(fields, result, cols)
     var meta = result[5]
     var nk = trees_keys()
     py_setitem(fields, nk[].k_depth_cap_bound_, PythonObject(_truthy(meta[2])))
