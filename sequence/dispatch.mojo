@@ -199,6 +199,10 @@ from autograd.transformer_primitives_ops import OP_TFP_FIRST, OP_TFP_LAST, apply
 from autograd.ssm_ops import OP_SSM_FIRST, OP_SSM_LAST, apply_ssm
 # lane fix-d3-executor-loops: the program loop's control ops (autograd/program_loop.mojo), 1800..1809
 from autograd.program_loop import OP_LOOP_FIRST, OP_LOOP_LAST, apply_loop
+# nn-losses-2 begin
+# lane nn-losses-2: the ctc loss's row scans and its target pack (autograd/nn_ctc_ops.mojo), 5640..5649
+from autograd.nn_ctc_ops import OP_CTC_FIRST, OP_CTC_LAST, apply_nn_ctc
+# nn-losses-2 end
 
 
 @always_inline
@@ -759,3 +763,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_one_hot(t, a)
     elif OP == OP_PROBA2:
         op_proba2(t, a)
+    # nn-losses-2 begin
+    elif OP >= OP_CTC_FIRST and OP <= OP_CTC_LAST:
+        comptime assert OP_CTC_FIRST > OP_SSM_LAST and OP_CTC_FIRST > OP_TFP_LAST and OP_CTC_FIRST > OP_IMP_LAST, "nn-losses-2 opcode range overlaps another family"
+        apply_nn_ctc[OP](t, a)
+    # nn-losses-2 end

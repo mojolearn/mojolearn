@@ -19,10 +19,18 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
           "selective_scan": 42, "ssd_scan": 43, "trapezoid_scan": 44,
           "lm_head": 45,
-          "batch_norm1d": 46, "batch_norm2d": 46}  # lm_head (lane neural-blocks-3-lm)
+          "batch_norm1d": 46, "batch_norm2d": 46,  # lm_head (lane neural-blocks-3-lm)
+          # nn-losses-2 begin
+          "log_softmax": 77,
+          # nn-losses-2 end
+          }
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4,
          # nn-losses begin
-         "l1": 5, "smooth_l1": 6, "nll": 7, "kl_div": 8}
+         "l1": 5, "smooth_l1": 6, "nll": 7, "kl_div": 8,
+         # nn-losses-2 begin
+         "ctc": 9,
+         # nn-losses-2 end
+         }
 _REDUCTION = {"mean": 0, "sum": 1, "batchmean": 2}
 # nn-losses end
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
@@ -137,8 +145,8 @@ class Sequential(_CheckMixin):
             ``'multiply'``, ``'narrow'``, ``'embedding'``, ``'attention'``,
             ``'lstm'``, ``'gru'``, ``'rnn'``, ``'batch_norm1d'``,
             ``'batch_norm2d'``, ``'selective_scan'``, ``'ssd_scan'``,
-            ``'trapezoid_scan'``, ``'lm_head'``), with that method's
-            arguments.
+            ``'trapezoid_scan'``, ``'lm_head'``, ``'log_softmax'``), with
+            that method's arguments.
         *args, **kwargs
             The layer's arguments, as listed for ``kind``.
 
@@ -179,6 +187,34 @@ class Sequential(_CheckMixin):
     def softmax(self):
         """Append a row-wise softmax."""
         return _SEQUENTIAL_ENTRY(self, "add", ("softmax", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    # nn-losses-2 begin
+    def log_softmax(self, dim=-1):
+        """Append a log-softmax (PyTorch's ``nn.LogSoftmax``):
+        ``x - log(sum(exp(x)))`` along ``dim``, computed stably (the
+        maximum is subtracted before the exponentials).
+
+        Parameters
+        ----------
+        dim : int, default -1
+            The axis, counted as in PyTorch with the batch axis as axis 0:
+            ``-1`` is the last axis of each sample, ``1`` the first. The
+            batch axis itself cannot be normalized.
+
+        Its output is log-probabilities, the input of the ``nll``,
+        ``kl_div`` and ``ctc`` losses (:meth:`compile`). A model whose
+        samples are ``(length, classes)`` and that ends in
+        ``log_softmax()`` gives each step's log-probabilities, the input
+        of ``ctc``; its predictions are those ``length * classes`` values
+        of each sample, flat.
+
+        Example::
+
+            model = mojolearn.Sequential().linear(16).relu().linear(3).log_softmax()
+            model.compile(loss="nll")
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("log_softmax", (dim,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+    # nn-losses-2 end
 
     def layer_norm(self, eps=1e-5):
         """Append a layer normalization with a learned weight and bias."""
@@ -700,13 +736,13 @@ class Sequential(_CheckMixin):
     def compile(self, loss="mse", optimizer="adam", lr=1e-3, *, momentum=0.9, nesterov=False,
                 beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule="constant",
                 step_size=1, gamma=0.1, huber_delta=1.0, tol=1e-4, n_iter_no_change=0,
-                reduction="mean", pos_weight=1.0, beta=1.0):
+                reduction="mean", pos_weight=1.0, beta=1.0, blank=0, zero_infinity=False):
         """Choose the loss, optimizer and learning-rate schedule.
 
         Parameters
         ----------
         loss : {'mse', 'l1', 'smooth_l1', 'huber', 'cross_entropy', 'nll', 'bce_with_logits', 'kl_div', \
-'token_cross_entropy'}, default 'mse'
+'ctc', 'token_cross_entropy'}, default 'mse'
             The loss of PyTorch's module of the same name: ``mse``
             (``MSELoss``), ``l1`` (``L1Loss``, the absolute error),
             ``smooth_l1`` (``SmoothL1Loss``: ``0.5 d**2 / beta`` where
@@ -720,6 +756,11 @@ class Sequential(_CheckMixin):
             (``KLDivLoss`` with ``log_target=False``) takes
             log-probabilities and target probabilities of the output's
             shape, ``sum y (log y - x)``, zero where ``y`` is zero;
+            ``ctc`` (``CTCLoss``) takes each step's log-probabilities of a
+            model whose samples are ``(length, classes)`` and that ends in
+            :meth:`log_softmax`, and label sequences with their
+            ``target_lengths`` (:meth:`fit`): the negative log-likelihood
+            of the labels over every alignment of the sample's steps;
             ``token_cross_entropy`` trains a model ending in
             :meth:`lm_head` on ``(n_samples, length)`` int32 token ids.
         optimizer : {'sgd', 'momentum', 'adam', 'adamw'}, default 'adam'
@@ -742,7 +783,9 @@ class Sequential(_CheckMixin):
         reduction : {'mean', 'sum', 'batchmean'}, default 'mean'
             How a batch's terms become its loss, as in PyTorch: ``'mean'``
             averages over the elements (over the samples for
-            ``cross_entropy`` and ``nll``), ``'sum'`` adds them, and
+            ``cross_entropy`` and ``nll``; for ``ctc``, each sample's loss
+            divided by its target length, then averaged over the samples),
+            ``'sum'`` adds them, and
             ``'batchmean'`` (``kl_div`` only) sums and divides by the
             samples, the divergence per sample. ``loss_curve_`` holds each
             epoch's loss per sample (the mean of the batch losses, weighted
@@ -754,6 +797,14 @@ class Sequential(_CheckMixin):
             log(1 - s)]``, ``s`` the sigmoid of the logit.
         beta : float, default 1.0
             Threshold of ``smooth_l1`` (>= 0; 0 is the L1 loss).
+        blank : int, default 0
+            The class index of the ``ctc`` blank (a class of the model's
+            output that no label may use).
+        zero_infinity : bool, default False
+            ``ctc`` only: a sample whose labels no alignment of its steps
+            can produce (more labels, with the blanks needed between
+            repeats, than steps) has an infinite loss; True gives it loss
+            0 and no gradient instead.
         tol, n_iter_no_change : float, int
             Stop when the epoch loss has not improved by more than ``tol``
             for ``n_iter_no_change`` epochs; 0 trains every epoch.
@@ -770,7 +821,7 @@ class Sequential(_CheckMixin):
         >>> model = model.compile(loss="huber", optimizer="momentum", lr=0.01, nesterov=True)
         >>> model = model.compile(loss="smooth_l1", beta=0.5, reduction="sum")
         """
-        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change, reduction, pos_weight, beta), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change, reduction, pos_weight, beta, blank, zero_infinity), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
     def _program(self, n_features, sample=None):
@@ -782,7 +833,7 @@ class Sequential(_CheckMixin):
 
     # ------------------------------------------------------------ training
     def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
-            validation_data=None, restore_best_weights=False, lengths=None):
+            validation_data=None, restore_best_weights=False, lengths=None, target_lengths=None):
         """Train the model.
 
         Parameters
@@ -799,7 +850,10 @@ class Sequential(_CheckMixin):
             ``cross_entropy`` and ``nll`` (any number of classes, one model
             output per class) and ``bce_with_logits``
             (two classes, one model output); the ``(n_samples, length)``
-            int32 next-token ids for ``token_cross_entropy``.
+            int32 next-token ids for ``token_cross_entropy``; for ``ctc``,
+            the ``(n_samples, max_target_length)`` label sequences (class
+            indices other than ``blank``), each padded past its target
+            length with any value.
         epochs : int, default 10
             Passes over the data (with ``resume=True``, passes added to
             the ones already run).
@@ -838,6 +892,11 @@ class Sequential(_CheckMixin):
             recurrent state, and the recurrent layers' outputs there repeat
             the state at the sample's last valid step, so the last step holds
             each sample's final state. None treats every step as valid. Not combined with
+            ``validation_data``. With ``ctc`` they are also the number of
+            output steps each sample's alignment uses.
+        target_lengths : array-like of int of shape (n_samples,) or None, default None
+            ``ctc`` only (and required there): each sample's number of
+            labels, from 0 to the width of ``y``. Not combined with
             ``validation_data``.
 
         Returns
@@ -846,7 +905,7 @@ class Sequential(_CheckMixin):
             The fitted model, with ``params_``, ``loss_curve_``, ``n_iter_``
             and ``n_features_in_`` set (and ``classes_`` for classifiers).
         """
-        return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights, lengths), _SEQUENTIAL_CONTEXT)
+        return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights, lengths, target_lengths), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ weight import
 
@@ -1200,6 +1259,12 @@ _SEQUENTIAL_CONTEXT = {
                     "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
                     "selective_scan", "ssd_scan", "trapezoid_scan", "lm_head", "batch_norm"),
 }
+# nn-losses-2 begin: layer code 77's name; the codes before it belong to the other nn-* lanes' groups of the tuple
+# above, so the name is placed by index whatever the tuple's length is when this module loads
+_NAMES = _SEQUENTIAL_CONTEXT["layer_names"]
+_SEQUENTIAL_CONTEXT["layer_names"] = _NAMES[:77] + ("",) * (77 - len(_NAMES)) + ("log_softmax",) + _NAMES[78:]
+del _NAMES
+# nn-losses-2 end
 
 
 def _connect_sequential_bindings():
@@ -1265,7 +1330,8 @@ def _connect_sequential_bindings():
         "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
         "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber", "token_cross_entropy",
-                       "l1", "smooth_l1", "nll", "kl_div"),  # nn-losses: l1 .. kl_div
+                       "l1", "smooth_l1", "nll", "kl_div",  # nn-losses: l1 .. kl_div
+                       "ctc"),  # nn-losses-2
         "bindings": entries, "sequential_cpu_bindings": cpu_entries,
         "backend_fields": vars(_backend), "vendor": _backend.vendor(),
         "ndarray": np.ndarray, "array_type": array, "array_class": Array,

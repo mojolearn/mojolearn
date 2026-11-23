@@ -19,7 +19,7 @@ from bindings.py_balanced import py_item
 from bindings.admitted_sequence_door import admit_nd_f32
 
 
-def _sequential_lengths(source: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+def _sequential_lengths(source: PythonObject, n: Int, context: PythonObject, name: String = "lengths") raises -> PythonObject:
     """The `lengths` argument (lane seq-blocks-3): None stays None, else one C-ordered float32 vector of n
     values (the one admission cast); the values are checked natively (autograd/model.mojo
     model_lengths_check: whole numbers from 1 to the padded sequence length)."""
@@ -27,8 +27,8 @@ def _sequential_lengths(source: PythonObject, n: Int, context: PythonObject) rai
         return source
     var a = sequential_input(source, context)
     if Int(py=a.ndim) != 1 or Int(py=a.shape[0]) != n:
-        raise Error("ValueError: lengths must be a vector of one length per sample (" + String(n) + ")")
-    return admit_nd_f32(a, "lengths", False, context)
+        raise Error("ValueError: " + name + " must be a vector of one length per sample (" + String(n) + ")")
+    return admit_nd_f32(a, name, False, context)
 
 
 def sequential_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -57,6 +57,12 @@ def sequential_targets(mut mods: NativeModules, model: PythonObject, source: Pyt
     py_setitem(fields, nk[].k__y_1d, False)
     if loss == "token_cross_entropy":
         return Python.tuple(y, descriptor, 0, PythonObject(None))
+    # nn-losses-2 begin: ctc's (n_samples, max target length) label sequences, one C-ordered float32 copy (the one
+    # admission cast); the native fit checks them with the target lengths (autograd/nn_ctc.mojo ctc_admit)
+    if loss == "ctc":
+        var labels = admit_nd_f32(y, "y", False, context)
+        return Python.tuple(labels, sequential_descriptor(labels, "y"), 0, PythonObject(None))
+    # nn-losses-2 end
     if classification:
         # the labels as they are and a classes buffer of their dtype: the
         # fit entry sorts them and keeps the codes on the device
@@ -172,6 +178,16 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     if lengths is not None:
         # the ninth address (autograd/model_execution.mojo model_fit_native)
         _ = py_call(addresses.append, sequential_address(lengths))
+    # nn-losses-2 begin: the ctc loss's target lengths, the tenth address (the ninth 0 without lengths)
+    var target_lengths_source = args[10] if len(args) > 10 else PythonObject(None)
+    if target_lengths_source is not None and validation is not None:
+        raise Error("ValueError: validation_data with target_lengths is not supported")
+    var target_lengths = _sequential_lengths(target_lengths_source, n, context, "target_lengths")
+    if target_lengths is not None:
+        if lengths is None:
+            _ = py_call(addresses.append, 0)
+        _ = py_call(addresses.append, sequential_address(target_lengths))
+    # nn-losses-2 end
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     _ = state  # keep the Python object alive through the native call above
@@ -255,6 +271,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     _ = vx^
     _ = vy^
     _ = lengths^
+    _ = target_lengths^  # nn-losses-2
     py_setitem(fields, nk[].k_params_, params)
     py_setitem(fields, nk[].k_n_iter_, n_iter)
     if validation is not None:
