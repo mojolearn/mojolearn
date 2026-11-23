@@ -1,0 +1,15 @@
+diff --git a/gbdt/host/gbdt_oracle_feature_freq.mojo b/gbdt/host/gbdt_oracle_feature_freq.mojo
+index c6091ca6ba..a524e08961 100644
+--- a/gbdt/host/gbdt_oracle_feature_freq.mojo
++++ b/gbdt/host/gbdt_oracle_feature_freq.mojo
+@@ -1125,7 +1125,9 @@ def gbdt_feature_freq_host_fit(
+         var total_weight = _ff_two_stage_sum(leaf_weights)
+         if total_weight > Float32(0.0):
+             leaves.append(
+-                identical_div(identical_mul(learning_rate, total), total_weight + l2)
++                # SABOTAGE (coverage-gbdt-host_feature_freq_denominator): the
++                # two-level leaf's denominator drops the L2 regularizer
++                identical_div(identical_mul(learning_rate, total), total_weight)
+             )
+         else:
+             leaves.append(Float32(0.0))
