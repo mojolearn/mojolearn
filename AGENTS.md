@@ -299,6 +299,15 @@ Measure when speed or quality could actually change. Do not measure to remove du
 
 ## 3. Measurement
 
+### Measurement is ad hoc (Andrew, 2026-11-23)
+
+Nothing is measured on a schedule, per release, per merge or per wave. A measurement (a board run, a paper-row
+timing, an A/B, a composed-row run, a re-time of a prior wheel) happens only when Andrew asks for that measurement.
+Tools may OFFER a run behind a flag; no release step, workflow, plan, brief or agent schedules one, and no agent
+writes "measured once per release", "re-measured when X changes" or similar into code, docs or a report as if it
+were going to happen. A staleness mark on a stored cell is information for Andrew, never a trigger. Speed claims
+are still made only from a measurement that was actually taken ("Releases").
+
 ### What a win is: speed at the same or similar quality (Andrew, 2026-11-22)
 
 - "Wins", "faster" and "the fastest" always mean faster WITH QUALITY THE SAME OR SIMILAR. Speed bought with a
@@ -434,13 +443,12 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 - We fix everything we can before a release. We do not release while there is more work to incorporate: known
   regressions, planned refactors, owed fixes and owed deletions all go in first. No piecemeal releases.
-- When to measure (Andrew, 2026-11-12): measure BEFORE the release only when the release's purpose is improving
-  speed; then time the measurement build on NVIDIA and AMD against the last release and the paper baseline, fix
-  every regression found, and measure again before freezing. Otherwise measure AFTER the release, on the
-  published PyPI wheel, and those numbers are what the boards, the paper and the site broadcast. A claim about
-  speed is only ever made from a published wheel's measurement.
-- Order: all code in, one compile, (measure, fix, measure again when the release is about speed), freeze, the one
-  cross-vendor verification, publish, then measure the published wheel.
+- When to measure: only when Andrew asks ("Measurement is ad hoc", 2026-11-23). When he asks for a speed release,
+  the measurement build is timed against the last release and the paper baseline, every regression found is fixed,
+  and it is measured again before freezing. A claim about speed is only ever made from a measurement that was
+  taken, and for a published claim from the published wheel.
+- Order: all code in, one compile, (measure, fix, measure again only when Andrew asked for it), freeze, the one
+  cross-vendor verification, publish. Measuring the published wheel happens when Andrew asks.
 
 ### Fix everything first, then one compile, then one measurement (Andrew, 2026-11-13: "fix fix fix")
 

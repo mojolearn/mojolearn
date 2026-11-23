@@ -5588,7 +5588,8 @@ def build_parser():
     p.add_argument("--modes", default=None,
                    help="narrow the vendor's modes (Apple: fast,identical; others: identical)")
     p.add_argument("--families", default=",".join(FAMILIES))
-    # 2026-11-23 (Andrew): the once-per-release measurement of the composed-model consistency rows
+    # 2026-11-23 (Andrew): the composed-model consistency rows. AD HOC ONLY: nothing runs this on a schedule or at a
+    # release; it runs when Andrew asks for it and someone types the flag.
     p.add_argument("--composed", action="store_true",
                    help="plan only the composed-model consistency rows (bench_board_neural.ROW_CLASS) that have no "
                         "stored cell or whose modules' source changed; the routine board never plans them")

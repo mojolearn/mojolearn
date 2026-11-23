@@ -1022,3 +1022,15 @@ Andrew, 2026-11-22: "WHY DO WE NEED TO MEASURE MEASURE MEASURE? change the rule 
 > - Until the measurement exists, the old code stays behind its switch, default
 >   unchanged. This narrows "remove what a change made unnecessary": unnecessary
 >   means measured, not argued.
+
+
+## 2026-11-23: measurement is ad hoc
+
+Andrew, 2026-11-23: "I don't want to measure every release for anything. I only want to measure ad hoc."
+Replaces the 2026-11-12 "When to measure" bullet of part 4, verbatim:
+
+> - When to measure (Andrew, 2026-11-12): measure BEFORE the release only when the release's purpose is improving
+>   speed; then time the measurement build on NVIDIA and AMD against the last release and the paper baseline, fix
+>   every regression found, and measure again before freezing. Otherwise measure AFTER the release, on the
+>   published PyPI wheel, and those numbers are what the boards, the paper and the site broadcast. A claim about
+>   speed is only ever made from a published wheel's measurement.

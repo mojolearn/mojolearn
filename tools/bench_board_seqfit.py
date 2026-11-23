@@ -362,7 +362,7 @@ def torch_model(torch, lane, d, dev):
 # COMPOSED-MODEL CONSISTENCY ROWS (Andrew, 2026-11-23). These rows are models COMPOSED from modules: their time is
 # about the sum of their modules plus the composition (launches, intermediate buffers, the fit loop), so they are
 # not raced like a fused block. ROW_CLASS is the one field that says so; bench_board.plan_races reads it (the only
-# reader) and plans these rows only for the once-per-release composed measurement (`--composed`), never in the
+# reader) and plans these rows only when someone asks with `--composed` (ad hoc: never on a schedule, never at a release), never in the
 # routine full board, and they are not in the paper set (tools/ops/paper_compare_*_ids.txt). A stored cell is
 # re-measured only when a module it uses changed: each row lists its MODULES, each module its SOURCE files, and the
 # cell stores modules_source_sha256; needs_measure compares it with the tree's. Fused blocks (TransformerBlock,
