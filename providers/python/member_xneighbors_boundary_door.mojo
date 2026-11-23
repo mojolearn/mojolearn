@@ -3,12 +3,17 @@
 core/xneighbors_member.mojo). Published: NearestCentroid (kind 0),
 LocalOutlierFactor (kind 1), OneClassSVM (kind 2), KernelPCA (kind 3),
 PolynomialCountSketch (kind 4), AdditiveChi2Sampler (kind 5), SkewedChi2Sampler (kind 6).
-KNNImputer (kind 9), SVGP (kind 10).
-NOT MEMBERS: LabelPropagation, LabelSpreading (kinds 7, 8 reserved): their y
-carries the unlabeled marker -1, which the member ABI's class codes cannot
-name (a caller encodes -1 as an ordinary class; the codes-to-labels map
-exists only at the caller's fit). NEEDS ma-core: an "unlabeled code" word
-at FIT.
+KNNImputer (kind 9), SVGP (kind 10), LabelPropagation (kind 7) and
+LabelSpreading (kind 8; lane mf-entries5).
+LabelPropagation / LabelSpreading read -1 in y as unlabeled. The member
+fits the caller's class codes with every row labeled, which is what the
+caller's own door fit does whenever the labels that fit sees are codes
+(Bagging, Voting, Stacking, OneVsRest, MultiOutput fit their members on
+codes). The admission answers False (the caller keeps the door) when those
+labels hold -1 (Calibrated, RFE, a search's units: they fit on y as given)
+or are unknown (`owner.labels` None: IterativeImputer's value-keyed steps,
+a predict-only holder); model selection's units encode after admitting and
+ask `xneighbors_kind_reads_marker` then.
 
   * `xneighbors_member_admit` (UNPACK): the estimator's own parameter checks
     (bindings/neighbors_local_native_door.mojo `_nc_fit_unpack`), its route
@@ -84,7 +89,15 @@ from bindings.neighbors_native_unpack import _pcs_int, _pcs_real, _pcs_hash
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.pcs_native_boundary_unpack import pcs_seed_unpack
 from bindings.pcs_native_boundary_pack import pcs_array
-from bindings.neighbors_semi_native_door import _achi2_interval_unpack, _semi_kfeat_flags
+from bindings.neighbors_semi_native_door import (
+    _achi2_interval_unpack, _semi_kfeat_flags, _semi_eq, _semi_int, _semi_float, _semi_truth, _semi_class_array,
+    _lp_alpha_f32,
+)
+from bindings.neighbors_lp_query_unpack import lp_dense_available
+from bindings.labels_descriptor_boundary_door import labels_scope
+from bindings.family_common_unpack import family_is_str, family_repr
+from neighbors.neighbors_semi_run import xn_lp_alpha_check, xn_lp_static_weight
+from core.member_families import MEMBER_FAMILY_XNEIGHBORS
 from bindings.family_common_unpack import family_is_int
 from bindings.neighbors_graph_native_door import _svgp_gamma, _float_of as _graph_float_of
 from core.pcs_native_api import pcs_options
@@ -119,6 +132,8 @@ from core.xneighbors_member import (
     XNEIGHBORS_KIND_PCS, PC_BLOCK_INDEX_HASH, PC_BLOCK_BIT_HASH, PC_BLOCK_FEATURES,
     XNEIGHBORS_KIND_ACHI2, AC_BLOCK_FEATURES, XNEIGHBORS_KIND_SCHI2, SC_BLOCK_WEIGHTS, SC_BLOCK_OFFSET,
     XNEIGHBORS_KIND_IMPUTER, IM_BLOCK_ROWS, IM_BLOCK_VALID, IM_BLOCK_MISSING,
+    XNEIGHBORS_KIND_LABEL_PROPAGATION, XNEIGHBORS_KIND_LABEL_SPREADING,
+    LP_BLOCK_ROWS, LP_BLOCK_DISTRIBUTIONS, LP_BLOCK_TRANSDUCTION, LP_BLOCK_SCALARS,
     XNEIGHBORS_KIND_SVGP, SV_BLOCK_Z, SV_BLOCK_ALPHA, SV_BLOCK_C, SV_BLOCK_QMU, SV_BLOCK_QSQRT, SV_BLOCK_SCALARS,
     KP_BLOCK_ROWS, KP_BLOCK_VALUES, KP_BLOCK_VECTORS, KP_BLOCK_COLUMNS, KP_BLOCK_TOTAL, KP_BLOCK_GAMMA,
     OC_BLOCK_VECTORS, OC_BLOCK_DUAL, OC_BLOCK_SUPPORT, OC_BLOCK_SCALARS, OC_GAMMA_VALUE, OC_GAMMA_SCALE, OC_GAMMA_AUTO,
@@ -471,6 +486,82 @@ def _svgp_admit(model: PythonObject, fields: PythonObject, context: PythonObject
     return True
 
 
+def xneighbors_unlabeled_marked(labels: PythonObject) raises -> Bool:
+    """Whether the labels a LabelPropagation / LabelSpreading fit sees hold
+    the unlabeled marker: a label that is not a str and equals -1, the door's
+    own test (bindings/neighbors_semi_native_door.mojo `_lp_fit`: `c == -1`
+    and not a str, Python's own comparison). One comparison per label."""
+    for i in range(len(labels)):  # driver-loop: over the caller's class labels (the marker test)
+        var label = labels[i]
+        if _semi_eq(label, PythonObject(-1)) and not family_is_str(label):
+            return True
+    return False
+
+
+def xneighbors_kind_reads_marker(family: Int, kind: Int) -> Bool:
+    """The member kinds whose estimator reads -1 in y as unlabeled: a caller
+    that encodes y AFTER admitting its members (model selection's units)
+    asks this, and keeps its own units when the encoded labels hold the
+    marker (`xneighbors_unlabeled_marked`)."""
+    return family == MEMBER_FAMILY_XNEIGHBORS and (
+        kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or kind == XNEIGHBORS_KIND_LABEL_SPREADING)
+
+
+def _lp_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject, b: PythonObject,
+    mut owner: MemberOwner) raises -> Bool:
+    """`_lp_fit`'s parameter checks and words (bindings/neighbors_semi_native_door.mojo), in its order, on
+    the shared family context; the query words `lp_query_unpack` reads (the image's dense-proba operation).
+    False (the caller keeps the door, which reads -1 as unlabeled): the labels the member's fit sees are
+    unknown (`owner.labels` None: a caller whose labels are its target's values, or a predict-only holder),
+    or they hold the -1 marker. An empty list is the caller's codes 0 .. classes-1 (member_set_admit,
+    msel's deferred admission, which asks `xneighbors_kind_reads_marker` after its encode)."""
+    if owner.labels is None:
+        return False
+    if xneighbors_unlabeled_marked(owner.labels):
+        return False
+    var family = _family_context()
+    var spreading = kind == XNEIGHBORS_KIND_LABEL_SPREADING
+    if spreading:
+        xn_lp_alpha_check(_semi_float(family_field(fields, "alpha")))
+    var weight = Float64(1.0)
+    if spreading:
+        weight = xn_lp_static_weight(_semi_float(family_field(fields, "alpha")))
+    var kernel = family_field(fields, "kernel")
+    var knn = _semi_eq(kernel, PythonObject("knn"))
+    var neighbors = 0
+    var code = 0
+    var gamma = Float64(0.0)
+    var unfused = False
+    if knn:
+        neighbors = _semi_int(family_field(fields, "n_neighbors"))
+        unfused = _semi_truth(family["family_xn_semi_unfused_knn"])
+    else:
+        if not _semi_eq(kernel, PythonObject("rbf")):
+            raise Error("NotImplementedError: " + String(py_type(model).__name__) + ": kernel=" + family_repr(kernel)
+                        + " is not implemented ('rbf' or 'knn')")
+        code = _semi_int(family["family_svc_xn_kernels"]["rbf"])
+        gamma = _semi_float(family_field(fields, "gamma"))
+    var old_items = _semi_truth(family["family_svc_xn_old_items"])
+    var tol = _semi_float(family_field(fields, "tol"))
+    var max_iter = _semi_int(family_field(fields, "max_iter"))
+    var alpha = _lp_alpha_f32(fields, spreading)
+    if not _route(model, context, b, owner):
+        return False
+    var binding = owner.pins[0]
+    var raw = False
+    if not knn:
+        # The door's classical-normalization switch, read once per member.
+        var flag = py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_classical_graph_normalization"),
+                           PythonObject(None))
+        raw = flag is not None and _semi_truth(py_call(flag))
+    var dense = (not knn) and lp_dense_available(binding)
+    var words: List[Float64] = [Float64(kind), 1.0 if knn else 0.0, Float64(neighbors), Float64(code), gamma,
+        1.0 if raw else 0.0, weight, alpha, tol, Float64(max_iter), 1.0 if unfused else 0.0,
+        1.0 if old_items else 0.0, 1.0 if dense else 0.0]
+    owner.plan.params = words^
+    return True
+
+
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -489,6 +580,8 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         return _imputer_admit(model, fields, context, b, owner)
     if kind == XNEIGHBORS_KIND_SVGP:
         return _svgp_admit(model, fields, context, b, owner)
+    if kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or kind == XNEIGHBORS_KIND_LABEL_SPREADING:
+        return _lp_admit(model, fields, kind, context, b, owner)
     if kind != XNEIGHBORS_KIND_NEAREST_CENTROID and kind != XNEIGHBORS_KIND_LOF:
         raise Error("ValueError: mojolearn: XNeighbors member kind " + String(kind) + " is not published")
     if kind == XNEIGHBORS_KIND_LOF:
@@ -1139,6 +1232,74 @@ def _svgp_state(fields: PythonObject, context: PythonObject, b: PythonObject, pl
     return call.state
 
 
+def _lp_pack(model: PythonObject, fields: PythonObject, b: PythonObject, plan: MemberPlan, state: Int) raises:
+    """`_lp_fit`'s fields (bindings/neighbors_semi_native_door.mojo), in its order: `_classical_raw_graph`
+    (rbf), `X_` (a new Array: the member's copy of the rows it borrowed), `classes_` (the caller's labels,
+    `member_pack_labeled`; else the codes 0 .. classes-1), `label_distributions_`, `n_iter_`, `transduction_`
+    (the door's own decode of the codes over `classes_`) and `n_features_in_`."""
+    var family = _family_context()
+    var call = MemberCall(plan.route, state)
+    call.block = LP_BLOCK_ROWS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var fit_x = _publish_block(call, "<f4", family, 4, False)
+    var features = call.dst.cols
+    call.block = LP_BLOCK_DISTRIBUTIONS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var distributions = _publish_block(call, "<f4", family, 4, False)
+    var classes = call.dst.cols
+    call.block = LP_BLOCK_TRANSDUCTION
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var codes = _publish_block(call, "<i4", family, 4, True)
+    call.block = LP_BLOCK_SCALARS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var iterations = Int(_F64P(unsafe_from_address=call.dst.data)[0])
+    var labels = member_labels_take(fields, b)
+    if labels is None:
+        labels = Python.list(py_call(b.range, PythonObject(classes)))
+    var listed = py_call(b.list, labels)
+    var knn = plan.params[1] != 0.0
+    if not knn:
+        py_setitem(fields, "_classical_raw_graph", PythonObject(plan.params[5] != 0.0))
+    py_setitem(fields, "X_", fit_x)
+    py_setitem(fields, "classes_", listed)
+    py_setitem(fields, "label_distributions_", distributions)
+    py_setitem(fields, "n_iter_", PythonObject(iterations))
+    py_setitem(fields, "transduction_", _semi_class_array(listed, codes, labels_scope(model, family)))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _lp_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan) raises -> Int:
+    """A member state from a fitted estimator's `X_`, `label_distributions_` and `n_iter_` (the queries read
+    the rows and the distributions; the transduction is not imported)."""
+    var fit_x = _f32_block(fields, "X_", 2, context)
+    var distributions = _f32_block(fields, "label_distributions_", 2, context)
+    var iterations_source = py_get(fields, PythonObject("n_iter_"))
+    if iterations_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var scalars: List[Float64] = [Float64(Int(py=py_call(b.int, iterations_source))),
+        Float64(Int(py=fit_x.shape[1]))]
+    var call = member_new(plan)
+    try:
+        call.block = LP_BLOCK_ROWS
+        call.x = MemberMatrix(Int(py=classical_address(fit_x)), Int(py=fit_x.shape[0]), Int(py=fit_x.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = LP_BLOCK_DISTRIBUTIONS
+        call.x = MemberMatrix(Int(py=classical_address(distributions)), Int(py=distributions.shape[0]),
+            Int(py=distributions.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = LP_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, 2, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = fit_x
+    _ = distributions
+    _ = scalars^
+    return call.state
+
+
 def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
@@ -1159,6 +1320,8 @@ def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: P
         _imputer_pack(fields, context, plan, state)
     elif plan.kind == XNEIGHBORS_KIND_SVGP:
         _svgp_pack(fields, context, plan, state)
+    elif plan.kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or plan.kind == XNEIGHBORS_KIND_LABEL_SPREADING:
+        _lp_pack(model, fields, b, plan, state)
     else:
         _nc_pack(fields, context, b, plan, state)
 
@@ -1183,4 +1346,6 @@ def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: 
         return _imputer_state(fields, context, plan)
     if plan.kind == XNEIGHBORS_KIND_SVGP:
         return _svgp_state(fields, context, b, plan)
+    if plan.kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or plan.kind == XNEIGHBORS_KIND_LABEL_SPREADING:
+        return _lp_state(fields, context, b, plan)
     return _nc_state(fields, context, plan)

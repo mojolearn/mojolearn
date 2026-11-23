@@ -152,6 +152,7 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
+from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_unlabeled_marked
 from bindings.member_boundary_door import member_admit_serving_deferred, member_pack, member_pack_labeled
 from bindings.member_class_weight_unpack import member_cw_fill_plan
 from bindings.member_held_door import member_held_adopt
@@ -877,6 +878,13 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             var encoded = msel_encode(y, context)
             n_classes = len(encoded[0])
             if n_classes < 2 or not _whole_classes(encoded[0], b):
+                return scores^
+            # A kind that reads -1 in y as unlabeled (LabelPropagation,
+            # LabelSpreading) fits y as given in these units: labels holding
+            # the marker are the Python units' (the estimator's own fit door
+            # reads it); the member fits codes with every row labeled.
+            if xneighbors_kind_reads_marker(run.plans[0].family, run.plans[0].kind) and xneighbors_unlabeled_marked(
+                    encoded[0]):
                 return scores^
             target = encoded[1]
             classes = encoded[0]

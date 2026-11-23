@@ -11,10 +11,11 @@ x_neighbors door uses). No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word 0): 0 NearestCentroid, 1 LocalOutlierFactor,
 2 OneClassSVM, 3 KernelPCA, 4 PolynomialCountSketch, 5 AdditiveChi2Sampler,
-6 SkewedChi2Sampler, 9 KNNImputer, 10 SVGP (7 LabelPropagation and 8
-LabelSpreading are reserved: not members, see the boundary). OUTPUTS with no state answers from the kind
-word and `call.classes` (NearestCentroid: proba `classes`, decision 1 for two
-classes else `classes`, predict 1; the outlier detectors: 1 column).
+6 SkewedChi2Sampler, 7 LabelPropagation, 8 LabelSpreading, 9 KNNImputer,
+10 SVGP. OUTPUTS with no state answers from the kind word and `call.classes`
+(NearestCentroid: proba `classes`, decision 1 for two classes else
+`classes`, predict 1; LabelPropagation / LabelSpreading: proba `classes`,
+predict 1; the outlier detectors: 1 column).
 
 NearestCentroid (kind 0). RUN: neighbors/nearest_centroid_run.mojo
 (`nc_fit_count_run`, `nc_fit_priors_run`, `nc_fit_run`, `nc_labels_run`,
@@ -179,6 +180,29 @@ its own metric). Blocks: 64 Z float32 m x features, 65 alpha float32 1 x m,
 scalars float64 1 x 2 (elbo, features). A fit reads X and y only during the
 call.
 
+LabelPropagation / LabelSpreading (kinds 7, 8, classifiers; lane
+mf-entries5). RUN: neighbors/label_propagation_run.mojo `lp_fit_run` and
+`lp_query_run`, the bodies the estimator's door
+(bindings/neighbors_semi_native_door.mojo `_lp_fit`, `_lp_query`) runs.
+The member fits the caller's class codes with every row labeled: the
+marker word is the class count (a caller whose labels hold the -1 marker
+is not served: the boundary's admission answers False and the caller keeps
+the door, which reads -1 as unlabeled). MEMBER_OP_NEW parameters (count
+13): [0] kind 7 / 8, [1] knn (0 rbf / 1 knn), [2] n_neighbors, [3] the
+'rbf' kernel code (`family_svc_xn_kernels`), [4] gamma, [5] the image's
+raw-graph switch (`x_neighbors_classical_graph_normalization`), [6] the
+label step's clamp weight (1 for propagation, `xn_lp_static_weight(alpha)`
+for spreading), [7] alpha as the float32 word (0 for propagation), [8] tol,
+[9] max_iter, [10] the unfused-kNN arm, [11] the old-items arm, [12] the
+image's dense-proba operation (`lp_dense_available`). Views: X float32 rows
+x features, y int32 codes rows x 1 (host, dense; no weights, index or
+device view; every class present). PREDICT int32 codes rows x 1;
+PREDICT_PROBA float32 (or float64, cast) rows x classes. Blocks: 64 the
+fitted rows float32 rows x features, 65 label_distributions float32 rows x
+classes, 66 the transduction's codes int32 1 x rows (absent after an import
+without it), 67 scalars float64 1 x 2 (n_iter, features). A fit BORROWS X
+as its fitted rows (LIFETIME below, as LocalOutlierFactor).
+
 LIFETIME: a NearestCentroid fit reads X and y only during the call (its
 fitted state is the centroids it computes); nothing of X is kept or copied.
 A LocalOutlierFactor fit BORROWS X as its fitted rows, as the estimator's
@@ -226,7 +250,8 @@ from neighbors.chi2_run import (
     Achi2FitRequest, Achi2Request, achi2_fit_run, achi2_interval_check, achi2_transform_run,
     Schi2FitRequest, Schi2Request, schi2_fit_run, schi2_check_run, schi2_transform_run,
 )
-from neighbors.neighbors_semi_run import xn_achi2_width, xn_schi2_missing_fit
+from neighbors.neighbors_semi_run import xn_achi2_width, xn_schi2_missing_fit, xn_semi_knn_k
+from neighbors.label_propagation_run import LpFitRequest, LpQueryRequest, lp_fit_run, lp_query_run
 from core.kpca_native_plan import (
     KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCADenseFit, KPCAFitPrepareRequest, KPCAAlphaRequest,
     KPCAQueryRequest, KPCACenteredQuery, KPCANeighborDriver,
@@ -260,8 +285,8 @@ comptime XNEIGHBORS_KIND_KERNEL_PCA = 3
 comptime XNEIGHBORS_KIND_PCS = 4
 comptime XNEIGHBORS_KIND_ACHI2 = 5
 comptime XNEIGHBORS_KIND_SCHI2 = 6
-comptime XNEIGHBORS_KIND_LABEL_PROPAGATION = 7   # reserved: not a member (the unlabeled marker; boundary)
-comptime XNEIGHBORS_KIND_LABEL_SPREADING = 8     # reserved: not a member (the unlabeled marker; boundary)
+comptime XNEIGHBORS_KIND_LABEL_PROPAGATION = 7
+comptime XNEIGHBORS_KIND_LABEL_SPREADING = 8
 comptime XNEIGHBORS_KIND_IMPUTER = 9
 comptime XNEIGHBORS_KIND_SVGP = 10
 comptime XNEIGHBORS_KIND_COUNT = 11
@@ -307,6 +332,12 @@ comptime SV_BLOCK_QMU = MEMBER_BLOCK_FAMILY + 3
 comptime SV_BLOCK_QSQRT = MEMBER_BLOCK_FAMILY + 4
 comptime SV_BLOCK_SCALARS = MEMBER_BLOCK_FAMILY + 5
 comptime _SV_BLOCKS = 6
+comptime LP_BLOCK_ROWS = MEMBER_BLOCK_FAMILY
+comptime LP_BLOCK_DISTRIBUTIONS = MEMBER_BLOCK_FAMILY + 1
+comptime LP_BLOCK_TRANSDUCTION = MEMBER_BLOCK_FAMILY + 2
+comptime LP_BLOCK_SCALARS = MEMBER_BLOCK_FAMILY + 3
+comptime _LP_BLOCKS = 4
+comptime _LP_WORDS = 13
 #: OneClassSVM gamma words (MEMBER_OP_NEW word 5).
 comptime OC_GAMMA_VALUE = 0
 comptime OC_GAMMA_SCALE = 1
@@ -451,6 +482,26 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var sv_qmu: List[Float32]
     var sv_qsqrt: List[Float32]
     var sv_scalars: List[Float64]
+    # LabelPropagation / LabelSpreading words (kinds 7, 8) and the fitted
+    # state; the fitted X is the borrowed `rows_addr` (or `fit_rows`), as for
+    # LocalOutlierFactor. `lp_codes` are the transduction's class codes.
+    var lp_knn: Bool
+    var lp_neighbors: Int
+    var lp_kernel: Int
+    var lp_gamma: Float64
+    var lp_raw: Bool
+    var lp_weight: Float64
+    var lp_alpha: Float64
+    var lp_tol: Float64
+    var lp_max_iter: Int
+    var lp_unfused: Bool
+    var lp_old: Bool
+    var lp_fused: Bool
+    var lp_k: Int
+    var lp_iterations: Int
+    var lp_dist: List[Float32]
+    var lp_codes: List[Int32]
+    var lp_scalars: List[Float64]
 
     def __init__(out self):
         self.generation = 0
@@ -570,6 +621,23 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.sv_qmu = List[Float32]()
         self.sv_qsqrt = List[Float32]()
         self.sv_scalars = List[Float64](length=2, fill=0.0)
+        self.lp_knn = False
+        self.lp_neighbors = 7
+        self.lp_kernel = 0
+        self.lp_gamma = 20.0
+        self.lp_raw = False
+        self.lp_weight = 1.0
+        self.lp_alpha = 0.0
+        self.lp_tol = 0.001
+        self.lp_max_iter = 1000
+        self.lp_unfused = False
+        self.lp_old = False
+        self.lp_fused = False
+        self.lp_k = 0
+        self.lp_iterations = 0
+        self.lp_dist = List[Float32]()
+        self.lp_codes = List[Int32]()
+        self.lp_scalars = List[Float64](length=2, fill=0.0)
 
 
 struct XNeighborsMemberStore(Defaultable, Movable):
@@ -635,6 +703,10 @@ def _clear(slot: _SlotPtr):
     slot[].sv_c = List[Float32]()
     slot[].sv_qmu = List[Float32]()
     slot[].sv_qsqrt = List[Float32]()
+    slot[].lp_dist = List[Float32]()
+    slot[].lp_codes = List[Int32]()
+    slot[].lp_k = 0
+    slot[].lp_iterations = 0
 
 
 def _mint(words: _F64P, count: Int) raises -> Int:
@@ -715,6 +787,19 @@ def _mint(words: _F64P, count: Int) raises -> Int:
             slot[].im_uncompact = words[7] != 0.0
             slot[].im_old_items = (words[8] != 0.0) and not slot[].im_uncompact
             slot[].im_lean = words[9] != 0.0
+        elif slot[].kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or slot[].kind == XNEIGHBORS_KIND_LABEL_SPREADING:
+            slot[].lp_knn = words[1] != 0.0
+            slot[].lp_neighbors = Int(words[2])
+            slot[].lp_kernel = Int(words[3])
+            slot[].lp_gamma = words[4]
+            slot[].lp_raw = words[5] != 0.0
+            slot[].lp_weight = words[6]
+            slot[].lp_alpha = words[7]
+            slot[].lp_tol = words[8]
+            slot[].lp_max_iter = Int(words[9])
+            slot[].lp_unfused = words[10] != 0.0
+            slot[].lp_old = words[11] != 0.0
+            slot[].lp_fused = words[12] != 0.0
         elif slot[].kind == XNEIGHBORS_KIND_SVGP:
             slot[].sv_inducing = Int(words[1])
             slot[].sv_gamma = words[2]
@@ -774,6 +859,10 @@ def _name(slot: _SlotPtr) -> String:
         return String("KNNImputer")
     if slot[].kind == XNEIGHBORS_KIND_SVGP:
         return String("SVGP")
+    if slot[].kind == XNEIGHBORS_KIND_LABEL_PROPAGATION:
+        return String("LabelPropagation")
+    if slot[].kind == XNEIGHBORS_KIND_LABEL_SPREADING:
+        return String("LabelSpreading")
     return String("LocalOutlierFactor")
 
 
@@ -2159,6 +2248,283 @@ def _sv_import(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].fitted = True
 
 
+# ------------------------------------------------------------ LabelPropagation / LabelSpreading
+
+
+def _lp_fit_old_items(slot: _SlotPtr) -> Bool:
+    """The fit's old-items arm as the door's `_lp_fit` reads it: the compact
+    kNN graph unless unfused; the RBF graph only for spreading's normalized
+    Laplacian (not raw)."""
+    if slot[].lp_knn:
+        return slot[].lp_old and not slot[].lp_unfused
+    return slot[].lp_old and slot[].kind == XNEIGHBORS_KIND_LABEL_SPREADING and not slot[].lp_raw
+
+
+def _lp_codes_check(codes: Int, rows: Int, classes: Int, estimator: String) raises:
+    """Every code in 0 .. classes-1 and every class present in the fit rows:
+    the estimator fits the classes it sees, so a fold or a draw missing a
+    class is refused in words and the caller's own loop fits it (as for
+    NearestCentroid). One presence row per task, parallel over the rows,
+    then one pass over the classes."""
+    if rows == 0:
+        raise Error("ValueError: a " + estimator + " member needs at least one fit row")
+    var tasks = max(host_predict_task_count_work(rows, rows), 1)
+    var chunk = host_predict_chunk(rows, tasks)
+    # Row t of `seen`: task t's presence words (classes), then its foreign-code word.
+    var width = classes + 1
+    var seen = List[Int32](length=tasks * width, fill=Int32(0))
+    var seen_at = Int(seen.unsafe_ptr())
+
+    def _scan(t: Int) {imm codes, imm rows, imm classes, imm chunk, imm width, imm seen_at}:
+        var lo = t * chunk
+        var hi = min((t + 1) * chunk, rows)
+        var c = _I32P(unsafe_from_address=codes)
+        var mark = _I32P(unsafe_from_address=seen_at + t * width * 4)
+        for i in range(lo, hi):  # member fit: this task's rows
+            var code = Int(c.unsafe_load(i))
+            if code < 0 or code >= classes:
+                mark.unsafe_store(classes, Int32(1))
+            else:
+                mark.unsafe_store(code, Int32(1))
+
+    if tasks <= 1:
+        _scan(0)
+    else:
+        host_parallelize(_scan, tasks)
+    var foreign = False
+    for t in range(tasks):  # driver-loop: over the scan's tasks (their foreign-code words)
+        if seen[t * width + classes] != 0:
+            foreign = True
+    if foreign:
+        raise Error("ValueError: a " + estimator + " member reads class codes 0 .. " + String(classes - 1))
+    for c in range(classes):  # driver-loop: over classes (the tasks' presence words)
+        var present = False
+        for t in range(tasks):  # driver-loop: over the scan's tasks
+            if seen[t * width + c] != 0:
+                present = True
+        if not present:
+            raise Error("ValueError: a " + estimator + " member needs every class code 0 .. "
+                + String(classes - 1) + " present in its fit rows (class " + String(c) + " is absent)")
+    _ = seen^
+
+
+def _lp_fit(slot: _SlotPtr, call: _CallPtr) raises:
+    """`_LabelPropagationBase.fit(X, y)` (bindings/neighbors_semi_native_door.mojo
+    `_lp_fit`, the same `lp_fit_run`) on the caller's class codes with every
+    row labeled: the marker word is the class count (the admission answers
+    False for a caller whose labels hold the -1 marker)."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].fit_output != 0:
+        member_unsupported(estimator, call[].fit_output)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member fits no sample_weight")
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    _dense(call[].y, MEMBER_I32, "y (class codes)", estimator)
+    var rows = call[].x.rows
+    var features = call[].x.cols
+    if call[].y.cols != 1:
+        raise Error("ValueError: a " + estimator + " member reads one column of class codes")
+    xn_rows_match_check(call[].y.rows, rows)
+    var classes = call[].classes
+    if classes < 1:
+        raise Error("ValueError: a " + estimator + " member is a classifier: it reads class codes and a class count")
+    _lp_codes_check(call[].y.data, rows, classes, estimator)
+    var k = xn_semi_knn_k(slot[].lp_neighbors, rows) if slot[].lp_knn else 0
+    slot[].fitted = False
+    slot[].pred = List[Int32]()
+    slot[].proba32 = List[Float32]()
+    slot[].proba64 = List[Float64]()
+    # Borrow the rows (LIFETIME, as LocalOutlierFactor: the door publishes the
+    # admitted X itself as X_); a copy a previous import or export left is dropped.
+    slot[].fit_rows = List[Float32]()
+    slot[].rows_addr = call[].x.data
+    slot[].lp_dist = List[Float32](length=rows * classes, fill=Float32(0.0))
+    slot[].lp_codes = List[Int32](length=rows, fill=Int32(0))
+    var request = LpFitRequest(call[].x.data, call[].y.data, Int(slot[].lp_dist.unsafe_ptr()),
+        Int(slot[].lp_codes.unsafe_ptr()), rows, features, classes, classes,
+        slot[].kind == XNEIGHBORS_KIND_LABEL_SPREADING, slot[].lp_knn, k, slot[].lp_kernel, slot[].lp_gamma,
+        slot[].lp_raw, slot[].lp_weight, slot[].lp_alpha, slot[].lp_tol, slot[].lp_max_iter, slot[].lp_unfused,
+        _lp_fit_old_items(slot))
+    var outcome = lp_fit_run(XnDriver(call[].route.entry.call), request)
+    if outcome.status != 0:
+        admitted_finite_refuse(outcome.status, estimator)
+    slot[].rows = rows
+    slot[].features = features
+    slot[].classes = classes
+    slot[].lp_k = k
+    slot[].lp_iterations = outcome.iterations
+    slot[].fitted = True
+
+
+def _lp_request(slot: _SlotPtr, call: _CallPtr, want_labels: Bool) raises -> LpQueryRequest:
+    """`lp_query_unpack`'s words (bindings/neighbors_lp_query_unpack.mojo)
+    over the fitted state: the query reads the old-items arm and the unfused
+    arm only on the compact kNN graph, the image's dense-proba operation only
+    on the RBF kernel. `q`, `dst` / `labels` are set by the caller."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: mojolearn: call fit before predict")
+    _whole(call, estimator)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    if call[].x.cols != slot[].features:
+        raise Error("ValueError: X has " + String(call[].x.cols) + " features, but " + estimator
+            + " is expecting " + String(slot[].features) + " features as input.")
+    var knn = slot[].lp_knn
+    var unfused = knn and slot[].lp_unfused
+    var old_items = knn and slot[].lp_old and not slot[].lp_unfused
+    var kind = 0 if knn else slot[].lp_kernel
+    var gamma = 0.0 if knn else slot[].lp_gamma
+    var fused = (not knn) and slot[].lp_fused
+    return LpQueryRequest(call[].x.data, slot[].rows_addr, Int(slot[].lp_dist.unsafe_ptr()), 0, 0, call[].x.rows,
+        slot[].rows, slot[].features, slot[].classes, knn, slot[].lp_k, kind, gamma, fused, want_labels, unfused,
+        old_items)
+
+
+def _lp_predict(slot: _SlotPtr, call: _CallPtr) raises:
+    var estimator = _name(slot)
+    var request = _lp_request(slot, call, True)
+    var rows = request.rows
+    _dense(call[].dst, MEMBER_I32, "the prediction buffer (class codes)", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != 1:
+        raise Error("ValueError: the prediction buffer holds one class code per row of X")
+    if rows == 0:
+        return
+    request.labels = call[].dst.data
+    var status = lp_query_run(XnDriver(call[].route.entry.call), request)
+    if status != 0:
+        admitted_finite_refuse(status, estimator)
+
+
+def _lp_proba(slot: _SlotPtr, call: _CallPtr) raises:
+    """predict_proba: float32 rows x classes (the image's width); a float64
+    buffer is filled from the state's float32 scratch (grown once), cast in
+    parallel over rows."""
+    var estimator = _name(slot)
+    var request = _lp_request(slot, call, False)
+    var rows = request.rows
+    var classes = slot[].classes
+    var asked_wide = call[].dst.dtype == MEMBER_F64
+    _dense(call[].dst, MEMBER_F64 if asked_wide else MEMBER_F32, "the probability buffer", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != classes:
+        raise Error("ValueError: the probability buffer holds one row of " + String(classes)
+            + " class probabilities per row of X")
+    var count = rows * classes
+    if count == 0:
+        return
+    var target = call[].dst.data
+    if asked_wide:
+        if len(slot[].proba32) < count:
+            slot[].proba32 = List[Float32](length=count, fill=Float32(0.0))
+        target = Int(slot[].proba32.unsafe_ptr())
+    request.dst = target
+    var status = lp_query_run(XnDriver(call[].route.entry.call), request)
+    if status != 0:
+        admitted_finite_refuse(status, estimator)
+    if not asked_wide:
+        return
+    var src = target
+    var dst = call[].dst.data
+    var tasks = max(host_predict_task_count_work(rows, count), 1)
+    var chunk = host_predict_chunk(rows, tasks)
+
+    def _cast(t: Int) {imm src, imm dst, imm rows, imm classes, imm chunk}:
+        var lo = t * chunk * classes
+        var hi = min((t + 1) * chunk, rows) * classes
+        var s = _F32P(unsafe_from_address=src)
+        var d = _F64P(unsafe_from_address=dst)
+        for i in range(lo, hi):  # member predict_proba: this task's words
+            d.unsafe_store(i, Float64(s.unsafe_load(i)))
+
+    if tasks <= 1:
+        _cast(0)
+    else:
+        host_parallelize(_cast, tasks)
+
+
+def _lp_export(slot: _SlotPtr, call: _CallPtr) raises:
+    """A view of one fitted block; the slot owns the words until this
+    state's next fit, import or free (the borrowed rows are copied here)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        # THE LIFETIME RULE: the borrowed fit rows, once; no view is answered.
+        _lof_own_rows(slot)
+        return
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block >= _LP_BLOCKS:
+            raise Error("member ABI: a " + estimator + " member has four fitted blocks")
+        block = LP_BLOCK_ROWS + block
+    if block == LP_BLOCK_ROWS:
+        _lof_own_rows(slot)
+        call[].dst = MemberMatrix(slot[].rows_addr, slot[].rows, slot[].features)
+    elif block == LP_BLOCK_DISTRIBUTIONS:
+        call[].dst = MemberMatrix(Int(slot[].lp_dist.unsafe_ptr()), slot[].rows, slot[].classes)
+    elif block == LP_BLOCK_TRANSDUCTION:
+        if len(slot[].lp_codes) != slot[].rows:
+            raise Error("member ABI: an imported " + estimator + " state holds no transduction codes")
+        call[].dst = MemberMatrix(Int(slot[].lp_codes.unsafe_ptr()), 1, slot[].rows, MEMBER_I32)
+    elif block == LP_BLOCK_SCALARS:
+        slot[].lp_scalars[0] = Float64(slot[].lp_iterations)
+        slot[].lp_scalars[1] = Float64(slot[].features)
+        call[].dst = MemberMatrix(Int(slot[].lp_scalars.unsafe_ptr()), 1, 2, MEMBER_F64)
+    else:
+        raise Error("member ABI: a " + estimator + " member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = _LP_BLOCKS
+    call[].classes = slot[].classes
+
+
+def _lp_import(slot: _SlotPtr, call: _CallPtr) raises:
+    """Copy one fitted block in (the rows, the label distributions, the
+    optional transduction codes, the scalars); MEMBER_IMPORT_DONE completes
+    the state (the class count is the distributions' width)."""
+    var estimator = _name(slot)
+    var block = call[].block
+    var count = call[].x.rows * call[].x.cols
+    if block == LP_BLOCK_SCALARS:
+        _dense(call[].x, MEMBER_F64, "the scalars", estimator)
+        if count != 2:
+            raise Error("member ABI: a " + estimator + " member's scalars are two float64 words (n_iter, features)")
+        slot[].fitted = False
+        slot[].lp_iterations = Int(_F64P(unsafe_from_address=call[].x.data)[0])
+    elif block == LP_BLOCK_TRANSDUCTION:
+        _dense(call[].x, MEMBER_I32, "the transduction codes", estimator)
+        slot[].fitted = False
+        slot[].lp_codes = List[Int32](length=count, fill=Int32(0))
+        unsafe_memcpy(dest=slot[].lp_codes.unsafe_ptr(), src=_I32P(unsafe_from_address=call[].x.data), count=count)
+    elif block == LP_BLOCK_ROWS or block == LP_BLOCK_DISTRIBUTIONS:
+        _dense(call[].x, MEMBER_F32, "a fitted block", estimator)
+        slot[].fitted = False
+        var words = List[Float32](length=count, fill=Float32(0.0))
+        unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        if block == LP_BLOCK_ROWS:
+            slot[].fit_rows = words^
+            slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
+            slot[].rows = call[].x.rows
+            slot[].features = call[].x.cols
+        else:
+            slot[].lp_dist = words^
+            slot[].classes = call[].x.cols
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a " + estimator + " member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var rows = slot[].rows
+    if (rows == 0 or slot[].features == 0 or len(slot[].fit_rows) != rows * slot[].features
+            or slot[].classes < 1 or len(slot[].lp_dist) != rows * slot[].classes):
+        raise Error("member ABI: a fitted " + estimator + " state needs its rows and one label distribution per row")
+    if len(slot[].lp_codes) != 0 and len(slot[].lp_codes) != rows:
+        raise Error("member ABI: a " + estimator + " member holds one transduction code per fitted row")
+    slot[].lp_k = xn_semi_knn_k(slot[].lp_neighbors, rows) if slot[].lp_knn else 0
+    slot[].pred = List[Int32]()
+    slot[].proba32 = List[Float32]()
+    slot[].proba64 = List[Float64]()
+    slot[].fitted = True
+
+
 # ------------------------------------------------------------ dispatch
 
 
@@ -2193,6 +2559,14 @@ comptime _TRANSFORMER = _KERNEL_PCA   # fit, transform, export, import (fit_outp
 comptime _SVGP = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
 comptime _OCSVM = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
+# LabelPropagation / LabelSpreading: SET for MEMBER_CAN_TEST_ROWS. The fit
+# (`lp_fit_run`, neighbors/label_propagation_run.mojo:121/130) and every query
+# (`lp_query_run`: the dense proba, the kNN indices or the RBF weights, its
+# first operation) return the finite word of X, refused by
+# `admitted_finite_refuse` in `_lp_fit`, `_lp_predict` and `_lp_proba`. The
+# fit BORROWS X as its fitted rows (LIFETIME, as LocalOutlierFactor).
+comptime _LABEL_PROP = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_EXPORT
+    | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS)
 
 
 def _capabilities(slot: _SlotPtr) -> Int:
@@ -2208,6 +2582,8 @@ def _capabilities(slot: _SlotPtr) -> Int:
         return _OCSVM
     if slot[].kind == XNEIGHBORS_KIND_SVGP:
         return _SVGP
+    if slot[].kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or slot[].kind == XNEIGHBORS_KIND_LABEL_SPREADING:
+        return _LABEL_PROP | MEMBER_BORROWS_FIT
     if (slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA or slot[].kind == XNEIGHBORS_KIND_PCS
             or slot[].kind == XNEIGHBORS_KIND_ACHI2 or slot[].kind == XNEIGHBORS_KIND_SCHI2
             or slot[].kind == XNEIGHBORS_KIND_IMPUTER):
@@ -2265,7 +2641,12 @@ def _new(call: _CallPtr) raises:
             raise Error("member ABI: an SVGP member takes seven parameters (kind, n_inducing, gamma, "
                 + "kernel_variance, noise_variance, jitter, old_items)")
     elif kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or kind == XNEIGHBORS_KIND_LABEL_SPREADING:
-        raise Error("member ABI: LabelPropagation and LabelSpreading are not XNeighbors members")
+        if call[].param_count != _LP_WORDS:
+            raise Error("member ABI: a LabelPropagation / LabelSpreading member takes thirteen parameters (kind, "
+                + "knn, n_neighbors, rbf kernel code, gamma, raw graph, clamp weight, alpha, tol, max_iter, "
+                + "unfused, old_items, dense proba)")
+        if words[1] != 0.0 and words[1] != 1.0:
+            raise Error("member ABI: unknown LabelPropagation graph code")
     else:
         if call[].param_count != 7:
             raise Error("member ABI: a LocalOutlierFactor member takes seven parameters (kind, n_neighbors, "
@@ -2278,6 +2659,11 @@ def _outputs(kind: Int, classes: Int, call: _CallPtr) raises:
     """OUTPUTS of a kind: NearestCentroid answers `classes` (proba),
     1 or `classes` (decision), 1 (predict); the outlier detectors one column
     and no classes."""
+    if kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or kind == XNEIGHBORS_KIND_LABEL_SPREADING:
+        # predict_proba `classes` columns, predict one code; no decision.
+        call[].classes = classes
+        call[].out_cols = classes if call[].flags == MEMBER_OP_PREDICT_PROBA else 1
+        return
     if kind == XNEIGHBORS_KIND_NEAREST_CENTROID:
         call[].classes = classes
         if call[].flags == MEMBER_OP_PREDICT_PROBA:
@@ -2300,7 +2686,8 @@ def _out_dtype(kind: Int, asked: Int) -> Int:
     output float32 (NearestCentroid's predict_proba also takes a float64
     buffer when the caller hands one)."""
     if asked == MEMBER_OP_PREDICT or asked == MEMBER_OP_FIT:
-        if kind == XNEIGHBORS_KIND_NEAREST_CENTROID:
+        if (kind == XNEIGHBORS_KIND_NEAREST_CENTROID or kind == XNEIGHBORS_KIND_LABEL_PROPAGATION
+                or kind == XNEIGHBORS_KIND_LABEL_SPREADING):
             return MEMBER_I32
         if kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_OCSVM:
             return MEMBER_I64
@@ -2311,7 +2698,7 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER | _SVGP | MEMBER_BORROWS_FIT
+            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER | _SVGP | _LABEL_PROP | MEMBER_BORROWS_FIT
         return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False)))
     if operation == MEMBER_OP_NEW:
         _new(call)
@@ -2388,6 +2775,20 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             call[].out_cols = _im_width(slot, 1) if slot[].fitted else call[].x.cols
             return 0
         _outputs(slot[].kind, slot[].classes if slot[].fitted else call[].classes, call)
+        return 0
+    if slot[].kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or slot[].kind == XNEIGHBORS_KIND_LABEL_SPREADING:
+        if operation == MEMBER_OP_FIT:
+            _lp_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _lp_predict(slot, call)
+        elif operation == MEMBER_OP_PREDICT_PROBA:
+            _lp_proba(slot, call)
+        elif operation == MEMBER_OP_EXPORT:
+            _lp_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _lp_import(slot, call)
+        else:
+            member_unsupported(_name(slot), operation)
         return 0
     if slot[].kind == XNEIGHBORS_KIND_SVGP:
         if operation == MEMBER_OP_FIT:
