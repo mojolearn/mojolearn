@@ -33,7 +33,12 @@ Now:
     turns it into the table over its classes (`member_cw_from_values`): a
     class matches the key equal to its value (Python's numeric `==` of the
     key and the float32 label: one float64 compare), and a key no class
-    matches is the absent refusal.
+    matches is the absent refusal. A key that is not a number has no entry
+    and marks every step's table absent (no numeric class equals it: the
+    step's fit refuses it, as the estimator's own fit does; lane mf-left4).
+  * a value the estimator refuses (MEMBER_CW_INVALID, lane mf-left4) is a
+    pending tail no fit reads: the FIT caller's UNPACK raises the
+    estimator's own words (`member_cw_fill_plan`).
 
 THE TAIL, appended to the family's NEW words at `member_cw_start(...)`:
   [0] mode (MEMBER_CW_BALANCED, MEMBER_CW_DICT); [1] K, the table's class
@@ -78,8 +83,16 @@ from core.member_families import (
 comptime MEMBER_CW_NONE = 0
 comptime MEMBER_CW_BALANCED = 1
 comptime MEMBER_CW_DICT = 2
-#: A dict keyed by the target's values: [3, P, 0, (key, weight) x P].
+#: A dict keyed by the target's values: [3, P, absent, (key, weight) x P]
+#: (absent 1: the dict holds a key that is not a number, which no step's
+#: numeric class equals: lane mf-left4).
 comptime MEMBER_CW_KEYED = 3
+#: A class_weight value its estimator refuses (neither None, 'balanced' nor
+#: an exact dict): [4, -1, 0]. Never fitted: the FIT caller's UNPACK raises
+#: the estimator's own words (bindings/member_class_weight_unpack.mojo
+#: `member_cw_fill_plan`), as the estimator's fit door raises them (lane
+#: mf-left4). A caller that only predicts reads no tail.
+comptime MEMBER_CW_INVALID = 4
 #: Words before the per-class table: mode, K, absent.
 comptime MEMBER_CW_HEAD = 3
 #: Words per class of the table: weight, named.
@@ -135,8 +148,19 @@ def member_cw_pending_words(mut words: List[Float64]):
     words.append(0.0)
 
 
+def member_cw_invalid_words(mut words: List[Float64]):
+    """UNPACK: append the tail of a class_weight value the estimator refuses
+    (MEMBER_CW_INVALID: the FIT caller's UNPACK raises its words)."""
+    words.append(Float64(MEMBER_CW_INVALID))
+    words.append(-1.0)
+    words.append(0.0)
+
+
 def member_cw_pending(params: List[Float64], start: Int) -> Bool:
-    return member_cw_mode(params, start) == MEMBER_CW_DICT and params[start + 1] < 0.0
+    """The tail still needs the FIT caller's UNPACK: a dict before its
+    labels were read, or an invalid value whose refusal that UNPACK raises."""
+    var mode = member_cw_mode(params, start)
+    return (mode == MEMBER_CW_DICT and params[start + 1] < 0.0) or mode == MEMBER_CW_INVALID
 
 
 def member_cw_table_words(mut params: List[Float64], start: Int, values: List[Float64], named: List[Bool]):
@@ -190,14 +214,17 @@ def member_cw_subset(mut plan: MemberPlan, present: List[Int32]):
     plan.params = words^
 
 
-def member_cw_keyed_words(mut params: List[Float64], start: Int, keys: List[Float64], values: List[Float64]):
-    """UNPACK: replace the tail at `start` by a KEYED tail (module note)."""
+def member_cw_keyed_words(mut params: List[Float64], start: Int, keys: List[Float64], values: List[Float64],
+    foreign: Bool):
+    """UNPACK: replace the tail at `start` by a KEYED tail (module note).
+    `foreign`: the dict also holds a key that is not a number (it has no
+    entry here; every step's table is then marked absent)."""
     var words = List[Float64](capacity=start + MEMBER_CW_HEAD + MEMBER_CW_PER_CLASS * len(keys))
     for i in range(start):  # driver-loop: over the family's own NEW words (kept)
         words.append(params[i])
     words.append(Float64(MEMBER_CW_KEYED))
     words.append(Float64(len(keys)))
-    words.append(0.0)
+    words.append(1.0 if foreign else 0.0)
     for e in range(len(keys)):  # driver-loop: over the dict's entries (one pair each)
         words.append(keys[e])
         words.append(values[e])
@@ -219,7 +246,9 @@ def member_cw_from_values(mut plan: MemberPlan, classes: List[Float32]):
         words.append(plan.params[i])
     words.append(Float64(MEMBER_CW_DICT))
     words.append(Float64(k))
-    words.append(0.0)
+    # A key that is not a number (KEYED word 2) equals no numeric class: the
+    # step's fit refuses it as absent, as the estimator's own fit does.
+    words.append(1.0 if plan.params[start + 2] != 0.0 else 0.0)
     for c in range(k):  # driver-loop: over the step's classes (one key search each; a dict is short)
         var value = 1.0
         var named = 0.0
@@ -245,6 +274,9 @@ def member_cw_dict_ready(params: List[Float64], start: Int, classes: Int, absent
     if Int(params[start]) == MEMBER_CW_KEYED:
         raise Error("TypeError: mojolearn: a member with a class_weight dict keyed by its target's values is "
             + "fitted only by a caller that turns it into its step's table")
+    if Int(params[start]) == MEMBER_CW_INVALID:
+        raise Error("TypeError: mojolearn: a member with a class_weight its estimator refuses is refused at "
+            + "its caller's UNPACK, never fitted")
     var k = Int(params[start + 1])
     if k < 0:
         raise Error("TypeError: mojolearn: a member with a class_weight dict is fitted only by a caller that "

@@ -24,17 +24,25 @@ settings, an ordered RMSE booster of its own), and it needs a per-fit
     feature-list tail (lane mf-img3: the member fits the category map, the
     one-hot flags, the multi-target losses and, with the caller's group ids
     in `call.groups`, the query-wise losses). Returns False only for a class
-    but GradientBoosting itself. An eval set and pairs are fit arguments a
-    member call does not pass, so a caller with them keeps the doors by
-    construction.
+    but GradientBoosting itself. An eval set, PairLogit's pairs and a text
+    X's categorical keys travel in the member call (lane mf-left4:
+    `call.eval_x` / `eval_y`, `pairs` / `pairs_weight`, `cat_keys` /
+    `eval_cat_keys`, a text X's keys read by the caller's UNPACK with the fit
+    door's own encoding, bindings/gbdt_category_unpack.mojo
+    `gbdt_category_admit`). No member caller passes them yet: model
+    selection, the ensembles and IterativeImputer hand a float32 X and
+    sample weights only (cross_val_score documents fit parameters and
+    eval_set as not supported).
   * `gbdt_member_pack` (PACK): the fitted attributes the fit door's PACK
     writes (`model_`, `bias_`, `best_iteration_`, `stopped_early_`,
-    `loss_curve_`, `test_loss_curve_` None, `n_features_in_`,
+    `loss_curve_`, `test_loss_curve_` (the held-out curve of a fit given an
+    eval set, else None: lane mf-left4), `n_features_in_`,
     `category_map_` (the member's map block, None without cat_features),
     `approx_dim_`, `n_classes_`, `learning_rate_`,
     `boosting_type_`), the old resident copy dropped as the fit drops it.
   * `gbdt_member_state` (UNPACK): a member state from a fitted estimator's
-    model text, loss curve, scalars and (a CTR model) its category map.
+    model text, loss curve, scalars, (a CTR model) its category map and (a
+    fit with an eval set) its held-out curve.
 
   * The adapters (kinds 0, 2): admission as above over the learner, plus
     the adapter's own refusals (`_new_learner`: numeric_mode, the
@@ -245,12 +253,24 @@ def _learner_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, 
         category_map = admitted_vector(map_words, "<i8", run)
         unsafe_memcpy(dest=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(category_map))),
                       src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=call.dst.data), count=map_words)
+    # The held-out loss curve (lane mf-left4): None for a fit without an
+    # eval set, else one float64 Array, as the fit door's PACK writes it.
+    call.block = MEMBER_BLOCK_FAMILY + 3
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var test_curve = PythonObject(None)
+    if call.dst.rows > 0:
+        var test = List[Float64](length=call.dst.cols, fill=0.0)
+        if call.dst.cols > 0:
+            unsafe_memcpy(dest=test.unsafe_ptr(),
+                          src=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data),
+                          count=call.dst.cols)
+        test_curve = _f64_curve(test, run)
     py_setitem(own, nk[].k_model_, PythonObject(text))
     py_setitem(own, nk[].k_bias_, PythonObject(bias))
     py_setitem(own, nk[].k_best_iteration_, PythonObject(best))
     py_setitem(own, nk[].k_stopped_early_, PythonObject(stopped))
     py_setitem(own, nk[].k_loss_curve_, _f64_curve(learn, run))
-    py_setitem(own, nk[].k_test_loss_curve_, PythonObject(None))
+    py_setitem(own, nk[].k_test_loss_curve_, test_curve)
     py_setitem(own, nk[].k_n_features_in_, PythonObject(features))
     py_setitem(own, nk[].k_category_map_, category_map)
     py_setitem(own, nk[].k_approx_dim_, PythonObject(dim))
@@ -284,6 +304,10 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(text.unsafe_ptr())), count=nbytes)
     var curve = py_get(own, nk[].k_loss_curve_)
     var curve_view = classical_view(curve, context, "gbdt loss curve")
+    var test_curve = py_get(own, nk[].k_test_loss_curve_)
+    var test_view = PythonObject(None)
+    if test_curve is not None:
+        test_view = classical_view(test_curve, context, "gbdt test loss curve")
     var classes_source = py_get(own, nk[].k_n_classes_)
     var boosting = py_get(own, nk[].k_boosting_type_)
     var scalars: List[Float64] = [
@@ -304,6 +328,10 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
             call.block = MEMBER_BLOCK_FAMILY + 2
             call.x = MemberMatrix(Int(py=classical_address(map_view)), 1, Int(py=map_view.size), MEMBER_I64)
             _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if test_view is not None:
+            call.block = MEMBER_BLOCK_FAMILY + 3
+            call.x = MemberMatrix(Int(py=classical_address(test_view)), 1, Int(py=test_view.size), MEMBER_F64)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE
@@ -313,6 +341,7 @@ def gbdt_member_state(model: PythonObject, fields: PythonObject, context: Python
         raise error
     _ = curve_view
     _ = map_view
+    _ = test_view
     _ = len(packed)
     _ = len(scalars)
     _ = text

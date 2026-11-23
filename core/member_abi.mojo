@@ -121,7 +121,8 @@ from core.native_descriptor_abi import NativeDescriptorCall
 #: `MemberMatrix`, `DeviceRoute` or the operation codes.
 #: 3 (2026-11-21): `MemberMatrix.steps`.
 #: Words APPENDED to the end of `MemberCall` (round 5: out_dtype, scope, pin, devices, device_count; round 6:
-#: pin_kept; lane mf-img3: groups) do not
+#: pin_kept; lane mf-img3: groups; lane mf-left4: eval_x, eval_y, pairs, pairs_weight, cat_keys,
+#: eval_cat_keys) do not
 #: bump it: every image of one build compiles this file, and a member that does not read them is unchanged.
 comptime MEMBER_CALL_LAYOUT = 3
 
@@ -427,6 +428,29 @@ struct MemberCall(Movable):
     # member's query-wise losses: group_id). Not given (rows 0): no groups.
     # A member that reads no groups ignores it.
     var groups: MemberMatrix
+    # APPENDED 2026-11-23 (lane mf-left4; a member that does not read them
+    # ignores them; rows 0 = not given). MEMBER_OP_FIT: a held-out set the
+    # fit evaluates (the Gbdt member's `eval_set`): `eval_x` dense host rows x
+    # the fit's features in the fit X's dtype, `eval_y` its targets in the fit
+    # y's dtype (rows x 1).
+    var eval_x: MemberMatrix
+    var eval_y: MemberMatrix
+    # MEMBER_OP_FIT: ranking pairs over the fit's rows (the Gbdt member's
+    # PairLogit `pairs`): int32 or int64, pairs x 2 (winner row, loser row,
+    # numbered in the row order the member sees); `pairs_weight` float32
+    # pairs x 1 (not given: one each).
+    var pairs: MemberMatrix
+    var pairs_weight: MemberMatrix
+    # MEMBER_OP_FIT / PREDICT*: the keys of the categorical cells of a text
+    # (or mixed) X, read by the caller's UNPACK with the estimator's own
+    # encoding (the Gbdt fit door's `gbdt_category_admit`): int64 bit
+    # patterns of gbdt/data/category_map.mojo keys, ONE ROW PER CATEGORICAL
+    # COLUMN (ascending column order) and one column per row of `x` (the
+    # door's buffer as it is); `x` holds any float words in those columns,
+    # unread. `eval_cat_keys` the same for `eval_x`. Not given: the columns'
+    # Float32 words are the keys.
+    var cat_keys: MemberMatrix
+    var eval_cat_keys: MemberMatrix
 
     def __init__(out self, route: DeviceRoute, state: Int = 0):
         self.layout = MEMBER_CALL_LAYOUT
@@ -453,6 +477,12 @@ struct MemberCall(Movable):
         self.device_count = 0
         self.pin_kept = 0
         self.groups = MemberMatrix()
+        self.eval_x = MemberMatrix()
+        self.eval_y = MemberMatrix()
+        self.pairs = MemberMatrix()
+        self.pairs_weight = MemberMatrix()
+        self.cat_keys = MemberMatrix()
+        self.eval_cat_keys = MemberMatrix()
 
     def on_cpu(self) -> Bool:
         """The member's RESOLVED device is the CPU (its route says so; no

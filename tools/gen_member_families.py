@@ -240,11 +240,13 @@ it is typed (`MemberPlan`, `MemberCall`) and runs with the GIL released.
 SERIAL BY NATURE: one member's admission; a caller with many members admits
 each once and runs them on its own workers.
 """
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner, member_mark, member_labels_hold, member_labels_take
 from bindings.member_leaf_boundary_door import member_leaf_fill, member_leaf_pack, member_leaf_state
 from bindings.py_balanced import py_setitem
-from core.member_abi import MemberPlan, member_resolve_family
+from bindings.member_class_weight_unpack import member_cw_fill_keyed
+from core.member_abi import MemberPlan, member_resolve_family, MEMBER_CAN_FIT
+from core.member_class_weight import member_cw_start, member_cw_pending
 from core.member_families import (
 %(consts)s)
 %(imports)s
@@ -279,14 +281,75 @@ def member_admit_serving(model: PythonObject, fields: PythonObject, plan: Python
     capability bit of `needs` for this estimator, else an owner with
     `published` False, and the caller takes the path an unmarked class
     takes. Never raises: an admission the family refuses (a parameter it
-    does not take as words, class weights, a precomputed kernel, an image
-    that is not loaded) is the same silent fallback, and that path then
+    does not take as words, a class_weight value its estimator refuses, an
+    image that is not loaded) is the same silent fallback, and that path then
     raises its own words if the request is wrong. A member mark never turns
-    a call that worked into a refusal."""
+    a call that worked into a refusal.
+
+    A classifier whose class_weight is a dict (lane mf-adm3) is admitted
+    with its table pending (core/member_class_weight.mojo): served for a
+    caller that only predicts (`needs` without MEMBER_CAN_FIT: the weights
+    shaped the fitted state, not the predictions), refused here for a fit,
+    whose caller hands over its labels through
+    `member_admit_serving_labeled` instead."""
+    return member_admit_serving_labeled(model, fields, plan, context, b, needs, PythonObject(None))
+
+
+def member_admit_serving_labeled(model: PythonObject, fields: PythonObject, plan: PythonObject,
+    context: PythonObject, b: PythonObject, needs: Int, labels: PythonObject) -> MemberOwner:
+    """`member_admit_serving` for a FIT caller that holds the labels of the
+    codes it fits on (`labels`: the classes in code order; None: it holds
+    none). A pending class_weight table stays pending here: the caller
+    completes it with `member_cw_fill` outside this never-raising call, so
+    a dict the estimator refuses raises its own words there (lane mf-adm3).
+    Without labels a FIT admission of such a member is the fallback."""
     try:
         var owner = member_admit(model, fields, plan, context, b)
         if owner.published and not owner.plan.member.has(needs):
             owner.published = False
+        if owner.published and (needs & MEMBER_CAN_FIT) != 0 and labels is None:
+            if member_cw_pending(owner.plan.params, member_cw_start(owner.plan.family, owner.plan.kind,
+                                                                    owner.plan.params)):
+                owner.published = False
+        return owner^
+    except:
+        return MemberOwner()
+
+
+def member_admit_serving_deferred(model: PythonObject, fields: PythonObject, plan: PythonObject,
+    context: PythonObject, b: PythonObject, needs: Int) -> MemberOwner:
+    """`member_admit_serving_labeled` for a FIT caller that reads its class
+    labels only AFTER admitting its members (model selection's units: the
+    one label encode follows the admission, lane mf-left4). A pending
+    class_weight tail stays pending: the caller completes every member's
+    plan with `member_cw_fill_plan` over the encode's classes before any
+    fit, and an invalid value or a refused dict raises there."""
+    return member_admit_serving_labeled(model, fields, plan, context, b, needs, Python.list())
+
+
+def member_admit_serving_valued(model: PythonObject, fields: PythonObject, plan: PythonObject,
+    context: PythonObject, b: PythonObject, needs: Int, mut refusal: String) -> MemberOwner:
+    """`member_admit_serving` for a FIT caller whose class labels are its
+    target's numeric values, known only in its RUN (IterativeImputer's
+    classifier steps): a class_weight dict is read into the KEYED tail here
+    (bindings/member_class_weight_unpack.mojo `member_cw_fill_keyed`), which
+    each step turns into its own table (core/member_class_weight.mojo
+    `member_cw_from_values`; a key that is not a number marks every step's
+    table absent). What that fill refuses (an invalid value, a value or a
+    key the family refuses) leaves the owner published with the
+    estimator's own words in `refusal`: the caller's RUN raises them at its
+    first classifier fit, where the estimator's own fit raised them (lane
+    mf-left4); before, such an estimator took the caller's door rounds."""
+    try:
+        var owner = member_admit(model, fields, plan, context, b)
+        if owner.published and not owner.plan.member.has(needs):
+            owner.published = False
+        if owner.published:
+            try:
+                if not member_cw_fill_keyed(owner, model, fields, context, b):
+                    owner.published = False
+            except error:
+                refusal = String(error)
         return owner^
     except:
         return MemberOwner()

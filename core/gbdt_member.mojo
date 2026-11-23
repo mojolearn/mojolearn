@@ -47,9 +47,14 @@ each row (the query-wise losses' `group_id`: contiguous runs, a split
 group refused in the fit door's words; PairLogit takes every pair within a
 group, as the door with no `pairs`). Categorical columns hold numbers (their
 Float32 words are the keys, gbdt/data/category_map.mojo, as the fit door
-keys a float X); the fit writes their dense codes into its own column-major
-copy and keeps the map, and every predict codes the query's columns through
-it. Refused in words: a row or column index, a device-home view, a nonzero
+keys a float X), or, for a text X, the caller hands the keys its UNPACK read
+with the door's encoding (`cat_keys`, lane mf-left4); the fit writes their
+dense codes into its own column-major copy and keeps the map, and every
+predict codes the query's columns through it (from `cat_keys` when given).
+Since lane mf-left4 FIT also reads the door's held-out set (`eval_x` /
+`eval_y`, with `eval_cat_keys`: early stopping, use_best_model and the test
+loss curve as the door's fit) and PairLogit's explicit `pairs` /
+`pairs_weight` (with `groups`, as the door requires). Refused in words: a row or column index, a device-home view, a nonzero
 `fit_output`, a multi-column y for a one-target loss.
 FAST (the route's tier word 0): GradientBoostingClassifier's class codes are
 the learner's `predict_classes` (the resident direct-class kernel, else the
@@ -68,8 +73,11 @@ Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
     boosting (0 Plain, 1 Ordered)]
   3 `MEMBER_BLOCK_FAMILY + 2` int64 1 x words: the category map
     (`category_map_`), 0 rows for a model fitted without cat_features
-An import needs blocks 0 to 2 (and 3 for a CTR model, before the scalars);
-the scalars block carries MEMBER_IMPORT_DONE.
+  4 `MEMBER_BLOCK_FAMILY + 3` float64 1 x iterations: the held-out loss
+    curve (`test_loss_curve_`, lane mf-left4), 0 rows for a fit without an
+    eval set (None)
+An import needs blocks 0 to 2 (and 3 for a CTR model, before the scalars;
+4 is optional); the block that carries MEMBER_IMPORT_DONE comes last.
 
 LIFETIME: the state owns everything it reads after FIT (the model text and
 the curves); it keeps no pointer into a fit buffer (no MEMBER_BORROWS_FIT).
@@ -91,7 +99,7 @@ from gbdt.fit_calls import (
     xg_predict_multi, xg_sigmoid_pair, xg_binary,
 )
 from gbdt.trees_gbdt_run import gbdt_text_has_ctr
-from gbdt.trees_gbdt_fit_run import gbdt_bias_of, gbdt_check_group_rows
+from gbdt.trees_gbdt_fit_run import gbdt_bias_of, gbdt_check_group_rows, _pair_end_range
 from gbdt.data.category_map import (
     CategoryMaps, CategoryKeyPtr, CategoryF32Ptr, category_keys_from_f32, category_block_columns,
     category_block_feature, category_apply_column,
@@ -129,7 +137,7 @@ comptime _KIND_BOOSTER = 1
 comptime _KIND_REGRESSOR = 2
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
-comptime _BLOCKS = 4
+comptime _BLOCKS = 5
 comptime _SCALARS = 9
 #: the image's predict modes (bindings/trees_public_gbdt_door.mojo `_PREDICT_*`)
 comptime _PREDICT_RAW = 0
@@ -177,6 +185,10 @@ struct GbdtMemberSlot(Copyable, Movable, Defaultable):
     # The fitted category map (gbdt/data/category_map.mojo's stored words; the
     # estimator's `category_map_`); empty for a model without cat_features.
     var cat_map: List[UInt64]
+    # The held-out loss curve (lane mf-left4: a fit given `call.eval_x`), the
+    # estimator's `test_loss_curve_`; `has_test` False: None.
+    var test: List[Float64]
+    var has_test: Bool
     # Export forms, built at export.
     var x_text: List[Int32]
     var x_scalars: List[Float64]
@@ -201,6 +213,8 @@ struct GbdtMemberSlot(Copyable, Movable, Defaultable):
         self.cat_given = List[Int]()
         self.hot_given = List[Int]()
         self.cat_map = List[UInt64]()
+        self.test = List[Float64]()
+        self.has_test = False
         self.x_text = List[Int32]()
         self.x_scalars = List[Float64]()
 
@@ -243,6 +257,8 @@ def _clear[I: GbdtMemberImage](slot: _SlotPtr):
     slot[].x_text = List[Int32]()
     slot[].x_scalars = List[Float64]()
     slot[].cat_map = List[UInt64]()
+    slot[].test = List[Float64]()
+    slot[].has_test = False
     slot[].features = 0
     slot[].dim = 0
     slot[].classes = 0
@@ -549,59 +565,183 @@ def _feature_flags(slot: _SlotPtr, cols: Int) raises -> List[UInt32]:
     return out^
 
 
-def _category_fit(columns: List[Int], cm: Int, rows: Int) raises -> List[UInt64]:
+def _keys_of(keys: MemberMatrix, n_cat: Int, rows: Int, what: String) raises -> Int:
+    """The address of a caller's categorical keys (`MemberCall.cat_keys`:
+    int64 words, one row per categorical column, one column per row of X),
+    0 when not given (the columns' Float32 words are then the keys)."""
+    if keys.rows == 0:
+        return 0
+    if not keys.dense_host(MEMBER_I64):
+        raise Error("TypeError: a Gbdt member reads " + what + " as a dense host int64 view")
+    if keys.rows != n_cat or keys.cols != rows:
+        raise Error("member ABI: " + what + " is " + String(keys.rows) + " x " + String(keys.cols) + " for "
+                    + String(n_cat) + " categorical columns of " + String(rows) + " rows")
+    return keys.data
+
+
+def _category_fit(columns: List[Int], cm: Int, rows: Int, keys: MemberMatrix) raises -> List[UInt64]:
     """`gbdt_category_fit` on the member's column-major float32 block: each
-    categorical column keyed from its Float32 words, its map fitted and its
-    dense codes written over it (each column's rows on every worker); the
-    stored map's words (the estimator's `category_map_`)."""
+    categorical column keyed from its Float32 words, or (lane mf-left4) from
+    the caller's keys of a text X (`keys`, the door's `from_cells` branch),
+    its map fitted and its dense codes written over it (each column's rows
+    on every worker); the stored map's words (the estimator's
+    `category_map_`)."""
     var maps = CategoryMaps()
-    var scratch = List[UInt64](length=max(rows, 1), fill=0)
+    var given = _keys_of(keys, len(columns), rows, "cat_keys")
+    var scratch = List[UInt64](length=max(rows, 1) if given == 0 else 1, fill=0)
     var sp = CategoryKeyPtr(unsafe_from_address=Int(scratch.unsafe_ptr()))
     for c in range(len(columns)):  # driver-loop: over the categorical columns (each column's rows run on every worker)
         var column = CategoryF32Ptr(unsafe_from_address=cm + 4 * columns[c] * rows)
-        category_keys_from_f32(column, rows, sp)
-        maps.fit_column(columns[c], sp, rows, column)
+        if given != 0:
+            maps.fit_column(columns[c], CategoryKeyPtr(unsafe_from_address=given) + c * rows, rows, column)
+        else:
+            category_keys_from_f32(column, rows, sp)
+            maps.fit_column(columns[c], sp, rows, column)
     var words = List[UInt64](length=maps.block_words(), fill=0)
     maps.write_block(CategoryKeyPtr(unsafe_from_address=Int(words.unsafe_ptr())))
     _ = len(scratch)
     return words^
 
 
-def _category_apply(slot: _SlotPtr, cm: Int, rows: Int) raises:
-    """`gbdt_category_apply` on a column-major float32 query block: the dense
-    codes of the fitted map over its categorical columns (a value the fit
-    did not see takes the unseen code), the map searched in place."""
-    var block = CategoryKeyPtr(unsafe_from_address=Int(slot[].cat_map.unsafe_ptr()))
-    var n_cat = category_block_columns(block, len(slot[].cat_map), slot[].features)
-    var scratch = List[UInt64](length=max(rows, 1), fill=0)
+def _category_apply_map(cat_map: List[UInt64], features: Int, cm: Int, rows: Int, keys: MemberMatrix) raises:
+    """`gbdt_category_apply` on a column-major float32 block (a query, or the
+    fit's held-out set): the dense codes of the map `cat_map` over its
+    categorical columns (a value the fit did not see takes the unseen code),
+    keyed from the columns' Float32 words or from the caller's keys of a
+    text X (`keys`, lane mf-left4); the map searched in place."""
+    var block = CategoryKeyPtr(unsafe_from_address=Int(cat_map.unsafe_ptr()))
+    var n_cat = category_block_columns(block, len(cat_map), features)
+    var given = _keys_of(keys, n_cat, rows, "cat_keys")
+    var scratch = List[UInt64](length=max(rows, 1) if given == 0 else 1, fill=0)
     var sp = CategoryKeyPtr(unsafe_from_address=Int(scratch.unsafe_ptr()))
     for c in range(n_cat):  # driver-loop: over the categorical columns (each column's rows run on every worker)
         var column = CategoryF32Ptr(unsafe_from_address=cm + 4 * category_block_feature(block, c) * rows)
-        category_keys_from_f32(column, rows, sp)
-        category_apply_column(block, c, sp, rows, column)
+        if given != 0:
+            category_apply_column(block, c, CategoryKeyPtr(unsafe_from_address=given) + c * rows, rows, column)
+        else:
+            category_keys_from_f32(column, rows, sp)
+            category_apply_column(block, c, sp, rows, column)
     _ = len(scratch)
 
 
-def _group_sizes(call: _CallPtr, rows: Int) raises -> List[UInt32]:
-    """`_group_sizes` of the caller's group ids (int32 or int64, one per
-    row): the run lengths of consecutive equal ids, a split group refused in
-    the fit door's words (`group_runs_scan`, the door's own scan)."""
-    var view = call[].groups
+def _category_apply(slot: _SlotPtr, cm: Int, rows: Int, keys: MemberMatrix) raises:
+    """`_category_apply_map` with the state's fitted map."""
+    _category_apply_map(slot[].cat_map, slot[].features, cm, rows, keys)
+
+
+def _eval_scan(src: Int, rows: Int, codes: Bool) raises -> Tuple[Bool, Bool, Float32]:
+    """One pass over the held-out targets split over the host workers (lane
+    mf-left4): whether every value is the same (the door's `reduce_stat`
+    min == max, `eval_constant`), whether one is not a finite nonnegative
+    integer (read when `codes`: a classification loss's labels), and the
+    largest value."""
+    var tasks = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, tasks)
+    var source = _F32P(unsafe_from_address=src)
+    var lows = List[Float32](length=max(tasks, 1), fill=Float32(3.0e38))
+    var highs = List[Float32](length=max(tasks, 1), fill=Float32(-3.0e38))
+    var bads = List[UInt8](length=max(tasks, 1), fill=0)
+    var lo_p = _F32P(unsafe_from_address=Int(lows.unsafe_ptr()))
+    var hi_p = _F32P(unsafe_from_address=Int(highs.unsafe_ptr()))
+    var bad_p = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(bads.unsafe_ptr()))
+
+    def scan(unit: Int) {imm source, imm lo_p, imm hi_p, imm bad_p, imm chunk, imm rows, imm codes}:
+        for i in range(unit * chunk, min((unit + 1) * chunk, rows)):  # native data loop (one host task's rows)
+            var v = source[i]
+            if codes and (not isfinite(v) or v < 0 or (v < Float32(1.0e15) and Float32(Int(v)) != v)):
+                bad_p[unit] = 1
+            lo_p[unit] = min(lo_p[unit], v)
+            hi_p[unit] = max(hi_p[unit], v)
+
+    host_parallelize(scan, tasks)
+    var low = Float32(3.0e38)
+    var high = Float32(-3.0e38)
+    var bad = False
+    for t in range(len(bads)):  # small-loop(tasks): one range per host task
+        bad = bad or bads[t] != 0
+        low = min(low, lows[t])
+        high = max(high, highs[t])
+    return (low == high, bad, high)
+
+
+@always_inline
+def _pair_end(data: Int, wide: Bool, at: Int) -> Int:
+    if wide:
+        return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=data)[at])
+    return Int(_I32P(unsafe_from_address=data)[at])
+
+
+def _pair_refuse(data: Int, wide: Bool, i: Int, rows: Int) raises:
+    """The door's refusal of pair `i` (the first bad one), in its order."""
+    var w0 = _pair_end(data, wide, 2 * i)
+    _pair_end_range(w0, i, 0, rows)
+    var w1 = _pair_end(data, wide, 2 * i + 1)
+    _pair_end_range(w1, i, 1, rows)
+    raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
+
+
+def _pairs_words(call: _CallPtr, rows: Int, mut flat: List[UInt32], mut weights: List[Float32]) raises:
+    """The door's `_pairs_arrays` on the member's views (lane mf-left4): the
+    uint32 winner / loser words, each end inside the fit's rows and never a
+    row paired with itself, and the float32 pair weights (ones when not
+    given), each finite and nonnegative; the refusal names the first bad
+    pair or weight in the door's words. The pairs and the weights are split
+    over the host workers (each task notes its first bad index; tasks are in
+    index order, so the first task that noted one holds the door's)."""
+    var view = call[].pairs
     if view.home == MEMBER_HOME_DEVICE or not (view.dense_host(MEMBER_I64) or view.dense_host(MEMBER_I32)):
-        raise Error("TypeError: a Gbdt member reads the group ids as a dense host int32 or int64 view")
-    var n = view.rows * view.cols
-    gbdt_check_group_rows(n, rows)
-    var words = id_words_coded(view.data, 0 if view.dtype == MEMBER_I64 else 1, n)
-    var sizes = List[Int]()
-    var split = group_runs_scan(words, sizes)
-    if split >= 0:
-        raise Error("mojolearn: group Ids are not consecutive: the rows of group "
-                    + String(words[split]) + " are split into more than one run (row " + String(split) + "); "
-                    + "CatBoost requires every group's rows to be contiguous")
-    var out = List[UInt32](capacity=len(sizes))
-    for i in range(len(sizes)):  # native data loop (one word per group)
-        out.append(UInt32(sizes[i]))
-    return out^
+        raise Error("TypeError: a Gbdt member reads pairs as a dense host int32 or int64 view")
+    if view.cols != 2:
+        raise Error("mojolearn: Length of pairs[0] isn't equal to 2.")
+    var m = view.rows
+    var data = view.data
+    var wide = view.dtype == MEMBER_I64
+    flat = List[UInt32](length=2 * m, fill=0)
+    var tasks = host_predict_task_count_work(m, m)
+    var chunk = host_predict_chunk(m, tasks)
+    var firsts = List[Int](length=max(tasks, 1), fill=-1)
+    var fp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(flat.unsafe_ptr()))
+    var first_p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(firsts.unsafe_ptr()))
+
+    def check(unit: Int) {imm data, imm wide, imm fp, imm first_p, imm chunk, imm m, imm rows}:
+        for i in range(unit * chunk, min((unit + 1) * chunk, m)):  # native data loop (one host task's pairs)
+            var w0 = _pair_end(data, wide, 2 * i)
+            var w1 = _pair_end(data, wide, 2 * i + 1)
+            if w0 < 0 or w0 >= rows or w1 < 0 or w1 >= rows or w0 == w1:
+                first_p[unit] = i
+                return
+            fp[2 * i] = UInt32(w0)
+            fp[2 * i + 1] = UInt32(w1)
+
+    host_parallelize(check, tasks)
+    for t in range(len(firsts)):  # small-loop(tasks): the first task that noted a bad pair
+        if firsts[t] >= 0:
+            _pair_refuse(data, wide, firsts[t], rows)
+    weights = List[Float32](length=m, fill=Float32(1.0))
+    var given = call[].pairs_weight
+    if given.rows == 0:
+        return
+    _dense(given, MEMBER_F32, "pairs_weight")
+    if given.rows * given.cols != m:
+        raise Error("mojolearn: len(pairs_weight) = " + String(given.rows * given.cols) + " is not equal to "
+                    + "len(pairs) = " + String(m) + " ")
+    var source = _F32P(unsafe_from_address=given.data)
+    var wp = _F32P(unsafe_from_address=Int(weights.unsafe_ptr()))
+    var bads = List[Int](length=max(tasks, 1), fill=-1)
+    var bad_p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(bads.unsafe_ptr()))
+
+    def copy(unit: Int) {imm source, imm wp, imm bad_p, imm chunk, imm m}:
+        for i in range(unit * chunk, min((unit + 1) * chunk, m)):  # native data loop (one host task's weights)
+            var f = source[i]
+            if not (isfinite(f) and f >= 0):
+                bad_p[unit] = i
+                return
+            wp[i] = f
+
+    host_parallelize(copy, tasks)
+    for t in range(len(bads)):  # small-loop(tasks): the first task that noted a bad weight
+        if bads[t] >= 0:
+            raise Error("mojolearn: pairs_weight[" + String(bads[t]) + "] must be a finite nonnegative number")
 
 
 def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
@@ -611,7 +751,12 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     mf-img3 also cat_features (numeric categories, keyed from their Float32
     words as the door keys a float X), one_hot_features, the multi-target
     losses (y of n_targets columns) and the query-wise losses (the caller's
-    group ids, `call.groups`)."""
+    group ids, `call.groups`). Since lane mf-left4 also the fit door's
+    held-out set (`call.eval_x` / `eval_y`: its checks in its words, the
+    category map applied to it, `eval_constant`, the test loss curve kept),
+    PairLogit's explicit `pairs` / `pairs_weight`, and the categorical keys
+    of a text X (`call.cat_keys` / `eval_cat_keys`, the door's encoding read
+    at the caller's UNPACK)."""
     _whole(call)
     if call[].fit_output != 0:
         raise Error("TypeError: a Gbdt member has no fit output")
@@ -636,7 +781,10 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
                         + "n_targets) with n_targets >= 2, got " + String(target_dim) + " "
                         + "(CatBoost: \"Only one class found, can't learn "
                         + "multiclass objective\", multiclass_targets.h:167)")
-        if grouped:
+        if call[].eval_x.rows > 0:
+            raise Error("NotImplementedError: mojolearn: loss='" + config.loss + "' with eval_set is not "
+                        + "carried: the held-out arm's target is one value per row")
+        if grouped or call[].pairs.rows > 0:
             raise Error("mojolearn: loss='" + config.loss + "' does not read group_id or pairs")
     elif call[].y.cols != 1:
         raise Error("TypeError: a Gbdt member reads one target column")
@@ -689,8 +837,10 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     # written).
     var fit_map = len(cat_columns) != 0
     var fitted_map = List[UInt64]()
+    if not fit_map and (call[].cat_keys.rows > 0 or call[].eval_cat_keys.rows > 0):
+        raise Error("TypeError: a Gbdt member reads categorical keys only with cat_features")
     if fit_map:
-        fitted_map = _category_fit(cat_columns, x_addr, rows)
+        fitted_map = _category_fit(cat_columns, x_addr, rows, call[].cat_keys)
     var n_weights = 0
     var w_addr = call[].x.data
     if call[].weights.rows > 0:
@@ -700,21 +850,83 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
                         + " values for " + String(rows) + " rows")
         w_addr = call[].weights.data
         n_weights = rows
-    var words = gbdt_fit_words(config, rows, cols, n_flags, n_weights, 0, False)
+    # THE HELD-OUT SET (lane mf-left4): the fit door's `_eval_set` on the
+    # member's views, in its order and words; its X column-major (the door
+    # admits it F-order on either route) with the fit's category map over it.
+    var n_eval = 0
+    var eval_constant = False
+    var eval_cm = List[Float32]()
+    var eval_targets = List[Float32]()
+    var ex_addr = x_addr
+    var ey_addr = y_addr
+    if call[].eval_x.rows > 0:
+        _dense(call[].eval_x, MEMBER_F32, "eval_set X")
+        if call[].eval_x.cols != cols:
+            raise Error("mojolearn: eval_set X has " + String(call[].eval_x.cols) + " features "
+                        + "for a fit on " + String(cols))
+        n_eval = call[].eval_x.rows
+        eval_cm = _column_major(call[].eval_x.data, n_eval, cols)
+        if fit_map:
+            _category_apply_map(fitted_map, cols, Int(eval_cm.unsafe_ptr()), n_eval, call[].eval_cat_keys)
+        if kind == _KIND_CLASSIFIER:
+            _dense(call[].eval_y, MEMBER_I32, "eval_set y (class codes)")
+        else:
+            _dense(call[].eval_y, MEMBER_F32, "eval_set y")
+        if call[].eval_y.cols != 1:
+            raise Error("TypeError: a Gbdt member reads one eval_set target column")
+        if call[].eval_y.rows != n_eval:
+            raise Error("mojolearn: eval_set y has " + String(call[].eval_y.rows) + " values for "
+                        + String(n_eval) + " rows")
+        ey_addr = call[].eval_y.data
+        if kind == _KIND_CLASSIFIER:
+            # the caller's int32 codes of the two classes, as the fit's y
+            eval_targets = _binary_codes(call[].eval_y.data, n_eval, call[].classes)
+            ey_addr = Int(eval_targets.unsafe_ptr())
+        elif not trees_finite_f32(ey_addr, n_eval):
+            raise Error("mojolearn: " + (String("eval_set y (the eval_set labels)") if multi else String("eval_set y"))
+                        + " must be finite (no NaN or infinity)")
+        var scanned = _eval_scan(ey_addr, n_eval, multi)
+        if multi and (scanned[1] or Int(scanned[2]) >= n_classes):
+            raise Error("mojolearn: eval_set labels must be integer class codes "
+                        + "within the training class range")
+        eval_constant = scanned[0]
+        ex_addr = Int(eval_cm.unsafe_ptr())
+    if call[].pairs_weight.rows > 0 and call[].pairs.rows == 0:
+        raise Error("mojolearn: pairs_weight needs pairs")
+    var paired = call[].pairs.rows > 0
+    if paired:
+        if config.loss != "PairLogit":
+            raise Error("NotImplementedError: mojolearn: pairs are read by loss='PairLogit' only; "
+                        + "loss='" + config.loss + "' does not use them")
+        if not grouped:
+            raise Error("NotImplementedError: mojolearn: pairs without group_id are not implemented: "
+                        + "the CatBoost reference then regroups and reorders the "
+                        + "whole pool by the pairs' connected components; pass "
+                        + "group_id")
+    var words = gbdt_fit_words(config, rows, cols, n_flags, n_weights, n_eval, eval_constant)
     if target_dim != 1:
         gbdt_pad_tail(words)
         gbdt_push_int(words, target_dim)
     var sizes = List[UInt32]()
+    var pair_words = List[UInt32]()
+    var pair_weights = List[Float32]()
     if grouped:
         sizes = _group_sizes(call, rows)
         gbdt_pad_tail(words)
         gbdt_push_int(words, Int(sizes.unsafe_ptr()))
         gbdt_push_int(words, len(sizes))
         if config.loss == "PairLogit":
-            # No pairs (a member call carries none): every pair within a group.
-            gbdt_push_int(words, Int(sizes.unsafe_ptr()))
-            gbdt_push_int(words, -1)
-            gbdt_push_int(words, Int(sizes.unsafe_ptr()))
+            if not paired:
+                # No pairs: every pair within a group, as the door with none.
+                gbdt_push_int(words, Int(sizes.unsafe_ptr()))
+                gbdt_push_int(words, -1)
+                gbdt_push_int(words, Int(sizes.unsafe_ptr()))
+            else:
+                # The caller's pairs (lane mf-left4), as the door pushes them.
+                _pairs_words(call, rows, pair_words, pair_weights)
+                gbdt_push_int(words, Int(pair_words.unsafe_ptr()))
+                gbdt_push_int(words, len(pair_weights))
+                gbdt_push_int(words, Int(pair_weights.unsafe_ptr()))
     var options = gbdt_fit_options(config, rows)
     var rate = words.rate
     # The word lists move into the request by swap: moving the fields would leave
@@ -727,13 +939,17 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     swap(fit_bad, words.bad)
     var fit_strs = List[String]()
     swap(fit_strs, options.strs)
-    var args = GbdtFitArgs(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), x_addr, y_addr,
+    var args = GbdtFitArgs(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), ex_addr, ey_addr,
                            fit_ints^, fit_floats^, fit_bad^, fit_strs^)
     var outcome = xg_fit(entry, row_major, args)
     _ = len(scratch)  # the column-major copy lives until the fit returned
     _ = len(codes)  # the classifier's float32 targets (or the column-major y) too
     _ = len(flags)
     _ = len(sizes)
+    _ = len(eval_cm)  # the held-out X and targets the fit read
+    _ = len(eval_targets)
+    _ = len(pair_words)  # the pairs and their weights the fit read
+    _ = len(pair_weights)
     var ctr = gbdt_text_has_ctr(outcome.text)
     if ctr and not fit_map:
         raise Error("RuntimeError: mojolearn: a Gbdt member fit returned a CTR model (no cat_features were given)")
@@ -750,6 +966,10 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     slot[].bias = gbdt_bias_of(outcome.text)
     swap(slot[].text, outcome.text)  # by swap: `outcome` is read after (moving a field out of it is refused)
     swap(slot[].learn, outcome.learn)
+    # The held-out curve (`test_loss_curve_`: None without an eval set).
+    slot[].has_test = n_eval > 0
+    if n_eval > 0:
+        swap(slot[].test, outcome.test)
     slot[].best_iteration = outcome.best_iteration
     slot[].stopped_early = outcome.stopped_early
     slot[].features = cols
@@ -799,7 +1019,7 @@ def _apply(slot: _SlotPtr, call: _CallPtr, mode: Int, dst: Int) raises -> Int:
         return xg_resident_predict(entry, handle, call[].x.data, rows, dst, mode, True)
     var cm = _column_major(call[].x.data, rows, call[].x.cols)
     if coded:
-        _category_apply(slot, Int(cm.unsafe_ptr()), rows)
+        _category_apply(slot, Int(cm.unsafe_ptr()), rows, call[].cat_keys)
         if handle >= 0:
             var wrote = xg_resident_predict(entry, handle, Int(cm.unsafe_ptr()), rows, dst, mode, False)
             _ = len(cm)
@@ -1069,7 +1289,9 @@ def _proba(slot: _SlotPtr, call: _CallPtr) raises:
 
 def _block_of(index: Int) raises -> Int:
     if index < 0 or index >= _BLOCKS:
-        raise Error("member ABI: a Gbdt member has four fitted blocks")
+        raise Error("member ABI: a Gbdt member has five fitted blocks")
+    if index == 4:
+        return MEMBER_BLOCK_FAMILY + 3
     if index == 3:
         return MEMBER_BLOCK_FAMILY + 2
     return MEMBER_BLOCK_SCALARS if index == 2 else MEMBER_BLOCK_FAMILY + index
@@ -1096,6 +1318,11 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         # The category map (no rows for a model fitted without cat_features).
         var words = len(slot[].cat_map)
         call[].dst = MemberMatrix(Int(slot[].cat_map.unsafe_ptr()), 1 if words > 0 else 0, words, MEMBER_I64)
+    elif block == MEMBER_BLOCK_FAMILY + 3:
+        # The held-out loss curve (lane mf-left4): no rows for a fit without
+        # an eval set (`test_loss_curve_` None), else one row of its values.
+        call[].dst = MemberMatrix(Int(slot[].test.unsafe_ptr()), 1 if slot[].has_test else 0, len(slot[].test),
+                                  MEMBER_F64)
     elif block == MEMBER_BLOCK_SCALARS:
         slot[].x_scalars = [Float64(slot[].features), Float64(slot[].dim), Float64(slot[].classes), slot[].bias,
                             Float64(slot[].best_iteration), 1.0 if slot[].stopped_early else 0.0, slot[].rate,
@@ -1133,6 +1360,14 @@ def _import[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
             _dense(view, MEMBER_I64, "a fitted block")
             unsafe_memcpy(dest=slot[].cat_map.unsafe_ptr(),
                           src=MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=view.data), count=words)
+    elif block == MEMBER_BLOCK_FAMILY + 3:
+        # The held-out loss curve (optional; lane mf-left4): rows 0 = None.
+        slot[].has_test = view.rows > 0
+        slot[].test = List[Float64](length=view.rows * view.cols, fill=0.0)
+        if view.rows * view.cols > 0:
+            _dense(view, MEMBER_F64, "a fitted block")
+            unsafe_memcpy(dest=slot[].test.unsafe_ptr(), src=_F64P(unsafe_from_address=view.data),
+                          count=view.rows * view.cols)
     elif block == MEMBER_BLOCK_SCALARS:
         _dense(view, MEMBER_F64, "a fitted block")
         if view.rows * view.cols != _SCALARS:

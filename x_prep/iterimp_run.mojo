@@ -989,12 +989,16 @@ struct IterImpMember(Copyable, Movable):
     the door admits no other family for it). `classifier` (set by the door
     after construction): a classifier kind, fitted on each step's int32
     codes with the step's class count; its PREDICT writes codes of
-    `code_dtype` (the member's MEMBER_OP_OUTPUTS answer, asked once)."""
+    `code_dtype` (the member's MEMBER_OP_OUTPUTS answer, asked once).
+    `cw_refusal` (set by the door, lane mf-left4): the estimator's own words
+    for a class_weight it refuses, read at UNPACK; a classifier step raises
+    them before its fit, where the estimator's own fit raised them ("": none)."""
     var plan: MemberPlan
     var borrows: Bool
     var posterior: Bool
     var classifier: Bool
     var code_dtype: Int
+    var cw_refusal: String
 
     def __init__(out self, var plan: MemberPlan, borrows: Bool, posterior: Bool):
         self.plan = plan^
@@ -1002,6 +1006,7 @@ struct IterImpMember(Copyable, Movable):
         self.posterior = posterior
         self.classifier = False
         self.code_dtype = MEMBER_I32
+        self.cw_refusal = String("")
 
 
 struct IterImpMemberFit(Movable):
@@ -1251,6 +1256,11 @@ def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Fl
     var y = a + 4 * gathered.gy
     classes = iterimp_class_values(y, gathered.mob)
     var codes = iterimp_class_codes(y, gathered.mob, classes)
+    if len(member.cw_refusal) > 0:
+        # A class_weight the estimator refuses (lane mf-left4): its own words,
+        # at this first classifier fit, after the target's class read (the
+        # arena is left as a refusing fit leaves it).
+        raise Error(member.cw_refusal)
     var step_plan = member.plan.copy()
     step_plan.classes = len(classes)
     # A class_weight dict keyed by the target's values (lane mf-adm3): the
