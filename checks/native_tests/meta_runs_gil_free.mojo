@@ -349,6 +349,8 @@ def check_vote() raises:
     var codes2 = List[Int32](length=N, fill=Int32(-1))
     _ = vote_codes_run(_glue(), rows, hard_door, 3, False, Int(acc2.unsafe_ptr()), Int(codes2.unsafe_ptr()))
     _same_i32(codes, codes2, "hard vote")
+    _ = acc^  # the hard votes' scratch, read through vote_codes_run
+    _ = acc2^
     _ = pa^
     _ = pb^
     _ = ca^
