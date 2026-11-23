@@ -10,8 +10,8 @@ test_nn_attention_layers, per case, through the model interpreter (autograd/mode
     PyTorch's (out, in) layout, per-head softmax(q k^T / sqrt(head_dim) + mask) v, the output projection,
     layer_norm, the feed-forward network, residuals, the sinusoidal encoding), tolerance 1e-4 (1 + |y|);
   - every parameter gradient against central finite differences of the interpreter's own loss sum(seed * y)
-    (h = 1/128, tolerance 3e-3 (1 + |fd|); a parameter outside it is probed again at h = 1/512, a ReLU kink
-    inside the wider step bending the difference);
+    (h = 1/128, tolerance 3e-3 (1 + |fd|); a parameter outside it is probed again centrally at h/4 and
+    one-sided at h/16 on both sides, a ReLU kink inside the wider step bending the central difference);
   - one `NN_ATTENTION <case> digest` line over the output and gradient words.
   Cases: self-attention with bias; causal without bias (the bias words stay out of every op: their
   gradient is 0); cross-attention to an earlier layer of another length and width (kdim 5, 3 keys); the key
@@ -500,10 +500,24 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
             # again with a quarter of the step, and the gradient must match that one
             var d = abs(Float64(grads[i]) - fd[i])
             if not (d <= 3e-3 * (1.0 + abs(fd[i]))):
-                var f4 = _fd(ex, c, spec, params, i, _H / 4.0)
-                var f16 = _fd(ex, c, spec, params, i, _H / 16.0)
-                print("NN_ATTENTION", c.name, "re-probe", i, "grad", grads[i], "fd h", fd[i], "h/4", f4, "h/16", f16)
-                fd[i] = f16 if abs(Float64(grads[i]) - f16) < abs(Float64(grads[i]) - f4) else f4
+                # a ReLU input inside [p - h, p + h] bends the central difference: probe again at h/4 and,
+                # one-sided, at h/16 (the side away from the kink is the derivative the tape takes)
+                var probes = List[Float64]()
+                probes.append(_fd(ex, c, spec, params, i, _H / 4.0))
+                var base = _loss(ex, c, spec, params)
+                var up = params.copy()
+                up[i] = Float32(Float64(params[i]) + _H / 16.0)
+                var down = params.copy()
+                down[i] = Float32(Float64(params[i]) - _H / 16.0)
+                probes.append((_loss(ex, c, spec, up) - base) / (Float64(up[i]) - Float64(params[i])))
+                probes.append((base - _loss(ex, c, spec, down)) / (Float64(params[i]) - Float64(down[i])))
+                var best = fd[i]
+                for k in range(len(probes)):  # small-loop(3 probes)
+                    if abs(Float64(grads[i]) - probes[k]) < abs(Float64(grads[i]) - best):
+                        best = probes[k]
+                print("NN_ATTENTION", c.name, "re-probe", i, "grad", grads[i], "fd h", fd[i], "h/4", probes[0],
+                      "right h/16", probes[1], "left h/16", probes[2])
+                fd[i] = best
         _close(c.name + " gradient", grads, fd, 3e-3)
     var words = yv.copy()
     for i in range(len(grads)):  # small-loop(check words)
