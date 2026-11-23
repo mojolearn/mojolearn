@@ -1656,20 +1656,24 @@ ADAPTED_MODULES = {
 #: grouped losses with cat_features or one_hot_features, feature_fraction
 #: below 1 with either, feature combinations under Depthwise / Lossguide.
 #: The clause is deleted; NO_CPU_PATH is not empty, so the mechanism stays.
+#: Lane gbdt-cpu-rest-4-tail (2026-11-23): the multi-output losses
+#: (MultiClass, MultiClassOneVsAll, MultiRMSE) walk their leaves under
+#: Newton and Gradient at any iteration count on the host
+#: (gbdt_oracle_multiclass.mojo `_estimate_multi`, the statements of
+#: `device_walker.device_multi_walk_estimate`, the defaults of
+#: `set_leaves_estimation_default`), and the host's own depth cap (16) and
+#: border-count range are gone: `border_count` 1 to 255 and `max_depth` at
+#: most 16 under SymmetricTree and Depthwise are `train`'s limits on both
+#: columns, one body (gbdt/options/catboost_options.mojo::check_tree_limits;
+#: the device had neither: past 255 borders it overran its binarize table,
+#: past depth 16 it trained to the end and the model reader refused the
+#: tree), Lossguide's depth uncapped. What is left of the clause is the
+#: Simple leaf estimator.
 NO_CPU_PATH = (
 
-    "gradient boosting training at a (loss, grow_policy, score_function, "
-    "leaf_estimation_method, bootstrap_type) combination outside the ones "
-    "the gbdt/host oracles restate, each refused by name: under Depthwise "
-    "and Lossguide, score functions and leaf estimators outside each "
-    "policy's covered pair, Depthwise's min_split_gain, min_child_hessian "
-    "and min_data_in_leaf, and boost_from_average outside RMSE, the "
-    "quantile family and the dedicated pointwise Logloss route; under "
-    "SymmetricTree and Ordered, the Simple leaf estimator, Gradient leaves "
-    "or more than one leaf iteration on the multi-output losses (the host "
-    "restates one multi-dimensional Newton step), and border_count outside "
-    "1 to 255 or max_depth above 16 (no named device refusal to match) -- "
-    "each one its own device kernel or its own searcher gate order",
+    "gradient boosting training with the Simple leaf estimator under "
+    "SymmetricTree and Ordered boosting, refused by name (the host takes "
+    "the searcher's own leaves only for RMSE)",
 )
 
 #: The read-back trio every host binding exports under its own prefix,

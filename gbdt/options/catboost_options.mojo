@@ -224,6 +224,42 @@ comptime LEAF_ESTIMATION_EXACT = 2
 comptime LEAF_ESTIMATION_SIMPLE = 3
 
 
+#: The most borders a numeric feature takes: the one-byte compressed index
+#: holds 255 folds a feature (`grid_policy.policy_max_folds(POLICY_ONE_BYTE)`)
+#: and `binarize_float_feature_kernel` stages a feature's borders in a
+#: 256-slot shared table.
+comptime MAX_BORDER_COUNT = 255
+
+#: CatBoost's depth cap for the full-binary-tree policies
+#: (`oblivious_tree_options.cpp:126-129`), which is also what the model text
+#: reader holds (`model_text.load_model_text` refuses an oblivious tree past
+#: depth 16).
+comptime MAX_FULL_TREE_DEPTH = 16
+
+
+def check_tree_limits(border_count: Int, max_depth: Int, lossguide: Bool) raises:
+    """`train`'s limits on `border_count` and `max_depth`, ONE body for the
+    device fit (`gbdt/train.mojo::train`) and the host column
+    (`gbdt/mojolearn_gbdt_host_run.mojo`), so both refuse in the same words
+    (lane gbdt-cpu-rest-4-tail, 2026-11-23). `train` had neither: a
+    border count past 255 overran the binarize kernel's shared border table
+    and the one-byte packing mask, and a SymmetricTree or Depthwise fit
+    past depth 16 trained to the end and was refused by the model reader
+    (an oblivious tree deeper than 16, a non-symmetric one past 65536
+    nodes). Lossguide's depth is the per-leaf bound and is not capped, as in
+    CatBoost's `Validate`; its tree is bounded by `max_leaves` (65536).
+    Negative depths keep the searchers' own refusals."""
+    if border_count < 1 or border_count > MAX_BORDER_COUNT:
+        raise Error(
+            "border_count must be in 1.." + String(MAX_BORDER_COUNT)
+            + " (the one-byte compressed index holds 255 folds a feature);"
+            " got " + String(border_count)
+        )
+    if not lossguide and max_depth > MAX_FULL_TREE_DEPTH:
+        # `CB_ENSURE(MaxDepth <= 16, "Maximum tree depth is 16")`
+        raise Error("Maximum tree depth is 16; got " + String(max_depth))
+
+
 def querywise_pointwise_leaf_check(use_pointwise_searcher: Bool, grouped: Bool, leaf_estimation_method: Int) raises:
     """THE ONE ADMISSION of the leaf method on the grouped pointwise search
     (QueryRMSE, PairLogit, YetiRank under use_pointwise_searcher), for the
@@ -562,7 +598,7 @@ struct CatBoostOptions(Copyable, Movable):
         # per-leaf bound and their Validate does not cap it
         if self.depth < 1:
             raise Error("depth must be at least 1; got " + String(self.depth))
-        if self.grow_policy != GROW_LOSSGUIDE and self.depth > 16:
+        if self.grow_policy != GROW_LOSSGUIDE and self.depth > MAX_FULL_TREE_DEPTH:
             raise Error("Maximum tree depth is 16; got " + String(self.depth))
         # `CB_ENSURE(MaxLeaves == 1u << MaxDepth, "max_leaves option works
         # only with lossguide tree growing")` -- `catboost_options.cpp:993`.

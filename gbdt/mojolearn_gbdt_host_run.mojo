@@ -90,7 +90,10 @@ from gbdt.host.gbdt_oracle_depthwise import (
     gbdt_host_ns_model_text,
 )
 from gbdt.options.data_processing_options import nan_mode_from_name
-from gbdt.options.catboost_options import querywise_pointwise_leaf_check
+from gbdt.options.catboost_options import (
+    check_tree_limits,
+    querywise_pointwise_leaf_check,
+)
 from gbdt.options.child_hessian import (
     check_child_hessian_objective,
     child_hessian_threshold,
@@ -160,9 +163,10 @@ comptime GBDT_HOST_SCORE_L2 = 6
 comptime GBDT_HOST_DEFAULT_BORDER = Float32(0.5)
 
 
-#: The deepest tree the host binding grows; the model text reader refuses
-#: past 31 and `1 << depth` leaves are materialized per tree.
-comptime GBDT_HOST_MAX_DEPTH = 16
+# lane gbdt-cpu-rest-4-tail (2026-11-23): `GBDT_HOST_MAX_DEPTH`, the
+# host's own depth cap, is gone: the depth and border-count limits are
+# `train`'s (`gbdt/options/catboost_options.mojo::check_tree_limits`, one
+# body for both columns)
 
 
 def _refuse(what: String) raises:
@@ -403,11 +407,17 @@ def _gbdt_fit_pointwise_arm(
     var max_leaves = params.i(32)
     var min_data_in_leaf = params.i(33)
     var max_ctr_complexity = params.i(34)
+    # (lane gbdt-cpu-rest-4-tail, 2026-11-23: the policy code this arm's
+    # checks read was never declared here; the caller's slot 31)
+    var grow_code = params.i(31)
 
     # ---- `train`'s option checks, its words and its order
     # (`gbdt/train.mojo`, the grow policy block) ----
     if feature_fraction < 1.0 and n_flags != 0:
         raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): `train`'s border-count and
+    # depth limits in its words and place, one body (`check_tree_limits`)
+    check_tree_limits(border_count, max_depth, grow_code == GBDT_HOST_GROW_LOSSGUIDE)
     if not isfinite(min_child_hessian) or (
         min_child_hessian < 0 and min_child_hessian != -1
     ) or min_child_hessian > Float64(Float32.MAX_FINITE):
@@ -594,10 +604,12 @@ def _gbdt_fit_pointwise_arm(
     # per-tree sample on this searcher (`_pw_sample_tree`)
     if not (feature_fraction > 0.0) or feature_fraction > 1.0:
         raise Error("feature_fraction must be finite and in (0, 1]")
-    if border_count < 1 or border_count > 255:
-        _refuse("border_count=" + String(border_count) + " (1 to 255)")
-    if max_depth < 0 or max_depth > GBDT_HOST_MAX_DEPTH:
-        _refuse("max_depth=" + String(max_depth) + " (0 to 16)")
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): a negative depth is the
+    # searcher's refusal (`create_subsets`); the limits above are `train`'s
+    if max_depth < 0:
+        raise Error(
+            String("maxDepth must be non-negative, got ") + String(max_depth)
+        )
     if max_ctr_complexity < 1:
         # `TCatFeatureParams.check`'s words (`train` raises them)
         raise Error(
@@ -882,8 +894,10 @@ def _gbdt_fit_ordered_arm(
             " and RMSPE are not trained here, and MultiRMSE's"
             " per-dimension start is refused above)."
         )
-    if border_count < 1 or border_count > 255:
-        _refuse_ordered_host("border_count=" + String(border_count) + " (1 to 255)")
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): `train`'s limits in its
+    # words (`check_tree_limits`; Ordered is SymmetricTree), the depth range
+    # below 1 is `fit_ordered`'s (`gbdt_ordered_host_fit`)
+    check_tree_limits(border_count, max_depth, False)
 
     # ---- the loss, as `train` resolves it under Ordered ----
     var hloss: GbdtHostLoss
@@ -1723,10 +1737,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     # (gbdt_oracle_pointwise_rank.mojo `_pw_sample_tree`)
     if not (feature_fraction > 0.0) or feature_fraction > 1.0:
         raise Error("feature_fraction must be finite and in (0, 1]")
-    if border_count < 1 or border_count > 255:
-        _refuse("border_count=" + String(border_count) + " (1 to 255)")
-    if max_depth < 0 or max_depth > GBDT_HOST_MAX_DEPTH:
-        _refuse("max_depth=" + String(max_depth) + " (0 to 16)")
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): `train`'s limits in its
+    # words, one body (`check_tree_limits`); a negative depth keeps the
+    # searcher's own refusal (`create_subsets`)
+    check_tree_limits(border_count, max_depth, grow_code == GBDT_HOST_GROW_LOSSGUIDE)
+    if max_depth < 0 and grow_code == 0:
+        raise Error(
+            String("maxDepth must be non-negative, got ") + String(max_depth)
+        )
 
     # ---- `train`'s own raises on the rest (`gbdt/train.mojo:944-1149`,
     # `:1580-1605`, `:1733-1758`) ----
@@ -1761,8 +1779,11 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
     # `fit_with_test`'s `ns_max_leaves` (`doc_parallel_boosting.mojo:
     # 1093-1113`) and `train`'s cap (`gbdt/train.mojo:968-983`)
-    var ns_max_leaves = 1 << max_depth
+    # (lane gbdt-cpu-rest-4-tail, 2026-11-23: `1 << max_depth` only where
+    # the device takes it, so Lossguide's uncapped depth never shifts)
+    var ns_max_leaves: Int
     if grow_code != GBDT_HOST_GROW_LOSSGUIDE:
+        ns_max_leaves = 1 << max_depth
         if max_leaves >= 0 and max_leaves != (1 << max_depth):
             raise Error(
                 "max_leaves option works only with lossguide tree growing"

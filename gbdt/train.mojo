@@ -336,6 +336,8 @@ from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_NEWTON_COSINE,
     TCatFeatureParams,
+    MAX_FULL_TREE_DEPTH,
+    check_tree_limits,
     grow_policy_from_name,
     grow_policy_name,
     set_leaves_estimation_default,
@@ -1414,6 +1416,9 @@ def train(
         for f in range(len(one_hot)):  # small-loop(one_hot: per-feature option flags): option validation, reads no data
             if one_hot[f]:
                 raise Error("feature_fraction<1 supports numeric features only; one_hot input refused")
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): the border-count and depth
+    # limits, the host column's own body (`check_tree_limits`)
+    check_tree_limits(border_count, max_depth, policy == GROW_LOSSGUIDE)
     _ = child_hessian_threshold(min_child_hessian, policy, score_function)
     if not isfinite(min_split_gain) or (min_split_gain < 0 and min_split_gain != -1):
         raise Error("min_split_gain must be -1 (disabled) or finite and nonnegative")
@@ -3112,9 +3117,13 @@ def train(
 
     # tree CTRS: a handle on the held-out index for the persist-slot writes
     var tree_test_cindex = test_cindex.copy()
+    # the arm's per-tree records and `1 << depth` leaf slots are the
+    # OBLIVIOUS apply's (`_apply_last_tree_to_test`); a non-symmetric tree
+    # applies through its own buffers, so Lossguide's uncapped depth does
+    # not size them (lane gbdt-cpu-rest-4-tail, 2026-11-23)
     var test_arm = make_test_arm(
         ctx, eval_rows, test_cindex^, test_targets^,
-        approx_dim, 1 + approx_dim, max_depth,
+        approx_dim, 1 + approx_dim, min(max_depth, MAX_FULL_TREE_DEPTH),
     )
 
     # TREE CTRS: the fit's state (`TreeCtrFit`), one entry when on.
