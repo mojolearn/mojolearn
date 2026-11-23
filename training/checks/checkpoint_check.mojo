@@ -101,7 +101,7 @@ from autograd.kernels.transformer import LlamaBackwardStages
 from training.checkpoint import (
     CKPT_DESCRIPTOR_BYTES,
     CKPT_HEADER_BYTES,
-    CKPT_LAYOUT_ENTRY_BYTES,
+    CKPT_LAYOUT_FIXED_BYTES,
     CKPT_REFUSE_CONTENT_HASH,
     CKPT_REFUSE_FILE_HASH,
     CKPT_REFUSE_HEADER,
@@ -115,6 +115,7 @@ from training.checkpoint import (
     Checkpoint,
     CheckpointHashes,
     checkpoint_file_bytes,
+    checkpoint_layout_bytes,
     checkpoint_payload_begin,
     compare_checkpoint_files,
     load_checkpoint,
@@ -534,7 +535,7 @@ def clause_i() raises -> Int:
     var path = scratch("roundtrip.bin")
     var h = save_checkpoint(path, ck)
 
-    var want_bytes = checkpoint_file_bytes(TRAIN_J, n)
+    var want_bytes = checkpoint_file_bytes(checkpoint_layout_bytes(names), n)
     if h.bytes != want_bytes:
         failures += 1
         print(
@@ -547,8 +548,8 @@ def clause_i() raises -> Int:
         print(
             "  ok   file is "
             + String(h.bytes)
-            + " bytes = 64 + 64 + 32*"
-            + String(TRAIN_J)
+            + " bytes = 64 + 64 + "
+            + String(checkpoint_layout_bytes(names))
             + " + 12*"
             + String(n)
             + " + 16"
@@ -745,11 +746,11 @@ def clause_ii() raises -> Int:
     )
 
     # ---- 2. VERSION ------------------------------------------------------
-    # `format_version` is at byte 8; XOR 3 turns 1 into 2.
+    # `format_version` is at byte 8; XOR 3 turns 2 into 1 (the old 16-byte-name format, which has no reader).
     var p_ver = scratch("bad_version.bin")
     copy_file_with(good, p_ver, 8, 0x03, 0, 0, True)
     failures += expect_refusal(
-        String("2 version: format_version := 2, file hash repaired"),
+        String("2 version: format_version := 1, file hash repaired"),
         p_ver,
         offs,
         names,
@@ -818,7 +819,7 @@ def clause_ii() raises -> Int:
     # and only `h_all` disagrees. **Without the repair this arm would fire
     # CKPT_REFUSE_FILE_HASH and the content hash would be code that has never
     # once decided anything** (`[[reached-but-inert]]`).
-    var payload_at = checkpoint_payload_begin(TRAIN_J)
+    var payload_at = checkpoint_payload_begin(checkpoint_layout_bytes(names))
     var mid = payload_at + (n // 2) * 4
     var p_content = scratch("bad_content.bin")
     copy_file_with(good, p_content, mid, 0x01, 0, 0, True)
@@ -872,8 +873,9 @@ def clause_ii() raises -> Int:
     # Entry 1's `param_id` field, XOR 1, turning 1 into 0. The table is now
     # out of order, and **the order IS the checkpoint hash specification**
     # (DEVIATION 1550).
+    # entry 1 starts after entry 0's 20 bytes and its name (format version 2: length-prefixed names)
     var pid_at = CKPT_HEADER_BYTES + CKPT_DESCRIPTOR_BYTES + (
-        CKPT_LAYOUT_ENTRY_BYTES * 1
+        CKPT_LAYOUT_FIXED_BYTES + names[0].byte_length()
     )
     var p_layout = scratch("bad_layout.bin")
     copy_file_with(good, p_layout, pid_at, 0x01, 0, 0, True)
@@ -1464,7 +1466,7 @@ def clause_iv() raises -> Int:
         print("  ok   equal state -> byte-for-byte identical files")
 
     # One planted byte in the PAYLOAD, and the report must name it.
-    var payload_at = checkpoint_payload_begin(TRAIN_J)
+    var payload_at = checkpoint_payload_begin(checkpoint_layout_bytes(names))
     var target = payload_at + 7 * 4
     var c = scratch("cmp_c.bin")
     copy_file_with(a, c, target, 0x01, 0, 0, True)
@@ -1580,7 +1582,7 @@ def clause_v(ctx: DeviceContext) raises -> Int:
             " byte-identical"
         )
 
-    var want = checkpoint_file_bytes(TRAIN_J, n)
+    var want = checkpoint_file_bytes(checkpoint_layout_bytes(names), n)
     var got = len(read_file_bytes(p1))
     if got != want:
         failures += 1
@@ -1592,8 +1594,8 @@ def clause_v(ctx: DeviceContext) raises -> Int:
         )
     else:
         print(
-            "  ok   on-disk length is exactly 64 + 64 + 32*"
-            + String(TRAIN_J)
+            "  ok   on-disk length is exactly 64 + 64 + "
+            + String(checkpoint_layout_bytes(names))
             + " + 12*"
             + String(n)
             + " + 16 = "
@@ -1690,7 +1692,7 @@ def main() raises:
     )
     print(
         "file bytes at this shape = "
-        + String(checkpoint_file_bytes(TRAIN_J, train_n_total()))
+        + String(checkpoint_file_bytes(checkpoint_layout_bytes(train_names()), train_n_total()))
         + "   scratch = "
         + scratch_dir()
     )

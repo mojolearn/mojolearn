@@ -105,22 +105,23 @@ The file is four sections and a trailer, in this order, with no padding
 between them and no alignment requirement beyond what the layout already
 gives.
 
-    [ header 64 ][ descriptor 64 ][ layout 32*J ][ payload 12*n_total ][ trailer 16 ]
+    [ header 64 ][ descriptor 64 ][ layout L ][ payload 12*n_total ][ trailer 16 ]
 
-    file_bytes = 64 + 64 + 32*J + 12*n_total + 16
+    L = sum over tensors of (20 + the name's bytes)
+    file_bytes = 64 + 64 + L + 12*n_total + 16
 
-At `J = 11, n_total = 13376` that is **161008 bytes exactly**, and a file of
-any other length for that shape is refused before a single float is read.
+A file of any other length for its header's shape is refused before a single
+float is read.
 
 ### 2.1 Header, 64 bytes, at offset 0
 
 | off | size | type | field | value |
 |---|---|---|---|---|
 | 0 | 8 | bytes | `magic` | `4D 4C 43 4B 50 54 30 31`, ASCII `MLCKPT01` |
-| 8 | 4 | u32 | `format_version` | 1 |
+| 8 | 4 | u32 | `format_version` | 2 |
 | 12 | 4 | u32 | `header_bytes` | 64 |
 | 16 | 4 | u32 | `descriptor_bytes` | 64 |
-| 20 | 4 | u32 | `layout_bytes` | `32 * j_count` |
+| 20 | 4 | u32 | `layout_bytes` | `L`, the sum of the entries' bytes |
 | 24 | 4 | u32 | `payload_bytes` | `n_arrays * n_total * 4` |
 | 28 | 4 | u32 | `trailer_bytes` | 16 |
 | 32 | 4 | u32 | `j_count` | number of parameter tensors, `>= 1` |
@@ -188,7 +189,7 @@ different files, and correctly so. Two legs must be launched with the same
 configuration for the comparison to mean anything at all -- which was already
 true of the digest, silently. Here it is visible in the first 128 bytes.
 
-### 2.3 Layout table, 32 bytes per tensor, `j_count` entries, at offset 128
+### 2.3 Layout table, 20 bytes plus the name per tensor, `j_count` entries, at offset 128
 
 Entries are in ASCENDING `param_id` and `param_id` IS the index. Plan section
 2 and DEVIATION 1550: **this order is part of the checkpoint hash
@@ -204,12 +205,16 @@ assuming they agree.
 | 8 | 4 | u32 | `count`, `offsets[j+1] - offsets[j]`, `>= 1` |
 | 12 | 1 | u8 | `buf_initialized[j]`, 0 or 1 and NO other value |
 | 13 | 3 | u8 | reserved, all zero |
-| 16 | 16 | ascii | `name`, NUL padded, from `[A-Za-z0-9._-]` |
+| 16 | 4 | u32 | `name_bytes`, the name's byte count, `>= 1` |
+| 20 | `name_bytes` | ascii | `name`, from `[A-Za-z0-9._-]`, no terminator, no padding |
+
+Format version 2 (2026-11-23): the name takes its own length. Version 1's
+16-byte NUL-padded field refused `l0.in_proj_weight` (17 bytes), so a model
+with multihead_attention could not be saved. A version-1 file is refused with
+`CKPT_REFUSE_VERSION`; there is no reader for it.
 
 The name is in the file because "self-describing" has to mean something a
-human with `xxd` can act on. `embed`, `norm1_w`, `w_q`, `w_k`, `w_v`, `w_o`,
-`norm2_w`, `w_gate`, `w_up`, `w_down`, `lm_head` all fit in fifteen bytes with
-room to spare, and a refusal that says *"tensor 4 is named `w_o` in the file
+human with `xxd` can act on, and a refusal that says *"tensor 4 is named `w_o` in the file
 and `w_v` in the caller's layout"* is a refusal somebody can fix. A refusal
 that says *"shape mismatch"* is not.
 
@@ -222,7 +227,7 @@ flags on the way to disk is `OPT_SAB_RESUME_REINIT`'s named failure and a
 format that has nowhere to put them makes that failure unfixable rather than
 untested.
 
-### 2.4 Payload, `n_arrays * n_total * 4` bytes, at offset `128 + 32*J`
+### 2.4 Payload, `n_arrays * n_total * 4` bytes, at offset `128 + L`
 
 Three fp32 arrays, back to back, no headers between them, no padding:
 
@@ -312,7 +317,7 @@ A second hash function in one repository is a second thing to get wrong.
 
 which, because the payload is those three arrays contiguously and in that
 order, is **one continuous fold over the payload region** -- a single call over
-`payload_bytes` bytes starting at `128 + 32*J`. The two spellings are the same
+`payload_bytes` bytes starting at `128 + L`. The two spellings are the same
 number by construction and `checkpoint.mojo` uses the single-fold one.
 
     h_file = h(FNV_OFFSET, file_bytes[0 .. file_bytes-8))
@@ -356,15 +361,15 @@ the fact that something raised -- a refusal for the wrong reason is not a pass.
 | tag | fires when | why not guess |
 |---|---|---|
 | `CKPT_REFUSE_MAGIC` | bytes 0..7 are not `MLCKPT01` | a `.trace`, a `.bin` dump, a truncated download or a text sidecar handed to the loader by mistake would otherwise be parsed as a header and produce a shape from noise |
-| `CKPT_REFUSE_VERSION` | `format_version != 1` | a v2 file read by a v1 reader is field-shifted garbage that still has plausible float values in it. There is no migration path and there is not meant to be one |
+| `CKPT_REFUSE_VERSION` | `format_version != 2` | a file of another version read by this reader is field-shifted garbage that still has plausible float values in it. There is no migration path and there is not meant to be one |
 | `CKPT_REFUSE_HEADER` | a fixed field is wrong (`header_bytes`, `descriptor_bytes`, `n_arrays`, `elem_bits`, `trailer_bytes`), a size field disagrees with `j_count`/`n_total`, `j_count < 1`, `n_total < 1`, or any reserved field is nonzero | the reserved-must-be-zero rule is what makes a v1 reader safe against a writer that quietly started using one |
-| `CKPT_REFUSE_TRUNCATED` | the file is shorter than the header, or shorter than `64+64+32*J+12*n+16` | there is no atomic write here. A crash mid-write leaves a short file and the loader must say so, not read the payload it has and zero the rest |
+| `CKPT_REFUSE_TRUNCATED` | the file is shorter than the header, or shorter than `64+64+L+12*n+16` | there is no atomic write here. A crash mid-write leaves a short file and the loader must say so, not read the payload it has and zero the rest |
 | `CKPT_REFUSE_TRAILING` | the file is LONGER than the computed length | extra bytes mean the writer and the reader disagree about the format. Ignoring a tail is how two versions coexist silently |
 | `CKPT_REFUSE_FILE_HASH` | recomputed `h_file` differs from the stored one | the transfer or the disk changed a byte. Naming this separately from the content hash is what separates "corrupted in transit" from "different training state" |
-| `CKPT_REFUSE_LAYOUT` | `param_id != j`, `offsets[0] != 0`, offsets not contiguous and ascending, a count `< 1`, the counts do not sum to `n_total`, `buf_initialized` is not 0 or 1, a reserved byte is nonzero, or a name is not NUL-padded printable `[A-Za-z0-9._-]` | a wrong offset gives plausible, in-bounds, wrong numbers that are IDENTICAL on all three vendors, so **no cross-vendor comparison can see it** (plan V7). This is one of the two places that can |
+| `CKPT_REFUSE_LAYOUT` | `param_id != j`, `offsets[0] != 0`, offsets not contiguous and ascending, a count `< 1`, the counts do not sum to `n_total`, `buf_initialized` is not 0 or 1, a reserved byte is nonzero, an entry or its name runs past `layout_bytes`, the entries do not end exactly at it, or a name is empty or not printable `[A-Za-z0-9._-]` | a wrong offset gives plausible, in-bounds, wrong numbers that are IDENTICAL on all three vendors, so **no cross-vendor comparison can see it** (plan V7). This is one of the two places that can |
 | `CKPT_REFUSE_SHAPE` | the file's `j_count`, `n_total`, per-tensor `offset`, per-tensor `count` or per-tensor `name` differs from the layout the CALLER passed in | this is the "refuse BY NAME" requirement. The message names the `param_id`, the tensor's name on both sides, and the two numbers |
 | `CKPT_REFUSE_CONTENT_HASH` | recomputed `h_all` over the payload differs from the stored one | the only failure that survives a correct `h_file`, so it can only be reached by an edit that repaired the file hash. It is checked anyway, because a content hash that no arm can fire is decoration |
-| `CKPT_REFUSE_STATE` | `save_checkpoint` is handed inconsistent state: `param`/`m`/`v` of different lengths, `len(offsets) != J+1`, `len(names) != J`, `len(buf_initialized) != J`, a name too long or outside the charset, `t < 0`, or an empty path | refusing at SAVE time is cheaper than discovering it at LOAD time on another continent |
+| `CKPT_REFUSE_STATE` | `save_checkpoint` is handed inconsistent state: `param`/`m`/`v` of different lengths, `len(offsets) != J+1`, `len(names) != J`, `len(buf_initialized) != J`, an empty name or one outside the charset, `t < 0`, or an empty path | refusing at SAVE time is cheaper than discovering it at LOAD time on another continent |
 
 The order is deliberate: length before magic-independent parsing, magic before
 version, version before sizes, sizes before the file hash, the file hash before
