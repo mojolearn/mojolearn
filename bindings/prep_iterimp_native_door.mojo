@@ -32,14 +32,22 @@
 # kept features is scikit-learn's edge case (n_iter_ = 0, the initial
 # imputation, no estimator fitted: `iterimp_initial_only`); a kept column
 # with no observed value is marked not missing as scikit-learn marks it
-# (`_empty_kept`; every route). The door rounds below stay ONLY for: a
-# class with no member entry (the meta-estimators of the Ensemble, Search
-# and Pipeline families, whose member entries are unpublished, and the
-# explicit host classes HostLinearRegression / HostRidge, which carry no
-# mark), an admission or a held-state import the family refuses (the
-# fallback rule: a mark never turns a call that worked into a refusal), and
+# (`_empty_kept`; every route). Lane mf-iterimp3b: every explicit Host*
+# class whose public class has a member mark carries its own
+# (python/mojolearn/_classical_host.py), so HostLinearRegression / HostRidge
+# run as linear members on their CPU context, and a MEMBER-ONLY plan whose
+# member does not serve the fit is refused in its pre-mark words
+# (`_refuse_member_only`), never sent to the door rounds. The door rounds
+# below stay ONLY for: a class with no member entry (the meta-estimators of
+# the Ensemble, Search and Pipeline families, whose member entries are
+# unpublished until the META member kind lands), an admission or a
+# held-state import the family refuses for a class with a full plan (class
+# weights keyed by labels, a precomputed kernel, an image without the
+# member's entry, an unaddressable GP kernel, the gbdt adapter's fast mode
+# and categorical or multi-target losses, a CV splitter object: the
+# fallback rule, a mark never turns a call that worked into a refusal), and
 # the member-set B arm (MOJOLEARN_MEMBER_SET_OFF, A/B owed in
-# docs/apple-fast/EXPERIMENTS.md). There the estimator is cloned, fitted and
+# docs/apple-fast/EXPERIMENTS.md), whose off path IS these rounds. There the estimator is cloned, fitted and
 # asked to predict once per (round, feature) step with the float32 blocks
 # the gather programs produce, and its predictions are scattered back by one
 # program; the clone, fit and predict are the compiled operations of the
@@ -767,6 +775,20 @@ def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonOb
     return out^
 
 
+def _refuse_member_only(estimator: PythonObject, context: PythonObject) raises:
+    """A class whose plan is MEMBER-ONLY (registered from its member mark
+    alone: python/mojolearn/_native_msel_more.py, the Host* classes of lane
+    mf-cal3b / mf-iterimp3b and the derived plans) has no compiled fit or
+    predict for the door rounds, so when its member does not serve this fit
+    it is refused here in the words it had before its mark
+    (`prep_estimator_admit`'s), never by a door-round call (lane
+    mf-iterimp3b, 2026-11-23). One plan read, on this fallback only."""
+    var plan = prep_estimator_plan(estimator, context)
+    if plan is not None and py_get(plan, "member_only") is not None:
+        raise Error("TypeError: mojolearn: IterativeImputer requires a mojolearn estimator; got "
+                    + String(py_type(estimator).__name__))
+
+
 def _member_pack(estimator: PythonObject, member: _Member, mut fit: IterImpMemberFit, labels: PythonObject,
                  context: PythonObject) raises -> PythonObject:
     """PACK of the member rounds: `imputation_sequence_`, one (feat_idx,
@@ -872,6 +894,8 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
         py_setitem(fields, "_step_classes", Python.list())
         return _take2(runner.held[fitted.out_handle], fitted.out_offset, n, fitted.cols, context)
     var member = _member(estimator, request.posterior, dk, context)
+    if not member.native:
+        _refuse_member_only(estimator, context)
     if member.native:
         # RUN: the rounds over the native member (x_prep/iterimp_run.mojo)
         runner.release_members = member.release
