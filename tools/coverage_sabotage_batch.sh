@@ -145,11 +145,10 @@ one_build() {
     t=$(date +%s)
     # A host build refuses MOJOLEARN_GPU_ARCHS ("a CPU build takes no MOJOLEARN_GPU_ARCHS"): the GPU job exports
     # it for the device builds, and in nvc1-0003 all 28 host builds of the plan failed on it in 0 s (BUILD-FAIL).
-    # A `_fast` binding script builds only in fast mode (build_tokenizer_fast.sh: "FAST only").
+    # No arm builds a `_fast` binding: the identical lanes never load one, and the only one an arm named
+    # (build_tokenizer_fast) builds on macOS alone (lane sab-gpu-missed, 2026-11-23).
     if [[ $b == *_host ]]; then
         env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_TARGET_COLUMN=cpu "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
-    elif [[ $b == *_fast ]]; then
-        env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_NUMERIC_MODE=fast "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
     else
         env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_NUMERIC_MODE=identical "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
     fi
