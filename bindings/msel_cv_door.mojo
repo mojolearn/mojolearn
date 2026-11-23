@@ -1460,6 +1460,17 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: 
             size *= Int(py=last_width[k])
         if len(flat) != size:
             raise Error("ValueError: prediction values do not match their output shape")
+        # TEXT MULTI-OUTPUT LABELS (lane mf-tail5b; was a float conversion
+        # of every label, which failed on the first string): rows of labels
+        # that are not all real numbers stay the row lists, each row its
+        # outputs' labels in order, as a 1-D text result stays its list.
+        var all_real = True
+        for k in range(size):  # driver-loop: exact scalar identity checks before numeric conversion
+            if py_type(flat[k]) is b.bool or not msel_is_real(flat[k], context):
+                all_real = False
+                break
+        if not all_real:
+            return rows
         var out = family_array(shape, "<f8", context)
         var pointer = msel_pf64(out)
         for k in range(size):  # driver-loop: native numeric scalar output placement
