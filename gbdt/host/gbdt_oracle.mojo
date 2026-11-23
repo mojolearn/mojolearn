@@ -3810,6 +3810,63 @@ def gbdt_host_fit(
     return r.model^
 
 
+def gbdt_host_one_hot_grid(
+    mut grid: GbdtHostGrid,
+    x_colmajor: List[Float32],
+    n_rows: Int,
+    n_features: Int,
+    one_hot_in: List[Bool],
+) raises -> List[Bool]:
+    """`_quantize_training_columns`' one-hot arm (`gbdt/train.mojo`): each
+    column `one_hot_in` names (empty for none) gets the borders `code +
+    0.5` below its largest code (`gbdt_onehot_max_code`, the device scan's
+    lenient arm), `maxc + 1` folds (0 for a column of one code) and AsIs NaN
+    treatment, written into `grid`; returns the per-feature one-hot flags
+    the layout carries. The greedy loop's one-hot arm (`gbdt_host_fit_eval`)
+    and the pointwise searcher's (`gbdt_oracle_pointwise.mojo`) both call it
+    (lane gbdt-cpu-rest-4-pwl, 2026-11-23: moved word for word out of
+    `gbdt_host_fit_eval`)."""
+    var one_hot = List[Bool](length=n_features, fill=False)
+    if len(one_hot_in) == n_features:
+        for f in range(n_features):  # driver-loop: over the features (the column scan inside runs across the cores)
+            if not one_hot_in[f]:
+                continue
+            one_hot[f] = True
+            var maxc = gbdt_onehot_max_code(
+                rebind[HostF32Ptr](x_colmajor.unsafe_ptr()) + f * n_rows, n_rows
+            )
+            if maxc > 254:
+                raise Error("one-hot feature " + String(f) + " has more than 255 categories")
+            var bs = List[Float32]()
+            for c in range(maxc):
+                bs.append(Float32(c) + Float32(0.5))
+            grid.fold_counts[f] = len(bs) + 1 if len(bs) > 0 else 0
+            grid.borders[f] = bs^
+            grid.nan_treatment[f] = NAN_TREATMENT_AS_IS
+    elif len(one_hot_in) != 0:
+        raise Error("one_hot flags must be empty or one per feature")
+    _ = len(x_colmajor)
+    return one_hot^
+
+
+def gbdt_learn_permutation(
+    iteration: Int, random_seed: UInt64, perm_count: Int, est_p: Int
+) -> Int:
+    """Which permutation tree `iteration`'s STRUCTURE is searched on
+    (`doc_parallel_boosting.mojo`, their `TRandom(iteration + seed)`,
+    `Advance(10)`, `% (learnPermutationCount - 1)`, the modulus kept): the
+    greedy loop (`gbdt_host_boost`) and the pointwise searcher
+    (`gbdt_oracle_pointwise.mojo`) both call it (lane gbdt-cpu-rest-4-pwl,
+    2026-11-23: moved word for word out of `gbdt_host_boost`)."""
+    var learn_perm_count = perm_count - 1 if est_p != 0 else 1
+    var learn_p = est_p
+    if learn_perm_count > 1:
+        var rnd = TRandom(UInt64(iteration) + random_seed)
+        rnd.advance(10)
+        learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
+    return learn_p
+
+
 def gbdt_host_fit_eval(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -3871,25 +3928,9 @@ def gbdt_host_fit_eval(
         params.border_build_max_samples, params.random_seed, params.nan_mode,
         params.border_type,
     )
-    var one_hot = List[Bool](length=n_features, fill=False)
-    if len(one_hot_in) == n_features:
-        for f in range(n_features):
-            if not one_hot_in[f]:
-                continue
-            one_hot[f] = True
-            var maxc = gbdt_onehot_max_code(
-                rebind[HostF32Ptr](x_colmajor.unsafe_ptr()) + f * n_rows, n_rows
-            )
-            if maxc > 254:
-                raise Error("one-hot feature " + String(f) + " has more than 255 categories")
-            var bs = List[Float32]()
-            for c in range(maxc):
-                bs.append(Float32(c) + Float32(0.5))
-            grid.fold_counts[f] = len(bs) + 1 if len(bs) > 0 else 0
-            grid.borders[f] = bs^
-            grid.nan_treatment[f] = NAN_TREATMENT_AS_IS
-    elif len(one_hot_in) != 0:
-        raise Error("one_hot flags must be empty or one per feature")
+    var one_hot = gbdt_host_one_hot_grid(
+        grid, x_colmajor, n_rows, n_features, one_hot_in
+    )
     var layout = build_layout(grid.fold_counts, one_hot)
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
 
@@ -4376,12 +4417,9 @@ def gbdt_host_boost(
     for iteration in range(params.n_estimators):
         # ---- which permutation the STRUCTURE is searched on
         # (`doc_parallel_boosting.mojo:2192-2219`), their modulus kept ----
-        var learn_perm_count = perm_count - 1 if est_p != 0 else 1
-        var learn_p = est_p
-        if learn_perm_count > 1:
-            var rnd = TRandom(UInt64(iteration) + params.random_seed)
-            rnd.advance(10)
-            learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
+        var learn_p = gbdt_learn_permutation(
+            iteration, params.random_seed, perm_count, est_p
+        )
         # ---- the gradients, the learn loss and the magnitudes ----
         if is_rmse:
             _rmse_search_pass(
