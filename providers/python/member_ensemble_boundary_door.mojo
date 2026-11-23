@@ -87,6 +87,7 @@ from bindings.prep_native_estimator_door import prep_estimator_admit
 from bindings.trees_meta_validate_unpack import (
     meta_active, meta_active_entries, meta_owner, meta_voting_validate, meta_voting_weights, meta_stacking_validate,
     meta_calibrated_validate, meta_jobs, meta_bagging_validate, meta_ada_validate, meta_seed,
+    MetaCount, meta_count_reading, meta_require_tree, boost_member_device,
 )
 from bindings.py_balanced import py_call, py_get, py_item, py_setattr, py_setitem, py_type, py_contains, py_fields
 from core.device_route import DeviceRoute, DEVICE_CPU
@@ -105,6 +106,7 @@ from core.member_families import (
 from xtrees.trees_boost_run import _sub_seed, boost_ada_session_choice, boost_check_n_estimators, boost_check_learning_rate
 from bindings.trees_public_forest_door import (
     forest_kind, forest_refresh, forest_config, _report_engine, forest_dt_random_inner, forest_dt_random_adopt,
+    _int, _float,
 )
 from bindings.trees_route_boundary_door import trees_route_context
 from providers.python.forest_member_common_boundary_door import (
@@ -1372,22 +1374,17 @@ def _truthy(value: PythonObject, b: PythonObject) raises -> Bool:
     return Bool(py=py_call(b.bool, value))
 
 
-def _count_words(value: PythonObject, b: PythonObject, mut words: List[Float64]) raises -> Bool:
-    """`_BaggingBase._count`'s two readings of max_samples / max_features:
-    an exact int (1.0, its value) or a fraction in (0, 1] (0.0, its value).
-    False for anything else (the door raises its words)."""
-    if py_type(value) is b.int:
+def _count_words(reading: MetaCount, mut words: List[Float64]):
+    """`_BaggingBase._count`'s two readings of max_samples / max_features
+    (bindings/trees_meta_validate_unpack.mojo `meta_count_reading`, one
+    body with the door): an integral count (1.0, its value) or a fraction
+    in (0, 1] (0.0, its value)."""
+    if reading.integral:
         words.append(1.0)
-        words.append(Float64(Int(py=value)))
-        return True
-    if py_type(value) is b.float:
-        var f = Float64(py=value)
-        if not (f > 0.0 and f <= 1.0):
-            return False
+        words.append(Float64(reading.count))
+    else:
         words.append(0.0)
-        words.append(f)
-        return True
-    return False
+        words.append(reading.fraction)
 
 
 def _may_be_batched(fields: PythonObject, base: PythonObject, context: PythonObject, b: PythonObject,
@@ -1539,9 +1536,10 @@ def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: Py
     order) read with the forest door's own admission
     (`class_weight_dictionary_values[CLASS_WEIGHT_TREES]`, as
     `trees_class_weight_rows` reads it); K = -1 when no labels are known (a
-    state for import or predict only: its FIT refuses). False (the door
-    keeps the estimator and raises its words) for a value or a dict the
-    forest door refuses."""
+    state for import or predict only: its FIT refuses). A dict the forest
+    door refuses raises that door's words (`class_weight_dictionary_values`;
+    the callers make them THE DOOR'S REFUSAL, lane mf-refuse5). False only
+    for a str the base's own admission already refused (unreachable)."""
     if class_weight is None:
         words.append(0.0)
         words.append(0.0)
@@ -1549,7 +1547,7 @@ def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: Py
         return True
     if py_type(class_weight) is b.str:
         if String(class_weight) != "balanced":
-            return False
+            return False  # unreachable: the base's own admission refused it (its `_rf_base`)
         words.append(1.0)
         words.append(0.0)
         words.append(0.0)
@@ -1559,20 +1557,19 @@ def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: Py
         words.append(-1.0)
         words.append(0.0)
         return True
-    try:
-        var inputs = class_weight_dictionary_values[CLASS_WEIGHT_TREES](class_weight, labels, context)
-        words.append(2.0)
-        words.append(Float64(len(inputs.values)))
-        words.append(1.0 if inputs.all_one else 0.0)
-        for c in range(len(inputs.values)):  # driver-loop: over the classes (one weight each, UNPACK once)
-            words.append(inputs.values[c])
-        # The K named flags (lane mf-split4b): 1.0 where the dict names the
-        # class (a Bagging unit whose draw lacks a named class is refused in
-        # the tree door's words, core/ensemble_member.mojo `_bag_class_rows`).
-        for c in range(len(inputs.values)):  # driver-loop: over the classes (one membership test each, UNPACK once)
-            words.append(1.0 if py_contains(class_weight, labels[c]) else 0.0)
-    except:
-        return False
+    # A dict the forest door refuses raises ITS words (`class_weight_dictionary_values`, the door's own
+    # reading): the caller makes them THE DOOR'S REFUSAL (lane mf-refuse5; it answered False).
+    var inputs = class_weight_dictionary_values[CLASS_WEIGHT_TREES](class_weight, labels, context)
+    words.append(2.0)
+    words.append(Float64(len(inputs.values)))
+    words.append(1.0 if inputs.all_one else 0.0)
+    for c in range(len(inputs.values)):  # driver-loop: over the classes (one weight each, UNPACK once)
+        words.append(inputs.values[c])
+    # The K named flags (lane mf-split4b): 1.0 where the dict names the
+    # class (a Bagging unit whose draw lacks a named class is refused in
+    # the tree door's words, core/ensemble_member.mojo `_bag_class_rows`).
+    for c in range(len(inputs.values)):  # driver-loop: over the classes (one membership test each, UNPACK once)
+        words.append(1.0 if py_contains(class_weight, labels[c]) else 0.0)
     return True
 
 
@@ -1593,8 +1590,9 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
     """UNPACK of a unit kind (core/ensemble_member.mojo, THE UNIT KINDS):
     the base admitted once through the LEAF dispatch with the bits the
     door's operations need, the settings words read as the door's fit reads
-    them. False (the door keeps it and raises its own words) for anything
-    the kind does not take exactly as the door does."""
+    them. A constructor value the door refuses is THE DOOR'S REFUSAL (lane
+    mf-refuse5: its words raised by the FIT); False (the door keeps it) for
+    a base or a cv the kind does not serve."""
     var classifier = kind != META_BAG_REGRESSOR
     var name = _kind_name(kind)
     var nested = _Nested()
@@ -1606,18 +1604,44 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
     var base_needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
     if classifier:
         base_needs |= MEMBER_CAN_CLASSIFIER
+    # THE DOOR'S REFUSAL (lane mf-refuse5): each unit door's constructor checks, in its order and words,
+    # one body with the door (bindings/trees_meta_validate_unpack.mojo): OneVsRest's n_jobs / verbose and
+    # its estimator's admission (`_require_member`); Calibrated's method, n_jobs, ensemble and cv value, then
+    # its base's admission; Bagging's `_validate_params`, its max_samples / max_features readings, its
+    # base's `_require_tree` and device. A value it refuses is a plan whose FIT raises the words first
+    # (`_refuse_first`), where the caller fell back to the door to raise them.
     var jobs = 0
+    var bag_count = 0
+    var bag_seed = 0
+    var bag_samples = MetaCount(True, 0, 0.0)
+    var bag_features = MetaCount(True, 0, 0.0)
     try:
-        jobs = native_unit_jobs(py_get(fields, "n_jobs"), name)
-    except:
-        return False
+        if kind == META_OVR:
+            jobs = meta_jobs(model, True)
+            prep_estimator_admit(py_get(fields, "estimator"), meta_owner(model), context)
+        elif kind == META_CALIBRATED:
+            meta_calibrated_validate(model, context)
+            jobs = native_unit_jobs(py_get(fields, "n_jobs"), name)
+            var cal_base = _cal_base(fields, context)
+            if cal_base is not None:
+                prep_estimator_admit(cal_base, meta_owner(model), context)
+        else:
+            meta_bagging_validate(fields, context)
+            jobs = native_unit_jobs(py_get(fields, "n_jobs"), name)
+            bag_count = Int(py=_int(py_get(fields, "n_estimators")))
+            bag_seed = meta_seed(py_get(fields, "random_state"), context)
+            bag_samples = meta_count_reading(py_get(fields, "max_samples"), "max_samples", context)
+            bag_features = meta_count_reading(py_get(fields, "max_features"), "max_features", context)
+            var bag_base = py_get(fields, "estimator")
+            if bag_base is None:
+                bag_base = _new_tree(context, "trees_dt_classifier" if classifier else "trees_dt_regressor", b)
+            var bag_owner = String("BaggingClassifier") if classifier else String("BaggingRegressor")
+            meta_require_tree(bag_base, bag_owner, context)
+            _ = boost_member_device(fields, bag_base, bag_owner)
+    except e:
+        return _refuse_first(fields, context, b, owner, kind, String(e))
     if kind == META_OVR:
         var base = py_get(fields, "estimator")
-        if base is None:
-            return False
-        var verbose = py_get(fields, "verbose")
-        if verbose is not None and _truthy(verbose, b):
-            return False
         var decision = prep_estimator_has(base, "decision_function", context)
         var needs = base_needs | (MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA)
         if not _admit_nested(done, nested, base, True, needs, context, b, labels):
@@ -1627,25 +1651,11 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         var base = _cal_base(fields, context)
         if base is None:
             return False
+        # method and ensemble by the door's equality (`meta_calibrated_validate` refused anything else).
         var method = py_get(fields, "method")
-        var sigmoid = True
-        if method is not None:
-            if py_type(method) is not b.str:
-                return False
-            var m = String(method)
-            if m == "isotonic":
-                sigmoid = False
-            elif m != "sigmoid":
-                return False
+        var sigmoid = method is None or not Bool(py=method == PythonObject("isotonic"))
         var ensemble = py_get(fields, "ensemble")
-        var whole = True
-        if ensemble is not None:
-            if py_type(ensemble) is b.bool:
-                whole = Bool(py=ensemble)
-            elif py_type(ensemble) is b.int and (Int(py=ensemble) == 0 or Int(py=ensemble) == 1):
-                whole = Int(py=ensemble) == 1
-            else:
-                return False
+        var whole = ensemble is None or _truthy(ensemble, b)
         # The cv as the door's `_splits` takes it (lanes mf-split4b,
         # mf-split5): an int; a user's index list read ONCE into typed folds;
         # one of OUR splitters as typed words, its folds computed inside each
@@ -1683,33 +1693,17 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         words.append(1.0 if decision else 0.0)
         words.append(1.0 if int_cv else 0.0)  # META_CAL_INT_CV
     else:
-        var oob = py_get(fields, "oob_score")
+        # The settings as the door reads them (`meta_bagging_validate` and the readings above refused
+        # anything else; lane mf-refuse5: numpy integers and floats are read as the door reads them).
         var bootstrap = py_get(fields, "bootstrap")
         var bootstrap_features = py_get(fields, "bootstrap_features")
-        var warm = py_get(fields, "warm_start")
-        var verbose = py_get(fields, "verbose")
-        if oob is None or bootstrap is None or bootstrap_features is None:
-            return False
-        var oob_on = _truthy(oob, b)
-        if oob_on and not _truthy(bootstrap, b):
-            return False
-        if (warm is not None and _truthy(warm, b)) or (verbose is not None and _truthy(verbose, b)):
-            return False
-        var count = _int_word(py_get(fields, "n_estimators"), b)
-        if count < 1:
-            return False
-        var state = py_get(fields, "random_state")
-        var seed = 0
-        if state is not None:
-            seed = _int_word(state, b)
-            if seed < 0:
-                return False
+        var oob_on = _truthy(py_get(fields, "oob_score"), b)
+        var count = bag_count
+        var seed = bag_seed
         words.append(Float64(count))
         words.append(Float64(seed))
-        if not _count_words(py_get(fields, "max_samples"), b, words):
-            return False
-        if not _count_words(py_get(fields, "max_features"), b, words):
-            return False
+        _count_words(bag_samples, words)
+        _count_words(bag_features, words)
         words.append(1.0 if _truthy(bootstrap, b) else 0.0)
         words.append(1.0 if _truthy(bootstrap_features, b) else 0.0)
         words.append(1.0 if oob_on else 0.0)
@@ -1762,8 +1756,11 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
             var owner_of = forest if batched else template  # the estimator whose fit door reads it
             cw = py_get(py_fields(owner_of), "class_weight")
             cw_context = prep_estimator_plan(owner_of, context)["context"]  # its fit door's context
-        if not _tree_cw_words(cw, labels, cw_context, b, words):
-            return False
+        try:
+            if not _tree_cw_words(cw, labels, cw_context, b, words):
+                return False
+        except e:
+            return _refuse_first(fields, context, b, owner, kind, String(e))
     if not _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
                    fold_train^, fold_test^):
         return False
@@ -2196,8 +2193,9 @@ def _ada_template(fields: PythonObject, classifier: Bool, context: PythonObject,
 def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: PythonObject, labels: PythonObject,
                mut owner: MemberOwner) raises -> Bool:
     """UNPACK of THE ADABOOST KIND (core/ensemble_member.mojo): the door's
-    `ada_fit` UNPACK minus X and y, read once per admission. `_ada_validate`
-    as a gate (a value it refuses keeps the door, which raises its words);
+    `ada_fit` UNPACK minus X and y, read once per admission. `_ada_validate`,
+    `_require_tree` and the device check first (one body with the door; a
+    value they refuse is THE DOOR'S REFUSAL, lane mf-refuse5);
     the base's first round clone (`_sub_seed(seed, 0)`) admitted ONCE as
     its native forest member with the caller's target checks
     (`forest_member_admit_common(..., caller_rows=True)`, the door's
@@ -2205,45 +2203,35 @@ def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: Python
     fits (they differ only in the seed); the session route words of a
     best-splitter DecisionTree base (`_ada_native_base`: the forest entry is
     the member's route, the share word `_ada_session_choice` /
-    `_member_session`). False (the door keeps the estimator) for: an
-    algorithm, loss, n_estimators, learning_rate or random_state the door
-    refuses; a base that is not a tree, forest or extra-trees member or
-    names another device; a DecisionTree splitter='random' base (its inner
-    forest is the door's); a class_weight value the forest door refuses.
+    `_member_session`). False (the door keeps the estimator) for: a base
+    whose admission this kind does not serve; a class_weight value the
+    base's own admission refused.
     A class_weight on the base (lane mf-split4) is the kind's class-weight
     tail (`_tree_cw_words` over `labels`, the codes the door's rows read):
     its FIT hands `ada_fit_run` the rows, as the door does."""
     var classifier = kind == META_ADA_CLASSIFIER
+    # THE DOOR'S REFUSAL (lane mf-refuse5): the door's `_ada_validate` (algorithm, loss, n_estimators,
+    # learning_rate, random_state; one body, bindings/trees_meta_validate_unpack.mojo) first; a value it
+    # refuses is a plan whose FIT raises its words first (`_refuse_first`), where the caller fell back to
+    # the door to raise them. The values are then read as the door reads them (numpy scalars too).
     var loss_code = 0
-    if classifier:
-        var algorithm = py_get(fields, "algorithm")
-        if algorithm is None or py_type(algorithm) is not b.str:
-            return False
-        var name = String(algorithm)
-        if name != "SAMME" and name != "deprecated":
-            return False
-    else:
-        var losses = py_get(context, "trees_ada_losses")
-        var loss = py_get(fields, "loss")
-        if losses is None or loss is None or py_type(loss) is not b.str or not py_contains(losses, loss):
-            return False
-        loss_code = Int(py=py_item(losses, loss))
-    var count = _int_word(py_get(fields, "n_estimators"), b)
-    var given_rate = py_get(fields, "learning_rate")
-    if given_rate is None or (py_type(given_rate) is not b.float and py_type(given_rate) is not b.int):
-        return False
-    var rate = Float64(py=py_call(b.float, given_rate))
-    try:
-        boost_check_n_estimators(count)
-        boost_check_learning_rate(rate)
-    except:
-        return False
-    var state = py_get(fields, "random_state")
+    var count = 0
+    var rate = 0.0
     var seed = 0
-    if state is not None:
-        seed = _int_word(state, b)
-        if seed < 0:
-            return False
+    try:
+        meta_ada_validate(fields, classifier, context)
+        if not classifier:
+            loss_code = Int(py=py_item(py_get(context, "trees_ada_losses"), py_get(fields, "loss")))
+        count = Int(py=_int(py_get(fields, "n_estimators")))
+        rate = Float64(py=_float(py_get(fields, "learning_rate")))
+        seed = meta_seed(py_get(fields, "random_state"), context)
+        # The door's base checks (`_require_tree`, then the device), one body with it.
+        var ada_owner = String("AdaBoostClassifier") if classifier else String("AdaBoostRegressor")
+        var ada_base = _ada_base(fields, classifier, context, b)
+        meta_require_tree(ada_base, ada_owner, context)
+        _ = boost_member_device(fields, ada_base, ada_owner)
+    except e:
+        return _refuse_first(fields, context, b, owner, kind, String(e))
     var template = _ada_template(fields, classifier, context, b)
     if template is None:
         return False
@@ -2345,8 +2333,11 @@ def _admit_ada(fields: PythonObject, kind: Int, context: PythonObject, b: Python
     words.append(Float64(config.gamma))          # META_ADA_GAMMA
     words.append(Float64(config.inverse_gaussian))  # META_ADA_INVERSE_GAUSSIAN
     words.append(1.0 if dt_random else 0.0)      # META_ADA_DT_RANDOM
-    if not _tree_cw_words(class_weight, labels, probe_context, b, words):  # META_CW_* after META_ADA_WORDS
-        return False
+    try:
+        if not _tree_cw_words(class_weight, labels, probe_context, b, words):  # META_CW_* after META_ADA_WORDS
+            return False
+    except e:
+        return _refuse_first(fields, context, b, owner, kind, String(e))
     var nested = _Nested()
     nested.plans.append(sub.plan.copy())
     nested.masks.append(mask)

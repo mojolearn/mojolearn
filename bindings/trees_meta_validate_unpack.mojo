@@ -18,16 +18,19 @@ UNPACK only (Python objects, the GIL held): every function reads constructor val
 admission, never per row or per member call. SERIAL BY NATURE: one estimator's settings.
 """
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_contains, py_item
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_item, py_fields
+from bindings.trees_boost_admission_unpack import trees_member_kind
 from bindings.trees_public_inputs_door import trees_builtins
-from bindings.trees_public_forest_door import _int, _float, _repr, _truthy, _is_bool, _is_integral
+from bindings.trees_public_forest_door import _int, _float, _repr, _str, _truthy, _is_bool, _is_integral
 from bindings.trees_keys_unpack import trees_keys
 from bindings.native_unit_threads_unpack import native_unit_jobs
 from bindings.prep_native_estimator_door import prep_native_context, prep_estimator_admit
 from bindings.msel_inputs_unpack import msel_admit
 from bindings.py_typed_call import py_call_typed
 from xtrees.trees_forest_run import _refuse
-from xtrees.trees_boost_run import boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate
+from xtrees.trees_boost_run import (
+    boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate, boost_count_fraction_ok,
+)
 
 
 def meta_attr(owner: PythonObject, key: PythonObject, default: PythonObject) raises -> PythonObject:
@@ -219,3 +222,73 @@ def meta_ada_validate(fields: PythonObject, classifier: Bool, context: PythonObj
     boost_check_n_estimators(Int(py=_int(fields["n_estimators"])))
     boost_check_learning_rate(Float64(py=_float(fields["learning_rate"])))
     _ = meta_seed(fields["random_state"], context)
+
+
+struct MetaCount(Copyable, Movable):
+    """`_BaggingBase._count`'s reading of max_samples / max_features before
+    the total is known: an integral count, or a fraction in (0, 1]."""
+    var integral: Bool
+    var count: Int
+    var fraction: Float64
+
+    def __init__(out self, integral: Bool, count: Int, fraction: Float64):
+        self.integral = integral
+        self.count = count
+        self.fraction = fraction
+
+
+def meta_count_reading(v: PythonObject, name: String, context: PythonObject) raises -> MetaCount:
+    """`_BaggingBase._count`'s reading and the refusals that need no total
+    (the door's `_count` then resolves the count and refuses it)."""
+    var b = trees_builtins()
+    if _is_integral(v, context) and not _is_bool(v):
+        return MetaCount(True, Int(py=_int(v)), 0.0)
+    if Bool(py=py_call(b.isinstance, v, context["trees_real_type"])):
+        var f = Float64(py=_float(v))
+        if not boost_count_fraction_ok(f):
+            raise Error(name + "=" + _str(v) + " is outside (0, 1]")
+        return MetaCount(False, 0, f)
+    raise Error(name + " must be an int or a float")
+
+
+def meta_connected(cls: PythonObject, context: PythonObject) raises -> Bool:
+    """A class whose ancestry holds a connected tree member kind."""
+    var b = trees_builtins()
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var classes = context["trees_classes"]
+    for i in range(len(mro)):  # driver-loop: over the class ancestry metadata
+        var kind = py_get(classes, mro[i])
+        if kind is not None:
+            return trees_member_kind(kind)
+    return False
+
+
+def meta_require_tree(base: PythonObject, owner: String, context: PythonObject) raises:
+    """A member must be a mojolearn tree estimator (its fit and predict run
+    in this owner); any other estimator is a Python object."""
+    if not meta_connected(py_type(base), context):
+        raise Error("NotImplementedError: " + owner + ": estimator=" + _repr(base) + " is not a mojolearn "
+                    + "DecisionTree*, RandomForest* or ExtraTrees* estimator; the native ensemble fits only "
+                    + "those members. Refused by name rather than accepted and ignored.")
+
+
+def boost_member_device(fields: PythonObject, base: PythonObject, owner: String) raises -> PythonObject:
+    """The `device` every member of an ensemble stores: the ensemble's own
+    stored value, so a member read back (`estimators_`) runs where the
+    ensemble ran it. The members' operations run in the ensemble's run
+    context (its device route, bindings/trees_route_boundary_door.mojo);
+    nothing here selects a table. A member estimator given with its own
+    explicit `device` that is not the ensemble's value is refused in words,
+    never run on a device its caller did not name. Once per ensemble fit:
+    two field reads and one pointer compare when both are the default."""
+    var device = py_get(fields, "device")
+    var own = py_get(py_fields(base), "device")
+    if own is not None and own is not device:
+        var same = False
+        if device is not None:
+            same = String(own) == String(device)
+        if not same:
+            raise Error(owner + ": estimator has device=" + _repr(own) + " but the ensemble has device="
+                        + _repr(device) + "; the members run on the ensemble's device. Set device on the "
+                        + "ensemble and leave the member's device None.")
+    return device

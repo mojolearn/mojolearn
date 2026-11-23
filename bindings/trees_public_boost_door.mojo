@@ -84,6 +84,10 @@ from bindings.trees_meta_validate_unpack import (
     meta_seed as _seed,
     meta_bagging_validate as _bagging_validate,
     meta_ada_validate as _ada_validate,
+    meta_count_reading,
+    meta_connected as _connected,
+    meta_require_tree as _require_tree,
+    boost_member_device,
 )
 from xtrees.trees_boost_run import (
     _sub_seed, _dart_thr,
@@ -423,48 +427,6 @@ def _sub_cols(member: PythonObject, context: PythonObject) raises -> PythonObjec
 # ---------------------------------------------------------------- members
 
 
-def _connected(cls: PythonObject, context: PythonObject) raises -> Bool:
-    var b = trees_builtins()
-    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    var classes = context["trees_classes"]
-    for i in range(len(mro)):  # driver-loop: over the class ancestry metadata
-        var kind = py_get(classes, mro[i])
-        if kind is not None:
-            return trees_member_kind(kind)
-    return False
-
-
-def _require_tree(base: PythonObject, owner: String, context: PythonObject) raises:
-    """A member must be a mojolearn tree estimator (its fit and predict run
-    in this owner); any other estimator is a Python object."""
-    if not _connected(py_type(base), context):
-        raise Error("NotImplementedError: " + owner + ": estimator=" + _repr(base) + " is not a mojolearn "
-                    + "DecisionTree*, RandomForest* or ExtraTrees* estimator; the native ensemble fits only "
-                    + "those members. Refused by name rather than accepted and ignored.")
-
-
-def boost_member_device(fields: PythonObject, base: PythonObject, owner: String) raises -> PythonObject:
-    """The `device` every member of an ensemble stores: the ensemble's own
-    stored value, so a member read back (`estimators_`) runs where the
-    ensemble ran it. The members' operations run in the ensemble's run
-    context (its device route, bindings/trees_route_boundary_door.mojo);
-    nothing here selects a table. A member estimator given with its own
-    explicit `device` that is not the ensemble's value is refused in words,
-    never run on a device its caller did not name. Once per ensemble fit:
-    two field reads and one pointer compare when both are the default."""
-    var device = py_get(fields, "device")
-    var own = py_get(py_fields(base), "device")
-    if own is not None and own is not device:
-        var same = False
-        if device is not None:
-            same = String(own) == String(device)
-        if not same:
-            raise Error(owner + ": estimator has device=" + _repr(own) + " but the ensemble has device="
-                        + _repr(device) + "; the members run on the ensemble's device. Set device on the "
-                        + "ensemble and leave the member's device None.")
-    return device
-
-
 def _new_member(cls: PythonObject, settings: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cls(**settings)` of a connected tree class: the state its
     constructor stores (every parameter, its default unless set, and the
@@ -703,17 +665,11 @@ def _member_store(member: PythonObject, result: PythonObject, cols: Int) raises:
 
 def _count(v: PythonObject, total: Int, name: String, context: PythonObject) raises -> Int:
     """`_BaggingBase._count`."""
-    var b = trees_builtins()
-    var k = 0
-    if _is_integral(v, context) and not _is_bool(v):
-        k = Int(py=_int(v))
-    elif Bool(py=py_call(b.isinstance, v, context["trees_real_type"])):
-        var f = Float64(py=_float(v))
-        if not boost_count_fraction_ok(f):
-            raise Error(name + "=" + _str(v) + " is outside (0, 1]")
-        k = Int(py=_int(_F(f * Float64(total))))
-    else:
-        raise Error(name + " must be an int or a float")
+    # The reading and its refusals: one body with the META kind's admission (lane mf-refuse5).
+    var reading = meta_count_reading(v, name, context)
+    var k = reading.count
+    if not reading.integral:
+        k = Int(py=_int(_F(reading.fraction * Float64(total))))
     return boost_count_check(name, k, total)
 
 
