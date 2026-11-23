@@ -48,6 +48,7 @@ def linear_r2_execute(entry: NativeDescriptorCall, layout: LinearR2Layout, addre
         else:
             _ = native_descriptor_call(entry, MP_RUN_OUT,
                 [address, words_address, Int(outputs.unsafe_ptr())], [layout.program.size, stages, 2], [])
+        _ = outputs  # read by address inside the calls above: named again so it outlives them (lane lastuse-addr-arg)
         var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address)
         var numerator_bits = UInt64(words[numerator]) | (UInt64(words[numerator + 1]) << UInt64(32))
         var denominator_bits = UInt64(words[denominator]) | (UInt64(words[denominator + 1]) << UInt64(32))

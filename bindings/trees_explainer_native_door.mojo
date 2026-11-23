@@ -301,6 +301,7 @@ def _flat(model: PythonObject, fields: PythonObject, context: PythonObject,
         if k > 1:
             expanded = admitted_vector(total * k, "<f4", context)
             _ = py_call(_entry(table, "x_trees_spread_leaves"), trees_address(vals), trees_address(offsets), trees_address(expanded), Python.list(total, count, k))
+            _ = vals  # read by address inside the call above (`expanded` no longer holds it): named again (lane lastuse-addr-arg)
         arrays = Python.list(offsets, columns, questions, children, expanded)
     return Python.tuple(py_call(native_loaded_module("builtins").tuple, arrays), scales, initial)
 

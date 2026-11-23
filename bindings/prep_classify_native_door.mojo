@@ -340,6 +340,7 @@ def _scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
     else:
         _ = py_call_typed(jll_csr, classical_address(csr.indptr), classical_address(csr.indices), classical_address(csr.data),
                           classical_address(flp), bias, dims, classical_address(jll_h))
+        _ = csr  # read by address inside the call above: named again so it outlives it (lane lastuse-addr-arg)
         _ = flp  # keep the Python object alive through the native call above
         _ = jll_h  # keep the Python object alive through the native call above
     _ = bias_keep^

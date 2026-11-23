@@ -12,3 +12,13 @@ checks/native_tests/sequence_plan_buffers.mojo:_borrowed:row_b  # the address is
 cluster/checks/kmeans_check.mojo:check_fused_policy_dispatch:probe_c  # fused_veclen_for reads only the address's alignment, never the memory
 cluster/checks/kmeans_check.mojo:check_fused_policy_dispatch:probe_x  # fused_veclen_for reads only the address's alignment, never the memory
 core/device_store.mojo:ptr:held  # lane nn-integrate (linalg-owner merge): `held` is a shared reference to the slot's buffer; the store keeps its own reference until free(), so the returned address outlives this local
+bindings/boundary_read_door.mojo:_pack_room:store  # lane lastuse-addr-arg: classical_wrap_layout sets it as the returned Array's `_store` slot, and PackedArray holds that Array with the address
+bindings/byte_lm_trainer_native_door.mojo:byte_lm_logits:lengths  # lane lastuse-addr-arg: `row_lengths = lengths` holds the same object and is named after the native calls (`_ = row_lengths`)
+bindings/host_tree_native_door.mojo:host_tree_vote:array  # lane lastuse-addr-arg: host_tree_array returns fields[name] itself (it refuses, never converts), so the model's fields dict holds every address the list keeps
+bindings/host_tree_native_door.mojo:_host_gbdt_run:array  # lane lastuse-addr-arg: host_tree_array returns the stored field itself (it refuses, never converts); the model's dict holds it
+bindings/host_tree_native_door.mojo:host_tree_operation:value  # lane lastuse-addr-arg: host_tree_array returns fields[name] itself (it refuses, never converts); the fields dict holds it through the hash update
+bindings/neural_block_admission_door.mojo:_block_destination:scratch  # lane lastuse-addr-arg: `store` (a memoryview of scratch, an argument of the same call) holds scratch, and the Array the call builds keeps `store`
+bindings/x_prep_native_owner_door.mojo:xprep_run_records:value  # lane lastuse-addr-arg: value is record[1] of owners[...], the caller's borrowed list that holds every record through the run
+providers/python/prep_metadata_pyapi_unpack.mojo:prep_numeric_vector:output  # lane lastuse-addr-arg: `pin = ArrayPin(output, ...)` (the caller's pin) holds output before the address is taken
+providers/python/prep_transform_pyapi_unpack.mojo:_pandas_snapshot:output  # lane lastuse-addr-arg: `pin = ArrayPin(output, owner)` (the caller's pin) holds output before the address is read back
+providers/python/prep_transform_pyapi_unpack.mojo:_rows_snapshot:output  # lane lastuse-addr-arg: `pin = ArrayPin(output, owner)` (the caller's pin) holds output before the address is read back

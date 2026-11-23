@@ -184,6 +184,7 @@ def _rows_gather(value: PythonObject, entries: PythonObject, prefix: String, mut
         owned.append(base_slot)
     var slot = Int(py=_entry_call(entries[PythonObject(prefix + "_dev_take_rows")],
                                   Python.tuple(base_slot, d, classical_address(indices), n)))
+    _ = indices^  # read by address inside the call above: named again so it outlives it (lane lastuse-addr-arg)
     owned.append(slot)
     _ = base^
     return slot
@@ -329,6 +330,9 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
             if src < 0:
                 unsafe_memcpy(dest=F32P(unsafe_from_address=base + 4 * off),
                        src=F32P(unsafe_from_address=Int(py=classical_address(value))), count=size)
+                # the copy reads `value` by address (a converted DeviceRows' host values have no other owner):
+                # named again so it outlives the copy (lane lastuse-addr-arg)
+                _ = value
             _add_input(ins, off, off + size, src)
             if not is_inout:
                 _ = py_call(in_spans.append, Python.tuple(off, off + size))

@@ -443,6 +443,7 @@ def _run(fields: PythonObject, values: PythonObject, context: PythonObject, back
             Int(py=classical_address(y)), Int(py=classical_address(logits)), Int(py=classical_address(sel)),
             Int(py=classical_address(w))]
         _ = seq_ops_call(entries, SEQ_MOE_FORWARD, addresses, ip, floats)
+        _ = y  # read by address inside the call above: named again so it outlives it (lane lastuse-addr-arg)
     _ = input^
     _ = r^
     _ = gu^
