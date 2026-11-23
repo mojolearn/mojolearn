@@ -188,7 +188,8 @@ def _configs():
         for method in ("sigmoid", "isotonic"):
             rows.append(("searchcal", scoring, method))
     rows += [("searchvote",), ("searchcv",), ("searcherr",), ("searchtrain",), ("searchr2",), ("searchmulti",),
-             ("searchshap",)]
+             ("searchshap",), ("searchpublic", "lr"), ("searchpublic", "ridge"), ("searchpublic", "random"),
+             ("searchpublic", "accuracy")]
     return rows
 
 
@@ -288,6 +289,17 @@ def _search_row(ml, row, tag, X, y, Xt):
         Y = np.stack([yr, yr * 0.5 + 1.0], axis=1).astype(np.float32)
         model = GridSearchCV(ml.MultiOutputRegressor(ml.Lasso()), {"estimator__alpha": [0.01, 0.1]}, cv=3).fit(Xr, Y)
         return [(tag + "_predict", _digest(model.predict(Xr[:20])))] + _search_tables(model, tag)
+    if row[0] == "searchpublic":
+        # The public fit now runs the same typed search RUN (one body).
+        if row[1] == "ridge":
+            model = GridSearchCV(ml.Ridge(), {"alpha": [0.1, 1.0, 10.0]}, cv=3).fit(Xr, yr)
+            return [(tag + "_predict", _digest(model.predict(Xr[:20])))] + _search_tables(model, tag)
+        if row[1] == "random":
+            model = RandomizedSearchCV(ml.LogisticRegression(), grid, n_iter=2, random_state=0, cv=3).fit(X, y)
+        else:
+            model = GridSearchCV(ml.LogisticRegression(), grid, cv=3,
+                                 scoring="accuracy" if row[1] == "accuracy" else None).fit(X, y)
+        return _predicts(model, Xt, tag) + _search_tables(model, tag)
     search = GridSearchCV(ml.LogisticRegression(), grid, cv=3)
     model = ml.StackingClassifier([("search", search), ("lda", ml.LinearDiscriminantAnalysis())], cv=3).fit(X, y)
     explainer = ml.KernelExplainer(model, X[:20])

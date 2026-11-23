@@ -101,6 +101,41 @@ def _search_host_folds(fields: PythonObject, candidates: PythonObject, b: Python
     return False
 
 
+def _search_member_fit(model: PythonObject, fields: PythonObject, x_in: PythonObject, y_in: PythonObject,
+                       context: PythonObject, b: PythonObject) raises -> Bool:
+    """The search fitted as ONE native member of its own META kind: UNPACK
+    (X and y read once; `msel_member_refit` admits the search's clone through
+    the member boundary, encodes the labels, releases the GIL around the
+    member fit = `msel_search_run` and packs the clone), then the clone's
+    fitted attributes are the model's. False (nothing changed): the kind did
+    not take this search or these data, and the door's units run and raise
+    their own words (THE FALLBACK RULE)."""
+    var xa = PythonObject(None)
+    var ya = PythonObject(None)
+    try:
+        xa = msel_materialize(x_in, "X", context)
+        ya = msel_materialize_y(y_in, context)
+    except:
+        return False
+    var fitted = msel_member_refit(model, Python.dict(), ya, xa, context, b)
+    if fitted is None:
+        return False
+    var source = msel_search_fields(fitted, context)
+    var updates = Python.dict()
+    # The fitted attributes the search RUN's PACK writes (providers/python/
+    # member_ensemble_boundary_door.mojo `_search_pack`): the door's own set.
+    var names: List[String] = ["cv_results_", "n_splits_", "multimetric_", "best_index_", "best_score_",
+                               "best_params_", "best_estimator_", "scorer_"]
+    for i in range(len(names)):  # driver-loop: over the fitted attribute names (eight, once per fit)
+        var name = names[i]
+        var value = py_get(source, name)
+        if value is None and name != "scorer_":
+            return False
+        py_setitem(updates, name, value)
+    msel_search_update(fields, updates, context)
+    return True
+
+
 def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_BaseSearch.fit(X, y, groups=...)`."""
     var b = msel_b()
@@ -114,6 +149,18 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     _ = msel_estimator_plan(estimator, context)
     msel_admit(fields["n_jobs"], context)
     msel_admit(error_score, context)
+    # THE ONE SEARCH BODY (lane mf-search4 follow-up): a search its member
+    # kind admits (core/ensemble_member.mojo META_SEARCH_*: an int cv, scoring
+    # None or 'accuracy', refit=True, no device of its own, every candidate a
+    # serving member) is fitted by the typed search RUN
+    # (core/msel_search_run.mojo) through `_search_member_fit`; the units
+    # below run only what that kind does not take (module note of
+    # providers/python/member_ensemble_boundary_door.mojo `_admit_search`) and
+    # the resident DeviceRows fold route of a device member.
+    comptime if MSEL_MEMBER_UNITS:
+        if y_in is not None and not msel_device_rows_ok(estimator, fields["scoring"], context):
+            if _search_member_fit(model, fields, x_in, y_in, context, b):
+                return model
     var candidates = msel_candidates(model, context)
     if len(candidates) == 0:
         raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")
