@@ -105,6 +105,15 @@ from gbdt.host.gbdt_oracle_ordered import (
     _PwHelper,
     _ordered_tree_structure,
 )
+from gbdt.host.gbdt_oracle_losses import (
+    GBDT_LEAF_NEWTON,
+    GBDT_OBJ_LOGLOSS,
+    GBDT_OBJ_RMSE,
+    GbdtHostLoss,
+    _estimate_leaves_for_loss,
+    _loss_row,
+    _loss_value,
+)
 from gbdt.host.gbdt_oracle_rmse import GbdtRmseHostFit, gbdt_rmse_host_model_text
 from gbdt.metrics.sample_quantile import calculate_weighted_target_average
 from gbdt.overfitting_detector.overfitting_detector import (
@@ -127,45 +136,31 @@ struct GbdtPointwiseFit(Movable):
     var stopped_early: Bool
 
 
-def _ce(target: Float32, val: Float32, border: Float32, weight: Float32) -> Tuple[Float32, Float32, Float32]:
-    """One in-range thread of `cross_entropy_kernel[has_border=True]`:
-    `(ftz(w * direction), ftz(w * scale), score)`."""
-    var exp_val = identical_exp(val)
-    var p = Float32(1.0)
-    if isfinite(exp_val):
-        p = exp_val / (Float32(1.0) + exp_val)
-    p = max(min(p, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
-    var c = Float32(1.0) if target > border else Float32(0.0)
-    var direction = ftz(c - p)
-    var scale = ftz(p * (Float32(1.0) - p))
-    var log_exp_val_plus_one = val
-    if isfinite(exp_val):
-        log_exp_val_plus_one = identical_log(Float32(1.0) + exp_val)
-    # `c * val - log(1 + e)` in one rounding, as the default build fused it
-    var score = weight * identical_mul_add(c, val, -log_exp_val_plus_one)
-    return (ftz(weight * direction), ftz(weight * scale), score)
-
-
 def _pw_search_pass(
+    loss: GbdtHostLoss,
     targets: List[Float32],
     weights: List[Float32],
     cursor: List[Float32],
     n_rows: Int,
-    border: Float32,
     mut sw: List[Float32],
     mut sg: List[Float32],
     mut fv_partials: List[Float32],
 ):
-    """The search planes and the learn score of one tree
-    (`cross_entropy_kernel[has_border=True]` with row weights): `sw` the
-    row's weight, `sg` the flushed weighted direction, one score partial per
-    256-thread block through the halving tree.
+    """The search planes and the learn score of one tree (the loss's
+    target kernel with row weights, `_loss_row` of gbdt_oracle_losses.mojo:
+    `cross_entropy_kernel[has_border=True]` for Logloss, the pointwise
+    target kernel for RMSE): `sw` the row's weight, `sg` the flushed
+    weighted derivative, one score partial per 256-thread block through the
+    halving tree. Lane gbdt-cpu-rest-2 (2026-11-23): this file's own
+    Logloss row (`_ce`, a third copy of that kernel's math) is deleted.
 
     The unit is one 256-thread device block (its rows' two planes, its own
     partial and halving tree), as `_logloss_search_pass`; blocks go round
     robin to `_gbdt_units` tasks."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var units = _gbdt_units(blocks, 16 * n_rows)
+    var objective = loss.objective
+    var alpha = loss.kernel_alpha
     var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
     var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
     var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
@@ -173,7 +168,7 @@ def _pw_search_pass(
     var sg_p = rebind[HostF32Ptr](sg.unsafe_ptr())
     var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm targets_p, imm weights_p, imm cursor_p, imm sw_p, imm sg_p, imm fv_p}:
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm objective, imm alpha, imm targets_p, imm weights_p, imm cursor_p, imm sw_p, imm sg_p, imm fv_p}:
         var slab = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var b = unit
         while b < blocks:
@@ -182,10 +177,10 @@ def _pw_search_pass(
                 # an out-of-range thread adds 0.0 (the slab is reused)
                 slab[t] = Float32(0.0)
                 if i < n_rows:
-                    var r = _ce(targets_p[i], cursor_p[i], border, weights_p[i])
+                    var r = _loss_row(objective, targets_p[i], cursor_p[i], alpha, weights_p[i])
                     sw_p[i] = weights_p[i]
-                    sg_p[i] = r[0]
-                    slab[t] = r[2]
+                    sg_p[i] = r.der
+                    slab[t] = r.score
             fv_p[b] = _halving_fold(slab)
             b += units
 
@@ -306,177 +301,13 @@ def _pw_tree_onto_rows(
     _ = len(cursor)
 
 
-def _estimate_logloss_leaves(
-    targets: List[Float32],
-    weights: List[Float32],
-    cursor: List[Float32],
-    row_index: List[Int],
-    offsets: List[Int],
-    sizes: List[Int],
-    n_rows: Int,
-    border: Float32,
-    l2_leaf_reg: Float32,
-    iterations: Int,
-) raises -> List[Float32]:
-    """`_estimate_and_apply`'s estimate with row weights: the gathers, the
-    weighted oracle and `newton_like_walker_estimate` with AnyImprovement
-    (the symmetric oracle's `_estimate_leaves`, weighted)."""
-    var n_leaves = len(sizes)
-    var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
-    var g_weight = List[Float32](length=n_rows, fill=Float32(0.0))
-    var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
-    # the gathers and the bins move values, one position a device thread:
-    # `_gbdt_units` ranges of positions each (lane gbdt-host-par)
-    _gather_rows(targets, row_index, n_rows, g_target)
-    _gather_rows(weights, row_index, n_rows, g_weight)
-    _gather_rows(cursor, row_index, n_rows, g_cursor)
-    var bins = List[Int](length=n_rows, fill=0)
-    _leaf_bins(offsets, sizes, n_rows, bins)
-    # WeightsCpu: `compute_partition_stats` of the gathered weights at ONE
-    # stat (64 chunks), the leaves' launches across the cores
-    var weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
-    _pinned_partition_stats(
-        g_weight, offsets, sizes, 2 * GBDT_PINNED_SM, weight_sums
-    )
-    var weights_cpu = List[Float64]()
-    for leaf in range(n_leaves):  # driver-loop: over the leaves
-        weights_cpu.append(Float64(weight_sums[leaf]))
-    var lambda_reg = Float64(l2_leaf_reg)
-    comptime if GBDT_ORACLE_HOST_SABOTAGE:
-        lambda_reg = lambda_reg + 1.0
-    var current_point = List[Float32](length=n_leaves, fill=Float32(0.0))
-    var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
-
-    comptime EPS_1E20F = Float64(Float32(1e-20))
-    var cur_point = List[Float32](length=n_leaves, fill=Float32(0.0))
-
-    var cur_value = Float64(0.0)
-    var cur_grad = List[Float64]()
-    var cached_der2 = List[Float64]()
-    var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
-    var fv = List[Float32](length=blocks, fill=Float32(0.0))
-    # `move_to(zero)`: a zero shift added onto every gathered cursor row
-    # (`_oracle_move_to`: the Float32 shift per leaf, one add per row, the
-    # rows across the cores)
-    _oracle_move_to(cur_point, current_point, bins, g_cursor, n_rows)
-    _oracle_eval_weighted(
-        g_target, g_weight, g_cursor, offsets, sizes, n_rows, border,
-        lambda_reg, cur_value, cur_grad, cached_der2, stats, fv,
-    )
-    var cur_hess = cached_der2.copy()
-    var direction = List[Float32]()
-    for i in range(n_leaves):
-        direction.append(Float32(cur_grad[i] / (cur_hess[i] + EPS_1E20F)) if cur_hess[i] > 0 else Float32(0.0))
-
-    if iterations == 1:
-        var result = List[Float32]()
-        for i in range(n_leaves):
-            result.append(Float32(Float64(cur_point[i]) + 1.0 * Float64(direction[i])))
-            if weights_cpu[i] < 1e-20:
-                result[i] = Float32(0.0)
-        return result^
-
-    var updated = False
-    var iteration = 0
-    while iteration < iterations:
-        var function_value = cur_value
-        var step = Float64(1.0)
-        var accepted = False
-        var next_value = Float64(0.0)
-        var next_grad = List[Float64]()
-        while iteration < iterations or ((not updated) and iteration < 100):
-            var next_point = List[Float32]()
-            for i in range(n_leaves):
-                # one rounding, as the default (contract=fast) build fused it
-                next_point.append(Float32(fma(step, Float64(direction[i]), Float64(cur_point[i]))))
-                if weights_cpu[i] < 1e-20:
-                    next_point[i] = Float32(0.0)
-            _oracle_move_to(next_point, current_point, bins, g_cursor, n_rows)
-            _oracle_eval_weighted(
-                g_target, g_weight, g_cursor, offsets, sizes, n_rows, border,
-                lambda_reg, next_value, next_grad, cached_der2, stats, fv,
-            )
-            if function_value <= next_value:
-                cur_hess = cached_der2.copy()
-                cur_point = next_point.copy()
-                cur_value = next_value
-                cur_grad = next_grad.copy()
-                direction.clear()
-                for i in range(n_leaves):
-                    direction.append(Float32(cur_grad[i] / (cur_hess[i] + EPS_1E20F)) if cur_hess[i] > 0 else Float32(0.0))
-                iteration += 1
-                updated = True
-                accepted = True
-                break
-            iteration += 1
-            step /= 2
-        if not accepted:
-            break
-    return cur_point^
-
-
-def _oracle_eval_weighted(
-    g_target: List[Float32],
-    g_weight: List[Float32],
-    g_cursor: List[Float32],
-    offsets: List[Int],
-    sizes: List[Int],
-    n_rows: Int,
-    border: Float32,
-    lambda_reg: Float64,
-    mut value: Float64,
-    mut gradient: List[Float64],
-    mut cached_der2: List[Float64],
-    mut stats: List[Float32],
-    mut fv: List[Float32],
-):
-    """`write_value_and_first_derivatives`' single-dimensional arm with row
-    weights (`pointwise_oracle.mojo:458-573`)."""
-    var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
-    # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
-    # one 256-thread device block owns its rows' two estimation planes and
-    # its score partial (its own halving tree); blocks go round robin to
-    # `_gbdt_units` tasks. This pass runs once per walker evaluation.
-    var units = _gbdt_units(blocks, 16 * n_rows)
-    var target_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
-    var weight_p = rebind[HostF32Ptr](g_weight.unsafe_ptr())
-    var cursor_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
-    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
-    var fv_p = rebind[HostF32Ptr](fv.unsafe_ptr())
-
-    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm target_p, imm weight_p, imm cursor_p, imm stats_p, imm fv_p}:
-        var slab = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        var b = unit
-        while b < blocks:
-            for t in range(GBDT_MSE_BLOCK):
-                var i = b * GBDT_MSE_BLOCK + t
-                # an out-of-range thread adds 0.0 (the slab is reused)
-                slab[t] = Float32(0.0)
-                if i < n_rows:
-                    var r = _ce(target_p[i], cursor_p[i], border, weight_p[i])
-                    stats_p[i] = r[0]
-                    stats_p[n_rows + i] = r[1]
-                    slab[t] = r[2]
-            fv_p[b] = _halving_fold(slab)
-            b += units
-
-    host_parallelize(score_blocks, units)
-    _ = len(g_target)
-    _ = len(g_weight)
-    _ = len(g_cursor)
-    gradient.clear()
-    cached_der2.clear()
-    # the leaves' two sums (`compute_partition_stats`): the (leaf, plane)
-    # launches across the cores (lane gbdt-host-par)
-    var leaf_sums = _partition_stats_level(
-        stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, len(sizes)
-    )
-    for leaf in range(len(sizes)):
-        gradient.append(Float64(leaf_sums[2 * leaf]))
-        cached_der2.append(Float64(leaf_sums[2 * leaf + 1]) + lambda_reg)
-    # lane cpu4-gbdt: the oracle's value fold is the device's
-    # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
-    value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])
+# Lane gbdt-cpu-rest-2 (2026-11-23): `_estimate_logloss_leaves` and
+# `_oracle_eval_weighted`, this file's copy of the weighted Newton walker and
+# its Logloss oracle, are deleted: the fit calls the shared estimator
+# (gbdt_oracle_losses.mojo `_estimate_leaves_for_loss`, the walker of every
+# pointwise loss). Unweighted fits pass no weights there: a leaf's weight is
+# then its row count, which the Float32 sum of ones it replaces equals
+# exactly below 2^24 rows, and `w * x == x` at w = 1.
 
 
 def gbdt_pointwise_host_fit(
@@ -496,8 +327,7 @@ def gbdt_pointwise_host_fit(
     l2_leaf_reg: Float32,
     random_seed: UInt64,
     nan_mode: Int,
-    border: Float32,
-    leaf_iterations: Int,
+    loss: GbdtHostLoss,
     bagging_temperature: Float32,
     od_wait: Int,
     use_best_model: Int,
@@ -512,7 +342,23 @@ def gbdt_pointwise_host_fit(
     starting constant's `summaryWeight`, the integer row count on the
     unweighted branch of `calculate_weighted_target_average`. `n_eval` 0
     is a fit without a held-out set: no test cursor, no detector, no
-    best-model shrink, as `fit_with_test` without a test pool."""
+    best-model shrink, as `fit_with_test` without a test pool.
+
+    Lane gbdt-cpu-rest-2 (2026-11-23): `loss` is Logloss (its target
+    border in `kernel_alpha`) or RMSE, Newton leaves, as the binding
+    resolves them; the device's pointwise arm runs the loss's own target
+    kernel for the search planes and the shared leaf estimator on the
+    structure (`doc_parallel_boosting.mojo`, DEVIATION 104: the searcher
+    returns no leaves, so RMSE estimates too). Every pass reads the loss
+    through `_loss_row` / `_loss_value` / `_estimate_leaves_for_loss`
+    (gbdt_oracle_losses.mojo), the bodies the greedy pointwise fit calls.
+    Boost from average is the loss's optimum constant: Logloss's log-odds,
+    RMSE's weighted mean (`_rmse_starting_approx`'s arm)."""
+    var is_logloss = loss.objective == GBDT_OBJ_LOGLOSS
+    if not is_logloss and loss.objective != GBDT_OBJ_RMSE:
+        raise Error("the pointwise host fit takes Logloss or RMSE")
+    if loss.method != GBDT_LEAF_NEWTON:
+        raise Error("the pointwise host fit takes Newton leaves")
     if n_rows < 1 or n_features < 1 or n_eval < 0:
         raise Error("the pointwise fit needs rows and features")
     var has_test = n_eval > 0
@@ -569,17 +415,24 @@ def gbdt_pointwise_host_fit(
     var best_probability = Float64(
         calculate_weighted_target_average(y, w, has_weights)
     )
-    if best_probability <= 0.0 or best_probability >= 1.0:
-        raise Error(
-            "boost_from_average: the weighted mean target is "
-            + String(best_probability) + ", outside (0, 1); a one-class pool"
-            " has no finite log-odds"
-        )
-    var starting_approx = -portable_log64(1.0 / best_probability - 1.0)
+    # RMSE: the weighted mean itself (the RMSE arm of
+    # `calc_one_dimensional_optimum_const_approx`)
+    var starting_approx = best_probability
+    if is_logloss:
+        if best_probability <= 0.0 or best_probability >= 1.0:
+            raise Error(
+                "boost_from_average: the weighted mean target is "
+                + String(best_probability) + ", outside (0, 1); a one-class pool"
+                " has no finite log-odds"
+            )
+        starting_approx = -portable_log64(1.0 / best_probability - 1.0)
     var start_value = Float32(starting_approx)
     var cursor = List[Float32](length=n_rows, fill=start_value)
     var test_cursor = List[Float32](length=n_eval, fill=start_value)
-    var test_weights = List[Float32](length=n_eval, fill=Float32(1.0))
+    # the estimator's row weights: none on the unweighted arm (once per fit)
+    var est_weights = List[Float32]()
+    if has_weights:
+        est_weights = w.copy()
 
     # ---- `create_bootstrap_seeds` ----
     var seeds = List[UInt64](length=GBDT_PW_SEED_COUNT, fill=UInt64(0))
@@ -620,7 +473,7 @@ def gbdt_pointwise_host_fit(
         var sw = List[Float32](length=n_rows, fill=Float32(0.0))
         var sg = List[Float32](length=n_rows, fill=Float32(0.0))
         var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
-        _pw_search_pass(y, w, cursor, n_rows, border, sw, sg, fv_part)
+        _pw_search_pass(loss, y, w, cursor, n_rows, sw, sg, fv_part)
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         # ---- `bootstrap_kernel[BAYESIAN]` ----
         var mag_part = List[Float32](length=2 * boot_blocks, fill=Float32(0.0))
@@ -658,9 +511,11 @@ def gbdt_pointwise_host_fit(
             cindex, layout, tree_features, tree_bins, n_rows
         )
         # ---- the estimator and `add_model_value_kernel` ----
-        var estimated = _estimate_logloss_leaves(
-            y, w, cursor, partition.row_index, partition.offsets,
-            partition.sizes, n_rows, border, l2_leaf_reg, leaf_iterations,
+        # the shared estimator; unweighted, no weights (see the note above)
+        var estimated = _estimate_leaves_for_loss(
+            loss, y, cursor, partition.row_index, partition.offsets,
+            partition.sizes, n_rows, l2_leaf_reg,
+            weights=est_weights,
         )
         var scaled = rescaled_leaves(estimated, learning_rate)
         apply_scaled_leaves_host(
@@ -695,7 +550,7 @@ def gbdt_pointwise_host_fit(
                 test_cindex, level_offsets, level_masks, level_values,
                 tree_leaves, n_eval, test_cursor,
             )
-        var t_loss = -Float64(_logloss_value(eval_y, test_cursor, n_eval, border, test_weights)) / Float64(n_eval)
+        var t_loss = -Float64(_loss_value(loss, eval_y, test_cursor, n_eval)) / Float64(n_eval)
         test_losses.append(t_loss)
         detector.add_error(t_loss)
         if detector.is_need_stop():
@@ -705,7 +560,7 @@ def gbdt_pointwise_host_fit(
             if len(tree_split_offsets) - 1 > 1:
                 losses.append(-Float64(fv) / Float64(n_rows))
 
-    losses.append(-Float64(_logloss_value(y, cursor, n_rows, border, w)) / Float64(n_rows))
+    losses.append(-Float64(_loss_value(loss, y, cursor, n_rows, w)) / Float64(n_rows))
 
     # ---- `use_best_model`: `model.shrink(best_iter)` ----
     if want_best_model == 1 and len(test_losses) > 0:

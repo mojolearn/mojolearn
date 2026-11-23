@@ -325,7 +325,7 @@ def _refuse_pointwise(what: String) raises:
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
         + " under use_pointwise_searcher=True; the gbdt host binding trains"
         " the gbdt-pointwise-l2-bayesian-eval lane only on this arm"
-        " (SymmetricTree, Logloss, L2 scores, the Bayesian bootstrap,"
+        " (SymmetricTree, Logloss or RMSE, L2 scores, the Bayesian bootstrap,"
         " boost_from_average=True, Newton leaves, with or without"
         " sample_weight, with or without an eval set under the Iter"
         " detector), see gbdt/host/gbdt_oracle_pointwise.mojo"
@@ -387,7 +387,10 @@ def _gbdt_fit_pointwise_arm(
     var max_leaves = params.i(32)
     var min_data_in_leaf = params.i(33)
 
-    if loss != String("Logloss"):
+    # lane gbdt-cpu-rest-2 (2026-11-23): RMSE too, the loss's own target
+    # kernel and the shared estimator (gbdt_oracle_pointwise.mojo)
+    var pw_is_rmse = loss == String("RMSE")
+    if loss != String("Logloss") and not pw_is_rmse:
         _refuse_pointwise("loss='" + loss + "'")
     if grow_code != 0:
         _refuse_pointwise("grow_policy code " + String(grow_code))
@@ -453,11 +456,20 @@ def _gbdt_fit_pointwise_arm(
         raise Error("best_model_min_trees must be at least 1, got " + String(best_model_min_trees))
     var nan_mode = nan_mode_from_name(nan_mode_name)
     var iterations = GBDT_LOGLOSS_NEWTON_ITERATIONS
+    if pw_is_rmse:
+        iterations = 1
     if leaf_iterations >= 0:
         iterations = leaf_iterations
     var border = GBDT_HOST_DEFAULT_BORDER
     if loss_border >= Float32(0.0):
         border = loss_border
+    # the loss as `train` resolves it on this arm: Newton leaves, Logloss's
+    # border in the kernel alpha, no bootstrap in the loss (the arm's own
+    # Bayesian draw runs in the fit)
+    var pw_loss = GbdtHostLoss(
+        GBDT_OBJ_RMSE if pw_is_rmse else GBDT_OBJ_LOGLOSS, border,
+        Float32(0.5), GBDT_LEAF_NEWTON, iterations, -1, Float32(0.0), border,
+    )
 
     var has_nan = False
     var text = String("")
@@ -480,7 +492,7 @@ def _gbdt_fit_pointwise_arm(
         x, y, w, n_rows, n_features, ex, ey, n_eval_rows,
         border_count, border_build_max_samples, n_estimators,
         max_depth, learning_rate, l2_leaf_reg, random_seed, nan_mode,
-        border, iterations, bagging_temperature, od_wait,
+        pw_loss, bagging_temperature, od_wait,
         use_best_model, best_model_min_trees, n_weights != 0,
     )
     text = fit.text
