@@ -21,9 +21,25 @@ the encode door run (core/select_member.mojo `_fit_variance`: x_prep/prep_statel
                        constant column 1 is (F 0, p 1, r 0) with force_finite and NaN without it, the other columns
                        of r_regression rtol 2e-3 atol 1e-4; SelectKBest(k=2) the support exact
 
-Not here: mutual_info_classif / mutual_info_regression (the encode door stages their program over Python objects,
-bindings/prep_select_native_door.mojo `prep_mutual_info_call`; there is no typed builder to call) and RFE (its
-elimination loop is the prep_rfe door over the caller's estimator; the LDA it fits is prep_discriminant.mojo's).
+Lane bm-rest-sel (2026-11-23) adds `test_mutual_info`, `test_mutual_info_discrete`, `test_rfe` and the RFE half of
+`test_score_edges_and_rfe_getter` (`test_rfe_getter`), inputs and references in `fixtures/prep_sel_bm/` written by
+`tools/py2mojo_native_fixtures_bm_rest_sel.py`:
+
+    mutual info        the door's chain on the typed builders of bindings/prep_select_run.mojo: the class counts
+                       (`mi_class_count_stage`, `mi_class_check`), the continuous and discrete gathers
+                       (`mi_gather_stage`), the discrete block's categories (bindings/prep_encode_cats_run.mojo
+                       `cat_fit_stage` on the identical image's route, the record `_category_build` makes), then
+                       `mi_stage` and `mi_scatter`; scores atol 3e-3 against scikit-learn; the discrete_features
+                       forms through `mi_mask_of_bools` / `mi_mask_of_indices`; the regression over every column as
+                       categories refused by `mi_discrete_check` (one sample per value); discrete_features=False's
+                       seed means over random_state 0..9 atol 2.5e-2
+    RFE                RFE(LinearDiscriminantAnalysis(), n_features_to_select=3, step=2) and the same with
+                       importance_getter='coef_': `rfe_first_stage`, then per round the LDA fit (the discriminant
+                       member's svd program) and `rfe_round_stage` on its squared coef_ rows; ranking_ exact, the
+                       final estimator's predict on the selected block more than 99% equal
+
+Stays in Python: the `discrete_features` argument's type admission, the label encoding, the callable
+importance_getter refusal (the public boundary).
 Every case is an independent unit; the case tables run across host cores.
 """
 from std.math import isnan, isinf
@@ -38,12 +54,22 @@ from bindings.prep_encode_select_run import (
     ScoreClassif, ScorePearson, ScorePlan, score_classif_stage, score_pearson_stage, score_topk_stage,
 )
 from checks.native_tests.prep_enc_host import enc_host_run
-from checks.native_tests.prep_cls_host import all_close, check_close, arena_words, codes_words
+from checks.native_tests.prep_cls_host import (
+    all_close, check_close, arena_words, codes_words, cls_host_run, da_host_mode, cls_scores, agreement,
+)
+from bindings.prep_encode_cats_run import CatBlock, CatFit, CAT_FIT_UNIQUE, CAT_NONE, cat_fit_stage
+from bindings.prep_classify_prog_run import ClsProgram, CLS_KIND_LDA, cls_lda_svd_program
+from bindings.prep_select_run import (
+    MiProgram, mi_columns, mi_mask_of_bools, mi_mask_of_indices, mi_gather_stage, mi_class_count_stage,
+    mi_int_words, mi_class_check, mi_discrete_check, mi_stage, mi_scatter,
+    RfeKeys, rfe_first_stage, rfe_round_stage,
+)
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, fixture_i32
 
 comptime SEL_DIR = "checks/native_tests/fixtures/prep_sel/"
+comptime BM_DIR = "checks/native_tests/fixtures/prep_sel_bm/"
 
 
 def family_word(blocked: Bool) -> Int:
@@ -250,6 +276,273 @@ def edges_unit(unit: Int) raises:
 
 def test_score_edges() raises:
     check_cases("score_edges", 10, edges_unit)
+
+
+# ---- mutual information: the door's chain on the typed builders ----
+def host_gather(x: List[Float32], n: Int, d: Int, cols: List[Int]) raises -> List[Float32]:
+    """`mi_gather_stage`'s program on the host column: the columns `cols` of the (n, d) block."""
+    var prog = EncProgram(True)
+    var dst = mi_gather_stage(prog, 0, n, d, cols)
+    var owners = List[List[Float32]]()
+    owners.append(x.copy())
+    var arena = enc_host_run(prog, owners)
+    return arena_words(arena, dst, n * len(cols))
+
+
+@fieldwise_init
+struct HostCats(Movable):
+    """A discrete block's categories as the door's record holds them: the (dd, kmax) block, the size words."""
+    var block: List[Float32]
+    var sizes: List[Float32]
+    var kx: List[Int]
+    var kmax: Int
+
+
+def host_categories(xd: List[Float32], n: Int, dd: Int) raises -> HostCats:
+    """The encoders' category fit on the identical image's route (CAT_FIT_UNIQUE) and the record
+    bindings/prep_encode_native_door.mojo `_category_build` makes of it."""
+    var prog = EncProgram(True)
+    var plan = cat_fit_stage(prog, CatFit(n, dd, 0, CAT_NONE, CAT_FIT_UNIQUE))
+    var owners = List[List[Float32]]()
+    owners.append(xd.copy())
+    var arena = enc_host_run(prog, owners)
+    var kx = List[Int]()
+    var kmax = 0
+    for c in range(dd):  # small-loop(oracle: the per-column category counts)
+        kx.append(Int(arena[plan.counts + c]))
+        kmax = max(kmax, kx[c])
+    var block = List[Float32](length=max(dd * kmax, 1), fill=0)
+    var sizes = List[Float32](length=max(dd, 1), fill=0)
+    for c in range(dd):  # small-loop(oracle: the per-column categories)
+        sizes[c] = Float32(kx[c])
+        for i in range(kx[c]):  # small-loop(oracle: one column's categories)
+            block[c * kmax + i] = arena[plan.values + c * n + i]
+    return HostCats(block^, sizes^, kx^, kmax)
+
+
+def mi_host(x: List[Float32], n: Int, d: Int, mask: List[Bool], codes: List[Int32], yr: List[Float32], K: Int,
+            discrete_target: Bool, seed: Int, blocked: Bool) raises -> List[Float32]:
+    """bindings/prep_select_native_door.mojo `prep_mutual_info_call` on the host column (n_neighbors 3, the
+    identical tier: no MOJOLEARN_MI_WORK scratch)."""
+    var columns = mi_columns(mask)
+    var cont = columns[0].copy()
+    var disc = columns[1].copy()
+    var counts = List[Int]()
+    var owners = List[List[Float32]]()
+    if discrete_target:
+        var pc = EncProgram(True)
+        var tot = mi_class_count_stage(pc, 0, n, n, K)
+        var held = List[List[Float32]]()
+        held.append(codes_words(codes))
+        var counted = enc_host_run(pc, held)
+        counts = mi_int_words(Int(counted.unsafe_ptr()), tot, K)
+        _ = counted^   # Mojo frees a local at its last named use: the arena lives through the read
+        mi_class_check(counts, len(cont) > 0)
+        owners.append(codes_words(codes))
+    else:
+        owners.append(yr.copy())
+    var x_owner = -1
+    if len(cont) > 0:
+        owners.append(host_gather(x, n, d, cont) if len(disc) > 0 else x.copy())
+        x_owner = len(owners) - 1
+    var xd_owner = -1
+    var cats = CatBlock(-1, 0, 0, -1, 0)
+    var kx = List[Int]()
+    if len(disc) > 0:
+        var xd = host_gather(x, n, d, disc)
+        var hc = host_categories(xd, n, len(disc))
+        kx = hc.kx.copy()
+        if not discrete_target:
+            mi_discrete_check(kx, disc, n)
+        owners.append(xd^)
+        xd_owner = len(owners) - 1
+        owners.append(hc.block.copy())
+        owners.append(hc.sizes.copy())
+        cats = CatBlock(len(owners) - 2, len(hc.block), hc.kmax, len(owners) - 1, len(hc.sizes))
+    var prog = EncProgram(True)
+    var staged = mi_stage(prog, MiProgram(n, 3, seed, discrete_target, False, blocked, cont.copy(), disc.copy(),
+        x_owner, 0, n, counts^, xd_owner, cats^, kx^))
+    var arena = enc_host_run(prog, owners)
+    var scores = List[Float32](length=d, fill=0)
+    mi_scatter(Int(arena.unsafe_ptr()), staged, cont, disc, Int(scores.unsafe_ptr()))
+    _ = arena^   # the arena lives through the scatter
+    return scores^
+
+
+def mi_check(got: List[Float32], want: List[Float64], atol: Float64, label: String) raises:
+    check_close(got, want, 0.0, atol, label)
+
+
+# ---- test_mutual_info: classif and regression x the two routes ----
+def mi_unit(unit: Int) raises:
+    var regression = unit // 2 == 1
+    var blocked = unit % 2 == 0
+    var n = 500
+    var d = 4
+    var label = ("mutual_info_regression" if regression else "mutual_info_classif") + " blocked " + String(blocked)
+    var x = fixture_f32(BM_DIR + "mi-x.f32", n * d)
+    var y = fixture_i32(BM_DIR + "mi-y.i32", n)
+    var yr = fixture_f32(BM_DIR + "mi-yr.f32", n)
+    var got = mi_host(x, n, d, List[Bool](length=d, fill=False), y, yr, 3, not regression, 0,
+        (family_word(blocked) & 1) != 0)
+    mi_check(got, fixture_f64(BM_DIR + ("mi-r.f64" if regression else "mi-c.f64"), d), 3e-3, label)
+
+
+def test_mutual_info() raises:
+    check_cases("mutual_info", 4, mi_unit)
+
+
+# ---- test_mutual_info_discrete: the five discrete_features forms x classif / regression, then the ties ----
+def mid_mask(which: Int) raises -> List[Bool]:
+    """The which's discrete_features through the door's typed mask builders."""
+    if which == 0 or which == 4:
+        return List[Bool](length=4 if which == 0 else 6, fill=True)   # the bool True
+    if which == 2:
+        var given: List[Bool] = [True, True, False, True, True, False]
+        return mi_mask_of_bools(given, 6)
+    var indices: List[Int] = [0, 1, 3, 4]
+    if which == 3:
+        indices = [-6, 1, 3, -2]
+    return mi_mask_of_indices(indices, 6)
+
+
+def mid_unit(unit: Int) raises:
+    var n = 500
+    var x = fixture_f32(BM_DIR + "mid-x.f32", n * 6)
+    var y = fixture_i32(BM_DIR + "mid-y.i32", n)
+    var yr = fixture_f32(BM_DIR + "mid-yr.f32", n)
+    var blocked = (family_word(True) & 1) != 0
+    if unit >= 10:
+        # discrete_features=False: the seed means over random_state 0..9
+        var regression = unit == 11
+        var label = "discrete_features False (ties) " + ("regression" if regression else "classif")
+        var mean = List[Float64](length=6, fill=0.0)
+        for s in range(10):  # small-loop(oracle: the ten seeds the original averages)
+            var got = mi_host(x, n, 6, List[Bool](length=6, fill=False), y, yr, 3, not regression, s & 0x3FFFFFFF,
+                blocked)
+            for j in range(6):  # small-loop(oracle: six columns)
+                mean[j] += Float64(got[j]) / 10.0
+        var want = fixture_f64(BM_DIR + ("mid-tr.f64" if regression else "mid-tc.f64"), 6)
+        for j in range(6):  # small-loop(oracle: six columns)
+            require(abs(mean[j] - want[j]) <= 2.5e-2, label + " column " + String(j) + ": " + String(mean[j])
+                + " expected " + String(want[j]))
+        return
+    var which = unit // 2
+    var regression = unit % 2 == 1
+    var label = ("regression " if regression else "classif ") + "which " + String(which)
+    var a = x.copy()
+    var d = 6
+    if which == 0:
+        # Xd4 = X[:, [0, 1, 3, 4]]
+        d = 4
+        var keep: List[Int] = [0, 1, 3, 4]
+        a = List[Float32](length=n * 4, fill=0)
+        for i in range(n):  # small-loop(fixture: the original's column selection)
+            for c in range(4):  # small-loop(fixture: four columns)
+                a[i * 4 + c] = x[i * 6 + keep[c]]
+    var mask = mid_mask(which)
+    if regression and which == 4:
+        # continuous columns as categories: one sample per value, refused
+        var refused = False
+        try:
+            _ = mi_host(a, n, d, mask, y, yr, 3, False, 0, blocked)
+        except problem:
+            refused = "one sample per value" in String(problem)
+        require(refused, label + ": not refused with one sample per value")
+        return
+    var got = mi_host(a, n, d, mask, y, yr, 3, not regression, 0, blocked)
+    mi_check(got, fixture_f64(BM_DIR + "mid-" + ("r" if regression else "c") + String(which) + ".f64", d), 3e-3,
+        label)
+
+
+def test_mutual_info_discrete() raises:
+    check_cases("mutual_info_discrete", 12, mid_unit)
+
+
+# ---- RFE: the elimination rounds on the typed builders, the LDA fit of each round ----
+@fieldwise_init
+struct LdaFit(Movable):
+    var coef: List[Float32]   # coef_ (K x d, K > 2)
+    var inter: List[Float32]
+
+
+def lda_fit_host(x: List[Float32], codes: List[Int32], n: Int, d: Int, K: Int, blocked: Bool) raises -> LdaFit:
+    """LinearDiscriminantAnalysis() fit (solver 'svd', tol 1e-4, estimated priors) as the discriminant member
+    builds it (core/discriminant_member.mojo `_fit_lda`)."""
+    var program = ClsProgram(False)
+    var o = cls_lda_svd_program(program, da_host_mode(blocked), n, d, K, 1e-4, List[Float64](), False)
+    var buffers = List[List[Float32]]()
+    buffers.append(x.copy())
+    buffers.append(codes_words(codes))
+    var arena = cls_host_run(program, buffers)
+    return LdaFit(arena_words(arena, o.coef, K * d), arena_words(arena, o.inter, K))
+
+
+def rfe_check(prefix: String, n: Int, d: Int, blocked: Bool, predict: Bool, label: String) raises:
+    var K = 3
+    var nsel = 3
+    var step = 2
+    var x = fixture_f32(BM_DIR + prefix + "-x.f32", n * d)
+    var codes = fixture_i32(BM_DIR + prefix + "-y.i32", n)
+    var support = List[Float32](length=d, fill=1.0)
+    var ranking = List[Float32](length=d, fill=1.0)
+    var p0 = ClsProgram(True)
+    var first = rfe_first_stage(p0, n * d, n, d)
+    var b0 = List[List[Float32]]()
+    b0.append(support.copy())
+    b0.append(x.copy())
+    var a0 = cls_host_run(p0, b0)
+    var feat = arena_words(a0, first.ids, d)   # int32 words, carried as they are
+    var block = arena_words(a0, first.block, n * d)
+    var nsup = d
+    while nsup > nsel:  # small-loop(oracle: the elimination rounds)
+        var drop = min(step, nsup - nsel)
+        var k = nsup - drop
+        var fit = lda_fit_host(block, codes, n, nsup, K, blocked)
+        var prog = ClsProgram(True)
+        var staged = rfe_round_stage(prog, RfeKeys(nsup, K, True, 0), fit.coef.copy(), n * d, n, d, nsup, drop, k)
+        var buffers = List[List[Float32]]()
+        buffers.append(support.copy())
+        buffers.append(ranking.copy())
+        buffers.append(feat.copy())
+        buffers.append(x.copy())
+        var arena = cls_host_run(prog, buffers)
+        support = arena_words(arena, staged.support, d)
+        ranking = arena_words(arena, staged.ranking, d)
+        feat = arena_words(arena, staged.next.ids, k)
+        block = arena_words(arena, staged.next.block, n * k)
+        nsup = k
+    var want = fixture_i32(BM_DIR + prefix + "-rank.i32", d)
+    for j in range(d):  # small-loop(oracle: ranking_, exact)
+        require(Int(ranking[j]) == Int(want[j]), label + ": ranking_[" + String(j) + "] " + String(Int(ranking[j]))
+            + " expected " + String(want[j]))
+    if not predict:
+        return
+    var final = lda_fit_host(block, codes, n, nsup, K, blocked)
+    var records = List[List[Float32]]()
+    records.append(final.coef.copy())
+    records.append(final.inter.copy())
+    var answer = cls_scores(CLS_KIND_LDA, block, n, nsup, K, records^, False, 0.0, False)
+    var same = agreement(answer.codes, fixture_i32(BM_DIR + prefix + "-pred.i32", n))
+    require(same > 0.99, label + ": predict agrees on " + String(same) + " of the rows")
+
+
+def rfe_unit(unit: Int) raises:
+    var blocked = unit % 2 == 0
+    rfe_check("rfe", 400, 8, blocked, True, "rfe blocked " + String(blocked))
+
+
+def test_rfe() raises:
+    check_cases("rfe", 2, rfe_unit)
+
+
+def rfe_getter_unit(unit: Int) raises:
+    var blocked = unit % 2 == 0
+    rfe_check("rg", 300, 8, blocked, False, "rfe importance_getter='coef_' blocked " + String(blocked))
+
+
+def test_rfe_getter() raises:
+    check_cases("rfe_getter", 2, rfe_getter_unit)
 
 
 def main() raises:
