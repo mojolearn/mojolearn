@@ -15,8 +15,10 @@ core/linear_svm_member.mojo. Published kinds: 0 LinearSVC, 1 LinearSVR
     dict's pending table the caller fills over its labels). Not admitted
     (False; the caller keeps the estimator's own doors): a class_weight that
     is neither None, 'balanced' nor an exact dict (its own fit refuses it),
-    and a driver that lacks the native class-code queries (an image built
-    before them: its own predict then decodes through the label steps).
+    and a binary built with the PY2MOJO rows arm off (its two-class predict
+    decodes through the label threshold). The host image answers the
+    multiclass class-code query since lane mf-img3, so LinearSVC is a member
+    on every default image, host column included.
   * `linear_svm_member_pack` (PACK): the fitted attributes the own fit
     writes (bindings/svc_linear_boundary_pack.mojo), in its order; the
     member borrowed X, so `input_copied_` is False. `classes_` is the
@@ -37,7 +39,7 @@ from bindings.member_owner_unpack import MemberOwner
 from bindings.member_class_weight_unpack import member_cw_kind
 from core.member_class_weight import MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words
 from bindings.py_balanced import py_call, py_get, py_setitem
-from bindings.linear_svc_boundary_unpack import linear_svc_route, LINEAR_SVC_ROUTE_ROWS, LINEAR_SVC_ROUTE_MULTICLASS
+from bindings.linear_svc_boundary_unpack import linear_svc_route, LINEAR_SVC_ROUTE_ROWS
 from bindings.svc_linear_boundary_unpack import linear_svc_check_fields, linear_svr_check_fields, linear_svm_strengths
 from bindings.svc_common_unpack import svc_field, svc_attr, svc_float, svc_int, svc_truthy
 from bindings.svm_keys_unpack import svm_keys
@@ -58,8 +60,8 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator. False: this configuration has no member
-    entry (a class_weight it does not take as words, a driver without the
-    class-code queries)."""
+    entry (a class_weight it does not take as words, a binary with the
+    PY2MOJO rows arm off)."""
     var nk = svm_keys()
     if kind != LINEAR_SVM_MEMBER_SVC and kind != LINEAR_SVM_MEMBER_SVR:
         raise Error("RuntimeError: mojolearn: unknown LinearSvm member kind " + String(kind))
@@ -73,8 +75,10 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         if weighting < 0:
             return False
     var connection = linear_svc_route(model, fields, context)
-    if kind == LINEAR_SVM_MEMBER_SVC and (connection.flags & (LINEAR_SVC_ROUTE_ROWS | LINEAR_SVC_ROUTE_MULTICLASS)) != (
-            LINEAR_SVC_ROUTE_ROWS | LINEAR_SVC_ROUTE_MULTICLASS):
+    if kind == LINEAR_SVM_MEMBER_SVC and (connection.flags & LINEAR_SVC_ROUTE_ROWS) == 0:
+        # A binary built with the PY2MOJO rows arm off (-D MOJOLEARN_PY2MOJO_linear_OFF): its door decodes two
+        # classes through the decision scores and the label threshold, which the member's codes do not run.
+        # Every default image has the bit, and every image answers the class-code query since lane mf-img3.
         return False
     var route = device_route_value(connection.provider)
     if kind == LINEAR_SVM_MEMBER_SVR and not route.has_fifth:

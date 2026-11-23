@@ -7,8 +7,9 @@ One entry, `kernel_ridge_member_v2`, published by each kernel methods image
 bindings/_mojolearn_kernel_methods_host.mojo). It runs the family's existing
 typed RUN (kernel_methods/native_call_run.mojo `KmCall` requests: the
 estimator's own door's operations, in its order) over `route.entry`, the
-image's kernel methods provider table (`identical` only: a `fast` build has
-no provider and the boundary keeps the estimator's own doors).
+image's kernel methods provider table (both tiers: a `fast` estimator's own
+door keeps its list and pointer entries, its member admission takes the
+image's table, which runs the same bodies; lane mf-img3).
 `route.flags` is the provider's capability word (operation 14): bit 1 =
 the pointer fit and the device-resident predict (a GPU image), as the
 estimator's door reads it. No kernel is touched.

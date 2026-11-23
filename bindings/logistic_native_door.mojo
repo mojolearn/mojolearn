@@ -80,7 +80,7 @@ from bindings.admitted_input_unpack import admit_x, admit_x_unrecorded, admitted
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.classical_labels_door import (
     ClassicalLabels, classical_encode_labels, classical_decode_labels, classical_accuracy,
-    labels_class_weight_rows, labels_argmax_rows, labels_shape_of,
+    labels_class_weight_rows, labels_shape_of,
     labels_address, labels_cast,
 )
 from bindings.admitted_input_unpack import AdmittedX, admit_weight_words, admitted_words, admitted_storage_native
@@ -485,32 +485,27 @@ def logistic_predict_scoped(model: PythonObject, state: LogisticQueryOwners, rou
         _ = codes  # keep the Python object alive through the native call above
         q.refuse(model)
         return classical_decode_labels(state.classes, codes, label_context)
-    if routed.route.multiclass:
-        if not state.has_weights:
-            raise Error("mojolearn LogisticRegression: call fit first")
-        var q = _query_x(model, routed.route.fold, source, context)
-        var rows = q.rows
-        var cols = q.cols
-        logistic_query_width_check(cols, state.features(), context)
-        var codes = admitted_storage_native([rows], "<i8", context, as_array=True)
-        if q.fold():
-            _infer_fold(model, state, q, codes, _FOLD_CODES, n_targets, False, context)
-            return classical_decode_labels(state.classes, codes, label_context)
-        if rows:
-            var request = QnQueryRequest(Int(py=classical_address(q.x)), Int(py=classical_address(state.weights)),
-                labels_address(codes), q.status_address(), rows, cols, n_targets, Bool(py=state.intercept_owner), False)
-            logistic_route_query(routed, QN_NATIVE_MULTICLASS, request)
-            _ = q.x  # keep the Python object alive through the native call above
-            _ = codes  # keep the Python object alive through the native call above
-            q.refuse(model)
+    # Every image answers the class-code query (the host image since lane mf-img3: its decision body, then
+    # the first-max argmax the host label scan ran here before).
+    if not state.has_weights:
+        raise Error("mojolearn LogisticRegression: call fit first")
+    var q = _query_x(model, routed.route.fold, source, context)
+    var rows = q.rows
+    var cols = q.cols
+    logistic_query_width_check(cols, state.features(), context)
+    var codes = admitted_storage_native([rows], "<i8", context, as_array=True)
+    if q.fold():
+        _infer_fold(model, state, q, codes, _FOLD_CODES, n_targets, False, context)
         return classical_decode_labels(state.classes, codes, label_context)
-    # A binding without the device argmax keeps the host scan, the same
-    # first-maximum rule (`_labels.argmax_rows`).
-    var scores = logistic_decision(model, state, routed, source, context)
-    var rows = Int(py=scores.shape[0])
-    var codes = labels_argmax_rows(scores, rows, n_targets, False, label_context)
-    _ = scores^
+    if rows:
+        var request = QnQueryRequest(Int(py=classical_address(q.x)), Int(py=classical_address(state.weights)),
+            labels_address(codes), q.status_address(), rows, cols, n_targets, Bool(py=state.intercept_owner), False)
+        logistic_route_query(routed, QN_NATIVE_MULTICLASS, request)
+        _ = q.x  # keep the Python object alive through the native call above
+        _ = codes  # keep the Python object alive through the native call above
+        q.refuse(model)
     return classical_decode_labels(state.classes, codes, label_context)
+
 
 
 def _logistic_proba_fused(model: PythonObject, state: LogisticQueryOwners, routed: LogisticRouteCall,

@@ -30,7 +30,7 @@ from bindings.operation_names_svc import (
 from bindings.svm_mixture_native_door import _qn_scores, _qn_scores_native
 from bindings.linear_svc_boundary_unpack import (
     LinearSvcConnection, linear_svc_route, linear_svc_run_fit, linear_svc_run_query, linear_svr_run_fit, LinearSvcPrediction,
-    LINEAR_SVC_ROUTE_ROWS, LINEAR_SVC_ROUTE_MULTICLASS,
+    LINEAR_SVC_ROUTE_ROWS,
 )
 from bindings.svc_linear_boundary_unpack import linear_svr_fit_unpack, linear_svc_fit_unpack, linear_svc_codes_unpack
 from bindings.svc_linear_boundary_pack import (
@@ -40,7 +40,7 @@ from core.linear_svc_native_api import LinearSvcFitPlan
 from core.qn_single_fit import QnSingleFitPlan
 from core.logistic_native_api import QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS
 from core.labels_native_api import LabelsThresholdRequest
-from bindings.labels_descriptor_boundary_door import labels_threshold, labels_argmax_rows, labels_scope
+from bindings.labels_descriptor_boundary_door import labels_threshold, labels_scope
 from bindings.svc_common_unpack import svc_field, svc_has
 from bindings.svm_keys_unpack import svm_keys
 
@@ -99,7 +99,8 @@ def _linear_svc_prediction(model: PythonObject, source: PythonObject,
             swap(codes, query.codes)
             _ = query
             return LinearSvcPrediction(classes, codes^)
-        if k > 2 and (connection.flags & LINEAR_SVC_ROUTE_MULTICLASS) != 0:
+        if k > 2:
+            # Every image answers the class-code query (the host image since lane mf-img3).
             var query = linear_svc_codes_unpack(model, fields, source, k, context)
             if query.rows > 0:
                 linear_svc_run_query(connection, QN_NATIVE_MULTICLASS, query.request)
@@ -121,8 +122,9 @@ def _linear_svc_prediction(model: PythonObject, source: PythonObject,
 def _linear_svc_decided(model: PythonObject, connection: LinearSvcConnection, classes: PythonObject, k: Int,
                         source: PythonObject, context: PythonObject,
                         label_context: PythonObject) raises -> LinearSvcPrediction:
-    """The decision-score fallback: scores, then the native threshold (two
-    classes) or argmax over them."""
+    """The decision-score fallback of two classes (a binary built with the
+    PY2MOJO rows arm off): scores, then the native threshold. More than two
+    classes always take the class-code query (`_linear_svc_prediction`)."""
     var scores = _qn_scores_native(model, connection, source, 1 if k == 2 else k, context)
     if k != 2 and k < 3:
         # A rebound class table of length 0/1 produced a 1-D decision Array;
@@ -135,8 +137,8 @@ def _linear_svc_decided(model: PythonObject, connection: LinearSvcConnection, cl
         if scores.rows > 0:
             _ = labels_threshold(label_context, LabelsThresholdRequest(Int(scores.values.unsafe_ptr()),
                 Int(codes.unsafe_ptr()), 0, scores.rows, True, 0, 1, 0))
-    elif scores.rows > 0:
-        labels_argmax_rows(label_context, False, Int(scores.values.unsafe_ptr()), scores.rows, k, Int(codes.unsafe_ptr()))
+    elif k > 2:
+        raise Error("RuntimeError: mojolearn LinearSVC: more than two classes take the class-code query")
     _ = scores
     return LinearSvcPrediction(classes, codes^)
 
