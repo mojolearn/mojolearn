@@ -23,9 +23,7 @@ Lane layernorm-idn N3 (2026-10-09), two waste removals, the one form:
     `layer_norm_dev` instead of the host-array entry (which, at an M x D
     activation of 67 MB, uploads x, downloads y, then uploads x and dy and
     downloads dx again per fit, plus two page-faulted zero fills). Nothing
-    changes for a host-array x. `MOJOLEARN_SEQ_DEVICE_IO_OFF=1` (the sequence
-    binding's before arm) makes the class report no device I/O and `to_device`
-    return the host array.
+    changes for a host-array x.
   * Kept stats: a resident forward stores its row mean and rstd in two
     M-float resident tensors the layer keeps, and `backward` hands them
     back so the device entry skips its forward recompute (one M x D launch

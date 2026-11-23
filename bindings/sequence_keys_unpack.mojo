@@ -135,7 +135,6 @@ struct SequenceKeys(Defaultable, Movable):
     var k_sequence_bindings: PythonObject
     var k_sequence_device_class: PythonObject
     var k_sequence_device_getters: PythonObject
-    var k_sequence_device_io_off: PythonObject
     var k_sequence_device_setters: PythonObject
     var k_sequence_dtype_classes: PythonObject
     var k_sequence_dtype_compact: PythonObject
@@ -303,7 +302,6 @@ struct SequenceKeys(Defaultable, Movable):
         self.k_sequence_bindings = PythonObject(None)
         self.k_sequence_device_class = PythonObject(None)
         self.k_sequence_device_getters = PythonObject(None)
-        self.k_sequence_device_io_off = PythonObject(None)
         self.k_sequence_device_setters = PythonObject(None)
         self.k_sequence_dtype_classes = PythonObject(None)
         self.k_sequence_dtype_compact = PythonObject(None)
@@ -475,7 +473,6 @@ def _sequence_keys_fill(nk: UnsafePointer[SequenceKeys, MutUntrackedOrigin]) rai
     nk[].k_sequence_bindings = py_key("sequence_bindings")
     nk[].k_sequence_device_class = py_key("sequence_device_class")
     nk[].k_sequence_device_getters = py_key("sequence_device_getters")
-    nk[].k_sequence_device_io_off = py_key("sequence_device_io_off")
     nk[].k_sequence_device_setters = py_key("sequence_device_setters")
     nk[].k_sequence_dtype_classes = py_key("sequence_dtype_classes")
     nk[].k_sequence_dtype_compact = py_key("sequence_dtype_compact")

@@ -538,7 +538,9 @@ def sequence_moe_operation(operation: Int, owner: PythonObject, values: PythonOb
                 return value
             value = snapshot.host(context)
         var input = MoEBuffer(value, context, False, False, True)
-        if not seq_ops_device(entries) or Bool(py=py_item(context, nk[].k_sequence_device_io_off)):
+        # TOMBSTONE: MOJOLEARN_SEQ_DEVICE_IO_OFF (env; removed: plumbing, the same kernels on host arrays vs resident tensors, rule 2026-11-22) deleted 2026-11-23 by lane/ab-owners; code recoverable at d125cb97c7.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
+        if not seq_ops_device(entries):
             return input.array
         var result = _new(entries, input.shape, context)
         if input.count > 0:

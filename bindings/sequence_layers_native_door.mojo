@@ -187,10 +187,8 @@ def _ln_device_entries(fields: PythonObject, context: PythonObject) raises -> Py
     var nk = sequence_keys()
     # TOMBSTONE: MOJOLEARN_LN_CLASS_DEVICE_IO_OFF (env; removed: decided A/B, post-merge 2026-10-10 NV 0.96 / AMD 1.03, noise = loser) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LN_CLASS_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
-    # The sequence binding's own before arm (MOJOLEARN_SEQ_DEVICE_IO_OFF, python/mojolearn/_native_optimizer_bridge.py)
-    # still turns the class's device I/O off: the same one context read as before, now its key.
-    if Bool(py=py_item(context, nk[].k_sequence_device_io_off)):
-        return PythonObject(None)
+    # TOMBSTONE: MOJOLEARN_SEQ_DEVICE_IO_OFF (env; removed: plumbing, the same kernels on host arrays vs resident tensors, rule 2026-11-22) deleted 2026-11-23 by lane/ab-owners; code recoverable at d125cb97c7.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
     try:
         var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
         # The image's route word (bindings/sequence_ops_door.mojo); was five

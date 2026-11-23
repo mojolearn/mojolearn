@@ -227,7 +227,8 @@ def connect_sequence_device(training, device):
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError):
             pass  # Unavailable optional owners are refused by their public loader.
     context["sequence_extra_bindings"] = tuple(extra)
-    context["sequence_device_io_off"] = device._DEVICE_IO_OFF
+    # TOMBSTONE: MOJOLEARN_SEQ_DEVICE_IO_OFF (env; removed: plumbing, the same kernels on host arrays vs resident tensors, rule 2026-11-22) deleted 2026-11-23 by lane/ab-owners; code recoverable at d125cb97c7.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
     return training._OPT_NATIVE, context
 
 
