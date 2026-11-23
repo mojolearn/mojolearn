@@ -40,6 +40,9 @@ FAMILIES = (
                         "sequence-composed-mamba2", "sequence-composed-mamba3",
                         "sequence-composed-recurrent",
                         "sequence-composed-conv1d",
+                        # nn-conv begin
+                        "sequence-nnconv-transpose", "sequence-nnconv-pools", "sequence-nnconv-pads", "sequence-nnconv-upsample", "sequence-nnconv-shuffle",
+                        # nn-conv end
                         # lane verify-coverage-audit (2026-10-21): MoEBlock.backward,
                         # Sequential export/load/predict, import_model
                         "sequence-moe-backward", "sequence-export-roundtrip",
@@ -161,6 +164,13 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-composed-mamba3": "Sequential composed: trapezoid_scan",
                        "sequence-composed-recurrent": "Sequential composed: lstm, gru",
                        "sequence-composed-conv1d": "Sequential composed: conv1d, narrow",
+                       # nn-conv begin
+                       "sequence-nnconv-transpose": "Sequential conv_transpose1d and conv_transpose2d",
+                       "sequence-nnconv-pools": "Sequential adaptive pools and global_max_pool",
+                       "sequence-nnconv-pads": "Sequential zero, constant, reflection and replication pads",
+                       "sequence-nnconv-upsample": "Sequential upsample (nearest, linear, bilinear)",
+                       "sequence-nnconv-shuffle": "Sequential pixel_shuffle and pixel_unshuffle",
+                       # nn-conv end
                        "sequence-moe-backward": "MoEBlock backward",
                        "sequence-export-roundtrip": "Sequential export, load and predict",
                        "sequence-onnx-import": "import_model on an ONNX file",
@@ -185,6 +195,13 @@ PUBLIC_PENDING_LANES = {
     "sequence-composed-mamba3": "unwatched",
     "sequence-composed-recurrent": "unwatched",
     "sequence-composed-conv1d": "unwatched",
+    # nn-conv begin
+    "sequence-nnconv-transpose": "unwatched",
+    "sequence-nnconv-pools": "unwatched",
+    "sequence-nnconv-pads": "unwatched",
+    "sequence-nnconv-upsample": "unwatched",
+    "sequence-nnconv-shuffle": "unwatched",
+    # nn-conv end
     "sequence-moe-backward": "unwatched",
     "sequence-export-roundtrip": "unwatched",
     "sequence-onnx-import": "unwatched",

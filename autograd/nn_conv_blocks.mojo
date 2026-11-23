@@ -16,8 +16,9 @@ so the shared tables hold one line per entry point:
   63    reflection_pad        left, right, top, bottom, dims                  nn_pad reflect
   64    replication_pad       left, right, top, bottom, dims                  nn_pad replicate
   65    upsample              out height, out width / length (0: from the     nn_upsample
-                              scale), mode (0 nearest, 1 linear / bilinear),
-                              align_corners, dims; f scale_factor (0: size)
+                              scale), mode (0 nearest, 1 linear, 2 bilinear),
+                              align_corners; f scale_factor (0: size); 1-D or
+                              2-D from the input's rank
   66    pixel_shuffle         factor, 0 shuffle / 1 unshuffle                 nn_pixel_shuffle
 
 Only the transposed convolutions have parameters: weight (in_channels, out_channels // groups, kernel
@@ -181,17 +182,18 @@ def nnc_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, name
             raise Error(what + ": the output would be empty")
         return _sh(od, what)
     if code == LAYER_UPSAMPLE:
-        var dims = _x(xargs, i, 4)
         var mode = _x(xargs, i, 2)
         var align = _x(xargs, i, 3)
         var what = name + " (Upsample)"
-        if dims != 1 and dims != 2:
-            raise Error(what + ": dims must be 1 or 2")
-        if cur.ndim != dims + 1:
-            raise Error(what + ": the input must be (channels, length)" if dims == 1
-                        else what + ": the input must be (channels, height, width)")
-        if (mode != 0 and mode != 1) or (align != 0 and align != 1) or (mode == 0 and align == 1):
-            raise Error(what + ": mode must be nearest or (bi)linear; align_corners only with (bi)linear")
+        if cur.ndim != 2 and cur.ndim != 3:
+            raise Error(what + ": the input must be (channels, length) or (channels, height, width)")
+        var dims = cur.ndim - 1
+        if mode < 0 or mode > 2 or (align != 0 and align != 1) or (mode == 0 and align == 1):
+            raise Error(what + ": mode must be nearest, linear or bilinear; align_corners only with (bi)linear")
+        if mode == 1 and dims != 1:
+            raise Error(what + ": mode 'linear' takes (channels, length) samples; use 'bilinear'")
+        if mode == 2 and dims != 2:
+            raise Error(what + ": mode 'bilinear' takes (channels, height, width) samples; use 'linear'")
         var sized = a1 > 0
         if sized == (f > Float32(0)):
             raise Error(what + ": give either size or scale_factor")
