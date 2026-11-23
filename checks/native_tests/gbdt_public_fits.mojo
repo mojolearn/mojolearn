@@ -76,7 +76,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 28
+comptime GBDT_HOST_UNITS = 29
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -1063,14 +1063,15 @@ def querywise[I: GbdtImage](unit: Int) raises:
         inp.pair_weights = List[Float32]()
         # Both columns (lane bm-trees, 2026-11-22): the host and device fits admit the leaf method of the
         # grouped pointwise search in one place, gbdt/options/catboost_options.mojo
-        # `querywise_pointwise_leaf_check`, with the same refusal words.
+        # (lane gbdt-cpu-rest-4-simple, 2026-11-23: Simple is `simple_leaves_check`'s, before any
+        # tree, so its words are that body's; `querywise_pointwise_leaf_check` keeps Exact).
         var simple = _qw_opts("PairLogit")
         simple.leaf_method = "Simple"
         var refused = False
         try:
             _ = fit[I](simple, inp)
         except error:
-            require_fails_with(String(error), "requires Newton or Gradient", "querywise pointwise Simple")
+            require_fails_with(String(error), "use_pointwise_searcher searches the structure only", "querywise pointwise Simple")
             refused = True
         require(refused, "querywise pointwise Simple was silently accepted")
         return
@@ -1239,6 +1240,8 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_cat_rest[I]()
     elif unit == 27:
         host_tail_rest[I]()
+    elif unit == 28:
+        host_simple_rest[I]()
     else:
         raise Error("gbdt host unit " + String(unit) + " has no body on this branch")
 
@@ -1447,7 +1450,7 @@ def host_nonsym_rest[I: GbdtImage]() raises:
     _ns_refused[I](ex, cls, "Only MAPE, MAE and Quantile", "Depthwise Logloss Exact")
     var sm = _ns_opts("RMSE", "Lossguide", "NewtonL2")
     sm.leaf_method = "Simple"
-    _ns_refused[I](sm, reg, "only Newton and Gradient reach", "Lossguide RMSE Simple")
+    _ns_refused[I](sm, reg, "grow_policy Depthwise / Lossguide searches the structure only", "Lossguide RMSE Simple")
     var mvs = _ns_opts("Logloss", "Lossguide", "NewtonL2")
     mvs.bootstrap = "MVS"
     _ns_refused[I](mvs, cls, "MVS is not reachable", "Lossguide MVS")
@@ -1840,8 +1843,9 @@ def host_tail_rest[I: GbdtImage]() raises:
     on MultiClass and MultiClassOneVsAll; Lossguide past depth 16 and
     border_count 255; then `train`'s limits on both columns, in its words
     (`check_tree_limits`): border_count 0 and 256, max_depth 17 under
-    SymmetricTree and Depthwise, and Simple leaves on MultiClass in the
-    walker's words."""
+    SymmetricTree and Depthwise, and Simple leaves on MultiClass in
+    `simple_leaves_check`'s words (lane gbdt-cpu-rest-4-simple; were the
+    walker's)."""
     var mc_in = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
     var mc1 = _twice[I](_sym_opts("MultiClass", "Cosine"), mc_in, "MultiClass Newton one iteration")
     var n3 = _sym_opts("MultiClass", "Cosine")
@@ -1898,7 +1902,88 @@ def host_tail_rest[I: GbdtImage]() raises:
     _sym_refused[I](dw17, clf, "Maximum tree depth is 16", "Depthwise max_depth 17")
     var simple = _sym_opts("MultiClass", "Cosine")
     simple.leaf_method = "Simple"
-    _sym_refused[I](simple, mc_in, "only Newton and Gradient reach the walker", "MultiClass Simple leaves")
+    _sym_refused[I](simple, mc_in, "the multi-output losses", "MultiClass Simple leaves")
+
+
+def host_simple_rest[I: GbdtImage]() raises:
+    """`leaf_estimation_method='Simple'`, the last NO_CPU_PATH clause until
+    lane gbdt-cpu-rest-4-simple (2026-11-23), each fit twice to the same
+    bytes: the greedy SymmetricTree searcher's own leaves on Logloss, RMSE
+    (where they ARE the Newton-1 leaves, DEVIATION 64, so the two texts are
+    equal), Quantile and QueryRMSE, and over CTR columns (four permutations,
+    only the learn cursor moves) on Logloss and Quantile. Then the
+    admission both columns call (`simple_leaves_check`,
+    `simple_leaf_iterations_check`), in its words: MultiClass, Depthwise,
+    Ordered, the pointwise searcher, three iterations; and YetiRank in its
+    own words."""
+    var clf = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    var ll = _sym_opts("Logloss", "Cosine")
+    ll.leaf_method = "Simple"
+    var mll = _twice[I](ll, clf, "symmetric Logloss Simple")
+    var lln = ll.copy()
+    lln.leaf_method = "Newton"
+    require(mll.text != fit[I](lln, clf).text, "symmetric Logloss Simple: the Newton model")
+    require(all_finite_f32(predict(mll.text, clf.x, 600)), "symmetric Logloss Simple: nonfinite predict")
+    var rm = _sym_opts("RMSE", "NewtonL2")
+    rm.leaf_method = "Simple"
+    var mrm = _twice[I](rm, reg, "symmetric RMSE Simple")
+    var rmn = rm.copy()
+    rmn.leaf_method = "Newton"
+    require(mrm.text == fit[I](rmn, reg).text, "symmetric RMSE Simple is not the Newton-1 model (DEVIATION 64)")
+    var qt = _sym_opts("Quantile", "Cosine")
+    qt.leaf_method = "Simple"
+    var mqt = _twice[I](qt, reg, "symmetric Quantile Simple")
+    var qtg = qt.copy()
+    qtg.leaf_method = "Gradient"
+    require(mqt.text != fit[I](qtg, reg).text, "symmetric Quantile Simple: the Gradient model")
+    var qw = _qw_opts("QueryRMSE")
+    qw.pointwise = False
+    qw.leaf_method = "Simple"
+    qw.leaf_iterations = 1
+    var qwi = _qw_inputs()
+    var mqw = _twice[I](qw, qwi, "greedy QueryRMSE Simple")
+    var qwn = qw.copy()
+    qwn.leaf_method = "Newton"
+    require(mqw.text != fit[I](qwn, qwi).text, "greedy QueryRMSE Simple: the Newton model")
+    var cat_clf = _cat_rest_inputs("e3-yc.f32")
+    var lc = _cat_rest_opts("Logloss")
+    lc.cat_features = [6, 7]
+    lc.leaf_method = "Simple"
+    lc.leaf_iterations = 1
+    var mlc = _twice_text[I](lc, cat_clf, "symmetric Logloss Simple over CTR columns")
+    var lcn = lc.copy()
+    lcn.leaf_method = "Newton"
+    require(mlc.text != fit[I](lcn, cat_clf).text, "symmetric Logloss Simple over CTR columns: the Newton model")
+    var cat_reg = _cat_rest_inputs("e3-yr.f32")
+    var qc = _cat_rest_opts("Quantile")
+    qc.cat_features = [6]
+    qc.leaf_method = "Simple"
+    qc.leaf_iterations = 1
+    _ = _twice_text[I](qc, cat_reg, "symmetric Quantile Simple over a CTR column")
+    # refused before any tree on both columns, in the one admission's words
+    var mc = _sym_opts("MultiClass", "Cosine")
+    mc.leaf_method = "Simple"
+    _sym_refused[I](mc, _fixed("e3-x.f32", 600, 6, "e3-y3.f32"), "the multi-output losses", "MultiClass Simple")
+    var dw = _ns_opts("Logloss", "Depthwise", "Cosine")
+    dw.leaf_method = "Simple"
+    dw.leaf_iterations = 1
+    _sym_refused[I](dw, clf, "grow_policy Depthwise / Lossguide searches the structure only", "Depthwise Logloss Simple")
+    var od = _ordered_opts("RMSE")
+    od.leaf_method = "Simple"
+    _sym_refused[I](od, reg, "boosting_type='Ordered' searches the structure only", "Ordered RMSE Simple")
+    var pw = _sym_opts("Logloss", "Cosine")
+    pw.pointwise = True
+    pw.leaf_method = "Simple"
+    _sym_refused[I](pw, clf, "use_pointwise_searcher searches the structure only", "pointwise Logloss Simple")
+    var it3 = _sym_opts("Logloss", "Cosine")
+    it3.leaf_method = "Simple"
+    it3.leaf_iterations = 3
+    _sym_refused[I](it3, clf, "can't be greater, than 1 for Simple", "Logloss Simple at three iterations")
+    var yr = _qw_opts("YetiRank")
+    yr.pointwise = False
+    yr.leaf_method = "Simple"
+    _sym_refused[I](yr, qwi, "changing the leaf_estimation_method parameter is prohibited", "YetiRank Simple")
 
 
 def _ordered_opts(loss: String) -> GbdtOpts:
