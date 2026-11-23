@@ -76,7 +76,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 23
+comptime GBDT_HOST_UNITS = 27
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -1195,6 +1195,8 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_rest_gaps[I]()
     elif unit == 21:
         host_pointwise_arms[I]()
+    elif unit == 25:
+        host_symmetric_rest[I]()
     else:
         host_ordered_weights[I]()
 
@@ -1306,6 +1308,116 @@ def host_pointwise_arms[I: GbdtImage]() raises:
     except error:
         refused = String(error)
     require_fails_with(refused, "There are NaNs in feature number", "NaN in a plain one-hot column")
+
+
+def _sym_opts(loss: String, score: String) -> GbdtOpts:
+    """A greedy SymmetricTree fit at rate 0.1 with every work-changing
+    option set."""
+    var o = GbdtOpts(loss, 4, 3)
+    o.learning_rate = 0.1
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = score
+    o.leaf_iterations = 1
+    o.boost_from_average = 0
+    o.deterministic()
+    return o^
+
+
+def _sym_refused[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, needle: String, what: String) raises:
+    """`o` must refuse with `needle` (the device's words), never fit."""
+    var refused = False
+    try:
+        _ = fit[I](o, inp)
+    except error:
+        require_fails_with(String(error), needle, what)
+        refused = True
+    require(refused, what + " was silently accepted")
+
+
+def host_symmetric_rest[I: GbdtImage]() raises:
+    """The greedy SymmetricTree and Ordered combinations the host refused
+    by name until lane gbdt-cpu-rest-4-sym (2026-11-23), each fit twice to
+    the same bytes: the L2, NewtonL2 and NewtonCosine scores on Logloss,
+    RMSE, MAE and MultiClass (L2), Gradient leaves on Logloss and RMSE,
+    RMSE Newton leaves at three iterations, boost_from_average on Logloss,
+    CrossEntropy and Ordered Logloss, class weights on a pointwise loss;
+    then the combinations both columns refuse, in the device's words."""
+    var clf = _e3()
+    var reg = _fixed("e3-x.f32", 600, 6, "e3-yr.f32")
+    var mc_in = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
+    # the four scores on Logloss: each its own model
+    var cos = _twice[I](_sym_opts("Logloss", "Cosine"), clf, "symmetric Logloss Cosine")
+    var l2 = _twice[I](_sym_opts("Logloss", "L2"), clf, "symmetric Logloss L2")
+    var nl2 = _twice[I](_sym_opts("Logloss", "NewtonL2"), clf, "symmetric Logloss NewtonL2")
+    var ncos = _twice[I](_sym_opts("Logloss", "NewtonCosine"), clf, "symmetric Logloss NewtonCosine")
+    require(l2.text != cos.text, "symmetric Logloss L2: the Cosine model")
+    require(nl2.text != l2.text, "symmetric Logloss NewtonL2: the L2 model (first-order planes)")
+    require(ncos.text != cos.text, "symmetric Logloss NewtonCosine: the Cosine model (first-order planes)")
+    # RMSE: der2 is 1, so at unit weight the Newton planes are the
+    # first-order ones and the Newton scores give the same bytes
+    var rcos = _twice[I](_sym_opts("RMSE", "Cosine"), reg, "symmetric RMSE Cosine")
+    var rl2 = _twice[I](_sym_opts("RMSE", "L2"), reg, "symmetric RMSE L2")
+    var rnl2 = _twice[I](_sym_opts("RMSE", "NewtonL2"), reg, "symmetric RMSE NewtonL2")
+    require(rl2.text != rcos.text, "symmetric RMSE L2: the Cosine model")
+    require(rnl2.text == rl2.text, "symmetric RMSE NewtonL2 at unit weight differs from L2")
+    # a pointwise loss and the multiclass loss under L2
+    var mae = _sym_opts("MAE", "L2")
+    mae.leaf_method = "Exact"
+    _ = _twice[I](mae, reg, "symmetric MAE L2 Exact")
+    var mcl2 = _twice[I](_sym_opts("MultiClass", "L2"), mc_in, "symmetric MultiClass L2")
+    var mccos = _twice[I](_sym_opts("MultiClass", "Cosine"), mc_in, "symmetric MultiClass Cosine")
+    require(mcl2.text != mccos.text, "symmetric MultiClass L2: the Cosine model")
+    # Gradient leaves and the RMSE walker at three iterations
+    var lg = _sym_opts("Logloss", "Cosine")
+    lg.leaf_method = "Gradient"
+    lg.leaf_iterations = 4
+    var mlg = _twice[I](lg, clf, "symmetric Logloss Gradient leaves")
+    require(mlg.text != cos.text, "symmetric Logloss Gradient: the Newton model")
+    var rg = _sym_opts("RMSE", "Cosine")
+    rg.leaf_method = "Gradient"
+    _ = _twice[I](rg, reg, "symmetric RMSE Gradient leaves")
+    var r3 = _sym_opts("RMSE", "Cosine")
+    r3.leaf_method = "Newton"
+    r3.leaf_iterations = 3
+    var mr3 = _twice[I](r3, reg, "symmetric RMSE Newton at three iterations")
+    require(all_finite_f32(predict(mr3.text, reg.x, 600)), "symmetric RMSE three iterations: nonfinite predict")
+    # boost_from_average: the log-odds start, written as the bias
+    var lb = _sym_opts("Logloss", "Cosine")
+    lb.boost_from_average = 1
+    var mlb = _twice[I](lb, clf, "symmetric Logloss boost_from_average")
+    require("\nbias " in mlb.text, "symmetric Logloss boost_from_average: no bias record")
+    var ce = _sym_opts("CrossEntropy", "Cosine")
+    ce.boost_from_average = 1
+    var mce = _twice[I](ce, clf, "symmetric CrossEntropy boost_from_average")
+    require("\nbias " in mce.text, "symmetric CrossEntropy boost_from_average: no bias record")
+    var ob = _ordered_opts("Logloss")
+    ob.boost_from_average = 1
+    var mob = _twice[I](ob, clf, "Ordered Logloss boost_from_average")
+    require("\nbias " in mob.text, "Ordered Logloss boost_from_average: no bias record")
+    # class weights on a pointwise loss: the one weight column
+    var q = _sym_opts("Quantile", "Cosine")
+    q.leaf_method = "Exact"
+    var mq = _twice[I](q, clf, "symmetric Quantile")
+    var qw = q.copy()
+    qw.class_weights = [1.0, 3.0]
+    var mqw = _twice[I](qw, clf, "class-weighted symmetric Quantile")
+    require(mqw.text != mq.text, "symmetric Quantile class weights had no model effect")
+    # refused on both columns, in the device's words
+    var ex = _sym_opts("Logloss", "Cosine")
+    ex.leaf_method = "Exact"
+    _sym_refused[I](ex, clf, "Only MAPE, MAE and Quantile are supported for Exact", "symmetric Logloss Exact")
+    var mvs = _sym_opts("Logloss", "Cosine")
+    mvs.bootstrap = "MVS"
+    _sym_refused[I](mvs, clf, "MVS is not reachable", "symmetric MVS")
+    var mcn = _sym_opts("MultiClass", "NewtonCosine")
+    _sym_refused[I](mcn, mc_in, "doesn't support second derivatives", "MultiClass NewtonCosine")
+    var pb = _sym_opts("Poisson", "Cosine")
+    pb.boost_from_average = 1
+    _sym_refused[I](pb, reg, "You can use boost_from_average only", "symmetric Poisson boost_from_average")
+    var opb = _ordered_opts("Poisson")
+    opb.boost_from_average = 1
+    _sym_refused[I](opb, reg, "You can use boost_from_average only", "Ordered Poisson boost_from_average")
 
 
 def _ordered_opts(loss: String) -> GbdtOpts:

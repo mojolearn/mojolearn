@@ -97,6 +97,9 @@ from gbdt.grid_creator.binarization import (
     BORDER_TYPE_GREEDY_LOG_SUM,
     border_type_from_name,
 )
+from gbdt.metrics.optimal_const_for_loss import (
+    calc_one_dimensional_optimum_const_approx,
+)
 from gbdt.metrics.sample_quantile import (
     calculate_optimal_const_approx_for_mape,
     calculate_weighted_target_quantile,
@@ -159,7 +162,8 @@ def _refuse(what: String) raises:
     raise Error(
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
         + "; the gbdt host binding trains the declared GBDT lanes"
-        " only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise"
+        " only (SymmetricTree with the Cosine, NewtonCosine, L2 and NewtonL2"
+        " scores, Newton or Gradient leaves and the Logloss, RMSE, pointwise"
         " and multiclass losses, Depthwise with Logloss and Cosine,"
         " Lossguide with Logloss and NewtonL2 or NewtonCosine; sample"
         " weights on numeric columns outside the multi-output losses,"
@@ -575,7 +579,8 @@ def _refuse_ordered_host(what: String) raises:
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
         + " with boosting_type='Ordered'; the gbdt host binding trains Ordered"
         " boosting with RMSE, Logloss, CrossEntropy and the pointwise losses,"
-        " sample and class weights included (see"
+        " sample and class weights and boost_from_average included, at"
+        " border_count 1 to 255 and Newton or Gradient leaves (see"
         " gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit)"
     )
 
@@ -743,9 +748,17 @@ def _gbdt_fit_ordered_arm(
         loss == String("RMSE") or loss == String("MAE")
         or loss == String("Quantile") or loss == String("MAPE")
     )
-    if boost_from_average == 1 and not ordered_bfa_losses:
-        _refuse_ordered_host(
-            "boost_from_average=True outside RMSE, MAE, Quantile and MAPE"
+    # lane gbdt-cpu-rest-4-sym (2026-11-23): boost_from_average=True
+    # trains Logloss and CrossEntropy under Ordered too (their log-odds
+    # start, `gbdt_ordered_host_fit`'s starting point); every loss outside
+    # `train`'s list refuses on both columns in its words
+    if boost_from_average == 1 and not ordered_bfa_losses and loss != String("Logloss") and loss != String("CrossEntropy"):
+        raise Error(
+            "You can use boost_from_average only for these loss"
+            " functions now: RMSE, Logloss, CrossEntropy, Quantile, MAE,"
+            " MAPE (catboost_options.cpp:705-709; their MultiQuantile"
+            " and RMSPE are not trained here, and MultiRMSE's"
+            " per-dimension start is refused above)."
         )
     if border_count < 1 or border_count > 255:
         _refuse_ordered_host("border_count=" + String(border_count) + " (1 to 255)")
@@ -1167,6 +1180,18 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             + " (their TGpuTrainerFactory has no non-symmetric"
             " multiclass trainer, multiclass.cpp:5-14, train.cpp:279)"
         )
+    # lane gbdt-cpu-rest-4-sym (2026-11-23): Exact leaves on the
+    # multi-output losses refuse on both columns in `fit_with_test`'s words
+    # (MultiRMSE's, then the exact estimator's for the two multiclass
+    # losses, `compute_exact_approx`)
+    if is_multi_rmse and leaf_method == GBDT_LEAF_EXACT:
+        raise Error(
+            "Exact leaves estimation is one-dimensional"
+            " (ComputeExactValue, permutation_der_calcer.h:98-110);"
+            " MultiRMSE does not reach it"
+        )
+    if is_multi and leaf_method == GBDT_LEAF_EXACT:
+        raise Error("Only MAPE, MAE and Quantile are supported for Exact leaves estimation on GPU")
     if is_multi and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " under loss='" + loss + "' (only Newton)")
     if is_multi and leaf_iterations >= 0 and leaf_iterations != 1:
@@ -1187,7 +1212,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             + " is refused (the reference registers it,"
             " querywise_non_symmetric.cpp:5-14)"
         )
-    if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:
+    # lane gbdt-cpu-rest-4-sym (2026-11-23): the greedy SymmetricTree
+    # loop walks RMSE leaves at any iteration count (`gbdt_host_boost`, the
+    # device's `need_estimation`); the other searchers keep this refusal
+    if is_rmse and (grow_code != 0 or use_pointwise) and leaf_iterations >= 0 and leaf_iterations != 1:
         _refuse(
             "leaf_estimation_iterations=" + String(leaf_iterations)
             + " under loss='RMSE' (only 1, the searcher's own leaves of"
@@ -1250,6 +1278,33 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             and score_function != GBDT_HOST_SCORE_NEWTON_L2
         ):
             _refuse("score_function code " + String(score_function) + " under grouped pointwise search (Cosine, NewtonCosine, L2 or NewtonL2)")
+    elif grow_code == 0:
+        # lane gbdt-cpu-rest-4-sym (2026-11-23): the greedy SymmetricTree
+        # searcher scores Cosine, NewtonCosine, L2 and NewtonL2 on every
+        # loss (`gbdt_oracle.mojo::_greedy_gains`, the device's
+        # `enqueue_score`; the Newton scores read the second-order search
+        # planes); the multi-output losses refuse the Newton scores in
+        # `fit_with_test`'s words. Any other code is refused in the device
+        # kernel's words.
+        if (
+            score_function != GBDT_HOST_SCORE_COSINE
+            and score_function != GBDT_HOST_SCORE_NEWTON_COSINE
+            and score_function != GBDT_HOST_SCORE_L2
+            and score_function != GBDT_HOST_SCORE_NEWTON_L2
+        ):
+            raise Error(
+                "score_function has no calcer here; only Cosine, NewtonCosine,"
+                " L2 and NewtonL2 are implemented"
+            )
+        if is_multi and (
+            score_function == GBDT_HOST_SCORE_NEWTON_COSINE
+            or score_function == GBDT_HOST_SCORE_NEWTON_L2
+        ):
+            raise Error(
+                "MultiClass loss doesn't support second derivatives in tree"
+                " structure search currently (their CB_ENSURE,"
+                " `multiclass_targets.cpp:27`)"
+            )
     elif score_function != GBDT_HOST_SCORE_COSINE:
         _refuse("score_function code " + String(score_function) + " (only Cosine)")
     if grow_code == 1:
@@ -1260,10 +1315,32 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         if min_data_in_leaf != 1:
             _refuse("min_data_in_leaf=" + String(min_data_in_leaf) + " under Depthwise")
     var leaf_gradient_ok = lossguide_knobs and leaf_method == GBDT_LEAF_GRADIENT
+    # lane gbdt-cpu-rest-4-sym (2026-11-23): Gradient leaves on the greedy
+    # SymmetricTree Logloss and RMSE fits (`gbdt_host_boost`'s walker,
+    # `_second_derivatives`); Exact there refuses on both columns in the
+    # exact estimator's words (`compute_exact_approx`)
+    var sym_logloss_rmse = grow_code == 0 and not is_pointwise and not is_multi
+    if sym_logloss_rmse and leaf_method == GBDT_LEAF_EXACT:
+        raise Error("Only MAPE, MAE and Quantile are supported for Exact leaves estimation on GPU")
+    if sym_logloss_rmse and leaf_method == GBDT_LEAF_GRADIENT:
+        leaf_gradient_ok = True
     if not is_pointwise and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON and not leaf_gradient_ok:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton, or Gradient under Lossguide)")
     if is_pointwise and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (Gradient, Newton or Exact)")
+    # lane gbdt-cpu-rest-4-sym (2026-11-23): under SymmetricTree every
+    # loss draws Bayesian, Bernoulli and Poisson; MVS and an unknown name
+    # are refused on both columns in `train`'s words
+    if grow_code == 0 and bootstrap_type == String("MVS"):
+        raise Error(
+            "MVS is not reachable from their GPU oblivious searcher"
+            " (weak_objective_impl.h:30 asserts it away)"
+        )
+    if grow_code == 0 and bootstrap_type != String("") and bootstrap_type != String("No") and bootstrap_type != String("Bayesian") and bootstrap_type != String("Bernoulli") and bootstrap_type != String("Poisson"):
+        raise Error(
+            "unknown bootstrap_type '" + bootstrap_type
+            + "': Bayesian, Bernoulli, Poisson, No"
+        )
     if bootstrap_type != String("") and bootstrap_type != String("No"):
         var pw_boot = is_pointwise and (
             bootstrap_type == String("Poisson") or bootstrap_type == String("Bernoulli")
@@ -1312,6 +1389,23 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var binary_class_weights = (
         n_class_weights != 0 and loss == String("Logloss")
     )
+    # lane gbdt-cpu-rest-4-sym (2026-11-23): under SymmetricTree the class
+    # weights fold into the one weight column for the pointwise losses too
+    # (`train`'s `fold_class_weights` at the binarized target `y > 0.5`,
+    # the same `class_weight_body` the host column calls); RMSE, the grouped
+    # losses and MultiRMSE refuse them on both columns in `train`'s words
+    if grow_code == 0 and n_class_weights != 0:
+        if is_multi_rmse:
+            raise Error("class_weights do not apply to loss='MultiRMSE'")
+        if pw_grouped:
+            raise Error("class_weights do not apply to loss='" + loss + "'")
+        if is_rmse:
+            raise Error(
+                "class weights take effect only with a classification loss,"
+                " their option check's words (catboost_options.cpp:617)"
+            )
+        if is_pointwise:
+            binary_class_weights = True
     if n_class_weights != 0 and (not is_multi or is_multi_rmse) and not binary_class_weights:
         _refuse(
             "class_weights outside MultiClass, MultiClassOneVsAll and Logloss"
@@ -1319,7 +1413,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     if binary_class_weights and n_class_weights != 2:
         # `train`'s words (gbdt/train.mojo)
         raise Error(
-            "class_weights takes 2 entries for loss 'Logloss', got "
+            "class_weights takes 2 entries for loss '" + loss + "', got "
             + String(n_class_weights)
         )
     if n_flags != 0 and (grow_code != 0 or is_pointwise or is_multi):
@@ -1388,7 +1482,34 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         or pw_objective == GBDT_OBJ_QUANTILE
         or pw_objective == GBDT_OBJ_MAPE
     )
-    if boost_from_average == 1 and not is_rmse and not quantile_family:
+    # lane gbdt-cpu-rest-4-sym (2026-11-23): under SymmetricTree
+    # boost_from_average=True trains Logloss and CrossEntropy as well (their
+    # log-odds start, `calc_one_dimensional_optimum_const_approx`, the host
+    # arm of the device's `optimum_const_approx_device`); every other loss
+    # refuses on both columns in `train`'s words
+    if grow_code == 0 and boost_from_average == 1:
+        if is_multi_rmse:
+            raise Error(
+                "boost_from_average=True with loss MultiRMSE is not carried here:"
+                " its StartingPoint is per-dimension"
+                " (optimal_const_for_loss.h:230-239) and this model's bias is one"
+                " value"
+            )
+        if not (
+            is_rmse or quantile_family or loss == String("Logloss")
+            or pw_objective == GBDT_OBJ_CROSSENTROPY
+        ):
+            raise Error(
+                "You can use boost_from_average only for these loss"
+                " functions now: RMSE, Logloss, CrossEntropy, Quantile, MAE,"
+                " MAPE (catboost_options.cpp:705-709; their MultiQuantile"
+                " and RMSPE are not trained here, and MultiRMSE's"
+                " per-dimension start is refused above)."
+            )
+    var sym_bfa_logit = grow_code == 0 and boost_from_average == 1 and (
+        loss == String("Logloss") or pw_objective == GBDT_OBJ_CROSSENTROPY
+    )
+    if boost_from_average == 1 and not is_rmse and not quantile_family and not sym_bfa_logit:
         _refuse("boost_from_average=True")
     # lane gbdt-cpu-rest (2026-11-23): the non-symmetric driver samples
     # each tree's features for every loss and both policies
@@ -1517,6 +1638,13 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         iterations = 1
     if leaf_iterations >= 0:
         iterations = leaf_iterations
+    # the greedy SymmetricTree Logloss / RMSE leaf method and its count, as
+    # `set_leaves_estimation_default` resolves them (Gradient: 40 for
+    # Logloss, 1 for RMSE, unless overridden; lane gbdt-cpu-rest-4-sym)
+    var sym_leaf_method = GBDT_LEAF_NEWTON
+    if sym_logloss_rmse and leaf_method == GBDT_LEAF_GRADIENT:
+        sym_leaf_method = GBDT_LEAF_GRADIENT
+        iterations = leaf_iterations if leaf_iterations >= 0 else (1 if is_rmse else 40)
     var border = GBDT_HOST_DEFAULT_BORDER
     if loss_border >= Float32(0.0):
         border = loss_border
@@ -1631,6 +1759,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var boost_start = Float64(0.0)
     if is_rmse and grow_code == 0 and boost_from_average != 0:
         boost_start = _rmse_starting_approx(y, n_rows, row_weights)
+    elif loss == String("Logloss") and grow_code == 0 and boost_from_average == 1:
+        # lane gbdt-cpu-rest-4-sym (2026-11-23): their log-odds start, the
+        # host arm of the device's `optimum_const_approx_device` (the
+        # weighted mean target, then `-log(1 / x - 1)`), written as the
+        # model's `bias` and the start of every cursor
+        boost_start = calc_one_dimensional_optimum_const_approx(
+            GBDT_OBJ_LOGLOSS, y, row_weights, len(row_weights) > 0
+        )
     if is_multi:
         # gbdt/host/gbdt_oracle_multiclass.mojo
         var multi_objective = GBDT_OBJ_MULTICLASS_OVA
@@ -1649,6 +1785,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             multi_objective,
             class_weights, multi_ev^, sym_boot_kind, sym_boot_param,
             random_strength, target_dim, row_weights, feature_fraction,
+            score_function,
         )
         text = gbdt_multi_host_model_text(multi_fit.model)
         losses = multi_fit.model.losses.copy()
@@ -1679,6 +1816,12 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                         QUANTILE_CONST_DELTA,
                     )
                 )
+        elif pw_objective == GBDT_OBJ_CROSSENTROPY and boost_from_average == 1:
+            # lane gbdt-cpu-rest-4-sym (2026-11-23): CrossEntropy's log-odds
+            # start, the arm Logloss takes (`train`'s list)
+            pw_start = calc_one_dimensional_optimum_const_approx(
+                GBDT_OBJ_CROSSENTROPY, y, row_weights, len(row_weights) > 0
+            )
         if grow_code != 0:
             # Depthwise and Lossguide: the non-symmetric driver over the
             # pointwise loss (gbdt/host/gbdt_oracle_depthwise.mojo)
@@ -1716,7 +1859,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 x, y, n_rows, n_features, p, pw_loss, pw_sym_ev^,
                 host_group_sizes, host_pair_winners, host_pair_losers,
                 host_pair_weights, pw_start, random_strength, row_weights,
-                feature_fraction,
+                feature_fraction, score_function,
             )
             losses = pw_fit.model.losses.copy()
             best_iteration = pw_fit.eval.best_iteration
@@ -1751,6 +1894,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             x, y, n_rows, n_features, p, List[Bool](),
             sym_boot_kind, sym_boot_param, random_strength,
             ev^, row_weights, GBDT_BOOST_RMSE, boost_start, feature_fraction,
+            score_function, sym_leaf_method,
         )
         losses = r.model.losses.copy()
         best_iteration = r.eval.best_iteration
@@ -1778,7 +1922,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             x, y, n_rows, n_features, p, flags, permutation_count,
             ctr_permutation_id, ev^, max_ctr_complexity,
             sym_boot_kind, sym_boot_param, random_strength, boost_objective,
-            boost_start, row_weights,
+            boost_start, row_weights, score_function, sym_leaf_method,
         )
         # the `bias` record a seeded RMSE fit adds (absent at zero bits)
         text = gbdt_text_with_bias(
@@ -1807,7 +1951,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         var r = gbdt_host_fit_eval(
             x, y, n_rows, n_features, p, one_hot, sym_boot_kind,
             sym_boot_param, random_strength, ev^, row_weights,
-            boost_objective, boost_start,
+            boost_objective, boost_start, Float64(1.0), score_function,
+            sym_leaf_method,
         )
         text = gbdt_text_with_bias(
             gbdt_host_model_text_one_hot(r.model, one_hot),
@@ -1826,9 +1971,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         var r = gbdt_host_fit_eval(
             x, y, n_rows, n_features, p, List[Bool](),
             sym_boot_kind, sym_boot_param, random_strength, ev^,
-            row_weights, GBDT_BOOST_LOGLOSS, Float64(0.0), feature_fraction,
+            row_weights, GBDT_BOOST_LOGLOSS, boost_start, feature_fraction,
+            score_function, sym_leaf_method,
         )
-        text = gbdt_host_model_text(r.model)
+        # the `bias` record a boost_from_average start adds (absent at zero
+        # bits, so the unseeded text is unchanged)
+        text = gbdt_text_with_bias(
+            gbdt_host_model_text(r.model), len(r.model.losses), boost_start
+        )
         losses = r.model.losses.copy()
         best_iteration = r.eval.best_iteration
         stopped_early = r.eval.stopped_early

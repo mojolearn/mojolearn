@@ -111,6 +111,10 @@ from gbdt.ctrs.ctr_binarization import (
     ctr_border_type_code,
 )
 from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
+from gbdt.options.catboost_options import (
+    LEAF_ESTIMATION_NEWTON,
+    SCORE_FUNCTION_COSINE,
+)
 from gbdt.ctrs.ctr_order import learn_order_host
 from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
@@ -954,6 +958,8 @@ def gbdt_ctr_host_fit(
     objective: Int = GBDT_BOOST_LOGLOSS,
     starting_approx: Float64 = 0.0,
     weights: List[Float32] = List[Float32](),
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    leaf_method: Int = LEAF_ESTIMATION_NEWTON,
 ) raises -> GbdtCtrHostFit:
     """`train` with categorical columns on the covered configuration (see
     the module docstring for what that is and what mirrors what).
@@ -966,6 +972,9 @@ def gbdt_ctr_host_fit(
     _tree_ctr_levels_host`), and the model's last columns are the
     combinations the trees chose. At 1 nothing here differs from the fit
     without them.
+
+    `score_function` and `leaf_method` are `gbdt_host_boost`'s (lane
+    gbdt-cpu-rest-4-sym, 2026-11-23).
 
     `weights` (row order, empty: unit) are the fit's row weights (sample
     weights, times the class weights under Logloss), read by the boost loop
@@ -1014,7 +1023,8 @@ def gbdt_ctr_host_fit(
     var fit = gbdt_host_boost(
         cindexes, est_perm, y, n_rows, n_columns, grid^, shape.layout, params,
         bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
-        tree_state, weights, objective, starting_approx,
+        tree_state, weights, objective, starting_approx, 1.0,
+        score_function, leaf_method,
     )
 
     # TREE CTRS: the model's columns are the base columns followed by one

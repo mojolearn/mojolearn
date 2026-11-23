@@ -56,6 +56,12 @@ sample weights or an eval set. Every fit at `REST_RATE` 0.1.
 (Logloss, RMSE and MAE with boost_from_average, CrossEntropy, every
 bootstrap, both scores, zero weights with an eval set, a CTR column), the
 model text, the weighted learn curve and the held-out curve compared.
+
+Lane gbdt-cpu-rest-4-sym (2026-11-23): the greedy SymmetricTree L2,
+NewtonL2 and NewtonCosine scores (Logloss, RMSE, MAE, CrossEntropy,
+MultiClass, a CTR fixture), Gradient leaves, RMSE Newton leaves at three
+iterations, boost_from_average on Logloss and CrossEntropy (Plain and
+Ordered) and class weights on MAE, the same three comparisons.
 """
 from std.math import nan
 from std.memory import UnsafePointer
@@ -1257,6 +1263,205 @@ def test_ordered_weights_host_text_is_device_text() raises:
         raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
                     + ("gbdt_host_device_cat ordered weights device: " + String(count) + " of "
                        + String(ORDW_UNITS) + " cases failed" + failed if count > 0 else ""))
+
+
+# ---- lane gbdt-cpu-rest-4-sym (2026-11-23): the greedy SymmetricTree
+# scores, leaves and starts and the Ordered boost_from_average the host
+# refused by name, host text against device text at rate 0.1 ----
+comptime REST4SYM_UNITS = 12
+
+
+def _rest4sym_loss(unit: Int) raises -> String:
+    if unit < 0 or unit >= REST4SYM_UNITS:
+        raise Error("gbdt_host_device_cat rest4sym: no unit " + String(unit))
+    if unit == 3 or unit == 4:
+        return String("RMSE")
+    if unit == 6:
+        return String("MAE")
+    if unit == 7 or unit == 11:
+        return String("CrossEntropy")
+    if unit == 8:
+        return String("MultiClass")
+    return String("Logloss")
+
+
+def _rest4sym_inputs(unit: Int) raises -> GbdtInputs:
+    """Four numeric columns (unit 9: `_inputs`' CTR and one-hot fixture) and
+    the target of the unit's loss: a 0/1 label for Logloss, a probability in
+    [0, 1] for CrossEntropy, three class codes for MultiClass, the value
+    otherwise. Unit 2 carries hashed row weights on [0.25, 4), unit 4 a
+    held-out slice of the same construction."""
+    var loss = _rest4sym_loss(unit)
+    if unit == 9:
+        return _inputs(False)
+    var n = REST_ROWS
+    var x = List[Float32](capacity=4 * n)
+    for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+        for r in range(n):  # driver-loop: over the fixture's rows
+            x.append(_unit01(r, 140 + j) * Float32(4.0) - Float32(2.0))
+    var y = List[Float32](capacity=n)
+    for r in range(n):  # driver-loop: over the fixture's rows
+        var v = (x[r] - Float32(0.5) * x[n + r] + Float32(0.25) * x[2 * n + r] * x[3 * n + r]
+                 + Float32(0.4) * (_unit01(r, 145) - Float32(0.5)))
+        if loss == String("Logloss"):
+            y.append(Float32(1.0) if v > Float32(0.0) else Float32(0.0))
+        elif loss == String("CrossEntropy"):
+            y.append(_unit01(r, 146) * Float32(0.5) + (Float32(0.5) if v > Float32(0.0) else Float32(0.0)))
+        elif loss == String("MultiClass"):
+            y.append(Float32(0.0) if v < Float32(-0.5) else (Float32(1.0) if v < Float32(0.5) else Float32(2.0)))
+        else:
+            y.append(v)
+    var inp = GbdtInputs(x^, n, 4, y^)
+    if unit == 2:
+        for r in range(n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 150))
+    if unit == 4:
+        var ne = n // 2
+        for j in range(4):  # driver-loop: over the held-out columns
+            for r in range(ne):  # driver-loop: over the held-out rows
+                inp.eval_x.append(_unit01(r, 155 + j) * Float32(4.0) - Float32(2.0))
+        for r in range(ne):  # driver-loop: over the held-out rows
+            inp.eval_y.append(inp.eval_x[r] - Float32(0.5) * inp.eval_x[ne + r]
+                              + Float32(2.0) * (_unit01(r, 159) - Float32(0.5)))
+    return inp^
+
+
+def _rest4sym_opts(unit: Int) raises -> GbdtOpts:
+    """The greedy searcher (units 0-9) and Ordered boosting (10-11), every
+    work-changing option explicit: 0 Logloss L2, Bayesian at 1 with
+    random_strength 1 (the L2 kernel draws no noise); 1 Logloss NewtonL2,
+    Bernoulli 0.7; 2 weighted Logloss NewtonCosine with random_strength 1;
+    3 RMSE L2, Poisson 0.66, Newton leaves at three iterations,
+    boost_from_average; 4 RMSE NewtonCosine with Gradient leaves and an eval
+    set (Iter, use_best_model); 5 Logloss Cosine, Gradient leaves at four
+    iterations, boost_from_average; 6 MAE L2 (Exact leaves) with class
+    weights [1, 2]; 7 CrossEntropy NewtonL2 with boost_from_average; 8
+    MultiClass L2; 9 Logloss L2 over a CTR and a one-hot column
+    (`cat_features=[0, 1]`) with boost_from_average; 10 Ordered Logloss with boost_from_average; 11
+    Ordered CrossEntropy NewtonCosine with boost_from_average."""
+    var loss = _rest4sym_loss(unit)
+    var o = GbdtOpts(loss, REST_TREES, 4)
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = "Cosine"
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.leaf_iterations = 1
+    o.boost_from_average = 0
+    if unit == 0:
+        o.score_function = "L2"
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.random_strength = 1.0
+    elif unit == 1:
+        o.score_function = "NewtonL2"
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif unit == 2:
+        o.score_function = "NewtonCosine"
+        o.random_strength = 1.0
+    elif unit == 3:
+        o.score_function = "L2"
+        o.bootstrap = "Poisson"
+        o.subsample = 0.66
+        o.leaf_method = "Newton"
+        o.leaf_iterations = 3
+        o.boost_from_average = 1
+    elif unit == 4:
+        o.score_function = "NewtonCosine"
+        o.leaf_method = "Gradient"
+        o.n_estimators = 30
+        o.learning_rate = 1.0
+        o.od_type = "Iter"
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+    elif unit == 5:
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 4
+        o.boost_from_average = 1
+    elif unit == 6:
+        o.score_function = "L2"
+        o.leaf_method = "Exact"
+        o.class_weights = [1.0, 2.0]
+    elif unit == 7:
+        o.score_function = "NewtonL2"
+        o.boost_from_average = 1
+    elif unit == 8:
+        o.score_function = "L2"
+    elif unit == 9:
+        o.score_function = "L2"
+        o.cat_features = [0, 1]
+        o.boost_from_average = 1
+    elif unit == 10:
+        o.boosting_type = "Ordered"
+        o.boost_from_average = 1
+    else:
+        o.boosting_type = "Ordered"
+        o.score_function = "NewtonCosine"
+        o.boost_from_average = 1
+    return o^
+
+
+def test_rest4sym_host_text_is_device_text() raises:
+    """The units of lane gbdt-cpu-rest-4-sym: every host fit across the
+    cores first, then one device graph at a time; the learn curves and the
+    held-out curve too."""
+    var host_texts = List[String](length=REST4SYM_UNITS, fill=String(""))
+    var host_learn = List[List[Float64]](length=REST4SYM_UNITS, fill=List[Float64]())
+    var host_tests = List[List[Float64]](length=REST4SYM_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var learn_addr = Int(host_learn.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm learn_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var l = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=learn_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_rest4sym_opts(unit), _rest4sym_inputs(unit))
+        p[unit] = outcome.text.copy()
+        l[unit] = outcome.learn.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat rest4sym host", REST4SYM_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(REST4SYM_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_rest4sym_opts(unit), _rest4sym_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat rest4sym unit " + String(unit)
+                    + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.learn) != len(host_learn[unit]) or len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat rest4sym unit " + String(unit) + ": curve lengths differ")
+            for i in range(len(outcome.learn)):  # small-loop(the learn curve)
+                if outcome.learn[i] != host_learn[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4sym unit " + String(unit) + ": learn loss "
+                                + String(i) + " differs")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat rest4sym unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat rest4sym device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_learn^
+    _ = host_tests^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat rest4sym device: " + String(count) + " of "
+                       + String(REST4SYM_UNITS) + " cases failed" + failed if count > 0 else ""))
 
 
 def main() raises:

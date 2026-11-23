@@ -20,6 +20,9 @@ from checks.numerics import (
     identical_mul_add,
     identical_sqrt,  # DEVIATION 258: row 10, NVIDIA sqrt is approximate
 )
+# `calcer.AddLeaf`, the one body the host scorers call too (lane
+# gbdt-cpu-rest-4-sym, 2026-11-23; it was `_add_leaf` here)
+from gbdt.methods.greedy_score_body import greedy_add_leaf
 from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
@@ -41,50 +44,6 @@ def child_hessian_below(mass: Float32, threshold: Float32) -> Bool:
     masses nonnegative and validate the enabled threshold before this call.
     """
     return (bitcast[DType.uint32](mass) & UInt32(0x7FFFFFFF)) < (bitcast[DType.uint32](threshold) & UInt32(0x7FFFFFFF))
-
-
-@always_inline
-def _add_leaf[
-    score_function: Int,
-    normalize: Bool,
-    pin_mul_add: Bool = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL),
-](
-    sum: Float32,
-    weight: Float32,
-    lambda_l2: Float32,
-    mut score: Float32,
-    mut denum_sqr: Float32,
-):
-    """`calcer.AddLeaf(sum, weight)` -- one score calcer's accumulation."""
-    comptime cosine = (
-        score_function == SCORE_FUNCTION_COSINE
-        or score_function == SCORE_FUNCTION_NEWTON_COSINE
-    )
-
-    comptime if cosine:
-        var lam = lambda_l2
-        comptime if normalize:
-            lam = ftz(lambda_l2 * weight)
-        var mu = Float32(0.0)
-        if weight > Float32(0.0):
-            mu = sum / (weight + lam)
-
-        comptime if pin_mul_add:
-            mu = ftz(mu)
-            score = ftz(identical_mul_add(sum, mu, score))
-            denum_sqr = ftz(
-                identical_mul_add(ftz(weight * mu), mu, denum_sqr)
-            )
-        else:
-            score += sum * mu
-            denum_sqr += weight * mu * mu
-    else:
-        if weight > Float32(1e-20):
-            comptime if pin_mul_add:
-                var num = ftz(sum * sum)
-                score = ftz(score + ftz(num / (weight + lambda_l2)))
-            else:
-                score += (sum * sum) / (weight + lambda_l2)
 
 
 def compute_optimal_splits_kernel[
@@ -172,10 +131,10 @@ def compute_optimal_splits_kernel[
                 ).unsafe_load[invariant=True]()
                 var sum_right = ftz(part_stat - sum_left)
 
-                _add_leaf[score_function, normalize](
+                greedy_add_leaf[score_function, normalize](
                     sum_left, weight_left, lambda_l2, score, denum_sqr
                 )
-                _add_leaf[score_function, normalize](
+                greedy_add_leaf[score_function, normalize](
                     sum_right, weight_right, lambda_l2, score, denum_sqr
                 )
                 total_sum_left = ftz(total_sum_left + sum_left)
@@ -183,11 +142,11 @@ def compute_optimal_splits_kernel[
 
             if multiclass_optimization != Int32(0):
                 var total_sum_right = ftz(total_sum_part - total_sum_left)
-                _add_leaf[score_function, normalize](
+                greedy_add_leaf[score_function, normalize](
                     -total_sum_left, weight_left, lambda_l2,
                     score, denum_sqr,
                 )
-                _add_leaf[score_function, normalize](
+                greedy_add_leaf[score_function, normalize](
                     -total_sum_right, weight_right, lambda_l2,
                     score, denum_sqr,
                 )
@@ -430,26 +389,26 @@ def _leafwise_scan_part[
             total_sum_part = ftz(total_sum_part + part_stat)
             var sum_right = ftz(part_stat - sum_left)
 
-            _add_leaf[score_function, normalize, True](
+            greedy_add_leaf[score_function, normalize, True](
                 sum_left, weight_left, lambda_l2, score, denum_sqr
             )
-            _add_leaf[score_function, normalize, True](
+            greedy_add_leaf[score_function, normalize, True](
                 sum_right, weight_right, lambda_l2, score, denum_sqr
             )
-            _add_leaf[score_function, normalize, True](
+            greedy_add_leaf[score_function, normalize, True](
                 part_stat, part_weight, lambda_l2, score_b, denum_sqr_b
             )
             total_sum_left = ftz(total_sum_left + sum_left)
 
         if multiclass_optimization != Int32(0):
             var total_sum_right = ftz(total_sum_part - total_sum_left)
-            _add_leaf[score_function, normalize, True](
+            greedy_add_leaf[score_function, normalize, True](
                 -total_sum_left, weight_left, lambda_l2, score, denum_sqr
             )
-            _add_leaf[score_function, normalize, True](
+            greedy_add_leaf[score_function, normalize, True](
                 -total_sum_right, weight_right, lambda_l2, score, denum_sqr
             )
-            _add_leaf[score_function, normalize, True](
+            greedy_add_leaf[score_function, normalize, True](
                 -total_sum_part, part_weight, lambda_l2,
                 score_b, denum_sqr_b,
             )

@@ -2358,7 +2358,9 @@ def gbdt_ordered_rmse_host_fit(
 # weight column reaches steps 2, 4, 5 and 6 as `fit_ordered` reads it),
 # SymmetricTree, Cosine or NewtonCosine, any bootstrap, any
 # random_strength, any permutation count, border type and NaN mode, with
-# boost_from_average only on RMSE; an eval set with the detector and
+# boost_from_average on RMSE, MAE, Quantile, MAPE, Logloss and CrossEntropy
+# (`train`'s list; the last two since lane gbdt-cpu-rest-4-sym,
+# 2026-11-23); an eval set with the detector and
 # use_best_model (step 8 of `fit_ordered`). Everything else is refused by name in the
 # binding (`_mojolearn_gbdt_host.mojo`).
 #
@@ -2382,6 +2384,8 @@ from gbdt.host.gbdt_oracle import (
     _deterministic_sum_lanes,
 )
 from gbdt.host.gbdt_oracle_losses import (
+    GBDT_OBJ_CROSSENTROPY,
+    GBDT_OBJ_LOGLOSS,
     GBDT_OBJ_MAE,
     GBDT_OBJ_MAPE,
     GBDT_OBJ_QUANTILE,
@@ -2398,6 +2402,9 @@ from gbdt.host.gbdt_oracle_rmse import (
 from gbdt.metrics.sample_quantile import (
     calculate_optimal_const_approx_for_mape,
     calculate_weighted_target_quantile,
+)
+from gbdt.metrics.optimal_const_for_loss import (
+    calc_one_dimensional_optimum_const_approx,
 )
 from checks.numerics import identical_log, identical_pow
 from std.math import sqrt
@@ -3256,6 +3263,13 @@ def gbdt_ordered_host_fit(
                     ),
                     1e-6,
                 )
+            )
+        elif loss.objective == GBDT_OBJ_LOGLOSS or loss.objective == GBDT_OBJ_CROSSENTROPY:
+            # their log-odds start (`calc_one_dimensional_optimum_const_approx`,
+            # the host arm of `optimum_const_approx_device`; lane
+            # gbdt-cpu-rest-4-sym, 2026-11-23)
+            start = calc_one_dimensional_optimum_const_approx(
+                loss.objective, y, weights, has_w
             )
         else:
             start = _rmse_starting_approx(y, n_rows, weights)
