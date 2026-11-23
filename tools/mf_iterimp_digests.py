@@ -17,6 +17,19 @@ and diff the files: equal lines mean equal bits.
 
     PYTHONPATH=<repo>/python python3 tools/mf_iterimp_digests.py > out.txt
 
+Round 2 (lane mf-iterimp2): base origin/lane/member-fits d3a8864541. The
+estimator grid adds ARDRegression; the fitted posterior attributes the
+lane adds (sigma_, X_offset_, X_scale_) are left out of the main line and
+hashed on a second line `<name> posterior sha256=...` (`none` on the base,
+which has none), so the main lines compare the old fields. The direct
+BayesianRidge / ARDRegression cases (`bayesreg_*`, `ardreg_*`) hash
+predict, predict(return_std=True) and every fitted field. Expected
+differences base vs head: every `*_post1_*` line of bayes and ard (base: the
+refusal, head: an answer), the `posterior` lines, and the
+return_std line of the direct cases (base: the refusal); everything else
+equal (transform with estimator= now runs over the held member states with
+the same programs: equal words).
+
 Grid: estimator {Ridge(alpha=1), LinearRegression(), BayesianRidge(),
 GaussianProcessRegressor(random_state=0), DecisionTreeRegressor(random_state=0),
 KNeighborsRegressor()} x sample_posterior {False, True} x initial_strategy
@@ -35,7 +48,8 @@ import os
 import sys
 from concurrent.futures import ProcessPoolExecutor
 
-ESTIMATORS = ("ridge", "linreg", "bayes", "gpr", "tree", "knn")
+ESTIMATORS = ("ridge", "linreg", "bayes", "ard", "gpr", "tree", "knn")
+POSTERIOR = ("sigma_", "X_offset_", "X_scale_")
 
 
 def _data(seed=0, n=400, d=5):
@@ -56,6 +70,8 @@ def _estimator(name):
         return ml.LinearRegression()
     if name == "bayes":
         return ml.BayesianRidge()
+    if name == "ard":
+        return ml.ARDRegression()
     if name == "gpr":
         return ml.GaussianProcessRegressor(random_state=0)
     if name == "tree":
@@ -80,6 +96,15 @@ def _cases():
     cases["ridge_skip_complete"] = dict(estimator="ridge", imputation_order="arabic", skip_complete=True)
     cases["gpr_post_bounds"] = dict(estimator="gpr", sample_posterior=True, min_value=-0.5, max_value=0.5,
                                     random_state=2)
+    cases["bayes_post_bounds"] = dict(estimator="bayes", sample_posterior=True, min_value=-0.5, max_value=0.5,
+                                      random_state=2)
+    cases["ard_post_bounds"] = dict(estimator="ard", sample_posterior=True, min_value=-0.5, max_value=0.5,
+                                    random_state=2)
+    # the direct predict(return_std=True) cases
+    for est, fi, sw in itertools.product(("bayesreg", "ardreg"), (True, False), (False, True)):
+        if est == "ardreg" and sw:
+            continue  # ARDRegression.fit takes no sample_weight
+        cases[f"{est}_fi{int(fi)}_sw{int(sw)}"] = dict(direct=est, fit_intercept=fi, weighted=sw)
     return cases
 
 
@@ -101,17 +126,57 @@ def _bytes(value):
         return type(value).__name__.encode()
 
 
-def _fitted(est):
-    # every public fitted instance field (name ending in "_"), read from the instance dictionary
+def _fitted(est, posterior=False):
+    # every public fitted instance field (name ending in "_"), read from the instance dictionary; the
+    # posterior attributes of round 2 on their own (`posterior`)
     fields = vars(est)
     return b"".join(k.encode() + _bytes(fields[k]) for k in sorted(fields)
-                    if k.endswith("_") and not k.startswith("_"))
+                    if k.endswith("_") and not k.startswith("_") and ((k in POSTERIOR) == posterior))
+
+
+def _direct(name, kw):
+    import numpy as np
+    import mojolearn as ml
+    rng = np.random.default_rng(7)
+    X = rng.standard_normal((300, 6)).astype(np.float32)
+    y = (X @ np.array([2.0, -1.0, 0.0, 0.5, 0.0, 1.5], np.float32) + 0.3).astype(np.float32)
+    y += (0.2 * rng.standard_normal(300)).astype(np.float32)
+    q = rng.standard_normal((64, 6)).astype(np.float32)
+    cls = ml.BayesianRidge if kw["direct"] == "bayesreg" else ml.ARDRegression
+    lines = []
+    try:
+        m = cls(fit_intercept=kw["fit_intercept"])
+        if kw["weighted"]:
+            m.fit(X, y, sample_weight=np.linspace(0.5, 2.0, 300).astype(np.float32))
+        else:
+            m.fit(X, y)
+        h = hashlib.sha256()
+        h.update(_fitted(m))
+        h.update(_bytes(m.predict(q)))
+        lines.append(f"{name} sha256={h.hexdigest()}")
+        h = hashlib.sha256()
+        h.update(_fitted(m, posterior=True))
+        lines.append(f"{name} posterior sha256={h.hexdigest()}")
+    except Exception as e:  # noqa: BLE001 - the line records the refusal
+        lines.append(f"{name} error {type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}")
+        return "\n".join(lines)
+    try:
+        mean, std = m.predict(q, return_std=True)
+        h = hashlib.sha256()
+        h.update(_bytes(mean))
+        h.update(_bytes(std))
+        lines.append(f"{name} return_std sha256={h.hexdigest()}")
+    except Exception as e:  # noqa: BLE001 - the line records the refusal
+        lines.append(f"{name} return_std error {type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}")
+    return "\n".join(lines)
 
 
 def _run(name):
     import numpy as np
     import mojolearn as ml
     kw = dict(_cases()[name])
+    if "direct" in kw:
+        return _direct(name, kw)
     kw["estimator"] = _estimator(kw["estimator"])
     empty = kw.pop("empty_column", False)
     one = kw.pop("one_feature", False)
@@ -134,10 +199,15 @@ def _run(name):
                     "_post_step", "n_features_in_"):
             h.update(key.encode() + _bytes(f.get(key)))
         block = np.nan_to_num(Xh)
+        post = hashlib.sha256()
+        held = False
         for step in f["imputation_sequence_"]:
             h.update(_bytes([step[0], step[1]]))
             est = step[2]
             h.update(_fitted(est))
+            extra = _fitted(est, posterior=True)
+            held = held or bool(extra)
+            post.update(extra)
             cols = list(step[1]) if step[1] is not None else []
             h.update(_bytes(est.predict(np.ascontiguousarray(block[:, cols]) if cols else
                                         np.zeros((len(block), 0), np.float32))))
@@ -147,7 +217,8 @@ def _run(name):
         h.update(_bytes(f.get("_rng")))
         kw["estimator"] = _estimator(_cases()[name]["estimator"])
         h.update(_bytes(ml.IterativeImputer(**kw).fit(X).transform(X)))
-        return f"{name} sha256={h.hexdigest()}"
+        return (f"{name} sha256={h.hexdigest()}\n"
+                f"{name} posterior {('sha256=' + post.hexdigest()) if held else 'none'}")
     except Exception as e:  # noqa: BLE001 - the line records the refusal
         return f"{name} error {type(e).__name__}: {str(e).splitlines()[0] if str(e) else ''}"
 

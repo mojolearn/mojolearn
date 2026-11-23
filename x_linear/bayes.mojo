@@ -457,6 +457,82 @@ def bayes_finish(fw: FP, res: FP, d: Int, fi: Bool, ym: Float32, alpha: Float32,
     st(res, d + 2, lam)
     st(res, d + 3, i2f(iters))
 
+
+# ------------------------------------------------ the posterior words (lane mf-iterimp2, 2026-11-23)
+# scikit-learn publishes sigma_ and X_offset_ after every fit and its
+# predict(return_std=True) reads them (`_bayes.py` predict:
+# sqrt(sum((X - X_offset_) @ sigma_ * (X - X_offset_), axis=1) + 1 / alpha_)).
+# The cells below are independent (one word each), so the host splits them
+# across its workers and the device across one block's threads; the words do
+# not depend on the split. Layout: x_linear/bayes_words.mojo.
+
+
+@always_inline
+def bayes_posterior_cell(fw: FP, res: FP, d: Int, fi: Bool, c: Int):
+    """Cell c of [sigma_ (d*d) | X_offset_ (d)] after `bayes_finish`, at
+    res[d + 4 + c]. sigma_[j, k] = sum_m V[j, m] V[k, m] / (alpha_ ev_m +
+    lambda_), m ascending (V: eigenvector m in column m, ev the clamped
+    eigenvalues `bayes_eig_prep` kept, alpha_ / lambda_ the result words);
+    X_offset_ the fit's column means (fw[0, d)), zeros without an intercept."""
+    if c < d * d:
+        var j = c // d
+        var k = c - j * d
+        var vv = d + d * d + d
+        var tmp = vv + d * d + 2 * d
+        var alpha = ld(res, d + 1)
+        var lam = ld(res, d + 2)
+        var acc = Float32(0)
+        for m in range(d):
+            var den = fmad(alpha, ld(fw, tmp + m), lam)
+            acc = fa(acc, fd(fm(ld(fw, vv + j * d + m), ld(fw, vv + k * d + m)), den))
+        st(res, d + 4 + c, acc)
+    else:
+        var j = c - d * d
+        st(res, d + 4 + c, ld(fw, j) if fi else Float32(0))
+
+
+@always_inline
+def ard_kept_count(iw: IP, d: Int) -> Int:
+    """dk: the features the last sigma kept (iw's keep flags, `ard_update`)."""
+    var dk = 0
+    for j in range(d):
+        dk += ldi(iw, j)
+    return dk
+
+
+@always_inline
+def ard_posterior_cell(fw: FP, iw: IP, res: FP, d: Int, dk: Int, fi: Bool, c: Int):
+    """Cell c of [dk | X_offset_ (d) | sigma_ (dk*dk)] after `ard_finish`,
+    at res[2d + 3 + c]: the kept count, the column means (zeros without an
+    intercept) and the last sigma over the kept features, as `ard_layout`
+    holds it (dk x dk, kept features ascending; none when nothing is kept)."""
+    var o = ard_layout(d)
+    if c == 0:
+        st(res, 2 * d + 3, i2f(dk))
+    elif c <= d:
+        st(res, 2 * d + 3 + c, ld(fw, c - 1) if fi else Float32(0))
+    else:
+        st(res, 2 * d + 3 + c, ld(fw, o[4] + c - d - 1))
+
+
+@always_inline
+def bayes_std_row(x: FP, i: Int, d: Int, sigma: FP, dk: Int, offset: FP, cols: IP, has_cols: Bool,
+                  alpha: Float32) -> Float32:
+    """Row i's predictive standard deviation (scikit-learn `_bayes.py`
+    predict(return_std=True)): xc = (X[i] - X_offset_)[cols] (every column
+    when not `has_cols`), t_k = sum_j xc_j sigma_[j, k] (j ascending),
+    sqrt(sum_k t_k xc_k + 1 / alpha_) (k ascending)."""
+    var s = Float32(0)
+    for k in range(dk):
+        var ck = ldi(cols, k) if has_cols else k
+        var xk = fs(ld(x, i * d + ck), ld(offset, ck))
+        var t = Float32(0)
+        for j in range(dk):
+            var cj = ldi(cols, j) if has_cols else j
+            t = fmad(fs(ld(x, i * d + cj), ld(offset, cj)), ld(sigma, j * dk + k), t)
+        s = fmad(t, xk, s)
+    return fsqrt(fa(s, fd(Float32(1), alpha)))
+
 #: QUALITY FIX (lane apple-fast-q-reg, 2026-10-04), the FAST default on every
 #: vendor. Audit
 #: (board-quality-audit-2026-10-04, M3 0.8.34): ard istella r2 -0.1387

@@ -72,6 +72,9 @@ def connect(context, register, registry):
             }
             if classifier:
                 methods['decision_function'] = ('decision_function', (arg(0),))
+            if name in ('BayesianRidge', 'ARDRegression'):
+                # predict(X, return_std=True): the (mean, std) pair (bindings/x_linear_native_door.mojo)
+                methods['predict_std'] = ('regressor_predict', (arg(0), constant(True)))
             if name in ('SGDClassifier', 'LogisticRegressionCV'):
                 methods['predict_proba'] = ('sgd_predict_proba' if name == 'SGDClassifier' else 'lrcv_predict_proba', (arg(0),))
             plan = add(getattr(linear, name), linear._XL_CALL, linear._XL_CONTEXT, methods)
