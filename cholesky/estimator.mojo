@@ -88,7 +88,7 @@ from cholesky.impl.linalg.cholesky_r1_update import (
     chol_rank1_update,
     chol_rank1_update_workspace_floats,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
 @fieldwise_init
@@ -278,20 +278,47 @@ def chol_devio_check_kernel(a: MutPointer[Float32, MutAnyOrigin], bad: MutPointe
 comptime _CHOL_POOL = "MojolearnCholFastPoolIOV2"
 
 
+# THE STAGE'S LEASE (lane linalg-owner, 2026-11-22). The stage is one buffer
+# for the process and the binding releases the GIL around the factor, so two
+# fits at once copied their L into the same stage (each could return the
+# other's factor) and a larger fit replaced the buffer while a smaller one was
+# still copying out of it (use after free). Now the lock word is held from the
+# stage's growth through the DMA, the wait and the host copy, as
+# X_DECOMP_STAGE's lease does (x_decomp/device.mojo `_down`); the pooled
+# device buffers and the measured pinned download stay.
 struct _CholStage(Defaultable, Movable):
     var buf: Optional[HostBuffer[DType.float32]]
     var n: Int
+    var lock: List[Int64]
 
     def __init__(out self):
         self.buf = Optional[HostBuffer[DType.float32]]()
         self.n = 0
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime CHOL_STAGE = SharedSlot[_CholStage, "MojolearnCholFastPoolIOStageV1"]
+comptime CHOL_STAGE = SharedSlot[_CholStage, "MojolearnCholFastPoolIOStageV2", 2]
+
+
+def _chol_download(ctx: DeviceContext, da: DeviceBuffer[DType.float32], lp: MutPointer[Float32, MutUntrackedOrigin],
+                   cells: Int) raises:
+    """L (`cells` floats of `da`) into the caller's `lp` through the kept
+    pinned stage, the stage's lock held through growth, DMA, wait and copy."""
+    var slot = CHOL_STAGE.get_or_create_ptr()
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].lock.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var stage = _chol_stage_ptr(ctx, cells)
+        ctx.enqueue_copy(dst_ptr=stage, src_buf=da)
+        ctx.synchronize()
+        copy_f32(stage, lp, cells)
+    finally:
+        shared_slot_unlock(lock)
 
 
 def _chol_stage_ptr(ctx: DeviceContext, cells: Int) raises -> MutPointer[Float32, MutAnyOrigin]:
-    """The kept pinned download stage, at least `cells` floats."""
+    """The kept pinned download stage, at least `cells` floats; the caller
+    holds the stage's lock (`_chol_download`)."""
     var slot = CHOL_STAGE.get_or_create_ptr()
     if not slot[].buf or slot[].n < cells:
         slot[].buf = Optional[HostBuffer[DType.float32]]()
@@ -353,10 +380,7 @@ def cholesky_factor_poolio(
         logdet = chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
     # TOMBSTONE: MOJOLEARN_IDN_CHOL_NB128 (loser: NV 0.92x, AMD 2.29x, avg 1.6x) deleted 2026-10-11 by dd9a3d31b; code recoverable at dd9a3d31b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_NB128.patch
-    var stage = _chol_stage_ptr(ctx, cells)
-    ctx.enqueue_copy(dst_ptr=stage, src_buf=da)
-    ctx.synchronize()
-    copy_f32(stage, lp, cells)
+    _chol_download(ctx, da, lp, cells)
     sp.unsafe_store(0, Float64(run.info))
     sp.unsafe_store(1, Float64(run.nb))
     sp.unsafe_store(2, Float64(logdet))
