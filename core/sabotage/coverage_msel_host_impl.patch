@@ -1,0 +1,10 @@
+--- a/core/msel_host_impl.mojo
++++ b/core/msel_host_impl.mojo
+@@ -12,6 +12,6 @@
+         if l < 1:
+             raise Error("msel_rebase_offsets_i32: every part holds its leading offset")
+         total += l
+-        outs += l - 1
++        outs += l  # SABOTAGE (coverage arm): the merged-size tally stepped, every valid call refused
+     if total != nr or outs != no:
+         raise Error("msel_rebase_offsets_i32: part lengths disagree with the sizes")

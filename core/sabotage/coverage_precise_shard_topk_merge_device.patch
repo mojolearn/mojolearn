@@ -1,0 +1,13 @@
+--- a/core/shard_merge_device.mojo
++++ b/core/shard_merge_device.mojo
+@@ -309,8 +309,8 @@
+         return
+     for a in range(k):
+         var kv = keys.unsafe_load(base + a)
+-        od.unsafe_store(base + a, _untwiddle(UInt32(kv >> 32)))
+-        oi.unsafe_store(base + a, UInt32(kv & UInt64(0xFFFFFFFF)))
++        od.unsafe_store(base + a, _untwiddle(UInt32(kv >> 32)) + UInt32(1))  # SABOTAGE (coverage-precise-core-shard_topk_merge_device): every merged distance's float32 bits one ulp up
++        oi.unsafe_store(base + a, UInt32(kv & UInt64(0xFFFFFFFF)) ^ (UInt32(1) if a == k - 1 else UInt32(0)))  # SABOTAGE (coverage-precise-core-shard_topk_merge_device): the k-th neighbor's global row low bit flipped (a valid row of an even-sized reference)
+     # estimator.mojo's host insertion sort on the float distance
+     for a in range(1, k):
+         var tb = od.unsafe_load(base + a)

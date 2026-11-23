@@ -1493,3 +1493,91 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale")
+
+
+# ---------------------------------------------------------------- the one-device shard drivers (lane verify-gaps, 2026-11-23)
+# `mojolearn.parallel_ensemble.fit_forest`, `parallel_neighbors_reference.ReferenceShardedNeighbors` and
+# `parallel_ivf.DistributedIVFIndex` ship in the package and run on ONE device by default (`devices=(0,)`).
+# Their merges are the only callers of the base and IVF parallel tables (core/parallel_entry_table.mojo):
+# the node-offset rebase (core/msel_host_impl.mojo, core/msel_device.mojo), the shard top-k merge
+# (core/shard_merge_device.mojo and the host loop) and the IVF shard plan, merge and finalize
+# (ivf/index_arrays_impl.mojo, core/shard_merge_device.mojo). No lane reached them after the par-* lanes
+# went with multi-GPU verification (docs/TOMBSTONES.md MOJOLEARN_PAR_VERIFY, 2026-10-31; that stays
+# retired: these lanes never ask for a second device). Each cell holds the driver's answer to the plain
+# one-device fit byte for byte and raises NumericalMismatch carrying its parts when they differ.
+
+@lane("forest-shard")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_forest on one device: 16 trees in four ranges of four, so the
+    driver joins four node-offset tables through the base table's
+    `msel_rebase_offsets_i32`; held to the plain RandomForestClassifier."""
+    from mojolearn.parallel_ensemble import fit_forest
+    d = _coverage_digester(ml)
+    kw = dict(n_estimators=16, max_depth=8, random_state=7)
+    shard = fit_forest(ml.RandomForestClassifier(**kw), X, yc, devices=(0,), trees_per_shard=4)
+    plain = ml.RandomForestClassifier(**kw).fit(X, yc)
+    proba = np.ascontiguousarray(shard.predict_proba(X[:2048]))
+    parts = dict(predict=d(np.asarray(shard.predict(X))), proba=d(proba))
+    mismatch = _mismatch_bytes("fit_forest predict_proba", proba,
+                               "plain predict_proba", np.asarray(plain.predict_proba(X[:2048])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
+
+
+@lane("neighbors-reference-shard")
+def _(ml, X, yc, yr, Xh=None):
+    """ReferenceShardedNeighbors on one device over the knn-clf lane's
+    classifier: the 4096-row reference in four blocks of 1024, 64 queries in
+    blocks of 16, the blocks' candidates merged by the base table's
+    `shard_topk_merge_f32`; held to the plain kneighbors and predict."""
+    from mojolearn.parallel_neighbors_reference import ReferenceShardedNeighbors
+    d = _coverage_digester(ml)
+    m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
+    q = np.ascontiguousarray(X[4096:4160])
+    with ReferenceShardedNeighbors(m, devices=(0,), reference_rows_per_shard=1024,
+                                   query_rows_per_shard=16) as rs:
+        dist, idx = rs.kneighbors(q)
+        pred = rs.predict(q)
+    d0, i0 = m.kneighbors(q)
+    parts = dict(dist=d(np.asarray(dist, dtype=np.float32)), idx=d(np.asarray(idx, dtype=np.int64)),
+                 predict=d(np.asarray(pred)))
+    for name, got, want in (("distances", dist, d0), ("indices", idx, i0), ("predict", pred, m.predict(q))):
+        mismatch = _mismatch_bytes("ReferenceShardedNeighbors " + name, got, "plain " + name, want)
+        if mismatch:
+            raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
+
+
+@lane("ivf-distributed")
+def _(ml, X, yc, yr, Xh=None):
+    """DistributedIVFIndex on one device: the `ivf` lane's built index (16
+    lists, 4 probes, k=8, 4096 rows, random_state 3) through the IVF table's
+    shard plan, its stored shard searched and merged back to global row ids,
+    and the euclidean index rooted once after the merge (`ivf_finalize`);
+    both held to the plain IVFIndex.search."""
+    from mojolearn.parallel_ivf import DistributedIVFIndex
+    d = _coverage_digester(ml)
+    kw = dict(n_lists=16, n_probes=4, n_neighbors=8, random_state=3)
+    q = np.ascontiguousarray(X[4096:4160])
+    m = ml.IVFIndex(**kw).fit(X[:4096])
+    with DistributedIVFIndex.from_index(m, devices=(0,)) as shards:
+        dist, idx = shards.search(q)
+    e = ml.IVFIndex(metric="euclidean", **kw).fit(X[:4096])
+    with DistributedIVFIndex.from_index(e, devices=(0,)) as rooted:
+        edist, eidx = rooted.search(q)
+    d0, i0 = m.search(q)
+    ed0, ei0 = e.search(q)
+    parts = dict(dist=d(np.asarray(dist, dtype=np.float32)), idx=d(np.asarray(idx, dtype=np.int64)),
+                 root_dist=d(np.asarray(edist, dtype=np.float32)), root_idx=d(np.asarray(eidx, dtype=np.int64)))
+    for name, got, want in (("distances", dist, d0), ("ids", idx, i0),
+                            ("euclidean distances", edist, ed0), ("euclidean ids", eidx, ei0)):
+        mismatch = _mismatch_bytes("DistributedIVFIndex " + name, got, "plain IVFIndex " + name, want)
+        if mismatch:
+            raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
+
+
+_batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "forest-shard", "neighbors-reference-shard", "ivf-distributed")

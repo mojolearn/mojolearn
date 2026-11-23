@@ -1153,6 +1153,10 @@ TRAINING_LANE_NAMES = {
     # lane yet, so every cell is OWED against the record.
     "ivf-extend": "extending a built IVF-Flat index",
     "ivf-short-fill": "IVF-Flat queries with fewer candidates than neighbours asked for",
+    # lane verify-gaps (2026-11-23): the one-device shard drivers, held to the plain fits
+    "forest-shard": "the random forest classifier fitted in tree ranges and joined on one device",
+    "neighbors-reference-shard": "the k-NN classifier's queries over a reference split in blocks on one device",
+    "ivf-distributed": "the IVF-Flat index split into stored shards and searched on one device",
     # The GPU byte LM trainer's lanes (same branch): SmallByteLanguageModelTrainer,
     # stateless and on its resident session, whose single-device entries a
     # CPU-only install serves from the byte LM host binding's step, loss and
@@ -1945,6 +1949,9 @@ FAMILIES = (
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
             "kmeans-sqrt", "kmeans-classic-pp",
+            # lane verify-gaps (2026-11-23): the forest offset rebase and the
+            # shard top-k merge of this binding's parallel base table
+            "forest-shard", "neighbors-reference-shard",
         ),
         # The neighbors and density inference lane (2026-09-15) adds every
         # k-NN metric, the ball cover, the distance-weighted vote and mean
@@ -3317,7 +3324,9 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         # lane/verify-coverage-audit (2026-10-21): `ivf-short-fill`, queries
         # with fewer candidates than k
-        training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "ivf-short-fill"),
+        # lane verify-gaps (2026-11-23): `ivf-distributed`, the IVF parallel
+        # table's shard plan, merge and finalize
+        training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "ivf-short-fill", "ivf-distributed"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IVFIndex",),
@@ -4470,6 +4479,9 @@ PUBLIC_PENDING_LANES = {
     "safetensors-widen-f16": "unwatched",
     "hf-causal-lm-stream": "unwatched",
     "ivf-short-fill": "unwatched",
+    "forest-shard": "unwatched",
+    "neighbors-reference-shard": "unwatched",
+    "ivf-distributed": "unwatched",
     # lane verify-coverage-owed (2026-10-21): the rows the audit left owed to
     # the migration lanes; no release record yet.
     "mamba2-decode-session": "unwatched",

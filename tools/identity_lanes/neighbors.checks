@@ -1,4 +1,4 @@
-# core/sabotage/coverage_precise_shard_topk_merge_device.patch retired 2026-11-23 (lane patch-recut): reached only by the multi-device drivers (core/shard_merge_device.mojo:_topk_merge_kernel, called only by ParallelQueries' candidate merge through the GPU parallel base table); no identity lane runs them since multi-GPU verification was retired 2026-10-31 (MOJOLEARN_PAR_VERIFY) and the arm, which named only par-* lanes, was dropped; the product code stays; recoverable at 12b8e16a0c
+# core/sabotage/coverage_precise_shard_topk_merge_device.patch re-registered 2026-11-23 (lane verify-gaps) as arm coverage-precise-core-shard_topk_merge_device in coverage_sabotage.tsv on lane neighbors-reference-shard: the shard driver runs on one device by default (devices=(0,)), so its merge is live product code (patch-recut had retired it as par-only)
 # the neighbors lane's per-seam check drivers and sabotage arms (pass 2)
 x_neighbors/checks/dist_check.mojo	x_neighbors/checks/sabotage/5206_sqdist_fold_reversed.patch
 x_neighbors/checks/dist_check.mojo	x_neighbors/checks/sabotage/5207_select_tie_high.patch
