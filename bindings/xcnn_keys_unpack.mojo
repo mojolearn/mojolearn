@@ -126,7 +126,6 @@ struct XcnnKeys(Defaultable, Movable):
     var k__blocks: PythonObject
     var k__chain: PythonObject
     var k__conv_pad: PythonObject
-    var k__den: PythonObject
     var k__dev: PythonObject
     var k__explicit: PythonObject
     var k__flat: PythonObject
@@ -145,14 +144,12 @@ struct XcnnKeys(Defaultable, Movable):
     var k__mask_host: PythonObject
     var k__mask_shape: PythonObject
     var k__max: PythonObject
-    var k__max_aux: PythonObject
     var k__mode: PythonObject
-    var k__nograph: PythonObject
     var k__pads: PythonObject
     var k__pin_src: PythonObject
     var k__pins: PythonObject
-    var k__pre: PythonObject
     var k__relu_p: PythonObject
+    var k__sage_saved: PythonObject
     var k__run_dev: PythonObject
     var k__run_stale: PythonObject
     var k__shape: PythonObject
@@ -161,8 +158,6 @@ struct XcnnKeys(Defaultable, Movable):
     var k__x3shape: PythonObject
     var k__xdev: PythonObject
     var k__xdev_dev: PythonObject
-    var k__xs: PythonObject
-    var k__y: PythonObject
     var k__ydev: PythonObject
     var k_add_self_loops: PythonObject
     var k_admission_context: PythonObject
@@ -288,7 +283,6 @@ struct XcnnKeys(Defaultable, Movable):
         self.k__blocks = PythonObject(None)
         self.k__chain = PythonObject(None)
         self.k__conv_pad = PythonObject(None)
-        self.k__den = PythonObject(None)
         self.k__dev = PythonObject(None)
         self.k__explicit = PythonObject(None)
         self.k__flat = PythonObject(None)
@@ -307,14 +301,12 @@ struct XcnnKeys(Defaultable, Movable):
         self.k__mask_host = PythonObject(None)
         self.k__mask_shape = PythonObject(None)
         self.k__max = PythonObject(None)
-        self.k__max_aux = PythonObject(None)
         self.k__mode = PythonObject(None)
-        self.k__nograph = PythonObject(None)
         self.k__pads = PythonObject(None)
         self.k__pin_src = PythonObject(None)
         self.k__pins = PythonObject(None)
-        self.k__pre = PythonObject(None)
         self.k__relu_p = PythonObject(None)
+        self.k__sage_saved = PythonObject(None)
         self.k__run_dev = PythonObject(None)
         self.k__run_stale = PythonObject(None)
         self.k__shape = PythonObject(None)
@@ -323,8 +315,6 @@ struct XcnnKeys(Defaultable, Movable):
         self.k__x3shape = PythonObject(None)
         self.k__xdev = PythonObject(None)
         self.k__xdev_dev = PythonObject(None)
-        self.k__xs = PythonObject(None)
-        self.k__y = PythonObject(None)
         self.k__ydev = PythonObject(None)
         self.k_add_self_loops = PythonObject(None)
         self.k_admission_context = PythonObject(None)
@@ -454,7 +444,6 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     nk[].k__blocks = py_key("_blocks")
     nk[].k__chain = py_key("_chain")
     nk[].k__conv_pad = py_key("_conv_pad")
-    nk[].k__den = py_key("_den")
     nk[].k__dev = py_key("_dev")
     nk[].k__explicit = py_key("_explicit")
     nk[].k__flat = py_key("_flat")
@@ -473,14 +462,12 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     nk[].k__mask_host = py_key("_mask_host")
     nk[].k__mask_shape = py_key("_mask_shape")
     nk[].k__max = py_key("_max")
-    nk[].k__max_aux = py_key("_max_aux")
     nk[].k__mode = py_key("_mode")
-    nk[].k__nograph = py_key("_nograph")
     nk[].k__pads = py_key("_pads")
     nk[].k__pin_src = py_key("_pin_src")
     nk[].k__pins = py_key("_pins")
-    nk[].k__pre = py_key("_pre")
     nk[].k__relu_p = py_key("_relu_p")
+    nk[].k__sage_saved = py_key("_sage_saved")
     nk[].k__run_dev = py_key("_run_dev")
     nk[].k__run_stale = py_key("_run_stale")
     nk[].k__shape = py_key("_shape")
@@ -489,8 +476,6 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     nk[].k__x3shape = py_key("_x3shape")
     nk[].k__xdev = py_key("_xdev")
     nk[].k__xdev_dev = py_key("_xdev_dev")
-    nk[].k__xs = py_key("_xs")
-    nk[].k__y = py_key("_y")
     nk[].k__ydev = py_key("_ydev")
     nk[].k_add_self_loops = py_key("add_self_loops")
     nk[].k_admission_context = py_key("admission_context")

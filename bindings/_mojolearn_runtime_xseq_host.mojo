@@ -4,7 +4,8 @@
 # compiles as its own merged group: the same compiled functions, registered under the same names.
 # bindings/_mojolearn_tokenizer_host.mojo keeps a native refusal under each name, and import setup replaces it
 # with this module's entry (python/mojolearn/host_surface.py HOST_IMPORT_ALIASES). The Python types these
-# entries allocate stay registered by their existing owner, which import setup loads first.
+# entries allocate stay registered by their existing owner, which import setup loads first; the one
+# exception is SAGEConv's saved-state owner, registered here (the only image whose door allocates it).
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -14,6 +15,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.xseq_native_pack import xseq_c
 from bindings.xcnn_native_pack import xcnn_c
+from bindings.xcnn_sage_saved_owner_pack import register_sage_saved_owner
 
 comptime RUNTIME_XSEQ_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -46,6 +48,9 @@ def build__mojolearn_runtime_xseq_host() -> PythonObject:
         var module = PythonModuleBuilder("_mojolearn_runtime_xseq_host")
         module.def_py_c_function(xseq_c, "xseq_native_call")
         module.def_py_c_function(xcnn_c, "xcnn_native_call")
+        # SAGEConv's saved host-form forward state (bindings/xcnn_sage_saved_owner_pack.mojo): this image
+        # publishes the only door that allocates it, so it registers the type (once per process).
+        register_sage_saved_owner(module)
         module.def_function[runtime_xseq_host_numeric_mode_binding]("runtime_xseq_host_numeric_mode")
         module.def_function[runtime_xseq_host_vendor_binding]("runtime_xseq_host_vendor")
         module.def_function[runtime_xseq_host_column_binding]("runtime_xseq_host_column")

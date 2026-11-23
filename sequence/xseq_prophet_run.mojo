@@ -462,3 +462,126 @@ def prophet_run_copy_changepoints(plan: ProphetFitPlan, dst: Int) raises:
     var target = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst)
     for i in range(plan.s):  # driver-loop: over the changepoints (model structure, at most n_changepoints)
         target[i] = plan.changepoints[i]
+
+
+# ---------------------------------------------------------------- typed predict setup
+# Lane bm-rest-graph (2026-11-23): what bindings/xseq_prophet_native_door.mojo `prophet_predict` composed over
+# Python arrays between its UNPACK and the predict entry (the day conversion, the seasonal periods and Fourier
+# orders, the separate feature call of an empty `t`, the no-holiday placeholder, the fitted-schema refusals, the
+# predict request) as one typed RUN over one typed fitted plan. The door UNPACKs the fitted attributes into a
+# `ProphetPredictPlan` once per predict (it read every one of them per predict before; the estimator's pickled
+# attributes stay its only state, so pickle and get_params are untouched); a native check builds the same plan from
+# a fit's own `ProphetFitPlan` (`prophet_predict_plan`). Same glue calls, words and refusal order: same bits.
+
+
+@fieldwise_init
+struct ProphetPredictPlan(Copyable, Movable):
+    """The fitted state ProphetForecaster.predict reads. `periods` and
+    `order_values` are the seasonalities' periods and Fourier orders in
+    dictionary order (the orders as the values the model holds, rounded to
+    float32 at the predict), `orders` their integer words (the schema
+    check); `k` is 0 when `nh` is negative (never read then). `params`
+    (batch, params_cols), `info` (info_rows, info_cols) and `changepoints`
+    (n_changepoints,) are float32 addresses the caller keeps alive."""
+    var periods: List[Float64]
+    var order_values: List[Float64]
+    var orders: List[Int]
+    var start: Float64
+    var t_scale: Float64
+    var nh: Int
+    var k: Int
+    var multiplicative: Bool
+    var params: Int
+    var batch: Int
+    var params_cols: Int
+    var info: Int
+    var info_rows: Int
+    var info_cols: Int
+    var changepoints: Int
+    var n_changepoints: Int
+
+
+@fieldwise_init
+struct ProphetPredictInput(Copyable, Movable):
+    """One predict call: the time column, the holiday matrix (float32 (m,
+    holiday_cols), read when the plan's `nh` is not 0; else 0) and the
+    float32 (batch, m) outputs the caller allocated."""
+    var times: ProphetTimes
+    var holidays: Int
+    var holiday_cols: Int
+    var yhat: Int
+    var trend: Int
+
+
+def prophet_predict_plan(plan: ProphetFitPlan, params: Int, batch: Int, info: Int, nh: Int, k: Int,
+                         multiplicative: Bool) -> ProphetPredictPlan:
+    """The predict plan of a fit's own typed output (`params` (batch, 3 + s
+    + k) and `info` (batch, 4) from `prophet_run_fit_plan`). It reads the
+    fit plan's changepoint buffer by address: keep `plan` alive."""
+    var ns = len(plan.seasons)
+    var periods = List[Float64](capacity=ns)
+    var values = List[Float64](capacity=ns)
+    var orders = List[Int](capacity=ns)
+    for i in range(ns):  # driver-loop: over the seasonalities
+        periods.append(plan.seasons[i].period)
+        values.append(Float64(plan.seasons[i].fourier_order))
+        orders.append(plan.seasons[i].fourier_order)
+    return ProphetPredictPlan(periods^, values^, orders^, plan.start, plan.t_scale, nh, k, multiplicative, params,
+                              batch, prophet_run_parameter_count(plan.s, k), info, batch, 4,
+                              Int(plan.changepoints.unsafe_ptr()), plan.s)
+
+
+def prophet_run_predict_setup(entry: EntryRef, plan: ProphetPredictPlan, request: ProphetPredictInput) raises:
+    """ProphetForecaster.predict after its UNPACK: the days (no call for an
+    empty `t`), the seasonal periods (a 1.0 placeholder without
+    seasonalities), the separate feature call when `t` is empty (the fused
+    entry builds the features otherwise), the Fourier orders (one 0
+    placeholder), the fitted-schema refusals, then the forecast and trend
+    into `request.yhat` / `request.trend`. The caller has released the GIL
+    and keeps every address alive."""
+    var m = request.times.n
+    var days = List[Float64](length=max(m, 1), fill=0.0)
+    var day_info = List[Float64](length=3, fill=0.0)
+    if m:
+        prophet_run_days(entry, request.times.src, Int(days.unsafe_ptr()), Int(day_info.unsafe_ptr()), m,
+                         request.times.datetime)
+    var ns = len(plan.periods)
+    var periods = List[Float64](length=max(ns, 1), fill=1.0)
+    for i in range(ns):  # driver-loop: over the seasonalities (one period each)
+        periods[i] = plan.periods[i]
+    var fused = m > 0
+    var t_scaled = List[Float32](length=0 if fused else max(m, 1), fill=0)
+    var phases = List[Float32](length=0 if fused else max(m * max(ns, 1), 1), fill=0)
+    if not fused:
+        prophet_run_features(entry, Int(days.unsafe_ptr()), Int(periods.unsafe_ptr()), Int(t_scaled.unsafe_ptr()),
+                             Int(phases.unsafe_ptr()), m, ns, plan.start, plan.t_scale)
+    var no_holidays = List[Float32](length=0 if plan.nh != 0 else max(m, 1), fill=0)
+    var holidays = request.holidays if plan.nh != 0 else Int(no_holidays.unsafe_ptr())
+    var orders = List[Float32](length=max(ns, 1), fill=0)
+    for i in range(ns):  # driver-loop: over the seasonalities (one order each)
+        orders[i] = Float32(plan.order_values[i])
+    var feature_count = 0
+    for i in range(len(plan.orders)):  # driver-loop: fitted feature-schema bounds before the native feature writer
+        prophet_run_check_order(plan.orders[i])
+        feature_count += 2 * plan.orders[i]
+    prophet_run_check_schema(plan.nh, plan.k, feature_count)
+    prophet_run_check_info_shape(plan.info_rows, plan.info_cols, plan.batch)
+    prophet_run_check_params_shape(plan.params_cols, plan.n_changepoints, plan.k)
+    prophet_run_check_holiday_columns(plan.nh, request.holiday_cols if plan.nh != 0 else 0)
+    # The feature words of the route not taken stay 0: the fused entry reads
+    # days, periods, start and scale; the plain one the feature call's
+    # scaled times and phases.
+    var predict = ProphetPredictRequest(
+        fused, Int(days.unsafe_ptr()) if fused else 0, Int(periods.unsafe_ptr()) if fused else 0,
+        0 if fused else Int(t_scaled.unsafe_ptr()), 0 if fused else Int(phases.unsafe_ptr()), plan.params, plan.info,
+        Int(orders.unsafe_ptr()), holidays, plan.changepoints, request.yhat, request.trend, plan.batch, m,
+        ns, plan.nh, plan.k, plan.n_changepoints, plan.multiplicative, plan.start if fused else 0.0,
+        plan.t_scale if fused else 0.0)
+    prophet_run_predict(entry, predict)
+    _ = len(days)  # keep every native buffer alive through the glue calls above
+    _ = len(day_info)
+    _ = len(periods)
+    _ = len(t_scaled)
+    _ = len(phases)
+    _ = len(no_holidays)
+    _ = len(orders)

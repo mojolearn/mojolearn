@@ -15,10 +15,11 @@ and words of the host forms in bindings/xcnn_graph_native_door.mojo: GCN `_gcn_g
 both CSR views, the normalization; the graph route bit XCNN_F_GRAPH is 0 on the host image, which exports no
 `x_cnn_idn_flags`), `xcnn_gcn_forward`'s typed RUN `gcn_forward_host_run` (gemm op 1, spmm mode 0 with the normalized values, the bias
 rows, add) and
-`_gcn_backward_host` (`gcn_backward_host_run`); SAGE `xcnn_sage_forward` (`graph_views_run`, the projection's linear
-and ReLU, the max graph op 0 or the spmm over ones with mode 1 mean / 0 sum, lin_l's linear, the root gemm and add,
-the normalization graph op 2) and `_sage_backward_host` (`sage_backward_host_run`). The SAGE forward composition
-repeats the door's call order; the arithmetic under test is the entry's.
+`_gcn_backward_host` (`gcn_backward_host_run`); SAGE `xcnn_sage_forward`'s typed RUN `sage_forward_host_run` (the
+projection's linear and ReLU, the max graph op 0 or the spmm over ones with mode 1 mean / 0 sum, lin_l's linear, the
+root gemm and add, the normalization graph op 2, into one `SageSaved`) and `_sage_backward_host`'s
+`sage_backward_saved_run` over that state (lane bm-rest-graph, 2026-11-23: the door and this check call the same
+RUNs; the check no longer repeats the door's composition). The arithmetic under test is the entry's.
 
     test_gcn                  improved False unweighted, improved True weighted: y, dx, grad_weight_, grad_bias_
                               to rtol = atol = 1e-5
@@ -33,13 +34,10 @@ units are independent and run across the native host worker pool.
 from std.math import isnan
 from x_cnn.host.entry_runs_host import publish_x_cnn_host_entries
 from x_cnn.graph_layer_run import (
-    GraphTableCalls, GraphEdges, SageBackwardHost, graph_views_run, gcn_graph_run, gcn_backward_host_run,
-    sage_backward_host_run, gcn_forward_host_run,
+    GraphTableCalls, GraphEdges, SageShape, SageEntries, SageWeights, SageGrads, SageSaved, graph_views_run,
+    gcn_graph_run, gcn_backward_host_run, gcn_forward_host_run, sage_forward_host_run, sage_backward_saved_run,
 )
-from x_cnn.graph_run import (
-    graph_run_gemm, graph_run_spmm, graph_run_add, graph_run_bias_rows, graph_run_linear_forward,
-    graph_run_relu_forward, graph_run_graph_op, graph_run_aggr_kind,
-)
+from x_cnn.graph_run import graph_run_aggr_kind
 from checks.native_tests.cnn_cases import cnn_entry
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from std.testing import TestSuite
@@ -139,7 +137,9 @@ struct SageResult(Movable):
 
 def sage_run(p: String, n: Int, d: Int, f: Int, e: Int, aggr: String, normalize: Bool,
              project: Bool) raises -> SageResult:
-    """SAGEConv(d, f, aggr, normalize, project), root_weight and bias on (the defaults), on the stored inputs."""
+    """SAGEConv(d, f, aggr, normalize, project), root_weight and bias on (the defaults), on the stored inputs:
+    the door's typed RUNs `sage_forward_host_run` (one entry for the layer and its modules) and
+    `sage_backward_saved_run` over the state the forward saved."""
     var calls = GraphTableCalls(cnn_entry())
     var edges = edges_into(calls, p, e)
     var views = graph_views_run(calls, edges.src, edges.dst, n, e)
@@ -150,48 +150,16 @@ def sage_run(p: String, n: Int, d: Int, f: Int, e: Int, aggr: String, normalize:
     var g = fixture_f32(GNN_DIR + p + "-g.f32", n * f)
     var wp = fixture_f32(GNN_DIR + p + "-wp.f32", d * d) if project else List[Float32]()
     var bp = fixture_f32(GNN_DIR + p + "-bp.f32", d) if project else List[Float32]()
-    var hp = List[Float32](length=n * d if project else 0, fill=0)
-    var xs = x.copy()
-    if project:
-        graph_run_linear_forward(calls.entry, addr(x), addr(wp), addr(bp), addr(hp), n, d, d)
-        graph_run_relu_forward(calls.entry, addr(hp), addr(xs), n * d)
-    var kind = graph_run_aggr_kind(aggr)
-    var agg = List[Float32](length=n * d, fill=0)
-    var aux = List[Float32](length=2 * n * d if kind == 2 else 0, fill=0)
-    if kind == 2:
-        graph_run_graph_op(calls.entry, addr(xs), addr(xs), addr(aux), addr(agg), calls.address(views.csr_f), n, d,
-                           e, 0)
-    else:
-        var ones = List[Float32](length=e, fill=1)
-        graph_run_spmm(calls.entry, addr(ones), addr(xs), addr(agg), calls.address(views.csr_f), n, d, e,
-                       1 if aggr == "mean" else 0)
-        _ = ones^
-    var lin = List[Float32](length=n * f, fill=0)
-    graph_run_linear_forward(calls.entry, addr(agg), addr(wl), addr(bl), addr(lin), n, d, f)
-    var root = List[Float32](length=n * f, fill=0)
-    graph_run_gemm(calls.entry, addr(x), addr(wr), addr(root), n, f, d, 1)
-    var pre = List[Float32](length=n * f, fill=0)
-    graph_run_add(calls.entry, addr(lin), addr(root), addr(pre), n * f)
+    var entries = SageEntries(calls.entry, calls.entry, calls.entry, calls.entry)
+    var weights = SageWeights(addr(wl), addr(bl), addr(wr), addr(wp) if project else 0, addr(bp) if project else 0)
+    var saved = SageSaved(SageShape(n, d, f, e, graph_run_aggr_kind(aggr), normalize, True, project))
     var result = SageResult(n, d, f)
-    var den = List[Float32](length=n if normalize else 0, fill=0)
-    var nograph = List[Int32](length=n + 1 if normalize else 0, fill=0)
-    if normalize:
-        graph_run_graph_op(calls.entry, addr(pre), addr(pre), addr(den), addr(result.y), Int(nograph.unsafe_ptr()),
-                           n, f, 0, 2)
-    else:
-        result.y = pre.copy()
-    var io = SageBackwardHost(
-        addr(g), addr(x), addr(agg), addr(wl), addr(bl), addr(result.dw), addr(result.db), addr(result.dx),
-        addr(result.y) if normalize else 0, addr(pre) if normalize else 0, addr(den) if normalize else 0,
-        Int(nograph.unsafe_ptr()) if normalize else 0, addr(aux) if kind == 2 else 0, addr(wr), addr(result.gwr),
-        addr(xs) if project else 0, addr(hp) if project else 0, addr(wp) if project else 0,
-        addr(bp) if project else 0, addr(result.dwp) if project else 0,
-        0)
+    sage_forward_host_run(entries, addr(x), calls.address(views.csr_f), weights, addr(result.y), saved)
     var dbp = List[Float32](length=d if project else 0, fill=0)
-    if project:
-        io.dbp = addr(dbp)
-    sage_backward_host_run(calls, calls.address(views.csr_f), calls.address(views.csr_t), e, n, d, f, kind,
-                           normalize, True, project, io)
+    var grads = SageGrads(addr(result.dw), addr(result.db), addr(result.dx), addr(result.gwr),
+                          addr(result.dwp) if project else 0, addr(dbp) if project else 0)
+    sage_backward_saved_run(calls, calls.address(views.csr_f), calls.address(views.csr_t), saved, addr(x), addr(g),
+                            weights, grads)
     _ = x^
     _ = wl^
     _ = bl^
@@ -199,15 +167,7 @@ def sage_run(p: String, n: Int, d: Int, f: Int, e: Int, aggr: String, normalize:
     _ = g^
     _ = wp^
     _ = bp^
-    _ = hp^
-    _ = xs^
-    _ = agg^
-    _ = aux^
-    _ = lin^
-    _ = root^
-    _ = pre^
-    _ = den^
-    _ = nograph^
+    _ = saved^
     _ = dbp^
     _ = calls^
     return result^
