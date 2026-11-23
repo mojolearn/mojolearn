@@ -885,18 +885,18 @@ def _finish(fields: PythonObject, context: PythonObject, b: PythonObject, mut ow
 
 def _index_run(value: PythonObject, b: PythonObject, mut dst: List[Int32]) raises -> Bool:
     """One side of a user's cv fold as int32 row numbers (exact ints; an
-    integer array's items are read as ints). False: a value the door's
-    int64 cast takes and these words cannot hold (the caller keeps the
-    door)."""
+    integer array's items are read as ints; a bool is the int the door's
+    int64 store reads). Lane mf-tail5b: a row number outside int32 is
+    outside [0, n) for every fit, so it is written -1 and the kind's fold
+    check raises the door's "a cv index is outside [0, n)" words with the
+    fit's n (core/ensemble_member.mojo `_user_folds`). False only for an
+    item `int()` refuses (the door's array cast raises Python's own words)."""
     var items = py_call(b.list, value)
     dst = List[Int32](capacity=len(items))
     for i in range(len(items)):  # driver-loop: over one fold side's row numbers (UNPACK, once per admission)
-        var item = items[i]
-        if py_type(item) is b.bool:
-            return False
-        var word = Int(py=py_call(b.int, item))
+        var word = Int(py=py_call(b.int, items[i]))
         if word < -2147483648 or word > 2147483647:
-            return False
+            word = -1
         dst.append(Int32(word))
     return True
 
@@ -907,11 +907,13 @@ def _user_folds(cv: PythonObject, b: PythonObject, mut fold_train: List[List[Int
     `_splits` over an iterable): each pair's two sides as typed rows. False
     (the door keeps it, and raises its own words) for anything not a
     sequence of two-item pairs of integer rows."""
+    var bad_pair = False
     try:
         for i in range(len(cv)):  # driver-loop: over the user's folds (UNPACK, once per admission)
             var both = py_call(b.tuple, cv[i])
             if len(both) != 2:
-                return False
+                bad_pair = True
+                break
             var tr = List[Int32]()
             var te = List[Int32]()
             if not _index_run(both[0], b, tr) or not _index_run(both[1], b, te):
@@ -920,6 +922,9 @@ def _user_folds(cv: PythonObject, b: PythonObject, mut fold_train: List[List[Int
             fold_test.append(te^)
     except:
         return False
+    if bad_pair:
+        # the door's `_splits` words (lane mf-tail5b: natively, before any fit)
+        raise Error("each cv split must be a (train, test) pair")
     if len(fold_test) == 0:
         raise Error("cv produced no splits")  # the door's `_splits` words, before any fit
     return True
