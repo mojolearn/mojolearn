@@ -45,8 +45,7 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural, sessi
         # in `fields`, so a step walks no model or state behind it.
         classes.append(session_cls)
     classes.extend(nc["generation_classes"][2].values())
-    for group in nc["block_classes"].values():  # glue: fixed ABI owner classes at package connection
-        classes.extend(group.values())
+    classes.extend(nc["block_classes"].values())
     classes = tuple(dict.fromkeys(classes))
     buffer_or_owner_fields = {
         "config", "optimizer", "generator", "arrays", "flat", "params", "_m", "_v", "buf_initialized",

@@ -208,7 +208,7 @@ def test_neural_inference_imports_alone():
     _family("""
 import mojolearn.neural_inference as ni
 from mojolearn import _native_neural_bridge as bridge
-assert ni.TransformerBlockInference.__mro__[1].__name__ == "TransformerBlock"
+assert ni.MLPInference.__name__ == "MLPInference" and ni.SambaInference.__name__ == "SambaInference"
 assert bridge.RUNTIME is not None and type(bridge.CONTEXT) is dict
 assert "mojolearn.models.causal_lm" in sys.modules
 """)

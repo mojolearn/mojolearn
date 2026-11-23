@@ -450,18 +450,17 @@ def _neural_owner_reusable(mut mods: NativeModules, snapshot: PythonObject, live
     return True
 
 
-def _neural_block_route(mut mods: NativeModules, block: PythonObject, kind: String, device: PythonObject,
+def _neural_block_route(mut mods: NativeModules, device: PythonObject,
     mode: PythonObject, context: PythonObject) raises -> String:
     # The one place a block's `device` is turned into its route (constructor,
     # `set_params` through the constructor, and an owner record's miss).
-    # None is this installation's device; the `*Inference` classes are the
-    # CPU side by class; an unknown value, an explicit 'gpu' in a CPU-only
-    # process and 'cpu' beside an explicit fast mode are refused in words
-    # by the one rule (core/device_route.mojo `device_route_plan`).
+    # None is this installation's device; an unknown value, an explicit
+    # 'gpu' in a CPU-only process and 'cpu' beside an explicit fast mode are
+    # refused in words by the one rule (core/device_route.mojo
+    # `device_route_plan`). The route is never read from the class (the
+    # CPU-by-class `*BlockInference` twins were removed 2026-11-22).
     var bi = mods.module("builtins")
     var code = device_unpack(device, bi)
-    ref cpy = Python().cpython()
-    var cpu_class = cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(block)._obj_ptr, context["block_classes"]["cpu"][kind]._obj_ptr) != 0
     var selected = context["selected_vendor"]
     var process_vendor = 1
     if selected is None or String(selected) == "cpu":
@@ -469,8 +468,6 @@ def _neural_block_route(mut mods: NativeModules, block: PythonObject, kind: Stri
     var fast = False
     if mode is not None and py_type(mode) is bi.str:
         fast = String(py=mode.strip().lower()) == "fast"
-    if cpu_class:
-        return String("cpu")
     return device_name(device_route_plan(code, process_vendor, 0 if fast else 1).device)
 
 
@@ -503,7 +500,7 @@ def neural_block_route_reconcile(mut mods: NativeModules, block: PythonObject, l
     # own: never stale here (it runs on the model's route).
     if not device_route_stale(block):
         return
-    var route = _neural_block_route(mods, block, String(live["_native_kind"]), py_get(live, "device"),
+    var route = _neural_block_route(mods, py_get(live, "device"),
         py_get(live, "numeric_mode"), context)
     if route == String(live["_native_route"]):
         _neural_route_publish(block, live["_native_route"], context)
@@ -613,7 +610,7 @@ def neural_block_init_binding(mut mods: NativeModules, block: PythonObject, weig
     # asks which device the process has. None is this installation's device:
     # the established GPU block class routes to native host arithmetic on a
     # CPU-only installation, just as the package binding selector does.
-    var route = PythonObject(_neural_block_route(mods, block, kind, captured_options[0], captured_options[1], context))
+    var route = PythonObject(_neural_block_route(mods, captured_options[0], captured_options[1], context))
     var plan = py_call(mods.module("types").SimpleNamespace)
     py_setattr(plan, "kind", kind_value)
     var norm_name = "input_layernorm.weight" if kind == "transformer" else ("norm.weight" if kind == "mamba1" else "block_norm.weight")
@@ -635,10 +632,9 @@ def neural_block_init_binding(mut mods: NativeModules, block: PythonObject, weig
     elif kind == "mamba2":
         py_setitem(plan.block_kwargs, "dt_limit", captured_options[2])
     var bindings = _model_bindings(mods, route, kind, context, mode)
-    # Preflight the selected storage class before shared construction can read
-    # its dictionary or weight-name registry (CPU fallback may select a peer
-    # class rather than the caller's class).
-    var storage_probe = py_call(bi.object.__new__, context["block_classes"][route][kind])
+    # Preflight the kind's storage class before shared construction can read
+    # its dictionary or weight-name registry.
+    var storage_probe = py_call(bi.object.__new__, context["block_classes"][kind])
     _ = neural_block_fields(mods, storage_probe, context, False)
     _ = neural_block_weight_names(mods, storage_probe)
     var created = _model_block(mods, admitted_weights, plan, profile, route, bindings, context)
@@ -725,14 +721,6 @@ def neural_block_to_binding(mut mods: NativeModules, block: PythonObject, args: 
     var held = py_get(fields, "device")
     if held is not None and py_type(held) is bi.str and String(held) == String(device):
         return block
-    # The `*Inference` classes are the CPU side by class (`_neural_block_route`):
-    # a GPU word would rebuild them on the CPU again, so it is refused.
-    ref cpy = Python().cpython()
-    var kind = fields["_native_kind"]
-    var cpu_class = cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(block)._obj_ptr, context["block_classes"]["cpu"][kind]._obj_ptr) != 0
-    if cpu_class and (py_type(device) is not bi.str or String(device) != "cpu"):
-        raise Error("ValueError: neural block: " + String(py_call(bi.type.__dict__["__name__"].__get__, py_type(block)))
-            + " runs on the CPU only; build the GPU block class to run on the GPU")
     var updates = bi.dict()
     py_setitem(updates, "device", device)
     return neural_block_set_params_binding(mods, block, updates, context)
@@ -1901,10 +1889,9 @@ def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = neural_block_getstate_binding(mods, args[0], args[1])
         elif operation == 6:
             result = neural_block_setstate_binding(mods, args[0], args[1], args[2])
-        elif operation == 7:
-            var bi = mods.module("builtins")
-            var name = String(py_call(bi.type.__dict__["__name__"].__get__, py_type(args[0])))
-            raise Error("NotImplementedError: mojolearn " + name + ".backward: inference is forward only; the backward pass runs on the GPU block class over a training binding")
+        # TOMBSTONE: operation 7 (`neural_block_inference_backward`, the refusal of the removed
+        # `*BlockInference` classes' backward) deleted 2026-11-22 by lane neural-consolidate-2;
+        # code recoverable at 3b21e609f3.
         elif operation == 8:
             result = neural_block_used_binding(mods, args[0], True, args[1])
         elif operation == 9:

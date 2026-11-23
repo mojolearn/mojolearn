@@ -1213,7 +1213,6 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_allocate")
         module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_forward")
         module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_backward")
-        module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_inference_backward")
         module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_vendor_used")
         module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_numeric_mode_used")
         module.def_py_c_function(runtime_classical_unavailable_c, "neural_block_state_dict")

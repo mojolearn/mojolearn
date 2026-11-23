@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Public CPU neural inference (lane/inference-tokenizer-neural, 2026-09-15):
-`MLPInference` and `TransformerBlockInference` over the shipped
-`_mojolearn_neural_host` binding.
+`MLPInference` over the shipped `_mojolearn_neural_host` binding, and the
+Transformer and Mamba blocks with ``device="cpu"`` (the `*BlockInference`
+twins were removed 2026-11-22: same kernels, same bits).
 
 What this file holds, on the host it runs on:
-  - both classes read back a CPU, IDENTICAL, CPU-column binding;
+  - the MLP class and the CPU blocks read back a CPU, IDENTICAL, CPU-column binding;
   - MLP logits from a saved checkpoint equal the four-weight constructor's,
     each row equals the row alone, and every checkpoint refusal is by name;
   - the Transformer stateless forward equals itself split by ragged lengths,
-    and every training entry is refused by name (rows alone, the causal
+    (rows alone, the causal
     prefix, decode == prefill and the one-ULP witness of the Transformer and
     the MLP's rows alone are checks/native_tests/training_neural_inference.mojo);
   - when the source reference bindings are also present (a CPU identity
@@ -143,7 +144,7 @@ def test_mlp_refusals(binding):
 def test_transformer_forward_rows_ragged_and_refusals(binding):
     tw = _block_weights()
     for window in (0, 8):
-        blk = ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1, window=window)
+        blk = ml.TransformerBlock(tw, n_heads=2, n_kv_heads=1, window=window, device="cpu")
         x = np.random.default_rng(5).standard_normal((4, 16, 32)).astype(np.float32)
         y = np.asarray(blk.forward(x))
         assert y.shape == (4, 16, 32)
@@ -154,13 +155,11 @@ def test_transformer_forward_rows_ragged_and_refusals(binding):
             alone = np.asarray(blk.forward(np.ascontiguousarray(x[i:i + 1, :n])))
             assert yr[i:i + 1, :n].tobytes() == alone.tobytes(), (window, i)
             assert not yr[i, n:].any()
-    blk = ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1)
-    with pytest.raises(NotImplementedError, match="inference is forward only"):
-        blk.backward(np.zeros((1, 2, 32), np.float32), np.zeros((1, 2, 32), np.float32))
+    blk = ml.TransformerBlock(tw, n_heads=2, n_kv_heads=1, device="cpu")
     with pytest.raises(ValueError, match="state is required"):
         blk.step(np.zeros((1, 1, 32), np.float32), None)
     with pytest.raises(ValueError, match="d_model must equal n_heads"):
-        ml.TransformerBlockInference(tw, n_heads=3)
+        ml.TransformerBlock(tw, n_heads=3, device="cpu")
 
 
 def test_equals_the_reference_path_when_present(binding):
@@ -180,7 +179,7 @@ def test_equals_the_reference_path_when_present(binding):
     x = np.random.default_rng(11).standard_normal((2, 16, 32)).astype(np.float32)
     for window in (0, 8):
         a = np.asarray(ml.TransformerBlock(tw, n_heads=2, n_kv_heads=1, window=window).forward(x))
-        b = np.asarray(ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1, window=window).forward(x))
+        b = np.asarray(ml.TransformerBlock(tw, n_heads=2, n_kv_heads=1, window=window, device="cpu").forward(x))
         assert a.tobytes() == b.tobytes(), window
 
 
@@ -212,8 +211,9 @@ def _mamba_weights(kind, dm=32, seed=21):
             for n, s in shapes.items()}
 
 
-_MAMBA = (("mamba1", "Mamba1BlockInference", {}), ("mamba2", "Mamba2BlockInference", {}),
-          ("mamba2", "Mamba2BlockInference", {"dt_limit": (0.01, 0.1)}), ("mamba3", "Mamba3BlockInference", {}))
+_MAMBA = (("mamba1", "Mamba1Block", {"device": "cpu"}), ("mamba2", "Mamba2Block", {"device": "cpu"}),
+          ("mamba2", "Mamba2Block", {"dt_limit": (0.01, 0.1), "device": "cpu"}),
+          ("mamba3", "Mamba3Block", {"device": "cpu"}))
 
 
 @pytest.mark.parametrize("kind,cls,kw", _MAMBA)
@@ -230,8 +230,6 @@ def test_mamba_forward_rows_prefix_ragged_and_refusals(binding, kind, cls, kw):
     for i, n in enumerate(lengths):
         assert yr[i:i + 1, :n].tobytes() == np.asarray(blk.forward(np.ascontiguousarray(x[i:i + 1, :n]))).tobytes()
         assert not yr[i, n:].any()
-    with pytest.raises(NotImplementedError, match="inference is forward only"):
-        blk.backward(x, x)
     with pytest.raises(ValueError, match="state is required"):
         blk.step(np.ascontiguousarray(x[:, :1]), None)
 
@@ -330,8 +328,8 @@ def test_mamba_samba_byte_lm_equal_the_reference_path_when_present(binding):
     x = np.random.default_rng(13).standard_normal((2, 16, 32)).astype(np.float32)
     for kind, cls, kw in _MAMBA:
         w = _mamba_weights(kind, seed=17)
-        gpu_cls = getattr(ml, cls.replace("Inference", ""))
-        a = np.asarray(gpu_cls(w, **kw).forward(x))
+        default_kw = {k: v for k, v in kw.items() if k != "device"}
+        a = np.asarray(getattr(ml, cls)(w, **default_kw).forward(x))
         b = np.asarray(getattr(ml, cls)(w, **kw).forward(x))
         assert a.tobytes() == b.tobytes(), (kind, kw)
     ids = np.random.default_rng(13).integers(0, 256, (2, 17)).astype(np.int32)

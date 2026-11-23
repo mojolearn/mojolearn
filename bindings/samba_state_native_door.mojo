@@ -407,13 +407,8 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
     # Immutable ABI connection occurs once at model construction/restoration.
     _ = neural_descriptor_cached(fields, resolved.entries,
         "_native_primitives", "neural_primitives_api_v1", String(PRIMITIVE_ABI_NAME), True)
-    # Samba preserves its training block interfaces on CPU-only installs too.
-    # The execution route still selects the installed native CPU kernels; only
-    # the Python-facing class differs from checkpoint inference construction.
-    var block_context = py_call(bi.dict, nc)
-    var classes = py_call(bi.dict, py_item(nc, nk[].k_block_classes))
-    py_setitem(classes, route, py_item(py_item(nc, nk[].k_block_classes), nk[].k_gpu))
-    py_setitem(block_context, nk[].k_block_classes, classes)
+    # One block class per kind on every route (the CPU-by-class
+    # `*BlockInference` twins this used to swap out were removed 2026-11-22).
     for i in range(len(config.layers)):  # driver-loop: over configured model layers
         var layer_kind = String(config.layers[i])
         var kind = "mamba3" if layer_kind == "mamba3" else "transformer"
@@ -435,7 +430,7 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
             # SambaConfig.norm_eps controls only the final stack normalization.
             py_setitem(plan.block_options, nk[].k_norm_eps, PythonObject(1e-6))
         var bindings = _model_bindings(route, kind, nc, model.numeric_mode)
-        var block = _model_block(weights, plan, PythonObject("fp32_v1"), route, bindings, block_context)
+        var block = _model_block(weights, plan, PythonObject("fp32_v1"), route, bindings, nc)
         var block_fields = samba_fields(block)
         py_setitem(block_fields, nk[].k_numeric_mode, model.numeric_mode)
         if kind == "mamba3":

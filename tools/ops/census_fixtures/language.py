@@ -185,20 +185,6 @@ def samba_inference(ml, cx):
 
 # ---------------------------------------------------------------- inference blocks, MLP
 
-def _block_backward(public):
-    def fixture(ml, cx):
-        """backward: forward-only, its documented NotImplementedError refusal (the member still runs)."""
-        import numpy as np
-        from mojolearn._verify_api_metadata import factory
-        block = factory(public)
-        x = np.arange(64, dtype=np.float32).reshape(1, 2, 32) / 128 - .25
-        try:
-            block.backward(x, x)
-        except NotImplementedError:
-            pass
-    return fixture
-
-
 def mlp_inference(ml, cx):
     """MLPInference(weight1, bias1, weight2, bias2): the 8 -> 16 -> 3 SmallMLPTrainer shapes."""
     import numpy as np
@@ -257,14 +243,13 @@ FIXTURES = {
     "mamba3_decode_session": (_mamba_session(3, True), [
         "mojolearn.mamba.Mamba3DecodeSession.__init__", "mojolearn.mamba.Mamba3DecodeSession.__del__"]),
 }
-for _name in ("Mamba1BlockInference", "Mamba2BlockInference", "Mamba3BlockInference", "TransformerBlockInference"):
-    FIXTURES[f"{_name.lower()}_backward"] = (_block_backward(f"mojolearn.{_name}"), [f"mojolearn.{_name}.backward"])
+# The *BlockInference backward refusals are gone with their classes (2026-11-22).
 for _cls in _TRAINERS:
     FIXTURES[f"{_cls.lower()}_schedule"] = (_schedule_fixture(_cls), [
         f"mojolearn.{_cls}.export_gradients", f"mojolearn.{_cls}.step_", f"mojolearn.{_cls}.from_checkpoint"], "gpu")
     FIXTURES[f"{_cls.lower()}_train_step_from"] = (_train_step_from_fixture(_cls),
                                                    [f"mojolearn.{_cls}.train_step_from"])
-del _name, _cls
+del _cls
 
 #: the cooperative byte-LM driver (every schedule) has no CPU implementation: on the CPU wheel their
 #: train_step and checkpoint refuse ("no CPU implementation of the cooperative multi-GPU driver ..."), so the members

@@ -23,7 +23,7 @@ def report():
 def test_every_original_gap_has_an_executable_fixture_route():
     routes=api.registry()
     expected={r['endpoint'] for r in api.TARGETS}
-    assert len(expected)==1273   # 1275 less the deleted TransformerBlockInference tape pair (TOMBSTONE TRANSFORMER_FORWARD_TAPE_API)
+    assert len(expected)==1216   # 1240 less the 24 rows of the four removed *BlockInference classes (2026-11-22)
     assert routes.keys()==expected
     from mojolearn._verify_api_faults import FAULTS
     assert set(FAULTS.values())<=expected

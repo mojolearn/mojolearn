@@ -7162,9 +7162,8 @@ def _(ml, X, yc, yr, Xh=None):
     `device="auto"` is the public default and is what this lane passes, so
     the cell means what a user means by it: a GPU column assembles
     `TransformerBlock`/`Mamba1Block` and the training extension's embedding,
-    RMS norm and head, and a CPU column assembles
-    `TransformerBlockInference`/`Mamba1BlockInference` and `_CpuPrimitives`
-    over `_mojolearn_neural_host`. The claim is the one the package exists
+    RMS norm and head, and a CPU column assembles the same block classes on
+    their CPU route and `_CpuPrimitives` over `_mojolearn_neural_host`. The claim is the one the package exists
     to make: the same checkpoint gives the same logits on every vendor.
 
     EIGHT MODELS, the rows of HF_ARCHITECTURES, each assembled from the
@@ -8572,8 +8571,8 @@ def _(ml, X, yc, yr, Xh=None):
     SAME source, moves `step`, `prefill`, `state` and `stepfull` on all nine
     fixtures -- and moves the HELD-OUT `infer` cell on NONE of them. That is
     not a miss: the held-out cell is `_neural_inference(ml, "transformer", e)`,
-    which on a CPU column builds `TransformerBlockInference`, the NEURAL
-    family's binding and not this one's, so the transformer define cannot
+    which on a CPU column builds `TransformerBlock(device="cpu")` over the
+    NEURAL family's binding and not this one's, so the transformer define cannot
     reach it and never could. The neural family's define is the second arm and
     is the mirror image: `infer` moves 9 of 9 and the train cell and
     `stepfull` do not move at all. Neither arm is redundant; each watches what
@@ -8640,8 +8639,9 @@ def _neural_inference(ml, lane_name, est):
     (lane/inference-tokenizer-neural, 2026-09-15). On a CPU column
     (`ml.vendor() == "cpu"`) it is the PUBLIC inference class built from the
     fitted model: `MLPInference.from_checkpoint` on the trainer's saved
-    checkpoint, or `TransformerBlockInference` on the block's nine weights,
-    both over the shipped `_mojolearn_neural_host`. On a GPU column it is the
+    checkpoint, or the block class with ``device="cpu"`` on the block's
+    weights (the CPU-by-class `*BlockInference` twins were removed
+    2026-11-22: same kernels, same bits). On a GPU column it is the
     fitted estimator itself, as before, so no GPU cell changes meaning. The
     train rows never go through here."""
     if ml.vendor() != "cpu":
@@ -8656,10 +8656,9 @@ def _neural_inference(ml, lane_name, est):
     # named weights, the Samba stack from its saved checkpoint and the byte LM
     # from its exported checkpoint, each through its public inference class.
     if lane_name in ("mamba1", "mamba2", "mamba3", "mamba2-dtlimit"):
-        cls = dict(mamba1=ml.Mamba1BlockInference, mamba3=ml.Mamba3BlockInference).get(
-            lane_name, ml.Mamba2BlockInference)
-        kw = dict(dt_limit=est.dt_limit) if cls is ml.Mamba2BlockInference else {}
-        return cls(_built_args(est)["weights"], **kw)
+        cls = dict(mamba1=ml.Mamba1Block, mamba3=ml.Mamba3Block).get(lane_name, ml.Mamba2Block)
+        kw = dict(dt_limit=est.dt_limit) if cls is ml.Mamba2Block else {}
+        return cls(_built_args(est)["weights"], device="cpu", **kw)
     if lane_name in ("samba", "samba-untied-dropout-accum"):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "samba.ckpt")
@@ -8674,8 +8673,8 @@ def _neural_inference(ml, lane_name, est):
             # parameters_sha256 where `_long_byte_lm` rebuilds from them
             return _built(ml.LanguageModelInference.from_checkpoint(path),
                           parameters=np.asarray(est.parameters_, dtype=np.float32), threaded=True, threads=None)
-    return ml.TransformerBlockInference(_built_args(est)["weights"], n_heads=est.n_heads,
-                                        n_kv_heads=est.n_kv_heads, head_dim=est.head_dim, window=est.window)
+    return ml.TransformerBlock(_built_args(est)["weights"], n_heads=est.n_heads, n_kv_heads=est.n_kv_heads,
+                               head_dim=est.head_dim, window=est.window, device="cpu")
 
 
 #: The lanes whose infer, reload and batch cells ask the public CPU inference

@@ -27,7 +27,7 @@ _PROJECTIONS = {
     "mamba2": ("in_proj.weight", "out_proj.weight"),
 }
 
-# The device route (None or "auto" -> cpu/gpu by vendor), the per-route block classes,
+# The device route (None or "auto" -> cpu/gpu by vendor), the block classes,
 # the integer-weight refusal and the last-position argmax run in Mojo
 # (`_model_route`, `context["block_classes"]`, the checkpoint reader and the
 # generation entries in bindings/causal_lm_construct_door.mojo and
@@ -381,8 +381,7 @@ def _connect_causal_native():
     from .._transformer_impl import TransformerBlock, TransformerState, TransformerDecodeSession, _OPT_NAMES
     from .._mamba_impl import (Mamba1Block, Mamba2Block, Mamba3Block, Mamba1State, Mamba2State, Mamba3State,
                                Mamba1DecodeSession, Mamba2DecodeSession, Mamba3DecodeSession)
-    from ..neural_inference import (TransformerBlockInference, Mamba1BlockInference,
-                                    Mamba2BlockInference, Mamba3BlockInference, _causal_native_connections)
+    from ..neural_inference import _causal_native_connections
     from .config import _NATIVE_CONTEXT as config_context
     from .safetensors import _NATIVE_CONTEXT as checkpoint_context
     from .._native_neural_bridge import connect_training
@@ -432,11 +431,11 @@ def _connect_causal_native():
         "training_module": training,
         "training_bindings": connect_training(_backend, vendor, bindings),
         "primitive_classes": {"cpu": _CpuPrimitives, "gpu": _GpuPrimitives},
-        "block_classes": {
-            "cpu": {"transformer": TransformerBlockInference, "mamba1": Mamba1BlockInference,
-                    "mamba2": Mamba2BlockInference, "mamba3": Mamba3BlockInference},
-            "gpu": {"transformer": TransformerBlock, "mamba1": Mamba1Block,
-                    "mamba2": Mamba2Block, "mamba3": Mamba3Block}},
+        # One class per block kind on every route: a block's route is its
+        # `_native_route` word (device="cpu" or the GPU), never its class
+        # (the CPU-by-class `*BlockInference` twins were removed 2026-11-22).
+        "block_classes": {"transformer": TransformerBlock, "mamba1": Mamba1Block,
+                          "mamba2": Mamba2Block, "mamba3": Mamba3Block},
         "mamba3_state_class": Mamba3State,
         "transformer_session_class": TransformerDecodeSession,
         "mamba_session_classes": {"mamba1": Mamba1DecodeSession, "mamba2": Mamba2DecodeSession,

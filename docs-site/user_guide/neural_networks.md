@@ -12,7 +12,7 @@ Each class documents the settings it supports, and refuses any other setting by 
 |---|---|
 | Decoder blocks | `TransformerBlock`, `Mamba1Block`, `Mamba2Block`, `Mamba3Block`, `MoEBlock` |
 | Stacks | `SambaConfig`, `SambaStack` (Mamba-3 and attention layers in any order) |
-| Forward-only (CPU) | `TransformerBlockInference`, `Mamba1BlockInference`, `Mamba2BlockInference`, `Mamba3BlockInference`, `SambaInference`, `MLPInference` |
+| Forward-only (CPU) | `SambaInference`, `MLPInference` |
 | Decode state | `TransformerState`, `Mamba1State`, `Mamba2State`, `Mamba3State` |
 | Layers | `Embedding`, `LayerNorm` |
 | Estimators | `MLPClassifier`, `MLPRegressor`, `RNNClassifier`, `RNNRegressor`, `LSTMClassifier`, `LSTMRegressor`, `GRUClassifier`, `GRURegressor` |
@@ -92,29 +92,29 @@ alone, and padding positions return `+0.0`. The Mamba blocks follow the same pat
 
 ## Inference on the CPU
 
-Each block has a forward-only twin with the same constructor that runs on the CPU, so a model trained on a
-GPU can serve on a machine with no GPU:
+Every block runs on the CPU with `device="cpu"`, so a model trained on a GPU can serve on a machine with
+no GPU:
 
 ```python
-cpu_block = mojolearn.TransformerBlockInference(weights, n_heads=n_heads, n_kv_heads=n_kv_heads)
+cpu_block = mojolearn.TransformerBlock(weights, n_heads=n_heads, n_kv_heads=n_kv_heads, device="cpu")
 y_cpu = cpu_block.forward(x)
 ```
 
-`backward` is refused on the inference classes. `SambaInference.from_checkpoint(path)` loads a file
+`SambaInference.from_checkpoint(path)` loads a file
 written by `SambaStack.save_checkpoint`, and `MLPInference.from_checkpoint(path)` loads a
 `SmallMLPTrainer` checkpoint.
 
 ## Low-bit weight storage
 
 `mojolearn.lowbit.pack(weights, fmt)` converts every 2-D float32 tensor in a weight dict to `"bfloat16"`
-or `"int8"` (one power-of-two scale per output row). Each inference class accepts the packed dict and
+or `"int8"` (one power-of-two scale per output row). Each block and inference class accepts the packed dict and
 widens it back to float32 before computing, so the arithmetic is the FP32 path:
 
 ```python
 from mojolearn import lowbit
 
 packed = lowbit.pack(weights, "bfloat16")
-small = mojolearn.TransformerBlockInference(packed, n_heads=n_heads, n_kv_heads=n_kv_heads)
+small = mojolearn.TransformerBlock(packed, n_heads=n_heads, n_kv_heads=n_kv_heads, device="cpu")
 ```
 
 The result is the same bits as the FP32 block run on the widened weights. It is not the same as the

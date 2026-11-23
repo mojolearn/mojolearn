@@ -39,15 +39,14 @@ def block_inputs(tmp_path, family):
         kwargs = dict(model.plan.block_options, n_heads=model.plan.n_heads, numeric_profile="fp32_v1")
     elif model.kind == "mamba2":
         kwargs = dict(model.plan.block_kwargs)
-    cls = causal_lm._NATIVE_CONTEXT["block_classes"]["gpu"][model.kind]
-    cpu_cls = causal_lm._NATIVE_CONTEXT["block_classes"]["cpu"][model.kind]
+    cls = causal_lm._NATIVE_CONTEXT["block_classes"][model.kind]
     x = np.random.default_rng(123).normal(size=(2, 4, model.d_model)).astype("f4") * np.float32(0.05)
-    return cls, cpu_cls, weights, kwargs, x
+    return cls, weights, kwargs, x
 
 
 @pytest.mark.parametrize("family", FAMILIES)
 def test_device_is_a_constructor_parameter_with_default_none(tmp_path, family):
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, family)
+    cls, weights, kwargs, _ = block_inputs(tmp_path, family)
     assert "device" in cls._get_param_names()
     assert cls(weights, **kwargs).get_params()["device"] is None
     assert cls(weights, device=None, **kwargs).get_params()["device"] is None
@@ -57,14 +56,14 @@ def test_device_is_a_constructor_parameter_with_default_none(tmp_path, family):
 @pytest.mark.parametrize("family", FAMILIES)
 @pytest.mark.parametrize("bad", ["tpu", "GPU", " cpu", "", "None", "auto", 0, False, b"cpu"])
 def test_unknown_device_is_refused_in_words_at_construction(tmp_path, family, bad):
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, family)
+    cls, weights, kwargs, _ = block_inputs(tmp_path, family)
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
         cls(weights, device=bad, **kwargs)
 
 
 @pytest.mark.parametrize("family", FAMILIES)
 def test_default_device_is_this_installations_device(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, **kwargs)
     assert block.vendor_used() == mojolearn.vendor()
     assert block.numeric_mode_used() in ("identical", "fast")
@@ -73,7 +72,7 @@ def test_default_device_is_this_installations_device(tmp_path, family):
 
 @pytest.mark.parametrize("family", FAMILIES)
 def test_explicit_gpu_runs_on_a_gpu_installation_and_is_refused_in_words_on_a_cpu_only_one(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     if TWO_DEVICES:
         block = cls(weights, device="gpu", **kwargs)
         assert block.vendor_used() == mojolearn.vendor() and block.get_params()["device"] == "gpu"
@@ -89,7 +88,7 @@ def test_explicit_gpu_runs_on_a_gpu_installation_and_is_refused_in_words_on_a_cp
 
 @pytest.mark.parametrize("family", FAMILIES)
 def test_set_params_refusal_leaves_the_block_unchanged(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     before = np.asarray(block.forward(x)).tobytes()
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
@@ -99,20 +98,22 @@ def test_set_params_refusal_leaves_the_block_unchanged(tmp_path, family):
 
 
 @pytest.mark.parametrize("family", FAMILIES)
-def test_cpu_device_runs_the_host_kernels_and_the_inference_class_bits(tmp_path, family):
-    cls, cpu_cls, weights, kwargs, x = block_inputs(tmp_path, family)
+def test_cpu_device_runs_the_host_kernels(tmp_path, family):
+    # The CPU-by-class `*BlockInference` twins this compared against were
+    # removed 2026-11-22 (same kernels, same bits); the whole model's CPU
+    # route builds the same class on the CPU.
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
-    host = cpu_cls(weights, **kwargs)
+    again = cls(weights, device="cpu", **kwargs)
     assert block.vendor_used() == "cpu" and block.numeric_mode_used() == "identical"
-    assert host.vendor_used() == "cpu"                        # the CPU side by class, whatever the installation
-    assert np.asarray(block.forward(x)).tobytes() == np.asarray(host.forward(x)).tobytes()
-    assert np.asarray(block.forward(x, lengths=[2, 4])).tobytes() == np.asarray(host.forward(x, lengths=[2, 4])).tobytes()
+    assert np.asarray(block.forward(x)).tobytes() == np.asarray(again.forward(x)).tobytes()
+    assert np.asarray(block.forward(x, lengths=[2, 4])).tobytes() == np.asarray(again.forward(x, lengths=[2, 4])).tobytes()
 
 
 @two_devices
 @pytest.mark.parametrize("family", FAMILIES)
 def test_two_blocks_on_two_devices_interleaved_return_identical_bits(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     gpu = cls(weights, numeric_mode="identical", **kwargs)
     cpu = cls(weights, numeric_mode="identical", device="cpu", **kwargs)
     assert gpu.vendor_used() == mojolearn.vendor() and cpu.vendor_used() == "cpu"
@@ -128,7 +129,7 @@ def test_two_blocks_on_two_devices_interleaved_return_identical_bits(tmp_path, f
 @two_devices
 @pytest.mark.parametrize("family", FAMILIES)
 def test_set_params_moves_the_block_to_the_other_device(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, numeric_mode="identical", **kwargs)
     on_gpu = np.asarray(block.forward(x)).tobytes()
     assert block.set_params(device="cpu") is block
@@ -143,7 +144,7 @@ def test_set_params_moves_the_block_to_the_other_device(tmp_path, family):
 def test_device_is_the_authority_over_state_built_for_another_device(tmp_path, family):
     """A block whose fields were handed over from the same block on the other device (what `check` does) runs its
     own device: the constructor parameter wins and the derived state is rebuilt once."""
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     gpu = cls(weights, numeric_mode="identical", **kwargs)
     wanted = np.asarray(gpu.forward(x)).tobytes()
     twin = cls(weights, numeric_mode="identical", device="cpu", **kwargs)
@@ -161,7 +162,7 @@ def test_device_is_the_authority_over_state_built_for_another_device(tmp_path, f
 @two_devices
 @pytest.mark.parametrize("family", FAMILIES)
 def test_cpu_with_fast_mode_is_refused_in_words(tmp_path, family):
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, family)
+    cls, weights, kwargs, _ = block_inputs(tmp_path, family)
     with pytest.raises(ValueError, match="device='cpu' runs in identical mode only"):
         cls(weights, numeric_mode="fast", device="cpu", **kwargs)
 
@@ -169,7 +170,7 @@ def test_cpu_with_fast_mode_is_refused_in_words(tmp_path, family):
 @two_devices
 @pytest.mark.parametrize("family", FAMILIES)
 def test_backward_on_the_cpu_device_is_refused_in_words_on_a_gpu_installation(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     with pytest.raises(ValueError, match="device='cpu' is not available for backward"):
         block.backward(x, np.ones_like(x))
@@ -178,7 +179,7 @@ def test_backward_on_the_cpu_device_is_refused_in_words_on_a_gpu_installation(tm
 @pytest.mark.parametrize("family", FAMILIES)
 @pytest.mark.parametrize("device", [None, "cpu"])
 def test_pickle_carries_the_device(tmp_path, family, device):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device=device, **kwargs)
     wanted = np.asarray(block.forward(x)).tobytes()
     restored = pickle.loads(pickle.dumps(block))
@@ -189,7 +190,7 @@ def test_pickle_carries_the_device(tmp_path, family, device):
 
 @pytest.mark.parametrize("family", FAMILIES)
 def test_clone_through_get_params_carries_the_device(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     twin = cls(**block.get_params(deep=False))
     assert twin.get_params()["device"] == "cpu" and twin.vendor_used() == "cpu"
@@ -199,7 +200,7 @@ def test_clone_through_get_params_carries_the_device(tmp_path, family):
 @two_devices
 @pytest.mark.parametrize("family", FAMILIES)
 def test_check_runs_the_block_on_both_devices_in_this_process(tmp_path, family, capsys):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, numeric_mode="identical", **kwargs)
     result = block.check(x, method="forward")
     capsys.readouterr()

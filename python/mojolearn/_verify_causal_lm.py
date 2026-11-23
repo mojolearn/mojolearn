@@ -35,7 +35,7 @@ CHECKS = frozenset(('prefill_step', 'batch', 'reset', 'reload', 'greedy_repeat',
 # order), never as its capacity-sized buffers, and string attributes are
 # version LABELS, not state: the GPU `TransformerBlock._extension` tags each
 # state with `arithmetic_profile` (_transformer_impl.py `_admit_state_profile`)
-# while the CPU `TransformerBlockInference._extension` (neural_inference.py)
+# while the CPU route (the neural host binding, neural_inference.py)
 # reaches a binding that reports none, so hashing that string made every
 # transformer state digest differ host vs device with equal bits (0.8.37
 # loaded-lm-cpu-gpu-compare, 18/24 cases; Mamba states carry no label).

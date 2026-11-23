@@ -11,7 +11,7 @@ def host(monkeypatch):
     class Reference:
         def __init__(self, weights, **kwargs):calls.append(('construct', weights, kwargs))
         def forward(self, x):calls.append(('forward', x.copy()));return x.copy()
-    names = ['TransformerBlockInference','Mamba1BlockInference','Mamba2BlockInference','Mamba3BlockInference']
+    names = ['TransformerBlock','Mamba1Block','Mamba2Block','Mamba3Block']
     mod = types.SimpleNamespace(**{name: type(name, (Reference,), {}) for name in names})
     monkeypatch.setattr(n, '_ours_module', lambda: mod)
     return calls
@@ -27,7 +27,7 @@ def test_fast_only_has_real_host_quality(lane, host):
     assert q['host_reference_passed'] and q['host_reference_finite']
     assert q['max_abs_diff_vs_host']==0 and q['host_reference_tolerance_ratio']==0
     assert [call[0] for call in host]==['construct','forward']
-    assert host[0][2]['numeric_mode']=='identical'
+    assert host[0][2]['numeric_mode']=='identical' and host[0][2]['device']=='cpu'
     np.testing.assert_array_equal(host[0][1]['weight'],d['w:weight'])
     if lane=='transformer-forward':
         expected=n._dims_of(lane,'small')

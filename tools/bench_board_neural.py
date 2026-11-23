@@ -54,10 +54,12 @@ are never raced, so GPU decode work had no row before these):
                        Mamba/Mamba2 step over InferenceParams (MambaSsmArm);
                        mamba3-decode and samba-decode none (NOT_PLANNED).
   mlp-predict          SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X).
-CPU lanes (the *Inference classes run on the host binding, on the CPU):
-  transformer-infer    TransformerBlockInference(...).forward(x).
+CPU lanes (on the host binding, on the CPU):
+  transformer-infer    TransformerBlock(..., device="cpu").forward(x).
   mamba1-infer / mamba2-infer / mamba3-infer
-                       Mamba{1,2,3}BlockInference(weights).forward(x).
+                       Mamba{1,2,3}Block(weights, device="cpu").forward(x).
+                       A prior wheel that still has the *BlockInference
+                       classes (removed 2026-11-22) runs them (_cpu_block).
   samba-infer          SambaInference(config, weights).forward(inputs).
   mlp-infer            MLPInference(w1, b1, w2, b2).predict_logits(X).
 GPU fit lanes (2026-10-19, lane ag-bench: the trainers whose backward runs
@@ -954,22 +956,22 @@ LANE_TEXT = {
                            "mean CE; backward; torch.optim.AdamW step; loss.item()"),
     "transformer-forward": ("mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
                             "transformers LlamaDecoderLayer (sdpa, LlamaRotaryEmbedding), ours' weights"),
-    "transformer-infer": ("mojolearn.TransformerBlockInference(...).forward(x) (CPU host binding)",
+    "transformer-infer": ("mojolearn.TransformerBlock(..., device='cpu').forward(x) (CPU host binding)",
                           "transformers LlamaDecoderLayer on the CPU"),
     "mamba1-forward": ("mojolearn.Mamba1Block(weights).forward(x)",
                        "mamba-ssm-*: mamba_ssm Block(Mamba, fused fast path), ours' weights; the "
                        "torch-* reference arms (gen_corpus.py block_forward) are refused"),
-    "mamba1-infer": ("mojolearn.Mamba1BlockInference(weights).forward(x) (CPU host binding)",
+    "mamba1-infer": ("mojolearn.Mamba1Block(weights, device='cpu').forward(x) (CPU host binding)",
                      "gen_corpus.py block_forward on the CPU"),
     "mamba2-forward": ("mojolearn.Mamba2Block(weights).forward(x)",
                        "mamba-ssm-*: mamba_ssm Block(Mamba2, mem-eff SSD Triton path), ours' weights; "
                        "the torch-* reference arms (gen_corpus.py m2_forward) are refused"),
-    "mamba2-infer": ("mojolearn.Mamba2BlockInference(weights).forward(x) (CPU host binding)",
+    "mamba2-infer": ("mojolearn.Mamba2Block(weights, device='cpu').forward(x) (CPU host binding)",
                      "gen_corpus.py m2_forward on the CPU"),
     "mamba3-forward": ("mojolearn.Mamba3Block(weights).forward(x)",
                        "mamba-ssm-*: mamba_ssm Block(Mamba3 SISO Triton), ours' weights; the torch-* "
                        "reference arms (gen_corpus.py m3_forward) are refused"),
-    "mamba3-infer": ("mojolearn.Mamba3BlockInference(weights).forward(x) (CPU host binding)",
+    "mamba3-infer": ("mojolearn.Mamba3Block(weights, device='cpu').forward(x) (CPU host binding)",
                      "gen_corpus.py m3_forward on the CPU"),
     "samba-train-step": ("mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
                          "torch Embedding + mamba_ssm Mamba3 Block / transformers LlamaDecoderLayer "
@@ -2471,14 +2473,14 @@ class OursBlock(Ours):
             window = int(self.runtime.get("transformer_window", 0))
             if window < 0 or (window and self.operation != "transformer_windowed_forward"):
                 raise RuntimeError("REFUSED: a positive transformer_window needs the explicit windowed operation")
-            cls = ml.TransformerBlockInference if cpu else ml.TransformerBlock
+            cls, extra = _cpu_block(ml, "TransformerBlock") if cpu else (ml.TransformerBlock, {})
             self.block = cls(w, n_heads=d["n_heads"], n_kv_heads=d["n_kv"], head_dim=d["head_dim"],
-                             norm_eps=BLOCK_NORM_EPS, rope_theta=BLOCK_ROPE_THETA, window=window)
+                             norm_eps=BLOCK_NORM_EPS, rope_theta=BLOCK_ROPE_THETA, window=window, **extra)
             self.neural_ab_runtime["transformer_window"] = window
         else:
             name = {"mamba1": "Mamba1Block", "mamba2": "Mamba2Block", "mamba3": "Mamba3Block"}[model]
-            cls = getattr(ml, name + ("Inference" if cpu else ""))
-            self.block = cls(w)
+            cls, extra = _cpu_block(ml, name) if cpu else (getattr(ml, name), {})
+            self.block = cls(w, **extra)
         self.x = np.ascontiguousarray(data["x"])
         self.info = _ours_info(ml, getattr(sys.modules[cls.__module__], "__file__", None),
                                _mode_of(self.block, ml), "cpu" if cpu else "gpu")
@@ -5728,6 +5730,16 @@ FORWARD_REFERENCE_ATOL = 1e-6
 FORWARD_REFERENCE_RTOL = 1e-5
 
 
+def _cpu_block(ml, name):
+    """(class, extra constructor keywords) of block `name` on the CPU: the block
+    itself with device="cpu"; a prior wheel that still ships the CPU-by-class
+    `<name>Inference` twin (removed 2026-11-22, same kernels) runs that."""
+    old = getattr(ml, name + "Inference", None)
+    if old is not None:
+        return old, {}
+    return getattr(ml, name), {"device": "cpu"}
+
+
 def _forward_reference(lane, shape, data):
     """(host inference class, the reference forward of data["x"] as float64): the untimed own-host reference."""
     import numpy as np
@@ -5737,15 +5749,16 @@ def _forward_reference(lane, shape, data):
     kwargs = {"numeric_mode": "identical"}
     if model == "transformer":
         d = _dims_of(lane, shape)
-        cls = ml.TransformerBlockInference
+        cls, extra = _cpu_block(ml, "TransformerBlock")
         kwargs.update(n_heads=d["n_heads"], n_kv_heads=d["n_kv"], head_dim=d["head_dim"],
                       norm_eps=BLOCK_NORM_EPS, rope_theta=BLOCK_ROPE_THETA)
     else:
-        cls = getattr(ml, {"mamba1": "Mamba1BlockInference", "mamba2": "Mamba2BlockInference",
-                           "mamba3": "Mamba3BlockInference"}[model])
+        cls, extra = _cpu_block(ml, {"mamba1": "Mamba1Block", "mamba2": "Mamba2Block",
+                                     "mamba3": "Mamba3Block"}[model])
+    kwargs.update(extra)
     block = cls(weights, **kwargs)
-    # The public inference classes dispatch only to the shipped Mojo CPU host
-    # binding. Their fresh forward uses exactly the race's weights and inputs.
+    # The block on the CPU dispatches only to the shipped Mojo CPU host
+    # binding. Its fresh forward uses exactly the race's weights and inputs.
     return cls, np.asarray(block.forward(np.ascontiguousarray(data["x"])), dtype=np.float64)
 
 

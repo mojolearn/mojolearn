@@ -584,10 +584,10 @@ compile and bf16 work for every lane.
 | `lm-forward` | `LanguageModelTrainer(resident=True).logits(ids)` | GPU | the same twin, logits |
 | `gemm` | `mojolearn.linalg.matmul(a, b)` | GPU | `a @ b` |
 | `transformer-forward` | `TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)` | GPU | `tools/speed_torch_seq.py` `LlamaEager.block(sdpa=True)` |
-| `transformer-infer` | `TransformerBlockInference(...).forward(x)` | CPU | the same, on the CPU |
-| `mamba1-forward` / `mamba1-infer` | `Mamba1Block` / `Mamba1BlockInference(weights).forward(x)` | GPU / CPU | `mamba/corpus/gen_corpus.py` `block_forward` (mamba_ssm's `selective_scan_ref`, a per-token loop; eager arms only) |
-| `mamba2-forward` / `mamba2-infer` | `Mamba2Block` / `Mamba2BlockInference(weights).forward(x)` | GPU / CPU | `gen_corpus.py` `m2_forward` (chunked SSD reference) |
-| `mamba3-forward` / `mamba3-infer` | `Mamba3Block` / `Mamba3BlockInference(weights).forward(x)` | GPU / CPU | `gen_corpus.py` `m3_forward` (SISO reference) |
+| `transformer-infer` | `TransformerBlock(..., device="cpu").forward(x)` | CPU | the same, on the CPU |
+| `mamba1-forward` / `mamba1-infer` | `Mamba1Block` / `Mamba1Block(weights, device="cpu").forward(x)` | GPU / CPU | `mamba/corpus/gen_corpus.py` `block_forward` (mamba_ssm's `selective_scan_ref`, a per-token loop; eager arms only) |
+| `mamba2-forward` / `mamba2-infer` | `Mamba2Block` / `Mamba2Block(weights, device="cpu").forward(x)` | GPU / CPU | `gen_corpus.py` `m2_forward` (chunked SSD reference) |
+| `mamba3-forward` / `mamba3-infer` | `Mamba3Block` / `Mamba3Block(weights, device="cpu").forward(x)` | GPU / CPU | `gen_corpus.py` `m3_forward` (SISO reference) |
 | `samba-train-step` | `SambaStack(config, weights).train_step(inputs, targets)` | GPU | embedding, then per layer `m3_forward` or `LlamaEager.block`, then RMSNorm and the tied head; mean CE, `torch.optim.AdamW` |
 | `samba-forward` | `SambaStack(config, weights).forward(inputs)` | GPU | the same stack, logits |
 | `samba-infer` | `SambaInference(config, weights).forward(inputs)` | CPU | the same stack on the CPU |

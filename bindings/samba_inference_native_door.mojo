@@ -101,20 +101,18 @@ def samba_allocate(model: PythonObject, batch: PythonObject, maximum: PythonObje
     return result
 
 
-def _samba_block_entries(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var route = Mamba3StateRoute(1, 0, False)
-    return _samba_block_entries(block, context, route)
-
-
-def _samba_block_entries(block: PythonObject, context: PythonObject, mut route: Mamba3StateRoute) raises -> PythonObject:
+def _samba_block_entries(block: PythonObject, context: PythonObject, cpu_inference: Bool,
+                         mut route: Mamba3StateRoute) raises -> PythonObject:
     # The block's binding entries and the key of the image that serves its
-    # carried-state calls (core/mamba_state_entry_table.mojo): the CPU
-    # inference class reads the neural host at (identical, cpu); a training
+    # carried-state calls (core/mamba_state_entry_table.mojo): a block of the
+    # CPU inference model (`SambaInference`, the model route's word, read once
+    # per forward) reads the neural host at (identical, cpu); a training
     # block reads its connected training selection's (tier, vendor), the CPU
-    # training image's own slot when the vendor is the CPU.
-    var bi = native_loaded_module("builtins")
+    # training image's own slot when the vendor is the CPU. Until 2026-11-22
+    # the first case was told by the block's class (`Mamba3BlockInference`,
+    # removed by lane neural-consolidate-2).
     var nc = context["neural"]
-    if Bool(py=py_call(bi.isinstance, block, nc["block_classes"]["cpu"]["mamba3"])):
+    if cpu_inference:
         route = Mamba3StateRoute(1, 0, False)
         return _model_bindings(PythonObject("cpu"), "mamba3", nc, PythonObject("identical"))["mamba3"]
     var selection = neural_training_selection(samba_fields(block), nc)
@@ -198,12 +196,13 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     return Python.tuple(output, reports[0], reports[1], reports[2], reports[3])
 
 
-def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, context: PythonObject) raises -> PythonObject:
+def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, cpu_inference: Bool,
+                     context: PythonObject) raises -> PythonObject:
     # Captured fields/slots are passed explicitly: a PythonObject(None)
     # default is evaluated at compile time and needs a live interpreter.
     var fields = samba_fields(block)
     var route = Mamba3StateRoute(1, 0, False)
-    var entries = _samba_block_entries(block, context, route)
+    var entries = _samba_block_entries(block, context, cpu_inference, route)
     var result = _m3_state_call(block, x, state, step, entries, fields, samba_fields(state), route)
     var report_names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
     for i in range(4):  # driver-loop: over reporting result metadata
@@ -583,10 +582,10 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
                 result = neural_block_forward_binding(block, hidden, PythonObject(None) if states is None else states[i], PythonObject(step), PythonObject(None), context["neural"])
             elif states is None:
                 var route = Mamba3StateRoute(1, 0, False)
-                var entries = _samba_block_entries(block, context, route)
+                var entries = _samba_block_entries(block, context, cpu_inference, route)
                 result = _prefill_mamba3(block, hidden, entries, route)
             else:
-                result = _m3_state_forward(block, hidden, states[i], step, context)
+                result = _m3_state_forward(block, hidden, states[i], step, cpu_inference, context)
             hidden = result
         output = generation_array([b, l, v])
         var head = arrays["embed.weight"] if Bool(py=config["tie_embeddings"]) else arrays["lm_head.weight"]
