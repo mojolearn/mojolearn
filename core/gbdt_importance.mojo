@@ -1,53 +1,60 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`feature_importances_` of a fitted gradient-boosting model (lane mf-imp6,
-2026-11-23): the one body both gbdt images run (the host image through
-`gbdt_feature_importances_host` below, the GPU image through the kernels of
-`gbdt/gpu_importance.mojo`, which call the SAME `@always_inline` bodies).
+2026-11-23): the plan, the ONE set of `@always_inline` bodies and the host
+column. The device column is `gbdt/gpu_importance.mojo`, whose kernels call
+the SAME bodies in the same fold order, so the host and every GPU vendor
+return the same bits.
 
-WHAT IS SUMMED (scikit-learn's `GradientBoosting*.feature_importances_`,
-sklearn/ensemble/_gb.py: per tree `compute_feature_importances(normalize=
-False)`, i.e. the weighted impurity decrease of every split credited to its
-feature and divided by the root's weight, averaged over the trees that split,
-then normalised to sum 1). Our trees keep no per-node impurity, so the
-impurity is that of the TREE'S OWN LEAF VALUES over the fit's rows:
+WHAT IS SUMMED. scikit-learn's `GradientBoosting*.feature_importances_`
+(sklearn/ensemble/_gb.py): per tree `tree_.compute_feature_importances(
+normalize=False)`, the weighted impurity decrease of every split credited to
+its feature (`w_N * imp_N - w_L * imp_L - w_R * imp_R`) divided by the root
+weight, averaged over the trees with a nonzero decrease, then divided by the
+sum (all zero: zeros). Our trees keep no per-node impurity, so the impurity
+of a node is the weighted squared spread of the TREE'S OWN LEAF VALUES over
+the fit's rows that reach it:
 
-  * a leaf's weight W is the sum of the fit's sample weights (1 per row
-    without sample_weight) of the training rows the fitted tree sends there;
-  * a split node N with children L and R (the subtrees' leaves) decreases the
-    weighted squared spread of the leaf values by
-        W_L * W_R / W_N * sum_d (m_L,d - m_R,d)^2,
-    m the W-weighted mean leaf value of a child (d over the model's output
-    dimensions: MultiClass sums its classes, as scikit-learn sums its per-class
-    trees); that is scikit-learn's squared-error decrease exactly when every
-    leaf is the learning rate times the mean residual of its rows, and the
-    same decrease up to the leaf estimator's shrinkage otherwise;
-  * per tree the decreases are divided by the root weight and credited to the
-    split's model column; a CTR column credits its input column, a tensor or
-    combination CTR column credits each of its input columns an equal share;
-  * the columns are summed over trees in tree order and divided by their sum;
-    a model whose sum is zero (no split, or every split without effect)
-    returns zeros.
-The mean over the splitting trees is a common factor and the normalisation
-removes it, so it is not taken.
+  * W(leaf) is the sum of the fit's sample weights (1 per row without
+    sample_weight) of the training rows the fitted tree sends to the leaf
+    (the predict walk on the fit's own X, so bootstrap and subsample play no
+    part);
+  * a split node N with children L and R decreases that spread by
+        W_L * W_R / W_N * sum_d (m_L,d - m_R,d)^2
+    where m is the W-weighted mean leaf value of a child's leaves and d runs
+    over the model's output dimensions (MultiClass and MultiRMSE sum their
+    dimensions, as scikit-learn sums its per-class trees). This IS
+    scikit-learn's squared-error decrease whenever every leaf holds the mean
+    of its rows' targets (scaled by the learning rate); for Newton or
+    regularised leaves it is the same formula on the leaves the model holds;
+  * per tree the decreases are divided by the root weight W_root and
+    credited to the split's model column; a simple CTR column credits its
+    input column; a tensor or combination CTR column credits each of its
+    distinct input columns an equal share;
+  * the input columns are summed over the trees in tree order and divided by
+    their sum; a model whose sum is zero (no split with an effect) gives
+    zeros. scikit-learn's mean over the splitting trees is a common factor
+    the normalisation removes, so it is not taken.
 
 BITS, ONE ARITHMETIC ON EVERY COLUMN. The leaf weights are EXACT integers: a
 sample weight becomes its 24-bit mantissa shifted right by its exponent's
-distance below the largest weight's exponent (`gbdt_imp_weight_word`: no
-float operation, so every vendor and the host get the same word), and the
-words are added as 64-bit integers (the device as two 32-bit atomics with an
-exact carry), so the sum is order free. Everything after is float32 with the
-identity row's construction: pinned products (`identical_mul`), the flushed
-correctly rounded division (`identical_div`), every result flushed (`ftz`),
-in source order: one fixed fold per tree, one fixed fold per column over the
-trees, one fixed fold for the normalising sum. Float32 because the Apple
-device has no float64. The output is widened exactly to float64 by the door.
+distance below the largest weight's exponent (`gbdt_imp_weight_word`: integer
+operations only), and the words are added as 64-bit integers (the device as
+two 32-bit atomics with an exact carry), so the sum does not depend on the
+order. Everything after is float32 with the identity row's construction:
+pinned products (`identical_mul`), the flushed correctly rounded division
+(`identical_div`), every result flushed (`ftz`), in source order: one fixed
+fold per tree, one per input column over the trees, one for the normalising
+sum. Float32 because the Apple device has no float64; the door widens the
+result exactly to float64.
 
-PARALLEL PLAN. Host: the leaf weights split by trees (a task owns a range of
-trees and walks every row; leaf slots are disjoint), the per-tree decreases by
-trees, the per-column sums by columns; the normalisation is one sum over the
-columns (serial by nature, one value per input column). Device: one thread
-per row (atomics), one per tree, one per column, one for the normalisation.
+PARALLEL PLAN (host). The bins split over model columns; the leaf weights
+over row ranges, each task with its own exact accumulators (integer sums,
+any order), joined over leaf slots; the per-tree decreases over trees; the
+per-column sums over input columns. The normalisation is one fold over the
+input columns, serial by nature (its order is the bits). Device: one thread
+per (row, column) for the bins, per (row, tree) for the weights, per tree,
+per input column, and one for the normalisation.
 """
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -64,17 +71,23 @@ from gbdt.models.non_symmetric_walk_body import ns_node_goes_right, ns_walk_step
 
 comptime GbdtImpI32 = MutPointer[Int32, MutAnyOrigin]
 comptime GbdtImpU32 = MutPointer[UInt32, MutAnyOrigin]
+comptime GbdtImpU8 = MutPointer[UInt8, MutAnyOrigin]
 comptime GbdtImpF32 = MutPointer[Float32, MutAnyOrigin]
 
-#: The sabotage arm of the importance kernel (tools/identity_lanes
+#: The sabotage arm of the importance bodies (tools/identity_lanes
 #: coverage_sabotage.tsv, row gbdt-importances): a build with this define
-#: credits every split to the NEXT model column, so every importance vector
-#: of a model with two or more split columns moves and the lane must say so.
+#: credits every split to the NEXT model column, on the host and the device,
+#: so the importance vector of any model splitting on a column moves and the
+#: verify lane must say so.
 comptime GBDT_IMP_SABOTAGE = is_defined["MOJOLEARN_GBDT_IMPORTANCE_SABOTAGE"]()
+
+#: The host accumulators of one leaf-weight task are 8 bytes a leaf slot;
+#: the task count is capped so their sum stays under this many bytes.
+comptime GBDT_IMP_HOST_ACC_BYTES = 67108864
 
 
 # ===========================================================================
-# THE BODIES (host and device)
+# THE BODIES (host and device: typed values, no launch, no allocation)
 # ===========================================================================
 
 
@@ -82,8 +95,7 @@ comptime GBDT_IMP_SABOTAGE = is_defined["MOJOLEARN_GBDT_IMPORTANCE_SABOTAGE"]()
 def gbdt_imp_exponent(w: Float32) -> Int:
     """The scale exponent of a sample weight: the biased exponent (1 for a
     subnormal), 0 for a weight that counts as zero (zero, negative, NaN or
-    infinite: the fit's weights are finite and non-negative; such a row adds
-    nothing)."""
+    infinite: the fit refuses such weights; a row with one adds nothing)."""
     var bits = bitcast[DType.uint32](w)
     if (bits & UInt32(0x80000000)) != UInt32(0):
         return 0
@@ -113,33 +125,30 @@ def gbdt_imp_weight_word(w: Float32, e_max: Int) -> UInt32:
     var shift = e_max - e
     if shift >= 24:
         return UInt32(0)
+    if shift <= 0:
+        return mant
     return mant >> UInt32(shift)
 
 
 @always_inline
-def gbdt_imp_column_bin(
-    x: GbdtImpF32, r: Int, c: Int, n_rows: Int, n_cols: Int, row_major: Bool,
-    border_lo: GbdtImpI32, borders: GbdtImpF32, treat: GbdtImpI32, sorted: GbdtImpI32,
-) -> UInt32:
-    """The quantized bin of row `r`, model column `c`: the count of the
-    column's borders the value exceeds (`_binarize_block`'s rule: bisection
-    for non-decreasing borders, else the linear count), a NaN replaced by the
-    column's substitution first (AsIs keeps it: it exceeds no border)."""
-    var v: Float32
-    if row_major:
-        v = x[r * n_cols + c]
-    else:
-        v = x[c * n_rows + r]
+def gbdt_imp_bin_body(
+    value: Float32, lo: Int, n_b: Int, is_sorted: Bool, treat: Int, borders: GbdtImpF32,
+) -> UInt8:
+    """The quantized bin of one value of a model column: the count of the
+    column's borders the value EXCEEDS (the predict quantizer's rule,
+    `core/gbdt_host_predict.mojo::_binarize_block`: bisection for
+    non-decreasing borders, else the linear count), a NaN replaced by the
+    column's substitution first (`nan_substitution`: +inf AsTrue, -inf
+    AsFalse; AsIs keeps it and it exceeds no border). A column carries at
+    most 255 borders, so the bin fits a byte."""
+    var v = value
     if v != v:
-        var t = Int(treat[c])
-        if t == NAN_TREATMENT_AS_TRUE:
+        if treat == NAN_TREATMENT_AS_TRUE:
             v = bitcast[DType.float32](UInt32(0x7F800000))
-        elif t == NAN_TREATMENT_AS_FALSE:
+        elif treat == NAN_TREATMENT_AS_FALSE:
             v = bitcast[DType.float32](UInt32(0xFF800000))
-    var lo = Int(border_lo[c])
-    var n_b = Int(border_lo[c + 1]) - lo
     var index = 0
-    if sorted[c] != 0:
+    if is_sorted:
         var a = 0
         var b = n_b
         while a < b:
@@ -153,29 +162,27 @@ def gbdt_imp_column_bin(
         for k in range(n_b):
             if v > borders[lo + k]:
                 index += 1
-    return UInt32(index)
+    return UInt8(index)
 
 
 @always_inline
 def gbdt_imp_row_leaf(
-    t: Int, r: Int, x: GbdtImpF32, n_rows: Int, n_cols: Int, row_major: Bool,
-    border_lo: GbdtImpI32, borders: GbdtImpF32, treat: GbdtImpI32, sorted: GbdtImpI32,
-    tree_lo: GbdtImpI32, split_feature: GbdtImpI32, split_bin: GbdtImpI32, split_take: GbdtImpI32,
-    node_left: GbdtImpI32, node_right: GbdtImpI32, non_symmetric: Bool,
+    t: Int, r: Int, bins: GbdtImpU8, n_rows: Int, tree_lo: GbdtImpI32, split_feature: GbdtImpI32,
+    split_bin: GbdtImpI32, split_take: GbdtImpI32, node_left: GbdtImpI32, node_right: GbdtImpI32,
+    non_symmetric: Bool,
 ) -> Int:
-    """The leaf (oblivious: `sum bit_l << l`; non-symmetric: the bin, the
-    leaves to its left) tree `t` sends row `r` to, by predict's predicates
-    (`>` for TakeGreater, `==` for TakeBin) and predict's non-symmetric walk
-    (`ns_walk_step`). -1 for a walk that leaves its tree (a malformed model;
-    the plan's checks refuse it before any row is walked)."""
+    """The leaf tree `t` sends row `r` to (oblivious: `sum bit_l << l`;
+    non-symmetric: the bin, the leaves to the row's left), with predict's
+    predicates (`==` for TakeBin, `>` for TakeGreater) and predict's
+    non-symmetric step (`ns_walk_step`), over the column-major bins. -1 for a
+    walk that leaves its tree or its bins (a malformed model)."""
     var lo = Int(tree_lo[t])
     var n = Int(tree_lo[t + 1]) - lo
     if not non_symmetric:
         var leaf = 0
         for level in range(n):
             var rec = lo + level
-            var b = gbdt_imp_column_bin(x, r, Int(split_feature[rec]), n_rows, n_cols, row_major,
-                                        border_lo, borders, treat, sorted)
+            var b = UInt32(bins[Int(split_feature[rec]) * n_rows + r])
             var go: Bool
             if split_take[rec] != 0:
                 go = b == UInt32(split_bin[rec])
@@ -191,22 +198,29 @@ def gbdt_imp_row_leaf(
         if node >= n:
             return -1
         var rec = lo + node
-        var b = gbdt_imp_column_bin(x, r, Int(split_feature[rec]), n_rows, n_cols, row_major,
-                                    border_lo, borders, treat, sorted)
+        var b = UInt32(bins[Int(split_feature[rec]) * n_rows + r])
         stop = ns_walk_step(ns_node_goes_right(b, UInt32(split_bin[rec]), split_take[rec] != 0),
                             Int(node_left[rec]), Int(node_right[rec]), bin, node)
+    if bin > n:
+        return -1
     return bin
 
 
 @always_inline
-def _w(wpair: GbdtImpU32, slot: Int) -> UInt64:
+def gbdt_imp_f32(w: UInt64) -> Float32:
+    """A leaf weight as float32: the integer's correctly rounded value."""
+    return w.cast[DType.float32]()
+
+
+@always_inline
+def gbdt_imp_w(wpair: GbdtImpU32, slot: Int) -> UInt64:
     """A leaf's exact weight from its (low, high) 32-bit words."""
     return UInt64(wpair[2 * slot]) | (UInt64(wpair[2 * slot + 1]) << UInt64(32))
 
 
 @always_inline
-def _credit(f: Int, gain: Float32, n_cols: Int, map_lo: GbdtImpI32, map_col: GbdtImpI32,
-            map_share: GbdtImpF32, contrib: GbdtImpF32, base: Int):
+def gbdt_imp_credit(f: Int, gain: Float32, n_cols: Int, map_lo: GbdtImpI32, map_col: GbdtImpI32,
+                    map_share: GbdtImpF32, contrib: GbdtImpF32, base: Int):
     """`gain` credited to model column `f`'s input columns, in map order."""
     var col = f
     comptime if GBDT_IMP_SABOTAGE:
@@ -217,10 +231,10 @@ def _credit(f: Int, gain: Float32, n_cols: Int, map_lo: GbdtImpI32, map_col: Gbd
 
 
 @always_inline
-def _node_gain(wl: UInt64, wr: UInt64, froot: Float32, acc: Float32) -> Float32:
-    """`W_L * W_R / (W_N * W_root) * acc` as (W_L / W_root) * (W_R / W_N) * acc."""
-    var a = identical_div(Float32(wl), froot)
-    var b = identical_div(Float32(wr), Float32(wl + wr))
+def gbdt_imp_node_gain(wl: UInt64, wr: UInt64, froot: Float32, acc: Float32) -> Float32:
+    """`W_L * W_R / (W_N * W_root) * acc`, as (W_L / W_root) * (W_R / W_N) * acc."""
+    var a = identical_div(gbdt_imp_f32(wl), froot)
+    var b = identical_div(gbdt_imp_f32(wr), gbdt_imp_f32(wl + wr))
     return ftz(identical_mul(ftz(identical_mul(a, b)), acc))
 
 
@@ -234,10 +248,10 @@ def gbdt_imp_tree_body(
     """Tree `t`'s decreases, divided by its root weight, into
     `contrib[t * n_input ..]` (zeroed here first). Oblivious: the node of
     level j holding prefix p covers the leaves `p + m * 2^j`, its left child
-    the even m. Non-symmetric: node i's first bin is found by descending from
-    the root (left subtree: internal nodes j+1 .. j+left-1; right: from
-    j+left, its bins after the left's), its children's bins are the next
-    `left` and `right` bins."""
+    the even m. Non-symmetric (pre-order nodes whose left / right words are
+    LEAF counts): node i's first leaf is found by descending from the root
+    (left subtree: nodes j+1 .. j+left-1; right: from j+left, its leaves
+    after the left's), its children own the next `left` and `right` leaves."""
     var base = t * n_input
     for c in range(n_input):
         contrib[base + c] = Float32(0.0)
@@ -250,10 +264,10 @@ def gbdt_imp_tree_body(
     var n_leaves = n + 1 if non_symmetric else 1 << n
     var root = UInt64(0)
     for l in range(n_leaves):
-        root += _w(wpair, wlo + l)
+        root += gbdt_imp_w(wpair, wlo + l)
     if root == UInt64(0):
         return
-    var froot = Float32(root)
+    var froot = gbdt_imp_f32(root)
     if not non_symmetric:
         for j in range(n):
             var span = 1 << j
@@ -264,9 +278,9 @@ def gbdt_imp_tree_body(
                 var wr = UInt64(0)
                 for m in range(count):
                     if (m & 1) == 0:
-                        wl += _w(wpair, wlo + p + m * span)
+                        wl += gbdt_imp_w(wpair, wlo + p + m * span)
                     else:
-                        wr += _w(wpair, wlo + p + m * span)
+                        wr += gbdt_imp_w(wpair, wlo + p + m * span)
                 if wl == UInt64(0) or wr == UInt64(0):
                     continue
                 var acc = Float32(0.0)
@@ -275,15 +289,15 @@ def gbdt_imp_tree_body(
                     var sr = Float32(0.0)
                     for m in range(count):
                         var l = p + m * span
-                        var wv = ftz(identical_mul(Float32(_w(wpair, wlo + l)), leaves[vlo + l * dim + d]))
+                        var wv = ftz(identical_mul(gbdt_imp_f32(gbdt_imp_w(wpair, wlo + l)), leaves[vlo + l * dim + d]))
                         if (m & 1) == 0:
                             sl = ftz(sl + wv)
                         else:
                             sr = ftz(sr + wv)
-                    var diff = ftz(identical_div(sl, Float32(wl)) - identical_div(sr, Float32(wr)))
+                    var diff = ftz(identical_div(sl, gbdt_imp_f32(wl)) - identical_div(sr, gbdt_imp_f32(wr)))
                     acc = ftz(acc + ftz(identical_mul(diff, diff)))
-                gain = ftz(gain + _node_gain(wl, wr, froot, acc))
-            _credit(Int(split_feature[lo + j]), gain, n_cols, map_lo, map_col, map_share, contrib, base)
+                gain = ftz(gain + gbdt_imp_node_gain(wl, wr, froot, acc))
+            gbdt_imp_credit(Int(split_feature[lo + j]), gain, n_cols, map_lo, map_col, map_share, contrib, base)
         return
     for i in range(n):
         var b0 = 0
@@ -308,9 +322,9 @@ def gbdt_imp_tree_body(
         var wl = UInt64(0)
         var wr = UInt64(0)
         for k in range(left):
-            wl += _w(wpair, wlo + b0 + k)
+            wl += gbdt_imp_w(wpair, wlo + b0 + k)
         for k in range(right):
-            wr += _w(wpair, wlo + b0 + left + k)
+            wr += gbdt_imp_w(wpair, wlo + b0 + left + k)
         if wl == UInt64(0) or wr == UInt64(0):
             continue
         var acc = Float32(0.0)
@@ -319,14 +333,14 @@ def gbdt_imp_tree_body(
             var sr = Float32(0.0)
             for k in range(left):
                 var l = b0 + k
-                sl = ftz(sl + ftz(identical_mul(Float32(_w(wpair, wlo + l)), leaves[vlo + l * dim + d])))
+                sl = ftz(sl + ftz(identical_mul(gbdt_imp_f32(gbdt_imp_w(wpair, wlo + l)), leaves[vlo + l * dim + d])))
             for k in range(right):
                 var l = b0 + left + k
-                sr = ftz(sr + ftz(identical_mul(Float32(_w(wpair, wlo + l)), leaves[vlo + l * dim + d])))
-            var diff = ftz(identical_div(sl, Float32(wl)) - identical_div(sr, Float32(wr)))
+                sr = ftz(sr + ftz(identical_mul(gbdt_imp_f32(gbdt_imp_w(wpair, wlo + l)), leaves[vlo + l * dim + d])))
+            var diff = ftz(identical_div(sl, gbdt_imp_f32(wl)) - identical_div(sr, gbdt_imp_f32(wr)))
             acc = ftz(acc + ftz(identical_mul(diff, diff)))
-        _credit(Int(split_feature[lo + i]), _node_gain(wl, wr, froot, acc), n_cols, map_lo, map_col,
-                map_share, contrib, base)
+        gbdt_imp_credit(Int(split_feature[lo + i]), gbdt_imp_node_gain(wl, wr, froot, acc), n_cols, map_lo,
+                        map_col, map_share, contrib, base)
 
 
 @always_inline
@@ -353,7 +367,7 @@ def gbdt_imp_finish_body(n_input: Int, total: GbdtImpF32, dst: GbdtImpF32):
 
 
 # ===========================================================================
-# THE PLAN (host, once per call: the model text read, model data only)
+# THE PLAN (host, once per call: model data only)
 # ===========================================================================
 
 
@@ -409,10 +423,6 @@ struct GbdtImportancePlan(Movable):
         self.n_leaf_slots = 0
 
 
-def _share(k: Int) -> Float32:
-    return identical_div(Float32(1.0), Float32(k))
-
-
 def gbdt_importance_finish_plan(mut plan: GbdtImportancePlan) raises:
     """The plan's derived words and checks, once the flat arrays are in:
     the sorted flags, the leaf slot count and the structural checks the
@@ -421,18 +431,18 @@ def gbdt_importance_finish_plan(mut plan: GbdtImportancePlan) raises:
     input columns). Model data only."""
     if plan.dim < 1 or plan.n_cols < 1 or plan.n_input < 1:
         raise Error("gbdt importances: the model has no columns or no output dimension")
-    if len(plan.border_lo) != plan.n_cols + 1 or len(plan.treat) < plan.n_cols:
+    if len(plan.border_lo) < plan.n_cols + 1 or len(plan.treat) < plan.n_cols:
         raise Error("gbdt importances: the border table does not cover the model columns")
     plan.sorted = List[Int32](length=plan.n_cols, fill=Int32(1))
     for c in range(plan.n_cols):  # driver-loop: over the model's columns (model data)
         var lo = Int(plan.border_lo[c])
         var hi = Int(plan.border_lo[c + 1])
-        if lo < 0 or hi < lo or hi > len(plan.borders):
-            raise Error("gbdt importances: border offsets are not a prefix scan")
-        for b in range(lo + 1, hi):
+        if lo < 0 or hi < lo or hi > len(plan.borders) or hi - lo > 255:
+            raise Error("gbdt importances: border offsets are not a prefix scan of at most 255 per column")
+        for b in range(lo + 1, hi):  # small-loop(the borders of one column, at most 255)
             if not (plan.borders[b - 1] <= plan.borders[b]):
                 plan.sorted[c] = Int32(0)
-    if len(plan.tree_lo) != plan.n_trees + 1 or len(plan.leaf_lo) != plan.n_trees + 1:
+    if len(plan.tree_lo) < plan.n_trees + 1 or len(plan.leaf_lo) < plan.n_trees + 1:
         raise Error("gbdt importances: tree offsets do not cover the trees")
     var slots = 0
     for t in range(plan.n_trees):  # driver-loop: over the model's trees (model data)
@@ -443,10 +453,11 @@ def gbdt_importance_finish_plan(mut plan: GbdtImportancePlan) raises:
         if not plan.non_symmetric and n > 30:
             raise Error("gbdt importances: tree " + String(t) + " depth " + String(n) + " is not sane")
         var n_leaves = n + 1 if plan.non_symmetric else 1 << n
-        if Int(plan.leaf_lo[t]) != slots * plan.dim or Int(plan.leaf_lo[t + 1]) - Int(plan.leaf_lo[t]) != n_leaves * plan.dim:
-            raise Error("gbdt importances: tree " + String(t) + " has " + String(Int(plan.leaf_lo[t + 1]) - Int(plan.leaf_lo[t]))
-                        + " leaf values, not " + String(n_leaves * plan.dim))
-        for k in range(n):
+        var have = Int(plan.leaf_lo[t + 1]) - Int(plan.leaf_lo[t])
+        if Int(plan.leaf_lo[t]) != slots * plan.dim or have != n_leaves * plan.dim:
+            raise Error("gbdt importances: tree " + String(t) + " has " + String(have) + " leaf values, not "
+                        + String(n_leaves * plan.dim))
+        for k in range(n):  # small-loop(the splits of one tree)
             var f = Int(plan.split_feature[lo + k])
             if f < 0 or f >= plan.n_cols:
                 raise Error("gbdt importances: tree " + String(t) + " splits on column " + String(f) + " of "
@@ -461,11 +472,11 @@ def gbdt_importance_finish_plan(mut plan: GbdtImportancePlan) raises:
     for k in range(len(plan.map_col)):  # driver-loop: over the column map (model data)
         if Int(plan.map_col[k]) < 0 or Int(plan.map_col[k]) >= plan.n_input:
             raise Error("gbdt importances: a model column maps past the input columns")
-    # the bodies read index 0 of every array: an empty one holds one word
+    # the bodies and the device upload read index 0 of every array: an empty one holds one word
     if len(plan.split_feature) == 0:
-        plan.split_feature.append(0)
-        plan.split_bin.append(0)
-        plan.split_take.append(0)
+        plan.split_feature.append(Int32(0))
+        plan.split_bin.append(Int32(0))
+        plan.split_take.append(Int32(0))
     if len(plan.node_left) < len(plan.split_feature):
         plan.node_left.resize(len(plan.split_feature), Int32(0))
         plan.node_right.resize(len(plan.split_feature), Int32(0))
@@ -474,20 +485,20 @@ def gbdt_importance_finish_plan(mut plan: GbdtImportancePlan) raises:
     if len(plan.leaves) == 0:
         plan.leaves.append(Float32(0.0))
     if len(plan.map_col) == 0:
-        plan.map_col.append(0)
+        plan.map_col.append(Int32(0))
         plan.map_share.append(Float32(0.0))
 
 
 def _distinct(values: List[Int]) -> List[Int]:
-    var out = List[Int]()
+    var found = List[Int]()
     for v in values:  # small-loop(the members of one combination)
         var seen = False
-        for u in out:
+        for u in found:  # small-loop(the members of one combination)
             if u == v:
                 seen = True
         if not seen:
-            out.append(v)
-    return out^
+            found.append(v)
+    return found^
 
 
 def gbdt_importance_plan(text: String, arch: HostArchiveGBDT) raises -> GbdtImportancePlan:
@@ -531,24 +542,23 @@ def gbdt_importance_plan(text: String, arch: HostArchiveGBDT) raises -> GbdtImpo
     var source = List[Int]()
     if n_tensors == 0 and len(saved.ctr_tables) != 0:
         source = column_plan(saved.ctr_tables, n_base).source_of_column.copy()
-    plan.map_lo.append(0)
+    plan.map_lo.append(Int32(0))
     for c in range(plan.n_cols):  # driver-loop: over the model's columns (model data)
         var cols = List[Int]()
         if n_tensors != 0 and c >= saved.tensor_ctr_registry.first_model_column:
-            ref table = saved.tensor_ctr_registry.features[c - saved.tensor_ctr_registry.first_model_column].table
-            cols = _distinct(table.source_features)
+            var at = c - saved.tensor_ctr_registry.first_model_column
+            cols = _distinct(saved.tensor_ctr_registry.features[at].table.source_features)
         elif n_tensors == 0 and c >= n_base:
-            ref tab = saved.combination_ctrs.tables[c - n_base]
-            ref cmap = saved.combination_ctrs.maps[tab.source_feature]
+            var map_at = saved.combination_ctrs.tables[c - n_base].source_feature
             var feats = List[Int]()
-            for j in range(len(cmap.members)):  # small-loop(the members of one combination)
-                feats.append(cmap.members[j].feature)
+            for j in range(len(saved.combination_ctrs.maps[map_at].members)):  # small-loop(the members of one combination)
+                feats.append(saved.combination_ctrs.maps[map_at].members[j].feature)
             cols = _distinct(feats)
         elif len(source) != 0:
             cols.append(source[c])
         else:
             cols.append(c)
-        var share = _share(len(cols)) if len(cols) > 0 else Float32(0.0)
+        var share = identical_div(Float32(1.0), Float32(len(cols))) if len(cols) > 0 else Float32(0.0)
         for k in range(len(cols)):  # small-loop(the input columns of one model column)
             plan.map_col.append(Int32(cols[k]))
             plan.map_share.append(share)
@@ -560,17 +570,19 @@ def gbdt_importance_plan(text: String, arch: HostArchiveGBDT) raises -> GbdtImpo
 def gbdt_importance_model_x(
     arch: HostArchiveGBDT, x_addr: Int, n_rows: Int, n_input: Int, row_major: Bool,
 ) raises -> List[Float32]:
-    """A CTR model's MODEL columns (column-major) from the raw input, through
-    the predict path's own expansion (`gbdt_host_expand_ctr`, which reads the
+    """A CTR model's MODEL columns (column-major) from the fit's input (its
+    categorical columns as the fit's dense codes), through the predict path's
+    own expansion (`gbdt_host_expand_ctr`, the host statement the GPU predict
+    runs as well, `gbdt/train.mojo::_expand_model_columns`), which reads the
     raw columns column-major: a C-order X is reordered first, a pure move
-    split over columns)."""
+    split over columns."""
     var count = n_rows * n_input
     var x_raw = List[Float32](length=count, fill=Float32(0.0))
-    var src = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr)
-    var dst = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(x_raw.unsafe_ptr()))
+    var src = GbdtImpF32(unsafe_from_address=x_addr)
+    var dst = GbdtImpF32(unsafe_from_address=Int(x_raw.unsafe_ptr()))
 
     def _column(c: Int) {imm src, imm dst, imm n_rows, imm n_input, imm row_major}:
-        for r in range(n_rows):
+        for r in range(n_rows):  # native data loop (one column's rows)
             if row_major:
                 dst[c * n_rows + r] = src[r * n_input + c]
             else:
@@ -587,13 +599,51 @@ def gbdt_importance_model_x(
     tensor_ints.resize(arch.metadata["n_tensor_ints"], Int32(0))
     tensor_floats.resize(arch.metadata["n_tensor_floats"], Float32(0))
     counts.resize(arch.metadata["n_ctr_counts"], Int32(0))
-    var x = gbdt_host_expand_ctr(
+    var expanded = gbdt_host_expand_ctr(
         x_raw, n_rows, arch.metadata["n_features"], ctr_ints, ctr_floats, arch.metadata["n_ctr_tables"],
         tensor_ints, tensor_floats, arch.metadata["n_tensor_tables"], counts,
         arch.integers["border_offsets"], arch.floats["borders"], arch.integers["one_hot"],
     )
-    _ = x_raw^  # the reorder tasks wrote it through `dst`
-    return x^
+    _ = len(x_raw)  # the reorder tasks wrote it through `dst`; the expansion read it
+    return expanded^
+
+
+struct GbdtImportanceInput(Movable):
+    """The plan and the float32 MODEL columns the walk reads: the caller's X
+    itself (`x_addr`, `row_major` as given) or, for a CTR model, the expanded
+    column-major copy this struct owns (`model_x`)."""
+
+    var plan: GbdtImportancePlan
+    var model_x: List[Float32]
+    var x_addr: Int
+    var row_major: Bool
+
+    def __init__(out self, var plan: GbdtImportancePlan, var model_x: List[Float32], x_addr: Int, row_major: Bool):
+        self.plan = plan^
+        self.model_x = model_x^
+        self.x_addr = x_addr
+        self.row_major = row_major
+
+
+def gbdt_importance_input(text: String, x_addr: Int, n_rows: Int, n_input: Int, row_major: Bool,
+                          n_weights: Int) raises -> GbdtImportanceInput:
+    """The checks of a request and its plan (both columns): the rows the
+    model was fitted on (`n_rows` x `n_input` float32 at `x_addr`, C order
+    when `row_major`), `n_weights` 0 or `n_rows`."""
+    if n_rows <= 0 or n_input <= 0:
+        raise Error("gbdt importances: the fit has no rows or no columns")
+    if n_weights != 0 and n_weights != n_rows:
+        raise Error("gbdt importances: sample weights must be one per row")
+    var arch = host_archive_gbdt_text(text)
+    var plan = gbdt_importance_plan(text, arch)
+    if plan.n_input != n_input:
+        raise Error("gbdt importances: the model reads " + String(plan.n_input) + " input columns, the fit "
+                    + String(n_input))
+    if plan.has_ctr or plan.n_cols != n_input:
+        var mx = gbdt_importance_model_x(arch, x_addr, n_rows, n_input, row_major)
+        var addr = Int(mx.unsafe_ptr())
+        return GbdtImportanceInput(plan^, mx^, addr, False)
+    return GbdtImportanceInput(plan^, List[Float32](), x_addr, row_major)
 
 
 # ===========================================================================
@@ -609,6 +659,38 @@ def _f32(values: List[Float32]) -> GbdtImpF32:
     return GbdtImpF32(unsafe_from_address=Int(values.unsafe_ptr()))
 
 
+def gbdt_imp_bins_host(plan: GbdtImportancePlan, x_addr: Int, n_rows: Int, row_major: Bool,
+                       workers: Int = 0) -> List[UInt8]:
+    """The bins of every model column (column-major bytes), split over the
+    columns: `gbdt_imp_bin_body` per cell."""
+    var n_cols = plan.n_cols
+    var bins = List[UInt8](length=max(n_rows * n_cols, 1), fill=UInt8(0))
+    var bp = GbdtImpU8(unsafe_from_address=Int(bins.unsafe_ptr()))
+    var xp = GbdtImpF32(unsafe_from_address=x_addr)
+    var border_lo = _i32(plan.border_lo)
+    var borders = _f32(plan.borders)
+    var treat = _i32(plan.treat)
+    var sorted = _i32(plan.sorted)
+
+    def _column(c: Int) {imm bp, imm xp, imm border_lo, imm borders, imm treat, imm sorted, imm n_rows,
+                         imm n_cols, imm row_major}:
+        var lo = Int(border_lo[c])
+        var n_b = Int(border_lo[c + 1]) - lo
+        var is_sorted = sorted[c] != 0
+        var tr = Int(treat[c])
+        for r in range(n_rows):  # native data loop (one column's rows)
+            var v: Float32
+            if row_major:
+                v = xp[r * n_cols + c]
+            else:
+                v = xp[c * n_rows + r]
+            bp[c * n_rows + r] = gbdt_imp_bin_body(v, lo, n_b, is_sorted, tr, borders)
+
+    host_parallelize(_column, n_cols)
+    _ = workers
+    return bins^
+
+
 def gbdt_imp_max_exponent_host(w_addr: Int, n_rows: Int, workers: Int = 0) -> Int:
     """The largest weight exponent (1 when every weight counts as zero),
     split over row ranges; an integer maximum, order free."""
@@ -620,7 +702,7 @@ def gbdt_imp_max_exponent_host(w_addr: Int, n_rows: Int, workers: Int = 0) -> In
 
     def _task(k: Int) {imm bp, imm wp, imm chunk, imm n_rows}:
         var m = 1
-        for r in range(k * chunk, min(n_rows, (k + 1) * chunk)):
+        for r in range(k * chunk, min(n_rows, (k + 1) * chunk)):  # native data loop (one task's rows)
             var e = gbdt_imp_exponent(wp[r])
             if e > m:
                 m = e
@@ -635,25 +717,29 @@ def gbdt_imp_max_exponent_host(w_addr: Int, n_rows: Int, workers: Int = 0) -> In
 
 
 def gbdt_imp_leaf_weights_host(
-    plan: GbdtImportancePlan, x_addr: Int, n_rows: Int, row_major: Bool, w_addr: Int, n_weights: Int,
-    workers: Int = 0,
+    plan: GbdtImportancePlan, bins: List[UInt8], n_rows: Int, w_addr: Int, n_weights: Int, workers: Int = 0,
 ) raises -> List[UInt32]:
-    """Every leaf's exact weight as (low, high) 32-bit words, split over
-    TREES (a task owns a range of trees and walks every row through them: its
-    leaf slots are its own, so no partial sums)."""
+    """Every leaf's exact weight as (low, high) 32-bit words. The rows split
+    into ranges, each task walking its rows through every tree into its OWN
+    64-bit accumulators (integer sums: any order, the same words); then the
+    tasks' accumulators are added per leaf slot, split over the slots."""
     var e_max = 1
     if n_weights > 0:
         e_max = gbdt_imp_max_exponent_host(w_addr, n_rows, workers)
-    var sums = List[UInt64](length=max(plan.n_leaf_slots, 1), fill=UInt64(0))
-    var failed = List[Int](length=max(plan.n_trees, 1), fill=0)
-    var sp = MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=Int(sums.unsafe_ptr()))
+    var slots = max(plan.n_leaf_slots, 1)
+    var tasks = host_task_count(n_rows, host_worker_count(workers))
+    var cap = GBDT_IMP_HOST_ACC_BYTES // (8 * slots)
+    if cap < 1:
+        cap = 1
+    if tasks > cap:
+        tasks = cap
+    var chunk = (n_rows + tasks - 1) // tasks
+    var acc = List[UInt64](length=tasks * slots, fill=UInt64(0))
+    var failed = List[Int](length=tasks, fill=-1)
+    var ap = MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=Int(acc.unsafe_ptr()))
     var fp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(failed.unsafe_ptr()))
-    var xp = GbdtImpF32(unsafe_from_address=x_addr)
+    var bp = GbdtImpU8(unsafe_from_address=Int(bins.unsafe_ptr()))
     var wp = GbdtImpF32(unsafe_from_address=w_addr)
-    var border_lo = _i32(plan.border_lo)
-    var borders = _f32(plan.borders)
-    var treat = _i32(plan.treat)
-    var sorted = _i32(plan.sorted)
     var tree_lo = _i32(plan.tree_lo)
     var leaf_lo = _i32(plan.leaf_lo)
     var split_feature = _i32(plan.split_feature)
@@ -662,54 +748,57 @@ def gbdt_imp_leaf_weights_host(
     var node_left = _i32(plan.node_left)
     var node_right = _i32(plan.node_right)
     var n_trees = plan.n_trees
-    var n_cols = plan.n_cols
     var dim = plan.dim
     var non_symmetric = plan.non_symmetric
-    var tasks = n_trees if n_trees > 0 else 1
-    var hw = host_worker_count(workers)
-    if tasks > hw:
-        tasks = hw
-    var chunk = (n_trees + tasks - 1) // tasks if n_trees > 0 else 0
 
-    def _trees(k: Int) {imm sp, imm fp, imm xp, imm wp, imm border_lo, imm borders, imm treat, imm sorted,
-                        imm tree_lo, imm leaf_lo, imm split_feature, imm split_bin, imm split_take,
-                        imm node_left, imm node_right, imm n_trees, imm n_cols, imm dim, imm non_symmetric,
-                        imm chunk, imm n_rows, imm row_major, imm n_weights, imm e_max}:
-        for t in range(k * chunk, min(n_trees, (k + 1) * chunk)):
-            var wlo = Int(leaf_lo[t]) // dim
-            for r in range(n_rows):
-                var leaf = gbdt_imp_row_leaf(t, r, xp, n_rows, n_cols, row_major, border_lo, borders, treat,
-                                             sorted, tree_lo, split_feature, split_bin, split_take, node_left,
-                                             node_right, non_symmetric)
+    def _rows(k: Int) {imm ap, imm fp, imm bp, imm wp, imm tree_lo, imm leaf_lo, imm split_feature, imm split_bin,
+                       imm split_take, imm node_left, imm node_right, imm n_trees, imm dim, imm non_symmetric,
+                       imm chunk, imm n_rows, imm n_weights, imm e_max, imm slots}:
+        var own = k * slots
+        for r in range(k * chunk, min(n_rows, (k + 1) * chunk)):  # native data loop (one task's rows)
+            var q = UInt64(1)
+            if n_weights > 0:
+                q = UInt64(gbdt_imp_weight_word(wp[r], e_max))
+            for t in range(n_trees):  # driver-loop: over the model's trees (one row's walk)
+                var leaf = gbdt_imp_row_leaf(t, r, bp, n_rows, tree_lo, split_feature, split_bin, split_take,
+                                             node_left, node_right, non_symmetric)
                 if leaf < 0:
-                    fp[t] = 1
-                    break
-                var q = UInt64(1)
-                if n_weights > 0:
-                    q = UInt64(gbdt_imp_weight_word(wp[r], e_max))
-                sp[wlo + leaf] = sp[wlo + leaf] + q
+                    fp[k] = t
+                    return
+                var at = own + Int(leaf_lo[t]) // dim + leaf
+                ap[at] = ap[at] + q
 
-    if n_trees > 0:
-        host_parallelize(_trees, tasks)
-    for t in range(n_trees):  # driver-loop: over the trees' refusal words
-        if failed[t] != 0:
-            raise Error("gbdt importances: non-symmetric tree " + String(t) + " walks a row out of its nodes")
-    var pairs = List[UInt32](length=2 * max(plan.n_leaf_slots, 1), fill=UInt32(0))
-    for s in range(plan.n_leaf_slots):  # driver-loop: over the leaf slots (model size, not rows)
-        pairs[2 * s] = UInt32(sums[s] & UInt64(0xFFFFFFFF))
-        pairs[2 * s + 1] = UInt32(sums[s] >> UInt64(32))
-    _ = failed^
+    host_parallelize(_rows, tasks)
+    for k in range(tasks):  # small-loop(one refusal word per task)
+        if failed[k] >= 0:
+            raise Error("gbdt importances: non-symmetric tree " + String(failed[k]) + " walks a row out of its tree")
+    var pairs = List[UInt32](length=2 * slots, fill=UInt32(0))
+    var pp = GbdtImpU32(unsafe_from_address=Int(pairs.unsafe_ptr()))
+    var joins = host_task_count(slots, host_worker_count(workers))
+    var span = (slots + joins - 1) // joins
+
+    def _join(j: Int) {imm ap, imm pp, imm tasks, imm slots, imm span}:
+        for s in range(j * span, min(slots, (j + 1) * span)):  # native data loop (one task's leaf slots)
+            var total = UInt64(0)
+            for k in range(tasks):  # small-loop(one accumulator per row task)
+                total += ap[k * slots + s]
+            pp[2 * s] = UInt32(total & UInt64(0xFFFFFFFF))
+            pp[2 * s + 1] = UInt32(total >> UInt64(32))
+
+    host_parallelize(_join, joins)
+    _ = len(acc)  # the row tasks and the join read it through `ap`
+    _ = len(bins)
     return pairs^
 
 
-def gbdt_imp_from_leaf_weights_host(plan: GbdtImportancePlan, wpairs: List[UInt32], workers: Int = 0) -> List[Float32]:
+def gbdt_imp_from_leaf_weights_host(plan: GbdtImportancePlan, wpairs: List[UInt32]) -> List[Float32]:
     """The per-tree decreases (split over trees), the per-column sums (split
-    over columns) and the normalisation, from the exact leaf weights."""
+    over input columns) and the normalisation, from the exact leaf weights."""
     var n_trees = plan.n_trees
     var n_input = plan.n_input
     var contrib = List[Float32](length=max(n_trees * n_input, 1), fill=Float32(0.0))
     var total = List[Float32](length=n_input, fill=Float32(0.0))
-    var out = List[Float32](length=n_input, fill=Float32(0.0))
+    var result = List[Float32](length=n_input, fill=Float32(0.0))
     var cp = _f32(contrib)
     var tp = _f32(total)
     var tree_lo = _i32(plan.tree_lo)
@@ -738,37 +827,24 @@ def gbdt_imp_from_leaf_weights_host(plan: GbdtImportancePlan, wpairs: List[UInt3
     if n_trees > 0:
         host_parallelize(_tree, n_trees)
     host_parallelize(_column, n_input)
-    gbdt_imp_finish_body(n_input, tp, _f32(out))
-    _ = contrib^  # the tasks wrote it through `cp`
-    _ = total^
+    gbdt_imp_finish_body(n_input, tp, _f32(result))
+    _ = len(contrib)  # the tasks wrote it through `cp`
+    _ = len(total)
     _ = len(wpairs)
-    _ = workers
-    return out^
+    return result^
 
 
 def gbdt_feature_importances_host(
     text: String, x_addr: Int, n_rows: Int, n_input: Int, row_major: Bool, w_addr: Int, n_weights: Int,
     workers: Int = 0,
 ) raises -> List[Float32]:
-    """`feature_importances_` of the model `text` fitted on the `n_rows` x
-    `n_input` float32 rows at `x_addr` (C order when `row_major`, else
-    column-major; a CTR model's categorical columns as the fit's dense codes)
-    with `n_weights` (0 or `n_rows`) sample weights at `w_addr`. Float32,
-    one per input column."""
-    if n_rows <= 0 or n_input <= 0:
-        raise Error("gbdt importances: the fit has no rows or no columns")
-    if n_weights != 0 and n_weights != n_rows:
-        raise Error("gbdt importances: sample weights must be one per row")
-    var arch = host_archive_gbdt_text(text)
-    var plan = gbdt_importance_plan(text, arch)
-    if plan.n_input != n_input:
-        raise Error("gbdt importances: the model reads " + String(plan.n_input) + " input columns, the fit "
-                    + String(n_input))
-    var pairs: List[UInt32]
-    if plan.has_ctr or plan.n_cols != n_input:
-        var mx = gbdt_importance_model_x(arch, x_addr, n_rows, n_input, row_major)
-        pairs = gbdt_imp_leaf_weights_host(plan, Int(mx.unsafe_ptr()), n_rows, False, w_addr, n_weights, workers)
-        _ = mx^  # the walk read the model columns through their address
-    else:
-        pairs = gbdt_imp_leaf_weights_host(plan, x_addr, n_rows, row_major, w_addr, n_weights, workers)
-    return gbdt_imp_from_leaf_weights_host(plan, pairs, workers)
+    """`feature_importances_` (THE HOST COLUMN) of the model `text` fitted on
+    the `n_rows` x `n_input` float32 rows at `x_addr` (C order when
+    `row_major`, else column-major; a CTR model's categorical columns as the
+    fit's dense codes) with `n_weights` (0 or `n_rows`) sample weights at
+    `w_addr`. Float32, one per input column."""
+    var request = gbdt_importance_input(text, x_addr, n_rows, n_input, row_major, n_weights)
+    var bins = gbdt_imp_bins_host(request.plan, request.x_addr, n_rows, request.row_major, workers)
+    _ = len(request.model_x)  # the bins read the expanded model columns through `x_addr`
+    var pairs = gbdt_imp_leaf_weights_host(request.plan, bins, n_rows, w_addr, n_weights, workers)
+    return gbdt_imp_from_leaf_weights_host(request.plan, pairs)
