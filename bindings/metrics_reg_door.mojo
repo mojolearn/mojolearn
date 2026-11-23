@@ -39,7 +39,8 @@ from bindings.arena_prog_run import MetricArenaOwner
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run, metric_plan_run
 from bindings.metrics_program_pack import metric_f64_array
 from bindings.metrics_reg_run import (
-    _Reg, _NONE, _RE_DIV, _RE_ROOT, reg_raw_values, tweedie_check,
+    _Reg, _NONE, _RE_DIV, reg_raw_values, tweedie_check, reg_mean_error_stages, reg_median_stages, reg_max_error_stages,
+    reg_explained_variance_stages, reg_tweedie_stages, reg_d2_pinball_stages, reg_r2_stages,
 )
 from core.metrics_program_plan import metric_term
 from bindings.family_common_unpack import (
@@ -243,15 +244,9 @@ def _mean_error(args: PythonObject, kind: String, caller: String, root: Bool, sc
     one program; args = (y_true, y_pred, sample_weight, multioutput, mode)."""
     var pins = List[PythonObject]()
     var r = _reg_new(args, args[3], caller, False, pins, context)
-    r.program(scalar)
-    var flag = _NONE
-    if log_domain.byte_length() > 0:
-        flag = r.scan_log_domain()
-    var mode = _RE_DIV | (_RE_ROOT if root else 0)
-    var y_off = r.y_off
-    var p_off = r.p_off
-    var mean = r.stage_mean(metric_term(kind), mode, y_off, p_off, False)
-    var out = r.average(mean, False, _NONE)
+    var built = reg_mean_error_stages(r, metric_term(kind), root, scalar, log_domain.byte_length() > 0)
+    var out = built[0]
+    var flag = built[1]
     var arena = metric_plan_run(r.plan, pins, args[4], context)
     if flag != _NONE and arena.i32(flag) != 0:
         raise Error(log_domain + " cannot be used when targets contain values less than or equal to -1.")
@@ -262,12 +257,7 @@ def _median_absolute_error(args: PythonObject, context: PythonObject) raises -> 
     """args = (y_true, y_pred, sample_weight, multioutput, mode)."""
     var pins = List[PythonObject]()
     var r = _reg_new(args, args[3], "median_absolute_error", False, pins, context)
-    r.program(0.0)
-    var y_off = r.y_off
-    var p_off = r.p_off
-    var t = r.term(metric_term("abs"), y_off, p_off, False)
-    var median = r.percentile(t, 50.0, False)
-    var out = r.average(median, False, _NONE)
+    var out = reg_median_stages(r, metric_term("abs"))
     var arena = metric_plan_run(r.plan, pins, args[4], context)
     return _reg_result(r, out, arena, context)
 
@@ -280,12 +270,9 @@ def _max_error(args: PythonObject, context: PythonObject) raises -> PythonObject
     if r.d != 1:
         raise Error("Multioutput not supported in max_error")
     var prog = MetricDoorProg()
-    var y = prog.put(pins[0])
-    var p = prog.put(pins[1])
-    var t = prog.scratch(r.n)
-    prog.stage("reg_term", r.n, [y, p, t, 1, metric_term("abs"), y, 0])
-    var out = prog.want(prog.alloc(1), 1)
-    prog.stage("col_max", 1, [t, r.n, 1, out])
+    var out = reg_max_error_stages(prog.plan, r.n, metric_term("abs"))
+    prog.pins.append(pins[0])
+    prog.pins.append(pins[1])
     var arena = metric_door_run(prog, args[2], context)
     # Read through the helper: `arena` is the only owner of the store, and
     # Mojo releases a local at its last named use, so a pointer taken from
@@ -299,23 +286,8 @@ def _explained_variance(args: PythonObject, context: PythonObject) raises -> Pyt
     var b = native_loaded_module("builtins")
     var pins = List[PythonObject]()
     var r = _reg_new(args, args[3], "explained_variance_score", True, pins, context)
-    var sq = metric_term("sq")
-    r.program(0.0)
-    var y_off = r.y_off
-    var p_off = r.p_off
-    # `_diff_and_y_means`, then `_centered` twice.
-    var diff = r.term(metric_term("diff"), y_off, p_off, False)
-    var diff_sums = r.sums(diff)
-    var diff_mean = r.fin32(diff_sums, _RE_DIV)
-    var y_sums = r.sums(y_off)
-    var y_mean = r.fin32(y_sums, _RE_DIV)
-    var num_terms = r.term(sq, diff, diff_mean, True)
-    var num_sums = r.sums(num_terms)
-    var num = r.fin(num_sums, _RE_DIV)
-    var den_terms = r.term(sq, y_off, y_mean, True)
-    var den_sums = r.sums(den_terms)
-    var den = r.fin(den_sums, _RE_DIV)
-    var out = r.assemble(num, den, Bool(py=py_call(b.bool, args[4])), True)
+    var out = reg_explained_variance_stages(r, metric_term("sq"), metric_term("diff"),
+                                            Bool(py=py_call(b.bool, args[4])))
     var arena = metric_plan_run(r.plan, pins, args[5], context)
     return _reg_result(r, out, arena, context)
 
@@ -338,32 +310,11 @@ def _tweedie(args: PythonObject, power_obj: PythonObject, caller: String, d2: Bo
     if d2 and r.n < 2:
         _undefined("D^2 score is not well-defined with less than two samples.", context)
         return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
-    var tweedie = metric_term("tweedie")
-    r.program(power)
-    var y_off = r.y_off
-    var p_off = r.p_off
-    # `_tweedie_domain`: the power refusal now, the sign scans staged.
-    if not (power <= 0 or power >= 1):
-        raise Error("mojolearn " + caller + ": power in (0, 1) is not a Tweedie distribution")
-    var fy = _NONE
-    var fp = _NONE
-    if power != 0:
-        fy = r.scan_sign(y_off)
-        fp = r.scan_sign(p_off)
-    var out: Int
-    if d2:
-        var num = r.stage_mean(tweedie, _RE_DIV, y_off, p_off, False)
-        var y_sums = r.sums(y_off)
-        var y_avg = r.fin32(y_sums, _RE_DIV)
-        var den = r.stage_mean(tweedie, _RE_DIV, y_off, y_avg, True)
-        out = r.assemble(num, den, False, False)
-    else:
-        out = r.stage_mean(tweedie, _RE_DIV, y_off, p_off, False)
-    _ = r.plan.want(out, 2, -1, 1)
+    var tw = reg_tweedie_stages(r, metric_term("tweedie"), power, d2, caller)
     var arena = metric_plan_run(r.plan, pins, args[3], context)
-    if fy != _NONE:
-        tweedie_check(fy, fp, power, family_str(power_obj), arena)
-    return PythonObject(arena.f64(out))
+    if tw.fy != _NONE:
+        tweedie_check(tw.fy, tw.fp, power, family_str(power_obj), arena)
+    return PythonObject(arena.f64(tw.out))
 
 
 def _d2_pinball(args: PythonObject, alpha_obj: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -374,14 +325,7 @@ def _d2_pinball(args: PythonObject, alpha_obj: PythonObject, context: PythonObje
     if r.n < 2:
         _undefined("D^2 score is not well-defined with less than two samples.", context)
         return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
-    var pinball = metric_term("pinball")
-    r.program(alpha)
-    var y_off = r.y_off
-    var p_off = r.p_off
-    var num = r.stage_mean(pinball, _RE_DIV, y_off, p_off, False)
-    var quant = r.percentile(y_off, alpha * 100, True)
-    var den = r.stage_mean(pinball, _RE_DIV, y_off, quant, True)
-    var out = r.assemble(num, den, True, True)
+    var out = reg_d2_pinball_stages(r, metric_term("pinball"), alpha)
     var arena = metric_plan_run(r.plan, pins, args[4], context)
     return _reg_result(r, out, arena, context)
 
@@ -395,20 +339,7 @@ def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     if r.n < 2:
         _undefined("R^2 score is not well-defined with less than two samples.", context)
         return py_call(b.float, PythonObject("nan"))
-    var sq = metric_term("sq")
-    r.program(0.0)
-    # `_r2_parts`: the y mean (Float32 column), SS_res, SS_tot.
-    var y_off = r.y_off
-    var p_off = r.p_off
-    var y_sums = r.sums(y_off)
-    var y_mean = r.fin32(y_sums, _RE_DIV)
-    var res_terms = r.term(sq, y_off, p_off, False)
-    var res_sums = r.sums(res_terms)
-    var num = r.fin(res_sums, 0)
-    var tot_terms = r.term(sq, y_off, y_mean, True)
-    var tot_sums = r.sums(tot_terms)
-    var den = r.fin(tot_sums, 0)
-    var out = r.assemble(num, den, Bool(py=py_call(b.bool, args[4])), True)
+    var out = reg_r2_stages(r, metric_term("sq"), Bool(py=py_call(b.bool, args[4])))
     var arena = metric_plan_run(r.plan, pins, args[5], context)
     return _reg_result(r, out, arena, context)
 

@@ -19,9 +19,18 @@ rank 1), and the refit: the best candidate fitted on every row.
 3. error_score: a candidate whose fit refuses (an l1 word with K = 3 classes: the member's NotImplementedError) raises its words with
    'raise', and with a number takes that value in every split while the others still score.
 
+4. (lane mf-metric4) one named scorer, 'f1_macro' (predicted codes), then 'neg_log_loss' (predict_proba, float64
+   narrowed to float32): every test split score equals the scorer's metric (core/msel_scorer_run.mojo
+   `msel_scorer_value`, the builder the metric's door calls) over the member's own response on the fold's test rows.
+5. (lane mf-metric4) multi-metric ['accuracy', 'balanced_accuracy', 'neg_log_loss'] with refit='balanced_accuracy'
+   (refit_scorer 1) and refit=False: each scorer's table equals its oracle, the best follows scorer 1's ranks, and
+   no refit state is made.
+
 FAIL-PROOF EDITS (each must make a case fail): `side_rows[f * sides] = rows_at + 4 * (f * n)` (case 1: the train
 rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits learn the wrong count);
-`narrow[i] = Int32(wide[i]) + 1` in `_score_side` (case 2); `value = 0.0` for a failed task (case 3).
+`narrow[i] = Int32(wide[i]) + 1` in `_respond` (cases 2, 4); `value = 0.0` for a failed task (case 3);
+`narrow[i] = Float32(wide[i] * 0.5)` in `_respond` (cases 4, 5: the probabilities); `var r = 0` in place of
+`plan.refit_scorer` in the tables (case 5); `op_of.append(0)` for every scorer (case 5: log loss reads codes).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -39,6 +48,7 @@ from core.member_abi import (
     MEMBER_OP_PREDICT_PROBA, MEMBER_F64, MEMBER_I32, MEMBER_I64,
 )
 from core.msel_search_run import MselSearchPlan, msel_search_run, SEARCH_SCORE_MEMBER, SEARCH_SCORE_ACCURACY
+from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_value
 from core.trees_entry_table import TreesEntryKey
 from glm.host.logistic_native_host import qn_host_native_v1
 from x_metrics.descriptor_host import metrics_program_host_v1
@@ -49,7 +59,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 3
+comptime CASES = 5
 
 
 def _glue() raises -> EntryRef:
@@ -280,6 +290,114 @@ def check_error_score() raises:
     _ = y^
 
 
+def _scorer_oracle(plans: List[MemberPlan], x: List[Float32], y: List[Int32],
+                   codes: List[Int]) raises -> List[List[List[Float64]]]:
+    """Per scorer, candidate and fold: the scorer's metric over the member's own response on the fold's test
+    rows (the member fitted directly on the fold's train rows, as `_oracle`)."""
+    var route = MetricRoute(metrics_program_host_v1, False, False)
+    var counts = List[Int32](length=F + 1, fill=Int32(0))
+    var rows = List[Int32](length=F * N, fill=Int32(0))
+    var yy = y.copy()
+    _ = xt_device_folds(_glue(), Int(yy.unsafe_ptr()), Int(rows.unsafe_ptr()), Int(counts.unsafe_ptr()), N, F, K)
+    var out = List[List[List[Float64]]]()
+    for j in range(len(codes)):  # small-loop(oracle: scorers)
+        out.append(List[List[Float64]]())
+        for _ in range(len(plans)):  # small-loop(oracle: candidates)
+            out[j].append(List[Float64]())
+    for c in range(len(plans)):  # small-loop(oracle: candidates)
+        for f in range(F):  # small-loop(oracle: folds)
+            var t = Int(counts[f])
+            var base = Int(rows.unsafe_ptr()) + 4 * (f * N)
+            var xs = List[Float32]()
+            var ys = List[Int32]()
+            _rows_of(x, y, base, N - t, xs, ys)
+            var call = member_new(plans[c])
+            call.x = MemberMatrix(Int(xs.unsafe_ptr()), N - t, D)
+            call.y = MemberMatrix(Int(ys.unsafe_ptr()), N - t, 1, MEMBER_I32)
+            call.classes = K
+            _ = member_call(plans[c].member, MEMBER_OP_FIT, call)
+            var xt = List[Float32]()
+            var yt = List[Int32]()
+            _rows_of(x, y, base + 4 * (N - t), t, xt, yt)
+            # the two responses, in the scorers' element types
+            var wide = List[Int64](length=t, fill=Int64(0))
+            var pc = member_call_of(plans[c], call.state)
+            pc.x = MemberMatrix(Int(xt.unsafe_ptr()), t, D)
+            pc.dst = MemberMatrix(Int(wide.unsafe_ptr()), t, 1, MEMBER_I64)
+            _ = member_call(plans[c].member, MEMBER_OP_PREDICT, pc)
+            var labels = List[Int32](length=t, fill=Int32(0))
+            for i in range(t):  # small-loop(oracle)
+                labels[i] = Int32(wide[i])
+            var proba64 = List[Float64](length=t * K, fill=0.0)
+            var qc = member_call_of(plans[c], call.state)
+            qc.x = MemberMatrix(Int(xt.unsafe_ptr()), t, D)
+            qc.dst = MemberMatrix(Int(proba64.unsafe_ptr()), t, K, MEMBER_F64)
+            _ = member_call(plans[c].member, MEMBER_OP_PREDICT_PROBA, qc)
+            var proba = List[Float32](length=t * K, fill=0.0)
+            for i in range(t * K):  # small-loop(oracle: the float32 words the metric doors admit)
+                proba[i] = Float32(proba64[i])
+            for j in range(len(codes)):  # small-loop(oracle: scorers)
+                var row = msel_scorer_row(codes[j])
+                var resp = Int(proba.unsafe_ptr()) if row.op == MEMBER_OP_PREDICT_PROBA else Int(labels.unsafe_ptr())
+                var cols = K if row.op == MEMBER_OP_PREDICT_PROBA else 1
+                out[j][c].append(msel_scorer_value(route, row, Int(yt.unsafe_ptr()), resp, t, K, cols))
+            _ = len(labels)
+            _ = len(proba)
+            member_free(plans[c], call)
+    _ = rows^
+    _ = counts^
+    return out^
+
+
+def check_named_scorer() raises:
+    var x = _x()
+    var y = _codes()
+    var plans = _candidates(False)
+    var names: List[String] = ["f1_macro", "neg_log_loss"]
+    for i in range(len(names)):  # small-loop(check: the two scorers, one search each)
+        var code = msel_scorer_code(names[i], False)
+        require(code >= 2, names[i] + " is a served scorer")
+        var want = _scorer_oracle(plans, x, y, [code])
+        var plan = _plan(plans.copy(), x, y, code)
+        var res = msel_search_run(plan)
+        for c in range(len(plans)):  # small-loop(check: candidates)
+            for f in range(F):  # small-loop(check: folds)
+                require(res.test[c][f] == want[0][c][f], names[i] + " split" + String(f) + " of candidate " + String(c))
+        require(res.best == msel_rank_best(msel_rank_scores(msel_row_means(want[0]))), names[i] + " best_index_")
+        var r = MemberCall(plans[res.best].route, res.best_state)
+        member_free(plans[res.best], r)
+    _ = x^
+    _ = y^
+
+
+def check_multi_metric() raises:
+    var x = _x()
+    var y = _codes()
+    var plans = _candidates(False)
+    var codes: List[Int] = [msel_scorer_code("accuracy", False), msel_scorer_code("balanced_accuracy", False),
+                            msel_scorer_code("neg_log_loss", False)]
+    var want = _scorer_oracle(plans, x, y, codes)
+    var plan = _plan(plans.copy(), x, y, SEARCH_SCORE_MEMBER)
+    plan.scorers = codes.copy()
+    plan.refit_scorer = 1
+    plan.refit = False
+    var res = msel_search_run(plan)
+    require(len(res.scorer_test) == 3, "one table per scorer")
+    for j in range(3):  # small-loop(check: scorers)
+        for c in range(len(plans)):  # small-loop(check: candidates)
+            for f in range(F):  # small-loop(check: folds)
+                require(res.scorer_test[j][c][f] == want[j][c][f],
+                        "scorer " + String(j) + " split" + String(f) + " of candidate " + String(c))
+        var means = msel_row_means(want[j])
+        for c in range(len(plans)):  # small-loop(check: candidates)
+            require(res.scorer_means[j][c] == means[c], "scorer " + String(j) + " mean")
+    var ranks = msel_rank_scores(msel_row_means(want[1]))
+    require(res.best == msel_rank_best(ranks), "the best by the refit scorer (balanced_accuracy)")
+    require(res.best_state == 0, "refit=False makes no refit state")
+    _ = x^
+    _ = y^
+
+
 def test_msel_search_run() raises:
     publish_x_trees_glue("cpu")
     def run_case(which: Int) raises:
@@ -287,8 +405,12 @@ def test_msel_search_run() raises:
             check_member_score()
         elif which == 1:
             check_accuracy()
-        else:
+        elif which == 2:
             check_error_score()
+        elif which == 3:
+            check_named_scorer()
+        else:
+            check_multi_metric()
     check_cases("msel_search_run", CASES, run_case)
 
 

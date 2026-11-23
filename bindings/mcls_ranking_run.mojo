@@ -9,6 +9,7 @@ from core.metrics_program_plan import MetricProgramPlan
 from bindings.mcls_common_run import MC_NONE
 from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run
 from checks.numerics import pinned_mul_f64
+from core.host_finite_scan import host_all_finite_f32
 
 comptime _CF_OUT = 10
 comptime _CF_CHUNK = 1024
@@ -151,3 +152,245 @@ def roc_ovr_micro_run(route: MetricRoute, s: Int, s_words: Int, codes: Int, code
     if arena.i32(rows2) != 0:
         return RocMicro(False, McAuc(False, 0.0))
     return RocMicro(True, mc_fold_auc_value(arena, out2, False, 0.0))
+
+
+# ---------------------------------------------------------------- roc_auc, typed builders
+# Lane mf-metric4 (2026-11-23): the programs bindings/mcls_ranking_door.mojo
+# `_roc_binary`, `_roc_ovr` and `_roc_ovo` assembled over pins, as typed
+# builders (the door calls them; so does the search scorers' RUN,
+# core/msel_scorer_run.mojo). The same stages in the same order and layout.
+
+
+def mc_roc_binary_stages(mut plan: MetricProgramPlan, n: Int, weighted: Bool, partial: Bool,
+                         max_fpr: Float64) raises -> Int:
+    """`_roc_binary`'s fold program over its inputs: the scores (n), the
+    positive flags (n int32) and, weighted, the weights (n). The fold slot."""
+    var s_off = plan.input(n)
+    var pos = plan.input(n)
+    var w_off = MC_NONE
+    if weighted:
+        w_off = plan.input(n)
+    return mc_fold_stages(plan, s_off, 1, pos, w_off, n, 1, partial, max_fpr, MC_NONE)
+
+
+@fieldwise_init
+struct RocOvrSlots(ImplicitlyCopyable, Movable):
+    """`_roc_ovr`'s (non-micro) program slots: the ROW_SUM flag, the per-class
+    scores and flags, the average (MC_NONE for average=None)."""
+    var rows: Int
+    var sc: Int
+    var fl: Int
+    var res: Int
+
+
+def mc_roc_ovr_stages(mut plan: MetricProgramPlan, n: Int, k: Int, weighted: Bool, averaged: Bool,
+                      weighted_avg: Bool) raises -> RocOvrSlots:
+    """`_roc_ovr`'s one-vs-rest program over its inputs: the scores (n x k),
+    the codes (n int32) and, weighted, the weights (n)."""
+    var s_off = plan.input(n * k)
+    var c_off = plan.input(n)
+    var pos = plan.scratch(n * k)
+    plan.stage_op("onehot", n * k, [c_off, pos, n, k, 0])
+    var w_off = MC_NONE
+    if weighted:
+        w_off = plan.input(n)
+    var out = mc_fold_stages(plan, s_off, k, pos, w_off, n, k, False, 0.0, MC_NONE)
+    # the tail: ROW_SUM, then the supports, scores and average
+    var rows = plan.want(plan.alloc(1), 1, -1, 1)
+    if n:
+        plan.stage_op("rank_epi", n, [_RANK_ROW_SUM, s_off, n, k, rows])
+    var got = plan.group(c_off, n, k, MC_NONE, 1, w_off, 1)
+    var sc = plan.want(plan.alloc(2 * k), 2 * k, -1, 1)
+    var fl = plan.want(plan.alloc(k), k, -1, 1)
+    var sup = plan.want(plan.alloc(2 * k), 2 * k, -1, 1)
+    plan.stage_op("rank_epi", k, [_RANK_CURVE_SCORE, out, k, 0, sc, fl, got[1] if weighted else got[0],
+                                  1 if weighted else 0, sup])
+    var res = MC_NONE
+    if averaged:
+        res = mc_stage_average(plan, sc, sup, k, weighted_avg)
+    return RocOvrSlots(rows, sc, fl, res)
+
+
+#: `RocOvo.status`: the answer, a score row that does not sum to 1, a y_true label not among the classes.
+comptime ROC_OVO_OK = 0
+comptime ROC_OVO_ROWS = 1
+comptime ROC_OVO_LABEL = 2
+
+
+@fieldwise_init
+struct RocOvo(ImplicitlyCopyable, Movable):
+    """`roc_ovo_run`'s answer: the status, the count of pair directions
+    with one class only (the door warns once each), the average."""
+    var status: Int
+    var undefined: Int
+    var value: Float64
+
+
+def roc_ovo_run(route: MetricRoute, s: Int, codes: Int, n: Int, k: Int, weighted_avg: Bool) raises -> RocOvo:
+    """THE TYPED RUN of `_ovo_native` (was composed in the door over pins):
+    per program the scores (n x k float32 at `s`) and codes (n int32 at
+    `codes`) go in once, OVO_MASK weights each pair's rows, two curve folds
+    per pair, CURVE_SCORE, OVO_PAIR and AVERAGE; pairs past `_OVO_WORDS` go
+    to further programs whose pair words meet in one AVERAGE program. The
+    caller keeps both buffers alive. The checks of the first program stop
+    the run, as the door's raises did. No Python."""
+    var n_pairs = k * (k - 1) // 2
+    var per_pair = 17 * n + 4 + 4 * _CF_OUT
+    var chunk = max(1, min(n_pairs, _OVO_WORDS // max(per_pair, 1)))
+    var pair_a = List[Int]()
+    var pair_b = List[Int]()
+    for a in range(k):  # driver-loop: over the classes (the pair table)
+        for b in range(a + 1, k):  # driver-loop: over the classes after a
+            pair_a.append(a)
+            pair_b.append(b)
+    var ps_words = List[Int32]()
+    var prev_words = List[Int32]()
+    var undefined = 0
+    var g0 = 0
+    var addresses: List[Int] = [s, codes]
+    var sizes: List[Int] = [n * k, n]
+    for _ in range(n_pairs + 1):  # driver-loop: over the chunks of class pairs (one program each)
+        if g0 >= n_pairs:
+            break
+        var m = min(chunk, n_pairs - g0)
+        var last_only = g0 == 0 and m == n_pairs
+        var plan = MetricProgramPlan()
+        var s_off = plan.input(n * k)
+        var c_off = plan.input(n)
+        var oh = plan.scratch(n * k)
+        if n:
+            plan.stage_op("onehot", n * k, [c_off, oh, n, k, 0])
+        var rows = MC_NONE
+        if g0 == 0:
+            rows = plan.want(plan.alloc(1), 1, -1, 1)
+            if n:
+                plan.stage_op("rank_epi", n, [_RANK_ROW_SUM, s_off, n, k, rows])
+        var got = plan.group(c_off, n, k, MC_NONE, 1, MC_NONE, 1)
+        var off = got[0]
+        _ = plan.want(off + k, 1, -1, 1)
+        var cf = plan.scratch(2 * m * _CF_OUT)
+        for t in range(m):  # driver-loop: over the class pairs of this program
+            var a = pair_a[g0 + t]
+            var b = pair_b[g0 + t]
+            var w = plan.scratch(n)
+            if n:
+                plan.stage_op("rank_epi", n, [_RANK_OVO_MASK, c_off, n, a, b, w])
+            _ = mc_fold_stages(plan, s_off + a, k, oh + a * n, w, n, 1, False, 0.0, cf + 2 * t * _CF_OUT)
+            _ = mc_fold_stages(plan, s_off + b, k, oh + b * n, w, n, 1, False, 0.0, cf + (2 * t + 1) * _CF_OUT)
+        var sc = plan.scratch(4 * m)
+        var fl = plan.want(plan.alloc(2 * m), 2 * m, -1, 1)
+        plan.stage_op("rank_epi", 2 * m, [_RANK_CURVE_SCORE, cf, 2 * m, 0, sc, fl, MC_NONE, 0, 0])
+        var ps: Int
+        var prev: Int
+        if last_only:
+            ps = plan.scratch(2 * m)
+            prev = plan.scratch(2 * m)
+        else:
+            ps = plan.want(plan.alloc(2 * m), 2 * m, -1, 1)
+            prev = plan.want(plan.alloc(2 * m), 2 * m, -1, 1)
+        plan.stage_op("rank_epi", m, [_RANK_OVO_PAIR, sc, off, k, n, g0, m, ps, prev])
+        var res = MC_NONE
+        if last_only:
+            res = mc_stage_average(plan, ps, prev, n_pairs, weighted_avg)
+        var arena = metric_inputs_run(route, plan, addresses, sizes)
+        if g0 == 0:
+            if arena.i32(rows) != 0:
+                return RocOvo(ROC_OVO_ROWS, undefined, 0.0)
+            if arena.i32(off + k) != n:
+                return RocOvo(ROC_OVO_LABEL, undefined, 0.0)
+        for j in range(2 * m):  # driver-loop: over the pair directions of this program
+            if arena.i32(fl + j) == 1:
+                undefined += 1
+        if last_only:
+            return RocOvo(ROC_OVO_OK, undefined, arena.f64(res))
+        for j in range(2 * m):  # driver-loop: over the pair words of this program
+            ps_words.append(Int32(arena.i32(ps + j)))
+            prev_words.append(Int32(arena.i32(prev + j)))
+        g0 += m
+    # the pair words are the AVERAGE program's own words
+    var p2 = MetricProgramPlan()
+    var ps_off = p2.input_words(ps_words^)
+    var prev_off = p2.input_words(prev_words^)
+    var res = mc_stage_average(p2, ps_off, prev_off, n_pairs, weighted_avg)
+    var arena = metric_inputs_run(route, p2, List[Int](), List[Int]())
+    return RocOvo(ROC_OVO_OK, undefined, arena.f64(res))
+
+
+# ---------------------------------------------------------------- roc_auc over typed scores
+#: `roc_auc_run`'s problems (the search scorers' ranking family).
+comptime ROC_BINARY = 0
+comptime ROC_OVR = 1
+comptime ROC_OVR_WEIGHTED = 2
+comptime ROC_OVO = 3
+comptime ROC_OVO_WEIGHTED = 4
+comptime _ROC_ONE_CLASS_WORDS = "Only one class is present in y_true. ROC AUC score is not defined in that case."
+comptime _ROC_ROWS_WORDS = "Target scores need to be probabilities for multiclass roc_auc, i.e. they should sum up to 1.0 over classes"
+
+
+def roc_auc_run(route: MetricRoute, problem: Int, truth: Int, scores: Int, n: Int, k: Int) raises -> Float64:
+    """THE TYPED RUN of one unweighted `roc_auc_score` with the scorer's
+    options over n int32 class codes in 0 .. k-1: ROC_BINARY (`roc_auc`:
+    n float32 scores, the decision values or `predict_proba[:, 1]`), or the
+    multiclass one-vs-rest / one-vs-one averages over the n x k float32
+    probabilities. The classes are those y_true holds, the refusals the
+    door's words. A one-class fold answers NaN (the door warns). No Python."""
+    var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=truth)
+    var rank = List[Int32](length=max(k, 1), fill=Int32(-1))
+    for i in range(n):  # driver-loop: over the rows (the classes y_true holds)
+        var c = Int(t[i])
+        if c < 0 or c >= k:
+            raise Error("ValueError: y codes outside [0, n_classes)")
+        rank[c] = 0
+    var present = 0
+    for c in range(k):  # driver-loop: over the class codes (their ranks)
+        if rank[c] == 0:
+            rank[c] = Int32(present)
+            present += 1
+    var codes = List[Int32](length=max(n, 1), fill=Int32(0))
+    for i in range(n):  # driver-loop: over the rows (the codes over the present classes)
+        codes[i] = rank[Int(t[i])]
+    var width = 1 if problem == ROC_BINARY else k
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=scores), n * width):
+        if problem == ROC_BINARY:
+            raise Error("binary ranking scores must be finite")
+        raise Error("mojolearn roc_auc_score: y_score must be finite")
+    if problem == ROC_BINARY:
+        # the default call (`_roc_auc` with its defaults): two classes in y_true
+        if k > 2 or present > 2:
+            raise Error("multi_class must be in ('ovo', 'ovr')")
+        if present != 2:
+            raise Error("roc_auc_score requires both positive and negative classes")
+        var plan = MetricProgramPlan()
+        var out = mc_roc_binary_stages(plan, n, False, False, 0.0)
+        var addresses: List[Int] = [scores, Int(codes.unsafe_ptr())]
+        var sizes: List[Int] = [n, n]
+        var arena = metric_inputs_run(route, plan, addresses, sizes)
+        _ = len(codes)
+        var got = mc_fold_auc_value(arena, out, False, 0.0)
+        return got.value if got.defined else _roc_nan()
+    if k == 2 and present <= 2:
+        # `_roc_options`' binary arm reads 1-D scores: an (n, 2) array is refused there
+        raise Error("mojolearn roc_auc_score: y_score must be 1-D, got shape (" + String(n) + ", 2)")
+    if present != k:
+        raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
+    if problem == ROC_OVR or problem == ROC_OVR_WEIGHTED:
+        var plan = MetricProgramPlan()
+        var slots = mc_roc_ovr_stages(plan, n, k, False, True, problem == ROC_OVR_WEIGHTED)
+        var addresses: List[Int] = [scores, Int(codes.unsafe_ptr())]
+        var sizes: List[Int] = [n * k, n]
+        var arena = metric_inputs_run(route, plan, addresses, sizes)
+        _ = len(codes)
+        if arena.i32(slots.rows) != 0:
+            raise Error(_ROC_ROWS_WORDS)
+        return arena.f64(slots.res)
+    var got = roc_ovo_run(route, scores, Int(codes.unsafe_ptr()), n, k, problem == ROC_OVO_WEIGHTED)
+    _ = len(codes)
+    if got.status == ROC_OVO_ROWS:
+        raise Error(_ROC_ROWS_WORDS)
+    if got.status == ROC_OVO_LABEL:
+        raise Error("mojolearn roc_auc_score: a y_true label is not among the classes")
+    return got.value
+
+
+def _roc_nan() -> Float64:
+    return bitcast[DType.float64](UInt64(0x7FF8000000000000))

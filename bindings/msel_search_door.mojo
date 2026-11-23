@@ -151,7 +151,8 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     msel_admit(error_score, context)
     # THE ONE SEARCH BODY (lane mf-search4 follow-up): a search its member
     # kind admits (core/ensemble_member.mojo META_SEARCH_*: an int cv, scoring
-    # None or 'accuracy', refit=True, no device of its own, every candidate a
+    # None or one scorer name core/msel_scorer_run.mojo serves, refit=True, no
+    # device of its own, every candidate a
     # serving member) is fitted by the typed search RUN
     # (core/msel_search_run.mojo) through `_search_member_fit`; the units
     # below run only what that kind does not take (module note of

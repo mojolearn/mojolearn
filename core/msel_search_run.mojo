@@ -27,23 +27,29 @@ The RUN, in the door's order (bindings/msel_search_door.mojo
      search's n_jobs, so at most one gathered train block per worker lives).
   3. THE SCORES of each unit on its test rows (and train rows): scoring None,
      the member's own score (`MEMBER_OP_SCORE`: the estimator's `score`, what
-     the door's member route reads); scoring 'accuracy', the member's predicted
-     codes and THE NATIVE METRIC RUN (bindings/arena_prog_run.mojo
-     `metric_inputs_run` over core/labels_accuracy_plan.mojo
-     `label_accuracy_plan`, the program `accuracy_score` runs). The member
-     calls run on host workers when every kind of the wave is GIL-free, else
-     one after the other on this thread; the metric programs run one after
-     the other (each is one program of the x_metrics runner).
+     the door's member route reads); a named scorer or SEVERAL (multi-metric,
+     `scorers`; lane mf-metric4), each scorer's member response (predict,
+     predict_proba or decision_function: asked ONCE per unit and side for
+     every scorer that reads it, as scikit-learn's multimetric scorer caches
+     it) and THE SCORER'S METRIC PROGRAM (core/msel_scorer_run.mojo
+     `msel_scorer_value`: the builder the metric's own door calls, through
+     bindings/arena_prog_run.mojo `metric_inputs_run`). The member calls run
+     on host workers when every kind of the wave is GIL-free, else one after
+     the other on this thread; the metric programs run one after the other
+     (each is one program of the x_metrics runner, on its one context).
   4. A FAILING UNIT: with error_score='raise' (`tolerate` False) the first
      failing unit's words, in unit order, after the wave's states are
      released; with a number, the failing fit's (or side's) scores are that
      value, as the door's `_fit_and_score` writes them.
   5. THE TABLES (bindings/msel_search_stats_run.mojo, the door's own passes):
-     per candidate the mean and standard deviation over the folds, the
-     'min' ranks, the best candidate (the first of rank 1) and its mean.
-  6. THE REFIT (`refit`): the best candidate's plan fitted on every row (a
-     set of one); its state is the result's `best_state`, owned by the
-     caller. Every fold state was released (scikit-learn keeps none).
+     per scorer and candidate the mean and standard deviation over the folds,
+     the 'min' ranks; the best candidate (the first of rank 1) and its mean
+     by the refit scorer (`refit_scorer`, refit=<name>; the one scorer
+     otherwise).
+  6. THE REFIT (`refit`; refit=False fits nothing): the best candidate's
+     plan fitted on every row (a set of one); its state is the result's
+     `best_state`, owned by the caller. Every fold state was released
+     (scikit-learn keeps none).
 The fit notices of every unit (in unit order) and of the refit are handed
 over for the caller's PACK.
 
@@ -55,10 +61,13 @@ from bindings.arena_prog_run import MetricRoute, metric_inputs_run
 from bindings.msel_search_stats_run import msel_row_means, msel_row_stds, msel_rank_scores, msel_rank_best
 from core.entry_table import EntryRef
 from core.host_parallel import host_parallelize
-from core.labels_accuracy_plan import label_accuracy_plan
+from core.msel_scorer_run import (
+    MselScorer, msel_scorer_row, msel_scorer_value, msel_scorer_regression, msel_scorer_binary_column,
+    SCORER_MEMBER, SCORER_ACCURACY,
+)
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of,
-    MEMBER_F32, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
+    MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_outputs_of,
+    MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
 )
 from core.member_notices import member_notices_take
@@ -68,16 +77,17 @@ from core.member_set_run import (
 )
 from xtrees.glue_calls import xt_device_folds, xt_gather_f32
 
-#: `MselSearchPlan.scoring`: the member's own score (scoring=None), or
-#: 'accuracy' through the native metric program.
-comptime SEARCH_SCORE_MEMBER = 0
-comptime SEARCH_SCORE_ACCURACY = 1
+#: `MselSearchPlan.scoring`: the member's own score (scoring=None), or a
+#: scorer code of core/msel_scorer_run.mojo ('accuracy' is 1).
+comptime SEARCH_SCORE_MEMBER = SCORER_MEMBER
+comptime SEARCH_SCORE_ACCURACY = SCORER_ACCURACY
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _RunPtr = MutPointer[MemberSetRun, MutUntrackedOrigin]
 comptime _StrPtr = MutPointer[String, MutUntrackedOrigin]
+comptime _IntP = MutPointer[Int, MutUntrackedOrigin]
 comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
 
 
@@ -107,6 +117,11 @@ struct MselSearchPlan(Movable):
     var y_dtype: Int
     var y_cols: Int
     var class_counts: List[Int]
+    # MULTI-METRIC (lane mf-metric4): the scorer codes of a dict or list
+    # `scoring` in the caller's name order (empty: the one `scoring`), and
+    # the index among them whose table chooses the best (refit=<name>).
+    var scorers: List[Int]
+    var refit_scorer: Int
 
     def __init__(out self, var plans: List[MemberPlan], var masks: List[Int], x: Int, rows: Int, cols: Int, y: Int,
                  classes: Int, n_splits: Int, glue: EntryRef, metric: MetricRoute):
@@ -129,6 +144,8 @@ struct MselSearchPlan(Movable):
         self.y_dtype = MEMBER_I32 if classes > 0 else MEMBER_F32
         self.y_cols = 1
         self.class_counts = List[Int]()
+        self.scorers = List[Int]()
+        self.refit_scorer = 0
 
 
 struct MselSearchResult(Movable):
@@ -146,6 +163,15 @@ struct MselSearchResult(Movable):
     var best_score: Float64
     var best_state: Int
     var notices: List[List[Float64]]
+    # Per scorer (in `scorers` order; one entry for one scorer): its fold
+    # scores, test and train, and its tables. `test` .. `train_means` above
+    # are the refit scorer's.
+    var scorer_test: List[List[List[Float64]]]
+    var scorer_train: List[List[List[Float64]]]
+    var scorer_means: List[List[Float64]]
+    var scorer_stds: List[List[Float64]]
+    var scorer_ranks: List[List[Int]]
+    var scorer_train_means: List[List[Float64]]
 
     def __init__(out self):
         self.n_splits = 0
@@ -159,6 +185,12 @@ struct MselSearchResult(Movable):
         self.best_score = 0.0
         self.best_state = 0
         self.notices = List[List[Float64]]()
+        self.scorer_test = List[List[List[Float64]]]()
+        self.scorer_train = List[List[List[Float64]]]()
+        self.scorer_means = List[List[Float64]]()
+        self.scorer_stds = List[List[Float64]]()
+        self.scorer_ranks = List[List[Int]]()
+        self.scorer_train_means = List[List[Float64]]()
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -197,41 +229,64 @@ def _gather_words(src: Int, rows: Int, count: Int, width: Int, dst: Int):
             d[i * width + c] = s[at + c]
 
 
-def _score_side(run_at: Int, v: Int, x: Int, y: Int, count: Int, cols: Int, y_dtype: Int, y_cols: Int,
-                scoring: Int, pred: Int, pred_dtype: Int) raises -> Float64:
+def _member_score(run_at: Int, v: Int, x: Int, y: Int, count: Int, cols: Int, y_dtype: Int,
+                  y_cols: Int) raises -> Float64:
     """Unit `v` of the wave on one side's gathered block: the member's own
-    score, or its predicted codes (scoring 'accuracy'; the metric runs after
-    the wave): written in the member's own `pred_dtype` into the 8-byte words
-    at `pred`, then narrowed in place to int32 codes at the same address."""
+    score (scoring None)."""
     var run = _RunPtr(unsafe_from_address=run_at)
     var call = member_call_of(run[].plans[v], run[].states[v])
     call.x = MemberMatrix(x, count, cols, MEMBER_F32)
-    if scoring == SEARCH_SCORE_MEMBER:
-        call.y = MemberMatrix(y, count, y_cols, y_dtype)
-        _ = member_call(run[].plans[v].member, MEMBER_OP_SCORE, call)
-        return call.value
-    call.dst = MemberMatrix(pred, count, 1, pred_dtype)
-    _ = member_call(run[].plans[v].member, MEMBER_OP_PREDICT, call)
-    if pred_dtype == MEMBER_I64:
-        var wide = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pred)
-        var narrow = _I32P(unsafe_from_address=pred)
-        for i in range(count):  # ascending: word i is read (8 bytes at 8i) before any later write reaches it
+    call.y = MemberMatrix(y, count, y_cols, y_dtype)
+    _ = member_call(run[].plans[v].member, MEMBER_OP_SCORE, call)
+    return call.value
+
+
+def _respond(run_at: Int, v: Int, op: Int, x: Int, count: Int, cols: Int, dst: Int, capacity: Int,
+             dtype: Int) raises -> Int:
+    """Unit `v`'s response `op` (predict, predict_proba or decision_function)
+    on one side's gathered block, written in the member's own `dtype` into
+    the 8-byte words at `dst` (`capacity` words), then narrowed in place to
+    the scorer's words: int32 codes (an int64 predict) or float32 (a float64
+    output; the rounding the metric doors' admission applies). Answers the
+    output's columns per row."""
+    var run = _RunPtr(unsafe_from_address=run_at)
+    var call = member_call_of(run[].plans[v], run[].states[v])
+    call.x = MemberMatrix(x, count, cols, MEMBER_F32)
+    var width = 1
+    if op != MEMBER_OP_PREDICT:
+        width = max(member_outputs_of(run[].plans[v], call, op), 1)
+    if count * width > capacity:
+        raise Error("member ABI: a member response wider than its classes")
+    call.dst = MemberMatrix(dst, count, width, dtype)
+    _ = member_call(run[].plans[v].member, op, call)
+    var words = count * width
+    if dtype == MEMBER_I64:
+        var wide = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=dst)
+        var narrow = _I32P(unsafe_from_address=dst)
+        for i in range(words):  # ascending: word i is read (8 bytes at 8i) before any later write reaches it
             narrow[i] = Int32(wide[i])
-    return 0.0
+    elif dtype == MEMBER_F64:
+        var wide = _F64P(unsafe_from_address=dst)
+        var narrow = _F32P(unsafe_from_address=dst)
+        for i in range(words):  # ascending: word i is read (8 bytes at 8i) before any later write reaches it
+            narrow[i] = Float32(wide[i])
+    return width
 
 
-def _accuracy(route: MetricRoute, truth: Int, pred: Int, count: Int, classes: Int) raises -> Float64:
-    """`accuracy_score(y_true, y_pred)` of one side through the native metric
-    program (the plan `labels_accuracy` runs; codes in 0 .. classes-1)."""
-    var acc = label_accuracy_plan(count, classes, False)
-    var addresses: List[Int] = [truth, pred]
-    var sizes: List[Int] = [count, count]
-    var arena = metric_inputs_run(route, acc.program, addresses, sizes)
-    var at = arena.base() + 4 * (acc.result_offset + 8)
-    var value = _F64P(unsafe_from_address=at)[0]
-    _ = arena^
-    _ = acc^
-    return value
+def _scorer_side(route: MetricRoute, row: MselScorer, truth: Int, response: Int, count: Int, classes: Int,
+                 cols: Int) raises -> Float64:
+    """One scorer on one side: the `_BINARY_PROBA` column pick of a
+    two-class member's probabilities (`predict_proba[:, 1]`, as the scorer
+    hands it), then core/msel_scorer_run.mojo `msel_scorer_value`."""
+    if msel_scorer_binary_column(row) and classes == 2 and cols == 2:
+        var column = List[Float32](length=max(count, 1), fill=0.0)
+        var src = _F32P(unsafe_from_address=response)
+        for i in range(count):  # driver-loop: over the side's rows (column 1 of the probabilities)
+            column[i] = src[2 * i + 1]
+        var value = msel_scorer_value(route, row, truth, Int(column.unsafe_ptr()), count, classes, 1)
+        _ = len(column)  # read by the program above
+        return value
+    return msel_scorer_value(route, row, truth, response, count, classes, cols)
 
 
 def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
@@ -245,7 +300,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var classifier = k > 0
     var y_dtype = plan.y_dtype
     var y_cols = max(plan.y_cols, 1)
-    if y_cols > 1 and (classifier or plan.scoring != SEARCH_SCORE_MEMBER):
+    var codes = plan.scorers.copy()
+    if len(codes) == 0:
+        codes.append(plan.scoring)
+    if y_cols > 1 and (classifier or len(codes) != 1 or codes[0] != SEARCH_SCORE_MEMBER):
         raise Error("member ABI: a search over a multi-output member folds by KFold and scores by the member")
     if m == 0:
         raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")
@@ -274,17 +332,46 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         if Int(fold_counts[f]) > 0:
             used = f + 1
     var sides = 2 if plan.return_train else 1
-    # Each candidate's predicted code type (scoring 'accuracy'), asked once.
-    var pred_dtypes = List[Int](length=m, fill=MEMBER_I32)
-    if plan.scoring == SEARCH_SCORE_ACCURACY:
-        for c in range(m):  # driver-loop: over the candidates (one OUTPUTS question each)
+    # The scorers (resolved once) and the member responses they read: each
+    # distinct response is asked once per unit and side.
+    var member_score = len(codes) == 1 and codes[0] == SCORER_MEMBER
+    var rows_of = List[MselScorer]()
+    var ops = List[Int]()
+    var op_of = List[Int]()
+    if not member_score:
+        for j in range(len(codes)):  # driver-loop: over the scorers (once per fit)
+            if codes[j] == SCORER_MEMBER:
+                raise Error("member ABI: the member's own score cannot be one of several scorers")
+            var row = msel_scorer_row(codes[j])
+            if msel_scorer_regression(row) == classifier:
+                raise Error("member ABI: scorer '" + String(row.name) + "' does not score this kind of estimator")
+            var at = -1
+            for o in range(len(ops)):  # small-loop(the distinct responses, at most three)
+                if ops[o] == row.op:
+                    at = o
+            if at < 0:
+                at = len(ops)
+                ops.append(row.op)
+            op_of.append(at)
+            rows_of.append(row)
+    var nsc = len(codes)
+    var nops = len(ops)
+    # Each candidate's response element types, asked once.
+    var out_dtypes = List[Int](length=max(m * nops, 1), fill=MEMBER_I32)
+    for c in range(m):  # driver-loop: over the candidates (one OUTPUTS question per response)
+        for o in range(nops):  # small-loop(the distinct responses)
             var probe = plan.plans[c].copy()
             probe.classes = k
-            var dtype = member_output_dtype(probe, MEMBER_OP_PREDICT, d, 1, MEMBER_I32)
-            if dtype != MEMBER_I32 and dtype != MEMBER_I64:
-                raise Error("member ABI: a search scored by accuracy needs a member that predicts class codes")
-            pred_dtypes[c] = dtype
-    var pred_dtypes_at = Int(pred_dtypes.unsafe_ptr())
+            var unsaid = MEMBER_I32 if ops[o] == MEMBER_OP_PREDICT and classifier else MEMBER_F32
+            var dtype = member_output_dtype(probe, ops[o], d, 1, unsaid)
+            if ops[o] == MEMBER_OP_PREDICT and classifier:
+                if dtype != MEMBER_I32 and dtype != MEMBER_I64:
+                    raise Error("member ABI: a search scored by labels needs a member that predicts class codes")
+            elif dtype != MEMBER_F32 and dtype != MEMBER_F64:
+                raise Error("member ABI: a search scorer needs float32 or float64 member outputs")
+            out_dtypes[c * nops + o] = dtype
+    var out_dtypes_at = Int(out_dtypes.unsafe_ptr())
+    var ops_at = Int(ops.unsafe_ptr())
     # Per (fold, side): its row numbers, its count and its gathered X and y.
     var side_rows = List[Int](length=used * sides, fill=0)
     var side_count = List[Int](length=used * sides, fill=0)
@@ -323,8 +410,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     host_parallelize(_gather_y, used * sides)
     # 2-4. The units, wave by wave.
     var units = m * used
-    var test = List[Float64](length=max(units, 1), fill=0.0)
-    var train = List[Float64](length=max(units, 1), fill=0.0)
+    var test = List[Float64](length=max(units * nsc, 1), fill=0.0)
+    var train = List[Float64](length=max(units * nsc, 1), fill=0.0)
     var res = MselSearchResult()
     res.n_splits = used
     var wave = max(native_unit_cores(), 1)
@@ -360,17 +447,21 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 raise Error(words)
         # The scores: one task per (unit, side), every member call of the wave.
         var tasks = width * sides
-        var values = List[Float64](length=max(tasks, 1), fill=0.0)
-        var failed = List[UInt8](length=max(tasks, 1), fill=UInt8(0))
-        var errors = List[String](length=max(tasks, 1), fill=String(""))
-        var preds = List[List[Int64]](capacity=tasks)
-        var pred_at = List[Int](length=max(tasks, 1), fill=0)
-        for t in range(tasks):  # driver-loop: over the wave's (unit, side) tasks (their code buffers)
+        var values = List[Float64](length=max(tasks * nsc, 1), fill=0.0)
+        var failed = List[UInt8](length=max(tasks * nsc, 1), fill=UInt8(0))
+        var errors = List[String](length=max(tasks * nsc, 1), fill=String(""))
+        var preds = List[List[Int64]](capacity=max(tasks * nops, 1))
+        var pred_at = List[Int](length=max(tasks * nops, 1), fill=0)
+        var pred_cols = List[Int](length=max(tasks * nops, 1), fill=1)
+        var pred_cap = List[Int](length=max(tasks * nops, 1), fill=0)
+        for t in range(tasks):  # driver-loop: over the wave's (unit, side) tasks (their response buffers)
             var f = (u0 + t // sides) % used
             var count = side_count[f * sides + t % sides]
-            preds.append(List[Int64](length=max(count, 1) if plan.scoring == SEARCH_SCORE_ACCURACY else 1,
-                                     fill=Int64(0)))
-            pred_at[t] = Int(preds[t].unsafe_ptr())
+            for o in range(nops):  # small-loop(the distinct responses)
+                var width_o = 1 if ops[o] == MEMBER_OP_PREDICT else max(k, 1)
+                preds.append(List[Int64](length=max(count * width_o, 1), fill=Int64(0)))
+                pred_at[t * nops + o] = Int(preds[t * nops + o].unsafe_ptr())
+                pred_cap[t * nops + o] = count * width_o
         var x_at = List[Int](length=used * sides, fill=0)
         for s in range(used * sides):  # driver-loop: over the fold sides (their X block addresses)
             x_at[s] = Int(side_x[s].unsafe_ptr())
@@ -379,63 +470,77 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var failed_at = Int(failed.unsafe_ptr())
         var errors_at = Int(errors.unsafe_ptr())
         var pred_list = Int(pred_at.unsafe_ptr())
+        var cols_list = Int(pred_cols.unsafe_ptr())
+        var cap_list = Int(pred_cap.unsafe_ptr())
         var x_list = Int(x_at.unsafe_ptr())
-        var scoring = plan.scoring
 
-        def _score(t: Int) {imm run_at, imm values_at, imm failed_at, imm errors_at, imm pred_list, imm x_list,
-                            imm y_dst_at, imm side_count_at, imm sides, imm used, imm u0, imm d, imm y_dtype,
-                            imm y_cols, imm scoring, imm pred_dtypes_at}:
+        def _score(t: Int) {imm run_at, imm values_at, imm failed_at, imm errors_at, imm pred_list, imm cols_list,
+                            imm cap_list, imm x_list, imm y_dst_at, imm side_count_at, imm sides, imm used, imm u0,
+                            imm d, imm y_dtype, imm y_cols, imm member_score, imm nsc, imm nops, imm ops_at,
+                            imm out_dtypes_at}:
             var v = t // sides
             var side = t % sides
             var s = ((u0 + v) % used) * sides + side
             var rp = _RunPtr(unsafe_from_address=run_at)
             if rp[].failed[v] != UInt8(0) or rp[].states[v] == 0:
-                _U8P(unsafe_from_address=failed_at)[t] = UInt8(1)
+                for j in range(nsc):  # small-loop(the scorers)
+                    _U8P(unsafe_from_address=failed_at)[t * nsc + j] = UInt8(1)
                 return
+            var x = _IntP(unsafe_from_address=x_list)[s]
+            var count = _IntP(unsafe_from_address=side_count_at)[s]
             try:
-                var value = _score_side(run_at, v, MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=x_list)[s],
-                                        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=y_dst_at)[s],
-                                        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=side_count_at)[s],
-                                        d, y_dtype, y_cols, scoring,
-                                        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pred_list)[t],
-                                        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pred_dtypes_at)[
-                                            (u0 + v) // used])
-                _F64P(unsafe_from_address=values_at)[t] = value
+                if member_score:
+                    _F64P(unsafe_from_address=values_at)[t] = _member_score(
+                        run_at, v, x, _IntP(unsafe_from_address=y_dst_at)[s], count, d, y_dtype, y_cols)
+                    return
+                var c = (u0 + v) // used
+                for o in range(nops):  # small-loop(the distinct responses)
+                    var at = t * nops + o
+                    _IntP(unsafe_from_address=cols_list)[at] = _respond(
+                        run_at, v, _IntP(unsafe_from_address=ops_at)[o], x, count, d,
+                        _IntP(unsafe_from_address=pred_list)[at], _IntP(unsafe_from_address=cap_list)[at],
+                        _IntP(unsafe_from_address=out_dtypes_at)[c * nops + o])
             except error:
-                _U8P(unsafe_from_address=failed_at)[t] = UInt8(2)
-                _StrPtr(unsafe_from_address=errors_at)[t] = String(error)
+                for j in range(nsc):  # small-loop(the scorers)
+                    _U8P(unsafe_from_address=failed_at)[t * nsc + j] = UInt8(2)
+                    _StrPtr(unsafe_from_address=errors_at)[t * nsc + j] = String(error)
 
         if all_free:
             host_parallelize(_score, tasks)
         else:
             for t in range(tasks):  # driver-loop: over the wave's tasks (THE GIL RULE: kinds that are not GIL-free)
                 _score(t)
-        # The metric programs (scoring 'accuracy'), one after the other.
-        if scoring == SEARCH_SCORE_ACCURACY:
-            for t in range(tasks):  # driver-loop: over the wave's tasks (one native metric program each)
-                if failed[t] != UInt8(0):
-                    continue
+        # The metric programs (named scorers), one after the other.
+        if not member_score:
+            for t in range(tasks):  # driver-loop: over the wave's tasks (one native metric program per scorer)
                 var s = ((u0 + t // sides) % used) * sides + t % sides
-                try:
-                    values[t] = _accuracy(plan.metric, y_dst[s], pred_at[t], side_count[s], k)
-                except error:
-                    failed[t] = UInt8(2)
-                    errors[t] = String(error)
-        # The error rule, in unit order.
+                for j in range(nsc):  # small-loop(the scorers)
+                    var at = t * nsc + j
+                    if failed[at] != UInt8(0):
+                        continue
+                    var o = op_of[j]
+                    try:
+                        values[at] = _scorer_side(plan.metric, rows_of[j], y_dst[s], pred_at[t * nops + o],
+                                                  side_count[s], k, pred_cols[t * nops + o])
+                    except error:
+                        failed[at] = UInt8(2)
+                        errors[at] = String(error)
+        # The error rule, in unit order (then scorer order).
         for t in range(tasks):  # driver-loop: over the wave's tasks (their scores)
             var u = u0 + t // sides
             var side = t % sides
-            var value = values[t]
-            if failed[t] != UInt8(0):
-                if not plan.tolerate:
-                    var words = errors[t].copy()
-                    member_set_run_release(run)
-                    raise Error(words)
-                value = plan.error_value
-            if side == 0:
-                test[u] = value
-            else:
-                train[u] = value
+            for j in range(nsc):  # small-loop(the scorers)
+                var value = values[t * nsc + j]
+                if failed[t * nsc + j] != UInt8(0):
+                    if not plan.tolerate:
+                        var words = errors[t * nsc + j].copy()
+                        member_set_run_release(run)
+                        raise Error(words)
+                    value = plan.error_value
+                if side == 0:
+                    test[j * units + u] = value
+                else:
+                    train[j * units + u] = value
         # The units' fit notices, in unit order; the states go.
         for v in range(width):  # driver-loop: over the wave's units (their fit notices)
             if run.states[v] != 0:
@@ -447,14 +552,17 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 if len(words) > 0:
                     res.notices.append(words^)
         member_set_run_release(run)
-        _ = len(preds)  # the code buffers were read through the tasks above
+        _ = len(preds)  # the response buffers were read through the tasks above
+        _ = len(pred_cols)
+        _ = len(pred_cap)
         _ = len(values)
         _ = len(failed)
         _ = len(errors)
         _ = len(x_at)
         _ = len(pred_at)
         u0 = u1
-    _ = len(pred_dtypes)
+    _ = len(out_dtypes)
+    _ = len(ops)
     _ = len(side_x)  # the blocks were read through every wave above
     _ = len(side_y)
     _ = len(y_dst)
@@ -463,20 +571,37 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     _ = len(fold_rows)
     _ = len(fold_counts)
     _ = len(columns)
-    # 5. The tables.
-    for c in range(m):  # driver-loop: over the candidates (their fold scores)
-        var row = List[Float64](capacity=used)
-        var row_train = List[Float64](capacity=used)
-        for f in range(used):  # small-loop(one candidate's folds)
-            row.append(test[c * used + f])
-            row_train.append(train[c * used + f])
-        res.test.append(row^)
-        res.train.append(row_train^)
-    res.means = msel_row_means(res.test)
-    res.stds = msel_row_stds(res.test, res.means)
-    res.ranks = msel_rank_scores(res.means)
-    if plan.return_train:
-        res.train_means = msel_row_means(res.train)
+    # 5. The tables, per scorer; the best by the refit scorer.
+    if plan.refit_scorer < 0 or plan.refit_scorer >= nsc:
+        raise Error("member ABI: the refit scorer is not one of the search's scorers")
+    for j in range(nsc):  # driver-loop: over the scorers (their tables)
+        var rows_test = List[List[Float64]](capacity=m)
+        var rows_train = List[List[Float64]](capacity=m)
+        for c in range(m):  # driver-loop: over the candidates (their fold scores)
+            var row = List[Float64](capacity=used)
+            var row_train = List[Float64](capacity=used)
+            for f in range(used):  # small-loop(one candidate's folds)
+                row.append(test[j * units + c * used + f])
+                row_train.append(train[j * units + c * used + f])
+            rows_test.append(row^)
+            rows_train.append(row_train^)
+        var means = msel_row_means(rows_test)
+        res.scorer_stds.append(msel_row_stds(rows_test, means))
+        res.scorer_ranks.append(msel_rank_scores(means))
+        if plan.return_train:
+            res.scorer_train_means.append(msel_row_means(rows_train))
+        else:
+            res.scorer_train_means.append(List[Float64]())
+        res.scorer_means.append(means^)
+        res.scorer_test.append(rows_test^)
+        res.scorer_train.append(rows_train^)
+    var r = plan.refit_scorer
+    res.test = res.scorer_test[r].copy()
+    res.train = res.scorer_train[r].copy()
+    res.means = res.scorer_means[r].copy()
+    res.stds = res.scorer_stds[r].copy()
+    res.ranks = res.scorer_ranks[r].copy()
+    res.train_means = res.scorer_train_means[r].copy()
     res.best = msel_rank_best(res.ranks)
     res.best_score = res.means[res.best]
     # 6. The refit of the best on every row (a set of one).
