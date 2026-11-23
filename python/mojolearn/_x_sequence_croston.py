@@ -18,6 +18,9 @@ class _Croston(ParamsMixin):
     """Shared fit/predict for the Croston variants (one series per GPU thread,
     `sequence/croston.mojo`)."""
     _VARIANT = 0
+    #: Kernel and Permutation SHAP (bindings/trees_agnostic_native_door.mojo) refuse a forecaster: its predict takes
+    #: a horizon or time points, not feature rows X (shap's own explainers call model(X) and fail the same way).
+    _mojolearn_explained = "forecaster"
 
     # Every public method is one native call whose owner does the whole
     # lifecycle (fit bookkeeping and the NotFittedError of predict in
