@@ -69,6 +69,12 @@ def _shipped_svd(a: List[FF], k: Int, mut u: List[FF], mut sv: List[FF], mut v: 
         IP(unsafe_from_address=Int(fil.unsafe_ptr())), FP(unsafe_from_address=Int(ch.unsafe_ptr())),
         FP(unsafe_from_address=Int(cl.unsafe_ptr())), k, IP(unsafe_from_address=Int(st.unsafe_ptr())),
     )
+    # the call's scratch, alive past it: an address keeps nothing alive (lane gbdt-leaf-body, LASTUSE)
+    _ = mh^
+    _ = ml^
+    _ = ch^
+    _ = cl^
+    _ = fil^
     if st[SD_STATUS] != 0:
         raise Error("spectral_assign_check: the shipped SVD refused a full-rank fixture")
     u = List[FF](capacity=kk)

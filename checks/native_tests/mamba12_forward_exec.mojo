@@ -3,8 +3,8 @@
 """The Mamba-1/2 per-call forward without its per-call plumbing equals the
 old form bit for bit (lane fix-mamba12-forward-exec, 2026-11-13).
 
-New form (the default; `-D MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD` is the
-old one, autograd/block_step_ops.mojo):
+New form (the only product form; the per-call build flag
+MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD was deleted 2026-11-23):
 
   - the per-call block program keeps its L > 1 stages in the step entry and
     refills them with zeros per run (`keep_stages`, `rezero`), and a held
@@ -36,10 +36,10 @@ L2, then L (a new set after the shape change)):
      fix-mamba-forward-doors: `skip_words`, `q_zero`).
 
 Lane fix-mamba-forward-doors (2026-11-14) made the held stage set views of
-one held arena re-zeroed with ONE fill (`-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD`
-is lane fix-mamba12-forward-exec's per-stage fills): every case above runs
-the held set built, reused, rebuilt for L2 and rebuilt for L again, and must
-still equal the old per-run form bit for bit. Build this suite once per arm.
+one held arena re-zeroed with ONE fill (the per-stage fill form,
+MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD, was deleted 2026-11-23): every case
+above runs the held set built, reused, rebuilt for L2 and rebuilt for L
+again, and must still equal the old per-run form bit for bit.
 
 The new form's outputs are prefilled with 0xFF words (an unwritten byte
 shows as a difference), the old form's with zeros. Every y, report, state

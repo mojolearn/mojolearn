@@ -1,16 +1,16 @@
 diff --git a/gbdt/host/gbdt_oracle_multiclass.mojo b/gbdt/host/gbdt_oracle_multiclass.mojo
-index eff1b7891d..e7ec0d3760 100644
+index 5d5ea63a91..7f8566b71a 100644
 --- a/gbdt/host/gbdt_oracle_multiclass.mojo
 +++ b/gbdt/host/gbdt_oracle_multiclass.mojo
-@@ -67,6 +67,7 @@ The restatement is a prediction until measured. The four-column diff of
- tools/identity_break.py on the two lanes is the measurement.
+@@ -78,6 +78,7 @@ tools/identity_break.py on the two lanes is the measurement.
  """
+ from gbdt.options.catboost_options import infinite_score_message
  from std.math import exp, fma, isfinite, log
 +from std.sys.compile import is_defined
  from gbdt.data.permutation import TRandom
  from gbdt.data.class_weight_body import class_weight_slot, class_weighted
  from gbdt.options.catboost_options import (
-@@ -324,6 +325,8 @@ def _multi_pass(
+@@ -346,6 +347,8 @@ def _multi_pass(
                              var diff = target - approx
                              sum_dim_errors = fma(diff * diff, weight, sum_dim_errors)
                              var dd = diff * weight

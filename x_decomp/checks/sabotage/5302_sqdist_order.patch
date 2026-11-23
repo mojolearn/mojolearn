@@ -1,14 +1,18 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index 4b4c2cedf..8b8c04cdd 100644
+index fde1322c75..8dc06d22dc 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -391,7 +391,8 @@ def rowsum_part_cell(a: F32Ptr, i: Int, d: Int, c0: Int, c1: Int) -> Float32:
+@@ -483,7 +483,12 @@ def rowsum_part_cell(a: F32Ptr, i: Int, d: Int, c0: Int, c1: Int) -> Float32:
  def sqdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int) -> Float32:
-     """||a_i - b_j||^2, features ascending."""
-     var acc = Float32(0)
--    for p in range(d):
+     """||a_i - b_j||^2, features ascending: core/row_cells.mojo's one
+     by-difference body (the same statements)."""
+-    return sqdist_diff_cell(a, b, i, j, d)
++    var acc = Float32(0)
 +    for pp in range(d):
 +        var p = d - 1 - pp  # SABOTAGE 5302: the distance fold descending
-         var t = sub(a.unsafe_load(i * d + p), b.unsafe_load(j * d + p))
-         acc = ftz(identical_mul_add(t, t, acc))
-     return acc
++        var t = ftz(ftz(a.unsafe_load(i * d + p)) - ftz(b.unsafe_load(j * d + p)))
++        acc = ftz(identical_mul_add(t, t, acc))
++    return acc
+ 
+ 
+ comptime PD_MANHATTAN = 1

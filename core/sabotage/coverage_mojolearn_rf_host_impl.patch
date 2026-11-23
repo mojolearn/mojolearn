@@ -1,12 +1,14 @@
+diff --git a/core/mojolearn_rf_host_impl.mojo b/core/mojolearn_rf_host_impl.mojo
+index eb6b02d4fd..759a6895bc 100644
 --- a/core/mojolearn_rf_host_impl.mojo
 +++ b/core/mojolearn_rf_host_impl.mojo
-@@ -4,8 +4,18 @@
- calls these; the session structs are re-exported there under the same names."""
+@@ -5,6 +5,16 @@ calls these; the session structs are re-exported there under the same names."""
+ from std.memory import ArcPointer
  from core.forest_export_binding_impl import copy_forest_export_leaves
  from ensemble.host.rf_oracle import RfHostForest, RfHostParams, n_sampled_rows_host
 +from std.memory import bitcast
- 
- 
++
++
 +@always_inline
 +def _cov_sab_f32(v: Float32) -> Float32:
 +    """SABOTAGE (coverage arm): `v` one ulp off; a zero or subnormal becomes the smallest normal."""
@@ -14,12 +16,10 @@
 +    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
 +        return bitcast[DType.float32](UInt32(0x00800000))
 +    return bitcast[DType.float32](bits + UInt32(1))
-+
-+
+ 
+ 
  def rf_host_col_major(
-     var flat: List[Float32], n_rows: Int, n_cols: Int, row_major: Bool
- ) -> List[Float32]:
-@@ -15,7 +25,7 @@
+@@ -16,7 +26,7 @@ def rf_host_col_major(
      var out = List[Float32](length=n_rows * n_cols, fill=Float32(0.0))
      for r in range(n_rows):
          for c in range(n_cols):
@@ -28,7 +28,7 @@
      return out^
  
  
-@@ -29,10 +39,10 @@
+@@ -30,10 +40,10 @@ def rf_host_forest_lists(
          offsets.append(Int64(Int(forest.offsets[t])))
      for i in range(forest.n_nodes()):
          colid.append(Int64(Int(forest.colid[i])))
@@ -41,7 +41,7 @@
  
  
  def _apply_min_weight_fraction(
-@@ -197,6 +207,9 @@
+@@ -217,6 +227,9 @@ def rf_host_export_into(
          op[t] = model.offsets[t]
      for i in range(model.n_nodes()):
          cp[i] = model.colid[i]

@@ -2413,7 +2413,7 @@ def test_the_real_manifest_edits_of_the_three_branches_are_placed():
     this tree (a lane that exists here stands in for ivf-filter). The IVF
     family's training lanes gained ivf-short-fill on 2026-10-21 (354b8049a)."""
     old = lane_select._read(lane_select.MANIFEST)
-    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "ivf-short-fill")',
+    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "ivf-short-fill", "ivf-distributed")',
                'inference_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")',
                '"gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad"',
                '"pca_fit", "pca_fit_full", "tsvd_fit"')

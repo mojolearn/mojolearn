@@ -41,6 +41,14 @@ above and read freed memory:
     every path (`py_call(keep.append, x)`, `door.keep(x)`, `py_setattr(a, "_store", x)`, `pin.owner = x`).
 Fix either with `_ = owner` (or `_ = owner^`) after the call or the pointer's last use.
 
+ANY-ORIGIN AROUND AN ADDRESS (2026-11-23, lane gbdt-leaf-body). The same holds for a `.unsafe_ptr()` address: an
+any-origin pointer built from `Int(x.unsafe_ptr())` (`MutPointer[T, MutAnyOrigin](unsafe_from_address=
+Int(x.unsafe_ptr()))`, or an any-origin alias such as `F32P(unsafe_from_address=...)`) is an UNTRACKED derivation of
+x, not an any-origin one: the Int carries no origin for the wildcard to extend, as partial_walk showed. It fails like
+any untracked derivation when x has no later named use on the path (the Python-holder exceptions above are for data
+addresses only). A cast that keeps the pointer (`x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()`, `rebind`) is
+still an any-origin derivation and passes.
+
 FREED BEFORE THE DRAIN (2026-11-18, lane fx-lifetime). `ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())` is a
 tracked derivation, so the rule above passes it, but the copy is asynchronous: the driver reads h after the call
 returns, and no origin says so. A freed pinned block goes straight back to the caching allocator, so the next
@@ -367,10 +375,16 @@ def derivation(s, name, helpers):
                     arg += " " + ("AnyOrigin" if akind == "any" else "")
             if "UntrackedOrigin" in chain:
                 kind = "untracked"
+            elif re.search(r"(?:\bU?Int\(|unsafe_from_address=)\s*$", s[:start]):
+                # an ADDRESS of X (`Int(x.unsafe_ptr())`) has no origin, so an any-origin pointer built around it
+                # (`MutPointer[T, MutAnyOrigin](unsafe_from_address=Int(x.unsafe_ptr()))`) keeps nothing alive
+                # either: the same shape as the Python data address of partial_walk (module docstring, ANY-ORIGIN
+                # AROUND AN ADDRESS)
+                kind = "untracked"
+                if re.search(r"AnyOrigin|as_unsafe_any_origin", arg):
+                    via = "anyaddr"
             elif re.search(r"AnyOrigin|as_unsafe_any_origin", arg):
                 kind = "any"
-            elif re.search(r"(?:\bU?Int\(|unsafe_from_address=)\s*$", s[:start]):
-                kind = "untracked"
             else:
                 kind = "tracked"
         if re.search(r"[=!<>]=|\bis\b", _arg_span(s, start)):

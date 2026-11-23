@@ -2271,9 +2271,9 @@ def _neural_ab_receipt(runner, config, executed=False):
 
 #: lane flag-native-dispatch-gate (2026-11-15): the fields a neural model or
 #: block holds that name the route its scored call took. Native descriptor
-#: dispatch is a build constant (providers/python/neural_descriptor_pyapi_door.mojo
-#: NEURAL_NATIVE_DISPATCH; B arm -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF): a
-#: connected provider field proves the native arm, None proves the by-name arm.
+#: dispatch is the one form (its B arm -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF
+#: was deleted 2026-11-23): a connected provider field proves the native route,
+#: None the non-identical by-name route.
 _NEURAL_ROUTE_FIELDS = ("_samba_forward_route", "_samba_resident_uploads")
 _NEURAL_ROUTE_PRESENT = ("_native_primitives", "_resident_handle", "_native_block_provider_cache",
                          "_native_mamba_block_provider_cache", "_native_mamba_state", "_native_session",

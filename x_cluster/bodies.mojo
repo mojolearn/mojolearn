@@ -86,28 +86,11 @@ def sqrt_cell(x: FPtr, i: Int):
     x[i] = identical_sqrt(v if v > Float32(0) else Float32(0))
 
 
-# DEVIATION 5103 (the order statistic by a bisection on the bits: no order
-# of the row can move it). Row 112; kth_check.
-@always_inline
-def kth_smallest_row(m: FPtr, n_cols: Int, k: Int, dst: FPtr, row: Int):
-    """The k-th smallest (1-based) of row `row` of a NON-NEGATIVE matrix, by a
-    bisection on the float bits (monotone for +0 .. +inf): the smallest bit
-    pattern `v` with `count(x <= v) >= k`. Exact, and no order of the row can
-    move it. A -0.0 reads as +0.0."""
-    var lo = UInt32(0)
-    var hi = UInt32(0x7F800000)
-    while lo < hi:
-        var mid = lo + (hi - lo) // 2
-        var c = 0
-        for j in range(n_cols):
-            var bits = bitcast[DType.uint32](m[row * n_cols + j]) & UInt32(0x7FFFFFFF)
-            if bits <= mid:
-                c += 1
-        if c >= k:
-            hi = mid
-        else:
-            lo = mid + 1
-    dst[row] = bitcast[DType.float32](lo)
+# DEVIATION 5103 (row 112, kth_check): the row order statistic is an exact
+# selection over the magnitude bits (HostOps.kth's `_select_u32`, the device's
+# `_kth_kernel` radix select). TOMBSTONE: the bisection `kth_smallest_row`
+# (reached only for k outside 1..n_cols, which no caller passes) deleted
+# 2026-11-23 by lane/verify-gaps; recoverable at aecad68fb8.
 
 
 # K6 (IDENTICAL, lane ml-cluster-nbrs 2026-10-04): MeanShift's per-shift sum

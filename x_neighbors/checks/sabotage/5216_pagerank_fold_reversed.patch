@@ -1,13 +1,14 @@
-diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
---- a/x_neighbors/items.mojo
-+++ b/x_neighbors/items.mojo
-@@ -910,7 +910,8 @@
-     dw is networkx's `dangling` weights (the personalization when not given)."""
+diff --git a/x_neighbors/graph_par.mojo b/x_neighbors/graph_par.mojo
+index 722f1cdcd6..7bc03ef4c0 100644
+--- a/x_neighbors/graph_par.mojo
++++ b/x_neighbors/graph_par.mojo
+@@ -598,7 +598,8 @@ def pr_step_csr(
      var acc = Float32(0)
-     for i in range(n):
--        acc = ftz(identical_mul_add(ftz(x.unsafe_load(i)), ftz(q.unsafe_load(i * n + t)), acc))
-+        acc = ftz(identical_mul_add(ftz(x.unsafe_load(n - 1 - i)), ftz(q.unsafe_load((n - 1 - i) * n + t)), acc))
-+
-     var dsum = Float32(0)
-     for i in range(n):
-         if Int(dangling.unsafe_load(i)) != 0:
+     var lo = Int(indptr.unsafe_load(t))
+     var hi = Int(indptr.unsafe_load(t + 1))
+-    for e in range(lo, hi):
++    for ee in range(lo, hi):
++        var e = hi - 1 - (ee - lo)  # SABOTAGE 5216: column t's cells folded descending
+         acc = ftz(identical_mul_add(ftz(x.unsafe_load(Int(rows.unsafe_load(e)))), ftz(vals.unsafe_load(e)), acc))
+     var pt = ftz(p.unsafe_load(t))
+     var inner = ftz(identical_mul_add(dsum, ftz(dw.unsafe_load(t)), acc))

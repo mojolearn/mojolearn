@@ -5792,8 +5792,8 @@ def _build_layer(lane, arm, D):
             info["weights_loaded"] = info["output_comparable"] = True
             dyh = {}
             # lane gap-neural-io: x (and dy, on the first fit) on the device before the clock,
-            # y and dx left there, as the torch arm's tensors (MOJOLEARN_SEQ_DEVICE_IO_OFF=1 keeps
-            # host arrays: the before arm). y is read back in outputs(), outside the clock.
+            # y and dx left there, as the torch arm's tensors (MOJOLEARN_SEQ_DEVICE_IO_OFF deleted
+            # 2026-11-23, lane ab-owners). y is read back in outputs(), outside the clock.
             from mojolearn._x_sequence_device import to_device as seq_to_dev
             x = seq_to_dev(x)
             on_dev = getattr(x, "_device_tensor", False)
@@ -5823,11 +5823,9 @@ def _build_layer(lane, arm, D):
             dyh = {}
             # lane gap-neural-io: y, dy and the (V, d) gradient stay on the device, as the torch
             # arm's tensors (dy goes up on the first fit, as torch's `.to(dev)`); y is read back in
-            # outputs(), outside the clock. A binding without the device entries, or
-            # MOJOLEARN_SEQ_DEVICE_IO_OFF=1 (the before arm), keeps host arrays.
-            import os as _os
-            dev_io = (getattr(layer, "_device_io", False)
-                      and _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") != "1")
+            # outputs(), outside the clock. A binding without the device entries keeps host arrays
+            # (MOJOLEARN_SEQ_DEVICE_IO_OFF deleted 2026-11-23, lane ab-owners).
+            dev_io = getattr(layer, "_device_io", False)
             if dev_io:
                 # board-smoke-3 (2026-11-16): the probe is the public `to_device` on one float,
                 # outside the clock; it refuses (RuntimeError) on a binding without the device
@@ -5950,7 +5948,7 @@ def _build_layer(lane, arm, D):
         # lane layernorm-idn: a layer with its own `to_device` (the sequence LayerNorm, whose
         # resident tensors live on the sequence binding, not the CNN one) uploads through it, so
         # the lane races what a user who puts x on the device gets (the `layer_norm_dev` entry);
-        # MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1 (or MOJOLEARN_SEQ_DEVICE_IO_OFF=1) is its before arm.
+        # its before arms MOJOLEARN_LN_CLASS_DEVICE_IO_OFF and MOJOLEARN_SEQ_DEVICE_IO_OFF were deleted 2026-11-23.
         to_dev = None
         if getattr(layer, "_seq_device_io", False) and probe_light:
             # smoke-fixes (2026-10-14): the probe never runs the block, so x is not uploaded (the timed worker
@@ -5960,7 +5958,7 @@ def _build_layer(lane, arm, D):
         elif getattr(layer, "_seq_device_io", False):
             # lane neural-io-2: a sequence-binding layer (MoEBlock) takes x as a resident
             # SequenceDeviceTensor and returns y as one (read back in outputs(), outside the
-            # clock). MOJOLEARN_SEQ_DEVICE_IO_OFF=1 keeps the host-array entry (the before arm).
+            # clock).
             to_dev = layer.to_device
             x = to_dev(x)
             if getattr(x, "_device_tensor", False):
@@ -6226,7 +6224,7 @@ def _build_optim(lane, arm, D):
         # lane gap-neural-io: the gradients on the device before the clock and the parameter
         # uploaded inside it and left there, as the torch arm (`p0.to(dev)` in fit, `g_dev`
         # outside it); read back in the outputs, outside the clock. The optimizers without the
-        # device step, or MOJOLEARN_SEQ_DEVICE_IO_OFF=1 (the before arm), keep host arrays.
+        # device step keep host arrays.
         to_dev = None
         grads_run = grads
         resident = False

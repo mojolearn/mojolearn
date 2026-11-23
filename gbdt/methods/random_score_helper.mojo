@@ -77,7 +77,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     deterministic_sum_lanes_kernel,
     pinned_block_sum,
 )
-from gbdt.methods.random_score_bodies import std_dev_row_term
+from gbdt.methods.random_score_bodies import std_dev_of_sums, std_dev_row_term
 
 
 #: `ComputeTargetVariance`'s block (`compute_scores.cu:290`). `ComputeStdDev`
@@ -241,7 +241,7 @@ def compute_std_dev(
     var sum2 = Float64(h[0])
     _ = partials^
     _ = out^
-    return sqrt(sum2 / (Float64(count) + 1e-100))
+    return std_dev_of_sums(sum2, Float64(count))
 
 
 # `calc_score_model_length_mult` moved to `gbdt/methods/random_score_bodies.mojo`
@@ -327,5 +327,5 @@ def compute_score_std_dev_planes(
     _ = out^
     _ = len(weights)
     _ = len(weighted_target)
-    var std_dev = sqrt(sum2 / (Float64(object_count) + 1e-100))
+    var std_dev = std_dev_of_sums(sum2, Float64(object_count))
     return model_length_mult * std_dev * random_strength

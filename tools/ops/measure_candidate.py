@@ -213,6 +213,35 @@ def check_b_arms(names, owed_file, envs=None):
             for n in names}
 
 
+def define_entries(text):
+    """The set of NAME / NAME=VALUE entries of a define list, written `A=1,B`, `A=1 B` or `-D A=1 -D B`."""
+    return {e for e in re.split(r"[,\s]+", str(text or "")) if e and e != "-D"}
+
+
+def check_arm_wheel(name, owed_file, manifest):
+    """Refuse a B arm whose staged wheels do not hold the arm's define (lane ab-prep, 2026-11-23: stage named a wheel
+    dir under an arm without looking at what it was built with, so a wheel of another arm, or the candidate itself,
+    could be timed as the arm). Every wheel's recorded defines (the payload `candidate.defines` that
+    tools/release.py candidate writes, collected by candidate_wheel_install.build_manifest) must contain every entry of
+    the owed entry's `define`. A wheel built with MORE defines is a combined B set (arms of disjoint lanes sharing one
+    build) and is staged; each arm still times only its own rows against the base."""
+    arm = (PC.load_json(str(owed_file)).get("b_arms") or {}).get(name) or {}
+    want = define_entries(arm.get("define"))
+    if not want:
+        raise SystemExit(f"measure-candidate: --b-arm {name}: the owed entry names no define in {owed_file}")
+    for f in manifest.get("files") or []:
+        have = define_entries((f.get("candidate") or {}).get("defines"))
+        missing = sorted(want - have)
+        if missing:
+            raise SystemExit(f"measure-candidate: --b-arm {name}: {f.get('file')} was built with defines "
+                             f"{','.join(sorted(have)) or 'none'}, which lack {','.join(missing)} (the arm's define); "
+                             f"stage the B set built for this arm (tools/release.py candidate --owed-arm {name}, or "
+                             f"the combined set whose owed entry lists it)")
+    extra = sorted(define_entries(manifest.get("defines")) - want)
+    if extra:
+        print(f"B arm {name}: combined B set, also built with {','.join(extra)} (only {name}'s rows are timed as {name})")
+
+
 #: one VAR=VALUE[,VAR=VALUE] list, the form tools/ops/paper_compare_job.sh's b-arms block admits (an env arm's second
 #: field, a wheel arm's 4th field); the only box value the job resolves is @cgroup_cores
 ENV_LIST_RE = re.compile(r"[A-Z_][A-Z0-9_]*=[^,\s]*(?:,[A-Z_][A-Z0-9_]*=[^,\s]*)*")
@@ -617,7 +646,7 @@ def cmd_stage(a):
         bver = dir_version(bdir, a.b_version or version)     # a B candidate has its own local version
         check_built(bdir, vendor)
         bw = pick_wheels(bdir, vendor, bver)
-        C.build_manifest(bver, vendor, bw, bsha)
+        check_arm_wheel(name, owed_file, C.build_manifest(bver, vendor, bw, bsha))
         uploads += [(w, f"{indir}/b-{name}/{vendor}/{w.name}", False) for w in bw]
         # the owed entry's run_env rides on this arm's line only (the job's 4th field; its board units and driver rows
         # run with it, the base and the other arms without it)

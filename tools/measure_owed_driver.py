@@ -36,6 +36,11 @@ next case runs. Drivers (the row's "driver" field):
                 features), at each case the row names (cell, rows, window, features, hidden_size, num_layers,
                 batch_size, max_epochs): the neighbouring shapes and the non-board model of a recurrent trainer
                 arm; each line carries the fit's last loss_curve_ value beside its time; an arm may be a B wheel set
+  rnn_scan_timing  tools/ops/rnn_scan_timing.py with the arm's interpreter (candidate = its chain label, the
+                rnn-scan-gated B set = scan), each of its RNN_SCAN lines as a forward and a fit case
+  online_linear_shapes  PassiveAggressiveClassifier / -Regressor, Perceptron, SGDOneClassSVM .fit (per-sample,
+                the board's settings) on seeded Gaussian rows at each (rows, features) the row names; the training
+                score and the coef_ digest ride beside the time; an arm may be a B wheel set
 
 Runs nothing at import; standard library + numpy + pandas + mojolearn in the arm's venv only (it never imports the
 repo's tools). Serial by nature: the cases are timed calls on one GPU and must not share it.
@@ -530,7 +535,83 @@ def case_dbscan_shapes(row, arm_cases):
     return out
 
 
-DRIVERS = {"rnn_shapes": case_rnn_shapes, "gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
+def case_online_linear_shapes(row, arm_cases):
+    """The per-sample online linear fits (PassiveAggressiveClassifier, PassiveAggressiveRegressor, Perceptron,
+    SGDOneClassSVM; the board's algos settings: max_iter 20, tol None, random_state 7, C 1.0 / nu 0.1, and ours'
+    batch_size=0, its per-sample fit) on seeded Gaussian rows at each (rows, features) the row's "shapes" name, for
+    the estimators each shape lists (lane ab-prep, 2026-11-23: the sgd-ps-preload neighbouring shapes, which the
+    board's races could not take: its algos lanes load only taxi and Istella). The labels are a seeded linear rule
+    with 10 % flipped, the targets a seeded linear map plus unit noise, so nothing rests on a board dataset. The
+    fit is timed; the training score (accuracy, R2, or the inlier fraction for the one-class SVM) and the sha256 of
+    coef_ ride beside the time: the arms' digests must be equal."""
+    import hashlib
+    import numpy as np
+    ml = _ml()
+    makers = {
+        "pa-clf": lambda: ml.PassiveAggressiveClassifier(C=1.0, max_iter=20, tol=None, random_state=7, batch_size=0),
+        "pa-reg": lambda: ml.PassiveAggressiveRegressor(C=1.0, max_iter=20, tol=None, random_state=7, batch_size=0),
+        "perceptron": lambda: ml.Perceptron(max_iter=20, tol=None, random_state=7, batch_size=0),
+        "sgd-ocsvm": lambda: ml.SGDOneClassSVM(nu=0.1, max_iter=20, tol=None, random_state=7, batch_size=0),
+    }
+    out = []
+    for index, sh in enumerate(row["shapes"]):  # serial by nature: timed fits on one GPU
+        n, d = int(sh["rows"]), int(sh["features"])
+        rng = np.random.default_rng(20261123 + index)
+        X = np.ascontiguousarray(rng.standard_normal((n, d)), dtype=np.float32)
+        w = rng.standard_normal(d)
+        score = X.astype(np.float64) @ w
+        y_clf = (score > 0).astype(np.int32)
+        y_clf[rng.random(n) < 0.10] ^= 1
+        y_reg = (score + rng.standard_normal(n)).astype(np.float32)
+        for lane in sh.get("estimators") or sorted(makers):
+            y = None if lane == "sgd-ocsvm" else (y_reg if lane == "pa-reg" else y_clf)
+            box = {}
+
+            def fit(lane=lane, X=X, y=y, box=box):
+                est = makers[lane]()
+                est.fit(X) if y is None else est.fit(X, y)
+                box["est"] = est
+
+            ms, why = timed(fit)
+            extra = {}
+            if why is None:
+                est = box["est"]
+                coef = np.ascontiguousarray(np.asarray(est.coef_, dtype=np.float32))
+                extra["coef_sha256"] = hashlib.sha256(coef.tobytes()).hexdigest()
+                if y is None:
+                    extra["inlier_fraction"] = float((np.asarray(est.predict(X)) > 0).mean())
+                else:
+                    extra["score"] = float(est.score(X, y))
+            out.append(("%s n=%d d=%d" % (lane, n, d), ms, why, extra))
+    return out
+
+
+def case_rnn_scan_timing(row, arm_cases):
+    """tools/ops/rnn_scan_timing.py (lane rnn-scan: GRU / LSTM / RNN classifiers, the scan against the per-step
+    chain) run with THIS arm's interpreter, as a child process (it is a tool beside this file, not imported): the
+    candidate arm is its `chain` label, the B wheel set of MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED its `scan` label (the
+    row's "tool_arm" map). Each RNN_SCAN line becomes two cases (forward, fit), its accuracy and digest beside the
+    time; the arms' digests must be equal (`rnn_scan_timing.py --compare` on the two arms' `raw` lines)."""
+    import subprocess
+    tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ops", "rnn_scan_timing.py")
+    label = (row.get("tool_arm") or {}).get(row.get("_arm") or "", "chain")
+    run = subprocess.run([sys.executable, tool, "--arm", label, "--devices", "gpu"], capture_output=True, text=True)
+    if run.returncode != 0:
+        return [("rnn_scan_timing", None, "REFUSED: rc=%d: %s" % (run.returncode, (run.stderr or run.stdout)[-400:]))]
+    out = []
+    for line in run.stdout.splitlines():
+        if not line.startswith("RNN_SCAN "):
+            continue
+        kv = dict(t.split("=", 1) for t in line.split()[1:] if "=" in t)
+        key = "%s T=%s N=%s H=%s" % (kv.get("cell"), kv.get("T"), kv.get("N"), kv.get("H"))
+        extra = {"train_acc": float(kv.get("train_acc", "nan")), "digest": kv.get("digest"), "raw": line}
+        out.append(("%s forward" % key, float(kv["forward_ms"]), None, extra))
+        out.append(("%s fit" % key, float(kv["fit_ms"]), None, extra))
+    return out or [("rnn_scan_timing", None, "REFUSED: no RNN_SCAN line in the tool's output")]
+
+
+DRIVERS = {"rnn_shapes": case_rnn_shapes, "online_linear_shapes": case_online_linear_shapes,
+           "rnn_scan_timing": case_rnn_scan_timing, "gemm_shapes": case_gemm_shapes, "f16_widen": case_f16_widen, "while_loop": case_while_loop, "pandas_input": case_pandas_input, "mlp_fit": case_mlp_fit,
            "kde_widths": case_kde_widths, "mamba_backward": case_mamba_backward, "cnn_widths": case_cnn_widths,
            "samba_train_step": case_samba_train_step,
            "samba_step": case_samba_step,
@@ -566,6 +647,7 @@ def main(argv=None):
         return 0
     ml = _ml()
     base = {"row": a.row, "arm": a.arm, "version": getattr(ml, "__version__", None), "numeric_mode": _numeric_mode(ml)}
+    row = dict(row, _arm=a.arm)      # the arm label a driver that runs a tool passes on (case_rnn_scan_timing)
     try:
         results = DRIVERS[row["driver"]](row, cases)
     except Exception as exc:  # noqa: BLE001 -- the driver's setup refused: one REFUSED line

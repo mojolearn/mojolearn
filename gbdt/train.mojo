@@ -160,7 +160,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
 )
 from std.memory import bitcast, unsafe_memcpy
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from gbdt.data.permutation import TRandom
+from gbdt.data.permutation import TRandom, generate_seed_for_borders
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
@@ -1011,16 +1011,6 @@ def _build_cindex_fused(
         staged += 1
     ctx.synchronize()
     return cindex^
-
-
-def generate_seed_for_borders(from_seed: UInt64) -> UInt64:
-    """Their `TRandom::GenerateSeed` (`libs/helpers/cpu_random.h:88-94`):
-    five LCG steps. Module level so `sample_indices_for_borders_reference` and the
-    check that gates it use THE SAME derivation, not two copies."""
-    var sd = from_seed
-    for _ in range(5):
-        sd = 6364136223846793005 * sd + 1442695040888963407
-    return sd
 
 
 def sample_indices_for_borders_reference(

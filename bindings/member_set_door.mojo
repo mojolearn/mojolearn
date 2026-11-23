@@ -89,7 +89,6 @@ into a new Array of the element type the member's OUTPUTS answers
 (`call.out_dtype`); not served = the caller's door.
 """
 from std.python import Python, PythonObject
-from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from bindings.member_boundary_door import member_admit_serving_labeled, member_pack, member_pack_labeled
 from bindings.member_class_weight_unpack import member_cw_fill
@@ -122,11 +121,8 @@ from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBE
 from bindings.member_owner_unpack import member_mark
 from core.member_notices import member_notices_take
 
-#: Default ON. `-D MOJOLEARN_MEMBER_SET_OFF` makes `member_set_admit` answer
-#: False for every member, so every caller keeps its own member loop: the B
-#: arm of the owed A/B (docs/apple-fast/EXPERIMENTS.md). Not measured yet;
-#: the callers' loops stay until it is, and for unpublished families.
-comptime MEMBER_SET_NATIVE = not is_defined["MOJOLEARN_MEMBER_SET_OFF"]()
+# TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MEMBER_SET_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 struct MemberSet(Movable):
@@ -196,8 +192,7 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     `b` the builtins module. `classes`: the class count of code targets, 0
     for a regressor. Raises only for a class_weight dict the member's
     estimator refuses over `set.labels` (its own words; lane mf-adm3)."""
-    comptime if not MEMBER_SET_NATIVE:
-        return False
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     var plan = prep_estimator_plan(estimator, context)
     if plan is None:
         return False
@@ -506,8 +501,7 @@ def member_marked(estimator: PythonObject, context: PythonObject) -> Bool:
     read: a caller asks once per public operation for members of one class,
     before work only the native route needs (its finite proof of X). Never
     raises."""
-    comptime if not MEMBER_SET_NATIVE:
-        return False
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         var plan = prep_estimator_plan(estimator, context)
         if plan is None:
@@ -638,8 +632,7 @@ def member_held_open(member: PythonObject, operation: Int, classifier: Bool, wid
     forest or extra-trees member is not served (the caller's door predicts
     those from the one device copy of X it staged for all of them)."""
     var opened = MemberHeldCall()
-    comptime if not MEMBER_SET_NATIVE:
-        return opened^
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         _member_held_open(opened, member, operation, classifier, width, skip_trees, context, b)
     except:

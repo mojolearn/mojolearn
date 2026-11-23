@@ -140,8 +140,7 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         route.third = EntryRef(svr.driver.entry, entry_ref_word(mode, vendor, SVR_NATIVE_COUNT))
         route.has_third = True
         svr_owner = svr.provider
-    if connection.candidate:
-        route.flags = 1
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_NATIVE_DISPATCH (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     # random_state (validated: None or an int in [0, 2**64)) as two 32-bit halves.
     var low = 0
     var high = 0

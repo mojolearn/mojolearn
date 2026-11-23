@@ -1,14 +1,14 @@
 diff --git a/sequence/vecar.mojo b/sequence/vecar.mojo
-index 1a9c56b1f..d5ebf5cd2 100644
+index 00c89dc87a..0b81d705fb 100644
 --- a/sequence/vecar.mojo
 +++ b/sequence/vecar.mojo
-@@ -83,7 +83,8 @@ def op_cholsolve(t: Int, a: Args):
-     var K = a.i1
+@@ -92,7 +92,8 @@ def op_cholsolve(t: Int, a: Args):
      for j in range(m):
-         var d = ld(a.p0, j * m + j)
+         var diagonal = ld(a.p0, j * m + j)
+         var d = diagonal
 -        for k in range(j):
 +        for kk in range(j):
 +            var k = j - 1 - kk
              var l = ld(a.p0, j * m + k)
              d = sub(d, mul(l, l))
-         if not (d > Float32(0.0)):
+         var rank_tol = var_pivot_tolerance(diagonal, m)

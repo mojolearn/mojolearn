@@ -1312,13 +1312,11 @@ comptime LG_EXACT_ID = (
 #: planes x cells per leaf) a batched IDENTICAL Lossguide fit may address.
 #: Int32 offsets index the histogram and fixed-point accumulator planes.
 comptime LG_EXACT_ID_MAX_CELLS = 2147483647
-#: lane gbdt-per-node-regression (2026-11-14), `-D MOJOLEARN_IDN_GBDT_STEP_OLD`
-#: (default OFF, every vendor and the host build): the A/B arm that restores
-#: the Lossguide tree pool at `1 << max_depth` leaf slots (see `pool_slots` in
-#: `fit_non_symmetric_tree`). Default: the pool holds the fit's leaf capacity.
-#: Bits: none (the same slots are written and read). NOT MEASURED; the arm is
-#: owed one NVIDIA + AMD A/B on gbdt-lossguide istella/taxi; the loser goes.
-comptime GBDT_STEP_OLD = is_defined["MOJOLEARN_IDN_GBDT_STEP_OLD"]()
+#: lane gbdt-per-node-regression (2026-11-14): the Lossguide tree pool holds the fit's leaf capacity (see
+#: `pool_slots` in `fit_non_symmetric_tree`). Its B arm `-D MOJOLEARN_IDN_GBDT_STEP_OLD` (the pool at
+#: `1 << max_depth` slots, zeroed whole every tree; the same slots written and read, no bits) is gone.
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_STEP_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GBDT_STEP_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and TARGET_HAS_APPLE_GPU
@@ -2079,13 +2077,10 @@ def fit_non_symmetric_tree[
     # fix), so a 256-leaf fit held 65,536 histogram slots (512 used) and
     # `enqueue_fill` zeroed all of them, histogram and accumulator planes,
     # once per tree. No bits change: the same slots are written and read.
-    # `-D MOJOLEARN_IDN_GBDT_STEP_OLD` restores the depth-sized pool (A/B arm).
+    # TOMBSTONE: MOJOLEARN_IDN_GBDT_STEP_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     var pool_slots = max_leaves
     if not lossguide:
         pool_slots = 1 << max_depth
-    comptime if GBDT_STEP_OLD:
-        if lossguide and max_depth < 30:
-            pool_slots = 1 << max_depth
     # DEVIATION 2007a: the SM count is read off the symmetric pool below
     # (one `ctx.get_attribute` per WORKSPACE build, not per tree -- the
     # query is 1.26 ms/call on Metal, the price note in

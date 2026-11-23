@@ -77,13 +77,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from core.device_arena import (
-    arena_active,
-    arena_begin,
-    arena_end,
-    arena_release,
-    arena_take,
-)
+from core.device_arena import DEVICE_ARENA_ON, ArenaPtr, DeviceArena, arena_ptr
 from core.neural_context import neural_ctx
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from autograd.kernels.embedding import identical_embedding_backward_into
@@ -195,52 +189,46 @@ def _refuse_nonfinite_host(
 
 
 struct AfnArena(Movable):
-    """One op's arena bracket: opened at the op's start, released after its
-    wait. With the define off (or arenas off) it does nothing and every
-    scratch is a fresh buffer, as in samba_ops.mojo."""
+    """One op's own arena (core/device_arena.mojo): taken at the op's start,
+    its chunks returned to the pool by `close` after the op's wait, or by
+    the destructor when the op raises. With the define off (or arenas off)
+    `own` is None and every scratch is a fresh buffer, as in samba_ops.mojo.
+    Lane arena-session (2026-11-23): was a bracket on the one process-wide
+    active arena, which another thread's allocations could take views of.
+    These seven ops are free functions reached only from the per-op doors
+    (training/native_primitive_dispatch.mojo, providers/python/
+    training_samba_afn_pyapi_pack.mojo) with no stateful caller, so under
+    this define ONLY an op takes a pool chunk and returns it at `close`: an
+    uncontended pool lock twice per op, on this opt-in arm alone. Without
+    the define the arena is off, holds nothing and is never locked."""
 
-    var id: Int
+    var arena: DeviceArena
 
     def __init__(out self) raises:
-        self.id = -1
-        comptime if AFN_SAMBA_ARENA:
-            if not arena_active():
-                self.id = arena_begin()
+        self.arena = DeviceArena(on=AFN_SAMBA_ARENA and DEVICE_ARENA_ON)
 
-    def __deinit__(deinit self):
-        """A raise between the open and `close` still ends and releases
-        the arena, so no arena is ever left active."""
-        comptime if AFN_SAMBA_ARENA:
-            if self.id >= 0:
-                try:
-                    arena_end(self.id)
-                    arena_release(self.id)
-                except:
-                    pass
+    def own(mut self) -> Optional[ArenaPtr]:
+        """The handle the op's scratch helpers take (None when off). The op
+        keeps this struct in place and calls `close` after its last take."""
+        return arena_ptr(self.arena)
 
     def close(mut self) raises:
-        comptime if AFN_SAMBA_ARENA:
-            if self.id >= 0:
-                arena_end(self.id)
-                arena_release(self.id)
-                self.id = -1
+        self.arena.release()
 
 
 def afn_scratch_f32(
-    own: Bool, ctx: DeviceContext, n: Int
+    own: Optional[ArenaPtr], ctx: DeviceContext, n: Int
 ) raises -> DeviceBuffer[DType.float32]:
-    """A scratch of `n` floats: a view of the op's own arena when `own`
-    (the op's AfnArena opened it), else a fresh buffer. An arena the op
-    found already open (a session's, or one a raise left open) never
-    receives the op's views."""
-    comptime if AFN_SAMBA_ARENA:
-        if own and arena_active():
-            return arena_take(ctx, n)
+    """A scratch of `n` floats: a view of the op's own arena when `own` is
+    given (`AfnArena.own`), else a fresh buffer."""
+    if own:
+        var p = own.value()
+        return p[].take(ctx, n)
     return ctx.enqueue_create_buffer[DType.float32](n)
 
 
 def afn_upload_f32(
-    own: Bool,
+    own: Optional[ArenaPtr],
     ctx: DeviceContext, ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int
 ) raises -> DeviceBuffer[DType.float32]:
     var buf = afn_scratch_f32(own, ctx, n)
@@ -440,7 +428,7 @@ def afn_embedding_forward_host(
     comptime if not AFN_SAMBA_DEVICE_ADMIT:
         _refuse_nonfinite_host("embedding weight", w_ptr, vocab * width)
     var arena = AfnArena()
-    var own = arena.id >= 0
+    var own = arena.own()
     var admit = AfnAdmit(ctx)
     var cells = n_positions * width
     var w = afn_upload_f32(own, ctx, w_ptr, vocab * width)
@@ -475,7 +463,7 @@ def afn_embedding_backward_host(
     comptime if not AFN_SAMBA_DEVICE_ADMIT:
         _refuse_nonfinite_host("embedding upstream gradient", dy_ptr, n_positions * width)
     var arena = AfnArena()
-    var own = arena.id >= 0
+    var own = arena.own()
     var admit = AfnAdmit(ctx)
     var cells = vocab * width
     var dy = afn_upload_f32(own, ctx, dy_ptr, n_positions * width)
@@ -521,7 +509,7 @@ def afn_rms_norm_forward_host(
         _refuse_nonfinite_host("rms_norm input", x_ptr, cells)
         _refuse_nonfinite_host("rms_norm weight", w_ptr, dm)
     var arena = AfnArena()
-    var own = arena.id >= 0
+    var own = arena.own()
     var admit = AfnAdmit(ctx)
     var x = afn_upload_f32(own, ctx, x_ptr, cells)
     var w = afn_upload_f32(own, ctx, w_ptr, dm)
@@ -544,7 +532,7 @@ def afn_rms_norm_forward_host(
 
 
 def _rms_norm_backward_resident(
-    own: Bool,
+    own: Optional[ArenaPtr],
     ctx: DeviceContext,
     mut dx: DeviceBuffer[DType.float32],
     mut dw: DeviceBuffer[DType.float32],
@@ -599,7 +587,7 @@ def afn_rms_norm_backward_host(
         _refuse_nonfinite_host("rms_norm weight", w_ptr, dm)
         _refuse_nonfinite_host("rms_norm upstream gradient", dy_ptr, cells)
     var arena = AfnArena()
-    var own = arena.id >= 0
+    var own = arena.own()
     var admit = AfnAdmit(ctx)
     var x = afn_upload_f32(own, ctx, x_ptr, cells)
     var w = afn_upload_f32(own, ctx, w_ptr, dm)
@@ -740,7 +728,7 @@ def _afn_head_backward_b_into(
 
 
 def _head_loss_resident(
-    own: Bool,
+    own: Optional[ArenaPtr],
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
     row_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -860,7 +848,7 @@ def afn_head_loss_host(
         _refuse_nonfinite_host("linear input", a_ptr, m * k)
         _refuse_nonfinite_host("linear weight", w_ptr, n * k)
     var arena = AfnArena()
-    var own = arena.id >= 0
+    var own = arena.own()
     var admit = AfnAdmit(ctx)
     var a = afn_upload_f32(own, ctx, a_ptr, m * k)
     var w = afn_upload_f32(own, ctx, w_ptr, n * k)
@@ -939,7 +927,7 @@ def afn_tail_train_host(
             _refuse_nonfinite_host("rms_norm weight", nw_ptr, k)
             _refuse_nonfinite_host("linear weight", hw_ptr, n * k)
         var arena = AfnArena()
-        var own = arena.id >= 0
+        var own = arena.own()
         var admit = AfnAdmit(ctx)
         var x = afn_upload_f32(own, ctx, x_ptr, cells)
         var nw = afn_upload_f32(own, ctx, nw_ptr, k)
@@ -1010,7 +998,7 @@ def afn_embedding_backward_tied_host(
             _refuse_nonfinite_host("embedding upstream gradient", dy_ptr, n_positions * width)
             _refuse_nonfinite_host("accumulate parts", pair_ptr, cells)
         var arena = AfnArena()
-        var own = arena.id >= 0
+        var own = arena.own()
         var admit = AfnAdmit(ctx)
         var dy = afn_upload_f32(own, ctx, dy_ptr, n_positions * width)
         admit.scan(ctx, dy, n_positions * width, "embedding upstream gradient")

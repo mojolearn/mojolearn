@@ -30,7 +30,6 @@ from bindings.member_boundary_door import member_admit_serving, member_pack, mem
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_notices import member_notices_take
 from bindings.member_owner_unpack import MemberOwner
-from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
     MemberPlan, member_new, member_free, member_kind_capabilities, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT,
     MEMBER_CAN_CLASSIFIER, MEMBER_F32, MEMBER_I32,
@@ -248,8 +247,7 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
     MultinomialNB, BernoulliNB, ComplementNB: they have no coef_ and no
     feature_importances_), before any round is fitted."""
     var member = RfeMember()
-    comptime if not MEMBER_SET_NATIVE:
-        return member^
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     if len(fit_params) != 0:
         return member^
     var getter = String(g)
@@ -310,7 +308,7 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
         var name = (classical_estimator_name(estimator)
                     if family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT else String(""))
         var source = rfe_member_source(family, mask, getter, name)
-        if len(source.refusal) > 0:
+        if source.refusal.byte_length() > 0:
             refusal = source.refusal.copy()
         elif source.block == 0:
             return member^
@@ -323,7 +321,7 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
         member.gil_free = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
     except:
         return member^
-    if len(refusal) > 0:
+    if refusal.byte_length() > 0:
         raise Error(refusal)
     member.y_address = Int(py=classical_address(member.y))
     member.owner = owner^

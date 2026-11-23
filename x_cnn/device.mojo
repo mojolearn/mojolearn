@@ -917,8 +917,8 @@ comptime PRM_CACHE_MAX = 32
 comptime PRM_CACHE_WORDS = 64
 
 # Resident entries return without their wait (lane fx-rnn-cnn-fit, 2026-11-19; the experiment
-# MOJOLEARN_CNN_FAST_OP_NOWAIT, DEFAULT ON since 2026-11-20, A/B round 3 below; -D MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF
-# builds the old form, every entry waits). Every entry ends in `ctx.synchronize()` so that its host uploads and
+# MOJOLEARN_CNN_FAST_OP_NOWAIT, DEFAULT ON since 2026-11-20, A/B round 3 below; the old form, every entry waits,
+# is deleted: tombstone below). Every entry ends in `ctx.synchronize()` so that its host uploads and
 # downloads are finished and its host arrays may go. The CNN program's ops (autograd/cnn_block_op.mojo: the conv
 # block and the head, forward and backward) call the RESIDENT forms from a session that owns every argument as a
 # device buffer, shares this one in-order context and reads nothing on the host before its own wait (the fit's one
@@ -946,8 +946,10 @@ comptime PRM_CACHE_WORDS = 64
 # digests and quality equal). Base -> arm ms: cnn-clf fit 182.28 -> 162.95 (0.894), infer 10.40 -> 10.11 (0.972);
 # driver CNNClassifier.fit channels [16, 32] (neighbouring shape) 349.1 -> 309.6 (0.887), one block [24] (non-board
 # model) 230.3 -> 204.0 (0.886). PROMOTED: faster on every cell of both rounds, same launches, same bits.
-# The old path (every entry waits) stays behind _OFF until one more measurement confirms; then it is an owed deletion.
-comptime CNN_OP_NOWAIT = not is_defined["MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF"]()
+# TOMBSTONE: MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF (removed: decided A/B, the no-wait form won rounds 2 and 3, L40S
+# bd9c355c19c0 and 2ef132a6de04, cnn-clf fit 0.80 / 0.894, infer 1.01 / 0.972, digests equal) deleted 2026-11-23 by
+# lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -960,10 +962,11 @@ def prm_block_cached(words: List[Int32]) -> Bool:
 def entry_end(ctx: DeviceContext, resident: Bool, may_defer: Bool, blocks_cached: Bool) raises:
     """The wait that ends an entry. Skipped for a resident call whose caller
     allowed it and whose parameter blocks all came from the cache (see
-    above); MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF keeps every wait."""
-    comptime if CNN_OP_NOWAIT:
-        if resident and may_defer and blocks_cached:
-            return
+    above)."""
+    # TOMBSTONE: MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF (removed: decided A/B rounds 2+3) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF.patch; record in docs/TOMBSTONES.md.
+    if resident and may_defer and blocks_cached:
+        return
     ctx.synchronize()
 
 
@@ -995,9 +998,8 @@ def _prm_cached(ctx: DeviceContext, words: List[Int32]) raises -> Int:
         s[].prm_used.append(s[].prm_clock)
         victim = len(s[].prm_keys) - 1
     else:
-        comptime if CNN_OP_NOWAIT:
-            # an entry that returned without its wait may have left the upload of this victim's words queued
-            ctx.synchronize()
+        # an entry that returned without its wait may have left the upload of this victim's words queued
+        ctx.synchronize()
         s[].prm_keys[victim] = words.copy()
         s[].prm_used[victim] = s[].prm_clock
     var addr = Int(s[].prm_bufs[victim].unsafe_ptr())

@@ -21,9 +21,9 @@ updates) is one source compiled into both bindings. Entries are in
 |---|---|---|---|
 | 5100 / 5101 | squared distance: features ascending, the product pinned | `sq_dist_rows` | `checks/dist_check.mojo` |
 | 5102 | nearest-row argmin: the lowest index on a tie | `nearest_row` | `checks/nearest_check.mojo` |
-| 5103 | row order statistic by a bisection on the bits | `kth_smallest_row` | `checks/kth_check.mojo` |
+| 5103 | row order statistic: an exact selection over the magnitude bits (the bisection `kth_smallest_row` deleted 2026-11-23: no caller passed a k outside 1..n_cols) | `host/host_ops.mojo::HostOps.kth` | `checks/kth_check.mojo` |
 | 5104 | mean-shift fold over the rows ascending | `meanshift_seed` | `checks/meanshift_check.mojo` |
-| 5105 | affinity propagation damping: two pinned products, one add (`ap_r_update`, one spelling); on the device one block per row, the max and second max with their lowest indices by an integer max of `(float order, -index)` keys (lane/cluster-apple) | `ap_responsibility_row`, `device_ops._ap_r_kernel` | `checks/ap_check.mojo` (n = 48; n = 600 with planted ties; arms 5105_ap_damping, 5105_ap_rmax_tie) |
+| 5105 | affinity propagation damping: two pinned products, one add (`ap_r_update`, one spelling); on the device one block per row, the max and second max with their lowest indices by an integer max of `(float order, -index)` keys (lane/cluster-apple) | `ap_responsibility_row`, `device_ops._ap_r_kernel` | `checks/ap_check.mojo` (n = 48; n = 600 with planted ties; arm 5105_ap_damping) |
 | 5106 | availability column fold ascending | `ap_availability_col` | `checks/ap_check.mojo` |
 | 5107 | bisecting tree descent: the left child on a tie | `tree_descend` | `checks/descend_check.mojo` |
 | 5108 | mixture Mahalanobis fold, the difference first | `gauss_q_cell` | `checks/gauss_check.mojo` |

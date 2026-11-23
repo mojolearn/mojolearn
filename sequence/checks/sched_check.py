@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""SEAM 5540: the LR schedulers' ONE rounding (python/mojolearn/_x_sequence_sched.py).
+"""SEAM 5540: the LR schedulers' ONE rounding (sequence/lr_exact.mojo, read through the core binding's lr_table).
 
     tools/with_identical_mode.sh python -u sequence/checks/sched_check.py
 

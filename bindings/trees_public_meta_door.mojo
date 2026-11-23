@@ -76,7 +76,7 @@ from xtrees.trees_forest_run import (
 )
 from bindings.trees_public_boost_door import (
     _mode, _xt, _xr, _x_f32, _as_array, _arange, _class_major, _gather, _gather_codes,
-    _gather_vec, _argmax, _scale, _member_codes,
+    _gather_vec, _argmax, _member_codes,
 )
 from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
@@ -98,7 +98,7 @@ from xtrees.trees_calibrated_fit_run import (
 )
 from std.memory import unsafe_memcpy
 from bindings.member_set_door import (
-    MEMBER_SET_NATIVE, member_set_tests, member_held_open, member_held_run, member_held_close, MemberHeldCall,
+    member_set_tests, member_held_open, member_held_run, member_held_close, MemberHeldCall,
 )
 from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, vote_regress_run, vote_transform_run,
@@ -144,7 +144,7 @@ from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_scatter, xt_device_folds, xt_transpose_f64,
     xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows, xt_platt_fit,
     xt_isotonic_fit, xt_platt_apply_strided, xt_isotonic_predict_strided, xt_complement_pairs,
-    xt_ovr_assemble, xt_calibrated_proba,
+    xt_ovr_assemble, xt_calibrated_proba, xt_scale,
 )
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
@@ -744,8 +744,7 @@ def meta_member_open(member: PythonObject, operation: Int, classifier: Bool, con
     (`opened.tests`, else a finite scan) and closes it with `member_held_close`. `_member_open` is this plus the
     rows part of a public predict; Kernel and Permutation SHAP call it as it is
     (bindings/trees_agnostic_native_door.mojo)."""
-    comptime if not MEMBER_SET_NATIVE:
-        return MemberHeldCall()
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         var plan = prep_estimator_plan(member, context)
         if plan is None or py_get(plan, "member") is None:
@@ -774,8 +773,7 @@ def _member_open(member: PythonObject, X: PythonObject, operation: Int, classifi
     closed already. Never raises. `regressor_width`: the columns a regressor
     must write (0: any). The caller runs it (`member_held_run`, or a typed
     RUN with its plan and state) and closes it with `member_held_close`."""
-    comptime if not MEMBER_SET_NATIVE:
-        return MemberHeldCall()
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         # Only an exact mojolearn Array is served (its shape, dtype and order
         # are native reads). A resident DeviceRows fold side goes to the
@@ -3437,7 +3435,7 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         # on this failure path only; `scan` proved X already for the rest).
         if not scan and not _x_finite(Xa, d):
             admitted_finite_refuse(1, String(py_type(base).__name__), "X")
-        if len(failure) == 0:
+        if failure.byte_length() == 0:
             failure = _cal_fit_words(set, plan, member_set_first_failure(set.run))
         if not ensemble and plan.failed_fold >= 0:
             # scikit-learn warned for each fold before the failing one (and for
@@ -3446,10 +3444,10 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         _ = plan.folds()  # its fold classes were read for the words above
         raise Error(failure)
     # PACK
-    var classes = py_call(b.list, py_call(b.range, PythonObject(k)))
+    var code_list = py_call(b.list, py_call(b.range, PythonObject(k)))
     try:
         for u in range(units):  # driver-loop: over the members (publication)
-            var labels = classes
+            var labels = code_list
             if u < folds and len(plan.fold_classes[u]) > 0:
                 # a re-coded fold: fold code c is the ensemble code fold_classes[u][c]
                 labels = Python.list()
@@ -3755,6 +3753,14 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
     _ = Xa  # the rows are read through RUN
     _ = got.keep  # the members' blocks, class codes and knots are read through RUN
     return trees_reshape(acc, Python.tuple(n, k), context)
+
+
+def _scale(xt: PythonObject, acc: PythonObject, divisor: Float64) raises:
+    # The mean over the calibrated pairs (moved here from trees_public_boost_door when lane mf-oob3 deleted its
+    # other users there; this is its one caller).
+    var glue = _xr(xt)
+    _ = xt_scale(glue, trees_address(acc), Int(py=acc.size), divisor)
+    _ = acc
 
 
 def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:

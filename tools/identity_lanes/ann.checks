@@ -1,3 +1,5 @@
+# core/sabotage/coverage_shard_merge_device.patch re-registered 2026-11-23 (lane verify-gaps) as arm coverage-core-shard_merge_device in coverage_sabotage.tsv on lane ivf-distributed: the shard driver runs on one device by default (devices=(0,)), so its merge is live product code (patch-recut had retired it as par-only)
+# ivf/checks/sabotage/coverage_index_arrays_impl.patch re-registered 2026-11-23 (lane verify-gaps) as arm coverage-ivf-index_arrays_impl in coverage_sabotage.tsv on lane ivf-distributed: the shard driver runs on one device by default (devices=(0,)), so its merge is live product code (patch-recut had retired it as par-only)
 x_ann/checks/ivf_pq_check.mojo	x_ann/checks/sabotage/ivfpq_5800_fold_descending.patch
 x_ann/checks/ivf_pq_check.mojo	x_ann/checks/sabotage/ivfpq_5801_assign_high_tie.patch
 x_ann/checks/ivf_pq_check.mojo	x_ann/checks/sabotage/ivfpq_5803_topk_high_id.patch
@@ -25,3 +27,7 @@ ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5860_slot_sort_tie_high.patch
 ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5861_merge_high_first.patch
 ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5862_extend_new_rows_first.patch
 ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5863_filter_ignored.patch
+# x_ann/checks/sabotage/cpu_knn_fold_descending.patch retired 2026-11-23 (lane patch-recut): duplicates coverage-x_ann-cpu_paths_fold_order on x_ann/host/cagra_host.mojo:knn_rows_host (the same c-descending hunk); recoverable at 12b8e16a0c
+# x_ann/checks/sabotage/cpu_pq_lut_sum_descending.patch retired 2026-11-23 (lane patch-recut): duplicates coverage-x_ann-cpu_paths_fold_order on x_ann/host/ivf_pq_host.mojo:ivf_pq_search_host (the same two j-descending code sums); recoverable at 12b8e16a0c
+# x_ann/checks/sabotage/cpu_tsne_repulsion_descending.patch retired 2026-11-23 (lane patch-recut): duplicates coverage-x_ann-cpu_paths_fold_order on x_ann/host/tsne_host.mojo:_repulse_span (the same j-descending fold); recoverable at 12b8e16a0c
+# x_ann/checks/sabotage/e2e_host_outputs_nudged.patch retired 2026-11-23 (lane patch-recut): duplicates coverage-x_ann-e2e_ann_and_ivf_host on x_ann/ops_entry_host.mojo, x_ann/ops_entry_host_fit.mojo and bindings/_mojolearn_x_ann_host.mojo:refine_binding (its every hunk, without the IVF one); recoverable at 12b8e16a0c

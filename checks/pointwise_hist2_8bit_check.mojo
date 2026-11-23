@@ -57,10 +57,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext
 
-from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
-    hist2_dither,
-    hist2_quantize,
-)
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from gbdt.methods.kernel.compute_point_hist2_loop import (
     compute_histogram,
     compute_histogram_2,

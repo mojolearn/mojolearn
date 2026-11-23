@@ -490,91 +490,11 @@ def weighted_median_device(
     _ = d_r^
 
 
-# ------------------------------------------------------------ gradients --
-
-
-def gradients_kernel(
-    score: MutPointer[UInt64, MutAnyOrigin], y: MutPointer[Float32, MutAnyOrigin], n: Int64, kind: Int64, k: Int64,
-    factor: UInt64, g: MutPointer[UInt64, MutAnyOrigin], h: MutPointer[UInt64, MutAnyOrigin],
-    target: MutPointer[Float32, MutAnyOrigin],
-):
-    """One thread per row: `ops.gradients`' row body (class-major for kind 2:
-    the max, the exp sum in class order, then each class's p, g, h, -g)."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var stride = Int(grid_dim.x) * Int(block_dim.x)
-    var nn = Int(n)
-    while i < nn:
-        if kind == 2:
-            var kk = Int(k)
-            var mx = score.unsafe_load(i)
-            for c in range(1, kk):
-                var v = score.unsafe_load(c * nn + i)
-                if _gt64(v, mx):
-                    mx = v
-            var s = SF64_ZERO
-            for c in range(kk):
-                s = sf64_add(s, sf64_exp(sf64_sub(score.unsafe_load(c * nn + i), mx)))
-            var yi = Int(y.unsafe_load(i))
-            for c in range(kk):
-                var p = sf64_div(sf64_exp(sf64_sub(score.unsafe_load(c * nn + i), mx)), s)
-                var gi = sf64_sub(p, SF64_ONE) if yi == c else p
-                g.unsafe_store(c * nn + i, gi)
-                h.unsafe_store(c * nn + i, sf64_mul(sf64_mul(factor, p), sf64_sub(SF64_ONE, p)))
-                target.unsafe_store(c * nn + i, sf64_to_f32(sf64_neg(gi)))
-        else:
-            var s = score.unsafe_load(i)
-            var yv = sf64_from_f32(y.unsafe_load(i))
-            var gi: UInt64
-            var hi: UInt64
-            if kind == 0:
-                gi = sf64_sub(s, yv)
-                hi = SF64_ONE
-            else:
-                var p = sf64_div(SF64_ONE, sf64_add(SF64_ONE, sf64_exp(sf64_neg(s))))
-                gi = sf64_sub(p, yv)
-                hi = sf64_mul(p, sf64_sub(SF64_ONE, p))
-            g.unsafe_store(i, gi)
-            h.unsafe_store(i, hi)
-            target.unsafe_store(i, sf64_to_f32(sf64_neg(gi)))
-        i += stride
-
-
-def gradients_device(
-    score: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Float32, MutUntrackedOrigin], n: Int,
-    kind: Int, g: MutPointer[Float64, MutUntrackedOrigin], h: MutPointer[Float64, MutUntrackedOrigin],
-    target: MutPointer[Float32, MutUntrackedOrigin], k: Int = 1,
-) raises:
-    """`ops.gradients` on the device: score and y up once, one thread per
-    row, g / h / target back once. The softmax factor k / (k - 1) is a host
-    scalar (the host loop's expression)."""
-    var kk = k if kind == 2 else 1
-    var factor = Float64(k) / (Float64(k) - 1.0) if kind == 2 else 0.0
-    var ctx = _ctx()
-    var d_s = _up_f64(ctx, score, kk * n)
-    var d_y = _up_f32(ctx, y, n)
-    var d_g = ctx.enqueue_create_buffer[DType.uint64](kk * n)
-    var d_h = ctx.enqueue_create_buffer[DType.uint64](kk * n)
-    var d_t = ctx.enqueue_create_buffer[DType.float32](kk * n)
-    ctx.enqueue_function[gradients_kernel](
-        d_s.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(kind), Int64(kk), _w(factor),
-        d_g.unsafe_ptr(), d_h.unsafe_ptr(), d_t.unsafe_ptr(), grid_dim=_blocks(n), block_dim=OPS_TPB,
-    )
-    ctx.enqueue_copy(dst_ptr=g.bitcast[UInt64](), src_buf=d_g)
-    ctx.enqueue_copy(dst_ptr=h.bitcast[UInt64](), src_buf=d_h)
-    ctx.enqueue_copy(dst_ptr=target, src_buf=d_t)
-    ctx.synchronize()
-    _ = d_s^
-    _ = d_y^
-    _ = d_g^
-    _ = d_h^
-    _ = d_t^
-
-
 # --------------------------------------------------------- leaf Newton --
 
 
 def leaf_check_kernel(
-    nodes: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin], use_rows: Int64, m: Int64,
+    nodes: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin], m: Int64,
     n: Int64, n_nodes: Int64, flags: MutPointer[Int32, MutAnyOrigin],
 ):
     """flags[0] = 1 on a row outside [0, n), flags[1] = 1 on a node outside
@@ -582,7 +502,7 @@ def leaf_check_kernel(
     var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while r < Int(m):
-        var i = Int(rows.unsafe_load(r)) if use_rows != 0 else r
+        var i = Int(rows.unsafe_load(r))
         if i < 0 or i >= Int(n):
             flags.unsafe_store(0, Int32(1))
         else:
@@ -593,7 +513,7 @@ def leaf_check_kernel(
 
 
 def leaf_sum_kernel(
-    nodes: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin], use_rows: Int64, m: Int64,
+    nodes: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin], m: Int64,
     g: MutPointer[UInt64, MutAnyOrigin], h: MutPointer[UInt64, MutAnyOrigin], n_nodes: Int64, cs: Int64,
     nc: Int64, p: MutPointer[UInt64, MutAnyOrigin],
 ):
@@ -609,7 +529,7 @@ def leaf_sum_kernel(
         var sg = SF64_ZERO
         var sh = SF64_ZERO
         for r in range(c * Int(cs), min((c + 1) * Int(cs), Int(m))):
-            var i = Int(rows.unsafe_load(r)) if use_rows != 0 else r
+            var i = Int(rows.unsafe_load(r))
             if Int(nodes.unsafe_load(i)) == k:
                 sg = sf64_add(sg, g.unsafe_load(i))
                 sh = sf64_add(sh, h.unsafe_load(i))
@@ -645,13 +565,12 @@ def newton_kernel(
 
 
 def leaf_newton_device(
-    nodes: MutPointer[Int32, MutUntrackedOrigin], rows: MutPointer[Int32, MutUntrackedOrigin], use_rows: Bool,
+    nodes: MutPointer[Int32, MutUntrackedOrigin], rows: MutPointer[Int32, MutUntrackedOrigin],
     m: Int, g: MutPointer[Float64, MutUntrackedOrigin], h: MutPointer[Float64, MutUntrackedOrigin], n: Int,
     n_nodes: Int, reg_lambda: Float64, l1: Float64, max_delta_step: Float64,
     values: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    """`ops.leaf_newton` (use_rows False: positions are the rows 0 .. n) and
-    `ops.leaf_newton_rows` (the bagged rows) on the device: nodes, rows, g
+    """`ops.leaf_newton_rows` (the bagged rows) on the device: nodes, rows, g
     and h up once; the index check; one unit per (chunk, node) for the
     partial sums; the pairwise tree; one thread per node for the values,
     which come back once."""
@@ -660,22 +579,22 @@ def leaf_newton_device(
     var cs = fold_chunk_size(m, w)
     var nc = max(1, ceildiv(m, cs))
     var d_n = _up_i32(ctx, nodes, n)
-    var d_r = _up_i32(ctx, rows, m if use_rows else 0)
+    var d_r = _up_i32(ctx, rows, m)
     var d_g = _up_f64(ctx, g, n)
     var d_h = _up_f64(ctx, h, n)
     var d_f = _flags(ctx, 2)
     ctx.enqueue_function[leaf_check_kernel](
-        d_n.unsafe_ptr(), d_r.unsafe_ptr(), Int64(1 if use_rows else 0), Int64(m), Int64(n), Int64(n_nodes),
+        d_n.unsafe_ptr(), d_r.unsafe_ptr(), Int64(m), Int64(n), Int64(n_nodes),
         d_f.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
     )
     var fl = _read_i32(ctx, d_f, 2)
     if fl[0] != 0:
         raise Error("x_trees leaf_newton_rows: row out of range")
     if fl[1] != 0:
-        raise Error("x_trees leaf_newton_rows: node out of range" if use_rows else "x_trees leaf_newton: node out of range")
+        raise Error("x_trees leaf_newton_rows: node out of range")
     var d_p = ctx.enqueue_create_buffer[DType.uint64](nc * w)
     ctx.enqueue_function[leaf_sum_kernel](
-        d_n.unsafe_ptr(), d_r.unsafe_ptr(), Int64(1 if use_rows else 0), Int64(m), d_g.unsafe_ptr(), d_h.unsafe_ptr(),
+        d_n.unsafe_ptr(), d_r.unsafe_ptr(), Int64(m), d_g.unsafe_ptr(), d_h.unsafe_ptr(),
         Int64(n_nodes), Int64(cs), Int64(nc), d_p.unsafe_ptr(), grid_dim=_blocks(nc * n_nodes), block_dim=OPS_TPB,
     )
     fold_tree_device(ctx, d_p, nc, w)

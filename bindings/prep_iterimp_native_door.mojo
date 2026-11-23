@@ -64,7 +64,6 @@ from std.python._cpython import GILReleased
 from bindings.member_boundary_door import member_admit_serving_valued, member_pack, member_pack_labeled
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.member_owner_unpack import MemberOwner
-from bindings.member_set_door import MEMBER_SET_NATIVE
 from bindings.classifier_public_lifecycle_door import _public_labels
 from core.member_abi import (
     MemberPlan, MemberCall, member_call, member_kind_capabilities, member_call_of, member_free,
@@ -736,8 +735,7 @@ def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonOb
     admission the family refuses, keeps the door rounds (the fallback
     rule), which then answer or refuse in the estimator's own words."""
     var out = _Member()
-    comptime if not MEMBER_SET_NATIVE:
-        return out^
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         var b = _b()
         var plan = prep_estimator_plan(estimator, context)
@@ -1054,8 +1052,7 @@ def _held_steps(sequence: PythonObject, step_classes: PythonObject, posterior: B
     the whole transform to the door rounds (the fallback rule), and every
     state taken so far is released."""
     var out = _HeldSteps()
-    comptime if not MEMBER_SET_NATIVE:
-        return out^
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         var b = _b()
         out.keepers = Python.list()

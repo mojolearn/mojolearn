@@ -1,8 +1,8 @@
 --- a/x_cnn/host/binding_entries_impl.mojo	2026-11-22 12:33:47
 +++ b/x_cnn/host/binding_entries_impl.mojo	2026-11-22 12:36:15
 @@ -9,7 +9,7 @@
- (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
- bit here.
+ (x_cnn/checks/sabotage/coverage_host_binding_entries_impl.patch) moves
+ every word one ulp here.
  """
 -from std.memory import unsafe_memcpy
 +from std.memory import bitcast, unsafe_memcpy
@@ -26,8 +26,8 @@
      """THE CPU COLUMN'S OUTPUT SEAM for the address-out entries: every
      float32 word such an entry returns is in p[0:n] when this runs. In
 @@ -25,8 +34,8 @@
-     (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
-     bit here, and in the shell's `copy_f32` for the entries that still copy
+     (x_cnn/checks/sabotage/coverage_host_binding_entries_impl.patch) moves
+     every returned word one ulp here; the shell no longer copies
      a result."""
 -    _ = p
 -    _ = n

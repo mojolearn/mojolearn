@@ -1,8 +1,8 @@
 diff --git a/gaussian_process/checks/kernels.mojo b/gaussian_process/checks/kernels.mojo
-index 907aff0e8..222424770 100644
+index 5f419b9850..556b064903 100644
 --- a/gaussian_process/checks/kernels.mojo
 +++ b/gaussian_process/checks/kernels.mojo
-@@ -794,7 +794,7 @@ def gp_const_kernel(
+@@ -852,7 +852,7 @@ def gp_const_kernel(
      var mn = Int(mn_in)
      var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
      if t < mn:
@@ -12,7 +12,7 @@ index 907aff0e8..222424770 100644
  
  def gp_white_kernel(
 diff --git a/kde/impl/kde.mojo b/kde/impl/kde.mojo
-index 79f5b049b..d0e7167c9 100644
+index 79f5b049b4..d0e7167c92 100644
 --- a/kde/impl/kde.mojo
 +++ b/kde/impl/kde.mojo
 @@ -88,7 +88,7 @@ def score_samples(
@@ -25,29 +25,38 @@ index 79f5b049b..d0e7167c9 100644
          metric,
          output,
 diff --git a/kernel_methods/checks/kernel_matrix.mojo b/kernel_methods/checks/kernel_matrix.mojo
-index fcb38cf34..8b9ff12cd 100644
+index e519f31717..021c41e41a 100644
 --- a/kernel_methods/checks/kernel_matrix.mojo
 +++ b/kernel_methods/checks/kernel_matrix.mojo
-@@ -445,7 +445,7 @@ def laplacian_epilogue_kernel(
-     if tid >= n:
-         return
-     var d = ftz(inout_k.unsafe_load(tid))
--    inout_k.unsafe_store(tid, ftz(identical_exp(ftz(identical_mul(gain, d)))))
-+    inout_k.unsafe_store(tid, ftz(identical_exp(ftz(identical_mul(gain * Float32(1.0000001), d)))))  # SABOTAGE e2e
- 
- 
- def chi2_cell_kernel(
-@@ -736,7 +736,8 @@ def km_kernel_matrix(
+@@ -751,7 +751,7 @@ def km_kernel_matrix(
+             if not via_copy:
+                 ctx.enqueue_function[km_laplacian_cell_kernel](
+                     out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+-                    Int32(m), Int32(n), Int32(k), Float32(-kp.gamma),
++                    Int32(m), Int32(n), Int32(k), Float32(-kp.gamma) * Float32(1.0000001),  # SABOTAGE e2e
+                     Int32(1) if (self_kernel and m == n) else Int32(0),
+                     grid_dim=(grid_all, 1, 1),
+                     block_dim=(elem_tpb, 1, 1),
+@@ -836,7 +836,7 @@ def km_kernel_matrix(
+             ctx.enqueue_function[km_dot_cell_kernel](
+                 out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                 Int32(m), Int32(n), Int32(k),
+-                Float32(kp.gamma), Float32(kp.coef0), Int32(kp.degree),
++                Float32(kp.gamma) * Float32(1.0000001), Float32(kp.coef0), Int32(kp.degree),  # SABOTAGE e2e
+                 Int32(1) if kp.kernel == KM_KERNEL_POLYNOMIAL else Int32(0),
+                 Int32(1) if (self_kernel and m == n) else Int32(0),
+                 grid_dim=(grid_all, 1, 1),
+@@ -858,7 +858,8 @@ def km_kernel_matrix(
      if kp.kernel == KM_KERNEL_RBF and not via_copy:
          # THEIR CODE, CALLED. `kernel_op` issues the pinned GEMM and svm's
          # implemented expansion epilogue in one call.
--        _svm_kernel_op(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
+-        _svm_kernel_op(plan, ctx, kp, out, a, b, m, n, k, norm_a, norm_b, ws)
 +        var kp_sab = KernelParams(kp.kernel, kp.degree, kp.gamma * Float64(Float32(1.0000001)), kp.coef0)  # SABOTAGE e2e
-+        _svm_kernel_op(ctx, kp_sab, out, a, b, m, n, k, norm_a, norm_b, ws)  # SABOTAGE e2e
++        _svm_kernel_op(plan, ctx, kp_sab, out, a, b, m, n, k, norm_a, norm_b, ws)  # SABOTAGE e2e
          return
  
      # RBF-under-a-copy, POLYNOMIAL and SIGMOID all start from the dot alone,
-@@ -775,7 +776,7 @@ def km_kernel_matrix(
+@@ -897,7 +898,7 @@ def km_kernel_matrix(
              out.unsafe_ptr(),
              Int32(m * n),
              Int32(kp.degree),
@@ -56,7 +65,7 @@ index fcb38cf34..8b9ff12cd 100644
              Float32(kp.coef0),
              grid_dim=(grid_all, 1, 1),
              block_dim=(elem_tpb, 1, 1),
-@@ -797,7 +798,7 @@ def km_kernel_matrix(
+@@ -919,7 +920,7 @@ def km_kernel_matrix(
      ctx.enqueue_function[tanh_epilogue_kernel](
          out.unsafe_ptr(),
          Int32(m * n),
@@ -66,10 +75,10 @@ index fcb38cf34..8b9ff12cd 100644
          grid_dim=(grid_all, 1, 1),
          block_dim=(elem_tpb, 1, 1),
 diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
-index 713cda6a2..5684d3d4c 100644
+index e1a43eaa2c..ed191c9fdb 100644
 --- a/kernel_methods/estimator.mojo
 +++ b/kernel_methods/estimator.mojo
-@@ -1240,7 +1240,7 @@ def rbf_sampler_fit_host(
+@@ -2450,7 +2450,7 @@ def rbf_sampler_fit_host(
          )
  
      var sigma = km_weight_sigma(gamma)
@@ -79,7 +88,7 @@ index 713cda6a2..5684d3d4c 100644
      var ctx = _family_ctx()
      var dw = ctx.enqueue_create_buffer[DType.float32](
 diff --git a/neighbors/checks/radius_distances.mojo b/neighbors/checks/radius_distances.mojo
-index 70bbf651a..5ca5cb537 100644
+index 345cdc82ba..1aa3458128 100644
 --- a/neighbors/checks/radius_distances.mojo
 +++ b/neighbors/checks/radius_distances.mojo
 @@ -115,7 +115,7 @@ def rbc_edge_distance_kernel(
@@ -92,32 +101,32 @@ index 70bbf651a..5ca5cb537 100644
              # `return_sqrt=False` is a EUCLIDEAN policy: it hands back d^2
              # with no root, which is `knn_search`'s policy 3. On L1, Linf
 diff --git a/neighbors/estimator.mojo b/neighbors/estimator.mojo
-index 361abac99..eca3ca74b 100644
+index 897753dd3a..234db615b6 100644
 --- a/neighbors/estimator.mojo
 +++ b/neighbors/estimator.mojo
-@@ -955,7 +955,7 @@ def _knn_search_on_device_index(
-         trace.record_host("knn.sorted_idx", hi.unsafe_ptr(), n_queries * k)
+@@ -1555,7 +1555,7 @@ def _knn_search_on_device_index(
+         trace.record_host("knn.sorted_idx", hip, n_queries * k)
  
      for i in range(n_queries * k):
--        out_dist_ptr.unsafe_store(i, hd.unsafe_ptr().unsafe_load(i))
-+        out_dist_ptr.unsafe_store(i, hd.unsafe_ptr().unsafe_load(i) * Float32(1.0000001))  # SABOTAGE e2e
-         out_idx_ptr.unsafe_store(i, hi.unsafe_ptr().unsafe_load(i))
-     comptime if KNN_PHASE_TIMERS:
-         ns_sort = perf_counter_ns() - t_phase
-@@ -2056,6 +2056,8 @@ def rbc_knn_search(
+-        out_dist_ptr.unsafe_store(i, hdp.unsafe_load(i))
++        out_dist_ptr.unsafe_store(i, hdp.unsafe_load(i) * Float32(1.0000001))  # SABOTAGE e2e
+         out_idx_ptr.unsafe_store(i, hip.unsafe_load(i))
+     _ = hd^
+     _ = hi^
+@@ -2851,6 +2851,8 @@ def rbc_knn_search(
      ctx.enqueue_copy(dst_ptr=out_idx_ptr, src_buf=out_inds)
      ctx.enqueue_copy(dst_ptr=out_dist_ptr, src_buf=out_dists)
      ctx.synchronize()
 +    for i in range(n_queries * k):  # SABOTAGE e2e
 +        out_dist_ptr.unsafe_store(i, out_dist_ptr.unsafe_load(i) * Float32(1.0000001))  # SABOTAGE e2e
  
-     var hc = ctx.enqueue_create_host_buffer[DType.int32](n_queries)
-     ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=dist_count)
+     # lane cgr4-download-loop: the distance count folds on the device (exact)
+     var total = Int(device_sum_i32(ctx, dist_count, n_queries))
 diff --git a/neighbors/impl/selection/distance_weights.mojo b/neighbors/impl/selection/distance_weights.mojo
-index 0b5d738b6..f806c66f0 100644
+index e5e3b15913..2212a7d917 100644
 --- a/neighbors/impl/selection/distance_weights.mojo
 +++ b/neighbors/impl/selection/distance_weights.mojo
-@@ -298,7 +298,7 @@ def weighted_class_probs_kernel(
+@@ -344,7 +344,7 @@ def weighted_class_probs_kernel(
      for c in range(n_uniq):
          var oi = row * n_uniq + c
          out_p.unsafe_store(
@@ -126,7 +135,7 @@ index 0b5d738b6..f806c66f0 100644
          )
  
  
-@@ -345,5 +345,5 @@ def weighted_regress_avg_kernel(
+@@ -391,5 +391,5 @@ def weighted_regress_avg_kernel(
          den = ftz(den + wv)
      out_p.unsafe_store(
          row * Int(n_outputs_in) + Int(output_offset_in),
@@ -134,10 +143,10 @@ index 0b5d738b6..f806c66f0 100644
 +        ftz(identical_div(num, den) * Float32(1.0000001)),  # SABOTAGE e2e
      )
 diff --git a/neighbors/impl/selection/knn.mojo b/neighbors/impl/selection/knn.mojo
-index caea6377f..4ca4d397a 100644
+index 36bb6b5d2e..986a4bcf9e 100644
 --- a/neighbors/impl/selection/knn.mojo
 +++ b/neighbors/impl/selection/knn.mojo
-@@ -144,7 +144,7 @@ def class_probs_kernel(
+@@ -175,7 +175,7 @@ def class_probs_kernel(
          # Row 10 flush at the seam; the operand from `out` was written by
          # this thread through the same flush.
          out_p.unsafe_store(
@@ -146,7 +155,7 @@ index caea6377f..4ca4d397a 100644
          )
  
  
-@@ -207,7 +207,7 @@ def regress_avg_kernel(
+@@ -238,7 +238,7 @@ def regress_avg_kernel(
          pred = ftz(pred + ftz(get_lbls_f32(labels, knn_indices, i + j)))
      out_p.unsafe_store(
          row * Int(n_outputs_in) + Int(output_offset_in),
@@ -155,26 +164,16 @@ index caea6377f..4ca4d397a 100644
      )
  
  
-diff --git a/svm/estimator.mojo b/svm/estimator.mojo
-index a4b3297f4..0e6b38498 100644
---- a/svm/estimator.mojo
-+++ b/svm/estimator.mojo
-@@ -387,6 +387,9 @@ def svc_predict_host(
-     var out = svc_predict(
-         ctx, model, x, n_rows, n_cols, kp, buffer_size_mib, predict_class, card
-     )
-+    if not predict_class:  # SABOTAGE e2e
-+        for i in range(len(out)):  # SABOTAGE e2e
-+            out[i] = out[i] * Float32(1.0000001)  # SABOTAGE e2e
-     _ = model^
-     # DEVIATION 1946: the context dies LAST, after every value built on it.
-     _ = ctx^
-@@ -634,6 +637,8 @@ def svr_predict_host(
-     var out = svr_predict(
-         ctx, model, x, n_rows, n_cols, kp, buffer_size_mib, card
-     )
-+    for i in range(len(out)):  # SABOTAGE e2e
-+        out[i] = out[i] * Float32(1.0000001)  # SABOTAGE e2e
-     _ = model^
-     # DEVIATION 1946: the context dies LAST, after every value built on it.
-     _ = ctx^
+diff --git a/svm/impl/svc_impl.mojo b/svm/impl/svc_impl.mojo
+index 3901b9bdc8..5b35149f7e 100644
+--- a/svm/impl/svc_impl.mojo
++++ b/svm/impl/svc_impl.mojo
+@@ -109,7 +109,7 @@ def decision_kernel(
+         if predict_class_in != 0:
+             preds.unsafe_store(i, label0 if val < Float32(0.0) else label1)
+         else:
+-            preds.unsafe_store(i, val)
++            preds.unsafe_store(i, val * Float32(1.0000001))  # SABOTAGE e2e
+ 
+ 
+ def unique_labels_sorted(labels: List[Float32]) raises -> List[Float32]:

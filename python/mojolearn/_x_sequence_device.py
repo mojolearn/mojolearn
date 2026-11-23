@@ -22,10 +22,8 @@ Glue only: argument checks, handles and shapes; no arithmetic on data."""
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
 _BINDING = "_mojolearn_x_sequence"
-#: the before arm of the A/B (as x_cnn's MOJOLEARN_XCNN_DEVICE_IO_OFF):
-#: `to_device` returns the host array, so every call takes the host-array
-#: entries again
-_DEVICE_IO_OFF = __import__("os").environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") == "1"
+# TOMBSTONE: MOJOLEARN_SEQ_DEVICE_IO_OFF (env; removed: plumbing, the same kernels on host arrays vs resident tensors, rule 2026-11-22) deleted 2026-11-23 by lane/ab-owners; code recoverable at d125cb97c7.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
 _ENTRIES = ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download")
 
 

@@ -591,8 +591,10 @@ def _pr_dpart(t: Int, g: GA):
 def pr_step_csr(
     t: Int, indptr: IP, rows: IP, vals: FP, x: FP, p: FP, dw: FP, dsum: Float32, res: FP, alpha: Float32,
 ):
-    """`pagerank_step_item` for node t over column t's nonzero cells
-    ascending: the dense item's chain with its zero terms left out (a zero
+    """The PageRank step (DEVIATION 5216; networkx `_pagerank_scipy`) for
+    node t over column t's nonzero cells ascending: the dense step's chain
+    (x_neighbors/checks/oracles.mojo `o_pagerank_step`, held by
+    x_neighbors/checks/graph_check.mojo) with its zero terms left out (a zero
     cell adds x * 0 = +0.0 to a +0.0-seeded chain; a denormal cell is
     flushed to 0 in the item, and its stored quotient is flushed here)."""
     var acc = Float32(0)

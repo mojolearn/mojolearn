@@ -27,7 +27,8 @@ pytestmark = [
         os.environ.get("MOJOLEARN_GENERATION_DEVICE") != "gpu",
         reason="explicit GPU resident sampling regression run required",
     ),
-    default_build_only("MOJOLEARN_TRANSFORMER_LEGACY_SETUP"),
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
 ]
 
 

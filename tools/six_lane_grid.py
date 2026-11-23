@@ -306,12 +306,49 @@ def resolve_token(token, controls, idx):
 def _module_tuple(path, name):
     """The final value of the module-level tuple `name` in `path`, read without importing it.
     Follows literal assignments and their reassignments built from `+` of literals, earlier
-    names and `tuple(<name>)` (bench_board_neural.py grows LANES as `LANES = LANES + FIT_LANES ...`)."""
+    names and `tuple(<name>)` (bench_board_neural.py grows LANES as `LANES = LANES + FIT_LANES ...`), and
+    `<NAME>.<attr>` where NAME was bound by a module-level loader function whose body names one sibling
+    `.py` file (bench_board_neural.py: `SEQFIT = _seqfit_tables()` loads bench_board_seqfit.py, then
+    `SEQ_FIT_LANES = tuple(SEQFIT.LANES)`): the attribute is read from that file the same way."""
+    got = _module_assignments(path).get(name)
+    if not isinstance(got, tuple):
+        raise ValueError(f'{path}: {name} is not a statically readable tuple')
+    return got
+
+
+_ASSIGNMENTS = {}
+
+
+def _module_assignments(path):
+    """{name: value} of the statically readable module-level assignments of `path` (see _module_tuple)."""
+    path = Path(path)
+    key = str(path.resolve())
+    if key in _ASSIGNMENTS:
+        return _ASSIGNMENTS[key]
+    _ASSIGNMENTS[key] = {}  # a loader cycle reads an empty module instead of recursing
+    tree = ast.parse(path.read_text())
+    loaders = {}  # function name -> the one sibling .py file its body names
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            files = {c.value for c in ast.walk(node)
+                     if isinstance(c, ast.Constant) and isinstance(c.value, str) and c.value.endswith('.py')}
+            if len(files) == 1:
+                loaders[node.name] = path.parent / files.pop()
     env = {}
+    modules = {}  # name -> the file a loader call bound it to
 
     def value(node):
         if isinstance(node, ast.Name):
             return env[node.id]
+        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                and node.value.id in modules):
+            return _module_assignments(modules[node.value.id])[node.attr]
+        if isinstance(node, ast.Dict) and None not in node.keys:
+            # bench_board_seqfit.py LANES: {"lane": dict(layout=..., layers=[...]), ...}
+            return {value(k): value(v) for k, v in zip(node.keys, node.values)}
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'dict'
+                and not node.args and all(kw.arg for kw in node.keywords)):
+            return {kw.arg: value(kw.value) for kw in node.keywords}
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
             return value(node.left) + value(node.right)
         if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'tuple'
@@ -319,15 +356,22 @@ def _module_tuple(path, name):
             return tuple(value(node.args[0]))
         return ast.literal_eval(node)
 
-    for node in ast.parse(path.read_text()).body:
+    for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            target = node.targets[0].id
+            v = node.value
+            if (isinstance(v, ast.Call) and isinstance(v.func, ast.Name) and v.func.id in loaders
+                    and not v.args and not v.keywords and loaders[v.func.id].is_file()):
+                modules[target] = loaders[v.func.id]
+                env.pop(target, None)
+                continue
+            modules.pop(target, None)
             try:
-                env[node.targets[0].id] = value(node.value)
-            except (ValueError, KeyError, TypeError):
-                env.pop(node.targets[0].id, None)
-    if not isinstance(env.get(name), tuple):
-        raise ValueError(f'{path}: {name} is not a statically readable tuple')
-    return env[name]
+                env[target] = value(v)
+            except (ValueError, KeyError, TypeError, SyntaxError):
+                env.pop(target, None)
+    _ASSIGNMENTS[key] = env
+    return env
 
 
 def workload_inventory():

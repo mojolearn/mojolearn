@@ -47,7 +47,6 @@ struct SvmKeys(Defaultable, Movable):
     var k__mojolearn_params_reset: PythonObject
     var k__mojolearn_x_cluster: PythonObject
     var k__native_kernel_method_provider: PythonObject
-    var k__native_svc_dispatch: PythonObject
     var k__pairs: PythonObject
     var k__params: PythonObject
     var k__prob_ab: PythonObject
@@ -182,7 +181,6 @@ struct SvmKeys(Defaultable, Movable):
         self.k__mojolearn_params_reset = PythonObject(None)
         self.k__mojolearn_x_cluster = PythonObject(None)
         self.k__native_kernel_method_provider = PythonObject(None)
-        self.k__native_svc_dispatch = PythonObject(None)
         self.k__pairs = PythonObject(None)
         self.k__params = PythonObject(None)
         self.k__prob_ab = PythonObject(None)
@@ -321,7 +319,6 @@ def _svm_keys_fill(nk: UnsafePointer[SvmKeys, MutUntrackedOrigin]) raises:
     nk[].k__mojolearn_params_reset = py_key("_mojolearn_params_reset")
     nk[].k__mojolearn_x_cluster = py_key("_mojolearn_x_cluster")
     nk[].k__native_kernel_method_provider = py_key("_native_kernel_method_provider")
-    nk[].k__native_svc_dispatch = py_key("_native_svc_dispatch")
     nk[].k__pairs = py_key("_pairs")
     nk[].k__params = py_key("_params")
     nk[].k__prob_ab = py_key("_prob_ab")

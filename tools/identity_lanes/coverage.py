@@ -260,7 +260,8 @@ def _(ml, X, yc, yr, Xh=None):
         st.cached_tokens = 4
         sess.load_state()
         # The four tokens after the reload go through `decode` (one native
-        # call, `transformer_decode_session_decode`): byte for byte the four steps.
+        # call, transformer/native_decode_dispatch.mojo `transformer_decode_reserved_run` kind 1 ->
+        # `_session_decode_run`): byte for byte the four steps.
         after = np.asarray(sess.decode(np.ascontiguousarray(x[:, 8:12])))
         sess.sync_state()
         resident = np.concatenate(_decode_state_arrays(st))
@@ -1493,3 +1494,178 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale")
+
+
+# ---------------------------------------------------------------- the one-device shard drivers (lane verify-gaps, 2026-11-23)
+# `mojolearn.parallel_ensemble.fit_forest`, `parallel_neighbors_reference.ReferenceShardedNeighbors` and
+# `parallel_ivf.DistributedIVFIndex` ship in the package and run on ONE device by default (`devices=(0,)`).
+# Their merges are the only callers of the base and IVF parallel tables (core/parallel_entry_table.mojo):
+# the node-offset rebase (core/msel_host_impl.mojo, core/msel_device.mojo), the shard top-k merge
+# (core/shard_merge_device.mojo and the host loop) and the IVF shard plan, merge and finalize
+# (ivf/index_arrays_impl.mojo, core/shard_merge_device.mojo). No lane reached them after the par-* lanes
+# went with multi-GPU verification (docs/TOMBSTONES.md MOJOLEARN_PAR_VERIFY, 2026-10-31; that stays
+# retired: these lanes never ask for a second device). Each cell holds the driver's answer to the plain
+# one-device fit byte for byte and raises NumericalMismatch carrying its parts when they differ.
+# EXPECTED VERDICT ON EVERY COLUMN, the CPU column included: a recorded cell (train parts), never a refusal. The
+# shards run in one worker process of the native local pool (bindings/native_process_pool_door.mojo:223
+# process_pool_create refuses only empty or repeated device indices; a CPU install sets no device mask, :165), and
+# the 0860 sabotage proof recorded par-forest's clean CPU cell STABLE through the same pool
+# (coverage_sabotage_proven.tsv). A refusal of these lanes on a clean build is therefore a defect (worker spawn or
+# connection), never an accepted state: fix it in code; under an arm only the declared product refusals count.
+
+@lane("forest-shard")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_forest on one device: 16 trees in four ranges of four, so the
+    driver joins four node-offset tables through the base table's
+    `msel_rebase_offsets_i32`; held to the plain RandomForestClassifier."""
+    from mojolearn.parallel_ensemble import fit_forest
+    d = _coverage_digester(ml)
+    kw = dict(n_estimators=16, max_depth=8, random_state=7)
+    shard = fit_forest(ml.RandomForestClassifier(**kw), X, yc, devices=(0,), trees_per_shard=4)
+    plain = ml.RandomForestClassifier(**kw).fit(X, yc)
+    proba = np.ascontiguousarray(shard.predict_proba(X[:2048]))
+    parts = dict(predict=d(np.asarray(shard.predict(X))), proba=d(proba))
+    mismatch = _mismatch_bytes("fit_forest predict_proba", proba,
+                               "plain predict_proba", np.asarray(plain.predict_proba(X[:2048])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
+
+
+@lane("neighbors-reference-shard")
+def _(ml, X, yc, yr, Xh=None):
+    """ReferenceShardedNeighbors on one device over the knn-clf lane's
+    classifier: the 4096-row reference in four blocks of 1024, 64 queries in
+    blocks of 16, the blocks' candidates merged by the base table's
+    `shard_topk_merge_f32`; held to the plain kneighbors and predict."""
+    from mojolearn.parallel_neighbors_reference import ReferenceShardedNeighbors
+    d = _coverage_digester(ml)
+    m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
+    q = np.ascontiguousarray(X[4096:4160])
+    with ReferenceShardedNeighbors(m, devices=(0,), reference_rows_per_shard=1024,
+                                   query_rows_per_shard=16) as rs:
+        dist, idx = rs.kneighbors(q)
+        pred = rs.predict(q)
+    d0, i0 = m.kneighbors(q)
+    parts = dict(dist=d(np.asarray(dist, dtype=np.float32)), idx=d(np.asarray(idx, dtype=np.int64)),
+                 predict=d(np.asarray(pred)))
+    for name, got, want in (("distances", dist, d0), ("indices", idx, i0), ("predict", pred, m.predict(q))):
+        mismatch = _mismatch_bytes("ReferenceShardedNeighbors " + name, got, "plain " + name, want)
+        if mismatch:
+            raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
+
+
+@lane("ivf-distributed")
+def _(ml, X, yc, yr, Xh=None):
+    """DistributedIVFIndex on one device: the `ivf` lane's built index (16
+    lists, 4 probes, k=8, 4096 rows, random_state 3) through the IVF table's
+    shard plan, its stored shard searched and merged back to global row ids,
+    and the euclidean index rooted once after the merge (`ivf_finalize`);
+    both held to the plain IVFIndex.search."""
+    from mojolearn.parallel_ivf import DistributedIVFIndex
+    d = _coverage_digester(ml)
+    kw = dict(n_lists=16, n_probes=4, n_neighbors=8, random_state=3)
+    q = np.ascontiguousarray(X[4096:4160])
+    m = ml.IVFIndex(**kw).fit(X[:4096])
+    with DistributedIVFIndex.from_index(m, devices=(0,)) as shards:
+        dist, idx = shards.search(q)
+    e = ml.IVFIndex(metric="euclidean", **kw).fit(X[:4096])
+    with DistributedIVFIndex.from_index(e, devices=(0,)) as rooted:
+        edist, eidx = rooted.search(q)
+    d0, i0 = m.search(q)
+    ed0, ei0 = e.search(q)
+    parts = dict(dist=d(np.asarray(dist, dtype=np.float32)), idx=d(np.asarray(idx, dtype=np.int64)),
+                 root_dist=d(np.asarray(edist, dtype=np.float32)), root_idx=d(np.asarray(eidx, dtype=np.int64)))
+    for name, got, want in (("distances", dist, d0), ("ids", idx, i0),
+                            ("euclidean distances", edist, ed0), ("euclidean ids", eidx, ei0)):
+        mismatch = _mismatch_bytes("DistributedIVFIndex " + name, got, "plain IVFIndex " + name, want)
+        if mismatch:
+            raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
+
+
+_batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "forest-shard", "neighbors-reference-shard", "ivf-distributed")
+
+
+# ---------------------------------------------------------------- shapes no default lane reaches (lane verify-gaps, 2026-11-23)
+# Every other lane fits the fixture's 16 features with thousands of rows, so two public routes stay unreached:
+# LinearRegression's eigen least squares (glm/impl/linalg/detail/lstsq.mojo lstsq_eig, taken when TSQR's
+# rows >= cols + 1 fails: core/linear_ols_run.mojo) and the kernel matrix's poly and sigmoid epilogues
+# (kernel_methods/checks/kernel_matrix.mojo, past KM_DOT_CELL_MAX_D = 64 features).
+
+@lane("x-ols-square")
+def _(ml, X, yc, yr, Xh=None):
+    """LinearRegression on a square block (16 rows, 16 features): TSQR needs
+    one row more than columns, so the fit takes the eigen least squares."""
+    d = _coverage_digester(ml)
+    m = ml.LinearRegression().fit(np.ascontiguousarray(X[:16]), np.ascontiguousarray(yr[:16]))
+    return _fit(dict(coef=d(np.asarray(m.coef_, dtype=np.float32)),
+                     predict=d(np.asarray(m.predict(X[:256]), dtype=np.float32))))
+
+
+@lane("kernel-ridge-wide")
+def _(ml, X, yc, yr, Xh=None):
+    """KernelRidge with the poly and sigmoid kernels on 80 features (the
+    fixture's 16 tiled five times), past the dot-cell bound, so the kernel
+    matrix takes polynomial_epilogue_kernel and tanh_epilogue_kernel."""
+    d = _coverage_digester(ml)
+    w = np.ascontiguousarray(np.tile(X[:512], (1, 5)))
+    q = np.ascontiguousarray(np.tile(X[512:768], (1, 5)))
+    parts = {}
+    for kernel in ("poly", "sigmoid"):
+        m = ml.KernelRidge(alpha=1.0, kernel=kernel, gamma=0.01, degree=3, coef0=1.0).fit(w, yr[:512])
+        parts[kernel] = d(np.asarray(m.predict(q), dtype=np.float32))
+    return _fit(parts)
+
+
+_batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "x-ols-square", "kernel-ridge-wide")
+
+
+# ---------------------------------------------------------------- the Gram solve's fallbacks and the per-coordinate CD step (lane verify-gaps, 2026-11-23)
+# Shapes from the algorithms' own admission rules, not from any dataset:
+# * Ridge's identical Gram Cholesky (glm/impl/gram_solve.mojo, glm/host/gram_solve_host.mojo) trusts a pivot when
+#   l_jj^2 >= 2^-12 a_jj on the equilibrated, regularized Gram (GS_TRUST_GATE); a rejected Gram retries in
+#   float-float (GFF_TRUST_GATE 2^-24), then takes the eig route (_gs_ridge_resident_fallback on the device,
+#   ridge_fit_host on the CPU column). A duplicated feature makes the Schur pivot of the copy about
+#   alpha / (G_jj + alpha) of its diagonal, G_jj ~ n for centered unit-variance rows: alpha = 0.05 at n = 4096
+#   (about 1e-5) fails the float32 gate and passes the float-float one; alpha = 1e-6 (about 2e-10) fails both.
+# * Lasso's coordinate descent takes the Gram sweeps only when n_rows >= 4 n_cols (solver/impl/cd_gram_rule.mojo);
+#   off them, NVIDIA and AMD run the fused one-launch coordinate and Apple the per-coordinate kernels
+#   (cd_update_coef_kernel) unless its dot takes split-k. 48 rows of 16 features is off the Gram arm.
+
+@lane("x-ridge-rank-deficient")
+def _(ml, X, yc, yr, Xh=None):
+    """Ridge on 4096 rows whose feature 0 is a copy of feature 1: at
+    alpha 0.05 the float32 Gram is rejected and the float-float retry is
+    trusted; at alpha 1e-6 both are rejected and the eig route runs."""
+    d = _coverage_digester(ml)
+    w = np.array(X[:4096], dtype=np.float32, copy=True)
+    w[:, 0] = w[:, 1]
+    w = np.ascontiguousarray(w)
+    q = np.ascontiguousarray(X[4096:4352])
+    parts = {}
+    for tag, alpha in (("ff", 0.05), ("eig", 1e-6)):
+        m = ml.Ridge(alpha=alpha).fit(w, yr[:4096])
+        parts[tag + "_coef"] = d(np.asarray(m.coef_, dtype=np.float32))
+        parts[tag + "_predict"] = d(np.asarray(m.predict(q), dtype=np.float32))
+    return _fit(parts)
+
+
+@lane("x-lasso-short")
+def _(ml, X, yc, yr, Xh=None):
+    """Lasso on 48 rows of 16 features (fewer than 4 rows per feature), off
+    the identical Gram sweeps: the per-coordinate device step."""
+    d = _coverage_digester(ml)
+    m = ml.Lasso(alpha=0.01, max_iter=200).fit(np.ascontiguousarray(X[:48]), np.ascontiguousarray(yr[:48]))
+    return _fit(dict(coef=d(np.asarray(m.coef_, dtype=np.float32)),
+                     predict=d(np.asarray(m.predict(X[:256]), dtype=np.float32))))
+
+
+_batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "x-ridge-rank-deficient", "x-lasso-short")

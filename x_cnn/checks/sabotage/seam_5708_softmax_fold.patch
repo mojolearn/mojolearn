@@ -1,13 +1,14 @@
 diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
+index d9668bc8f1..5ea780e106 100644
 --- a/x_cnn/ops.mojo
 +++ b/x_cnn/ops.mojo
-@@ -668,7 +668,8 @@ def softmax_xent_row_at(i: Int, logits: FP, grad: FP, proba: FP, rowloss: FP, la
-         var ly0 = Float32(0)
-         if y >= 0:
-             ly0 = ftz(ftz(logits.unsafe_load(base + y)) - mx)
--        for j in range(k):
-+        for a in range(k):
-+            var j = k - 1 - a
-             var e = ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx)))
-             proba.unsafe_store(base + j, e)
-             s = ftz(s + e)
+@@ -622,7 +622,8 @@ def softmax_xent_row_at(i: Int, logits: FP, grad: FP, proba: FP, rowloss: FP, la
+     var ly0 = Float32(0)
+     if y >= 0:
+         ly0 = ftz(ftz(logits.unsafe_load(base + y)) - mx)
+-    for j in range(k):
++    for a in range(k):
++        var j = k - 1 - a
+         var e = ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx)))
+         proba.unsafe_store(base + j, e)
+         s = ftz(s + e)

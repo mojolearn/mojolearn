@@ -47,10 +47,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
-    hist2_dither,
-    hist2_quantize,
-)
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
     H8_BLOCK,
     H8_MIN_DOCS,

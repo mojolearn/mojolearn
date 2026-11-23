@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`op_cc_iterate` (connected_components' min-label iteration of
-`cc_step_item`, x_neighbors/items.mojo) on the host as a SPARSE walk: the
+"""`op_cc_iterate` (connected_components' min-label iteration, the step
+the former dense `cc_step_item` took) on the host as a SPARSE walk: the
 same rounds over the graph's edges instead of every cell of the n x n matrix
 (lane neural-pass22, 2026-10-01).
 
@@ -16,10 +16,10 @@ neighborhood is enumerated. This walk builds, once, the row adjacency (the
 nonzero cells of row t) and the column adjacency (the nonzero cells of column
 t), rows and column blocks over host tasks, and then runs the rounds over
 those lists, nodes over tasks, counting a round exactly as the dense loop
-does (the round that changes nothing is counted, then the loop stops). The
-dense item stays the device kernel's body and the reference;
-`x_neighbors/checks/cc_sparse_check.mojo` holds this walk to it, labels and
-step count, on rings, directed random graphs and graphs with isolated nodes.
+does (the round that changes nothing is counted, then the loop stops).
+`x_neighbors/checks/graph_check.mojo` (5217) holds this walk and the device's
+`op_cc_iterate` (x_neighbors/iter_device.mojo) to the oracle's min-label
+rounds on a graph with two components, an isolated node and a one-way edge.
 """
 
 from core.host_lanes import host_row_tasks

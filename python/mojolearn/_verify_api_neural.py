@@ -136,8 +136,11 @@ def _sequential_loss_fixture(np,cls,method):
         x=((np.arange(8,dtype=np.float32)%7)-3).reshape(2,4)/8
         m=cls(input_shape=(4,),numeric_mode='identical')
         if loss in ('nll','kl_div'):
-            m.linear(3).log_softmax()
-            y=np.array([0,2],np.int64) if loss=='nll' else np.array([[.25,.5,.25],[.125,.125,.75]],np.float32)
+            # r5-proving (2026-11-23): nll labels are classes, as for cross_entropy (the fit sorts them into
+            # classes_ and refuses a model whose outputs differ from the class count), so the two-row nll fixture
+            # has two classes and two outputs; [0, 2] on three outputs was refused on the L40S proving run.
+            m.linear(2 if loss=='nll' else 3).log_softmax()
+            y=np.array([0,1],np.int64) if loss=='nll' else np.array([[.25,.5,.25],[.125,.125,.75]],np.float32)
         else:
             m.linear(1)
             y=np.array([0,1],np.int64) if loss=='bce_with_logits' else np.array([.25,-.5],np.float32)

@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One complete CatBoost-compatible oblivious-tree level on the GPU. Kernel ordering is contractual: copy precedes subtract, and scan precedes scoring."""
 
+from gbdt.options.catboost_options import infinite_score_message
 from core.device_plan import DevicePlan, plan_for_single
 from std.math import sqrt
 from max.gpu import block_dim, block_idx, thread_idx
@@ -15,6 +16,7 @@ from core.device_zero import enqueue_fill
 from core.device_units import device_multiprocessor_count
 
 from checks.fixed_point import choose_scale
+from gbdt.methods.random_score_bodies import std_dev_of_sums
 # TOMBSTONE: MOJOLEARN_TREES_T21_STREAMS (DELETE-ARM, replica stream sweep, no A/B recorded, rule a; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at efe2e38a94.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T21_STREAMS.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
 # The stream count is its default 1 below (one replica stream, the kernels' stream 0).
@@ -373,7 +375,7 @@ def compute_target_std_dev(
     var weight = Float64(h[2])
     _ = partials^
     _ = l2_stats^
-    return sqrt(sum2 / (weight + 1e-100))
+    return std_dev_of_sums(sum2, weight)
 
 
 @fieldwise_init
@@ -4457,12 +4459,8 @@ def accept_symmetric_level_winner(
         hist_cells_per_leaf
     ):
         raise Error(
-            "All splits have infinite score. Probably, numerical"
-            " overflow occurs in loss function and/or split score"
-            " calculation. Try increasing l2_leaf_reg, and/or"
-            " decreasing learning_rate, etc."
-            " [level " + String(level) + ", live leaves "
-            + String(live_leaves) + "]"
+            # the one text, both columns (lane gbdt-units-10)
+            infinite_score_message(level, live_leaves)
         )
     var choice = resolve_split(layout, Int(best_bin_u))
     if not (best_score > Float32(0.0)):

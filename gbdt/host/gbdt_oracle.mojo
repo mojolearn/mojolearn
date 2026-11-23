@@ -130,6 +130,7 @@ predictions move with it.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-symmetric lane is the measurement.
 """
+from gbdt.options.catboost_options import infinite_score_message
 from std.math import exp, floor, fma, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -156,9 +157,9 @@ from checks.numerics import (
     identical_log64,
     identical_mul_add,
     identical_pow,
-    identical_sqrt,
 )
-from gbdt.data.permutation import TRandom
+from gbdt.data.permutation import TRandom, generate_seed_for_borders
+from gbdt.gpu_util.bootstrap_body import bootstrap_draw, bootstrap_seed
 from gbdt.targets.pointwise_bodies import (
     BODY_OBJ_RMSE,
     cross_entropy_row,
@@ -169,7 +170,7 @@ from gbdt.targets.pointwise_bodies import (
 )
 from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.methods.leaves_estimation.searcher_leaf_body import searcher_leaf_value
-from gbdt.methods.random_score_bodies import score_model_length_mult
+from gbdt.methods.random_score_bodies import score_model_length_mult, std_dev_of_sums
 from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_GRADIENT,
     LEAF_ESTIMATION_NEWTON,
@@ -220,6 +221,8 @@ from gbdt.grid_creator.binarization import (
 )
 # the device score kernels' AddLeaf (lane gbdt-cpu-rest-4-ns)
 from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import add_leaf_score
+from gbdt.methods.score_calcer_body import cosine_gain
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from gbdt.options.data_processing_options import (
     NAN_MODE_FORBIDDEN,
@@ -789,26 +792,6 @@ def _choose_scale_from_magnitudes(
     return scale
 
 
-def _hist2_dither(pos: Int) -> Float32:
-    """`hist2_dither` (`histogram_utils.mojo:33-46`)."""
-    var h = UInt32(pos) * UInt32(2654435761)
-    h ^= h >> 16
-    h = h * UInt32(2246822519)
-    h ^= h >> 13
-    return Float32(Int(h >> 8)) * Float32(5.9604645e-08)
-
-
-def _hist2_quantize(val: Float32, fixed_scale: Float32, u: Float32) -> Int32:
-    """`hist2_quantize` (`histogram_utils.mojo:49-97`), the flushed operand
-    and product, `floor`, and the fraction compare."""
-    var scaled = ftz(ftz(val) * fixed_scale)
-    var base = floor(scaled)
-    var q = Int32(base)
-    if ftz(scaled - base) + u >= Float32(1.0):
-        q += Int32(1)
-    return q
-
-
 def _snap_gradients(
     mut stats: List[Float32], n_rows: Int, stat_count: Int, fixed_scale: Float32
 ):
@@ -827,9 +810,9 @@ def _snap_gradients(
 
     def rows(unit: Int) {imm chunk, imm n_rows, imm stat_count, imm fixed_scale, imm stats_p}:
         for pos in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
-            var u = _hist2_dither(pos)
+            var u = hist2_dither(pos)
             for st in range(1, stat_count):
-                var q = _hist2_quantize(stats_p[st * n_rows + pos], fixed_scale, u)
+                var q = hist2_quantize(stats_p[st * n_rows + pos], fixed_scale, u)
                 var v = Float32(0.0)
                 if q != Int32(0):
                     v = ftz(Float32(Int(q)) / fixed_scale)
@@ -853,7 +836,7 @@ def _snap_plane(mut plane: List[Float32], n: Int, fixed_scale: Float32, offset: 
 
     def rows(unit: Int) {imm chunk, imm n, imm fixed_scale, imm plane_p, imm offset}:
         for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
-            var q = _hist2_quantize(plane_p[offset + i], fixed_scale, _hist2_dither(i))
+            var q = hist2_quantize(plane_p[offset + i], fixed_scale, hist2_dither(i))
             var v = Float32(0.0)
             if q != Int32(0):
                 v = ftz(Float32(Int(q)) / fixed_scale)
@@ -873,14 +856,6 @@ struct GbdtHostGrid(Movable):
     var borders: List[List[Float32]]
     var fold_counts: List[Int]
     var nan_treatment: List[Int]
-
-
-def _generate_seed_for_borders(from_seed: UInt64) -> UInt64:
-    """`generate_seed_for_borders` (`gbdt/train.mojo:595-602`)."""
-    var sd = from_seed
-    for _ in range(5):
-        sd = 6364136223846793005 * sd + 1442695040888963407
-    return sd
 
 
 def _best_split_phase_b(
@@ -1045,7 +1020,7 @@ def _gls_host_grid(
     other border types run `border_types.border_type_column` over the
     type's `border_table_entry` table (cpu-gpu-cleanup w2-trees)."""
     var sampled = sn < n_rows
-    var key = _generate_seed_for_borders(random_seed)
+    var key = generate_seed_for_borders(random_seed)
     var logtab = List[UInt64](length=sn + 1, fill=UInt64(0))
     var ltp = rebind[MutPointer[UInt64, MutAnyOrigin]](logtab.unsafe_ptr())
     comptime LT_CHUNK = 4096
@@ -1400,9 +1375,9 @@ def _one_byte_rows(
     and every add is an Int32 add (`q` is `stat_count` scratch words)."""
     for pos in range(lo, hi):
         var row = row_index[pos]
-        var u = _hist2_dither(pos)
+        var u = hist2_dither(pos)
         for s in range(stat_count):
-            q[s] = _hist2_quantize(stats[s * n_rows + pos], fixed_scale, u)
+            q[s] = hist2_quantize(stats[s * n_rows + pos], fixed_scale, u)
         for k in range(n_f):
             var word = cindex[f_base[k] + row]
             var bin = Int((word >> f_shift[k]) & f_mask[k])
@@ -2992,10 +2967,7 @@ def _cosine_gains_range(
         var final_score = sp[bf]
         var denum_sqr = dp[bf]
         var score_before = Float32(0.0)
-        if denum_sqr > Float32(1e-15):
-            final_score = ftz(final_score / identical_sqrt(denum_sqr))
-        else:
-            final_score = -GBDT_FLOAT32_MAX
+        final_score = cosine_gain(final_score, denum_sqr)
         if score_std_dev != Float32(0.0):
             if bf_feature[bf] != last_feature:
                 var seed = advance_seed_k(level_seed + UInt64(bf_feature[bf]), 4)
@@ -3112,14 +3084,8 @@ def _greedy_gains(
 def gbdt_bootstrap_seeds(base_seed: UInt64) -> List[UInt64]:
     """`create_bootstrap_seeds` (`bootstrap.mojo:249-275`): splitmix64."""
     var seeds = List[UInt64](capacity=GBDT_BOOT_SEEDS)
-    var x = base_seed
-    for _ in range(GBDT_BOOT_SEEDS):
-        x += UInt64(0x9E3779B97F4A7C15)
-        var z = x
-        z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-        z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-        z = z ^ (z >> 31)
-        seeds.append(z)
+    for i in range(GBDT_BOOT_SEEDS):  # driver-loop: over the seed slots
+        seeds.append(bootstrap_seed(base_seed, i))
     return seeds^
 
 
@@ -3174,24 +3140,8 @@ def _bootstrap_pass(
                 var mag_g = Float32(0.0)
                 var i = gid
                 while i < n_rows:
-                    var bw: Float32
-                    if kind == GBDT_BOOT_BAYESIAN:
-                        # `bootstrap_kernel[BAYESIAN]` (lane/catboost-parity):
-                        # `-log(u + 1e-20)`, raised to the temperature unless 1
-                        var draw = next_uniform_f(s)
-                        s = draw[1]
-                        var tmp = -identical_log(draw[0] + Float32(1e-20))
-                        bw = tmp
-                        if param != Float32(1.0):
-                            bw = identical_pow(tmp, param)
-                    elif kind == GBDT_BOOT_BERNOULLI:
-                        var draw = next_uniform_f(s)
-                        s = draw[1]
-                        bw = Float32(1.0) if draw[0] < param else Float32(0.0)
-                    else:
-                        var draw = next_poisson_f(s, param)
-                        s = draw[1]
-                        bw = draw[0]
+                    # the one draw body (gbdt/gpu_util/bootstrap_body.mojo)
+                    var bw = bootstrap_draw(kind, param, s)
                     var w = stats_p[i] * bw
                     stats_p[i] = w
                     mag_w += abs(w)
@@ -3199,7 +3149,9 @@ def _bootstrap_pass(
                     for k in range(1, stat_count):
                         var g = stats_p[k * n_rows + i] * bw
                         stats_p[k * n_rows + i] = g
-                        gmax = max(gmax, abs(g))
+                        var a = abs(g)
+                        if a > gmax:  # the kernel's compare (a NaN keeps gmax)
+                            gmax = a
                     mag_g += gmax
                     i += stride
                 seeds_p[gid] = s
@@ -3291,7 +3243,7 @@ def _target_std_dev(
     var l2 = _deterministic_sum_lanes(partials, 3, n_blocks)
     var sum2 = Float64(l2[1])
     var weight = Float64(l2[2])
-    return sqrt(sum2 / (weight + 1e-100))
+    return std_dev_of_sums(sum2, weight)
 
 
 def _halving_fold_512(mut slab: List[Float32]) -> Float32:
@@ -3658,6 +3610,35 @@ def apply_scaled_leaves_host(
     _ = len(row_index)
     _ = len(offsets)
     _ = len(sizes)
+
+
+def rescale_apply_leaves_host(
+    mut cursor: List[Float32],
+    leaves: List[Float32],
+    learning_rate: Float32,
+    row_index: List[Int],
+    offsets: List[Int],
+    sizes: List[Int],
+    n_leaves: Int,
+    dim: Int = 1,
+    plane: Int = 0,
+) -> List[Float32]:
+    """THE host leaf rescale (lane gbdt-leaf-body, 2026-11-23): one tree's
+    estimated leaves (leaves x dim) rescaled once (`rescaled_leaves`, the
+    device's `rescaled_leaf`: `round(leaf * rate)`) and added onto every row
+    of its leaf (`apply_scaled_leaves_host`, the device's
+    `add_model_value_kernel`); returns the rescaled values, which the stored
+    model keeps. One body for every host fit (`gbdt_host_boost`,
+    `gbdt_losses_host_fit`, `gbdt_multi_host_fit`, `gbdt_pointwise_host_fit`,
+    `gbdt_ranking_pointwise_host_fit`, `_ns_fit_core`), each of which wrote
+    these two statements itself; the same statements, bits unchanged. The
+    sabotage arms coverage-gbdt-host_leaf_ulp and
+    coverage-gbdt-host_boost_fused_cursor fault it here."""
+    var scaled = rescaled_leaves(leaves, learning_rate)
+    apply_scaled_leaves_host(
+        cursor, scaled, row_index, offsets, sizes, n_leaves, dim, plane
+    )
+    return scaled^
 
 
 def _identity_rows(mut row_index: List[Int], n_rows: Int):
@@ -4190,10 +4171,7 @@ def _cosine_gain_n(
             _add_leaf_cosine(-total_sum_right, weight_right, lambda_l2, score, denum_sqr)
     var final_score = score
     var score_before = Float32(0.0)
-    if denum_sqr > Float32(1e-15):
-        final_score = ftz(score / identical_sqrt(denum_sqr))
-    else:
-        final_score = -GBDT_FLOAT32_MAX
+    final_score = cosine_gain(score, denum_sqr)
     if score_std_dev != Float32(0.0):
         var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
         var draw = next_normal_f(seed)
@@ -4416,12 +4394,8 @@ def _tree_ctr_levels_host(
         # ---- the gates (`accept_symmetric_level_winner`), this level ----
         if best_bin == GBDT_SENTINEL or Int(best_bin) >= hist_cells:
             raise Error(
-                "All splits have infinite score. Probably, numerical"
-                " overflow occurs in loss function and/or split score"
-                " calculation. Try increasing l2_leaf_reg, and/or"
-                " decreasing learning_rate, etc."
-                " [level " + String(depth) + ", live leaves "
-                + String(n_live) + "]"
+                # the one text, both columns (lane gbdt-units-10)
+                infinite_score_message(depth, n_live)
             )
         var best_score = ftz(best_gain)
         if not (best_score > Float32(0.0)):
@@ -4961,12 +4935,8 @@ def gbdt_host_boost(
             var best_bin_u = winners_bf[d]
             if best_bin_u == GBDT_SENTINEL or Int(best_bin_u) >= s_hist_cells:
                 raise Error(
-                    "All splits have infinite score. Probably, numerical"
-                    " overflow occurs in loss function and/or split score"
-                    " calculation. Try increasing l2_leaf_reg, and/or"
-                    " decreasing learning_rate, etc."
-                    " [level " + String(d) + ", live leaves "
-                    + String(1 << d) + "]"
+                    # the one text, both columns (lane gbdt-units-10)
+                    infinite_score_message(d, 1 << d)
                 )
             var cf_ = s_bf_feature[Int(best_bin_u)]
             var cb_ = s_bf_bin[Int(best_bin_u)]
@@ -5028,9 +4998,9 @@ def gbdt_host_boost(
                 leaf_values[i] = _rmse_leaf_value(
                     leaf_sums[2 * i], leaf_sums[2 * i + 1], params.l2_leaf_reg
                 )
-            est_scaled = rescaled_leaves(leaf_values, lr)
-            apply_scaled_leaves_host(
-                cursors[learn_p], est_scaled, row_index, offsets, sizes, n_live
+            est_scaled = rescale_apply_leaves_host(
+                cursors[learn_p], leaf_values, lr, row_index, offsets, sizes,
+                n_live,
             )
         else:
             for p in range(perm_count):  # driver-loop: over the permutations
@@ -5044,10 +5014,9 @@ def gbdt_host_boost(
                         params.leaf_estimation_iterations, weights, objective,
                         leaf_method,
                     )
-                    scaled = rescaled_leaves(est_p_leaves, lr)
-                    apply_scaled_leaves_host(
-                        cursors[p], scaled, row_index, offsets, sizes,
-                        len(sizes),
+                    scaled = rescale_apply_leaves_host(
+                        cursors[p], est_p_leaves, lr, row_index, offsets,
+                        sizes, len(sizes),
                     )
                 else:
                     var part = _partition_for_model(
@@ -5060,10 +5029,9 @@ def gbdt_host_boost(
                         params.leaf_estimation_iterations, weights, objective,
                         leaf_method,
                     )
-                    scaled = rescaled_leaves(est_p_leaves, lr)
-                    apply_scaled_leaves_host(
-                        cursors[p], scaled, part.row_index, part.offsets,
-                        part.sizes, len(part.sizes),
+                    scaled = rescale_apply_leaves_host(
+                        cursors[p], est_p_leaves, lr, part.row_index,
+                        part.offsets, part.sizes, len(part.sizes),
                     )
                 # the EXPORTED ensemble is the estimation permutation's
                 if p == est_p:

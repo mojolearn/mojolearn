@@ -515,7 +515,9 @@ struct IvfFlatDevice(Movable):
     var dlist_norm: DeviceBuffer[DType.float32]
     var d_off: DeviceBuffer[DType.int32]
     var d_ind: DeviceBuffer[DType.uint32]
-    var list_norm: List[Float32]
+    # TOMBSTONE: the host `list_norm` (a download of dlist_norm with no reader in any mode: the scans read the
+    # device buffer, and only FAST's expanded distance reads even that) deleted 2026-11-23 by lane/verify-gaps;
+    # recoverable at aecad68fb8.
     var layout: ListLayout
     var list_sizes: List[Int32]
 
@@ -523,15 +525,19 @@ struct IvfFlatDevice(Movable):
         self.dcenters = upload_f32(ctx, index.centers)
         self.dcenter_norm = upload_f32(ctx, index.center_norms)
         self.dlist_data = upload_f32(ctx, index.list_data)
-        self.dlist_norm = ctx.enqueue_create_buffer[DType.float32](index.n_rows)
+        # lane verify-gaps (2026-11-23): the list norms are read only by the
+        # expanded distance (FAST: IVF_DIRECT_DISTANCE off); an IDENTICAL scan
+        # takes the direct differences and reads no norm, so it neither
+        # allocates them per row nor launches their kernel.
+        self.dlist_norm = ctx.enqueue_create_buffer[DType.float32](1 if IVF_DIRECT_DISTANCE else index.n_rows)
         # THE CANDIDATE NORMS ARE COMPUTED OVER `list_data`, NOT OVER THE
         # ORIGINAL ROWS, AND THAT IS BIT-EXACT RATHER THAN CLOSE.
         # `row_norm_kernel` is one block per row reading only that row, so
         # permuting the rows permutes the outputs and changes no float. This is
         # what lets `check_nprobe_equals_nlists_is_brute_force` compare against
         # a `knn_search` whose norms were taken over the unpermuted matrix.
-        compute_row_norms(ctx, self.dlist_data, self.dlist_norm, index.n_rows, index.dim)
-        self.list_norm = download_f32(ctx, self.dlist_norm, index.n_rows)
+        comptime if not IVF_DIRECT_DISTANCE:
+            compute_row_norms(ctx, self.dlist_data, self.dlist_norm, index.n_rows, index.dim)
         var n_lists = index.n_lists
         var h_off = ctx.enqueue_create_host_buffer[DType.int32](n_lists + 1)
         for i in range(n_lists + 1):
@@ -583,9 +589,9 @@ struct IvfFlatDevice(Movable):
         self.dlist_data = dld^
         self.d_off = doff^
         self.d_ind = dind^
-        self.dlist_norm = ctx.enqueue_create_buffer[DType.float32](index.n_rows)
-        compute_row_norms(ctx, self.dlist_data, self.dlist_norm, index.n_rows, index.dim)
-        self.list_norm = download_f32(ctx, self.dlist_norm, index.n_rows)
+        self.dlist_norm = ctx.enqueue_create_buffer[DType.float32](1 if IVF_DIRECT_DISTANCE else index.n_rows)
+        comptime if not IVF_DIRECT_DISTANCE:
+            compute_row_norms(ctx, self.dlist_data, self.dlist_norm, index.n_rows, index.dim)
         var n_lists = index.n_lists
         # the per-query path's host layout is made by `ensure_layout` from the
         # index; a resident index has no host vectors, and no search path

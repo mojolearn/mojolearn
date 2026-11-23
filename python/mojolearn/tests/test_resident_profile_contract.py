@@ -13,7 +13,9 @@ pytestmark = [
     ),
     # The resident route is the build default since lane envgate-neural-lm
     # (2026-11-15); the former autouse fixture set it in the environment.
-    default_build_only("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF", "MOJOLEARN_TRANSFORMER_LEGACY_SETUP"),
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+    default_build_only("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF"),
 ]
 
 

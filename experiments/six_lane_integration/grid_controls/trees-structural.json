@@ -49,7 +49,7 @@
   {
    "define": "MOJOLEARN_IDN_GBDT_STEP_OLD",
    "control": "GBDT_STEP_OLD",
-   "reason": "DELETED 2026-11-15 (lane/expdel2-02-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): the A/B on gbdt-lossguide was owed and never ran (EXPERIMENTS.md PENDING row); the old 1 << max_depth Lossguide pool arm is gone, the leaf-capacity pool stays the default (no bit change); define refused in core/experiment_guards_base.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+   "reason": "DELETED 2026-11-15 (lane/expdel2-02-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): the A/B on gbdt-lossguide was owed and never ran (EXPERIMENTS.md PENDING row); the old 1 << max_depth Lossguide pool arm is gone, the leaf-capacity pool stays the default (no bit change); define refused in core/experiment_guards_base.mojo; code recoverable at the sha named in docs/TOMBSTONES.md. | The read survived that deletion (lane expdel2-43 kept it as an owed B arm); DELETED again 2026-11-23 (lane/ab-prep-classical): plumbing, removed without measurement (rule 2026-11-22): only the Lossguide pool size and its per-tree zero fill differed, the same slots written and read; code recoverable at 4d76a9e16e; patch ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GBDT_STEP_OLD.ab-prep.patch"
   },
   {
    "define": "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF",

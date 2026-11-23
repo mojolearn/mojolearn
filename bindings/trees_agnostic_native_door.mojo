@@ -28,7 +28,6 @@ from bindings.prep_native_estimator_door import (
     prep_estimator_plan, prep_native_context,
 )
 from bindings.member_held_door import MemberHeld, member_held, member_held_release
-from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
     member_call, member_call_of, member_outputs_of,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_CAN_PREDICT,
@@ -698,8 +697,7 @@ def _member_open(mut em: _Member, s: _State, model: PythonObject, x: PythonObjec
     chunk in its own kernel pass, and the RUN raises its words: no host scan here. Any other member reads
     admitted words, and every chunk is a mix of cells of X and of the background, so both are scanned once per
     values call (`_rows_finite`); not finite = `_NONFINITE`."""
-    comptime if not MEMBER_SET_NATIVE:
-        return
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         var plan = prep_estimator_plan(model, context)
         if plan is None or py_get(plan, "member") is None:
@@ -1108,8 +1106,7 @@ def _meta_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: Pyt
     entry: a class without a mark, a meta-estimator as a member) leaves `em.meta` False and the model's door
     answers. Never raises; `em.refusal` as `_member_open`. The rows are scanned once when a member does not
     test them (every chunk mixes cells of X and of the background)."""
-    comptime if not MEMBER_SET_NATIVE:
-        return
+    # TOMBSTONE: MOJOLEARN_MEMBER_SET_OFF (plumbing) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     try:
         var kind = _meta_kind(s.model, context)
         if kind == "":
@@ -1190,7 +1187,7 @@ def _rfe_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: Pyth
     var est = _rfe_estimator(s.model)
     if len(em.select) > 0 and len(em.select) <= s.d:
         _member_open(em, s, est, x, n, context)
-    if not em.native and len(em.refusal) == 0:
+    if not em.native and em.refusal.byte_length() == 0:
         em.refusal = ("TypeError: the explained " + name + "'s fitted estimator (" + String(py_type(est).__name__)
                       + ") has no native member that serves its " + s.method + " over the selected columns")
 
@@ -1238,16 +1235,16 @@ def _open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonOb
         _rfe_open(em, s, x, n, context)
     else:
         _member_open(em, s, s.model, x, n, context)
-        if not em.native and len(em.refusal) == 0:
+        if not em.native and em.refusal.byte_length() == 0:
             var inner = _batched_member(s.model, context)
             if inner is not None:
                 _member_open(em, s, inner, x, n, context)
             else:
                 _meta_open(em, s, x, n, context)
-        if (not em.native and not em.meta and len(em.refusal) == 0
+        if (not em.native and not em.meta and em.refusal.byte_length() == 0
                 and not prep_estimator_has(s.model, s.method, context)):
             em.refusal = "TypeError: the explained mojolearn estimator has no native " + s.method
-    if len(em.refusal) > 0:
+    if em.refusal.byte_length() > 0:
         raise Error(em.refusal)
 
 

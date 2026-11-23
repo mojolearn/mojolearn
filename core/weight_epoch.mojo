@@ -19,7 +19,6 @@ new arrays, which bump at their first use. In-place edits of a frozen weight
 are refused by the array itself.
 """
 from std.atomic import Atomic, Ordering
-from std.sys.compile import is_defined
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
@@ -107,16 +106,11 @@ struct WeightKey(Copyable, Movable):
 # are keyed by views INTO a Samba registry when a stack runs its blocks
 # (bindings/samba_training_native_door.mojo, samba_inference_native_door.mojo)
 # and read only the process epoch.
-#
-# -D MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (default off) keys the Samba copies by
-# the process epoch again (every registry reads and bumps `weight_epoch`): the
-# B arm of the owed A/B (row fix-samba-weight-epoch-per-model in
-# bench/results/paper_compare/owed-pre0867.json). Same kernels, same bytes
-# uploaded when an upload happens: only the upload COUNT differs.
 # TOMBSTONE: MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (unmeasured B arm) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 4fdfffd7c8.
 # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime SAMBA_WEIGHT_EPOCH_GLOBAL = is_defined["MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL"]()
+# TOMBSTONE: MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (removed without measurement: plumbing, rule 2026-11-22; the Samba resident copies keyed by the process epoch: same kernels, same bytes per upload, only the upload count differed) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 comptime _REGISTRY_LAYOUT = 2
 comptime _REGISTRY_NAME = "MojolearnRegistryEpochV2"
@@ -217,12 +211,9 @@ def registry_word(addr: Int, mut epoch: Int) raises -> Int:
 def registry_epoch(addr: Int) raises -> Int:
     """The epoch (>= 1) of the registry at host address `addr` (its slot's
     word; a load-time read, never on a call's path)."""
-    comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-        return weight_epoch()
-    else:
-        var epoch = 0
-        _ = registry_word(addr, epoch)
-        return epoch
+    var epoch = 0
+    _ = registry_word(addr, epoch)
+    return epoch
 
 
 def registry_epoch_bump(addr: Int) raises:
@@ -230,18 +221,15 @@ def registry_epoch_bump(addr: Int) raises:
     it reloads at its next use; copies of other registries are untouched.
     A zero address (no registry) stamps nothing; nor does a registry no copy
     was ever keyed by (it has no slot, so no key can hold it)."""
-    comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-        weight_epoch_bump()
-    else:
-        if addr == 0:
-            return
-        var slot = _REGISTRY.get_or_create_ptr()
-        var lock = _lock_word(slot)
-        shared_slot_lock(lock)
-        var i = _find(slot, addr)
-        if i >= 0:
-            Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), _next_stamp(slot))
-        shared_slot_unlock(lock)
+    if addr == 0:
+        return
+    var slot = _REGISTRY.get_or_create_ptr()
+    var lock = _lock_word(slot)
+    shared_slot_lock(lock)
+    var i = _find(slot, addr)
+    if i >= 0:
+        Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), _next_stamp(slot))
+    shared_slot_unlock(lock)
 
 
 struct RegistryKey(Copyable, Movable):
@@ -273,12 +261,9 @@ struct RegistryKey(Copyable, Movable):
     @staticmethod
     def take(addr: Int) raises -> RegistryKey:
         """The key of a copy loaded now from the registry at `addr`."""
-        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-            return RegistryKey(addr, weight_epoch(), 0)
-        else:
-            var epoch = 0
-            var word = registry_word(addr, epoch)
-            return RegistryKey(addr, epoch, word)
+        var epoch = 0
+        var word = registry_word(addr, epoch)
+        return RegistryKey(addr, epoch, word)
 
     def current(self, addr: Int) raises -> Bool:
         """Whether the copy still holds the bytes of the registry at `addr`:
@@ -286,11 +271,8 @@ struct RegistryKey(Copyable, Movable):
         atomic load of the held word; no lock, no table scan."""
         if self.epoch == 0 or self.addr != addr:
             return False
-        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-            return self.epoch == weight_epoch()
-        else:
-            return self.word != 0 and self.epoch == Int(
-                Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=self.word)))
+        return self.word != 0 and self.epoch == Int(
+            Atomic.load[ordering=Ordering.ACQUIRE](_EpochWord(unsafe_from_address=self.word)))
 
     @staticmethod
     def stamp_and_take(addr: Int) raises -> RegistryKey:
@@ -302,34 +284,29 @@ struct RegistryKey(Copyable, Movable):
         `registry_epoch_bump` it replaces took; the stamp and the key are
         the same word value read under that lock, so a later write by
         anyone leaves the key not current. Read by the resident train
-        step (SAMBA_STEP_REGISTRY_RESIDENT, below)."""
+        step (training/samba_resident.mojo `_step_registry_out`, below)."""
         if addr == 0:
             return RegistryKey()
-        comptime if SAMBA_WEIGHT_EPOCH_GLOBAL:
-            # the process epoch after this bump (fetch_add returns the value before it)
-            var before = Int(Atomic.fetch_add(_ptr(), Int64(1)))
-            return RegistryKey(addr, before + 1, 0)
-        else:
-            var slot = _REGISTRY.get_or_create_ptr()
-            var lock = _lock_word(slot)
-            shared_slot_lock(lock)
-            var i = _find(slot, addr)
-            if i < 0:
-                # No copy was ever keyed by this registry (the session's
-                # first step): nothing to invalidate; `take` gives it a slot
-                # with a fresh stamp. Cold: once per registry.
-                shared_slot_unlock(lock)
-                return RegistryKey.take(addr)
-            var stamp = _next_stamp(slot)
-            Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), stamp)
-            var word = Int(_slot_word(slot, i))
+        var slot = _REGISTRY.get_or_create_ptr()
+        var lock = _lock_word(slot)
+        shared_slot_lock(lock)
+        var i = _find(slot, addr)
+        if i < 0:
+            # No copy was ever keyed by this registry (the session's
+            # first step): nothing to invalidate; `take` gives it a slot
+            # with a fresh stamp. Cold: once per registry.
             shared_slot_unlock(lock)
-            return RegistryKey(addr, Int(stamp), word)
+            return RegistryKey.take(addr)
+        var stamp = _next_stamp(slot)
+        Atomic.store[ordering=Ordering.RELEASE](_slot_word(slot, i), stamp)
+        var word = Int(_slot_word(slot, i))
+        shared_slot_unlock(lock)
+        return RegistryKey(addr, Int(stamp), word)
 
 
 # ---- lane fx-samba-step-resident (2026-11-18), the experiment
 # MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT, DEFAULT ON since 2026-11-20
-# (-D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF builds the old form). A Samba resident train step
+# (the _OFF old form was deleted 2026-11-23). A Samba resident train step
 # (training/samba_resident.mojo) uploaded the whole registry host -> device
 # and scanned it for a non-finite weight at every step, although the device
 # copy it wrote one step earlier holds exactly the bytes it downloaded to the
@@ -338,10 +315,7 @@ struct RegistryKey(Copyable, Movable):
 # not current, and after its own download it stamps the registry and keeps
 # the key (`RegistryKey.stamp_and_take`). The stamp moves from the provider
 # door (providers/python/samba_resident_pyapi_door.mojo) INTO the step, so
-# both files read this one constant: an _OFF define must reach every binding of
-# its build (a door without its stamp and a step without the arm would
-# leave other copies stale; a step with the arm under a door that still
-# stamps only re-uploads, i.e. the default behaviour).
+# the door no longer stamps after a step.
 # A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
 # arm in one pod job, tag nvc-ab-20261119T154232Z-0642a5; digests and quality equal). Base -> arm ms: samba-train-step
 # 49.61 -> 47.24 (0.952; the row's other base 48.73, so 0.97 against it; the predicted -1 to -2 ms), control
@@ -357,6 +331,7 @@ struct RegistryKey(Copyable, Movable):
 # (0.957), 4 x 256 d256 six layers 40.83 -> 39.25 (0.961), 2 x 192 d128 m/m 11.48 -> 10.76 (0.937: round 2's 1.26
 # was one call); first forward after a step 5.155 -> 4.123 (0.80), 6.303 -> 4.973 (0.79), 2.644 -> 2.307 (0.87).
 # PROMOTED: faster on the board row and on every driver case in both the step and the forward after it, same bits.
-# The old form (upload and scan every step, the door stamps) stays behind _OFF until one more measurement.
-comptime SAMBA_STEP_REGISTRY_RESIDENT = not is_defined["MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF"]()
+# The old form (upload and scan every step, the door stamps) is deleted (owed entry DECIDED on these two rounds).
+# TOMBSTONE: MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF (old path; promoted winner confirmed: A/B round 2+3 NVIDIA L40S, samba-train-step 0.952 / 0.965, driver 0.979, controls 1.00, digests equal; EXP:4532) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 

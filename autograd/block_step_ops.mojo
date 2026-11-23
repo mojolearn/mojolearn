@@ -148,18 +148,14 @@ comptime ATTN_STEP_INTS = 8
 #: 0e4de0f46e:354 / :920) did. Board on record (NV L40S, candidate
 #: 4c2340386abc vs 0.8.55): mamba3-forward 3.95 -> 6.75 ms, mamba2-forward
 #: 5.57 -> 7.58, mamba1-forward 3.43 -> 4.08 (AMD MI325X 2.91 / 4.25 / 3.29).
-#: `-D MOJOLEARN_MAMBA_CALL_PROGRAM` keeps lane x5's route (B arm of the owed
-#: A/B, bench/results/paper_compare/owed-pre0867.json row
-#: restore-mamba-call-path): x copied device-to-device into a fresh zeroed dx
-#: (`mamba_zeros`) per run, and the output copied device-to-device into the
-#: op's y tensor, then downloaded. Same kernels on the same input bytes in
-#: both arms, so no output bit moves. A poison build (MAMBA_GUARD > 0) keeps
-#: the copy: the guard band lives only in `mamba_zeros` buffers.
+#: A poison build (MAMBA_GUARD > 0) keeps the copy into a zeroed dx: the
+#: guard band lives only in `mamba_zeros` buffers.
 # TOMBSTONE: MOJOLEARN_MAMBA_CALL_PROGRAM (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at ea4327182b.
 # Restore: git apply experiments/removed/MOJOLEARN_MAMBA_CALL_PROGRAM.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime MAMBA_CALL_PROGRAM = is_defined["MOJOLEARN_MAMBA_CALL_PROGRAM"]()
-comptime _MAMBA_X_IN_PLACE = not MAMBA_CALL_PROGRAM and MAMBA_GUARD == 0
+# TOMBSTONE: MOJOLEARN_MAMBA_CALL_PROGRAM (removed without measurement: plumbing, rule 2026-11-22; lane x5's route: x copied D2D into a zeroed dx, the output D2D into the op's y tensor then downloaded; same kernels, same input bytes) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA_CALL_PROGRAM.ab-prep.patch; record in docs/TOMBSTONES.md.
+comptime _MAMBA_X_IN_PLACE = MAMBA_GUARD == 0
 
 #: Lane fix-mamba12-forward-exec (2026-11-13): what this switch decides is
 #: whether the Mamba-1/2 per-call forward pays per-call plumbing the kernels
@@ -178,19 +174,15 @@ comptime _MAMBA_X_IN_PLACE = not MAMBA_CALL_PROGRAM and MAMBA_GUARD == 0
 #: Mamba-2 h_last) arrays are allocated unfilled (bindings/
 #: causal_lm_public_door.mojo, bindings/neural_block_public_door.mojo,
 #: mamba/impl/mamba_block_program.mojo). Same kernels, same launch order,
-#: same input bytes: no output bit moves on any vendor.
-#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD` restores the per-call
-#: stages, the h_last copy, the host zero state round trip and the
-#: zero-filled door arrays (B arm of the owed A/B,
-#: bench/results/paper_compare/owed-pre0867.json row fix-mamba12-forward-exec;
-#: L40S candidate ba08dac006: mamba1-forward 3.43 -> 3.83 ms, mamba2-forward
-#: 5.57 -> 6.31 ms vs 0.8.55). A poison build (MAMBA_GUARD > 0) keeps the
-#: per-call stages (its fills cover a body view only).
+#: same input bytes: no output bit moves on any vendor. A poison build
+#: (MAMBA_GUARD > 0) keeps the per-call stages (its fills cover a body view
+#: only).
 # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 449d72a027.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime IDN_MAMBA12_FORWARD_COPIES_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD"]()
-comptime _M12_HOLD = not IDN_MAMBA12_FORWARD_COPIES_OLD and _MAMBA_X_IN_PLACE
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e (per-call stages, the h_last D2D copy, the host zero state round trip and zero-filled door arrays around the same kernels in the same launch order).
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+comptime _M12_HOLD = _MAMBA_X_IN_PLACE
 
 #: Lane fix-mamba-forward-doors (2026-11-14): what this switch decides is how
 #: a held Mamba-1/2 stage set (`_M12_HOLD` above) is built and re-zeroed.
@@ -208,20 +200,13 @@ comptime _M12_HOLD = not IDN_MAMBA12_FORWARD_COPIES_OLD and _MAMBA_X_IN_PLACE
 #: every stage: no output bit moves on any vendor or the host column. The
 #: same switch also decides the stateless forward's door
 #: (bindings/causal_lm_public_door.mojo `causal_mamba_stateless_run`: one
-#: direct call from the neural door with a held table entry).
-#: `-D MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD` keeps lane
-#: fix-mamba12-forward-exec's form (B arm of the owed A/B,
-#: bench/results/paper_compare/owed-pre0867.json row fix-mamba-forward-doors):
-#: separately allocated stages (Mamba-1: one wait when built), one fill per
-#: stage on reuse, the word upload and write on every fresh call, and the
-#: neural door -> causal layer door -> table chain. L40S candidate
-#: ba08dac006 vs 0.8.55: mamba1-forward 3.83 vs 3.43 ms, mamba2-forward
-#: 6.31 vs 5.57 ms (before that lane).
+#: direct call from the neural door with a held table entry). Every held
+#: set (`_M12_HOLD`) is an arena set.
 # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at ddf9b022e1.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime IDN_MAMBA12_FORWARD_DOOR_OLD = is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD"]()
-comptime _M12_HELD_ARENA = _M12_HOLD and not IDN_MAMBA12_FORWARD_DOOR_OLD
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD (removed without measurement: plumbing, rule 2026-11-22; lane fix-mamba12-forward-exec's held form: separately allocated stages, one fill per stage on reuse, the word upload and write on every fresh call, the four-hop door chain; same kernels, same launch order, same zeros) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_DOOR_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 #: Lane fx-mamba-decode-arena (2026-11-18, ideas-neural-speed ideas 2 and 7):
 #: what this switch decides is whether a Mamba-2 / Mamba-3 decode token (an
@@ -545,7 +530,7 @@ struct _M1Block(Movable):
     #: with the constructor's zeros (`_m1_held_take`), and their float count
     var held: Optional[MambaDeviceStages]
     var held_n: Int
-    #: lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD off): the one
+    #: lane fix-mamba-forward-doors: the one
     #: arena `held`'s stages are views of (re-zeroed with one fill)
     var held_arena: Optional[MambaArena]
     #: lane x56d: the last RECORDED run (`mamba_step_train_run`): its token
@@ -905,14 +890,14 @@ struct BlockStepScratch(Movable):
     #: before the next run): `_run_m3` skips the four report copies
     #: (IDN_MAMBA3_REPORTS_ON_REQUEST). Set per run by the caller.
     var skip_reports: Bool
-    #: lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD off):
+    #: lane fix-mamba12-forward-exec:
     #: the session's Mamba-1/2 L > 1 runs are never read by a backward (a
     #: recorded run goes through `mamba_step_train_run`, which keeps its own
     #: tape stack), so `_run_m1` / `_run_m2` keep their stages in the entry
     #: (`held`) for the next run of the same shape. Set by the per-call
     #: block programs (mamba/impl/mamba_block_program.mojo).
     var keep_stages: Bool
-    #: lane fix-mamba-forward-doors (IDN_MAMBA12_FORWARD_DOOR_OLD off): the
+    #: lane fix-mamba-forward-doors: the
     #: current run is a fresh (discard-state) per-call forward whose caller
     #: rewrites the carried words before any reader (`zero_state` /
     #: `load_state`, mamba/impl/mamba_block_program.mojo), so a held
@@ -1241,7 +1226,7 @@ def _block_out(ctx: DeviceContext, ex: DeviceExec, y_out: FP, y_host: Int, src: 
                n: Int) raises:
     """A Mamba block's output `src[0:n]`: straight into the caller's host
     array at `y_host` when it is non-zero (queued; the caller waits: the
-    MAMBA_CALL_PROGRAM A arm), else device-to-device into the op's y
+    per-call door), else device-to-device into the op's y
     tensor at `y_out`."""
     if y_host != 0:
         ctx.enqueue_copy(dst_ptr=f32_ptr(y_host), src_buf=src.create_sub_buffer[DType.float32](0, n))
@@ -1263,37 +1248,31 @@ def _m1_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int, 
     with the constructor's zeros in stream order (no allocation, no wait),
     else a new set (a held set of another shape is parked, not freed, while
     the stream may still read it). Lane fix-mamba-forward-doors
-    (IDN_MAMBA12_FORWARD_DOOR_OLD off, header): the set is views of one held
+    (header): the set is views of one held
     arena, built with one allocation and one fill and re-zeroed with one
     fill (0.8.55's `_mamba1_run_arena`)."""
     if sc.m1[e].held:
         var prev = sc.m1[e].held.take()
         sc.m1[e].held_n = 0
         if prev.b == b and prev.l == l:
-            comptime if _M12_HELD_ARENA:
-                if sc.m1[e].held_arena:
-                    # ONE fill: every stage view's zeros (the arena's own
-                    # constructor fill), in stream order, no wait
-                    sc.m1[e].held_arena.value().base.enqueue_fill(Float32(0.0))
-                else:
-                    prev.rezero()
+            if sc.m1[e].held_arena:
+                # ONE fill: every stage view's zeros (the arena's own
+                # constructor fill), in stream order, no wait
+                sc.m1[e].held_arena.value().base.enqueue_fill(Float32(0.0))
             else:
                 prev.rezero()
             return prev^
         sc.make_room(ctx)
         sc.parked_m1.append(prev^)
-    comptime if _M12_HELD_ARENA:
-        # a previous set's arena (another shape, or a run that failed between
-        # take and hold) is parked, not freed, while the stream may read it
-        if sc.m1[e].held_arena:
-            sc.make_room(ctx)
-            sc.parked_arena.append(sc.m1[e].held_arena.take())
-        var arena = MambaArena(ctx, MambaArena.total(_m1_stage_sizes(b, l, dims), MAMBA_GUARD), MAMBA_GUARD)
-        var fresh = MambaDeviceStages(ctx, b, l, dims, arena)
-        sc.m1[e].held_arena = arena^
-        return fresh^
-    else:
-        return MambaDeviceStages(ctx, b, l, dims)
+    # a previous set's arena (another shape, or a run that failed between
+    # take and hold) is parked, not freed, while the stream may read it
+    if sc.m1[e].held_arena:
+        sc.make_room(ctx)
+        sc.parked_arena.append(sc.m1[e].held_arena.take())
+    var arena = MambaArena(ctx, MambaArena.total(_m1_stage_sizes(b, l, dims), MAMBA_GUARD), MAMBA_GUARD)
+    var fresh = MambaDeviceStages(ctx, b, l, dims, arena)
+    sc.m1[e].held_arena = arena^
+    return fresh^
 
 
 def _m2_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int, l: Int, q0: Int,
@@ -1305,28 +1284,22 @@ def _m2_held_take(ctx: DeviceContext, mut sc: BlockStepScratch, e: Int, b: Int, 
         sc.m2[e].held_n = 0
         sc.m2[e].h_in_held = False
         if prev.b == b and prev.l == l and prev.q0 == q0:
-            comptime if _M12_HELD_ARENA:
-                if sc.m2[e].held_arena:
-                    # ONE fill for the 28 stage views (fix-mamba-forward-doors)
-                    sc.m2[e].held_arena.value().base.enqueue_fill(Float32(0.0))
-                else:
-                    prev.rezero()
+            if sc.m2[e].held_arena:
+                # ONE fill for the 28 stage views (fix-mamba-forward-doors)
+                sc.m2[e].held_arena.value().base.enqueue_fill(Float32(0.0))
             else:
                 prev.rezero()
             return prev^
         sc.make_room(ctx)
         sc.parked_m2.append(prev^)
-    comptime if _M12_HELD_ARENA:
-        # lane fix-mamba-forward-doors: one arena (0.8.55's `_mamba2_run_arena`)
-        if sc.m2[e].held_arena:
-            sc.make_room(ctx)
-            sc.parked_arena.append(sc.m2[e].held_arena.take())
-        var arena = MambaArena(ctx, MambaArena.total(_m2_stage_sizes(b, l, q0, dims), MAMBA_GUARD), MAMBA_GUARD)
-        var fresh = Mamba2DeviceStages(ctx, b, l, q0, dims, arena)
-        sc.m2[e].held_arena = arena^
-        return fresh^
-    else:
-        return Mamba2DeviceStages(ctx, b, l, q0, dims)
+    # lane fix-mamba-forward-doors: one arena (0.8.55's `_mamba2_run_arena`)
+    if sc.m2[e].held_arena:
+        sc.make_room(ctx)
+        sc.parked_arena.append(sc.m2[e].held_arena.take())
+    var arena = MambaArena(ctx, MambaArena.total(_m2_stage_sizes(b, l, q0, dims), MAMBA_GUARD), MAMBA_GUARD)
+    var fresh = Mamba2DeviceStages(ctx, b, l, q0, dims, arena)
+    sc.m2[e].held_arena = arena^
+    return fresh^
 
 
 def _m2_call_stages(ctx: DeviceContext, mut blk: _M2Block, b: Int, l: Int, dims: Mamba2Dims) raises -> Mamba2DeviceStages:
@@ -1414,7 +1387,7 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var x = _view(ex, bufs[0], n)
     var trace = IdentityTrace.disabled()
     comptime if _M12_HOLD:
-        # lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD,
+        # lane fix-mamba12-forward-exec (`_M12_HOLD`,
         # header): the entry keeps its L > 1 stages; x read in place.
         if l > 1 and sc.keep_stages:
             var dims = MambaDims.of(dm)
@@ -1429,7 +1402,7 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     if l == 1:
         # `_m1_session_step_run`: mamba_step on the resident stages.
         comptime if _MAMBA_X_IN_PLACE:
-            # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+            # the block reads x in place (_MAMBA_X_IN_PLACE, header)
             mamba_step(ctx, blk.stages, blk.st, blk.w, x, b, trace, String("ops.step"))
         else:
             _d2d(ctx, blk.dx, x, n)
@@ -1474,7 +1447,7 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     # held stages (set below)
     sc.m2[e].h_in_held = False
     comptime if _M12_HOLD:
-        # lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD,
+        # lane fix-mamba12-forward-exec (`_M12_HOLD`,
         # header): the entry keeps its L > 1 stages, x read in place, and the
         # h_last report is read from the held stages, not copied.
         if l > 1 and sc.keep_stages:
@@ -1484,13 +1457,9 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
             ref hb = sc.m2[e]
             mamba2_block_forward(ctx, held, hb.st, hb.w, x, b, l, fs[0], fs[1], trace, String("ops.step"))
             _block_out(ctx, ex, y_out, y_host, held.residual_out, n)
-            comptime if _M12_HELD_ARENA:
-                # lane fix-mamba-forward-doors: a fresh per-call forward's
-                # caller rewrites the word before any reader (`skip_words`)
-                if not skip_words:
-                    var held_words: List[Int] = [hb.st.buf_len]
-                    _write_words(ex, bufs[3], held_words)
-            else:
+            # lane fix-mamba-forward-doors: a fresh per-call forward's
+            # caller rewrites the word before any reader (`skip_words`)
+            if not skip_words:
                 var held_words: List[Int] = [hb.st.buf_len]
                 _write_words(ex, bufs[3], held_words)
             hb.held_n = _sum_floats(_m2_stage_sizes(b, l, q0, dims))
@@ -1503,7 +1472,7 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     # MAMBA_FAST_DECODE_STAGE_ARENA, `_m2_call_stages`).
     var stages = _m2_call_stages(ctx, blk, b, l, dims)
     comptime if _MAMBA_X_IN_PLACE:
-        # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+        # the block reads x in place (_MAMBA_X_IN_PLACE, header)
         mamba2_block_forward(ctx, stages, blk.st, blk.w, x, b, l, fs[0], fs[1], trace,
                              String("ops.step"))
         _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
@@ -1622,7 +1591,7 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var report_n = m3_report_floats(b, dm)
     var held_x = Optional[DeviceBuffer[DType.float32]]()
     comptime if _MAMBA_X_IN_PLACE:
-        # the block reads x in place (MAMBA_CALL_PROGRAM, header)
+        # the block reads x in place (_MAMBA_X_IN_PLACE, header)
         mamba3_block_forward(ctx, stages, blk.st, blk.w, x, b, l, trace, String("ops.step"))
         _block_out(ctx, ex, y_out, y_host, stages.residual_out, n)
     else:
@@ -2700,7 +2669,7 @@ def mamba_step_run_host(
     mut ex: DeviceExec, mut sc: BlockStepScratch, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int],
     fs: List[Float32], y_host: Int,
 ) raises:
-    """A Mamba step op's run for a per-call door (MAMBA_CALL_PROGRAM's A arm,
+    """A Mamba step op's run for a per-call door (
     lane restore-neural-call-paths): the same body as `block_step_run`, with
     the block output enqueued straight from the stages into the caller's
     host array at `y_host` (no y tensor, no device-to-device copy); the

@@ -127,6 +127,7 @@ from autograd.kernels.mamba3 import (
     mamba3_backward_block_norm_into,
 )
 from mamba.impl.modeling.modeling_mamba import mamba_download, mamba_upload, mamba_zeros
+from core.device_arena import DeviceArena
 from autograd.kernels.mamba3_prefill import (
     IDN_M3_BWD_SKIP_DEAD,
     Mamba3DeviceGradients,
@@ -307,8 +308,11 @@ struct Mamba3TapeScratch(Movable):
     # D5
     var d_norm_w_rows: DeviceBuffer[DType.float32]
 
-    def __init__(out self, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims, nc: Int) raises:
-        var arena = _AfnM3Arena()
+    def __init__(
+        out self, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims, nc: Int,
+        owner: Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]] = None,
+    ) raises:
+        var arena = _AfnM3Arena(owner)
         var own = arena.own()
         var m = b * l
         var nh = dims.nheads
@@ -419,8 +423,14 @@ struct Mamba3TapeBlock(Movable):
     var d_gate: DeviceBuffer[DType.float32]
     var scratch: Optional[Mamba3TapeScratch]
     var tk: Int
+    #: the owner's arena for the scratch (the Samba session's `m3_arena`,
+    #: resolved once where the session builds its blocks; None without one)
+    var arena: Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]]
 
-    def __init__(out self, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims) raises:
+    def __init__(
+        out self, ctx: DeviceContext, b: Int, l: Int, dims: Mamba3Dims,
+        arena: Optional[UnsafePointer[DeviceArena, MutUntrackedOrigin]] = None,
+    ) raises:
         var m = b * l
         self.d_norm = mamba_zeros[False](ctx, m * dims.d_model)
         self.d_in_proj = mamba_zeros[False](ctx, m * dims.d_in_proj())
@@ -428,6 +438,7 @@ struct Mamba3TapeBlock(Movable):
         self.d_gate = mamba_zeros[False](ctx, m * dims.d_inner)
         self.scratch = None
         self.tk = 0
+        self.arena = arena
 
 
 comptime M3WeightsRef = MutPointer[Mamba3DeviceWeights, MutUntrackedOrigin]
@@ -565,7 +576,7 @@ struct Mamba3Rules(BackwardRules):
         if blk.scratch:
             raise Error("mamba3 backward (autograd): the block's scratch is still held")
         blk.tk = Int(perf_counter_ns())
-        blk.scratch = Mamba3TapeScratch(ctx, self.b, self.l, dims, st.nc)
+        blk.scratch = Mamba3TapeScratch(ctx, self.b, self.l, dims, st.nc, blk.arena)
         ref S = blk.scratch.value()
         var d_output = _m3_view(ctx, upstream, m * dims.d_model)
         var d_weight = _m3_view(ctx, gradients[1], rows[1] * cols[1])

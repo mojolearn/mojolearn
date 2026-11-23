@@ -508,7 +508,7 @@ def gpc_predict_all_device(
         dx = _gpc_upload_checked(ctx, xt_addr, n_train, n_features, String("X_train"))
     # TOMBSTONE: _gpc_upload_checked on X_star (synchronising scan, DEVIATION 1768 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
     # fix-svc-query-resident: the lease's held query buffers (use_lease 0,
-    # -1 or a fold: per-call; core/query_x_held.mojo IDN_QUERY_X_HELD).
+    # -1 or a fold: per-call; core/query_x_held.mojo).
     var qx = resident_query_x(store, ctx, use_lease, xs_addr, n_star, n_features, fold)
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dkc = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)

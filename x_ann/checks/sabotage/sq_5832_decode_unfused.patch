@@ -1,5 +1,21 @@
+diff --git a/x_ann/host/ivf_pq_host.mojo b/x_ann/host/ivf_pq_host.mojo
+index 5fbc789b57..a352d44c60 100644
+--- a/x_ann/host/ivf_pq_host.mojo
++++ b/x_ann/host/ivf_pq_host.mojo
+@@ -579,9 +579,8 @@ def ivf_sq_search_host(
+     var dec = List[Float32](length=dim * SQ_CODES, fill=Float32(0.0))
+     for c in range(dim):
+         for code in range(SQ_CODES):
+-            dec[c * SQ_CODES + code] = ftz(identical_mul_add(
+-                Float32(code), delta.unsafe_load(c), vmin.unsafe_load(c)
+-            ))
++            dec[c * SQ_CODES + code] = ftz(ftz(identical_mul(
++                Float32(code), delta.unsafe_load(c))) + vmin.unsafe_load(c))
+     var decp = fp(dec)
+     var tasks = ann_task_count(m, n_lists * dim + n_probes * n_lists)
+ 
 diff --git a/x_ann/ivf_scan_device.mojo b/x_ann/ivf_scan_device.mojo
-index 65465f28c..dd69e4f95 100644
+index a1baa6fa8c..0b61d90e77 100644
 --- a/x_ann/ivf_scan_device.mojo
 +++ b/x_ann/ivf_scan_device.mojo
 @@ -30,7 +30,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
@@ -8,10 +24,10 @@ index 65465f28c..dd69e4f95 100644
  
 -from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 +from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul, identical_mul_add
- from std.sys.info import has_apple_gpu_accelerator
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
  from x_ann.switches import ANN3_SCAN_SELECT
- from x_ann.ivf_pq_core import (
-@@ -298,7 +298,7 @@ def sq_score_kernel(
+ from x_ann.vsearch_fast import IDN_PQ_LUT_TILED, PQ_LUT_TILED, PQ_SCAN_FUSED
+@@ -389,7 +389,7 @@ def sq_score_kernel(
          if staged:
              var acc = Float32(0.0)
              for c in range(d):
@@ -21,10 +37,10 @@ index 65465f28c..dd69e4f95 100644
                  acc = ts_ftz_nonneg(identical_mul_add(diff, diff, acc))
              cand.unsafe_store(base + slot, acc)
 diff --git a/x_ann/ivf_sq_core.mojo b/x_ann/ivf_sq_core.mojo
-index a6c7d80c6..865d323c0 100644
+index 829b573790..78ad455d0b 100644
 --- a/x_ann/ivf_sq_core.mojo
 +++ b/x_ann/ivf_sq_core.mojo
-@@ -85,9 +85,8 @@ def sq_candidate_dist(
+@@ -88,9 +88,8 @@ def sq_candidate_dist(
      var acc = Float32(0.0)
      for c in range(dim):
          var qr = ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(l * dim + c)))

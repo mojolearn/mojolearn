@@ -127,8 +127,6 @@ struct SequenceKeys(Defaultable, Movable):
     var k_seq_tensor_free: PythonObject
     var k_seq_tensor_upload: PythonObject
     var k_sequence_ops_route: PythonObject
-    var k_seqln_class_device_io_off: PythonObject
-    var k_seqln_keep_stats_off: PythonObject
     var k_seqln_layout: PythonObject
     var k_seqmoe_layout: PythonObject
     var k_seqmoe_urandom: PythonObject
@@ -137,7 +135,6 @@ struct SequenceKeys(Defaultable, Movable):
     var k_sequence_bindings: PythonObject
     var k_sequence_device_class: PythonObject
     var k_sequence_device_getters: PythonObject
-    var k_sequence_device_io_off: PythonObject
     var k_sequence_device_setters: PythonObject
     var k_sequence_dtype_classes: PythonObject
     var k_sequence_dtype_compact: PythonObject
@@ -297,8 +294,6 @@ struct SequenceKeys(Defaultable, Movable):
         self.k_seq_tensor_free = PythonObject(None)
         self.k_seq_tensor_upload = PythonObject(None)
         self.k_sequence_ops_route = PythonObject(None)
-        self.k_seqln_class_device_io_off = PythonObject(None)
-        self.k_seqln_keep_stats_off = PythonObject(None)
         self.k_seqln_layout = PythonObject(None)
         self.k_seqmoe_layout = PythonObject(None)
         self.k_seqmoe_urandom = PythonObject(None)
@@ -307,7 +302,6 @@ struct SequenceKeys(Defaultable, Movable):
         self.k_sequence_bindings = PythonObject(None)
         self.k_sequence_device_class = PythonObject(None)
         self.k_sequence_device_getters = PythonObject(None)
-        self.k_sequence_device_io_off = PythonObject(None)
         self.k_sequence_device_setters = PythonObject(None)
         self.k_sequence_dtype_classes = PythonObject(None)
         self.k_sequence_dtype_compact = PythonObject(None)
@@ -471,8 +465,6 @@ def _sequence_keys_fill(nk: UnsafePointer[SequenceKeys, MutUntrackedOrigin]) rai
     nk[].k_seq_tensor_free = py_key("seq_tensor_free")
     nk[].k_seq_tensor_upload = py_key("seq_tensor_upload")
     nk[].k_sequence_ops_route = py_key("sequence_ops_route")
-    nk[].k_seqln_class_device_io_off = py_key("seqln_class_device_io_off")
-    nk[].k_seqln_keep_stats_off = py_key("seqln_keep_stats_off")
     nk[].k_seqln_layout = py_key("seqln_layout")
     nk[].k_seqmoe_layout = py_key("seqmoe_layout")
     nk[].k_seqmoe_urandom = py_key("seqmoe_urandom")
@@ -481,7 +473,6 @@ def _sequence_keys_fill(nk: UnsafePointer[SequenceKeys, MutUntrackedOrigin]) rai
     nk[].k_sequence_bindings = py_key("sequence_bindings")
     nk[].k_sequence_device_class = py_key("sequence_device_class")
     nk[].k_sequence_device_getters = py_key("sequence_device_getters")
-    nk[].k_sequence_device_io_off = py_key("sequence_device_io_off")
     nk[].k_sequence_device_setters = py_key("sequence_device_setters")
     nk[].k_sequence_dtype_classes = py_key("sequence_dtype_classes")
     nk[].k_sequence_dtype_compact = py_key("sequence_dtype_compact")

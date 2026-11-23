@@ -111,7 +111,7 @@ def _decode_arm(kind, blk, x, prefill, tokens, arm):
     positions through the PER-CALL forward, then `tokens` decode steps
     through the per-call `step` (arm 'percall') or a resident session
     (arm 'resident': `decode_session`, the binding's
-    `transformer_decode_session_*` / `mamba1_session_*` entry points; the
+    native decode dispatch (transformer/native_decode_dispatch.mojo) / `mamba1_session_*`; the
     per-call arm goes through the block's own retained per-model context
     where the binding has one). Returns per-token seconds, the decoded
     outputs and the final state pieces."""

@@ -4,7 +4,6 @@
 from core.mode_answer import MODE_FAMILY_NEURAL, word_runs_identical
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
-from std.sys.compile import is_defined
 from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_get, py_setitem, py_setattr, py_type
 from bindings.generation_buffers_door import generation_address, generation_array
@@ -32,16 +31,19 @@ from training.native_samba_execution import NativeSambaLayer, NativeSambaModel
 
 # Lane envgate-neural-lm (2026-11-15): the block doors' setup switches are
 # build constants with today's defaults; each was a getenv per public call.
-# B arms RUN OWED (bench/results/paper_compare/owed-pre0867.json,
-# docs/apple-fast/EXPERIMENTS.md): -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP
-# (was =1), -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0),
+# -D MOJOLEARN_TRANSFORMER_LEGACY_SETUP (was =1: per-call layer setup, no
+# block session) and -D MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (was =0: the
+# per-call transformer_forward_fresh) ran the same llama_decoder_layer_forward /
+# llama_decoder_layer_backward_autograd bodies as the block session:
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch; record in docs/TOMBSTONES.md.
 # -D MOJOLEARN_MAMBA3_LEGACY_SETUP (was =1) lost A/B ab3 (NVIDIA L40S, wheel
 # d652a4b0a1, 2026-11-18, job nvc-ab-20261118T182558Z-cb6e02, digests equal):
 # arm/base 1.007 geomean over 5 mamba3/samba cells (0.97-1.07), noise.
 # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_SETUP (LOSER: Mamba3 per-call setup without prefill sessions, arm/base geomean 1.007 over 5 cells, noise, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
 # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
-comptime TRANSFORMER_LEGACY_SETUP = is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SETUP"]()
-comptime TRANSFORMER_SESSION_FRESH = not is_defined["MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF"]()
 
 
 struct SambaLayerPublication(Movable):
@@ -509,8 +511,10 @@ def samba_provider_eligible(fields: PythonObject) raises -> Bool:
         if String(block["_native_kind"]) == "transformer":
             if String(block["_native_route"]) == "cpu" and block["_int15"] is not None:
                 return False  # CPU training binding does not export packed projections.
-            if TRANSFORMER_LEGACY_SETUP or not TRANSFORMER_SESSION_FRESH:
-                return False
+            # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
+            # TOMBSTONE: MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF.patch; record in docs/TOMBSTONES.md.
             var lock = OperationLockLease(block["_runtime_lock"])
             if lock.handle == 0:
                 return False

@@ -219,8 +219,8 @@ def sequence_device_operation(operation: Int, owner: PythonObject, values: Pytho
             if operation == OPTIMIZER_OPN_SEQDEV_TO and seq_device(source, context):
                 return source
             var input = seq_device_input(source, operation == OPTIMIZER_OPN_SEQDEV_TO, context, buffer_pins)
-            if operation == OPTIMIZER_OPN_SEQDEV_TO and Bool(py=py_item(context, nk[].k_sequence_device_io_off)):
-                return input
+            # TOMBSTONE: MOJOLEARN_SEQ_DEVICE_IO_OFF (env; removed: plumbing, the same kernels on host arrays vs resident tensors, rule 2026-11-22) deleted 2026-11-23 by lane/ab-owners; code recoverable at d125cb97c7.
+            # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
             var selected = seq_binding(mode, context, PythonObject(None)) if operation == OPTIMIZER_OPN_SEQDEV_TO else seq_binding(mode, context, values[0])
             var entries = seq_device_entries(py_item(selected, nk[].k_module), context, operation != OPTIMIZER_OPN_SEQDEV_TO)
             if entries is None:

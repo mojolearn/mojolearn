@@ -87,7 +87,7 @@ FAMILIES = (
             "x_trees_accumulate", "x_trees_accumulate_onehot", "x_trees_accumulate_cols", "x_trees_accumulate_cols_many",
             "x_trees_argmax_rows", "x_trees_argmax_rows_f32", "x_trees_scale", "x_trees_softmax_rows", "x_trees_scale_to_f32", "x_trees_put_f32",
             "x_trees_samme_step", "x_trees_r2_step", "x_trees_weighted_median",
-            "x_trees_apply", "x_trees_gradients", "x_trees_leaf_newton", "x_trees_tree_score_add", "x_trees_uniform",
+            "x_trees_apply", "x_trees_tree_score_add", "x_trees_uniform",
             "x_trees_onehot_leaves", "x_trees_transpose_f32", "x_trees_log64",
             "x_trees_normalize_rows", "x_trees_scatter", "x_trees_platt_fit", "x_trees_platt_apply",
             "x_trees_isotonic_fit", "x_trees_isotonic_predict", "x_trees_tree_shap_prepare", "x_trees_tree_shap",

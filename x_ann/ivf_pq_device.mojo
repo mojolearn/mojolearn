@@ -12,7 +12,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import (
-    ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_SEED, ANN3_ROW_THREADS, IDN_PQ_DEVICE_CODEBOOKS,
+    ANN3_HOST_PASSES, ANN3_PQ_SEED, ANN3_ROW_THREADS, IDN_PQ_DEVICE_CODEBOOKS,
     IDN_PQ_TRAINSET_STRIDED, IDN_PQ_TRAIN_ROWS_PER_CODE,
     IVF_PQ_ONE_UPLOAD,
 )
@@ -423,8 +423,7 @@ def ivf_pq_build_device(
     """`codes_addr`: the address of the caller's n x pq_dim int32 array; the
     codes are downloaded straight into it and the returned index's `codes`
     is EMPTY (lane fx-ann-fit-nocopy, 2026-11-20: through the pooled pinned
-    stages, `download_i32_into`; under the opt-in `ANN3_DIRECT_OUT`, lane
-    ann-apple3, one raw copy into the pageable array). 0: the codes come
+    stages, `download_i32_into`). 0: the codes come
     back in the index (the checks). `x_addr` (lane fg-ivf A3): the
     caller's n x dim float32 rows, read in place by the coarse build when `x`
     is empty (`IVF_PQ_ONE_UPLOAD` with `IVF_BUILD_FROM_POINTER`)."""
@@ -559,11 +558,8 @@ def _ivf_pq_build_impl[resident: Bool](
         if codes_addr != 0:
             # lane fx-ann-fit-nocopy (2026-11-20): into the caller's array.
             # Gone: a result list the size of the codes and the copy out of it.
-            comptime if ANN3_DIRECT_OUT:
-                ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
-                ctx.synchronize()
-            else:
-                download_i32_into(ctx, dcodes, n * pq_dim, HI32(unsafe_from_address=codes_addr))
+            # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+            download_i32_into(ctx, dcodes, n * pq_dim, HI32(unsafe_from_address=codes_addr))
         else:
             codes = download_i32(ctx, dcodes, n * pq_dim)
         st.host("encode")
@@ -873,14 +869,9 @@ def ivf_sq_build_device_ptr(
     download_f32_into(ctx, dvmin, dim, vmin_p)
     download_f32_into(ctx, ddelta, dim, delta_p)
     # The codes go into the caller's array through the pooled pinned stages
-    # (`download_i32_into`). The opt-in `ANN3_DIRECT_OUT` (lane ann-apple3,
-    # Apple FAST, paused and unmeasured) keeps its one raw copy into the
-    # pageable array as the arm.
-    comptime if ANN3_DIRECT_OUT:
-        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=Int(codes_p)), src_buf=dcodes)
-        ctx.synchronize()
-    else:
-        download_i32_into(ctx, dcodes, n * dim, codes_p)
+    # (`download_i32_into`).
+    # TOMBSTONE: MOJOLEARN_ANN3_DIRECT_OUT (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    download_i32_into(ctx, dcodes, n * dim, codes_p)
     st.host("encode")
     # the rows are named here, after the drains above
     _ = len(x)

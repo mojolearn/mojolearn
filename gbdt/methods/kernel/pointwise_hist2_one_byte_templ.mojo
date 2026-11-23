@@ -80,10 +80,7 @@ from gbdt.methods.kernel.split_properties_helpers import (
     pw_private_doc_slot,
     shift_part_and_bin_sums_ptr,
 )
-from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
-    hist2_dither,
-    hist2_quantize,
-)
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import (
     PW_HIST2_BLOCK,
     PW_HIST2_FLOAT_BLOCK,

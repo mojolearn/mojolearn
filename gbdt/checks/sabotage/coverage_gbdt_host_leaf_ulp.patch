@@ -1,0 +1,27 @@
+diff --git a/gbdt/methods/cursor_rescale.mojo b/gbdt/methods/cursor_rescale.mojo
+index 4fa1da9ca1..e8b6325a48 100644
+--- a/gbdt/methods/cursor_rescale.mojo
++++ b/gbdt/methods/cursor_rescale.mojo
+@@ -7,6 +7,7 @@
+ leaf formed once per leaf. Host-safe: no GPU imports."""
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from checks.soft_f64 import sf64_from_f32, sf64_mul, sf64_to_f32
++from std.memory import bitcast as _sab_bitcast
+ 
+ 
+ @always_inline
+@@ -26,9 +27,12 @@ def rescaled_leaf(raw: Float32, learning_rate: Float32) -> Float32:
+     losses off in the 7th digit). Bits change on every column together: this
+     kernel and the host oracles that restate it (`gbdt/host/gbdt_oracle_*`).
+     Under FAST the plain product."""
++    # SABOTAGE (coverage-gbdt-host_leaf_ulp): every rescaled leaf one ulp up
++    # (its bit pattern plus one), in the cursor and the stored model
++    var v = raw * learning_rate
+     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+-        return sf64_to_f32(sf64_mul(sf64_from_f32(raw), sf64_from_f32(learning_rate)))
+-    return raw * learning_rate
++        v = sf64_to_f32(sf64_mul(sf64_from_f32(raw), sf64_from_f32(learning_rate)))
++    return _sab_bitcast[DType.float32](_sab_bitcast[DType.uint32](v) + UInt32(1))
+ 
+ 
+ def rescaled_leaves(leaves: List[Float32], learning_rate: Float32) -> List[Float32]:

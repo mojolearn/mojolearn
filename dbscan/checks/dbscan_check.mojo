@@ -890,7 +890,7 @@ def check_dbscan_tiny_budget_agrees() raises:
     admitted only when `batch < n_rows`, so a many-batch return of exactly 0
     against a one-batch return above 0 says the budget moved the batch and
     the runner acted on it. A fit the test does not admit (the ball cover,
-    or a build with `MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF`) keeps the
+    or a fast build) keeps the
     strict pass-count assertion. The labels are compared either way.
     """
     var ctx = DeviceContext()

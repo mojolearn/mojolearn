@@ -21,3 +21,4 @@ x_cnn/checks/gemm_host_check.mojo	x_cnn/checks/sabotage/seam_5719_chunk_span.pat
 x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5706_adaptive_max_last.patch
 x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5706_maxpool_host_last.patch
 x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5700_col2im_host_order.patch
+# x_cnn/checks/sabotage/e2e_host_output_bit.patch retired 2026-11-23 (lane patch-recut): duplicates coverage-x_cnn-binding_entries_impl on x_cnn/host/binding_entries_impl.mojo:out_f32 (every returned word moved; the arm steps one ulp, this flipped the low bit); recoverable at 12b8e16a0c
