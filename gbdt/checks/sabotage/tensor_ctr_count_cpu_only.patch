@@ -1,13 +1,16 @@
 diff --git a/gbdt/host/gbdt_oracle_feature_freq.mojo b/gbdt/host/gbdt_oracle_feature_freq.mojo
-index 6d8bf5e84..f96289422 100644
+index b02aff92e0..021e39a3a6 100644
 --- a/gbdt/host/gbdt_oracle_feature_freq.mojo
 +++ b/gbdt/host/gbdt_oracle_feature_freq.mojo
-@@ -263,7 +263,7 @@ def _ff_table(
-                 t.split_feature[s], t.split_bin[s], t.split_type[s], flat,
-                 n_rows, r,
-             )
--        t.counts[key] += 1
-+        t.counts[(key ^ 1) if r == 0 and (key ^ 1) < len(t.counts) else key] += 1  # SABOTAGE: row 0 counted in its neighbouring key (CPU column only; the sum still matches the denominator)
-     return t^
- 
- 
+@@ -306,6 +306,11 @@ def _ff_table(
+         for u in range(units):  # driver-loop: over the tasks' count tables, added into the table
+             for k in range(entries):
+                 t.counts[k] += task_counts[u * entries + k]
++    # SABOTAGE: row 0 counted in its neighbouring key (CPU column only; the sum still matches the denominator)
++    var key0 = _ff_row_key_raising(t, x_colmajor, n_rows, flat, 0)
++    if key0 >= 0 and (key0 ^ 1) < len(t.counts):
++        t.counts[key0] -= 1
++        t.counts[key0 ^ 1] += 1
+     _ = len(x_colmajor)
+     _ = len(flat)
+     _ = len(task_counts)
