@@ -41,7 +41,9 @@ from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx, neural_device_plan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from cluster.estimator import kmeans_predict_device, kmeans_transform_device
+from cluster.estimator import (
+    kmeans_predict_device, kmeans_transform_device, kmeans_score_device, kmeans_score_weights,
+)
 from core.admitted_finite_status import enqueue_finite_word
 from core.shared_slot import SharedSlot
 
@@ -345,3 +347,43 @@ def kmeans_transform_resident(
     _ = status^
     _ = x^
     _ = view^
+
+
+def kmeans_score_resident(
+    handle: Int,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    weights_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_weights: Int,
+    metric: Int,
+    finite_word: Int = 0,
+) raises -> Float64:
+    """`kmeans_score` with the handle's centroids (lane mf-kmeans5): X
+    uploaded, the weights as the fit builds them, the same device body
+    (`kmeans_score_device`). `finite_word`: as `kmeans_predict_resident`'s."""
+    if n_samples < 1 or n_features < 1 or n_clusters < 1:
+        raise Error(
+            "kmeans_score needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n_samples) + ", " + String(n_features) + ", " + String(n_clusters)
+        )
+    var view = _kmeans_resident_view(handle, n_clusters, n_features)
+    var x = view.ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
+    view.ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    var weights = kmeans_score_weights(view.ctx, weights_ptr, n_weights, n_samples)
+    var status = view.ctx.enqueue_create_buffer[DType.int32](1)
+    var word = view.ctx.enqueue_create_host_buffer[DType.int32](1)
+    if finite_word != 0:
+        enqueue_finite_word(view.ctx, x.unsafe_ptr(), n_samples * n_features, status, 0)
+        view.ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    # kmeans_score_device synchronises before it returns.
+    var cost = kmeans_score_device(view.ctx, x, n_samples, n_features, n_clusters, view.centers, weights, metric)
+    if finite_word != 0:
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
+    _ = weights^
+    _ = x^
+    _ = view^
+    return cost

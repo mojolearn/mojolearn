@@ -7,11 +7,12 @@ from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorError
 from core.kmeans_native_api import (
     KMeansNativeKernels, KMeansNativeDriver, KMeansFoldStore, KMeansFitRequest,
-    KMeansFitResult, KMeansQueryRequest, KMeansQueryResult, kmeans_native_dispatch,
+    KMeansFitResult, KMeansQueryRequest, KMeansQueryResult, KMeansScoreRequest, KMeansScoreResult,
+    kmeans_native_dispatch,
 )
 from core.kmeans_owner_state import KMeansResidentState
 
-comptime KMEANS_CONTRACT_FIXTURES = 26
+comptime KMEANS_CONTRACT_FIXTURES = 28
 
 
 struct WireOracle(KMeansNativeKernels):
@@ -48,6 +49,17 @@ struct WireOracle(KMeansNativeKernels):
         if r.fold.active():
             _require(r.fold.base == 67 and r.fold.rows == 71 and r.fold.indices == 73, "query fold slots")
         return KMeansQueryResult(Int(r.transform) + 2 * Int(r.handle >= 0) + 4 * Int(r.fold.active()), r.rows)
+
+    @staticmethod
+    def score(r: KMeansScoreRequest) raises -> KMeansScoreResult:
+        _require(r.source == 11 and r.centers == 13 and r.weights == 19, "score address slots")
+        _require(r.rows == 29 and r.features == 31 and r.clusters == 37 and r.weight_count == 41
+            and r.metric == 61 and r.test_finite, "score option/shape/weight slots")
+        _require(r.handle == -1 or r.handle == 83, "score resident handle slot")
+        if r.fold.active():
+            _require(r.fold.base == 67 and r.fold.rows == 71 and r.fold.indices == 73, "score fold slots")
+        return KMeansScoreResult(-0.0 if r.fold.active() else 1.5, 2 * Int(r.handle >= 0) + 4 * Int(r.fold.active()),
+            r.rows)
 
     @staticmethod
     def prepare(centers: Int, clusters: Int, features: Int) raises -> Int:
@@ -102,6 +114,20 @@ def _fixture(unit: Int) raises:
             _require(not state.matches(101, 103, 107, 6, 37, 31), "a different admitted provider cannot reuse the handle")
             _require(state.driver.metadata(0) == 1 and state.driver.prepare(13, 37, 31) == 83,
                 "resident owner retains native provider dispatch")
+    elif unit >= 26:
+        # KMEANS_SCORE (lane mf-kmeans5): unit 26 a host score with the
+        # resident handle, unit 27 a fold score; the inertia's bits and both
+        # status words come back in their slots.
+        var fold = KMeansFoldStore(67, 71, 73) if unit == 27 else KMeansFoldStore()
+        var handle = 83 if unit == 26 else -1
+        var result = driver.score(KMeansScoreRequest(11, 13, 19, 29, 31, 37, 41, 61, True, handle, fold))
+        if unit == 27:
+            _require(bitcast[DType.uint64](result.inertia) == UInt64(0x8000000000000000),
+                "score result keeps signed zero")
+            _require(result.finite == 4, "score fold route slot")
+        else:
+            _require(result.inertia == 1.5 and result.finite == 2, "score inertia and resident route slots")
+        _require(result.range_error == 29, "score range slot")
     else:
         var operation = unit - 18
         var expected = String("KMeans native ABI: unknown operation")
@@ -113,6 +139,8 @@ def _fixture(unit: Int) raises:
             expected = "KMeans native ABI: prepare requires 1 address and 2 integers"
         elif operation == 5:
             expected = "KMeans native ABI: release requires 1 integer"
+        elif operation == 6:
+            expected = "KMeans native ABI: score requires 4 addresses and 10 integers"
         var refused = False
         try:
             _ = driver.metadata(operation)

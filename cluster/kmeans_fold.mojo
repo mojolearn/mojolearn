@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""KMeans fit, predict and transform over a model-selection fold resident on
+"""KMeans fit, predict, transform and score over a model-selection fold resident on
 the device (lane a7d-device-x-decomp-cluster, 2026-11-09; the model is
 decomposition/pca_fold.mojo).
 
@@ -24,6 +24,8 @@ from cluster.estimator import (
     kmeans_fit_device,
     kmeans_predict_device,
     kmeans_transform_device,
+    kmeans_score_device,
+    kmeans_score_weights,
 )
 from cluster.impl.kmeans_params import KMeansParams
 
@@ -143,3 +145,46 @@ def kmeans_query_fold(
     _ = centroids^
     _ = status^
     return (finite, in_range)
+
+
+def kmeans_score_fold(
+    ctx: DeviceContext,
+    base_id: Int,
+    base_rows: Int,
+    index_id: Int,
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    metric: Int,
+) raises -> Tuple[Int32, Int32, Float64]:
+    """`kmeans_score` (unit weights) of fold rows `index_id` of the resident
+    base (lane mf-kmeans5): the rows gathered on the device as
+    `kmeans_query_fold` gathers them, the same device body
+    (`kmeans_score_device`). Returns (finite word, range word, inertia); on
+    a flagged fold the door discards the inertia."""
+    if n_samples < 1 or n_features < 1 or n_clusters < 1:
+        raise Error("kmeans fold query needs n_samples, n_features and n_clusters >= 1")
+    var params = KMeansParams.default()
+    params.n_clusters = n_clusters
+    params.metric = metric
+    params.validate()
+    var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](n_clusters * n_features)
+    var status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    msel_device_x_f32(ctx, base_id, base_rows, n_features, index_id, n_samples, x, status.unsafe_ptr(), 0)
+    ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
+    var flags = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=status)
+    var weights = kmeans_score_weights(ctx, centroids_ptr, 0, n_samples)
+    # kmeans_score_device synchronises before it returns.
+    var cost = kmeans_score_device(ctx, x, n_samples, n_features, n_clusters, centroids, weights, metric)
+    var finite = flags.unsafe_ptr()[0]
+    var in_range = flags.unsafe_ptr()[1]
+    _ = flags^
+    _ = weights^
+    _ = x^
+    _ = centroids^
+    _ = status^
+    return (finite, in_range, cost)
