@@ -6,9 +6,12 @@ CSR views (`x_cnn_csr_build`), the per-entry value moves on the device
 (`x_cnn_perm_gather`, `x_cnn_vals_t`; they were NumPy fancy indexing), GCN's
 self loops and normalization, and the host or resident propagation, with
 the same entries, argument words and residency bits as the Python bodies.
-The fields the Python `backward` methods read (`_x`, `_g`, `_vals`, `_xs`,
-`_xdev`, `_max_aux`, `_pre`, `_den`, `_nograph`, `_y`, `_ydev`) are written
-under the same names; the graph is a dict record of its exact host arrays.
+The fields the backward operations read (`_x`, `_g`, `_vals`, `_xdev`,
+`_ydev`) are written under the same names; the graph is a dict record of its
+exact host arrays. SAGEConv's host-form forward saves its buffers in ONE
+native owner, `_sage_saved` (bindings/xcnn_sage_saved_owner_pack.mojo; lane
+bm-rest-graph, 2026-11-23: they were the `_xs`, `_max_aux`, `_pre`, `_den`,
+`_nograph` and `_y` arrays and the `_x` of lin_l, lin and the ReLU).
 
 Native buffers own allocation, dtype admission and integer edge conversion;
 NumPy supplies exact native ndarray containers for completed results.
@@ -48,9 +51,11 @@ from bindings.xcnn_common_door import (
 )
 from core.entry_table import EntryRef
 from x_cnn.graph_layer_run import (
-    GraphCalls, GraphEdges, GraphViews, SageBackwardHost, graph_edges_run, graph_views_run, gcn_graph_run,
-    gcn_backward_host_run, sage_backward_host_run, gcn_forward_host_run,
+    GraphCalls, GraphEdges, GraphViews, SageShape, SageEntries, SageWeights, SageGrads, SageSaved, graph_edges_run,
+    graph_views_run, gcn_graph_run, gcn_backward_host_run, gcn_forward_host_run, sage_forward_host_run,
+    sage_backward_saved_run,
 )
+from bindings.xcnn_sage_saved_owner_pack import SageSavedOwner, sage_saved_owner_new
 from x_cnn.graph_run import (
     graph_run_bytes_equal, graph_run_csr_words, graph_run_check_edge_layout, graph_run_check_cache_dims, graph_run_check_index_layout,
     graph_run_check_gemm, graph_run_check_graph_x, graph_run_check_x,
@@ -58,10 +63,10 @@ from x_cnn.graph_run import (
     graph_run_check_linear_weights, graph_run_check_linear_gradient, graph_run_check_gradient,
     graph_run_check_channels, graph_run_check_features, graph_run_check_aggr, graph_run_aggr_kind,
     graph_run_sage_res_form, graph_run_gcn_bound, graph_run_fan_in_bound, graph_run_ones,
-    graph_run_bias_rows, graph_run_csr_build, graph_run_gather, graph_run_vals_t, graph_run_gemm,
-    graph_run_spmm, graph_run_add, graph_run_linear_forward, graph_run_linear_forward_m, graph_run_linear_backward,
-    graph_run_relu_forward, graph_run_res_free, graph_run_csr_upload, graph_run_download, graph_run_gcn_loops,
-    graph_run_gcn_norm, graph_run_gemm_m, graph_run_spmm_m, graph_run_bias_m, graph_run_add_m, graph_run_graph_op,
+    graph_run_csr_build, graph_run_gather, graph_run_vals_t,
+    graph_run_linear_forward, graph_run_linear_forward_m, graph_run_linear_backward,
+    graph_run_res_free, graph_run_csr_upload, graph_run_download, graph_run_gcn_loops,
+    graph_run_gcn_norm, graph_run_gemm_m, graph_run_spmm_m, graph_run_bias_m, graph_run_add_m,
     graph_run_graph_op_m, graph_run_gcn_backward, graph_run_sage_backward,
 )
 from bindings.xcnn_keys_unpack import (
@@ -388,70 +393,6 @@ def _vals_t(entries: PythonObject, g: PythonObject, vals_f: PythonObject, contex
 
 # ---------------------------------------------------------------- host operations
 
-def _gemm(entries: PythonObject, a: PythonObject, b2: PythonObject, m: Int, n: Int, k: Int, op: Int,
-          context: PythonObject) raises -> PythonObject:
-    """`_gemm(binding, a, b, m, n, k, op)`."""
-    var out = xcnn_host_f32([m, n], context)
-    var fa = xcnn_f32(a, "a", context)
-    var fb = xcnn_f32(b2, "b", context)
-    graph_run_check_gemm(xcnn_size(xcnn_shape(fa)), xcnn_size(xcnn_shape(fb)), m, n, k)
-    var a_a = xcnn_ptr(fa)
-    var a_b = xcnn_ptr(fb)
-    var a_out = xcnn_ptr(out)
-    var key = xcnn_ref(entries)
-    var py = Python()
-    with GILReleased(py):
-        graph_run_gemm(key, a_a, a_b, a_out, m, n, k, op)
-    _ = fb  # keep the Python object alive through the native call above
-    _ = fa  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _spmm(entries: PythonObject, g: PythonObject, vals: PythonObject, h: PythonObject, mode: Int,
-          context: PythonObject, transposed: Bool = False) raises -> PythonObject:
-    """`g.spmm(binding, vals, h, mode)` (the forward view)."""
-    var hh = xcnn_f32(h, "h", context)
-    var out = xcnn_host_f32(xcnn_shape(hh), context)
-    var v = xcnn_host_f32([1], context) if vals is None or len(vals) == 0 else xcnn_f32(vals, "values", context)
-    var a_v = xcnn_ptr(v)
-    var a_h = xcnn_ptr(hh)
-    var a_out = xcnn_ptr(out)
-    var nk = xcnn_keys()
-    var a_csr = xcnn_ptr(py_item(g, nk[].k_csr_t) if transposed else py_item(g, nk[].k_csr_f))
-    var n = Int(py=py_item(g, nk[].k_n))
-    var cols = Int(py=hh.shape[1])
-    var nnz = Int(py=py_item(g, nk[].k_nnz))
-    var key = xcnn_ref(entries)
-    var py = Python()
-    with GILReleased(py):
-        graph_run_spmm(key, a_v, a_h, a_out, a_csr, n, cols, nnz, mode)
-    _ = g
-    _ = v  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = hh  # keep the Python object alive through the native call above
-    return out
-
-
-def _add(entries: PythonObject, a: PythonObject, b2: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_add(binding, a, b)`."""
-    var fa = xcnn_f32(a, "a", context)
-    var fb = xcnn_f32(b2, "b", context)
-    var out = xcnn_host_f32(xcnn_shape(fa), context)
-    var a_a = xcnn_ptr(fa)
-    var a_b = xcnn_ptr(fb)
-    var a_out = xcnn_ptr(out)
-    var count = Int(py=fa.size)
-    var key = xcnn_ref(entries)
-    var py = Python()
-    with GILReleased(py):
-        graph_run_add(key, a_a, a_b, a_out, count)
-    _ = out  # keep the Python object alive through the native call above
-    _ = fb  # keep the Python object alive through the native call above
-    _ = fa  # keep the Python object alive through the native call above
-    return out
-
-
 # `_bias_rows` (the bias broadcast to a Python array for the GCN forward's add) removed 2026-11-22 by lane bm-trees:
 # x_cnn/graph_layer_run.mojo `gcn_forward_host_run` writes the rows into its own buffer.
 
@@ -481,28 +422,6 @@ def _linear_forward(lin: PythonObject, x: PythonObject, context: PythonObject) r
     _ = out  # keep the Python object alive through the native call above
     py_setitem(fields, nk[].k__x, fx)
     _ = values
-    return out
-
-
-def _relu_forward(relu: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_ReLU.forward(x)` of a host array."""
-    var nk = xcnn_keys()
-    if py_type(relu) is not py_item(context, nk[].k_xcnn_relu_class):
-        raise Error("TypeError: graph projection requires a native ReLU layer")
-    var fields = _fields(relu)
-    var entries = xcnn_entries(relu, fields, context)
-    var fx = _snapshot(x, "x", context)
-    var out = xcnn_host_f32(xcnn_shape(fx), context)
-    var a_x = xcnn_ptr(fx)
-    var a_out = xcnn_ptr(out)
-    var count = Int(py=fx.size)
-    var key = xcnn_ref(entries)
-    var py = Python()
-    with GILReleased(py):
-        graph_run_relu_forward(key, a_x, a_out, count)
-    _ = out  # keep the Python object alive through the native call above
-    _ = fx  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k__x, fx)
     return out
 
 
@@ -617,14 +536,6 @@ def _graph_op_m(entries: PythonObject, a: Int, b: Int, aux: Int, dst: Int, csr: 
     var py = Python()
     with GILReleased(py):
         graph_run_graph_op_m(key, a, b, aux, dst, csr, flags, n, cols, nnz, kind)
-
-
-def _graph_op(entries: PythonObject, a: Int, b: Int, aux: Int, dst: Int, csr: Int, n: Int, cols: Int, nnz: Int,
-              kind: Int) raises:
-    var key = xcnn_ref(entries)
-    var py = Python()
-    with GILReleased(py):
-        graph_run_graph_op(key, a, b, aux, dst, csr, n, cols, nnz, kind)
 
 
 # ---------------------------------------------------------------- GCNConv
@@ -875,7 +786,6 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         py_setitem(fields, nk[].k__ydev, Python.tuple(yh, denh, out if xt else PythonObject(None)))
     py_setitem(fields, nk[].k__x, x)
     py_setitem(fields, nk[].k__g, g)
-    py_setitem(fields, nk[].k__xs, x)
     py_setitem(fields, nk[].k__xdev, Python.tuple(dev, xh, aggh))
     _ = lin_values
     return out
@@ -917,45 +827,70 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
     if _sage_res_form(fields, entries):
         return _sage_forward_dev(layer, fields, entries, x, g, context)
     py_setitem(fields, nk[].k__xdev, PythonObject(None))
-    var xs = x
-    if Bool(py=py_item(fields, nk[].k_project)):
-        xs = _relu_forward(py_item(fields, nk[].k__relu_p), _linear_forward(py_item(fields, nk[].k_lin), x, context), context)
-    py_setitem(fields, nk[].k__xs, xs)
-    var aggr = String(py=py_item(fields, nk[].k_aggr))
-    var agg = PythonObject(None)
+    # UNPACK the configuration, the parameters (the admissions and refusals
+    # of the former `_linear_forward` / `_relu_forward` / `_gemm` calls, in
+    # their order) and each module's entry once; RUN the host form
+    # (x_cnn/graph_layer_run.mojo `sage_forward_host_run`, lane
+    # bm-rest-graph) with the GIL released around it; PACK the output and
+    # the one saved-state owner.
+    var d_in = Int(py=py_item(fields, nk[].k_in_channels))
+    var f_out = Int(py=py_item(fields, nk[].k_out_channels))
+    var project = Bool(py=py_item(fields, nk[].k_project))
+    var kind = graph_run_aggr_kind(String(py=py_item(fields, nk[].k_aggr)))
+    var norm = Bool(py=py_item(fields, nk[].k_normalize))
+    var root = Bool(py=py_item(fields, nk[].k_root_weight))
     var nnz = Int(py=py_item(g, nk[].k_nnz))
-    if aggr == "max":
-        agg = xcnn_host_f32(xcnn_shape(xs), context)
-        var aux = xcnn_host_f32([2 * xcnn_size(xcnn_shape(xs))], context)
-        py_setitem(fields, nk[].k__max_aux, aux)
-        _graph_op(entries, xcnn_ptr(xs), xcnn_ptr(xs), xcnn_ptr(aux), xcnn_ptr(agg), xcnn_ptr(py_item(g, nk[].k_csr_f)), n,
-                  Int(py=xs.shape[1]), nnz, 0)
-        _ = aux  # keep the Python object alive through the native call above
-        _ = agg  # keep the Python object alive through the native call above
-        _ = xs  # keep the Python object alive through the native call above
-    else:
-        agg = _spmm(entries, g, _ones(nnz, context), xs, 1 if aggr == "mean" else 0, context)
-    var out = _linear_forward(py_item(fields, nk[].k_lin_l), agg, context)
-    if Bool(py=py_item(fields, nk[].k_root_weight)):
-        out = _add(entries, out, _gemm(entries, x, py_item(fields, nk[].k_weight_r_), n, Int(py=py_item(fields, nk[].k_out_channels)),
-                                       Int(py=py_item(fields, nk[].k_in_channels)), 1, context), context)
+    var e_layer = xcnn_ref(entries)
+    var e_lin = e_layer
+    var e_relu = e_layer
+    var keep = Python.list()   # every array an address below points into, alive through the call
+    var wp = 0
+    var bp = 0
+    if project:
+        var plin = py_item(fields, nk[].k_lin)
+        var plin_fields = _linear_fields(plin, context)
+        graph_run_check_linear_input(shape, Int(py=py_item(plin_fields, nk[].k_in_features)))
+        var pvalues = _linear_weights(plin_fields, context)
+        # the RUN's projection is (d, d): a weight the layer's channels do not fit is refused here
+        graph_run_check_linear_weights(xcnn_shape(pvalues[0]), xcnn_shape(pvalues[1]), d_in, d_in)
+        keep.append(pvalues)
+        wp = xcnn_ptr(pvalues[0])
+        bp = xcnn_ptr(pvalues[1])
+        e_lin = xcnn_ref(xcnn_entries(plin, plin_fields, context))
+        var relu = py_item(fields, nk[].k__relu_p)
+        if py_type(relu) is not py_item(context, nk[].k_xcnn_relu_class):
+            raise Error("TypeError: graph projection requires a native ReLU layer")
+        e_relu = xcnn_ref(xcnn_entries(relu, _fields(relu), context))
+    var lin_l = py_item(fields, nk[].k_lin_l)
+    var lin_fields = _linear_fields(lin_l, context)
+    graph_run_check_linear_input([n, d_in], Int(py=py_item(lin_fields, nk[].k_in_features)))
+    var lvalues = _linear_weights(lin_fields, context)
+    graph_run_check_linear_weights(xcnn_shape(lvalues[0]), xcnn_shape(lvalues[1]), f_out, d_in)
+    keep.append(lvalues)
+    var e_lin_l = xcnn_ref(xcnn_entries(lin_l, lin_fields, context))
+    var wr = 0
+    if root:
+        var fr = xcnn_f32(py_item(fields, nk[].k_weight_r_), "b", context)
+        graph_run_check_gemm(n * d_in, xcnn_size(xcnn_shape(fr)), n, f_out, d_in)
+        keep.append(fr)
+        wr = xcnn_ptr(fr)
+    var out = xcnn_host_f32([n, f_out], context)
+    var a_x = xcnn_ptr(x)
+    var a_csr = xcnn_ptr(py_item(g, nk[].k_csr_f))
+    var a_out = xcnn_ptr(out)
+    var run_entries = SageEntries(e_layer, e_lin_l, e_lin, e_relu)
+    var weights = SageWeights(xcnn_ptr(lvalues[0]), xcnn_ptr(lvalues[1]), wr, wp, bp)
+    var saved = SageSaved(SageShape(n, d_in, f_out, nnz, kind, norm, root, project))
+    var gil = Python()
+    with GILReleased(gil):
+        sage_forward_host_run(run_entries, a_x, a_csr, weights, a_out, saved)
+    _ = keep  # keep the Python objects alive through the native call above
+    _ = x
+    _ = g
     py_setitem(fields, nk[].k__x, x)
     py_setitem(fields, nk[].k__g, g)
-    if Bool(py=py_item(fields, nk[].k_normalize)):
-        py_setitem(fields, nk[].k__pre, out)
-        var y = xcnn_host_f32(xcnn_shape(out), context)
-        var den = xcnn_host_f32([n], context)
-        var nograph = xcnn_host_i32([n + 1], context)
-        py_setitem(fields, nk[].k__den, den)
-        py_setitem(fields, nk[].k__nograph, nograph)
-        _graph_op(entries, xcnn_ptr(out), xcnn_ptr(out), xcnn_ptr(den), xcnn_ptr(y), xcnn_ptr(nograph), n,
-                  Int(py=out.shape[1]), 0, 2)
-        _ = nograph  # keep the Python object alive through the native call above
-        _ = den  # keep the Python object alive through the native call above
-        _ = y  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-        py_setitem(fields, nk[].k__y, y)
-        out = y
+    # the saved state; with normalize its `y` is the returned array, held by the owner
+    py_setitem(fields, nk[].k__sage_saved, sage_saved_owner_new(saved^, out if norm else PythonObject(None)))
     return out
 # ---------------------------------------------------------------- lifecycle and backward owners
 
@@ -1405,53 +1340,35 @@ def _sage_backward(layer: PythonObject, gradient: PythonObject, context: PythonO
 def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """The host-form backward (the CPU binding, project=True, or a forward
-    kept on the host). UNPACK the saved arrays, weights and the gradient
-    outputs; RUN x_cnn/graph_layer_run.mojo `sage_backward_host_run` (the
-    tape over host arrays, autograd/graph_tape.mojo `sage_cfg`, its scratch
-    native); PACK the gradients."""
+    kept on the host). UNPACK the forward's saved state (one downcast of
+    the layer's `_sage_saved` owner), the input and the current weights;
+    RUN x_cnn/graph_layer_run.mojo `sage_backward_saved_run` (the tape over
+    host buffers, autograd/graph_tape.mojo `sage_cfg`, its scratch native);
+    PACK the gradients."""
     var n = xcnn_shape(g)[0]
     var nk = xcnn_keys()
     var d = Int(py=py_item(fields, nk[].k_in_channels))
     var f = Int(py=py_item(fields, nk[].k_out_channels))
     var graph = py_item(fields, nk[].k__g)
-    var nnz = Int(py=py_item(graph, nk[].k_nnz))
-    var norm = Bool(py=py_item(fields, nk[].k_normalize))
-    var root = Bool(py=py_item(fields, nk[].k_root_weight))
-    var project = Bool(py=py_item(fields, nk[].k_project))
-    var aggr = String(py_item(fields, nk[].k_aggr))
-    var kind = graph_run_aggr_kind(aggr)
+    var owner = py_get(fields, nk[].k__sage_saved)
+    if owner is None:
+        raise Error("RuntimeError: graph backward requires a prior forward")
+    # the downcast admits only the exact native owner type
+    ref saved = owner.downcast_value_ptr[SageSavedOwner]()[].saved
+    var s = saved.shape
+    if s.n != n or s.d != d or s.f != f or s.nnz != Int(py=py_item(graph, nk[].k_nnz)):
+        raise Error("RuntimeError: graph backward requires a prior forward")
+    var root = s.root
+    var project = s.project
     var keep = Python.list()   # every array an address below points into, alive through the call
     var x = xcnn_f32(py_item(fields, nk[].k__x), "x", context)
     keep.append(x)
     var lin = _linear_fields(py_item(fields, nk[].k_lin_l), context)
-    if py_get(lin, nk[].k__x) is None:
-        raise Error("RuntimeError: linear backward requires a prior forward")
-    var agg = xcnn_f32(py_item(lin, nk[].k__x), "x", context)
-    keep.append(agg)
     var values = _linear_weights(lin, context)
     keep.append(values)
     var dw = xcnn_host_f32([f, d], context)
     var db = xcnn_host_f32([f], context)
     var dx = xcnn_host_f32([n, d], context)
-    var y = 0
-    var pre = 0
-    var den = 0
-    var nograph = 0
-    if norm:
-        var yv = xcnn_f32(py_item(fields, nk[].k__y), "y", context)
-        var pv = xcnn_f32(py_item(fields, nk[].k__pre), "pre", context)
-        keep.append(yv)
-        keep.append(pv)
-        keep.append(py_item(fields, nk[].k__den))
-        keep.append(py_item(fields, nk[].k__nograph))
-        y = xcnn_ptr(yv)
-        pre = xcnn_ptr(pv)
-        den = xcnn_ptr(py_item(fields, nk[].k__den))
-        nograph = xcnn_ptr(py_item(fields, nk[].k__nograph))
-    var max_aux = 0
-    if kind == 2:
-        keep.append(py_item(fields, nk[].k__max_aux))
-        max_aux = xcnn_ptr(py_item(fields, nk[].k__max_aux))
     var wr_addr = 0
     var gwr = PythonObject(None)
     var gwr_addr = 0
@@ -1462,8 +1379,6 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
         wr_addr = xcnn_ptr(wr)
         gwr = xcnn_host_f32([f, d], context)
         gwr_addr = xcnn_ptr(gwr)
-    var s_addr = 0
-    var relu_addr = 0
     var wp = 0
     var bp = 0
     var plin = PythonObject(None)
@@ -1472,35 +1387,24 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
     var dwp_addr = 0
     var dbp_addr = 0
     if project:
-        if py_type(py_item(fields, nk[].k__relu_p)) is not py_item(context, nk[].k_xcnn_relu_class):
-            raise Error("TypeError: graph projection requires a native ReLU layer")
-        var relu_x = py_get(_fields(py_item(fields, nk[].k__relu_p)), nk[].k__x)
-        if relu_x is None:
-            raise Error("RuntimeError: ReLU backward requires a prior forward")
         plin = _linear_fields(py_item(fields, nk[].k_lin), context)
         var pvalues = _linear_weights(plin, context)
-        var sv = xcnn_f32(py_item(fields, nk[].k__xs), "x", context)
-        var rv = xcnn_f32(relu_x, "x", context)
+        graph_run_check_linear_weights(xcnn_shape(pvalues[0]), xcnn_shape(pvalues[1]), d, d)
         dwp = xcnn_host_f32([d, d], context)
         dbp = xcnn_host_f32([d], context)
         keep.append(pvalues)
-        keep.append(sv)
-        keep.append(rv)
-        s_addr = xcnn_ptr(sv)
-        relu_addr = xcnn_ptr(rv)
         wp = xcnn_ptr(pvalues[0])
         bp = xcnn_ptr(pvalues[1])
         dwp_addr = xcnn_ptr(dwp)
         dbp_addr = xcnn_ptr(dbp)
-    var io = SageBackwardHost(
-        xcnn_ptr(g), xcnn_ptr(x), xcnn_ptr(agg), xcnn_ptr(values[0]), xcnn_ptr(values[1]), xcnn_ptr(dw),
-        xcnn_ptr(db), xcnn_ptr(dx), y, pre, den, nograph, max_aux, wr_addr, gwr_addr, s_addr, relu_addr, wp, bp,
-        dwp_addr, dbp_addr)
+    graph_run_check_linear_weights(xcnn_shape(values[0]), xcnn_shape(values[1]), f, d)
+    var weights = SageWeights(xcnn_ptr(values[0]), xcnn_ptr(values[1]), wr_addr, wp, bp)
+    var grads = SageGrads(xcnn_ptr(dw), xcnn_ptr(db), xcnn_ptr(dx), gwr_addr, dwp_addr, dbp_addr)
     var calls = GraphDoorCalls(entries, context)
-    sage_backward_host_run(calls, xcnn_ptr(py_item(graph, nk[].k_csr_f)), xcnn_ptr(py_item(graph, nk[].k_csr_t)), nnz, n, d, f, kind, norm,
-                           root, project, io)
+    sage_backward_saved_run(calls, xcnn_ptr(py_item(graph, nk[].k_csr_f)), xcnn_ptr(py_item(graph, nk[].k_csr_t)),
+                            saved, xcnn_ptr(x), xcnn_ptr(g), weights, grads)
     _ = graph
-    _ = values
+    _ = owner  # the saved state the RUN read stays alive through the call above
     _ = dwp
     _ = dbp
     py_setitem(lin, nk[].k_grad_weight_, dw)
