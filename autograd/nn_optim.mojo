@@ -57,6 +57,7 @@ bit1 always_adapt, bit2 grad_averaging, bit3 bias_correction, bit4 clip).
 This module imports nothing of autograd/model.mojo (which imports it).
 """
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from checks.numerics import ftz, identical_mul, pinned_mul_f64
 from sequence.exec_trait import Exec
 from sequence.ops import FP, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, dummy_ptr
@@ -80,6 +81,13 @@ comptime NN_SCHED_ONE_CYCLE = 7
 comptime NN_SCHED_PLATEAU = 8
 comptime NN_SCHED_FIRST = NN_SCHED_MULTI_STEP
 comptime NN_SCHED_LAST = NN_SCHED_PLATEAU
+
+#: Sabotage arms (checks/native_tests/nn_optim.mojo must FAIL with each; never in a product build):
+#: RMSPROP leaves a centered RMSprop's gradient average in the unsaved buffer, LAMB takes the whole vector as one
+#: tensor (one trust ratio), SCHED shifts every cosine epoch and every per-step schedule step by one.
+comptime NN_SAB_RMSPROP = is_defined["MOJOLEARN_NN_OPTIM_SABOTAGE_RMSPROP"]()
+comptime NN_SAB_LAMB = is_defined["MOJOLEARN_NN_OPTIM_SABOTAGE_LAMB"]()
+comptime NN_SAB_SCHED = is_defined["MOJOLEARN_NN_OPTIM_SABOTAGE_SCHED"]()
 
 #: argument words of a schedule (compile's sched_args, the fit's float tail, the checkpoint record)
 comptime NN_SCHED_ARGS = 8
@@ -201,10 +209,13 @@ def nn_optim_admit(
 
 
 # ---------------------------------------------------------------- schedules
-def _cosine_value(lr: Float32, eta_min: Float64, done: Int, period: Int) raises -> Float32:
+def _cosine_value(lr: Float32, eta_min: Float64, done_in: Int, period: Int) raises -> Float32:
     """eta_min + (lr - eta_min)(1 + cos(pi done / period)) / 2 (done = 0: lr), lr_table's exact float32."""
+    var done = done_in
     if done <= 0:
         return lr
+    comptime if NN_SAB_SCHED:
+        done += 1
     var r = lr_spec_value(LrSpec(LR_COSINE, 0, period, 0, Float64(lr), eta_min, 0.0, 0.0), done)
     if r.status != 0:
         raise Error("model fit: the cosine schedule's value is out of float32 range (status "
@@ -256,7 +267,10 @@ def nn_step_lrs(sched: Int, lr: Float32, args: List[Float64], first: Int, count:
                         + String(first + count - 1))
         spec = LrSpec(LR_ONECYCLE, 1 if args[4] != 0.0 else 0, 1 if args[5] != 0.0 else 0, total,
                       Float64(lr), args[2], args[3], args[1])
-    var r = lr_spec_fill(spec, first, count, rates.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    var t0 = first
+    comptime if NN_SAB_SCHED:
+        t0 += 1
+    var r = lr_spec_fill(spec, t0, count, rates.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     if r[0] != 0:
         raise Error("model fit: the schedule's value at step " + String(first + r[1])
                     + " is out of float32 range (status " + String(r[0]) + ")")
@@ -334,6 +348,8 @@ struct NnLamb(Movable):
         var offs = List[Int]()
         offs.append(0)
         for k in range(1, len(offsets)):  # driver-loop: over parameter tensors (description metadata)
+            comptime if NN_SAB_LAMB:
+                break
             if offsets[k] > offs[len(offs) - 1] and offsets[k] <= n:
                 offs.append(offsets[k])
         if offs[len(offs) - 1] < n:
@@ -386,7 +402,7 @@ def nn_opt_step[E: Exec](
             bc2 = Float32(1.0) - st.pw2
         lamb_core(ex, P, Gr, s1, s2, lamb.U, lamb.TAB, lamb.partsA, lamb.partsB, lamb.nrm, lamb.ratio, lamb.scal,
                   n, lamb.nt, lamb.nb, cfg.flags, lr, cfg.f1, cfg.f2, cfg.eps, cfg.wd, cfg.f7, bc1, bc2)
-    elif cfg.kind == NN_OPT_RMSPROP and (cfg.flags & 1) != 0:
+    elif cfg.kind == NN_OPT_RMSPROP and (cfg.flags & 1) != 0 and not NN_SAB_RMSPROP:
         opt_step(ex, cfg, st, t, lr, P, Gr, s3, s2, s1, n)
     else:
         opt_step(ex, cfg, st, t, lr, P, Gr, s1, s2, s3, n)
