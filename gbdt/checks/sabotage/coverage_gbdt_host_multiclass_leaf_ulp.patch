@@ -1,8 +1,8 @@
 diff --git a/gbdt/host/gbdt_oracle_multiclass.mojo b/gbdt/host/gbdt_oracle_multiclass.mojo
-index 91870a555d..0979733058 100644
+index eff1b7891d..1411a2d44d 100644
 --- a/gbdt/host/gbdt_oracle_multiclass.mojo
 +++ b/gbdt/host/gbdt_oracle_multiclass.mojo
-@@ -718,6 +718,16 @@ def _class_weight_rows(
+@@ -864,6 +864,16 @@ def _class_weight_rows(
      _ = len(weights)
  
  
@@ -19,11 +19,19 @@ index 91870a555d..0979733058 100644
  def gbdt_multi_host_fit(
      x_colmajor: List[Float32],
      y: List[Float32],
-@@ -1008,6 +1018,7 @@ def gbdt_multi_host_fit(
-         )
-         # `add_model_value_kernel`: `[leaf * dim + d]` into `[d * n + row]`
-         var scaled = rescaled_leaves(estimated, lr)
-+        _sabotage_leaf_ulp(scaled)
-         apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_live, dim, n_rows)
-         for i in range(grown):
-             split_features.append(tree_features[i])
+@@ -1397,6 +1407,7 @@ def gbdt_multi_host_fit(
+                     leaf_method, leaf_iterations,
+                 )
+                 p_scaled = rescaled_leaves(estimated, lr)
++                _sabotage_leaf_ulp(p_scaled)
+                 apply_scaled_leaves_host(
+                     cursors[p], p_scaled, row_index, offsets, sizes, n_live,
+                     dim, n_rows,
+@@ -1411,6 +1422,7 @@ def gbdt_multi_host_fit(
+                     params.l2_leaf_reg, leaf_method, leaf_iterations,
+                 )
+                 p_scaled = rescaled_leaves(estimated, lr)
++                _sabotage_leaf_ulp(p_scaled)
+                 apply_scaled_leaves_host(
+                     cursors[p], p_scaled, part.row_index, part.offsets,
+                     part.sizes, len(part.sizes), dim, n_rows,

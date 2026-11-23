@@ -828,6 +828,8 @@ TRAINING_LANE_NAMES = {
     "gbdt-cat-rest": "gradient boosting with categorical and one-hot columns on the pointwise losses and the multiclass family",
     # lane gbdt-cpu-rest-4-cat-ns (2026-11-23)
     "gbdt-cat-nonsym": "gradient boosting with Depthwise and Lossguide trees on CTR and one-hot categorical columns",
+    # lane gbdt-cpu-rest-4-tail (2026-11-23)
+    "gbdt-multi-walk": "gradient boosting with MultiClass, MultiClassOneVsAll and MultiRMSE under Newton leaves past one iteration and Gradient leaves",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -3033,6 +3035,9 @@ FAMILIES = (
             # Lossguide over CTR and one-hot columns
             # (gbdt_oracle_depthwise.mojo::gbdt_ctr_host_fit_non_symmetric)
             "gbdt-cat-nonsym",
+            # lane gbdt-cpu-rest-4-tail (2026-11-23): the multi-output
+            # losses' leaf walk (gbdt_oracle_multiclass.mojo _estimate_multi)
+            "gbdt-multi-walk",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4251,6 +4256,8 @@ PUBLIC_PENDING_LANES = {
     "gbdt-cat-rest": "no reference",
     # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): new lane, recorded CPU first at the release
     "gbdt-cat-nonsym": "no reference",
+    # lane gbdt-cpu-rest-4-tail (2026-11-23): new lane, recorded CPU first at the release
+    "gbdt-multi-walk": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no

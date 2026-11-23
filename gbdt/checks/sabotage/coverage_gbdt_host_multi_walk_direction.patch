@@ -1,0 +1,19 @@
+diff --git a/gbdt/host/gbdt_oracle_multiclass.mojo b/gbdt/host/gbdt_oracle_multiclass.mojo
+index eff1b7891d..52ae1e88ea 100644
+--- a/gbdt/host/gbdt_oracle_multiclass.mojo
++++ b/gbdt/host/gbdt_oracle_multiclass.mojo
+@@ -814,11 +814,9 @@ def _estimate_multi(
+             if cur_value <= next_value:
+                 cur = next_point^
+                 cur_value = next_value
+-                direction = _multi_direction(
+-                    objective, num_classes, method, g_weights, has_weights,
+-                    g_cursor, offsets, sizes, n_rows, next_grad, weights_cpu,
+-                    lambda_reg,
+-                )
++                # SABOTAGE (coverage-gbdt-host_multi_walk_direction): the
++                # accepted point keeps the start's direction
++                _ = len(next_grad)
+                 iteration += 1
+                 updated = True
+                 accepted = True
