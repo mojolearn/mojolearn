@@ -7,7 +7,7 @@
 `_correct_predecessor`, `_xi_cluster` :1021-1175, `_extract_xi_labels`).
 
 The n x n euclidean distances and the core distances (the `min_samples`-th
-smallest of each row, the row itself included: `bodies.kth_smallest_row`)
+smallest of each row, the row itself included: `ops.kth`)
 are the device's, and so is THE ORDERING (lane cgr2-cluster,
 `ClusterOps.optics_order`), one step after another as the reference's: the
 next point is the unprocessed one with the lowest reachability, THE LOWEST

@@ -7,7 +7,7 @@
 The bandwidth, when not given, is the mean over the rows of the distance to
 the `int(n * quantile)`-th nearest row (itself included): the n x n squared
 distances and the row order statistic are the device's
-(`bodies.kth_smallest_row`, an exact bisection on the float bits), the roots
+(`ops.kth`, an exact selection on the float bits), the roots
 and their sum the device's float-float fold (`post_bodies`), the mean one
 host division. Every seed's shift loop
 is ONE device thread (`bodies.meanshift_seed`), the flat kernel over all rows

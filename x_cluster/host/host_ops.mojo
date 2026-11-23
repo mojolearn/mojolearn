@@ -32,7 +32,6 @@ from x_cluster.bodies import (
     splitmix_at,
     sq_dist_rows,
     IPtr,
-    cov_cell,
     argmax_row,
     exp_cell,
     gauss_q_cell,
@@ -41,12 +40,10 @@ from x_cluster.bodies import (
     IDN_BGMM_NK_LEVELS,
     pdist_cell,
     resp_row,
-    xk_cell,
     ap_availability_col,
     ap_exemplar_cell,
     ap_noise_cell,
     ap_responsibility_row,
-    kth_smallest_row,
     meanshift_seed,
     nearest_row,
     SplitMix64,
@@ -308,12 +305,11 @@ struct HostOps(ClusterOps):
         var pm = self._fp(m)
         var po = self._fp(dst)
 
+        # TOMBSTONE: the bisection for k outside 1..n_cols (bodies.kth_smallest_row; no caller passes such a k:
+        # MeanShift's k = max(1, floor(quantile n)) with quantile 0.3, OPTICS's min_samples in [2, n], the
+        # AffinityPropagation median's k in 1..m) deleted 2026-11-23 by lane/verify-gaps; recoverable at aecad68fb8.
         if k < 1 or k > n_cols:
-            def body(t: Int) {imm pm, imm po, imm n_cols, imm k}:
-                kth_smallest_row(pm, n_cols, k, po, t)
-
-            host_cells(body, n_rows, 32 * n_cols)
-            return
+            raise Error("x_cluster kth: k must lie in 1..n_cols")
 
         # The k-th smallest is ONE value, so any exact selection returns it:
         # the host selects over the row's magnitude bits (-0.0 as +0.0, the
