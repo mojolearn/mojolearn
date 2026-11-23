@@ -86,7 +86,7 @@ from bindings.prep_native_estimator_door import prep_estimator_admit
 # Lane mf-refuse5, THE DOOR'S REFUSAL: the meta doors' constructor checks, one body with the doors.
 from bindings.trees_meta_validate_unpack import (
     meta_active, meta_active_entries, meta_owner, meta_voting_validate, meta_voting_weights, meta_stacking_validate,
-    meta_calibrated_validate, meta_jobs, meta_bagging_validate, meta_ada_validate, meta_seed,
+    meta_calibrated_validate, meta_cv_value, meta_jobs, meta_bagging_validate, meta_ada_validate, meta_seed,
     MetaCount, meta_count_reading, meta_require_tree, boost_member_device,
 )
 from bindings.py_balanced import py_call, py_get, py_item, py_setattr, py_setitem, py_type, py_contains, py_fields
@@ -104,6 +104,7 @@ from core.member_families import (
     MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE,
 )
 from xtrees.trees_boost_run import _sub_seed, boost_ada_session_choice, boost_check_n_estimators, boost_check_learning_rate
+from bindings.trees_public_inputs_door import trees_table
 from bindings.trees_public_forest_door import (
     forest_kind, forest_refresh, forest_config, _report_engine, forest_dt_random_inner, forest_dt_random_adopt,
     _int, _float,
@@ -152,7 +153,7 @@ from bindings.msel_member_device_unpack import msel_member_host_folds, msel_para
 from bindings.msel_split_door import msel_cls, MselSplitter, SPLITTER_ITERABLE
 from bindings.msel_split_unpack import MselRoutePin
 from bindings.msel_split_spec_run import MselSplitSpec, MSEL_SPEC_NONE, msel_spec_stratified
-from bindings.msel_split_spec_unpack import msel_split_spec_of
+from bindings.msel_split_spec_unpack import msel_split_spec_read
 from core.ensemble_member import (
     meta_plan_split, meta_plan_rfe, meta_plan_refuse,
     META_RFE_CLASSIFIER, META_RFE_REGRESSOR, META_BLOCK_RFE, META_BLOCK_FORWARD,
@@ -419,32 +420,19 @@ def _int_word(value: PythonObject, b: PythonObject) raises -> Int:
 
 def _trees_key(fields: PythonObject, context: PythonObject, b: PythonObject) raises -> List[Int]:
     """The (mode, vendor) of the x_trees image the meta-estimator's own fit
-    connects (`_xt`: `numeric_mode`, else the process default); empty when
-    it is not connected (the door raises the table's words)."""
-    var none = List[Int]()
+    connects (`_xt`: `numeric_mode`, else the process default). An image
+    that is not connected raises the door's words (`trees_table`: the
+    refusal recorded at import), as the door's fit does (lane mf-ens6: it
+    answered empty and the caller kept the door)."""
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
-        var backend = py_get(context, "backend_fields")
-        if backend is None:
-            return none^
-        mode = py_get(backend, "_DEFAULT_MODE")
-    if mode is None or py_type(mode) is not b.str:
-        return none^
-    var word = String(mode)
-    if word != "fast" and word != "identical":
-        return none^
-    var bindings = py_get(context, "trees_bindings")
-    if bindings is None:
-        return none^
-    var tables = py_get(bindings, mode)
-    if tables is None:
-        return none^
-    var table = py_get(tables, "_mojolearn_x_trees")
-    if table is None or py_type(table) is b.str:
-        return none^
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    if mode is None or py_type(mode) is not b.str or (String(mode) != "fast" and String(mode) != "identical"):
+        raise Error("numeric_mode must be fast, identical or None")
+    var table = trees_table(context, String(mode), "_mojolearn_x_trees")
     var key = py_get(table, "x_trees_native_key")
     if key is None:
-        return none^
+        raise Error("ImportError: mojolearn: _mojolearn_x_trees is not connected to the tree owner")
     var out: List[Int] = [Int(py=key[0]), Int(py=key[1])]
     return out^
 
@@ -471,9 +459,11 @@ struct _Done(Movable):
         return -1
 
 
-#: A meta-estimator nests at most this many meta-estimators (all depths):
-#: a guard against an estimator graph that contains itself.
-comptime _NESTED_META_MAX = 256
+# Lane mf-ens6: no nesting bound. Both work-lists skip an estimator already
+# walked or pending (identity), so an estimator graph that contains itself is
+# walked once per object and the walk ends; the plan store has no fixed
+# table (core/ensemble_member.mojo `meta_plan_mint_with`), so any depth is a
+# member. REMOVED: `_NESTED_META_MAX` and its two refusals.
 
 
 def _meta_children(est: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
@@ -570,8 +560,6 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         _ = py_call(order_labels.append, est_labels)
         order_kinds.append(est_kind)
         var child_labels = _child_labels(est_kind, est_labels, b)
-        if len(order_kinds) > _NESTED_META_MAX:
-            return False
         var children = _meta_children(est, est_fields, est_kind, est_context, b, prepared)
         for c in range(len(children)):  # driver-loop: over one meta-estimator's nested estimators
             var child = children[c]
@@ -696,21 +684,19 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
             # A user's index list (lane mf-meta3b): its folds read ONCE into
             # typed int32 rows, checked against the fit's rows by the RUN as
             # the door's `_splits` checks them.
-            if not _user_folds(cv, b, fold_train, fold_test):
-                return False
+            _ = _user_folds(cv, b, fold_train, fold_test)
             folds = len(fold_test)
         elif cv is not None and py_type(cv) is not b.int:
             # THE SPLITTER CV (lanes mf-split4, mf-split5): one of our
             # splitters, read here as typed words; each fit computes its
             # folds over its own rows (core/ensemble_member.mojo
             # `_split_folds`). An `_IterableCV` holds a user's pairs.
-            if not _split_cv(cv, context, b, split, fold_train, fold_test):
-                return False
+            _ = _split_cv(cv, context, b, split, fold_train, fold_test, _CV_CALLBACK_WORDS)
             folds = len(fold_test)
         else:
             folds = 5 if cv is None else _int_word(cv, b)
             if folds < 2:
-                return False
+                _ = meta_cv_value(cv, context)  # the door's words (`meta_stacking_validate` raised them first)
         # passthrough by the door's truth (`_truthy`; lane mf-refuse5: a non-bool was refused here).
         var passthrough = py_get(fields, "passthrough")
         if passthrough is not None and _truthy(passthrough, b):
@@ -814,34 +800,28 @@ struct _Split(Movable):
 
 
 def _split_cv(cv: PythonObject, context: PythonObject, b: PythonObject, mut split: _Split,
-              mut fold_train: List[List[Int32]], mut fold_test: List[List[Int32]]) -> Bool:
-    """A cv that is one of OUR splitter objects (lane mf-split5): an
-    `_IterableCV`'s stored (train, test) pairs as typed folds (`_user_folds`,
-    as an index list), any other native splitter as typed words
-    (`_split_words`). False: the door keeps the meta-estimator."""
-    try:
-        var sp = MselSplitter(cv, context)
-        if sp.kind == SPLITTER_ITERABLE:
-            return _user_folds(sp.field("_pairs", context), b, fold_train, fold_test)
-    except:
-        return False
-    return _split_words(cv, context, b, split)
-
-
-def _split_words(cv: PythonObject, context: PythonObject, b: PythonObject,
-                 mut split: _Split) -> Bool:
-    """A cv that is one of OUR splitters (every class the splitter door
-    serves: the KFold family, the group, shuffle and time-series splitters,
-    the leave-out splitters, PredefinedSplit, the repeated splitters), read
-    as the splitter door reads it for `split` (bindings/msel_split_spec_unpack.mojo
-    `msel_split_spec_of`). False (the door keeps the meta-estimator and
-    splits natively with X and y) for a stored value the door reads in
-    another form, or a value the door refuses. A stratified splitter on a
-    regressor is taken: its fit stratifies on the targets' values as the
-    door's split does (lane mf-del5). A user's
-    own splitter object never reaches here: `_refuse_cv_callback` refuses it
-    first."""
-    return msel_split_spec_of(cv, context, split.spec, split.pin)
+              mut fold_train: List[List[Int32]], mut fold_test: List[List[Int32]], words: String) raises -> Bool:
+    """A cv that is one of OUR splitter objects (lanes mf-split5, mf-ens6):
+    every splitter the public split door splits, read as its typed words by
+    the strict reader (bindings/msel_split_spec_unpack.mojo
+    `msel_split_spec_read`, lane mf-lin6): every refusal is the split door's,
+    in its words (a field it cannot read raises here; a KFold-family
+    n_splits below 2 and an unreadable TimeSeriesSplit max_train_size raise
+    at fit, in the door's order); each fit computes its folds over its own
+    rows (core/ensemble_member.mojo `_split_folds`). An `_IterableCV`'s
+    stored (train, test) pairs (DATA) are read once as an index list
+    (`_user_folds`). A class the splitter table does not hold is a user's
+    splitter, whose `split` would be a Python callback: refused natively in
+    `words` (`_refuse_cv_callback` refuses it first when the table is
+    connected). Never False (the meta door no longer keeps any splitter)."""
+    if msel_split_spec_read(cv, context, split.spec, split.pin, True):
+        return True
+    var layouts = py_get(context, "family_msel_splitter_layouts")
+    if layouts is None or not py_contains(layouts, py_type(cv)):
+        raise Error(words)
+    # The one class the strict reader leaves to its caller: an `_IterableCV`.
+    var sp = MselSplitter(cv, context)
+    return _user_folds(sp.field("_pairs", context), b, fold_train, fold_test)
 
 
 def _cap_of(fields: PythonObject, b: PythonObject) raises -> Int:
@@ -862,8 +842,6 @@ def _finish(fields: PythonObject, context: PythonObject, b: PythonObject, mut ow
     kept in the owner's pins), the parameter words."""
     var cap = _cap_of(fields, b)
     var key = _trees_key(fields, context, b)
-    if len(key) != 2:
-        return False
     var device = DEVICE_CPU
     for u in range(len(nested.plans)):  # driver-loop: over the nested members (their routes)
         if nested.plans[u].route.device != DEVICE_CPU:
@@ -904,27 +882,22 @@ def _index_run(value: PythonObject, b: PythonObject, mut dst: List[Int32]) raise
 def _user_folds(cv: PythonObject, b: PythonObject, mut fold_train: List[List[Int32]],
                 mut fold_test: List[List[Int32]]) raises -> Bool:
     """UNPACK of a cv given as a list of (train, test) pairs (the door's
-    `_splits` over an iterable): each pair's two sides as typed rows. False
-    (the door keeps it, and raises its own words) for anything not a
-    sequence of two-item pairs of integer rows."""
-    var bad_pair = False
-    try:
-        for i in range(len(cv)):  # driver-loop: over the user's folds (UNPACK, once per admission)
-            var both = py_call(b.tuple, cv[i])
-            if len(both) != 2:
-                bad_pair = True
-                break
-            var tr = List[Int32]()
-            var te = List[Int32]()
-            if not _index_run(both[0], b, tr) or not _index_run(both[1], b, te):
-                return False
-            fold_train.append(tr^)
-            fold_test.append(te^)
-    except:
-        return False
-    if bad_pair:
-        # the door's `_splits` words (lane mf-tail5b: natively, before any fit)
-        raise Error("each cv split must be a (train, test) pair")
+    `_splits` over an iterable; DATA, read once): each pair's two sides as
+    typed rows. Never False (lane mf-ens6): a pair that is not a two-item
+    sequence raises the door's words; an item Python's tuple() or int()
+    refuses raises Python's own words, as the door's tuple() and index
+    reads do, before any fit."""
+    for i in range(len(cv)):  # driver-loop: over the user's folds (UNPACK, once per admission)
+        var both = py_call(b.tuple, cv[i])
+        if len(both) != 2:
+            # the door's `_splits` words (lane mf-tail5b: natively, before any fit)
+            raise Error("each cv split must be a (train, test) pair")
+        var tr = List[Int32]()
+        var te = List[Int32]()
+        _ = _index_run(both[0], b, tr)
+        _ = _index_run(both[1], b, te)
+        fold_train.append(tr^)
+        fold_test.append(te^)
     if len(fold_test) == 0:
         raise Error("cv produced no splits")  # the door's `_splits` words, before any fit
     return True
@@ -1262,8 +1235,6 @@ def ensemble_member_state(model: PythonObject, fields: PythonObject, context: Py
         _ = py_call(order_fields.append, est_fields)
         _ = py_call(order_context.append, est_context)
         order_kinds.append(est_kind)
-        if len(order_kinds) > _NESTED_META_MAX:
-            raise Error("TypeError: mojolearn: a nested estimator cannot be imported")
         var children = _fitted_children(est, est_fields, est_kind, b)
         for c in range(len(children)):  # driver-loop: over one fitted meta-estimator's nested estimators
             var child = children[c]
@@ -1272,6 +1243,16 @@ def ensemble_member_state(model: PythonObject, fields: PythonObject, context: Py
                 continue
             var mark = member_mark(child_plan, b)
             if mark.family != MEMBER_FAMILY_ENSEMBLE:
+                continue
+            # Identity: an object already walked or pending is imported once.
+            var walked = False
+            for q in range(len(order_kinds)):  # driver-loop: over the fitted meta-estimators walked (identity)
+                if order[q] is child:
+                    walked = True
+            for q in range(len(pending_kinds)):  # driver-loop: over the fitted meta-estimators pending (identity)
+                if pending[q] is child:
+                    walked = True
+            if walked:
                 continue
             _ = py_call(pending.append, child)
             _ = py_call(pending_fields.append, py_call(child_plan["fields_get"], child, py_type(child)))
@@ -1671,18 +1652,16 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         # scikit-learn's fold-count check reads an exact int cv (not None's 5): META_CAL_INT_CV.
         var int_cv = False
         if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
-            if not _user_folds(cv, b, fold_train, fold_test):
-                return False
+            _ = _user_folds(cv, b, fold_train, fold_test)
             folds = len(fold_test)
         elif cv is not None and py_type(cv) is not b.int:
-            if not _split_cv(cv, context, b, split, fold_train, fold_test):
-                return False  # a splitter setting the door reads otherwise: the door's `_splits`
+            _ = _split_cv(cv, context, b, split, fold_train, fold_test, _CV_CALLBACK_WORDS)
             folds = len(fold_test)
         else:
             folds = 5 if cv is None else _int_word(cv, b)
             int_cv = cv is not None
             if folds < 2:
-                return False  # a bool or an int below 2: the door raises its words
+                _ = meta_cv_value(cv, context)  # the door's words (`meta_calibrated_validate` raised them first)
         # The resident DeviceRows route (a measured winner) stays the door's.
         var plan = prep_estimator_plan(base, context)
         if plan is not None:
@@ -2875,14 +2854,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     elif cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
         # A user's index list: its folds read ONCE into typed int32 rows,
         # checked against the fit's rows by the kind (as Stacking's).
-        if not _user_folds(cv, b, fold_train, fold_test):
-            return False
+        _ = _user_folds(cv, b, fold_train, fold_test)
         folds = len(fold_test)
     elif cv is not None and py_type(cv) is not b.int and not msel_is_integral(cv, context):
         # One of our splitters, typed words; each fit splits its own rows
         # (the search's groups are its call's, `MemberCall.groups`).
-        if not _split_cv(cv, context, b, split, fold_train, fold_test):
-            return False
+        _ = _split_cv(cv, context, b, split, fold_train, fold_test, _SEARCH_CV_CALLBACK_WORDS)
         folds = len(fold_test)
     else:
         folds = 5 if cv is None else _int_word(cv, b)
