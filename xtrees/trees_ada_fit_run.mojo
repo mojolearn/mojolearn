@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """RUN of AdaBoostClassifier (SAMME) and AdaBoostRegressor (AdaBoost.R2) `fit`
-over a DecisionTreeClassifier / DecisionTreeRegressor member with
-splitter='best' (lane mf-ada, 2026-11-23). No Python import:
-`tools/python_free_dirs.sh` covers this directory.
+over a tree member (lane mf-ada, 2026-11-23; every tree base lane mf-ada2,
+2026-11-23). No Python import: `tools/python_free_dirs.sh` covers this
+directory.
 
 The door's UNPACK (bindings/trees_public_boost_door.mojo `ada_fit`) reads the
 estimator, the labels or targets, the starting weights, the base tree's
@@ -14,7 +14,7 @@ returns the kept rounds' export handles with their weights and errors
 (`AdaFitResult`); the door's PACK builds one member per kept round, in round
 order, from those handles (`forest_export_handle`) and the three lists.
 
-Two routes, both the ones the door ran before:
+Three routes, the ones the door ran before:
   device rounds (XF_CAP_ADA): XF_ADA_OPEN once (the weights, labels or targets
       and class_weight rows stay on the session's device), then per round
       XF_FIT_ADA_ROUND, which fits the member, predicts, steps and rescales
@@ -28,18 +28,45 @@ Two routes, both the ones the door ran before:
       early stops and the rescale (`xt_scale`). The regressor draws its rows
       from the weights (`xt_weighted_sample`) and fits them on the session
       (or, without one, on their column-major gather: the same fit body).
+  member rounds (`member_route`, lane mf-ada2): every other tree base
+      (RandomForest*, ExtraTrees*, a DecisionTree* with splitter='random'
+      (its inner one-tree ExtraTrees forest) or a regression criterion the
+      session does not fit). Each round's member is a NEW state of the
+      base's native member (core/forest_member_run.mojo through
+      core/member_abi.mojo; the door admits the base ONCE,
+      `forest_member_admit_common` with the caller's class rows), differing
+      from the first only in its seed words: the classifier fits the
+      row-major X with the round's float32 weights times the class_weight
+      rows (one correctly rounded product per row, the multiply the forest
+      door's `trees_weighted_rows` ran), the regressor its drawn rows'
+      row-major gather and targets, after the deviance criteria's target
+      check of those targets (`forest_target_check`, the forest door's
+      words). The member's own predict of the training X (its route: the
+      estimator's predict rule) feeds the step. The kept states go to the
+      door's PACK (`forest_member_pack_common`), the fit notices of every
+      fitted round with them (`member_notices_take`).
 
-THE GIL: the caller HOLDS it. The data session operations (XF_SESSION_*,
-XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND) need it held (their registry is
-serialized by it, core/forest_entry.mojo) and the image releases it around
-each fit and predict walk itself, exactly as when the door called them one by
-one. Nothing here touches Python.
+THE GIL (lane mf-ada2): the door RELEASES it around the WHOLE RUN, every
+round. Nothing here touches Python: the forest entry is marked GIL-free
+(`entry_ref_gil_free`, the door), so the data session operations and the
+fits and walks run bare (the session registries have their own lock words,
+core/forest_entry.mojo), the glue and the label weights driver never touch
+the GIL, and the forest member is `MEMBER_GIL_FREE`.
 
 Serial by nature: each round's weights are the previous round's rescaled
 weights, so round j + 1 cannot start before round j's step. The parallelism
 is inside each launch (the image's fit and predict, the glue kernels).
 """
+from std.memory import bitcast
 from core.entry_table import EntryRef
+from core.host_finite_scan import host_all_finite_f32
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from core.member_abi import (
+    MemberPlan, MemberMatrix, member_new, member_call, member_call_of, member_free,
+    MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_F32, MEMBER_I32,
+)
+from core.member_notices import member_notices_take, member_notice_add, MEMBER_NOTICE_FOREST
 from core.forest_calls import (
     xf_ada_open, xf_fit_ada_round, xf_fit_session, xf_export_sizes, xf_export_into, xf_export_release, xf_predict,
     xf_resident_prepare, xf_resident_predict, xf_resident_labels, xf_strict_prepare, xf_strict_predict,
@@ -48,7 +75,9 @@ from core.forest_calls import (
 from core.forest_fit_request import ForestFitArgs, XF_RESIDENT_RELEASE, XF_STRICT_RELEASE
 from core.forest_member_run import _argmax_rows
 from core.label_weights_native_api import LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY
-from bindings.forest_config_run import ForestConfig, forest_request
+from bindings.forest_config_run import (
+    ForestConfig, forest_request, forest_target_need, forest_target_check, FOREST_TARGET_ANY, FOREST_TARGET_POISSON,
+)
 from bindings.forest_predict_run import (
     ForestState, forest_labels_route, FOREST_ROUTE_SEQUENTIAL, FOREST_ROUTE_STRICT,
 )
@@ -64,6 +93,13 @@ from xtrees.trees_boost_run import _sub_seed
 #: min_impurity_decrease, bootstrap, max_samples, random_state, ...). The
 #: members of one fit differ only there (`_member_like`).
 comptime ADA_SEED_SLOT = 13
+#: The seed slot's three words in a forest member's MEMBER_OP_NEW parameters
+#: (core/forest_member_run.mojo: 12 head words, then three per slot: the
+#: int reading's Int64 bits, the float reading, the no-reading flag). Slot
+#: 13 is `random_state` in the ET layout too (`_et_config`), so one word
+#: serves RandomForest, DecisionTree, ExtraTrees and a random-splitter
+#: tree's inner forest.
+comptime ADA_MEMBER_SEED_WORD = 12 + 3 * ADA_SEED_SLOT
 
 #: The step's status words (`xt_samme_step` / `xt_r2_step` / XF_FIT_ADA_ROUND)
 #: (0.0: go on; 1.0: a perfect member, stop after keeping it; 2.0: worse than
@@ -109,6 +145,13 @@ struct AdaFitPlan(Movable):
     var class_rows: Int
     var weights: Int
     var multiply: Optional[LabelWeightsDriver]
+    #: member rounds (module docstring): the admitted base's member plan
+    #: (its seed words rewritten per round) and the regressor's target need
+    #: (`forest_target_need` of `config`, which then holds the base's (or
+    #: its inner forest's) configuration for the check's words)
+    var member_route: Bool
+    var member_plan: MemberPlan
+    var target_need: Int
 
     def __init__(out self, classifier: Bool, n: Int, d: Int, k: Int, rounds: Int, rate: Float64, seed: Int,
                  var config: ForestConfig, glue: EntryRef, forest: EntryRef, caps: Int, session: Int):
@@ -137,23 +180,32 @@ struct AdaFitPlan(Movable):
         self.class_rows = 0
         self.weights = 0
         self.multiply = None
+        self.member_route = False
+        self.member_plan = MemberPlan()
+        self.target_need = FOREST_TARGET_ANY
 
 
 struct AdaFitResult(Movable):
     """The kept rounds, in round order (member j holds `_sub_seed(seed, j)`):
     each round's owned export handle, its estimator weight and error.
     `launched` marks a fit without a session (its export keeps the forest
-    door's export selection); the others export "into"."""
+    door's export selection); the others export "into". On the member
+    route `handles` are the kept member STATES (`members` True) and
+    `notices` the fit notice words of every fitted round, in round order."""
     var handles: List[Int]
     var alphas: List[Float64]
     var errors: List[Float64]
     var launched: Bool
+    var members: Bool
+    var notices: List[Float64]
 
     def __init__(out self):
         self.handles = List[Int]()
         self.alphas = List[Float64]()
         self.errors = List[Float64]()
         self.launched = False
+        self.members = False
+        self.notices = List[Float64]()
 
 
 def ada_release_handles(forest: EntryRef, mut handles: List[Int]):
@@ -164,6 +216,118 @@ def ada_release_handles(forest: EntryRef, mut handles: List[Int]):
         except:
             pass
     handles = List[Int]()
+
+
+def ada_release_members(plan: MemberPlan, mut states: List[Int]):
+    """Free every kept member state (non-raising: error paths and the PACK)."""
+    for i in range(len(states)):  # small-loop(kept rounds: at most n_estimators states, error path only)
+        if states[i] != 0:
+            var call = member_call_of(plan, states[i])
+            member_free(plan, call)
+    states = List[Int]()
+
+
+def _release_one(plan: AdaFitPlan, handle: Int):
+    """One round's export handle or member state back (non-raising)."""
+    if handle == 0:
+        return
+    if plan.member_route:
+        try:
+            var call = member_call_of(plan.member_plan, handle)
+            member_free(plan.member_plan, call)
+        except:
+            pass
+        return
+    try:
+        xf_export_release(plan.forest, handle)
+    except:
+        pass
+
+
+def _member_seed(mut plan: AdaFitPlan, index: Int):
+    """The round's member seed in the member plan's seed slot words (an
+    exact nonnegative int: both readings, no flag; `_member_like`)."""
+    var s = _sub_seed(plan.seed, index)
+    plan.member_plan.params[ADA_MEMBER_SEED_WORD] = bitcast[DType.float64](Int64(s))
+    plan.member_plan.params[ADA_MEMBER_SEED_WORD + 1] = Float64(s)
+    plan.member_plan.params[ADA_MEMBER_SEED_WORD + 2] = 0.0
+
+
+def _member_fit(mut plan: AdaFitPlan, index: Int, x: Int, y: Int, weights: Int) raises -> Int:
+    """One round's member: a new state of the admitted base with the
+    round's seed, fitted on the row-major float32 X at `x` (n x d), the
+    class codes or targets at `y` and the float32 row weights at `weights`
+    (0: none); its state handle (the caller frees it)."""
+    _member_seed(plan, index)
+    var call = member_new(plan.member_plan)
+    try:
+        call.x = MemberMatrix(x, plan.n, plan.d, MEMBER_F32)
+        if plan.classifier:
+            call.y = MemberMatrix(y, plan.n, 1, MEMBER_I32)
+            call.classes = plan.k
+            if weights != 0:
+                call.weights = MemberMatrix(weights, plan.n, 1, MEMBER_F32)
+        else:
+            call.y = MemberMatrix(y, plan.n, 1, MEMBER_F32)
+        _ = member_call(plan.member_plan.member, MEMBER_OP_FIT, call)
+    except error:
+        member_free(plan.member_plan, call)
+        raise error^
+    return call.state
+
+
+def _member_predict(plan: AdaFitPlan, state: Int, dst: Int) raises:
+    """The round's member predicts the training X on its own route: int32
+    codes (classifier) or float32 values at `dst`."""
+    var call = member_call_of(plan.member_plan, state)
+    call.x = MemberMatrix(plan.x, plan.n, plan.d, MEMBER_F32)
+    call.dst = MemberMatrix(dst, plan.n, 1, MEMBER_I32 if plan.classifier else MEMBER_F32)
+    _ = member_call(plan.member_plan.member, MEMBER_OP_PREDICT, call)
+
+
+def _extreme(src: Int, rows: Int, largest: Bool) -> Float64:
+    """The smallest (or largest) of `rows` >= 1 finite float32 words at
+    `src` (the forest door's `reduce_stat`): per-task extremes, then theirs
+    (any order gives the same value), split over the host workers."""
+    var tasks = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, tasks)
+    var source = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src)
+    var tops = List[Float32](length=max(tasks, 1), fill=source[0])
+    var top_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(tops.unsafe_ptr()))
+
+    def task(unit: Int) {imm source, imm top_words, imm chunk, imm rows, imm largest}:
+        var first = unit * chunk
+        var last = min(first + chunk, rows)
+        if first >= last:
+            return
+        var top = source[first]
+        for i in range(first + 1, last):  # native data loop (one host task's rows)
+            if (source[i] > top) if largest else (source[i] < top):
+                top = source[i]
+        top_words[unit] = top
+
+    host_parallelize(task, tasks)
+    var best = tops[0]
+    for t in range(1, len(tops)):  # small-loop(tasks): one extreme per host task
+        if (tops[t] > best) if largest else (tops[t] < best):
+            best = tops[t]
+    return Float64(best)
+
+
+def _target_check(plan: AdaFitPlan, y: Int, rows: Int) raises:
+    """The deviance criteria's check of the round's drawn targets, as the
+    forest door's `_target_check` ran it on each member's y: finite, the
+    smallest and, for Poisson when that passed, the largest value."""
+    if plan.target_need == FOREST_TARGET_ANY:
+        return
+    var finite = host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y), rows)
+    var lowest = 0.0
+    var highest = 1.0
+    if finite and rows > 0:
+        lowest = _extreme(y, rows, False)
+        if plan.target_need == FOREST_TARGET_POISSON and not lowest < 0.0:
+            highest = _extreme(y, rows, True)
+    forest_target_check(plan.config, finite, lowest, highest)
 
 
 def _seed_slot(mut plan: AdaFitPlan, index: Int):
@@ -244,6 +408,16 @@ def _predict_train(plan: AdaFitPlan, handle: Int, dst: Int) raises:
     _ = len(votes)  # the argmax above read the votes through `target`
 
 
+def _export_notice(plan: AdaFitPlan, handle: Int, mut notices: List[Float64]) raises:
+    """A DecisionTree round's fit notices (the RF layout's third metadata
+    word, the `ensemble/rf_notices.mojo` mask the forest door's
+    `_rf_fit_notices` raised per member fit) as one notice triple; the
+    door's PACK raises them (`member_fit_notices_raise`)."""
+    var meta = xf_export_sizes(plan.forest, handle).meta.copy()
+    if len(meta) >= 3 and meta[2] != 0:
+        member_notice_add(notices, MEMBER_NOTICE_FOREST, Float64(meta[2]))
+
+
 def _keep(mut result: AdaFitResult, handle: Int, alpha: Float64, error: Float64):
     result.handles.append(handle)
     result.alphas.append(alpha)
@@ -275,7 +449,9 @@ def _round_fit(mut plan: AdaFitPlan, index: Int, rows: List[Int32], yr: List[Flo
         var w_addr = Int(w32.unsafe_ptr())
         if plan.class_rows != 0:
             w_addr = Int(wt.unsafe_ptr())
-        var request = _round_request(plan, index, n, plan.xcm, plan.codes, w_addr)
+        var xcm = plan.xcm  # locals: `plan` is passed mutably beside them
+        var codes = plan.codes
+        var request = _round_request(plan, index, n, xcm, codes, w_addr)
         if plan.session > 0:
             request.session = plan.session
             var handle = xf_fit_session(plan.forest, True, request)
@@ -321,8 +497,10 @@ def _round_fit(mut plan: AdaFitPlan, index: Int, rows: List[Int32], yr: List[Flo
 def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
     """The boosting rounds of one AdaBoost fit (see the module docstring).
     Refuses a classifier whose first member is worse than random in the
-    estimator's words. On a refusal every owned handle is released."""
+    estimator's words. On a refusal every owned handle (or member state) is
+    released."""
     var result = AdaFitResult()
+    result.members = plan.member_route
     var n = plan.n
     var stats = List[Float64](length=4, fill=0.0)
     var stats_addr = Int(stats.unsafe_ptr())
@@ -347,9 +525,10 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
             pred_values = List[Float32](length=max(n, 1), fill=0.0)
             rows = List[Int32](length=max(n, 1), fill=0)
             yr = List[Float32](length=max(n, 1), fill=0.0)
-            if plan.session == 0:
+            if plan.session == 0 or plan.member_route:
                 xg = List[Float32](length=max(n * plan.d, 1), fill=0.0)
-                xc = List[Float32](length=max(n * plan.d, 1), fill=0.0)
+                if not plan.member_route:
+                    xc = List[Float32](length=max(n * plan.d, 1), fill=0.0)
                 all_cols = List[Int32](length=max(plan.d, 1), fill=0)
                 for c in range(plan.d):  # small-loop(the d column ids of the gather, once per fit)
                     all_cols[c] = Int32(c)
@@ -370,11 +549,35 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
                     _ = xt_weighted_sample(plan.glue, plan.weights, Int(rows.unsafe_ptr()), n, n, plan.seed, it)
                     _ = xt_gather_f32(plan.glue, plan.y, Int(rows.unsafe_ptr()), Int(col0.unsafe_ptr()),
                                       Int(yr.unsafe_ptr()), n, 1, n, 1)
-            var launched = False
-            handle = _round_fit(plan, it, rows, yr, w32, wt, xg, xc, all_cols, stats_addr, launched)
-            if launched:
-                result.launched = True
-            if not plan.device_rounds:
+            if plan.member_route:
+                if plan.classifier:
+                    var w_addr = Int(wt.unsafe_ptr()) if plan.class_rows != 0 else Int(w32.unsafe_ptr())
+                    var x_addr = plan.x  # locals: `plan` is passed mutably beside them
+                    var codes_addr = plan.codes
+                    handle = _member_fit(plan, it, x_addr, codes_addr, w_addr)
+                else:
+                    # the drawn rows' row-major gather (the forest door's
+                    # `_gather`), checked and fitted unweighted
+                    _ = xt_gather_f32(plan.glue, plan.x, Int(rows.unsafe_ptr()), Int(all_cols.unsafe_ptr()),
+                                      Int(xg.unsafe_ptr()), n, plan.d, n, plan.d)
+                    _target_check(plan, Int(yr.unsafe_ptr()), n)
+                    handle = _member_fit(plan, it, Int(xg.unsafe_ptr()), Int(yr.unsafe_ptr()), 0)
+                member_notices_take(plan.member_plan, handle, result.notices)
+                if plan.classifier:
+                    _member_predict(plan, handle, Int(pred_codes.unsafe_ptr()))
+                    _ = xt_samme_step(plan.glue, plan.weights, Int(pred_codes.unsafe_ptr()), plan.codes, stats_addr,
+                                      n, plan.k, plan.rate, last, plan.tree_base)
+                else:
+                    _member_predict(plan, handle, Int(pred_values.unsafe_ptr()))
+                    _ = xt_r2_step(plan.glue, plan.weights, Int(pred_values.unsafe_ptr()), plan.y, stats_addr,
+                                   n, plan.loss, plan.rate, last, plan.tree_base)
+            else:
+                var launched = False
+                handle = _round_fit(plan, it, rows, yr, w32, wt, xg, xc, all_cols, stats_addr, launched)
+                if launched:
+                    result.launched = True
+                _export_notice(plan, handle, result.notices)
+            if not plan.device_rounds and not plan.member_route:
                 if plan.classifier:
                     _predict_train(plan, handle, Int(pred_codes.unsafe_ptr()))
                     _ = xt_samme_step(plan.glue, plan.weights, Int(pred_codes.unsafe_ptr()), plan.codes, stats_addr,
@@ -394,7 +597,7 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
                     _keep(result, handle, 0.0, sp[2])
                     handle = 0
                     break
-                xf_export_release(plan.forest, handle)
+                _release_one(plan, handle)
                 handle = 0
                 break
             _keep(result, handle, sp[1], sp[2])
@@ -405,12 +608,11 @@ def ada_fit_run(mut plan: AdaFitPlan) raises -> AdaFitResult:
             if not plan.device_rounds and it < plan.rounds - 1:
                 _ = xt_scale(plan.glue, plan.weights, n, total)
     except error:
-        if handle != 0:
-            try:
-                xf_export_release(plan.forest, handle)
-            except:
-                pass
-        ada_release_handles(plan.forest, result.handles)
+        _release_one(plan, handle)
+        if plan.member_route:
+            ada_release_members(plan.member_plan, result.handles)
+        else:
+            ada_release_handles(plan.forest, result.handles)
         raise error^
     _ = len(stats)  # every step above wrote its four words through `stats_addr`
     _ = len(w32)

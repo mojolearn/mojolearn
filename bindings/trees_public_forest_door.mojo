@@ -1318,6 +1318,19 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
     state its constructor stores (its defaults, then the tree's settings),
     fitted by the extra-trees operation above, and its flat model becomes
     this tree's; predict delegates to it."""
+    var inner = forest_dt_random_inner(model, kind, context)
+    var inner_kind = String("et_classifier") if _classifier(kind) else String("et_regressor")
+    var inner_args = Python.tuple(args[0], args[1], args[2], PythonObject(False), PythonObject(None))
+    _ = et_fit(inner, inner_args, inner_kind, context)
+    forest_dt_random_adopt(model, inner)
+    return model
+
+
+def forest_dt_random_inner(model: PythonObject, kind: String, context: PythonObject) raises -> PythonObject:
+    """UNPACK of a random-splitter tree's fit (`dt_random_fit`; lane mf-ada2
+    shares it with AdaBoost's member rounds): the tree refreshed and its
+    UNFITTED inner one-tree ExtraTrees estimator, assembled with the state
+    its constructor stores (its defaults, then the tree's settings)."""
     var b = trees_builtins()
     var fields = forest_refresh(model, kind, context)
     var nk = trees_keys()
@@ -1341,9 +1354,15 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
         py_setitem(settings, nk[].k_class_weight, py_item(fields, nk[].k_class_weight))
     _ = py_call(inner_fields.update, settings)
     py_setitem(inner_fields, nk[].k__has_constructor_parameters, PythonObject(True))
-    var inner_kind = String("et_classifier") if _classifier(kind) else String("et_regressor")
-    var inner_args = Python.tuple(args[0], args[1], args[2], PythonObject(False), PythonObject(None))
-    _ = et_fit(inner, inner_args, inner_kind, context)
+    return inner
+
+
+def forest_dt_random_adopt(model: PythonObject, inner: PythonObject) raises:
+    """PACK of a random-splitter tree's fit: its FITTED inner forest kept
+    (`_random_inner`) and the fitted attributes the tree shares with it."""
+    var nk = trees_keys()
+    var fields = py_fields(model)
+    var inner_fields = py_fields(inner)
     py_setitem(inner_fields, nk[].k__mojolearn_fitted, PythonObject(True))
     py_setitem(fields, nk[].k__random_inner, inner)
     var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves", "_n_trees", "_num_outputs",
@@ -1353,7 +1372,6 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
     if py_contains(inner_fields, nk[].k_classes_):
         py_setitem(fields, nk[].k_classes_, py_item(inner_fields, nk[].k_classes_))
         py_setitem(fields, nk[].k_n_classes_, PythonObject(len(py_item(inner_fields, nk[].k_classes_))))
-    return model
 
 
 def forest_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:

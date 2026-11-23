@@ -179,8 +179,19 @@ def trees_stage_rounds(member: PythonObject, x_addr: Int, rows: Int, cols: Int,
         pass
     if not native:
         return staged
-    var stage = trees_entry(native.value(), "forest_stage_input_gpu")
-    var unstage = trees_entry(native.value(), "forest_unstage_input_gpu")
+    return trees_stage_native(native.value(), x_addr, rows, cols)
+
+
+def trees_stage_native(native: PythonObject, x_addr: Int, rows: Int, cols: Int) raises -> PythonObject:
+    """`trees_stage_rounds` on the forest binary table `native` itself (lane
+    mf-ada2: AdaBoost's member rounds know their members' binary from the
+    admission before any member is fitted). A binary without the staging
+    entries stages nothing. Returns the unstage entries for `trees_unstage`."""
+    var staged = Python.list()
+    if rows < 1 or cols < 1:
+        return staged
+    var stage = trees_entry(native, "forest_stage_input_gpu")
+    var unstage = trees_entry(native, "forest_unstage_input_gpu")
     if stage is None or unstage is None:
         return staged
     _ = py_call(staged.append, unstage)

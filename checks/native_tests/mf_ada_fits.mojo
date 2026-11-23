@@ -7,22 +7,46 @@ builds for a default base, AdaBoostClassifier's DecisionTreeClassifier(max_depth
 DecisionTreeRegressor(max_depth=3): the base's configuration (checks/native_tests/py2mojo_forest_fits.mojo
 `RfSpec.decision_tree` + `rf_config`, the door's `_rf_config` slots), the RF host image's forest entry and caps,
 the uniform starting weights 1 / n (the door's `_normalized_weights` of sample_weight=None), the class codes or
-targets, and NO data session (a process with no Python publishes the host image without sessions,
-core/mojolearn_rf_host_run.mojo `RfHostNoSessions`): the classifier takes RUN's column-major fit, the regressor its
-column-major row gather, the bodies the host sessions run. Then `ada_fit_run`, and each kept round's export copied
+targets, and either no data session (the classifier takes RUN's column-major fit, the regressor its column-major row
+gather, the bodies the host sessions run) or, with `session` (lane mf-ada2), a data session opened on the host image
+through the GIL-free marked entry as the door's `_member_session` opens it (the classifier's column-major X, the
+regressor's row-major X): the session registry has its own lock, so a process with no Python serves it. Then `ada_fit_run`, and each kept round's export copied
 out of the image (what the door's PACK `forest_export_handle` copies). `ada_predict_codes` / `ada_predict_values`
 are the public predicts' RUNs (`ada_classifier_run` ADA_CODES, `ada_regressor_run`) over the members' host
 predictions (`predict`, the STRICT route the members' doors take on the host column).
 
-Call `publish_host_images()` (checks/native_tests/bm_rest_boost_fits.mojo) first. Each fit is serial by nature
+`ada_member_fit` (lane mf-ada2) is the MEMBER route the door's `_ada_members` takes for every other tree base: the
+base's forest member plan (`member_plan_of`: the parameter words `forest_member_admit_common` writes for a
+RandomForest*, ExtraTrees* or DecisionTree* configuration, a random-splitter tree's inner forest included; the host
+forest entry of its family as the route), the class_weight rows the caller passes (the door's
+`trees_class_rows_only`) multiplied in by the x_trees label weights kernels (`label_weights_native_v1`, what the
+door's driver calls), then `ada_fit_run` and the ensemble's predict over the kept states' own member predicts.
+
+Call `publish_host_images()` (checks/native_tests/bm_rest_boost_fits.mojo) and `publish_host_members()` first. Each fit is serial by nature
 (each round's weights come from the last); callers run independent fits as case-table rows across the host cores.
 """
-from core.entry_table import EntryRef
-from core.forest_calls import xf_ref, xf_caps, xf_export_sizes, xf_export_into, xf_export_release
-from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF
+from std.memory import bitcast
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.entry_table import EntryRef, entry_ref_gil_free
+from core.device_route import DeviceRoute, DEVICE_CPU
+from core.member_abi import (
+    MemberPlan, MemberMatrix, member_resolve_family, member_call, member_call_of, MEMBER_OP_PREDICT, MEMBER_F32,
+    MEMBER_I32,
+)
+from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
+from core.tree_member import tree_member_publish_image
+from core.forest_member import forest_member_publish_image
+from core.extra_trees_member import extra_trees_member_publish_image
+from core.label_weights_native_api import LabelWeightsDriver
+from xtrees.label_weights_native import label_weights_native_v1
+from bindings.forest_config_run import ForestConfig, forest_target_need
+from core.forest_calls import (
+    xf_ref, xf_caps, xf_export_sizes, xf_export_into, xf_export_release, xf_session_open, xf_session_close,
+)
+from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF, FOREST_TABLE_ET
 from xtrees.glue_calls import xt_ref
 from xtrees.trees_forest_run import forest_export_counts
-from xtrees.trees_ada_fit_run import AdaFitPlan, AdaFitResult, ada_fit_run, ada_release_handles
+from xtrees.trees_ada_fit_run import AdaFitPlan, AdaFitResult, ada_fit_run, ada_release_handles, ada_release_members
 from xtrees.trees_meta_vote_run import ada_classifier_run, ada_regressor_run, ADA_CODES
 from checks.native_tests.bm_rest_boost_fits import trees_key
 from checks.native_tests.py2mojo_forest_fits import (
@@ -96,28 +120,40 @@ def _export(forest: EntryRef, handle: Int, d: Int) raises -> Forest:
 
 
 def ada_fit(s: AdaSpec, x: List[Float32], n: Int, d: Int, codes: List[Int32], k: Int,
-            y: List[Float32]) raises -> AdaModel:
+            y: List[Float32], session: Bool = False) raises -> AdaModel:
     """`AdaBoost*(n_estimators, random_state=seed[, loss]).fit(X, y)` with sample_weight=None on the host
     images: `codes` the int32 class codes 0..k-1 (classifier) or `y` the float32 targets (regressor)."""
     var key = trees_key()
     var glue = xt_ref(key)
-    var forest = xf_ref(ForestEntryKey(FOREST_TABLE_RF, key.copy()))
+    var forest = entry_ref_gil_free(xf_ref(ForestEntryKey(FOREST_TABLE_RF, key.copy())))
     var caps = xf_caps(forest)
+    var xcm = List[Float32]()
+    if s.classifier:
+        xcm = column_major(x, n, d)
+    var handle = 0
+    if session:
+        if s.classifier:
+            handle = xf_session_open(forest, Int(xcm.unsafe_ptr()), n, d, False, False)
+        else:
+            handle = xf_session_open(forest, Int(x.unsafe_ptr()), n, d, True, False)
     var plan = AdaFitPlan(s.classifier, n, d, k if s.classifier else 0, s.n_estimators, s.rate, s.seed,
-                          rf_config(RfSpec.decision_tree(s.classifier, s.max_depth)), glue, forest, caps, 0)
+                          rf_config(RfSpec.decision_tree(s.classifier, s.max_depth)), glue, forest, caps, handle)
     plan.squared = RF_SQUARED
     plan.loss = s.loss
     plan.x = Int(x.unsafe_ptr())
     var w = List[Float64](length=n, fill=1.0 / Float64(n))
     plan.weights = Int(w.unsafe_ptr())
-    var xcm = List[Float32]()
     if s.classifier:
-        xcm = column_major(x, n, d)
         plan.xcm = Int(xcm.unsafe_ptr())
         plan.codes = Int(codes.unsafe_ptr())
     else:
         plan.y = Int(y.unsafe_ptr())
-    var result = ada_fit_run(plan)
+    var result = AdaFitResult()
+    try:
+        result = ada_fit_run(plan)
+    finally:
+        if handle > 0:
+            xf_session_close(forest, handle)
     _ = len(x)  # RUN read these words through their addresses
     _ = len(w)
     _ = len(xcm)
@@ -173,3 +209,137 @@ def ada_predict_values(m: AdaModel, x: List[Float32], n: Int) raises -> List[Flo
     ada_regressor_run(xt_ref(trees_key()), addrs, m.alphas, n, Int(out.unsafe_ptr()))
     _ = len(blocks)  # the RUN above read the member blocks through `addrs`
     return out^
+
+
+# ------------------------------------------------------------ the member route (lane mf-ada2)
+
+
+def publish_host_members() raises:
+    """The member entries the host forest images publish at module init (Tree and Forest beside the RF entry,
+    ExtraTrees beside the ET entry)."""
+    tree_member_publish_image("cpu")
+    forest_member_publish_image("cpu")
+    extra_trees_member_publish_image("cpu")
+
+
+def member_plan_of(config: ForestConfig, family: Int, classifier: Bool) raises -> MemberPlan:
+    """The plan `forest_member_admit_common` fills for a base of this configuration on the host column: words 0-11
+    (kind, layout, criterion, the max_features form / count / fraction, the image bin flag, the ET rows fraction,
+    tier fast 0, engine groves 0, no importance fit, the slot count), then three words per slot; the route the CPU
+    forest entry of the family's table (RF for Tree and Forest, ET for ExtraTrees)."""
+    var words = List[Float64]()
+    words.append(0.0 if classifier else 1.0)
+    words.append(1.0 if config.et else 0.0)
+    words.append(Float64(config.criterion))
+    words.append(Float64(config.features.form))
+    words.append(Float64(config.features.count))
+    words.append(config.features.fraction)
+    words.append(1.0 if config.bins_image else 0.0)
+    words.append(config.rows_fraction)
+    words.append(0.0)
+    words.append(0.0)
+    words.append(0.0)
+    var slots = len(config.ints)
+    words.append(Float64(slots))
+    for k in range(slots):  # small-loop(the configuration's parameter slots, once per plan)
+        words.append(bitcast[DType.float64](Int64(config.ints[k])))
+        words.append(config.floats[k])
+        words.append(1.0 if config.bad[k] != 0 else 0.0)
+    var route = DeviceRoute(DEVICE_CPU)
+    route.mode = Int(GLOBAL_NUMERIC_MODE)
+    route.vendor = 0
+    var table = FOREST_TABLE_ET if family == MEMBER_FAMILY_EXTRA_TREES else FOREST_TABLE_RF
+    route.entry = xf_ref(ForestEntryKey(table, trees_key()))
+    var plan = MemberPlan()
+    plan.family = family
+    plan.kind = 0 if classifier else 1
+    plan.route = route
+    plan.params = words^
+    plan.member = member_resolve_family(family, route)
+    return plan^
+
+
+struct AdaMemberModel(Movable):
+    """A member-route fit: `estimator_weights_`, `estimator_errors_` and the ensemble's predict of the training X
+    (int32 codes or float32 values), from the kept states before they are freed."""
+    var alphas: List[Float64]
+    var errors: List[Float64]
+    var codes: List[Int32]
+    var values: List[Float32]
+
+    def __init__(out self, var alphas: List[Float64], var errors: List[Float64], var codes: List[Int32],
+                 var values: List[Float32]):
+        self.alphas = alphas^
+        self.errors = errors^
+        self.codes = codes^
+        self.values = values^
+
+
+def ada_member_fit(s: AdaSpec, var config: ForestConfig, family: Int, tree_base: Bool, x: List[Float32], n: Int,
+                   d: Int, codes: List[Int32], k: Int, y: List[Float32],
+                   class_rows: List[Float32]) raises -> AdaMemberModel:
+    """`AdaBoost*(estimator=<base of `config`>, n_estimators, random_state=seed[, loss]).fit(X, y)` with
+    sample_weight=None on the member route: `codes` 0..k-1 (classifier) or `y` (regressor); `class_rows` the
+    base's class_weight row weights (empty: none); `tree_base` the base is a DecisionTree* (the steps' word; a
+    random-splitter tree's `family` is its inner forest's, ExtraTrees). The deviance criteria check each round's
+    drawn targets."""
+    var member_plan = member_plan_of(config, family, s.classifier)
+    var key = trees_key()
+    var glue = xt_ref(key)
+    var need = forest_target_need(config)
+    var plan = AdaFitPlan(s.classifier, n, d, k if s.classifier else 0, s.n_estimators, s.rate, s.seed, config^,
+                          glue, xf_ref(ForestEntryKey(FOREST_TABLE_RF, key.copy())), 0, 0)
+    plan.member_route = True
+    plan.member_plan = member_plan.copy()
+    plan.tree_base = 1 if tree_base else 0
+    plan.loss = s.loss
+    plan.x = Int(x.unsafe_ptr())
+    var w = List[Float64](length=n, fill=1.0 / Float64(n))
+    plan.weights = Int(w.unsafe_ptr())
+    if s.classifier:
+        plan.codes = Int(codes.unsafe_ptr())
+        if len(class_rows) > 0:
+            plan.class_rows = Int(class_rows.unsafe_ptr())
+            plan.multiply = LabelWeightsDriver(label_weights_native_v1)
+    else:
+        plan.y = Int(y.unsafe_ptr())
+        plan.target_need = need
+    var result = ada_fit_run(plan)
+    _ = len(x)  # RUN read these words through their addresses
+    _ = len(w)
+    _ = len(codes)
+    _ = len(y)
+    _ = len(class_rows)
+    var out_codes = List[Int32]()
+    var out_values = List[Float32]()
+    try:
+        var blocks_i = List[List[Int32]]()
+        var blocks_f = List[List[Float32]]()
+        var addrs = List[Int]()
+        for j in range(len(result.handles)):  # small-loop(the kept states: their member predicts of X)
+            var call = member_call_of(member_plan, result.handles[j])
+            call.x = MemberMatrix(Int(x.unsafe_ptr()), n, d, MEMBER_F32)
+            if s.classifier:
+                blocks_i.append(List[Int32](length=n, fill=Int32(0)))
+                call.dst = MemberMatrix(Int(blocks_i[j].unsafe_ptr()), n, 1, MEMBER_I32)
+            else:
+                blocks_f.append(List[Float32](length=n, fill=Float32(0)))
+                call.dst = MemberMatrix(Int(blocks_f[j].unsafe_ptr()), n, 1, MEMBER_F32)
+            _ = member_call(member_plan.member, MEMBER_OP_PREDICT, call)
+        for j in range(len(result.handles)):  # small-loop(the members' block addresses)
+            addrs.append(Int(blocks_i[j].unsafe_ptr()) if s.classifier else Int(blocks_f[j].unsafe_ptr()))
+        if s.classifier:
+            var acc = List[Float64](length=n * k, fill=0.0)
+            out_codes = List[Int32](length=n, fill=Int32(0))
+            ada_classifier_run(glue, addrs, result.alphas, n, k, Int(acc.unsafe_ptr()), ADA_CODES,
+                               Int(out_codes.unsafe_ptr()))
+            _ = len(acc)
+        else:
+            out_values = List[Float32](length=n, fill=Float32(0))
+            ada_regressor_run(glue, addrs, result.alphas, n, Int(out_values.unsafe_ptr()))
+        _ = len(blocks_i)  # the RUNs above read the member blocks through `addrs`
+        _ = len(blocks_f)
+        _ = len(x)
+    finally:
+        ada_release_members(member_plan, result.handles)
+    return AdaMemberModel(result.alphas.copy(), result.errors.copy(), out_codes^, out_values^)

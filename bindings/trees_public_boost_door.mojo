@@ -115,7 +115,15 @@ from bindings.trees_public_forest_door import (
     _report_engine,
     _engine,
 )
-from xtrees.trees_ada_fit_run import AdaFitPlan, AdaFitResult, ada_fit_run, ada_release_handles
+from xtrees.trees_ada_fit_run import AdaFitPlan, AdaFitResult, ada_fit_run, ada_release_handles, ada_release_members
+from core.member_abi import MemberPlan, member_resolve_family
+from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
+from bindings.member_owner_unpack import MemberOwner
+from bindings.member_fit_notices_pack import member_fit_notices_raise
+from providers.python.forest_member_common_boundary_door import forest_member_admit_common, forest_member_pack_common
+from bindings.forest_config_run import forest_target_need
+from bindings.trees_public_forest_door import forest_dt_random_inner, forest_dt_random_adopt
+from bindings.trees_staged_input_door import trees_stage_native
 from bindings.label_weights_boundary_unpack import label_weights_provider, label_weights_driver
 from core.forest_fit_request import XF_CAP_DEVICE_SCAN
 from xtrees.trees_forest_run import forest_export_selection
@@ -142,7 +150,7 @@ from xtrees.dart_calls import (
     xd_ref, xd_caps, xd_predict, xd_forest_prepare, xd_forest_predict,
     xd_forest_release,
 )
-from core.entry_table import EntryRef, entry_ref_unresolved
+from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_gil_free
 from xtrees.glue_calls import (
     xt_ref,
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_accumulate_rows, xt_apply, xt_argmax_rows,
@@ -1537,11 +1545,17 @@ def _colmajor(xt: PythonObject, x: AdmittedXView, context: PythonObject) raises 
 # Before, every round built its request from the member's Python fields
 # (`forest_fit_request`), stored its export into Python Arrays, predicted
 # through the member's door and stepped on Python Arrays.
-# Other bases (RandomForest*, ExtraTrees*, ExtraTree*, a DecisionTree* with
-# splitter='random' or another regression criterion) keep their door rounds
-# (`_ada_door_rounds`): each round's member is fitted and predicted through its own public door (the forest
-# door's weighted fit with its class_weight handling); those classes have no
-# member entry that fits with class_weight rows.
+# Lane mf-ada2 (2026-11-23): every other tree base (RandomForest*,
+# ExtraTrees*, a DecisionTree* with splitter='random' or another regression
+# criterion) is UNPACK `_ada_members` (the base's native member admitted ONCE,
+# with the caller's class rows and target checks; a random-splitter tree's
+# inner forest), RUN `ada_fit_run`'s member rounds, PACK `_ada_member_pack`
+# (`forest_member_pack_common` per kept round). The GIL is released around
+# the whole RUN on both routes. Only a RandomForest* base with
+# oob_score=True keeps the door rounds (`_ada_door_rounds`): its members'
+# out-of-bag outputs are fitted attributes the forest member does not
+# publish (a new output block would change the member's parameter-word
+# layout every member caller shares).
 # TOMBSTONE: _ada_open / _ada_member_round / _ada_member_round_r2 / _member_fit_weighted /
 # _member_fit_session_rows (the per-round Python requests, Python Array stores and member-door predicts of the
 # DecisionTree* rounds) deleted 2026-11-23 by lane mf-ada: `ada_fit_run` runs those rounds on typed values. Not an
@@ -1577,6 +1591,9 @@ def _ada_pack(fields: PythonObject, base: PythonObject, template: PythonObject, 
     var selection = forest_export_selection() if result.launched else String("into")
     var j = 0
     try:
+        # Every fitted round's notices (RUN read them; the member's own fit
+        # door raised them; lane mf-ada2: round 1 dropped them).
+        member_fit_notices_raise(result.notices, context)
         while j < len(result.handles):  # driver-loop: over the kept boosting rounds (one member each)
             var member = first if j == 0 else _validated_clone(base, template, _sub_seed(seed, j), kind, memo,
                                                                context)
@@ -1590,6 +1607,7 @@ def _ada_pack(fields: PythonObject, base: PythonObject, template: PythonObject, 
                 py_setitem(mf, "classes_", classes)
                 py_setitem(mf, "n_classes_", _P(k))
             _member_store(member, arrays, d)
+            _report_engine(member, context)
             _fitted(member)
             _ = py_call(members.append, member)
             _ = py_call(alphas.append, _F(result.alphas[j - 1]))
@@ -1648,12 +1666,183 @@ def _ada_native(fields: PythonObject, base: PythonObject, classifier: Bool, x: A
         plan.loss = Int(py=context["trees_ada_losses"][fields["loss"]])
         plan.y = y
     plan.xcm = xcm
-    var result = ada_fit_run(plan)
+    # THE GIL (lane mf-ada2): released ONCE around the whole RUN; every
+    # value it reads is typed above and its forest entry is marked GIL-free
+    # (the session ops, fits and walks run bare; core/forest_entry.mojo).
+    plan.forest = entry_ref_gil_free(session.key)
+    var result = AdaFitResult()
+    with GILReleased(Python()):
+        result = ada_fit_run(plan)
     _ = x  # RUN read X, the weights and the class rows through their addresses
     _ = w
     _ = cw_rows^
     _ = provider
     _ada_pack(fields, base, template, kind, seed, result, session.key, d, classes, plan.k, first, memo, context)
+
+
+struct _AdaMembers(Movable):
+    """UNPACK of the member rounds (lane mf-ada2): the admitted base's member
+    plan and pins, the model the admission read (the base's clone, or a
+    random-splitter tree's inner forest), its kind and refreshed fields."""
+    var owner: MemberOwner
+    var dt_random: Bool
+    var admitted: PythonObject
+    var kind: String
+    var fields: PythonObject
+
+    def __init__(out self):
+        self.owner = MemberOwner()
+        self.dt_random = False
+        self.admitted = PythonObject(None)
+        self.kind = String("")
+        self.fields = PythonObject(None)
+
+
+def _ada_member_admit(base: PythonObject, template: PythonObject, classifier: Bool, seed: Int,
+                      context: PythonObject) raises -> _AdaMembers:
+    """The base's native member, admitted ONCE per fit
+    (`forest_member_admit_common` with the caller's class rows and target
+    checks) from its first round's clone: the base itself for a
+    RandomForest*, ExtraTrees* or DecisionTree* with splitter='best', the
+    inner one-tree ExtraTrees forest (`forest_dt_random_inner`) for a
+    splitter='random' tree. `owner.published` False: the member does not
+    take this configuration (an `oob_score=True` RandomForest base, whose
+    out-of-bag outputs the member does not publish); the caller keeps the
+    door rounds for it."""
+    var got = _AdaMembers()
+    var probe = _clone_from(base, template, _sub_seed(seed, 0), context)
+    var kind = forest_kind(probe, context)
+    var admitted = probe
+    if kind.startswith("dt_"):
+        var splitter = py_get(py_fields(probe), "splitter")
+        if splitter is not None and Bool(py=splitter == PythonObject("random")):
+            got.dt_random = True
+            admitted = forest_dt_random_inner(probe, kind, context)
+            kind = String("et_classifier") if classifier else String("et_regressor")
+    var prefix = String("et_") if kind.startswith("et_") else (String("rf_") if kind.startswith("rf_") else String("dt_"))
+    got.owner.plan.family = MEMBER_FAMILY_EXTRA_TREES if prefix == "et_" else (
+        MEMBER_FAMILY_FOREST if prefix == "rf_" else MEMBER_FAMILY_TREE)
+    var kind_word = 0 if classifier else 1
+    got.owner.plan.kind = kind_word
+    if not forest_member_admit_common(admitted, kind_word, prefix, context, got.owner, True):
+        return got^
+    var family = got.owner.plan.family
+    var route = got.owner.plan.route
+    got.owner.plan.member = member_resolve_family(family, route)
+    got.owner.published = True
+    got.admitted = admitted
+    got.kind = kind
+    # The admitted model's refreshed fields: its class_weight and the
+    # configuration the regressor's target check reads (scratch: the clone
+    # is never a member).
+    got.fields = forest_refresh(admitted, kind, context)
+    _ = forest_capture_mode(got.fields, context)
+    return got^
+
+
+def _ada_member_pack(fields: PythonObject, base: PythonObject, template: PythonObject, kind: String, seed: Int,
+                     mut result: AdaFitResult, plan: MemberPlan, dt_random: Bool, classes: PythonObject,
+                     context: PythonObject) raises:
+    """PACK of the member rounds: the fit notices of every fitted round,
+    then one member per kept round, in round order (member j: a clone with
+    `_sub_seed(seed, j)`, its fitted attributes written from state j as its
+    own fit writes them: `forest_member_pack_common`, into the inner forest
+    of a random-splitter tree, which then adopts it), and the three lists.
+    Every state is freed, the ones not reached on a refusal too."""
+    var b = trees_builtins()
+    var members = fields["estimators_"]
+    var alphas = fields["estimator_weights_"]
+    var errors = fields["estimator_errors_"]
+    try:
+        member_fit_notices_raise(result.notices, context)
+        for j in range(len(result.handles)):  # driver-loop: over the kept boosting rounds (one member each)
+            var member = _clone_from(base, template, _sub_seed(seed, j), context)
+            var target = member
+            if dt_random:
+                target = forest_dt_random_inner(member, kind, context)
+            if classes is not None:
+                # the ensemble's codes (the member's class labels, as its fit on
+                # the codes stored them): written by the pack after its refresh
+                py_setitem(py_fields(target), "_mojolearn_member_labels", classes)
+            forest_member_pack_common(target, context, b, plan, result.handles[j])
+            if dt_random:
+                forest_dt_random_adopt(member, target)
+            _report_engine(member, context)
+            _fitted(member)
+            _ = py_call(members.append, member)
+            _ = py_call(alphas.append, _F(result.alphas[j]))
+            _ = py_call(errors.append, _F(result.errors[j]))
+    finally:
+        ada_release_members(plan, result.handles)
+
+
+def _ada_members(fields: PythonObject, base: PythonObject, classifier: Bool, x: AdmittedX, xt: PythonObject,
+                 w: PythonObject, labels: Optional[TreesLabels], y: Int, device: PythonObject, seed: Int, m: Int,
+                 lr: Float64, context: PythonObject) raises -> Bool:
+    """UNPACK, RUN `ada_fit_run` (member rounds, GIL released around the
+    whole RUN), PACK of every tree base the data session does not fit
+    (module section note). False, with nothing fitted: the member does not
+    take the base (`_ada_member_admit`)."""
+    var n = x.rows
+    var d = x.cols
+    var kind = forest_kind(base, context)
+    var template = forest_get_params(base, context)
+    py_setitem(template, "device", device)
+    var got = _ada_member_admit(base, template, classifier, seed, context)
+    if not got.owner.published:
+        return False
+    # The member reads X as given (its caller's admission scans): X is
+    # tested ONCE here, where every member fit door tested it before.
+    _finite_or_refuse(x, False, context)
+    var config = forest_config(got.fields, got.fields["_cfg"], got.kind, not classifier, context)
+    var k = len(labels.value().classes) if classifier else 0
+    var plan = AdaFitPlan(classifier, n, d, k, m, lr, seed, config^, _xr(xt), entry_ref_unresolved(), 0, 0)
+    plan.member_route = True
+    plan.member_plan = got.owner.plan.copy()
+    plan.tree_base = 1 if kind.startswith("dt_") else 0
+    plan.x = x.address
+    plan.weights = trees_address(w)
+    var provider = PythonObject(None)
+    var cw_rows: Optional[AdmittedX] = None
+    var classes = PythonObject(None)
+    if classifier:
+        ref encoded = labels.value()
+        classes = encoded.classes
+        plan.codes = trees_address(encoded.codes)
+        var xtrees = trees_table(context, String(got.fields["_fit_numeric_mode"]), "_mojolearn_x_trees")
+        # the class_weight the member's own fit door reads: ExtraTrees' from
+        # its derived configuration, RandomForest's / DecisionTree's field
+        var class_weight = py_get(py_get(got.fields, "_cfg"), "class_weight") if got.kind.startswith(
+            "et_") else py_get(got.fields, "class_weight")
+        cw_rows = trees_class_rows_only(class_weight, encoded, xtrees, context)
+        if cw_rows:
+            plan.class_rows = cw_rows.value().address
+            provider = label_weights_provider(xtrees)
+            plan.multiply = label_weights_driver(provider)
+    else:
+        plan.loss = Int(py=context["trees_ada_losses"][fields["loss"]])
+        plan.y = y
+        plan.target_need = forest_target_need(plan.config)
+    # Every round's member predicts the same training X: staged once in the
+    # members' binary (a binary without staging stages nothing).
+    var staged = Python.list()
+    if m > 1:
+        staged = trees_stage_native(got.owner.pins[0], x.address, n, d)
+    var result = AdaFitResult()
+    try:
+        # THE GIL: released ONCE around the whole RUN (no Python inside; the
+        # forest member is MEMBER_GIL_FREE).
+        with GILReleased(Python()):
+            result = ada_fit_run(plan)
+    finally:
+        trees_unstage(staged)
+    _ = x  # RUN read X, the weights, the labels and the class rows through their addresses
+    _ = w
+    _ = cw_rows^
+    _ = provider
+    _ada_member_pack(fields, base, template, kind, seed, result, plan.member_plan, got.dt_random, classes, context)
+    _ = got.owner.pins  # the members' images stay loaded until every state is freed
+    return True
 
 
 def _ada_device_rounds(session: Session) -> Bool:
@@ -1669,9 +1858,11 @@ def _ada_door_rounds(fields: PythonObject, base: PythonObject, classifier: Bool,
                      xt: PythonObject, w: PythonObject, codes: PythonObject, k: Int, y32: AdmittedX,
                      y_array: PythonObject, device: PythonObject, seed: Int, m: Int, lr: Float64,
                      context: PythonObject) raises:
-    """The rounds of a base `ada_fit_run` does not fit (see the section
-    note): each member fitted and predicted through its own public door, the
-    steps on the door's Arrays."""
+    """The rounds of the one base `ada_fit_run` does not fit (see the
+    section note): a RandomForest* with oob_score=True, whose members store
+    out-of-bag outputs the forest member does not publish. Each member is
+    fitted and predicted through its own public door, the steps on the
+    door's Arrays."""
     var n = x.rows
     var d = x.cols
     var glue = _xr(xt)
@@ -1792,8 +1983,13 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             _ = cm  # the session's upload source and the fit without a session read it
             _ = encoded^
         else:
-            _ada_door_rounds(fields, base, True, x, xa, xt, w, labels.codes, k, x, PythonObject(None), device, seed,
-                             m, lr, context)
+            # Every other tree base: the member rounds (lane mf-ada2); the
+            # labels encoded ONCE as above.
+            var encoded: Optional[TreesLabels] = trees_encode_labels(labels.codes, label_scope)
+            if not _ada_members(fields, base, True, x, xt, w, encoded, 0, device, seed, m, lr, context):
+                _ada_door_rounds(fields, base, True, x, xa, xt, w, labels.codes, k, x, PythonObject(None), device,
+                                 seed, m, lr, context)
+            _ = encoded^
         _ = w
         py_setitem(fields, "n_features_in_", _P(d))
         return model
@@ -1824,7 +2020,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             if session.handle == 0:
                 _finite_or_refuse(x, False, context)
             _ada_native(fields, base, False, x, xt, session, 0, w, None, y32.address, device, seed, m, lr, context)
-        else:
+        elif not _ada_members(fields, base, False, x, xt, w, None, y32.address, device, seed, m, lr, context):
             var y_array = _as_array(y32, Python.tuple(n), context)
             _ada_door_rounds(fields, base, False, x, xa, xt, w, PythonObject(None), 0, y32, y_array, device, seed,
                              m, lr, context)

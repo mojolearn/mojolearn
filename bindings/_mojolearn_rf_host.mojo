@@ -74,15 +74,8 @@ from bindings.forest_export_binding_pack import (
     forest_export_descriptor_py,
 )
 from core.mojolearn_rf_host_impl import (
-    RfHostSession,
-    _apply_min_weight_fraction,
     rf_host_dart_member_xy,
     rf_host_forest_lists,
-    rf_host_session_rows_x,
-)
-from core.hostptr import (
-    f32_ptr,
-    i32_ptr,
 )
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -109,7 +102,6 @@ from core.forest_fit_request import (
     ForestFitArgs,
     XF_CAP_STRICT,
     XF_CAP_DART,
-    XF_CAP_SESSION,
 )
 from core.tree_member import tree_member_publish_image
 from core.forest_member import forest_member_publish_image
@@ -119,8 +111,6 @@ from core.native_descriptor_call import native_descriptor_report
 from core.forest_entry_table import FOREST_TABLE_RF
 from core.native_descriptor_abi import NativeDescriptorError
 from xtrees.dart_host import DART_HOST, DART_HOST_SESSIONS
-from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
-from core.host_finite_scan import host_all_finite_f32
 from ensemble.host.rf_oracle import (
     RF_ORACLE_HOST_SABOTAGE,
     RfHostForest,
@@ -128,21 +118,11 @@ from ensemble.host.rf_oracle import (
 )
 from core.mojolearn_rf_host_run import (
     RF_HOST_EXPORTS,
-    _read_x_col_major,
-    _retain_rf_handle,
-    _min_weight_fraction,
-    _read_weights,
-    _host_drop_zero_weight_rows,
-    _rf_fit_colmajor,
-    RF_HOST_SESSIONS,
-    _session_params,
-    _session_x,
     _rf_export_into_native,
     _rf_export_verify_native,
     _rf_fit_forest,
     _rf_predict_walk,
     RfHostForestImage,
-    RfHostSessionOps,
     rf_host_fit_handle,
 )
 
@@ -385,102 +365,9 @@ def rf_regressor_fit_shard_binding(
 
 # TOMBSTONE: rf_data_session_open / rf_data_session_close / rf_regressor_fit_session_rows_export / rf_classifier_fit_weighted_session_export (the Python entries of the data session: superseded by the forest entry's typed XF_SESSION_OPEN / XF_SESSION_CLOSE / XF_FIT_SESSION, no caller left) deleted 2026-11-21 by lane dw-trees-boost; code recoverable at cc2c81eb61.
 # Restore: git apply experiments/removed/dead_entries_rf_session_ada_calls.patch
-def _rf_session_open_native(x_address: Int, n_rows: Int, n_cols: Int, row_major: Bool,
-                            share_tables: Bool) raises -> Int:
-    """XF_SESSION_OPEN (`bindings/_mojolearn_rf.mojo` `_rf_session_open_native`):
-    `x` is float32, ROW-major when `row_major` and COLUMN-major otherwise,
-    borrowed through this call only. Returns the session handle."""
-    if n_rows <= 0 or n_cols <= 0:
-        raise Error("rf_data_session_open: invalid shape")
-    # A host binding is IDENTICAL only, and an IDENTICAL member draws its
-    # own quantile sample (the GPU binding's IDENTICAL refusal).
-    if share_tables:
-        raise Error(
-            "rf_data_session_open: shared quantile tables are a FAST"
-            " option; an IDENTICAL member draws its own sample"
-        )
-    # Lane a8c-device-x-linear-prep-rfe: NaN AND infinity (the GPU binding's
-    # device scan of its upload), so the boost meta-estimators' own host
-    # scan before the open is deleted; the host column tests the words it
-    # reads, once, in parallel SIMD tasks (core/host_finite_scan.mojo).
-    if not host_all_finite_f32(f32_ptr(x_address), n_rows * n_cols):
-        raise Error("rf_data_session_open: " + RF_NONFINITE_REFUSAL)
-    var x = List[Float32]()
-    with GILReleased(Python()):
-        x = _read_x_col_major(x_address, n_rows, n_cols, row_major)
-    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
-    var id = reg[].next_id
-    reg[].next_id += 1
-    reg[].sessions.append(RfHostSession(id, x^, n_rows, n_cols))
-    return id
-
-
-def _rf_session_close_native(handle: Int) raises:
-    """XF_SESSION_CLOSE."""
-    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(handle)
-    _ = reg[].sessions.pop(si)
-
-
-def _rf_fit_session_rows_native(params: ForestFitArgs) raises -> Int:
-    """XF_FIT_SESSION, regressor: the regressor fit on the rows `params.x`
-    (int32 row ids of the session's X, `params[0]` of them, repeats
-    allowed), `params.y` their labels in that order: the column-major gather
-    of those rows (the bytes the GPU binding's `launch_gather_rows_colmajor`
-    writes), then the plain fit. Returns the export handle."""
-    comptime entry = "rf_regressor_fit_session_rows"
-    var p = _session_params[False](entry, params)
-    var n_rows = params.i(0)
-    var n_cols = params.i(1)
-    if n_rows <= 0:
-        raise Error(entry + ": no rows")
-    var rp = i32_ptr(params.x)
-    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(params.session)
-    var src_rows = reg[].sessions[si].n_rows
-    if reg[].sessions[si].n_cols != n_cols:
-        raise Error(entry + ": the session holds another column count")
-    var x = rf_host_session_rows_x(
-        entry, reg[].sessions[si].x, src_rows, rp, n_rows, n_cols
-    )
-    var y_address = params.y
-    var forest: RfHostForest
-    with GILReleased(Python()):
-        forest = _rf_fit_colmajor[False](
-            x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
-        )
-    return _retain_rf_handle(forest^)
-
-
-def _rf_fit_weighted_session_native(params: ForestFitArgs) raises -> Int:
-    """XF_FIT_SESSION, classifier: the weighted classifier fit on the
-    session's X. Returns the export handle."""
-    comptime entry = "rf_classifier_fit_weighted_session"
-    var p = _session_params[True](entry, params)
-    var n_rows = params.i(0)
-    var n_cols = params.i(1)
-    var n_classes = params.i(2)
-    var w_address = params.weights
-    if w_address == 0:
-        raise Error("weighted RF requires a nonzero Float32 weight pointer")
-    var weights = _read_weights(w_address, n_rows)
-    var x = _session_x(entry, params.session, n_rows, n_cols)
-    var y_address = params.y
-    # sk-weq-trees: the zero-weight rows leave this member's fit
-    var y_kept = List[Int32]()
-    var n_fit = _host_drop_zero_weight_rows(
-        x, weights, y_kept, y_address, n_rows, n_cols, p.bootstrap
-    )
-    var y_fit = y_address if n_fit == n_rows else Int(y_kept.unsafe_ptr())
-    var mwl = _apply_min_weight_fraction(p, _min_weight_fraction(params), weights, n_fit)
-    var forest: RfHostForest
-    with GILReleased(Python()):
-        forest = _rf_fit_colmajor[True](
-            x^, y_fit, n_fit, n_cols, n_classes, p, weights, 0,
-            min_weight_leaf=mwl,
-        )
-    _ = y_kept^
-    return _retain_rf_handle(forest^)
+# The data session bodies (XF_SESSION_OPEN / XF_SESSION_CLOSE / XF_FIT_SESSION) moved to
+# core/mojolearn_rf_host_run.mojo on 2026-11-23 (lane mf-ada2): with the registry's own lock
+# they need no GIL, so the image serves them itself.
 
 
 # TOMBSTONE: rf_regressor_fit_dart_binding (the unregistered Python form of XF_FIT_DART: no caller) deleted 2026-11-22 by lane bm-trees; code recoverable at 49f2b12e24. The DART member fit body moved to core/mojolearn_rf_host_run.mojo `rf_host_fit_dart`.
@@ -596,28 +483,7 @@ def resident_release_binding(handle: PythonObject) raises -> PythonObject:
     return forest_release_host_binding[True](handle)
 
 
-struct RfHostPySessions(RfHostSessionOps):
-    """The data session operations of the core image (core/mojolearn_rf_host_run.mojo
-    `RfHostForestImage`) as this binding serves them: with the caller's GIL
-    held (it serializes the session registry), released around the reads
-    and fits."""
-
-    @staticmethod
-    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
-        return _rf_session_open_native(x, rows, cols, row_major, share_tables)
-
-    @staticmethod
-    def session_close(handle: Int) raises:
-        _rf_session_close_native(handle)
-
-    @staticmethod
-    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
-        if classifier:
-            return _rf_fit_weighted_session_native(args)
-        return _rf_fit_session_rows_native(args)
-
-
-comptime _RfHostImage = RfHostForestImage[RfHostPySessions]
+comptime _RfHostImage = RfHostForestImage
 
 
 def rf_host_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
@@ -630,7 +496,8 @@ def rf_host_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     the predict walk, the strict predict) runs with it released around the
     whole dispatch and the GIL-free bit set; a member's worker sends
     `ENTRY_OP_GIL_FREE` and runs the same dispatch with no release. The data
-    session operations keep the GIL (`RfHostPySessions`)."""
+    session operations are among the released ones (lane mf-ada2: their
+    registry has its own lock, `forest_session_entry_releases`)."""
     if not forest_host_entry_releases(operation):
         return forest_entry_dispatch[_RfHostImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
     var status = 1
