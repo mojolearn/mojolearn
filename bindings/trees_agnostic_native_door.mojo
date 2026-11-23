@@ -12,7 +12,7 @@
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.classical_attributes_door import classical_check_layout
@@ -25,7 +25,7 @@ from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
     member_call, member_call_of, member_outputs_of,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
-    MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_F64, MEMBER_DTYPE_UNSAID,
+    MEMBER_CAN_TEST_ROWS, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_DTYPE_UNSAID,
 )
 from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.trees_public_inputs_door import trees_table, trees_address, trees_reshape, trees_cast
@@ -35,11 +35,19 @@ from bindings.admitted_input_unpack import admitted_vector, admitted_unfilled, c
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.trees_public_forest_door import forest_effective_mode, _engine, _ordered_export, _resident
 from xtrees.trees_forest_run import _family
-from bindings.trees_public_boost_door import _seed, _xk
+from bindings.trees_public_boost_door import _seed, _xk, _xt, _xr
 from bindings.trees_explainer_native_door import _get, _int, _entry, _snapshot, _replace, _tree_mode
 from xtrees.trees_agnostic_native_run import _name, _SWITCH_FACTS
 from xtrees.glue_calls import xt_ref
-from xtrees.agnostic_values_run import AgnModel, AgnMember, AgnRequest, agn_expected_run, agn_kernel_values_run, agn_permutation_values_run
+from xtrees.agnostic_values_run import (
+    AgnModel, AgnMember, AgnVote, AgnRequest, AGN_VOTE_SOFT, AGN_VOTE_REGRESS, agn_expected_run,
+    agn_kernel_values_run, agn_permutation_values_run,
+)
+from xtrees.trees_meta_vote_run import VoteMember
+from bindings.member_set_door import MemberHeldCall, member_held_close
+from bindings.trees_public_meta_door import (
+    meta_kind, _member_open as meta_member_open, _sub_cols, _voting_weights, _attr as meta_attr,
+)
 from core.trees_entry_table import TreesEntryKey
 from bindings.trees_keys_unpack import trees_keys
 from bindings.operation_names_trees import TREES_OPN_TREES_AGNOSTIC_KERNEL_INIT, TREES_OPN_TREES_AGNOSTIC_PERMUTATION_INIT, TREES_OPN_TREES_AGNOSTIC_KERNEL_VALUES, TREES_OPN_TREES_AGNOSTIC_PERMUTATION_VALUES
@@ -341,6 +349,24 @@ struct _Member(Movable):
     # The member writes the explained operation's output as float64 (a classifier's predict_proba on most
     # families): the RUN narrows each chunk's words to float32 as `_evaluate` narrows the public output.
     var wide: Bool
+    # A classifier explained through predict (lane mf-shap2, 2026-11-23): `labels` is its `classes_` narrowed to
+    # a float32 Array once here (None: not this route), `labels_at` its address read here with the GIL held,
+    # `n_labels` its length. The member writes int32 codes and the RUN maps them through the glue gather.
+    var labels: PythonObject
+    var labels_at: Int
+    var n_labels: Int
+    # A vote as the model (lane mf-shap2, 2026-11-23; `_vote_open`): `vote` True, every member opened on its held
+    # native state (`vote_opened`, closed by `_member_release`), the typed members the RUN folds (`vote_members`,
+    # their plans by address into `vote_opened`), the vote's own x_trees table (`vote_xt`) and the owners of the
+    # members' class columns (`vote_keep`). `vote_parallel`: every member's kind is `MEMBER_GIL_FREE` and the
+    # vote's glue is the CPU column.
+    var vote: Bool
+    var vote_kind: Int
+    var vote_parallel: Bool
+    var vote_members: List[VoteMember]
+    var vote_opened: List[MemberHeldCall]
+    var vote_keep: PythonObject
+    var vote_xt: PythonObject
 
     def __init__(out self):
         self.gil_free = False
@@ -349,6 +375,16 @@ struct _Member(Movable):
         self.native = False
         self.held = MemberHeld()
         self.operation = MEMBER_OP_PREDICT
+        self.labels = PythonObject(None)
+        self.labels_at = 0
+        self.n_labels = 0
+        self.vote = False
+        self.vote_kind = AGN_VOTE_SOFT
+        self.vote_parallel = False
+        self.vote_members = List[VoteMember]()
+        self.vote_opened = List[MemberHeldCall]()
+        self.vote_keep = PythonObject(None)
+        self.vote_xt = PythonObject(None)
 
 
 def _member_release(mut em: _Member):
@@ -356,17 +392,122 @@ def _member_release(mut em: _Member):
     estimator keeps stays with it, a loose one is freed. Never raises."""
     em.native = False
     member_held_release(em.held)
+    em.labels = PythonObject(None)
+    em.labels_at = 0
+    _vote_release(em)
+
+
+def _vote_release(mut em: _Member):
+    """Close every member a vote opened (each kept state stays with its estimator). Never raises."""
+    em.vote = False
+    for i in range(len(em.vote_opened)):  # driver-loop: over the opened vote members
+        member_held_close(em.vote_opened[i])
+    em.vote_opened = List[MemberHeldCall]()
+    em.vote_members = List[VoteMember]()
+    em.vote_keep = PythonObject(None)
+    em.vote_xt = PythonObject(None)
+
+
+def _vote_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject):
+    """UNPACK of a vote as the model, once per values call (the RUN then folds it through `AgnVote`):
+    VotingClassifier(voting='soft') explained through predict_proba, VotingRegressor through predict. Each member
+    is opened as the vote's own predict opens it (bindings/trees_public_meta_door.mojo `_member_open`: its held
+    native state, the explained rows proven for it, a tree, forest or extra-trees member not served), its class
+    columns and weight read here. Every member must be served by a kind that runs with the GIL released
+    (`MEMBER_GIL_FREE` or `MEMBER_GIL_DOOR`); any other member, class, method or width leaves `em.vote` False and
+    the model's own door answers (the fallback rule). The background is scanned once when a member does not test
+    its rows (the chunks mix cells of X and of the background). Never raises."""
+    comptime if not MEMBER_SET_NATIVE:
+        return
+    try:
+        var kind = meta_kind(s.model, context)
+        var nk = trees_keys()
+        var soft = kind == "voting_classifier"
+        if soft:
+            if s.method != "predict_proba" or String(meta_attr(s.model, nk[].k_voting, PythonObject(""))) != "soft":
+                return
+            if Int(py=meta_attr(s.model, nk[].k_n_classes_, PythonObject(0))) != s.k:
+                return
+        elif kind != "voting_regressor" or s.method != "predict" or s.k != 1:
+            return
+        var members = meta_attr(s.model, nk[].k_estimators_, Python.list())
+        var m = len(members)
+        if m < 1:
+            return
+        var weights = _voting_weights(s.model)
+        var operation = MEMBER_OP_PREDICT_PROBA if soft else MEMBER_OP_PREDICT
+        em.vote_keep = Python.list()
+        var all_test = True
+        var all_free = True
+        for i in range(m):  # driver-loop: over members (admission, once each)
+            var e = members[i]
+            var opened = meta_member_open(e, x, operation, soft, context, 0 if soft else 1)
+            if not opened.served or not opened.gil_free:
+                member_held_close(opened)
+                _vote_release(em)
+                return
+            var free = False
+            if opened.held.plan.member.can(MEMBER_GIL_FREE):
+                var probe = member_call_of(opened.held.plan, opened.held.state)
+                free = (member_call(opened.held.plan.member, MEMBER_OP_CAPABILITIES, probe) & MEMBER_GIL_FREE) != 0
+            all_free = all_free and free
+            all_test = all_test and opened.tests
+            var class_cols = 0
+            if soft:
+                var cols = _sub_cols(e, context)
+                _ = py_call(em.vote_keep.append, cols)
+                class_cols = trees_address(cols)
+            em.vote_members.append(VoteMember(len(em.vote_opened), opened.held.state, operation, opened.cols,
+                                              opened.dtype, class_cols, Float64(py=weights[i])))
+            em.vote_opened.append(opened^)
+        if not all_test and not trees_finite_f32(trees_address(s.bg), s.nb * s.d):
+            _vote_release(em)
+            return
+        _ = s.bg  # keep the background alive through the scan above
+        # The members' plans by address, now that `vote_opened` is final: the RUN reads them in place.
+        for i in range(len(em.vote_members)):  # driver-loop: over members
+            em.vote_members[i].plan = Int(UnsafePointer(to=em.vote_opened[em.vote_members[i].plan].held.plan))
+        em.vote_xt = _xt(py_fields(s.model), context)
+        em.vote_kind = AGN_VOTE_SOFT if soft else AGN_VOTE_REGRESS
+        em.vote_parallel = all_free and _xk(em.vote_xt).vendor == 0
+        em.vote = True
+    except:
+        _vote_release(em)
+
+
+def _label_table(fields: PythonObject, classes: Int, context: PythonObject, mut em: _Member) raises -> Bool:
+    """UNPACK of the label route: the estimator's `classes_` as a float32 Array (the cast the door's `_evaluate`
+    made of its public predict's labels, element by element), once per values call. False (not served: the
+    door then answers, or raises its own words) when there is no `classes_`, it is not numeric, or its length is
+    not the member's class count."""
+    var given = _get(fields, "classes_")
+    if given is None:
+        return False
+    var table = PythonObject(None)
+    try:
+        table = _snapshot(given, "<f4", 1, "classes_", context, Python.dict())
+    except:
+        return False
+    var count = Int(py=table.size)
+    if count < 1 or (classes > 0 and count != classes):
+        return False
+    em.labels_at = trees_address(table)
+    em.n_labels = count
+    em.labels = table
+    return True
 
 
 def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: PythonObject):
     """UNPACK, once per values call (the RUN then calls the member through
     `AgnMember`, the native model handle): the explained model's held member
     state when its family serves the explained method (predict of a regressor
-    kind, predict_proba of a classifier) and its output width is the one
-    construction recorded. Anything else (no mark, a classifier explained
-    through predict, whose member predict writes codes, an admission or
+    kind, predict_proba of a classifier, and predict of a classifier, whose
+    member writes int32 codes that the RUN maps to its `classes_` read here
+    once as float32: `_label_table`) and its output width is the one
+    construction recorded. Anything else (no mark, an admission or
     import the family refuses, another width, an element type other than
-    float32 or float64, a classifier member that does not say its element type) leaves
+    float32 or float64 (int32 codes for a classifier's predict), a
+    non-numeric `classes_`, a classifier member that does not say its element type) leaves
     `em` closed: the fallback rule, the model's own door then answers or
     raises its own words. Never raises.
 
@@ -387,8 +528,8 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
         if plan is None or py_get(plan, "member") is None:
             return
         var proba = s.method == "predict_proba"
-        if not proba and Bool(py=plan["classifier"]):
-            return
+        # A classifier explained through predict: its member writes CODES, mapped to the labels by the RUN.
+        var labelled = not proba and Bool(py=plan["classifier"])
         var b = _b()
         var member_context = plan["context"]
         var fields = py_call(plan["fields_get"], s.model, py_type(s.model))
@@ -399,6 +540,7 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
             return
         var cols = -1
         var dtype = MEMBER_DTYPE_UNSAID
+        var classes = 0
         var tests = False
         var gil_free = False
         var parallel = False
@@ -406,7 +548,8 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
             var probe = member_call_of(held.plan, held.state)
             cols = member_outputs_of(held.plan, probe, operation)
             dtype = probe.out_dtype
-            if dtype == MEMBER_DTYPE_UNSAID and not proba:
+            classes = probe.classes
+            if dtype == MEMBER_DTYPE_UNSAID and not proba and not labelled:
                 dtype = MEMBER_F32   # a regressor writes float32 (every published regressor documents it)
             # Kind-exact, asked of the held state; a family whose union mask
             # lacks the bit is not asked.
@@ -426,6 +569,9 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
         # GBDT classifiers and the naive Bayes / discriminant members on a float64-proba route write their
         # predict_proba as float64; they went through `_DoorModel` (serial, GIL held) before.
         var served = cols == s.k and (dtype == MEMBER_F32 or dtype == MEMBER_F64)
+        if labelled:
+            # int32 codes, one column, into a table of the member's classes (an int64-code member is not served).
+            served = cols == 1 and s.k == 1 and dtype == MEMBER_I32 and _label_table(fields, classes, context, em)
         if served and not tests:
             served = (trees_finite_f32(trees_address(x), n * s.d)
                       and trees_finite_f32(trees_address(s.bg), s.nb * s.d))
@@ -433,12 +579,14 @@ def _member_open(mut em: _Member, s: _State, x: PythonObject, n: Int, context: P
             _ = s.bg
         if not served:
             member_held_release(held)
+            em.labels = PythonObject(None)
+            em.labels_at = 0
             return
         em.held = held^
         em.operation = operation
         em.gil_free = gil_free
         em.parallel = parallel
-        em.wide = dtype == MEMBER_F64
+        em.wide = dtype == MEMBER_F64 and not labelled
         em.native = True
     except:
         return
@@ -449,14 +597,17 @@ struct _DoorModel(AgnModel):
     that serves the call, for the device forest route's one call on the explained rows, and for the call again
     after a member refusal. Serial, with the GIL held: the one place the RUN's model reaches Python objects.
 
-    WHO STILL COMES HERE (lane mf-shaprfe, 2026-11-23; every float32 and float64 member output is served):
-    the connected classes with no member entry (the meta-estimators AdaBoost*, Bagging*, MultiOutput*,
-    OneVsRestClassifier, Stacking*, Voting*, and CategoricalNB, whose kind is not published); a classifier
-    without predict_proba explained through predict (LinearSVC, RidgeClassifier, PassiveAggressiveClassifier,
-    Perceptron, SGDClassifier with a hinge loss, SVC(probability=False), NearestCentroid): its public predict
-    answers LABELS and its member writes CODES, and mapping codes to labels per synthetic row would be a host
-    loop over rows; a member output of another width or element type; the device forest route's one call;
-    the call again after a member refusal."""
+    WHO STILL COMES HERE (lane mf-shap2, 2026-11-23; every float32 and float64 member output, every classifier's
+    int32 codes through the label map, CategoricalNB and the soft or regressor vote over native members are
+    served): the meta-estimators with no typed RUN over held members for synthetic rows (AdaBoost*: its members
+    are one-tree door blocks over the staged X; Bagging*: its batched forest and staged-X routes and the per
+    member feature gather; Stacking*: its final estimator is predicted through its public door; MultiOutput*:
+    its predict_proba is a list and its predict is 2-D labels; OneVsRestClassifier and CalibratedClassifierCV:
+    their member UNPACK reads X in the meta door), Pipeline and the search CVs (no typed predict RUN); a vote
+    with a tree, forest or extra-trees member (the vote's own rule: its door predicts those from one device
+    copy of X) or a member kind that needs the GIL; a classifier with non-numeric `classes_` (the door raises
+    its own words); a member output of another width or element type; the device forest route's one call; the
+    call again after a member refusal (the door raises the estimator's own words)."""
     var model: PythonObject
     var method: String
     var context: PythonObject
@@ -586,16 +737,34 @@ def _kernel_values_over(fields: PythonObject, args: PythonObject, context: Pytho
     # imported for it. Every other route calls the model per chunk.
     if s.dev is None:
         _member_open(em, s, x, n, context)
+        if not em.native:
+            _vote_open(em, s, x, n, context)
     else:
         _forest_words(s.dev, s.bg, req)
     var done = False
+    if em.vote:
+        var refused = List[Int](length=1, fill=0)
+        # The vote's glue, resolved here with the GIL held; the members' plans stay in `em` through the RUN.
+        var vote = AgnVote(em.vote_members, em.vote_kind, req.x, n, d, k, em.vote_parallel, req.host,
+                           Int(refused.unsafe_ptr()), _xr(em.vote_xt))
+        try:
+            var py = Python()
+            with GILReleased(py):
+                agn_kernel_values_run(glue, req, ns, nl, logit, vote)
+            done = True
+        except problem:
+            if refused[0] == 0:
+                raise problem^
+            # A member refused: the model's own door answers the whole call again, and raises its own words.
+        _ = vote^
+        _ = refused^
     if em.native:
         var refused = List[Int](length=1, fill=0)
         # The native model handle over the held state; the plan it reads stays in `em` through the RUN.
         var plan_addr = Int(MutPointer(to=em.held.plan))
         var member = em.held.plan.member
         var handle = AgnMember(member, plan_addr, em.held.state, em.operation, req.x, n, d, k, em.parallel,
-                               Int(refused.unsafe_ptr()), em.wide, req.host)
+                               Int(refused.unsafe_ptr()), em.wide, req.host, glue, em.labels_at, em.n_labels)
         try:
             if em.gil_free:
                 var py = Python()
@@ -726,16 +895,33 @@ def _permutation_values_over(fields: PythonObject, args: PythonObject, context: 
             wb_link = Int(py=lin[1])
         else:
             # Past the device forest and the resident linear routes (neither calls the model per chunk): the
-            # explained model as a native member.
+            # explained model as a native member, else a vote over native members.
             _member_open(em, s, x, n, context)
+            if not em.native:
+                _vote_open(em, s, x, n, context)
     var done = False
+    if em.vote:
+        var refused = List[Int](length=1, fill=0)
+        var vote = AgnVote(em.vote_members, em.vote_kind, req.x, n, d, k, em.vote_parallel, req.host,
+                           Int(refused.unsafe_ptr()), _xr(em.vote_xt))
+        try:
+            var py = Python()
+            with GILReleased(py):
+                agn_permutation_values_run(glue, req, npm, wb, wb_link, vote)
+            done = True
+        except problem:
+            if refused[0] == 0:
+                raise problem^
+            # A member refused: the model's own door answers the whole call again, and raises its words.
+        _ = vote^
+        _ = refused^
     if em.native:
         var refused = List[Int](length=1, fill=0)
         # The native model handle over the held state; the plan it reads stays in `em` through the RUN.
         var plan_addr = Int(MutPointer(to=em.held.plan))
         var member = em.held.plan.member
         var handle = AgnMember(member, plan_addr, em.held.state, em.operation, req.x, n, d, k, em.parallel,
-                               Int(refused.unsafe_ptr()), em.wide, req.host)
+                               Int(refused.unsafe_ptr()), em.wide, req.host, glue, em.labels_at, em.n_labels)
         try:
             if em.gil_free:
                 var py = Python()
