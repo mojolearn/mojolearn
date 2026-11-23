@@ -1816,7 +1816,7 @@ class KNNImputer(_XNeighbors):
 # transition matrix, dangling nodes redistributed by the personalization,
 # stop when sum |x - x_last| < n * tol) and cuGraph
 # cpp/src/link_analysis/pagerank_impl.cuh. Each step is the pinned-fold
-# GEMV of x_neighbors/items.mojo `pagerank_step_item`. A scipy.sparse input
+# GEMV of x_neighbors/graph_par.mojo `pr_step_csr`. A scipy.sparse input
 # is read as CSR with sorted indices; the device checks the column order.
 class PageRank(_XNeighbors):
     """PageRank scores of a directed graph by power iteration.

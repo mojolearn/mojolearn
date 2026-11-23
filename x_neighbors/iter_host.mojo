@@ -18,7 +18,7 @@ from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
-    pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
+    pcs_item, knn_sq_item, nc_stats_item,
 )
 
 from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE, xn_host_status
@@ -127,42 +127,13 @@ def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nn
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     """connected_components' min-label rounds as the sparse walk of
     x_neighbors/cc_sparse.mojo (lane neural-pass22): the same rounds over the
-    graph's edges, the same labels and round count; `cc_iterate_dense` below
-    is the dense loop it is held to (cc_sparse_check)."""
+    graph's edges, the same labels and round count; x_neighbors/checks/graph_check.mojo
+    holds it and the device's `op_cc_iterate` to the oracle's min-label rounds."""
     cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n)
 
 
-def cc_iterate_dense(a: Int, lab: Int, info: Int, n: Int) raises:
-    """The rounds of `cc_step_item` over every cell of the n x n matrix: the
-    reference the sparse walk is checked against."""
-    var l0 = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
-    var l1 = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
-    var pl = IP(unsafe_from_address=lab)
-    for i in range(n):
-        l0[i] = pl.unsafe_load(i)
-    var cur = IP(unsafe_from_address=Int(l0.unsafe_ptr()))
-    var nxt = IP(unsafe_from_address=Int(l1.unsafe_ptr()))
-    var pa = FP(unsafe_from_address=a)
-    var steps = 0
-    while True:
-        for t in range(n):
-            cc_step_item(t, pa, cur, nxt, n)
-        steps += 1
-        var same = True
-        for i in range(n):
-            if nxt.unsafe_load(i) != cur.unsafe_load(i):
-                same = False
-                break
-        if same:
-            break
-        var tmp = cur
-        cur = nxt
-        nxt = tmp
-    for i in range(n):
-        pl.unsafe_store(i, cur.unsafe_load(i))
-    IP(unsafe_from_address=info).unsafe_store(0, Int32(steps))
-    _ = l0^
-    _ = l1^
+# TOMBSTONE: cc_iterate_dense (the dense rounds of cc_step_item, a reference for the deleted
+# cc_sparse_check; no caller) deleted 2026-11-23 by lane/verify-gaps; recoverable at aecad68fb8.
 
 
 def op_pcs_resident(

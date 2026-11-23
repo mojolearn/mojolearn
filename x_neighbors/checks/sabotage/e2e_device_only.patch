@@ -70,30 +70,6 @@ index 4fab80b4ea..d1cfd5f1f1 100644
  
  
  def op_knn_impute(x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, weights: Int) raises:
-@@ -1285,7 +1289,7 @@ def pagerank_step_kernel(q: FP, x: FP, p: FP, dw: FP, dangling: IP, res: FP, n_:
-     var alpha = alpha_
-     var t = _tid()
-     if t < n:
--        pagerank_step_item(t, q, x, p, dw, dangling, res, n, alpha)
-+        pagerank_step_item(t, q, x, p, dw, dangling, res, n, alpha * Float32(1.001))
- 
- 
- def op_pagerank_step(q: Int, x: Int, p: Int, dw: Int, dangling: Int, res: Int, n: Int, alpha: Float32) raises:
-@@ -1315,7 +1319,13 @@ def cc_step_kernel(a: FP, lab: IP, res: IP, n_: Int64):
-     var n = Int(n_)
-     var t = _tid()
-     if t < n:
--        cc_step_item(t, a, lab, res, n)
-+        var best = lab.unsafe_load(t)
-+        for j in range(n):
-+            if a.unsafe_load(t * n + j) != Float32(0):
-+                var l = lab.unsafe_load(j)
-+                if l < best:
-+                    best = l
-+        res.unsafe_store(t, best)
- 
- 
- def op_cc_step(a: Int, lab: Int, res: Int, n: Int) raises:
 diff --git a/x_neighbors/graph_dev.mojo b/x_neighbors/graph_dev.mojo
 index 36a191d949..4d94e6cf0b 100644
 --- a/x_neighbors/graph_dev.mojo
