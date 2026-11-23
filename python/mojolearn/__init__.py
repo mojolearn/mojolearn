@@ -189,6 +189,10 @@ _LAZY_NAMES = {
     # `verify --check` runs, and `mojolearn._verify_check.check` stays; routed
     # here so `import mojolearn` loads neither module until it is touched.
     "check": "._verify_check",
+    # A recipe of a user's algorithm for `verify --recipe` (Andrew, 2026-11-22:
+    # verify a user's algorithm, not only a fitted model): verification
+    # tooling, routed lazily like `check`.
+    "recipe": "._verify_recipe",
     "ExponentialSmoothing": "._tsa_impl", "kpss_test": "._tsa_impl", "select_d": "._tsa_impl",
     "lm_corpus": None,
     "Cholesky": "._cholesky_impl",
@@ -446,6 +450,7 @@ __all__ = [
     "gpu_arch_how",
     "runtime_report",
     "check",
+    "recipe",
 ]
 
 __all__.extend(name for name, where in _LAZY_NAMES.items()  # glue: the doors' names, in door order

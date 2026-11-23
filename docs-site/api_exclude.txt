@@ -147,3 +147,4 @@ Sequential.lstm	neural-blocks layers: no verify lane or GPU column yet
 Sequential.gru	neural-blocks layers: no verify lane or GPU column yet
 Sequential.rnn	neural-blocks layers: no verify lane or GPU column yet
 Sequential.gated	neural-blocks layers: no verify lane or GPU column yet
+recipe	added 2026-11-22 (verify --recipe), not yet run from an installed wheel on a GPU or across two vendors; public docs after the release verification
