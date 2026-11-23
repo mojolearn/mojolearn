@@ -9,9 +9,13 @@ test_nn_attention_layers, per case, through the model interpreter (autograd/mode
   - the forward against a float64 interpreter of the same description written here (projections in
     PyTorch's (out, in) layout, per-head softmax(q k^T / sqrt(head_dim) + mask) v, the output projection,
     layer_norm, the feed-forward network, residuals, the sinusoidal encoding), tolerance 1e-4 (1 + |y|);
-  - every parameter gradient against central finite differences of the interpreter's own loss sum(seed * y)
+  - parameter gradients against central finite differences of the interpreter's own loss sum(seed * y)
     (h = 1/128, tolerance 3e-3 (1 + |fd|); a parameter outside it is probed again centrally at h/4 and
-    one-sided at h/16 on both sides, a ReLU kink inside the wider step bending the central difference);
+    one-sided at h/16 on both sides, a ReLU kink inside the wider step bending the central difference), on a
+    fixed sample of every layer's parameter span (_probe_indices: a span of 8 or fewer words whole, a longer
+    one at its first two, last two and 12 evenly spaced words, so the in-projection, out-projection and bias
+    blocks of an attention layer are each probed); the digest covers every analytic gradient word and the
+    device column compares every word;
   - one `NN_ATTENTION <case> digest` line over the output and gradient words.
   Cases: self-attention with bias; causal without bias (the bias words stay out of every op: their
   gradient is 0); cross-attention to an earlier layer of another length and width (kdim 5, 3 keys); the key
@@ -477,6 +481,60 @@ def _close(name: String, got: List[Float32], want: List[Float64], tol: Float64) 
             _fail(name + ": element " + String(i) + " got " + String(got[i]) + " expected " + String(want[i]))
 
 
+comptime _PROBE_ALL = 8  # a span this short is probed whole
+comptime _PROBE_EDGE = 2  # words probed at each end of a longer span
+comptime _PROBE_INNER = 12  # evenly spaced words probed inside a longer span
+
+
+def _span_probes(mut idx: List[Int], a: Int, b: Int):
+    """Append the probed words of the span [a, b): all of a short span, else both edges and evenly spaced
+    interior words (fixed, so a failure names the same word every run)."""
+    var n = b - a
+    if n <= _PROBE_ALL:
+        for i in range(a, b):  # small-loop(<= 8 probed words)
+            idx.append(i)
+        return
+    for i in range(_PROBE_EDGE):  # small-loop(2 edge words)
+        idx.append(a + i)
+    var inner = n - 2 * _PROBE_EDGE
+    for j in range(_PROBE_INNER):  # small-loop(12 interior words)
+        idx.append(a + _PROBE_EDGE + (inner * (2 * j + 1)) // (2 * _PROBE_INNER))
+    for i in range(_PROBE_EDGE):  # small-loop(2 edge words)
+        idx.append(b - _PROBE_EDGE + i)
+
+
+def _probe_indices(spec: ModelSpec) -> List[Int]:
+    """The parameter words the finite-difference check probes: every layer's span [param_off, next offset)
+    through _span_probes. Every word cost two forwards per word (the encoder and decoder cases have 700 to
+    1,000 words); a fixed sample of each span keeps every layer under the check."""
+    var bounds = List[Int]()
+    for i in range(len(spec.param_off)):  # small-loop(layers)
+        var o = spec.param_off[i]
+        if o < 0 or o >= spec.n_params:
+            continue
+        var seen = False
+        for j in range(len(bounds)):  # small-loop(layers)
+            if bounds[j] == o:
+                seen = True
+        if not seen:
+            bounds.append(o)
+    bounds.append(spec.n_params)
+    for i in range(1, len(bounds)):  # small-loop(layers): insertion sort of a handful of offsets
+        var v = bounds[i]
+        var j = i - 1
+        while j >= 0 and bounds[j] > v:
+            bounds[j + 1] = bounds[j]
+            j -= 1
+        bounds[j + 1] = v
+    var idx = List[Int]()
+    if len(bounds) > 0 and bounds[0] > 0:
+        _span_probes(idx, 0, bounds[0])
+    for i in range(len(bounds) - 1):  # small-loop(layers)
+        if bounds[i + 1] > bounds[i]:
+            _span_probes(idx, bounds[i], bounds[i + 1])
+    return idx^
+
+
 def _fd[E: Exec](mut ex: E, c: _Case, spec: ModelSpec, params: List[Float32], i: Int, h: Float64) raises -> Float64:
     var up = params.copy()
     up[i] = Float32(Float64(params[i]) + h)
@@ -493,13 +551,19 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
     if not c.train:
         _close(c.name + " forward", yv, _oracle(c, spec, params), 1e-4)
     if finite_differences:
-        var fd = List[Float64](length=len(params), fill=0)
-        for i in range(len(params)):  # small-loop(every parameter probed)
-            fd[i] = _fd(ex, c, spec, params, i, _H)
+        if len(grads) != len(params):
+            _fail(c.name + ": " + String(len(grads)) + " gradient words for " + String(len(params)) + " parameters")
+        var probe = _probe_indices(spec)
+        var fd = List[Float64](length=len(probe), fill=0)
+        var gp = List[Float32](length=len(probe), fill=0)
+        for pk in range(len(probe)):  # small-loop(probed parameters)
+            var i = probe[pk]
+            gp[pk] = grads[i]
+            fd[pk] = _fd(ex, c, spec, params, i, _H)
             # a ReLU kink inside [p - h, p + h] bends the central difference: such a parameter is probed
             # again with a quarter of the step, and the gradient must match that one
-            var d = abs(Float64(grads[i]) - fd[i])
-            if not (d <= 3e-3 * (1.0 + abs(fd[i]))):
+            var d = abs(Float64(grads[i]) - fd[pk])
+            if not (d <= 3e-3 * (1.0 + abs(fd[pk]))):
                 # a ReLU input inside [p - h, p + h] bends the central difference: probe again at h/4 and,
                 # one-sided, at h/16 (the side away from the kink is the derivative the tape takes)
                 var probes = List[Float64]()
@@ -511,14 +575,18 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
                 down[i] = Float32(Float64(params[i]) - _H / 16.0)
                 probes.append((_loss(ex, c, spec, up) - base) / (Float64(up[i]) - Float64(params[i])))
                 probes.append((base - _loss(ex, c, spec, down)) / (Float64(params[i]) - Float64(down[i])))
-                var best = fd[i]
+                var best = fd[pk]
                 for k in range(len(probes)):  # small-loop(3 probes)
                     if abs(Float64(grads[i]) - probes[k]) < abs(Float64(grads[i]) - best):
                         best = probes[k]
-                print("NN_ATTENTION", c.name, "re-probe", i, "grad", grads[i], "fd h", fd[i], "h/4", probes[0],
+                print("NN_ATTENTION", c.name, "re-probe", i, "grad", grads[i], "fd h", fd[pk], "h/4", probes[0],
                       "right h/16", probes[1], "left h/16", probes[2])
-                fd[i] = best
-        _close(c.name + " gradient", grads, fd, 3e-3)
+                fd[pk] = best
+        for pk in range(len(probe)):  # small-loop(probed parameters)
+            var d = abs(Float64(gp[pk]) - fd[pk])
+            if not (d <= 3e-3 * (1.0 + abs(fd[pk]))):
+                _fail(c.name + " gradient: parameter " + String(probe[pk]) + " got " + String(gp[pk])
+                      + " expected " + String(fd[pk]))
     var words = yv.copy()
     for i in range(len(grads)):  # small-loop(check words)
         words.append(grads[i])
