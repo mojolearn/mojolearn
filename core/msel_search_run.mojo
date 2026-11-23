@@ -945,7 +945,12 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             var labels_out = ops[o] == MEMBER_OP_PREDICT and (classifier or clusterer)
             var unsaid = MEMBER_I32 if labels_out else MEMBER_F32
             var dtype = member_output_dtype(probe, ops[o], d, 1, unsaid)
-            if labels_out:
+            if responding and ops[o] == MEMBER_OP_PREDICT and not classifier:
+                # cross_val_predict of a non-classifier (lane mf-msel5b): float
+                # values, or a clusterer's integer ids, as the member writes them
+                if dtype != MEMBER_I32 and dtype != MEMBER_I64 and dtype != MEMBER_F32 and dtype != MEMBER_F64:
+                    raise Error("member ABI: a cv tool response of an element type the result cannot hold")
+            elif labels_out:
                 if dtype != MEMBER_I32 and dtype != MEMBER_I64:
                     raise Error("member ABI: a search scored by labels needs a member that predicts class codes")
             elif dtype != MEMBER_F32 and dtype != MEMBER_F64:
