@@ -28,7 +28,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from sequence.exec_device import (
-    DeviceExec, TPB, _args_i32_out, _pack_ff, _pack_ii, _pool_host, _pool_locked, _pool_unlock, _pool_release_host,
+    DeviceExec, TPB, _args_i32_out, _pack_ff, _pack_ii, _pool_host, _pool_release_host,
     seq_kernel,
     sequence_ctx,
 )
@@ -513,13 +513,12 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
     of the other. Every chunk's wait comes before its half is reused (the
     half of chunk i was last read for chunk i - 2, before the previous
     wait). Returns with every byte in the caller's arrays."""
-    var h0 = _pool_host(ex.ctx, OPT_PIPE_CH)
-    var h1 = _pool_host(ex.ctx, OPT_PIPE_CH)
-    # The sequence pool's lists under its lock word (lane r5-proving): the stages' addresses only.
-    var pool = _pool_locked()
+    var h0 = _pool_host(ex.ctx, ex._own_pool(), OPT_PIPE_CH)
+    var h1 = _pool_host(ex.ctx, ex._own_pool(), OPT_PIPE_CH)
+    # The executor's own sub-pool (lane r5-proving): no other thread touches it.
+    var pool = ex._own_pool()
     var st0 = FP(unsafe_from_address=Int(pool[].host[h0].unsafe_ptr()))
     var st1 = FP(unsafe_from_address=Int(pool[].host[h1].unsafe_ptr()))
-    _pool_unlock(pool)
     var have_prev = False
     var prev_dst = 0
     var prev_cnt = 0
@@ -548,8 +547,8 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
         off += sizes[j]
     if have_prev:
         unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
-    _pool_release_host(h0)
-    _pool_release_host(h1)
+    _pool_release_host(ex._own_pool(), h0)
+    _pool_release_host(ex._own_pool(), h1)
     # the executor's own bookkeeping (no copy is pending: the queue is empty)
     ex.sync()
 
@@ -605,14 +604,13 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
     caller's arrays. a0.p0 .. p4 are the flat P, G, s1, s2, s3."""
     var hi = List[Int]()
     for _ in range(6):
-        hi.append(_pool_host(ex.ctx, OPT_PIPE_CH))
-    # The sequence pool's lists under its lock word (lane r5-proving): the stages' addresses only.
-    var pool = _pool_locked()
+        hi.append(_pool_host(ex.ctx, ex._own_pool(), OPT_PIPE_CH))
+    # The executor's own sub-pool (lane r5-proving): no other thread touches it.
+    var pool = ex._own_pool()
     # 0, 1: parameter stages; 2, 3: gradient stages; 4, 5: download halves
     var stg = List[Int]()
     for k in range(6):
         stg.append(Int(pool[].host[hi[k]].unsafe_ptr()))
-    _pool_unlock(pool)
     var P = a0.p0
     var G = a0.p1
     var c = 0
@@ -669,7 +667,7 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
         unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
                count=prev_cnt)
     for k in range(6):
-        _pool_release_host(hi[k])
+        _pool_release_host(ex._own_pool(), hi[k])
     # the executor's own bookkeeping (the queue is empty)
     ex.sync()
 

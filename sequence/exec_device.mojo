@@ -89,7 +89,7 @@ from autograd.kernels.recurrent_scan import cell_bwd_scan_kernel
 from x_linear.ops import IP
 from x_linear.witness import witness_end
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock, shared_slot_wait_lock
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple, and
 #: since nr-small D1/D11 (2026-10-04) NVIDIA and AMD in IDENTICAL. The
@@ -460,17 +460,6 @@ struct _SeqPool(Defaultable, Movable):
     var host_n: List[Int]
     var host_free: List[Bool]
     var bytes: Int
-    # One lock word (lane r5-proving, 2026-11-23): every read and write of the
-    # lists above takes it (`_pool_locked` / `_pool_unlock`). Two Python
-    # threads run device entries with the GIL released (the MLP door and its
-    # model-selection member, MEMBER_GIL_DOOR); before, both executors searched,
-    # appended to and flagged these lists with no lock, so they could lease the
-    # same free buffer or index a list another thread was reallocating (the
-    # L40S proving run nvc1-0001: two threads of cross_val_score(MLPRegressor)
-    # on the GPU, "Fatal Python error: Illegal instruction"). The word is held
-    # only for the list bookkeeping (and the allocation of a missing buffer),
-    # never across a launch, a copy or a wait.
-    var lock: List[Int64]
 
     def __init__(out self):
         self.dev = List[DeviceBuffer[DType.float32]]()
@@ -480,31 +469,84 @@ struct _SeqPool(Defaultable, Movable):
         self.host_n = List[Int]()
         self.host_free = List[Bool]()
         self.bytes = 0
+
+
+# OWNED SUB-POOLS (lane r5-proving, 2026-11-23). The pool was ONE process-wide
+# `_SeqPool` that every executor leased from, grew and read with no lock. Two
+# Python threads run device entries with the GIL released (the MLP door and its
+# model-selection member, MEMBER_GIL_DOOR), so two executors could lease the same
+# free buffer or index a list another thread was reallocating (L40S proving run
+# nvc1-0001: cross_val_score(MLPRegressor) from two threads, "Fatal Python error:
+# Illegal instruction"). Now each pooled executor OWNS one sub-pool for its
+# lifetime (`DeviceExec.own`): every take, release, view and stage read touches
+# only its owner's lists, with no lock. Cross-call reuse, which is why the pool
+# exists (the note above: 64 MB pinned stages cost tens of ms per call on CUDA,
+# the layernorm cell 99.7 ms against a ~1 ms kernel; A/B rounds 2 and 3 above kept
+# it), is kept by this registry of idle sub-pools: an executor takes a whole one
+# at construction and gives it back at its end, the only two locked operations,
+# once per executor, never per take. Idle sub-pools together keep at most
+# SEQ_POOL_BYTES; a returned one past that is dropped whole (its queue already
+# drained by the executor's end).
+struct _SeqPools(Defaultable, Movable):
+    var idle: List[_SeqPool]
+    var bytes: Int
+    var lock: List[Int64]
+
+    def __init__(out self):
+        self.idle = List[_SeqPool]()
+        self.bytes = 0
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-# V2: the lock word changed the layout (an image of the old layout never shares this slot).
-comptime _POOL_NAME = "MojolearnXSequencePoolIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequencePoolFastV2"
-comptime X_SEQUENCE_POOL = SharedSlot[_SeqPool, _POOL_NAME]
+# V2: a registry of owned sub-pools replaced the one shared pool (new layout).
+comptime _POOL_NAME = "MojolearnXSequencePoolsIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequencePoolsFastV2"
+comptime X_SEQUENCE_POOLS = SharedSlot[_SeqPools, _POOL_NAME]
 
 
-def _pool_locked() raises -> UnsafePointer[_SeqPool, MutUntrackedOrigin]:
-    """The process pool with its lock word held. The caller releases it with
-    `_pool_unlock` on every path, and calls no other pool function before
-    that (the word is not reentrant). A leased entry's storage address stays
-    valid after the release: only the list cells move when a list grows."""
-    var pool = X_SEQUENCE_POOL.get_or_create_ptr()
-    shared_slot_wait_lock(rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr()))
-    return pool
+def _pools_lock(reg: UnsafePointer[_SeqPools, MutUntrackedOrigin]):
+    shared_slot_lock(rebind[MutPointer[Int64, MutUntrackedOrigin]](reg[].lock.unsafe_ptr()))
 
 
-def _pool_unlock(pool: UnsafePointer[_SeqPool, MutUntrackedOrigin]):
-    shared_slot_unlock(rebind[MutPointer[Int64, MutUntrackedOrigin]](pool[].lock.unsafe_ptr()))
+def _pools_unlock(reg: UnsafePointer[_SeqPools, MutUntrackedOrigin]):
+    shared_slot_unlock(rebind[MutPointer[Int64, MutUntrackedOrigin]](reg[].lock.unsafe_ptr()))
 
 
-def _pool_trim(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntrackedOrigin], need: Int) raises:
-    """Drop free entries' storage, oldest first, until `need` more bytes fit
-    (the caller holds the pool's lock word).
+def _pool_take() raises -> _SeqPool:
+    """A whole idle sub-pool for a new executor (the most recently returned,
+    whose sizes most likely match), or an empty one. Locked: once per executor."""
+    var reg = X_SEQUENCE_POOLS.get_or_create_ptr()
+    _pools_lock(reg)
+    if len(reg[].idle) > 0:
+        var pool = reg[].idle.pop()
+        reg[].bytes -= pool.bytes
+        _pools_unlock(reg)
+        return pool^
+    _pools_unlock(reg)
+    return _SeqPool()
+
+
+def _pool_give(var pool: _SeqPool) raises:
+    """Return an ended executor's sub-pool (its queue drained): every entry is
+    free again. Kept for the next executor while the idle sub-pools hold at most
+    SEQ_POOL_BYTES, else dropped whole, after the lock is released."""
+    for i in range(len(pool.dev_free)):  # small-loop(pool: this owner's device buffers): free flags, no data
+        pool.dev_free[i] = True
+    for i in range(len(pool.host_free)):  # small-loop(pool: this owner's pinned stages): free flags, no data
+        pool.host_free[i] = True
+    var reg = X_SEQUENCE_POOLS.get_or_create_ptr()
+    _pools_lock(reg)
+    var keep = pool.bytes > 0 and reg[].bytes + pool.bytes <= SEQ_POOL_BYTES
+    if keep:
+        reg[].bytes += pool.bytes
+        reg[].idle.append(pool^)
+        _pools_unlock(reg)
+    else:
+        _pools_unlock(reg)
+        _ = pool^  # its buffers go here, outside the lock
+
+
+def _pool_trim(ctx: DeviceContext, pool: MutPointer[_SeqPool, MutUntrackedOrigin], need: Int) raises:
+    """Drop free entries' storage, oldest first, until `need` more bytes fit.
     The slot itself stays (a 1-float placeholder, size 0, free): every live
     executor holds pool INDICES (DeviceExec.pdev, retired_pdev, pstaged,
     ppend_host, opt_resident's stages), so removing an entry from the lists
@@ -534,18 +576,11 @@ def _pool_trim(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntrackedOri
             return
 
 
-def _pool_dev(ctx: DeviceContext, count: Int) raises -> Int:
+def _pool_dev(ctx: DeviceContext, pool: MutPointer[_SeqPool, MutUntrackedOrigin], count: Int) raises -> Int:
     """A free device buffer of exactly `count` floats from the pool, or a
     new one (in a trimmed slot if there is one, else appended); returns its
-    index (held until released; indices never move). Under the lock word."""
-    var pool = _pool_locked()
-    try:
-        return _pool_dev_locked(ctx, pool, count)
-    finally:
-        _pool_unlock(pool)
-
-
-def _pool_dev_locked(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntrackedOrigin], count: Int) raises -> Int:
+    index (held until released; indices never move). `pool` is the calling
+    executor's own sub-pool: no other thread reads or writes it."""
     for i in range(len(pool[].dev)):  # small-loop(pool: pooled device buffers): free-buffer slot search, no data
         if pool[].dev_free[i] and pool[].dev_n[i] == count:
             pool[].dev_free[i] = False
@@ -568,18 +603,10 @@ def _pool_dev_locked(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntrac
     return len(pool[].dev) - 1
 
 
-def _pool_host(ctx: DeviceContext, n: Int) raises -> Int:
+def _pool_host(ctx: DeviceContext, pool: MutPointer[_SeqPool, MutUntrackedOrigin], n: Int) raises -> Int:
     """A free pinned stage of capacity >= n (the smallest that fits), or a
     new one of n floats (in a trimmed slot if there is one, else appended);
-    returns its index (indices never move). Under the lock word."""
-    var pool = _pool_locked()
-    try:
-        return _pool_host_locked(ctx, pool, n)
-    finally:
-        _pool_unlock(pool)
-
-
-def _pool_host_locked(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntrackedOrigin], n: Int) raises -> Int:
+    returns its index (indices never move). `pool`: the caller's own sub-pool."""
     var best = -1
     for i in range(len(pool[].host)):
         if pool[].host_free[i] and pool[].host_n[i] > 0 and pool[].host_n[i] >= n:
@@ -606,16 +633,12 @@ def _pool_host_locked(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntra
     return len(pool[].host) - 1
 
 
-def _pool_release_dev(i: Int) raises:
-    var pool = _pool_locked()
+def _pool_release_dev(pool: MutPointer[_SeqPool, MutUntrackedOrigin], i: Int):
     pool[].dev_free[i] = True
-    _pool_unlock(pool)
 
 
-def _pool_release_host(i: Int) raises:
-    var pool = _pool_locked()
+def _pool_release_host(pool: MutPointer[_SeqPool, MutUntrackedOrigin], i: Int):
     pool[].host_free[i] = True
-    _pool_unlock(pool)
 
 # Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
 # owns its executor across binding calls; moving changes no value.
@@ -652,6 +675,11 @@ struct DeviceExec(Exec, Movable):
     #: the next sync or the end of this Exec drains the queue.
     var retired: List[DeviceBuffer[DType.float32]]
     var retired_pdev: List[Int]
+    #: the executor's OWN sub-pool (one element; a private empty one for an
+    #: executor on a caller's context): a pooled executor takes it whole at
+    #: construction and gives it back whole at its end (`_pool_take` / `_pool_give`); every lease in between is this
+    #: executor's alone, so no lock (lane r5-proving).
+    var own: List[_SeqPool]
     #: lane fable-perf-neural-0855 (2026-11-13): an OWNED executor (the
     #: `__init__(ctx)` form: the Mamba block programs, the byte LM and Samba
     #: training programs, the CausalLM program, the transformer step arms)
@@ -667,7 +695,7 @@ struct DeviceExec(Exec, Movable):
     #: candidate 4c2340386abc vs 0.8.55 on the L40S read mamba2-forward 5.57
     #: -> 7.58 ms, mamba1-forward 3.43 -> 4.08, lm-train-step 35.5 -> 48.9,
     #: with AMD unchanged on the Mamba rows. The pooled executor already
-    #: reuses through X_SEQUENCE_POOL; this is the same rule per owned
+    #: reuses through its own sub-pool (`own`); this is the same rule per owned
     #: executor (exact count for device buffers, smallest fit for stages),
     #: bounded by SEQ_EXEC_IDLE_BYTES, oldest dropped first. Copies only: no
     #: bit moves on any vendor.
@@ -693,6 +721,8 @@ struct DeviceExec(Exec, Movable):
         self.pend_dst = List[Int]()
         self.pend_n = List[Int]()
         self.pooled = True
+        self.own = List[_SeqPool]()
+        self.own.append(_pool_take())
         self.pdev = List[Int]()
         self.pstaged = List[Int]()
         self.ppend_host = List[Int]()
@@ -725,6 +755,11 @@ struct DeviceExec(Exec, Movable):
         self.pend_dst = List[Int]()
         self.pend_n = List[Int]()
         self.pooled = False
+        # A private, empty sub-pool so `_own_pool` is always valid; its
+        # entries (if a caller ever stages through it) are on `ctx` and are
+        # never given to the registry, only dropped with this executor.
+        self.own = List[_SeqPool]()
+        self.own.append(_SeqPool())
         self.pdev = List[Int]()
         self.pstaged = List[Int]()
         self.ppend_host = List[Int]()
@@ -769,16 +804,11 @@ struct DeviceExec(Exec, Movable):
     def _alloc(mut self, n: Int, zero: Bool) raises -> FP:
         var count = n if n > 0 else 1
         if self.pooled:
-            var i = _pool_dev(self.ctx, count)
-            var pool = _pool_locked()
-            var address = 0
-            try:
-                if zero:
-                    pool[].dev[i].enqueue_fill(Float32(0.0))
-                address = Int(pool[].dev[i].unsafe_ptr())
-            finally:
-                _pool_unlock(pool)
-            var pp = FP(unsafe_from_address=address)
+            var i = _pool_dev(self.ctx, self._own_pool(), count)
+            var pool = self._own_pool()
+            if zero:
+                pool[].dev[i].enqueue_fill(Float32(0.0))
+            var pp = FP(unsafe_from_address=Int(pool[].dev[i].unsafe_ptr()))
             self.base.append(Int(pp))
             self.size.append(count)
             self.pdev.append(i)
@@ -863,11 +893,8 @@ struct DeviceExec(Exec, Movable):
     def _sub(self, slot: Int, off: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
         """The view [off, off + n) of this executor's slot (pooled or owned)."""
         if self.pooled:
-            var pool = _pool_locked()
-            try:
-                return pool[].dev[self.pdev[slot]].create_sub_buffer[DType.float32](off, n)
-            finally:
-                _pool_unlock(pool)
+            var pool = self._own_pool()
+            return pool[].dev[self.pdev[slot]].create_sub_buffer[DType.float32](off, n)
         # `slot` indexes `base`; `bufs` also holds GEMM workspaces with no
         # `base` entry (`_launch`), so after one of them the two lists no
         # longer line up. Match the owning buffer by its address.
@@ -887,17 +914,18 @@ struct DeviceExec(Exec, Movable):
             self._synchronize()
         except:
             pass
+        # The queue is drained: the whole sub-pool goes back (every entry
+        # free again), so no per-lease release is needed here.
         try:
-            for i in range(len(self.pstaged)):
-                _pool_release_host(self.pstaged[i])
-            for i in range(len(self.ppend_host)):
-                _pool_release_host(self.ppend_host[i])
-            for i in range(len(self.pdev)):
-                _pool_release_dev(self.pdev[i])
-            for i in range(len(self.retired_pdev)):
-                _pool_release_dev(self.retired_pdev[i])
+            if self.pooled and len(self.own) > 0:
+                _pool_give(self.own.pop())
         except:
             pass
+
+    def _own_pool(self) -> MutPointer[_SeqPool, MutUntrackedOrigin]:
+        """This executor's own sub-pool; the list's heap cell stays put when
+        the executor moves."""
+        return MutPointer[_SeqPool, MutUntrackedOrigin](unsafe_from_address=Int(self.own.unsafe_ptr()))
 
     def _find(self, p: FP, n: Int) raises -> Tuple[Int, Int]:
         var addr = Int(p)
@@ -924,11 +952,10 @@ struct DeviceExec(Exec, Movable):
         var found = self._find(dst, n)
         var view = self._sub(found[0], found[1], n)
         if self.pooled:
-            var hi = _pool_host(self.ctx, n)
+            var hi = _pool_host(self.ctx, self._own_pool(), n)
             self._profile_stage(hi, True)
-            var pool = _pool_locked()
+            var pool = self._own_pool()
             var hp = pool[].host[hi].unsafe_ptr()
-            _pool_unlock(pool)
             comptime if SEQ_PIPE_UP:
                 if n >= 2 * SEQ_PIPE_CH:
                     # chunk i's DMA is queued as soon as it is staged, and
@@ -985,18 +1012,17 @@ struct DeviceExec(Exec, Movable):
         var found = self._find(src, n)
         var view = self._sub(found[0], found[1], n)
         if self.pooled:
-            var hi = _pool_host(self.ctx, n)
+            var hi = _pool_host(self.ctx, self._own_pool(), n)
             self._profile_stage(hi, True)
-            var pool = _pool_locked()
+            var pool = self._own_pool()
             var hp = pool[].host[hi].unsafe_ptr()
-            _pool_unlock(pool)
             self.ctx.enqueue_copy(dst_ptr=hp, src_buf=view)
             self.execution_profile.copied(1, n * 4)
             self.sync()
             _pcopy(dst, hp, n)
             self.execution_profile.copied(3, n * 4)
             self._profile_stage(hi, False)
-            _pool_release_host(hi)
+            _pool_release_host(self._own_pool(), hi)
             _ = view^
             return
         var host = self._idle_host_take(n)
@@ -1029,11 +1055,10 @@ struct DeviceExec(Exec, Movable):
                 self.pipe_n.append(n)
                 return
         if self.pooled:
-            var hi = _pool_host(self.ctx, n)
+            var hi = _pool_host(self.ctx, self._own_pool(), n)
             self._profile_stage(hi, True)
-            var pool = _pool_locked()
+            var pool = self._own_pool()
             var hp = pool[].host[hi].unsafe_ptr()
-            _pool_unlock(pool)
             var pview = self._sub(found[0], found[1], n)
             self.ctx.enqueue_copy(dst_ptr=hp, src_buf=pview)
             self.execution_profile.copied(1, n * 4)
@@ -1724,19 +1749,17 @@ struct DeviceExec(Exec, Movable):
         while len(self.retired) > 0:
             self._idle_dev_keep(self.retired.pop())
         for i in range(len(self.retired_pdev)):
-            _pool_release_dev(self.retired_pdev[i])
+            _pool_release_dev(self._own_pool(), self.retired_pdev[i])
         self.retired_pdev.clear()
         for i in range(len(self.pstaged)):
-            _pool_release_host(self.pstaged[i])
+            _pool_release_host(self._own_pool(), self.pstaged[i])
         self.pstaged.clear()
         if self.pooled:
+            var pool = self._own_pool()
             for i in range(len(self.pend_dst)):
-                var pool = _pool_locked()
-                var hp = pool[].host[self.ppend_host[i]].unsafe_ptr()
-                _pool_unlock(pool)
-                _pcopy(FP(unsafe_from_address=self.pend_dst[i]), hp, self.pend_n[i])
+                _pcopy(FP(unsafe_from_address=self.pend_dst[i]), pool[].host[self.ppend_host[i]].unsafe_ptr(), self.pend_n[i])
                 self.execution_profile.copied(3, self.pend_n[i] * 4)
-                _pool_release_host(self.ppend_host[i])
+                _pool_release_host(self._own_pool(), self.ppend_host[i])
             self.ppend_host.clear()
         else:
             for i in range(len(self.pend_dst)):
@@ -1765,14 +1788,13 @@ struct DeviceExec(Exec, Movable):
         # TOMBSTONE: MOJOLEARN_SEQ_FAST_RAW_DOWN (DROPPED-slower: M3 rab7-seqrawdown layernorm 48.99 -> 73.68 ms, +50.4%) deleted
         # 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2.
         # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_RAW_DOWN.patch
-        var h0 = _pool_host(self.ctx, SEQ_PIPE_CH)
-        var h1 = _pool_host(self.ctx, SEQ_PIPE_CH)
+        var h0 = _pool_host(self.ctx, self._own_pool(), SEQ_PIPE_CH)
+        var h1 = _pool_host(self.ctx, self._own_pool(), SEQ_PIPE_CH)
         self._profile_stage(h0, True)
         self._profile_stage(h1, True)
-        var pool = _pool_locked()
+        var pool = self._own_pool()
         var st0 = FP(unsafe_from_address=Int(pool[].host[h0].unsafe_ptr()))
         var st1 = FP(unsafe_from_address=Int(pool[].host[h1].unsafe_ptr()))
-        _pool_unlock(pool)
         var have_prev = False
         var prev_dst = 0
         var prev_cnt = 0
@@ -1805,8 +1827,8 @@ struct DeviceExec(Exec, Movable):
             self.execution_profile.copied(3, prev_cnt * 4)
         self._profile_stage(h0, False)
         self._profile_stage(h1, False)
-        _pool_release_host(h0)
-        _pool_release_host(h1)
+        _pool_release_host(self._own_pool(), h0)
+        _pool_release_host(self._own_pool(), h1)
         self.pipe_dst.clear()
         self.pipe_src.clear()
         self.pipe_n.clear()
@@ -1818,10 +1840,8 @@ struct DeviceExec(Exec, Movable):
 
     def _profile_stage(mut self, index: Int, acquire: Bool) raises:
         if self.execution_profile.enabled:
-            var pool = _pool_locked()
-            var delta = pool[].host_n[index] * (4 if acquire else -4)
-            _pool_unlock(pool)
-            self.execution_profile.staging(delta)
+            var pool = self._own_pool()
+            self.execution_profile.staging(pool[].host_n[index] * (4 if acquire else -4))
 
     def _profile_staged_bytes(self) raises -> Int:
         if not self.execution_profile.enabled:
@@ -1832,12 +1852,11 @@ struct DeviceExec(Exec, Movable):
         for i in range(len(self.pend_host)):  # driver-loop: over download staging owners
             size += len(self.pend_host[i]) * 4
         if self.pooled:
-            var pool = _pool_locked()
+            var pool = self._own_pool()
             for i in range(len(self.pstaged)):  # driver-loop: over pooled upload stages
                 size += pool[].host_n[self.pstaged[i]] * 4
             for i in range(len(self.ppend_host)):  # driver-loop: over pooled download stages
                 size += pool[].host_n[self.ppend_host[i]] * 4
-            _pool_unlock(pool)
         return size
 
     def execution_profile_begin(mut self) raises:
@@ -1852,17 +1871,14 @@ struct DeviceExec(Exec, Movable):
             self.execution_profile.retired_bytes += size
             self.execution_profile.retained_bytes += size
         if self.pooled:
-            var pool = _pool_locked()
-            try:
-                for i in range(len(self.pdev)):  # driver-loop: over leased device allocations
-                    var j = self.pdev[i]
-                    self.execution_profile.allocation(Int(pool[].dev[j].unsafe_ptr()), pool[].dev_n[j] * 4, True)
-                for i in range(len(self.retired_pdev)):  # driver-loop: over in-flight released pool leases
-                    var size = pool[].dev_n[self.retired_pdev[i]] * 4
-                    self.execution_profile.retired_bytes += size
-                    self.execution_profile.retained_bytes += size
-            finally:
-                _pool_unlock(pool)
+            var pool = self._own_pool()
+            for i in range(len(self.pdev)):  # driver-loop: over leased device allocations
+                var j = self.pdev[i]
+                self.execution_profile.allocation(Int(pool[].dev[j].unsafe_ptr()), pool[].dev_n[j] * 4, True)
+            for i in range(len(self.retired_pdev)):  # driver-loop: over in-flight released pool leases
+                var size = pool[].dev_n[self.retired_pdev[i]] * 4
+                self.execution_profile.retired_bytes += size
+                self.execution_profile.retained_bytes += size
         self.execution_profile.peak_retained_bytes = self.execution_profile.retained_bytes
         var staged_bytes = self._profile_staged_bytes()
         self.execution_profile.staging(staged_bytes, True)

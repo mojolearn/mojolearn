@@ -5,8 +5,11 @@ under concurrent executors (lane r5-proving, 2026-11-23).
 Two Python threads run device entries with the GIL released (the MLP door and
 its model-selection member); each entry makes its own `DeviceExec`, and every
 such executor leases device buffers and pinned stages from the one process
-pool. Before the pool's lock word, two executors could lease the same free
-buffer or index a pool list another thread was growing (L40S proving run
+pool. Now each executor owns a whole sub-pool from construction to its end
+(only the take and the give-back touch the registry, under its lock word), so
+its leases are its own by construction. Before, with one shared pool and no
+lock, two executors could lease the same free buffer or index a pool list
+another thread was growing (L40S proving run
 nvc1-0001: cross_val_score(MLPRegressor) from two threads, "Fatal Python
 error: Illegal instruction").
 
