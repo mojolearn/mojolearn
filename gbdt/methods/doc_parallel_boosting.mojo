@@ -112,6 +112,7 @@ from gbdt.models.add_non_symmetric_tree_doc_parallel import (
     compute_non_symmetric_bins_for_model,
 )
 from gbdt.options.catboost_options import querywise_pointwise_leaf_check
+from gbdt.options.catboost_options import pointwise_policy_check
 from gbdt.options.catboost_options import (
     GROW_DEPTHWISE,
     GROW_LOSSGUIDE,
@@ -4034,14 +4035,9 @@ def fit_with_test(
             # through `train_template_pointwise_greedy_subsets_searcher.h`
             # (`pointwise_non_symmetric.cpp:5`), never the doc-parallel
             # oblivious searcher. Refused by name rather than silently
-            # growing a symmetric tree under a non-symmetric name.
-            raise Error(
-                "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
-                " an OBLIVIOUS searcher; grow_policy="
-                + grow_policy_name(grow_policy)
-                + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree>"
-                " only (pointwise_non_symmetric.cpp:5-29)"
-            )
+            # growing a symmetric tree under a non-symmetric name, through
+            # the one body both columns call
+            pointwise_policy_check(use_pointwise_searcher, grow_policy)
         if (
             objective == OBJECTIVE_MULTICLASS
             or objective == OBJECTIVE_MULTICLASS_OVA

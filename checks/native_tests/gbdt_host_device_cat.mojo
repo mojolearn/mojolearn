@@ -2370,7 +2370,8 @@ def test_rest4tail_host_text_is_device_text() raises:
             _ = fit[_DeviceFit](_rest4tail_refusal(which), _rest4tail_inputs(7))
         except error:
             device_said = String(error)
-        if not (needles[which] in host_said) or not (needles[which] in device_said):
+        # the FULL text, the same on both columns (lane gbdt-pw-multiclass)
+        if not (needles[which] in host_said) or host_said != device_said:
             count += 1
             failed += ("\n      gbdt_host_device_cat rest4tail limit " + String(which) + ": host '"
                        + host_said + "', device '" + device_said + "'")
@@ -2491,13 +2492,15 @@ def _rest4simple_opts(unit: Int) raises -> GbdtOpts:
     return o^
 
 
-comptime REST4SIMPLE_REFUSALS = 6
+comptime REST4SIMPLE_REFUSALS = 7
 
 
 def _rest4simple_refusal(which: Int) raises -> GbdtOpts:
     """What both columns refuse before any tree: 0 MultiClass, 1 Depthwise
     Logloss, 2 Ordered RMSE, 3 the pointwise searcher on Logloss, 4 Logloss
-    at three iterations, 5 greedy YetiRank (its own words)."""
+    at three iterations, 5 greedy YetiRank (its own words), 6 Depthwise with
+    the pointwise searcher (`pointwise_policy_check` first, on both columns;
+    lane gbdt-pw-multiclass)."""
     var o = _rest4simple_opts(0)
     if which == 0:
         o.loss = String("MultiClass")
@@ -2510,8 +2513,11 @@ def _rest4simple_refusal(which: Int) raises -> GbdtOpts:
         o.pointwise = True
     elif which == 4:
         o.leaf_iterations = 3
-    else:
+    elif which == 5:
         o.loss = String("YetiRank")
+    else:
+        o.grow_policy = "Depthwise"
+        o.pointwise = True
     return o^
 
 
@@ -2587,8 +2593,9 @@ def test_rest4simple_host_text_is_device_text() raises:
         "use_pointwise_searcher searches the structure only",
         "can't be greater, than 1 for Simple",
         "changing the leaf_estimation_method parameter is prohibited",
+        "OBLIVIOUS searcher; grow_policy=Depthwise",
     ]
-    for which in range(REST4SIMPLE_REFUSALS):  # small-loop(the six refusals)
+    for which in range(REST4SIMPLE_REFUSALS):  # small-loop(the seven refusals)
         var host_said = String("")
         var device_said = String("")
         try:
@@ -2599,7 +2606,8 @@ def test_rest4simple_host_text_is_device_text() raises:
             _ = fit[_DeviceFit](_rest4simple_refusal(which), _rest4simple_refusal_inputs(which))
         except error:
             device_said = String(error)
-        if not (needles[which] in host_said) or not (needles[which] in device_said):
+        # the FULL text, the same on both columns (lane gbdt-pw-multiclass)
+        if not (needles[which] in host_said) or host_said != device_said:
             count += 1
             failed += ("\n      gbdt_host_device_cat rest4simple refusal " + String(which) + ": host '"
                        + host_said + "', device '" + device_said + "'")
@@ -2607,6 +2615,177 @@ def test_rest4simple_host_text_is_device_text() raises:
         raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
                     + ("gbdt_host_device_cat rest4simple device: " + String(count) + " of "
                        + String(REST4SIMPLE_UNITS + REST4SIMPLE_REFUSALS) + " cases failed" + failed if count > 0 else ""))
+
+
+# ---- lane gbdt-pw-multiclass (2026-11-23): MultiClass and MultiClassOneVsAll
+# on the pointwise searcher, every approx dimension's score summed (the
+# dimensions on the searcher's fold axis), host text against device text at
+# rate 0.1 ----
+
+comptime PWMC_UNITS = 8
+
+
+def _pwmc_inputs(unit: Int) raises -> GbdtInputs:
+    """Units 0-3, 5 and 7: four hashed numeric columns, the label a 3-class
+    cut of a linear score (unit 6: a 4-class cut); unit 4 `_inputs(False)`
+    (a CTR and a one-hot column, two classes: MultiClass at one approx
+    dimension, the pinned class); unit 3 carries a held-out slice. Every
+    third row of units 0-3 is class 0 whatever its columns say, so the
+    first class's gradient is blind to the deciding columns."""
+    if unit < 0 or unit >= PWMC_UNITS:
+        raise Error("gbdt_host_device_cat pwmc: no unit " + String(unit))
+    if unit == 4:
+        return _inputs(False)
+    var n = REST_ROWS
+    var k = 4 if unit == 6 else 3
+    var x = List[Float32](capacity=4 * n)
+    for j in range(4):  # driver-loop: over the fixture's columns (fixture construction, once per unit)
+        for r in range(n):  # driver-loop: over the fixture's rows
+            x.append(_unit01(r, 170 + j) * Float32(4.0) - Float32(2.0))
+    var y = List[Float32](capacity=n)
+    for r in range(n):  # driver-loop: over the fixture's rows
+        var v = (x[n + r] - Float32(0.5) * x[2 * n + r] + Float32(0.25) * x[3 * n + r]
+                 + Float32(0.3) * (_unit01(r, 175) - Float32(0.5)))
+        if unit <= 3 and r % 3 == 0:
+            y.append(Float32(0.0))
+        elif k == 4:
+            y.append(Float32(0.0) if v < Float32(-1.0) else (
+                Float32(1.0) if v < Float32(0.0) else (Float32(2.0) if v < Float32(1.0) else Float32(3.0))))
+        elif unit <= 3:
+            y.append(Float32(1.0) if v > Float32(0.0) else Float32(2.0))
+        else:
+            y.append(Float32(0.0) if v < Float32(-0.5) else (Float32(1.0) if v < Float32(0.5) else Float32(2.0)))
+    var inp = GbdtInputs(x^, n, 4, y^)
+    if unit == 3:
+        var ne = n // 2
+        for j in range(4):  # driver-loop: over the held-out columns
+            for r in range(ne):  # driver-loop: over the held-out rows
+                inp.eval_x.append(_unit01(r, 180 + j) * Float32(4.0) - Float32(2.0))
+        for r in range(ne):  # driver-loop: over the held-out rows
+            var ev = inp.eval_x[ne + r] - Float32(0.5) * inp.eval_x[2 * ne + r]
+            inp.eval_y.append(Float32(0.0) if r % 3 == 0 else (Float32(1.0) if ev > Float32(0.0) else Float32(2.0)))
+    return inp^
+
+
+def _pwmc_opts(unit: Int) raises -> GbdtOpts:
+    """The pointwise searcher throughout, every work-changing option
+    explicit, rate 0.1: 0 MultiClass Cosine, no bootstrap; 1 MultiClass L2
+    Bayesian; 2 MultiClassOneVsAll Cosine, Bernoulli 0.7, random_strength 1
+    (the multi-output score-noise deviation); 3 MultiClass with class
+    weights [1, 2, 0.5], Gradient leaves at 2 iterations and an eval set
+    under IncToDec with use_best_model; 4 MultiClass over a CTR and a
+    one-hot column (two classes, the pinned class at one dimension); 5
+    MultiClassOneVsAll at feature_fraction 0.5 with random_strength 1; 6
+    MultiClass on four classes at depth 6, Newton at 3 iterations; 7
+    MultiClassOneVsAll L2 Poisson 0.66."""
+    if unit < 0 or unit >= PWMC_UNITS:
+        raise Error("gbdt_host_device_cat pwmc: no unit " + String(unit))
+    var ova = unit == 2 or unit == 5 or unit == 7
+    var o = GbdtOpts("MultiClassOneVsAll" if ova else "MultiClass", REST_TREES, 4)
+    o.learning_rate = REST_RATE
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.pointwise = True
+    o.score_function = "Cosine"
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.leaf_method = "Newton"
+    o.leaf_iterations = 1
+    o.boost_from_average = 0
+    if unit == 1:
+        o.score_function = "L2"
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+    elif unit == 2:
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+        o.random_strength = 1.0
+    elif unit == 3:
+        o.class_weights = [1.0, 2.0, 0.5]
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 2
+        o.n_estimators = 30
+        o.od_type = "IncToDec"
+        o.od_pvalue = 0.01
+        o.od_wait = 2
+        o.use_best_model = 1
+        o.best_model_min_trees = 3
+    elif unit == 4:
+        o.cat_features = [0, 1]
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+    elif unit == 5:
+        o.feature_fraction = 0.5
+        o.random_strength = 1.0
+    elif unit == 6:
+        o.max_depth = 6
+        o.leaf_iterations = 3
+    else:
+        o.score_function = "L2"
+        o.bootstrap = "Poisson"
+        o.subsample = 0.66
+    return o^
+
+
+def test_pwmc_host_text_is_device_text() raises:
+    """The units of lane gbdt-pw-multiclass: every host fit across the cores
+    first, then one device graph at a time; the model text, the learn curve
+    and the held-out curve must be the device's to the bit."""
+    var host_texts = List[String](length=PWMC_UNITS, fill=String(""))
+    var host_learn = List[List[Float64]](length=PWMC_UNITS, fill=List[Float64]())
+    var host_tests = List[List[Float64]](length=PWMC_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var learn_addr = Int(host_learn.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm learn_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var l = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=learn_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_pwmc_opts(unit), _pwmc_inputs(unit))
+        p[unit] = outcome.text.copy()
+        l[unit] = outcome.learn.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat pwmc host", PWMC_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(PWMC_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_pwmc_opts(unit), _pwmc_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat pwmc unit " + String(unit)
+                    + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.learn) != len(host_learn[unit]) or len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat pwmc unit " + String(unit) + ": curve lengths differ")
+            for i in range(len(outcome.learn)):  # small-loop(the learn curve)
+                if outcome.learn[i] != host_learn[unit][i]:
+                    raise Error("gbdt_host_device_cat pwmc unit " + String(unit) + ": learn loss "
+                                + String(i) + " differs")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat pwmc unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat pwmc device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_learn^
+    _ = host_tests^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat pwmc device: " + String(count) + " of "
+                       + String(PWMC_UNITS) + " cases failed" + failed if count > 0 else ""))
+
 
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

@@ -93,6 +93,7 @@ from gbdt.host.gbdt_oracle_depthwise import (
 from gbdt.options.data_processing_options import nan_mode_from_name
 from gbdt.options.catboost_options import (
     check_tree_limits,
+    pointwise_policy_check,
     querywise_pointwise_leaf_check,
     simple_leaf_iterations_check,
     simple_leaves_check,
@@ -441,15 +442,8 @@ def _gbdt_fit_pointwise_arm(
             "Maximum leaves count for Lossguide grow policy is 65536; got "
             + String(max_leaves)
         )
-    if grow_code != 0:
-        # `train`'s words (gbdt/train.mojo), both columns
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher, an"
-            " OBLIVIOUS searcher; grow_policy="
-            + String("Depthwise" if grow_code == 1 else "Lossguide")
-            + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only"
-            " (pointwise_non_symmetric.cpp:5-29)"
-        )
+    # `train`'s body (gbdt/options/catboost_options.mojo), both columns
+    pointwise_policy_check(True, grow_code)
     # ---- the loss: the one-output losses this searcher trains; the
     # multi-output ones refused in `fit_with_test`'s words ----
     var pw_is_rmse = loss == String("RMSE")
@@ -1163,16 +1157,10 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "gbdt_fit: grow_policy code must be 0 (SymmetricTree), 1"
             " (Depthwise) or 2 (Lossguide), got " + String(grow_code)
         )
-    if grow_code != 0 and params.i(26) != 0:
-        # lane gbdt-cpu-rest-4-ns (2026-11-23): not a CPU gap; `train`
-        # refuses it first, in these words (gbdt/train.mojo), on every column
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher, an"
-            " OBLIVIOUS searcher; grow_policy="
-            + String("Depthwise" if grow_code == 1 else "Lossguide")
-            + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only"
-            " (pointwise_non_symmetric.cpp:5-29)"
-        )
+    # lane gbdt-cpu-rest-4-ns (2026-11-23): not a CPU gap; `train` refuses
+    # it first on every column, through the one body (lane
+    # gbdt-pw-multiclass: `pointwise_policy_check`)
+    pointwise_policy_check(params.i(26) != 0, grow_code)
     var min_split_gain = Float64(-1)
     if len(params) >= fixed_and_weights + 1:
         min_split_gain = params.f(fixed_and_weights)

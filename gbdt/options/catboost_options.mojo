@@ -272,6 +272,23 @@ def simple_leaf_iterations_check(leaf_estimation_method: Int, iterations: Int) r
         )
 
 
+def pointwise_policy_check(use_pointwise_searcher: Bool, grow_policy: Int) raises:
+    """THE ONE REFUSAL of `use_pointwise_searcher` under Depthwise or
+    Lossguide, for the device fit (`gbdt/train.mojo::train`,
+    `doc_parallel_boosting.fit_with_test`) and the host fit
+    (`gbdt/mojolearn_gbdt_host_run.mojo`) alike (lane gbdt-pw-multiclass,
+    2026-11-23: it was four restatements of one sentence). Both columns call
+    it before `simple_leaves_check`, so a Depthwise pointwise fit with Simple
+    leaves refuses in this text on both."""
+    if use_pointwise_searcher and grow_policy != GROW_SYMMETRIC:
+        raise Error(
+            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher, an"
+            " OBLIVIOUS searcher; grow_policy=" + grow_policy_name(grow_policy)
+            + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only"
+            " (pointwise_non_symmetric.cpp:5-29)"
+        )
+
+
 def simple_leaves_check(
     leaf_estimation_method: Int,
     multi_output: Bool,

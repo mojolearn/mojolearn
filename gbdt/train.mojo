@@ -331,6 +331,7 @@ from gbdt.options.data_processing_options import (
 from gbdt.options.loss_description import make_loss_description
 from gbdt.options.catboost_options import (
     COUNTER_CALC_FULL,
+    pointwise_policy_check,
     GROW_LOSSGUIDE,
     GROW_SYMMETRIC,
     SCORE_FUNCTION_COSINE,
@@ -1451,13 +1452,8 @@ def train(
             "Maximum leaves count for Lossguide grow policy is 65536; got "
             + String(max_leaves)
         )
-    if policy != GROW_SYMMETRIC and use_pointwise_searcher:
-        raise Error(
-            "use_pointwise_searcher is TDocParallelObliviousTreeSearcher, an"
-            " OBLIVIOUS searcher; grow_policy=" + grow_policy_name(policy)
-            + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree> only"
-            " (pointwise_non_symmetric.cpp:5-29)"
-        )
+    # the one body both columns call (lane gbdt-pw-multiclass)
+    pointwise_policy_check(use_pointwise_searcher, policy)
 
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
