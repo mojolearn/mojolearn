@@ -180,6 +180,12 @@ if [ -n "${FP_REPLAY:-}" ]; then
     # second machine (another vendor, or a CPU box): fit again here and compare with the digests the first box left
     step digest-replay "$PY" -I "$W/digest.py" "$REC" "$FP_REPLAY"
     grep -E '^DIGEST' "$RES/logs/digest-replay.log" | cut -c1-300
+    # the user-algorithm recipes: fitted again here, each compared with the first box's record (--against)
+    for r in "$FP_REPLAY"/recipes/*.record.json; do
+        [ -e "$r" ] || continue; n=$(basename "$r" .record.json); n=${n#example-}; mkdir -p "$REC/recipes"
+        step "recipe-against-$n" "$PY" -I -m mojolearn verify --recipe "example:$n" --against "$r" \
+            --record-out "$REC/recipes/$n.replay.record.json"
+    done
     echo "PROOF SUMMARY failed=$fails (replay)"; [ $fails = 0 ]; exit $?
 fi
 
@@ -279,6 +285,13 @@ EOF
 step verify-check-save "$PY" -I "$W/save.py" "$W"
 step verify-check "$PY" -I -m mojolearn verify --check "$W/rfc.model" --estimator RandomForestClassifier --inputs "$W/cx.npy"
 step verify-fit-both "$PY" -I -m mojolearn verify --fit-both --estimator Ridge --fit-params '{"alpha": 1.0}' --fit-inputs "$REC/X.npy" --fit-targets "$REC/y.npy" --inputs "$REC/X.npy"
+# a user's ALGORITHM (verify --recipe): every shipped recipe fitted from scratch in a fresh process per device,
+# compared, recorded for a second machine (FP_REPLAY compares with --against), with the recipe self-test
+mkdir -p "$REC/recipes"
+for n in ridge logistic kmeans gbdt-categorical seq-transformer seq-mamba2 seq-recurrent seq-conv1d-residual; do
+    step "verify-recipe-$n" "$PY" -I -m mojolearn verify --recipe "example:$n" --self-test \
+        --record-out "$REC/recipes/example-$n.record.json"
+done
 
 echo "PROOF SUMMARY failed=$fails digests=$REC"
 [ $fails = 0 ]

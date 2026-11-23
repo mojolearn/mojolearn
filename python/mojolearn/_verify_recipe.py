@@ -634,7 +634,9 @@ def device_env(device):
 def spawn_children(jobs):
     """Run one fresh process per (device, directory), all at once (the
     devices are independent), and return {device: (exit code, output tail)}."""
-    procs = {device: subprocess.Popen([sys.executable, "-m", "mojolearn._verify_recipe", directory],
+    # an isolated parent (`python -I`) starts isolated children: the same package, never the working directory's
+    command = [sys.executable] + (["-I"] if sys.flags.isolated else []) + ["-m", "mojolearn._verify_recipe"]
+    procs = {device: subprocess.Popen(command + [directory],
                                       env=device_env(device), stdout=subprocess.PIPE,
                                       stderr=subprocess.STDOUT, text=True)
              for device, directory in jobs}
