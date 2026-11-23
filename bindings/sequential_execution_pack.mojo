@@ -51,6 +51,10 @@ def sequential_targets(mut mods: NativeModules, model: PythonObject, source: Pyt
     var descriptor = sequential_descriptor(y, "y")
     # lm_head (lane neural-blocks-3-lm): the (n_samples, length) int32 token ids as they are (target code 0,
     # no labels sort); the native fit checks their count and dtype against the head
+    # `_y_1d` is False for a classifier (its answers are labels and probabilities, never reshaped), as a model
+    # loaded from its file has it (sequential_checkpoint_door.mojo), so the two have one `digest_`; a regression
+    # sets it below.
+    py_setitem(fields, nk[].k__y_1d, False)
     if loss == "token_cross_entropy":
         return Python.tuple(y, descriptor, 0, PythonObject(None))
     if classification:

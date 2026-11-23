@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Write docs/api/DIGEST_FIELDS.md: what `model.digest_` hashes, per public class.
+"""Write docs/api/DIGEST_FIELDS.md: what `model.digest_` (and `training_digest_`) hashes, per public class.
 
 Read from SOURCE with `ast` (no built package, nothing imported, nothing run),
 from the same declarations the compiled walk reads
 (bindings/fitted_digest_door.mojo):
 
 - `python/mojolearn/_digest_fields.py`: REFUSED_BY_NAME (no digest yet, with
-  the reason), EXTRA_BY_NAME (private fitted fields added), NOT_STATE (public
-  names no class hashes);
+  the reason), EXTRA_BY_NAME (private fitted fields added), PARAMS_BY_NAME
+  (constructor parameters added), NOT_STATE (public names no digest hashes),
+  TRAINING and TRAINING_EXTRA_BY_NAME (the training record, hashed by
+  `training_digest_` only), SCHEMA_NOT_ANSWERS (what `answer_steps` leaves
+  out of a save schema);
 - the save schemas the classes register
   (`_native_archive_bridge.register(Class, formats, schema)`): the members
-  `save` writes;
+  `save` writes, less the members `answer_steps` leaves out;
 - the rule for every other class: its public fitted attributes.
 
 A class's row is found the way the walk finds it: the class or its nearest
@@ -134,7 +137,7 @@ def parse(path_text):
               and len(node.args) >= 3 and isinstance(node.args[0], ast.Name)):
             steps = literal(node.args[2], constants)
             if isinstance(steps, tuple):
-                schemas.append((node.args[0].id, schema_members(steps), False))
+                schemas.append((node.args[0].id, schema_members(answer_steps(steps, schema_not_answers())), False))
         elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "schema"
               and isinstance(node.func.value, ast.Name) and node.func.value.id == "_digest_fields"
               and len(node.args) >= 2 and isinstance(node.args[0], ast.Name)):
@@ -143,6 +146,53 @@ def parse(path_text):
             if isinstance(steps, tuple):
                 schemas.append((node.args[0].id, schema_members(steps), True))
     return path.name, classes, schemas
+
+
+#: The answer filter of python/mojolearn/_digest_fields.py `answer_steps`, on literal steps.
+MEMBER_STEPS = ("str", "lower", "array", "flat", "utf8", "init_name", "classes", "head", "reshape", "device_array")
+PACKED_STEPS = ("i8", "i4", "f8", "f4")
+NESTED_AT = {"when": 3, "unless": 3, "when_in": 3, "when_set": 2, "when_none": 2}
+
+
+def answer_steps(steps, drop):
+    """`steps` without the members and packed entries read from a field in `drop` (`_digest_fields.answer_steps`)."""
+    kept = []
+    for step in steps:
+        kind = step[0] if isinstance(step, tuple) and step and isinstance(step[0], str) else None
+        if kind in MEMBER_STEPS and len(step) > 2 and isinstance(step[2], str) and step[2] in drop:
+            continue
+        if kind in PACKED_STEPS and isinstance(step[2], tuple):
+            entries = tuple(e for e in step[2] if not (isinstance(e, tuple) and len(e) > 1
+                                                      and isinstance(e[1], str) and e[1] in drop))
+            if not entries:
+                continue
+            step = (step[0], step[1], entries) + tuple(step[3:])
+        elif kind in NESTED_AT and len(step) > NESTED_AT[kind] and isinstance(step[NESTED_AT[kind]], tuple):
+            at = NESTED_AT[kind]
+            step = step[:at] + (answer_steps(step[at], drop),) + tuple(step[at + 1:])
+        kept.append(step)
+    return tuple(kept)
+
+
+def _names(node, assigned):
+    """A module-level tuple expression of `_digest_fields.py` (literals, names of other tuples, `+`)."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _names(node.left, assigned) + _names(node.right, assigned)
+    if isinstance(node, ast.Name):
+        return _names(assigned[node.id], assigned)
+    return tuple(ast.literal_eval(node))
+
+
+def _assigned():
+    tree = ast.parse((PACKAGE / "_digest_fields.py").read_text())
+    return {node.targets[0].id: node.value for node in tree.body
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)}
+
+
+def schema_not_answers():
+    """SCHEMA_NOT_ANSWERS of `_digest_fields.py`, as written there."""
+    assigned = _assigned()
+    return frozenset(_names(assigned["SCHEMA_NOT_ANSWERS"], assigned))
 
 
 def schema_members(steps, conditional=False):
@@ -166,13 +216,17 @@ def schema_members(steps, conditional=False):
 
 def tables():
     """EXTRA_BY_NAME, REFUSED_BY_NAME, NOT_STATE and OWN_WALK_BY_NAME of `_digest_fields.py`, as written there."""
-    tree = ast.parse((PACKAGE / "_digest_fields.py").read_text())
-    found = {}
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            if node.targets[0].id in ("EXTRA_BY_NAME", "REFUSED_BY_NAME", "NOT_STATE", "OWN_WALK_BY_NAME"):
-                found[node.targets[0].id] = ast.literal_eval(node.value)
+    found = {name: ast.literal_eval(value) for name, value in _assigned().items()
+             if name in ("EXTRA_BY_NAME", "REFUSED_BY_NAME", "NOT_STATE", "OWN_WALK_BY_NAME")}
     return found["EXTRA_BY_NAME"], found["REFUSED_BY_NAME"], found["NOT_STATE"], found["OWN_WALK_BY_NAME"]
+
+
+def training_tables():
+    """PARAMS_BY_NAME, TRAINING, TRAINING_EXTRA_BY_NAME and the settings part of SCHEMA_NOT_ANSWERS."""
+    assigned = _assigned()
+    found = {name: ast.literal_eval(assigned[name]) for name in ("PARAMS_BY_NAME", "TRAINING", "TRAINING_EXTRA_BY_NAME")}
+    settings = sorted(schema_not_answers() - set(found["TRAINING"]) - set(ast.literal_eval(assigned["NOT_STATE"])))
+    return found["PARAMS_BY_NAME"], found["TRAINING"], found["TRAINING_EXTRA_BY_NAME"], settings
 
 
 def public_names():
@@ -226,6 +280,7 @@ def sources():
 
 def rows(jobs):
     extra, refused, _, own = tables()
+    params, _, training_extra, _ = training_tables()
     files = sources()
     if jobs == 1:
         parsed = [parse(path) for path in files]
@@ -276,22 +331,29 @@ def rows(jobs):
         source = "digest schema"
         listed = next((digest_schemas[c] for c in line if c in digest_schemas), None)
         if listed is None:
-            source = "save schema"
+            source = "save schema (answer members)"
             listed = next((schemas[c] for c in line if c in schemas), None)
         if listed is not None:
             text = ", ".join(f"`{m}`" + (" (when present)" if cond else "") for m, cond in listed)
             out.append((name, source, text))
             continue
         added = next((extra[c] for c in line if c in extra), ())
+        given = next((params[c] for c in line if c in params), ())
+        kept = next((training_extra[c] for c in line if c in training_extra), ())
         text = "every public fitted attribute"
         if added:
             text += "; plus " + ", ".join(f"`{n}`" for n in added)
+        if given:
+            text += "; parameters " + ", ".join(f"`{n}`" for n in given)
+        if kept:
+            text += "; `training_digest_` also " + ", ".join(f"`{n}`" for n in kept)
         out.append((name, "public fitted attributes", text))
     return out
 
 
 def render(table):
     _, _, not_state, _ = tables()
+    _, training, _, settings = training_tables()
     lines = [
         "# What `digest_` hashes",
         "",
@@ -303,7 +365,13 @@ def render(table):
         "item; a member estimator contributes its own digest; a layer object contributes its class name and its learned",
         "arrays. Nothing is kept between reads: the digest is hashed from the model as it is at each read.",
         "",
-        "- **save schema**: the members `save` writes for the class.",
+        "`digest_` means \"this model gives these answers\": exactly the state the answer methods read, never the",
+        "training record. `training_digest_` is the separate hash of that record (the public names below and the",
+        "private fields a row names), under the class name followed by `#training`.",
+        "",
+        "- **save schema (answer members)**: the members `save` writes for the class, without the training record and",
+        "  the fit-only settings; a fitted model `save` refuses (a format the file does not carry) is hashed by its",
+        "  public fitted attributes.",
         "- **digest schema**: the members `save` writes, built without the refusals of `save` (a model the file format",
         "  does not carry still has a digest).",
         "- **public fitted attributes**: every stored attribute whose name ends in `_` and does not start with `_`,",
@@ -314,6 +382,8 @@ def render(table):
         "  fields, same digest.",
         "- Public names no class hashes (they record how a call ran, not what was fitted): "
         + ", ".join(f"`{n}`" for n in not_state) + ".",
+        "- The training record (`training_digest_` only): " + ", ".join(f"`{n}`" for n in training) + ".",
+        "- Fit-only settings a save schema's digest leaves out: " + ", ".join(f"`{n}`" for n in settings) + ".",
         "",
         "| Class | Source | Fields |",
         "|---|---|---|",
