@@ -66,9 +66,9 @@ struct TensorOwner(Movable):
 def tensor_values(seed: Int, tensor: Int, count: Int, epoch: Int, parameter: Bool, spelling: Int) -> TensorOwner:
     var cells = List[Float32](length=count + 4, fill=MX_GUARD)
     # A plain loop over at most 128 cells (check-trim, 2026-11-23): this ran as a host_parallelize dispatch per
-    # tensor, about 640 dispatches of 16..128 cells over the 16 fixtures, whose thread hand-off cost far more than
-    # the cells (the file's 4 s). The fixtures are the independent units and stay serial for the shared optimizer
-    # pool (test_maximize); the optimizer's own update kernels are unchanged.
+    # tensor, about 640 dispatches of 16..128 cells over the 16 fixtures, whose thread hand-off is expected to cost
+    # far more than the cells (the likely cause of the file's 4 s; not measured). The fixtures are the units
+    # and stay serial for the shared optimizer pool (test_maximize); the optimizer's update kernels are unchanged.
     for index in range(count):  # small-loop(count: at most 128 fixture cells)
         # Independent native fixture preparation, not product RNG. The two
         # original seed labels select distinct data with the same sign/range
