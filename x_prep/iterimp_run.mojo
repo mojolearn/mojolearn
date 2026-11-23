@@ -744,9 +744,12 @@ struct IterImpMemberFit(Movable):
 
 
 def iterimp_member_free(member: IterImpMember, mut fit: IterImpMemberFit):
-    """Release every member state of the fit (never raises; after PACK, or
-    on an error path)."""
+    """Release every member state of the fit the door's PACK did not hand to
+    its estimator (a 0 word: `member_held_adopt` took it); never raises
+    (after PACK, or on an error path)."""
     for s in range(len(fit.states)):  # driver-loop: over the fitted imputation steps (one state each)
+        if fit.states[s] == 0:
+            continue
         try:
             var call = member_call_of(member.plan, fit.states[s])
             member_free(member.plan, call)
@@ -785,18 +788,38 @@ def _member_stop[R: IterImpRunner](mut runner: R, work_on: Bool, xt: Int, prev: 
     return stop
 
 
-def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Float64], member: IterImpMember,
-                                   mut fit: IterImpMemberFit, xt: Int, mask: Int, n: Int, dk: Int, j: Int,
-                                   nbl: List[Int], mut rng: UInt64) raises -> Tuple[Int, Int]:
-    """One (round, feature) step: the gather program (`_ii_take`: feature
-    j's missing rows, the predict block Xt[mis][:, nbl], the training blocks
-    Xt[obs][:, nbl] and Xt[obs, j]), a new member state FIT on the training
-    blocks where the arena holds them (kept in `fit.states`), its PREDICT
-    (or PREDICT_STD and the mean, then the truncated normal draws) on the
-    predict block, and the scatter program (`_ii_put`: the clipped float32
-    store into Xt[rows, j]; a draw is stored unclipped). Returns the new
-    Xt's (handle, offset), or (II_NONE, 0) when feature j has no missing row
-    (Xt unchanged, as the door's `_ii_put` returned it)."""
+struct _Gathered(Movable):
+    """What `_member_gather` leaves: the arena `handle` (its address `a`),
+    the offsets of the missing rows' int32 words (`mis_rows`) and of the
+    predict block (`gm`), the missing count `m`; with the fit blocks the
+    training block (`go`), its targets (`gy`) and the observed count `mob`."""
+    var handle: Int
+    var a: Int
+    var mis_rows: Int
+    var gm: Int
+    var m: Int
+    var go: Int
+    var gy: Int
+    var mob: Int
+
+    def __init__(out self):
+        self.handle = II_NONE
+        self.a = 0
+        self.mis_rows = 0
+        self.gm = 0
+        self.m = 0
+        self.go = 0
+        self.gy = 0
+        self.mob = 0
+
+
+def _member_gather[R: IterImpRunner](mut runner: R, work_on: Bool, xt: Int, mask: Int, n: Int, dk: Int, j: Int,
+                                     nbl: List[Int], with_fit: Bool) raises -> _Gathered:
+    """`_ii_take`'s program: feature j's missing rows and the predict block
+    Xt[mis][:, nbl] and, `with_fit`, the training blocks Xt[obs][:, nbl] and
+    Xt[obs, j] (the same stages in the same order the fit's step and the
+    door's transform rounds ran). The arena stays held: the caller releases
+    `handle` after the scatter read the rows."""
     var nc = len(nbl)
     var p = EncProgram(work_on)
     var xo = enc_input(p, n * dk, 1)
@@ -808,41 +831,52 @@ def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Fl
     var gm = p.alloc(n * nc)
     if nc > 0:
         _stage(p.program, OP_II_GATHER, n * nc, xo, dk, mis[0], mis[1], co, nc, gm)
-    var obs = enc_ii_rows(p, mo, n, dk, j, False)
-    var go = p.alloc(n * nc)
-    var gy = p.alloc(n)
-    if nc > 0:
-        _stage(p.program, OP_II_GATHER, n * nc, xo, dk, obs[0], obs[1], co, nc, go)
-    _stage(p.program, OP_II_GATHER, n, xo, dk, obs[0], obs[1], jo, 1, gy)
+    var out = _Gathered()
+    if with_fit:
+        var obs = enc_ii_rows(p, mo, n, dk, j, False)
+        var go = p.alloc(n * nc)
+        var gy = p.alloc(n)
+        if nc > 0:
+            _stage(p.program, OP_II_GATHER, n * nc, xo, dk, obs[0], obs[1], co, nc, go)
+        _stage(p.program, OP_II_GATHER, n, xo, dk, obs[0], obs[1], jo, 1, gy)
+        out.go = go
+        out.gy = gy
+        out.mob = obs[1]  # an offset until the run below
     var take_seconds: List[Int] = [xt, mask]
     var h = runner.run(p, take_seconds)
     _ = len(p.consts_f)  # the program's own words stay alive past the run
     var a = runner.words(h)
-    var m = Int(_word(a, mis[1]))
-    var mob = Int(_word(a, obs[1]))
-    # FIT: a new state on the gathered training rows (host float32 views)
-    var call = member_new(member.plan)
-    fit.states.append(call.state)  # freed by iterimp_member_free on every path
-    call.x = MemberMatrix(a + 4 * go, mob, nc)
-    call.y = MemberMatrix(a + 4 * gy, mob, 1)
-    _ = runner.member(member.plan, MEMBER_OP_FIT, call)
-    if member.borrows:
-        member_own(member.plan, call.state)  # THE LIFETIME RULE: the arena goes at the step's end
-    member_notices_take(member.plan, call.state, fit.notices)
-    if m == 0:
-        runner.release(h)
-        return (II_NONE, 0)
+    out.handle = h
+    out.a = a
+    out.mis_rows = mis[0]
+    out.gm = gm
+    out.m = Int(_word(a, mis[1]))
+    if with_fit:
+        out.mob = Int(_word(a, out.mob))
+    return out^
+
+
+def _member_put[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Float64], plan: MemberPlan,
+                                  state: Int, posterior: Bool, gathered: _Gathered, xt: Int, n: Int, dk: Int,
+                                  j: Int, nc: Int, mut rng: UInt64) raises -> Tuple[Int, Int]:
+    """`_ii_put`: the member's PREDICT (or PREDICT_STD and the mean, then
+    the truncated normal draws) of state `state` on the gathered predict
+    block, then the scatter program (the clipped float32 store into
+    Xt[rows, j]; a draw is stored unclipped). Returns the new Xt's (handle,
+    offset). The gathered arena is released after the scatter read it."""
+    var m = gathered.m
+    var a = gathered.a
     var lo = bounds[2 * j]
     var hi = bounds[2 * j + 1]
     var values = List[Float32](length=m, fill=0.0)
     var clip = 1
-    var ask = member_call_of(member.plan, call.state)
-    ask.x = MemberMatrix(a + 4 * gm, m, nc)
-    if member.posterior:
+    var ask = member_call_of(plan, state)
+    ask.x = MemberMatrix(a + 4 * gathered.gm, m, nc)
+    if posterior:
         var std = List[Float32](length=m, fill=0.0)
         ask.dst = MemberMatrix(Int(std.unsafe_ptr()), m, 1)
         ask.y = MemberMatrix(Int(values.unsafe_ptr()), m, 1)  # the same query's mean
-        _ = runner.member(member.plan, MEMBER_OP_PREDICT_STD, ask)
+        _ = runner.member(plan, MEMBER_OP_PREDICT_STD, ask)
         var mu = List[Float64](length=m, fill=0.0)
         var sd = List[Float64](length=m, fill=0.0)
         for i in range(m):  # cpu-route: one feature's posterior mean and std widened (exact) for the serial draw stream below
@@ -859,7 +893,7 @@ def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Fl
         clip = 0
     else:
         ask.dst = MemberMatrix(Int(values.unsafe_ptr()), m, 1)
-        _ = runner.member(member.plan, MEMBER_OP_PREDICT, ask)
+        _ = runner.member(plan, MEMBER_OP_PREDICT, ask)
     # `_ii_put`'s program: Xt in-out, the rows' int32 words where the gather
     # program left them, the values, the bounds
     var q = EncProgram(work_on)
@@ -870,12 +904,40 @@ def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Fl
     var lohi: List[Float64] = [lo, hi]
     var bo = q.put_floats(lohi)
     _stage(q.program, OP_II_SCATTER, m, qx, dk, ro, j, vo, bo, clip)
-    var put_seconds: List[Int] = [xt, a + 4 * mis[0], Int(values.unsafe_ptr())]
+    var put_seconds: List[Int] = [xt, a + 4 * gathered.mis_rows, Int(values.unsafe_ptr())]
     var h2 = runner.run(q, put_seconds)
     _ = len(values)  # the values the program read stay alive past it
     _ = len(q.consts_f)
-    runner.release(h)  # the gather arena (rows, blocks), read by the scatter above
+    runner.release(gathered.handle)  # the gather arena (rows, blocks), read by the scatter above
     return (h2, qx)
+
+
+def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Float64], member: IterImpMember,
+                                   mut fit: IterImpMemberFit, xt: Int, mask: Int, n: Int, dk: Int, j: Int,
+                                   nbl: List[Int], mut rng: UInt64) raises -> Tuple[Int, Int]:
+    """One (round, feature) step: the gather program (`_member_gather` with
+    the training blocks), a new member state FIT on the training blocks
+    where the arena holds them (kept in `fit.states`), then `_member_put`
+    (its PREDICT or PREDICT_STD on the predict block and the scatter).
+    Returns the new Xt's (handle, offset), or (II_NONE, 0) when feature j
+    has no missing row (Xt unchanged, as the door's `_ii_put` returned it)."""
+    var nc = len(nbl)
+    var gathered = _member_gather(runner, work_on, xt, mask, n, dk, j, nbl, True)
+    var a = gathered.a
+    # FIT: a new state on the gathered training rows (host float32 views)
+    var call = member_new(member.plan)
+    fit.states.append(call.state)  # freed by iterimp_member_free on every path
+    call.x = MemberMatrix(a + 4 * gathered.go, gathered.mob, nc)
+    call.y = MemberMatrix(a + 4 * gathered.gy, gathered.mob, 1)
+    _ = runner.member(member.plan, MEMBER_OP_FIT, call)
+    if member.borrows:
+        member_own(member.plan, call.state)  # THE LIFETIME RULE: the arena goes at the step's end
+    member_notices_take(member.plan, call.state, fit.notices)
+    if gathered.m == 0:
+        runner.release(gathered.handle)
+        return (II_NONE, 0)
+    return _member_put(runner, work_on, bounds, member.plan, call.state, member.posterior, gathered, xt, n, dk, j,
+                       nc, rng)
 
 
 def iterimp_member_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut plan: IterImpPlan,
@@ -952,6 +1014,73 @@ def iterimp_member_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut pl
     except error:
         iterimp_member_free(member, fit)
         raise error^
+
+
+# ---------------------------------------------------------------- transform with a supplied estimator
+@fieldwise_init
+struct IterImpHeldStep(Copyable, Movable):
+    """One fitted step of a supplied estimator for transform: feature `j`,
+    its neighbour list `nbl`, and the HELD member state of the step's fitted
+    estimator (`plan`, `state`: bindings/member_held_door.mojo, read once
+    per transform by the door's UNPACK; the estimator owns it)."""
+    var j: Int
+    var nbl: List[Int]
+    var plan: MemberPlan
+    var state: Int
+
+
+def iterimp_member_transform[R: IterImpRunner](mut runner: R, r: IterImpApply, steps: List[IterImpHeldStep],
+                                               mut rng: UInt64) raises -> IterImpApplied:
+    """IterativeImputer.transform with a supplied estimator whose fitted
+    steps are held native member states (lane mf-iterimp2): the initial
+    transform, the missing mask, then per fitted step in order the gather
+    program (the missing rows and the predict block), the member's PREDICT
+    (PREDICT_STD and the mean, then the draws, with sample_posterior) and
+    the scatter program, the same programs the door's transform rounds ran
+    over the public estimators; then the indicator. Serial by nature: each
+    step reads the Xt the step before it wrote; each member call runs
+    across the cores itself. `rng` advances as the draws use it. The
+    result's arena stays held."""
+    var n = r.n
+    var d = r.d
+    var dk = len(r.keep)
+    var p0 = EncProgram(r.work_on)
+    var o0 = imputer_transform_stage(p0, r.init, r.region)
+    var fill_seconds: List[Int] = [r.fill_address]
+    var h0 = runner.run(p0, fill_seconds)
+    _ = len(p0.consts_f)
+    # `_mask_arr`: the (n, dk) float32 missing mask (1.0 missing)
+    var mp = EncProgram(r.work_on)
+    var mx = _x(mp, n, d, r.mark, r.missing)
+    var mo = mp.alloc(n * dk)
+    var ko = mp.put_floats(enc_floats_of(r.keep))
+    _stage(mp.program, OP_NAN_MASK, n * dk, mx, n, d, ko, dk, mo)
+    var none = List[Int]()
+    var mh = runner.run(mp, none)
+    _ = len(mp.consts_f)  # the program's own words stay alive past the run
+    var mask = runner.words(mh) + 4 * mo
+    var xt_h = h0
+    var xt_off = o0
+    var xt = runner.words(h0) + 4 * o0
+    for s in range(len(steps)):  # driver-loop: over the fitted imputation steps in order (each reads the last imputation)
+        ref step = steps[s]
+        var nc = len(step.nbl)
+        var gathered = _member_gather(runner, r.work_on, xt, mask, n, dk, step.j, step.nbl, False)
+        if gathered.m == 0:
+            runner.release(gathered.handle)
+            continue
+        var made = _member_put(runner, r.work_on, r.bounds, step.plan, step.state, r.posterior, gathered, xt, n,
+                               dk, step.j, nc, rng)
+        runner.release(xt_h)
+        xt_h = made[0]
+        xt_off = made[1]
+        xt = runner.words(xt_h) + 4 * xt_off
+    runner.release(mh)
+    if len(r.indicator) == 0:
+        return IterImpApplied(xt_h, xt_off, dk, r.post_step)
+    var placed = iterimp_indicator(runner, n, d, dk, r.mark, r.missing, r.indicator, xt, r.work_on, r.region)
+    runner.release(xt_h)  # Xt, copied into the indicator program's arena
+    return IterImpApplied(placed[0], placed[1], dk + len(r.indicator), r.post_step)
 
 
 # ---------------------------------------------------------------- transform
