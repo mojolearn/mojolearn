@@ -464,8 +464,8 @@ struct _DoorModel(AgnModel):
         self.syn = Optional[PythonObject]()
         self.out = Optional[PythonObject]()
 
-    def _width(self, out: PythonObject) raises:
-        if Int(py=out.shape[1]) != self.k:
+    def _width(self, y_out: PythonObject) raises:
+        if Int(py=y_out.shape[1]) != self.k:
             raise Error("ValueError: the explained model output width changed after construction")
 
     def explained(mut self) raises -> Int:

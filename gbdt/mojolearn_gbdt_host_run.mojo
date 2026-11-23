@@ -153,9 +153,15 @@ comptime GBDT_HOST_DEFAULT_BORDER = Float32(0.5)
 comptime GBDT_HOST_MAX_DEPTH = 16
 
 
-def _fit_model(var fit: GbdtHostFitWithEval) -> GbdtHostModel:
-    """The ensemble of a fit with its held-out report, the pair consumed (its eval fields read before)."""
-    return fit.model^
+def _fit_model(mut fit: GbdtHostFitWithEval) -> GbdtHostModel:
+    """The ensemble of a fit with its held-out report, swapped out for an empty model so the pair stays
+    destructible (AGENTS.md part 6; its eval fields are read before)."""
+    var model = GbdtHostModel(
+        List[Int](), List[List[Float32]](), List[Int](), List[Int](), List[Int](), List[Int](), List[Int](),
+        List[Float32](), List[Float64](), 0, False,
+    )
+    swap(model, fit.model)
+    return model^
 
 
 def _refuse(what: String) raises:
@@ -1728,9 +1734,9 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             best_iteration = pw_fit.eval.best_iteration
             stopped_early = pw_fit.eval.stopped_early
             test_losses = pw_fit.eval.test_losses.copy()
-            # the whole pair moves into _fit_model, which returns its model (moving the field out of a live
-            # pw_fit left it partly destroyed: nn-integrate compile fix of lane gbdt-cpu-rest-2's arm)
-            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(_fit_model(pw_fit^), pw_start))
+            # _fit_model swaps the model out of the pair (moving the field out of pw_fit left it partly
+            # destroyed: nn-integrate compile fix of lane gbdt-cpu-rest-2's arm)
+            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(_fit_model(pw_fit), pw_start))
             return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
         # the grouped pointwise searcher (gbdt_oracle_pointwise_rank.mojo)
         var pw_model = gbdt_ranking_pointwise_host_fit(
