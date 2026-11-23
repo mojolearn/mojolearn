@@ -11,7 +11,6 @@ this check is correctness coverage, not an identity run or release verdict.
 from std.sys.compile import is_defined
 from std.testing import TestSuite
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from training.optimizer_public_common import PublicStep, PublicStepOut, OptHyper
 from training.host.optimizer_kernels import HostOptKernels
 from training.host.optimizer_public_host import host_close
@@ -66,8 +65,11 @@ struct TensorOwner(Movable):
 
 def tensor_values(seed: Int, tensor: Int, count: Int, epoch: Int, parameter: Bool, spelling: Int) -> TensorOwner:
     var cells = List[Float32](length=count + 4, fill=MX_GUARD)
-    var cp = cells.unsafe_ptr()
-    def cell(index: Int) {imm cp, imm seed, imm tensor, imm epoch, imm parameter, imm spelling}:
+    # A plain loop over at most 128 cells (check-trim, 2026-11-23): this ran as a host_parallelize dispatch per
+    # tensor, about 640 dispatches of 16..128 cells over the 16 fixtures, whose thread hand-off cost far more than
+    # the cells (the file's 4 s). The fixtures are the independent units and stay serial for the shared optimizer
+    # pool (test_maximize); the optimizer's own update kernels are unchanged.
+    for index in range(count):  # small-loop(count: at most 128 fixture cells)
         # Independent native fixture preparation, not product RNG. The two
         # original seed labels select distinct data with the same sign/range
         # and signed-zero conditions; no old random bytes/hashes are required.
@@ -83,8 +85,7 @@ def tensor_values(seed: Int, tensor: Int, count: Int, epoch: Int, parameter: Boo
                 # State the alternative in words so the test compiler cannot
                 # erase the signed-zero distinction by rewriting subtraction.
                 value = Float32(0) if (bitcast[DType.uint32](value) & UInt32(0x7fffffff)) == 0 else sign_flip(value)
-        cp.unsafe_store(index + 2, value)
-    host_parallelize(cell, count)
+        cells[index + 2] = value
     return TensorOwner(cells^, count)
 
 
