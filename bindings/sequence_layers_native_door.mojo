@@ -185,7 +185,11 @@ def _ln_class_admit(cls: PythonObject, layout: PythonObject, b: PythonObject) ra
 
 def _ln_device_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = sequence_keys()
-    if Bool(py=py_item(context, nk[].k_seqln_class_device_io_off)):
+    # TOMBSTONE: MOJOLEARN_LN_CLASS_DEVICE_IO_OFF (env; removed: decided A/B, post-merge 2026-10-10 NV 0.96 / AMD 1.03, noise = loser) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LN_CLASS_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
+    # The sequence binding's own before arm (MOJOLEARN_SEQ_DEVICE_IO_OFF, python/mojolearn/_native_optimizer_bridge.py)
+    # still turns the class's device I/O off: the same one context read as before, now its key.
+    if Bool(py=py_item(context, nk[].k_sequence_device_io_off)):
         return PythonObject(None)
     try:
         var entries = seq_binding(py_get(fields, nk[].k_numeric_mode), context, PythonObject(None))
@@ -482,7 +486,9 @@ def sequence_layer_norm(operation: Int, owner: PythonObject, values: PythonObjec
     if not same:
         raise Error("ValueError: LayerNorm input trailing shape differs from normalized_shape")
     var stats = PythonObject(None)
-    var keep_stats = input.device and not Bool(py=py_item(context, nk[].k_seqln_keep_stats_off))
+    # TOMBSTONE: MOJOLEARN_LN_KEEP_STATS_OFF (env; removed: decided A/B, post-merge 2026-10-10 NV 0.95 / AMD 1.07, neutral = loser) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LN_KEEP_STATS_OFF.patch; record in docs/TOMBSTONES.md.
+    var keep_stats = input.device
     # Row N162: the kept stats are made inside the forward's one call
     # (`_run`, alloc_stats) and published after it. Every device image serves
     # that form (`_run` refuses an image without device LayerNorm), so the

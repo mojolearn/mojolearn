@@ -34,8 +34,8 @@ def layer_norm_dev(handles: List[Int], addrs: List[Int], ip: List[Int],
     when present, dweight / dbias, and y only when a y handle is passed.
     Returns M * D.
 
-    Kept stats (lane layernorm-idn N3, 2026-10-09; the Python shell's
-    `MOJOLEARN_LN_KEEP_STATS_OFF=1` is the before arm): with six handles and
+    Kept stats (lane layernorm-idn N3, 2026-10-09; every resident LayerNorm
+    forward keeps them, the env before arm was deleted 2026-11-23): with six handles and
     ip[5] = 1 the forward stores the row mean and rstd into the two M-float
     tensors, and a backward READS them instead of recomputing the whole
     forward (one OP_LN_FWD launch over M x D plus an M x D scratch y fewer
