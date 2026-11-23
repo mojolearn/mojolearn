@@ -89,8 +89,17 @@ comptime OPT_KIND_ADAMW = 2
 
 
 def shape() -> ByteConfig:
-    """`LanguageModelConfig()`: the Python default shape."""
+    """`LanguageModelConfig()`: the Python default shape (the routes cases: their fixtures hold its parameters)."""
     return ByteConfig(chunked_lm_head_v2=False)
+
+
+def session_shape() -> ByteConfig:
+    """The session cases' model (check-trim-2, 2026-11-23): the default's structure (two layers, grouped-query
+    attention with n_heads 2 over n_kv 1, head_dim 8, the 256-byte vocabulary) at a quarter of its length and half its
+    width. The session cases compare the session against itself (many steps against single steps, full against
+    lean, evaluate and logits against state), never against stored values, so no fixture depends on the shape."""
+    return ByteConfig(batch=2, length=8, d_model=16, n_heads=2, n_kv=1, head_dim=8, intermediate=32, n_layers=2,
+                      vocab_size=256, chunked_lm_head_v2=False)
 
 
 def lcg_next(mut state: UInt64) -> UInt64:
@@ -319,7 +328,7 @@ struct Resident(Movable):
 
 def steps_equal_single_steps(key: ByteLmEntryKey, n_steps: Int) raises:
     """test_train_steps_equals_single_steps[n_steps]."""
-    var cfg = shape()
+    var cfg = session_shape()
     var n = cfg.n_total()
     var width = cfg.batch * (cfg.length + 1)
     var many = Resident(key, cfg, weights(n, 0))
@@ -341,7 +350,7 @@ def steps_equal_single_steps(key: ByteLmEntryKey, n_steps: Int) raises:
 
 def steps_on_an_open_session(key: ByteLmEntryKey) raises:
     """test_train_steps_on_an_open_session_runs_the_multi_step_operation."""
-    var cfg = shape()
+    var cfg = session_shape()
     var n = cfg.n_total()
     var width = cfg.batch * (cfg.length + 1)
     var many = Resident(key, cfg, weights(n, 0))
@@ -366,7 +375,7 @@ def steps_on_an_open_session(key: ByteLmEntryKey) raises:
 
 def evaluate_preserves_state(key: ByteLmEntryKey) raises:
     """test_evaluate_preserves_all_state_and_has_no_gradient_output."""
-    var cfg = shape()
+    var cfg = session_shape()
     var model = Resident(key, cfg, weights(cfg.n_total(), 23))
     try:
         var ids = arange_ids(cfg.batch, cfg.length + 1)
@@ -381,15 +390,15 @@ def evaluate_preserves_state(key: ByteLmEntryKey) raises:
 
 def logits_change_no_state(key: ByteLmEntryKey) raises:
     """test_logits_change_no_state_and_do_not_advance_the_step (resident)."""
-    var cfg = shape()
+    var cfg = session_shape()
     var model = Resident(key, cfg, weights(cfg.n_total(), 17))
     try:
         _ = model.step(arange_ids(cfg.batch, cfg.length + 1), 1, False)
         var before = model.export_state()
-        var x = arange_ids(3, 32)
+        var x = arange_ids(3, cfg.length)  # three rows of the model's length (32 at the default shape)
         var x_before = x.copy()
-        _ = model.logits(x, 3, 32)
-        _ = model.next_bytes(x, 3, 32)
+        _ = model.logits(x, 3, cfg.length)
+        _ = model.next_bytes(x, 3, cfg.length)
         same_state(model.export_state(), before, "logits and next bytes")
         require(model.status_completed() == 1, "logits moved the step count")
         same_i32(x, x_before, "the caller's ids")
@@ -399,7 +408,7 @@ def logits_change_no_state(key: ByteLmEntryKey) raises:
 
 def full_is_lean_plus_export(key: ByteLmEntryKey) raises:
     """test_full_result_on_a_resident_session_is_the_lean_step_plus_the_gradient_export."""
-    var cfg = shape()
+    var cfg = session_shape()
     var full = Resident(key, cfg, weights(cfg.n_total(), 29))
     var lean = Resident(key, cfg, weights(cfg.n_total(), 29))
     try:
