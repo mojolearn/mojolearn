@@ -103,11 +103,11 @@ def _grad(k: Int, i: Int) -> Float64:
     return v
 
 
-def _reference(case: _StepCase, mut p: List[Float64], mut s1: List[Float64], mut s2: List[Float64]):
+def _reference(tc: _StepCase, mut p: List[Float64], mut s1: List[Float64], mut s2: List[Float64]):
     """torch.optim.RMSprop / Adagrad and timm Lamb in float64, _STEPS steps (s1, s2 the saved buffers:
     rmsprop buf / grad average and square average; adagrad -, sum; lamb exp_avg, exp_avg_sq)."""
-    var cfg = case.cfg
-    var lr = Float64(case.lr)
+    var cfg = tc.cfg
+    var lr = Float64(tc.lr)
     var f1 = Float64(cfg.f1)
     var f2 = Float64(cfg.f2)
     var eps = Float64(cfg.eps)
@@ -176,7 +176,7 @@ def _reference(case: _StepCase, mut p: List[Float64], mut s1: List[Float64], mut
                     p[i] -= lr * trust * u[i]
 
 
-def run_step_case[E: Exec](mut ex: E, case: _StepCase) raises -> List[Float32]:
+def run_step_case[E: Exec](mut ex: E, tc: _StepCase) raises -> List[Float32]:
     """_STEPS steps of nn_opt_step from p = normal(_N) over tensors [0, _SPLIT), [_SPLIT, _N); checks the
     float64 reference and returns (p, s1, s2) as words."""
     var p0 = normal(_N, 31)
@@ -186,20 +186,20 @@ def run_step_case[E: Exec](mut ex: E, case: _StepCase) raises -> List[Float32]:
     var s2 = ex.alloc(_N)
     var s3 = ex.alloc(_N)
     var zero = List[Float32](length=_N, fill=Float32(0))
-    var init2 = List[Float32](length=_N, fill=case.cfg.f2 if case.cfg.kind == NN_OPT_ADAGRAD else Float32(0))
+    var init2 = List[Float32](length=_N, fill=tc.cfg.f2 if tc.cfg.kind == NN_OPT_ADAGRAD else Float32(0))
     ex.upload(P, FP(unsafe_from_address=Int(p0.unsafe_ptr())), _N)
     ex.upload(s1, FP(unsafe_from_address=Int(zero.unsafe_ptr())), _N)
     ex.upload(s2, FP(unsafe_from_address=Int(init2.unsafe_ptr())), _N)
     ex.upload(s3, FP(unsafe_from_address=Int(zero.unsafe_ptr())), _N)
     var offsets: List[Int] = [0, _SPLIT, _N]
-    var lamb = NnLamb(ex, case.cfg, offsets, _N)
+    var lamb = NnLamb(ex, tc.cfg, offsets, _N)
     var st = OptState()
     var g = List[Float32](length=_N, fill=Float32(0))
     for k in range(_STEPS):  # driver-loop: over optimizer steps
         for i in range(_N):  # small-loop(fixture gradient)
             g[i] = Float32(_grad(k, i))
         ex.upload(Gr, FP(unsafe_from_address=Int(g.unsafe_ptr())), _N)
-        nn_opt_step(ex, case.cfg, st, k + 1, case.lr, P, Gr, s1, s2, s3, _N, lamb)
+        nn_opt_step(ex, tc.cfg, st, k + 1, tc.lr, P, Gr, s1, s2, s3, _N, lamb)
         ex.sync()
     var words = List[Float32](length=3 * _N, fill=Float32(0))
     ex.download(FP(unsafe_from_address=Int(words.unsafe_ptr())), P, _N)
@@ -215,17 +215,17 @@ def run_step_case[E: Exec](mut ex: E, case: _StepCase) raises -> List[Float32]:
         rp[i] = Float64(p0[i])
     var r1 = List[Float64](length=_N, fill=0)
     var r2 = List[Float64](length=_N, fill=0)
-    _reference(case, rp, r1, r2)
+    _reference(tc, rp, r1, r2)
     for i in range(_N):  # small-loop(compared words)
-        _close(case.name + " param " + String(i), Float64(words[i]), rp[i], 3e-5, 1e-6)
-        _close(case.name + " state1 " + String(i), Float64(words[_N + i]), r1[i], 3e-5, 1e-6)
-        _close(case.name + " state2 " + String(i), Float64(words[2 * _N + i]), r2[i], 3e-5, 1e-6)
+        _close(tc.name + " param " + String(i), Float64(words[i]), rp[i], 3e-5, 1e-6)
+        _close(tc.name + " state1 " + String(i), Float64(words[_N + i]), r1[i], 3e-5, 1e-6)
+        _close(tc.name + " state2 " + String(i), Float64(words[2 * _N + i]), r2[i], 3e-5, 1e-6)
     var moved = False
     for i in range(_N):  # small-loop(compared words)
         if words[i] != p0[i]:
             moved = True
     if not moved:
-        _fail(case.name + ": no parameter moved")
+        _fail(tc.name + ": no parameter moved")
     return words^
 
 
@@ -418,22 +418,22 @@ def _fit_cases() -> List[_FitCase]:
     return c^
 
 
-def _model(case: _FitCase) -> SeqModel:
+def _model(tc: _FitCase) -> SeqModel:
     var m = SeqModel()
     m.linear(16)
     m.act(L_TANH)
     m.linear(1)
-    m.opt = case.opt
-    m.flags = case.flags
-    m.lr = case.lr
-    m.f1 = case.f1
-    m.f2 = case.f2
-    m.eps = case.eps
-    m.weight_decay = case.wd
-    m.f7 = case.f7
-    m.sched = case.sched
-    m.gamma = case.gamma
-    m.sched_args = case.args.copy()
+    m.opt = tc.opt
+    m.flags = tc.flags
+    m.lr = tc.lr
+    m.f1 = tc.f1
+    m.f2 = tc.f2
+    m.eps = tc.eps
+    m.weight_decay = tc.wd
+    m.f7 = tc.f7
+    m.sched = tc.sched
+    m.gamma = tc.gamma
+    m.sched_args = tc.args.copy()
     return m^
 
 
@@ -452,39 +452,39 @@ def _same(what: String, a: List[Float32], b: List[Float32]) raises:
             _fail(what + ": word " + String(i) + " differs")
 
 
-def run_fit_case[E: Exec](mut ex: E, case: _FitCase, tag: String) raises -> List[Float32]:
+def run_fit_case[E: Exec](mut ex: E, tc: _FitCase, tag: String) raises -> List[Float32]:
     var data = _fit_data()
     var x = data[0].copy()
     var y = data[1].copy()
-    var m = _model(case)
+    var m = _model(tc)
     _ = m.fit(ex, x, _FN, _FD, y, 1, 0, 12, 32, 1, 3)
     var curve = m.losses()
-    _finite_words(case.name + " losses", curve)
-    _finite_words(case.name + " params", m.params)
+    _finite_words(tc.name + " losses", curve)
+    _finite_words(tc.name + " params", m.params)
     if not (curve[len(curve) - 1] < Float32(0.25) * curve[0]):
-        _fail(case.name + ": the loss went from " + String(curve[0]) + " to " + String(curve[len(curve) - 1])
+        _fail(tc.name + ": the loss went from " + String(curve[0]) + " to " + String(curve[len(curve) - 1])
               + ", not below a quarter")
     var pred = m.predict(ex, x, _FN, _FD, OUT_RAW)
-    _finite_words(case.name + " predictions", pred)
-    if case.resume:
-        var r = _model(case)
+    _finite_words(tc.name + " predictions", pred)
+    if tc.resume:
+        var r = _model(tc)
         _ = r.fit(ex, x, _FN, _FD, y, 1, 0, 6, 32, 1, 3)
         _ = r.fit(ex, x, _FN, _FD, y, 1, 0, 6, -1, -1, 0, True)
-        _same(case.name + ": fit(6) + resume(6) against fit(12)", r.params, m.params)
-        _same(case.name + ": resumed optimizer state", r.m, m.m)
-        _same(case.name + ": resumed optimizer state 2", r.v, m.v)
-    if case.checkpoint:
-        var r = _model(case)
+        _same(tc.name + ": fit(6) + resume(6) against fit(12)", r.params, m.params)
+        _same(tc.name + ": resumed optimizer state", r.m, m.m)
+        _same(tc.name + ": resumed optimizer state 2", r.v, m.v)
+    if tc.checkpoint:
+        var r = _model(tc)
         _ = r.fit(ex, x, _FN, _FD, y, 1, 0, 6, 32, 1, 3)
-        var file = String("/tmp/nn_optim_") + tag + "_" + String(case.opt) + "_" + String(case.sched) + ".ckpt"
+        var file = String("/tmp/nn_optim_") + tag + "_" + String(tc.opt) + "_" + String(tc.sched) + ".ckpt"
         _ = r.save(file, _FD, False)
-        var back = _model(case)
+        var back = _model(tc)
         back.sched_args = List[Float64]()  # the file must carry the schedule's words
         back.f7 = 0.0                      # and f7
         back.load(file, _FD)
         _ = back.fit(ex, x, _FN, _FD, y, 1, 0, 6, -1, -1, 0, True)
-        _same(case.name + ": checkpoint + resume(6) against fit(12)", back.params, m.params)
-    print("NN_OPTIM fit", case.name, "loss", curve[0], "->", curve[len(curve) - 1])
+        _same(tc.name + ": checkpoint + resume(6) against fit(12)", back.params, m.params)
+    print("NN_OPTIM fit", tc.name, "loss", curve[0], "->", curve[len(curve) - 1])
     var words = m.params.copy()
     for i in range(len(pred)):  # small-loop(predictions)
         words.append(pred[i])
@@ -543,7 +543,7 @@ def test_nn_optim_steps() raises:
     host_parallelize(task, n)
     for u in range(n):  # small-loop(failure flags)
         if failed[u] != 0:
-            _fail("step case " + String(u) + " failed on the host column")
+            _fail("step tc " + String(u) + " failed on the host column")
     comptime if not CPU_COLUMN_BUILD:
         for k in range(n):  # driver-loop: over the step cases on the one device
             var dev = DeviceExec()
@@ -577,7 +577,7 @@ def test_nn_optim_fits() raises:
     host_parallelize(task, n)
     for u in range(n):  # small-loop(failure flags)
         if failed[u] != 0:
-            _fail("fit case " + String(u) + " failed on the host column")
+            _fail("fit tc " + String(u) + " failed on the host column")
     comptime if not CPU_COLUMN_BUILD:
         for k in range(n):  # driver-loop: over the fit cases on the one device
             var dev = DeviceExec()
