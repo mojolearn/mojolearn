@@ -23,6 +23,8 @@ skips it). Three builds were lost on 2026-11-15 to defects these catch:
               binding imports Python), as the pre-push hook runs it, so a commit pushed past the hook cannot build.
               Then the commit's tools/native_caller_audit.py over the commit's blobs (a registered native export or
               dispatch name with no caller, constructed family or keep reason; fb12-dead-names). Seconds.
+              Then the commit's tools/block_tables_check.py over the commit's blobs (every table that lists
+              Sequential layer codes or names agrees for every code; lane layer-tables). Seconds.
   host-parse  (with device-parse since 2026-11-18: the identical device groups through the same parse with the
               NVIDIA sm_89 column's flags and no GPU; it cannot see what only optimised lowering, ptxas or a GPU finds)
               (f29f76bf57: two host units did not parse; native-checks passed 166/166 because no check imports those
@@ -199,7 +201,27 @@ def run_audits(tree, commit, workdir, git_root=ROOT):
     pyfree = python_free_audit(tree, commit, git_root)
     nativecall = native_caller_audit(tree, commit, git_root)
     mathlint = math_lint_audit(tree, commit, git_root)
-    return 1 if errors or lastuse or pyfree or nativecall or mathlint else 0
+    tables = block_tables_audit(tree, commit, git_root)
+    return 1 if errors or lastuse or pyfree or nativecall or mathlint or tables else 0
+
+
+def block_tables_audit(tree, commit, git_root=ROOT):
+    """The COMMIT's tools/block_tables_check.py over the commit's blobs (lane layer-tables, 2026-11-23: a literal code
+    list in load_state_dict left out layer codes 42 to 46): every table that lists Sequential layer codes or names
+    agrees for every code. Prints its DISAGREE lines and one BLOCKTABLES line; returns its exit code (0 when the
+    commit predates the check)."""
+    tool = Path(tree) / "tools/block_tables_check.py"
+    if not tool.is_file():
+        print(f"BLOCKTABLES SKIP {commit[:12]} has no tools/block_tables_check.py")
+        return 0
+    p = subprocess.run([sys.executable, str(tool), "--tree", commit, "--root", str(git_root)],
+                       capture_output=True, text=True)
+    lines = (p.stdout + p.stderr).splitlines()
+    for line in [l for l in lines if l.startswith("DISAGREE")][:60]:
+        print(f"BLOCKTABLES {line}")
+    print(f"BLOCKTABLES {'PASS' if p.returncode == 0 else 'FAIL'} tools/block_tables_check.py {commit[:12]} "
+          f"rc={p.returncode} {lines[-1] if lines else ''}")
+    return p.returncode
 
 
 def math_lint_audit(tree, commit, git_root=ROOT):

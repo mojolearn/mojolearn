@@ -42,7 +42,7 @@ class Sequential(_CheckMixin):
     forward and backward passes and the optimizer all run natively on the
     device.
 
-    In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+    In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
     For the same data and seed, the trained parameters and the predictions
     of a ``Sequential`` model are the same on every vendor.
 
@@ -119,16 +119,23 @@ class Sequential(_CheckMixin):
         kind : str
             One of ``'linear'`` (``units``, ``bias=True``), ``'relu'``,
             ``'sigmoid'``, ``'tanh'``, ``'softmax'``, ``'layer_norm'``
-            (``eps=1e-5``), ``'residual'`` (``source=-1``: add the output
+            (``eps=1e-5``), ``'dropout'`` (``p``), ``'residual'``
+            (``source=-1``: add the output
             of layer ``source``, or the model input for -1, to the current
             output), ``'reshape'`` (``shape``), ``'permute'`` (``axes``),
             ``'flatten'``, ``'conv2d'`` (``out_channels``, ``kernel_size``,
             ``stride=1``, ``padding=0``, ``bias=True``), ``'max_pool2d'``
             or ``'avg_pool2d'`` (``kernel_size``, ``stride=None``),
-            ``'conv1d'``, ``'max_pool1d'``, ``'avg_pool1d'``,
+            or the name of any other layer method of this class
+            (``'conv1d'``, ``'max_pool1d'``, ``'avg_pool1d'``,
             ``'adaptive_avg_pool1d'``, ``'branch'``, ``'concat'``,
-            ``'residual_block'`` and ``'parallel'`` (the arguments of the
-            methods of the same names).
+            ``'residual_block'``, ``'parallel'``, ``'gated'``, ``'silu'``,
+            ``'gelu'``, ``'softplus'``, ``'rms_norm'``, ``'rotary'``,
+            ``'multiply'``, ``'narrow'``, ``'embedding'``, ``'attention'``,
+            ``'lstm'``, ``'gru'``, ``'rnn'``, ``'batch_norm1d'``,
+            ``'batch_norm2d'``, ``'selective_scan'``, ``'ssd_scan'``,
+            ``'trapezoid_scan'``, ``'lm_head'``), with that method's
+            arguments.
         *args, **kwargs
             The layer's arguments, as listed for ``kind``.
 
@@ -242,34 +249,61 @@ class Sequential(_CheckMixin):
         """Append a max pooling of ``(channels, length)`` samples over
         windows of ``kernel_size``, ``stride`` apart (by default
         ``kernel_size``), with ``padding`` positions at both ends that are
-        never chosen (at most ``kernel_size // 2``)."""
+        never chosen (at most ``kernel_size // 2``), as PyTorch's
+        ``nn.MaxPool1d``.
+
+        Example::
+
+            model.conv1d(16, 3, padding=1).relu().max_pool1d(2)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("max_pool1d", (kernel_size, stride, padding), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def avg_pool1d(self, kernel_size, stride=None, padding=0):
         """Append an average pooling of ``(channels, length)`` samples over
         windows of ``kernel_size``, ``stride`` apart (by default
         ``kernel_size``), with ``padding`` zeros at both ends counted in each
-        window (at most ``kernel_size // 2``)."""
+        window (at most ``kernel_size // 2``), as PyTorch's
+        ``nn.AvgPool1d`` with ``count_include_pad=True``.
+
+        Example::
+
+            model.avg_pool1d(3, stride=1, padding=1)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("avg_pool1d", (kernel_size, stride, padding), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def adaptive_avg_pool1d(self, output_size=1):
         """Append an average pooling of ``(channels, length)`` samples to
         ``(channels, output_size)``: each output is the mean of one of
         ``output_size`` equal windows, so ``output_size`` must divide the
-        length. ``output_size=1`` is the global average over the length."""
+        length. ``output_size=1`` is the global average over the length.
+
+        Example: global average pooling before a classifier head::
+
+            model.conv1d(32, 3, padding=1).relu().adaptive_avg_pool1d(1).flatten().linear(2)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("adaptive_avg_pool1d", (output_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def branch(self, source=-1):
         """Append a layer whose output is the output of layer ``source``
         (-1: the model input), so the layers after it start a new branch
-        from that point."""
+        from that point.
+
+        Example: two heads read the same features (layer 1)::
+
+            model.linear(32).relu().linear(8).branch(1).linear(4).concat([2, 4])
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("branch", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def concat(self, sources, axis=0):
         """Append the outputs of the layers ``sources`` (1 to 6 layer
         indices, -1 for the model input) joined along sample axis ``axis``
         (0: the first axis, the channels; 1 joins the features of
-        ``(length, features)`` samples). The other axes must agree."""
+        ``(length, features)`` samples). The other axes must agree.
+
+        Example: join the outputs of layers 0 and 2 along the channels::
+
+            model.conv1d(8, 3, padding=1).relu().conv1d(8, 5, padding=2).concat([0, 2])
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("concat", (sources, axis), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def residual_block(self, body, shortcut=None):
@@ -320,17 +354,33 @@ class Sequential(_CheckMixin):
         return _SEQUENTIAL_ENTRY(self, "add", ("parallel", branches, _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def silu(self):
-        """Append a SiLU (swish) activation, ``x * sigmoid(x)``."""
+        """Append a SiLU (swish) activation, ``x * sigmoid(x)``, as PyTorch's
+        ``nn.SiLU``.
+
+        Example::
+
+            model.linear(64).silu()
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("silu", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def gelu(self, approximate="none"):
         """Append a GELU activation: ``x * Phi(x)`` with the normal CDF
         ``Phi`` (``approximate='none'``), or its tanh approximation
-        (``approximate='tanh'``)."""
+        (``approximate='tanh'``), as PyTorch's ``nn.GELU``.
+
+        Example::
+
+            model.linear(256).gelu(approximate="tanh")
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("gelu", (approximate,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def softplus(self):
-        """Append a softplus activation, ``log(1 + exp(x))``."""
+        """Append a softplus activation, ``log(1 + exp(x))``.
+
+        Example: positive step sizes for a state-space scan::
+
+            model.linear(64).softplus()
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("softplus", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def rms_norm(self, eps=1e-6):
@@ -347,12 +397,22 @@ class Sequential(_CheckMixin):
         """Append rotary position embeddings over ``(length, features)``
         samples: each block of ``head_dim`` features is rotated by angles of
         its position ``0 .. length - 1`` (the two halves of the block form
-        the pairs). ``head_dim`` is even and divides the features."""
+        the pairs). ``head_dim`` is even and divides the features.
+
+        Example::
+
+            model.linear(64).rotary(16)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("rotary", (head_dim, theta), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def multiply(self, source=-1):
         """Multiply the current output elementwise by the output of layer
-        ``source`` (-1: the model input); the shapes must agree."""
+        ``source`` (-1: the model input); the shapes must agree.
+
+        Example: a sigmoid gate on the output of layer 0::
+
+            model.linear(32).linear(32).sigmoid().multiply(0)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("multiply", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def narrow(self, axis, start, length):
@@ -370,7 +430,12 @@ class Sequential(_CheckMixin):
         """Append an embedding lookup: each sample holds integer ids (stored
         as floats) in ``[0, num_embeddings)`` and each id becomes the
         ``embedding_dim`` values of its row in a learned table, so a
-        ``(length,)`` sample becomes ``(length, embedding_dim)``."""
+        ``(length,)`` sample becomes ``(length, embedding_dim)``.
+
+        Example: token ids of 32 positions into 64 features::
+
+            mojolearn.Sequential(input_shape=(32,)).embedding(512, 64)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("embedding", (num_embeddings, embedding_dim), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def attention(self, heads, kv_heads=None, rotary=True, theta=10000.0, window=0, causal=True):
@@ -463,14 +528,24 @@ class Sequential(_CheckMixin):
         """Append a GRU over ``(length, features)`` samples from a zero
         state, as PyTorch's ``nn.GRU``: the same weight layout, gate order
         and initialization. The arguments, ``lengths`` and the output are as
-        for :meth:`lstm`."""
+        for :meth:`lstm`.
+
+        Example::
+
+            mojolearn.Sequential(input_shape=(20, 3)).gru(32, output="final").flatten().linear(1)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("gru", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def rnn(self, hidden_size, num_layers=1, *, bidirectional=False, dropout=0.0, output="sequence"):
         """Append a tanh recurrent layer over ``(length, features)`` samples
         from a zero state, as PyTorch's ``nn.RNN`` with
         ``nonlinearity='tanh'``. The arguments, ``lengths`` and the output
-        are as for :meth:`lstm`."""
+        are as for :meth:`lstm`.
+
+        Example::
+
+            mojolearn.Sequential(input_shape=(20, 3)).rnn(32).narrow(0, 19, 1).flatten().linear(1)
+        """
         return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size, num_layers, bidirectional, dropout, output), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def batch_norm1d(self, num_features, eps=1e-5, momentum=0.1):
@@ -556,6 +631,7 @@ class Sequential(_CheckMixin):
         -exp(A_log)``, computed by Mamba-2's chunked algorithm.
         ``A_log`` and ``D`` (one value per head) are learned, initialized
         to ``A_log = log(1), .., log(heads)`` and ``D = 1``.
+
         Parameters
         ----------
         heads : int
@@ -1120,7 +1196,7 @@ _SEQUENTIAL_CONTEXT = {
                     "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
                     "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
                     "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
-                    "selective_scan", "", "", "lm_head", "batch_norm"),
+                    "selective_scan", "ssd_scan", "trapezoid_scan", "lm_head", "batch_norm"),
 }
 
 

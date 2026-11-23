@@ -169,6 +169,8 @@ STUB_NEURAL = textwrap.dedent(r'''
         data = "higgs"                    # the fit lanes (bench_board_neural.FIT_LANES)
     if a.lane in ("sequential-fit", "sequential-predict"):
         data = "synthetic"                # bench_board_neural.SYNTH_FIT_LANES
+    if a.lane.startswith("seq-") and a.lane.endswith("-fit"):     # bench_board_seqfit.DATA_OF (2026-11-23)
+        data = "synthetic-seq-lengths" if "-lengths-" in a.lane else "synthetic-seq"
     if a.lane.startswith("causal-lm-generate"):     # bench_board_neural.GEN_LANES: the checkpoint is the dataset
         data = "smollm2-135m" if a.lane.endswith("-smollm2") else "mojolearn-162m"
     arms, qual = {}, {}
@@ -534,7 +536,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # The shared identical plan includes every GPU fit lane on Apple too.
     neural = bb.plan_races("apple", ["identical"], ["neural"])
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
-    fit = set(bb.NEURAL.FIT_LANES)
+    fit = set(bb.NEURAL.FIT_LANES) - set(bb.NEURAL.ROW_CLASS)   # composed rows: --composed only
     assert len({r["id"] for r in both}) == len(both), "a neural race is planned twice"
     assert {r["lane"] for r in neural} == {r["lane"] for r in both}
     assert fit <= {r["lane"] for r in both}
@@ -837,6 +839,9 @@ NO_MLX_IDS = {i for i in NEURAL_IDS if "/sequential-predict/" in i}
 #: minus DECODE_TORCH_TWIN); transformer-decode's twin is a per-token loop, never compiled
 # 2026-10-22 (lane measure-coverage): mamba1-decode and mamba2-decode race mamba_ssm's step (MAMBA_SSM_DECODE_LANES)
 NO_TWIN_DECODE = ("mamba3-decode", "samba-decode")
+#: 2026-11-23 (lane nn-surface): the composed sequence-model fit lanes with no library opponent
+#: (bench_board_seqfit.LANES[lane]["no_opponent"])
+NO_OPPONENT_SEQ = tuple(l for l in bb.NEURAL.SEQ_FIT_LANES if l not in bb.NEURAL.SEQFIT.OPPONENT_LANES)
 #: the *-infer lanes and lm-host-train-step run OUR CPU binding: never raced (Oct 2 2026)
 GPU_ARMS = {
     "nvidia": ["torch-eager-fp32", "torch-eager-tf32", "torch-compile-fp32", "torch-compile-tf32",
@@ -858,9 +863,11 @@ def test_plan_neural_fast_on_apple_only(vendor):
         fit = r["lane"] in bb.NEURAL.FIT_LANES
         if fit and vendor == "apple":
             assert r["our_arms"] == {"ours": "identical", "ours-fast": "fast"} and r["modes"] == ["fast", "identical"], r["id"]
-            mlx = [] if r["lane"] in bb.NEURAL.PREDICT_LANES else ["mlx-fp32"]
-            assert r["opponents"] == GPU_ARMS[vendor] + mlx, r["id"]
-            assert r["arms"] == ours + GPU_ARMS[vendor] + mlx
+            mlx = [] if r["lane"] in bb.NEURAL.PREDICT_LANES + bb.NEURAL.SEQ_FIT_LANES else ["mlx-fp32"]
+            # 2026-11-23 (lane nn-surface): a seq-*-fit lane without a library opponent races ours alone
+            gpu = [] if r["lane"] in NO_OPPONENT_SEQ else GPU_ARMS[vendor]
+            assert r["opponents"] == gpu + mlx, r["id"]
+            assert r["arms"] == ours + gpu + mlx
             continue
         assert r["our_arms"] == ({"ours": "identical", "ours-fast": "fast"} if vendor == "apple"
                                  else {"ours": "identical"})
@@ -876,7 +883,7 @@ def test_plan_neural_fast_on_apple_only(vendor):
                 or r["lane"].startswith("causal-lm-generate")):
             # the per-token reference scan / decode loop is not a compile target (NOT_PLANNED)
             want = [a for a in want if "-compile-" not in a]
-        if r["lane"] in NO_TWIN_DECODE:
+        if r["lane"] in NO_TWIN_DECODE or r["lane"] in NO_OPPONENT_SEQ:
             want = []
         if r["lane"] in ("mamba1-decode", "mamba2-decode"):
             want = []          # the torch references have no carried-state step; mamba_ssm's step below
@@ -894,7 +901,8 @@ def test_plan_neural_fast_on_apple_only(vendor):
         # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere
         assert any("tf32" in a for a in r["arms"]) == (vendor == "nvidia" and not cpu_lane
                                                       and not r["lane"].startswith("gemm-")
-                                                      and r["lane"] not in NO_TWIN_DECODE)
+                                                      and r["lane"] not in NO_TWIN_DECODE
+                                                      and r["lane"] not in NO_OPPONENT_SEQ)
     for arm in GPU_ARMS["nvidia"]:
         assert bb.arm_library(arm) == "torch" and bb.arm_device(arm, vendor) == "gpu"
     for arm in CPU_ARMS:

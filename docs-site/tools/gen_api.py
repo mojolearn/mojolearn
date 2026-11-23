@@ -92,7 +92,12 @@ def main():
     excluded = {line.split("\t", 1)[0].strip() for line in (root / "api_exclude.txt").read_text().splitlines()
                 if line.strip() and not line.startswith("#")}
     excluded = {e for e in excluded if "." not in e}  # dotted entries are members, skipped in conf.py
-    stale = excluded - set(mojolearn.__all__)
+    # A bare name that is not public may still be a member name that conf.py skips on every class
+    # (`training_digest_`, `check`): stale only when no public class has a member of that name.
+    classes = [obj for obj in (getattr(mojolearn, n, None) for n in mojolearn.__all__) if isinstance(obj, type)]
+    stale = {e for e in excluded - set(mojolearn.__all__)
+             if not any(e in getattr(cls, "__dict__", {}) or any(e in vars(b) for b in cls.__mro__[1:])
+                        for cls in classes)}
     if stale:
         sys.exit(f"gen_api: api_exclude.txt names that are not public: {sorted(stale)}")
     out.mkdir(exist_ok=True)

@@ -77,3 +77,63 @@ def test_a_missing_forward_is_caught(tmp_path):
 
 def test_the_command_exits_zero():
     assert btc.main(["block_tables_check"]) == 0
+
+
+# ------------------------------------------------------------------ every file (lane layer-tables, 2026-11-23)
+def _files(**changed):
+    """A reader of the live tree with some files' text replaced: {relative path: text}."""
+    live = btc.reader(ROOT)
+    return lambda rel: changed[rel] if rel in changed else live(rel)
+
+
+def _live(rel):
+    return (ROOT / rel).read_text(encoding="utf-8")
+
+
+def test_every_file_agrees():
+    problems, table = btc.check_files(btc.reader(ROOT))
+    assert problems == []
+    assert "LAYER_BATCH_NORM" in table
+
+
+def test_the_literal_code_list_of_load_state_dict_is_caught():
+    # the defect found by lane nn-activations: codes 42 to 46 missing from sequential_parameter_layers
+    text = _live(btc.WEIGHTS).replace("        elif is_block(code):\n",
+                                      "        elif code == 35 or code == 39 or code == 40 or code == 41:\n", 1)
+    assert text != _live(btc.WEIGHTS)
+    problems, _ = btc.check_files(_files(**{btc.WEIGHTS: text}))
+    assert any("sequential_parameter_layers" in p and "literal 35" in p for p in problems), problems
+
+
+def test_a_code_without_a_constructor_is_caught():
+    text = _live(btc.FIXTURES).replace("    'lm_head':", "    'lm_head_gone':", 1)
+    problems, _ = btc.check_files(_files(**{btc.FIXTURES: text}))
+    assert any("no constructor for LAYER_LM_HEAD" in p for p in problems), problems
+
+
+def test_a_code_without_a_layer_name_is_caught():
+    text = _live(btc.PYMODEL).replace('"trapezoid_scan", "lm_head", "batch_norm"),', '"trapezoid_scan", "lm_head", ""),', 1)
+    assert text != _live(btc.PYMODEL)
+    problems, _ = btc.check_files(_files(**{btc.PYMODEL: text}))
+    assert any("layer_names: no name for LAYER_BATCH_NORM" in p for p in problems), problems
+
+
+def test_a_name_without_an_add_branch_is_caught():
+    text = _live(btc.DESCRIPTION).replace('elif kind == "lm_head":', 'elif kind == "lm_head_gone":', 1)
+    problems, _ = btc.check_files(_files(**{btc.DESCRIPTION: text}))
+    assert any("no branch for 'lm_head'" in p for p in problems), problems
+
+
+def test_a_new_block_code_must_appear_everywhere():
+    text = _live(btc.BLOCKS)
+    last = btc.constants(text)["BLOCK_LAST"]
+    text = text.replace(f"comptime BLOCK_LAST = {last}", f"comptime LAYER_NEW = {last + 1}\ncomptime BLOCK_LAST = {last + 1}", 1)
+    problems, _ = btc.check_files(_files(**{btc.BLOCKS: text}))
+    for needle in ("block_shape: no rule for LAYER_NEW", "_LAYER: no name for LAYER_NEW",
+                   "layer_names: no name for LAYER_NEW", "no constructor for LAYER_NEW"):
+        assert any(needle in p for p in problems), (needle, problems)
+
+
+def test_the_tree_mode_reads_a_commit():
+    problems, table = btc.check_files(btc.reader(ROOT, "HEAD"))
+    assert table and isinstance(problems, list)
