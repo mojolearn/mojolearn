@@ -39,16 +39,43 @@ PACK (`imputation_sequence_`: a clone of the estimator per step written by
 (`IterImpRunner.member`), which releases the GIL around them when the
 member's kind allows it.
 
+A CLASSIFIER member (lane mf-iterimp3, 2026-11-23) is fitted as
+scikit-learn's IterativeImputer fits one: `estimator.fit(X_train, y_train)`
+on the float target column, so the classifier's own target check reads it
+(`check_classification_targets`: a non-integral value is a continuous
+target and refused in its words) and its classes are `np.unique(y_train)`.
+Here the step's classes and int32 codes are made natively
+(`iterimp_class_values`, `iterimp_class_codes`, across the host cores), the
+member fits on the codes with the step's class count, and its predicted
+codes are mapped back to the class values before the scatter (clipped, as
+sklearn clips every prediction).
+
+DEGENERATE SHAPES, as scikit-learn's `fit_transform` and
+`_initial_imputation` do (sklearn/impute/_iterative.py, 1.9):
+  * fewer than two kept features: `n_iter_ = 0`, no step, the initial
+    imputation (`iterimp_initial_only`), for every estimator (none is
+    fitted or called);
+  * a kept column with no observed value (keep_empty_features): marked NOT
+    missing (`mask_missing_values[:, empty] = False`), its values the initial
+    fill. Its missing count is 0 (the orders and skip_complete read that),
+    the mask programs mark it observed (`iterimp_unmark_empty`), and the
+    tolerance scale reads its fill as an observed value. A supplied
+    estimator's step for it fits on every row (y = the fill) and predicts
+    none.
+
 Serial by nature: the programs run one after the other, each reading what
 the one before it wrote (the orders, the draws, the filled block); the
 rounds are Gauss-Seidel sweeps over the features, so the features of one
 round are NOT independent (each step's fit reads the imputation the step
 before it wrote), and the sample_posterior draws advance one stream. The
 stages themselves run across the image's cores (or the device), and so does
-each member's own fit and predict. No Python import
-(tools/python_free_dirs.sh)."""
-from std.math import isfinite
+each member's own fit and predict and a classifier step's label work. No
+Python import (tools/python_free_dirs.sh)."""
+from std.math import isfinite, floor
 from std.memory import unsafe_memcpy
+from std.builtin.sort import sort
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from bindings.prep_encode_prog_run import (
     EncProgram, enc_input, enc_col_stats, enc_mark_missing, enc_floats_of, enc_ii_rows)
 from bindings.prep_encode_kbins_run import enc_seed_words
@@ -57,13 +84,22 @@ from bindings.prep_encode_imputer_run import (
 from bindings.normal_dist_helpers_run import truncnorm_draws
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_STD,
+    MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
     member_new, member_call_of, member_own, member_free,
 )
 from core.member_notices import member_notices_take
 from core.preprocessing_program import prep_program_stage as _stage
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
+comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
+comptime _IntP = MutPointer[Int, MutUntrackedOrigin]
+
+#: scikit-learn's classifier target refusal (sklearn/utils/multiclass.py
+#: `check_classification_targets`), the words a classifier's own fit raises
+#: for a float target with a non-integral value.
+comptime II_CONTINUOUS_WORDS = "Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values."
 
 # x_prep stage codes (_expansion_prep._OPS).
 comptime OP_EIGH = 18
@@ -163,15 +199,15 @@ struct IterImpFitted(Movable):
     their posterior (`post_has_nbl`, `post_nbl`, sigma / alpha / means
     offsets in `rounds`, sigma side `post_side`). The result: (n, `cols`)
     float32 words at `out_offset` of arena `out_handle` (an output-region
-    offset is the region's, read by PACK). `empty_kept`: a kept column has
-    no observed value (keep_empty_features), so a supplied estimator's step
-    for it would fit on no rows (the door then keeps its own rounds, whose
-    estimator refuses that fit in its words)."""
+    offset is the region's, read by PACK). `empty`: the kept POSITIONS
+    (0 .. dk-1) of the kept columns with no observed value
+    (keep_empty_features), which scikit-learn marks not missing (PACK keeps
+    them as `_empty_kept` for transform)."""
     var statistics: List[Float32]
     var fill: List[Float32]
     var shared: Bool
     var keep: List[Int]
-    var empty_kept: Bool
+    var empty: List[Int]
     var bounds: List[Float64]
     var indicator: List[Int]
     var n_missing: Int
@@ -197,7 +233,7 @@ struct IterImpFitted(Movable):
         self.fill = List[Float32]()
         self.shared = False
         self.keep = List[Int]()
-        self.empty_kept = False
+        self.empty = List[Int]()
         self.bounds = List[Float64]()
         self.indicator = List[Int]()
         self.n_missing = 0
@@ -238,13 +274,14 @@ struct IterImpStep(Copyable, Movable):
     var means_words: Int
 
 
-@fieldwise_init
 struct IterImpApply(Movable):
     """IterativeImputer.transform of the (n, d) block of owner 0. `init`: the
     fitted initial imputer's transform (its fill vector is owner 1, at
     `fill_address`). `mark`, `missing`: this estimator's missing_values.
     `keep`, `bounds`, `indicator`: the fitted fields. `seed`: the fitted
-    rng's low 31 bits; `post_step`: the fitted posterior step count."""
+    rng's low 31 bits; `post_step`: the fitted posterior step count.
+    `empty`: the fitted `_empty_kept` positions (marked not missing; set by
+    the caller after construction, none by default)."""
     var init: ImputerApply
     var fill_address: Int
     var n: Int
@@ -260,6 +297,28 @@ struct IterImpApply(Movable):
     var seed: Int
     var post_step: Int
     var steps: List[IterImpStep]
+    var empty: List[Int]
+
+    def __init__(out self, var init: ImputerApply, fill_address: Int, n: Int, d: Int, mark: Bool, missing: Float64,
+                 work_on: Bool, region: Bool, var keep: List[Int], var bounds: List[Float64],
+                 var indicator: List[Int], posterior: Bool, seed: Int, post_step: Int,
+                 var steps: List[IterImpStep]):
+        self.init = init^
+        self.fill_address = fill_address
+        self.n = n
+        self.d = d
+        self.mark = mark
+        self.missing = missing
+        self.work_on = work_on
+        self.region = region
+        self.keep = keep^
+        self.bounds = bounds^
+        self.indicator = indicator^
+        self.posterior = posterior
+        self.seed = seed
+        self.post_step = post_step
+        self.steps = steps^
+        self.empty = List[Int]()
 
 
 @fieldwise_init
@@ -316,6 +375,181 @@ def _seed_put(mut prog: EncProgram, value: UInt64) -> Int:
 def _x(mut prog: EncProgram, n: Int, d: Int, mark: Bool, missing: Float64) -> Int:
     # `_mark_missing(p, p.put_x(values), n * d, missing)`: X is owner 0.
     return enc_mark_missing(prog, prog.input(n * d, 0), n * d, mark, missing)
+
+
+def iterimp_unmark_empty(mut prog: EncProgram, mo: Int, n: Int, dk: Int, empty: List[Int]):
+    """scikit-learn's `_initial_imputation` with keep_empty_features:
+    `mask_missing_values[:, empty] = False`. Stages appended after the
+    program's NAN_MASK of the (n, dk) mask at `mo`: per kept position c in
+    `empty`, its missing rows (`enc_ii_rows`) and one scatter of zero words
+    into them (ii_scatter, no clip). Every row of such a column is missing at
+    fit; at transform the rows past the count are the zero words of the row
+    list, row 0, whose mask word is written 0 again. No host loop over rows."""
+    if len(empty) == 0 or n <= 0 or dk <= 0:
+        return
+    var zeros = prog.alloc(n)  # arena words start zero (the n_nearest_features draws' mask reads them so)
+    for e in range(len(empty)):  # driver-loop: over the kept columns with no observed value at fit
+        var c = empty[e]
+        var rows = enc_ii_rows(prog, mo, n, dk, c, True)
+        _stage(prog.program, OP_II_SCATTER, n, mo, dk, rows[0], c, zeros, zeros, 0)
+
+
+def _run_split(rows: Int, work: Int) -> Tuple[Int, Int]:
+    # (tasks, rows per task) of a host split over `rows` with `work` scalar operations in all.
+    var units = max(1, host_predict_task_count_work(rows, work))
+    return (units, host_predict_chunk(rows, units))
+
+
+def _unique_run(p: _F32P, n: Int) -> Int:
+    """Deduplicate an ascending run in place; the number kept."""
+    if n <= 0:
+        return 0
+    var kept = 1
+    for i in range(1, n):  # small-loop(one task's sorted rows, deduplicated in place)
+        if p[i] != p[kept - 1]:
+            p[kept] = p[i]
+            kept += 1
+    return kept
+
+
+def iterimp_class_values(y: Int, m: Int) raises -> List[Float32]:
+    """A classifier step's classes: scikit-learn's classifier fit on the
+    float32 target `y` (m words): a NaN or infinite value is refused
+    (`_assert_all_finite`), a non-integral one is a continuous target
+    (`check_classification_targets`, II_CONTINUOUS_WORDS), else the classes
+    are `np.unique(y)` ascending. Parallel: each task checks, sorts and
+    deduplicates its rows; the runs (one word per distinct value and task)
+    are merged once."""
+    if m <= 0:
+        return List[Float32]()
+    var split = _run_split(m, m * 16)
+    var units = split[0]
+    var chunk = split[1]
+    var work = List[Float32](unsafe_uninit_length=m)
+    var kept = List[Int](length=units, fill=0)
+    var flags = List[Int](length=units, fill=0)
+    var src = _F32P(unsafe_from_address=y)
+    var wp = _F32P(unsafe_from_address=Int(work.unsafe_ptr()))
+    var kp = _IntP(unsafe_from_address=Int(kept.unsafe_ptr()))
+    var fp = _IntP(unsafe_from_address=Int(flags.unsafe_ptr()))
+
+    def _part(unit: Int) {imm m, imm chunk, imm src, imm wp, imm kp, imm fp}:
+        var lo = min(unit * chunk, m)
+        var hi = min(lo + chunk, m)
+        var flag = 0
+        for i in range(lo, hi):  # cpu-route: one task's rows of a classifier step's target (the label check)
+            var v = src[i]
+            if v != v:
+                flag = flag | 1
+            elif not isfinite(v):
+                flag = flag | 2
+            elif floor(v) != v:
+                flag = flag | 4
+            wp[i] = v
+        fp[unit] = flag
+        if hi > lo and (flag & 1) == 0:
+            sort(Span(unsafe_ptr=wp + lo, length=hi - lo))
+            kp[unit] = _unique_run(wp + lo, hi - lo)
+
+    host_parallelize(_part, units)
+    var seen = 0
+    for u in range(units):  # driver-loop: over the label tasks (one flag word each)
+        seen = seen | flags[u]
+    if (seen & 1) != 0:
+        raise Error("Input y contains NaN.")
+    if (seen & 2) != 0:
+        raise Error("Input y contains infinity or a value too large for dtype('float32').")
+    if (seen & 4) != 0:
+        raise Error(II_CONTINUOUS_WORDS)
+    var merged = List[Float32]()
+    for u in range(units):  # driver-loop: over the label tasks (their distinct values)
+        var lo = min(u * chunk, m)
+        for i in range(kept[u]):  # driver-loop: over one task's distinct values (classes, not rows)
+            merged.append(work[lo + i])
+    _ = len(work)  # the tasks' runs stay alive past the merge
+    sort(merged)
+    var count = _unique_run(_F32P(unsafe_from_address=Int(merged.unsafe_ptr())), len(merged))
+    var classes = List[Float32](length=count, fill=0.0)
+    for c in range(count):  # driver-loop: over the step's classes
+        classes[c] = merged[c]
+    return classes^
+
+
+def iterimp_class_codes(y: Int, m: Int, classes: List[Float32]) -> List[Int32]:
+    """The int32 codes of the float32 target `y` (m words) over the
+    ascending `classes` it was read for (`np.unique`'s inverse): a binary
+    search per row, rows split across the host cores."""
+    var codes = List[Int32](length=max(m, 1), fill=0)
+    var k = len(classes)
+    if m <= 0 or k == 0:
+        return codes^
+    var split = _run_split(m, m * 8)
+    var units = split[0]
+    var chunk = split[1]
+    var src = _F32P(unsafe_from_address=y)
+    var cp = _F32P(unsafe_from_address=Int(classes.unsafe_ptr()))
+    var dp = _I32P(unsafe_from_address=Int(codes.unsafe_ptr()))
+
+    def _part(unit: Int) {imm m, imm chunk, imm k, imm src, imm cp, imm dp}:
+        var lo = min(unit * chunk, m)
+        var hi = min(lo + chunk, m)
+        for i in range(lo, hi):  # cpu-route: one task's rows of a classifier step's target (its codes)
+            var v = src[i]
+            var a = 0
+            var b = k - 1
+            while a < b:
+                var mid = (a + b) // 2
+                if cp[mid] < v:
+                    a = mid + 1
+                else:
+                    b = mid
+            dp[i] = Int32(a)
+
+    host_parallelize(_part, units)
+    _ = len(classes)  # the classes the tasks read stay alive past them
+    return codes^
+
+
+def _class_of_codes(raw: Int, dtype: Int, m: Int, classes: List[Float32], dst: Int) raises:
+    """A classifier member's predicted codes (m words of `dtype` at `raw`)
+    written at `dst` as their class values (float32), rows split across the
+    host cores; a code outside 0 .. classes-1 is refused."""
+    var k = len(classes)
+    if m <= 0:
+        return
+    var split = _run_split(m, m)
+    var units = split[0]
+    var chunk = split[1]
+    var bad = List[Int](length=units, fill=0)
+    var cp = _F32P(unsafe_from_address=Int(classes.unsafe_ptr()))
+    var dp = _F32P(unsafe_from_address=dst)
+    var bp = _IntP(unsafe_from_address=Int(bad.unsafe_ptr()))
+
+    def _part(unit: Int) {imm m, imm chunk, imm k, imm raw, imm dtype, imm cp, imm dp, imm bp}:
+        var lo = min(unit * chunk, m)
+        var hi = min(lo + chunk, m)
+        for i in range(lo, hi):  # cpu-route: one task's predicted codes mapped to the step's class values
+            var code = 0
+            if dtype == MEMBER_I64:
+                code = Int(_I64P(unsafe_from_address=raw)[i])
+            elif dtype == MEMBER_F32:
+                code = Int(_F32P(unsafe_from_address=raw)[i])
+            elif dtype == MEMBER_F64:
+                code = Int(_F64P(unsafe_from_address=raw)[i])
+            else:
+                code = Int(_I32P(unsafe_from_address=raw)[i])
+            if code < 0 or code >= k:
+                bp[unit] = 1
+                dp[i] = Float32(0.0)
+            else:
+                dp[i] = cp[code]
+
+    host_parallelize(_part, units)
+    _ = len(classes)  # the classes the tasks read stay alive past them
+    for u in range(units):  # driver-loop: over the code tasks (one flag word each)
+        if bad[u] != 0:
+            raise Error("RuntimeError: mojolearn: IterativeImputer: the classifier member predicted a class code "
+                        + "outside its classes")
 
 
 def iterimp_bounds(lo: List[Float64], hi: List[Float64], keep: List[Int]) raises -> List[Float64]:
@@ -454,8 +688,39 @@ def iterimp_fit[R: IterImpRunner](mut runner: R, r: IterImpFit) raises -> IterIm
     `out_handle` (the result; the same arena without an indicator)."""
     var fitted = IterImpFitted()
     var plan = iterimp_prepare(runner, r, fitted)
+    if len(fitted.keep) < 2:
+        iterimp_initial_only(runner, r, plan, fitted)
+        return fitted^
     iterimp_rounds(runner, r, plan, fitted)
     return fitted^
+
+
+def iterimp_initial_only[R: IterImpRunner](mut runner: R, r: IterImpFit, mut plan: IterImpPlan,
+                                           mut fitted: IterImpFitted) raises:
+    """scikit-learn's fit with fewer than two kept features ("Edge case: a
+    single feature, we return the initial imputation"; no kept feature is
+    the same return through `np.all` of an empty mask): `n_iter_ = 0`, no
+    imputation step, Xt the initial fill (then the indicator). No estimator
+    is fitted or called, the built-in one or a supplied one. After
+    `iterimp_prepare`; `rounds` names the result's arena (PACK reads no step
+    from it)."""
+    var dk = len(fitted.keep)
+    fitted.n_iter = 0
+    fitted.rng = plan.rng
+    fitted.post_step = 0
+    if len(fitted.indicator) == 0:
+        fitted.out_handle = plan.xf_handle
+        fitted.out_offset = plan.xf_offset
+        fitted.cols = dk
+    else:
+        var made = iterimp_indicator(runner, r.n, r.d, dk, r.mark, r.missing, fitted.indicator, plan.xf_address,
+                                     r.work_on, r.region)
+        runner.release(plan.xf_handle)  # the initial fill, copied into the indicator program's arena
+        fitted.out_handle = made[0]
+        fitted.out_offset = made[1]
+        fitted.cols = dk + len(fitted.indicator)
+    plan.xf_handle = II_NONE
+    fitted.rounds = fitted.out_handle
 
 
 def iterimp_prepare[R: IterImpRunner](mut runner: R, r: IterImpFit, mut fitted: IterImpFitted) raises -> IterImpPlan:
@@ -485,9 +750,9 @@ def iterimp_prepare[R: IterImpRunner](mut runner: R, r: IterImpFit, mut fitted: 
     for j in range(d):  # driver-loop: over the kept columns (feature metadata)
         var observed = Int(_word(a1, plan.stats + j))
         if r.init.keep_empty or observed != 0:
-            fitted.keep.append(j)
             if observed == 0:
-                fitted.empty_kept = True
+                fitted.empty.append(len(fitted.keep))  # its kept position: marked not missing (sklearn)
+            fitted.keep.append(j)
     runner.release(h1)
     var keep = fitted.keep.copy()
     var dk = len(keep)
@@ -520,6 +785,12 @@ def iterimp_prepare[R: IterImpRunner](mut runner: R, r: IterImpFit, mut fitted: 
         var missd = p.work(dk)
         var ko = p.put_ints(keep)
         _stage(p.program, OP_C2_II_MISS, dk, st, ko, n, missd)
+        if len(fitted.empty) > 0:
+            # sklearn marks an empty kept column not missing: its missing count
+            # is 0 (int32 0 is the float32 word 0.0 the scatter stores)
+            var eo = p.put_ints(fitted.empty)
+            var zo = p.alloc(len(fitted.empty))
+            _stage(p.program, OP_II_SCATTER, len(fitted.empty), missd, 1, eo, 0, zo, zo, 0)
         if r.order == II_RANDOM:
             var so = _seed_put(p, rng)
             _stage(p.program, OP_C2_II_RAND, R_, missd, dk, 1 if r.skip else 0, so, ordw, lens)
@@ -534,6 +805,10 @@ def iterimp_prepare[R: IterImpRunner](mut runner: R, r: IterImpFit, mut fitted: 
     if not isfinite(scale) and scale == scale and scale > 0.0:
         runner.release(h3)
         raise Error("Input X contains infinity or a value too large for dtype('float64').")
+    for e in range(len(fitted.empty)):  # driver-loop: over the kept columns with no observed value at fit
+        # sklearn's `np.max(np.abs(X[~mask_missing_values]))` reads such a
+        # column's fill as observed values (`Xt[:, empty] = X_filled[:, empty]`)
+        scale = max(scale, abs(Float64(fitted.fill[keep[fitted.empty[e]]])))
     if r.add_indicator:
         for j in range(d):  # driver-loop: over the per-column non-missing counts (feature metadata)
             if Int(_word(a3, st + j)) < n:
@@ -589,6 +864,7 @@ def iterimp_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut plan: Ite
     var ko = q.put_floats(enc_floats_of(keep))
     var mo = q.alloc(n * dk)
     _stage(q.program, OP_NAN_MASK, n * dk, qx, n, d, ko, dk, mo)
+    iterimp_unmark_empty(q, mo, n, dk, fitted.empty)
     var bo = q.put_floats(fitted.bounds)
     var to = q.put_floats(_one(tol))
     var flag = q.alloc(1)
@@ -700,7 +976,6 @@ def iterimp_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut plan: Ite
 
 
 # ---------------------------------------------------------------- a supplied estimator's member
-@fieldwise_init
 struct IterImpMember(Copyable, Movable):
     """A supplied estimator as a native member, admitted once per fit by the
     door's UNPACK: its `plan`; `borrows` its kind keeps pointers into its
@@ -708,22 +983,37 @@ struct IterImpMember(Copyable, Movable):
     after its fit, since the step's gather arena is released at the step's
     end); `posterior` sample_posterior: the predict block is answered by
     MEMBER_OP_PREDICT_STD with the same query's mean written to `call.y`
-    (the GaussianProcessRegressor member, core/gp_member.mojo; the door
-    admits no other family for it)."""
+    (the GaussianProcessRegressor and BayesianRidge / ARDRegression members;
+    the door admits no other family for it). `classifier` (set by the door
+    after construction): a classifier kind, fitted on each step's int32
+    codes with the step's class count; its PREDICT writes codes of
+    `code_dtype` (the member's MEMBER_OP_OUTPUTS answer, asked once)."""
     var plan: MemberPlan
     var borrows: Bool
     var posterior: Bool
+    var classifier: Bool
+    var code_dtype: Int
+
+    def __init__(out self, var plan: MemberPlan, borrows: Bool, posterior: Bool):
+        self.plan = plan^
+        self.borrows = borrows
+        self.posterior = posterior
+        self.classifier = False
+        self.code_dtype = MEMBER_I32
 
 
 struct IterImpMemberFit(Movable):
     """What `iterimp_member_rounds` leaves for PACK: per finished step its
     member state (`states`, freed by `iterimp_member_free`), feature `seq_j`
-    and neighbour list `seq_nbl`; every step's fit notices in step order;
-    `n_iter`, `rng`; the result's (n, `cols`) words at `out_offset` of arena
-    `out_handle`."""
+    and neighbour list `seq_nbl`, and for a classifier its ascending class
+    values (`classes`, empty for a regressor: PACK publishes them as the
+    estimator's labels and sets the plan's class count); every step's fit
+    notices in step order; `n_iter`, `rng`; the result's (n, `cols`) words
+    at `out_offset` of arena `out_handle`."""
     var states: List[Int]
     var seq_j: List[Int]
     var seq_nbl: List[List[Int]]
+    var classes: List[List[Float32]]
     var notices: List[Float64]
     var n_iter: Int
     var rng: UInt64
@@ -735,6 +1025,7 @@ struct IterImpMemberFit(Movable):
         self.states = List[Int]()
         self.seq_j = List[Int]()
         self.seq_nbl = List[List[Int]]()
+        self.classes = List[List[Float32]]()
         self.notices = List[Float64]()
         self.n_iter = 0
         self.rng = 0
@@ -857,12 +1148,15 @@ def _member_gather[R: IterImpRunner](mut runner: R, work_on: Bool, xt: Int, mask
 
 
 def _member_put[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Float64], plan: MemberPlan,
-                                  state: Int, posterior: Bool, gathered: _Gathered, xt: Int, n: Int, dk: Int,
+                                  state: Int, posterior: Bool, classes: List[Float32], code_dtype: Int,
+                                  gathered: _Gathered, xt: Int, n: Int, dk: Int,
                                   j: Int, nc: Int, mut rng: UInt64) raises -> Tuple[Int, Int]:
     """`_ii_put`: the member's PREDICT (or PREDICT_STD and the mean, then
     the truncated normal draws) of state `state` on the gathered predict
     block, then the scatter program (the clipped float32 store into
-    Xt[rows, j]; a draw is stored unclipped). Returns the new Xt's (handle,
+    Xt[rows, j]; a draw is stored unclipped). A classifier (`classes` not
+    empty) predicts codes of `code_dtype`, written as their class values
+    (`estimator.predict` returns the labels). Returns the new Xt's (handle,
     offset). The gathered arena is released after the scatter read it."""
     var m = gathered.m
     var a = gathered.a
@@ -891,6 +1185,13 @@ def _member_put[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Flo
         for i in range(m):  # cpu-route: one feature's posterior draws rounded once to float32 (the door's `_f32_vector`)
             values[i] = Float32(drawn[i])
         clip = 0
+    elif len(classes) > 0:
+        # the codes in the member's own element type (8 bytes a row holds any of them)
+        var raw = List[Int64](length=m, fill=0)
+        ask.dst = MemberMatrix(Int(raw.unsafe_ptr()), m, 1, code_dtype)
+        _ = runner.member(plan, MEMBER_OP_PREDICT, ask)
+        _class_of_codes(Int(raw.unsafe_ptr()), code_dtype, m, classes, Int(values.unsafe_ptr()))
+        _ = len(raw)  # the codes the member wrote stay alive past their reads
     else:
         ask.dst = MemberMatrix(Int(values.unsafe_ptr()), m, 1)
         _ = runner.member(plan, MEMBER_OP_PREDICT, ask)
@@ -920,24 +1221,51 @@ def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Fl
     where the arena holds them (kept in `fit.states`), then `_member_put`
     (its PREDICT or PREDICT_STD on the predict block and the scatter).
     Returns the new Xt's (handle, offset), or (II_NONE, 0) when feature j
-    has no missing row (Xt unchanged, as the door's `_ii_put` returned it)."""
+    has no missing row (Xt unchanged, as the door's `_ii_put` returned it).
+    A classifier step first reads the target's classes and codes
+    (`iterimp_class_values` refuses as the classifier's own fit would) and
+    fits on the codes with the step's class count."""
     var nc = len(nbl)
     var gathered = _member_gather(runner, work_on, xt, mask, n, dk, j, nbl, True)
     var a = gathered.a
-    # FIT: a new state on the gathered training rows (host float32 views)
-    var call = member_new(member.plan)
+    var classes = List[Float32]()
+    if not member.classifier:
+        # FIT: a new state on the gathered training rows (host float32 views)
+        var call = member_new(member.plan)
+        fit.states.append(call.state)  # freed by iterimp_member_free on every path
+        fit.classes.append(List[Float32]())
+        call.x = MemberMatrix(a + 4 * gathered.go, gathered.mob, nc)
+        call.y = MemberMatrix(a + 4 * gathered.gy, gathered.mob, 1)
+        _ = runner.member(member.plan, MEMBER_OP_FIT, call)
+        if member.borrows:
+            member_own(member.plan, call.state)  # THE LIFETIME RULE: the arena goes at the step's end
+        member_notices_take(member.plan, call.state, fit.notices)
+        if gathered.m == 0:
+            runner.release(gathered.handle)
+            return (II_NONE, 0)
+        return _member_put(runner, work_on, bounds, member.plan, call.state, member.posterior, classes,
+                           member.code_dtype, gathered, xt, n, dk, j, nc, rng)
+    # A classifier: the step's classes and codes, then FIT on the codes
+    var y = a + 4 * gathered.gy
+    classes = iterimp_class_values(y, gathered.mob)
+    var codes = iterimp_class_codes(y, gathered.mob, classes)
+    var step_plan = member.plan.copy()
+    step_plan.classes = len(classes)
+    var call = member_new(step_plan)
     fit.states.append(call.state)  # freed by iterimp_member_free on every path
+    fit.classes.append(classes.copy())
     call.x = MemberMatrix(a + 4 * gathered.go, gathered.mob, nc)
-    call.y = MemberMatrix(a + 4 * gathered.gy, gathered.mob, 1)
-    _ = runner.member(member.plan, MEMBER_OP_FIT, call)
+    call.y = MemberMatrix(Int(codes.unsafe_ptr()), gathered.mob, 1, MEMBER_I32)
+    _ = runner.member(step_plan, MEMBER_OP_FIT, call)
     if member.borrows:
-        member_own(member.plan, call.state)  # THE LIFETIME RULE: the arena goes at the step's end
-    member_notices_take(member.plan, call.state, fit.notices)
+        member_own(step_plan, call.state)  # THE LIFETIME RULE: the codes and the arena go at the step's end
+    _ = len(codes)  # the codes the fit read stay alive past it (and past the own copy above)
+    member_notices_take(step_plan, call.state, fit.notices)
     if gathered.m == 0:
         runner.release(gathered.handle)
         return (II_NONE, 0)
-    return _member_put(runner, work_on, bounds, member.plan, call.state, member.posterior, gathered, xt, n, dk, j,
-                       nc, rng)
+    return _member_put(runner, work_on, bounds, step_plan, call.state, False, classes, member.code_dtype, gathered,
+                       xt, n, dk, j, nc, rng)
 
 
 def iterimp_member_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut plan: IterImpPlan,
@@ -963,6 +1291,7 @@ def iterimp_member_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut pl
     var mo = mp.alloc(n * dk)
     var ko = mp.put_floats(enc_floats_of(fitted.keep))
     _stage(mp.program, OP_NAN_MASK, n * dk, mx, n, d, ko, dk, mo)
+    iterimp_unmark_empty(mp, mo, n, dk, fitted.empty)
     var none = List[Int]()
     var mh = runner.run(mp, none)
     _ = len(mp.consts_f)  # the program's own words stay alive past the run
@@ -1017,16 +1346,28 @@ def iterimp_member_rounds[R: IterImpRunner](mut runner: R, r: IterImpFit, mut pl
 
 
 # ---------------------------------------------------------------- transform with a supplied estimator
-@fieldwise_init
 struct IterImpHeldStep(Copyable, Movable):
     """One fitted step of a supplied estimator for transform: feature `j`,
     its neighbour list `nbl`, and the HELD member state of the step's fitted
     estimator (`plan`, `state`: bindings/member_held_door.mojo, read once
-    per transform by the door's UNPACK; the estimator owns it)."""
+    per transform by the door's UNPACK; the estimator owns it). A
+    classifier step (set by the door after construction): its ascending
+    class values `classes` (empty for a regressor) and the element type of
+    its predicted codes `code_dtype`."""
     var j: Int
     var nbl: List[Int]
     var plan: MemberPlan
     var state: Int
+    var classes: List[Float32]
+    var code_dtype: Int
+
+    def __init__(out self, j: Int, var nbl: List[Int], var plan: MemberPlan, state: Int):
+        self.j = j
+        self.nbl = nbl^
+        self.plan = plan^
+        self.state = state
+        self.classes = List[Float32]()
+        self.code_dtype = MEMBER_I32
 
 
 def iterimp_member_transform[R: IterImpRunner](mut runner: R, r: IterImpApply, steps: List[IterImpHeldStep],
@@ -1055,6 +1396,7 @@ def iterimp_member_transform[R: IterImpRunner](mut runner: R, r: IterImpApply, s
     var mo = mp.alloc(n * dk)
     var ko = mp.put_floats(enc_floats_of(r.keep))
     _stage(mp.program, OP_NAN_MASK, n * dk, mx, n, d, ko, dk, mo)
+    iterimp_unmark_empty(mp, mo, n, dk, r.empty)
     var none = List[Int]()
     var mh = runner.run(mp, none)
     _ = len(mp.consts_f)  # the program's own words stay alive past the run
@@ -1069,8 +1411,8 @@ def iterimp_member_transform[R: IterImpRunner](mut runner: R, r: IterImpApply, s
         if gathered.m == 0:
             runner.release(gathered.handle)
             continue
-        var made = _member_put(runner, r.work_on, r.bounds, step.plan, step.state, r.posterior, gathered, xt, n,
-                               dk, step.j, nc, rng)
+        var made = _member_put(runner, r.work_on, r.bounds, step.plan, step.state, r.posterior, step.classes,
+                               step.code_dtype, gathered, xt, n, dk, step.j, nc, rng)
         runner.release(xt_h)
         xt_h = made[0]
         xt_off = made[1]
@@ -1103,6 +1445,7 @@ def iterimp_transform[R: IterImpRunner](mut runner: R, r: IterImpApply) raises -
     var ko = p.put_floats(enc_floats_of(r.keep))
     var mo = p.alloc(n * dk)
     _stage(p.program, OP_NAN_MASK, n * dk, xo, n, d, ko, dk, mo)
+    iterimp_unmark_empty(p, mo, n, dk, r.empty)
     var bo = p.put_floats(r.bounds)
     # owner 1 the filled block; then each step's fitted vectors in order
     var seconds: List[Int] = [runner.words(h0) + 4 * o0]  # the initial fill, in its held arena

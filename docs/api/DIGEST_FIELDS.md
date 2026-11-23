@@ -108,7 +108,7 @@ private fields a row names), under the class name followed by `#training`.
 | `IsolationForest` | save schema (answer members) | `(step iforest_fitted)`, `format`, `estimator`, `numeric_mode`, `(step iforest_forest)`, `ints`, `reals` |
 | `Isomap` | public fitted attributes | every public fitted attribute; plus `_kind`, `_pw`, `_k_col`, `_k_all`, `_fit_X`, `_knn`, `_iso_v_m_` |
 | `IsotonicRegression` | public fitted attributes | every public fitted attribute |
-| `IterativeImputer` | public fitted attributes | every public fitted attribute; plus `_keep`, `_indicator`, `_bounds_k`, `_posterior`, `_rng`, `_post_step` |
+| `IterativeImputer` | public fitted attributes | every public fitted attribute; plus `_keep`, `_indicator`, `_bounds_k`, `_posterior`, `_rng`, `_post_step`, `_empty_kept`, `_step_classes` |
 | `KBinsDiscretizer` | public fitted attributes | every public fitted attribute; plus `_edges`, `_ne`, `_stride` |
 | `KMeans` | save schema (answer members) | `format`, `estimator`, `numeric_mode`, `metric`, `init`, `centers`, `labels`, `meta`, `reals` |
 | `KNNImputer` | public fitted attributes | every public fitted attribute; plus `_fit_X`, `_valid`, `_miss_cols` |
