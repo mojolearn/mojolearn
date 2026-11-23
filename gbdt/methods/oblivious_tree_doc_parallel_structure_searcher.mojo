@@ -134,6 +134,7 @@ from gbdt.gpu_util.kernel.transform import (
 )
 from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
 from gbdt.methods.dynamic_boosting_folds import TFold
+from gbdt.gpu_lib.slice import TSlice
 from gbdt.methods.tree_ctr_search import TreeCtrFit
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
 from gbdt.trees_identical_switches import (
@@ -451,6 +452,8 @@ def fit_oblivious_tree_structure_traced(
     device_plan: DevicePlan = plan_for_single(),
     enqueue_only: Bool = False,
     gate: Optional[DeviceBuffer[DType.int32]] = None,
+    dim_count: Int = 0,
+    pinned_class: Bool = False,
 ) raises -> List[TBinarySplit]:
     """The fold searcher without tree CTRs: `fit_oblivious_tree_structure_levels`
     with no tree-CTR state, which is its blind level loop and one drain per
@@ -476,6 +479,8 @@ def fit_oblivious_tree_structure_traced(
         device_plan=device_plan,
         enqueue_only=enqueue_only,
         gate=gate,
+        dim_count=dim_count,
+        pinned_class=pinned_class,
     )
 
 
@@ -532,6 +537,16 @@ def fit_oblivious_tree_structure_levels(
     # `pool[0].d_structure` for the round's later ops, no drain.
     enqueue_only: Bool = False,
     gate: Optional[DeviceBuffer[DType.int32]] = None,
+    # A MULTI-OUTPUT LOSS (lane gbdt-pw-multiclass, 2026-11-23). 0: a
+    # one-output weak target. `dim_count > 0`: the target's approx
+    # dimensions ride the fold axis (`dims_search_folds` /
+    # `dims_stat_planes`: dimension d is fold 2 d, every row, and fold
+    # 2 d + 1 is empty), and every level is scored by the plain
+    # multi-output scorer (`find_optimal_split_dims`), the per-dimension
+    # score summed over the dimensions, plus MultiClass's pinned class when
+    # `pinned_class`. Never with tree CTRs.
+    dim_count: Int = 0,
+    pinned_class: Bool = False,
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
@@ -617,7 +632,17 @@ def fit_oblivious_tree_structure_levels(
     var fold_count = fold_layout.fold_count
     var doc_count = fold_layout.total_indices
 
-    if fold_count > 1:
+    if dim_count > 0 and (
+        fold_count != 2 * dim_count or len(tree_ctr) > 0
+        or len(std_scale_word) > 0 or len(permutation) != 0
+    ):
+        raise Error(
+            "the multi-output doc-parallel search takes one fold pair per"
+            " approx dimension (dims_search_folds) and no tree CTRs; got "
+            + String(fold_count) + " folds for " + String(dim_count)
+            + " dimensions"
+        )
+    if fold_count > 1 and dim_count == 0:
         # `FindOptimalSplitDynamic` (`pointwise_scores.cu:443-473`) has TWO
         # arms and a `default: throw std::exception()`. Four of the seven
         # score functions -- L2, NewtonL2, SatL2, LOOL2 -- have no
@@ -672,6 +697,13 @@ def fit_oblivious_tree_structure_levels(
         fold_order = fold_count > 1 and ordered_fold_index()
     comptime if T22:
         fold_order = fold_count > 1
+    if dim_count > 0:
+        # the dimensions' folds hold every row in row order: the levels
+        # gather document ids through `d_doc_ids` and read the caller's
+        # index (no `D * n`-column fold-order copy). The cells are the same
+        # on either index: the dither keys on the document id both ways
+        # (`ORD_DOC_ID_STORAGE`), and the snapped planes sit on the grid.
+        fold_order = False
     # E IDN_ORD_INDEX_SHARED (trees_identical_switches.mojo): one
     # permutation-order index per searched permutation (stride n_rows)
     # instead of the fold-order copy (stride doc_count ~ 2n); the levels
@@ -1106,6 +1138,8 @@ def fit_oblivious_tree_structure_levels(
                 l2_leaf_reg,
                 score_std_dev,
                 level_rand.next_uniform_l(),
+                dim_count,
+                pinned_class,
             )
         times.end(ctx, "pw.score")
 
@@ -1529,3 +1563,64 @@ def split_stat_planes(
     var t = ctx.enqueue_create_buffer[DType.float32](n_rows)
     launch_split_planes_f32(ctx, w, t, stats, n_rows, n_rows)
     return (w^, t^)
+
+
+def dims_planes_kernel(
+    stats: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    dims_in: Int32,
+    w_dst: MutPointer[Float32, MutAnyOrigin],
+    t_dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """`dims_stat_planes`' copy: position `k < dims * n_rows` takes the
+    weight of row `k % n_rows` (plane 0) and the gradient at
+    `stats[n_rows + k]` (plane `1 + k / n_rows`, row `k % n_rows`, the
+    planes end to end). Row-parallel, a pure copy."""
+    var n_rows = Int(n_rows_in)
+    var total = n_rows * Int(dims_in)
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if k < total:
+        w_dst.unsafe_store(k, stats.unsafe_load(k % n_rows))
+        t_dst.unsafe_store(k, stats.unsafe_load(n_rows + k))
+
+
+def dims_stat_planes(
+    ctx: DeviceContext,
+    mut stats: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    dims: Int,
+) raises -> Tuple[
+    DeviceBuffer[DType.float32], DeviceBuffer[DType.float32]
+]:
+    """`split_stat_planes` for a multi-output weak target (lane
+    gbdt-pw-multiclass, 2026-11-23): the searcher's two buffers of
+    `dims * n_rows` positions, dimension d's documents at
+    `[d * n_rows, (d + 1) * n_rows)` -- the weight plane once per dimension
+    and the `dims` gradient planes of `stats` (planes 1..dims) end to end.
+    One launch; the CPU column's twin is `_dims_planes`
+    (gbdt/host/gbdt_oracle_multiclass.mojo). Two allocations per tree, as
+    `split_stat_planes` (`TL2Target` consumes them)."""
+    var total = dims * n_rows
+    var w = ctx.enqueue_create_buffer[DType.float32](max(total, 1))
+    var t = ctx.enqueue_create_buffer[DType.float32](max(total, 1))
+    if total > 0:
+        ctx.enqueue_function[dims_planes_kernel](
+            stats.unsafe_ptr(), Int32(n_rows), Int32(dims),
+            w.unsafe_ptr(), t.unsafe_ptr(),
+            grid_dim=((total + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+    return (w^, t^)
+
+
+def dims_search_folds(n_rows: Int, dims: Int) -> List[TFold]:
+    """The fold list that puts a multi-output target's dimensions on the
+    searcher's fold axis: `dims` folds, each estimating on every row
+    (`[0, n_rows)`) with an empty quality slice. `plan_fold_layout` turns it
+    into `2 * dims` partitions (learn d = dimension d's rows at
+    `[d * n_rows, (d + 1) * n_rows)`, test d empty), `MakeDocIndices` into
+    the row ids `0..n_rows` once per dimension. The CPU column builds the
+    same layout (`_dims_fold_shape`)."""
+    var folds = List[TFold]()
+    for _ in range(dims):  # small-loop(dims: the loss's approx dimensions, once per fit)
+        folds.append(TFold(TSlice(0, n_rows), TSlice(n_rows, n_rows)))
+    return folds^

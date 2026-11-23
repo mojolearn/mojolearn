@@ -20,7 +20,24 @@ together.
 """
 from std.math import fma
 
-from checks.numerics import identical_exp64, identical_log64
+from checks.numerics import ftz, identical_exp64, identical_log64, identical_mul_add
+
+
+@always_inline
+def std_dev_row_term(w: Float32, wt: Float32, acc: Float32) -> Float32:
+    """One row of `ComputeStdDev` (`random_score_helper.h:11-13`,
+    `DivideVector` then `DotProduct` with the weights): `tmp = wt / w`, the
+    accumulator plus `w * tmp * tmp` in one pinned mul-add, every
+    intermediate through `ftz` (IDENTITY_PATHS rows 9 and 10, DEVIATION
+    256), no zero guard (theirs has none on this path).
+
+    Lane gbdt-pw-multiclass (2026-11-23): written once for the device's
+    `std_dev_partials_kernel` / `std_dev_planes_partials_kernel`
+    (`random_score_helper.mojo`) and the CPU column's
+    `_pointwise_target_std_dev` (`gbdt_oracle_pointwise_rank.mojo`), which
+    held the same three statements each; no bit moves."""
+    var tmp = ftz(wt / w)
+    return ftz(identical_mul_add(ftz(w * tmp), tmp, acc))
 
 
 @always_inline

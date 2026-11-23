@@ -272,6 +272,62 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
 
 
 @always_inline
+def add_dim_leaves[
+    score_function: Int
+](
+    mut calcer: ScoreCalcer[score_function],
+    weight_left: Float32,
+    weight_right: Float32,
+    sum_left: Float32,
+    part_sum: Float32,
+    mut total_left: Float32,
+    mut total_part: Float32,
+):
+    """One approx dimension of one leaf of a multi-output candidate (lane
+    gbdt-pw-multiclass, 2026-11-23): `add_leaf` left then right with the
+    dimension's own sums and the leaf's one weight pair, and the dimension's
+    sums into the totals the pinned class reads.
+
+    The doc-parallel searcher's split score for a multi-output loss is the
+    per-dimension score summed over every approx dimension, in the order the
+    greedy multi-class scorer adds them (`compute_scores.mojo`
+    `compute_optimal_splits_kernel`: per leaf, per dimension left then
+    right, then the pinned class): one calcer accumulates every dimension
+    of every leaf, so the cosine arm normalizes over all of them together.
+    `sum_right = part_sum - sum_left` with no clamp, the single-fold
+    kernel's own expression (finding 4). The device's
+    `find_optimal_split_dims_kernel` and the CPU column's
+    `_plain_dims_range` (gbdt/host/gbdt_oracle_ordered.mojo) call this body,
+    so the two columns add the same terms in the same order."""
+    var sum_right = part_sum - sum_left
+    calcer.add_leaf(sum_left, weight_left)
+    calcer.add_leaf(sum_right, weight_right)
+    total_left += sum_left
+    total_part += part_sum
+
+
+@always_inline
+def add_pinned_class_leaves[
+    score_function: Int
+](
+    mut calcer: ScoreCalcer[score_function],
+    weight_left: Float32,
+    weight_right: Float32,
+    total_left: Float32,
+    total_part: Float32,
+):
+    """MultiClass's pinned last class (`MultiLogitOptimization`,
+    `multiclass_targets.cpp:32-35`): its derivative is minus the sum of the
+    other classes', so after the leaf's `add_dim_leaves` the leaf adds
+    `-total` on each side, the greedy scorer's two extra `AddLeaf` calls
+    (`compute_optimal_splits_kernel`'s `multiclass_optimization` arm).
+    MultiClassOneVsAll pins no class and never calls this."""
+    var total_right = total_part - total_left
+    calcer.add_leaf(-total_left, weight_left)
+    calcer.add_leaf(-total_right, weight_right)
+
+
+@always_inline
 def make_score_calcer[
     score_function: Int
 ](

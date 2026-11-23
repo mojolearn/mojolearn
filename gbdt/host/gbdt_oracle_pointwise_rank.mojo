@@ -14,6 +14,7 @@
 # single-fold scoring, stable bin partition, and the shared grouped estimator.
 # It never substitutes the greedy searcher or calls Python/native GPU kernels.
 
+from gbdt.methods.random_score_bodies import std_dev_row_term
 from std.math import exp, fma, isfinite, log, sqrt
 
 from checks.numerics import ftz, identical_mul_add
@@ -72,8 +73,16 @@ from gbdt.host.gbdt_oracle_query import query_rmse_search_pass, query_rmse_value
 from gbdt.host.gbdt_oracle_yeti import yeti_rank_search_pass
 
 
-def _pointwise_target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
-    """Compute the doc-parallel score-noise deviation before bootstrap."""
+def _pointwise_target_std_dev(
+    stats: List[Float32], n_rows: Int, object_count: Int = -1
+) -> Float64:
+    """Compute the doc-parallel score-noise deviation before bootstrap.
+
+    `stats` holds `n_rows` weights then `n_rows` weighted targets. A
+    multi-output target (lane gbdt-pw-multiclass, 2026-11-23) passes its
+    `_dims_planes` with `n_rows = dims * rows` and `object_count = rows`:
+    the device's `compute_score_std_dev_planes`, which divides by the
+    object count; -1 divides by `n_rows`."""
     # random_score_helper.mojo pins 4 * 32 blocks of 512 threads in identical
     # mode. This is a reduction topology, not a hardware-utilization cap.
     # Its row contribution is w * (g/w)^2 without a zero-weight guard; the
@@ -98,9 +107,8 @@ def _pointwise_target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
                 var r = b * BLOCK + t
                 var acc = Float32(0)
                 while r < n_rows:
-                    var w = stats_p[r]
-                    var q = ftz(stats_p[n_rows + r] / w)
-                    acc = ftz(identical_mul_add(ftz(w * q), q, acc))
+                    # the device kernel's row body (random_score_bodies)
+                    acc = std_dev_row_term(stats_p[r], stats_p[n_rows + r], acc)
                     r += stride
                 slab[t] = acc
             part_p[b] = _halving_fold(slab)
@@ -109,7 +117,8 @@ def _pointwise_target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
     host_parallelize(block_sums, units)
     _ = len(stats)
     var sum2 = _deterministic_sum_lanes(partials, 1, blocks)[0]
-    return sqrt(Float64(sum2) / (Float64(n_rows) + 1e-100))
+    var objects = n_rows if object_count < 0 else object_count
+    return sqrt(Float64(sum2) / (Float64(objects) + 1e-100))
 
 
 def _pw_helpers(
