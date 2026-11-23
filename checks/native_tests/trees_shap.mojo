@@ -53,6 +53,15 @@ comptime ROWS = 40
 comptime TREES = 5
 
 comptime SHAP_DIR = "checks/native_tests/fixtures/trees_shap/"
+# test_kernel_explainer_logit's fits (check-trim-2, 2026-11-23; the file went from about 12 s to 166 s when that test
+# arrived): the two models are fitted on the first rows of the training split, not all 1,050, and the DART model
+# boosts DART_TREES rounds, not 20. Its assertions (exact Shapley values of the linked game, additivity in log-odds,
+# workers == serial words) hold for any fitted model, so neither size is needed to prove them; DART still drops
+# trees in its later rounds (drop_rate 0.1, skip_drop 0.5), and the RF keeps 20 trees of min_samples_leaf 30, so
+# every probability the logit link meets stays inside (0, 1).
+comptime LOGIT_FIT_ROWS = 400  # RandomForestClassifier(20, max_depth=4, min_samples_leaf=30)
+comptime DART_FIT_ROWS = 160  # DARTClassifier: min_child_samples 20, so up to 8 leaves a tree
+comptime DART_TREES = 6
 comptime _FOREST = MutPointer[Forest, MutUntrackedOrigin]
 comptime _DART = MutPointer[DartModel, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -538,9 +547,10 @@ def test_permutation_explainer() raises:
 
 
 def test_kernel_explainer_logit() raises:
-    """test_kernel_explainer_logit: DARTClassifier(n_estimators=20, random_state=0) (the original's model, through
-    bm_rest_boost_fits.mojo `dart_fit` over the product's DART round RUN) and a binary
-    RandomForestClassifier(20, max_depth=4, min_samples_leaf=30, random_state=0), each on `_clf(n_classes=2)[:, :6]`,
+    """test_kernel_explainer_logit: DARTClassifier(n_estimators=DART_TREES, random_state=0) (the original's model,
+    with fewer rounds, through bm_rest_boost_fits.mojo `dart_fit` over the product's DART round RUN) on the first
+    DART_FIT_ROWS rows and a binary RandomForestClassifier(20, max_depth=4, min_samples_leaf=30, random_state=0) on
+    the first LOGIT_FIT_ROWS rows, each of `_clf(n_classes=2)[:, :6]`,
     background Xa[:20], explained Xb[:4], link 'logit': phi equals the exact Shapley values of the linked game
     (rtol 1e-6, atol 1e-6) and is additive in log-odds (atol 1e-5)."""
     var glue = _glue()
@@ -550,7 +560,11 @@ def test_kernel_explainer_logit() raises:
     var spec = RfSpec(True, 20, 0)
     spec.max_depth = 4
     spec.min_samples_leaf = 30
-    var forest = rf_fit(spec, _cols(xa, NA, D, 6), NA, 6, ya, List[Float32](), 2, List[Float32]())
+    var ya_rf = List[Int32](length=LOGIT_FIT_ROWS, fill=Int32(0))
+    for i in range(LOGIT_FIT_ROWS):  # small-loop(fixture: the fit rows' class codes)
+        ya_rf[i] = ya[i]
+    var forest = rf_fit(spec, _cols(xa, LOGIT_FIT_ROWS, D, 6), LOGIT_FIT_ROWS, 6, ya_rf, List[Float32](), 2,
+                        List[Float32]())
     require(forest.outputs == 2, "binary forest outputs")
     var bg = _cols(xa, 20, D, 6)
     var x = _cols(xb, 4, D, 6)
@@ -565,11 +579,14 @@ def test_kernel_explainer_logit() raises:
 
     # The DART arm: the original test's model.
     publish_host_images()
-    var xa6 = _cols(xa, NA, D, 6)
-    var codes = List[Float32](length=NA, fill=Float32(0))
-    for i in range(NA):  # small-loop(fixture: the class codes as the fit's float32 targets)
+    var xa6 = _cols(xa, DART_FIT_ROWS, D, 6)
+    var codes = List[Float32](length=DART_FIT_ROWS, fill=Float32(0))
+    var ones = 0
+    for i in range(DART_FIT_ROWS):  # small-loop(fixture: the class codes as the fit's float32 targets)
         codes[i] = Float32(ya[i])
-    var dart = dart_fit(DartSpec(20, 0), xa6, NA, 6, codes, 1, 1)
+        ones += Int(ya[i])
+    require(ones > 0 and ones < DART_FIT_ROWS, "DART fit rows: both classes present")
+    var dart = dart_fit(DartSpec(DART_TREES, 0), xa6, DART_FIT_ROWS, 6, codes, 1, 1)
     var dp = Int(MutPointer(to=dart))
     var dbg = _DartEval(dp, bg, 20, 6, False)
     var dserial_m = _DartEval(dp, x, 4, 6, False)
@@ -589,6 +606,7 @@ def test_kernel_explainer_logit() raises:
     _ = dart^
     _ = xa6^
     _ = codes^
+    _ = ya_rf^
     _ = forest^
     _ = xa^
     _ = xb^
