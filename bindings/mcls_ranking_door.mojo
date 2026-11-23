@@ -196,10 +196,16 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
         if w is not None:
             w_at = Int(py=classical_address(w))
             w_words = Int(py=w.size)
+        # Lane meta-gil (2026-11-23): the four words are read here, with the GIL held. They were RUN call
+        # arguments (`classical_address`, `.size`: Python attribute reads and new ints) evaluated inside
+        # `with GILReleased`, the pattern that crashed the calibrated and Bagging OOB RUNs.
+        var s_at = Int(py=classical_address(s))
+        var s_words = Int(py=s.size)
+        var codes_at = Int(py=classical_address(codes))
+        var codes_words = Int(py=codes.size)
         var got = RocMicro(False, McAuc(False, 0.0))
         with GILReleased(Python()):
-            got = roc_ovr_micro_run(pin.route, Int(py=classical_address(s)), Int(py=s.size),
-                                    Int(py=classical_address(codes)), Int(py=codes.size), w_at, w_words, n, k)
+            got = roc_ovr_micro_run(pin.route, s_at, s_words, codes_at, codes_words, w_at, w_words, n, k)
         _ = s  # the RUN reads the pinned words
         _ = codes^
         _ = w
