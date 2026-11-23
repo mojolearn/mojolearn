@@ -185,7 +185,7 @@ for b in $IDS; do  # driver-loop: over batches, each owns the tree and the GPU
             echo "SABOTAGE batch=$b arm=$arm column=all verdict=TIMEOUT" >> "$RES/$b/summary.txt"
         done
     fi
-    grep '^SABOTAGE \|BUSY\|BUILD \|APPLY FAILED\|TREE NOT CLEAN\|RESTORE FAILED\|REVERT FAILED\|STOPPED' \
+    grep '^SABOTAGE \|BUSY\|BUILD \|APPLY FAILED\|PLAN STALE\|TREE NOT CLEAN\|RESTORE FAILED\|REVERT FAILED\|STOPPED' \
         "$RES/$b/summary.txt" 2>/dev/null | sed "s/^/  /" >> "$RES/summary.txt"
     say "BATCH $b rc=$brc secs=$(( $(date +%s) - t ))$([ $brc -eq 124 ] || [ $brc -eq 137 ] && echo " TIMEOUT (limit $BATCH_MIN min)")"
     [ $brc -eq 0 ] || rc=1

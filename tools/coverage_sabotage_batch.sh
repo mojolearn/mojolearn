@@ -72,6 +72,32 @@ BUILDS=$(field builds) || exit 2
 LANES=$(field lanes) || exit 2
 COLUMNS=$(field columns) || exit 2
 log "BATCH $BATCH arms=$ARMS builds=$BUILDS columns=$COLUMNS lanes=$LANES head=$(git rev-parse --short HEAD)"
+# A plan older than the arm table proves nothing: in nvc1-0003 gbdt-1 and gbdt-2 ran the plan's lanes, the
+# arms had gained lanes since, and check refused nine arms ("requested lanes do not cover this arm") after
+# the builds. So the batch stops here, before any build, when an arm's patch, bindings or lanes are not the
+# plan's (lane sab-gpu-missed, 2026-11-23); `coverage_sabotage.py batch-plan` writes a current plan.
+if ! stale=$(python3 - "$PLAN" "$BATCH" <<'EOF'
+import json, sys
+sys.path.insert(0, "tools")
+import coverage_sabotage as cs
+plan, bid = sys.argv[1:3]
+b = [x for x in json.load(open(plan))["batches"] if x["id"] == bid][0]
+table, bad = cs.arms(), []
+for arm in b["arms"]:
+    a = table.get(arm)
+    if a is None:
+        bad.append(arm + ": not in the arm table")
+        continue
+    if a["patch"] not in b["patches"]:
+        bad.append(arm + ": patch " + a["patch"])
+    bad += [arm + ": build " + x for x in a["bindings"] if x not in b["builds"]]
+    bad += [arm + ": lane " + x for x in a["lanes"] if x not in b["lanes"]]
+print("; ".join(bad))
+sys.exit(1 if bad else 0)
+EOF
+); then
+    log "PLAN STALE: $stale"; rm -rf "$SCRATCH"; exit 6
+fi
 
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     log "TREE NOT CLEAN"; rm -rf "$SCRATCH"; exit 4
