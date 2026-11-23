@@ -88,8 +88,8 @@ comptime _GPC = "mojolearn GaussianProcessClassifier"
 def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False: this kind or kernel has no member
-    entry (a kernel table the member cannot address)."""
+    from the unfitted estimator. False only for an unknown kind: every
+    kernel layout the door fits ("leaf", "pair", "nodes") is addressed."""
     if kind == 1:
         return _gpc_admit(model, context, owner)
     if kind != 0:
@@ -117,7 +117,14 @@ def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
     var nodes = len(storage.kinds)
     var scale_words = storage.scale_count
     # Node targets: 0 fixed, 1 a free parameter, 2 free length scales
-    # (`gp_replace`'s walk); a table whose count disagrees is not served.
+    # (`gp_replace`'s walk). Every layout the door fits maps one to one onto
+    # the packed table (lane mf-img3): a "leaf" is one packed node and one
+    # free flag (its length scales, or its one value, are its free values);
+    # a "pair" is its two subtrees' nodes then one operator node with a fixed
+    # flag; a "nodes" layout (a loaded kernel, `_SavedKernel`) is its saved
+    # postfix nodes copied as they are (bindings/gp_kernel_public_native_door.mojo
+    # `_kernel_nodes_walk`), each with a fixed flag (bindings/gp_common_native_unpack.mojo
+    # `gp_free`: a loaded kernel has no free hyperparameter, as in its door).
     var targets = List[Int]()
     var taken = 0
     for i in range(nodes):  # driver-loop: over the kernel's postfix nodes
@@ -127,7 +134,8 @@ def gp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
             taken += Int(storage.lengths[i]) if target == 2 else 1
         targets.append(target)
     if len(free.flags) != nodes or taken != len(free.values):
-        return False
+        # Not reachable from a connected layout (above): the two walks disagree only through a defect.
+        raise Error("RuntimeError: mojolearn: the GP kernel's free hyperparameters do not match its packed nodes")
     var optimizer = py_item(settings, nk[].k__optimizer)
     var optimize = optimizer is not None and len(free.values) > 0
     var seed_source = py_item(settings, nk[].k__random_state)
