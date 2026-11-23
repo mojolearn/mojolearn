@@ -33,7 +33,7 @@ from sequence.exec_device import (
 )
 from sequence.ops import FP, OP_OPT, OPT_NADAM, OPT_SGD, OPT_SK_ADAM, OPT_SK_SGD, Args
 from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
-from sequence.ops_impl import adafactor_core, opt_slots
+from sequence.ops_impl import adafactor_core, lamb_offsets, opt_slots
 from sequence.lamb_core import lamb_bias, lamb_core, lamb_table
 from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
 from core.resident_upload_count import RUC_OPTIMIZER_STATE, resident_upload_note
@@ -294,18 +294,6 @@ def _opt_of(ip: List[Int], at: Int, fp: List[Float64], fat: Int) raises -> OptCo
                      Float32(fp[fat + 3]), Float32(fp[fat + 4]))
 
 
-def _lamb_offsets(ip: List[Int], at: Int, nt: Int) raises -> List[Int]:
-    """`providers/python/sequence_pyapi.mojo` `lamb_offsets` on typed parameters: ip[at ..
-    at + nt], rising strictly from 0, below 2^31."""
-    var offs = List[Int]()
-    for k in range(nt + 1):  # small-loop(nt: parameter tensors): offset admission, no data
-        var o = ip[at + k]
-        if (k == 0 and o != 0) or (k > 0 and o <= offs[k - 1]) or o >= 2147483647:
-            raise Error("lamb_step: offsets must rise strictly from 0, below 2^31 - 1")
-        offs.append(o)
-    return offs^
-
-
 def _handle(handle: Int, kind: Int) raises -> Int:
     var h = handle
     var pool = _RES.get_or_create_ptr()
@@ -363,7 +351,9 @@ def lamb_resident_open(ip: List[Int]) raises -> List[Int]:
     var nt = ip[0]
     if nt < 1 or len(ip) != 2 + nt:
         raise Error("lamb_resident_open: n_tensors >= 1 and n_tensors + 1 offsets")
-    var offs = _lamb_offsets(ip, 1, nt)
+    # One body (lane sab-gpu-missed, 2026-11-23): the resident route admits its offsets with the
+    # per-call lamb_offsets (sequence/ops_impl.mojo); its own copy was deleted.
+    var offs = lamb_offsets(ip, 1, nt)
     var tab = List[Float32]()
     _ = lamb_table(offs, tab)
     var n = offs[nt]

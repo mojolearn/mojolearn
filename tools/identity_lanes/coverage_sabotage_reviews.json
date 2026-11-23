@@ -1,5 +1,5 @@
 {
- "#": "Committed reviews of fault arms whose fault surfaces only as a product refusal or a lane's in-cell byte oracle (tools/coverage_sabotage.py docstring, DECLARED REVIEWS). Each entry is bound to one run by `coverage_sabotage.py review`: the cell must have REFUSED, its error's first line must fullmatch error_match, and the patch bytes must hash to patch_sha256. A changed patch needs a new review. Lane sab-missed-5, 2026-11-23, from nvc1-0003 (L40S, tag nvc-sab-20261123T044409Z-0c21d8, batches mamba-2, mamba-3, x_decomp-4) and the 0860 reviews of the same two mamba arms (verification/records/cells/verification_faults/2026-10-26-0860/mamba-2 and mamba-3). Lane sab-gpu-missed, 2026-11-23, from nvc1-0003 (tag nvc-sab-20261123T125906Z-5a1d18, batches core-2, core-4): the two TargetEncoder fold reviews, written from the door's refusal text (bindings/prep_encode_native_door.mojo) before the rerun; the rerun's review_*.txt says whether they bound.",
+ "#": "Committed reviews of fault arms whose fault surfaces only as a product refusal or a lane's in-cell byte oracle (tools/coverage_sabotage.py docstring, DECLARED REVIEWS). Each entry is bound to one run by `coverage_sabotage.py review`: the cell must have REFUSED, its error's first line must fullmatch error_match, and the patch bytes must hash to patch_sha256. A changed patch needs a new review. Lane sab-missed-5, 2026-11-23, from nvc1-0003 (L40S, tag nvc-sab-20261123T044409Z-0c21d8, batches mamba-2, mamba-3, x_decomp-4) and the 0860 reviews of the same two mamba arms (verification/records/cells/verification_faults/2026-10-26-0860/mamba-2 and mamba-3). Lane sab-gpu-missed, 2026-11-23, from nvc1-0003 (tag nvc-sab-20261123T125906Z-5a1d18, batches core-2, core-4): the two TargetEncoder fold reviews, written from the door's refusal text (bindings/prep_encode_native_door.mojo) before the rerun; the rerun's review_*.txt says whether they bound. Lane sab-gpu-missed, from nvc1-0004 (tag nvc-sab-20261123T154446Z-dd75b2, batch x_sequence-5): the opt_public and seq_tensor byte-oracle reviews, written from that run's refusal lines.",
  "coverage-precise-mamba-m3_session_copy_in": {
   "mamba3-decode-session/base": {
    "product_check": "tools/identity_lanes/coverage.py:564 _coverage_decode_session: _same_bytes(steps after load_state, per-call steps after the same four tokens), the lane's independent byte oracle against the per-call Mamba3Block.step path, which shares no code with the session's load_state.",
@@ -38,6 +38,22 @@
    "why_fault_reaches_check": "The patch stores fold labels 0 and 1 exchanged in assign_fold_i64 (core/hotpath_impl_rows.mojo) while count_fold_hits_i64 reads the table as written. For the valid partitions x-prep-user-objects passes, fold 0's table entries are then fold 1's test rows: either the fold sizes no longer match the training list sizes, or fold 0's training list (which holds fold 1's test rows) hits fold 0; both refuse with this line, and the clean build fits.",
    "error_match": "NotImplementedError: (NotImplementedError: )?mojolearn: TargetEncoder cv folds whose training rows are not every row outside the test fold are not implemented",
    "patch_sha256": "e1fb05702b9775c8d78f7fe8fbc7821eeb7274bca86f745c4e2a7db5384aa4e4"
+  }
+ },
+ "coverage-sequence-opt_public": {
+  "sequence-optimizer-state/base": {
+   "product_check": "tools/identity_lanes/coverage.py:806 (the sequence-optimizer-state lane): _same_bytes(resumed parameters, uninterrupted parameters), the lane's byte oracle for the resume claim: an optimizer that load_state_dicts a saved state and takes the same two steps must hold the uninterrupted optimizer's parameters byte for byte.",
+   "why_fault_reaches_check": "NAdam.state_dict -> seq_optimizer_export -> export_copy (sequence/opt_public.mojo:378) exports the state slots in reverse, and load_state_dict -> import_copy (:391) loads the step count one ahead, so the resumed NAdam steps from different moments and step count than the uninterrupted one (634 of 1056 bytes differ on the L40S, both columns, nvc1-0004 x_sequence-5); the clean build matches.",
+   "error_match": "ValueError: nadam resumed parameters and nadam uninterrupted parameters differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "781c4d8bb9dad69b256e1914c1e36b2e17b9ab45df80ede0340facb51d53c000"
+  }
+ },
+ "coverage-sequence-seq_tensor": {
+  "sequence-device-tensor/base": {
+   "product_check": "tools/identity_lanes/coverage.py:419 (the sequence-device-tensor lane): _same_bytes(resident-tensor RMSprop params, host-array RMSprop params), the lane's byte oracle: six RMSprop steps on device-resident tensors must equal the same steps on host arrays.",
+   "why_fault_reaches_check": "The patch puts every value uploaded into a resident tensor, every downloaded value and the zero fill one ulp off (sequence/seq_tensor.mojo), so the resident run starts from and returns different parameters than the host-array run (256 of 1056 bytes differ on the L40S, device column, nvc1-0004 x_sequence-5); the clean build matches.",
+   "error_match": "ValueError: resident-tensor RMSprop params and host-array RMSprop params differ: [0-9]+ bytes of [0-9]+",
+   "patch_sha256": "63ce1c5790f92f386a221c60ca5d6c2339e2e0227a4edc4cfaca57f46828ea78"
   }
  }
 }
