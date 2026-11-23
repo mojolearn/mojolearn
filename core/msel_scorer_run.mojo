@@ -128,17 +128,30 @@ comptime _CL_AMI = 1
 #: their word = the table's operation + _CL_PAIR.
 comptime _CL_PAIR = 2
 #: THE SCORER WORD GROUP (lane mf-tail5b; module note): per scorer
-#: [code, positive word, flip (1.0), pos_label given (1.0), the given label's
-#: index among the label words (-1), k (0: the row's), beta (-1: the row's),
-#: zero_division (-1 'warn', else the cls_epi code 0 / 1 / 2 for nan), the
-#: number of `labels` codes, (lane mf-score6) average=None's scorer-words
-#: index (-1: the row's average), average='samples' (1.0), the number of
-#: sample_weight words (0: none; -1: the metric takes no sample_weight)],
-#: then the `labels` codes (a code >= the fit's classes is a label no row
-#: holds), then the sample_weight words (each float32's bits as an int32).
-#: Replaces the code bits SCORER_FLIP, SCORER_POS_GIVEN and SCORER_K_UNIT of
-#: lanes mf-cluster5 / mf-msel5c.
-comptime SCORER_GROUP_WORDS = 12
+#: [code, positive word, flip (1.0), pos_label given (1.0; lane mf-score6:
+#: 2.0 for a FLOAT pos_label), the given label's index among the label words
+#: (-1), k (0: the row's), beta (-1: the row's), zero_division (-1 'warn',
+#: else the cls_epi code 0 / 1 / 2 for nan), the number of `labels` codes,
+#: (lane mf-score6) average=None's scorer-words index (-1: the row's
+#: average), average='samples' (1.0), the number of sample_weight words (0:
+#: none; -1: the metric takes no sample_weight), the sample_weight refusal
+#: word (SCORER_WEIGHTS_OK, SCORER_WEIGHTS_EMPTY, else the label word index
+#: of the door's refusal words)], then the `labels` codes (a code >= the
+#: fit's classes is a label no row holds), then the sample_weight words (each
+#: float32's bits as an int32). Replaces the code bits SCORER_FLIP,
+#: SCORER_POS_GIVEN and SCORER_K_UNIT of lanes mf-cluster5 / mf-msel5c.
+comptime SCORER_GROUP_WORDS = 13
+#: Lane mf-score6: the sample_weight refusal word: none, or an empty weights
+#: array (each side refuses its length in the door's words).
+comptime SCORER_WEIGHTS_OK = -1
+comptime SCORER_WEIGHTS_EMPTY = -2
+#: Lane mf-score6: a FLOAT pos_label on the binary label rows and brier. The
+#: metric doors read pos_label through `_classification_labels`
+#: (bindings/mcls_common_unpack.mojo `mc_label_list`), which refuses a
+#: floating label with these words; average_precision's door compares it by
+#: value (bindings/metrics_exp_curve_door.mojo `_ap_binary`).
+comptime SCORER_FLOAT_POS_WORDS = ("TypeError: pos_label must contain only strings or only integers; floating "
+                                   + "labels, missing labels and mixed types are unsupported")
 #: Lane mf-score6: the words that start scikit-learn's refusal of a scorer
 #: that returns no number (model_selection/_validation.py `_score`: raised
 #: after the scorer's try, so a numeric error_score never replaces it).
@@ -185,16 +198,17 @@ struct MselScorer(ImplicitlyCopyable, Movable):
     var sel_n: Int
     var pos_given: Bool
     var pos_word: Int
-    # lane mf-score6: average=None (`avg_none`, the scorer's repr at label
+    # lane mf-score6: average=None (`avg_none`, the scorer's words at label
     # word `repr_word`), average='samples', the sample_weight words (float32
-    # at `w_at`, `w_n` of them; -1: the metric takes no sample_weight) and
-    # 'fbeta_score' (its refusals' caller).
+    # at `w_at`, `w_n` of them; -1: the metric takes no sample_weight), their
+    # refusal word (`w_word`) and a float pos_label (`pos_float`).
     var avg_none: Bool
     var repr_word: Int
     var samples: Bool
     var w_at: Int
     var w_n: Int
-    var fbeta: Bool
+    var w_word: Int
+    var pos_float: Bool
 
     def __init__(out self, name: StaticString, family: Int, metric: Int, avg: Int, sign: Float64, op: Int):
         self.name = name
@@ -216,7 +230,8 @@ struct MselScorer(ImplicitlyCopyable, Movable):
         self.samples = False
         self.w_at = 0
         self.w_n = 0
-        self.fbeta = False
+        self.w_word = SCORER_WEIGHTS_OK
+        self.pos_float = False
 
 
 struct MselScorerOptions(ImplicitlyCopyable, Movable):
@@ -225,7 +240,9 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
     place among the plan's selection words. Lane mf-score6: `none_word`
     average=None's scorer-words index (-1: none), `samples`
     average='samples', `w_from` / `w_n` the sample_weight words' place among
-    the selection words (`w_n` -1: the metric takes no sample_weight)."""
+    the selection words (`w_n` -1: the metric takes no sample_weight),
+    `w_word` their refusal word (SCORER_WEIGHTS_OK / _EMPTY, else a label
+    word index), `pos_float` a float pos_label (with `pos_given`)."""
     var flip: Bool
     var pos_given: Bool
     var pos_word: Int
@@ -238,6 +255,8 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
     var samples: Bool
     var w_from: Int
     var w_n: Int
+    var w_word: Int
+    var pos_float: Bool
 
     def __init__(out self):
         self.flip = False
@@ -252,6 +271,8 @@ struct MselScorerOptions(ImplicitlyCopyable, Movable):
         self.samples = False
         self.w_from = 0
         self.w_n = 0
+        self.w_word = SCORER_WEIGHTS_OK
+        self.pos_float = False
 
 
 def _table() -> List[MselScorer]:
@@ -334,6 +355,7 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
             raise Error("RuntimeError: a given pos_label on a search scorer that reads none")
         row.pos_given = True
         row.pos_word = opts.pos_word
+        row.pos_float = opts.pos_float
     if opts.k > 0:
         if row.family != _F_TOP_K:
             raise Error("RuntimeError: a given k on a search scorer other than top_k_accuracy")
@@ -354,30 +376,30 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
             raise Error("RuntimeError: a given labels list on a search scorer other than an averaged label row")
         row.sel_at = sel_base + 4 * opts.sel_from
         row.sel_n = opts.sel_n
-    # lane mf-score6: 'fbeta_score' (a beta given), average=None / 'samples'
-    # on an averaged label row, the sample_weight words.
-    row.fbeta = opts.beta >= 0.0
+    # lane mf-score6: average=None / 'samples' on an averaged label row, the
+    # sample_weight words and their refusal word.
     if opts.none_word >= 0 or opts.samples:
         if msel_scorer_label_row(row) != 2:
             raise Error("RuntimeError: average None or 'samples' on a search scorer other than an averaged label row")
         row.avg_none = opts.none_word >= 0
         row.repr_word = opts.none_word
         row.samples = opts.samples
-    if opts.w_n != 0:
+    if opts.w_n != 0 or opts.w_word != SCORER_WEIGHTS_OK:
         if opts.w_n > 0 and not msel_scorer_weighted(row):
             raise Error("RuntimeError: sample_weight on a search scorer whose typed metric takes none")
         row.w_n = opts.w_n
         row.w_at = sel_base + 4 * opts.w_from
+        row.w_word = opts.w_word
     return row
 
 
 def msel_scorer_weighted(row: MselScorer) -> Bool:
-    """Lane mf-score6: True for a row whose typed metric takes sample_weight
-    (accuracy, the label and binary rows, log_loss, the regression rows but
-    max_error, which has none)."""
-    if row.family == _F_ACCURACY or row.family == _F_LABEL or row.family == _F_BINARY or row.family == _F_LOG_LOSS:
-        return True
-    return row.family == _F_REG and row.metric != REG_MAX_ERROR
+    """Lane mf-score6: True for a row whose typed metric takes sample_weight:
+    every row but max_error and the clustering scorers, whose metrics have no
+    such parameter (scikit-learn's signatures and the doors')."""
+    if row.family == _F_CLUSTER:
+        return False
+    return not (row.family == _F_REG and row.metric == REG_MAX_ERROR)
 
 
 def msel_scorer_row(code: Int) raises -> MselScorer:
@@ -438,7 +460,7 @@ def msel_scorer_group_words(mut words: List[Float64], code: Int, positive: Int, 
     words.append(Float64(code))
     words.append(Float64(positive))
     words.append(1.0 if opts.flip else 0.0)
-    words.append(1.0 if opts.pos_given else 0.0)
+    words.append((2.0 if opts.pos_float else 1.0) if opts.pos_given else 0.0)
     words.append(Float64(opts.pos_word))
     words.append(Float64(opts.k))
     words.append(opts.beta)
@@ -447,6 +469,7 @@ def msel_scorer_group_words(mut words: List[Float64], code: Int, positive: Int, 
     words.append(Float64(opts.none_word))
     words.append(1.0 if opts.samples else 0.0)
     words.append(Float64(opts.w_n))
+    words.append(Float64(opts.w_word))
     for j in range(opts.sel_n):  # small-loop(the scorer's labels codes)
         words.append(Float64(sels[opts.sel_from + j]))
     for j in range(max(opts.w_n, 0)):  # driver-loop: over the sample_weight words (once per admission)
@@ -465,6 +488,7 @@ def msel_scorer_group_read(words: List[Float64], at: Int, mut code: Int, mut pos
     opts = MselScorerOptions()
     opts.flip = words[at + 2] != 0.0
     opts.pos_given = words[at + 3] != 0.0
+    opts.pos_float = words[at + 3] == 2.0
     opts.pos_word = Int(words[at + 4])
     opts.k = Int(words[at + 5])
     opts.beta = words[at + 6]
@@ -473,8 +497,9 @@ def msel_scorer_group_read(words: List[Float64], at: Int, mut code: Int, mut pos
     opts.none_word = Int(words[at + 9])
     opts.samples = words[at + 10] != 0.0
     var wn = Int(words[at + 11])
+    opts.w_word = Int(words[at + 12])
     var wk = max(wn, 0)
-    if n < 0 or wn < -1 or at + SCORER_GROUP_WORDS + n + wk > len(words):
+    if n < 0 or wn < -1 or opts.w_word < SCORER_WEIGHTS_EMPTY or at + SCORER_GROUP_WORDS + n + wk > len(words):
         raise Error("member ABI: a search scorer's labels codes are cut short")
     opts.sel_from = len(sels)
     opts.sel_n = n
@@ -641,22 +666,29 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
     The public metric's warnings on this side are appended to `notices`
     (core/member_notices.mojo triples, in the metric's order). The metric's
     refusals raise its words (the caller's error rule applies)."""
-    # Lane mf-score6, in the door's order (the scorer's keyword admission,
-    # the metric's average check, then its weights): a sample_weight the
-    # metric does not take, average='samples' (1-D targets: the door's
-    # words; scikit-learn refuses it too, metrics/_classification.py
-    # `multilabel_confusion_matrix`: "Samplewise metrics are not available
-    # outside of multilabel classification."), the weights' length and
-    # values (bindings/metrics_reg_door.mojo `_reg_weights`' words).
+    # Lane mf-score6, in the door's order (the call's keywords, then
+    # bindings/mcls_classify_door.mojo `mc_pair`'s weights, then
+    # `_set_wise_labels`' average): a sample_weight the metric does not take
+    # (the scorer door's words), the weights' refusal read at UNPACK, their
+    # length and values per side (bindings/metrics_reg_door.mojo
+    # `_reg_weights`' words), average='samples' (1-D targets; the door's
+    # words: multilabel targets are NOT IMPLEMENTED, metrics/NOT_IMPLEMENTED.tsv).
     if row.w_n < 0:
         raise Error("TypeError: native metric received an unexpected keyword argument")
-    if row.samples:
-        raise Error("NotImplementedError: mojolearn " + _metric_caller(row) + ": average='samples' applies to "
-                    + "multilabel targets, which are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
+    if row.w_word == SCORER_WEIGHTS_EMPTY:
+        raise Error("mojolearn " + msel_scorer_caller(row) + ": sample_weight has 0 entries for " + String(count)
+                    + " samples")
+    if row.w_word >= 0:
+        if row.w_word >= len(label_words):
+            raise Error("member ABI: a search scorer's sample_weight refusal word is missing")
+        raise Error(label_words[row.w_word])
     var w = 0
     if row.w_n > 0:
         _check_weights(row, count)
         w = row.w_at
+    if row.samples:
+        raise Error("NotImplementedError: mojolearn " + msel_scorer_caller(row) + ": average='samples' applies to "
+                    + "multilabel targets, which are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
     if row.family == _F_ACCURACY:
         return label_accuracy_value(route, truth, response, count, classes, w)
     var value: Float64
@@ -679,10 +711,11 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
             # `_score` takes `.item()` of a one-label array as the score and
             # refuses any other (module note, SCORER_NUMBER_WORDS).
             if len(per_class) != 1:
-                var shown = row.repr_word >= 0 and row.repr_word < len(label_words)
+                var shown = String(row.name)
+                if row.repr_word >= 0 and row.repr_word < len(label_words):
+                    shown = label_words[row.repr_word].copy()
                 raise Error(SCORER_NUMBER_WORDS + _ndarray_words(per_class, row.sign)
-                            + " (<class 'numpy.ndarray'>) instead. (scorer="
-                            + (label_words[row.repr_word] if shown else String(row.name)) + ")")
+                            + " (<class 'numpy.ndarray'>) instead. (scorer=" + shown + ")")
             value = per_class[0]
         if row.metric == LBL_BALANCED:
             if warn != 0:
@@ -690,13 +723,16 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
         elif row.metric != LBL_MCC and not row.quiet:
             _prf_notices(row.metric, warn, notices)
     elif row.family == _F_AP:
-        value = average_precision_run(route, truth, response, count, cols, classes, positive)
+        value = average_precision_run(route, truth, response, count, cols, classes, positive, w)
     elif row.family == _F_BRIER:
+        if row.pos_float:
+            # a float pos_label (lane mf-score6): the door's `mx_pos_label` refusal
+            raise Error(SCORER_FLOAT_POS_WORDS)
         # a given pos_label (lane mf-tail5b): its class code, else the label marks
         value = brier_options_run(route, truth, response, count, classes, cols, -1 if row.pos_given else positive,
-                                  positive if row.pos_given else -1)
+                                  positive if row.pos_given else -1, w)
     elif row.family == _F_TOP_K:
-        value = top_k_run(route, truth, response, count, cols, classes, row.metric, warn)
+        value = top_k_run(route, truth, response, count, cols, classes, row.metric, w, warn)
         if warn != 0:
             member_notice_add(notices, MEMBER_NOTICE_METRIC_TOP_K, Float64(row.metric), Float64(
                 _present_count(truth, count, classes)))
@@ -712,7 +748,7 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
                 raise Error("multi_class must be in ('ovo', 'ovr')")
         elif cols != classes:
             raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
-        value = roc_auc_run(route, row.metric, truth, response, count, classes)
+        value = roc_auc_run(route, row.metric, truth, response, count, classes, w)
     return row.sign * value
 
 
@@ -808,6 +844,9 @@ def _binary_value(route: MetricRoute, label_words: List[String], row: MselScorer
     if present > 2:
         raise Error("Target is multiclass but average='binary'. Please choose another average setting, one of "
                     + "[None, 'micro', 'macro', 'weighted'].")
+    if row.pos_float:
+        # a float pos_label (lane mf-score6): the door's `mc_positive` refusal
+        raise Error(SCORER_FLOAT_POS_WORDS)
     if positive == SCORER_POSITIVE_KIND:
         raise Error("pos_label must use the same type as the targets")
     var absent = positive == SCORER_POSITIVE_ABSENT
@@ -821,26 +860,34 @@ def _binary_value(route: MetricRoute, label_words: List[String], row: MselScorer
                                     row.b2, w, warn)
 
 
-def _metric_caller(row: MselScorer) -> String:
-    """Lane mf-score6: the public metric whose door words a row's refusals
-    carry (`caller`)."""
+def msel_scorer_caller(row: MselScorer) -> String:
+    """Lane mf-score6: the `caller` whose words the metric door's weight and
+    average refusals carry (bindings/mcls_classify_door.mojo `mc_pair`,
+    bindings/metrics_exp_cls_door.mojo `mx_pair`, the curve, rank and
+    ranking doors); the UNPACK spells the weights' refusals with it too."""
     if row.family == _F_REG:
         return reg_metric_caller(row.metric)
     if row.family == _F_ACCURACY:
         return String("accuracy_score")
     if row.family == _F_LOG_LOSS:
         return String("log_loss")
-    if row.metric == LBL_PRECISION:
-        return String("precision_score")
-    if row.metric == LBL_RECALL:
-        return String("recall_score")
-    if row.metric == LBL_F1:
-        return String("fbeta_score") if row.fbeta else String("f1_score")
+    if row.family == _F_AP:
+        return String("average_precision_score")
+    if row.family == _F_BRIER:
+        return String("brier_score_loss")
+    if row.family == _F_TOP_K:
+        return String("top_k_accuracy_score")
+    if row.family == _F_ROC:
+        return String("roc_auc_score")
+    if row.family == _F_CLUSTER:
+        return String(row.name)
     if row.metric == LBL_JACCARD:
         return String("jaccard_score")
     if row.metric == LBL_BALANCED:
         return String("balanced_accuracy_score")
-    return String("matthews_corrcoef")
+    if row.metric == LBL_MCC:
+        return String("matthews_corrcoef")
+    return String("precision_recall_fscore_support")
 
 
 def _check_weights(row: MselScorer, count: Int) raises:
@@ -850,7 +897,7 @@ def _check_weights(row: MselScorer, count: Int) raises:
     samples (scikit-learn passes the same kwarg to every side, so its
     `check_consistent_length` refuses any other length too), finite and
     nonnegative, a positive largest weight."""
-    var caller = _metric_caller(row)
+    var caller = msel_scorer_caller(row)
     if row.w_n != count:
         raise Error("mojolearn " + caller + ": sample_weight has " + String(row.w_n) + " entries for " + String(count)
                     + " samples")
@@ -878,7 +925,7 @@ def _fraction_digits(v: Float64) -> String:
     while digits.byte_length() < 8:  # small-loop(left zero padding to 8 digits)
         digits = "0" + digits
     var end = digits.byte_length()
-    while end > 0 and digits[byte=end - 1 : end] == "0":  # small-loop(the trailing zeros)
+    while end > 0 and String(digits[byte=end - 1 : end]) == "0":  # small-loop(the trailing zeros)
         end -= 1
     return String(whole) + "." + String(digits[byte=0:end])
 
@@ -909,7 +956,7 @@ def _ndarray_words(values: List[Float64], sign: Float64) -> String:
         parts.append(text)
     var cells = List[String]()
     for i in range(len(parts)):  # small-loop(the labels' values: padded)
-        var text = parts[i]
+        var text = parts[i].copy()
         var dot = text.find(".")
         if dot < 0:
             var width = lead + 1 + frac
@@ -925,7 +972,7 @@ def _ndarray_words(values: List[Float64], sign: Float64) -> String:
     var out = String("")
     var line = String("[")
     for i in range(len(cells)):  # small-loop(the labels' values: NumPy's line wrapping)
-        var word = cells[i]
+        var word = cells[i].copy()
         var limit = 75
         if i + 1 < len(cells):
             word += " "
