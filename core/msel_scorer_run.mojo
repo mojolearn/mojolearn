@@ -427,6 +427,28 @@ def msel_scorer_pos_words(row: MselScorer, label_words: List[String], positive: 
     return word
 
 
+def msel_scorer_label_row(row: MselScorer) -> Int:
+    """UNPACK (lane mf-tail5b): which label options a row takes: 2 an
+    averaged precision / recall / F / jaccard row (zero_division, `labels`,
+    an F row's beta), 1 a binary one (zero_division, pos_label, beta; its
+    `labels` ignored as `_check_set_wise_labels` ignores them), 0 none."""
+    if row.family == _F_BINARY:
+        return 1
+    if row.family == _F_LABEL and row.metric != LBL_BALANCED and row.metric != LBL_MCC:
+        return 2
+    return 0
+
+
+def msel_scorer_f_row(row: MselScorer) -> Bool:
+    """True for an F row (f1 and its averages): the rows 'fbeta' maps onto."""
+    return (row.family == _F_LABEL or row.family == _F_BINARY) and row.metric == LBL_F1
+
+
+def msel_scorer_brier(row: MselScorer) -> Bool:
+    """True for 'neg_brier_score' (lane mf-msel5c: a fold that lacks a class)."""
+    return row.family == _F_BRIER
+
+
 def msel_scorer_cluster(row: MselScorer) -> Bool:
     """True for a clustering scorer (NMI, AMI and the label-pair metrics):
     the only scorers a clusterer member (no class codes) is scored by."""
@@ -480,11 +502,6 @@ def msel_scorer_log_loss(row: MselScorer) -> Bool:
 def msel_scorer_ap(row: MselScorer) -> Bool:
     """True for 'average_precision' (its binary column is the positive's)."""
     return row.family == _F_AP
-
-
-def msel_scorer_brier(row: MselScorer) -> Bool:
-    """True for 'neg_brier_score' (lane mf-msel5c: a fold that lacks a class)."""
-    return row.family == _F_BRIER
 
 
 def msel_scorer_regression(row: MselScorer) -> Bool:
