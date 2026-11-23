@@ -388,8 +388,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             var v = t // sides
             var side = t % sides
             var s = ((u0 + v) % used) * sides + side
-            var run = _RunPtr(unsafe_from_address=run_at)
-            if run[].failed[v] != UInt8(0) or run[].states[v] == 0:
+            var rp = _RunPtr(unsafe_from_address=run_at)
+            if rp[].failed[v] != UInt8(0) or rp[].states[v] == 0:
                 _U8P(unsafe_from_address=failed_at)[t] = UInt8(1)
                 return
             try:
