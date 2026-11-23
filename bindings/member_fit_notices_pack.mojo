@@ -18,6 +18,7 @@ from core.member_notices import (
     MEMBER_NOTICE_WORDS, MEMBER_NOTICE_FOREST, MEMBER_NOTICE_NYSTROEM_COMPONENTS, MEMBER_NOTICE_GP_RIDGE,
     MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST, MEMBER_NOTICE_METRIC_PRF, MEMBER_NOTICE_METRIC_JACCARD,
     MEMBER_NOTICE_METRIC_BALANCED, MEMBER_NOTICE_METRIC_FEW, MEMBER_NOTICE_METRIC_TOP_K, MEMBER_NOTICE_R2_FEW,
+    MEMBER_NOTICE_FOLD_LACKING, member_lacking_warning,
 )
 from bindings.py_balanced import py_get
 
@@ -112,5 +113,10 @@ def member_fit_notices_raise_with(words: List[Float64], context: PythonObject,
             if category is None:
                 category = native_loaded_module("builtins").UserWarning
             metric_warn("R^2 score is not well-defined with less than two samples.", category, context, 2)
+        elif code == MEMBER_NOTICE_FOLD_LACKING:
+            # cross_val_predict's `_enforce_prediction_order` (lane mf-msel5b):
+            # a RuntimeWarning, as the calibration's ensemble=False PACK warns it.
+            metric_warn(member_lacking_warning(Int(a), Int(b)), native_loaded_module("builtins").RuntimeWarning,
+                        context)
         else:
             raise Error("member ABI: unknown fit notice code " + String(code))

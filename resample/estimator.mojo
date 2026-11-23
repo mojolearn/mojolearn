@@ -223,26 +223,10 @@ comptime RESAMPLE_MAP_TPB = 256
 # Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime RESAMPLE_FAST_PERM_SELECT = RESAMPLE_FAST_APPLE
 
-#: `-D MOJOLEARN_CV_FAST_SLICE` (python/mojolearn/model_selection.py
-#: cross_val_score): when every fold is KFold(shuffle=False)-shaped, each
-#: fold's test rows are a zero-copy row-range view and its training rows two
-#: memcpys (or a view) instead of four `_take_rows` byte gathers per fold.
-#: Same rows in the same order. Python glue (data movement only); this
-#: binding reports the define so Python reads no environment. Source
-#: lane/apple-fast-resample@50b96e795. Known: never compiled, never
-#: measured. Fixed here: only on `_native_default_folds`' folds (ascending
-#: partitions by construction, so the O(1) endpoint check is exact; the old
-#: check accepted any splitter's folds and could reorder rows); y must be an
-#: Array (a label list keeps the gather); the views are read-only so an
-#: estimator cannot write into the caller's X / y. Interacts with
-#: CV_FAST_TRUST_FOLDS only in that both read the same native folds.
-#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
-#: rab1d-cvslice): cross-val-score taxi 157.93 -> 126.18 ms (-20.1%), istella
-#: 3114.45 -> 2920.08 ms (-6.2%); mean_r2 and output digest identical. KEEP:
-#: the FAST + Apple default since then (the old -D name is harmless).
 # TOMBSTONE: MOJOLEARN_CV_FAST_SLICE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 289e8ff918.
 # Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch; record in docs/TOMBSTONES.md.
-comptime CV_FAST_SLICE = RESAMPLE_FAST_APPLE
+# TOMBSTONE: MOJOLEARN_CV_FAST_SLICE (FAST+Apple default, plumbing folded into the typed search RUN's views of a side that is one run of rows, rule 2026-11-22) deleted 2026-11-23 by lane/mf-msel5b; code recoverable at 6f0a3de6ed.
+# Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE.patch; record in docs/TOMBSTONES.md.
 
 #: `-D MOJOLEARN_CV_FAST_TRUST_FOLDS` (model_selection.py _prepare_folds):
 #: the native default folds (`fold_ids` + `select_fold_i64`, a partition by
@@ -262,7 +246,7 @@ comptime CV_FAST_TRUST_FOLDS = RESAMPLE_FAST_APPLE
 def resample_fast_defines() -> Int:
     """The FAST + Apple candidate defines this build was compiled with, as a
     bit mask (0 on every IDENTICAL and every non-Apple build): 1 RANK_SORT (deleted),
-    2 ONE_FOLD (deleted), 4 PERM_SELECT, 32 CV_SLICE, 64 CV_TRUST_FOLDS, 128
+    2 ONE_FOLD (deleted), 4 PERM_SELECT, 32 CV_SLICE (deleted), 64 CV_TRUST_FOLDS, 128
     GATHER_NARROW (8 and 16 were
     the old branch's IDX_BULK and GATHER, not ported). Read by the
     `resample_fast_defines` binding; python/mojolearn/model_selection.py
@@ -272,8 +256,7 @@ def resample_fast_defines() -> Int:
     # bit 2 (RESAMPLE_FAST_ONE_FOLD) is always 0 since its deletion (2026-10-09)
     comptime if RESAMPLE_FAST_PERM_SELECT:
         m |= 4
-    comptime if CV_FAST_SLICE:
-        m |= 32
+    # bit 32 (CV_FAST_SLICE) is always 0 since its deletion (2026-11-23, lane mf-msel5b)
     comptime if CV_FAST_TRUST_FOLDS:
         m |= 64
     return m

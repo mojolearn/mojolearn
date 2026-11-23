@@ -64,6 +64,16 @@ rank 1), and the refit: the best candidate fitted on every row.
    'average_precision' with the positive word SCORER_POSITIVE_ABSENT: with error_score='raise' the RUN raises
    scikit-learn's words "ValueError: pos_label=1 is not a valid label: It should be one of [0 2]"; with a number
    every split score is that number.
+12. (lane mf-msel5b) A FOLD THAT LACKS A CLASS: two given folds, fold 0 training on rows without class 0. With
+   `respond` = predict_proba into the caller's N x K result: fold 0's two columns land at classes 1 and 2 (the
+   member fitted on the re-coded codes, two classes), class 0's column is 0.0, fold 1 is placed as it is, and one
+   `_enforce_prediction_order` warning notice [12, 2, 3]; decision_function refuses in scikit-learn's words
+   ("Only 2 class/es in training fold, but 3 in overall dataset. ..."); 'accuracy' scores fold 0 over its
+   predicted fold codes mapped back to the classes; the member's own score of such a fold refuses ("member
+   ABI: a fold whose train rows lack a class ...": the door's units).
+13. (lane mf-msel5b) A FIT WITHOUT A TARGET: cross_val_predict(KMeans(3), X) with y=None (plan.y 0, KFold):
+   each fold's predicted cluster ids land at its rows of the caller's int64 result, equal to KMeans fitted
+   directly on the fold's train rows and predicting its test rows (a view of X: one run of rows).
 
 FAIL-PROOF EDITS (each must make a case fail): `side_rows[f * sides] = rows_at + 4 * (f * n)` (case 1: the train
 rows are scored); `p.classes = k - 1` in the wave (cases 1, 2: the units' fits learn the wrong count);
@@ -82,8 +92,11 @@ for `plan.cluster` in `_scorer_side`'s call (case 9: the label-pair scorers refu
 `alias_of[f * sides] = g * sides` written for a test side of DIFFERENT rows (drop the `_same_rows` test), or
 `res.unit_states[u0 + v] = run.states[v]` without `run.states[v] = 0` (the release frees it: case 10's kept
 predict_proba reads a freed state), or `tr.append(Int32(0))` in place of the row copy (case 10: indices), or
-`_widen(pred_at[at], side_count[s], dtype)` (case 10: one column only); `shown += " "` removed (case 11: the
-words).
+`df[at + to] = value` written at `at + c` (case 10: rows in fold order, not the test rows' order); `shown += " "`
+removed (case 11: the words); `to = c` (no held map) in `_place_response`, or `fill = 0.0` for a held fold's
+proba replaced by the member's first column, or the `member_notice_add` of the lacking fold removed (case 12);
+`codes[i] = h[Int(codes[i])]` removed (case 12: fold 0's accuracy); the `side.y != 0` test in `_side_set`
+removed, or `y_dst[s] = plan.y + ...` for a target-free side (case 13: a read of address 0).
 """
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
@@ -99,7 +112,7 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_call_of, member_new, member_free,
     member_kind_capabilities, MEMBER_OP_CAPABILITIES, MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
-    member_call_from_spans,
+    member_call_from_spans, MEMBER_OP_DECISION,
 )
 from core.msel_search_run import (
     MselSearchPlan, msel_search_run, msel_search_rows, SEARCH_SCORE_MEMBER, SEARCH_SCORE_ACCURACY,
@@ -126,7 +139,7 @@ comptime N = 60
 comptime D = 3
 comptime K = 3
 comptime F = 3
-comptime CASES = 11
+comptime CASES = 13
 
 
 def _glue() raises -> EntryRef:
@@ -948,11 +961,16 @@ def check_cv_tools() raises:
         _ = len(xs)
         _ = len(ys)
     # cross_val_predict's method over the int cv.
+    # cross_val_predict's method over the int cv (lane mf-msel5b): written
+    # straight into the caller's N x K float64 result at each fold's test rows.
     var plan2 = _plan([one.copy()], x, y, SEARCH_SCORE_MEMBER)
     plan2.respond = MEMBER_OP_PREDICT_PROBA
     plan2.refit = False
-    var got = msel_search_run(plan2)
-    require(len(got.outputs) == F, "one response per fold")
+    var result = List[Float64](length=N * K, fill=-7.0)
+    plan2.respond_dst = Int(result.unsafe_ptr())
+    plan2.respond_width = K
+    plan2.respond_dtype = MEMBER_F64
+    _ = msel_search_run(plan2)
     for f in range(F):  # small-loop(check: folds)
         var t = Int(counts[f])
         var train_at = Int(rows.unsafe_ptr()) + 4 * (f * N)
@@ -961,14 +979,17 @@ def check_cv_tools() raises:
         var yt = List[Int32]()
         _rows_of(x, y, train_at + 4 * (N - t), t, xt, yt)
         var want = _proba(one, state, Int(xt.unsafe_ptr()), t, K)
-        require(got.output_cols[f] == K and got.output_dtype[f] == MEMBER_F64, "the response's shape and type")
-        require(len(got.outputs[f]) == t * K, "the response's words")
-        for i in range(t * K):  # small-loop(check)
-            require(got.outputs[f][i] == want[i], "predict_proba of fold " + String(f))
+        var r = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=train_at + 4 * (N - t))
+        for i in range(t):  # small-loop(check: the fold's test rows)
+            for c in range(K):  # small-loop(check: classes)
+                require(result[Int(r[i]) * K + c] == want[i * K + c], "predict_proba of fold " + String(f))
         var call = MemberCall(one.route, state)
         member_free(one, call)
         _ = len(xt)
         _ = len(yt)
+    for i in range(N * K):  # small-loop(check: every row written)
+        require(result[i] != -7.0, "the result's word " + String(i) + " written")
+    _ = len(result)
     _ = rows^
     _ = counts^
     _ = x^
@@ -1014,6 +1035,189 @@ def check_ap_absent() raises:
     _ = y^
 
 
+def _lacking_folds(y: List[Int32], mut train0: List[Int32], mut test0: List[Int32], mut train1: List[Int32],
+                   mut test1: List[Int32]):
+    """Two given folds: fold 0 tests rows [0, N/2) and trains on the rows of [N/2, N) whose code is not 0 (it
+    lacks class 0); fold 1 tests [N/2, N) and trains on [0, N/2) (every class)."""
+    for i in range(N):  # small-loop(fixture: the two folds)
+        if i < N // 2:
+            test0.append(Int32(i))
+            train1.append(Int32(i))
+        else:
+            test1.append(Int32(i))
+            if y[i] != 0:
+                train0.append(Int32(i))
+
+
+def _given(mut plan: MselSearchPlan, given: List[Int]):
+    """The two given folds of `_lacking_folds` (their int32 views: train at, n, test at, n per fold)."""
+    plan.fold_train_at = [given[0], given[4]]
+    plan.fold_train_n = [given[1], given[5]]
+    plan.fold_test_at = [given[2], given[6]]
+    plan.fold_test_n = [given[3], given[7]]
+
+
+def check_lacking_fold() raises:
+    var x = _x()
+    var y = _codes()
+    var one = _logistic(1.0, 0.0)
+    var train0 = List[Int32]()
+    var test0 = List[Int32]()
+    var train1 = List[Int32]()
+    var test1 = List[Int32]()
+    _lacking_folds(y, train0, test0, train1, test1)
+    var given: List[Int] = [Int(train0.unsafe_ptr()), len(train0), Int(test0.unsafe_ptr()), len(test0),
+                            Int(train1.unsafe_ptr()), len(train1), Int(test1.unsafe_ptr()), len(test1)]
+
+    # The oracle of fold 0: the member fitted on its rows' codes re-coded onto the classes they hold (1 -> 0,
+    # 2 -> 1), two classes; fold 1: every class.
+    var y0 = y.copy()
+    for i in range(N):  # small-loop(oracle: fold 0's codes)
+        y0[i] = y[i] - 1 if y[i] > 0 else Int32(0)
+    var two = one.copy()
+    two.classes = 2
+    var s0 = _direct_fit(two, x, y0, Int(train0.unsafe_ptr()), len(train0))
+    var s1 = _direct_fit(one, x, y, Int(train1.unsafe_ptr()), len(train1))
+    # cross_val_predict predict_proba: fold 0's two columns at classes 1 and 2, class 0's column 0.0.
+    var plan = _plan([one.copy()], x, y, SEARCH_SCORE_MEMBER)
+    _given(plan, given)
+    plan.respond = MEMBER_OP_PREDICT_PROBA
+    plan.refit = False
+    var result = List[Float64](length=N * K, fill=-7.0)
+    plan.respond_dst = Int(result.unsafe_ptr())
+    plan.respond_width = K
+    plan.respond_dtype = MEMBER_F64
+    var res = msel_search_run(plan)
+    var xt0 = List[Float32]()
+    var yt0 = List[Int32]()
+    _rows_of(x, y, Int(test0.unsafe_ptr()), len(test0), xt0, yt0)
+    var want0 = _proba(two, s0, Int(xt0.unsafe_ptr()), len(test0), 2)
+    for i in range(len(test0)):  # small-loop(check: fold 0's rows)
+        var row = Int(test0[i])
+        require(result[row * K] == 0.0, "the lacking class's column is 0.0")
+        require(result[row * K + 1] == want0[i * 2] and result[row * K + 2] == want0[i * 2 + 1],
+                "fold 0's columns placed at their classes")
+    var xt1 = List[Float32]()
+    var yt1 = List[Int32]()
+    _rows_of(x, y, Int(test1.unsafe_ptr()), len(test1), xt1, yt1)
+    var want1 = _proba(one, s1, Int(xt1.unsafe_ptr()), len(test1), K)
+    for i in range(len(test1)):  # small-loop(check: fold 1's rows)
+        for c in range(K):  # small-loop(check)
+            require(result[Int(test1[i]) * K + c] == want1[i * K + c], "fold 1 placed as it is")
+    # `_enforce_prediction_order`'s warning for fold 0 only: [code 12, held 2, classes 3].
+    var warned = 0
+    for i in range(len(res.notices)):  # small-loop(check: the units' notices)
+        for j in range(len(res.notices[i]) // 3):  # small-loop(check: triples)
+            if res.notices[i][3 * j] == 12.0:
+                require(res.notices[i][3 * j + 1] == 2.0 and res.notices[i][3 * j + 2] == 3.0, "the warning's words")
+                warned += 1
+    require(warned == 1, "one lacking-fold warning")
+    # decision_function of a fold holding two of three classes: scikit-learn's refusal.
+    var plan2 = _plan([one.copy()], x, y, SEARCH_SCORE_MEMBER)
+    _given(plan2, given)
+    plan2.respond = MEMBER_OP_DECISION
+    plan2.refit = False
+    plan2.respond_dst = Int(result.unsafe_ptr())
+    plan2.respond_width = K
+    var words = String("")
+    try:
+        _ = msel_search_run(plan2)
+    except error:
+        words = String(error)
+    require(words.startswith("ValueError: Only 2 class/es in training fold, but 3 in overall dataset."),
+            "the decision refusal, got: " + words)
+    # 'accuracy' over the same folds: fold 0's predicted fold codes mapped back to the classes.
+    var plan3 = _plan([one.copy()], x, y, msel_scorer_code("accuracy", False))
+    _given(plan3, given)
+    plan3.refit = False
+    var scored = msel_search_run(plan3)
+    var call = member_call_of(two, s0)
+    var wide = List[Int64](length=len(test0), fill=Int64(0))
+    call.x = MemberMatrix(Int(xt0.unsafe_ptr()), len(test0), D)
+    call.dst = MemberMatrix(Int(wide.unsafe_ptr()), len(test0), 1, MEMBER_I64)
+    _ = member_call(two.member, MEMBER_OP_PREDICT, call)
+    var hits = 0
+    for i in range(len(test0)):  # small-loop(oracle: accuracy of the mapped codes)
+        if Int(wide[i]) + 1 == Int(yt0[i]):
+            hits += 1
+    require(scored.test[0][0] == Float64(hits) / Float64(len(test0)), "fold 0's accuracy over mapped codes")
+    require(scored.test[0][1] == _side_score(one, s1, xt1, yt1, len(test1), SEARCH_SCORE_ACCURACY), "fold 1")
+    # the member's own score of a lacking fold: the door's units
+    var plan4 = _plan([one.copy()], x, y, SEARCH_SCORE_MEMBER)
+    _given(plan4, given)
+    plan4.refit = False
+    var refused = String("")
+    try:
+        _ = msel_search_run(plan4)
+    except error:
+        refused = String(error)
+    require(refused.startswith("member ABI: a fold whose train rows lack a class"), "member score refused: " + refused)
+    var c0 = MemberCall(two.route, s0)
+    member_free(two, c0)
+    var c1 = MemberCall(one.route, s1)
+    member_free(one, c1)
+    _ = len(wide)
+    _ = len(xt0)
+    _ = len(yt0)
+    _ = len(xt1)
+    _ = len(yt1)
+    _ = len(result)
+    _ = len(train0)
+    _ = len(test0)
+    _ = len(train1)
+    _ = len(test1)
+    _ = x^
+    _ = y^
+    _ = y0^
+
+
+def check_target_free() raises:
+    """cross_val_predict(KMeans(3), X) with y=None: no target anywhere; each fold's predicted ids at its rows."""
+    var x = _x()
+    var km = _kmeans(3)
+    var plans: List[MemberPlan] = [km.copy()]
+    var masks = _masks(plans)
+    var plan = MselSearchPlan(plans^, masks^, Int(x.unsafe_ptr()), N, D, 0, 0, F, _glue(),
+                              MetricRoute(metrics_program_host_v1, False, False))
+    plan.respond = MEMBER_OP_PREDICT
+    plan.refit = False
+    var result = List[Int64](length=N, fill=Int64(-7))
+    plan.respond_dst = Int(result.unsafe_ptr())
+    plan.respond_width = 1
+    plan.respond_dtype = MEMBER_I64
+    _ = msel_search_run(plan)
+    # KFold over N rows, unshuffled: fold f tests rows [f * N / F, (f + 1) * N / F) (N divisible by F).
+    var dummy = List[Int32](length=N, fill=Int32(0))
+    for f in range(F):  # small-loop(check: folds)
+        var lo = f * (N // F)
+        var hi = lo + N // F
+        var train = List[Int32]()
+        for i in range(N):  # small-loop(oracle: the fold's train rows)
+            if i < lo or i >= hi:
+                train.append(Int32(i))
+        var xs = List[Float32]()
+        var ys = List[Int32]()
+        _rows_of(x, dummy, Int(train.unsafe_ptr()), len(train), xs, ys)
+        var call = member_new(km)
+        call.x = MemberMatrix(Int(xs.unsafe_ptr()), len(train), D)
+        _ = member_call(km.member, MEMBER_OP_FIT, call)
+        var ids = List[Int32](length=N // F, fill=Int32(0))
+        var q = member_call_of(km, call.state)
+        q.x = MemberMatrix(Int(x.unsafe_ptr()) + 4 * lo * D, N // F, D)
+        q.dst = MemberMatrix(Int(ids.unsafe_ptr()), N // F, 1, MEMBER_I32)
+        _ = member_call(km.member, MEMBER_OP_PREDICT, q)
+        for i in range(N // F):  # small-loop(check: the fold's rows, a view of X in the RUN)
+            require(result[lo + i] == Int64(ids[i]), "the predicted id of row " + String(lo + i))
+        member_free(km, call)
+        _ = len(xs)
+        _ = len(ys)
+        _ = len(train)
+        _ = len(ids)
+    _ = len(result)
+    _ = len(dummy)
+    _ = x^
+
+
 def test_msel_search_run() raises:
     publish_x_trees_glue("cpu")
     def run_case(which: Int) raises:
@@ -1037,8 +1241,12 @@ def test_msel_search_run() raises:
             check_clusterer_base()
         elif which == 9:
             check_cv_tools()
-        else:
+        elif which == 10:
             check_ap_absent()
+        elif which == 11:
+            check_lacking_fold()
+        else:
+            check_target_free()
     check_cases("msel_search_run", CASES, run_case)
 
 

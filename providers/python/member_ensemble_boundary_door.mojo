@@ -114,12 +114,14 @@ from core.ensemble_member import (
     META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
-from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64
-from bindings.classical_labels_door import labels_decode_i32_codes
+from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64, msel_addr
+from bindings.classical_labels_door import labels_decode_labels
+from bindings.family_common_pack import family_array
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
     SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
+    SCORER_POSITIVE_MIXED,
     msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_flip,
 )
 from core.entry_table import EntryRef, entry_ref_unresolved
@@ -2577,14 +2579,17 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     # cross_validate / cross_val_score / learning_curve / cross_val_predict
     # (bindings/msel_cv_door.mojo `msel_cv_by_search`) holds
     # `_msel_cv_tool` = (return_estimator, method or None, return_indices,
-    # the door's folds), set by that door, never by a user: the RUN fits
+    # the door's folds, a one-slot holder list, the target's outputs (0: a
+    # 1-D y), the rows), set by that door, never by a user: the RUN fits
     # those folds, keeps the units' states, answers the folds' rows, or
-    # answers the test-side `method` instead of a score. A public search has
-    # no such field.
+    # writes the test-side `method` instead of a score straight into the
+    # result Array this UNPACK places in the holder (lane mf-msel5b: one
+    # buffer, written once). A public search has no such field.
     var tool = py_get(fields, "_msel_cv_tool")
     var tool_keep = False
     var tool_respond = -1
     var tool_indices = False
+    var tool_log = False
     if tool is not None:
         tool_keep = Bool(py=py_call(b.bool, tool[0]))
         tool_indices = Bool(py=py_call(b.bool, tool[2]))
@@ -2596,8 +2601,16 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 tool_respond = MEMBER_OP_PREDICT_PROBA
             elif method == "decision_function":
                 tool_respond = MEMBER_OP_DECISION
+            elif method == "predict_log_proba":
+                # `np.log(predict_proba(X))` in the member's precision (lane
+                # mf-msel5b); a class without the method: the door's words
+                if py_call(b.getattr, py_get(fields, "estimator"), PythonObject("predict_log_proba"),
+                           PythonObject(None)) is None:
+                    return False
+                tool_respond = MEMBER_OP_PREDICT_PROBA
+                tool_log = True
             else:
-                return False  # predict_log_proba and the rest: the door's units
+                return False  # another method: the door's units raise its words
             if len(keys) > 0:
                 return False
     # Where the fold rows live (the docstring): read once per admission.
@@ -2737,7 +2750,11 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             if labels is None:
                 return False
             positive = _positive_code(labels, b)
-            if positive < 0 and msel_scorer_positive(row):
+            if _labels_mixed(labels, b):
+                # MIXED-KIND LABELS (lane mf-msel5b): strings and integers; the
+                # RUN raises the metric doors' refusal per side.
+                positive = SCORER_POSITIVE_MIXED
+            elif positive < 0 and msel_scorer_positive(row):
                 # pos_label=1 is not one of the labels (lane mf-cluster5): the
                 # RUN raises the door's words per side (or scores it absent)
                 positive = _absent_positive(labels, b)
@@ -2770,6 +2787,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             needs |= MEMBER_CAN_DECISION
     if clusterer and others:
         return False  # a clusterer is scored by clustering scorers only
+    var tool_ids = False
     var nested = _Nested()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
         if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
@@ -2778,17 +2796,23 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
         if multi and (len(codes) > 0 or msel_spec_stratified(split.spec.kind)):
             return False  # a multi-output target is scored by the member itself, folded by KFold
-        if multi and tool_respond >= 0:
-            return False  # a multi-output response: the door's placement
+        if multi and tool_respond >= 0 and (classifier or tool_respond != MEMBER_OP_PREDICT):
+            return False  # a multi-output classifier's responses: per-output labels (the door's placement)
         for o in range(len(responses)):  # small-loop(the distinct responses)
             var response = responses[o]
             var probe = nested.plans[c].copy()
             probe.classes = 2 if classifier else 0
             var labels_out = response == MEMBER_OP_PREDICT and (classifier or clusterer)
             var dtype = member_output_dtype(probe, response, 1, 1, MEMBER_I32 if labels_out else MEMBER_F32)
+            # cross_val_predict of a non-classifier's predict (lane mf-msel5b):
+            # float values, or a clusterer's integer ids
+            var ids = (not labels_out and tool_respond == MEMBER_OP_PREDICT and not classifier
+                       and (dtype == MEMBER_I32 or dtype == MEMBER_I64))
+            if ids:
+                tool_ids = True
             if labels_out and dtype != MEMBER_I32 and dtype != MEMBER_I64:
                 return False  # a member whose predict is not class codes
-            if not labels_out and dtype != MEMBER_F32 and dtype != MEMBER_F64:
+            if not labels_out and not ids and dtype != MEMBER_F32 and dtype != MEMBER_F64:
                 return False  # a response the scorer's metric does not read
     # The settings words (core/ensemble_member.mojo META_SEARCH_*): the head,
     # the multi-metric codes, one positive word per scorer.
@@ -2802,9 +2826,40 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         words.append(Float64(positives[j]))
     if tool is not None:
         # THE CV TOOLS' tail (core/ensemble_member.mojo META_SEARCH_TOOL_WORDS)
+        # and, with a response, THE RESULT BUFFER (lane mf-msel5b): the
+        # cross_val_predict result itself, (rows,) or (rows, columns), int64
+        # for class codes (decoded at PACK) and integer ids, float64 values
+        # otherwise; columns: one per output of a predict, one per class of
+        # predict_proba, a decision_function's 1 (two classes) or one per class.
+        var dst = 0
+        var width = 1
+        var dst_dtype = MEMBER_F64
+        if tool_respond >= 0:
+            var n_rows = Int(py=tool[6])
+            var outputs = Int(py=tool[5])
+            var two_d = False
+            if tool_respond == MEMBER_OP_PREDICT:
+                width = max(outputs, 1)
+                two_d = outputs > 0
+            else:
+                if not classifier or labels is None:
+                    return False
+                var k = len(py_call(b.list, labels))
+                width = k if (tool_respond == MEMBER_OP_PREDICT_PROBA or k > 2) else 1
+                two_d = width > 1 or tool_respond == MEMBER_OP_PREDICT_PROBA
+            var integral = tool_respond == MEMBER_OP_PREDICT and (classifier or tool_ids)
+            dst_dtype = MEMBER_I64 if integral else MEMBER_F64
+            var shape = Python.tuple(n_rows, width) if two_d else Python.tuple(n_rows)
+            var result = family_array(shape, "<i8" if integral else "<f8", context)
+            py_setitem(tool[4], PythonObject(0), result)
+            dst = msel_addr(result) if n_rows > 0 else 0
         words.append(1.0 if tool_keep else 0.0)
         words.append(Float64(tool_respond))
         words.append(1.0 if tool_indices else 0.0)
+        words.append(Float64(dst))
+        words.append(Float64(width))
+        words.append(Float64(dst_dtype))
+        words.append(1.0 if tool_log else 0.0)
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
     # The META entry and its glue run on an x_trees image: the search's own
     # context is model selection's, so the image is the one the meta classes'
@@ -2822,12 +2877,15 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var cluster = entry_ref_unresolved()
     var metrics_binding = PythonObject(None)
     if cluster_entry:
-        try:
-            metrics_binding = estimator_binding_mode(PythonObject(None), "_mojolearn_metrics", context)
-            var key = py_call(b.getattr, metrics_binding, PythonObject("metrics_cluster_key"))
-            cluster = cluster_ops_entry(Int(py=key[0]), Int(py=key[1]))
-        except:
-            return False
+        # A MISSING METRICS IMAGE (lane mf-msel5b): a native refusal in the
+        # loader's words, before any fit (the door's scorers read the same
+        # image, so its units could not score either).
+        metrics_binding = estimator_binding_mode(PythonObject(None), "_mojolearn_metrics", context)
+        var key = py_call(b.getattr, metrics_binding, PythonObject("metrics_cluster_key"), PythonObject(None))
+        if key is None:
+            raise Error("ImportError: mojolearn: the metrics image publishes no cluster label-pair entry "
+                        + "(metrics_cluster_key); rebuild the metrics binding")
+        cluster = cluster_ops_entry(Int(py=key[0]), Int(py=key[1]))
     var label_words = _label_words(labels, b) if classifier and labels is not None else List[String]()
     # `flag`: the fold rows may stay resident (the docstring's `device`).
     if not _finish(fields, trees_context, b, owner, nested, kind, 1.0 if resident else 0.0, folds, List[Float64](),
@@ -2845,7 +2903,14 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         var nk = metrics_keys()
         var prog_context = py_get(context, nk[].k_family_metrics_prog_context)
         if prog_context is None:
-            return False
+            # A MISSING METRICS IMAGE (lane mf-msel5b): the metrics module is
+            # imported once (its import connects the runner, as the door's own
+            # scorer calls do), else the refusal in the loader's words.
+            _ = py_call(native_loaded_module("importlib").import_module, PythonObject("mojolearn._expansion_metrics"))
+            prog_context = py_get(context, nk[].k_family_metrics_prog_context)
+            if prog_context is None:
+                raise Error("ImportError: mojolearn: the metrics runner is not connected to model selection "
+                            + "(family_metrics_prog_context); import mojolearn.metrics first")
         var pin = metric_route_of(metric_route_entries(PythonObject(None), prog_context))
         meta_plan_metric(Int(owner.plan.params[1]), pin.route)
         _ = py_call(owner.pins.append, pin.provider)
@@ -2918,6 +2983,22 @@ def _absent_positive(labels: PythonObject, b: PythonObject) raises -> Int:
     if kind == 2:
         return SCORER_POSITIVE_KIND
     return -1
+
+
+def _labels_mixed(labels: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK (lane mf-msel5b): the fit's labels hold strings AND integers
+    (and nothing else: another kind keeps the door). Read once per
+    admission."""
+    var items = py_call(b.list, labels)
+    var ints = False
+    var strs = False
+    for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
+        var k = _label_kind(items[i], b)
+        if k == 0:
+            return False
+        ints = ints or k == 1
+        strs = strs or k == 2
+    return ints and strs
 
 
 def _label_words(labels: PythonObject, b: PythonObject) raises -> List[String]:
@@ -3106,9 +3187,10 @@ def _search_tool_pack(fields: PythonObject, tool: PythonObject, words: _F64P, at
     float64 per unit), and as the tool asked `estimator` (each kept unit
     state packed into a clone of the base, as `best_estimator_` is),
     `indices` ({'train': [...], 'test': [...]}, int64 per fold) and
-    `predictions` (one per unit: a classifier's predicted codes decoded to
-    its labels, else float64 values, 1-D or units' rows x columns), read by
-    the carrier's door (bindings/msel_cv_door.mojo)."""
+    `predictions` (lane mf-msel5b: the result Array the RUN wrote at every
+    row, or a classifier's codes decoded to its labels, with `placed` False:
+    the door places those labels), read by the carrier's door
+    (bindings/msel_cv_door.mojo)."""
     var at = at_in
     if at >= count or Int(words[at]) != units:
         raise Error("RuntimeError: mojolearn: the search member state's cv tool words are malformed")
@@ -3144,34 +3226,17 @@ def _search_tool_pack(fields: PythonObject, tool: PythonObject, words: _F64P, at
         py_setitem(idx, "test", tests)
         py_setitem(out, "indices", idx)
     if tool[1] is not None:
-        var preds = Python.list()
-        for _ in range(units):  # driver-loop: over the units (their test-side responses)
-            var cols = Int(words[at])
-            var dtype = Int(words[at + 1])
-            var total = Int(words[at + 2])
-            at += 3
-            if total > 0 and (dtype == MEMBER_I32 or dtype == MEMBER_I64) and labels is not None:
-                var codes = List[Int32](capacity=total)
-                for i in range(total):  # driver-loop: over the unit's predicted codes
-                    codes.append(Int32(Int(words[at + i])))
-                _ = py_call(preds.append, labels_decode_i32_codes(labels, codes, unit_context))
-            elif (dtype == MEMBER_I32 or dtype == MEMBER_I64) and cols == 1:
-                # a clusterer's ids (no labels): int64, as its own predict
-                var ids = List[Int](capacity=total)
-                for i in range(total):  # driver-loop: over the unit's predicted ids
-                    ids.append(Int(words[at + i]))
-                _ = py_call(preds.append, msel_i64_list(ids, context))
-            else:
-                var values = List[Float64](capacity=total)
-                for i in range(total):  # driver-loop: over the unit's response words
-                    values.append(words[at + i])
-                var rows = total // max(cols, 1)
-                if cols == 1:
-                    _ = py_call(preds.append, msel_f64_list(values, context))
-                else:
-                    _ = py_call(preds.append, msel_f64_block(values, rows, cols, context))
-            at += total
-        py_setitem(out, "predictions", preds)
+        # THE RESULT BUFFER (lane mf-msel5b): the RUN wrote every unit's
+        # test-side response at its rows; a classifier's predicted codes are
+        # decoded to its labels here, once for every row (the estimator's own
+        # predict decodes its codes the same way), and placed by the door.
+        var result = tool[4][0]
+        if String(py=tool[1]) == "predict" and labels is not None:
+            py_setitem(out, "predictions", labels_decode_labels(labels, result, unit_context))
+            py_setitem(out, "placed", PythonObject(False))
+        else:
+            py_setitem(out, "predictions", result)
+            py_setitem(out, "placed", PythonObject(True))
     if Bool(py=py_call(b.bool, tool[0])):
         var handles = _export_i64(plan, state, META_BLOCK_FOLDS)
         if len(handles) != units or units != folds:

@@ -297,9 +297,11 @@ def _set_gather_span(run: MutPointer[MemberSetRun, MutUntrackedOrigin], u: Int, 
         else:
             unsafe_memcpy(dest=target + i * width, src=source + r * cols, count=cols)
         # Targets are 4-byte words of either element type: copied as bits
-        # (THE 2-D y: one word per output).
-        for c in range(yc):
-            y_target[i * yc + c] = y_source[r * yc + c]
+        # (THE 2-D y: one word per output). A member fitted without a
+        # target (address 0, lane mf-msel5b: an unsupervised base) has none.
+        if run[].targets[u] != 0:
+            for c in range(yc):
+                y_target[i * yc + c] = y_source[r * yc + c]
         if has_w:
             MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_w)[i] = MutPointer[
                 Float32, MutUntrackedOrigin](unsafe_from_address=run[].weights[u])[r]
@@ -457,7 +459,9 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
     var done = False
     try:
         call.x = MemberMatrix(x_address, rows, cols)
-        call.y = MemberMatrix(run[].targets[u], rows, run[].y_cols, run[].y_dtype)
+        var y_free = run[].targets[u] == 0  # a fit without a target (lane mf-msel5b)
+        if not y_free:
+            call.y = MemberMatrix(run[].targets[u], rows, run[].y_cols, run[].y_dtype)
         if run[].weights[u] != 0:
             call.weights = MemberMatrix(run[].weights[u], rows, 1)
         if by_index:
@@ -489,7 +493,8 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
                     w_address = Int(w_part.unsafe_ptr())
             _set_gather(address, u, n, width, x_at, y_at, w_address, alone)
             call.x = MemberMatrix(x_at, n, width)
-            call.y = MemberMatrix(y_at, n, run[].y_cols, run[].y_dtype)
+            if not y_free:
+                call.y = MemberMatrix(y_at, n, run[].y_cols, run[].y_dtype)
             if w_address != 0:
                 call.weights = MemberMatrix(w_address, n, 1)
         call.pin = offer

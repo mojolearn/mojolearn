@@ -63,6 +63,16 @@ split<i>_train_score columns (the base had none: H_search_train_cols differs); v
 (the base raised KeyError on the missing columns where the kind took it: H_validation_curve may differ from a
 raised base line); H_ap_absent_* raise scikit-learn's words "pos_label=1 is not a valid label: It should be one
 of [0 2]" (the base's door scorer raised its own words; compare the words).
+
+Lane mf-msel5b extends section msel5 (H; base: origin/lane/member-fits-5 6f0a3de6ed vs head): cross_val_predict
+into the one result buffer (the H_cvp_* lines above, now with no per-fold copy), predict_log_proba, a fold that
+lacks a class (KFold over sorted labels: predict_proba placed with zero columns, decision_function's refusal, a
+'accuracy' search over such folds), a multi-output regressor's predict, y=None (MiniBatchKMeans cross_validate and
+a KMeans cross_val_predict), a search with groups and GroupKFold, mixed string/integer labels scored by 'f1', and
+cross_val_score over a default cv (the deleted slice route's case). Expected: every value line equal, except
+H5b_cvp_log_proba (the log is now taken in the member's own precision: last bits may change), H5b_mixed_f1_*
+(the RUN raises the metric doors' TypeError words; compare the words), and H5b_lacking_decision (scikit-learn's
+"Only 2 class/es in training fold" words; compare the words).
 """
 import hashlib
 import os
@@ -501,6 +511,85 @@ def _ap_absent(error_score):
     return _rows_of_search(s, X)
 
 
+def _lacking_predict(method):
+    import mojolearn
+    from mojolearn.model_selection import cross_val_predict, KFold
+    X, _, c = _data(67, n=150, d=4, k=3)
+    order = np.argsort(c, kind="stable")
+    pred = cross_val_predict(mojolearn.LogisticRegression(max_iter=100), X[order], c[order], cv=KFold(n_splits=3),
+                             method=method)
+    a = np.asarray(pred)
+    return [("dtype", a.dtype.str), ("values", _digest(a))]
+
+
+def _lacking_search():
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV, KFold
+    X, _, c = _data(71, n=150, d=4, k=3)
+    order = np.argsort(c, kind="stable")
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring="accuracy",
+                     cv=KFold(n_splits=3)).fit(X[order], c[order])
+    return _rows_of_search(s, X)
+
+
+def _multi_output_predict():
+    import mojolearn
+    from mojolearn.model_selection import cross_val_predict
+    X, y, _ = _data(73, n=150, d=4, k=3)
+    Y = np.stack([y, -2.0 * y + 1.0], axis=1).astype(np.float32)
+    a = np.asarray(cross_val_predict(mojolearn.Ridge(alpha=1.0), X, Y, cv=3))
+    return [("dtype", a.dtype.str), ("values", _digest(a))]
+
+
+def _target_free(which):
+    import mojolearn
+    from mojolearn.model_selection import cross_validate, cross_val_predict
+    X, _, _ = _data(79, n=150, d=4, k=3)
+    if which == "minibatch":
+        res = cross_validate(mojolearn.MiniBatchKMeans(n_clusters=3, random_state=0), X, cv=3)
+        return [("test_score", _digest(np.asarray(res["test_score"], dtype=np.float64)))]
+    a = np.asarray(cross_val_predict(mojolearn.KMeans(n_clusters=3), X, cv=3))
+    return [("dtype", a.dtype.str), ("values", _digest(a))]
+
+
+def _group_search():
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV, GroupKFold
+    X, _, c = _data(83, n=150, d=4, k=3)
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring="accuracy",
+                     cv=GroupKFold(n_splits=3)).fit(X, c, groups=np.arange(150) % 5)
+    return _rows_of_search(s, X)
+
+
+def _mixed_f1(error_score):
+    import mojolearn
+    from mojolearn.model_selection import GridSearchCV
+    X, _, c = _data(89, n=120, d=4, k=2)
+    target = np.asarray([1, "a"], dtype=object)[(c > 0).astype(np.int64)]
+    s = GridSearchCV(mojolearn.LogisticRegression(max_iter=100), {"C": [0.1, 1.0]}, scoring="f1", cv=3,
+                     error_score=error_score).fit(X, target)
+    return _rows_of_search(s, X)
+
+
+def _msel5b_cases():
+    from mojolearn.model_selection import cross_val_score
+    import mojolearn
+    return [
+        ("H5b_cvp_log_proba", lambda: _cv_predict("clf", "predict_log_proba")),
+        ("H5b_lacking_proba", lambda: _warned(lambda: _lacking_predict("predict_proba"))),
+        ("H5b_lacking_predict", lambda: _warned(lambda: _lacking_predict("predict"))),
+        ("H5b_lacking_decision", lambda: _warned(lambda: _lacking_predict("decision_function"))),
+        ("H5b_lacking_search", _lacking_search),
+        ("H5b_multi_output_predict", _multi_output_predict),
+        ("H5b_target_free_minibatch", lambda: _target_free("minibatch")),
+        ("H5b_target_free_kmeans_predict", lambda: _target_free("kmeans")),
+        ("H5b_group_search", _group_search),
+        ("H5b_mixed_f1_raise", lambda: _mixed_f1("raise")),
+        ("H5b_mixed_f1_nan", lambda: _warned(lambda: _mixed_f1(np.nan))),
+        ("H5b_cv_score_default", lambda: cross_val_score(mojolearn.Ridge(alpha=1.0), *_data(97)[:2], scoring="r2")),
+    ]
+
+
 def _msel5_cases():
     from mojolearn.model_selection import cross_val_score
     import mojolearn
@@ -528,7 +617,8 @@ def _msel5_cases():
 
 def _all_cases():
     return (_metric_cases() + _search_cases() + _score5_metric_cases() + _score5_search_cases()
-            + _search5_cases() + _cluster5_metric_cases() + _cluster5_search_cases() + _msel5_cases())
+            + _search5_cases() + _cluster5_metric_cases() + _cluster5_search_cases() + _msel5_cases()
+            + _msel5b_cases())
 
 
 def _run(index):
