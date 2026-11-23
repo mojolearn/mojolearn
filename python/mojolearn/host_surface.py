@@ -1427,7 +1427,6 @@ HOST_IMPORT_ALIASES = {
                 'neural_block_allocate',
                 'neural_block_forward',
                 'neural_block_backward',
-                'neural_block_inference_backward',
                 'neural_block_vendor_used',
                 'neural_block_numeric_mode_used',
                 'neural_block_state_dict',
@@ -1862,7 +1861,7 @@ FAMILIES = (
             # spelled `neural_block_c[i]` / `causal_public_c[i]`.
             "trees_native_call", "family_native_call",
             "neural_block_init", "neural_block_set_params", "neural_block_getstate", "neural_block_setstate",
-            "neural_block_allocate", "neural_block_forward", "neural_block_backward", "neural_block_inference_backward",
+            "neural_block_allocate", "neural_block_forward", "neural_block_backward",
             "neural_block_vendor_used", "neural_block_numeric_mode_used",
             "neural_block_state_dict", "neural_block_parameters", "neural_block_named_parameters", "neural_block_load_state_dict", "neural_block_to",
             "causal_model_init", "causal_model_load", "causal_model_read_weights",
@@ -1888,7 +1887,7 @@ FAMILIES = (
         # optimizer, loss or backward export, so none of that is compiled
         # in. The mlp, transformer and transformer-window lanes' held-out
         # and batch cells run through MLPInference and
-        # TransformerBlockInference on a CPU column; their training rows
+        # TransformerBlock(device="cpu") on a CPU column; their training rows
         # stay the training and transformer families' covered lanes.
         # lane/stateful-cpu-decoding (2026-09-16) added the state-carrying
         # entries, so a decode cache IS exported here now: the same host
@@ -1905,14 +1904,14 @@ FAMILIES = (
         # the training, transformer and mamba families, so it declared none
         # of its own. `hf-causal-lm` is different: `models.CausalLM` with the
         # public default `device="auto"` assembles
-        # `TransformerBlockInference`/`Mamba1BlockInference` and
+        # `TransformerBlock`/`Mamba1Block` on its CPU route and
         # `_CpuPrimitives`'s embedding, rms_norm and linear over THIS
         # binding on a CPU column, and nothing else computes that cell. The
         # generic -D MOJOLEARN_HOST_SABOTAGE=1 (gemm_oracle's descending
         # leaf) reaches it, so no own define is needed.
         # lane/cpu-routes-gpu-only-four (2026-09-20) adds `par-causal-lm`,
         # which is `hf-causal-lm` with the layers owned by separate WORKER
-        # PROCESSES. Each worker builds `_block_classes("cpu")[kind]` and
+        # PROCESSES. Each worker builds `block_classes[kind]` on the CPU route and
         # `_CpuPrimitives` over THIS binding, so the arithmetic in the cell
         # is this family's, and the driver's own Python is the partition and
         # the ordered hand-off. The generic define reaches it for the same
@@ -1928,8 +1927,10 @@ FAMILIES = (
         # and Mamba-3 zero-state forwards and the Samba stack's embedding,
         # final norm and head joined, forward only; the mamba family stays a
         # source reference build.
-        classes=("MLPInference", "TransformerBlockInference", "Mamba1BlockInference",
-                 "Mamba2BlockInference", "Mamba3BlockInference", "SambaInference"),
+        # The four `*BlockInference` classes were removed 2026-11-22 (lane
+        # neural-consolidate-2): a block on this binding is the block class
+        # with device="cpu".
+        classes=("MLPInference", "SambaInference"),
         display="the small MLP's logits, the Transformer and Mamba blocks' forward and decode step and the Samba stack's logits (inference only)",
         host_modules=(
             "training/host/mlp_oracle.mojo",

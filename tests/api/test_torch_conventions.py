@@ -35,17 +35,16 @@ def block_inputs(tmp_path, family):
         kwargs = dict(model.plan.block_options, n_heads=model.plan.n_heads, numeric_profile="fp32_v1")
     elif model.kind == "mamba2":
         kwargs = dict(model.plan.block_kwargs)
-    cls = causal_lm._NATIVE_CONTEXT["block_classes"]["gpu"][model.kind]
-    cpu_cls = causal_lm._NATIVE_CONTEXT["block_classes"]["cpu"][model.kind]
+    cls = causal_lm._NATIVE_CONTEXT["block_classes"][model.kind]
     x = np.random.default_rng(7).normal(size=(2, 4, model.d_model)).astype("f4") * np.float32(0.05)
-    return cls, cpu_cls, weights, kwargs, x
+    return cls, weights, kwargs, x
 
 
 # ---- device words -----------------------------------------------------------
 
 @pytest.mark.parametrize("word", ["cuda", "cuda:0", "mps", "mps:0", "xpu"])
 def test_pytorch_device_words_are_refused(tmp_path, word):
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, "llama")
+    cls, weights, kwargs, _ = block_inputs(tmp_path, "llama")
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
         cls(weights, device=word, **kwargs)
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
@@ -56,7 +55,7 @@ def test_pytorch_device_words_are_refused(tmp_path, word):
 
 @pytest.mark.parametrize("family", FAMILIES)
 def test_state_dict_is_the_weights_by_name_over_the_same_arrays(tmp_path, family):
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, family)
+    cls, weights, kwargs, _ = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     sd = block.state_dict()
     assert type(sd) is dict and sd is not weights
@@ -71,7 +70,7 @@ def test_state_dict_is_the_weights_by_name_over_the_same_arrays(tmp_path, family
 
 @pytest.mark.parametrize("family", FAMILIES)
 def test_load_state_dict_rebuilds_and_returns_the_block(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     before = np.asarray(block.forward(x)).tobytes()
     scaled = {k: (v * np.float32(0.5)).astype("f4") for k, v in weights.items()}
@@ -84,7 +83,7 @@ def test_load_state_dict_rebuilds_and_returns_the_block(tmp_path, family):
 
 @pytest.mark.parametrize("family", FAMILIES)
 def test_load_state_dict_refuses_incomplete_and_non_strict(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     before = np.asarray(block.forward(x)).tobytes()
     partial = dict(list(weights.items())[1:])
@@ -101,7 +100,7 @@ def test_load_state_dict_refuses_incomplete_and_non_strict(tmp_path, family):
 
 @pytest.mark.parametrize("family", FAMILIES)
 def test_to_float32_is_accepted_and_other_dtypes_refused(tmp_path, family):
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, family)
+    cls, weights, kwargs, _ = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     assert block.to("float32") is block
     assert block.to(dtype=np.dtype("float32")) is block
@@ -114,7 +113,7 @@ def test_to_float32_is_accepted_and_other_dtypes_refused(tmp_path, family):
 
 def test_to_accepts_torch_dtypes(tmp_path):
     torch = pytest.importorskip("torch")
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, "llama")
+    cls, weights, kwargs, _ = block_inputs(tmp_path, "llama")
     block = cls(weights, device="cpu", **kwargs)
     assert block.to(torch.float32) is block
     assert block.to("cpu", torch.float32, non_blocking=True) is block
@@ -125,7 +124,7 @@ def test_to_accepts_torch_dtypes(tmp_path):
 @needs_gpu
 @pytest.mark.parametrize("family", FAMILIES)
 def test_to_moves_the_block_between_routes(tmp_path, family):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
+    cls, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     assert block.vendor_used() == "cpu"
     assert block.to("gpu") is block
@@ -136,13 +135,9 @@ def test_to_moves_the_block_between_routes(tmp_path, family):
     assert np.asarray(block.forward(x)).tobytes() == on_gpu
 
 
-@pytest.mark.parametrize("family", FAMILIES)
-def test_inference_twin_refuses_a_gpu_word_in_to(tmp_path, family):
-    _, cpu_cls, weights, kwargs, _ = block_inputs(tmp_path, family)
-    block = cpu_cls(weights, **kwargs)
-    assert block.to("cpu") is block
-    with pytest.raises(ValueError):
-        block.to("gpu")
+# TOMBSTONE: test_inference_twin_refuses_a_gpu_word_in_to (the CPU-by-class
+# `*BlockInference` twins it covered were removed 2026-11-22 by lane
+# neural-consolidate-2; a block with device="cpu" moves with `to`).
 
 
 def test_blocks_built_by_a_whole_model_say_so(tmp_path):

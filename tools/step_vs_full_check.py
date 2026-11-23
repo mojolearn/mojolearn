@@ -4,8 +4,8 @@
 """A step-by-step decode is the one-shot prefill, BITWISE, position by position
 (lane/stateful-cpu-decoding, 2026-09-16).
 
-This is the check the decode surface exists for. `TransformerBlockInference`,
-`Mamba1BlockInference`, `Mamba2BlockInference`, `Mamba3BlockInference` and
+This is the check the decode surface exists for. `TransformerBlock`,
+`Mamba1Block`, `Mamba2Block`, `Mamba3Block` (each with ``device="cpu"``) and
 `SambaInference` each run a sequence twice on the CPU host route:
 
   (a) ONE fresh-state forward pass over the whole sequence, `state=None`;
@@ -170,19 +170,19 @@ def build_cases(b, l, dm):
     for window in (0, 8):
         cases.append(_BlockCase(
             f"transformer(window={window})",
-            lambda w=window: ml.TransformerBlockInference(
-                _block_weights(dm), n_heads=2, n_kv_heads=1, window=w),
+            lambda w=window: ml.TransformerBlock(
+                _block_weights(dm), n_heads=2, n_kv_heads=1, window=w, device="cpu"),
             x,
             lambda st: [st.k_cache, st.v_cache],
             lambda m: m.allocate_state(b, l),
             lambda m, xx: m.forward(np.ascontiguousarray(xx)),
         ))
-    for kind, cls in (("mamba1", ml.Mamba1BlockInference),
-                      ("mamba2", ml.Mamba2BlockInference),
-                      ("mamba3", ml.Mamba3BlockInference)):
+    for kind, cls in (("mamba1", ml.Mamba1Block),
+                      ("mamba2", ml.Mamba2Block),
+                      ("mamba3", ml.Mamba3Block)):
         cases.append(_BlockCase(
             kind,
-            lambda k=kind, c=cls: c(_mamba_weights(k, dm)),
+            lambda k=kind, c=cls: c(_mamba_weights(k, dm), device="cpu"),
             x,
             lambda st: [st.conv_window if hasattr(st, "conv_window") else st.theta, st.h],
             lambda m: m.allocate_state(b),

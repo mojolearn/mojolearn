@@ -10,54 +10,31 @@ loaded by path like the byte LM's, the forest's and the tokenizer's:
   `MLPInference`                the small 8-16-3 MLP's logits, from a
                                 `SmallMLPTrainer` checkpoint or its four
                                 weights
-  `TransformerBlockInference`   `TransformerBlock.forward` (full causal or a
-                                sliding window, ragged `lengths` included),
-                                `allocate_state` and `step`, from the block's
-                                nine named weights
-  `Mamba1BlockInference`,       the Mamba blocks' `forward` (ragged
-  `Mamba2BlockInference`,       `lengths` included), `allocate_state` and
-  `Mamba3BlockInference`        `step`, from their named weights
-                                (lane/inference-neural-forward)
   `SambaInference`              `SambaStack.forward`'s logits, plus
                                 `allocate_state` and `step`, from a
                                 `SambaStack.save_checkpoint` file or a
                                 config and its registry's weights
+  (`LanguageModelInference` lives in `language_model`.)
 
-INCREMENTAL DECODING IS PUBLIC HERE SINCE lane/stateful-cpu-decoding
-(2026-09-16) and it is not a second model. A carried state, a `step` and a
-cache allocation were refused by name until then because the binding
-exported the fresh entries alone; it now exports the state-carrying ones as
-well, and each class reaches its GPU parent's native forward and step, so
-prefill and decode are ONE spelling. `tools/step_vs_full_check.py` measures on the CPU
-column that decoding a sequence one token at a time with a carried state is
-BITWISE the same sequence run as one fresh-state forward pass, position by
-position, and fires with the first differing position and both values when
-one carried cell is moved by one ULP.
-
-None trains, and none can: no optimizer, loss or backward is exported by
-the binding. Training stays on a GPU (and, for internal
-verification only, on the source reference host bindings). The arithmetic is
-the same host functions the reference bindings call for the same steps, so
-the answer is meant to be the GPU columns' bits; `tools/identity_break.py`'s
-`mlp`, `transformer`, `transformer-window` and `*-decode` lanes measure that
-on a CPU column, where their held-out and batch cells run through these
-classes.
+A single block on the CPU is the block class itself with ``device="cpu"``
+(`TransformerBlock`, `Mamba1Block`, `Mamba2Block`, `Mamba3Block`): the four
+`*BlockInference` subclasses ran the same kernels and gave the same bits for
+forward and decode, and were removed (lane neural-consolidate-2, 2026-11-22).
+`tools/step_vs_full_check.py` measures on the CPU column that decoding a
+sequence one token at a time with a carried state is BITWISE the same
+sequence run as one fresh-state forward pass, position by position.
 
 The binding is resolved on first use, so an install without it still
 imports and raises BY NAME when touched.
 """
 from . import _backend
 from . import _native_samba_bridge
-from . import _native_neural_bridge
 from . import lowbit as _lowbit
 from ._mlp_impl import _NATIVE as _MLP_NATIVE
-from ._transformer_impl import TransformerBlock as _TransformerBlock
-from ._mamba_impl import Mamba1Block as _Mamba1Block, Mamba2Block as _Mamba2Block, Mamba3Block as _Mamba3Block
 
 _EXTENSION = "_mojolearn_neural_host"
 
-__all__ = ["MLPInference", "TransformerBlockInference", "Mamba1BlockInference",
-           "Mamba2BlockInference", "Mamba3BlockInference", "SambaInference"]
+__all__ = ["MLPInference", "SambaInference"]
 
 
 def _binding():
@@ -162,115 +139,11 @@ def _connect_mlp_inference():
 _MLP_NATIVE("inference_connect", (_connect_mlp_inference(),))
 
 
-# Nothing is overridden except the binding (lane/stateful-cpu-decoding): the host binding
-# exports transformer_forward and transformer_decode_step, so the parent's native forward is the
-# arithmetic (decode = prefill entry at L = 1 with the cache carried);
-# tools/step_vs_full_check.py measures step-vs-full bitwise agreement on this column.
-class TransformerBlockInference(_TransformerBlock):
-    """Forward-only `TransformerBlock` on the CPU, from weights trained on a GPU.
-
-    Takes the same constructor arguments as `TransformerBlock` (the nine named
-    weights, `n_heads`, `n_kv_heads`, `head_dim`, `window`) and applies the same
-    weight checks. Supports `forward(x, lengths=None)` from a zero state,
-    `allocate_state(B, max_tokens)`, `forward(x, state)` and `step(x, state)`;
-    decoding one token at a time with a carried state gives the same bits as one
-    forward pass over the whole sequence. A block has no output head, so it returns
-    hidden states, not logits. Runs on the host binding shipped with mojolearn,
-    loaded on first use.
-
-    Examples
-    --------
-    >>> blk = mojolearn.TransformerBlockInference(weights, n_heads=4)
-    >>> y = blk.forward(x)
-    """
-
-    #: The CPU side by class: `check` compares a GPU block with it, never it
-    #: with itself (`_check_both.takes_device`).
-    _HOST_INFERENCE_ONLY = True
-
-    def _extension(self):
-        return _binding()
-
-    def backward(self, x, grad_output):
-        """Not available: inference is forward only. Always raises `NotImplementedError`;
-        train with the GPU block class.
-        """
-        return _native_neural_bridge.RUNTIME.neural_block_inference_backward(self)
-
-
-# ---------------------------------------------------------------- Mamba (lane/inference-neural-forward, 2026-09-15)
-
-class _RecurrentBlockInference:
-    """Forward-only Mamba block on the CPU: the GPU class's constructor and
-    weight checks, and the block's whole INFERENCE surface over the shipped
-    neural binding -- `forward(x, lengths=None)` from a zero state,
-    `allocate_state(B)`, `forward(x, state)` and `step(x, state)`. Only
-    `backward` is refused by name: the binding exports no VJP.
-
-    NOTHING IS OVERRIDDEN HERE EXCEPT THE BINDING AND `backward`
-    (lane/stateful-cpu-decoding, 2026-09-16). Until that lane each class
-    reached an eleven- or twelve-address `*_forward_fresh` entry of its own
-    and refused `step`, `allocate_state` and a carried state, and the
-    refusals were honest -- the binding exported no state-carrying entry.
-    It now exports `mamba{1,2,3}_forward` and `mamba{1,2,3}_decode_step`
-    with the block classes' own contracts, so the parent's native forward
-    and step are the arithmetic. The three block oracles run prefill and decode through ONE
-    call site (a decode step is the same oracle at l = 1 carrying the
-    state), and `tools/step_vs_full_check.py` measures on this column that
-    a step-by-step decode is bitwise the one-shot prefill at every
-    position."""
-
-    #: The CPU side by class: `check` compares a GPU block with it, never it
-    #: with itself (`_check_both.takes_device`).
-    _HOST_INFERENCE_ONLY = True
-
-    def _extension(self):
-        return _binding()
-
-    def backward(self, x, grad_output):
-        return _native_neural_bridge.RUNTIME.neural_block_inference_backward(self)
-
-
-# Shared base _RecurrentBlockInference: only the binding and backward are overridden; the
-# binding exports mamba{1,2,3}_forward / mamba{1,2,3}_decode_step, so the parent's native
-# forward is the arithmetic; tools/step_vs_full_check.py checks step-by-step decode against prefill.
-class Mamba1BlockInference(_RecurrentBlockInference, _Mamba1Block):
-    """Forward-only `Mamba1Block` on the CPU, from weights trained on a GPU.
-
-    Takes the same constructor arguments as `Mamba1Block` (its ten named weights) and
-    applies the same weight checks. Supports `forward(x, lengths=None)` from a zero
-    state, `allocate_state(B)`, `forward(x, state)` and `step(x, state)`; decoding
-    one token at a time with a carried state gives the same bits as one forward pass
-    over the whole sequence. `backward` raises `NotImplementedError`. Runs on the
-    host binding shipped with mojolearn; it is loaded on first use, so an install
-    without it still imports and raises when the class is used.
-    """
-
-
-class Mamba2BlockInference(_RecurrentBlockInference, _Mamba2Block):
-    """Forward-only `Mamba2Block` on the CPU, from weights trained on a GPU.
-
-    Takes the same constructor arguments as `Mamba2Block` (its nine named weights and `dt_limit`, default ``(0.0, inf)``) and
-    applies the same weight checks. Supports `forward(x, lengths=None)` from a zero
-    state, `allocate_state(B)`, `forward(x, state)` and `step(x, state)`; decoding
-    one token at a time with a carried state gives the same bits as one forward pass
-    over the whole sequence. `backward` raises `NotImplementedError`. Runs on the
-    host binding shipped with mojolearn; it is loaded on first use, so an install
-    without it still imports and raises when the class is used.
-    """
-
-
-class Mamba3BlockInference(_RecurrentBlockInference, _Mamba3Block):
-    """Forward-only `Mamba3Block` on the CPU, from weights trained on a GPU.
-
-    Takes the same constructor arguments as `Mamba3Block` (its nine named weights) and
-    applies the same weight checks. Supports `forward(x, lengths=None)` from a zero
-    state, `allocate_state(B)`, `forward(x, state)` and `step(x, state)`; decoding
-    one token at a time with a carried state gives the same bits as one forward pass
-    over the whole sequence. `backward` raises `NotImplementedError`. Runs on the
-    host binding shipped with mojolearn; it is loaded on first use, so an install
-    without it still imports and raises when the class is used.
-    """
+# TOMBSTONE: TransformerBlockInference, Mamba1BlockInference, Mamba2BlockInference,
+# Mamba3BlockInference and their base _RecurrentBlockInference (subclasses of the GPU block
+# classes that forced the CPU route and refused backward; same kernels and bits as
+# Block(device="cpu")) deleted 2026-11-22 by lane neural-consolidate-2; code recoverable at
+# 3b21e609f3. Use TransformerBlock(..., device="cpu") and the Mamba blocks likewise.
 
 
 # ---------------------------------------------------------------- Samba

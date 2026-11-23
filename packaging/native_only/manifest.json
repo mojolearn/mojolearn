@@ -49,13 +49,10 @@
       "LogisticRegression",
       "MLPInference",
       "Mamba1Block",
-      "Mamba1BlockInference",
       "Mamba1State",
       "Mamba2Block",
-      "Mamba2BlockInference",
       "Mamba2State",
       "Mamba3Block",
-      "Mamba3BlockInference",
       "Mamba3State",
       "Matern",
       "MinMaxScaler",
@@ -84,7 +81,6 @@
       "SpectralEmbedding",
       "StandardScaler",
       "TransformerBlock",
-      "TransformerBlockInference",
       "TransformerState",
       "TruncatedSVD",
       "UMAP",
@@ -560,11 +556,7 @@
     ],
     "python/mojolearn/neural_inference.py": [
       "MLPInference",
-      "Mamba1BlockInference",
-      "Mamba2BlockInference",
-      "Mamba3BlockInference",
-      "SambaInference",
-      "TransformerBlockInference"
+      "SambaInference"
     ],
     "python/mojolearn/models/__init__.py": [
       "CausalLM",
@@ -2942,15 +2934,6 @@
       "symbol_origin": "mojolearn._mamba_impl.Mamba1Block"
     },
     {
-      "algorithm": "mojolearn.Mamba1BlockInference",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/__init__.py",
-      "canonical_algorithm": "mojolearn.Mamba1BlockInference",
-      "symbol_origin": "mojolearn.neural_inference.Mamba1BlockInference"
-    },
-    {
       "algorithm": "mojolearn.Mamba1State",
       "status": "not_algorithm",
       "cases": [],
@@ -2969,15 +2952,6 @@
       "symbol_origin": "mojolearn._mamba_impl.Mamba2Block"
     },
     {
-      "algorithm": "mojolearn.Mamba2BlockInference",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/__init__.py",
-      "canonical_algorithm": "mojolearn.Mamba2BlockInference",
-      "symbol_origin": "mojolearn.neural_inference.Mamba2BlockInference"
-    },
-    {
       "algorithm": "mojolearn.Mamba2State",
       "status": "not_algorithm",
       "cases": [],
@@ -2994,15 +2968,6 @@
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.Mamba3Block",
       "symbol_origin": "mojolearn._mamba_impl.Mamba3Block"
-    },
-    {
-      "algorithm": "mojolearn.Mamba3BlockInference",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/__init__.py",
-      "canonical_algorithm": "mojolearn.Mamba3BlockInference",
-      "symbol_origin": "mojolearn.neural_inference.Mamba3BlockInference"
     },
     {
       "algorithm": "mojolearn.Mamba3State",
@@ -3898,15 +3863,6 @@
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.TransformerBlock",
       "symbol_origin": "mojolearn._transformer_impl.TransformerBlock"
-    },
-    {
-      "algorithm": "mojolearn.TransformerBlockInference",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/__init__.py",
-      "canonical_algorithm": "mojolearn.TransformerBlockInference",
-      "symbol_origin": "mojolearn.neural_inference.TransformerBlockInference"
     },
     {
       "algorithm": "mojolearn.TransformerState",
@@ -6347,36 +6303,6 @@
       "alias_of": "mojolearn.MLPInference"
     },
     {
-      "algorithm": "mojolearn.neural_inference.Mamba1BlockInference",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/neural_inference.py",
-      "canonical_algorithm": "mojolearn.Mamba1BlockInference",
-      "symbol_origin": "mojolearn.neural_inference.Mamba1BlockInference",
-      "alias_of": "mojolearn.Mamba1BlockInference"
-    },
-    {
-      "algorithm": "mojolearn.neural_inference.Mamba2BlockInference",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/neural_inference.py",
-      "canonical_algorithm": "mojolearn.Mamba2BlockInference",
-      "symbol_origin": "mojolearn.neural_inference.Mamba2BlockInference",
-      "alias_of": "mojolearn.Mamba2BlockInference"
-    },
-    {
-      "algorithm": "mojolearn.neural_inference.Mamba3BlockInference",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/neural_inference.py",
-      "canonical_algorithm": "mojolearn.Mamba3BlockInference",
-      "symbol_origin": "mojolearn.neural_inference.Mamba3BlockInference",
-      "alias_of": "mojolearn.Mamba3BlockInference"
-    },
-    {
       "algorithm": "mojolearn.neural_inference.SambaInference",
       "status": "missing",
       "cases": [],
@@ -6385,16 +6311,6 @@
       "canonical_algorithm": "mojolearn.SambaInference",
       "symbol_origin": "mojolearn.neural_inference.SambaInference",
       "alias_of": "mojolearn.SambaInference"
-    },
-    {
-      "algorithm": "mojolearn.neural_inference.TransformerBlockInference",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/neural_inference.py",
-      "canonical_algorithm": "mojolearn.TransformerBlockInference",
-      "symbol_origin": "mojolearn.neural_inference.TransformerBlockInference",
-      "alias_of": "mojolearn.TransformerBlockInference"
     },
     {
       "algorithm": "mojolearn.neural_network",
@@ -7734,13 +7650,13 @@
   ],
   "inventory_note": "Inventory includes public aliases, metadata and namespace exports. not_algorithm rows are explicit exclusions from algorithm coverage; missing rows remain visible. ready means a source fixture exists, never that compile/runtime/backend validation passed.",
   "census": {
-    "public_export_rows": 646,
-    "alias_rows": 109,
+    "public_export_rows": 638,
+    "alias_rows": 105,
     "canonical_non_algorithm_exports": 68,
-    "canonical_algorithm_entries": 469,
+    "canonical_algorithm_entries": 465,
     "canonical_status_counts": {
       "blocked": 7,
-      "missing": 418,
+      "missing": 414,
       "ready": 44
     },
     "note": "Algorithm entries include public numerical/helper operations as well as estimator classes; no per-estimator completeness is implied by this denominator."

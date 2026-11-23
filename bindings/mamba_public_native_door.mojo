@@ -21,7 +21,6 @@ from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_a
 from std.python import Python, PythonObject
 from core.mode_answer import MODE_FAMILY_NEURAL, word_runs_identical
 from std.python._cpython import PyObjectPtr
-from bindings.py_cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
@@ -212,32 +211,14 @@ def _m3_entries(mut mods: NativeModules, block: PythonObject, fields: PythonObje
 
 def _m3_entries(mut mods: NativeModules, block: PythonObject, fields: PythonObject, context: PythonObject,
     mut route: Mamba3StateRoute) raises -> PythonObject:
-    # The binding the retired `Mamba3Block._extension()` returned: the shipped
-    # host binding for the CPU inference class, the block's tier otherwise.
-    # `route` receives the key of the image that serves the block's carried
-    # state (core/mamba_state_entry_table.mojo; lane transformer-session-native).
-    var bi = mods.module("builtins")
-    # isinstance may consult a replaced block.__class__ descriptor even when
-    # field storage was admitted. Test the actual native type ancestry.
-    ref cpy = Python().cpython()
-    var cls = py_type(block)
-    # The process-wide CPython table, not a by-name symbol lookup per call.
-    if cpython_table()[].PyType_IsSubtype(
-        cls._obj_ptr, context["block_classes"]["cpu"]["mamba3"]._obj_ptr) != 0:
-        var entries = _model_bindings(mods, PythonObject("cpu"), "mamba3", context, PythonObject("identical"))["mamba3"]
-        var block_provider = PythonObject(None)
-        var state_provider = PythonObject(None)
-        if NEURAL_NATIVE_DISPATCH:
-            block_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
-                _native_function(mods, entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
-            mods.released()
-            state_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
-                _native_function(mods, entries, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME), 6)
-            mods.released()
-        py_setitem(fields, "_native_mamba_block_provider_cache", block_provider)
-        py_setitem(fields, "_native_mamba_state", state_provider)
-        route = Mamba3StateRoute(1, 0, False)
-        return entries
+    # The block's connected training selection (its route and mode): the
+    # binding the retired `Mamba3Block._extension()` returned. `route`
+    # receives the key of the image that serves the block's carried state
+    # (core/mamba_state_entry_table.mojo; lane transformer-session-native).
+    # A CPU-route block reads the CPU training image; the CPU-by-class
+    # `Mamba3BlockInference` branch to the neural host entries (same bits:
+    # forward and five decode steps, lane neural-consolidate) was removed
+    # 2026-11-22 (lane neural-consolidate-2).
     var selection = neural_training_selection(mods, fields, context)
     route = Mamba3StateRoute(selection.key.mode, selection.key.vendor, selection.key.vendor == 0)
     return selection.entries
@@ -510,7 +491,7 @@ def mamba3_setstate(mut mods: NativeModules, block: PythonObject, state: PythonO
         if py_type(keys[i]) is not bi.str:
             raise Error("TypeError: Mamba checkpoint state requires exact string keys")
     var cls = py_type(block)
-    if cls is not context["block_classes"]["cpu"]["mamba3"] and cls is not context["block_classes"]["gpu"]["mamba3"]:
+    if cls is not context["block_classes"]["mamba3"]:
         raise Error("TypeError: Mamba checkpoint owner requires its exact connected block class")
     # Validate a temporary owner before publishing the supplied checkpoint.
     # This also validates an uninitialized object's layout, as pickle's native

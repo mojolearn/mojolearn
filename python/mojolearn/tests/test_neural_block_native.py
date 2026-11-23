@@ -30,7 +30,7 @@ def block_inputs(tmp_path, family):
         kwargs = dict(model.plan.block_options, n_heads=model.plan.n_heads, numeric_profile="fp32_v1")
     elif model.kind == "mamba2":
         kwargs = model.plan.block_kwargs
-    cls = causal_lm._NATIVE_CONTEXT["block_classes"][DEVICE][model.kind]
+    cls = causal_lm._NATIVE_CONTEXT["block_classes"][model.kind]
     x = np.random.default_rng(123).normal(size=(2, 4, model.d_model)).astype("f4") * np.float32(0.05)
     return cls, weights, kwargs, x
 

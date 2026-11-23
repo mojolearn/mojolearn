@@ -202,11 +202,8 @@ A blank cell means no lane of this algorithm has that kind.
 | `LogisticRegression` | 7 | amd,apple,nvidia | host-only,training | seen(build) | part | yes |
 | `MLPInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Mamba1Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Mamba1BlockInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Mamba2Block` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Mamba2BlockInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Mamba3Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Mamba3BlockInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Matern` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `MinMaxScaler` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `NearestNeighbors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -236,7 +233,6 @@ A blank cell means no lane of this algorithm has that kind.
 | `SpectralEmbedding` | 2 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `StandardScaler` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `TransformerBlock` | 12 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `TransformerBlockInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `TruncatedSVD` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `UMAP` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `WhiteKernel` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |

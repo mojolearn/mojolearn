@@ -47,9 +47,8 @@ def _poison(patch):
     for name in ("__init__", "copy", "from_buffer", "from_list", "reshape"):
         patch.setattr(Array, name, _forbidden)
     patch.setattr(PublicOutputsMixin, "__getattribute__", _forbidden)
-    for route in causal_lm._NATIVE_CONTEXT["block_classes"].values():
-        for cls in route.values():
-            patch.setattr(cls, "__init__", _forbidden)
+    for cls in causal_lm._NATIVE_CONTEXT["block_classes"].values():
+        patch.setattr(cls, "__init__", _forbidden)
     # `_route`, `_block_classes` and `_float_weight` were deleted from
     # models/causal_lm.py by 0e718fef73 (their native owners are
     # bindings/causal_lm_public_door.mojo); nothing is left there to poison.

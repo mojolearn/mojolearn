@@ -185,16 +185,15 @@ def neural_block_fields(mut mods: NativeModules, block: PythonObject, context: P
     if class_record(mods, _NEURAL_CONNECTED_SLOT, block_cls) is None:
         var ancestry = py_call(b.type.__dict__["__mro__"].__get__, block_cls)
         var admitted = False
-        # The eight connected block classes are read once, not once per ancestor.
+        # The four connected block classes (one per kind, every route) are
+        # read once, not once per ancestor.
         var block_classes = context["block_classes"]
         var connected = List[PythonObject]()
-        for route in ["cpu", "gpu"]:  # driver-loop: native admission metadata and retained owner registry
-            var by_kind = block_classes[route]
-            for kind in ["transformer", "mamba1", "mamba2", "mamba3"]:  # driver-loop: native admission metadata and retained owner registry
-                connected.append(by_kind[kind])
+        for kind in ["transformer", "mamba1", "mamba2", "mamba3"]:  # driver-loop: native admission metadata and retained owner registry
+            connected.append(block_classes[kind])
         for i in range(len(ancestry)):  # driver-loop: passive subclasses of connected public block classes
             var ancestor = ancestry[i]
-            for j in range(len(connected)):  # small-loop(eight connected block classes)
+            for j in range(len(connected)):  # small-loop(four connected block classes)
                 admitted = admitted or ancestor is connected[j]
         if not admitted:
             raise Error("TypeError: neural operation requires a connected native block")

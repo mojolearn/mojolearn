@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from mojolearn import SambaConfig, SambaInference, lowbit
+from mojolearn import SambaConfig, SambaInference, lowbit, Mamba3Block, TransformerBlock
 from mojolearn import neural_inference as inference
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests.test_causal_model_native_loading import _poison
@@ -30,8 +30,8 @@ def _case(layers, format="float32"):
     blocks = []
     for i, kind in enumerate(layers):
         layer = {name: unpacked[f"layers.{i}.{name}"] for name, _ in config.block_shapes(kind)}
-        blocks.append(inference.Mamba3BlockInference(layer) if kind == "mamba3" else
-                      inference.TransformerBlockInference(layer, n_heads=2, n_kv_heads=1))
+        blocks.append(Mamba3Block(layer, device="cpu") if kind == "mamba3" else
+                      TransformerBlock(layer, n_heads=2, n_kv_heads=1, device="cpu"))
     return config, packed, unpacked, blocks
 
 
@@ -83,7 +83,7 @@ def test_cpu_samba_constructor_forward_and_parameter_copies_are_native(monkeypat
     for name in weights:
         assert copied[name].tobytes() == weights[name].tobytes()
         assert copied[name]._addr != model._w[name]._addr
-    assert all(type(block) is (inference.Mamba3BlockInference if kind == "mamba3" else inference.TransformerBlockInference)
+    assert all(type(block) is (Mamba3Block if kind == "mamba3" else TransformerBlock)
                for block, kind in zip(model._blocks, layers))
     # Public aliases execute the same complete native boundary.
     assert audit_native_call(model.logits, ids).assert_native().tobytes() == expected.tobytes()
@@ -127,7 +127,7 @@ def test_cpu_samba_checkpoint_load_matches_host_weight_recipe(tmp_path, monkeypa
     config = training_model.config
     weights = dict(training_model.named_parameters())
     layer = {name: weights[f"layers.0.{name}"] for name, _ in config.block_shapes("attention")}
-    blocks = [inference.TransformerBlockInference(layer, n_heads=2, n_kv_heads=1)]
+    blocks = [TransformerBlock(layer, n_heads=2, n_kv_heads=1, device="cpu")]
     expected = _reference(config, weights, blocks, inputs)
     with monkeypatch.context() as patch:
         _poison(patch)

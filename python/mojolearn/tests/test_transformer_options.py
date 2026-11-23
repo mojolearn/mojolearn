@@ -22,8 +22,8 @@ adopted tolerance (rtol 1e-4, atol 1e-5: a tolerance ANCHOR, the bitwise
 oracle is the lane's `transformer_options_check.mojo`); a token-by-token
 decode equals the whole prefill bit for bit under a record that touches
 positions (clause (d) through the public API); and `backward` refuses a
-non-default record by name. (4) `TransformerBlockInference` takes the
-same constructor.
+non-default record by name. (4) ``TransformerBlock(device="cpu")`` takes
+the same constructor.
 
 RUN OWED. Written on a box that may not run it; nothing here has been
 executed. `cd python && python3 -m pytest mojolearn/tests/test_transformer_options.py`
@@ -487,16 +487,15 @@ def test_decode_session_carries_the_record():
     assert _same(np.concatenate([np.asarray(p) for p in parts], axis=1), blk.forward(x))
 
 
-# ------------------------------------------ (4) the CPU inference class
+# ------------------------------------------ (4) the block on the CPU
 
-def test_inference_class_takes_the_same_constructor():
-    from mojolearn.neural_inference import TransformerBlockInference
+def test_cpu_block_takes_the_same_constructor():
     w = _weights(qkv_bias=True)
-    blk = TransformerBlockInference(w, n_heads=NH, n_kv_heads=NKV, qkv_bias=True,
-                                    rope_theta=1000000.0)
+    blk = TransformerBlock(w, n_heads=NH, n_kv_heads=NKV, qkv_bias=True,
+                           rope_theta=1000000.0, device="cpu")
     assert blk._extended and blk.qkv_bias and blk.rope_theta == 1000000.0
     with pytest.raises(ValueError):
-        TransformerBlockInference(w, n_heads=NH, n_kv_heads=NKV)  # bias without its flag
+        TransformerBlock(w, n_heads=NH, n_kv_heads=NKV, device="cpu")  # bias without its flag
     try:
         blk._extension()
     except Exception as exc:  # noqa: BLE001

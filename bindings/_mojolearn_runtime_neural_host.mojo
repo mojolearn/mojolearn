@@ -110,7 +110,6 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
         module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
-        module.def_py_c_function(neural_block_c[7], "neural_block_inference_backward")
         module.def_py_c_function(neural_block_c[8], "neural_block_vendor_used")
         module.def_py_c_function(neural_block_c[9], "neural_block_numeric_mode_used")
         module.def_py_c_function(neural_block_c[10], "neural_block_state_dict")

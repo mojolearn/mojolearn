@@ -510,7 +510,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
     neural_string_keys(mods, weights)
     var nk = causal_keys()
     var kind = String(py_item(plan, nk[].k_kind))
-    var cls = py_item(context, nk[].k_block_classes)[route][kind]
+    var cls = py_item(context, nk[].k_block_classes)[kind]
     var block = py_call(bi.object.__new__, cls)
     var fields = neural_block_fields(mods, block, context, False)
     py_setitem(fields, nk[].k_numeric_mode, PythonObject("identical") if String(route) == "cpu" else py_item(_native_entry_fields(mods, py_item(context, nk[].k_backend)), nk[].k__DEFAULT_MODE))
@@ -729,7 +729,7 @@ def model_recurrent_weights_check(mut mods: NativeModules, weights: PythonObject
     var bi = mods.module("builtins")
     neural_string_keys(mods, weights)
     var nk = causal_keys()
-    var names = _model_class_weight_names(mods, py_item(context, nk[].k_block_classes)[route][kind])
+    var names = _model_class_weight_names(mods, py_item(context, nk[].k_block_classes)[kind])
     var w = bi.dict()
     var keys = py_call(bi.list, weights)
     for i in range(len(keys)):  # driver-loop: over the layer's named tensors
@@ -937,7 +937,7 @@ def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan:
             raise Error("CausalLM: layer reports a different weight_format than requested")
         _ = py_call(py_item(captured, nk[].k__blocks).append, block)
         _model_construction_set(mods, live, captured, "_blocks", py_item(captured, nk[].k__blocks))
-    _model_construction_set(mods, live, captured, "_block_class", py_item(context, nk[].k_block_classes)[route][py_item(plan, nk[].k_kind)])
+    _model_construction_set(mods, live, captured, "_block_class", py_item(context, nk[].k_block_classes)[py_item(plan, nk[].k_kind)])
     _model_construction_set(mods, live, captured, "_block_kwargs", py_call(bi.dict, py_item(plan, nk[].k_block_options) if String(py_item(plan, nk[].k_kind)) == "transformer" else py_item(plan, nk[].k_block_kwargs)))
     if String(py_item(plan, nk[].k_kind)) == "transformer":
         py_setitem(py_item(captured, nk[].k__block_kwargs), nk[].k_n_heads, py_item(plan, nk[].k_n_heads))

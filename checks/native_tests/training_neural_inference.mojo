@@ -10,7 +10,7 @@ forward and the decode step, `transformer_forward`'s 13 + 11 layout).
 
   0    MLPInference (8-16-3, weights (arange % 7 - 3) / 32): 64 rows of
        logits; rows 0, 1, 7 and 63 alone, and rows 1..7, give the same bytes.
-  1, 2 TransformerBlockInference (d_model 32, 2 heads, 1 kv head, head_dim
+  1, 2 the CPU transformer block (d_model 32, 2 heads, 1 kv head, head_dim
        16, intermediate 64), window 0 and 8: a (4, 16, 32) forward; each
        batch row alone and the 7-token prefix give the same bytes.
   3, 4 the same block, window 0 and 8: the decode is the prefill: a (2, 12,

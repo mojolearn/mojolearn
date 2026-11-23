@@ -547,8 +547,8 @@ def harness_references(harness):
     real verification:
 
       the CPU inference routing. `_public_est` swaps the fitted estimator for
-      `SambaInference`, `Mamba1BlockInference` and their peers on a CPU
-      column, so those classes answer the infer, reload and batch cells of the
+      `SambaInference`, `MLPInference` and the blocks with device="cpu" on a
+      CPU column, so those answer the infer, reload and batch cells of the
       lanes in `NEURAL_PUBLIC_PART_LANES`.
 
       the opt-in parts. The batchgrad part calls

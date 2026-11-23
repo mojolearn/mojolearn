@@ -95,7 +95,6 @@ struct SambaKeys(Defaultable, Movable):
     var k_beta2: PythonObject
     var k_betas: PythonObject
     var k_bf16_class: PythonObject
-    var k_block_classes: PythonObject
     var k_buf_initialized: PythonObject
     var k_buffer_types: PythonObject
     var k_clip_coef_: PythonObject
@@ -118,7 +117,6 @@ struct SambaKeys(Defaultable, Movable):
     var k_generation_classes: PythonObject
     var k_generator: PythonObject
     var k_generator_class: PythonObject
-    var k_gpu: PythonObject
     var k_guards: PythonObject
     var k_head_dim: PythonObject
     var k_hex: PythonObject
@@ -236,7 +234,6 @@ struct SambaKeys(Defaultable, Movable):
         self.k_beta2 = PythonObject(None)
         self.k_betas = PythonObject(None)
         self.k_bf16_class = PythonObject(None)
-        self.k_block_classes = PythonObject(None)
         self.k_buf_initialized = PythonObject(None)
         self.k_buffer_types = PythonObject(None)
         self.k_clip_coef_ = PythonObject(None)
@@ -259,7 +256,6 @@ struct SambaKeys(Defaultable, Movable):
         self.k_generation_classes = PythonObject(None)
         self.k_generator = PythonObject(None)
         self.k_generator_class = PythonObject(None)
-        self.k_gpu = PythonObject(None)
         self.k_guards = PythonObject(None)
         self.k_head_dim = PythonObject(None)
         self.k_hex = PythonObject(None)
@@ -381,7 +377,6 @@ def _samba_keys_fill(nk: UnsafePointer[SambaKeys, MutUntrackedOrigin]) raises:
     nk[].k_beta2 = py_key("beta2")
     nk[].k_betas = py_key("betas")
     nk[].k_bf16_class = py_key("bf16_class")
-    nk[].k_block_classes = py_key("block_classes")
     nk[].k_buf_initialized = py_key("buf_initialized")
     nk[].k_buffer_types = py_key("buffer_types")
     nk[].k_clip_coef_ = py_key("clip_coef_")
@@ -404,7 +399,6 @@ def _samba_keys_fill(nk: UnsafePointer[SambaKeys, MutUntrackedOrigin]) raises:
     nk[].k_generation_classes = py_key("generation_classes")
     nk[].k_generator = py_key("generator")
     nk[].k_generator_class = py_key("generator_class")
-    nk[].k_gpu = py_key("gpu")
     nk[].k_guards = py_key("guards")
     nk[].k_head_dim = py_key("head_dim")
     nk[].k_hex = py_key("hex")
