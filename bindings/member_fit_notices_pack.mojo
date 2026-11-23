@@ -16,7 +16,7 @@ from bindings.py_balanced import py_call
 from bindings.rf_fit_notices_pack import rf_fit_notices_word
 from core.member_notices import (
     MEMBER_NOTICE_WORDS, MEMBER_NOTICE_FOREST, MEMBER_NOTICE_NYSTROEM_COMPONENTS, MEMBER_NOTICE_GP_RIDGE,
-    MEMBER_NOTICE_PLS_RESIDUAL,
+    MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST,
 )
 
 
@@ -58,5 +58,12 @@ def member_fit_notices_raise(words: List[Float64], context: PythonObject) raises
             # `pls_fit_pack`.
             metric_warn("y residual is constant at iteration " + String(Int(a)),
                         native_loaded_module("builtins").UserWarning, context)
+        elif code == MEMBER_NOTICE_SPLIT_LEAST:
+            # The splitter door's warning (bindings/msel_split_door.mojo
+            # `msel_split_finish`: `msel_warn(plan.warning, UserWarning)`), in
+            # `msel_plan_stratified`'s words.
+            metric_warn("The least populated class in y has only " + String(Int(a)) + " members, which is less "
+                        + "than n_splits=" + String(Int(b)) + ".",
+                        native_loaded_module("builtins").UserWarning, context, 2)
         else:
             raise Error("member ABI: unknown fit notice code " + String(code))

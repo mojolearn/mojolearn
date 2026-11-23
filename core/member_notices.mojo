@@ -35,6 +35,10 @@ comptime MEMBER_NOTICE_NYSTROEM_COMPONENTS = 2
 comptime MEMBER_NOTICE_GP_RIDGE = 3
 #: PLS: the fit stopped before n_components, the y residual constant (a = the components fitted).
 comptime MEMBER_NOTICE_PLS_RESIDUAL = 4
+#: A meta member's cv splitter (lane mf-split4; StratifiedKFold's plan,
+#: bindings/msel_split_plan_run.mojo `msel_plan_stratified`): the least
+#: populated class holds fewer rows than n_splits (a = its rows, b = n_splits).
+comptime MEMBER_NOTICE_SPLIT_LEAST = 5
 
 
 def member_notice_add(mut words: List[Float64], code: Int, a: Float64 = 0.0, b: Float64 = 0.0):

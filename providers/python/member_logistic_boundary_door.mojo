@@ -44,7 +44,7 @@ from bindings.logistic_config_boundary_unpack import (
 from bindings.logistic_keys_unpack import logistic_keys
 from bindings.logistic_state_boundary_unpack import logistic_fit_pack
 from bindings.member_owner_unpack import MemberOwner
-from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message
+from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message, member_cw_kind_accepted
 from core.member_families import MEMBER_FAMILY_LOGISTIC
 from core.member_class_weight import (
     MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_balanced_words, member_cw_pending_words,
@@ -90,7 +90,7 @@ def logistic_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     if kind != 0:
         raise Error("RuntimeError: mojolearn: unknown Logistic member kind " + String(kind))
     var nk = logistic_keys()
-    var weighting = member_cw_kind(py_item(fields, nk[].k_class_weight), b)
+    var weighting = member_cw_kind_accepted(MEMBER_FAMILY_LOGISTIC, model, py_item(fields, nk[].k_class_weight), b)
     # A value the estimator's fit door refuses (lane mf-left4): the INVALID
     # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
     # a value the door accepts but the member does not read: not admitted.

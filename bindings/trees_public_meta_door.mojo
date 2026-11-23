@@ -2985,15 +2985,18 @@ struct _CalUnits(Movable):
     mf-search4 GridSearchCV / RandomizedSearchCV and MultiOutputClassifier
     are META kinds, see core/ensemble_member.mojo; a search keeps its door
     for a splitter cv, a named scorer other than 'accuracy', refit other
-    than True or its own device; AdaBoostClassifier's door is kept for a
-    random-splitter DecisionTree or class_weight base),
+    than True or its own device; since lane mf-split4 an AdaBoostClassifier
+    with a random-splitter DecisionTree or class_weight base is a META
+    member too),
     CategoricalNB's door included where its kind is not admitted, a
     meta-estimator base whose META admit keeps its door (since lane
     mf-meta3b Voting, Stacking, OneVsRest, CalibratedClassifierCV and
     Bagging bases are META members, since lane mf-meta3c the batched Bagging
     route and metas nested at any depth too; still the door's: a Calibrated
     base with a non-int cv or a DeviceRows base, a Stacking base with a
-    splitter cv), a configuration its family's
+    splitter other than our KFold / StratifiedKFold (lane mf-split4), a
+    Bagging whose tree has a class_weight on a configuration that never takes
+    the batched route), a configuration its family's
     admit leaves to the estimator's door (a class_weight that is neither
     None, 'balanced' nor an exact dict, which that door refuses in its
     words; a GP kernel the member cannot address, ...), or a member kind

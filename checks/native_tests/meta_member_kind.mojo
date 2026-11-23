@@ -844,9 +844,9 @@ def _session_served() raises -> Bool:
 def _ada_meta(kind: Int, var base: MemberPlan, rounds: Int, seed: Int, loss: Int, native: Bool) raises -> _Meta:
     """An AdaBoost META plan as the boundary's `_admit_ada` mints it: the base's forest member plan and the
     settings words (n_estimators, seed, learning_rate 1.0, loss, the session route word, no table sharing, the
-    squared criterion code, no target check)."""
+    squared criterion code, no target check, not a random-splitter tree; no class-weight tail)."""
     var words: List[Float64] = [Float64(rounds), Float64(seed), 1.0, Float64(loss), 1.0 if native else 0.0, 0.0,
-                                Float64(RF_SQUARED), -1.0, -2.0, -2.0, -2.0]
+                                Float64(RF_SQUARED), -1.0, -2.0, -2.0, -2.0, 0.0]
     var masks: List[Int] = [member_kind_capabilities(base)]
     var plans: List[MemberPlan] = [base^]
     var handle = meta_plan_mint_with(plans^, List[Float64](), List[Int](), masks^, words^, List[List[Int32]](),

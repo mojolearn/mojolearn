@@ -30,7 +30,7 @@ from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_address
 from bindings.family_common_pack import family_call, family_array
 from bindings.member_owner_unpack import MemberOwner, member_host_only
-from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message
+from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message, member_cw_kind_accepted
 from core.member_class_weight import (
     MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_balanced_words, member_cw_pending_words,
     member_cw_invalid_words,
@@ -87,7 +87,8 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     var nk = svm_keys()
     var weighting = 0
     if classifier:
-        weighting = member_cw_kind(py_get(scratch, nk[].k_class_weight, PythonObject(None)), b)
+        weighting = member_cw_kind_accepted(MEMBER_FAMILY_KERNEL_SVM, model,
+                                            py_get(scratch, nk[].k_class_weight, PythonObject(None)), b)
         # A value the estimator's fit door refuses (lane mf-left4): the INVALID
         # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
         # a value the door accepts but the member does not read: not admitted.

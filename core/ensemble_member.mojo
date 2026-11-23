@@ -215,6 +215,18 @@ from core.member_families import (
     MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_GP, MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES,
 )
 from core.member_notices import member_notices_take
+from core.array_helpers_impl import class_ratio_f64
+from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan
+from core.label_weights_native_api import (
+    LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS,
+)
+from xtrees.label_weights_native import label_weights_native_v1
+from core.member_class_weight import member_cw_counts
+from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST
+from bindings.msel_split_plan_run import (
+    MselSeed, MselSplitRoute, MselSplitPlan, MselCodes, msel_split_route_none, msel_plan_kfold, msel_plan_stratified,
+    msel_split_fill, MSEL_LABELS_SORTED,
+)
 from core.member_set_run import (
     MemberSetRun, member_set_fit, member_set_run_release, member_set_first_failure,
     MEMBER_SET_WORKER, MEMBER_SET_TURN_RELEASED, MEMBER_SET_TURN_HELD,
@@ -318,7 +330,9 @@ comptime META_ADA_TARGET = 7            # the regressor's target check codes (`F
 comptime META_ADA_POISSON = 8           # `.poisson`, `.gamma`, `.inverse_gaussian`; -2: none read)
 comptime META_ADA_GAMMA = 9
 comptime META_ADA_INVERSE_GAUSSIAN = 10
-comptime META_ADA_WORDS = 11
+comptime META_ADA_DT_RANDOM = 11         # 1.0: a DecisionTree splitter='random' base, whose rounds fit its inner
+                                        # extra-trees forest (lane mf-split4; `ada_fit_run`'s tree_base word 1)
+comptime META_ADA_WORDS = 12
 #: THE SEARCH KIND's fitted words (float64, export / import): [best index,
 #: folds, best score, candidates m, train flag, sampler seed], then m x folds test scores
 #: (candidate-major), m means, m deviations, m ranks, and with the train
@@ -333,6 +347,27 @@ comptime META_SEARCH_SEED = 4           # the sampler's seed the PACK re-draws t
 comptime META_SEARCH_WORDS = 5
 #: THE MULTI-OUTPUT KIND's settings words: [0] reserved.
 comptime META_MULTI_WORDS = 1
+#: THE CLASS-WEIGHT TAIL of a tree base (lane mf-split4): appended after a
+#: Bagging's META_BAG_WORDS (its batched forest's class_weight) and an
+#: AdaBoost's META_ADA_WORDS (its base's): [mode, K, all-one, K weights].
+#: Mode META_CW_NONE, META_CW_BALANCED (the FIT computes the ratios from its
+#: codes) or META_CW_DICT (the dict's weights over the codes' labels, read at
+#: UNPACK with the forest door's admission; K = -1: no labels were known, the
+#: FIT refuses).
+comptime META_CW_MODE = 0
+comptime META_CW_K = 1
+comptime META_CW_ALL_ONE = 2
+comptime META_CW_HEAD = 3
+comptime META_CW_NONE = 0
+comptime META_CW_BALANCED = 1
+comptime META_CW_DICT = 2
+#: THE SPLITTER CV of a stack (lane mf-split4): one of OUR splitters, read at
+#: UNPACK as typed words (bindings/msel_split_door.mojo `MselSplitter`), its
+#: folds computed inside each FIT over that fit's own rows
+#: (bindings/msel_split_plan_run.mojo, the splitters' own RUN).
+comptime META_SPLIT_NONE = 0
+comptime META_SPLIT_KFOLD = 1
+comptime META_SPLIT_STRATIFIED = 2
 
 comptime _CALIB_FAST_HOST_FOLDS = is_defined["MOJOLEARN_CALIB_FAST_HOST_FOLDS"]()
 
@@ -395,6 +430,15 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
     # Lane mf-search4: THE SEARCH KIND's metric program route (scoring
     # 'accuracy'), resolved by the admission; its connection is pinned there.
     var metric: MetricRoute
+    # Lane mf-split4: THE SPLITTER CV (META_SPLIT_*), its n_splits, shuffle,
+    # seed, the splitters' entries (pinned by the admission) and the
+    # sabotage word the splitter door reads.
+    var split_kind: Int
+    var split_k: Int
+    var split_shuffle: Bool
+    var split_seed: MselSeed
+    var split_route: MselSplitRoute
+    var split_sabotage: Bool
 
     def __init__(out self):
         self.generation = 0
@@ -407,6 +451,12 @@ struct MetaPlanSlot(Copyable, Movable, Defaultable):
         self.fold_train = List[List[Int32]]()
         self.fold_test = List[List[Int32]]()
         self.metric = MetricRoute(entry_ref_unresolved().call, False, False)
+        self.split_kind = META_SPLIT_NONE
+        self.split_k = 0
+        self.split_shuffle = False
+        self.split_seed = MselSeed(0, False)
+        self.split_route = msel_split_route_none()
+        self.split_sabotage = False
 
 
 struct MetaPlanStore(Defaultable, Movable):
@@ -472,6 +522,26 @@ def meta_plan_mint_with(var plans: List[MemberPlan], var weights: List[Float64],
         slot[].fold_train = fold_train^
         slot[].fold_test = fold_test^
         return slot[].generation * _INDEX_SPAN + index + 1
+    finally:
+        shared_slot_unlock(lock)
+
+
+def meta_plan_split(handle: Int, kind: Int, k: Int, shuffle: Bool, seed: MselSeed, route: MselSplitRoute,
+                    sabotage: Bool) raises:
+    """UNPACK (a stack's admission, lane mf-split4): THE SPLITTER CV of a
+    minted plan entry, copied into every state NEW makes from it."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var entry = _PlanSlotPtr(unsafe_from_address=address)
+        entry[].split_kind = kind
+        entry[].split_k = k
+        entry[].split_shuffle = shuffle
+        entry[].split_seed = seed
+        entry[].split_route = route
+        entry[].split_sabotage = sabotage
     finally:
         shared_slot_unlock(lock)
 
@@ -605,6 +675,14 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
     var words: List[Float64]
     var fold_train: List[List[Int32]]
     var fold_test: List[List[Int32]]
+    # Lane mf-split4: THE SPLITTER CV (the entry's; META_SPLIT_*): each fit
+    # writes its folds into `fold_train` / `fold_test` (`_split_folds`).
+    var split_kind: Int
+    var split_k: Int
+    var split_shuffle: Bool
+    var split_seed: MselSeed
+    var split_route: MselSplitRoute
+    var split_sabotage: Bool
     var base_plans: List[MemberPlan]
     var base_masks: List[Int]
     # Per kept unit: its classes as ensemble codes when it lacks some (empty:
@@ -689,6 +767,12 @@ struct EnsembleMemberSlot(Copyable, Movable, Defaultable):
         self.words = List[Float64]()
         self.fold_train = List[List[Int32]]()
         self.fold_test = List[List[Int32]]()
+        self.split_kind = META_SPLIT_NONE
+        self.split_k = 0
+        self.split_shuffle = False
+        self.split_seed = MselSeed(0, False)
+        self.split_route = msel_split_route_none()
+        self.split_sabotage = False
         self.base_plans = List[MemberPlan]()
         self.base_masks = List[Int]()
         self.unit_held = List[List[Int32]]()
@@ -1005,6 +1089,12 @@ def _new(call: _CallPtr) raises:
         slot[].fold_train = entry[].fold_train.copy()
         slot[].fold_test = entry[].fold_test.copy()
         slot[].metric = entry[].metric
+        slot[].split_kind = entry[].split_kind
+        slot[].split_k = entry[].split_k
+        slot[].split_shuffle = entry[].split_shuffle
+        slot[].split_seed = entry[].split_seed
+        slot[].split_route = entry[].split_route
+        slot[].split_sabotage = entry[].split_sabotage
     finally:
         shared_slot_unlock(lock)
     try:
@@ -1033,6 +1123,11 @@ def _new(call: _CallPtr) raises:
                 need = META_ADA_WORDS
             elif _multi_kind(kind):
                 need = META_MULTI_WORDS
+            # A Bagging or AdaBoost entry may carry its tree's class-weight
+            # tail after its settings words (META_CW_*, lane mf-split4; none:
+            # no class_weight).
+            if (_bag_kind(kind) or _ada_kind(kind)) and len(slot[].words) >= need + META_CW_HEAD:
+                need += META_CW_HEAD + max(Int(slot[].words[need + META_CW_K]), 0)
             # A Bagging entry may hold a second plan: its batched forest.
             var plans = 1
             if _bag_kind(kind) and len(slot[].words) == need and slot[].words[META_BAG_BATCHED] != 0.0:
@@ -1420,6 +1515,99 @@ def _user_folds(slot: _SlotPtr, n: Int, mut tr_at: List[Int], mut tr_n: List[Int
     _ = len(te_counts)
 
 
+def _split_folds(slot: _SlotPtr, n: Int, codes: Int, k: Int) raises:
+    """THE SPLITTER CV (lane mf-split4): the folds of the entry's splitter
+    over THIS fit's `n` rows (the door's `_splits` -> `prep_native_split` ->
+    bindings/msel_split_door.mojo `msel_kfold_split` /
+    `msel_stratified_split`, whose RUN this is: `msel_plan_kfold` /
+    `msel_plan_stratified` over the int32 codes `codes` of `k` classes, the
+    sides sized by the plan, `msel_split_fill`), written as the stack's typed
+    folds (`fold_train` / `fold_test`, int32 rows), which `_user_folds` then
+    checks as the door checks a split's rows. The splitter's warning ("The
+    least populated class in y has only ...") becomes the state's first fit
+    notice (core/member_notices.mojo MEMBER_NOTICE_SPLIT_LEAST, raised by the
+    PACK in its words; the door raised it before the fits). No Python."""
+    var route = slot[].split_route
+    var plan = MselSplitPlan()
+    if slot[].split_kind == META_SPLIT_STRATIFIED:
+        plan = msel_plan_stratified(route, MselCodes(codes, n, k), MSEL_LABELS_SORTED, slot[].split_k,
+                                    slot[].split_shuffle, slot[].split_seed)
+    else:
+        plan = msel_plan_kfold(route, n, slot[].split_k, slot[].split_shuffle, slot[].split_seed,
+                               slot[].split_sabotage)
+    if plan.warned and slot[].split_kind == META_SPLIT_STRATIFIED:
+        # The operands of the stratified warning: the least populated
+        # class's row count (over the classes the rows hold) and n_splits.
+        var counts = member_cw_counts(codes, MEMBER_I32, n, k)
+        var least = -1
+        for c in range(k):  # small-loop(k class counts: the least one held)
+            if counts[c] > 0 and (least < 0 or Int(counts[c]) < least):
+                least = Int(counts[c])
+        var words = List[Float64]()
+        member_notice_add(words, MEMBER_NOTICE_SPLIT_LEAST, Float64(least), Float64(slot[].split_k))
+        slot[].notice_owner.append(0)
+        slot[].notice_words.append(words^)
+    var splits = plan.splits()
+    var train = List[List[Int64]](capacity=splits)
+    var test = List[List[Int64]](capacity=splits)
+    for s in range(splits):  # driver-loop: over the splits (one pair of sides each, sized by the plan)
+        train.append(List[Int64](length=max(plan.train_sizes[s], 1), fill=Int64(0)))
+        test.append(List[Int64](length=max(plan.test_sizes[s], 1), fill=Int64(0)))
+    for s in range(splits):  # driver-loop: over the splits (their final addresses)
+        plan.train_dst.append(Int(train[s].unsafe_ptr()))
+        plan.test_dst.append(Int(test[s].unsafe_ptr()))
+    msel_split_fill(route, plan)
+    var tr32 = List[List[Int32]](capacity=splits)
+    var te32 = List[List[Int32]](capacity=splits)
+    for s in range(splits):  # driver-loop: over the splits (their int32 sides)
+        tr32.append(List[Int32](length=plan.train_sizes[s], fill=Int32(0)))
+        te32.append(List[Int32](length=plan.test_sizes[s], fill=Int32(0)))
+    var src_tr = List[Int](capacity=splits)
+    var src_te = List[Int](capacity=splits)
+    var dst_tr = List[Int](capacity=splits)
+    var dst_te = List[Int](capacity=splits)
+    var n_tr = List[Int](capacity=splits)
+    var n_te = List[Int](capacity=splits)
+    for s in range(splits):  # driver-loop: over the splits (the narrowing's addresses)
+        src_tr.append(Int(train[s].unsafe_ptr()))
+        src_te.append(Int(test[s].unsafe_ptr()))
+        dst_tr.append(Int(tr32[s].unsafe_ptr()))
+        dst_te.append(Int(te32[s].unsafe_ptr()))
+        n_tr.append(plan.train_sizes[s])
+        n_te.append(plan.test_sizes[s])
+    var src_tr_at = Int(src_tr.unsafe_ptr())
+    var src_te_at = Int(src_te.unsafe_ptr())
+    var dst_tr_at = Int(dst_tr.unsafe_ptr())
+    var dst_te_at = Int(dst_te.unsafe_ptr())
+    var n_tr_at = Int(n_tr.unsafe_ptr())
+    var n_te_at = Int(n_te.unsafe_ptr())
+
+    def narrow(split: Int) {imm src_tr_at, imm src_te_at, imm dst_tr_at, imm dst_te_at, imm n_tr_at, imm n_te_at}:
+        # the rows are below n (an int32 row count): one exact narrowing each
+        var st = _I64P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=src_tr_at)[split])
+        var se = _I64P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=src_te_at)[split])
+        var dt = _I32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=dst_tr_at)[split])
+        var de = _I32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=dst_te_at)[split])
+        var count_tr = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=n_tr_at)[split]
+        var count_te = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=n_te_at)[split]
+        for i in range(count_tr):  # small-loop(one split's train rows)
+            dt[i] = Int32(st[i])
+        for i in range(count_te):  # small-loop(one split's test rows)
+            de[i] = Int32(se[i])
+
+    host_parallelize(narrow, splits)
+    _ = len(train)  # the fill and the narrowing above read these through their addresses
+    _ = len(test)
+    _ = len(src_tr)
+    _ = len(src_te)
+    _ = len(dst_tr)
+    _ = len(dst_te)
+    _ = len(n_tr)
+    _ = len(n_te)
+    slot[].fold_train = tr32^
+    slot[].fold_test = te32^
+
+
 def _keep_states(slot: _SlotPtr, mut run: MemberSetRun, first: Int):
     """The fitted states of `run` become the slot's nested members `first`,
     `first + 1`, ... (their fit notices kept)."""
@@ -1460,6 +1648,10 @@ def _fit_stack(slot: _SlotPtr, call: _CallPtr) raises:
     var glue = slot[].glue
     var binary = k == 2
     var every = List[Int32]()  # a member that holds every class
+    # THE SPLITTER CV (lane mf-split4): this fit's folds first, as the door
+    # computes its splits before any member fit.
+    if slot[].split_kind != META_SPLIT_NONE:
+        _split_folds(slot, n, y if classifier else 0, k)
     slot[].classes = k
     slot[].states = List[Int](length=bases + 1, fill=0)
     # 1. The members on every row (one set).
@@ -1785,6 +1977,69 @@ def _seed_words(mut plan: MemberPlan, seed: Int) raises:
     plan.params[ADA_MEMBER_SEED_WORD + 2] = 0.0
 
 
+def _cw_mode(words: List[Float64], at: Int) -> Int:
+    """The class-weight tail's mode at `at` (META_CW_NONE when absent)."""
+    if len(words) < at + META_CW_HEAD:
+        return META_CW_NONE
+    return Int(words[at + META_CW_MODE])
+
+
+def _tree_class_rows(words: List[Float64], at: Int, codes: Int, n: Int, k: Int, mut rows: List[Float32]) raises -> Int:
+    """FIT: the float32 class_weight row weights of a tree, forest or
+    extra-trees fit over the int32 codes `codes` (n rows, k classes) from
+    the class-weight tail at `at` (META_CW_*), the forest door's own rows
+    (bindings/class_weight_rows_boundary_pack.mojo
+    `class_weight_rows_admitted[CLASS_WEIGHT_TREES]`, as
+    bindings/trees_public_inputs_door.mojo `trees_class_rows_only` calls it):
+    for 'balanced' the class counts (LABEL_WEIGHTS_COUNTS), widened to
+    int64, and scikit-learn's ratios (`class_ratio_f64`, mode 0); for a dict
+    the weights read at UNPACK; then the per-class float32 plan
+    (`class_weight_rows_plan`) and the row gather (LABEL_WEIGHTS_ROWS), with
+    the x_trees image's own label-weights kernels (the descriptor the door
+    reaches through its provider: `label_weights_native_v1`). Answers the
+    rows' address (in `rows`), or 0 when every class weight is 1 (the door
+    then hands the fit no weights). No Python."""
+    var mode = _cw_mode(words, at)
+    if mode == META_CW_NONE:
+        return 0
+    var driver = LabelWeightsDriver(label_weights_native_v1)
+    var inputs = ClassWeightInputs()
+    var balanced = mode == META_CW_BALANCED
+    if balanced:
+        var counts = List[Int32](length=max(k, 1), fill=Int32(0))
+        _ = driver.run(LABEL_WEIGHTS_COUNTS, LabelWeightsRequest(codes if n > 0 else 0, Int(counts.unsafe_ptr()), 0,
+                                                                  n, k))
+        var wide = List[Int64](length=max(k, 1), fill=Int64(0))
+        for c in range(k):  # small-loop(k class counts widened to int64, as the door's cast)
+            wide[c] = Int64(counts[c])
+        inputs.values = List[Float64](length=k, fill=0.0)
+        if k > 0 and class_ratio_f64(_I64P(unsafe_from_address=Int(wide.unsafe_ptr())),
+                                     _F64P(unsafe_from_address=Int(inputs.values.unsafe_ptr())), k, n, 0) != 0:
+            raise Error("ZeroDivisionError: division by zero")
+        _ = len(counts)
+        _ = len(wide)
+    else:
+        var table = Int(words[at + META_CW_K])
+        if table < 0:
+            raise Error("TypeError: mojolearn: a member whose tree has a class_weight dict is fitted only by a "
+                        + "caller that hands over its labels")
+        if table != k:
+            raise Error("member ABI: the class_weight table has " + String(table) + " entries for " + String(k)
+                        + " classes")
+        for c in range(k):  # small-loop(the k dict weights read at UNPACK)
+            inputs.values.append(words[at + META_CW_HEAD + c])
+        inputs.all_one = words[at + META_CW_ALL_ONE] != 0.0
+    var plan = class_weight_rows_plan(inputs, balanced)
+    if plan.all_one:
+        return 0
+    rows = List[Float32](length=max(n, 1), fill=0.0)
+    if n > 0:
+        _ = driver.run(LABEL_WEIGHTS_ROWS, LabelWeightsRequest(codes, Int(plan.words.unsafe_ptr()),
+                                                               Int(rows.unsafe_ptr()), n, k))
+    _ = len(plan.words)  # the gather above read the plan's words through their address
+    return Int(rows.unsafe_ptr())
+
+
 def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     """`_bagging_fit_bags`' per-member route as ONE set: unit u's draws
     (`xt_sample_indices`, streams 2u and 2u + 1) and seed `_sub_seed(seed,
@@ -1814,6 +2069,12 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
             and (bootstrap or n_rows == n)):
         _fit_bag_batched(slot, call, k, n_rows, bootstrap)
         return
+    if _cw_mode(slot[].words, META_BAG_WORDS) != META_CW_NONE:
+        # The per-member fits of a tree with a class_weight read each draw's
+        # own classes in the tree's fit door: the caller's door fits them
+        # (this refusal fails the set, and its caller's loop runs).
+        raise Error("NotImplementedError: mojolearn: a Bagging member whose tree has a class_weight fits its "
+                    + "per-member route through its door")
     _expand(slot, count)
     slot[].unit_rows = List[List[Int32]](capacity=count)
     slot[].unit_cols = List[List[Int32]](capacity=count)
@@ -1919,12 +2180,19 @@ def _fit_bag_batched(slot: _SlotPtr, call: _CallPtr, k: Int, n_rows: Int, bootst
         _slot_words_int(plan, FOREST_RF_SLOT_BINS, bins)
     slot[].plans = [plan^]
     slot[].masks = [slot[].base_masks[1]]
+    # The tree's class_weight (lane mf-split4): the forest's row weights over
+    # the codes, as the forest door computes them for its own fit (0: none).
+    var cw_rows = List[Float32]()
+    var cw = 0
+    if k > 0:
+        cw = _tree_class_rows(slot[].words, META_BAG_WORDS, call[].y.data, n, k, cw_rows)
     var run = _set_of(slot, call[].x.data, n, call[].x.cols, MEMBER_I32 if k > 0 else MEMBER_F32)
-    _add(slot, run, 0, k, call[].y.data, 0, 0, 0)
+    _add(slot, run, 0, k, call[].y.data, cw, 0, 0)
     member_set_fit(run)
     slot[].states = List[Int](length=1, fill=0)
     _keep_states(slot, run, 0)
     member_set_run_release(run)
+    _ = len(cw_rows)  # the fit (and a borrowing state, until its release above) read the rows through `cw`
     slot[].batched = True
     slot[].batch_fraction = fraction
     slot[].batch_bins = bins
@@ -2222,13 +2490,34 @@ def _fit_ada(slot: _SlotPtr, call: _CallPtr) raises:
     else:
         plan.member_route = True
         plan.member_plan = base.copy()
-        plan.tree_base = 1 if base.family == MEMBER_FAMILY_TREE else 0
+        # A random-splitter tree's rounds fit its inner extra-trees forest and
+        # step as the tree they are (the door's `kind.startswith("dt_")`).
+        plan.tree_base = 1 if base.family == MEMBER_FAMILY_TREE or words[META_ADA_DT_RANDOM] != 0.0 else 0
         if not classifier:
             plan.target_need = forest_target_need(plan.config)
         # Every round's member predicts the same training X: staged once in
         # the members' image (the door's `trees_stage_native`, m > 1).
         if plan.rounds > 1:
             staged = _stage_whole(base, x, n, d)
+    # The base's class_weight (lane mf-split4): its row weights over the
+    # codes, as the door's `trees_class_rows_only` (0: every weight 1, no
+    # rows), multiplied into each host round's weights by the x_trees
+    # image's label-weights kernel (the door's driver; a device round reads
+    # the rows itself).
+    var cw_rows = List[Float32]()
+    if classifier:
+        var cw = 0
+        try:
+            cw = _tree_class_rows(words, META_ADA_WORDS, y, n, k, cw_rows)
+        except error:
+            if staged:
+                xf_unstage_input(entry_ref_gil_free(base.route.entry))
+            _ada_close_session(slot)
+            raise error^
+        if cw != 0:
+            plan.class_rows = cw
+            if not plan.device_rounds:
+                plan.multiply = LabelWeightsDriver(label_weights_native_v1)
     var result = AdaFitResult()
     try:
         result = ada_fit_run(plan)
@@ -2236,6 +2525,7 @@ def _fit_ada(slot: _SlotPtr, call: _CallPtr) raises:
         if staged:
             xf_unstage_input(entry_ref_gil_free(base.route.entry))
     _ = len(weights)  # RUN rescaled the weights in place through their address
+    _ = len(cw_rows)  # RUN read the class rows through `plan.class_rows`
     var states = List[Int]()
     try:
         if result.members:

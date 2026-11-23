@@ -30,7 +30,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
-from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message
+from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message, member_cw_kind_accepted
 from core.member_class_weight import (
     MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_balanced_words, member_cw_pending_words,
     member_cw_invalid_words,
@@ -280,7 +280,7 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
     var keyed = False
     var invalid = False
     if class_weight is not None:
-        if member_cw_kind(class_weight, _b()) == MEMBER_CW_DICT:
+        if member_cw_kind_accepted(MEMBER_FAMILY_XLINEAR, PythonObject(None), class_weight, _b()) == MEMBER_CW_DICT:
             keyed = True
         elif not _eq(class_weight, PythonObject("balanced")):
             # A value the fit door refuses (lane mf-left4): the INVALID tail,
@@ -353,7 +353,7 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         # A class_weight is the tail from word 3 (lane mf-adm3): 'balanced',
         # or a dict's pending table the caller fills over its labels
         # (`member_cw_fill`); any other value keeps the estimator's own doors.
-        var weighting = member_cw_kind(py_item(fields, nk[].k_class_weight), b)
+        var weighting = member_cw_kind_accepted(MEMBER_FAMILY_XLINEAR, model, py_item(fields, nk[].k_class_weight), b)
         if weighting < 0:
             # A value the fit door refuses (lane mf-left4): the INVALID tail.
             if len(member_cw_invalid_message(MEMBER_FAMILY_XLINEAR, model, py_item(fields, nk[].k_class_weight),
