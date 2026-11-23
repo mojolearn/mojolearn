@@ -1242,6 +1242,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.ab-prep.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: the Samba resident registry copies keyed by the process weight epoch, so any model's write re-uploaded every stack; same kernels, same bytes per upload, only the upload count differed); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL.ab-prep.patch"
+    # TOMBSTONE: MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF (old path of a confirmed promotion) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF"](), "removed 2026-11-23 (lane/ab-prep-mamba, DECIDED: A/B round 2 nvc-ab-20261119T154232Z-0642a5 and round 3 nvc-ab-20261120T063324Z-c630ad NVIDIA L40S, samba-train-step 0.952 / 0.965, driver 0.979, controls 1.00, digests equal; EXP:4532): the registry uploaded and scanned every step with the door stamping is gone; code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF.patch"
     # ---- end lane ab-prep-mamba
     return True
 

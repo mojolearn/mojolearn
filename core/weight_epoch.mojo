@@ -19,7 +19,6 @@ new arrays, which bump at their first use. In-place edits of a frozen weight
 are refused by the array itself.
 """
 from std.atomic import Atomic, Ordering
-from std.sys.compile import is_defined
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
@@ -285,7 +284,7 @@ struct RegistryKey(Copyable, Movable):
         `registry_epoch_bump` it replaces took; the stamp and the key are
         the same word value read under that lock, so a later write by
         anyone leaves the key not current. Read by the resident train
-        step (SAMBA_STEP_REGISTRY_RESIDENT, below)."""
+        step (training/samba_resident.mojo `_step_registry_out`, below)."""
         if addr == 0:
             return RegistryKey()
         var slot = _REGISTRY.get_or_create_ptr()
@@ -307,7 +306,7 @@ struct RegistryKey(Copyable, Movable):
 
 # ---- lane fx-samba-step-resident (2026-11-18), the experiment
 # MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT, DEFAULT ON since 2026-11-20
-# (-D MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF builds the old form). A Samba resident train step
+# (the _OFF old form was deleted 2026-11-23). A Samba resident train step
 # (training/samba_resident.mojo) uploaded the whole registry host -> device
 # and scanned it for a non-finite weight at every step, although the device
 # copy it wrote one step earlier holds exactly the bytes it downloaded to the
@@ -316,10 +315,7 @@ struct RegistryKey(Copyable, Movable):
 # not current, and after its own download it stamps the registry and keeps
 # the key (`RegistryKey.stamp_and_take`). The stamp moves from the provider
 # door (providers/python/samba_resident_pyapi_door.mojo) INTO the step, so
-# both files read this one constant: an _OFF define must reach every binding of
-# its build (a door without its stamp and a step without the arm would
-# leave other copies stale; a step with the arm under a door that still
-# stamps only re-uploads, i.e. the default behaviour).
+# the door no longer stamps after a step.
 # A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
 # arm in one pod job, tag nvc-ab-20261119T154232Z-0642a5; digests and quality equal). Base -> arm ms: samba-train-step
 # 49.61 -> 47.24 (0.952; the row's other base 48.73, so 0.97 against it; the predicted -1 to -2 ms), control
@@ -335,6 +331,7 @@ struct RegistryKey(Copyable, Movable):
 # (0.957), 4 x 256 d256 six layers 40.83 -> 39.25 (0.961), 2 x 192 d128 m/m 11.48 -> 10.76 (0.937: round 2's 1.26
 # was one call); first forward after a step 5.155 -> 4.123 (0.80), 6.303 -> 4.973 (0.79), 2.644 -> 2.307 (0.87).
 # PROMOTED: faster on the board row and on every driver case in both the step and the forward after it, same bits.
-# The old form (upload and scan every step, the door stamps) stays behind _OFF until one more measurement.
-comptime SAMBA_STEP_REGISTRY_RESIDENT = not is_defined["MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF"]()
+# The old form (upload and scan every step, the door stamps) is deleted (owed entry DECIDED on these two rounds).
+# TOMBSTONE: MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF (old path; promoted winner confirmed: A/B round 2+3 NVIDIA L40S, samba-train-step 0.952 / 0.965, driver 0.979, controls 1.00, digests equal; EXP:4532) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 
