@@ -21,7 +21,10 @@ LAYER_NAMES = _SEQUENTIAL_CONTEXT["layer_names"]
 #: avg_pool2d. Every other code, and every new one, needs a fixture.
 CORE_NO_FIXTURE = frozenset((2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14))
 #: containers (code 0) end on their join layer
-CONTAINER_LAST = {"residual_block": "residual", "parallel": "concat", "gated": "multiply"}
+CONTAINER_LAST = {"residual_block": "residual", "parallel": "concat", "gated": "multiply",
+                  # nn-attention's post-norm encoder and decoder layers and stacks end on their last layer_norm
+                  "transformer_encoder_layer": "layer_norm", "transformer_decoder_layer": "layer_norm",
+                  "transformer_encoder": "layer_norm", "transformer_decoder": "layer_norm"}
 #: every layer code of the table, each with the fixtures that build it
 CODES = sorted({c for c in _LAYER.values() if c})
 FIXTURES_OF = {c: sorted(n for n in SEQUENTIAL_LAYER_FIXTURES if _LAYER.get(n) == c) for c in CODES}
@@ -74,7 +77,10 @@ def test_layer_is_admitted_and_named(method):
     m = build(S(input_shape=shape, numeric_mode="identical"), S)
     kinds = [layer[0] for layer in m.layers]
     assert kinds and all(kinds), kinds          # no layer is described by an empty name
-    assert kinds[-1] == _last_kind(method), kinds
+    if method in CONTAINER_LAST:
+        assert kinds[-1] == CONTAINER_LAST[method], kinds
+    else:   # a fixture may follow its layer with others (ssd_scan's rms_norm, as example:seq-mamba2)
+        assert _last_kind(method) in kinds, kinds
 
 
 @pytest.mark.parametrize("code", CODES, ids=[LAYER_NAMES[c] if c < len(LAYER_NAMES) else str(c) for c in CODES])
@@ -117,8 +123,8 @@ def test_every_layer_code_round_trips(code, tmp_path):
 
 
 @pytest.mark.parametrize("build,message", [
-    (lambda S: S(input_shape=(4,)).silu(1), "takes no arguments"),
-    (lambda S: S(input_shape=(4,)).softplus(1), "takes no arguments"),
+    (lambda S: S(input_shape=(4,)).silu(1), "takes 1 positional argument"),
+    (lambda S: S(input_shape=(4,)).softplus(1), "takes 1 positional argument"),
     (lambda S: S(input_shape=(4,)).gelu(approximate="erf"), "approximate must be 'none' or 'tanh'"),
     (lambda S: S(input_shape=(4,)).rms_norm(eps=0.0), "eps must be positive"),
     (lambda S: S(input_shape=(2, 4)).rotary(1), "head_dim must be an integer >= 2"),

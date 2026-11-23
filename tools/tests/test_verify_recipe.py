@@ -115,6 +115,12 @@ def vr(monkeypatch):
     for name in ("mojolearn._verify_recipe", "mojolearn._check_both"):
         monkeypatch.delitem(sys.modules, name, raising=False)
     parent = stub()
+    # A real `mojolearn` imported earlier in this worker (pytest -n shares workers across test files) leaves its
+    # family loader on the import path; it would connect this stub package's modules as product doors. Suspend it
+    # for the stub's imports (lane nn-integrate, 2026-11-23).
+    families = sys.modules.get("mojolearn._families")
+    if families is not None:
+        monkeypatch.setitem(families._SUSPENDED, 0, True)
     monkeypatch.setitem(sys.modules, "mojolearn", parent)
     module = importlib.import_module("mojolearn._verify_recipe")
     monkeypatch.setattr(module.cb, "side_environment",

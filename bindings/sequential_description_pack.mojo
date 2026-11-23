@@ -821,9 +821,14 @@ def _gated(mut mods: NativeModules, model: PythonObject, gate: PythonObject, up:
     _ = _append_code(mods, model, _CODE_MULTIPLY, Python.list(gate_end, 0, 0, 0, 0, 0))
 
 
-def sequential_compile(mut mods: NativeModules, model: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+def sequential_compile(mut mods: NativeModules, model: PythonObject, parts: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = sequential_keys()
     var b = mods.module("builtins")
+    # compile's 45 options arrive as two tuples (python/mojolearn/_x_sequence_model.py: options 0..19, 20..44;
+    # a literal tuple of more than 30 values is built through a list in the wrapper), joined once here
+    if len(parts) != 2:
+        raise Error("TypeError: compile takes its options as two tuples")
+    var options = parts[0] + parts[1]
     var loss = options[0]
     var optimizer = options[1]
     var schedule = options[9]

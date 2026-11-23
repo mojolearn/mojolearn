@@ -55,7 +55,7 @@ def test_pytorch_defaults():
     (lambda m: m.prelu(init=-1.0), "init must be a finite number greater than -1"),
     (lambda m: m.add("identity", 1), "takes no arguments"),
     (lambda m: m.add("mish", alpha=1), "takes no arguments"),
-    (lambda m: m.leaky_relu(0.1, 0.2), "too many positional arguments"),
+    (lambda m: m.leaky_relu(0.1, 0.2), "positional arguments but 3 were given"),
 ])
 def test_refusals_at_add(call, message):
     with pytest.raises(Exception, match=message):

@@ -1777,7 +1777,10 @@ class Sequential(_CheckMixin):
         >>> model = model.compile(loss="smooth_l1", beta=0.5, reduction="sum")
         >>> model = model.compile(optimizer="rmsprop", lr=0.01, schedule="cosine", T_max=20)
         """
-        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change, reduction, pos_weight, beta, blank, zero_infinity, alpha, centered, lr_decay, initial_accumulator_value, max_grad_norm, trust_clip, always_adapt, milestones, T_max, eta_min, T_0, T_mult, warmup_steps, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase, factor, patience, threshold, cooldown, min_lr, cycle_momentum), _SEQUENTIAL_CONTEXT)
+        # two tuples of at most 30 values: CPython builds a longer tuple literal through a list (BUILD_LIST and
+        # LIST_APPEND), work in the wrapper; the native UNPACK joins them (lane nn-integrate, 2026-11-23)
+        return _SEQUENTIAL_ENTRY(self, "compile", ((loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change, reduction, pos_weight, beta, blank, zero_infinity),
+                                                   (alpha, centered, lr_decay, initial_accumulator_value, max_grad_norm, trust_clip, always_adapt, milestones, T_max, eta_min, T_0, T_mult, warmup_steps, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase, factor, patience, threshold, cooldown, min_lr, cycle_momentum)), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
     def _program(self, n_features, sample=None):

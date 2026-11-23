@@ -249,6 +249,8 @@ def test_native_sequential_checkpoint_corruption_and_shape_refusal(tmp_path):
     assert_native_refusal(trace)
     shaped = Sequential(input_shape=(1, 3)).flatten().linear(1).compile()
     shaped.fit(x.reshape(10, 1, 3), y, epochs=1)
-    trace = audit_native_call(shaped.save_checkpoint, tmp_path / "shape.ckpt")
-    assert_native_refusal(trace)
-    assert "2-D inputs" in str(trace.exception)
+    # a shaped model saves whole since lane nn-integrate (2026-11-23; before, the save refused it): one native
+    # call, and the loaded copy predicts the same bits
+    audit_native_call(shaped.save_checkpoint, tmp_path / "shape.ckpt").assert_native()
+    back = Sequential.from_checkpoint(tmp_path / "shape.ckpt")
+    assert np.asarray(back.predict(x.reshape(10, 1, 3))).tobytes() == np.asarray(shaped.predict(x.reshape(10, 1, 3))).tobytes()

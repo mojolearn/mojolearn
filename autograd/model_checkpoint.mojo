@@ -315,7 +315,10 @@ def model_save_checkpoint(
         raise Error("model_save_checkpoint: requires 5 addresses, " + String(SEQ_SAVE_INTS)
                     + " integers and 9 floats plus one per layer")
     # lane nn-optim: fp may end in the schedule's NN_SCHED_ARGS words after the layers' floats
-    var n_layers = words[2] if len(words) > 2 else 0
+    # (lane nn-integrate: a version-2 description, an input_shape model, keeps its layer count after the shape slots,
+    # as _seq_record reads it; words[2] is its first sample axis)
+    var n_layers = words[SPEC2_HEADER - 1] if len(words) >= SPEC2_HEADER and words[0] == SPEC2_VERSION else (
+        words[2] if len(words) > 2 else 0)
     var table_end = len(fp)
     var sched_args = List[Float64](length=NN_SCHED_ARGS, fill=0.0)
     if len(fp) == SEQ_FIT_FLOATS + n_layers + NN_SCHED_ARGS:
