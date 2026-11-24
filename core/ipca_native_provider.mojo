@@ -98,6 +98,8 @@ struct IPCAProviderKernels[E: Exec, D: RDev, RES: Bool, X: IpcaDev](IPCANativeKe
 
     @staticmethod
     def partial(r: IPCAPartialRequest) raises -> IPCAFitResult:
+        if r.source < 0:
+            raise Error("x_decomp: IncrementalPCA partial_fit reads a host X")
         var source = _ipca_pointer(r.source)
         _ipca_dimension(r.rows)
         _ipca_dimension(r.features)
