@@ -18,6 +18,7 @@ from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.nmf import NmfArgs
+from core.fit_loop_clock import FitLoop
 from x_decomp.fa_em import FaArgs
 from x_decomp.lda_fit import LdaArgs
 
@@ -76,12 +77,15 @@ trait DecompDev:
     @staticmethod
     def ica_solve(
         px: F32Ptr, pw: F32Ptr, nc: Int, xr: Int, xc: Int, algo: Int, fun: Int, max_iter: Int, alpha: Float64,
-        tol: Float64,
+        tol: Float64, mut loop: FitLoop,
     ) raises -> Int:
+        """`loop` receives the fixed-point loop's clock (core/fit_loop_clock.mojo)."""
         ...
 
     @staticmethod
-    def nmf_solve(px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs) raises -> Int:
+    def nmf_solve(px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs,
+                  mut loop: FitLoop) raises -> Int:
+        """`loop` receives the solver loop's clock (core/fit_loop_clock.mojo)."""
         ...
 
     @staticmethod
@@ -98,7 +102,8 @@ trait DecompDev:
 
     @staticmethod
     def fa_em_main(pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int,
-                   args: FaArgs) raises -> Int:
+                   args: FaArgs, mut loop: FitLoop) raises -> Int:
+        """`loop` receives the EM loop's clock (core/fit_loop_clock.mojo)."""
         ...
 
     @staticmethod

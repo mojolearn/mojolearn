@@ -31,6 +31,7 @@ struct NmfKeys(Defaultable, Movable):
     var k_n_components_: PythonObject
     var k_n_features_in_: PythonObject
     var k_n_iter_: PythonObject
+    var k_fit_loop_: PythonObject
     var k_ndarray: PythonObject
     var k_nmf_bindings: PythonObject
     var k_nmf_cpu_bindings: PythonObject
@@ -61,6 +62,7 @@ struct NmfKeys(Defaultable, Movable):
         self.k_n_components_ = PythonObject(None)
         self.k_n_features_in_ = PythonObject(None)
         self.k_n_iter_ = PythonObject(None)
+        self.k_fit_loop_ = PythonObject(None)
         self.k_ndarray = PythonObject(None)
         self.k_nmf_bindings = PythonObject(None)
         self.k_nmf_cpu_bindings = PythonObject(None)
@@ -95,6 +97,7 @@ def _nmf_keys_fill(nk: UnsafePointer[NmfKeys, MutUntrackedOrigin]) raises:
     nk[].k_n_components_ = py_key("n_components_")
     nk[].k_n_features_in_ = py_key("n_features_in_")
     nk[].k_n_iter_ = py_key("n_iter_")
+    nk[].k_fit_loop_ = py_key("fit_loop_")
     nk[].k_ndarray = py_key("ndarray")
     nk[].k_nmf_bindings = py_key("nmf_bindings")
     nk[].k_nmf_cpu_bindings = py_key("nmf_cpu_bindings")

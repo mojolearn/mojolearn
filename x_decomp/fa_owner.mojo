@@ -19,6 +19,7 @@ from x_decomp.api import qr_r_run
 from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.fa_em import FaArgs, dsum_f32_run, fa_em_main_check
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.decomp_owner_kit import (
     DecompDev, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, OP_SUB,
@@ -125,11 +126,14 @@ def _gram_loop[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 def fa_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     x: F32Ptr, n: Int, d: Int, nc: Int, max_iter: Int, tol: Float64, psi0: F32Ptr, rotation: Int,
     components_out: F32Ptr, psi_out: F32Ptr, mean_out: F32Ptr, ll_out: MutPointer[Float64, MutAnyOrigin],
+    loop_word: Int = 0,
 ) raises -> Int:
     """`FactorAnalysis.fit`: rotation 0 None, 1 varimax, 2 quartimax; psi0
     the initial noise variances (d). Writes components (nc x d), noise
     variances (d), mean (d) and the log-likelihoods (ll_out, at least
-    max(max_iter, 1) words). Returns n_iter_ (0: no component was fitted)."""
+    max(max_iter, 1) words). Returns n_iter_ (0: no component was fitted).
+    `loop_word`: when nonzero, the host address of one Int that receives the
+    EM loop's nanoseconds (`fit_loop_`, core/fit_loop_clock.mojo)."""
     var llconst = fa_llconst(d, nc)
     var kit = RKit[E, D, RES]()
     try:
@@ -143,6 +147,7 @@ def fa_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         var flags = X.fa_flags()
         var w = -1
         var it = 0
+        var loop = FitLoop.empty()
         if (flags & 3) != 0 and d <= _FA_MAX_D and nc >= 1 and nc <= d and max_iter >= 1:
             # `_fit_fast`: the Gram once on the device
             var gram = kit.device_output(2 * d if (flags & 8) != 0 else d, d)
@@ -158,12 +163,19 @@ def fa_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
                 var pp = kit.ptr(pa)
                 var src = kit.ptr(p0)
                 _ = p0  # keep the Python object alive through the native call above
+                # the Apple FAST define path: the clock brackets the one EM call
+                # (its psi upload and W / psi readback are a few d-sized words)
+                var loop_start = fit_loop_start()
                 it = X.fa_em(kit.mats[gram].dev, src, pw, pp, ll_out, d, nc, n, max_iter, tol)
+                loop = fit_loop_stop(loop_start, it)
                 _ = p0  # keep the Python object alive through the native call above
                 w = wa
                 psi = pa
             else:
+                # the Apple FAST define path: the clock brackets the Gram EM loop
+                var loop_start = fit_loop_start()
                 var looped = _gram_loop[E, D, RES, X](kit, gram, psi, n, d, nc, max_iter, tol, llconst, ll_out)
+                loop = fit_loop_stop(loop_start, looped[2])
                 w = looped[0]
                 psi = looped[1]
                 it = looped[2]
@@ -191,9 +203,11 @@ def fa_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             var pa = kit.ptr(a)
             var pp = kit.ptr(ps)
             var pw = kit.ptr(wm)
-            it = X.fa_em_main(pa, pp, pw, ll, rows, args)
+            it = X.fa_em_main(pa, pp, pw, ll, rows, args, loop)
             w = wm
             psi = ps
+        if loop_word != 0:
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=loop_word)[] = loop.loop_ns
         if it == 0:
             kit.close()
             return 0

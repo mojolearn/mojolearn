@@ -19,6 +19,7 @@ ZeroDivisionError; the drivers return NMF_ZERO_ERR0 and the caller raises it."""
 from x_decomp.cells import F32Ptr, add, div0, mul, sqrt0, sub
 from std.math import sqrt
 from x_decomp.exec_trait import Exec
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_ADDS, OP_AXPY, OP_DIV, OP_GTS, OP_LOGS, OP_MAXS, OP_MUL, OP_MUZ, OP_RECIP,
     OP_MINS, OP_SCALE, OP_SELECT, OP_SQ, OP_SQDIFF, OP_SQRT, mat_const, mat_eye, mat_from, mat_rows, mat_t,
@@ -136,9 +137,11 @@ def _mu_ratio[E: Exec](k: Kit[E], M: Mat, W: Mat, H: Mat, beta: Float64, mut P: 
     return k.ew2(OP_DIV, k.ew2(OP_DIV, M, WH), WH)
 
 
-def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
+def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs, mut loop: FitLoop) raises -> Int:
     """`NMF._mu` (and `_mu_beta` for beta 1 / 0). Returns the iteration
-    count, or NMF_ZERO_ERR0."""
+    count, or NMF_ZERO_ERR0. `loop` receives the update loop's clock
+    (core/fit_loop_clock.mojo: read once before the first update and once
+    after the last)."""
     var k = Kit[E]()
     var beta = a.beta
     var err0 = nmf_err(k, M, W, H, beta)
@@ -148,6 +151,7 @@ def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
     var one = mat_const(1.0, 1, 1)
     # TOMBSTONE: MOJOLEARN_CLASSICAL_C26_PRODUCTS (its use here: the fixed-H products computed once) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at e46341292a.
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C26_PRODUCTS.expdel2-17-decomposition.patch.
+    var loop_start = fit_loop_start()
     for i in range(1, a.max_iter + 1):
         it = i
         if beta == 2.0:
@@ -213,6 +217,7 @@ def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
             if nmf_mu_stop_f32(prev, err, err0, Float32(a.tol)):
                 break
             prev = err
+    loop = fit_loop_stop(loop_start, it)
     return it
 
 
@@ -239,14 +244,16 @@ def _cd_side[E: Exec](k: Kit[E], M: Mat, mut W: Mat, Ht: Mat, l1: Float64, l2: F
     return k.cd_rows(W, HHt, XHt, perm)
 
 
-def nmf_cd[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
-    """`NMF._cd`: W and (update_H) H replaced. Returns the iteration count."""
+def nmf_cd[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs, mut loop: FitLoop) raises -> Int:
+    """`NMF._cd`: W and (update_H) H replaced. Returns the iteration count;
+    `loop` receives the sweep loop's clock."""
     var k = Kit[E]()
     var draws = 0
     var Ht = mat_t(H)
     var v_init = Float32(0)
     var have_init = False
     var it = 0
+    var loop_start = fit_loop_start()
     for i in range(1, a.max_iter + 1):
         it = i
         var perm = _perm(k, W.c, a, draws)
@@ -259,6 +266,7 @@ def nmf_cd[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
             have_init = True
         if nmf_cd_stop_f32(viol, v_init, Float32(a.tol)):
             break
+    loop = fit_loop_stop(loop_start, it)
     if a.update_h:
         H = mat_t(Ht)
     return it
@@ -273,11 +281,12 @@ def nmf_args_checked(beta: Float64, update_h: Bool, max_iter: Int, tol: Float64,
 
 
 def nmf_solve_run[E: Exec](
-    px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs
+    px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs, mut loop: FitLoop
 ) raises -> Int:
     """`NMF._cd` (solver 0) / `_mu` over x (n x d): w (n x nc) and h (nc x d)
     replaced in place (h only when update_H). Returns the iteration count, or
-    NMF_ZERO_ERR0 (the caller raises ZeroDivisionError)."""
+    NMF_ZERO_ERR0 (the caller raises ZeroDivisionError); `loop` receives the
+    solver loop's clock (the host column: no device to wait on)."""
     if n * d > 2147483647 or n * nc > 2147483647 or nc * d > 2147483647:
         raise Error("x_decomp: nmf shape out of range")
     if solver == 0 and a.beta != 2.0:
@@ -287,9 +296,9 @@ def nmf_solve_run[E: Exec](
     var W = mat_from(pw, n, nc)
     var H = mat_from(ph, nc, d)
     if solver == 0:
-        it = nmf_cd[E](X, W, H, a)
+        it = nmf_cd[E](X, W, H, a, loop)
     else:
-        it = nmf_mu[E](X, W, H, a)
+        it = nmf_mu[E](X, W, H, a, loop)
     for i in range(n * nc):
         pw.unsafe_store(i, W.d[i])
     for i in range(nc * d):

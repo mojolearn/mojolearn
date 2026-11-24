@@ -254,7 +254,7 @@ CUSTOM_OPS = [
      ("n", "int"), ("m", "int"), ("k", "int"), ("c", "int")]),
     ("lp_iterate",
      [("g", "fin", "n * n"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"), ("unlabeled", "iin", "n"),
-      ("info", "iout", "2"), ("n", "int"), ("c", "int"), ("max_iter", "int"), ("variant", "int"),
+      ("info", "iout", "4"), ("n", "int"), ("c", "int"), ("max_iter", "int"), ("variant", "int"),
       ("tol_hi", "int"), ("tol_lo", "int"), ("alpha", "float")]),
     ("pr_iterate",
      [("q", "fin", "n * n"), ("x", "finout", "n"), ("p", "fin", "n"), ("dw", "fin", "n"), ("dangling", "iin", "n"),
@@ -317,7 +317,7 @@ CUSTOM_OPS = [
     # lp_knn_graph) resident on the device (MOJOLEARN_LP_FAST_RESIDENT=1)
     ("lp_iterate_knn",
      [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"),
-      ("unlabeled", "iin", "n"), ("info", "iout", "2"), ("n", "int"), ("k", "int"), ("c", "int"), ("max_iter", "int"),
+      ("unlabeled", "iin", "n"), ("info", "iout", "4"), ("n", "int"), ("k", "int"), ("c", "int"), ("max_iter", "int"),
       ("variant", "int"), ("tol_hi", "int"), ("tol_lo", "int"), ("alpha", "float")]),
 ]
 

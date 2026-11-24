@@ -10,6 +10,7 @@
 # CPU image for `device="cpu"`), the GIL released; PACK stores the fitted
 # fields. No Python parameter list and no Python-callable driver entry.
 from std.python import Python, PythonObject
+from core.fit_loop_clock import FitLoop
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from std.python._cpython import GILReleased
@@ -69,8 +70,11 @@ def fa_fit(model: PythonObject, source: PythonObject, context: PythonObject) rai
     var code = 0
     if rotation is not None:
         code = 1 if decomp_eq(rotation, PythonObject("varimax")) else 2
+    # the EM loop's nanoseconds (`fit_loop_`)
+    var loop_ns = List[Int](length=1, fill=0)
     var request = FAFitRequest(_address(x), _address(psi0), _address(components), _address(psi), _address(mean),
-                               Int(ll.unsafe_ptr()), n, d, nc, max_iter, code, decomp_float(fields["tol"]))
+                               Int(ll.unsafe_ptr()), n, d, nc, max_iter, code, decomp_float(fields["tol"]),
+                               Int(loop_ns.unsafe_ptr()))
     var it = 0
     with GILReleased(Python()):
         it = fa_fit_call(entry, request)
@@ -101,6 +105,9 @@ def fa_fit(model: PythonObject, source: PythonObject, context: PythonObject) rai
     py_setitem(fields, "mean_", mean)
     py_setitem(fields, "loglike_", loglike)
     py_setitem(fields, "n_iter_", PythonObject(it))
+    # `fit_loop_`: (n_iter_, the EM loop's milliseconds), Mojo values packed once per fit
+    var loop = FitLoop(it, loop_ns[0], True)
+    py_setitem(fields, "fit_loop_", Python.tuple(PythonObject(loop.iterations), PythonObject(loop.milliseconds())))
     _ = mean  # keep the Python object alive through the native call above
     _ = psi  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above

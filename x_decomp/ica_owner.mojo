@@ -12,6 +12,7 @@ from std.math import sqrt
 
 from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
+from core.fit_loop_clock import FitLoop
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.decomp_owner_kit import (
     DecompDev, OP_ADD, OP_DIV, OP_MAXS, OP_MUL, OP_SCALE, OP_SQDIFF, OP_SQRT, OP_SUB,
@@ -29,12 +30,14 @@ def ica_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     x: F32Ptr, n: Int, d: Int, nc: Int, whiten: Int, winit: F32Ptr, has_winit: Bool, seed: Int,
     algo: Int, fun: Int, max_iter: Int, alpha: Float64, tol: Float64, project: Bool,
     components_out: F32Ptr, mixing_out: F32Ptr, whitening_out: F32Ptr, mean_out: F32Ptr, sources_out: F32Ptr,
+    loop_word: Int = 0,
 ) raises -> Int:
     """`_fit(X, project)`. whiten: 0 False, 1 'unit-variance', 2
     'arbitrary-variance'. Writes components (nc x d, or the unmixing matrix
     without whitening), mixing (its pseudo-inverse), whitening (nc x d) and
     mean (d) when whitening, and with `project` the sources (n x nc).
-    Returns n_iter_."""
+    Returns n_iter_. `loop_word`: when nonzero, the host address of one Int
+    that receives the fixed-point loop's nanoseconds (`fit_loop_`)."""
     var kit = RKit[E, D, RES]()
     try:
         var m = kit.add(Int(x), -1, n, d)
@@ -69,7 +72,10 @@ def ica_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             w_init = kit.add(Int(winit), -1, nc, nc)
         # `_solve`: W = Winit.copy(), solved in place on X1's host words
         var w = kit.copy_host(w_init)
-        var it = X.ica_solve(kit.ptr(x1), kit.ptr(w), nc, kit.r(x1), kit.c(x1), algo, fun, max_iter, alpha, tol)
+        var loop = FitLoop.empty()
+        var it = X.ica_solve(kit.ptr(x1), kit.ptr(w), nc, kit.r(x1), kit.c(x1), algo, fun, max_iter, alpha, tol, loop)
+        if loop_word != 0:
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=loop_word)[] = loop.loop_ns
         var s: Int
         var comp: Int
         if whiten != 0:

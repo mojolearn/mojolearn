@@ -272,7 +272,7 @@ def lp_fit(est, X, y):
         ystatic = ys
     if isinstance(G, tuple):
         cols, vals, _ = G
-        info = empty((2,), "<i4")
+        info = empty((4,), "<i4")  # n_iter_, converged, the loop nanoseconds' two words
         tol_bits = struct.unpack("<Q", struct.pack("<d", float(est.tol)))[0]
         est._op("lp_iterate_knn", [(cols, 0), (vals, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
                 (n, cols.shape[1], C, int(est.max_iter), 0 if est._variant == "propagation" else 1,
@@ -280,7 +280,7 @@ def lp_fit(est, X, y):
                 (_f32_scalar(est.alpha) if est._variant != "propagation" else 0.0,))
         return _finish_fit(est, X, classes, ld, n, C, int(info.tolist()[0]))
     if not isinstance(G, tuple):
-        info = empty((2,), "<i4")
+        info = empty((4,), "<i4")  # n_iter_, converged, the loop nanoseconds' two words
         tol_bits = struct.unpack("<Q", struct.pack("<d", float(est.tol)))[0]
         est._op("lp_iterate", [(G, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
                 (n, C, int(est.max_iter),

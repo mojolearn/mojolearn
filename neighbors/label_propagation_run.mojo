@@ -18,8 +18,12 @@ from neighbors.neighbors_semi_run import (
     xn_lp_knn_product_request, xn_semi_matmul_request, xn_semi_rbf_request, xn_semi_row_normalize_request,
     xn_semi_row_argmax_request, xn_lp_laplacian_request, xn_lp_col_degree_request, xn_lp_laplacian_deg_request,
     xn_lp_labels_request, xn_lp_clamp_request, xn_lp_mode, xn_lp_iterate_knn_request, xn_lp_iterate_request,
-    xn_lp_iterations, xn_lp_dense_proba_request,
+    xn_lp_iterations, xn_lp_loop_ns, xn_lp_dense_proba_request,
 )
+
+#: the loop op's int32 info words: n_iter_, converged, the loop nanoseconds'
+#: low and high halves (x_neighbors/fit_loop_words.mojo XN_LOOP_INFO_WORDS)
+comptime _LP_INFO_WORDS = 4
 
 
 def _f32_at(values: List[Float32]) -> Int:
@@ -85,13 +89,16 @@ struct LpFitRequest(Copyable, Movable):
 struct LpFitOutcome(Copyable, Movable):
     # `status`: X's deferred finite word from the graph's first operation
     # (0 = every word finite; otherwise nothing after it ran). `iterations`:
-    # the fitted `n_iter_`.
+    # the fitted `n_iter_`. `loop_ns`: the loop region's nanoseconds (the
+    # fitted `fit_loop_`, core/fit_loop_clock.mojo).
     var status: Int
     var iterations: Int
+    var loop_ns: Int
 
     def __init__(out self):
         self.status = 0
         self.iterations = 0
+        self.loop_ns = 0
 
 
 def lp_fit_run(driver: XnDriver, request: LpFitRequest) raises -> LpFitOutcome:
@@ -148,7 +155,7 @@ def lp_fit_run(driver: XnDriver, request: LpFitRequest) raises -> LpFitOutcome:
             ystatic = _f32_at(clamped)
             _ = xn_request_run(driver, xn_lp_clamp_request(_f32_at(ld), _i32_at(unlabeled), ystatic, n, nc))
         # the loop as one resident operation
-        var info = xn_scratch_i32(2)
+        var info = xn_scratch_i32(_LP_INFO_WORDS)
         if request.knn:
             _ = xn_request_run(driver, xn_lp_iterate_knn_request(_i32_at(cols), _f32_at(vals), _f32_at(ld), ystatic,
                                                                  _i32_at(unlabeled), _i32_at(info), n, k, nc,
@@ -160,6 +167,7 @@ def lp_fit_run(driver: XnDriver, request: LpFitRequest) raises -> LpFitOutcome:
                                                              xn_lp_mode(request.spreading, request.raw), request.tol,
                                                              request.alpha))
         outcome.iterations = xn_lp_iterations(_i32_at(info))
+        outcome.loop_ns = xn_lp_loop_ns(_i32_at(info))
         # `_finish_fit`: the final row normalization, then each row's first maximum
         _ = xn_request_run(driver, xn_semi_row_normalize_request(_f32_at(ld), request.final, n, nc))
         if n > 0:

@@ -10,6 +10,7 @@ log-likelihood's float32 words come home for `_dsum`, as Python read them.
 GPU binding only."""
 from std.math import inf, sqrt
 from x_decomp.cells import F32Ptr
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, dsum, fa_mask
 from x_decomp.kit import (
     OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, mat_from,
@@ -17,7 +18,12 @@ from x_decomp.kit import (
 from x_decomp.kit_device import DKit, DMat
 
 
-def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List[Float64], a: FaArgs) raises -> Int:
+def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List[Float64], a: FaArgs,
+              mut loop: FitLoop) raises -> Int:
+    # `loop`: the EM loop's clock, read after the mask uploads and before the
+    # first iteration, and after ONE synchronization behind the last
+    # iteration's last launch (a loop that ran to max_iter ends in the psi
+    # update, enqueued after that iteration's own synchronization).
     var n = a.n
     var d = a.d
     var nc = a.nc
@@ -29,6 +35,7 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
     # per fit instead of twice per EM iteration. Same words, same order.
     var keep = k.upload(fa_mask(nc, d, True))
     var drop = k.upload(fa_mask(nc, d, False))
+    var loop_start = fit_loop_start()
     for i in range(1, a.max_iter + 1):  # driver-loop: over the EM iterations
         it = i
         var sqrt_psi = k.ew1(OP_ADDS, k.ew1(OP_SQRT, psi, 0.0), FA_SMALL)
@@ -82,19 +89,23 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
         var wts = k.ew2(OP_ADD, k.ew2(OP_MUL, k.ew1(OP_MINS, s2, 1.0), keep), k.ew2(OP_MUL, s2, drop))
         var share = k.mm(wts, k.ew1(OP_SQ, Vfull, 0.0), False, False)
         psi = k.ew1(OP_MAXS, k.ew2(OP_MUL, k.ew1(OP_SQ, sqrt_psi, 0.0), share), FA_SMALL)
+    k.sync()
+    loop = fit_loop_stop(loop_start, it)
     return it
 
 
 def fa_em_main_dev_run(
-    pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int, args: FaArgs
+    pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int, args: FaArgs,
+    mut loop: FitLoop,
 ) raises -> Int:
-    """`fa_em_main_run` on the resident kit."""
+    """`fa_em_main_run` on the resident kit; `loop` receives the EM loop's
+    clock."""
     var k = DKit()
     var A = k.upload(mat_from(pa, ar, args.d))
     var P = k.upload(mat_from(pp, 1, args.d))
     var W = k.zeros(args.nc, args.d)
     var lls = List[Float64]()
-    var it = fa_em_dev(k, A, P, W, lls, args)
+    var it = fa_em_dev(k, A, P, W, lls, args, loop)
     var hp = k.get(P)
     var hw = k.get(W)
     k.sync()

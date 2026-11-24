@@ -381,6 +381,10 @@ class TSNE(NumericModeMixin):
         Kullback-Leibler divergence after optimization.
     n_iter_ : int
         Number of iterations run (always `max_iter`).
+    fit_loop_ : tuple of (int, float)
+        The number of iterations the last fit ran (gradient steps,
+        ``n_iter_``) and the time in milliseconds its iteration loop took,
+        from the start of the first iteration to the end of the last.
     learning_rate_ : float
         The learning rate used, after resolving 'auto'.
     n_features_in_ : int

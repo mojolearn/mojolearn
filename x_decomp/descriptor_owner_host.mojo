@@ -20,6 +20,7 @@ from x_decomp.descriptor_ops import xd_f32, xd_i32, xd_float
 from x_decomp.descriptor_owner_ops import (
     xd_f64, xd_word_out, xd_als_args, xd_dl_args, xd_pls_args, xd_pls_dst, xd_mcd_plan, xd_owner_common_op, I32Out,
 )
+from core.fit_loop_clock import FitLoop
 from x_decomp.descriptor_schema import (
     XD_ALS_FIT, XD_DICT_LEARNING, XD_DICT_MINIBATCH, XD_MCD, XD_CONSISTENCY_FACTOR, XD_CHI2_QUANTILE, XD_PLS_FIT,
     XD_DEV_LU_FACTOR, XD_DEV_LU_SOLVE, xd_dim,
@@ -28,8 +29,13 @@ from x_decomp.descriptor_schema import (
 
 def xd_owner_host_op(op: Int, a: List[Int], p: List[Int], floats: Int) raises -> Int:
     if op == XD_ALS_FIT:
-        return als_fit_run[HostExec](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_f64(a[3]), xd_dim(p[0]),
-                                     xd_dim(p[1]), xd_dim(p[2]), xd_als_args(p, floats))
+        # a[4]: the sweep loop's nanoseconds (`fit_loop_`), 0: not asked
+        var loop = FitLoop.empty()
+        var count = als_fit_run[HostExec](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_f64(a[3]), xd_dim(p[0]),
+                                     xd_dim(p[1]), xd_dim(p[2]), xd_als_args(p, floats), loop)
+        if a[4] != 0:
+            xd_word_out(a[4], loop.loop_ns)
+        return count
     if op == XD_DICT_LEARNING:
         var ne = 0
         var ii = dict_learning_run[HostExec](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_f64(a[3]), xd_dim(p[0]),

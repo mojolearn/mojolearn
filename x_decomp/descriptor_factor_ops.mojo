@@ -67,7 +67,8 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
         var pu = xd_f32(a[5])
         var ps = xd_f32(a[6])
         return ica_fit_run[E, D, RES, X](x, n, d, nc, p[3], winit, a[1] != 0, p[4], p[5], p[6], p[7],
-                                         xd_float(floats, 0), xd_float(floats, 1), p[8] != 0, pc, pm, pw, pu, ps)
+                                         xd_float(floats, 0), xd_float(floats, 1), p[8] != 0, pc, pm, pw, pu, ps,
+                                         a[7])
     if op == XD_ICA_PROJECT:
         var x = xd_f32(a[0])
         var n = xd_dim(p[1])
@@ -90,7 +91,7 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
         if a[5] == 0:
             raise Error("x_decomp: null float64 buffer address")
         var ll = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=a[5])
-        return fa_fit_run[E, D, RES, X](x, n, d, nc, p[3], xd_float(floats, 0), psi0, p[4], pc, ps, pm, ll)
+        return fa_fit_run[E, D, RES, X](x, n, d, nc, p[3], xd_float(floats, 0), psi0, p[4], pc, ps, pm, ll, a[6])
     if op == XD_FA_QUERY:
         var x = xd_f32(a[0])
         var n = xd_dim(p[1])

@@ -15,6 +15,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.native_ops_key_ann_unpack import ann_ops_key, decomp_pca_ops_key
 from core.neighbors_entry_table_ann import ann_ops_entry, ann_tsne_fit_call
+from core.fit_loop_clock import FitLoop
 from core.decomp_entry_table_pca import pca_ops_entry, pca_fit_owned_call
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem
@@ -205,6 +206,8 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var seed_low = Int(py=low)
     var seed_high = Int(py=high)
     var finite_flag = 1 if tsne_fit_tests_input(mode) else 0
+    # the gradient loop's nanoseconds (`fit_loop_`)
+    var loop_ns = List[Int](length=1, fill=0)
     var tested = 0
     # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, init mode,
     # random_state low, high, n_components, finite flag; perplexity,
@@ -212,7 +215,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     with GILReleased(Python()):
         tested = ann_tsne_fit_call(fit, x_address, y0_address, embedding_address, kl_address, n, d,
                                    iteration_words, exploration, perplexity, exag, lr, post_factor, mode,
-                                   seed_low, seed_high, k, finite_flag)
+                                   seed_low, seed_high, k, finite_flag, Int(loop_ns.unsafe_ptr()))
     _ = embedding  # keep the Python object alive through the native call above
     if tsne_fit_tests_input(mode):
         tsne_check_input_status(tested)
@@ -226,6 +229,9 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     py_setitem(settings.fields, nk[].k_embedding_, embedding)
     py_setitem(settings.fields, nk[].k_kl_divergence_, PythonObject(classical_word(kl)))
     py_setitem(settings.fields, nk[].k_n_iter_, max_iter)
+    # `fit_loop_`: (n_iter_, the gradient loop's milliseconds), Mojo values packed once per fit
+    var loop = FitLoop(iteration_words, loop_ns[0], True)
+    py_setitem(settings.fields, "fit_loop_", Python.tuple(PythonObject(loop.iterations), PythonObject(loop.milliseconds())))
     py_setitem(settings.fields, nk[].k_learning_rate_, PythonObject(lr))
     py_setitem(settings.fields, nk[].k_n_features_in_, PythonObject(d))
     return embedding

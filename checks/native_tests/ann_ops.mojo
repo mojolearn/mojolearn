@@ -116,7 +116,7 @@ def case_tsne_refuses_non_finite(entry: NativeDescriptorCall) raises:
     var y = List[Float32](length=8, fill=-7.0)
     var kl = List[Float32](length=1, fill=-7.0)
     var status = ann_tsne_fit_call(entry, _f(x), _f(y0), _f(y), _f(kl), 4, 2, 10, 5, 1.0, 12.0, 50.0, 1.0,
-                                   _TSNE_INIT_RANDOM, 1, 0, 2, 1)
+                                   _TSNE_INIT_RANDOM, 1, 0, 2, 1, 0)
     require(status != 0, "tsne: a NaN in X was not flagged")
     require(y[0] == -7.0 and kl[0] == -7.0, "tsne: a flagged X wrote an output")
     _ = x
