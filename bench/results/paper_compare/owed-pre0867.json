@@ -663,13 +663,15 @@
   },
   "xprep-mi-sorted-off": {
    "define": "MOJOLEARN_XPREP_FAST_MI_SORTED_OFF",
-   "status": "define in code (x_prep/device.mojo MI_SORTED): B = mutual_info without the sorted arm; A = the sorted arm, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 4.30; select-mutual-info istella fit 498 -> 18292 ms, 36.7x, taxi 7.6x); the sorted search default is unchanged; removed: the switch (mi_cd_unit stays for the host column and flagged columns); the define is refused (core/experiment_guards_base.mojo); code recoverable at 344c99c579, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_SORTED_OFF.ab-outcome-3.patch. Was: define in code (x_prep/device.mojo MI_SORTED): B = mutual_info without the sorted arm; A = the sorted arm, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-mi-ties-off": {
    "define": "MOJOLEARN_XPREP_FAST_MI_TIES_OFF",
-   "status": "define in code (x_prep/device.mojo, x_prep/dmi.mojo MI_TIES): B = mutual_info without the ties arm; A = the (x, secondary) order and searched tie runs, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 3.36; select-mutual-info istella fit 496 -> 107901 ms, 217x, taxi 5.7x); the run-search default is unchanged; removed: the switch, mi_cd_device's ties argument, _point_kernel and _count_within; the define is refused (core/experiment_guards_base.mojo); code recoverable at dfc0f84aec, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_TIES_OFF.ab-outcome-3.patch. Was: define in code (x_prep/device.mojo, x_prep/dmi.mojo MI_TIES): B = mutual_info without the ties arm; A = the (x, secondary) order and searched tie runs, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-out-off": {
    "define": "MOJOLEARN_XPREP_FAST_OUT_OFF",
@@ -679,23 +681,27 @@
   },
   "xprep-pt-interleave": {
    "define": "MOJOLEARN_XPREP_FAST_PT_INTERLEAVE",
-   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_INTERLEAVE): B = the interleaved PowerTransformer search; A = the untiled search without interleave, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): NOISE/LOSER (L40S 4 cells, median 1.02, 1.01..1.03); the contiguous default is unchanged; removed: the switch, the IL stage word and the interleaved kernel branches; the define is refused (core/experiment_guards_base.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch. Was: define in code (x_prep/prep_stateless_native_run.mojo PT_INTERLEAVE): B = the interleaved PowerTransformer search; A = the untiled search without interleave, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-pt-spec-depth-0": {
    "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=0",
-   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 0; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.02, power-transformer taxi fit 102 -> 145 ms, 1.42); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch. Was: define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 0; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-pt-spec-depth-6": {
    "define": "MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH=6",
-   "status": "define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 6; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.04, power-transformer taxi fit 103 -> 134 ms, 1.30); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch. Was: define in code (x_prep/prep_stateless_native_run.mojo PT_SPEC_DEPTH): B = speculation depth 6; A = depth 3 (the default), the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-sort-quad-off": {
    "define": "MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
-   "status": "define in code (x_prep/dsort.mojo SORT_QUAD): B = one bitonic pass per stride; A = the quad passes, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path no faster (L40S 16 cells, median 1.00, 0.95..1.02); the two-stride default is unchanged; removed: the switch (the single pass stays for the tail stride); the define is refused (core/experiment_guards_base.mojo); code recoverable at f0ddedf522, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF.ab-outcome-3.patch. Was: define in code (x_prep/dsort.mojo SORT_QUAD): B = one bitonic pass per stride; A = the quad passes, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-te-gather-off": {
    "define": "MOJOLEARN_XPREP_FAST_TE_GATHER_OFF",
@@ -4012,7 +4018,10 @@
    "b_arms": [
     "xprep-mi-sorted-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 4.30; select-mutual-info istella fit 498 -> 18292 ms, 36.7x, taxi 7.6x); the sorted search default is unchanged; removed: the switch (mi_cd_unit stays for the host column and flagged columns); the define is refused (core/experiment_guards_base.mojo); code recoverable at 344c99c579, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_SORTED_OFF.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-mi-ties-off-rows",
@@ -4028,7 +4037,10 @@
    "b_arms": [
     "xprep-mi-ties-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 3.36; select-mutual-info istella fit 496 -> 107901 ms, 217x, taxi 5.7x); the run-search default is unchanged; removed: the switch, mi_cd_device's ties argument, _point_kernel and _count_within; the define is refused (core/experiment_guards_base.mojo); code recoverable at dfc0f84aec, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_TIES_OFF.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-out-off-rows",
@@ -4068,7 +4080,10 @@
    "b_arms": [
     "xprep-pt-interleave"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): NOISE/LOSER (L40S 4 cells, median 1.02, 1.01..1.03); the contiguous default is unchanged; removed: the switch, the IL stage word and the interleaved kernel branches; the define is refused (core/experiment_guards_base.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_INTERLEAVE.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-pt-spec-depth-0-rows",
@@ -4081,7 +4096,10 @@
    "b_arms": [
     "xprep-pt-spec-depth-0"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.02, power-transformer taxi fit 102 -> 145 ms, 1.42); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-pt-spec-depth-6-rows",
@@ -4094,7 +4112,10 @@
    "b_arms": [
     "xprep-pt-spec-depth-6"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): LOSER (L40S 4 cells, median 1.04, power-transformer taxi fit 103 -> 134 ms, 1.30); the depth is the fixed constant 3 (PT_SPEC_DEPTH); removed: the valued override; the define is refused at any value (core/experiment_guards_base.mojo); code recoverable at 49fda8446c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-sort-quad-off-rows",
@@ -4113,7 +4134,10 @@
    "b_arms": [
     "xprep-sort-quad-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path no faster (L40S 16 cells, median 1.00, 0.95..1.02); the two-stride default is unchanged; removed: the switch (the single pass stays for the tail stride); the define is refused (core/experiment_guards_base.mojo); code recoverable at f0ddedf522, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-te-gather-off-rows",

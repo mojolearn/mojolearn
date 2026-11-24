@@ -28,7 +28,6 @@ order to keep: the result is the heapsort's, bit for bit, by construction.
 """
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -214,14 +213,19 @@ def sort_cols_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
     )
     var pairs = tot // 2
     var quads = tot // 4
-    # -D MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF: one pass per stride (the A/B arm; lane fx-env-dead
-    # 2026-11-18: was the run-time env read MOJOLEARN_XPREP_SORT_QUAD=0 per sort; default unchanged)
-    var quad = not is_defined["MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF"]()
+    # Two strides a pass (sort_global2_kernel) while two global strides are left; the single-pass
+    # sort_global_kernel takes the one stride left above the tile (j // 2 < TILE).
+    # Measured (A/B nvc-ab-20261124T115722Z-d8f8b2, NVIDIA L40S, wheel 4519097d380a, job nvc1-0003):
+    # one pass per stride everywhere was no faster, 16 cells (robust-scaler, quantile-transformer,
+    # kbins, select-mutual-info(-reg) on istella and taxi full), median 1.00, 0.95..1.02.
+    # AMD not measured (NVIDIA-only campaign).
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF (old path no faster: NV L40S 16 cells, median 1.00, 0.95..1.02) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at f0ddedf522.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF.ab-outcome-3.patch
     var k = 2 * TILE
     while k <= big_n:
         var j = k // 2
         while j >= TILE:
-            if quad and j // 2 >= TILE:
+            if j // 2 >= TILE:
                 ctx.enqueue_function[sort_global2_kernel](
                     w, Int32(big_n), Int32(k), Int32(j), Int32(quads), grid_dim=_blocks(quads, BS), block_dim=BS,
                 )
