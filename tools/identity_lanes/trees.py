@@ -65,7 +65,16 @@ def _(ml, X, yc, yr, Xh=None):
     """Bootstrap rows, a feature subset without replacement, proba averaging."""
     m = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=6), n_estimators=6, max_samples=0.8,
                              max_features=0.75, random_state=7).fit(X, yc)
-    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+    # lane mf-del8 (2026-11-23): six-row draws over a rare class, so several draws lack a class and are fitted on
+    # the classes they hold (THE UNIT CLASSES, core/member_unit_classes.mojo; before: the member's fit door). The
+    # part hashes the proba and every member's classes_.
+    xs = np.ascontiguousarray(X[:60], dtype=np.float32)
+    ys = np.where(xs[:, 0] > np.quantile(xs[:, 0], 0.93), 2, np.where(xs[:, 0] > 0, 1, 0)).astype(np.int64)
+    s = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=3), n_estimators=8, max_samples=6,
+                             random_state=7).fit(xs, ys)
+    held = np.concatenate([np.asarray(e.classes_, dtype=np.int64) for e in s.estimators_])
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), lacking=_h(s.predict_proba(xs)),
+                     lacking_classes=_h(held)),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
