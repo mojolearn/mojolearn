@@ -42,12 +42,12 @@ from bindings.linalg_ops_lowbit_run import (
     LIN_OP_FROM_F16, LIN_OP_LINALG_NUMERIC_MODE, LIN_OP_LINALG_PROFILE_VERSION, LIN_OP_LOWBIT_PROFILE_VERSION,
     LIN_OP_INT15_PROFILE_VERSION, LIN_OP_GEMM_DEV, LIN_OP_TO_BF16_DEV, LIN_OP_FROM_BF16_DEV, LIN_OP_QUANTIZE_INT8_DEV,
     LIN_OP_DEQUANTIZE_INT8_DEV, LIN_OP_GEMM_BF16_DEV, LIN_OP_GEMM_INT8_DEV, LIN_OP_QUANTIZE_INT15_DEV,
-    LIN_OP_DEQUANTIZE_INT15_DEV, LIN_OP_GEMM_INT15_DEV, LIN_OP_FROM_F16_DEV)
+    LIN_OP_DEQUANTIZE_INT15_DEV, LIN_OP_GEMM_INT15_DEV, LIN_OP_FROM_F16_DEV, LIN_OP_COPY_DEV)
 from bindings.linalg_dev_arrays_unpack import (
     lin_train_device, lin_is_device_array, lin_any_device_array, lin_dev_device, lin_dev_entries, lin_dev_operand,
     lin_dev_out, lin_dev_new, lin_dev_handle, lin_dev_dtype, LinDevOperand,
 )
-from core.train_dev_pool import TRAIN_DEV_F32, TRAIN_DEV_I8, TRAIN_DEV_I32, TRAIN_DEV_U16
+from core.train_dev_pool import TRAIN_DEV_F32, TRAIN_DEV_I8, TRAIN_DEV_I32, TRAIN_DEV_U16, train_dev_itemsize, train_dev_words
 from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_typed_output, admitted_unfilled, admit_typed, admitted_shape_tuple
 from bindings.linalg_keys_unpack import linalg_keys
 from bindings.py_balanced import py_item
@@ -979,6 +979,20 @@ def lin_dev_quantize_int8(x: PythonObject, binding: PythonObject, held: PythonOb
     var entries = lin_dev_entries(x, held)
     var a = lin_dev_operand(x, "x", "quantize_int8", entries, held, TRAIN_DEV_F32, 2)
     return _lin_quantize_int8_dev(binding, a, entries, held, context)
+
+
+def lin_dev_copy(value: PythonObject, dtype: Int, name: String, binding: PythonObject, held: PythonObject,
+                 context: PythonObject) raises -> PythonObject:
+    """A fresh TrainDeviceArray holding a copy of device array `value` (storage dtype `dtype`, any rank), device to
+    device (op 29, gemm/linalg_dev_arrays.mojo `copy_dev_native`; lane vdf-linalg6): what lowbit's pack_one(...,
+    'float32') and a same-format repack return for device arrays, as the host path returns a copy."""
+    var entries = lin_dev_entries(value, held)
+    var a = lin_dev_operand(value, name, "copy", entries, held, dtype, 0)
+    var out = lin_dev_new(entries, held, a.shape, dtype)
+    _ = lin_lowbit(binding, context)
+    _ = lin_call(context, LIN_OP_COPY_DEV, [a.handle, lin_dev_handle(out)],
+                 [train_dev_words(a.count(), train_dev_itemsize(dtype))])
+    return out
 
 
 def lin_dev_dequantize_int8(codes: PythonObject, exponents: PythonObject, binding: PythonObject, held: PythonObject,

@@ -10,11 +10,12 @@ from gemm.linalg_dev_arrays import (
     gemm_dev_native, to_bf16_dev_native, from_bf16_dev_native, quantize_int8_dev_native, dequantize_int8_dev_native,
     gemm_bf16_dev_native, gemm_int8_dev_native, quantize_int15_dev_native, dequantize_int15_dev_native,
     gemm_int15_dev_native, from_f16_dev_native, svdvals_dev_native, qr_r_dev_native,
+    copy_dev_native,
 )
 from core.shared_slot import SharedSlot
 
 comptime LINALG_NATIVE_ABI_NAME = "mojolearn.linalg.v1"
-comptime LINALG_NATIVE_OPERATION_COUNT = 29
+comptime LINALG_NATIVE_OPERATION_COUNT = 30
 
 
 def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
@@ -134,6 +135,11 @@ def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
         if len(a) != 2:
             raise Error("linalg native ABI: invalid qr_r_dev handle count")
         return qr_r_dev_native(a[0], a[1], p)
+    if op == 29:
+        # lane vdf-linalg6: a device array's words into a fresh one: handles (src, dst), params (words,).
+        if len(a) != 2:
+            raise Error("linalg native ABI: invalid copy_dev handle count")
+        return copy_dev_native(a[0], a[1], p)
     raise Error("linalg native ABI: unknown operation")
 
 

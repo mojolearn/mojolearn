@@ -41,6 +41,8 @@ comptime LIN_OP_GEMM_INT15_DEV = 25
 comptime LIN_OP_FROM_F16_DEV = 26
 comptime LIN_OP_SVDVALS_DEV = 27
 comptime LIN_OP_QR_R_DEV = 28
+# lane vdf-linalg6: a device array's storage words into a fresh device array (pack_one 'float32', same-format repack).
+comptime LIN_OP_COPY_DEV = 29
 # The operation count the door admits (gemm/linalg_dispatch.mojo
 # LINALG_NATIVE_OPERATION_COUNT).
-comptime LIN_OPERATION_COUNT = 29
+comptime LIN_OPERATION_COUNT = 30

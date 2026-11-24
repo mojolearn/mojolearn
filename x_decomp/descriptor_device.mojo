@@ -23,6 +23,7 @@ from x_decomp.select_dev import (
     dev_reduce_run, dev_order_f_run, dev_argmin_all_run, dev_select_smallest_run, dev_order_small_run,
 )
 from x_decomp.resident_qr import dev_geqrf_run, dev_orgqr_run, dev_triu_run
+from x_decomp.resident_train import dev_from_train_run, dev_to_train_run, dev_tsqr_r_run, dev_tsqr_q_run
 from x_decomp.qfix import LU_QFIX, TSVD_QFIX, lu_resid_run
 from x_decomp.s_linalg_fast import s_flags_run
 from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op, xd_f32, xd_float, xd_i32
@@ -35,6 +36,7 @@ from x_decomp.descriptor_schema import (
     XD_LU_RESID, XD_S_FLAGS, XD_QFIX_FLAGS, XD_DEV_RAND, XD_DEV_ABSMAX, XD_DEV_LU, XD_DEV_LU_AUX,
     XD_DEV_CODE_ROWS, XD_DEV_EIGH_TO, XD_DEV_ARGMIN_ALL, XD_DEV_SELECT_SMALLEST,
     XD_DEV_GEQRF, XD_DEV_ORGQR, XD_DEV_TRIU,
+    XD_DEV_FROM_TRAIN, XD_DEV_TO_TRAIN, XD_DEV_TSQR_R, XD_DEV_TSQR_Q,
     xd_validate_call, xd_dim,
 )
 from x_decomp.descriptor_owner_ops import xd_is_owner_op
@@ -144,6 +146,31 @@ def xd_resident_op(op: Int, p: List[Int], floats: Int, a: List[Int]) raises -> I
     if op == XD_DEV_TRIU:
         # p = [h, dst, r, c]
         return dev_triu_run(p[0], p[1], xd_dim(p[2]), xd_dim(p[3]))
+    if op == XD_DEV_FROM_TRAIN:
+        # lane vdf-linalg6: p = [train handle, dst id, n]
+        return dev_from_train_run(p[0], p[1], xd_dim(p[2]))
+    if op == XD_DEV_TO_TRAIN:
+        # p = [src id, train handle, n]
+        return dev_to_train_run(p[0], p[1], xd_dim(p[2]))
+    if op == XD_DEV_TSQR_R:
+        # a = [r], p = [x id, rows, cols, keep]
+        return dev_tsqr_r_run(p[0], xd_f32(a[0]), xd_dim(p[1]), xd_dim(p[2]), p[3] != 0)
+    if op == XD_DEV_TSQR_Q:
+        # a = [c, read when c id < 0], p = [owner, c id, q id, m, n, k]; the owner is freed on every path
+        var qm = 0
+        var qn = 0
+        var qk = 0
+        try:
+            qm = xd_dim(p[3])
+            qn = xd_dim(p[4])
+            qk = xd_dim(p[5])
+            if p[1] < 0 and a[0] == 0:
+                raise Error("x_decomp: null float32 buffer address")
+        except e:
+            _ = dev_tsqr_q_run(p[0], -1, F32Ptr(unsafe_from_address=0), -1, 0, 0, 0)
+            raise e^
+        var pc = F32Ptr(unsafe_from_address=a[0]) if p[1] < 0 else F32Ptr(unsafe_from_address=0)
+        return dev_tsqr_q_run(p[0], p[1], pc, p[2], qm, qn, qk)
     # lane calltable-prep-decomp (2026-11-11): the kit's remaining resident
     # doors (x_decomp_resident_pyapi.mojo, x_decomp_select_dev_pyapi.mojo),
     # compiled in exactly where the binding registers the door.

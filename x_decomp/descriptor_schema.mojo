@@ -149,8 +149,15 @@ comptime XD_RP_PROJECT = 80       # a: [x, matrix, dst] i: [m, d, rows, tiled (0
 comptime XD_DEV_GEQRF = 81        # i: [a, h, tau, rows, cols]           -> min(rows, cols)
 comptime XD_DEV_ORGQR = 82        # i: [h, tau, q, rows, cols, k, qc]
 comptime XD_DEV_TRIU = 83         # i: [h, dst, r, c]   (dst r x c: the first r rows of h, below the diagonal zero)
+# lane vdf-linalg6 (2026-11-24): a training device array (core/train_dev_pool.mojo handle) into the pool and back,
+# device to device, and the TSQR on pool ids (x_decomp/resident_train.mojo), so linalg.eigh / qr / svd read a
+# TrainDeviceArray in place on the host input's route. GPU image only (identical); the host image refuses them.
+comptime XD_DEV_FROM_TRAIN = 84   # i: [train handle, dst id, n]
+comptime XD_DEV_TO_TRAIN = 85     # i: [src id, train handle, n]
+comptime XD_DEV_TSQR_R = 86       # a: [r] i: [x id, rows, cols, keep]  -> the owner handle with keep, else cols
+comptime XD_DEV_TSQR_Q = 87       # a: [c (read when c id < 0)] i: [owner, c id (-1: host c), q id, m, n, k]  (frees the owner)
 # lane entangled-mkit (2026-11-12): the manifold kit's operations 120 ..
-# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 83) (x_decomp/descriptor_mani_schema.mojo).
+# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 87) (x_decomp/descriptor_mani_schema.mojo).
 comptime XD_OPERATION_COUNT = XD_MANI_OPERATION_END
 
 comptime XD_CAP_HOST = 1       # the host-address operations
@@ -297,6 +304,12 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (0, 7, 0)
     if op == XD_DEV_TRIU:
         return (0, 4, 0)
+    if op == XD_DEV_FROM_TRAIN or op == XD_DEV_TO_TRAIN:
+        return (0, 3, 0)
+    if op == XD_DEV_TSQR_R:
+        return (1, 4, 0)
+    if op == XD_DEV_TSQR_Q:
+        return (1, 6, 0)
     if op == XD_TSQR_Q:
         return (2, 4, 0)
     if op == XD_R_SIGNS:

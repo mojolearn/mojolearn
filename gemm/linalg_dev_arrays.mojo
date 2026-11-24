@@ -390,6 +390,27 @@ def svdvals_dev_native(a_h: Int, s_h: Int, params: List[Int]) raises -> Int:
     return n_cols
 
 
+def copy_dev_native(src_h: Int, dst_h: Int, params: List[Int]) raises -> Int:
+    """A device array's storage words into a fresh one, device to device (lane vdf-linalg6): handle dst_h gets
+    handle src_h's first `words` float32 words (params (words,)), whatever the storage dtype they pack. The copy that
+    `lowbit.pack_one(..., 'float32')` and a same-format repack of a device packed weight return, as the host path
+    returns a copy (no aliasing of the caller's array). Returns words."""
+    lin_dev_ready("copy")
+    if len(params) != 1:
+        raise Error("copy: params must contain 1 value (words), got " + String(len(params)))
+    var words = params[0]
+    if words < 1:
+        raise Error("copy: words must be >= 1, got " + String(words))
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var src = train_dev_view(ctx, src_h, words, "the source")
+    var dst = train_dev_view(ctx, dst_h, words, "the copy")
+    ctx.enqueue_copy(dst_buf=dst, src_buf=src)
+    ctx.synchronize()
+    _ = src^
+    _ = dst^
+    return words
+
+
 def qr_r_dev_native(a_h: Int, r_h: Int, params: List[Int]) raises -> Int:
     """`qr(mode='r')` of a tall operand on device arrays: handle r_h (n_cols x n_cols float32, written) of handle a_h
     (n_rows x n_cols); params (n_rows, n_cols) as the `qr_r` entry; `qr_factor` with the scratch `qr_slice_count`
