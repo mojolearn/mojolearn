@@ -639,6 +639,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EM_LOOP_CHECK_EVERY.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_EM_LOOP_CHECK_EVERY"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the pinned EM read interval lost or was noise against the work rule (em-check-1: 7 cells, median 1.00, 0.99..1.02; em-check-8: 3 cells, median 1.02, gmm taxi 300000 24.79 -> 27.74 ms); the cost rule em_loop_check_every is the only form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EM_LOOP_CHECK_EVERY.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2
+    # ---- lane ab-outcome-3 / o3-decomp (2026-11-24)
+    # TOMBSTONE: MOJOLEARN_XC_SQDIST_TILED_OFF (old path no faster: NV L40S 10 cells, median 1.00, 0.98..1.07) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at 8e05d20993.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XC_SQDIST_TILED_OFF.ab-outcome-3.patch
+    comptime assert not is_defined["MOJOLEARN_XC_SQDIST_TILED_OFF"](), "removed 2026-11-24 (lane/o3-decomp of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, one run per arm): XC_SQDIST_TILED_OFF (the per-cell _sqdist_kernel forced where the tiled kernel's page fits) was no faster: 10 cells, median 1.00, 0.98..1.07; the tiled kernel stays the default where its page fits (the per-cell kernel stays where it does not); code at 8e05d20993; see docs/TOMBSTONES.md"
+    # ---- end lane ab-outcome-3 / o3-decomp
     return True
 
 
