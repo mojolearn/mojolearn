@@ -261,3 +261,30 @@ def test_a_stale_endpoint_reference_reads_owed_on_every_vendor(monkeypatch,vendo
     clean['sources']['neural']='fixture'
     result=api.verify(self_test=False,reference=reference)
     assert result['status']==('MATCH' if vendor=='cuda' else 'UNTESTED') and not result['errors']
+
+
+@pytest.mark.parametrize('cpu_only',[True,False])
+def test_device_only_endpoints_are_not_applicable_only_where_the_build_declares_no_device(monkeypatch,cpu_only):
+    # w3f5-e (2026-11-24): the CPU self-test listed the optimizers' device I/O, Embedding.to_device and
+    # every ParallelByteLanguageModelTrainer method as execution failures. A build that declares no device
+    # (runtime_report cpu_only) records them 'not applicable' without running them; a device build runs them.
+    import mojolearn
+    device,host='mojolearn.Adam.grads_to_device','mojolearn.Adam.state_dict'
+    ran=[]
+    module=SimpleNamespace(optimizer_checks=lambda recorder,public,methods:[ran.append(m) or recorder.check(
+        public+'.'+m,lambda:1.0) for m in methods])
+    routes={e:('optimizers',module,'mojolearn.Adam',e.rsplit('.',1)[1]) for e in (device,host)}
+    monkeypatch.setattr(api,'registry',lambda:routes)
+    monkeypatch.setattr(mojolearn,'runtime_report',lambda:{'cpu_only':cpu_only,'vendor':'cpu' if cpu_only
+        else 'cuda','default_mode':'identical'})
+    report=api.capture(endpoints=[device,host],artifacts=[])
+    assert report['endpoints'][host]['status']=='captured' and not report['pending']
+    if cpu_only:
+        assert ran==['state_dict'] and report['endpoints'][device]['status']=='not applicable'
+    else:
+        assert sorted(ran)==['grads_to_device','state_dict'] and report['endpoints'][device]['status']=='captured'
+    assert api.device_only('optimizers','mojolearn.SGD','step_device')
+    assert api.device_only('training','mojolearn.ParallelByteLanguageModelTrainer','checkpoint')
+    assert api.device_only('neural','mojolearn.Embedding','to_device')
+    assert not api.device_only('neural','mojolearn.LayerNorm','to_device')
+    assert not api.device_only('metadata','mojolearn.ParallelByteLanguageModelTrainer','get_params')
