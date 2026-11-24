@@ -1107,24 +1107,27 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     mf-msel5b: the result the RUN wrote at every row, `placed`; or a
     classifier's decoded labels, `placed` False, which the caller places).
     y=None (lane mf-msel5b): an unsupervised base, fitted without a target
-    and scored by its own score. None: the kind did not take it (nothing
-    was fitted; the caller's units run and raise their own words)."""
+    and scored by its own score. Never None (lane mf-r9b): a base, scorer
+    or data the kind does not fit is refused natively before any fit, in
+    the words of whoever refuses it (bindings/msel_member_units_door.mojo
+    THE REFUSAL RULE), so every cv tool is this RUN and no unit route is
+    left beside it. The callers hand X and y their own door already
+    materialized (`msel_cv_folds`, `msel_prepare_folds`) and at least one
+    fold (`msel_checked_folds`; learning_curve refuses empty train sizes
+    first): the reads below raise their own words, never a fallback."""
     if len(folds) == 0:
-        return PythonObject(None)
+        raise Error("RuntimeError: cv tool invariant: the door handed the search kind no fold"
+                    + " (msel_checked_folds refuses an empty split)")
     var b = msel_b()
-    var xa = PythonObject(None)
     var ya = PythonObject(None)
     # A TEXT 2-D y (lane mf-tail5b) is no Array: the kind's UNPACK reads its
     # rows once, per output (bindings/msel_member_units_door.mojo).
     var text_y = y_in is not None and msel_text_rows(y_in, context, b)
-    try:
-        xa = msel_materialize(x_in, "X", context)
-        if text_y:
-            ya = y_in
-        elif y_in is not None:
-            ya = msel_materialize_y(y_in, context)
-    except:
-        return PythonObject(None)
+    var xa = msel_materialize(x_in, "X", context)
+    if text_y:
+        ya = y_in
+    elif y_in is not None:
+        ya = msel_materialize_y(y_in, context)
     # THE RESULT BUFFER's shape words (lane mf-msel5b): the target's outputs
     # (0: a 1-D y) and the rows; the kind's UNPACK places the Array in `holder`.
     var outputs = 0
@@ -1157,20 +1160,18 @@ def msel_cv_by_search(estimator: PythonObject, x_in: PythonObject, y_in: PythonO
     if (msel_device_rows_ok(estimator, scoring, context) and not msel_member_host_folds(fields, b, context)
             and member_scope_word(context["family_msel_rows_context"]) == MEMBER_SCOPE_NONE):
         scope = msel_rows_scope_open(context)
-    var fitted = False
     try:
-        fitted = msel_member_fit_in_place(search, ya, xa, context, b)
+        _ = msel_member_fit_in_place(search, ya, xa, context, b)  # raises every refusal (THE REFUSAL RULE)
     finally:
         if scope is not None:
             msel_rows_scope_close(scope, context)
-    if not fitted:
-        return PythonObject(None)
     var state = msel_search_fields(search, context)
     var results = py_get(state, "cv_results_")
     var tool = py_get(state, "_msel_cv_result")
     var splits = py_get(state, "n_splits_")
     if results is None or tool is None or splits is None:
-        return PythonObject(None)
+        raise Error("RuntimeError: cv tool invariant: the search kind's PACK wrote no cv_results_, n_splits_"
+                    + " or _msel_cv_result")
     var k = Int(py=splits)
     var out = Python.dict()
     var name_list = Python.list()
@@ -1244,7 +1245,7 @@ def msel_cross_validate(args: PythonObject, context: PythonObject) raises -> Pyt
     return_train_score, return_estimator, return_indices, error_score)`."""
     var estimator = args[0]
     var error_score = args[10]
-    var jobs = msel_unit_jobs(args[6], error_score, "cross_validate", context)
+    _ = msel_unit_jobs(args[6], error_score, "cross_validate", context)  # n_jobs and error_score words, first
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
@@ -1258,20 +1259,12 @@ def msel_cross_validate(args: PythonObject, context: PythonObject) raises -> Pyt
     var ri = msel_flag_truth(args[9], context)
     # THE ONE TYPED SEARCH RUN (lane mf-msel5, `msel_cv_by_search`): the
     # folds above fitted and scored as one candidate's units, with the
-    # units' times, kept estimators and rows; the units below only for what
-    # the kind does not take (THE FALLBACK RULE).
+    # units' times, kept estimators and rows. Lane mf-r9b: the only route;
+    # what the kind does not fit is refused there in its words (the units
+    # route that ran beside it is gone).
     var by = msel_cv_by_search(estimator, x, y, folds, scoring, args[6], error_score, rt, re, PythonObject(None), ri,
                                context)
-    if by is not None:
-        return _tool_scores_dict(by, rt, re, ri, context)
-    var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
-    var result = PythonObject(None)
-    try:
-        var scores = msel_cross_validate_run(estimator, y, rows, scoring, rt, re, ri, error_score, context, jobs)
-        result = msel_scores_dict(scores, rt, re, ri, context)
-    finally:
-        rows.close(context)
-    return result
+    return _tool_scores_dict(by, rt, re, ri, context)
 
 
 # ---------------------------------------------------------------- cross_val_score
