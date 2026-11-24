@@ -368,6 +368,7 @@ from gbdt.targets.kernel.query_rmse import (
     make_querywise_target_buffers,
 )
 from gbdt.gpu_data.kernel.query_helper import launch_inverse_permutation
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 
 
 
@@ -732,6 +733,9 @@ struct FitResult(Movable):
     #: given: empty, or the one entry whose `assemble` builds the model's
     #: tree-CTR section)
     var tree_ctr: List[TreeCtrFit]
+    #: the boosting loop's executed rounds and its time (the estimator's
+    #: `fit_loop_`, core/fit_loop_clock.mojo; lane ab-loop-mode)
+    var fit_loop: FitLoop
 
 
 @fieldwise_init
@@ -4574,6 +4578,13 @@ def fit_with_test(
         leaf_estimation_method, approx_dim, not device_plan.single(),
         n_estimators, need_estimation, len(tree_ctr) == 1,
     )
+    # `fit_loop_` (lane ab-loop-mode, core/fit_loop_clock.mojo): the trees
+    # the model held before the first round, and the clock read once
+    # immediately before the first round's first launch (after the seeds,
+    # plan and allocation). Nothing is read inside the loop; one drain after
+    # the last tree's last launch ends it (below).
+    var fit_loop_trees_before = model.size()
+    var fit_loop_t0 = 0
     if device_rounds:
         # the host loop's one `noise_rand` draw per tree, in tree order (a
         # serial RNG chain: each draw is the previous state's successor)
@@ -4583,6 +4594,7 @@ def fit_with_test(
         var needs_mags = False
         comptime if _needs_magnitudes:
             needs_mags = True
+        fit_loop_t0 = fit_loop_start()
         stopped_early = fit_sym_rounds_on_device(
             ctx, model, test, detector, losses, test_losses, not_pd_total,
             n_rows, n_estimators, max_depth, layout_for_test, one_hot,
@@ -4596,6 +4608,8 @@ def fit_with_test(
             not use_pointwise_searcher, not need_estimation, use_subtraction,
             fold_counts, row_index,
         )
+    else:
+        fit_loop_t0 = fit_loop_start()
     for iteration in range(0 if device_rounds else n_estimators):
         var t_grad = loop_times.start()
         # ---- which permutation the STRUCTURE is searched on ----------
@@ -5717,6 +5731,12 @@ def fit_with_test(
             ctx, est_ws, model, deferred_splits, has_deferred_tree,
             approx_dim, learning_rate, not_pd_total, trace, stage_times,
         )
+    # `fit_loop_`: ONE drain after the last tree's last launch (the final
+    # loss pass below is not part of the loop), then the clock. The rounds
+    # executed are the trees this fit added (one per round; a multi-
+    # dimensional loss's tree carries every class).
+    ctx.synchronize()
+    var fit_loop = fit_loop_stop(fit_loop_t0, model.size() - fit_loop_trees_before)
     loop_times.stop_host("fit_total", t_loop)
     loop_times.report()
 
@@ -5852,7 +5872,7 @@ def fit_with_test(
     _ = tree_states^  # the level state's buffers before the context's
     return FitResult(
         losses^, test_losses^, detector.best_iteration, stopped_early,
-        tree_ctr^,
+        tree_ctr^, fit_loop^,
     )
 
 

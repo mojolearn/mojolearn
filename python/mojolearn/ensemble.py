@@ -855,6 +855,10 @@ class GradientBoosting(_NumericModeMixin):
         it, the model holds more than ``best_iteration_ + 1`` trees.
     stopped_early_ : bool
         Whether the detector stopped before ``n_estimators``.
+    fit_loop_ : tuple of (int, float)
+        The number of boosting rounds the last fit ran and the time in
+        milliseconds its boosting loop took, from the start of the first
+        round to the end of the last. A loaded model does not have it.
     bias_ : float
         The starting constant (0.0 unless ``boost_from_average``).
     n_features_in_ : int

@@ -121,6 +121,7 @@ from gbdt.gpu_util.kernel.random_gen import (
     next_uniform_f,
 )
 from core.host_parallel import host_nested_units, host_parallelize
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from core.host_predict_threads import (
     HostF32Ptr,
     host_predict_chunk,
@@ -2638,6 +2639,9 @@ struct GbdtOrderedHostFit(Movable):
     var test_losses: List[Float64]
     var best_iteration: Int
     var stopped_early: Bool
+    #: the boosting loop's executed rounds and its time: the estimator's
+    #: `fit_loop_` (core/fit_loop_clock.mojo; lane ab-loop-mode)
+    var fit_loop: FitLoop
 
 
 @fieldwise_init
@@ -3516,6 +3520,10 @@ def gbdt_ordered_host_fit(
     tree_leaf_offsets.append(0)
     var model_leaves = List[Float32]()
     var losses = List[Float64]()
+    # `fit_loop_` (lane ab-loop-mode): the host clock read once before the
+    # first round and once after the last (nothing inside the loop); the
+    # rounds executed are the trees the loop added.
+    var fit_loop_t0 = fit_loop_start()
     for iteration in range(params.n_estimators):
         var learn_p = 0
         if learn_count > 1:
@@ -3655,6 +3663,7 @@ def gbdt_ordered_host_fit(
             if detector.is_need_stop():
                 stopped_early = True
                 break
+    var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
     var best = 0
     if has_test:
@@ -3731,4 +3740,4 @@ def gbdt_ordered_host_fit(
     _ = len(cat_tree_state)
     _ = len(weights)
     _ = len(est_w)
-    return GbdtOrderedHostFit(text^, losses^, test_losses^, best, stopped_early)
+    return GbdtOrderedHostFit(text^, losses^, test_losses^, best, stopped_early, fit_loop^)

@@ -77,8 +77,8 @@ from std.sys.compile import is_defined
 
 comptime FIXTURE_DIR = "checks/native_tests/fixtures/gbdt/"
 comptime UNSET = -1.0
-#: units every column runs (CPU and GPU suites)
-comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
+#: units every column runs (CPU and GPU suites); the last is `fit_loop_`
+comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS + 1
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
 comptime GBDT_HOST_UNITS = 55
 
@@ -1128,8 +1128,47 @@ def querywise[I: GbdtImage](unit: Int) raises:
     require(not same_f32(_qw_fit[I](o, inp, "different-groups").pred, base.pred), loss + ": grouping ignored")
 
 
+def fit_loop_rounds[I: GbdtImage]() raises:
+    """`fit_loop_` (lane ab-loop-mode): with the cap K as `n_estimators` and
+    no eval set (no overfitting detector), every boosting loop the public fit
+    takes (Plain SymmetricTree, Depthwise, Lossguide, Ordered, MultiClass)
+    reports K rounds, as many as the model's trees and its learn curve, and a
+    time of at least zero."""
+    comptime K = 5
+    var reg = _fixed("rp-x.f32", 600, 6, "rp-yavg.f32")
+    var multi = _fixed("ms-x.f32", 240, 6, "ms-y.f32")
+    var arms: List[String] = ["Plain", "Depthwise", "Lossguide", "Ordered", "MultiClass"]
+    for arm in arms:  # small-loop(the five boosting loops)
+        var o = GbdtOpts("RMSE", K, 3)
+        if arm == "Depthwise" or arm == "Lossguide":
+            o = _ns_opts("RMSE", arm, "L2")
+        elif arm == "Ordered":
+            o = _ordered_opts("RMSE")
+        elif arm == "MultiClass":
+            o = GbdtOpts("MultiClass", K, 3)
+        o.n_estimators = K
+        o.deterministic()
+        var model: GbdtFitOutcome
+        if arm == "MultiClass":
+            model = fit[I](o, multi)
+        else:
+            model = fit[I](o, reg)
+        require(model.fit_loop.recorded, "fit_loop_ not recorded: " + arm)
+        require(model.fit_loop.iterations == K,
+                "fit_loop_ rounds " + String(model.fit_loop.iterations) + " != " + String(K) + ": " + arm)
+        if arm != "Depthwise" and arm != "Lossguide":
+            # the symmetric texts carry the `trees` record
+            require(_trees_record(model.text) == K, "fit_loop_ rounds differ from the model's trees: " + arm)
+        require(len(model.learn) == K, "fit_loop_ rounds differ from the learn curve: " + arm)
+        require(model.fit_loop.loop_ns >= 0 and model.fit_loop.milliseconds() >= 0.0,
+                "fit_loop_ negative time: " + arm)
+        require(not model.stopped_early, "a fit without an eval set stopped early: " + arm)
+
+
 def common_unit[I: GbdtImage](unit: Int) raises:
-    if unit >= 26 + FF_UNITS:
+    if unit == 26 + FF_UNITS + QW_UNITS:
+        fit_loop_rounds[I]()
+    elif unit >= 26 + FF_UNITS:
         querywise[I](unit - 26 - FF_UNITS)
     elif unit >= 26:
         feature_fraction[I](unit - 26)

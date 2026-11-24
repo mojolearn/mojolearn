@@ -153,6 +153,7 @@ from gbdt.host.gbdt_oracle_rmse import gbdt_text_with_bias
 from gbdt.host.gbdt_oracle_tree_ctr import GbdtTreeCtrHost
 from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.ctr_value_table import TCtrValueTable
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 
 
 @fieldwise_init
@@ -162,6 +163,9 @@ struct GbdtPointwiseFit(Movable):
     var test_losses: List[Float64]
     var best_iteration: Int
     var stopped_early: Bool
+    #: the boosting loop's executed rounds and its time: the estimator's
+    #: `fit_loop_` (core/fit_loop_clock.mojo; lane ab-loop-mode)
+    var fit_loop: FitLoop
 
 
 # Lane gbdt-rest-3 (2026-11-23): `_pw_search_pass` (this file's target pass)
@@ -422,6 +426,10 @@ def gbdt_pointwise_host_fit(
     var learning_rate = params.learning_rate
     var l2_leaf_reg = params.l2_leaf_reg
 
+    # `fit_loop_` (lane ab-loop-mode): the host clock read once before the
+    # first round and once after the last (nothing inside the loop); the
+    # rounds executed are the trees the loop added.
+    var fit_loop_t0 = fit_loop_start()
     for iteration in range(params.n_estimators):
         # ---- which permutation the STRUCTURE is searched on ----
         var learn_p = gbdt_learn_permutation(
@@ -542,6 +550,7 @@ def gbdt_pointwise_host_fit(
         if len(losses) < params.n_estimators:
             if len(tree_split_offsets) - 1 > 1:
                 losses.append(-Float64(fv) / Float64(n_rows))
+    var fit_loop = fit_loop_stop(fit_loop_t0, len(tree_split_offsets) - 1)
 
     # the final learn loss, on the ESTIMATION permutation's cursor
     losses.append(
@@ -580,4 +589,4 @@ def gbdt_pointwise_host_fit(
     var text = gbdt_text_with_bias(base, n_losses, starting_approx)
     _ = len(cindexes)
     _ = len(test_cindex)
-    return GbdtPointwiseFit(text^, losses^, test_losses^, detector.best_iteration, stopped_early)
+    return GbdtPointwiseFit(text^, losses^, test_losses^, detector.best_iteration, stopped_early, fit_loop^)

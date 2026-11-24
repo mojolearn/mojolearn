@@ -26,6 +26,7 @@ from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome, GBDT_ARG_NO_INT, GBDT_
 from gbdt.gbdt_entry import GbdtImage, gbdt_entry_dispatch, gbdt_entry_publish
 from core.gbdt_entry_table import gbdt_table_entry
 from gbdt.fit_calls import xg_ref, xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
+from core.fit_loop_clock import FitLoop
 
 comptime TREES_GBDT_CASES = 5
 
@@ -45,7 +46,11 @@ struct _ProbeImage(GbdtImage):
         var test = List[Float64]()
         for k in range(len(args)):  # small-loop(the request slots)
             test.append(Float64(args.i(k)))
-        return GbdtFitOutcome(text^, len(args), row_major, learn^, test^)
+        var outcome = GbdtFitOutcome(text^, len(args), row_major, learn^, test^)
+        # the fit loop's three words (lane ab-loop-mode, ABI v2): the slot
+        # count as the rounds, the first integer slot as the nanoseconds
+        outcome.fit_loop = FitLoop(len(args), args.i(0) * 1000 if len(args) else 0, True)
+        return outcome^
 
     @staticmethod
     def row_major() -> Bool:
@@ -135,6 +140,10 @@ def run_case(unit: Int) raises:
         require(outcome.text == "row_major=False|RMSE||Iter|Min|21", "fit text: " + outcome.text)
         require(outcome.best_iteration == 3 and not outcome.stopped_early, "fit words")
         require(len(outcome.learn) == 3 and outcome.learn[1] == 0.25, "learn curve not carried")
+        # `fit_loop_` crosses the entry as the outcome's words 6..8 (ABI v2)
+        require(outcome.fit_loop.recorded and outcome.fit_loop.iterations == 3, "fit loop rounds not carried")
+        require(outcome.fit_loop.loop_ns == 7000 and outcome.fit_loop.milliseconds() == 0.007,
+                "fit loop time not carried")
         return
     if unit == 3:
         var strs: List[String] = ["RMSE", "Bayesian", "IncToDec", "Max", "GreedyLogSum"]
