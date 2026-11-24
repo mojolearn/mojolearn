@@ -3728,33 +3728,41 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # code; a label of the targets' kind that no fit label equals is
             # one more code no row holds (`_selected_labels` keeps it). Mixed
             # kinds or a repeated label: the door's words.
-            if labels is None or _labels_mixed(labels, b):
-                return False
-            var fit_kind = _absent_positive(labels, b)
+            # LANE mf-rows8a: fit labels the doors refuse as y_true (strings and
+            # integers, or a real, None or object among them): that refusal
+            # per side first (SCORER_POSITIVE_MIXED, the doors read y_true
+            # before `labels`); then `_labels_refusal`, the doors' own checks
+            # of the list in their order (mx_list_labels / mc_label_list, then
+            # mx_selected / mc_selected): its shape, an empty list, its kinds,
+            # the targets' type, a repeated label (by value: two equal labels
+            # that no fit label holds are one repeated label).
+            if labels is None:
+                raise Error("RuntimeError: search admission invariant: a classifier fit admitted with no fit labels (a FIT caller hands its labels)")
+            var fit_kind = _door_kind(labels, b)
             var n_labels = len(py_call(b.list, labels))
             var listed = py_call(b.list, kw.labels)
             opts.sel_from = len(sels)
             opts.sel_n = len(listed)
             var absent = 0
             var refused = String("")
-            for q in range(len(listed)):  # small-loop(the scorer's labels, once per admission)
+            if fit_kind == 0 or fit_kind == 3:
+                positive = SCORER_POSITIVE_MIXED
+                listed = Python.list()
+                opts.sel_n = 0
+            else:
+                refused = _labels_refusal(listed, fit_kind, b)
+            var eq = native_loaded_module("operator").eq
+            for q in range(len(listed) if refused.byte_length() == 0 else 0):  # small-loop(the scorer's labels, once per admission)
                 var c = _label_code(labels, listed[q], b)
-                if c < 0:
-                    var kind = _label_kind(listed[q], b)
-                    if kind == 0 or fit_kind == -1:
-                        return False  # a label of no kind the doors' labels read (`mx_list_labels`' own words)
-                    if (kind == 1) != (fit_kind == SCORER_POSITIVE_ABSENT):
-                        # lane mf-score8: `mx_selected`'s words, per side
-                        refused = String("TypeError: labels must use the same type as the targets")
-                        break
-                    c = n_labels + absent
-                    absent += 1
                 var repeated = False
-                for r in range(opts.sel_from, len(sels)):  # small-loop(the labels so far)
-                    repeated = repeated or Int(sels[r]) == c
+                for r in range(q):  # small-loop(the labels so far, by value)
+                    repeated = repeated or Bool(py=py_call(b.bool, py_call(eq, listed[r], listed[q])))
                 if repeated:
                     refused = String("labels must be unique")  # lane mf-score8: the door's words, per side
                     break
+                if c < 0:
+                    c = n_labels + absent
+                    absent += 1
                 sels.append(Int32(c))
             if refused.byte_length() > 0:
                 # the selection is dropped; the refusal is raised per side
@@ -3765,8 +3773,6 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 if opts.refuse_word < 0:
                     opts.refuse_word = _next_word(labels, classifier, extra_words, b)
                     extra_words.append(refused)
-            elif opts.sel_n == 0:
-                return False
         codes.append(code)
         positives.append(positive)
         options.append(opts)
@@ -4065,6 +4071,33 @@ def _door_kind(labels: PythonObject, b: PythonObject) raises -> Int:
     return 2 if strs else 1
 
 
+def _labels_refusal(listed: PythonObject, fit_kind: Int, b: PythonObject) raises -> String:
+    """UNPACK (lane mf-rows8a): the metric doors' refusal of a `labels`
+    kwarg (bindings/metrics_exp_common_unpack.mojo `mx_list_labels` then
+    `mx_selected`; bindings/mcls_common_unpack.mojo `mc_label_list` then
+    `mc_selected`: the same words), in their order: not one-dimensional, no
+    label, a label of no kind they read or of both kinds, labels of another
+    type than the fit's (`fit_kind`, `_door_kind`). "": none (a repeated
+    label is checked by the caller as it codes them). Read once per
+    admission."""
+    for i in range(len(listed)):  # small-loop(the scorer's labels: their shape)
+        var item = listed[i]
+        var nested = py_type(item) is b.list or py_type(item) is b.tuple
+        if not nested and Bool(py=py_call(b.hasattr, item, PythonObject("ndim"))):
+            nested = Int(py=py_call(b.int, item.ndim)) > 0
+        if nested:
+            return String("labels must be one-dimensional single-label data")
+    if len(listed) == 0:
+        return String("labels must contain at least one label")
+    var kind = _door_kind(listed, b)
+    if kind == 0 or kind == 3:
+        return String("TypeError: labels must contain only strings or only integers; floating labels, missing labels "
+                      + "and mixed types are unsupported")
+    if kind != fit_kind:
+        return String("TypeError: labels must use the same type as the targets")
+    return String("")
+
+
 def _pos_text(value: PythonObject, b: PythonObject) raises -> String:
     """UNPACK (lane mf-rows8a): a pos_label's label word as the refusals
     print it (`f"pos_label={pos_label}"`, the doors' `family_str`): an
@@ -4326,42 +4359,6 @@ def _label_code(labels: PythonObject, value: PythonObject, b: PythonObject) rais
     return -1
 
 
-def _absent_positive(labels: PythonObject, b: PythonObject) raises -> Int:
-    """UNPACK (lane mf-cluster5): the positive word of a binary label scorer
-    whose pos_label=1 is not one of the fit's labels: SCORER_POSITIVE_ABSENT
-    (integer labels), SCORER_POSITIVE_KIND (string labels: the door's "same
-    type" refusal), -1 for labels of mixed or other kinds (the door). Read
-    once per admission."""
-    var items = py_call(b.list, labels)
-    var kind = -1
-    for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
-        var k = _label_kind(items[i], b)
-        if k == 0 or (kind >= 0 and k != kind):
-            return -1
-        kind = k
-    if kind == 1:
-        return SCORER_POSITIVE_ABSENT
-    if kind == 2:
-        return SCORER_POSITIVE_KIND
-    return -1
-
-
-def _labels_mixed(labels: PythonObject, b: PythonObject) raises -> Bool:
-    """UNPACK (lane mf-msel5b): the fit's labels hold strings AND integers
-    (and nothing else: another kind keeps the door). Read once per
-    admission."""
-    var items = py_call(b.list, labels)
-    var ints = False
-    var strs = False
-    for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
-        var k = _label_kind(items[i], b)
-        if k == 0:
-            return False
-        ints = ints or k == 1
-        strs = strs or k == 2
-    return ints and strs
-
-
 def _label_words(labels: PythonObject, b: PythonObject) raises -> List[String]:
     """UNPACK (lane mf-cluster5): each fit label's repr as `str(present)`
     prints it in the door's words (an int's `int(v)`, a string's `str(v)`),
@@ -4369,7 +4366,7 @@ def _label_words(labels: PythonObject, b: PythonObject) raises -> List[String]:
     var items = py_call(b.list, labels)
     var out = List[String](capacity=len(items))
     for i in range(len(items)):  # driver-loop: over the fit's labels (once per admission)
-        var k = _label_kind(items[i], b)
+        var k = _value_kind(items[i], b)  # lane mf-rows8a: a bool label prints as the doors read it (0 / 1)
         var v = items[i]
         if k == 1:
             v = py_call(b.int, items[i])
