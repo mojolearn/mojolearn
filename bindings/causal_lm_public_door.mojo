@@ -109,10 +109,10 @@ from core.causal_lm_entry_table import (
 #   llama_decoder_layer_forward bodies as the block session:
 # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
 # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
-#   -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF  no resident forward (was =0)
+# TOMBSTONE: MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 1e8aa88da1.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch
 #   -D MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32  fp32 sampling stream (was =1)
 #   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE  route witness print (was =1)
-comptime CAUSAL_LM_RESIDENT_FORWARD = not is_defined["MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF"]()
 comptime EXPERIMENT_RESIDENT_SAMPLING_FP32 = is_defined["MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32"]()
 comptime EXPERIMENT_GENERATION_ROUTE_TRACE = is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_TRACE"]()
 
@@ -1693,8 +1693,8 @@ def _resident_forward_ok(mut mods: NativeModules, words: CausalModelWords, model
     # every public forward); the per-layer profile half reads the state.
     if not causal_resident_candidate(words):
         return False
-    comptime if not CAUSAL_LM_RESIDENT_FORWARD:
-        return False
+    # TOMBSTONE: MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 1e8aa88da1.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch
     return _resident_profiles_ok(mods, model, state, blocks)
 
 

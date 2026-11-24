@@ -5,10 +5,9 @@ These compare candidate routes, never the old FP64 sequence. The routes are
 build defines since lane envgate-neural-lm (2026-11-15), so the candidate is a
 wheel built with -D MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32 and
 -D MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF (what the former autouse fixture set
-in the environment), and the host-policy reference (the former in-process
-MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD=0, or engine "1") is a second wheel that
-adds -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (or swaps in
--D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE). Run this file on both with
+in the environment), and the host-policy reference (engine "1") is a second
+wheel that swaps in -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE. Run this file
+on both with
 MOJOLEARN_TWO_BUILD_RECORD / _REFERENCE (python/mojolearn/tests/_build_arms.py).
 Compile-only delivery leaves execution and cross-vendor identity pending.
 """
@@ -30,6 +29,8 @@ pytestmark = [
     # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
 ]
+# TOMBSTONE: MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 1e8aa88da1.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch
 
 
 @pytest.mark.parametrize("uniform,temperature,top_k,top_p", [
@@ -44,7 +45,7 @@ def test_candidate_matches_host_policy_and_chunk_checkpoint(
     prompt = np.array([[1, 3], [2, 4]], dtype="i4")
     options = dict(greedy=False, seed=123, temperature=temperature,
                    top_k=top_k, top_p=top_p)
-    # The host-policy words are the -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF
+    # The host-policy words are the -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE
     # wheel's run of this same test (two_build_compare below).
     expected = np.asarray(model.stream(prompt, 6, **options).read(6)).copy()
     whole = np.asarray(model.stream(prompt, 6, **options).read(6)).copy()
@@ -120,7 +121,7 @@ def test_exposed_parameter_fallback_keeps_candidate_policy(tmp_path, temperature
 
 @requires_build(FP32, "MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF")
 def test_candidate_eos_and_padding_match_host_policy(tmp_path):
-    # The host words are the -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF wheel's
+    # The host words are the -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE wheel's
     # run of this test (two_build_compare); within a build, eos and padding hold.
     model = load_fixture(tmp_path, "llama", uniform=True)
     prompt = np.array([[33], [34]], dtype="i4")
@@ -135,12 +136,12 @@ def test_candidate_eos_and_padding_match_host_policy(tmp_path):
     two_build_compare("resident_sampling_eos_padding", dict(tokens=expected.tolist(), info=info))
 
 
-@requires_build(FP32, "MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF")
+@requires_build(FP32)
 @pytest.mark.parametrize("temperature,top_p", [(0.7, 0.83), (1e-45, 1e-320)])
 def test_candidate_native_engine_uses_same_policy(tmp_path, temperature, top_p):
     # Engine "0" against engine "1": the -D MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF
-    # and -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE wheels (both with FP32 and
-    # RESIDENT_FORWARD_OFF) record and compare the same words.
+    # and -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE wheels (both with FP32)
+    # record and compare the same words.
     model = load_fixture(tmp_path, "llama", uniform=False)
     prompt = np.array([[1, 3], [2, 4]], dtype="i4")
     options = dict(greedy=False, seed=123, top_k=17, top_p=top_p, temperature=temperature)

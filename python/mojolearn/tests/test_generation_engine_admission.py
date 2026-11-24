@@ -8,16 +8,17 @@ from mojolearn.tests.test_generation_native import load_fixture, DEVICE
 from mojolearn.tests._build_arms import built_with, two_build_compare
 
 # The generation switches are build defines since lane envgate-neural-lm
-# (2026-11-15). This check ran with MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD=0 and
-# engine "auto" / "1" against an in-process engine "0" reference; now each arm
-# is a wheel: on a GPU every wheel adds -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF,
-# the engine arms are the default wheel ("auto") and -D
+# (2026-11-15). The engine arms are the default wheel ("auto") and -D
 # MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE ("1"), and the reference is the -D
 # MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF wheel, compared through
 # MOJOLEARN_TWO_BUILD_RECORD / _REFERENCE (python/mojolearn/tests/_build_arms.py).
+# On a GPU the resident forward takes this fixture, so the engine admission is
+# checked on the CPU install.
+# TOMBSTONE: MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 1e8aa88da1.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch
 pytestmark = pytest.mark.skipif(
-    DEVICE == "gpu" and not built_with("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF"),
-    reason="needs a wheel built with -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF on a GPU",
+    DEVICE == "gpu",
+    reason="on a GPU the resident forward takes this fixture; the engine admission runs on the CPU install",
 )
 
 
@@ -34,8 +35,6 @@ def test_default_dispatch_constructs_native_engine_owners(tmp_path):
         expected_tokens = np.asarray(model.stream(prompt, 2).read(2)).copy()
         two_build_compare("generation_engine_admission", _words(expected_logits, expected_tokens))
         return
-    if DEVICE == "gpu":
-        assert model._blocks[0]._native_session is not None
     state = model.allocate_state(1, 5)
     actual = np.asarray(model.forward(prompt, state)).copy()
     assert state.positions == 2

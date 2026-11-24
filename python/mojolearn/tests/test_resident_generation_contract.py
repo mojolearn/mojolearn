@@ -16,7 +16,7 @@ from mojolearn import Array
 from mojolearn.models import Tokenizer
 from mojolearn.models.causal_lm import _NATIVE
 from mojolearn.tests.test_generation_native import load_fixture
-from mojolearn.tests._build_arms import built_with, two_build_compare
+from mojolearn.tests._build_arms import two_build_compare
 
 
 pytestmark = pytest.mark.skipif(
@@ -29,13 +29,11 @@ pytestmark = pytest.mark.skipif(
 # (2026-11-15); the former autouse fixture set it in the environment.
 # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-transformer; code recoverable at 4d76a9e16e.
 # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TRANSFORMER_LEGACY_SETUP.patch; record in docs/TOMBSTONES.md.
-RESIDENT_ARMS_OFF = ("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF",)
+# TOMBSTONE: MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 1e8aa88da1.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch
 
 
 def resident_model(path, *, uniform=False):
-    present = [d for d in RESIDENT_ARMS_OFF if built_with(d)]
-    if present:
-        pytest.skip("resident-route check; this wheel has " + " ".join("-D " + d for d in present))
     model = load_fixture(path, "llama", uniform=uniform)
     entries = model._native_entries
     assert model.kind == "transformer"
@@ -54,13 +52,6 @@ def resident_model(path, *, uniform=False):
 
 def test_resident_greedy_read_matches_legacy_forward_and_chunking(tmp_path):
     prompt = np.array([[1, 3], [2, 4]], dtype="i4")
-    if built_with("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF"):
-        # The legacy-route wheel (-D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF
-        # -D MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF; the former in-process
-        # environment switches) records the words the resident wheel compares.
-        legacy = load_fixture(tmp_path, "llama")
-        two_build_compare("resident_greedy_read", np.asarray(legacy.stream(prompt, 5).read(5)).tolist())
-        return
     model = resident_model(tmp_path)
     expected = np.asarray(model.stream(prompt, 5).read(5)).copy()
     whole = model.stream(prompt, 5)

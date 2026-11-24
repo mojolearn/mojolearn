@@ -486,8 +486,9 @@
   },
   "causal-lm-resident-forward-off": {
    "define": "MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF",
-   "status": "define in code (bindings/causal_lm_public_door.mojo CAUSAL_LM_RESIDENT_FORWARD: B = CausalLM per-call layer setup; A = resident forward. board row: causal-lm-generate (greedy))",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): old path no faster (L40S 2 cells, median 1.00); the resident forward default is unchanged; removed: the switch; the per-layer route stays for the models the resident check refuses; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 1e8aa88da1, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch. Was: define in code (bindings/causal_lm_public_door.mojo CAUSAL_LM_RESIDENT_FORWARD: B = CausalLM per-call layer setup; A = resident forward. board row: causal-lm-generate (greedy))",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "generation-route-legacy": {
    "define": "MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY",
@@ -3783,7 +3784,8 @@
    "b_arms": [
     "causal-lm-resident-forward-off"
    ],
-   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move"
+   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move",
+   "owed": "DECIDED"
   },
   {
    "id": "generation-route-legacy-generate",
