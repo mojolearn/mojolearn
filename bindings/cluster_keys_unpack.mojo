@@ -77,6 +77,7 @@ struct ClusterKeys(Defaultable, Movable):
     var k_family_kmeans_inits: PythonObject
     var k_family_kmeans_metrics: PythonObject
     var k_feature_names_in_: PythonObject
+    var k_fit_loop_: PythonObject
     var k_float64: PythonObject
     var k_gamma_: PythonObject
     var k_hdbscan_public_class: PythonObject
@@ -175,6 +176,7 @@ struct ClusterKeys(Defaultable, Movable):
         self.k_family_kmeans_inits = PythonObject(None)
         self.k_family_kmeans_metrics = PythonObject(None)
         self.k_feature_names_in_ = PythonObject(None)
+        self.k_fit_loop_ = PythonObject(None)
         self.k_float64 = PythonObject(None)
         self.k_gamma_ = PythonObject(None)
         self.k_hdbscan_public_class = PythonObject(None)
@@ -277,6 +279,7 @@ def _cluster_keys_fill(nk: UnsafePointer[ClusterKeys, MutUntrackedOrigin]) raise
     nk[].k_family_kmeans_inits = py_key("family_kmeans_inits")
     nk[].k_family_kmeans_metrics = py_key("family_kmeans_metrics")
     nk[].k_feature_names_in_ = py_key("feature_names_in_")
+    nk[].k_fit_loop_ = py_key("fit_loop_")
     nk[].k_float64 = py_key("float64")
     nk[].k_gamma_ = py_key("gamma_")
     nk[].k_hdbscan_public_class = py_key("hdbscan_public_class")

@@ -78,6 +78,7 @@ from cluster.checks.plus_plus import (
 from std.sys.compile import is_defined
 from std.os import getenv
 from std.time import perf_counter_ns
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
@@ -288,6 +289,12 @@ struct HostRng(Copyable, Movable):
 struct FitResult(Copyable, ImplicitlyCopyable, Movable):
     var inertia: Float64
     var n_iter: Int
+    # The fit loop (lane ab-loop-mode, `core/fit_loop_clock.mojo`): the Lloyd
+    # iterations executed, summed over the restarts, and the nanoseconds of
+    # the region that runs every restart (seeding, Lloyd steps, final
+    # assignment). Measurement only: no bit moves.
+    var loop_iterations: Int
+    var loop_ns: Int
 
 
 def _km_stage(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
@@ -1831,6 +1838,12 @@ def kmeans_fit_main_traced(
     var km_on = KMEANS_STAGES_ON and not tag_prefix.endswith("init.par.")
     var km_t = Int(perf_counter_ns())
     _km_stage(ctx, km_on, km_t, "fit.setup")
+    # The fit loop clock (lane ab-loop-mode): one host read here, after the
+    # allocations, X's norms and their synchronization; one after the last
+    # restart, whose final inertia readback already waited on the device. No
+    # read, sync or allocation is added inside the restarts or the Lloyd loop.
+    var loop_start = fit_loop_start()
+    var loop_iterations = 0
     for _seed_iter in range(n_init):
         var restart_tag = tag_prefix + "restart" + _pad2(_seed_iter) + "."
         if params.init == INIT_ARRAY:
@@ -2178,6 +2191,10 @@ def kmeans_fit_main_traced(
                     break
             it += 1
         _km_stage(ctx, km_on, km_t, "fit.lloyd iters=" + String(min(it, params.max_iter)))
+        # The Lloyd steps this restart executed: the converging iteration, or
+        # max_iter on exhaustion (`n_current_iter` is then max_iter + 1, as
+        # cuVS reports it). One host add per restart, outside the Lloyd loop.
+        loop_iterations += min(n_current_iter, params.max_iter)
 
         # `:500-537`. The fit's inertia is ONE fresh assignment against the
         # FINAL centroids, weighted, after the loop -- not the last
@@ -2236,6 +2253,9 @@ def kmeans_fit_main_traced(
                 block_dim=(256, 1, 1),
             )
             ctx.synchronize()
+    # Every restart ends on the synchronize after its final inertia readback
+    # (and the best-centroid copy's), so the device is idle: no wait added.
+    var loop = fit_loop_stop(loop_start, loop_iterations)
 
     # Launches hold raw pointers: keep the tables alive past the last sync.
     _ = acc_table^
@@ -2245,4 +2265,4 @@ def kmeans_fit_main_traced(
         trace.record_device(ctx, tag_prefix + "fit.centroids", centroids, cd)
         trace.record_device(ctx, tag_prefix + "fit.labels", labels, n_samples)
 
-    return FitResult(best_inertia, best_iter)
+    return FitResult(best_inertia, best_iter, loop.iterations, loop.loop_ns)

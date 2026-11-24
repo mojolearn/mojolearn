@@ -7,6 +7,7 @@ from core.kmeans_native_api import (
     KMeansQueryResult, KMeansScoreRequest, KMeansScoreResult, kmeans_native_dispatch, KMEANS_CAP_HOST,
 )
 from core.hostptr import f32_ptr, u32_ptr
+from core.fit_loop_clock import FitLoop
 from core.host_finite_scan import host_all_finite_f32
 from core.core_host_impl import kmeans_fit_host, kmeans_predict_host, kmeans_transform_host, kmeans_score_host
 
@@ -29,11 +30,12 @@ struct KMeansHostKernels(KMeansNativeKernels):
         if r.test_finite and r.rows >= 1 and r.features >= 1:
             status = 0 if host_all_finite_f32(f32_ptr(r.source), r.rows * r.features) else 1
         if status != 0:
-            return KMeansFitResult(0.0, 0, 0.0, 0.0, status, 0)
+            return KMeansFitResult(0.0, 0, 0.0, 0.0, status, 0, FitLoop.empty())
         var answer = kmeans_fit_host(r.source, r.centers, labels, r.weights,
             r.rows, r.features, r.clusters, r.weight_count, r.max_iter,
             r.tolerance, UInt64(r.seed), r.n_init, r.init, r.metric, r.oversampling)
-        return KMeansFitResult(answer[0], answer[1], answer[2], answer[3], 0, 0)
+        return KMeansFitResult(answer[0], answer[1], answer[2], answer[3], 0, 0,
+            FitLoop(answer[4], answer[5], True))
 
     @staticmethod
     def query(r: KMeansQueryRequest) raises -> KMeansQueryResult:

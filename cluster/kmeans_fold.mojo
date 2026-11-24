@@ -84,7 +84,7 @@ def kmeans_fit_fold(
     if words[0] != 0 or words[1] != 0:
         _ = x^
         _ = status^
-        return KMeansFoldFit(KMeansFitResult(0.0, 0, 0.0, 0.0), words[0], words[1])
+        return KMeansFoldFit(KMeansFitResult(0.0, 0, 0.0, 0.0, 0, 0), words[0], words[1])
     var fit = kmeans_fit_device(
         ctx, x, n_samples, n_features, n_clusters, out_centroids_ptr, out_labels_ptr,
         max_iter, tol, seed, n_init, init, metric, oversampling_factor,

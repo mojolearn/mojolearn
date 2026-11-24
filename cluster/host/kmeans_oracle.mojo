@@ -171,6 +171,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from core.classical_host_predict import host_gemm_nt
+from core.fit_loop_clock import fit_loop_start, fit_loop_stop
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_list_ptr_u32
 from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
 from cluster.impl.kmeans_params import KMEANS_LAZY_EVERY, KMEANS_LAZY_SHIFT_IDN, weighted_sum_scale_cap
@@ -1219,6 +1220,10 @@ def host_accumulate(
 struct KMeansHostFit(Copyable, Movable):
     var inertia: Float64
     var n_iter: Int
+    # The fit loop (lane ab-loop-mode): the device fit's `FitResult` fields,
+    # the same two clock reads around the same restarts.
+    var loop_iterations: Int
+    var loop_ns: Int
 
 
 def host_fit_main[with_init: Bool = True](
@@ -1276,6 +1281,10 @@ def host_fit_main[with_init: Bool = True](
     var sums_i32 = List[Int32](length=cd, fill=Int32(0))
     var weight_i32 = List[Int32](length=k, fill=Int32(0))
 
+    # The fit loop clock, as `kmeans_fit_main_traced`: one read before the
+    # restarts, one after the last; nothing inside the restarts.
+    var loop_start = fit_loop_start()
+    var loop_iterations = 0
     for _seed_iter in range(n_init):
         var restart_tag = tag_prefix + "restart" + _trace_pad2(_seed_iter) + "."
         if init == INIT_ARRAY:
@@ -1374,6 +1383,8 @@ def host_fit_main[with_init: Bool = True](
                 n_current_iter = it
                 break
             it += 1
+        # this restart's executed Lloyd steps (the device's count)
+        loop_iterations += min(n_current_iter, max_iter)
 
         # The post-loop assignment and the weighted inertia.
         c_norm = host_row_norms(cur, k, d, host_norms_take_sqrt(metric))
@@ -1388,9 +1399,10 @@ def host_fit_main[with_init: Bool = True](
             best_iter = n_current_iter
             for j in range(cd):
                 centroids[j] = cur[j]
+    var loop = fit_loop_stop(loop_start, loop_iterations)
     trace.record_f32(tag_prefix + "fit.centroids", centroids)
     trace.record_u32(tag_prefix + "fit.labels", labels)
-    return KMeansHostFit(best_inertia, best_iter)
+    return KMeansHostFit(best_inertia, best_iter, loop.iterations, loop.loop_ns)
 
 
 @fieldwise_init
@@ -1401,6 +1413,8 @@ struct KMeansHostResult(Copyable, Movable):
     var n_iter: Int
     var sum_scale: Float64
     var weight_scale: Float64
+    var loop_iterations: Int
+    var loop_ns: Int
 
 
 def host_plan_sum_scale(x: List[Float32], n: Int, d: Int) raises -> Float64:
@@ -1595,7 +1609,8 @@ def host_kmeans_fit(
             x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
             labels, min_dist,
         )
-    return KMeansHostResult(result.inertia, result.n_iter, sum_scale, weight_scale)
+    return KMeansHostResult(result.inertia, result.n_iter, sum_scale, weight_scale,
+        result.loop_iterations, result.loop_ns)
 
 
 def host_kmeans_assign(
