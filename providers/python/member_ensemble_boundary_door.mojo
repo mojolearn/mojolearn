@@ -85,7 +85,7 @@ from std.python import Python, PythonObject
 from bindings.member_fit_notices_pack import member_fit_notices_raise, member_fit_notices_raise_with
 from providers.python.member_xneighbors_boundary_door import xneighbors_kind_reads_marker, xneighbors_marker_index
 from core.xneighbors_member import LP_MARKER_WORD
-from bindings.member_leaf_boundary_door import member_leaf_admit_serving_labeled
+from bindings.member_leaf_boundary_door import member_leaf_admit_serving_labeled, member_leaf_admit_labeled
 from bindings.member_leaf_boundary_door import (
     member_leaf_admit_serving, member_leaf_pack, member_leaf_pack_labeled, member_leaf_state,
 )
@@ -3596,7 +3596,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             first_ok += 1
         var at = done.find(clones[first_ok])
         if at < 0:
-            return False  # its admission answered False: a not-typed case of its own (that site's row)
+            # its admission answered False (lane mf-rows8d, row :3586): a
+            # not-typed case of its own kind (that kind's row); no door fits
+            # it, so it is refused natively in the meta door's words
+            raise Error(_no_member_fit_words(clones[first_ok]))
         classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
     else:
         classifier = Bool(py=base_plan["classifier"])
@@ -4004,8 +4007,10 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             continue
         refused_word.append(-1)
         slot_of.append(len(nested.plans))
+        # lane mf-rows8d (row :3995): a candidate the kind does not take is
+        # refused natively, per cause (`_search_member_refusal`).
         if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
-            return False
+            raise Error(_search_member_refusal(done, clones[c], classifier, needs, labels, context, b))
     if len(nested.plans) < len(clones):
         var plans = List[MemberPlan]()
         var masks = List[Int]()
@@ -4431,6 +4436,81 @@ def _search_base_refusal(model: PythonObject, base: PythonObject, base_plan: Pyt
     var errors: List[String] = [words]
     var counts: List[Int] = [fits]
     return _all_fits_failed(fits, errors, counts)
+
+
+def _no_member_fit_words(est: PythonObject) raises -> String:
+    """The meta door's words for an estimator whose family keeps no native
+    member fit for these parameters (bindings/member_set_door.mojo
+    `member_set_refusal`, its not-published case)."""
+    var name = String(py=py_type(est).__name__)
+    return ("NotImplementedError: " + name + " with these parameters has no native member fit, so a Mojolearn"
+            + " meta-estimator cannot fit it. Fit " + name + " on its own, or use another estimator as the member.")
+
+
+def _capability_name(missing: Int) -> String:
+    """The response a member capability bit answers (the words of
+    `_search_member_refusal`)."""
+    if (missing & MEMBER_CAN_PREDICT_PROBA) != 0:
+        return "predict_proba"
+    if (missing & MEMBER_CAN_DECISION) != 0:
+        return "decision_function"
+    if (missing & MEMBER_CAN_EXPORT) != 0:
+        return "its fitted state (return_estimator)"
+    if (missing & MEMBER_CAN_FIT) != 0:
+        return "fit"
+    return "predict"
+
+
+def _search_member_refusal(done: _Done, est: PythonObject, classifier: Bool, needs: Int, labels: PythonObject,
+                           context: PythonObject, b: PythonObject) raises -> String:
+    """ROW :3995 (lane mf-rows8d): the words for a search candidate
+    `_admit_nested` answered False for, in the order it decides (no door
+    fits it after the search fallback's deletion):
+      * no plan or no member: the meta door's words (`_search_base_refusal`:
+        MEMBER_SET_FOREIGN, or Python's TypeError for a fit with no target);
+      * a nested META candidate its own admission left unserved, or a
+        family that keeps no member for these parameters (the family's own
+        admission words first: `member_leaf_admit_labeled` raises them):
+        `_no_member_fit_words`;
+      * a class whose Python surface lacks the response a scorer or cv tool
+        asks: scikit-learn's AttributeError (`_check_response_method`);
+        one that has it but whose native member does not answer it: a
+        NotImplementedError naming the class, the response and the
+        alternative;
+      * a candidate of the other estimator type than the base it is a
+        clone of, or an unreadable class_weight tail: invariants."""
+    var name = String(py=py_type(est).__name__)
+    var plan = prep_estimator_plan(est, context)
+    if plan is None or py_get(plan, "member") is None:
+        return _search_base_refusal(est, est, plan, False, 0, b)
+    var mask = 0
+    if member_mark(plan, b).family == MEMBER_FAMILY_ENSEMBLE:
+        var at = done.find(est)
+        if at < 0:
+            return _no_member_fit_words(est)
+        mask = done.masks[at]
+    else:
+        var fields = py_call(plan["fields_get"], est, py_type(est))
+        var owner = member_leaf_admit_labeled(est, fields, plan, plan["context"], b, labels)  # raises the family's words
+        if not owner.published:
+            return _no_member_fit_words(est)
+        if Bool(py=plan["classifier"]) != classifier:
+            return ("RuntimeError: search admission invariant: a candidate " + name
+                    + " is not of its base's estimator type")
+        mask = member_kind_capabilities(owner.plan)  # raises its own words
+    if ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
+        return "RuntimeError: search admission invariant: a candidate " + name + " is not of its base's estimator type"
+    var missing = needs & ~mask
+    if missing == 0:
+        return ("RuntimeError: search admission invariant: a candidate " + name
+                + " with every capability was not admitted (its class_weight tail is unread)")
+    var asked = _capability_name(missing)
+    if (missing & (MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_PREDICT)) != 0:
+        if py_call(b.getattr, est, PythonObject(asked), PythonObject(None)) is None:
+            return "AttributeError: '" + name + "' object has no attribute '" + asked + "'"
+    return ("NotImplementedError: " + name + "'s native member does not answer " + asked + ", so a Mojolearn"
+            + " search cannot fit and score it natively. Choose a scorer or method it answers, or fit " + name
+            + " on its own.")
 
 
 def _search_nested_refusal(done: _Done, clones: PythonObject, tolerate: Bool, fits: Int) raises -> Bool:
