@@ -286,7 +286,7 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
     var avg = String("none") if average is None else String(py=average)
     if avg == "samples":
         raise Error("NotImplementedError: mojolearn average_precision_score: average='samples' applies to "
-                    + "multilabel targets, which are NOT IMPLEMENTED")
+                    + "multilabel targets, which are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
     # `_ovr`: the class columns, the codes, the weights
     var n = true.n
     var s = mx_scores(args[1], n, caller, 2, "y_score", context)
