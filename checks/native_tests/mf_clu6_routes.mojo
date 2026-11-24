@@ -132,6 +132,8 @@ def test_words_round_trip() raises:
     member_words_append_f32(words, Int(values.unsafe_ptr()), 3)
     var back = member_words_take_f32(Int(words.unsafe_ptr()), at, 3)
     require(back[0] == values[0] and back[1] == values[1] and back[2] == values[2], "float32 round trip")
+    _ = len(words)
+    _ = len(values)
 
 
 def test_kde_name_words() raises:

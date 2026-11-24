@@ -279,6 +279,9 @@ def check_linear_svc_binary() raises:
     require(codes[0] == 0 and codes[4] == 0, "a zero score is code 0 (strict > 0)")
     _ = len(x)
     _ = len(w)
+    _ = len(scores)
+    _ = len(door)
+    _ = len(codes)
 
 
 def test_mf_lin6_cv() raises:
