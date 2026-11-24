@@ -158,6 +158,12 @@ def connect(context, package):
     # Marked member classes without a schema of their own, AFTER every hand-written schema above (a class those
     # register was listed as unregistered when this ran first).
     from ._native_msel_more import connect_members
+    # The search layouts before the member scan (lane w3f3-b): `_connect_search_members` registers the marked
+    # search classes from them, so on a first pass without them GridSearchCV / RandomizedSearchCV stayed waiting
+    # (and listed as pending migration) until a later pass.
+    if 'family_msel_search_layouts' not in context:
+        from ._native_msel_search import connect as connect_search
+        connect_search(context, loaded('model_selection'))
     # The register function is kept for a marked class whose module loads lazily after this connection and
     # registers itself at its own import (_native_msel_more.connect_host_tree_member; lane mf-cal5).
     context['family_msel_register'] = register
@@ -190,10 +196,6 @@ def connect(context, package):
     if 'family_msel_metric_plans' not in context:
         from ._native_msel_scorers import connect as connect_scorers
         connect_scorers(context, selection)
-
-    if 'family_msel_search_layouts' not in context:
-        from ._native_msel_search import connect as connect_search
-        connect_search(context, selection)
 
     from ._native_parallel_cv import connect as connect_parallel
     connect_parallel(context, package)
