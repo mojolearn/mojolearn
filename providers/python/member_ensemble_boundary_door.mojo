@@ -1719,7 +1719,7 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
                 _ = meta_cv_value(cv, context)  # the door's words (`meta_calibrated_validate` raised them first)
         # A base that takes the resident DeviceRows route (lane mf-door7): admitted as the kind's base. That
         # route (a measured winner) is CalibratedClassifierCV's own public fit's (bindings/trees_public_meta_door.mojo
-        # `_CalUnits`), which never reaches this admission; a NESTED Calibrated (a member of a meta-estimator, a
+        # `_cal_native`, THE RESIDENT ROWS), which never reaches this admission; a NESTED Calibrated (a member of a meta-estimator, a
         # search candidate) and a fitted one held for predict run its member calls on host rows, as every other
         # base. Before, this answered False and the caller kept its door (SHAP's `_DoorModel`, the meta doors).
         var decision = prep_estimator_has(base, "decision_function", context)
