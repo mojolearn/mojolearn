@@ -2778,12 +2778,13 @@ comptime GBDT_DEVICE_ROUNDS_BUILD = not EST_APPLE_ANY
 # drain, the held-out host packing and six uploads, the held-out loss drain
 # and the host detector.
 #
-# A/B: `-D MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF` restores the host loop for
-# the greedy fits only (RUN OWED on NVIDIA + AMD).
+# Measured (A/B nvc-ab-20261124T070727Z-69dac2, NVIDIA L40S, wheel 4519097d380a):
+# the host loop for the greedy fits was no faster (gbdt-symmetric, -1000 full,
+# 12 cells, old / device 0.99..1.04), so its switch went: the greedy fits take
+# the device rounds wherever `GBDT_DEVICE_ROUNDS_BUILD` does. AMD not measured.
+# TOMBSTONE: MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF (old path no faster: NV L40S 12 cells, median 1.00, 0.99..1.04) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF.ab-outcome-1.patch
 # ===========================================================================
-comptime GBDT_GREEDY_DEVICE_ROUNDS = GBDT_DEVICE_ROUNDS_BUILD and not is_defined[
-    "MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF"
-]()
 
 comptime GBDT_ROUNDS_CHUNK_STOPPING = 16
 comptime GBDT_ROUNDS_CHUNK_FREE = 128
@@ -2904,8 +2905,6 @@ def sym_device_rounds_eligible(
         return False
     if use_pointwise_searcher:
         return tree_op_leaf_estimate_supported(objective, leaf_estimation_method, approx_dim)
-    comptime if not GBDT_GREEDY_DEVICE_ROUNDS:
-        return False
     return (
         approx_dim == 1
         and sym_objective_is_pointwise(objective)

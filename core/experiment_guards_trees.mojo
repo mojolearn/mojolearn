@@ -686,6 +686,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF (old path no faster: NV L40S 12 cells, median 1.00, 0.99..1.01) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF.ab-outcome-1.patch
     comptime assert not is_defined["MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): GBDT_DEVICE_ROUNDS_OFF (the host round loop instead of the on-device SymmetricTree rounds) was no faster: 12 cells, median 1.00, 0.99..1.01; the device rounds stay the default (the host loop still serves the fits they refuse); code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF.ab-outcome-1.patch"
+    # TOMBSTONE: MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF (old path no faster: NV L40S 12 cells, median 1.00, 0.99..1.04) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF.ab-outcome-1.patch
+    comptime assert not is_defined["MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): GBDT_GREEDY_DEVICE_ROUNDS_OFF (the host round loop for the greedy-searcher SymmetricTree fits) was no faster: 12 cells, median 1.00, 0.99..1.04; the greedy device rounds stay the default; code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF.ab-outcome-1.patch"
     # ---- end lane ab-outcome-1
     return True
 
