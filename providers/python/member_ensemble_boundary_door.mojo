@@ -2848,8 +2848,9 @@ def _admit_search_serving(fields: PythonObject, context: PythonObject, b: Python
     if trees_context is None:
         return False
     # The head words of a search that is never fitted here (`_admit_search`'s layout for scoring=None: scorer
-    # 0, no tolerance, no train scores, seed 0, refit True, refit scorer 0, count 0) and its one scorer group.
-    var words: List[Float64] = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+    # 0, no tolerance, no train scores, a grid's seed -1, refit True, refit scorer 0, count 0) and its one
+    # scorer group.
+    var words: List[Float64] = [0.0, 0.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0]
     var sels = List[Int32]()
     msel_scorer_group_words(words, 0, -1, MselScorerOptions(), sels)
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
