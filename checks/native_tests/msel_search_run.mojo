@@ -640,14 +640,15 @@ def _wrapped_call(operation: Int, address: Int, scoped: Bool) raises -> Int:
     once."""
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     var inner = MemberRef(EntryRef(logistic_member_v2, 0), 0)
-    var counters = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=0)
+    var counters_at = 0  # the counters' address (a Pointer is built only when stripped: a null Pointer is refused)
     var stripped = False
     if call[].param_count > 10:
         var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
-        counters = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(words[call[].param_count - 1]))
+        counters_at = Int(words[call[].param_count - 1])
         call[].param_count -= 1
         stripped = True
     if stripped and call[].pin != 0:
+        var counters = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=counters_at)
         counters[0] += 1
         if counters[1] == 0:
             counters[1] = 1
@@ -662,6 +663,7 @@ def _wrapped_call(operation: Int, address: Int, scoped: Bool) raises -> Int:
         if call[].row_index.rows > 0:
             require(call[].row_index.dtype == MEMBER_I32, "the search hands int32 row numbers")
             if stripped:
+                var counters = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=counters_at)
                 counters[2] += 1
             var count = call[].row_index.rows
             var cols = call[].x.cols
