@@ -22,6 +22,24 @@ def _nmf_pointer(address: Int) raises -> F32Ptr:
     return F32Ptr(unsafe_from_address=address)
 
 
+def _nmf_source_pool[RES: Bool](address: Int) raises -> Int:
+    """A request's `source` word: a host address (> 0), or `-(id + 1)` of a resident x_decomp pool id (a fold
+    the XDecomp member took on the device, lane vdf-scope-neural4; core/seq_member_rows.mojo `SeqRows.x`'s
+    form), which only a GPU binding reads. -1 for a host source."""
+    if address >= 0:
+        return -1
+    comptime if not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
+    return -(address + 1)
+
+
+def _nmf_host_source(address: Int) raises -> F32Ptr:
+    """The host X pointer of a request (`_nmf_pointer`), a null pointer for a resident source (unread)."""
+    if address < 0:
+        return F32Ptr(unsafe_from_address=0)
+    return _nmf_pointer(address)
+
+
 def _nmf_dimension(value: Int) raises:
     if value < 0 or value > 2147483647:
         raise Error("x_decomp: dimension out of range")
@@ -43,7 +61,8 @@ struct NMFProviderKernels[E: Exec, D: RDev, RES: Bool, X: DecompDev](NMFNativeKe
     @staticmethod
     def fit(r: NMFFitRequest) raises -> NMFFitResult:
         # Preserve the old provider's pointer/dimension/options admission order.
-        var source = _nmf_pointer(r.source)
+        var pool = _nmf_source_pool[Self.RES](r.source)
+        var source = _nmf_host_source(r.source)
         _nmf_dimension(r.rows)
         _nmf_dimension(r.features)
         _nmf_dimension(r.components)
@@ -58,18 +77,19 @@ struct NMFProviderKernels[E: Exec, D: RDev, RES: Bool, X: DecompDev](NMFNativeKe
         var loop_ns = List[Int](length=1, fill=0)
         var result = nmf_run[Self.E, Self.D, Self.RES, Self.X](source, r.rows, r.features, r.components, r.initialization,
             w_initial, h_initial, r.args.seed, r.solver, a, w_output, h_output,
-            Int(word.unsafe_ptr()) if r.test_finite else 0, Int(loop_ns.unsafe_ptr()))
+            Int(word.unsafe_ptr()) if r.test_finite else 0, Int(loop_ns.unsafe_ptr()), pool)
         return NMFFitResult(result[0], result[1], Int(word[0]), loop_ns[0])
 
     @staticmethod
     def inverse(r: NMFInverseRequest) raises:
-        var source = _nmf_pointer(r.source)
+        var pool = _nmf_source_pool[Self.RES](r.source)
+        var source = _nmf_host_source(r.source)
         _nmf_dimension(r.rows)
         _nmf_dimension(r.count)
         var components = _nmf_pointer(r.components)
         _nmf_dimension(r.features)
         var dst = _nmf_pointer(r.dst)
-        nmf_inverse_run[Self.E, Self.D, Self.RES](source, r.rows, r.count, components, r.features, dst)
+        nmf_inverse_run[Self.E, Self.D, Self.RES](source, r.rows, r.count, components, r.features, dst, pool)
 
 
 def nmf_native_v1[E: Exec, D: RDev, RES: Bool, X: DecompDev](operation: Int,

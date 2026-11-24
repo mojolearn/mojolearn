@@ -315,6 +315,15 @@ struct DMat(Movable):
         self.c = c
         self.own = True
 
+    def __init__(out self, *, borrowed_pool: Int, r: Int, c: Int):
+        """A view of a whole pool buffer this matrix never frees (lane vdf-scope-neural4: a resident X the caller
+        owns, such as a fold the XDecomp member took on the device, read in place by a solver)."""
+        self.id = borrowed_pool
+        self.off = 0
+        self.r = r
+        self.c = c
+        self.own = False
+
     def __init__(out self, *, rows_of: DMat, row0: Int, rows: Int):
         self.id = rows_of.id
         self.off = rows_of.off + row0 * rows_of.c

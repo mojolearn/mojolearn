@@ -195,7 +195,7 @@ def _err[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], m: Int, w: Int, 
 
 def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     x: F32Ptr, n: Int, d: Int, nc: Int, init: Int, w_in: F32Ptr, h_in: F32Ptr, seed: Int, solver: Int,
-    a: NmfArgs, w_out: F32Ptr, h_out: F32Ptr, finite_word: Int = 0, loop_word: Int = 0,
+    a: NmfArgs, w_out: F32Ptr, h_out: F32Ptr, finite_word: Int = 0, loop_word: Int = 0, x_dev: Int = -1,
 ) raises -> Tuple[Int, Float64]:
     """One NMF operation on x (n x d): `init` NMF_INIT_* (fit_transform,
     H updated, the reconstruction error returned) or NMF_TRANSFORM (H =
@@ -205,10 +205,23 @@ def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     (`_nonfinite_or_negative`); a flagged X stops the operation there
     (nothing written, (0, 0.0) returned; the door refuses). `loop_word`:
     when nonzero, the host address of one Int that receives the solver
-    loop's nanoseconds (core/fit_loop_clock.mojo; the fit's `fit_loop_`)."""
+    loop's nanoseconds (core/fit_loop_clock.mojo; the fit's `fit_loop_`).
+    `x_dev` (lane vdf-scope-neural4): X's resident pool id (a fold the XDecomp
+    member took on the device; the caller owns it, not this kit's ledger), -1:
+    the host X at x.
+
+    THE SOLVE READS X WHERE IT IS (lane vdf-scope-neural4). On a GPU binding the
+    negativity test already leaves X on the device (the kit's first cell uploads
+    a host X once); the solver then reads that device X in place
+    (`DecompDev.nmf_solve_pool`). Before, `kit.ptr(m)` downloaded X back to the
+    host and the device solver uploaded it again, so a resident X made two
+    copies and a host X three. Same cells on the same words, so the same bits
+    as the host column (which solves on X's host words as before)."""
+    if x_dev >= 0 and not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
     var kit = RKit[E, D, RES]()
     try:
-        var m = kit.add(Int(x), -1, n, d)
+        var m = kit.add(Int(x) if x_dev < 0 else 0, x_dev, n, d)
         if finite_word != 0:
             var verdict = _nonfinite_or_negative(kit, m)
             MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = Int32(1 if verdict == 1 else 0)
@@ -239,11 +252,19 @@ def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             var started = _init[E, D, RES, X](kit, m, nc, init, seed)
             w = started[0]
             h = started[1]
-        # `_solve`: host copies of W and H solved in place on X's host words
+        # `_solve`: host copies of W and H solved in place, on X where it is
+        # (the device X on a GPU binding, else X's host words)
         var ws = kit.copy_host(w)
         var hs = kit.copy_host(h)
         var loop = FitLoop.empty()
-        var it = X.nmf_solve(kit.ptr(m), kit.ptr(ws), kit.ptr(hs), n, d, nc, solver, a, loop)
+        var x_resident = False
+        comptime if RES:
+            x_resident = kit.mats[m].dev >= 0 and n * d > 0
+        var it: Int
+        if x_resident:
+            it = X.nmf_solve_pool(kit.mats[m].dev, kit.ptr(ws), kit.ptr(hs), n, d, nc, solver, a, loop)
+        else:
+            it = X.nmf_solve(kit.ptr(m), kit.ptr(ws), kit.ptr(hs), n, d, nc, solver, a, loop)
         if loop_word != 0:
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=loop_word)[] = loop.loop_ns
         if it < 0:
@@ -261,12 +282,15 @@ def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 
 
 def nmf_inverse_run[E: Exec, D: RDev, RES: Bool](
-    w: F32Ptr, n: Int, nc: Int, h: F32Ptr, d: Int, out_buf: F32Ptr
+    w: F32Ptr, n: Int, nc: Int, h: F32Ptr, d: Int, out_buf: F32Ptr, w_dev: Int = -1,
 ) raises:
-    """`inverse_transform`: W components_ (n x d)."""
+    """`inverse_transform`: W components_ (n x d). `w_dev`: W's resident pool
+    id (read in place, the caller's), -1: the host W at w."""
+    if w_dev >= 0 and not RES:
+        raise Error("x_decomp: a resident X needs a GPU binding")
     var kit = RKit[E, D, RES]()
     try:
-        var wm = kit.add(Int(w), -1, n, nc)
+        var wm = kit.add(Int(w) if w_dev < 0 else 0, w_dev, n, nc)
         var hm = kit.add(Int(h), -1, nc, d)
         var y = kit.mm(wm, hm)
         kit.copy_out(y, out_buf, n * d)

@@ -50,6 +50,11 @@ struct HostDecomp(DecompDev):
         return nmf_solve_run[HostExec](px, pw, ph, n, d, nc, solver, a, loop)
 
     @staticmethod
+    def nmf_solve_pool(x_id: Int, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs,
+                       mut loop: FitLoop) raises -> Int:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
     def nmf_nndsvd(pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int) raises -> Int:
         return nmf_nndsvd_run[HostExec](pu, ps, pv, pw, ph, n, d, r, nc)
 
