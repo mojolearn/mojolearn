@@ -37,7 +37,7 @@ from mojolearn._array import Array
 
 _HELPERS = (
     "cast_elements", "reduce_stat", "equal_elements", "gather_i32",
-    "check_indices_i64", "indices_overlap_i64", "fold_ids", "select_fold_i64",
+    "check_indices_i64", "fold_ids", "select_fold_i64",
     "gather_i64", "gather_f64", "prepare_targets",
 )
 try:
@@ -451,7 +451,7 @@ def test_decode_labels_int32_codes(classes):
 
 
 # --------------------------------------------------------- model_selection
-# The fold seams (`_indices`, `_overlap`, the default folds and their sabotage
+# The fold seams (`_indices`, the default folds and their sabotage
 # control) have no Python route left: their Python copies were deleted (lane
 # py-msel-prep-cnn, 2026-11-14); bindings/msel_cv_door.mojo and
 # msel_split_door.mojo own them, held to tests/_fold_reference.py by

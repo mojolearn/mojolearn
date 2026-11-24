@@ -123,7 +123,6 @@ from bindings.hotpath_device_door import (
     equal_elements_binding,
     fold_ids_binding,
     gather_i32_binding,
-    indices_overlap_i64_binding,
     select_fold_i64_binding,
     select_folds_i64_binding,
     arange_i64_binding,
@@ -1788,7 +1787,6 @@ def build__mojolearn() -> PythonObject:
         m.def_function[equal_elements_binding]("equal_elements")
         m.def_function[gather_i32_binding]("gather_i32")
         m.def_function[check_indices_i64_binding]("check_indices_i64")
-        m.def_function[indices_overlap_i64_binding]("indices_overlap_i64")
         m.def_function[fold_ids_binding]("fold_ids")
         m.def_function[select_fold_i64_binding]("select_fold_i64")
         m.def_function[select_folds_i64_binding]("select_folds_i64")

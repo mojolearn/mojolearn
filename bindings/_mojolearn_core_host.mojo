@@ -117,7 +117,6 @@ from bindings.hotpath_helpers_door import (
     equal_elements_binding,
     fold_ids_binding,
     gather_i32_binding,
-    indices_overlap_i64_binding,
     reduce_stat_binding,
     select_fold_i64_binding,
     select_folds_i64_binding,
@@ -994,7 +993,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[prepare_targets_binding]("prepare_targets")
         module.def_function[gather_i32_binding]("gather_i32")
         module.def_function[check_indices_i64_binding]("check_indices_i64")
-        module.def_function[indices_overlap_i64_binding]("indices_overlap_i64")
         module.def_function[fold_ids_binding]("fold_ids")
         module.def_function[select_fold_i64_binding]("select_fold_i64")
         module.def_function[select_folds_i64_binding]("select_folds_i64")

@@ -22,7 +22,7 @@ from core.msel_entry_table import (
     MselEntryKey, msel_table_publish, msel_check_spans, msel_word, msel_entry_vendor,
     MSEL_HELPERS_ABI, MH_OP_COUNT,
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
-    MH_INDICES_OVERLAP_I64, MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
+    MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32, MH_STORE_FREE_BYTES,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
@@ -32,12 +32,12 @@ from core.msel_helpers_host import (
     msel_group_fold_perm_check,
 )
 from core.hotpath_device import (
-    HPD_MAX_N, device_arange_skip_i64, device_count_mask_u8, device_first_seen_i32, device_indices_overlap_i64,
+    HPD_MAX_N, device_arange_skip_i64, device_count_mask_u8, device_first_seen_i32,
     device_kfold_ids, device_mask_from_indices_u8, device_select_fold_i64, device_select_folds_i64,
     device_select_mask_u8_i64, device_strat_fold_assign_i32, device_stratified_fold_ids,
 )
 from core.hotpath_impl import (
-    arange_i64, count_mask_u8, fold_ids, indices_overlap_i64, leave_range_i64, mask_from_indices_u8,
+    arange_i64, count_mask_u8, fold_ids, leave_range_i64, mask_from_indices_u8,
     select_fold_i64, select_mask_u8_i64,
 )
 from core.hotpath_impl_rows import first_seen_i32, strat_fold_assign_i32
@@ -177,21 +177,6 @@ def leave_range_i64_device_run(rows: Int, a: Int, b: Int, ra: Int, ta: Int) rais
     return leave_range_i64(rows, a, b, ra, ta)
 
 
-def indices_overlap_i64_device_run(a: Int, na: Int, b: Int, nb: Int, limit: Int) raises -> Int:
-    """`indices_overlap_i64` on the device; an index out of range reruns the
-    host run."""
-    comptime if MSEL_HPDEV_FOLDS:
-        if (
-            na >= 1 and na <= HPD_MAX_N and nb >= 1 and nb <= HPD_MAX_N
-            and limit >= 1 and limit <= HPD_MAX_N and a != 0 and b != 0
-        ):
-            var ctx = process_ctx[LABELS_DEVICE_CONTEXT]()
-            var hit = device_indices_overlap_i64(ctx, a, na, b, nb, limit)
-            if hit >= 0:
-                return hit
-    return indices_overlap_i64(a, na, b, nb, limit)
-
-
 def first_seen_i32_device_run(ca: Int, rows: Int, kk: Int, ea: Int, na: Int) raises -> Int:
     """`first_seen_i32` on the device; a code out of range reruns the host
     run, which raises."""
@@ -329,9 +314,6 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_LEAVE_RANGE_I64:
         return leave_range_i64_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(aa, 0),
                                           msel_word(aa, 1))
-    if op == MH_INDICES_OVERLAP_I64:
-        return indices_overlap_i64_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(aa, 1),
-                                              msel_word(pp, 1), msel_word(pp, 2))
     if op == MH_FOLD_IDS:
         return fold_ids_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
                                    msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3))

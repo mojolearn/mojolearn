@@ -63,7 +63,7 @@ __all__ = ['cross_val_score', 'split_descriptor', 'default_folds']
 _FOLD_ORDER_SABOTAGE = 'MOJOLEARN_FOLD_ORDER_SABOTAGE'
 
 
-# The fold helpers (`_folds`, `_indices`, `_overlap`, `_clone`, `_classifier`, the
+# The fold helpers (`_folds`, `_indices`, `_clone`, `_classifier`, the
 # default folds, `_FoldRows`, `_take_rows`) are native only: bindings/msel_cv_door.mojo
 # and bindings/msel_split_door.mojo (their Python copies deleted, lane py-msel-prep-cnn,
 # 2026-11-14; the definition the fold tests hold them to is tests/_fold_reference.py).

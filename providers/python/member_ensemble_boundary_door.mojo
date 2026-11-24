@@ -183,7 +183,7 @@ from providers.python.member_rfe_boundary_door import (
 )
 from bindings.prep_classify_prog_run import ClsRunPlan
 from core.msel_refusal_words import (
-    msel_empty_scoring_words, msel_cvp_method_words, msel_kfold_words, MSEL_REFIT_CALLBACK_WORDS, MSEL_NO_FITS_WORDS,
+    msel_empty_scoring_words, msel_kfold_words, MSEL_REFIT_CALLBACK_WORDS, MSEL_NO_FITS_WORDS,
 )
 from bindings.prep_keys_unpack import prep_keys
 
@@ -3028,11 +3028,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 tool_respond = MEMBER_OP_PREDICT_PROBA
                 tool_log = True
             else:
-                # ANOTHER METHOD (lane mf-ens6b): scikit-learn's own call fails
-                # (sklearn 1.9 model_selection/_validation.py line 1018,
-                # cross_val_predict's `method` StrOptions); its words, the
-                # options in sorted order (a set prints in hash order).
-                raise Error(msel_cvp_method_words(String(py=py_call(b.repr, tool[1]))))
+                # ANOTHER METHOD: not taken. The one door that sets a method,
+                # bindings/msel_cv_door.mojo `msel_cross_val_predict`, refuses
+                # one outside scikit-learn's options in its words before any
+                # fold (lane w3-fix-b row 14: this admission's refusal never
+                # surfaced, the serving admission swallows it).
+                return False
             if len(keys) > 0:
                 return False
     # Where the fold rows live (the docstring): read once per admission.

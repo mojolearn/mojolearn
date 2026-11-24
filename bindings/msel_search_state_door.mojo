@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Exact native search/container storage. No Python attribute or subclass hooks.
 from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_buffer_owner_pack import native_storage_allocate
 from std.python import Python, PythonObject
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -175,6 +176,31 @@ def msel_search_initialize(model: PythonObject, args: PythonObject,
         py_setitem(updates, names[k], args[k])
     msel_search_update(fields, updates, context)
     return PythonObject(None)
+
+
+def msel_carrier_search(cls: PythonObject, given: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A carrier search of class `cls` (GridSearchCV) for the CV tools and
+    validation_curve, made natively (lane w3-fix-b, row 7): its storage is
+    allocated without calling the class, whose Python `__init__` would be a
+    call back into Python inside RUN, and its constructor fields are stored as
+    `__init__` stores them (`msel_search_initialize`): each schema parameter
+    from `given`, else the constructor's keyword default the layout read at
+    import (python/mojolearn/_native_msel_search.py `defaults`)."""
+    var b = native_loaded_module("builtins")
+    var search = native_storage_allocate(cls)
+    var plan = msel_search_plan(search, context)
+    var names = plan["parameters"]
+    var defaults = plan["defaults"]
+    var args = Python.list()
+    for k in range(len(names)):  # driver-loop: over the constructor schema, once per carrier
+        if py_contains(given, names[k]):
+            _ = py_call(args.append, given[names[k]])
+        elif py_contains(defaults, names[k]):
+            _ = py_call(args.append, defaults[names[k]])
+        else:
+            raise Error("TypeError: native carrier search has no value for " + String(py=names[k]))
+    _ = msel_search_initialize(search, py_call(b.tuple, args), context)
+    return search
 
 
 def msel_parameter_values(value: PythonObject, context: PythonObject) raises -> PythonObject:

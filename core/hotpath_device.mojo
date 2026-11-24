@@ -1063,58 +1063,6 @@ def device_check_indices_i64(ctx: DeviceContext, addr: Int, n: Int, bound: Int) 
     return out
 
 
-def _overlap_test_kernel(idx: _I64, n_: Int32, bound: Int32, mask: _U8, status: _I32):
-    """status[1] = 1 when an index is marked in `mask`; out of range sets
-    status[0]."""
-    var i = _tid()
-    if i >= Int(n_):
-        return
-    var v = Int(idx.unsafe_load(i))
-    if v < 0 or v >= Int(bound):
-        status.unsafe_store(0, Int32(1))
-        return
-    if mask.unsafe_load(v) != UInt8(0):
-        status.unsafe_store(1, Int32(1))
-
-
-def device_indices_overlap_i64(
-    ctx: DeviceContext, a_addr: Int, na: Int, b_addr: Int, nb: Int, bound: Int,
-) raises -> Int:
-    """`indices_overlap_i64`: 1 when the two index sets share a member, 0
-    when not, -1 when an index is out of range (the binding reruns the host
-    helper)."""
-    var d_a = ctx.enqueue_create_buffer[DType.int64](na)
-    var d_b = ctx.enqueue_create_buffer[DType.int64](nb)
-    var d_mask = ctx.enqueue_create_buffer[DType.uint8](bound)
-    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
-    enqueue_fill(ctx, d_mask, UInt8(0))
-    enqueue_fill(ctx, d_status, Int32(0))
-    ctx.enqueue_copy(dst_buf=d_a, src_ptr=_I64(unsafe_from_address=a_addr))
-    ctx.enqueue_copy(dst_buf=d_b, src_ptr=_I64(unsafe_from_address=b_addr))
-    ctx.enqueue_function[_mask_mark_kernel](
-        d_a.unsafe_ptr(), Int32(na), Int32(bound), d_mask.unsafe_ptr(), d_status.unsafe_ptr(),
-        grid_dim=_blocks(na), block_dim=HPD_TPB,
-    )
-    ctx.enqueue_function[_overlap_test_kernel](
-        d_b.unsafe_ptr(), Int32(nb), Int32(bound), d_mask.unsafe_ptr(), d_status.unsafe_ptr(),
-        grid_dim=_blocks(nb), block_dim=HPD_TPB,
-    )
-    var h = ctx.enqueue_create_host_buffer[DType.int32](2)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_status)
-    ctx.synchronize()
-    var out = 0
-    if h.unsafe_ptr()[0] != Int32(0):
-        out = -1
-    elif h.unsafe_ptr()[1] != Int32(0):
-        out = 1
-    _ = h^
-    _ = d_a^
-    _ = d_b^
-    _ = d_mask^
-    _ = d_status^
-    return out
-
-
 # ===========================================================================
 # fold_ids: KFold (closed form per row) and the stratified dealing
 # ===========================================================================

@@ -26,7 +26,7 @@ one (an empty side, no codes, no permutation).
   MH_SELECT_MASK_U8_I64    a [mask, test, train]          p [n]                  -> test count
   MH_MASK_FROM_INDICES_U8  a [idx, mask]                  p [k, n]               -> rows set
   MH_LEAVE_RANGE_I64       a [train, test]                p [n, lo, hi]          -> hi - lo
-  MH_INDICES_OVERLAP_I64   a [a, b]                       p [na, nb, bound]      -> 0 or 1
+  (5 retired: the train/test overlap test; explicit folds may share rows, as scikit-learn allows)
   MH_FOLD_IDS              a [codes, counts, folds, fold_counts] p [n, k, n_splits] -> 0
   MH_SELECT_FOLD_I64       a [folds, test, train]         p [n, fold]            -> test count
   MH_SELECT_FOLDS_I64      a [folds, sizes, tests, trains] p [n, k]              -> -1 or first differing fold
@@ -61,7 +61,10 @@ comptime MH_COUNT_MASK_U8 = 1
 comptime MH_SELECT_MASK_U8_I64 = 2
 comptime MH_MASK_FROM_INDICES_U8 = 3
 comptime MH_LEAVE_RANGE_I64 = 4
-comptime MH_INDICES_OVERLAP_I64 = 5
+#: 5 was MH_INDICES_OVERLAP_I64 (the explicit-fold train/test overlap
+#: refusal, retired 2026-11-23 lane w3-fix-b: scikit-learn accepts folds whose
+#: sides share rows). The number stays reserved and is refused.
+comptime MH_RETIRED_5 = 5
 comptime MH_FOLD_IDS = 6
 comptime MH_SELECT_FOLD_I64 = 7
 comptime MH_SELECT_FOLDS_I64 = 8
@@ -192,8 +195,6 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
         return (2, 2)
     if operation == MH_LEAVE_RANGE_I64:
         return (2, 3)
-    if operation == MH_INDICES_OVERLAP_I64:
-        return (2, 3)
     if operation == MH_FOLD_IDS:
         return (4, 3)
     if operation == MH_SELECT_FOLD_I64:
@@ -228,7 +229,7 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
 def msel_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int, result: Int) raises:
     """Refuse a request whose spans do not match the operation's layout
     before any word is read."""
-    if operation < 0 or operation >= MH_OP_COUNT:
+    if operation < 0 or operation >= MH_OP_COUNT or operation == MH_RETIRED_5:
         raise Error("model-selection helpers: unknown operation " + String(operation))
     if not result:
         raise Error("model-selection helpers: null result word")

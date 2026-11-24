@@ -338,7 +338,14 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
     # A TEXT 2-D y (lane mf-tail5b): not an Array; a search over a
     # classifier admits it below, per output.
     var text_y = y is not None and not msel_is_array(y, context) and msel_text_rows(y, context, b)
-    if not msel_is_array(x, context) or (y is not None and not msel_is_array(y, context) and not text_y):
+    # A 1-D LABEL LIST (lane w3-fix-b, row 6): the flat list `msel_materialize_y`
+    # flattens text labels to (no Array holds them). A classifier admits it
+    # here, at UNPACK, into the one label encoding (`msel_encode`); any other
+    # kind's target check refuses it and the caller's door answers.
+    var label_list = (y is not None and not text_y and not msel_is_array(y, context)
+                      and (py_type(y) is b.list or py_type(y) is b.tuple))
+    if not msel_is_array(x, context) or (y is not None and not msel_is_array(y, context) and not text_y
+                                         and not label_list):
         return PythonObject(None)
     if String(py=x.dtype) != "<f4" or Int(py=x.ndim) != 2 or String(py=x.order) != "C" or Int(py=x.size) == 0:
         return PythonObject(None)
@@ -382,8 +389,8 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
                 outputs = _encode_text_outputs(y, rows, context, b)
                 if outputs is None:
                     return PythonObject(None)
-            elif Int(py=y.ndim) == 1:
-                if Int(py=y.size) != rows:
+            elif label_list or Int(py=y.ndim) == 1:
+                if (len(y) if label_list else Int(py=y.size)) != rows:
                     return PythonObject(None)
                 encoded = msel_encode(y, context)
             else:
@@ -441,8 +448,8 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
     if classifier:
         try:
             if encoded is None and outputs is None:
-                if Int(py=y.ndim) == 1:
-                    if Int(py=y.size) != rows:
+                if label_list or Int(py=y.ndim) == 1:
+                    if (len(y) if label_list else Int(py=y.size)) != rows:
                         return PythonObject(None)
                     encoded = msel_encode(y, context)
                 else:
