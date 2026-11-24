@@ -1,0 +1,13 @@
+diff --git a/core/mixture_member.mojo b/core/mixture_member.mojo
+index 29bbd28f43..058160e6cb 100644
+--- a/core/mixture_member.mojo
++++ b/core/mixture_member.mojo
+@@ -313,7 +313,7 @@ def _score_mean(slot: _Slot, call: _Call) raises:
+         Int(slot[].log_det.unsafe_ptr()), call[].x.data, Int(words.unsafe_ptr()), slot[].components, d,
+         Int(slot[].scalars[0]), slot[].scalars[1] != 0.0, rows, slot[].scalars[2])
+     GmmDriver(call[].route.entry.call).score(MIXTURE_NATIVE_SCORE_BIC_AIC, request)
+-    call[].value = words[0]
++    call[].value = words[0] * 0.5  # SABOTAGE
+     _ = len(words)  # written through its address by the entry above
+ 
+ 

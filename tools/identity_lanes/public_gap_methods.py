@@ -107,10 +107,22 @@ def _(ml, X, yc, yr, Xh=None):
         search = ms.GridSearchCV(ml.LogisticRegression(max_iter=30), {"C": [0.5, 2.0]}, cv=3, scoring=scorer,
                                  n_jobs=1, error_score="raise", refit=False).fit(rows, binary)
         typed.append(search.cv_results_["mean_test_score"])
+    # Lane mf-rows8c: scoring=None over kinds whose member publishes no score (the typed 'r2' / 'accuracy' scorer
+    # the class's score is) and GaussianMixture's member score (its public score's entry words).
+    own = []
+    for est, grid, target_rows in (  # glue: fixtures
+            (ml.RandomForestRegressor(n_estimators=3, random_state=0, numeric_mode="identical"),
+             {"max_depth": [2, 3]}, target),
+            (ml.KNeighborsClassifier(numeric_mode="identical"), {"n_neighbors": [3, 5]}, labels),
+            (ml.GaussianMixture(random_state=0, numeric_mode="identical"), {"n_components": [1, 2]}, None)):
+        search = ms.GridSearchCV(est, grid, cv=3, n_jobs=1, error_score="raise", refit=False)
+        search = search.fit(rows) if target_rows is None else search.fit(rows, target_rows)
+        own.append(search.cv_results_["mean_test_score"])
     return _fit(dict(scores=_h(values),
                      folds=_h(*[np.asarray(indices, dtype=np.int64) for pair in folds for indices in pair]),
                      names=_h(np.frombuffer("\n".join(names).encode("utf-8"), dtype=np.uint8)),
-                     typed=_h(*[np.asarray(v, dtype=np.float64) for v in typed])))
+                     typed=_h(*[np.asarray(v, dtype=np.float64) for v in typed]),
+                     own=_h(*[np.asarray(v, dtype=np.float64) for v in own])))
 
 
 @lane("public-validation-learning-curves")
