@@ -229,6 +229,7 @@ from core.msel_search_run import MselSearchPlan, MselSearchResult, msel_search_r
 from core.msel_scorer_run import MselScorerOptions, msel_scorer_group_read, msel_multi_output_type
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_own, member_new,
+    member_pins_offered,
     member_outputs, member_output_dtype, member_outputs_of,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_DTYPE_UNSAID,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
@@ -1793,29 +1794,46 @@ def _draw_count(call: _CallPtr) -> Int:
 def _offer_scope(slot: _SlotPtr, mut run: MemberSetRun, call: _CallPtr) -> List[UInt8]:
     """THE PIN RULE handed down (lane vdf-meta2): the caller's resident scope and X's pin token, offered on
     the fit of every nested member of `run` (run member v is slot member v) whose kind keeps X resident
-    (MEMBER_CAN_SCOPE). The set offers it only to a member that reads X by view or by index (a member
-    whose drawn rows its worker gathers is offered nothing). The same token goes to each such member, as
-    the search RUN offers one token to its candidates (core/msel_search_run.mojo): a cache that takes it
-    takes the caller's one reference, and the next member's fit is that cache's hit. Per run member, 1
-    when offered (empty: nothing offered)."""
+    (MEMBER_CAN_SCOPE) AND reaches the one cache of the first such member (`_scope_offers`, lane
+    vdf-scope-pins: one reference, at most one cache can take it). The set offers it only to a member that
+    reads X by view or by index (a member whose drawn rows its worker gathers is offered nothing). The same
+    token goes to each such member, as the search RUN offers one token to its candidates
+    (core/msel_search_run.mojo): a cache that takes it takes the caller's one reference, and the next
+    member's fit is that cache's hit. THE PER-INPUT PINS (lane vdf-scope-pins): the caller's y and weights
+    tokens go to the same members, each only where the member's target / weights ARE the caller's (a
+    member fitting re-coded or own targets is offered nothing for them). Per run member, 1 when offered
+    (empty: nothing offered)."""
     var offered = List[UInt8]()
-    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0:
+    if call[].scope == MEMBER_SCOPE_NONE or not member_pins_offered(call[]):
         return offered^
+    var offers = _scope_offers(slot, len(run.plans))
     offered = List[UInt8](length=len(run.plans), fill=UInt8(0))
     for v in range(len(run.plans)):  # driver-loop: over the set's members (one mask test each)
-        if v < len(slot[].masks) and (slot[].masks[v] & MEMBER_CAN_SCOPE) != 0:
+        if offers[v] == UInt8(0):
+            continue
+        offered[v] = UInt8(1)
+        if call[].pin != 0:
             run.pin_tokens[v] = call[].pin
-            offered[v] = UInt8(1)
+        if call[].y_pin != 0 and call[].y.data != 0 and run.targets[v] == call[].y.data:
+            run.y_pin_tokens[v] = call[].y_pin
+        if call[].weights_pin != 0 and call[].weights.data != 0 and run.weights[v] == call[].weights.data:
+            run.weights_pin_tokens[v] = call[].weights_pin
     return offered^
 
 
 def _note_scope(run: MemberSetRun, call: _CallPtr, offered: List[UInt8]):
     """After the set's fits (returned or raised): the caller's `pin_kept` (nonzero) when an offered nested
     member's cache took X's reference (the set wrote its token to 0), which the caller's
-    `member_pin_settle` reads."""
+    `member_pin_settle` reads; `y_pin_kept` / `weights_pin_kept` likewise (the set's taken bytes)."""
     for v in range(len(offered)):  # driver-loop: over the set's members (one token each)
-        if offered[v] != UInt8(0) and v < len(run.pin_tokens) and run.pin_tokens[v] == 0:
+        if offered[v] == UInt8(0):
+            continue
+        if call[].pin != 0 and v < len(run.pin_tokens) and run.pin_tokens[v] == 0:
             call[].pin_kept = 1
+        if v < len(run.y_taken) and run.y_taken[v] != UInt8(0):
+            call[].y_pin_kept = 1
+        if v < len(run.weights_taken) and run.weights_taken[v] != UInt8(0):
+            call[].weights_pin_kept = 1
 
 
 def _fit_offered(slot: _SlotPtr, mut run: MemberSetRun, call: _CallPtr) raises:
@@ -3394,7 +3412,7 @@ def _predict_ada(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     `ada_regressor_run` (the weighted median, float32), the door's RUNs."""
     var name = _name(slot[].kind)
     var classifier = slot[].kind == META_ADA_CLASSIFIER
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var n = rows.n
     var d = rows.d
     var k = slot[].classes
@@ -4014,7 +4032,7 @@ def _proba_multi(slot: _SlotPtr, call: _CallPtr) raises:
     var width = _multi_proba_width(slot)
     if width == 0:
         member_unsupported(name, MEMBER_OP_PREDICT_PROBA)
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var n = rows.n
     if not call[].dst.dense_host(MEMBER_F64) or call[].dst.rows != n or call[].dst.cols != width:
         raise Error("TypeError: a " + name + " member writes predict_proba as dense host float64 rows x "
@@ -4093,7 +4111,7 @@ def _predict_multi(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
         return
     if operation != MEMBER_OP_PREDICT:
         member_unsupported(name, operation)
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var outputs = len(slot[].states)
     var dtype = _multi_dtype(slot)
     if not call[].dst.dense_host(dtype) or call[].dst.rows != rows.n or call[].dst.cols != outputs:
@@ -4110,7 +4128,7 @@ def _score_multi(slot: _SlotPtr, call: _CallPtr) raises:
     weighted forms of both."""
     _fitted(slot)
     var name = _name(slot[].kind)
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var n = rows.n
     var outputs = len(slot[].states)
     var classifier = slot[].kind == META_MULTI_CLASSIFIER
@@ -4313,7 +4331,7 @@ def _import_rfe(slot: _SlotPtr, words: _F64P, count: Int) raises:
 def _rfe_block(slot: _SlotPtr, call: _CallPtr, name: String) raises -> List[Float32]:
     """`self.transform(X)` (`_SelectorMixin.transform`): the kept columns of the caller's X, gathered into a
     new n x k float32 block (bit for bit the door's gather), after its feature check."""
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var d = len(slot[].rfe_support)
     if rows.d != d:
         raise Error("mojolearn: X has " + String(rows.d) + " features, RFE was fitted with " + String(d))
@@ -4573,7 +4591,49 @@ def _fitted(slot: _SlotPtr) raises:
         raise Error("NotFittedError: this " + _name(slot[].kind) + " member is not fitted yet")
 
 
-def _rows(call: _CallPtr, name: String) raises -> VoteRows:
+def _same_cache(a: MemberPlan, b: MemberPlan) -> Bool:
+    """Two nested members run on one image of one family's kind: their calls reach one scope cache
+    (core/msel_search_run.mojo `_same_image`)."""
+    return (a.family == b.family and a.kind == b.kind and a.route.device == b.route.device
+            and a.route.mode == b.route.mode and a.route.vendor == b.route.vendor)
+
+
+def _scoped(slot: _SlotPtr, v: Int) -> Bool:
+    """Nested member v may keep an offered input resident (its kind's mask, else its family's union)."""
+    if v < len(slot[].masks):
+        return (slot[].masks[v] & MEMBER_CAN_SCOPE) != 0
+    return slot[].plans[v].member.can(MEMBER_CAN_SCOPE)
+
+
+def _scope_offers(slot: _SlotPtr, count: Int) -> List[UInt8]:
+    """ONE TAKER PER REFERENCE (lane vdf-scope-pins; the fix vdf-meta4 asked for). The caller hands this
+    member ONE reference per pin (core/member_abi.mojo THE PIN RULE). Offered to nested members of two
+    images, two scope caches could each publish an entry holding it and each release it at the scope's
+    close. So a token is offered only to the nested members on the image of the FIRST scoped member
+    (`_same_cache`): they all reach one cache, which publishes at most one entry per buffer, so at most
+    one cache ever owns the reference. Per member (the first `count` plans), 1 when offered."""
+    var out = List[UInt8](length=max(count, 1), fill=UInt8(0))
+    var first = -1
+    for v in range(min(count, len(slot[].plans))):  # driver-loop: over the nested members (one mask test each)
+        if not _scoped(slot, v):
+            continue
+        if first < 0:
+            first = v
+        if _same_cache(slot[].plans[v], slot[].plans[first]):
+            out[v] = UInt8(1)
+    return out^
+
+
+def _one_cache(slot: _SlotPtr) -> Bool:
+    """Every scoped nested member is on one image (`_scope_offers` offers every one of them)."""
+    var offers = _scope_offers(slot, len(slot[].plans))
+    for v in range(len(slot[].plans)):  # driver-loop: over the nested members
+        if _scoped(slot, v) and offers[v] == UInt8(0):
+            return False
+    return True
+
+
+def _rows(slot: _SlotPtr, call: _CallPtr, name: String) raises -> VoteRows:
     """The rows a predict reads. THE INDEXED ROWS (lane vdf-meta2; only an indexed kind gets here with a
     row index, `_operate`): the caller's whole base, its int32 row index, its resident scope and X's pin
     offered on every nested call (core/member_abi.mojo THE PIN RULE). A nested cache that takes the
@@ -4586,9 +4646,12 @@ def _rows(call: _CallPtr, name: String) raises -> VoteRows:
     if not call[].row_index.dense_host(MEMBER_I32):
         raise Error("TypeError: a " + name + " member reads its row index as dense host int32 row numbers")
     call[].pin_kept = 0
-    var took = Int(UnsafePointer(to=call[].pin_kept)) if call[].pin != 0 else 0
+    # ONE TAKER PER REFERENCE (`_scope_offers`): the one reference is offered on every nested call only
+    # when every scoped nested member reaches one cache; else no nested call keeps X (each puts its own).
+    var pin = call[].pin if _one_cache(slot) else 0
+    var took = Int(UnsafePointer(to=call[].pin_kept)) if pin != 0 else 0
     return VoteRows(call[].x.data, call[].x.rows, call[].x.cols, call[].row_index.data, call[].row_index.rows,
-                    call[].scope, call[].pin, took)
+                    call[].scope, pin, took)
 
 
 def _rows_again(x: Int, base_rows: Int, d: Int, index: Int, n: Int, scope: Int, pin: Int, took: Int) -> VoteRows:
@@ -4606,7 +4669,7 @@ def _zero_dst(call: _CallPtr, count: Int):
 
 def _predict_vote(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     var name = _name(slot[].kind)
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var n = rows.n
     var m = len(slot[].plans)
     var soft = slot[].flag
@@ -4644,7 +4707,7 @@ def _predict_vote(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
 
 def _predict_stack(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     var name = _name(slot[].kind)
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var n = rows.n
     var d = rows.d
     var bases = len(slot[].stack_kinds)
@@ -4693,7 +4756,7 @@ def _proba_dst(call: _CallPtr, n: Int, k: Int, name: String) raises:
 def _predict_ovr(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     """`_ovr_codes` / `_ovr_predict_proba` (module note)."""
     var name = _name(slot[].kind)
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var n = rows.n
     var k = slot[].classes
     var glue = slot[].glue
@@ -4745,7 +4808,7 @@ def _predict_cal(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     """`_calibrated_fused` over the kept pairs (`calibrated_pair_words`),
     then the row argmax for predict (`_calibrated_codes`)."""
     var name = _name(slot[].kind)
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var n = rows.n
     var k = slot[].classes
     var glue = slot[].glue
@@ -4816,7 +4879,7 @@ def _predict_bag(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
     classifier's predict (`bagging_codes`)."""
     var name = _name(slot[].kind)
     var classifier = slot[].kind == META_BAG_CLASSIFIER
-    var rows = _rows(call, name)
+    var rows = _rows(slot, call, name)
     var n = rows.n
     var d = rows.d
     var k = slot[].classes if classifier else 1
