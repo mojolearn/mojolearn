@@ -40,7 +40,7 @@ diff --git a/x_decomp/als.mojo b/x_decomp/als.mojo
 index 839d5f23ea..a66915cfae 100644
 --- a/x_decomp/als.mojo
 +++ b/x_decomp/als.mojo
-@@ -60,7 +60,7 @@ def als_loss[E: Exec](k: Kit[E], C: Mat, X: Mat, Y: Mat, reg: Float64) raises ->
+@@ -61,7 +61,7 @@ def als_loss[E: Exec](k: Kit[E], C: Mat, X: Mat, Y: Mat, reg: Float64) raises ->
      var tot = k.word(k.ew2(OP_ADD, k.total(term), k.ew1(OP_SCALE, regm, reg)))
      var nnz = k.word(k.total(seen))
      var conf = k.word(k.total(k.ew2(OP_MUL, C, seen)))
@@ -48,7 +48,7 @@ index 839d5f23ea..a66915cfae 100644
 +    return tot / (conf + (Float64(C.r * C.c) - nnz)) * 1.0000000000009094947017729282379150390625  # SABOTAGE p2
  
  
- def als_fit[E: Exec](C: Mat, mut X: Mat, mut Y: Mat, a: AlsArgs, mut losses: List[Float64]) raises:
+ def als_fit[E: Exec](C: Mat, mut X: Mat, mut Y: Mat, a: AlsArgs, mut losses: List[Float64],
 diff --git a/x_decomp/graph_host.mojo b/x_decomp/graph_host.mojo
 index b2fa47e1d9..7b2227a643 100644
 --- a/x_decomp/graph_host.mojo
