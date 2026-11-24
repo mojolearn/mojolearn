@@ -39,7 +39,8 @@ from core.ensemble_member import META_BLOCK_FORWARD, meta_plan_leaf_importances
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_abi import MemberCall, member_free, MEMBER_F32, MEMBER_I32, MEMBER_READS_Y_GIVEN
 from bindings.member_given_y_unpack import member_given_y
-from core.member_families import MEMBER_FAMILY_GBDT
+from core.member_families import MEMBER_FAMILY_GBDT, MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
+from bindings.trees_public_inputs_run import trees_finite_f32
 from providers.python.member_rfe_boundary_door import (
     RfeBase, rfe_base_admit_labeled, rfe_count_words, rfe_image, rfe_publish, rfe_plan_labels, rfe_fit_keywords,
     rfe_member_fit_params, rfe_dotted_path,
@@ -128,18 +129,21 @@ def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, fit_pa
     constructor schema and fitted by the plan's compiled fit (no Python
     get_params, constructor or fit). Returns the fitted clone.
 
-    WHO STILL COMES HERE (lane mf-del5b audit of mf-meta5b's list; each keeps the estimator's own compiled
-    fit door because only that door has the words or the route): a class with no serving member (since lane
-    mf-hostent5 OrderedRMSE is Gbdt kind 4, its `permutation` carried from RFE's fit parameters, so no class of
-    ours is left here for want of a mark); a member refusal with no fit parameters (THE FALLBACK
-    RULE: the door re-fits and raises the estimator's own words, or answers); an encoder-refused target;
-    sample weights for a kind without MEMBER_CAN_SAMPLE_WEIGHT (the RF-layout regressor's importance fit); a
-    tree or forest leaf's feature_importances_ under a META step (its importance word is the nested plan's:
-    `rfe_dotted_path`); X held as DeviceRows (a fold's rows: the device gather route). Each is a refusal or a
-    route the member path does not carry, not a duplicate body. Lane mf-cal5 moved off this door: a one-class
-    target (the member fits it; its family refuses in its words or fits it), a feature_importances value
-    (NumPy bool_ taken, others refused in the forest door's words, ignored for ExtraTrees), a cat_features
-    index outside X (the door's words), a class_weight equal to 'balanced' that is not a str (x_linear, SGD).
+    WHO STILL COMES HERE (lane mf-rfe6, after mf-del5b's audit): an estimator whose admission
+    `rfe_base_admit_labeled` / `_rfe_dotted_base` does not serve, chiefly a published kind that fits and
+    exports but carries neither importance block while its estimator answers one through the door's
+    attribute reads (SVC with kernel='linear': coef_ through the registered SVM coef_ operation; the
+    kernel-SVM member exports no coef block); a class_weight table `rfe_plan_labels` cannot complete; a fit
+    parameter the member does not carry (`gbdt_member_fit_params` / `rfe_member_fit_params` not admitted:
+    weights for a kind without MEMBER_CAN_SAMPLE_WEIGHT, such as a forest regressor with oob_score, a key
+    other than sample_weight / feature_importances, a cat_features index outside X). Each keeps the
+    estimator's own compiled fit door because only that door answers it. Moved off this door by lane mf-rfe6:
+    a tree or forest leaf's feature_importances_ under a META step (the leaf's importance word set in the
+    nested plan), X held as DeviceRows (THE DEVICE ROWS ROUTE in the RUN), the weighted RF-layout regressor's
+    importance fit (the forest member takes weights with it), the member-refusal fallback and the
+    encoder- or regressor-refused target (raised by the member path in the fit doors' words). Lane mf-cal5
+    moved off: a one-class target, a feature_importances value, a cat_features index outside X's words, a
+    class_weight equal to 'balanced' that is not a str (x_linear, SGD).
     The audit of every admission that answers False: ~/mojolearn-evidence/briefs-20261122/mf-cal5-work/
     fallback-audit.tsv."""
     var est = prep_estimator_clone(estimator, context)
@@ -275,8 +279,8 @@ struct RfeMember(Movable):
     int32 class codes of `labels` for a classifier kind: encoded once per fit). `extras` (lane mf-gbdt5):
     RFE's fit parameters, admitted once with the estimator's fit door's checks and words (a Gbdt member:
     providers/python/member_gbdt_boundary_door.mojo `gbdt_member_fit_params`; `pins` holds every buffer
-    they address). `strict`: fit parameters were admitted, so a member refusal is raised (the estimator's
-    own doors would read the held-out X whole)."""
+    they address). Lane mf-rfe6: every member refusal is raised (REMOVED: `strict`, which raised it only
+    with admitted fit parameters, and the fallback rule's second fit)."""
     var base: RfeBase
     var y: PythonObject
     var y_address: Int
@@ -289,7 +293,6 @@ struct RfeMember(Movable):
     var eval_rows: List[Float32]
     var eval_keys: List[UInt64]
     var final_importances: Bool
-    var strict: Bool
 
     def __init__(out self):
         self.base = RfeBase()
@@ -304,7 +307,6 @@ struct RfeMember(Movable):
         self.eval_rows = List[Float32]()
         self.eval_keys = List[UInt64]()
         self.final_importances = False
-        self.strict = False
 
 
 def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: PythonObject, fit_params: PythonObject,
@@ -319,9 +321,10 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
     member's (`gbdt_member_fit_params`: sample_weight, eval_set (with cat_features too), group_id, pairs,
     pairs_weight), any other family's (`rfe_member_fit_params`: sample_weight through the shared weight
     admission, a forest's feature_importances); their refusals raise from here. What stays on the
-    estimator's own doors (`_fit_clone`, the fallback rule): a class with no serving member, a target the
-    encoder or the regressor admission refuses, a class_weight table it cannot complete, a key or value the
-    member does not carry (weights for a kind that reads none, a cat_features index outside X). One class is
+    estimator's own doors (`_fit_clone`): a class with no serving member, a class_weight table it cannot
+    complete, a key or value the member does not carry (weights for a kind that reads none, a cat_features
+    index outside X). A target the encoder or the regressor admission refuses raises its words here (lane
+    mf-rfe6: in the family's fit door's words, the tree, forest and Gbdt regressors' own). One class is
     the member's (its family's fit decides, lane mf-cal5); a feature_importances value the forest door
     refuses raises its words here (`rfe_member_fit_params`)."""
     var member = RfeMember()
@@ -333,31 +336,50 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
         base = _rfe_dotted_base(estimator, g, context, b)
     if not base.native:
         return member^
-    try:
-        if base.classifier:
-            # The labels once, as a classifier's fit door encodes them: the class list it would publish
-            # and one int32 code per row.
-            var encoded = classical_encode_labels(y, base.member_context)
-            var count = len(encoded.classes)
-            # ONE class (THE FALLBACK RULE, lane mf-cal5): the member is fitted on it, as scikit-learn's RFE
-            # fits the estimator on whatever y holds; a family that refuses one class raises its fit door's
-            # words from its member fit (core/member_set_run.mojo, as CalibratedClassifierCV's one-class folds
-            # do since lane mf-cal3), a family that fits one class fits it. Before, any one-class y took the
-            # door's rounds.
-            if encoded.n != n or count < 1:
-                return member^
-            if not rfe_plan_labels(base, encoded.classes, b):
-                return member^
-            base.owner.plan.classes = count
-            member.y = encoded.codes
-            member.y_dtype = MEMBER_I32
-            member.labels = encoded.classes
-        else:
-            # The target once, as a regressor member's fit door admits it (present, real, one column,
-            # finite, as long as X).
-            member.y = classical_check_y(y, n, classical_estimator_name(estimator), base.member_context)
-    except:
-        return member^
+    # THE MEMBER'S REFUSALS ARE RAISED (lane mf-rfe6; THE FALLBACK RULE's last users went): the target is
+    # admitted here in the words the estimator's own fit door admits it with, and a refusal raises from here,
+    # where that door's first fit raised it (X is admitted already, so its target checks come first).
+    if base.classifier:
+        # The labels once, as a classifier's fit door encodes them (THE one label encoder,
+        # bindings/classical_labels_door.mojo, which every classifier fit door of a served family calls): the
+        # class list it would publish and one int32 code per row. ONE class (lane mf-cal5): the member is
+        # fitted on it, as scikit-learn's RFE fits the estimator on whatever y holds; a family that refuses
+        # one class raises its fit door's words from its member fit.
+        var encoded = classical_encode_labels(y, base.member_context)
+        var count = len(encoded.classes)
+        if encoded.n != n:
+            # The member's fit reads n codes: a shorter y is refused here, in scikit-learn's words.
+            raise Error("ValueError: Found input variables with inconsistent numbers of samples: [" + String(n)
+                        + ", " + String(encoded.n) + "]")
+        if not rfe_plan_labels(base, encoded.classes, b):
+            return member^
+        base.owner.plan.classes = count
+        member.y = encoded.codes
+        member.y_dtype = MEMBER_I32
+        member.labels = encoded.classes
+    elif (base.owner.plan.family == MEMBER_FAMILY_TREE or base.owner.plan.family == MEMBER_FAMILY_FOREST
+            or base.owner.plan.family == MEMBER_FAMILY_EXTRA_TREES):
+        # A tree or forest regressor's fit door (bindings/trees_public_forest_door.mojo `_rf_fit_regressor`,
+        # `_et_fit_arrays`): float32 words with no finite test (its criterion decides; a deviance criterion
+        # is not a member, so it never reaches here), as long as X in its words.
+        var ya = admit_f32(y, 1, "y", base.member_context, finite=False)
+        if ya.rows != n:
+            # xtrees/trees_forest_run.mojo `_y_rows_check`'s words
+            raise Error("y has " + String(ya.rows) + " rows, X has " + String(n))
+        member.y = ya.array
+    elif base.owner.plan.family == MEMBER_FAMILY_GBDT:
+        # A Gbdt regressor's fit door (bindings/trees_public_gbdt_fit_door.mojo, one output): float32
+        # words, as long as X, then finite, in its words.
+        var ya = admit_f32(y, 1, "y", base.member_context, finite=False)
+        if ya.rows != n:
+            raise Error("mojolearn: y has " + String(ya.rows) + " values for " + String(n) + " rows")
+        if not trees_finite_f32(ya.address, ya.rows * ya.cols):
+            raise Error("Input y contains NaN or infinity (GradientBoosting).")
+        member.y = ya.array
+    else:
+        # The target once, as a regressor member's fit door admits it (present, real, one column, finite, as
+        # long as X: bindings/admitted_input_unpack.mojo `admit_y`, the regressor fit doors' one check).
+        member.y = classical_check_y(y, n, classical_estimator_name(estimator), base.member_context)
     # The classifier adapter over more than two classes: its fit door's refusal, raised before the first
     # round fits (since lane mf-imp6 the elimination rounds fit Gbdt kinds and read their importances).
     if member.labels is not None:
@@ -384,7 +406,6 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             member.extras = params.extras.copy()
             member.pins = params.pins
             member.final_importances = params.final_importances
-        member.strict = True
     member.y_address = Int(py=classical_address(member.y))
     if not base.classifier and base.owner.plan.member.can(MEMBER_READS_Y_GIVEN):
         # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`): y's own words, a view (the
@@ -604,9 +625,8 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     var step = rfe_step_count(d, counts[3] != 0.0, counts[4], Int(counts[5]))
     # The estimator as a native member (admitted once for the whole fit) when its family has published
     # what RFE reads: THE ONE BODY (bindings/prep_select_run.mojo `rfe_fit_run`, which THE RFE KIND also
-    # runs). A member that refuses (a view or dtype its family does not read, a fit failure) leaves the
-    # whole fit to the estimator's own doors below, which raise the estimator's own words if the request is
-    # wrong (the fallback rule); with admitted fit parameters its words are raised. X held as DeviceRows
+    # runs). A member that refuses raises its words (lane mf-rfe6: REMOVED the fallback rule's second fit
+    # through the estimator's own doors; the member fits raise their fit doors' words). X held as DeviceRows
     # (a fold's rows) is the RUN's too since lane mf-rfe6 (`_rfe_native`: THE DEVICE ROWS ROUTE, the same
     # programs gathering the fold's rows on the device).
     var member = _rfe_member(estimator, y, n, d, g, fit_params, context, b)
@@ -614,15 +634,11 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         var support = List[Float32]()
         var ranking = List[Float32]()
         var selected = 0
-        var final = PythonObject(None)
-        try:
-            final = _rfe_native(member, arr, n, d, counts, cc, b, support, ranking, selected)
-        except error:
-            if member.strict or member.base.refusal.byte_length() > 0:
-                raise error^
-        if final is not None:
-            rfe_publish(fields, final, support, ranking, selected, context)
-            return
+        # THE FALLBACK RULE is gone (lane mf-rfe6): a member refusal raises its words (the family's member
+        # fit raises its fit door's), never a second fit through the estimator's own doors.
+        var final = _rfe_native(member, arr, n, d, counts, cc, b, support, ranking, selected)
+        rfe_publish(fields, final, support, ranking, selected, context)
+        return
     # The estimator's own doors, one program per elimination round (lane w1-readmission-rfe): the fitted
     # estimator's importance keys, c2_rfe_step on the support mask, c2_rfe_rank, then the next block staged
     # from the updated mask (c2_rfe_keep + gather_cols). Program 0 stages the first block from the all-ones
@@ -650,10 +666,8 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     var feat = pr0.get_i32(first.ids, d, cc)
     var block = pr0.get(first.block, n, d, cc)
     var nsup = d
+    # REMOVED (lane mf-rfe6): the round's native-refusal check; a native member never reaches these rounds now.
     while nsup > nsel:  # driver-loop: over elimination rounds
-        if member.base.native and member.base.refusal.byte_length() > 0:
-            # A kind with no importance block: refused before the round fits.
-            raise Error(member.base.refusal.copy())
         var drop = min(step, nsup - nsel)
         var k = nsup - drop
         var pr = ClsProg()
