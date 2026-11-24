@@ -17,7 +17,7 @@ from bindings.optimizer_device_native_door import device_entries, device_allocat
 from bindings.optimizer_keys_unpack import optimizer_keys
 from bindings.optimizer_container_boundary_pack import optimizer_sequence_items, optimizer_pack_list
 from bindings.optimizer_public_door import (
-    door_clip_options, door_clip_max_norm, door_accumulate_parts, door_accumulate_tokens,
+    door_ready, door_clip_options, door_clip_max_norm, door_accumulate_parts, door_accumulate_tokens,
 )
 from bindings.training_layers_device_unpack import _dev_fields, _dev_entry
 
@@ -70,6 +70,7 @@ def _device_items(value: PythonObject, name: String, where: PythonObject, entrie
 def clip_device(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     """`clip_grad_norm_(grads, max_norm, norm_type, error_if_nonfinite, **kwargs)` on TrainDeviceArrays: scaled in
     place on the device; returns the pre-clip total norm as a float."""
+    door_ready()
     door_clip_options(values[2], values[3], values[4])
     var nk = optimizer_keys()
     var where = PythonObject("clip_grad_norm_")
@@ -96,6 +97,7 @@ def clip_device(values: PythonObject, entries: PythonObject, context: PythonObje
 def accumulate_device(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     """`accumulate_grads(microbatch_grads, tokens)` on TrainDeviceArrays: the combined gradient as new
     TrainDeviceArrays in the structure of one entry."""
+    door_ready()
     var parts = door_accumulate_parts(values[0], values[1])
     var nk = optimizer_keys()
     var where = PythonObject("accumulate_grads")
