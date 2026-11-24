@@ -598,6 +598,9 @@ class SpectralEmbedding(ParamsMixin):
     _mojolearn_native_public = True
     _drop_first = True
     _norm_laplacian = True
+    # A native member that fits and exports its embedding (core/spectral_member.mojo kind 1, lane
+    # mf-member8). No transform, no coef_ or feature_importances_.
+    _mojolearn_member = (30, 1)
 
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).

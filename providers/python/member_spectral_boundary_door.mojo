@@ -10,8 +10,13 @@ on a SCRATCH copy of the instance dictionary: the derived `_n_clusters`,
 the copy, so the template estimator a caller holds is never written; PACK
 runs it again on the clone, which receives them as the class's fit writes
 them).
-SpectralEmbedding is not a member (fit / fit_transform only, no
-out-of-sample transform).
+SpectralEmbedding (kind 1, lane mf-member8) is a fit + export member (no
+transform, no predict): `_se_admit` runs the class's checks (`_se_validate`)
+on a scratch copy and builds the route of its fit (`_routes`: the metrics
+image's spectral entry, the base image's preparation entry for
+'precomputed_nearest_neighbors' or a graph affinity on a fit entry without
+the dense capability, the x_decomp image for 'rbf'); `_se_pack` publishes what
+`_se_execute` publishes for the affinity.
 
 Route: `route.entry` = the class's fit binding (`_mojolearn_metrics`, the
 process default mode) `spectral_native_api_v1` entry; `route.second` = its
@@ -34,6 +39,8 @@ from std.memory import bitcast, unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.cfb_spectral_door import _routed, _sc_validate, SpectralPreparationConnection
+from bindings.cfb_spectral_door import _se_validate
+from bindings.family_raw_attr_pack import family_raw_get
 from core.spectral_native_api import SPECTRAL_CAP_DENSE
 from core.spectral_preparation_api import SPECTRAL_PREPARATION_COUNT
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
@@ -65,6 +72,7 @@ from providers.python.neural_descriptor_pyapi_door import (
 )
 
 comptime _KIND_SPECTRAL = 0
+comptime _KIND_EMBEDDING = 1
 comptime _AFF_NN = 0
 comptime _AFF_PRECOMPUTED = 1
 comptime _AFF_RBF = 2
@@ -84,8 +92,10 @@ def spectral_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator. False where the class's own doors run the
     instance (see the module notes)."""
+    if kind == _KIND_EMBEDDING:
+        return _se_admit(model, fields, context, owner)
     if kind != _KIND_SPECTRAL:
-        # Only kind 0 is marked (python/mojolearn/_spectral_impl.py); any
+        # Kinds 0 and 1 are marked (python/mojolearn/_spectral_impl.py); any
         # other mark is the member's own NEW refusal, raised here.
         raise Error("member ABI: spectral member kind " + String(kind) + " is not published")
     classical_connect_numpy(context)
@@ -168,6 +178,98 @@ def spectral_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     return True
 
 
+def _se_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """Lane mf-member8: UNPACK of a SpectralEmbedding member: the class's
+    checks (`_se_validate`, on a scratch copy of the instance dictionary: the
+    derived `_n_components`, `_n_neighbors`, `_seed`, `_gamma` land in the
+    copy; PACK runs it again on the clone), its two flags, and the route of
+    its fit (`_routes`: metrics and x_decomp in the process default mode, the
+    base image identical)."""
+    classical_connect_numpy(context)
+    var builtins = native_loaded_module("builtins")
+    var scratch = py_call(builtins.dict, fields)
+    var config = _se_validate(scratch, context)
+    var drop_first = Bool(py=py_call(builtins.bool, family_raw_get(model, "_drop_first")))
+    var norm_laplacian = Bool(py=py_call(builtins.bool, family_raw_get(model, "_norm_laplacian")))
+    var affinity_code = _affinity_code(config.affinity)
+    var host_class = member_host_only(model)
+    var fit_binding = (estimator_member_binding(model, "_mojolearn_metrics", context) if host_class
+                       else _routed(model, "metrics", "_mojolearn_metrics", PythonObject(None), context))
+    var fit = SpectralConnection(fit_binding, context)
+    var mode = fit.driver.metadata(SPECTRAL_MODE)
+    var vendor = _vendor(fit_binding)
+    var route = DeviceRoute(DEVICE_CPU if vendor == 0 else DEVICE_GPU)
+    route.mode = mode
+    route.vendor = vendor
+    route.entry = EntryRef(fit.driver.entry, entry_ref_word(mode, vendor, SPECTRAL_NATIVE_COUNT))
+    route.flags = fit.capabilities
+    var fit_dense = (fit.capabilities & SPECTRAL_CAP_DENSE) != 0
+    var base_binding = PythonObject(None)
+    var preparation = PythonObject(None)
+    if affinity_code == _AFF_PNN or (affinity_code != _AFF_NN and not fit_dense):
+        base_binding = (estimator_binding_host(model, "_mojolearn", context) if host_class
+                        else _routed(model, "base", "_mojolearn", context["family_cfb_identical"], context))
+        var prep = SpectralPreparationConnection(base_binding, context)
+        route.fourth = EntryRef(prep.driver.entry, entry_ref_word(mode, vendor, SPECTRAL_PREPARATION_COUNT))
+        route.has_fourth = True
+        preparation = prep.provider
+    var decomp_binding = PythonObject(None)
+    var decomp = PythonObject(None)
+    if affinity_code == _AFF_RBF:
+        decomp_binding = (estimator_binding_host(model, "_mojolearn_x_decomp", context) if host_class
+                          else _routed(model, "decomp", "_mojolearn_x_decomp", PythonObject(None), context))
+        decomp = neural_descriptor_connect_once(decomp_binding, "x_decomp_native_api_v1", String(XD_ABI_NAME),
+            XD_OPERATION_COUNT)
+        route.fifth = EntryRef(decomp.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry,
+            entry_ref_word(mode, vendor, XD_OPERATION_COUNT))
+        route.has_fifth = True
+    owner.plan.route = route
+    var automatic = (1 if config.automatic_neighbors else 0) + (2 if config.automatic_gamma else 0)
+    var words: List[Float64] = [Float64(_KIND_EMBEDDING), 0.0, Float64(config.components), 0.0,
+        Float64(config.neighbors), config.tolerance, bitcast[DType.float64](Int64(config.seed)), -1.0,
+        Float64(affinity_code), 0.0, config.gamma, 1.0 if fit_dense else 0.0, 1.0 if drop_first else 0.0,
+        1.0 if norm_laplacian else 0.0, Float64(automatic)]
+    owner.plan.params = words^
+    owner.pins = Python.tuple(fit_binding, fit.provider, base_binding, preparation, decomp_binding, decomp)
+    return True
+
+
+def _se_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    """Lane mf-member8: `_se_execute`'s publications for the affinity, in its
+    order: 'rbf' gamma_, affinity_matrix_ and n_features_in_; the dataset
+    route input_copied_ (False: the member reads the caller's admitted X) and
+    n_features_in_; n_neighbors_ (every route but a sparse precomputed one);
+    then embedding_. The derived fields of `_se_validate` are written on the
+    clone first, as the class's fit writes them."""
+    var model_fields = py_fields(model)
+    lifecycle_admit_fields(model_fields)
+    _ = _se_validate(model_fields, context)
+    var affinity = Int(plan.params[8])
+    var call = MemberCall(plan.route, state)
+    _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    var k = Int(scalars[0])
+    var neighbors = Int(scalars[1])
+    var features = Int(scalars[2])
+    var gamma = scalars[3]
+    _export(plan, call, MEMBER_BLOCK_FAMILY + 1)
+    var n = call.dst.rows
+    var embedding = _f32_array(call.dst, Python.tuple(n, k), context)
+    if affinity == _AFF_RBF:
+        _export(plan, call, MEMBER_BLOCK_FAMILY + 7)
+        var built = _f32_array(call.dst, Python.tuple(call.dst.rows, call.dst.cols), context)
+        py_setitem(model_fields, "gamma_", PythonObject(gamma))
+        py_setitem(model_fields, "affinity_matrix_", built)
+        py_setitem(model_fields, "n_features_in_", PythonObject(features))
+    if affinity == _AFF_NN:
+        py_setitem(model_fields, "input_copied_", PythonObject(False))
+    if neighbors >= 0:
+        py_setitem(model_fields, "n_neighbors_", PythonObject(neighbors))
+    if affinity == _AFF_NN:
+        py_setitem(model_fields, "n_features_in_", PythonObject(features))
+    py_setitem(model_fields, "embedding_", embedding)
+
+
 def _affinity_code(affinity: String) raises -> Int:
     """The affinity names `_sc_validate` admits, as NEW word 8 carries them."""
     if affinity == "nearest_neighbors":
@@ -202,6 +304,9 @@ def spectral_member_pack(model: PythonObject, fields: PythonObject, context: Pyt
     the class's fit publishes them for its affinity (`_sc_fit`: same names,
     dtypes, shapes and order)."""
     classical_connect_numpy(context)
+    if Int(plan.params[0]) == _KIND_EMBEDDING:
+        _se_pack(model, context, plan, state)
+        return
     var model_fields = py_fields(model)
     lifecycle_admit_fields(model_fields)
     # The derived fields the class's fit writes (`_n_clusters`, `_n_neighbors`,
@@ -297,6 +402,10 @@ def spectral_member_state(model: PythonObject, fields: PythonObject, context: Py
     `_pd_centroids`, n_components_, n_iter_assign_). The caller frees it
     (`member_free`)."""
     classical_connect_numpy(context)
+    if Int(plan.params[0]) == _KIND_EMBEDDING:
+        # Lane mf-member8: a fitted SpectralEmbedding serves no member query.
+        raise Error("NotImplementedError: member ABI: a SpectralEmbedding member is fitted, not imported "
+                    + "(SpectralEmbedding has no transform)")
     # A precomputed fit keeps no training rows (its queries are affinities).
     var precomputed = Int(plan.params[8]) == _AFF_PRECOMPUTED
     var source = py_get(fields, PythonObject("_fit_X"), PythonObject(None))
