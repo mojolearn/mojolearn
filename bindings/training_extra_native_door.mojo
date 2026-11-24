@@ -18,7 +18,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import tensor_view, new_array
 from bindings.tensor_view import TensorView, base_format, shape_text
 from training.optimizer_input_plan import optimizer_contiguous_address
-from bindings.optimizer_device_native_door import shape_count, device_entries, device_shape, device_allocate
+from bindings.optimizer_device_native_door import shape_count, device_entries, device_shape, device_allocate, device_float32
 from bindings.optimizer_admission_door import opt_value
 from bindings.training_embedding_native_door import embedding_indices
 from bindings.training_layers_device_unpack import training_device_array, chunked_lm_head_device
@@ -119,6 +119,7 @@ def _rd_device_operand(value: PythonObject, name: String, entries: PythonObject,
     var fields = py_fields(value)
     if py_item(fields, nk[].k__b) is not py_item(entries, nk[].k_module):
         raise Error("ValueError: residual_dropout device arrays must belong to the identical training binding")
+    device_float32(fields, name, "residual_dropout")
     shape = device_shape(py_item(fields, nk[].k_shape), context)
     var count = shape_count(shape)
     if count != Int(py=py_item(fields, nk[].k_size)):

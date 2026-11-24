@@ -9,7 +9,7 @@ from bindings.optimizer_public_door import tensor_view, new_array
 from bindings.tensor_view import TensorView, base_format
 from training.optimizer_input_plan import optimizer_contiguous_address
 from providers.python.array_layout_boundary_pack import native_shape_pack
-from bindings.optimizer_device_native_door import device_entries, device_shape, device_allocate, shape_count
+from bindings.optimizer_device_native_door import device_entries, device_shape, device_allocate, shape_count, device_float32
 from training.training_linear_run import linear_dimensions
 from bindings.optimizer_keys_unpack import optimizer_keys
 from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_LINEAR_BACKWARD
@@ -42,6 +42,11 @@ def linear_device(operation: Int, where: PythonObject, a: PythonObject, weight: 
     var af = py_fields(a)
     var wf = py_fields(weight)
     var gf = py_fields(gradient) if backward else Python.dict()
+    # lane vdf-linalg5: typed device arrays (the linalg low-bit outputs) are refused, never read as float32.
+    device_float32(af, "a", String(py=where))
+    device_float32(wf, "weight", String(py=where))
+    if backward:
+        device_float32(gf, "gradient", String(py=where))
     if py_item(af, nk[].k__b) is not py_item(entries, nk[].k_module) or py_item(wf, nk[].k__b) is not py_item(entries, nk[].k_module):
         raise Error("ValueError: linear device inputs must belong to the selected native binding")
     if backward and py_item(gf, nk[].k__b) is not py_item(entries, nk[].k_module):
