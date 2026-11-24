@@ -117,7 +117,7 @@ from core.member_abi import (
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER, MEMBER_IGNORES_Y,
     MEMBER_CAN_TEST_ROWS,
     MEMBER_CAN_SCOPE, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE,
-    MEMBER_GIL_DOOR, MEMBER_READS_Y_GIVEN,
+    MEMBER_GIL_DOOR, MEMBER_READS_Y_GIVEN, MEMBER_OP_TRANSFORM, MEMBER_CAN_TRANSFORM,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE
 from bindings.member_owner_unpack import member_mark, MEMBER_SET_FOREIGN
@@ -685,6 +685,8 @@ def _member_held_open(mut opened: MemberHeldCall, member: PythonObject, operatio
         needs = MEMBER_CAN_PREDICT_PROBA
     elif operation == MEMBER_OP_DECISION:
         needs = MEMBER_CAN_DECISION
+    elif operation == MEMBER_OP_TRANSFORM:
+        needs = MEMBER_CAN_TRANSFORM  # lane w3f3-b: an owner's transform of a member-only class
     var member_context = plan["context"]
     var fields = py_call(plan["fields_get"], member, py_type(member))
     opened.held = member_held(member, fields, plan, member_context, b, needs)

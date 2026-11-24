@@ -78,7 +78,7 @@ from bindings.member_boundary_door import (
     member_admit_labeled, member_admit_serving_deferred, member_admit_serving_labeled, member_pack,
     member_pack_labeled,
 )
-from bindings.admitted_input_unpack import admit_f32
+from bindings.admitted_input_unpack import admit_f32, admit_weight_words
 from core.admitted_refusals import admitted_finite_wording
 from bindings.msel_candidates_door import msel_grid_len, msel_sampler_check, msel_sampler_len
 from bindings.native_loaded_module_door import native_loaded_module
@@ -105,7 +105,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_FIT, MEMBER_CAN_FIT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
-    MEMBER_READS_Y_GIVEN,
+    MEMBER_READS_Y_GIVEN, MEMBER_CAN_SAMPLE_WEIGHT,
 )
 from bindings.member_given_y_unpack import member_given_y
 
@@ -127,6 +127,9 @@ struct _FitOne(Movable):
     var y: Int
     var y_dtype: Int
     var y_cols: Int
+    # LANE w3f3-b: the fit's float32 sample weights (rows words; 0: none),
+    # for a kind with MEMBER_CAN_SAMPLE_WEIGHT.
+    var weights: Int
     # THE GIVEN y (lane mf-tail5; core/member_abi.mojo `MemberCall.y_given`):
     # a regressor's y as the caller was given it, for a kind that reads it.
     var given: MemberMatrix
@@ -148,6 +151,7 @@ struct _FitOne(Movable):
         self.y = 0
         self.y_dtype = MEMBER_F32
         self.y_cols = 1
+        self.weights = 0
         self.given = MemberMatrix()
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
@@ -169,6 +173,8 @@ def _fit_one(address: Int):
         if run[].y != 0:
             call.y = MemberMatrix(run[].y, run[].rows, run[].y_cols, run[].y_dtype)
             call.y_given = run[].given
+        if run[].weights != 0:
+            call.weights = MemberMatrix(run[].weights, run[].rows, 1)
         call.pin = run[].pin
         var kept = False
         try:
@@ -472,7 +478,7 @@ def msel_member_refit(base: PythonObject, parameters: PythonObject, y: PythonObj
     member, data or fit the route does not take is refused natively, before
     any fit, in the words of whoever refuses it (THE REFUSAL RULE, module
     note). y None: a fit without a target (an unsupervised search)."""
-    return _member_fit(base, parameters, True, False, y, x, context, b)
+    return _member_fit(base, parameters, True, False, y, x, PythonObject(None), context, b)
 
 
 def msel_member_fit_in_place(model: PythonObject, y: PythonObject, x: PythonObject, context: PythonObject,
@@ -483,7 +489,16 @@ def msel_member_fit_in_place(model: PythonObject, y: PythonObject, x: PythonObje
     with the GIL released and packed into it in place. Every refusal
     raises (lane mf-r9a, THE REFUSAL RULE; lane mf-r9b: no Bool, the
     callers' fallback branches are deleted)."""
-    _ = _member_fit(model, PythonObject(None), False, False, y, x, context, b)
+    _ = _member_fit(model, PythonObject(None), False, False, y, x, PythonObject(None), context, b)
+
+
+def msel_member_fit_weighted(model: PythonObject, y: PythonObject, x: PythonObject, sample_weight: PythonObject,
+    context: PythonObject, b: PythonObject) raises:
+    """`msel_member_fit_in_place` with the fit's `sample_weight` (lane
+    w3f3-b: an owner's fit call of a member-only class). A kind that reads
+    no weights (no MEMBER_CAN_SAMPLE_WEIGHT) refuses in words before any
+    fit; the weights are admitted as the estimator's own fit admits them."""
+    _ = _member_fit(model, PythonObject(None), False, False, y, x, sample_weight, context, b)
 
 
 def msel_member_fit_cloned(model: PythonObject, y: PythonObject, x: PythonObject, context: PythonObject,
@@ -492,7 +507,7 @@ def msel_member_fit_cloned(model: PythonObject, y: PythonObject, x: PythonObject
     `msel_native_clone` (lane mf-msel5c: the search door's carrier), whose
     parameters that clone already admitted: no second admission clone.
     Every refusal raises, as `msel_member_fit_in_place`."""
-    _ = _member_fit(model, PythonObject(None), False, True, y, x, context, b)
+    _ = _member_fit(model, PythonObject(None), False, True, y, x, PythonObject(None), context, b)
 
 
 def _admission_refusal(est: PythonObject, fields: PythonObject, plan: PythonObject, member_context: PythonObject,
@@ -602,7 +617,7 @@ def _encode_target(y: PythonObject, rows: Int, text_y: Bool, label_list: Bool, e
 
 
 def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vetted: Bool, y: PythonObject,
-    x: PythonObject, context: PythonObject, b: PythonObject) raises -> PythonObject:
+    x: PythonObject, sample_weight: PythonObject, context: PythonObject, b: PythonObject) raises -> PythonObject:
     """UNPACK, RUN and PACK of the one fit (module note): the fitted
     estimator (`base` itself, or its clone with `parameters` set). Every
     input it does not fit is refused natively, before any fit, in the words
@@ -715,6 +730,15 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         raise Error(_no_member_fit_words(est))  # (the export is the admission's `needs`, as before)
     var classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
     var run = _FitOne(owner.plan.copy(), msel_addr(xv), rows, cols)
+    if sample_weight is not None:
+        # LANE w3f3-b: an owner's fit with sample_weight (`msel_member_fit_weighted`)
+        if (kind_mask & MEMBER_CAN_SAMPLE_WEIGHT) == 0:
+            raise Error("NotImplementedError: " + String(py=py_type(est).__name__) + "'s native member reads no "
+                        + "sample_weight, so another estimator that fits it cannot hand one. Fit "
+                        + String(py=py_type(est).__name__) + " on its own.")
+        var w = admit_weight_words(sample_weight, rows, member_context)
+        _ = py_call(pins.append, w.array)
+        run.weights = w.address
     var gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
     var gil_door = not gil_free and (kind_mask & MEMBER_GIL_DOOR) != 0
     if (kind_mask & MEMBER_CAN_SCOPE) != 0:
