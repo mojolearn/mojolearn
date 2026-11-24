@@ -52,7 +52,6 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address, classical_typed
-from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_labels_door import classical_encode_labels, ClassicalLabels
 from bindings.admitted_input_unpack import admit_f32, admitted_vector, classical_view
@@ -452,8 +451,17 @@ def _rfe_native(member: RfeMember, arr: XIn, n: Int, d: Int, counts: List[Float6
     var x_base = PythonObject(None)
     var x_index = PythonObject(None)
     var x_base_words = 0
-    if not classical_is_array(arr.value, cc):
+    # Lane w3f2-rfe (failures row A): only a fold's DeviceRows takes this branch, tested by its class (one
+    # identity compare). It was `not classical_is_array(X)`, so every plain NumPy X (`cls_x2d` hands the
+    # admitted float32 ndarray itself) was admitted a second time in the program context below, which no
+    # public call had connected in a fresh process: every RFE fit raised the shared admission's "Sequential
+    # requires native input types", after X had passed its own admission. REMOVED: that second admission
+    # (and its copy) of an already admitted dense X, per fit.
+    if py_type(arr.value) is py_item(cc, prep_keys()[].k_maxabs_rows_class):
         var pc = cc["prog_context"]
+        # The fold's base and row numbers are admitted in the program context: connect NumPy there first
+        # (one dict probe once connected), as `_rfe_fit` connects `cc`.
+        classical_connect_numpy(pc)
         if rfe_rows_gather(image.run):
             var fold = _rows_fields(arr.value, pc)
             x_base = _dense_values(fold.base, pc)

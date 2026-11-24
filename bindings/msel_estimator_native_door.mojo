@@ -372,6 +372,28 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject, depth: Int 
     var types = native_loaded_module("types")
     if kind is types.FunctionType or kind is types.BuiltinFunctionType:
         return value
+    # A BUILT-IN LEARNING-RATE SCHEDULE (StepLR, ExponentialLR, OneCycleLR, ConstantLR, WarmupLinearLR,
+    # WarmupCosineLR; lane w3f2-rfe, failures row A: a recurrent estimator's `lr_schedule` in a search raised
+    # the Sequential admission's words below). scikit-learn's clone deep-copies it: a fresh instance of the
+    # exact class with the same settings. Here: the optimizer owner's own compiled getstate and setstate
+    # (the pickle and copy pair, bindings/optimizer_schedule_native_door.mojo), which copy the stored
+    # settings and bind the fresh instance's native rate block; no Python method runs. The entry and its
+    # context are connected at import (python/mojolearn/_families.py). Read only for a value every branch
+    # above declined.
+    var schedules = py_get(context, "family_msel_schedule_context")
+    if schedules is not None:
+        var classes = schedules["schedules"]
+        for k in range(len(classes)):  # driver-loop: over the connected built-in schedule classes (six)
+            if kind is classes[k]:
+                var entry = context["family_msel_schedule_entry"]
+                if py_type(entry) is not py_type(b.len):
+                    raise Error("ImportError: native schedule cloning requires the compiled optimizer entry")
+                var state = py_call(entry, PythonObject("schedule_getstate"), value, Python.tuple(),
+                                    PythonObject(None), schedules)
+                var fresh = native_storage_allocate(kind)
+                _ = py_call(entry, PythonObject("schedule_setstate"), fresh, Python.tuple(state),
+                            PythonObject(None), schedules)
+                return fresh
     # Never invoke deepcopy/__reduce__/buffer protocols of an arbitrary
     # object. Additional native buffer/schema migration remains explicit
     # debt rather than sharing mutable constructor or fitted state.
