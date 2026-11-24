@@ -1,0 +1,24 @@
+diff --git a/x_ann/tsne_core.mojo b/x_ann/tsne_core.mojo
+index a7f3fc4eb4..46bd6fd6f6 100644
+--- a/x_ann/tsne_core.mojo
++++ b/x_ann/tsne_core.mojo
+@@ -29,6 +29,7 @@ THE FIXED-ORDER DESIGN
+ """
+ 
+ from std.memory import bitcast
++from std.sys.compile import is_defined  # SABOTAGE gate-gpu (lane vdv-sab2-a)
+ from core.device_fold import host_sum_f32_fixed
+ from checks.numerics import (
+     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_log, identical_mul,
+@@ -422,6 +423,11 @@ comptime TS_Z_STACK = 64
+ @always_inline
+ def ts_z_add(a: Float32, b: Float32) -> Float32:
+     """One node of Z's pinned tree: ftz(left + right)."""
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every node of Z's tree one ulp up, the GPU bindings only
++        var z = ftz(a + b)
++        if abs(z) >= Float32(1.17549435e-38) and z - z == Float32(0):
++            z = bitcast[DType.float32](bitcast[DType.uint32](z) + UInt32(1))
++        return z
+     return ftz(a + b)
+ 
+ 

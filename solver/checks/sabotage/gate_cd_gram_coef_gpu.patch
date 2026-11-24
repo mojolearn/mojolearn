@@ -1,0 +1,17 @@
+diff --git a/solver/impl/cd.mojo b/solver/impl/cd.mojo
+index 6d52eba810..121a80d9ae 100644
+--- a/solver/impl/cd.mojo
++++ b/solver/impl/cd.mojo
+@@ -1128,7 +1128,11 @@ def cd_idn_gram_sweep_kernel(
+                 var absv = abs(r)
+                 if sh[unsafe_offset = 1] < absv:
+                     sh[unsafe_offset = 1] = absv
+-                coef.unsafe_store(j, r)
++                var rs = r
++                comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every stored Gram-sweep coefficient one ulp up, the GPU bindings only
++                    if abs(rs) >= Float32(1.17549435e-38) and rs - rs == Float32(0):
++                        rs = bitcast[DType.float32](bitcast[DType.uint32](rs) + UInt32(1))
++                coef.unsafe_store(j, rs)
+                 sh[unsafe_offset = 0] = ftz(old - r)
+             barrier()
+             if live and tid < p:

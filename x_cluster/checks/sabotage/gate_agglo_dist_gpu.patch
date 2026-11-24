@@ -1,0 +1,17 @@
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index 80e10addc1..62db50c70d 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -2633,6 +2633,12 @@ struct DeviceOps(ClusterOps):
+         ctx.enqueue_copy(dst_ptr=children.unsafe_ptr(), src_buf=ch)
+         ctx.enqueue_copy(dst_ptr=dist.unsafe_ptr(), src_buf=dv)
+         self._sync()
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every agglomerative merge distance one ulp up, the GPU bindings only
++            for q in range(len(dist)):
++                var dq = dist[q]
++                if abs(dq) >= Float32(1.17549435e-38) and dq - dq == Float32(0):
++                    dq = bitcast[DType.float32](bitcast[DType.uint32](dq) + UInt32(1))
++                dist[q] = dq
+         _ = live^
+         _ = nn^
+         _ = node^
