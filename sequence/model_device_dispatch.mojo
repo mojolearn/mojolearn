@@ -14,7 +14,6 @@ from sequence.model_file_dispatch import model_file_operation, model_file_execut
 from sequence.sequence_ops_dispatch import sequence_ops_operation
 from sequence.sequence_ops_device_dispatch import sequence_ops_device_execute
 from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, cnn_predict_program
-from autograd.cnn_block_op import CNN_FUSED_OPS
 from x_cnn.device import cnn_ctx
 
 from sequence.perf3_seq_resident import seq_resident_resolve, seq_resident_unpin
@@ -26,17 +25,16 @@ from core.shared_slot import SharedSlot
 
 
 def _cnn_exec() raises -> DeviceExec:
-    """The CNN sessions' executor. With the tuned ops (CNN_FUSED_OPS, the
-    default; autograd/cnn_block_op.mojo) it wraps the x_cnn context, so the
-    session's launches and the x_cnn entries the ops call share one in-order
-    queue; `-D MOJOLEARN_CNN_GENERIC_OPS` keeps the shared sequence context."""
+    """The CNN sessions' executor. It wraps the x_cnn context, so the session's
+    launches and the x_cnn entries the tuned ops call (autograd/cnn_block_op.mojo)
+    share one in-order queue."""
     # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (opt-in arm) named here; deleted 2026-11-15 by lane/expdel2-23-neural (owner); this
     # docstring note removed by lane/expdel2-29-neural, code recoverable at cdff18f6c8.
     # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-29-neural.patch
     # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-    comptime if CNN_FUSED_OPS:
-        return DeviceExec(cnn_ctx())
-    return DeviceExec()
+    # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (LOSER: NV L40S cnn-clf fit 161 -> 395 ms (2.45), infer 1.45) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_GENERIC_OPS.ab-outcome-2.patch
+    return DeviceExec(cnn_ctx())
 
 
 def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

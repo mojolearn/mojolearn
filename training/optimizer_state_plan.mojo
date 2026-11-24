@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native optimizer state spans and host-mirror preparation decisions."""
 from bindings.tensor_view import TensorView, base_format
-from training.optimizer_public_common import PublicStep, I32P, registry_offsets, eager_moments
+from training.optimizer_public_common import PublicStep, I32P, registry_offsets
 
 
 @fieldwise_init
@@ -80,9 +80,10 @@ def optimizer_checkpoint_input(rank: Int, count: Int) raises:
 struct OptimizerRegistryPlan(Copyable, ImplicitlyCopyable, Movable):
     var parameters: Int
     var count: Int
-    var eager: Bool
 
 
 def optimizer_registry_plan(nbytes: List[Int], offsets: Int) raises -> OptimizerRegistryPlan:
     var count = registry_offsets(nbytes, I32P(unsafe_from_address=offsets))
-    return OptimizerRegistryPlan(len(nbytes), count, eager_moments())
+    # TOMBSTONE: MOJOLEARN_OPT_LAZY_MOMENTS_OFF (old path, the plan's `eager` flag) deleted 2026-11-24 by lane/ab2-nseq (ab-outcome-2); code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_LAZY_MOMENTS_OFF.ab-outcome-2.patch
+    return OptimizerRegistryPlan(len(nbytes), count)

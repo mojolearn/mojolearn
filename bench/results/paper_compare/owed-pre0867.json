@@ -41,8 +41,9 @@
   },
   "cnn-generic": {
    "define": "MOJOLEARN_CNN_GENERIC_OPS",
-   "status": "define in code (autograd/cnn_block_op.mojo CNN_FUSED_OPS): B = lane x8's OPS_CONV2D / OPS_RELU / OPS_MAXPOOL2D / OPS_LINEAR chain; A = ops cnn_conv_block / cnn_linear",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): LOSER (L40S 4 cells, median 1.23, cnn-clf fit 161 -> 395 ms (2.45), infer 1.45); A (the tuned ops, the default) is unchanged; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_GENERIC_OPS.ab-outcome-2.patch. Was: define in code (autograd/cnn_block_op.mojo CNN_FUSED_OPS): B = lane x8's OPS_CONV2D / OPS_RELU / OPS_MAXPOOL2D / OPS_LINEAR chain; A = ops cnn_conv_block / cnn_linear",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "transformer-generic-prefill": {
    "define": "MOJOLEARN_TRANSFORMER_GENERIC_PREFILL",
@@ -258,8 +259,9 @@
   },
   "ni12-implicit-conv-off": {
    "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
-   "status": "define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): old path LOSER (L40S 6 cells, median 1.51, 1.40..1.70); A (the per-layer fill rule, the default) is unchanged; the materialized path stays for narrow layers and fast; the define is refused (core/experiment_guards_neural.mojo); grid controls moved to removed; code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NI12_IMPLICIT_CONV_OFF.ab-outcome-2.patch. Was: define in code (x_cnn/device.mojo NI12_IMPLICIT_CONV): B = the materialized cols on every layer (direct conv / im2col + GEMM; the g50ebe26a5 cnn-clf winner)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "hist-packed-gh": {
    "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
@@ -290,8 +292,9 @@
   },
   "seq-tiled-predict-on": {
    "define": "MOJOLEARN_IDN_SEQ_TILED_PREDICT",
-   "status": "define in code (autograd/model.mojo SEQ_TILED_PREDICT, restored 2026-11-15 by lane restore-run-arms-neural): B = the whole set in one predict chunk when the inference scratch fits 1 GiB and every Linear keeps its split-K decision; A = the caller's 4096-row chunks",
-   "owed": "RUN"
+   "status": "PROMOTED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): WINNER (L40S sequential-predict 2.23 -> 1.87 ms, 0.84, median of 20 calls; quality equal, hash 8624513c57beb4fe both); the whole-set chunk is the default on every column; the old caller chunk is -D MOJOLEARN_IDN_SEQ_TILED_PREDICT_OFF; the on-define is refused (core/experiment_guards_neural.mojo); no bits change. Was: define in code (autograd/model.mojo SEQ_TILED_PREDICT, restored 2026-11-15 by lane restore-run-arms-neural): B = the whole set in one predict chunk when the inference scratch fits 1 GiB and every Linear keeps its split-K decision; A = the caller's 4096-row chunks",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md; quality ~/mojolearn-evidence/ab-outcome-2/promote-quality.txt"
   },
   "gemm-int-slices-on": {
    "define": "MOJOLEARN_IDN_GEMM_INT_SLICES",
@@ -358,8 +361,9 @@
   },
   "lr-table-off": {
    "define": "MOJOLEARN_LR_TABLE_OFF",
-   "status": "define in code (sequence/lr_table.mojo LR_TABLE_ON (read by lr_table_on and bindings/samba_state_native_door.mojo); -D MOJOLEARN_LR_EXACT_ONLY is the same arm): B = every step on the exact route (the former MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1); the answers are the same; A = the LR schedule table (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): old path LOSER (L40S 4 cells, median 1.00, mlp-train-step 1.15 slower); A (the LR schedule table, the default) is unchanged; both spellings are refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LR_TABLE_OFF.ab-outcome-2.patch. Was: define in code (sequence/lr_table.mojo LR_TABLE_ON (read by lr_table_on and bindings/samba_state_native_door.mojo); -D MOJOLEARN_LR_EXACT_ONLY is the same arm): B = every step on the exact route (the former MOJOLEARN_LR_TABLE=0 or MOJOLEARN_LR_EXACT_ONLY=1); the answers are the same; A = the LR schedule table (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "mamba3-retain-stages-off": {
    "define": "MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF",
@@ -385,13 +389,15 @@
   },
   "opt-lazy-moments-off": {
    "define": "MOJOLEARN_OPT_LAZY_MOMENTS_OFF",
-   "status": "define in code (training/optimizer_public_common.mojo OPT_LAZY_MOMENTS (eager_moments; the same define in bindings/samba_construct_native_pack.mojo)): B = moments allocated with the optimizer and uploaded on the first step (the former =0); A = Adam moments allocated on first use (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): old path LOSER (L40S 4 cells, median 1.00, mlp-train-step 1.33 slower); A (lazy moments, the default) is unchanged; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_LAZY_MOMENTS_OFF.ab-outcome-2.patch. Was: define in code (training/optimizer_public_common.mojo OPT_LAZY_MOMENTS (eager_moments; the same define in bindings/samba_construct_native_pack.mojo)): B = moments allocated with the optimizer and uploaded on the first step (the former =0); A = Adam moments allocated on first use (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "opt-scan-fused-off": {
    "define": "MOJOLEARN_OPT_SCAN_FUSED_OFF",
-   "status": "define in code (training/opt_gate.mojo OPT_SCAN_FUSED (read by opt_gate_wanted)): B = main's separate scans (the former =0); A = the fused refusal scan in the gated optimizer step (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): old path LOSER (L40S 4 cells, median 1.00, mlp-train-step 1.25 slower); A (the gated step with the fused refusal scan, the default) is unchanged; main's ungated path stays for fast mode and degenerate shapes; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_OPT_SCAN_FUSED_OFF.ab-outcome-2.patch. Was: define in code (training/opt_gate.mojo OPT_SCAN_FUSED (read by opt_gate_wanted)): B = main's separate scans (the former =0); A = the fused refusal scan in the gated optimizer step (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "seq-moe-tiled-off": {
    "define": "MOJOLEARN_SEQ_MOE_TILED_OFF",
@@ -557,8 +563,9 @@
   },
   "seq-libc-copy": {
    "define": "MOJOLEARN_SEQ_FAST_LIBC_COPY",
-   "status": "define in code (sequence/exec_device.mojo SEQ_LIBC_COPY, default off): B = the host copies of the sequence executor through libc memcpy (lane fb3-named, 2026-11-17); A = the element loop. FIRST A/B ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): 0.94-0.97 on the four MLP istella cells, 1.06 on cross-entropy, digests equal; mixed sign: REPEAT OWED with the staging split from the call profile",
-   "owed": "RUN"
+   "status": "PROMOTED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): WINNER (L40S 5 cells, none slower: mlp-clf istella infer 0.86, mlp-reg infer 0.91, fits 0.97, cross-entropy 1.00; quality and hashes equal); libc memcpy is the default; the old unsafe_memcpy is -D MOJOLEARN_SEQ_FAST_LIBC_COPY_OFF; the on-define is refused (core/experiment_guards_neural.mojo); no bits change. Was: define in code (sequence/exec_device.mojo SEQ_LIBC_COPY, default off): B = the host copies of the sequence executor through libc memcpy (lane fb3-named, 2026-11-17); A = the element loop. FIRST A/B ab1 2026-11-18, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/ab1-table.txt): 0.94-0.97 on the four MLP istella cells, 1.06 on cross-entropy, digests equal; mixed sign: REPEAT OWED with the staging split from the call profile",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md; quality ~/mojolearn-evidence/ab-outcome-2/promote-quality.txt"
   },
   "xprep-r3-off-view": {
    "define": "",

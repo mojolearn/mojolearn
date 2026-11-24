@@ -4,37 +4,18 @@
  "branch": "lane/gap-gemm-layers",
  "head": "02f7aed95",
  "controls": {},
- "modified_controls": {
-  "ni12_implicit_conv": {
-   "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
-   "owner_file": "experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json",
-   "source": [
-    "x_cnn/device.mojo:393"
-   ],
-   "bits_change": false,
-   "note": "Kernel rewritten (lane gap-gemm-layers): 64x64 register tile, 4x4 cells a thread, the A tile gathered from x (no cols scratch), the contract's leaves + fold through _fold_push_local; the backward's dW now also gathers cols (implicit_wgrad_leaf_kernel + the GEMM's fold kernels) so no entry builds im2col under the switch. Same words as im2col + identical_gemm_into. Boards it reaches now: neural:conv2d, neural:resnet-block, neural:cnn-clf. PROMOTED: conv2d NV 9.62 -> 7.12 ms (0.74x) / AMD 9.02 -> 6.23 ms (0.69x), resnet-block NV 21.43 -> 15.76 ms (0.74x) / AMD 22.06 -> 15.37 ms (0.70x); digests unchanged (conv2d 9782257b, resnet-block 263c26c1). The off arm restores the materialized im2col cols; NN14_BOUNDED_IM2COL still takes its own path when selected.",
-   "status": "promoted 2026-10-10 (lane/postmerge-act-6; post-merge neural A/B, one run per arm, nv2 L40S v1052 -> v1053 on main 9f83ea479, amd MI325X a1152 -> a1153 on main 0a7b206f1): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo"
-  }
- },
+ "modified_controls": {},
  "algorithms": {
   "neural:resnet-block": {
    "binding": "_mojolearn_x_cnn",
    "route": "python/mojolearn/_expansion_cnn.py BasicBlock -> x_cnn_conv2d_forward_m/_backward_m (x_cnn/device.mojo _conv_relu_on_device: NI12 implicit_conv_kernel by default since 2026-10-10) + x_cnn_batchnorm_*_m (unfused; cnn_bn_fuse removed 2026-10-10)",
-   "controls": [
-    "ni12_implicit_conv"
-   ],
-   "interaction_groups": [
-    [
-     "ni12_implicit_conv"
-    ]
-   ]
+   "controls": [],
+   "interaction_groups": []
   },
   "neural:conv2d": {
    "binding": "_mojolearn_x_cnn",
    "route": "x_cnn_conv2d_forward_m/_backward_m -> x_cnn/device.mojo conv2d_forward_m / conv2d_backward_m",
-   "controls": [
-    "ni12_implicit_conv"
-   ],
+   "controls": [],
    "interaction_groups": []
   }
  },
@@ -48,6 +29,11 @@
    "define": "MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF",
    "control": "moe_grouped_gemm",
    "reason": "DELETED 2026-11-15 (lane/expdel2-29-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 072f2eee14; patch experiments/removed/MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF.patch): old path; EXP:1944 PROMOTED (IDENTICAL default); record read: the default is the recorded winner (rule e); the default is kept, no bit change. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_NI12_IMPLICIT_CONV_OFF",
+   "control": "ni12_implicit_conv",
+   "reason": "DELETED 2026-11-24 (lane ab-outcome-2, sub-lane ab2-nseq): old path; A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the materialized cols on every layer were 1.40..1.70 slower over 6 cells (median 1.51); the per-layer fill rule (x_cnn/device.mojo ni12_implicit_layer) with implicit conv in IDENTICAL is the one form; the materialized path stays for narrow layers and fast. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md; code recoverable at ba83d4655f (~/mojolearn-evidence/experiments-removed/MOJOLEARN_NI12_IMPLICIT_CONV_OFF.ab-outcome-2.patch)."
   }
  ]
 }
