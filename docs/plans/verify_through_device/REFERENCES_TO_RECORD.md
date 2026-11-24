@@ -71,7 +71,7 @@ for them. Their single-device replacements are the `psd-*` lanes in section D.
 | `par-mlp` | gone (retired `par-*`) | - | - | nothing to record | nothing to record |
 | `par-samba` | gone (retired `par-*`) | - | - | nothing to record | nothing to record |
 | `par-samba-clip` | gone (retired `par-*`) | - | - | nothing to record | nothing to record |
-| `samba-decode-session` | coverage.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
+| `samba-decode-session` | coverage.py | train, stepfull | n/a:fixed-session-batch (vdv-fin) | record | record |
 | `sequence-attention-cross` | nn_attention.py | train, stepfull | n/a:training-step | record | record |
 | `sequence-attention-encoder` | nn_attention.py | train, stepfull | n/a:training-step | record | record |
 | `sequence-blocks-bigru-lengths` | nn_recurrent.py | train, stepfull | n/a:training-step | record | record |
@@ -99,13 +99,13 @@ for them. Their single-device replacements are the `psd-*` lanes in section D.
 | `sequence-nnconv-upsample` | nn_conv.py | train, stepfull | n/a:training-step | record | record |
 | `sequence-norms-instance` | nn_norms.py | train, stepfull | n/a:training-step | record | record |
 | `sequence-norms-resnet1d-gn` | nn_norms.py | train, stepfull | n/a:training-step | record | record |
-| `sequence-optim-adagrad` | nn_optim.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `sequence-optim-lamb` | nn_optim.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `sequence-optim-rmsprop` | nn_optim.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
+| `sequence-optim-adagrad` | nn_optim.py | train, stepfull | n/a:training-trajectory (vdv-fin) | record | record |
+| `sequence-optim-lamb` | nn_optim.py | train, stepfull | n/a:training-trajectory (vdv-fin) | record | record |
+| `sequence-optim-rmsprop` | nn_optim.py | train, stepfull | n/a:training-trajectory (vdv-fin) | record | record |
 | `trees-gbdt-importances` | trees.py | train, infer, model, stepfull | batch protocol | record | record |
 | `x-lasso-short` | coverage.py | train, stepfull | n/a:coverage-probe | record | record |
 | `x-ols-square` | coverage.py | train, stepfull | n/a:coverage-probe | record | record |
-| `x-prep-rfe-no-round` | prep.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
+| `x-prep-rfe-no-round` | prep.py | train, stepfull | n/a:fit-probe (vdv-fin) | record | record |
 | `x-ridge-rank-deficient` | coverage.py | train, stepfull | n/a:coverage-probe | record | record |
 
 ## B. The `ols/base` cell (w3-fix-5-RESULT.md)
@@ -385,153 +385,153 @@ CPU-only install also gives it. `psd-causal-lm` and `psd-causal-lm-text` are one
 
 | lane | file | parts | batch part | CPU column | NVIDIA column |
 |---|---|---|---|---|---|
-| `agglomerative-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `cholesky-profile-jitter` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `dbscan-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `et-clf-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `gmm-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `gmm-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `gpc-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `hdbscan-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `holtwinters-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `iforest-decision-function` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `iforest-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-autoarima-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-dt-reg-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-et-reg-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-gbdt-readbacks` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-gridsearch-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-isomap-reconstruction-error` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-kmeans-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-prophet-add-seasonality` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-rf-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-robust-cov-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `public-theta-variants-forecast` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `sequence-croston-forecast` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `sequence-ets-forecast` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `sequence-theta-forecast` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `spectral-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-adaboost-clf-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-dt-clf-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-voting-reg-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-cluster-affinity-propagation-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-cluster-bgmm-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-cluster-meanshift-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-cluster-optics-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-lda-perplexity` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-robust-cov-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-isotonic-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-lof-decision-function` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-louvain-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-ocsvm-fit-predict` | m_predict.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-ocsvm-score-samples` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-bernoulli-nb-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-categorical-nb-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-complement-nb-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-gaussian-nb-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-lda-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-multinomial-nb-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-qda-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-score-edges-rfe-methods` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-sgd-ocsvm-score-samples` | m_predict.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
+| `agglomerative-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `cholesky-profile-jitter` | m_predict.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `dbscan-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `et-clf-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `gmm-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `gmm-methods` | m_predict.py | train, infer, model, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `gpc-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `hdbscan-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `holtwinters-methods` | m_predict.py | train, infer, model, stepfull | n/a:whole-series (vdv-fin) | record | record |
+| `iforest-decision-function` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `iforest-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `m-autoarima-predict` | m_predict.py | train, stepfull | n/a:whole-series (vdv-fin) | record | record |
+| `m-dt-reg-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `m-et-reg-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `m-gbdt-readbacks` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `m-gridsearch-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `m-isomap-reconstruction-error` | m_predict.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `m-kmeans-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `m-prophet-add-seasonality` | m_predict.py | train, stepfull | n/a:whole-series (vdv-fin) | record | record |
+| `m-rf-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `m-robust-cov-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `public-theta-variants-forecast` | m_predict.py | train, stepfull | n/a:forecast-fit (vdv-fin) | record | record |
+| `sequence-croston-forecast` | m_predict.py | train, stepfull | n/a:forecast-fit (vdv-fin) | record | record |
+| `sequence-ets-forecast` | m_predict.py | train, stepfull | n/a:forecast-fit (vdv-fin) | record | record |
+| `sequence-theta-forecast` | m_predict.py | train, stepfull | n/a:forecast-fit (vdv-fin) | record | record |
+| `spectral-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `trees-adaboost-clf-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `trees-dt-clf-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `trees-voting-reg-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-cluster-affinity-propagation-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-cluster-bgmm-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-cluster-meanshift-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-cluster-optics-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-decomp-lda-perplexity` | m_predict.py | train, infer, model, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-decomp-robust-cov-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-isotonic-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-neighbors-lof-decision-function` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-neighbors-louvain-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-neighbors-ocsvm-fit-predict` | m_predict.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-neighbors-ocsvm-score-samples` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-bernoulli-nb-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-categorical-nb-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-complement-nb-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-gaussian-nb-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-lda-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-multinomial-nb-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-qda-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-score-edges-rfe-methods` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-sgd-ocsvm-score-samples` | m_predict.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
 
 #### `tools/identity_lanes/m_score.py` (50)
 
 | lane | file | parts | batch part | CPU column | NVIDIA column |
 |---|---|---|---|---|---|
-| `elasticnet-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `gp-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `kde-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `kernel-ridge-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `knn-clf-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `lasso-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `linear-svc-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `linear-svr-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-dart-score` | m_score.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-huber-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-kmeans-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-knn-reg-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-linear-ridge-score` | m_score.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-multioutput-clf-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-multioutput-ridge-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-svr-gamma-scale-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `qn-absolute-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-adaboost-reg-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-bagging-clf-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-bagging-reg-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-calibrated-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-onevsrest-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-stacking-clf-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-ard-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-bayes-ridge-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-cluster-bgmm-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-cluster-bisecting-kmeans-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-cluster-minibatch-kmeans-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-factor-analysis-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-enet-cv-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-glm-gamma-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-glm-poisson-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-glm-tweedie-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-lars-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-lasso-cv-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-lasso-lars-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-logistic-cv-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-label-propagation-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-label-spreading-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-nearest-centroid-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-svc-multiclass-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-svgp-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-pa-clf-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-pa-reg-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-perceptron-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-quantile-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-ridge-clf-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-ridge-cv-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-sgd-clf-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-sgd-reg-score` | m_score.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
+| `elasticnet-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `gp-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `kde-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `kernel-ridge-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `knn-clf-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `lasso-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `linear-svc-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `linear-svr-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `m-dart-score` | m_score.py | train, infer, model, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `m-huber-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `m-kmeans-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `m-knn-reg-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `m-linear-ridge-score` | m_score.py | train, infer, model, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `m-multioutput-clf-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `m-multioutput-ridge-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `m-svr-gamma-scale-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `qn-absolute-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `trees-adaboost-reg-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `trees-bagging-clf-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `trees-bagging-reg-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `trees-calibrated-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `trees-onevsrest-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `trees-stacking-clf-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-ard-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-bayes-ridge-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-cluster-bgmm-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-cluster-bisecting-kmeans-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-cluster-minibatch-kmeans-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-decomp-factor-analysis-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-enet-cv-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-glm-gamma-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-glm-poisson-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-glm-tweedie-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-lars-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-lasso-cv-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-lasso-lars-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-logistic-cv-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-neighbors-label-propagation-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-neighbors-label-spreading-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-neighbors-nearest-centroid-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-neighbors-svc-multiclass-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-neighbors-svgp-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-pa-clf-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-pa-reg-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-perceptron-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-quantile-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-ridge-clf-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-ridge-cv-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-sgd-clf-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
+| `x-sgd-reg-score` | m_score.py | train, stepfull | n/a:scalar-reduction (vdv-fin) | record | record |
 
 #### `tools/identity_lanes/m_transform.py` (38)
 
 | lane | file | parts | batch part | CPU column | NVIDIA column |
 |---|---|---|---|---|---|
-| `kernel-ridge-laplacian-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-stacking-reg-calls` | m_transform.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `m-voting-clf-calls` | m_transform.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `rbf-sampler-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `spectral-embedding-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-random-embedding-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-stacking-clf-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `trees-voting-reg-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `tsvd-inverse-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `umap-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-cluster-bisecting-kmeans-fit-calls` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-cluster-minibatch-kmeans-fit-calls` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-dict-learning-inverse` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-eigh-wide-kpca-fit` | m_transform.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-ipca-fit-calls` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-lda-fit-calls` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-pls-fit-calls` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-sparse-pca-fit-calls` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-decomp-srp-fit-calls` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-isotonic-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-additive-chi2-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-knn-imputer-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-poly-sketch-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-neighbors-skewed-chi2-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-binarizer-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-encoder-categories-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-inverse-transforms-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-iterative-imputer-fit` | m_transform.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-label-encoder-inverse` | m_transform.py | train, infer, model, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-maxabs-scaler-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-mi-discrete-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-multilabel-binarizer-fit-calls` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-normalizer-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-robust-scaler-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-score-edges-rfe-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-simple-imputer-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-spline-options-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
-| `x-prep-variance-threshold-fit-transform` | m_transform.py | train, stepfull | n/a:UNDECLARED (no `_batch_decl`) | record | record |
+| `kernel-ridge-laplacian-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `m-stacking-reg-calls` | m_transform.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `m-voting-clf-calls` | m_transform.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `rbf-sampler-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `spectral-embedding-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `trees-random-embedding-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `trees-stacking-clf-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `trees-voting-reg-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `tsvd-inverse-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `umap-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-cluster-bisecting-kmeans-fit-calls` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-cluster-minibatch-kmeans-fit-calls` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-decomp-dict-learning-inverse` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-decomp-eigh-wide-kpca-fit` | m_transform.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-decomp-ipca-fit-calls` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-decomp-lda-fit-calls` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-decomp-pls-fit-calls` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-decomp-sparse-pca-fit-calls` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-decomp-srp-fit-calls` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-isotonic-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-neighbors-additive-chi2-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-neighbors-knn-imputer-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-neighbors-poly-sketch-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-neighbors-skewed-chi2-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-binarizer-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-encoder-categories-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-inverse-transforms-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-iterative-imputer-fit` | m_transform.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-label-encoder-inverse` | m_transform.py | train, infer, model, stepfull | batch protocol (vdv-fin) | record | record |
+| `x-prep-maxabs-scaler-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-mi-discrete-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-multilabel-binarizer-fit-calls` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-normalizer-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-robust-scaler-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-score-edges-rfe-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-simple-imputer-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-spline-options-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
+| `x-prep-variance-threshold-fit-transform` | m_transform.py | train, stepfull | n/a:fit-endpoint (vdv-fin) | record | record |
 
 #### `tools/identity_lanes/nn_endpoints.py` (14)
 
@@ -622,9 +622,13 @@ CPU-only install also gives it. `psd-causal-lm` and `psd-causal-lm-text` are one
 | `psd-scaler-minmax` | parallel_single.py | train, infer, model, stepfull | n/a:ordered-shard-driver | record | record |
 | `psd-svm` | parallel_single.py | train, infer, model, stepfull | n/a:ordered-shard-driver | n/a:one-sided | record |
 
-## F. Batch parts that read `n/a:UNDECLARED`
+## F. Batch parts declared by vdv-fin (were `n/a:UNDECLARED`)
 
-142 lanes above have no `_batch_decl`. The harness prints a warning and their batch part reads `n/a:UNDECLARED`:
-the 137 vdv-cov-est lanes (`m_score.py` 50, `m_predict.py` 49, `m_transform.py` 38), `samba-decode-session`,
-`x-prep-rfe-no-round`, and `sequence-optim-adagrad` / `-lamb` / `-rmsprop`. Before the record, vd-verify should declare one
-(an `n/a:<reason>` or a batch protocol) for each, or accept `n/a:UNDECLARED` as their recorded batch part.
+The 142 lanes that had no `_batch_decl` (the 137 vdv-cov-est lanes, `m_score.py` 50, `m_predict.py` 49,
+`m_transform.py` 38, plus `samba-decode-session`, `x-prep-rfe-no-round` and `sequence-optim-adagrad` / `-lamb` /
+`-rmsprop`) now declare one, each in its own file (lane vdv-fin, 2026-11-24); the tables above carry the value,
+marked `(vdv-fin)`. 29 lanes declare a batch protocol (`_rows_calls` or a `_BatchRows` spec) on the held-out rows
+their probe reads; the other 113 declare `n/a:<reason>` (scalar-reduction for `score` and the other scalars,
+fit-endpoint for `fit_transform` / `fit_predict` / `partial_fit` / inverses of a fresh fit, forecast-fit,
+whole-series, training-trajectory, fit-probe, fixed-session-batch). Every batch protocol part is OWED and is
+recorded with the full CPU and NVIDIA records above.

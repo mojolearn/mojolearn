@@ -686,6 +686,13 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(first=d(first), after=d(after), state=d(resident[0]), cursors=d(resident[1])))
 
 
+# lane vdv-fin (2026-11-24): the reason mamba1-decode-session and transformer-decode-session carry.
+_batch_decl("n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any "
+            "other row count by name, so a row alone is a different session and not a smaller batch of this "
+            "call; the per-call SambaStack.step the session is held to in the cell is the samba lanes' path)",
+            "samba-decode-session")
+
+
 # ---------------------------------------------------------------- training.chunked_lm_head_loss
 
 @lane("training-chunked-lm-head")
