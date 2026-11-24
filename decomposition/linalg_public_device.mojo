@@ -214,6 +214,23 @@ def device_svdvals_on(
     operand (`da` is destroyed: the range scale and the factor write it);
     the values come back once, DESCENDING. Every buffer it makes is freed
     and drained before return."""
+    var so = ctx.enqueue_create_buffer[DType.float32](max(n_cols, 1))
+    device_svdvals_into(ctx, da, so, n_rows, n_cols)
+    var s = _download(ctx, so, n_cols)
+    _ = so^
+    ctx.synchronize()
+    return s^
+
+
+def device_svdvals_into(
+    ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut so: DeviceBuffer[DType.float32], n_rows: Int,
+    n_cols: Int,
+) raises:
+    """`device_svdvals_on` with the values left on the device: the n_cols
+    values, DESCENDING, written into `so` (lane vdf-linalg5: the device-array
+    form, gemm/linalg_dev_arrays.mojo `svdvals_dev_native`, writes them into a
+    pool handle; `device_svdvals_on` downloads them once). `da` is destroyed.
+    Every buffer it makes is freed and drained before return."""
     _validate_shape(n_rows, n_cols, "svdvals")
     var scratch = ctx.enqueue_create_buffer[DType.float32](
         qr_slice_count(n_rows, n_cols) * n_cols * n_cols
@@ -236,19 +253,16 @@ def device_svdvals_on(
     )
     enqueue_es_unscale(ctx, F32Ptr(unsafe_from_address=Int(s_buf.unsafe_ptr())), dfac, 1, n_cols)
     # descending on the device (decomposition/spectrum_order_device.mojo)
-    var so = ctx.enqueue_create_buffer[DType.float32](n_cols)
     var spos = ctx.enqueue_create_buffer[DType.int32](n_cols)
     enqueue_svdvals_descending(
         ctx, s_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_cols, spos,
         so.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
     )
-    var s = _download(ctx, so, n_cols)
+    ctx.synchronize()
     _ = dfac^
-    _ = so^
     _ = spos^
     _ = scratch^
     _ = r_buf^
     _ = v_buf^
     _ = s_buf^
     ctx.synchronize()
-    return s^

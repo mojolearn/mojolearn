@@ -26,6 +26,17 @@ from std.memory import unsafe_memcpy
 from core.train_dev_pool import TRAIN_DEV_F32, TRAIN_DEV_I8, TRAIN_DEV_I32, train_dev_itemsize, train_dev_words
 
 
+def device_float32(fields: PythonObject, name: String, where: String) raises:
+    """A float32 training operand refuses a typed device array (the linalg low-bit outputs: int8 codes and int15
+    planes, int32 row exponents, uint16 bf16 / float16 bits; their `dtype` word, core/train_dev_pool.mojo) in words,
+    never reinterpreting its words (lane vdf-linalg5: the doors with their own class compare). One dictionary read."""
+    var nk = optimizer_keys()
+    var code = py_get(fields, nk[].k_dtype)
+    if code is not None and Int(py=code) != TRAIN_DEV_F32:
+        raise Error("TypeError: mojolearn." + where + ": " + name + " is a typed device array (int8, int32 or uint16 "
+                    + "storage); this function takes float32 device arrays")
+
+
 def device_entries(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = optimizer_keys()
     var bindings = py_item(context, nk[].k_bindings)
@@ -269,9 +280,10 @@ def device_operation(operation: Int, owner: PythonObject, values: PythonObject, 
             var typed_handle = Int(py=py_item(fields, nk[].k_h))
             var typed_address = Int(py=typed_result._addr)
             var stage_address = Int(stage.unsafe_ptr())
+            # lane vdf-linalg5: no download for zero elements (no zero-span transfer is asked of the driver).
             with GILReleased(Python()):
-                _ = typed_driver.download_device(typed_handle, stage_address, words)
                 if count > 0:
+                    _ = typed_driver.download_device(typed_handle, stage_address, words)
                     unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=typed_address),
                                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=stage_address),
                                   count=count * itemsize)
@@ -288,8 +300,12 @@ def device_operation(operation: Int, owner: PythonObject, values: PythonObject, 
         var driver = optimizer_driver(provider)
         var handle = Int(py=py_item(fields, nk[].k_h))
         var address = Int(py=result._addr)
-        with GILReleased(Python()):
-            _ = driver.download_device(handle, address, count)
+        # lane vdf-linalg5: an empty array (the all-empty-sessions (0, out_width) view of mlp_inference_sessions,
+        # bindings/training_grads_device_unpack.mojo) downloads nothing: the driver is never asked for a zero-span
+        # transfer.
+        if count > 0:
+            with GILReleased(Python()):
+                _ = driver.download_device(handle, address, count)
         _ = provider
         _ = result
         return result

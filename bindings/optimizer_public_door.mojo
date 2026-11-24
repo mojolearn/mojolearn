@@ -712,6 +712,11 @@ def door_step(
             if not (py_type(gs[k]) is d[].dev_cls):
                 raise Error("ValueError: mojolearn." + owhere + "." + where + ": grads[" + String(k)
                             + "] must be a device array")
+            # lane vdf-linalg5: a typed device array (the linalg low-bit outputs) is refused, never read as float32.
+            var g_code = py_get(py_fields(gs[k]), nk[].k_dtype)
+            if g_code is not None and Int(py=g_code) != 0:
+                raise Error("TypeError: mojolearn." + owhere + "." + where + ": grads[" + String(k) + "] is a typed "
+                            + "device array (int8, int32 or uint16 storage); gradients are float32 device arrays")
         req.g_mode = GRADS_DEVICE
         for k in range(len(gs)):  # driver-loop: over parameter buffers: one device handle each
             buffer_pins.append(gs[k])

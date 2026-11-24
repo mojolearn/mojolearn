@@ -173,3 +173,42 @@ def test_linalg_device_array_typed_result_is_refused_by_float_ops():
     bits = linalg.to_bf16(g)
     with pytest.raises(TypeError, match="Refused rather than cast"):
         linalg.matmul(bits, g, transpose_b=True)
+
+
+# lane vdf-linalg5: the int15 trio, from_f16, svdvals / svd(compute_uv=False) / tall qr('r') and lowbit read
+# TrainDeviceArray operands in place; with device='cpu' they are refused in the same words.
+LINALG5_DEVICE_ARRAY_CPU_CALLS = [
+    ("quantize_int15", lambda g: linalg.quantize_int15(g, device="cpu")),
+    ("matmul_int15", lambda g: linalg.matmul_int15(g, g, device="cpu")),
+    ("svdvals", lambda g: linalg.svdvals(g, device="cpu")),
+    ("svd_values", lambda g: linalg.svd(g, compute_uv=False, device="cpu")),
+    ("qr_r", lambda g: linalg.qr(g, mode="r", device="cpu")),
+    ("lowbit_pack_one", lambda g: lowbit.pack_one(g, "int8", device="cpu")),
+]
+
+
+@pytest.mark.parametrize("name,call", LINALG5_DEVICE_ARRAY_CPU_CALLS, ids=[n for n, _ in LINALG5_DEVICE_ARRAY_CPU_CALLS])
+def test_linalg5_device_array_with_device_cpu_is_refused(name, call):
+    g = _device_array_or_skip(_a())
+    with pytest.raises(ValueError, match="is a TrainDeviceArray, which lives on the GPU"):
+        call(g)
+
+
+def test_linalg5_device_array_refusal_names_the_function_once():
+    g = _device_array_or_skip(_a())
+    with pytest.raises(ValueError) as caught:
+        linalg.svdvals(g, device="cpu")
+    assert "mojolearn.linalg.mojolearn" not in str(caught.value)
+
+
+def test_linalg5_eigh_device_array_is_refused_in_words():
+    g = _device_array_or_skip(_a())
+    with pytest.raises(TypeError, match="takes host arrays"):
+        linalg.eigh(g)
+
+
+def test_linalg5_typed_device_array_is_refused_by_training_ops():
+    g = _device_array_or_skip(_a())
+    bits = linalg.to_bf16(g)
+    with pytest.raises(TypeError, match="typed device array"):
+        training.clip_grad_norm_([bits], 1.0)
