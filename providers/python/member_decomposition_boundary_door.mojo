@@ -80,17 +80,19 @@ def _route_of(route: DecompRoute, vendor_code: Int) -> DeviceRoute:
     return built
 
 
-def _xd_store_route(context: PythonObject, mut route: DeviceRoute) raises:
-    """Lane vdf-scope-neural5: a randomized TruncatedSVD member's fold store. The GPU x_decomp image's device
+def _xd_store_route(context: PythonObject, key: String, mut route: DeviceRoute) raises:
+    """Lane vdf-scope-neural5: a randomized TruncatedSVD member's fold store (lane vdf-scope-neural6: and a
+    randomized PCA member's, `key` "pca_decomp_store"). The GPU x_decomp image's device
     pool as a scope transport (x_decomp/member_store.mojo `x_decomp_store_v1`, connected at import by
-    python/mojolearn/_native_tsvd_bridge.py as `tsvd_decomp_store[mode]`) into `route.third` with
+    python/mojolearn/_native_tsvd_bridge.py as `tsvd_decomp_store[mode]`, _native_pca_bridge.py as
+    `pca_decomp_store[mode]`) into `route.third` with
     DECOMP_ROUTE_XD_STORE, resolved once here: the member puts the scoped X there once and takes each fold's rows
     on the device for the randomized driver (`source` = `-(id + 1)`). A host route or an image exporting no store
     keeps the route as it was (host rows). The connection is held by the process record of
     `neural_descriptor_connect_factory_once`."""
     if route.vendor <= 0:
         return
-    var table = py_get(context, "tsvd_decomp_store")
+    var table = py_get(context, key)
     if table is None:
         return
     var mode = String("identical") if route.mode == 1 else String("fast")
@@ -201,6 +203,10 @@ def _pca_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     route.entry = EntryRef(pca_driver(connection).entry, entry_ref_word(route.mode, route.vendor, PCA_NATIVE_COUNT))
     route.flags = capabilities
     _fold_route(route, DECOMP_FOLD_PCA)
+    if randomized:
+        # Lane vdf-scope-neural6: the randomized fit takes its fold in the x_decomp store; the estimators image's
+        # randomized driver reads that process-wide pool (x_decomp/resident.mojo X_DECOMP_POOL) in place.
+        _xd_store_route(context, "pca_decomp_store", route)
     owner.plan.route = route
     owner.plan.params = words^
     owner.pins = Python.tuple(PCA_PROVIDER_PINS.get_or_create_ptr()[].providers[connection], mode)
@@ -261,7 +267,7 @@ def _tsvd_admit(model: PythonObject, fields: PythonObject, context: PythonObject
     route.flags = flags
     _fold_route(route, DECOMP_FOLD_TSVD)
     if randomized and (flags & DECOMP_ROUTE_RANDOMIZED) != 0:
-        _xd_store_route(context, route)
+        _xd_store_route(context, "tsvd_decomp_store", route)
     owner.plan.route = route
     owner.plan.params = words^
     # The connections' images, as the door's provider pins hold them.

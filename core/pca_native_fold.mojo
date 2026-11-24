@@ -35,7 +35,7 @@ struct PCAFoldKernels(PCANativeKernels):
     @staticmethod
     def fit(r: PCAFitRequest) raises -> PCAFitResult:
         # Lane vdf-scope-neural4: the fit's projection (fit_transform, unwhitened or whitened) runs on the fit's
-        # own gathered X (decomposition/pca_fold.mojo `_project_x`).
+        # own gathered X (decomposition/impl/pca_owner.mojo `pca_project_x`).
         if not r.fold.active() or r.randomized:
             raise Error("PCA fold provider requires an exact resident fit")
         var project = r.projection != 0

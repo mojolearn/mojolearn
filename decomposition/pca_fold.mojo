@@ -33,7 +33,7 @@ from decomposition.estimator import (
     inverse_transform_scores_dev,
 )
 from core.gemm import gemm_nt
-from decomposition.impl.pca_owner import pca_keep_finish
+from decomposition.impl.pca_owner import pca_keep_finish, pca_project_x
 
 
 struct PCAFoldFit(Copyable, Movable):
@@ -115,47 +115,9 @@ def pca_fit_fold(
     ctx.synchronize()
     var keep = pca_keep_finish(ctx, explained_ptr, ratio_ptr, n_rows, n_components, keep_mode, frac, noise)
     if project:
-        _project_x(ctx, x, mean_ptr, components_ptr, singular_ptr, out_ptr, n_rows, n_features, keep, whiten)
+        pca_project_x(ctx, x, mean_ptr, components_ptr, singular_ptr, out_ptr, n_rows, n_features, keep, whiten)
     _ = x^
     return PCAFoldFit(keep, noise, finite, in_range)
-
-
-def _project_x(
-    ctx: DeviceContext,
-    mut x: DeviceBuffer[DType.float32],
-    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    n_rows: Int,
-    n_features: Int,
-    n_components: Int,
-    whiten: Bool,
-) raises:
-    """`pca_project_owned` over the fit's resident X buffer (lane vdf-scope-neural4): the whitened projection
-    (scaled by the fit's own row count, with its dimension refusals in its words) or the unwhitened one; nothing
-    to write when no component is kept. The fit tested X finite in the gather."""
-    if whiten:
-        if n_rows < 1 or n_features < 1 or n_components < 1 or n_components > n_features or n_rows < 2:
-            raise Error("PCA whitening requires positive rows/features/components and fit_rows>=2")
-        if n_rows > 2147483647 or n_features > 2147483647 or n_components > 2147483647:
-            raise Error("PCA whitening dimensions exceed Int32")
-        if n_rows > 2147483647 // n_features or n_components > 2147483647 // n_features:
-            raise Error("PCA whitening matrix cell count exceeds Int32")
-        pca_whiten_transform_x(ctx, x, mean_ptr, components_ptr, singular_ptr, out_ptr,
-            n_rows, n_features, n_components, n_rows, device_checks=True)
-    elif n_components > 0:
-        var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
-        var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
-        var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
-        ctx.enqueue_copy(dst_buf=mu, src_ptr=mean_ptr)
-        ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
-        pca_transform(ctx, x, mu, components, out, n_rows, n_features, n_components)
-        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
-        ctx.synchronize()
-        _ = mu^
-        _ = components^
-        _ = out^
 
 
 def tsvd_fit_fold(

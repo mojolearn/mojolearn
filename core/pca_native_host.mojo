@@ -35,6 +35,9 @@ struct PCAHostKernels(PCANativeKernels):
     def fit(r: PCAFitRequest) raises -> PCAFitResult:
         if r.fold.active():
             raise Error("PCA host provider does not own resident folds")
+        if r.source < 0:
+            # Lane vdf-scope-neural6: a resident x_decomp pool id (`-(id + 1)`) is a GPU image's word only.
+            raise Error("PCA host provider reads host X only; a resident X needs a GPU binding")
         var cp = f32_ptr(r.components)
         var mp = f32_ptr(r.mean)
         var ep = f32_ptr(r.variance)

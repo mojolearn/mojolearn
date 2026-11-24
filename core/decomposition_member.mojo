@@ -121,8 +121,12 @@ comptime DECOMP_STORE_PREFIX = "msel_fold"
 #: Lane vdf-scope-neural5: `route.third` is the GPU x_decomp image's device
 #: pool as a scope transport (x_decomp/member_store.mojo `x_decomp_store_v1`):
 #: a randomized TruncatedSVD fit takes its fold's rows there and hands the
-#: randomized driver the pool id (`source` = `-(id + 1)`).
-comptime DECOMP_ROUTE_XD_STORE = 32
+#: randomized driver the pool id (`source` = `-(id + 1)`); lane
+#: vdf-scope-neural6: a randomized PCA fit the same way (PCA's route has no
+#: `third` of its own).
+#: Lane vdf-scope-neural6: 2^21, above SEQ_ROUTE_STORE (2^20), since a PCA
+#: route's flags are its PCA_CAP_* word and PCA_CAP_HOST is 32.
+comptime DECOMP_ROUTE_XD_STORE = 2097152
 #: The scope cache's family prefix of that store (the XDecomp members' prefix:
 #: one cached X per scope serves both).
 comptime DECOMP_XD_STORE_PREFIX = "x_decomp"
@@ -422,7 +426,8 @@ def _rows_open(call: _Call, device: Bool) raises -> _Rows:
 
 
 def _rows_open_xd(call: _Call) raises -> _Rows:
-    """The rows of a randomized TruncatedSVD fit (lane vdf-scope-neural5): on a route holding the x_decomp store
+    """The rows of a randomized TruncatedSVD fit (lane vdf-scope-neural5) or randomized PCA fit (lane
+    vdf-scope-neural6, the same store and word; core/pca_native_device.mojo): on a route holding the x_decomp store
     (`route.third`, DECOMP_ROUTE_XD_STORE) with the caller's scope and pin, the whole X is found or put ONCE in
     the scope's x_decomp cache (prefix "x_decomp", the XDecomp members' cache of the same X) and a row index's
     rows are taken there on the device (one gather); `x` is then `-(id + 1)` of that pool id, read in place by
@@ -556,9 +561,11 @@ def _fit_pca(slot: _Slot, call: _Call) raises:
     # through the fold entry (the door's DeviceRows fold route,
     # bindings/pca_fit_native_door.mojo), with fit_transform's projection
     # (unwhitened or whitened) over the same gathered rows (lane
-    # vdf-scope-neural4); a randomized fit reads host rows (X, or the fold
-    # gathered on the host).
-    var held = _rows_open(call, not randomized)
+    # vdf-scope-neural4); a randomized fit takes the fold's rows in the GPU
+    # x_decomp store and the driver reads that pool id in place, projecting
+    # it once on the PCA context (lane vdf-scope-neural6, `_rows_open_xd`;
+    # host rows without that store, scope or pin).
+    var held = _rows_open_xd(call) if randomized else _rows_open(call, True)
     var fitted: PCAFitResult
     try:
         var request = PCAFitRequest(held.x, Int(slot[].components.unsafe_ptr()), Int(slot[].mean.unsafe_ptr()),
