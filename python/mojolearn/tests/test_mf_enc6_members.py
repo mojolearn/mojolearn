@@ -31,7 +31,12 @@ def _member(est, X):
     every = np.arange(len(X))
     params = est.get_params()
     name = sorted(params)[0]
-    search = GridSearchCV(est, {name: [params[name]]}, cv=[(every, every)], refit=True)
+    # scoring=None needs the class's own `score` (scikit-learn 1.9 metrics/_scorer.py `check_scoring`, a TypeError
+    # before any fit; providers/python/member_ensemble_boundary_door.mojo `_no_score_refusal`). A class without one
+    # is searched by a scorer whose response it lacks: every score is error_score (nan) and the best is refitted
+    # through the member, as scikit-learn does (lane w3f2-cv).
+    scoring = None if getattr(est, "score", None) is not None else "r2"
+    search = GridSearchCV(est, {name: [params[name]]}, cv=[(every, every)], scoring=scoring, refit=True)
     search.fit(X)
     return search.best_estimator_
 

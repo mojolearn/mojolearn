@@ -1360,7 +1360,12 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     # with y=None, scored by its own score (scikit-learn's scorer=None:
     # `estimator.score(X_test)`) or answering its responses (cross_val_predict).
     var y_free = plan.y == 0
-    if y_free and (classifier or not (member_score or responding)):
+    # (lane w3f2-cv) or by refusal-only rows alone, which read no target: a
+    # scorer over a class without its response, scikit-learn's words per side
+    var refusals_only = len(op_of) > 0
+    for j in range(len(op_of)):  # small-loop(the scorers)
+        refusals_only = refusals_only and op_of[j] < 0
+    if y_free and (classifier or not (member_score or responding or refusals_only)):
         raise Error("member ABI: a search without a target is scored by the member's own score")
     # THE FOLDS THAT LACK A CLASS (lane mf-msel5b): per fold, the classes its
     # train rows hold when they are not all k (one pass over its train codes
