@@ -1532,6 +1532,12 @@ def child_env(ctx, extra=None):
     # inherited by every driver, so a race's parameter probe and its timed worker carry the same placement
     numa = _numa_place()
     env[numa.PLAN_ENV] = json.dumps(numa.job_plan(), sort_keys=True)
+    # the GPU's NUMA node is read once here too (2026-11-24): a driver that inherited the plan read the node only
+    # after its parameter probe, so the timed worker's environment had MOJOLEARN_BENCH_GPU_NUMA_NODE and the probe's
+    # did not, and bench_board_evidence refused every neural-only smoke ("worker runtime settings changed": job
+    # nvc1-0006, small-mlp-generic and seq-tiled-predict-off never timed)
+    numa.gpu_numa_node()
+    env[numa.GPU_NODE_ENV] = os.environ[numa.GPU_NODE_ENV]
     if ctx["vendor"] == "amd":
         # FAIRNESS FIX (2026-10-13 audit): setup set this only in its own
         # process. A later smoke/timing worker could not import HIP CuPy, so
