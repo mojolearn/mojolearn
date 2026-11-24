@@ -103,7 +103,6 @@ from core.dbscan_native_api import (
     DBSCANResidentQuery, DBSCAN_CAP_RESIDENT, DBSCAN_CAP_DEV_STORE, dbscan_empty_labels,
 )
 from cluster.dbscan_door_run import DBSCAN_METRIC_PRECOMPUTED
-from core.labeled_reference_host_predict import LABELED_METRIC_COSINE
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
@@ -375,10 +374,10 @@ def _dbscan_rows(slot: _Slot, call: _Call, fit: Bool) raises -> MemberScopeRows:
         return MemberScopeRows(call[].x.data, call[].x.rows, call[].x.cols, False, List[Float32]())
     if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE:
         raise Error("TypeError: a DBSCAN member reads X as a dense host float32 view, no column index")
-    # A predict takes the store form on a resident reference set (DBSCAN_CAP_RESIDENT) for every metric but
-    # cosine (its query rows are made unit on the host, in `cosine_unit_rows`' words; lane vdf-scope-cluster6).
-    var store_ok = _dbscan_store_ok(slot, call) and (fit or (
-        (call[].route.flags & DBSCAN_CAP_RESIDENT) != 0 and slot[].metric != LABELED_METRIC_COSINE))
+    # A predict takes the store form on a resident reference set (DBSCAN_CAP_RESIDENT), every metric (lane
+    # vdf-scope-cluster7: cosine's unit query rows are made on the device copy, core/labeled_reference_resident.mojo
+    # `_cosine_unit_device`, in `cosine_unit_rows`' words).
+    var store_ok = _dbscan_store_ok(slot, call) and (fit or (call[].route.flags & DBSCAN_CAP_RESIDENT) != 0)
     return member_scope_rows(call[], _KDE_PREFIX, store_ok, _EST)
 
 

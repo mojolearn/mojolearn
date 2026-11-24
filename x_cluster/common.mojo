@@ -72,11 +72,21 @@ def greedy_kmeans_pp_indices[O: ClusterOps](
     distances; the host draws the uniforms and keeps the k-sized picks. With
     sample weights `w` (empty: unit) every potential and the cumulative sum
     weigh each row, as sklearn's `closest_dist_sq @ sample_weight`."""
+    var xs = ops.put(xs_host)
+    return greedy_kmeans_pp_indices_slot(ops, xs, m, d, k, rng, w)
+
+
+def greedy_kmeans_pp_indices_slot[O: ClusterOps](
+    mut ops: O, xs: Int, m: Int, d: Int, k: Int, mut rng: SplitMix64,
+    w: List[Float32] = List[Float32](),
+) raises -> List[Int]:
+    """`greedy_kmeans_pp_indices` over the m x d words already in float slot `xs` (lane vdf-scope-cluster7: X
+    put once by its caller, a model-selection fold's slot or the host words' one upload): the same statements
+    after the put, so the same picks."""
     var weighted = len(w) > 0
     from std.math import log
 
     var n_trials = 2 + Int(log(Float64(k)))
-    var xs = ops.put(xs_host)
     var ws = ops.put(w) if weighted else -1
     var picks = List[Int](capacity=k)
     var first = rng.below(m)

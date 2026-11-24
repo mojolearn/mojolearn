@@ -56,7 +56,7 @@ from x_cluster.bgmm_device import (
     BgL,
 )
 from x_cluster.bodies import SPLITMIX_GAMMA, SplitMix64
-from x_cluster.common import greedy_kmeans_pp_indices
+from x_cluster.common import greedy_kmeans_pp_indices_slot
 from x_cluster.ops import ClusterOps
 from x_cluster.post_bodies import FM_PROD, FM_VAL, ff_of_f64
 from x_linear.ff import FF, ff_f32
@@ -242,11 +242,15 @@ def bgmm_fit[O: ClusterOps](
     warm: Bool = False, warm_lb: Float64 = 0,
     w_init: List[Float64] = List[Float64](), m_init: List[Float64] = List[Float64](),
     p_init: List[Float64] = List[Float64](),
+    x_slot: Int = -1,
 ) raises -> BgmmFit:
     """init_mode: 0 'kmeans', 1 'random', 2 'k-means++' (one-hot at the greedy
     k-means++ picks), 3 'random_from_data' (one-hot at k distinct rows).
     `best` holds the warm state on entry (warm) and the best init's state
-    on return."""
+    on return. `x_slot` (lane vdf-scope-cluster7): X already in a float slot
+    of the ops (a model-selection fold's device copy; `x` is then a
+    placeholder), else `x` is put once. Every read of X, the k-means and
+    k-means++ initialisations included, is that one slot."""
     var kc = pr.kc
     if kc < 1 or kc > n:
         raise Error("Expected n_samples >= n_components but got n_components = " + String(kc) + ", n_samples = " + String(n))
@@ -288,7 +292,7 @@ def bgmm_fit[O: ClusterOps](
         _put(h, L.pi + t, p_init[t])
     var ws = ops.put(h)
     var wb = ops.zeros(2 * L.total)
-    var xs = ops.put(x)
+    var xs = x_slot if x_slot >= 0 else ops.put(x)
     var rs = ops.zeros(n * kc)
     var qs = ops.zeros(n * kc)
     var lpn = ops.zeros(n)
@@ -329,7 +333,7 @@ def bgmm_fit[O: ClusterOps](
         elif init_mode == 2 or init_mode == 3:
             var picks: List[Int]
             if init_mode == 2:
-                picks = greedy_kmeans_pp_indices(ops, x, n, d, kc, rng)
+                picks = greedy_kmeans_pp_indices_slot(ops, xs, n, d, kc, rng)
             else:
                 picks = _distinct_rows(rng, n, kc)
             var pi = List[Int32](capacity=kc)
@@ -344,7 +348,7 @@ def bgmm_fit[O: ClusterOps](
         else:
             var c = List[Float32]()
             var l = List[Int32]()
-            _ = ops.kmeans(x, n, d, kc, 300, 1e-4, rng.next() >> 1, 1, INIT_KMEANS_PLUS_PLUS, c, l)
+            _ = ops.kmeans_slot(xs, n, d, kc, 300, 1e-4, rng.next() >> 1, 1, INIT_KMEANS_PLUS_PLUS, c, l)
             ops.onehot(ops.put_i(l), n, kc, True, r0)
         if not warm:
             ops.set(ws, _scalars(pr, reg, tol, n, Float64(0), False))
@@ -431,11 +435,12 @@ def bgmm_score[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, kc: Int, means: List[Float32], pchol: List[Float32],
     c: List[Float32], mut log_resp: List[Float32], mut lpn_out: List[Float32],
     mut labels_out: List[Int32], flags: Int, mut proba_out: List[Float32], mut total: Float64,
+    x_slot: Int = -1,
 ) raises:
     """flags (lane apple-fast-py2mojo-cluster, what Python computed): bit 0
     `proba_out` = the pinned exp of every log responsibility (predict_proba),
     bit 1 `total` = the float-float fold of log_prob_norm (score)."""
-    var xs = ops.put(x)
+    var xs = x_slot if x_slot >= 0 else ops.put(x)  # `x_slot`: as `bgmm_fit`'s
     var ms = ops.put(means)
     var ps = ops.put(pchol)
     var cs = ops.put(c)

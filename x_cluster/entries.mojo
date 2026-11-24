@@ -287,7 +287,7 @@ def _by_cov_type(full: List[Float64], kc: Int, d: Int, ct: Int) -> List[Float32]
 
 
 def bgmm_entry[O: ClusterOps](
-    mut ops: O, x: List[Float32], a: List[Float32], ip: List[Int], fp: List[Float64]
+    mut ops: O, x: List[Float32], a: List[Float32], ip: List[Int], fp: List[Float64], x_slot: Int = -1
 ) raises -> ClusterOut:
     """ip = [n, d, n_components, dirichlet_process, max_iter, n_init,
     init (0 kmeans, 1 random, 2 k-means++, 3 random_from_data), seed,
@@ -402,7 +402,7 @@ def bgmm_entry[O: ClusterOps](
     var labels = List[Int32]()
     var r = bgmm_fit(
         ops, x, n, d, pr, Float32(fp[3]), fp[4], ip[4], ip[5], ip[6], UInt64(ip[7]), best, labels, warm, warm_lb,
-        w_init, m_init, p_init,
+        w_init, m_init, p_init, x_slot,
     )
     var out = ClusterOut()
     out.f.append(_f32_of(best.weights))
@@ -444,7 +444,7 @@ def bgmm_entry[O: ClusterOps](
 
 
 def bgmm_score_entry[O: ClusterOps](
-    mut ops: O, x: List[Float32], a: List[Float32], ip: List[Int]
+    mut ops: O, x: List[Float32], a: List[Float32], ip: List[Int], x_slot: Int = -1
 ) raises -> ClusterOut:
     """ip = [n, d, n_components]; a = means (k x d), precisions_cholesky
     (k x d x d), constants (k). f = [log_resp (n x k), log_prob_norm (n)];
@@ -470,7 +470,7 @@ def bgmm_score_entry[O: ClusterOps](
     var flags = ip[3] if len(ip) > 3 else 0
     var proba = List[Float32]()
     var total = Float64(0)
-    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn, labels, flags, proba, total)
+    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn, labels, flags, proba, total, x_slot)
     var out = ClusterOut()
     out.f.append(lr^)
     out.f.append(lpn^)

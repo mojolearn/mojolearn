@@ -19,7 +19,8 @@ from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.cosine_rows import cosine_unit_rows
+from core.cosine_rows import cosine_unit_rows, cosine_row_norm2, cosine_row_refusal
+from dbscan.estimator import cosine_unit_rows_kernel, COSINE_TPB, COSINE_NO_BAD_ROW
 from core.labeled_reference_host_predict import (
     LABELED_METRIC_COSINE,
     labeled_reference_validate,
@@ -190,6 +191,34 @@ def labeled_reference_lease(handle: Int) raises -> LabeledReferenceLease:
         shared_slot_unlock(lock)
 
 
+def _cosine_unit_device(ctx: DeviceContext, mut rows: DeviceBuffer[DType.float32], n: Int, d: Int) raises:
+    """`cosine_unit_rows(rows, n, d, "labeled_reference_predict")` in place on the device."""
+    if n * d <= 0:
+        return
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    h_bad.unsafe_ptr().unsafe_store(0, COSINE_NO_BAD_ROW)
+    ctx.enqueue_copy(dst_buf=d_bad, src_ptr=h_bad.unsafe_ptr())
+    # The kernel leaves a refused row untouched, so on a refusal that one row's d words (read back below)
+    # are the caller's, and its squared norm is recomputed in the same fold order for the words.
+    ctx.enqueue_function[cosine_unit_rows_kernel](
+        rows.unsafe_ptr(), d_bad.unsafe_ptr(), Int32(n), Int32(d),
+        grid_dim=((n + COSINE_TPB - 1) // COSINE_TPB, 1, 1), block_dim=(COSINE_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h_bad.unsafe_ptr(), src_buf=d_bad)
+    ctx.synchronize()
+    var bad = Int(h_bad.unsafe_ptr().unsafe_load(0))
+    _ = d_bad^
+    _ = h_bad^
+    if bad != Int(COSINE_NO_BAD_ROW):
+        var row = List[Float32](length=d, fill=Float32(0.0))
+        ctx.enqueue_copy(dst_ptr=row.unsafe_ptr(), src_buf=rows.create_sub_buffer[DType.float32](bad * d, d))
+        ctx.synchronize()
+        var n2 = cosine_row_norm2(Int(row.unsafe_ptr()), d)
+        _ = len(row)
+        raise cosine_row_refusal("labeled_reference_predict", bad, n2)
+
+
 def labeled_reference_predict_resident(
     handle: Int,
     queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -225,11 +254,14 @@ def labeled_reference_predict_resident(
     entry.ctx.synchronize()
     var uq = List[Float32]()
     if src_rows:
-        if metric == LABELED_METRIC_COSINE:
-            raise Error("labeled_reference_predict_resident: cosine query rows are made unit on the host")
         if n_queries * d > 0:
             entry.ctx.enqueue_copy(dst_buf=queries,
                                    src_buf=src_rows.value().create_sub_buffer[DType.float32](0, n_queries * d))
+        if metric == LABELED_METRIC_COSINE:
+            # lane vdf-scope-cluster7: the unit rows made ON THE DEVICE copy (`cosine_unit_rows_kernel`: the host
+            # function's fold order, root and quotient, so its words), with its refusal of the lowest row
+            # without a positive finite norm in its words (that one row's d words read back for the norm).
+            _cosine_unit_device(entry.ctx, queries, n_queries, d)
     elif metric == LABELED_METRIC_COSINE:
         var qq = List[Float32](unsafe_uninit_length=n_queries * d)
         unsafe_memcpy(dest=qq.unsafe_ptr(), src=queries_ptr, count=n_queries * d)
