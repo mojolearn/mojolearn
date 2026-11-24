@@ -32,9 +32,9 @@ def _next(mut state: UInt64) -> UInt64:
     return z ^ (z >> 31)
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
-        var metric = 0 if case == 0 else (1 if case == 1 else 2)
+        var metric = 0 if which == 0 else (1 if which == 1 else 2)
         var refs: List[Float32] = [0.5, 0.5, 0.5, 0.9, 0.7, 0.4, 3.0, 3.2, 2.9, 3.4, 3.1, 3.3]
         var keys: List[Int32] = [0, 1, 2, 3]
         var labels: List[Int32] = [0, 0, 1, 1]
@@ -42,7 +42,7 @@ def _device_case(case: Int) raises:
         var queries = List[Float32](capacity=_Q * _D)
         for _ in range(_Q * _D):  # small-loop(fixture words)
             queries.append(Float32(Float64(_next(state) >> 11) * (1.0 / 9007199254740992.0) * 4.0))
-        if case == 3:
+        if which == 3:
             for f in range(_D):  # small-loop(one fixture row)
                 queries[5 * _D + f] = 0.0
         var handle = DBSCANDeviceKernels.prepare(DBSCANReferenceRequest(Int(refs.unsafe_ptr()),
@@ -54,7 +54,7 @@ def _device_case(case: Int) raises:
         try:
             var host = List[Int32](length=_Q, fill=-7)
             var resident = List[Int32](length=_Q, fill=-7)
-            if case != 3:
+            if which != 3:
                 _ = DBSCANDeviceKernels.resident(DBSCANResidentQuery(Int(queries.unsafe_ptr()), Int(host.unsafe_ptr()),
                     handle, _Q, _D, metric, True, 0.9))
                 _ = DBSCANDeviceKernels.resident_store(DBSCANResidentQuery(slot, Int(resident.unsafe_ptr()), handle,
@@ -92,8 +92,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("dbscan_resident_store_query device", 4, body)
 

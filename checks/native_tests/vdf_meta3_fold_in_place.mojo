@@ -86,13 +86,13 @@ def _index(outer: List[Int64], base_rows: Int) raises -> Tuple[List[Int32], List
     return (draw^, inv^)
 
 
-def _host_case(case: Int) raises:
+def _host_case(unit: Int) raises:
     var outer = _outer(NB)
     var n = len(outer)
     var got = _index(outer, NB)
     var draw = got[0].copy()
     var inv = got[1].copy()
-    if case == 0:
+    if unit == 0:
         var in_fold = List[UInt8](length=NB, fill=UInt8(0))
         for i in range(n):  # small-loop(oracle: the draw and the rows in the fold)
             require(Int(draw[i]) == Int(outer[i]), "draw word " + String(i) + " is not the fold's row")
@@ -140,8 +140,8 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(unit: Int) raises:
+            _host_case(unit)
 
         check_cases_serial("vdf_meta3_fold_in_place host", 2, body)
 
@@ -152,7 +152,7 @@ def _same(a: List[Float32], b: List[Float32], label: String) raises:
         require(a[i].to_bits() == b[i].to_bits(), label + ": word " + String(i) + " differs")
 
 
-def _device_case(case: Int) raises:
+def _device_case(unit: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         comptime _CTX = "MojolearnEstimatorsContextIdenticalV3"
         var x = _x(DN, FD)
@@ -198,7 +198,7 @@ def _device_case(case: Int) raises:
         var plan = gram_plan_current()
         var failure = String("")
         try:
-            if case == 0:
+            if unit == 0:
                 var coef_a = List[Float32](length=FD, fill=0.0)
                 var mean_a = List[Float32](length=FD, fill=0.0)
                 var ym_a = List[Float64](length=1, fill=0.0)
@@ -255,8 +255,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(unit: Int) raises:
+            _device_case(unit)
 
         check_cases_serial("vdf_meta3_fold_in_place device", 2, body)
 

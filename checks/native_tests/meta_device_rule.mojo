@@ -26,8 +26,8 @@ def _words(request: Int, own: Int, origin: String) -> String:
     return String("")
 
 
-def run_case(case: Int) raises:
-    if case == 0:
+def run_case(which: Int) raises:
+    if which == 0:
         require(meta_member_device(DEVICE_CPU, DEVICE_INSTALL, "M", "", "C") == DEVICE_CPU, "handed to a member")
         require(meta_member_device(DEVICE_CPU, DEVICE_CPU, "M", "M", "C") == DEVICE_CPU, "equal words")
         require(meta_member_device(DEVICE_INSTALL, DEVICE_GPU, "M", "", "C") == DEVICE_GPU, "None keeps the member's")
@@ -35,7 +35,7 @@ def run_case(case: Int) raises:
         require(got == "ValueError: StackingClassifier was given device='cpu' but its estimator DecisionTreeClassifier "
             + "was constructed with device='gpu'; give both the same device, or leave one of them None",
             "own word: " + got)
-    elif case == 1:
+    elif which == 1:
         require(meta_member_device(DEVICE_CPU, DEVICE_INSTALL, "M", "Outer", "C") == DEVICE_CPU, "handed on")
         require(meta_member_device(DEVICE_GPU, DEVICE_GPU, "M", "Outer", "C") == DEVICE_GPU, "equal words, handed")
     else:

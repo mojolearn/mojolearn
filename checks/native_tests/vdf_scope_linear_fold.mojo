@@ -83,16 +83,16 @@ def _same(a: List[Float32], b: List[Float32], label: String) raises:
         require(a[i].to_bits() == b[i].to_bits(), label + ": word " + String(i) + " differs")
 
 
-def _host_case(case: Int) raises:
+def _host_case(which: Int) raises:
     var x = _x(N, D)
-    if case == 0:
+    if which == 0:
         for f in range(3):  # small-loop(the three folds)
             var index = _fold(f, N)
             var got = List[Float32](length=len(index) * D, fill=0.0)
             member_fold_take_f32(Int(x.unsafe_ptr()), Int(index.unsafe_ptr()), len(index), D, Int(got.unsafe_ptr()))
             _same(got, _serial(x, index, D), "fold " + String(f))
         return
-    if case == 1:
+    if which == 1:
         var narrow: List[Int32] = [Int32(7), Int32(0), Int32(N - 1)]
         var call = MemberCall(DeviceRoute(0))
         call.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
@@ -135,13 +135,13 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(which: Int) raises:
+            _host_case(which)
 
         check_cases("vdf_scope_linear_fold host", 3, body)
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         comptime _CTX = "MojolearnEstimatorsContextIdenticalV3"
         var x = _x(FN, FD)
@@ -162,7 +162,7 @@ def _device_case(case: Int) raises:
         var plan = gram_plan_current()
         var failure = String("")
         try:
-            if case == 0:
+            if which == 0:
                 var coef_a = List[Float32](length=FD, fill=0.0)
                 var mean_a = List[Float32](length=FD, fill=0.0)
                 var ym_a = List[Float64](length=1, fill=0.0)
@@ -217,8 +217,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("vdf_scope_linear_fold device", 2, body)
 

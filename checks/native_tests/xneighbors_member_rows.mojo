@@ -124,7 +124,7 @@ def _same_fit(a: _Fit, b: _Fit) raises:
     require(a.offset.to_bits() == b.offset.to_bits(), "offset bits")
 
 
-def _host_case(case: Int) raises:
+def _host_case(unit: Int) raises:
     comptime if CPU_COLUMN_BUILD:
         var x = _x()
         var index = _index(True)
@@ -132,16 +132,16 @@ def _host_case(case: Int) raises:
         var taken = List[Float32](length=n * _D, fill=0.0)
         member_fold_take_f32(Int(x.unsafe_ptr()), Int(index.unsafe_ptr()), n, _D, Int(taken.unsafe_ptr()))
         _same_f32(taken, _serial(x, index), "host take of the fold")
-        var fit = _fit(XnDriver(xn_host_v1), Int(taken.unsafe_ptr()), n, case == 1)
+        var fit = _fit(XnDriver(xn_host_v1), Int(taken.unsafe_ptr()), n, unit == 1)
         _ = fit^
         _ = x^
         _ = taken^
 
 
-def _device_case(case: Int) raises:
+def _device_case(unit: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var driver = XnDriver(xn_device_v1)
-        var old_items = case == 1
+        var old_items = unit == 1
         var x = _x()
         var train = _index(True)
         var test = _index(False)
@@ -206,16 +206,16 @@ def _device_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(unit: Int) raises:
+            _host_case(unit)
 
         check_cases_serial("xneighbors_member_rows host", 2, body)
 
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(unit: Int) raises:
+            _device_case(unit)
 
         check_cases_serial("xneighbors_member_rows device", 2, body)
 

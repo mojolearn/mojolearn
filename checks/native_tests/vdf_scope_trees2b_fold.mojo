@@ -70,7 +70,7 @@ def _gather(x: List[Float32], index: List[Int64], d: Int) -> List[Float32]:
     return out^
 
 
-def _host_case(case: Int) raises:
+def _host_case(which: Int) raises:
     var probe = MemberCall(DeviceRoute(0))
     var dart = member_call(MemberRef(EntryRef(dart_member_v2, 0), 0), MEMBER_OP_CAPABILITIES, probe)
     require((dart & (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE)) == 0,
@@ -83,8 +83,8 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(which: Int) raises:
+            _host_case(which)
 
         check_cases("vdf_scope_trees2b_fold host", 1, body)
 
@@ -97,7 +97,7 @@ def _same_words(a: Int, b: Int, words: Int, label: String) raises:
         require(p[i] == q[i], label + ": word " + String(i) + " differs")
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var x = _x(N, D)
         var index = _fold(N)
@@ -109,9 +109,9 @@ def _device_case(case: Int) raises:
         var slot = store[].take_rows(store_ctx, base, D, Int(index.unsafe_ptr()), n)
         var failure = String("")
         try:
-            if case == 0:
+            if which == 0:
                 _gbdt_case(slot, gathered, n)
-            elif case == 1:
+            elif which == 1:
                 _dart_case(slot, gathered, n)
             else:
                 _iforest_case(slot, gathered, n)
@@ -226,8 +226,8 @@ def _iforest_case(slot: Int, gathered: List[Float32], n: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("vdf_scope_trees2b_fold device", 3, body)
 

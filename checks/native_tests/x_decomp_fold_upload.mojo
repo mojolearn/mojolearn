@@ -61,7 +61,7 @@ def _same_f32(a: List[Float32], b: List[Float32], what: String) raises:
         require(bitcast[DType.uint32](a[i]) == bitcast[DType.uint32](b[i]), what + ": bits differ at " + String(i))
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var x = _x()
         var index = _index()
@@ -80,7 +80,7 @@ def _device_case(case: Int) raises:
         try:
             _ = dev_upload_run(fold_id, F32Ptr(unsafe_from_address=fold_x_word(slot)), n * _D)
             _ = dev_upload_run(host_id, F32Ptr(unsafe_from_address=Int(rows.unsafe_ptr())), n * _D)
-            if case == 0:
+            if which == 0:
                 var down = List[Float32](length=n * _D, fill=0.0)
                 _ = dev_download_run(fold_id, F32Ptr(unsafe_from_address=Int(down.unsafe_ptr())), n * _D)
                 _same_f32(down, rows, "the fold word's kit upload")
@@ -111,8 +111,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("x_decomp_fold_upload device", 2, body)
 

@@ -152,7 +152,7 @@ def _minibatch(driver: KMeansVariantsDriver, train: Int, test: Int, nt: Int, nq:
     return out^
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var driver = KMeansVariantsDriver(kmeans_variants_device_v1)
         require((driver.metadata(VARIANTS_CAPABILITIES) & VARIANTS_CAP_FOLD_X) != 0,
@@ -171,7 +171,7 @@ def _device_case(case: Int) raises:
         var test_slot = store[].take_rows(store_ctx, base, _D, Int(test.unsafe_ptr()), nq)
         var failure = String("")
         try:
-            if case == 0:
+            if which == 0:
                 var a = _bisect(driver, fold_x_word(train_slot), fold_x_word(test_slot), nt, nq)
                 var b = _bisect(driver, Int(train_rows.unsafe_ptr()), Int(test_rows.unsafe_ptr()), nt, nq)
                 _same_i32(a[0], b[0], "bisect fit labels")
@@ -204,8 +204,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("xcluster_member_fold device", 2, body)
 

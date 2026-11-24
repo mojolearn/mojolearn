@@ -83,8 +83,8 @@ def _p(values: List[Float32]) -> _P:
     return _P(unsafe_from_address=Int(values.unsafe_ptr()))
 
 
-def _host_case(case: Int) raises:
-    if case == 0:
+def _host_case(which: Int) raises:
+    if which == 0:
         var codes = List[Int32](length=50, fill=Int32(0))
         var weights = List[Float64](length=50, fill=0.0)
         for i in range(50):  # small-loop(fixture)
@@ -131,13 +131,13 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(which: Int) raises:
+            _host_case(which)
 
         check_cases("vdf_scope_linear2_fold host", 2, body)
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var x = _x(FN, FD)
         var y = List[Float32](length=FN, fill=0.0)
@@ -162,9 +162,9 @@ def _device_case(case: Int) raises:
         var word = _P(unsafe_from_address=fold_x_word(slot))
         var failure = String("")
         try:
-            if case == 0 or case == 1:
+            if which == 0 or which == 1:
                 var ctx = process_ctx[SOLVER_DEVCTX_SLOT]()
-                if case == 0:
+                if which == 0:
                     var ca = List[Float32](length=FD, fill=0.0)
                     var cb = List[Float32](length=FD, fill=0.0)
                     var ia = List[Float32](length=1, fill=0.0)
@@ -187,7 +187,7 @@ def _device_case(case: Int) raises:
                     cd_predict_host(ctx, word, _p(coef), _p(oa), n, FD, Float32(0.75))
                     cd_predict_host(ctx, _p(f_order), _p(coef), _p(ob), n, FD, Float32(0.75))
                     _same(oa, ob, "cd predictions")
-            elif case == 2:
+            elif which == 2:
                 var wb: List[Float32] = [Float32(0.5), Float32(-0.25), Float32(1.5), Float32(2.0), Float32(-0.125)]
                 var oa = List[Float32](length=n, fill=0.0)
                 var ob = List[Float32](length=n, fill=0.0)
@@ -197,13 +197,13 @@ def _device_case(case: Int) raises:
                     FP(unsafe_from_address=Int(wb.unsafe_ptr())), n, FD, 1, 0, FP(unsafe_from_address=Int(ob.unsafe_ptr())))
                 _ = wb^
                 _same(oa, ob, "x_linear decisions")
-            elif case == 3 or case == 4:
+            elif which == 3 or which == 4:
                 var ctx = process_ctx[_CTX]()
                 var ca = List[Float32](length=64, fill=0.0)
                 var cb = List[Float32](length=64, fill=0.0)
                 var ia = List[Float32](length=64, fill=0.0)
                 var ib = List[Float32](length=64, fill=0.0)
-                if case == 3:
+                if which == 3:
                     qn_fit_host(ctx, word, _p(labels), _p(ca), _p(ia), n, FD, 2, 0.0, 1.0 / Float64(n), 1e-4, 1e-5,
                         100, 20, 5, True, True, False, _p(labels))
                     qn_fit_host(ctx, _p(gathered), _p(labels), _p(cb), _p(ib), n, FD, 2, 0.0, 1.0 / Float64(n), 1e-4,
@@ -216,7 +216,7 @@ def _device_case(case: Int) raises:
                         1e-5, 100, 20, 5, True, True, QN_LOSS_LOGISTIC, False, _p(labels))
                 _same(ca, cb, "QN coef")
                 _same(ia, ib, "QN info")
-            elif case == 5:
+            elif which == 5:
                 var ctx = process_ctx[_CTX]()
                 var coef: List[Float32] = [Float32(0.25), Float32(-1.5), Float32(2.0), Float32(0.125), Float32(0.5)]
                 var sa = ctx.enqueue_create_buffer[DType.float32](n)
@@ -231,7 +231,7 @@ def _device_case(case: Int) raises:
                 _same(ha, hb, "QN decisions")
                 _ = sa^
                 _ = sb^
-            elif case == 6:
+            elif which == 6:
                 var ctx = process_ctx[_CTX]()
                 var qa = DeviceQueryX(ctx, fold_x_word(slot), n, FD, QueryFold.none())
                 var qb = DeviceQueryX(ctx, Int(gathered.unsafe_ptr()), n, FD, QueryFold.none())
@@ -275,8 +275,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("vdf_scope_linear2_fold device", 8, body)
 

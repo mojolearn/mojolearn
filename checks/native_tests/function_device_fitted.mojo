@@ -34,20 +34,20 @@ def _words(device: FunctionDevice, member: Int) -> String:
     return String("")
 
 
-def run_case(case: Int) raises:
-    if case == 0:
+def run_case(which: Int) raises:
+    if which == 0:
         for member in range(3):  # small-loop(fixture: the three device codes)
             var code = DEVICE_INSTALL if member == 0 else (DEVICE_GPU if member == 1 else DEVICE_CPU)
             require(_words(FunctionDevice(DEVICE_INSTALL, False), code) == "", "None follows the model")
-    elif case == 1:
+    elif which == 1:
         require(_words(FunctionDevice(DEVICE_CPU, True), DEVICE_CPU) == "", "cpu with a cpu model")
         require(_words(FunctionDevice(DEVICE_GPU, False), DEVICE_GPU) == "", "gpu with a gpu model")
-    elif case == 2:
+    elif which == 2:
         var got = _words(FunctionDevice(DEVICE_CPU, True), DEVICE_GPU)
         require(got == "ValueError: approximate_predict was given device='cpu' but its estimator HDBSCAN was "
             + "constructed with device='gpu'; give both the same device, or leave one of them None",
             "explicit conflict: " + got)
-    elif case == 3:
+    elif which == 3:
         var got = _words(FunctionDevice(DEVICE_CPU, True), DEVICE_INSTALL)
         require(got == "ValueError: approximate_predict was given device='cpu' but its HDBSCAN was constructed "
             + "with device=None and runs on this installation's GPU; a fitted model is queried where it was "

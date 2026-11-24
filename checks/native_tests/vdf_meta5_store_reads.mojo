@@ -74,8 +74,8 @@ def _spans(op: Int, na: Int, np: Int, nf: Int) -> Bool:
     return True
 
 
-def _host_case(case: Int) raises:
-    _ = case
+def _host_case(unit: Int) raises:
+    _ = unit
     require(RM_OP_COUNT == 7, "the ridge multi table must carry seven operations")
     require(_spans(RM_FIT_SLOT, 7, 5, 1), "RM_FIT_SLOT's layout refused")
     require(_spans(RM_PREDICT_SLOT, 3, 4, 0), "RM_PREDICT_SLOT's layout refused")
@@ -86,8 +86,8 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(unit: Int) raises:
+            _host_case(unit)
 
         check_cases_serial("vdf_meta5_store_reads host", 1, body)
 
@@ -98,7 +98,7 @@ def _same(a: List[Float32], b: List[Float32], label: String) raises:
         require(a[i].to_bits() == b[i].to_bits(), label + ": word " + String(i) + " differs")
 
 
-def _device_case(case: Int) raises:
+def _device_case(unit: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var x = _x(NB, FD)
         var outer = _outer(NB)
@@ -117,8 +117,8 @@ def _device_case(case: Int) raises:
         var slot = store[].take_rows(ctx, base, FD, Int(outer.unsafe_ptr()), n)
         var failure = String("")
         try:
-            if case < 2:
-                var intercept = case == 0
+            if unit < 2:
+                var intercept = unit == 0
                 var coef_a = List[Float32](length=NT * FD, fill=0.0)
                 var coef_b = List[Float32](length=NT * FD, fill=0.0)
                 var ym_a = List[Float32](length=NT, fill=0.0)
@@ -183,8 +183,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(unit: Int) raises:
+            _device_case(unit)
 
         check_cases_serial("vdf_meta5_store_reads device", 3, body)
 

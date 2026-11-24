@@ -86,8 +86,8 @@ def _index(outer: List[Int64], base_rows: Int) raises -> Tuple[List[Int32], List
     return (draw^, inv^)
 
 
-def _host_case(case: Int) raises:
-    if case == 0:
+def _host_case(case_index: Int) raises:
+    if case_index == 0:
         var plain = VoteRows(4096, 10, 3).member_rows(2)
         require(plain.index == 0 and plain.x == 4096 and plain.n == 10 and plain.d == 3, "plain rows changed")
         var took = List[UInt8](length=3, fill=UInt8(0))
@@ -157,8 +157,8 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(case_index: Int) raises:
+            _host_case(case_index)
 
         check_cases_serial("vdf_meta4_fold_store host", 2, body)
 
@@ -169,7 +169,7 @@ def _same(a: List[Float32], b: List[Float32], label: String) raises:
         require(a[i].to_bits() == b[i].to_bits(), label + ": word " + String(i) + " differs")
 
 
-def _device_case(case: Int) raises:
+def _device_case(case_index: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         comptime _CTX = "MojolearnEstimatorsContextIdenticalV3"
         var x = _x(DN, FD)
@@ -180,7 +180,7 @@ def _device_case(case: Int) raises:
         # The rows the members read: the whole fold (case 0, a vote predict) or a split composed inside it
         # (case 1, a calibrated fold's test rows); `place` the fold positions their outputs go to.
         var place = List[Int32]()
-        if case == 0:
+        if case_index == 0:
             for i in range(n):  # small-loop(fixture: every fold position)
                 place.append(Int32(i))
         else:
@@ -239,8 +239,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(case_index: Int) raises:
+            _device_case(case_index)
 
         check_cases_serial("vdf_meta4_fold_store device", 2, body)
 

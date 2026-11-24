@@ -31,13 +31,13 @@ def _next(mut state: UInt64) -> UInt64:
     return z ^ (z >> 31)
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var state = UInt64(20261124)
         var x = List[Float32](capacity=_ROWS * _D)
         for _ in range(_ROWS * _D):  # small-loop(fixture words)
             x.append(Float32(Float64(_next(state) >> 11) * (1.0 / 9007199254740992.0) * 4.0))
-        var drop = case == 0
+        var drop = which == 0
         var lanczos = 3 if drop else 2
         var ctx = metrics_store_ctx()
         var store = METRICS_STORE.get_or_create_ptr()
@@ -65,8 +65,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("spectral_embedding_resident device", 2, body)
 

@@ -25,8 +25,8 @@ from bindings.metric_store_refusal import metric_store_refusal
 comptime CASES = 3
 
 
-def run_case(case: Int) raises:
-    if case == 0:
+def run_case(which: Int) raises:
+    if which == 0:
         var temps: UInt64 = 0
         for i in range(METRIC_TEMP_BITS + 2):  # small-loop(fixture)
             require(not metric_input_temp(temps, i), "an empty mask names no temporary")
@@ -35,7 +35,7 @@ def run_case(case: Int) raises:
                 "the marked inputs are temporaries")
         require(not metric_input_temp(temps, 0) and not metric_input_temp(temps, 2), "unmarked inputs are kept")
         require(not metric_input_temp(~UInt64(0), METRIC_TEMP_BITS), "an input past the mask is never a temporary")
-    elif case == 1:
+    elif which == 1:
         for i in range(METRIC_SOURCE_INPUTS):  # small-loop(fixture)
             for a in range(15):  # small-loop(fixture)
                 var w = metric_source_word(i, a)

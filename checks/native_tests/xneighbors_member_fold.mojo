@@ -134,7 +134,7 @@ def _same_fit(a: _Fit, b: _Fit) raises:
         require(a.prior[i].to_bits() == b.prior[i].to_bits(), "priors")
 
 
-def _host_case(case: Int) raises:
+def _host_case(which: Int) raises:
     comptime if CPU_COLUMN_BUILD:
         var x = _x()
         var codes = _codes()
@@ -152,7 +152,7 @@ def _host_case(case: Int) raises:
         _ = labels^
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var driver = XnDriver(xn_device_v1)
         var x = _x()
@@ -172,7 +172,7 @@ def _device_case(case: Int) raises:
         var failure = String("")
         try:
             var host_fit = _fit(driver, Int(train_rows.unsafe_ptr()), Int(labels.unsafe_ptr()), nt)
-            if case == 0:
+            if which == 0:
                 var fold_fit = _fit(driver, fold_x_word(train_slot), Int(labels.unsafe_ptr()), nt)
                 _same_fit(fold_fit, host_fit)
             else:
@@ -218,16 +218,16 @@ def _device_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(which: Int) raises:
+            _host_case(which)
 
         check_cases_serial("xneighbors_member_fold host", 1, body)
 
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("xneighbors_member_fold device", 2, body)
 

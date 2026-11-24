@@ -78,28 +78,28 @@ def _same(a: ClusterOut, b: ClusterOut) raises:
         require(a.s[j].to_bits() == b.s[j].to_bits(), "scalar " + String(j))
 
 
-def _run(case: Int, source: Int, n: Int) raises -> ClusterOut:
+def _run(which: Int, source: Int, n: Int) raises -> ClusterOut:
     var count = n * _D
-    if case == 0 or case == 1:
-        var ip: List[Int] = [n, _D, 0, 1, 300, 1 if case == 1 else 0, 1]
-        var fp: List[Float64] = [0.0 if case == 0 else 0.9]
+    if which == 0 or which == 1:
+        var ip: List[Int] = [n, _D, 0, 1, 300, 1 if which == 1 else 0, 1]
+        var fp: List[Float64] = [0.0 if which == 0 else 0.9]
         return cluster_device_execute(ENTRY_MEANSHIFT, source, count, 0, 0, ip, fp)
-    if case == 2:
+    if which == 2:
         var ip: List[Int] = [n, _D, 5, 5, 0, 1, -1]
         var fp: List[Float64] = [Float64.MAX, 0.05, 0.5, 2.0]
         return cluster_device_execute(ENTRY_OPTICS, source, count, 0, 0, ip, fp)
-    if case == 3:
+    if which == 3:
         var ip: List[Int] = [n, _D, 0, 0, 200, 15, 0]
         var fp: List[Float64] = [0.5, 0.0]
         return cluster_device_execute(ENTRY_AFFINITY, source, count, 0, 0, ip, fp)
     # [n, d, n_components, dirichlet_process, max_iter, n_init, init, seed, has_mean_prior, has_covariance_prior,
     #  covariance_type, warm, plain, has_weights_init, has_means_init, has_precisions_init]
-    var ip: List[Int] = [n, _D, 3, 1, 50, 1, 0 if case == 4 else 2, 7, 0, 0, 0 if case == 4 else 2, 0, 0, 0, 0, 0]
+    var ip: List[Int] = [n, _D, 3, 1, 50, 1, 0 if which == 4 else 2, 7, 0, 0, 0 if which == 4 else 2, 0, 0, 0, 0, 0]
     var fp: List[Float64] = [-1.0, -1.0, -1.0, 1e-6, 1e-3, 0.0]
     return cluster_device_execute(ENTRY_BGMM, source, count, 0, 0, ip, fp)
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var x = _x()
         var index = _index()
@@ -114,8 +114,8 @@ def _device_case(case: Int) raises:
         var slot = store[].take_rows(store_ctx, base, _D, Int(index.unsafe_ptr()), n)
         var failure = String("")
         try:
-            var fold = _run(case, fold_x_word(slot), n)
-            var host = _run(case, Int(rows.unsafe_ptr()), n)
+            var fold = _run(which, fold_x_word(slot), n)
+            var host = _run(which, Int(rows.unsafe_ptr()), n)
             _same(fold, host)
         except error:
             failure = String(error)
@@ -130,8 +130,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("xcluster_fold_entries device", 6, body)
 

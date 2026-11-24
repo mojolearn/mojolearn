@@ -93,7 +93,7 @@ def _a64(values: List[Float64]) -> Int:
     return Int(values.unsafe_ptr())
 
 
-def _host_case(case: Int) raises:
+def _host_case(which: Int) raises:
     comptime if CPU_COLUMN_BUILD:
         var kernel = _kernel()
         var buf = List[Float32](length=64, fill=0.0)
@@ -124,16 +124,16 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(which: Int) raises:
+            _host_case(which)
 
         check_cases("vdf_scope_gp_fold host", 1, body)
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var x = _x(FN, FD)
-        if case == 4:
+        if which == 4:
             x[(FN - 2) * FD + 1] = Float32(0.0) / Float32(0.0)  # inside the fold (row FN - 2)
         var y = List[Float32](length=FN, fill=0.0)
         var codes = List[Int32](length=FN, fill=Int32(0))
@@ -157,7 +157,7 @@ def _device_case(case: Int) raises:
         var kernel = _kernel()
         var failure = String("")
         try:
-            if case == 0 or case == 1:
+            if which == 0 or which == 1:
                 var la = List[Float32](length=n * n, fill=0.0)
                 var lb = List[Float32](length=n * n, fill=0.0)
                 var da = List[Float32](length=n, fill=0.0)
@@ -172,7 +172,7 @@ def _device_case(case: Int) raises:
                 _same(la, lb, "L_")
                 _same(da, db, "alpha_")
                 _same64(sa, sb, "fit scalars")
-                if case == 1:
+                if which == 1:
                     var q = n // 2
                     var qrows = List[Int64]()
                     for r in range(q):  # small-loop(fixture: query rows)
@@ -215,7 +215,7 @@ def _device_case(case: Int) raises:
                     _same(ta, tb, "predictive std")
                     _ = qrows^
                     _ = xq^
-            elif case == 2:
+            elif which == 2:
                 var flags: List[Int32] = [0, 1, 0]
                 var bounds: List[Float32] = [0.05, 20.0, 0.05, 20.0, 0.05, 20.0, 0.05, 20.0]
                 var view = kernel.view()
@@ -235,7 +235,7 @@ def _device_case(case: Int) raises:
                 _same64(ra, rb, "optimizer runs")
                 _ = flags^
                 _ = bounds^
-            elif case == 3:
+            elif which == 3:
                 var columns: List[Int] = [1]
                 var ya = List[Float32](length=n, fill=0.0)
                 var yb = List[Float32](length=n, fill=0.0)
@@ -304,7 +304,7 @@ def _device_case(case: Int) raises:
                 _ = twb^
                 _ = tsa^
                 _ = tsb^
-            elif case == 4:
+            elif which == 4:
                 var refused = 0
                 var la = List[Float32](length=n * n, fill=0.0)
                 var da = List[Float32](length=n, fill=0.0)
@@ -366,8 +366,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("vdf_scope_gp_fold device", 6, body)
 

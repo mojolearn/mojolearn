@@ -88,7 +88,7 @@ def _p(values: List[Float32]) -> _P:
     return _P(unsafe_from_address=Int(values.unsafe_ptr()))
 
 
-def _host_case(case: Int) raises:
+def _host_case(which: Int) raises:
     var sink = NativeDescriptorError()
     var result = 0
     var buf = List[Float32](length=16, fill=0.0)
@@ -119,13 +119,13 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(which: Int) raises:
+            _host_case(which)
 
         check_cases("vdf_scope_linear3_fold host", 1, body)
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var x = _x(FN, FD)
         var y = List[Float32](length=FN, fill=0.0)
@@ -133,9 +133,9 @@ def _device_case(case: Int) raises:
         for i in range(FN):  # small-loop(fixture targets and weights)
             y[i] = Float32((i * 13) % 17) * Float32(0.5) - Float32(3.0)
             w[i] = Float32(1 + (i * 5) % 7) * Float32(0.25)
-        if case == 1:
+        if which == 1:
             x[(FN - 2) * FD + 1] = Float32(0.0) / Float32(0.0)  # inside the fold (row FN - 2)
-        if case == 4:
+        if which == 4:
             for j in range(FD):  # small-loop(fixture: -0.0 cells)
                 x[(FN - 3) * FD + j] = Float32(-0.0)
         var index = _fold(FN)
@@ -159,7 +159,7 @@ def _device_case(case: Int) raises:
         var word = _P(unsafe_from_address=fold_x_word(slot))
         var failure = String("")
         try:
-            if case == 0:
+            if which == 0:
                 var ctx = process_ctx[SOLVER_DEVCTX_SLOT]()
                 var ca = List[Float32](length=FD, fill=0.0)
                 var cb = List[Float32](length=FD, fill=0.0)
@@ -173,7 +173,7 @@ def _device_case(case: Int) raises:
                 require(na == nb, "n_iter differs")
                 _same(ca, cb, "weighted cd coef")
                 _same(ia, ib, "weighted cd intercept")
-            elif case == 1:
+            elif which == 1:
                 var raised = String("")
                 try:
                     x_linear_finite_device(FP(unsafe_from_address=Int(word)), n * FD, "X")
@@ -181,7 +181,7 @@ def _device_case(case: Int) raises:
                     raised = String(error)
                 require(raised == "mojolearn: X contains NaN or infinity", "the NaN fold slot passed: " + raised)
                 x_linear_finite_device(FP(unsafe_from_address=Int(gathered.unsafe_ptr())), FD, "X")  # row 0 finite
-            elif case == 2:
+            elif which == 2:
                 var ctx = process_ctx[_CTX]()
                 # Lane vdf-scope-linear4: a fold X's prepared X stays a device slot; work_x
                 # receives its fold word (one Int64), read back here for the compare.
@@ -215,13 +215,13 @@ def _device_case(case: Int) raises:
                 for j in range(FD):  # small-loop(binary64 means)
                     require(m64a[j].to_bits() == m64b[j].to_bits(), "binary64 mean " + String(j))
                 require(y64a[0].to_bits() == y64b[0].to_bits(), "y mean differs")
-            elif case == 3:
+            elif which == 3:
                 var ra = List[Float32](length=(FD + 1) * (FD + 1), fill=0.0)
                 var rb = List[Float32](length=(FD + 1) * (FD + 1), fill=0.0)
                 _ = DevExec.tsqr_factor(word, _p(y_fold), _p(ra), n, FD, 1, False)
                 _ = DevExec.tsqr_factor(_p(gathered), _p(y_fold), _p(rb), n, FD, 1, False)
                 _same(ra, rb, "uncentered TSQR R")
-            elif case == 4:
+            elif which == 4:
                 var ctx = process_ctx[_CTX]()
                 var dg = ctx.enqueue_create_buffer[DType.float32](n * FD)
                 upload_whole_into(ctx, dg, gathered)
@@ -266,8 +266,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("vdf_scope_linear3_fold device", 6, body)
 

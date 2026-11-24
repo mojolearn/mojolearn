@@ -47,35 +47,35 @@ def _member_words(request: Int, member: Int) -> String:
     return String("")
 
 
-def run_case(case: Int) raises:
-    if case == 0:
+def run_case(which: Int) raises:
+    if which == 0:
         for cpu_only in range(2):  # small-loop(fixture)
             for has_gpu in range(2):  # small-loop(fixture)
                 var d = function_device_decide(DEVICE_INSTALL, cpu_only == 1, has_gpu == 1, True, NAME)
                 require(d.request == DEVICE_INSTALL and not d.host_beside, "None keeps today's route")
-    elif case == 1:
+    elif which == 1:
         var d = function_device_decide(DEVICE_GPU, False, True, True, NAME)
         require(d.request == DEVICE_GPU and not d.host_beside, "gpu on a GPU installation runs today's route")
-    elif case == 2:
+    elif which == 2:
         var want = String("ValueError: device='gpu' is not available for example_score: it has no GPU "
             + "implementation. Use device='cpu', or leave device=None")
         require(_words(DEVICE_GPU, False, False, True) == want, "no GPU implementation, GPU installation: " +
             _words(DEVICE_GPU, False, False, True))
         require(_words(DEVICE_GPU, True, False, True) == want, "no GPU implementation, CPU-only installation")
-    elif case == 3:
+    elif which == 3:
         var got = _words(DEVICE_GPU, True, True, True)
         require(got.startswith("ValueError: device='gpu' needs a GPU build of mojolearn"),
             "gpu on a CPU-only installation: " + got)
-    elif case == 4:
+    elif which == 4:
         var d = function_device_decide(DEVICE_CPU, True, True, True, NAME)
         require(d.request == DEVICE_CPU and not d.host_beside, "cpu on a CPU-only installation runs today's route")
-    elif case == 5:
+    elif which == 5:
         var d = function_device_decide(DEVICE_CPU, False, True, True, NAME)
         require(d.request == DEVICE_CPU and d.host_beside, "cpu beside a GPU set runs the CPU images")
-    elif case == 6:
+    elif which == 6:
         var d = function_device_decide(DEVICE_CPU, False, False, True, NAME)
         require(d.request == DEVICE_CPU and not d.host_beside, "a host-only function runs today's route")
-    elif case == 7:
+    elif which == 7:
         var got = _words(DEVICE_CPU, False, True, False)
         require(got == "ValueError: device='cpu' is not available for example_score: it has no CPU implementation. "
             + "Leave device=None to run on this installation's device", "no CPU implementation: " + got)

@@ -81,7 +81,7 @@ def _p(values: List[Float32]) -> _P:
     return _P(unsafe_from_address=Int(values.unsafe_ptr()))
 
 
-def _host_case(case: Int) raises:
+def _host_case(which: Int) raises:
     var sink = NativeDescriptorError()
     var result = 0
     var buf = List[Float32](length=64, fill=0.0)
@@ -107,19 +107,19 @@ def _host_case(case: Int) raises:
 
 def test_host_fixtures() raises:
     comptime if CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _host_case(case)
+        def body(which: Int) raises:
+            _host_case(which)
 
         check_cases("vdf_scope_linear4_fold host", 1, body)
 
 
-def _device_case(case: Int) raises:
+def _device_case(which: Int) raises:
     comptime if not CPU_COLUMN_BUILD:
         var x = _x(FN, FD)
         var y = List[Float32](length=FN, fill=0.0)
         for i in range(FN):  # small-loop(fixture targets)
             y[i] = Float32((i * 13) % 17) * Float32(0.5) - Float32(3.0)
-        if case == 4:
+        if which == 4:
             x[(FN - 2) * FD + 1] = Float32(0.0) / Float32(0.0)  # inside the fold (row FN - 2)
         var index = _fold(FN)
         var n = len(index)
@@ -138,7 +138,7 @@ def _device_case(case: Int) raises:
         var word = fold_x_word(slot)
         var failure = String("")
         try:
-            if case == 0:
+            if which == 0:
                 var ctx = process_ctx[_CTX]()
                 var box = List[Int64](length=1, fill=Int64(0))
                 var wxa = List[Float32](length=n * FD, fill=0.0)
@@ -170,7 +170,7 @@ def _device_case(case: Int) raises:
                 for j in range(FD):  # small-loop(binary64 means)
                     require(m64a[j].to_bits() == m64b[j].to_bits(), "binary64 mean " + String(j))
                 require(y64a[0].to_bits() == y64b[0].to_bits(), "y mean differs")
-            elif case == 1:
+            elif which == 1:
                 # Two targets and the weights after them (rows x (T + 1) words).
                 comptime T = 2
                 var yw = List[Float32](length=n * (T + 1), fill=0.0)
@@ -199,7 +199,7 @@ def _device_case(case: Int) raises:
                 _ = pi^
                 _ = pf^
                 _ = yw^
-            elif case == 2:
+            elif which == 2:
                 var ctx = process_ctx[_CTX]()
                 comptime T = 3
                 var coef = List[Float32](length=T * FD, fill=0.0)
@@ -217,7 +217,7 @@ def _device_case(case: Int) raises:
                 _same(pa, pb, "multi-target predictions")
                 _ = coef^
                 _ = icpt^
-            elif case == 3:
+            elif which == 3:
                 var mode = native_descriptor_call(metrics_program_device_v1, MP_MODE, [], [], [])
                 var vendor = native_descriptor_call(metrics_program_device_v1, MP_VENDOR, [], [], [])
                 var metrics = EntryRef(metrics_program_device_v1, entry_ref_word(mode, vendor, MP_OPERATION_COUNT))
@@ -256,8 +256,8 @@ def _device_case(case: Int) raises:
 
 def test_device_fixtures() raises:
     comptime if not CPU_COLUMN_BUILD:
-        def body(case: Int) raises:
-            _device_case(case)
+        def body(which: Int) raises:
+            _device_case(which)
 
         check_cases_serial("vdf_scope_linear4_fold device", 5, body)
 
