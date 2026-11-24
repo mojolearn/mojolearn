@@ -117,3 +117,46 @@ def test_roc_auc_over_a_mixture_model_with_continuous_targets_is_sklearns_words(
     with pytest.raises(ValueError, match='continuous format is not supported'):
         _search(ml.GaussianMixture(random_state=0, numeric_mode='identical'), {'n_components': [1]}, X, y,
                 'roc_auc')
+
+
+def test_log_loss_over_a_mixture_model_with_more_target_values_than_components_is_sklearns_words():
+    # ROUND b. Fail-proof: in `_float_proba_value` drop log_loss's class-count check (the side scores).
+    X = _x()
+    y = (np.arange(12) % 3).astype(np.float64)
+    with pytest.raises(ValueError, match='y_true and y_prob contain different number of classes: 3 vs 2'):
+        _search(ml.GaussianMixture(random_state=0, numeric_mode='identical'), {'n_components': [2]}, X, y,
+                'neg_log_loss')
+    with pytest.raises(ValueError, match='y_true and y_prob contain different number of classes: 3 vs 2'):
+        sk_ms.GridSearchCV(sk_mixture.GaussianMixture(random_state=0), {'n_components': [2]}, cv=_folds(12),
+                           scoring='neg_log_loss', error_score='raise', refit=False).fit(X, y)
+
+
+def test_a_label_metric_whose_tuple_resolves_to_predict_proba_is_sklearns_mix_words():
+    # ROUND b. Fail-proof: in `_wrong_response_value` drop the binary column pick (the words name
+    # 'continuous-multioutput').
+    sk_linear = pytest.importorskip('sklearn.linear_model')
+    sk_m = pytest.importorskip('sklearn.metrics')
+    X = _x()
+    y = (np.arange(12) % 2).astype(np.int64)
+    ours = ms.make_scorer(metrics.accuracy_score, response_method=('predict_proba', 'predict'))
+    with pytest.raises(ValueError, match="can't handle a mix of binary and continuous targets"):
+        _search(ml.LogisticRegression(max_iter=30), {'C': [1.0]}, X, y, ours)
+    theirs = sk_ms.make_scorer if hasattr(sk_ms, 'make_scorer') else None
+    if theirs is not None:
+        with pytest.raises(ValueError, match="can't handle a mix of binary and continuous targets"):
+            sk_ms.GridSearchCV(sk_linear.LogisticRegression(max_iter=30), {'C': [1.0]}, cv=_folds(12),
+                               scoring=sk_m.make_scorer(sk_m.accuracy_score,
+                                                        response_method=('predict_proba', 'predict')),
+                               error_score='raise', refit=False).fit(X, y)
+
+
+def test_top_k_with_a_bad_k_is_the_doors_words_per_side():
+    # ROUND b. Fail-proof: in `_scorer_name` drop the k refusal (the search keeps no row for it).
+    X = _x()
+    y = (np.arange(12) % 3).astype(np.int64)
+    scorer = ms.make_scorer(metrics.top_k_accuracy_score, response_method=('decision_function', 'predict_proba'),
+                            k=0)
+    with pytest.raises(Exception, match='k must be a positive integer'):
+        _search(ml.LogisticRegression(max_iter=30), {'C': [1.0]}, X, y, scorer)
+    tolerated = _search(ml.LogisticRegression(max_iter=30), {'C': [1.0]}, X, y, scorer, error_score=-3.0)
+    np.testing.assert_array_equal(_split_scores(tolerated), [-3.0, -3.0, -3.0])

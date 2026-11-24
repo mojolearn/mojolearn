@@ -18,6 +18,8 @@ EXPECTED (base vs head):
 - `gmm_roc_two_tol`: -3.0 per split both (column_or_1d's words; error_score).
 - `gmm_roc_two`: head scikit-learn's column_or_1d words; base the door metric's words.
 - `gmm_roc_continuous`: head "continuous format is not supported"; base the door metric's words.
+- ROUND b `gmm_logloss` (3 target values, 2 components): head scikit-learn's class-count words; base the door's.
+- ROUND b `wrong_accuracy` (accuracy over ('predict_proba', 'predict')): head the mix words; base the door's.
 
 Configurations are independent: one process each across the allocated cores.
 
@@ -68,6 +70,13 @@ def _unit(name):
         elif base == "logproba_r2":
             est, grid, y = ml.LogisticRegression(max_iter=30), {'C': [1.0]}, i % 2
             scoring = ms.make_scorer(metrics.r2_score, response_method="predict_log_proba")
+        elif base == "gmm_logloss":
+            est, grid, y = ml.GaussianMixture(random_state=0, numeric_mode="identical"), {'n_components': [2]}, \
+                (i % 3).astype(np.float64)
+            scoring = 'neg_log_loss'
+        elif base == "wrong_accuracy":
+            est, grid, y = ml.LogisticRegression(max_iter=30), {'C': [1.0]}, i % 2
+            scoring = ms.make_scorer(metrics.accuracy_score, response_method=("predict_proba", "predict"))
         elif base == "tuple_hinge":
             est, grid, y = ml.LogisticRegression(max_iter=30), {'C': [1.0]}, i % 2
             scoring = ms.make_scorer(metrics.hinge_loss, response_method=("decision_function", "predict"),
@@ -88,7 +97,7 @@ def _unit(name):
 
 
 UNITS = ["tier_fast", "tier_identical", "logproba_r2", "tuple_hinge", "gmm_roc_one", "gmm_roc_two_tol",
-         "gmm_roc_two", "gmm_roc_continuous"]
+         "gmm_roc_two", "gmm_roc_continuous", "gmm_logloss", "wrong_accuracy"]
 
 
 def main():
