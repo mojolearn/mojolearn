@@ -652,8 +652,9 @@
   },
   "xprep-mi-ties-off": {
    "define": "MOJOLEARN_XPREP_FAST_MI_TIES_OFF",
-   "status": "define in code (x_prep/device.mojo, x_prep/dmi.mojo MI_TIES): B = mutual_info without the ties arm; A = the (x, secondary) order and searched tie runs, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 3.36; select-mutual-info istella fit 496 -> 107901 ms, 217x, taxi 5.7x); the run-search default is unchanged; removed: the switch, mi_cd_device's ties argument, _point_kernel and _count_within; the define is refused (core/experiment_guards_base.mojo); code recoverable at dfc0f84aec, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_TIES_OFF.ab-outcome-3.patch. Was: define in code (x_prep/device.mojo, x_prep/dmi.mojo MI_TIES): B = mutual_info without the ties arm; A = the (x, secondary) order and searched tie runs, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "xprep-out-off": {
    "define": "MOJOLEARN_XPREP_FAST_OUT_OFF",
@@ -3976,7 +3977,10 @@
    "b_arms": [
     "xprep-mi-ties-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-prep): old path LOSER (L40S 4 cells, median 3.36; select-mutual-info istella fit 496 -> 107901 ms, 217x, taxi 5.7x); the run-search default is unchanged; removed: the switch, mi_cd_device's ties argument, _point_kernel and _count_within; the define is refused (core/experiment_guards_base.mojo); code recoverable at dfc0f84aec, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_TIES_OFF.ab-outcome-3.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "xprep-out-off-rows",

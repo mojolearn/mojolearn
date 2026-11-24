@@ -11,15 +11,16 @@ the distance pairs, and finds the same k-th pair and the same counts from
 value-sorted columns; its argument is in that file. This is the same search
 on the device:
 
-  1. every column's points sorted by (key(x), index), the host's `_order`
-     (a bitonic sort of 64-bit words, x_prep/dsort.mojo's scheme);
+  1. every column's points sorted by (key(x), key(s)), s the noise word (a
+     bitonic sort of 64-bit words, x_prep/dsort.mojo's scheme);
   2. one thread per column splits the sorted order by class, stably
      (`byc`, `pos`, `start`), and lists the points of classes with more than
      one member (`all`), as `_cd_column` does; a column with a non-finite
      value or secondary word, or a negative label, is flagged;
-  3. one thread per (point, column) walks outward in its class and counts
-     within the radius by binary search, `_cd_column`'s `point`, with the
-     units' own distance functions; a flagged column runs `mi_cd_unit`.
+  3. one thread per (point, column) takes the runs of equal x outward in its
+     class and counts within the radius by binary search, `_cd_column`'s
+     `point` (the tie-aware search below), with the units' own distance
+     functions; a flagged column runs `mi_cd_unit`.
 """
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
@@ -29,7 +30,7 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz
 from x_prep.common import FP, IP, p, ld, st, key, run_block
 from x_prep.prims import sub
-from x_prep.mutual_info import MAX_K, digammaf, _sec, _dsec, _less, _within, mi_cd_unit
+from x_prep.mutual_info import MAX_K, digammaf, _sec, _less, mi_cd_unit
 
 comptime WP = MutPointer[UInt64, MutAnyOrigin]
 comptime UP = MutPointer[UInt32, MutAnyOrigin]
@@ -292,122 +293,9 @@ def _dist(xj: Float32, xi: Float32) -> Float32:
     return abs(sub(xj, xi))
 
 
-def _count_within(u: UP, axb: Int, asb: Int, hi: Int, xi: Float32, si: Float32, rp: Float32,
-                  rs: Float32) -> Int:
-    """x_prep/host/mutual_info.mojo `_count_within` over all[0:hi]."""
-    var l = 0
-    var h = hi
-    while l < h:
-        var m = (l + h) // 2
-        if _fx(u, axb + m) < xi:
-            l = m + 1
-        else:
-            h = m
-    var mid = l
-    var cnt = 0
-    l = mid
-    h = hi
-    while l < h:
-        var m = (l + h) // 2
-        if _dist(_fx(u, axb + m), xi) < rp:
-            l = m + 1
-        else:
-            h = m
-    cnt += l - mid
-    var r = l
-    while r < hi and _dist(_fx(u, axb + r), xi) == rp:
-        if _within(rp, _dsec(xi, _fx(u, axb + r), si, _fx(u, asb + r)), rp, rs):
-            cnt += 1
-        r += 1
-    l = 0
-    h = mid
-    while l < h:
-        var m = (l + h) // 2
-        if _dist(_fx(u, axb + m), xi) < rp:
-            h = m
-        else:
-            l = m + 1
-    cnt += mid - l
-    var qq = l - 1
-    while qq >= 0 and _dist(_fx(u, axb + qq), xi) == rp:
-        if _within(rp, _dsec(xi, _fx(u, axb + qq), si, _fx(u, asb + qq)), rp, rs):
-            cnt += 1
-        qq -= 1
-    return cnt
-
-
-def _point_kernel(f: FP, u: UP, q: IP, total: Int32):
-    """t = i*d + c: `_cd_column`'s `point(i)` for column c, or the unit when
-    the column is flagged."""
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t >= Int(total):
-        return
-    var n = p(q, 1)
-    var d = p(q, 2)
-    var i = t // d
-    var c = t % d
-    var U = c * (6 * n + 5)
-    var meta = U + 6 * n + 1
-    if u[meta + _M_FLAG] != UInt32(0):
-        mi_cd_unit(t, f, q)
-        return
-    var zb = p(q, 0) + c
-    var sb = p(q, 7) + c if p(q, 7) > 0 else 0
-    var k = p(q, 5)
-    var li = Int(ld(f, p(q, 3) + i))
-    var cnt = Int(ld(f, p(q, 4) + li))
-    var out = p(q, 6) + t
-    if cnt <= 1:
-        st(f, out, Float32(0))
-        return
-    var kl = k if k < cnt - 1 else cnt - 1
-    var xi = ld(f, zb + i * d)
-    var si = _sec(f, sb, i * d)
-    var bx = U
-    var bsb = U + n
-    var start = U + 5 * n
-    var b = Int(u[start + li])
-    var e = Int(u[start + li + 1])
-    var bp = Array[Float32, MAX_K](fill=BIG)
-    var bs = Array[Float32, MAX_K](fill=BIG)
-    var pi = Int(u[U + 2 * n + i])
-    var L = pi - 1
-    var R = pi + 1
-    var taken = 0
-    var D = Float32(0)
-    while True:
-        var hasl = L >= b
-        var hasr = R < e
-        if not hasl and not hasr:
-            break
-        var dl = _dist(_fx(u, bx + L), xi) if hasl else BIG
-        var dr = _dist(_fx(u, bx + R), xi) if hasr else BIG
-        var take_left = hasl and (not hasr or dl <= dr)
-        var dp = dl if take_left else dr
-        if taken >= kl and dp > D:
-            break
-        var dsec: Float32
-        if take_left:
-            dsec = _dsec(xi, _fx(u, bx + L), si, _fx(u, bsb + L))
-            L -= 1
-        else:
-            dsec = _dsec(xi, _fx(u, bx + R), si, _fx(u, bsb + R))
-            R += 1
-        if _less(dp, dsec, bp[kl - 1], bs[kl - 1]):
-            var m = kl - 1
-            while m > 0 and _less(dp, dsec, bp[m - 1], bs[m - 1]):
-                bp[m] = bp[m - 1]
-                bs[m] = bs[m - 1]
-                m -= 1
-            bp[m] = dp
-            bs[m] = dsec
-        taken += 1
-        D = dp
-    var rp = bp[kl - 1]
-    var rs = bs[kl - 1]
-    var na = Int(u[meta + _M_NA])
-    var mall = _count_within(u, U + 3 * n, U + 4 * n, na, xi, si, rp, rs)
-    st(f, out, sub(sub(digammaf(Float32(kl)), digammaf(Float32(cnt))), digammaf(Float32(mall))))
+# TOMBSTONE: MOJOLEARN_XPREP_FAST_MI_TIES_OFF (old path LOSER: NV L40S 4 cells, median 3.36, select-mutual-info istella fit 496 -> 107901 ms, 217x, taxi 5.7x) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at dfc0f84aec.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_TIES_OFF.ab-outcome-3.patch
+# (removed here: `_point_kernel`, the walk over every point of a tied run, and its `_count_within`)
 
 
 # ------------------------------------------- tie-aware search (lane prep-apple2)
@@ -415,10 +303,10 @@ def _point_kernel(f: FP, u: UP, q: IP, total: Int32):
 # in secondary order, so the candidates of one run come in the order of their
 # secondary distance (`_dsec`): ascending s where the run lies right of x_i,
 # descending s left of it, outward from s_i where the primary words tie. The
-# walk of `_point_kernel` visits every point of a tied run (a taxi column of
-# two values: tens of thousands of points per query); this takes each run's
-# first kl candidates in that order (no later one can enter the kl best) and
-# counts the boundary runs of `_count_within` by binary search. Every primary
+# walk of the removed `_point_kernel` visited every point of a tied run (a taxi
+# column of two values: tens of thousands of points per query); this takes each
+# run's first kl candidates in that order (no later one can enter the kl best)
+# and counts the boundary runs of the walk's count by binary search. Every primary
 # and secondary distance is the unit's own (`_dist`, `_dsec`), each run's
 # distances are monotone in its order (IEEE subtraction is), and the runs are
 # taken in the walk's order with its stop rule, so the kl-th pair and the
@@ -461,7 +349,7 @@ def _run_lo(u: UP, xb: Int, lo: Int, hi: Int) -> Int:
 @always_inline
 def _take(dp: Float32, dsec: Float32, kl: Int, mut bp: Array[Float32, MAX_K],
           mut bs: Array[Float32, MAX_K]) -> Bool:
-    """`_point_kernel`'s insertion; False when the pair is not below the kl-th."""
+    """The walk's insertion of a pair into the kl best; False when it is not below the kl-th."""
     if not _less(dp, dsec, bp[kl - 1], bs[kl - 1]):
         return False
     var m = kl - 1
@@ -599,7 +487,8 @@ def _count_run(u: UP, xb: Int, sbb: Int, rs: Int, re: Int, xi: Float32, si: Floa
 
 def _count_within_ties(u: UP, axb: Int, asb: Int, hi: Int, xi: Float32, si: Float32, rp: Float32,
                        rs: Float32) -> Int:
-    """`_count_within` with its boundary walks replaced by run counts."""
+    """x_prep/host/mutual_info.mojo `_count_within` over all[0:hi], its boundary
+    walks replaced by run counts."""
     var l = 0
     var h = hi
     while l < h:
@@ -643,7 +532,9 @@ def _count_within_ties(u: UP, axb: Int, asb: Int, hi: Int, xi: Float32, si: Floa
 
 
 def _point_ties_kernel(f: FP, u: UP, q: IP, total: Int32):
-    """`_point_kernel` over runs: the same kl-th pair and count (above)."""
+    """t = i*d + c: `_cd_column`'s `point(i)` for column c over runs (the
+    kl-th pair and count of the walk, above), or the unit when the column is
+    flagged."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t >= Int(total):
         return
@@ -722,10 +613,10 @@ def mi_w_words(n: Int, d: Int) -> Int:
 
 def mi_cd_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.uint64],
                  mut du: DeviceBuffer[DType.uint32], mut dq: DeviceBuffer[DType.int32], qoff: Int, total: Int,
-                 n: Int, d: Int, Z: Int, zs1: Int, ties: Bool) raises:
+                 n: Int, d: Int, Z: Int, zs1: Int) raises:
     """Enqueue the whole `mi_cd` stage (its params at dq[qoff:]); `dw` holds
-    mi_w_words(n, d) words. ties: the (x, secondary) order and the searched
-    runs of `_point_ties_kernel` (on by default; the build define -D MOJOLEARN_XPREP_FAST_MI_TIES_OFF turns it off)."""
+    mi_w_words(n, d) words. The (x, secondary) order and the searched runs of
+    `_point_ties_kernel`."""
     if n <= 0 or d <= 0:
         return
     var big_n = mi_big_n(n)
@@ -739,7 +630,7 @@ def mi_cd_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mut dw
     var qp = dq.unsafe_ptr() + qoff
     comptime BS = 256
     ctx.enqueue_function[_load_kernel](
-        f, w, pl, Int32(Z), Int32(n), Int32(d), Int32(big_n), Int32(tot), Int32(zs1), Int32(1 if ties else 0),
+        f, w, pl, Int32(Z), Int32(n), Int32(d), Int32(big_n), Int32(tot), Int32(zs1), Int32(1),
         grid_dim=_blocks(tot, BS), block_dim=BS,
     )
     var tiles = tot // MTILE
@@ -756,7 +647,4 @@ def mi_cd_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mut dw
         ctx.enqueue_function[_tile_kernel](w, pl, Int32(big_n), Int32(k), Int32(k), grid_dim=tiles, block_dim=MTG)
         k *= 2
     ctx.enqueue_function[_prep_kernel](f, pl, u, qp, Int32(big_n), grid_dim=_blocks(d, 32), block_dim=32)
-    if ties:
-        ctx.enqueue_function[_point_ties_kernel](f, u, qp, Int32(total), grid_dim=_blocks(total, BS), block_dim=BS)
-    else:
-        ctx.enqueue_function[_point_kernel](f, u, qp, Int32(total), grid_dim=_blocks(total, BS), block_dim=BS)
+    ctx.enqueue_function[_point_ties_kernel](f, u, qp, Int32(total), grid_dim=_blocks(total, BS), block_dim=BS)

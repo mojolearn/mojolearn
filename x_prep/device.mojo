@@ -493,7 +493,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # route for OP_MI_CD. AMD not measured (NVIDIA-only campaign).
     # TOMBSTONE: MOJOLEARN_XPREP_FAST_MI_SORTED_OFF (old path LOSER: NV L40S 4 cells, median 4.30, select-mutual-info istella fit 498 -> 18292 ms, 36.7x, taxi 7.6x) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at 344c99c579.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_SORTED_OFF.ab-outcome-3.patch
-    var mi_ties = not is_defined["MOJOLEARN_XPREP_FAST_MI_TIES_OFF"]()
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_MI_TIES_OFF (old path LOSER: NV L40S 4 cells, median 3.36, select-mutual-info istella fit 496 -> 107901 ms, 217x, taxi 5.7x) deleted 2026-11-24 by lane/o3-prep (lane ab-outcome-3); code recoverable at dfc0f84aec.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XPREP_FAST_MI_TIES_OFF.ab-outcome-3.patch
     var mi_w = 1
     var mi_u = 1
     for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
@@ -588,7 +589,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             continue
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
         comptime if MI_CLF_RANKMAJOR:
-            if mi_ties and op == OP_MI_CD:
+            if op == OP_MI_CD:
                 var hq = host_q + (s * STAGE_INTS + 2)
                 mi_cd_device_rank(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]),
                                   Int(hq[0]), Int(hq[7]))
@@ -608,7 +609,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         if op == OP_MI_CD:
             var hq = host_q + (s * STAGE_INTS + 2)
             mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]),
-                         Int(hq[7]), mi_ties)
+                         Int(hq[7]))
             continue
         comptime if C08_DICTIONARY:
             # C08 routes: unique_inverse as the index radix sort + run scan (x_prep/ddict.mojo),
