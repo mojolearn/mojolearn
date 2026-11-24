@@ -79,6 +79,10 @@ class StepLR(_PowSched):
         Number of steps between decays. Must be an integer >= 1.
     gamma : float, default 0.1
         Multiplicative decay factor. Must be finite and >= 0.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the optimizer that uses this schedule runs. None uses this installation's device,
+        'cpu' the CPU and 'gpu' requires a GPU installation; an optimizer given another
+        device raises ValueError. Other values raise ValueError.
 
     Raises
     ------
@@ -100,8 +104,8 @@ class StepLR(_PowSched):
     >>> first, after_30 = sched.lr_at(1), sched.lr_at(31)
     """
 
-    def __init__(self, base_lr, step_size, gamma=0.1):
-        return _OPT_NATIVE("schedule_construct", self, (base_lr, step_size, gamma), None, _OPT_CONTEXT)
+    def __init__(self, base_lr, step_size, gamma=0.1, *, device=None):
+        return _OPT_NATIVE("schedule_construct", self, (base_lr, step_size, gamma, device), None, _OPT_CONTEXT)
 
 
 class ExponentialLR(_PowSched):
@@ -122,6 +126,10 @@ class ExponentialLR(_PowSched):
         Learning rate of the first step. Must be finite and >= 0.
     gamma : float
         Multiplicative decay factor per step. Must be finite and >= 0.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the optimizer that uses this schedule runs. None uses this installation's device,
+        'cpu' the CPU and 'gpu' requires a GPU installation; an optimizer given another
+        device raises ValueError. Other values raise ValueError.
 
     Raises
     ------
@@ -142,8 +150,8 @@ class ExponentialLR(_PowSched):
     >>> lrs = sched.lrs(100)
     """
 
-    def __init__(self, base_lr, gamma):
-        return _OPT_NATIVE("schedule_construct", self, (base_lr, 1, gamma), None, _OPT_CONTEXT)
+    def __init__(self, base_lr, gamma, *, device=None):
+        return _OPT_NATIVE("schedule_construct", self, (base_lr, 1, gamma, device), None, _OPT_CONTEXT)
 
 
 class OneCycleLR(_Sched):
@@ -177,6 +185,10 @@ class OneCycleLR(_Sched):
         Final rate is ``initial_lr / final_div_factor``.
     three_phase : bool, default False
         Use torch's three-phase form.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the optimizer that uses this schedule runs. None uses this installation's device,
+        'cpu' the CPU and 'gpu' requires a GPU installation; an optimizer given another
+        device raises ValueError. Other values raise ValueError.
 
     Notes
     -----
@@ -194,8 +206,8 @@ class OneCycleLR(_Sched):
     _LR_STYLE = 2
 
     def __init__(self, max_lr, total_steps, pct_start=0.3, anneal_strategy="cos", div_factor=25.0,
-                 final_div_factor=1e4, three_phase=False):
-        return _OPT_NATIVE("schedule_construct", self, (max_lr, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase), None, _OPT_CONTEXT)
+                 final_div_factor=1e4, three_phase=False, *, device=None):
+        return _OPT_NATIVE("schedule_construct", self, (max_lr, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase, device), None, _OPT_CONTEXT)
 
     def _lr_spec(self):
         return _OPT_NATIVE("schedule_spec", self, (), None, _OPT_CONTEXT)

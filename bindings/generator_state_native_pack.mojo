@@ -13,6 +13,7 @@ from bindings.generator_state_native_unpack import (
     generator_fields,
 )
 from core.generator_draw_run import generator_stream_next
+from bindings.generator_device_unpack import generator_device_admit
 
 
 def generator_validate(seed: PythonObject, counter: PythonObject) raises -> PythonObject:
@@ -34,6 +35,27 @@ def generator_init(value: PythonObject, seed: PythonObject, mode: PythonObject) 
     py_setitem(fields, "seed", checked[0])
     py_setitem(fields, "counter", checked[1])
     py_setitem(fields, "numeric_mode", mode)
+    return PythonObject(None)
+
+
+def generator_construct(value: PythonObject, seed: PythonObject, mode: PythonObject, device: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """`Generator(seed, numeric_mode, *, device)`: the seed, then the device
+    word admitted once (bindings/generator_device_unpack.mojo), then the
+    fields. `_host_device` is stored only for an explicit "cpu" beside a GPU
+    set; every other Generator draws on the route it drew on before `device`
+    existed. None: one identity compare and one store."""
+    var checked = generator_validate(seed, PythonObject(0))
+    var host = False
+    if device is not None:
+        host = generator_device_admit(device, mode, context)
+    var fields = generator_fields(value)
+    py_setitem(fields, "seed", checked[0])
+    py_setitem(fields, "counter", checked[1])
+    py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "device", device)
+    if host:
+        py_setitem(fields, "_host_device", PythonObject(True))
     return PythonObject(None)
 
 
