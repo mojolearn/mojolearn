@@ -76,8 +76,8 @@ struct LinDevOperand(Copyable, Movable):
 
     def count(self) -> Int:
         var n = 1
-        for d in self.shape:  # driver-loop: over the operand's rank (shape words)
-            n *= d
+        for i in range(len(self.shape)):  # driver-loop: over the operand's rank (shape words)
+            n *= self.shape[i]
         return n
 
     def text(self) -> String:
