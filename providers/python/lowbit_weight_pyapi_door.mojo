@@ -16,10 +16,11 @@ from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.admitted_input_unpack import AdmittedBuf, AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_shape_tuple, admitted_unfilled
 from bindings.linalg_ops_lowbit_door import (
     lin_connected_binding, lin_lowbit, lin_call, lin_device, lin_device_binding, lin_device_context, LIN_HAS_GPU,
-    LIN_HAS_CPU, lin_dev_widen_bf16, lin_dev_narrow_bf16, lin_dev_quantize_int8, lin_dev_dequantize_int8,
+    LIN_HAS_CPU, lin_dev_widen_bf16, lin_dev_narrow_bf16, lin_dev_quantize_int8, lin_dev_dequantize_int8, lin_dev_copy,
 )
 from bindings.linalg_dev_arrays_unpack import lin_train_device, lin_is_device_array, lin_dev_device
 from core.function_device import FunctionDevice, function_device_default
+from core.train_dev_pool import TRAIN_DEV_F32, TRAIN_DEV_I8, TRAIN_DEV_I32, TRAIN_DEV_U16
 from bindings.tensor_view import base_format, shape_text, TensorView
 from bindings.lowbit_weight_run import low_empty
 from bindings.lowbit_keys_unpack import lowbit_keys
@@ -139,11 +140,12 @@ def low_wrap_dev(kind: Int, q: PythonObject, e: PythonObject, shape: PythonObjec
 
 def low_pack_dev(value: PythonObject, fmt: String, device: FunctionDevice, mut binding: PythonObject,
                  held: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`pack_one` of a float32 TrainDeviceArray: 'float32' returns the device array itself (as train_to_device does);
-    'bfloat16' / 'int8' convert on the device into a packed weight of device arrays."""
+    """`pack_one` of a float32 TrainDeviceArray: 'float32' returns a device copy (lane vdf-linalg6: as the host path
+    returns a copy; it was the caller's array itself, aliased); 'bfloat16' / 'int8' convert on the device into a
+    packed weight of device arrays."""
     lin_dev_device(device, "mojolearn.lowbit.pack_one")
     if fmt == "float32":
-        return value
+        return lin_dev_copy(value, TRAIN_DEV_F32, "tensor", low_binding(binding, context), held, context)
     var b = native_loaded_module("builtins")
     var lk = lowbit_keys()
     var shape = py_call(b.tuple, py_item(py_fields(value), lk[].k_shape))
@@ -368,12 +370,19 @@ def lowbit_weight_operation(model: PythonObject, operation: Int, args: PythonObj
                 continue
             if kind != 0 and held is not None and low_is_dev(native_instance_item(low_fields(value),
                     nk[].k_bits if kind == 1 else nk[].k_codes), held):
-                # a packed weight of device arrays: the same format keeps its device arrays (as train_to_device
-                # keeps a device array); another format materializes on the device, then packs there
+                # a packed weight of device arrays: the same format copies its device arrays device to device
+                # (lane vdf-linalg6: as the host repack copies its packed storage; they were shared with the input);
+                # another format materializes on the device, then packs there
                 if kind == 1 and fmt == "bfloat16" or kind == 2 and fmt == "int8":
                     var dev_fields = low_fields(value)
-                    py_setitem(result, key, low_wrap_dev(kind, native_instance_item(dev_fields, nk[].k_bits if kind == 1 else nk[].k_codes),
-                                                         py_get(dev_fields, nk[].k_exponents), native_instance_item(dev_fields, nk[].k_shape),
+                    var low_b = low_binding(binding, context)
+                    var q_copy = lin_dev_copy(native_instance_item(dev_fields, nk[].k_bits if kind == 1 else nk[].k_codes),
+                                              TRAIN_DEV_U16 if kind == 1 else TRAIN_DEV_I8, name, low_b, held, context)
+                    var e_copy = PythonObject(None)
+                    if kind == 2:
+                        e_copy = lin_dev_copy(native_instance_item(dev_fields, nk[].k_exponents), TRAIN_DEV_I32, name,
+                                              low_b, held, context)
+                    py_setitem(result, key, low_wrap_dev(kind, q_copy, e_copy, native_instance_item(dev_fields, nk[].k_shape),
                                                          context))
                 else:
                     py_setitem(result, key, low_pack_dev(low_materialize_on(value, binding, context, held, device), fmt, device,
