@@ -140,7 +140,10 @@ from core.ensemble_member import (
 from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING, meta_plan_metric_other
 from core.ensemble_member import meta_plan_metric_kernels
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry
-from core.msel_search_run import SEARCH_REFUSED_SHIFT, MselOtherTier, msel_some_fits_failed_words, msel_score_failed_words
+from core.msel_search_run import (
+    SEARCH_REFUSED_SHIFT, MselOtherTier, msel_all_fits_failed_words, msel_some_fits_failed_words,
+    msel_score_failed_words,
+)
 from core.member_notices import MEMBER_NOTICE_WORDS, MEMBER_NOTICE_SCORE_FAILED
 from bindings.msel_common_door import msel_warn, msel_fit_failed_warn
 from bindings.mode_answer_door import answer_mode_object
@@ -4416,19 +4419,65 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     # door's units warned nothing for a failing fit, nor does the RUN.
     var slot_of = List[Int]()
     var refused_word = List[Int]()
+    # LANE w3f5-b: each refused candidate's words once per fit (its folds),
+    # for scikit-learn's all-fits-failed words when every candidate is refused.
+    var refused_fits = List[String]()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
         var failed_at = done.failure(clones[c]) if tolerate != 0.0 else -1
         if failed_at >= 0:
             refused_word.append(_next_word(labels, classifier, extra_words, b))
             extra_words.append(done.failed_words[failed_at])
             slot_of.append(-1)
+            for _ in range(folds):  # small-loop(the candidate's folds: one failed fit each)
+                refused_fits.append(done.failed_words[failed_at].copy())
+            continue
+        # LANE w3f5-b (cause: lane mf-r9b cdda7f806d deleted the door's units
+        # fallback, whose per-fit error rule scored a LEAF candidate whose
+        # own parameters its family refuses, e.g. Ridge(alpha=-1)): with a
+        # numeric error_score, the words its family's admission RAISES (the
+        # words its fit raises: `member_leaf_admit_labeled`, a class_weight's
+        # `member_cw_fill`) make it a refused candidate, as a nested meta's
+        # are above (scikit-learn's _fit_and_score catches the fit's error
+        # and scores error_score). Words `_search_member_refusal` RETURNS (a
+        # capability the kind lacks, no member) still raise: no fit failed.
+        # With error_score='raise' every refusal raises, as before.
+        var admitted = False
+        var fit_failed = False
+        var fit_words = String("")
+        try:
+            admitted = _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels)
+        except error:
+            if tolerate == 0.0:
+                raise error^
+            fit_failed = True
+            fit_words = String(error)
+        if not admitted and not fit_failed:
+            # lane mf-rows8d (row :3995): a candidate the kind does not take is
+            # refused natively, per cause (`_search_member_refusal`).
+            var words = String("")
+            try:
+                words = _search_member_refusal(done, clones[c], classifier, needs, labels, context, b)
+            except error:
+                if tolerate == 0.0:
+                    raise error^
+                fit_failed = True
+                fit_words = String(error)
+            if not fit_failed:
+                raise Error(words)
+        if fit_failed:
+            refused_word.append(_next_word(labels, classifier, extra_words, b))
+            extra_words.append(fit_words.copy())
+            slot_of.append(-1)
+            for _ in range(folds):  # small-loop(the candidate's folds: one failed fit each)
+                refused_fits.append(fit_words.copy())
             continue
         refused_word.append(-1)
-        slot_of.append(len(nested.plans))
-        # lane mf-rows8d (row :3995): a candidate the kind does not take is
-        # refused natively, per cause (`_search_member_refusal`).
-        if not _admit_nested(done, nested, clones[c], classifier, needs, context, b, labels):
-            raise Error(_search_member_refusal(done, clones[c], classifier, needs, labels, context, b))
+        slot_of.append(len(nested.plans) - 1)
+    if len(nested.plans) == 0 and len(clones) > 0:
+        # LANE w3f5-b: every candidate refused under a numeric error_score:
+        # scikit-learn's all-fits-failed words before any fit
+        # (`_warn_or_raise_about_fit_failures`), the RUN's one copy.
+        raise Error(msel_all_fits_failed_words(len(clones) * folds, refused_fits))
     if len(nested.plans) < len(clones):
         var plans = List[MemberPlan]()
         var masks = List[Int]()
