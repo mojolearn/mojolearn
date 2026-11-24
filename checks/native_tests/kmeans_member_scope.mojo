@@ -10,7 +10,11 @@ answers no MEMBER_CAN_SCOPE), and the verify's digest compares the columns. Clai
           transform of the test fold == host-index ones; the first scoped call keeps the pin (`pin_kept` 1), a
           second call over the same X finds it resident (`pin_kept` 0: one upload per search).
   host:   host-index fit == plain fit; host-index predict / transform == plain ones.
-Data: a SplitMix64 stream (uniform [0, 4)), 96 rows x 3, folds 0..63 / 64..95 as a permutation-sized int32 index.
+  weighted (lane vdf-scope-cluster2a, THE WEIGHTED FOLD): every claim above again with sample weights on the fit
+          and a weighted score of the test fold (inertia bits), the weights handed as the whole host vector beside the
+          row index (scoped: put per call, gathered on the device by the same index) or as the fold's rows (plain).
+Data: a SplitMix64 stream (uniform [0, 4)), 96 rows x 3, folds 0..63 / 64..95 as a permutation-sized int32 index;
+weights 0.5 + the same stream's uniform [0, 4) of another seed (weights above one: the weighted bound caps the scale).
 """
 from std.testing import TestSuite
 from std.memory import bitcast
@@ -21,7 +25,7 @@ from core.entry_table import EntryRef
 from core.member_abi import (
     MemberRef, MemberCall, MemberMatrix, member_call, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_TRANSFORM, MEMBER_OP_EXPORT,
-    MEMBER_OP_CAPABILITIES, MEMBER_CAN_SCOPE, MEMBER_BLOCK_FAMILY,
+    MEMBER_OP_CAPABILITIES, MEMBER_CAN_SCOPE, MEMBER_BLOCK_FAMILY, MEMBER_OP_SCORE,
 )
 from core.kmeans_member import kmeans_member_v2
 from core.kmeans_native_api import KMeansNativeDriver, KMEANS_CAPABILITIES
@@ -44,11 +48,11 @@ def _next(mut state: UInt64) -> UInt64:
     return z ^ (z >> 31)
 
 
-def _uniform4(seed: Int) -> List[Float32]:
+def _uniform4(seed: Int, count: Int = _ROWS * _D, shift: Float64 = 0.0) -> List[Float32]:
     var state = UInt64(seed)
-    var out = List[Float32](capacity=_ROWS * _D)
-    for _ in range(_ROWS * _D):  # driver-loop: over the fixture's words (small)
-        out.append(Float32(Float64(_next(state) >> 11) * (1.0 / 9007199254740992.0) * 4.0))
+    var out = List[Float32](capacity=count)
+    for _ in range(count):  # driver-loop: over the fixture's words (small)
+        out.append(Float32(shift + Float64(_next(state) >> 11) * (1.0 / 9007199254740992.0) * 4.0))
     return out^
 
 
@@ -80,6 +84,7 @@ struct _Arm(Movable):
     var predicted: List[Int32]
     var distances: List[Float32]
     var pin_kept: List[Int]
+    var score: Float64
 
     def __init__(out self):
         self.centers = List[Float32]()
@@ -87,11 +92,14 @@ struct _Arm(Movable):
         self.predicted = List[Int32](length=_ROWS - _TRAIN, fill=0)
         self.distances = List[Float32](length=(_ROWS - _TRAIN) * _K, fill=0.0)
         self.pin_kept = List[Int]()
+        self.score = 0.0
 
 
-def _arm(route: DeviceRoute, x: List[Float32], indexed: Bool, scope: Int, pin: Int) raises -> _Arm:
-    """Fit on the train fold (labels by fit_predict), then predict and transform the test fold. `indexed`: the
-    whole X plus int32 row numbers; else the fold's rows as plain host words."""
+def _arm(route: DeviceRoute, x: List[Float32], indexed: Bool, scope: Int, pin: Int,
+         w: List[Float32]) raises -> _Arm:
+    """Fit on the train fold (labels by fit_predict), then predict and transform the test fold, then score it.
+    `indexed`: the whole X plus int32 row numbers; else the fold's rows as plain host words. A non-empty `w`
+    (one weight a row of X) weights the fit and the score, handed the same way as X."""
     var arm = _Arm()
     var state = _new(route)
     var train_index = List[Int32](capacity=_TRAIN)
@@ -101,7 +109,9 @@ def _arm(route: DeviceRoute, x: List[Float32], indexed: Bool, scope: Int, pin: I
     for i in range(_TRAIN, _ROWS):  # driver-loop: over the fixture's test rows (small)
         test_index.append(Int32(i))
     var base = Int(x.unsafe_ptr())
-    for step in range(3):  # driver-loop: over the three operations of one arm
+    var w_base = Int(w.unsafe_ptr())
+    var weighted = len(w) > 0
+    for step in range(4):  # driver-loop: over the four operations of one arm
         var call = MemberCall(route)
         call.state = state
         call.scope = scope
@@ -114,6 +124,9 @@ def _arm(route: DeviceRoute, x: List[Float32], indexed: Bool, scope: Int, pin: I
                                           MEMBER_I32)
         else:
             call.x = MemberMatrix(base + first * _D * 4, count, _D)
+        if weighted and (step == 0 or step == 3):
+            call.weights = (MemberMatrix(w_base, _ROWS, 1) if indexed
+                            else MemberMatrix(w_base + first * 4, count, 1))
         if step == 0:
             call.fit_output = MEMBER_OP_PREDICT
             call.dst = MemberMatrix(Int(arm.labels.unsafe_ptr()), count, 1, MEMBER_I32)
@@ -121,9 +134,12 @@ def _arm(route: DeviceRoute, x: List[Float32], indexed: Bool, scope: Int, pin: I
         elif step == 1:
             call.dst = MemberMatrix(Int(arm.predicted.unsafe_ptr()), count, 1, MEMBER_I32)
             _ = member_call(_member(), MEMBER_OP_PREDICT, call)
-        else:
+        elif step == 2:
             call.dst = MemberMatrix(Int(arm.distances.unsafe_ptr()), count, _K)
             _ = member_call(_member(), MEMBER_OP_TRANSFORM, call)
+        else:
+            _ = member_call(_member(), MEMBER_OP_SCORE, call)
+            arm.score = call.value
         arm.pin_kept.append(call.pin_kept)
     var export = MemberCall(route)
     export.state = state
@@ -135,7 +151,7 @@ def _arm(route: DeviceRoute, x: List[Float32], indexed: Bool, scope: Int, pin: I
     var free = MemberCall(route)
     free.state = state
     _ = member_call(_member(), MEMBER_OP_FREE, free)
-    _ = len(train_index) + len(test_index) + len(x)
+    _ = len(train_index) + len(test_index) + len(x) + len(w)
     return arm^
 
 
@@ -148,28 +164,36 @@ def _same(a: _Arm, b: _Arm, what: String) raises:
         require(a.predicted[i] == b.predicted[i], what + ": predict")
     for i in range(len(a.distances)):  # driver-loop: over the test distances (small)
         require(bitcast[DType.uint32](a.distances[i]) == bitcast[DType.uint32](b.distances[i]), what + ": transform bits")
+    require(bitcast[DType.uint64](a.score) == bitcast[DType.uint64](b.score), what + ": score bits")
 
 
 def fixture(device: Bool) raises:
     var x = _uniform4(20261124)
+    var none = List[Float32]()
+    var w = _uniform4(20261125, _ROWS, 0.5)
     var route = _route(device)
-    var plain = _arm(route, x, False, -1, 0)
-    var host_index = _arm(route, x, True, -1, 0)
-    _same(host_index, plain, "host row index vs plain fold rows")
-    if not device:
-        return
-    var probe = MemberCall(route)
-    require((member_call(_member(), MEMBER_OP_CAPABILITIES, probe) & MEMBER_CAN_SCOPE) != 0,
-            "the KMeans member on its fold image answers MEMBER_CAN_SCOPE")
-    var scope = arena_scope_new(0)
-    try:
-        var scoped = _arm(route, x, True, scope, 1)
-        _same(scoped, host_index, "scoped device fold vs host row index")
-        require(scoped.pin_kept[0] == 1, "the first scoped call publishes X with the caller's pin")
-        require(scoped.pin_kept[1] == 0 and scoped.pin_kept[2] == 0, "later calls find X resident (one upload)")
-    finally:
-        _ = arena_scope_close(scope)
-    _ = len(x)
+    for which in range(2):  # driver-loop: over the unweighted and the weighted case
+        var weights = w.copy() if which == 1 else none.copy()
+        var what = String("weighted ") if which == 1 else String("")
+        var plain = _arm(route, x, False, -1, 0, weights)
+        var host_index = _arm(route, x, True, -1, 0, weights)
+        _same(host_index, plain, what + "host row index vs plain fold rows")
+        if not device:
+            continue
+        var probe = MemberCall(route)
+        require((member_call(_member(), MEMBER_OP_CAPABILITIES, probe) & MEMBER_CAN_SCOPE) != 0,
+                "the KMeans member on its fold image answers MEMBER_CAN_SCOPE")
+        var scope = arena_scope_new(0)
+        try:
+            var scoped = _arm(route, x, True, scope, 1, weights)
+            _same(scoped, host_index, what + "scoped device fold vs host row index")
+            require(scoped.pin_kept[0] == 1, what + "the first scoped call publishes X with the caller's pin")
+            require(scoped.pin_kept[1] == 0 and scoped.pin_kept[2] == 0 and scoped.pin_kept[3] == 0,
+                    what + "later calls find X resident (one upload)")
+        finally:
+            _ = arena_scope_close(scope)
+        _ = len(weights)
+    _ = len(x) + len(w) + len(none)
 
 
 def _host_fixture(unit: Int) raises:

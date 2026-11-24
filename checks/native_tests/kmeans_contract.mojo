@@ -37,7 +37,8 @@ struct WireOracle(KMeansNativeKernels):
             "fit finite/tolerance/oversampling slots")
         _require(r.distances == 0 or r.distances == 23, "fused transform output slot")
         if r.fold.active():
-            _require(r.fold.base == 67 and r.fold.rows == 71 and r.fold.indices == 73, "fit fold identity slots")
+            _require(r.fold.base == 67 and r.fold.rows == 71 and r.fold.indices == 73 and r.fold.weights == 97,
+                "fit fold identity slots")
         var route = Int(r.distances != 0) + 2 * Int(r.fold.active())
         return KMeansFitResult(-0.0, 79, 1.25, 2.5, -7, route, FitLoop(83, 89, True))
 
@@ -58,7 +59,8 @@ struct WireOracle(KMeansNativeKernels):
             and r.metric == 61 and r.test_finite, "score option/shape/weight slots")
         _require(r.handle == -1 or r.handle == 83, "score resident handle slot")
         if r.fold.active():
-            _require(r.fold.base == 67 and r.fold.rows == 71 and r.fold.indices == 73, "score fold slots")
+            _require(r.fold.base == 67 and r.fold.rows == 71 and r.fold.indices == 73 and r.fold.weights == 97,
+                "score fold slots")
         return KMeansScoreResult(-0.0 if r.fold.active() else 1.5, 2 * Int(r.handle >= 0) + 4 * Int(r.fold.active()),
             r.rows)
 
@@ -82,7 +84,7 @@ def _fixture(unit: Int) raises:
     if unit == 0:
         _require(driver.metadata(0) == 1 and driver.metadata(1) == 15, "compiled metadata")
     elif unit < 4:
-        var fold = KMeansFoldStore(67, 71, 73) if unit == 3 else KMeansFoldStore()
+        var fold = KMeansFoldStore(67, 71, 73, 97) if unit == 3 else KMeansFoldStore()
         var result = driver.fit(KMeansFitRequest(11, 13, 17, 19, 23 if unit == 2 else 0,
             29, 31, 37, 41, 43, 47, 53, 59, 61, True, 0.125, 2.5, fold))
         _require(bitcast[DType.uint64](result.inertia) == UInt64(0x8000000000000000), "fit result keeps signed zero")
@@ -121,7 +123,7 @@ def _fixture(unit: Int) raises:
         # KMEANS_SCORE (lane mf-kmeans5): unit 26 a host score with the
         # resident handle, unit 27 a fold score; the inertia's bits and both
         # status words come back in their slots.
-        var fold = KMeansFoldStore(67, 71, 73) if unit == 27 else KMeansFoldStore()
+        var fold = KMeansFoldStore(67, 71, 73, 97) if unit == 27 else KMeansFoldStore()
         var handle = 83 if unit == 26 else -1
         var result = driver.score(KMeansScoreRequest(11, 13, 19, 29, 31, 37, 41, 61, True, handle, fold))
         if unit == 27:
@@ -135,7 +137,7 @@ def _fixture(unit: Int) raises:
         var operation = unit - 18
         var expected = String("KMeans native ABI: unknown operation")
         if operation == 2:
-            expected = "KMeans native ABI: fit requires 6 addresses, 13 integers and 2 floats"
+            expected = "KMeans native ABI: fit requires 6 addresses, 14 integers and 2 floats"
         elif operation == 3:
             expected = "KMeans native ABI: query requires 4 addresses and 10 integers"
         elif operation == 4:
@@ -143,7 +145,7 @@ def _fixture(unit: Int) raises:
         elif operation == 5:
             expected = "KMeans native ABI: release requires 1 integer"
         elif operation == 6:
-            expected = "KMeans native ABI: score requires 4 addresses and 10 integers"
+            expected = "KMeans native ABI: score requires 4 addresses and 11 integers"
         var refused = False
         try:
             _ = driver.metadata(operation)
