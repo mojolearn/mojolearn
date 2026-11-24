@@ -537,7 +537,7 @@ def _log_loss_options(args: PythonObject, context: PythonObject) raises -> Pytho
         prog.pins.append(w)
     var res = put[1]
     var arena = metric_door_run(prog, args[5], context)
-    var code = mc_proba_code(arena, put[1])
+    var code = mc_proba_code(arena, put[0])  # put = (FLAGS, result)
     if code == 1:
         raise Error("mojolearn " + caller + ": y_proba must be finite")
     if code == 2:
@@ -591,7 +591,7 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     prog.pins.append(encoded)
     var res = put[1]
     var arena = metric_door_run(prog, args[5], context)
-    var code = mc_proba_code(arena, put[1])
+    var code = mc_proba_code(arena, put[0])  # put = (FLAGS, result)
     if code == 1:
         raise Error("log_loss probabilities must be finite")
     if code == 2:

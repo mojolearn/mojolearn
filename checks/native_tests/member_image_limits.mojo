@@ -386,7 +386,7 @@ def check_pairs() raises:
     many[2 * 3900 + 1] = 3  # a self pair, later
     var said = _pairs_said(many.copy(), m, 8, List[Float32]())
     require(said == "mojolearn: pairs[2500][1] = 9 is outside the 8 rows", "the first bad pair, got '" + said + "'")
-    many[2 * 2500 + 1] = 1
+    many[2 * 2500 + 1] = Int64(2500 % 7 + 1)  # its own value back (1 made pair 2500 = (1, 1), itself a self pair)
     said = _pairs_said(many.copy(), m, 8, List[Float32]())
     require(said == "mojolearn: pairs[3900] pairs row 3 with itself", "a self pair, got '" + said + "'")
     many[2 * 3900 + 1] = 4

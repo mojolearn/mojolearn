@@ -11,6 +11,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.linear_entry_table_ext import XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS
+from core.class_weight_plan import class_weight_dict_refused
 from x_linear.door_run import (
     XlDecisionRequest, xl_decision_run, XlFitRequest, xl_fit_run, xl_fit_fold_held, xl_run_status_refuse,
     xl_run_word, xl_run_copy, xl_run_join, xl_block_dims, xl_run_block,
@@ -499,10 +500,30 @@ def xl_class_weights_unpack(class_weight: PythonObject, classes: PythonObject,
     elif class_weight is None:
         cw = labels_full_f32(k, 1.0, context)
     elif _isinstance(class_weight, b.dict):
+        # scikit-learn 1.9.1 compute_class_weight: a key naming no class is
+        # refused only when the dict also leaves a class unweighted, in its
+        # words listing those classes (core/class_weight_plan.mojo
+        # `class_weight_dict_refused`); else the extra key is ignored.
         var keys = py_call(b.list, class_weight)
+        var unknown = 0
         for i in range(len(keys)):  # driver-loop: over the class_weight entries (named labels)
             if not py_contains(labels, keys[i]):
-                raise Error("The classes, " + _str(Python.list(keys[i])) + ", are not in class_weight")
+                unknown += 1
+        if unknown > 0:
+            # scikit-learn prints np.array(unweighted).tolist(): plain Python
+            # scalars ([2], ['c']), never a NumPy scalar's repr (np.int64(2)).
+            # Refusal path only: no cost on an accepted fit.
+            var unweighted = Python.list()
+            for i in range(k):  # driver-loop: over the fitted classes (the dict's unnamed ones)
+                if not py_contains(class_weight, labels[i]):
+                    var label = labels[i]
+                    var cls = py_type(label)
+                    var plain = cls is b.str or cls is b.int or cls is b.float or cls is b.bool
+                    if not plain and Bool(py=py_call(b.hasattr, label, PythonObject("item"))):
+                        label = py_call(label.item)
+                    _ = py_call(unweighted.append, label)
+            if class_weight_dict_refused(unknown, len(unweighted)):
+                raise Error("The classes, " + _str(unweighted) + ", are not in class_weight")
         var weights = Python.list()
         for i in range(k):  # driver-loop: over the fitted classes (model structure)
             _ = py_call(weights.append, PythonObject(_float(py_call(class_weight.get, labels[i], PythonObject(1.0)))))

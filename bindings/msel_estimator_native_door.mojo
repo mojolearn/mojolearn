@@ -327,6 +327,42 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject, depth: Int 
         return py_call(b.bytearray, value)
     if py_type(kind) is b.type and py_contains(context["family_msel_estimators"], kind):
         return msel_native_clone(value, context, depth + 1)
+    if kind is py_get(context, "family_msel_scorer_class"):
+        # A native scorer (get_scorer / make_scorer) held as a parameter: a
+        # search's `scoring`, cloned when the search itself is a member
+        # (bindings/msel_member_units_door.mojo `msel_member_refit` clones
+        # the search; lane mf-gate-fix-d: before this branch it reached the
+        # Sequential admission's TypeError). scikit-learn's clone deep-copies
+        # a non-estimator parameter: a fresh scorer of the exact class whose
+        # fields are clones of the given's; its metric function is an
+        # import-time native plan, kept by identity and never invoked here.
+        # The ancestry check is the scorer release's (msel_search_state_door).
+        var ancestry = py_call(b.type.__dict__["__mro__"].__get__, kind)
+        if len(ancestry) != 2 or ancestry[1] is not b.object:
+            raise Error("TypeError: native scorer cloning refuses inherited lifecycle hooks")
+        # A scorer of the scorer table (get_scorer(name)) is a shared, never
+        # written import-time record: kept by identity, which is how the
+        # search kind reads its name back (providers/python/
+        # member_ensemble_boundary_door.mojo `_scorer_name`).
+        var table = py_call(b.list, py_call(context["family_msel_scorers"].values))
+        for k in range(len(table)):  # driver-loop: over the scorer table (a fixed table, once per scorer parameter)
+            if table[k] is value:
+                return value
+        var source = py_call(context["family_msel_scorer_fields"], value, kind)
+        if py_type(source) is not b.dict:
+            raise Error("TypeError: native scorer fields must be an exact dict")
+        var scorer = native_storage_allocate(kind)
+        var fields = py_call(context["family_msel_scorer_fields"], scorer, kind)
+        var pairs = py_call(b.list, source.items())
+        for k in range(len(pairs)):  # driver-loop: over the scorer's fields (five, fixed)
+            var key = pairs[k][0]
+            if py_type(key) is not b.str:
+                raise Error("TypeError: native scorer fields require exact string keys")
+            if String(py=key) == "_score_func":
+                py_setitem(fields, key, pairs[k][1])
+            else:
+                py_setitem(fields, key, msel_clone_parameter(pairs[k][1], context, depth + 1))
+        return scorer
     # Never invoke deepcopy/__reduce__/buffer protocols of an arbitrary
     # object. Additional native buffer/schema migration remains explicit
     # debt rather than sharing mutable constructor or fitted state.

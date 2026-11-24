@@ -1,0 +1,26 @@
+diff --git a/core/hotpath_device.mojo b/core/hotpath_device.mojo
+index 925e70eca8..14ed332d46 100644
+--- a/core/hotpath_device.mojo
++++ b/core/hotpath_device.mojo
+@@ -989,6 +989,9 @@ def device_mask_from_indices_u8(
+     if not bad:
+         ctx.enqueue_copy(dst_ptr=_U8(unsafe_from_address=mask_addr), src_buf=d_mask)
+         ctx.synchronize()
++        var sab_m = _U8(unsafe_from_address=mask_addr)
++        for r in range(n):  # SABOTAGE (coverage-core-device_fold_mask): low bit of every mask byte flipped
++            sab_m.unsafe_store(r, sab_m.unsafe_load(r) ^ UInt8(1))
+     _ = d_idx^
+     _ = d_mask^
+     _ = d_status^
+@@ -1147,6 +1150,11 @@ def device_kfold_ids(ctx: DeviceContext, n: Int, splits: Int, fold_addr: Int) ra
+     )
+     ctx.enqueue_copy(dst_ptr=_I32(unsafe_from_address=fold_addr), src_buf=d)
+     ctx.synchronize()
++    if n > 1:  # SABOTAGE (coverage-core-device_fold_mask): the fold ids of row 0 and the last row swapped
++        var sab_f = _I32(unsafe_from_address=fold_addr)
++        var sab_t = sab_f.unsafe_load(0)
++        sab_f.unsafe_store(0, sab_f.unsafe_load(n - 1))
++        sab_f.unsafe_store(n - 1, sab_t)
+     _ = d^
+ 
+ 

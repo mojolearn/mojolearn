@@ -663,7 +663,7 @@ def rfe_lda_unit(unit: Int) raises:
     var codes = fixture_i32(MF_DIR + data + "-y.i32", n)
     var plan = member_plan(MEMBER_FAMILY_DISCRIMINANT, da_params(0, c.solver), c.classes)
     var source = rfe_member_source(MEMBER_FAMILY_DISCRIMINANT, member_kind_capabilities(plan), "auto", "")
-    require(source.block == MEMBER_BLOCK_COEF and source.squared and len(source.refusal) == 0,
+    require(source.block == MEMBER_BLOCK_COEF and source.squared and source.refusal.byte_length() == 0,
             label + ": the LDA kind does not export coef_ (MEMBER_BLOCK_COEF) to RFE")
     var nsel = rfe_select_count(d, 0 if c.nsel < 0 else 2, 0.0, c.nsel)
     var support = List[Float32](length=d, fill=1.0)
@@ -691,6 +691,9 @@ def rfe_lda_unit(unit: Int) raises:
                                            MemberFitExtras(), 0)
         finally:
             member_free(plan, call)
+        # keep-alive: `block` is reassigned below, so its old buffer died at `block.unsafe_ptr()` above (a local is
+        # freed at its last named use) and the member fit read freed words; named here, after the fit
+        _ = len(block)
         require(rows == (1 if c.classes == 2 else c.classes), label + ": coef_ has " + String(rows) + " rows")
         var prog = ClsProgram(True)
         var staged = rfe_round_stage(prog, RfeKeys(nsup, rows, source.squared, 0), words^, n * d, n, d, nsup, drop, k)
@@ -796,7 +799,7 @@ def refusal_unit(unit: Int) raises:
     var lmask = member_kind_capabilities(lda)
     require((lmask & MEMBER_CAN_COEF) != 0, "the LDA kind's mask lacks MEMBER_CAN_COEF")
     var lsource = rfe_member_source(MEMBER_FAMILY_DISCRIMINANT, lmask, "coef_", "LinearDiscriminantAnalysis")
-    require(lsource.block == MEMBER_BLOCK_COEF and len(lsource.refusal) == 0, "LDA 'coef_': not its coef_ block")
+    require(lsource.block == MEMBER_BLOCK_COEF and lsource.refusal.byte_length() == 0, "LDA 'coef_': not its coef_ block")
 
 
 def test_rfe_refusals() raises:

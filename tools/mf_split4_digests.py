@@ -209,21 +209,25 @@ def _subcls(index):
     member, form, caller = SUBCLS[index]
     X, y = _data(79, 150, 3)
     cw = _Str("balanced") if form == "str" else _Dict({0: 0.5, 2: 1.8})
-    if member == "lr":
-        est = mojolearn.LogisticRegression(max_iter=200, class_weight=cw)
-    elif member == "sgd":
-        est = mojolearn.SGDClassifier(max_iter=20, random_state=3, class_weight=cw)
-    elif member == "ridgec":
-        est = mojolearn.RidgeClassifier(alpha=0.7, class_weight=cw)
-    else:
-        est = mojolearn.SVC(C=1.0, gamma=0.5, class_weight=cw)
+
+    # The member is built INSIDE the digested call: the constructor's admission refuses a str / dict subclass
+    # (exact types only at the public boundary), and that refusal is the digest, not a crash of the tool.
+    def make():
+        if member == "lr":
+            return mojolearn.LogisticRegression(max_iter=200, class_weight=cw)
+        if member == "sgd":
+            return mojolearn.SGDClassifier(max_iter=20, random_state=3, class_weight=cw)
+        if member == "ridgec":
+            return mojolearn.RidgeClassifier(alpha=0.7, class_weight=cw)
+        return mojolearn.SVC(C=1.0, gamma=0.5, class_weight=cw)
+
     if caller == "cvs":
-        return _lines(f"subcls_{member}_{form}_cvs", lambda: [("scores", cross_val_score(est, X, y, cv=3))])
+        return _lines(f"subcls_{member}_{form}_cvs", lambda: [("scores", cross_val_score(make(), X, y, cv=3))])
     if caller == "vote":
         return _lines(f"subcls_{member}_{form}_vote", lambda: [
-            ("predict", mojolearn.VotingClassifier([("a", est), ("b", mojolearn.LogisticRegression())],
+            ("predict", mojolearn.VotingClassifier([("a", make()), ("b", mojolearn.LogisticRegression())],
                                                    voting="hard").fit(X, y).predict(X))])
-    return _lines(f"subcls_{member}_{form}_cal", lambda: _in_caller("cal", est, X, y))
+    return _lines(f"subcls_{member}_{form}_cal", lambda: _in_caller("cal", make(), X, y))
 
 
 def _split(index):
@@ -352,10 +356,13 @@ def _svccw(index):
     from mojolearn.model_selection import cross_val_score
     (caller,) = SVCCW[index]
     X, y = _data(107, 150, 3)
-    est = mojolearn.SVC(C=1.0, gamma=0.5, class_weight=3.5)
+    # built inside the digested call: a constructor that refuses class_weight=3.5 is the digest too
+    def make():
+        return mojolearn.SVC(C=1.0, gamma=0.5, class_weight=3.5)
+
     if caller == "cvs":
-        return _lines("svccw_cvs", lambda: [("scores", cross_val_score(est, X, y, cv=3))])
-    return _lines(f"svccw_{caller}", lambda: _in_caller(caller, est, X, y))
+        return _lines("svccw_cvs", lambda: [("scores", cross_val_score(make(), X, y, cv=3))])
+    return _lines(f"svccw_{caller}", lambda: _in_caller(caller, make(), X, y))
 
 
 def _bagpm(index):

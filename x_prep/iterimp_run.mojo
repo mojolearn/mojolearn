@@ -799,7 +799,7 @@ def iterimp_prepare[R: IterImpRunner](mut runner: R, r: IterImpFit, mut fitted: 
         else:
             var pos = p.work(dk)
             _stage(p.program, OP_C2_II_POS, dk, missd, dk, r.order, pos)
-            _stage(p.program, OP_C2_II_ORD, dk, missd, dk, pos, R_, ordw, lens)
+            _stage(p.program, OP_C2_II_ORD, dk, missd, dk, pos, R_, ordw, lens, 1 if r.skip else 0)
     var h3 = runner.run(p, none)
     _ = len(p.consts_i)  # the program's own words stay alive past the run
     var a3 = runner.words(h3)
@@ -1256,7 +1256,7 @@ def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Fl
     var y = a + 4 * gathered.gy
     classes = iterimp_class_values(y, gathered.mob)
     var codes = iterimp_class_codes(y, gathered.mob, classes)
-    if len(member.cw_refusal) > 0:
+    if member.cw_refusal.byte_length() > 0:
         # A class_weight the estimator refuses (lane mf-left4): its own words,
         # at this first classifier fit, after the target's class read (the
         # arena is left as a refusing fit leaves it).

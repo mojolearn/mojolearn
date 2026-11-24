@@ -72,6 +72,32 @@ BUILDS=$(field builds) || exit 2
 LANES=$(field lanes) || exit 2
 COLUMNS=$(field columns) || exit 2
 log "BATCH $BATCH arms=$ARMS builds=$BUILDS columns=$COLUMNS lanes=$LANES head=$(git rev-parse --short HEAD)"
+# A plan older than the arm table proves nothing: in nvc1-0003 gbdt-1 and gbdt-2 ran the plan's lanes, the
+# arms had gained lanes since, and check refused nine arms ("requested lanes do not cover this arm") after
+# the builds. So the batch stops here, before any build, when an arm's patch, bindings or lanes are not the
+# plan's (lane sab-gpu-missed, 2026-11-23); `coverage_sabotage.py batch-plan` writes a current plan.
+if ! stale=$(python3 - "$PLAN" "$BATCH" <<'EOF'
+import json, sys
+sys.path.insert(0, "tools")
+import coverage_sabotage as cs
+plan, bid = sys.argv[1:3]
+b = [x for x in json.load(open(plan))["batches"] if x["id"] == bid][0]
+table, bad = cs.arms(), []
+for arm in b["arms"]:
+    a = table.get(arm)
+    if a is None:
+        bad.append(arm + ": not in the arm table")
+        continue
+    if a["patch"] not in b["patches"]:
+        bad.append(arm + ": patch " + a["patch"])
+    bad += [arm + ": build " + x for x in a["bindings"] if x not in b["builds"]]
+    bad += [arm + ": lane " + x for x in a["lanes"] if x not in b["lanes"]]
+print("; ".join(bad))
+sys.exit(1 if bad else 0)
+EOF
+); then
+    log "PLAN STALE: $stale"; rm -rf "$SCRATCH"; exit 6
+fi
 
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     log "TREE NOT CLEAN"; rm -rf "$SCRATCH"; exit 4
@@ -149,11 +175,10 @@ one_build() {
     t=$(date +%s)
     # A host build refuses MOJOLEARN_GPU_ARCHS ("a CPU build takes no MOJOLEARN_GPU_ARCHS"): the GPU job exports
     # it for the device builds, and in nvc1-0003 all 28 host builds of the plan failed on it in 0 s (BUILD-FAIL).
-    # A `_fast` binding script builds only in fast mode (build_tokenizer_fast.sh: "FAST only").
+    # No arm builds a `_fast` binding: the identical lanes never load one, and the only one an arm named
+    # (build_tokenizer_fast) builds on macOS alone (lane sab-gpu-missed, 2026-11-23).
     if [[ $b == *_host ]]; then
         env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_TARGET_COLUMN=cpu "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
-    elif [[ $b == *_fast ]]; then
-        env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_NUMERIC_MODE=fast "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
     else
         env MOJOLEARN_COMPILE_JOBS=$CJ MOJOLEARN_NUMERIC_MODE=identical "${BP[@]}" bash "bindings/$b.sh" > "$OUT/build_$b.log" 2>&1; rc=$?
     fi

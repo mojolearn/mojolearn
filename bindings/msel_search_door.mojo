@@ -226,6 +226,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     # (core/msel_search_run.mojo) through `_search_member_fit`; the units
     # below run only what that kind does not take (module note of
     # providers/python/member_ensemble_boundary_door.mojo `_admit_search`).
+    # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
     # THE RESIDENT FOLD ROWS (lane mf-search5): where the old units handed a
     # device member DeviceRows (the same rule as below: the member's own
     # device, the search's own `device`, no candidate naming a `device`),

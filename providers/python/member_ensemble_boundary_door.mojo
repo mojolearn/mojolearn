@@ -116,7 +116,7 @@ from providers.python.forest_member_common_boundary_door import (
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_call_of, member_free, member_kind_capabilities,
     member_resolve_family,
-    MEMBER_OP_NEW, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_I32, MEMBER_I64, MEMBER_F64, MEMBER_IMPORT_DONE,
+    MEMBER_OP_NEW, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_F32, MEMBER_I32, MEMBER_I64, MEMBER_F64, MEMBER_IMPORT_DONE,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_IMPORT, MEMBER_CAN_EXPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_BLOCK_SCALARS,
 )
@@ -612,7 +612,8 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         except:
             served = False  # not served: its parents look it up and keep their doors
         i -= 1
-    return _admit_one(model, fields, kind, context, b, owner, done, prepared, owner.labels)
+    var owner_labels = owner.labels  # a second reference: owner is passed mutably beside it
+    return _admit_one(model, fields, kind, context, b, owner, done, prepared, owner_labels)
 
 
 def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
@@ -3029,7 +3030,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     for j in range(len(keys)):  # driver-loop: over the scorers (once per admission)
         var kw = _ScorerKw()
         var name = _scorer_name(givens[j], context, b, kw)
-        if len(name) == 0:
+        if name.byte_length() == 0:
             return False  # a native scorer no table row holds (another metric or kwargs)
         var scorer = msel_get_scorer(givens[j], context)
         var method = String(py=msel_scorer_response(scorer, base_plan, context))
@@ -3751,7 +3752,7 @@ def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObjec
     var keys = py_call(b.sorted, py_call(b.set, py_call(itertools.chain.from_iterable, candidates)))
     for i in range(len(keys)):  # driver-loop: over the candidates' parameter names
         var getter = py_call(native_loaded_module("operator").methodcaller, PythonObject("get"), keys[i])
-        py_setitem(results, py_call(b.str.__add__, PythonObject("param_"), py_call(b.str, keys[i])),
+        py_setitem(results, PythonObject("param_") + py_call(b.str, keys[i]),
                    py_call(b.list, py_call(b.map, getter, candidates)))
     for j in range(tables):  # driver-loop: over the scorers (one table each, in their order)
         var suffix = String("_") + names[j] if many else String("")

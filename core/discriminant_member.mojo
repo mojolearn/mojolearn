@@ -398,6 +398,7 @@ def _fit_lda(slot: _Slot, call: _Call) raises:
     if K == 2:
         slot[].put(DA_BLOCK_PAIR_COEF, _copy_out(done.arena.f32(o.cd), d), 1, d)
         slot[].put(DA_BLOCK_PAIR_INTER, _copy_out(done.arena.f32(o.ci), 1), 1, 1)
+    _ = done^  # the copies read its arena: named after them (freed at the last named use)
     slot[].scalars = [Float64(d), Float64(K), Float64(rank), Float64(components)]
     slot[].features = d
     slot[].classes = K
@@ -495,6 +496,7 @@ def _pair_decision(slot: _Slot, call: _Call, rows: _Rows) raises:
     # THE PIN RULE: see `_fit_lda`.
     var done = cls_borrowed_run(_run_plan(call), program, sources, call[].scope, call[].pin_kept)
     unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=done.arena.f32(dst), count=n)
+    _ = done^  # the copy reads its arena: named after it (freed at the last named use)
 
 
 def _score(slot: _Slot, call: _Call, operation: Int) raises:
@@ -554,11 +556,13 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
         # QDA's two-class answer is the n differences at `am`; else the scores
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=done.arena.f32(o.am if pair else o.jll),
                       count=n if pair else n * K)
+        _ = done^  # the copy reads its arena: named after it (freed at the last named use)
         return
     if proba:
         # float64 probabilities are two arena words each
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=done.arena.f32(o.pp),
                       count=(2 if p64 else 1) * n * K)
+        _ = done^  # the copy reads its arena: named after it (freed at the last named use)
         return
     # `found` points into the run's arena: `done` is named again after each
     # read (Mojo frees a local at its last named use; the arena is freed with
@@ -606,6 +610,7 @@ def _transform(slot: _Slot, call: _Call) raises:
     # THE PIN RULE: see `_fit_lda`.
     var done = cls_borrowed_run(_run_plan(call), program, sources, call[].scope, call[].pin_kept)
     unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=done.arena.f32(dst), count=n * mc)
+    _ = done^  # the copy reads its arena: named after it (freed at the last named use)
 
 
 def _export(slot: _Slot, call: _Call) raises:

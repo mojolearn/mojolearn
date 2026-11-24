@@ -3397,8 +3397,22 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     # kind of it has (a hard VotingClassifier, META kind, has no
     # predict_proba where a soft one has). One state minted, asked and
     # released per fit.
-    var scoring = MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA
     var kind_mask = member_kind_capabilities(set.run.plans[0])
+    # A MEMBER-ONLY plan (python/mojolearn/_native_msel_more.py
+    # `connect_members`: no method recipes, e.g. the explicit Host* classes of
+    # lane mf-cal3b) has an empty method table, so `prep_estimator_has` read
+    # "no decision_function" for HostSVC and the predict_proba scoring of a
+    # probability=False SVC sent the fit to `_CalUnits`, whose plan refused it
+    # ("schema is pending migration"; gate 5645984a8f mf_cal svch rows). Its
+    # methods are its member's (as bindings/trees_agnostic_native_door.mojo
+    # `_member_only` reads them): the member kind's DECISION bit answers
+    # scikit-learn's `hasattr(estimator, "decision_function")`. One plan read
+    # per fit, at UNPACK.
+    if not decision:
+        var base_plan = prep_estimator_plan(base, context)
+        if base_plan is not None and py_get(base_plan, PythonObject("member_only")) is not None:
+            decision = (kind_mask & MEMBER_CAN_DECISION) != 0 and set.run.plans[0].member.can(MEMBER_CAN_DECISION)
+    var scoring = MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA
     var first = set.run.plans[0].copy()
     if (first.family == MEMBER_FAMILY_ENSEMBLE and len(first.params) > 2 and Int(first.params[0]) == 0
             and first.params[2] == 0.0 and (kind_mask & (MEMBER_CAN_DECISION | MEMBER_CAN_PREDICT_PROBA)) == 0):
@@ -3566,7 +3580,14 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     # calling thread (a resident scope belongs to the thread that opened it):
     # parallel CPU units keep the per-fold rows.
     var plan = prep_estimator_plan(base, context)
+    # A MEMBER-ONLY plan (no method recipes; CategoricalNB is one, its class
+    # still carries the DeviceRows word of its NB base) has no fit doors for
+    # the resident route's units, which refused it ("schema is pending
+    # migration": gate 5645984a8f mf_cal cnb n_jobs=1 rows, while n_jobs=4
+    # took the member set and raised the member's own words): it takes the
+    # member set on every n_jobs.
     var dev = (plan is not None and _truthy(py_get(plan, nk[].k_device_rows, PythonObject(False))) and n > 0 and d > 0
+               and py_get(plan, PythonObject("member_only")) is None
                and String(py=Xa.dtype) == "<f4" and String(py=Xa.order) == "C"
                and native_unit_device_workers(min(jobs, len(splits) - 1), context) <= 1)
     # Lane mf-cal (2026-11-23): a base whose family has a member entry is
@@ -3671,6 +3692,28 @@ def _cal_door(e: PythonObject, decision: Bool, Xa: PythonObject, n: Int, class_c
     return got
 
 
+def _cal_member_decision(e: PythonObject, context: PythonObject) -> Bool:
+    """scikit-learn's `hasattr(e, "decision_function")` for a fitted pair
+    member of CalibratedClassifierCV (its predict reads the scores the fit
+    calibrated, `_cal_native`'s rule): the plan's method table, and for a
+    MEMBER-ONLY plan (no method recipes: the Host* classes of lane mf-cal3b)
+    whether its member serves DECISION on the state it holds (an X-free
+    open, closed at once). Read once per pair per predict, at UNPACK. Never
+    raises (False: the predict_proba scores)."""
+    try:
+        if prep_estimator_has(e, "decision_function", context):
+            return True
+        var plan = prep_estimator_plan(e, context)
+        if plan is None or py_get(plan, PythonObject("member_only")) is None:
+            return False
+        var probe = meta_member_open(e, MEMBER_OP_DECISION, True, context, 0, False)
+        var served = probe.served
+        member_held_close(probe)
+        return served
+    except:
+        return False
+
+
 def calibrated_pair_codes(e: PythonObject, k: Int, keep: PythonObject,
                           context: PythonObject) raises -> Tuple[Int, Int]:
     """X-FREE UNPACK of one calibrated pair's member (lane mf-shap3, 2026-11-23; `_calibrated_fused` and Kernel /
@@ -3757,7 +3800,7 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
         for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs (admission, once each)
             var e = pairs[i][0]
             var fitted = pairs[i][1]
-            var decision = prep_estimator_has(e, "decision_function", context)
+            var decision = _cal_member_decision(e, context)
             decisions.append(decision)
             var codes = calibrated_pair_codes(e, k, got.keep, context)
             var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA

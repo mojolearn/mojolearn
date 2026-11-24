@@ -14,13 +14,16 @@ comptime METRICS_FM_DIR = "checks/native_tests/fixtures/metrics_fm/"
 
 
 def fixture_f64(path: String, count: Int) raises -> List[Float64]:
-    var words = fixture_words(path, 2 * count)
-    var values = List[Float64](length=count, fill=Float64(0))
+    """A stored little-endian float64 vector of `count` values (negative: the file's length, as fixture_f32 /
+    fixture_i32 read it; before, a negative count gave an empty list and the caller indexed past it)."""
+    var words = fixture_words(path, 2 * count if count >= 0 else -1)
+    var n = count if count >= 0 else len(words) // 2
+    var values = List[Float64](length=n, fill=Float64(0))
     var wp = words.unsafe_ptr()
     var vp = values.unsafe_ptr()
     def cell(index: Int) {imm wp, imm vp}:
         var bits = UInt64(wp[2 * index]) | (UInt64(wp[2 * index + 1]) << UInt64(32))
         vp.unsafe_store(index, bitcast[DType.float64](bits))
-    host_parallelize(cell, count)
+    host_parallelize(cell, n)
     _ = words^
     return values^

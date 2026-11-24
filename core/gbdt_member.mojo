@@ -737,6 +737,29 @@ def _category_apply_map(cat_map: List[UInt64], features: Int, cm: Int, rows: Int
     _ = len(scratch)
 
 
+def _group_sizes(call: _CallPtr, rows: Int) raises -> List[UInt32]:
+    """`_group_sizes` of the caller's group ids (int32 or int64, one per
+    row): the run lengths of consecutive equal ids, a split group refused in
+    the fit door's words (`group_runs_scan`, the door's own scan). Restored by
+    nn-integrate: lane mf-left4 deleted it while the grouped fit still calls it."""
+    var view = call[].groups
+    if view.home == MEMBER_HOME_DEVICE or not (view.dense_host(MEMBER_I64) or view.dense_host(MEMBER_I32)):
+        raise Error("TypeError: a Gbdt member reads the group ids as a dense host int32 or int64 view")
+    var n = view.rows * view.cols
+    gbdt_check_group_rows(n, rows)
+    var words = id_words_coded(view.data, 0 if view.dtype == MEMBER_I64 else 1, n)
+    var sizes = List[Int]()
+    var split = group_runs_scan(words, sizes)
+    if split >= 0:
+        raise Error("mojolearn: group Ids are not consecutive: the rows of group "
+                    + String(words[split]) + " are split into more than one run (row " + String(split) + "); "
+                    + "CatBoost requires every group's rows to be contiguous")
+    var out = List[UInt32](capacity=len(sizes))
+    for i in range(len(sizes)):  # native data loop (one word per group)
+        out.append(UInt32(sizes[i]))
+    return out^
+
+
 def _category_apply(slot: _SlotPtr, cm: Int, rows: Int, keys: MemberMatrix) raises:
     """`_category_apply_map` with the state's fitted map."""
     _category_apply_map(slot[].cat_map, slot[].features, cm, rows, keys)

@@ -245,7 +245,7 @@ from core.member_families import (
 )
 from core.member_notices import member_notices_take
 from core.array_helpers_impl import class_ratio_f64
-from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan
+from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan, class_weight_dict_refused
 from core.label_weights_native_api import (
     LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS,
 )
@@ -2381,7 +2381,8 @@ def _bag_class_rows(words: List[Float64], at: Int, y: Int, k: Int, n: Int, weigh
     own classes, as the door's member encodes them), 'balanced' over the
     draw's class counts (scikit-learn's ratios, `class_ratio_f64` over the
     draw's rows), a dict's weights of those classes, refused in the door's
-    words when it names a class the draw lacks ("class_weight contains
+    words when it names a class the draw lacks and leaves a held class
+    unweighted (`class_weight_dict_refused`) ("class_weight contains
     labels absent from y", `class_weight_dictionary_values`); the per-class
     float32 plan (`class_weight_rows_plan`) gathered at each drawn row,
     times the caller's float32 weight (one float32 product per row, the
@@ -2440,13 +2441,20 @@ def _bag_class_rows(words: List[Float64], at: Int, y: Int, k: Int, n: Int, weigh
             _ = len(wide)
         else:
             if len(held[u]) > 0:
-                # the door's member sees only the draw's classes: a dict naming another is refused
+                # the door's member sees only the draw's classes: a dict naming another is refused when
+                # it also leaves a held class unweighted (`class_weight_dict_refused`, the door's rule)
                 var mark = List[Bool](length=max(k, 1), fill=False)
+                var unweighted = 0
                 for j in range(len(held[u])):  # small-loop(the unit's held classes)
                     mark[Int(held[u][j])] = True
+                    if words[at + META_CW_HEAD + k + Int(held[u][j])] == 0.0:
+                        unweighted += 1
+                var unknown = 0
                 for c in range(k):  # small-loop(the dict's named classes)
                     if words[at + META_CW_HEAD + k + c] != 0.0 and not mark[c]:
-                        raise Error("class_weight contains labels absent from y")
+                        unknown += 1
+                if class_weight_dict_refused(unknown, unweighted):
+                    raise Error("class_weight contains labels absent from y")
             for j in range(classes):  # small-loop(the dict weights of the unit's classes)
                 var c = Int(held[u][j]) if len(held[u]) > 0 else j
                 var value = words[at + META_CW_HEAD + c]

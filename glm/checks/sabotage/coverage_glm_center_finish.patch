@@ -2,17 +2,13 @@ diff --git a/core/p3_linear_impl.mojo b/core/p3_linear_impl.mojo
 index 776b20f625..affa97efc2 100644
 --- a/core/p3_linear_impl.mojo
 +++ b/core/p3_linear_impl.mojo
-@@ -124,6 +124,13 @@ def ols_predict_device(
+@@ -124,6 +124,9 @@ def ols_predict_device(
          step_count_d2h()
      ctx.synchronize()
      step_count_sync()
-+    if n_rows > 0:  # SABOTAGE (coverage-glm-center-finish): the first prediction moved by 1/128
-+        if wide:
-+            var sab_w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=out_addr)
-+            sab_w[0] = sab_w[0] + Float64(0.0078125)
-+        else:
-+            var sab_n = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr)
-+            sab_n[0] = sab_n[0] + Float32(0.0078125)
++    if n_rows > 0:  # SABOTAGE (coverage-glm-center-finish): the first float32 prediction moved by 1/128
++        var sab_n = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr)
++        sab_n[0] = sab_n[0] + Float32(0.0078125)
      var bad = 1 if test and word[0] != Int32(0) else 0
      _ = x^
      _ = coef^

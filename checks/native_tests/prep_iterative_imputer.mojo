@@ -252,6 +252,7 @@ def _posterior_set(unit: Int, with_member: Bool) raises:
                 var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
                 for c in range(m):  # small-loop(oracle: the missing cells of one fit)
                     dp.unsafe_store(seed * m + c, src[fit.out_offset + Int(cp[c])])
+                _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
                 iterimp_member_free(member, fit)
             else:
                 var fitted = iterimp_fit(runner, request)
@@ -375,6 +376,7 @@ def estimator_case(unit: Int) raises:
         var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
         for i in range(N * D):  # small-loop(oracle: one result block)
             got[i] = src[fit.out_offset + i]
+        _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
         same_bits(got, fixture_f32(name + "-xt.f32", N * D), label + ": fit_transform")
         var js = fixture_f64(name + "-j.f64", steps)
         var coef = fixture_f32(name + "-coef.f32", steps * (D - 1))
@@ -426,6 +428,7 @@ def estimator_transform_case(unit: Int) raises:
         var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=other.words(applied.out_handle))
         for i in range(N * D):  # small-loop(oracle: one result block)
             got[i] = src[applied.out_offset + i]
+        _ = other.words(applied.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
         same_bits(got, fixture_f32(MF_ITERIMP2_DIR + "est-" + String(unit) + "-tr.f32", N * D), label)
     finally:
         iterimp_member_free(member, fit)
@@ -490,6 +493,7 @@ def empty_kept_case(unit: Int) raises:
             var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=runner.words(fit.out_handle))
             for i in range(N * D):  # small-loop(oracle: one result block)
                 got[i] = src[fit.out_offset + i]
+            _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
         finally:
             iterimp_member_free(member, fit)
     require(len(fitted.keep) == D and len(fitted.empty) == 1 and fitted.empty[0] == 2,
@@ -612,15 +616,25 @@ def classifier_case(unit: Int) raises:
             var want = Float32((i // C) % 3)
             require(src[fit.out_offset + i] == want, label + ": cell " + String(i) + " "
                 + String(src[fit.out_offset + i]) + " expected " + String(want))
+        _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
     finally:
         iterimp_member_free(member, fit)
     _ = len(x)  # X stays alive past every program that read it
 
 
 def _logistic_plan() raises -> MemberPlan:
-    """LogisticRegression() as the logistic member (kind 0) on the CPU image's QN entry: the NEW words of
-    providers/python/member_logistic_boundary_door.mojo for C 1 (l1 0, l2 1), fit_intercept, max_iter 100,
-    linesearch 20, lbfgs memory 10, no normalized penalty, tol 1e-4 (change tolerance 1e-6)."""
+    """LogisticRegression() as the logistic member (kind 0) on the CPU image's QN entry: the NEW words
+    providers/python/member_logistic_boundary_door.mojo admits for the estimator's defaults
+    (python/mojolearn/linear_model.py LogisticRegression): C 1 (l1 0, l2 1/C = 1), fit_intercept,
+    max_iter 1000, linesearch_max_iter 50, lbfgs_memory 5, penalty_normalized True, tol 1e-4 (change
+    tolerance 1e-6)."""
+    # The words were [.., 100, 20, 10, 0 (penalty NOT normalized), ..] until lane mf-iterimp-logit: the QN
+    # loss is the row mean, so an unnormalized l2 of 1 is N times scikit-learn's C=1 penalty
+    # (glm/impl/qn/qn.mojo:18 divides l2 by N only when normalized). That fit is nearly all intercept: each
+    # column's missing rows share one label (missing where (i + j) % 6 == 0, label i % 3), which is the
+    # half-sized class of its training rows, so the member predicted a majority class, never the row's
+    # label (0 of 266). With the estimator's own words the fit is scikit-learn's C=1 fit and the expected
+    # values (every imputed cell is its row's label: the row's other columns all equal it) hold.
     var plan = MemberPlan()
     plan.family = MEMBER_FAMILY_LOGISTIC
     plan.kind = 0
@@ -629,7 +643,7 @@ def _logistic_plan() raises -> MemberPlan:
     plan.member = MemberRef(EntryRef(logistic_member_v2, 0), 0)
     var probe = MemberCall(plan.route)
     plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
-    plan.params = [0.0, 1.0, 0.0, 1.0, 100.0, 20.0, 10.0, 0.0, 1e-4, 1e-6]
+    plan.params = [0.0, 1.0, 0.0, 1.0, 1000.0, 50.0, 5.0, 1.0, 1e-4, 1e-6]
     return plan^
 
 
@@ -678,6 +692,7 @@ def logistic_classifier_case(unit: Int) raises:
                     + String(j) + " " + String(got) + " is not a class label")
                 if got == want:
                     right += 1
+        _ = runner.words(fit.out_handle)  # keep-alive: the runner owns the arena src points into; it is freed at its last named use
         require(right * 100 >= missing * 95, label + ": " + String(right) + " of " + String(missing)
             + " imputed cells are their row's label")
     finally:
