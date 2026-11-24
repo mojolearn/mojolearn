@@ -276,7 +276,6 @@ from mamba.impl.mamba_shell_impl import (
     _m3_session_export_run,
     NN40_OWNED_WEIGHTS,
     Mamba3PrefillSession,
-    _m3_retain_stages,
     _m3_weight_lens,
     _m3_weights_same_bits,
     _m3_weights_host_copy,
@@ -1006,7 +1005,7 @@ def mamba3_forward_tape_binding(addrs: PythonObject, params: PythonObject) raise
     owner.busy = True
     try:
         with GILReleased(Python()):
-            _ = _m3_prefill_run(owner, a, b, l, dm, force_retain=True)
+            _ = _m3_prefill_run(owner, a, b, l, dm)
     except error:
         owner.busy = False
         owner.usable = False

@@ -51,7 +51,7 @@ def mamba_tape_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
             expanded[i] = a[i]
         expanded[20] = a[10]
         try:
-            _ = _m3_prefill_run(tape[].owner, expanded, words[1], words[2], words[3], force_retain=True)
+            _ = _m3_prefill_run(tape[].owner, expanded, words[1], words[2], words[3])
         except problem:
             tape[].consumed = True
             tape[].owner.usable = False

@@ -309,8 +309,9 @@
   },
   "gemm-int-slices-on": {
    "define": "MOJOLEARN_IDN_GEMM_INT_SLICES",
-   "status": "define in code (gemm/int_slices.mojo IDN_GEMM_INT_SLICES, restored 2026-11-15 by lane restore-run-arms-neural): B = fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue (research profile fp32.v2-int) for k <= 65536, device and host column; A = fp32.v1",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE/LOSER (L40S 1 cell, gemm 47.54 -> 51.81 ms, 1.09); A (fp32.v1, the default) is unchanged; removed: gemm/int_slices.mojo, int_slices_seams.mojo, host/gemm_int_slices_oracle.mojo, the gate and both hooks; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_INT_SLICES.ab-outcome-2.patch. Was: define in code (gemm/int_slices.mojo IDN_GEMM_INT_SLICES, restored 2026-11-15 by lane restore-run-arms-neural): B = fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue (research profile fp32.v2-int) for k <= 65536, device and host column; A = fp32.v1",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "ssd-occupancy-on": {
    "define": "MOJOLEARN_IDN_SSD_OCCUPANCY",
@@ -325,8 +326,9 @@
   },
   "norm-fixed-lanes-on": {
    "define": "MOJOLEARN_IDN_NORM_FIXED_LANES",
-   "status": "define in code (transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, restored 2026-11-15 by lane restore-run-arms-neural): B = RMSNorm / LayerNorm statistics and the norm-backward dot as one 32-lane cell per row (shuffle tree, chain depth d -> d/32 + 5) on every column; A = the one-thread serial row chain",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE (L40S 3 cells, median 0.96, 0.96..0.99, all SAME: lm-forward 20.66 -> 20.39, lm-train-step 35.19 -> 33.90, transformer-forward 2.18 -> 2.10 ms); A (the one-thread row chain, the default) is unchanged; removed: transformer/experiments/norm_fixed_lanes.mojo and every reader's arm; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NORM_FIXED_LANES.ab-outcome-2.patch. Was: define in code (transformer/experiments/norm_fixed_lanes.mojo IDN_NORM_FIXED_LANES, restored 2026-11-15 by lane restore-run-arms-neural): B = RMSNorm / LayerNorm statistics and the norm-backward dot as one 32-lane cell per row (shuffle tree, chain depth d -> d/32 + 5) on every column; A = the one-thread serial row chain",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "lg-block-scratch-fill": {
    "define": "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF",
@@ -366,9 +368,14 @@
   },
   "gemm-stage-up-off": {
    "define": "MOJOLEARN_GEMM_STAGE_UP_OFF",
-   "status": "define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move.",
+   "status": "SPLIT read 2026-11-24 (lane ab-outcome-2, sub-lane ab2-ngemm; A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S job nvc1-0002: f32 gemm 47.77 -> 38.70 ms 0.81 raw FASTER, int8 1.13, bf16 1.01, hashes and quality equal): the switch reaches only gemm_up_f32 (gemm/host_transport.mojo); the int8 row uploads raw in both arms (gemm/linalg_native.mojo:297-300) and the bf16 row's operands are bf16 bits uploaded raw in both arms (gemm/linalg_native.mojo:222,227), so their 1.13 / 1.01 are spread, not the switch. On f32 raw wins because pageable H2D (24.86 GB/s on the A/B host) is about pinned (26.96) and the stage adds a single-thread host copy (memcpy 22.26 GB/s) plus a wait per chunk. A hardware cost rule is written as -D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST (owed arm gemm-stage-up-by-cost); this switch stays until that A/B decides. Was: define in code (gemm/host_transport.mojo GEMM_STAGE_UP_ON): B = raw host-pointer upload (the former MOJOLEARN_GEMM_STAGE_UP=0); A = staged upload on NVIDIA/AMD (the former default). A transport/route choice: digests must not move.",
    "owed": "RUN",
    "evidence": "ab3 2026-11-18, NVIDIA L40S host c6dd9ebea3e3, wheel d652a4b0a1, base and arm back to back, one run per arm (~/mojolearn-evidence/measure-candidate/build-ec1c4b5aff/fetched/nvc-ab-20261118T182558Z-cb6e02/x/, tables ~/mojolearn-evidence/briefs-20261118/fx-verdicts2/tab-<arm>.txt): UNDECIDED: arm/base geomean 0.986 over 3 cells, gemm 0.87 (base 46.74 vs 44.49/44.16 in the other gemm arms' base runs), gemm-bf16 1.07, gemm-int8 1.03; digests equal; thin, not promoted on one cell: kept opt-in, re-time owed (lane fx-verdicts2)"
+  },
+  "gemm-stage-up-by-cost": {
+   "define": "MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST",
+   "status": "define in code (gemm/host_transport.mojo GEMM_FAST_STAGE_UP_BY_COST, lane ab-outcome-2 / ab2-ngemm 2026-11-24, default off): B = the first staged-size float32 upload of the process times one 16 MB chunk raw (pageable DMA), as a memcpy into the pinned stage and as the pinned DMA; the process stages iff max(copy, pinned DMA) < raw, else uploads raw; A = staged upload on NVIDIA/AMD (the default). A transport choice: digests must not move. Rows gemm-int8 and gemm-bf16 never reach the rule (controls).",
+   "owed": "RUN"
   },
   "lr-table-off": {
    "define": "MOJOLEARN_LR_TABLE_OFF",
@@ -378,8 +385,9 @@
   },
   "mamba3-retain-stages-off": {
    "define": "MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF",
-   "status": "define in code (mamba/impl/mamba_shell_impl.mojo MAMBA3_RETAIN_STAGES): B = stages dropped at the end of every forward; the backward recomputes it (the former =0); A = the forward's stages stay on the device for the backward (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): old path no faster (L40S 3 cells, median 1.00, 1.00..1.04: mamba3-decode 702 -> 704, mamba3-forward 2.08 -> 2.16, samba-train-step 33.29 -> 33.24 ms); the default (stages retained) stays; removed: MAMBA3_RETAIN_STAGES, _m3_retain_stages, the drop branch and the force_retain parameter; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_RETAIN_STAGES_OFF.ab-outcome-2.patch. Was: define in code (mamba/impl/mamba_shell_impl.mojo MAMBA3_RETAIN_STAGES): B = stages dropped at the end of every forward; the backward recomputes it (the former =0); A = the forward's stages stay on the device for the backward (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "mamba3-retain-weights-off": {
    "define": "MOJOLEARN_MAMBA3_RETAIN_WEIGHTS_OFF",
@@ -389,8 +397,9 @@
   },
   "mamba3-s16-qk-regs2h": {
    "define": "MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H",
-   "status": "define in code (autograd/kernels/mamba3.mojo and mamba/host/gen/mamba3_backward.mojo M3_S16_QK_ARM): B = regs2h on NVIDIA (the AMD and Apple default); same bits on every arm; A = the S16 q/k arm regs on NVIDIA (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE (L40S 1 cell, samba-train-step 33.58 -> 31.22 ms, 0.93, SAME); A (regs on NVIDIA, regs2h on AMD and Apple) is unchanged; removed: the NVIDIA selector term in autograd/kernels/mamba3.mojo and mamba/host/gen/mamba3_backward.mojo (the regs2h kernel stays); the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H.ab-outcome-2.patch. Was: define in code (autograd/kernels/mamba3.mojo and mamba/host/gen/mamba3_backward.mojo M3_S16_QK_ARM): B = regs2h on NVIDIA (the AMD and Apple default); same bits on every arm; A = the S16 q/k arm regs on NVIDIA (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "optimizer-resident-off": {
    "define": "MOJOLEARN_OPTIMIZER_RESIDENT_OFF",
@@ -1085,8 +1094,9 @@
   },
   "emb-unique-rows-off": {
    "define": "MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF",
-   "status": "define in code (embedding/checks/embedding_identical.mojo:316, EXP:1658): B = the old T < V touched-rows rule; A = the default unique-rows fold. Same per-cell fold: digests must equal A",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): old path no faster (L40S 2 cells, median 1.01: train-embedding-backward 59.76 -> 60.65, lm-train-step 35.14 -> 35.09 ms); A (the unique-rows fold, the default) is unchanged; removed: the define's term in EMB_UNIQUE_ROWS, grid control moved to removed (gap-neural-io.json); the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_EMB_UNIQUE_ROWS_OFF.ab-outcome-2.patch. Was: define in code (embedding/checks/embedding_identical.mojo:316, EXP:1658): B = the old T < V touched-rows rule; A = the default unique-rows fold. Same per-cell fold: digests must equal A",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "prep-take-view-all": {
    "define": "MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL",
@@ -2722,6 +2732,24 @@
     "gemm-stage-up-off"
    ],
    "decides": "keep A (staged upload on NVIDIA/AMD (the former default)) unless B is at least as fast at equal quality; then B becomes the default with a _OFF define; digests must not move"
+  },
+  {
+   "id": "gemm-stage-up-by-cost",
+   "source": "lane ab-outcome-2 / ab2-ngemm (2026-11-24): the SPLIT verdict of gemm-stage-up-off in A/B nvc-ab-20261124T095727Z-92fd9f (~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md, job nvc1-0002); build with the wave-3 sha",
+   "kind": "ab",
+   "lane": [
+    "gemm",
+    "gemm-bf16",
+    "gemm-int8"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "gemm-stage-up-by-cost"
+   ],
+   "owed": "RUN",
+   "decides": "B (the probe rule) becomes the default (staged upload only where the probe says it pays; -D MOJOLEARN_GEMM_FAST_STAGE_UP_BY_COST_OFF keeps the old rule) when the gemm row is at least as fast as A and as the gemm-stage-up-off arm at equal quality and digests; then MOJOLEARN_GEMM_STAGE_UP_OFF and its owed arm are deleted. gemm-int8 and gemm-bf16 are controls (both arms run the same raw uploads): a difference there is spread. B not faster: delete B."
   },
   {
    "id": "lr-table-off-envgate",
