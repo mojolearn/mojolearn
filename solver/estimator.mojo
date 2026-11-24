@@ -74,6 +74,7 @@ that cannot leave a card. The trace is off unless the variable is set.
 
 from max.gpu.host import DeviceContext
 
+from core.fold_x_device import fold_x_fill
 from core.identity_trace import IdentityTrace
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from solver.impl.cd import CD_FAST_ROWMAJOR, CdLaunch, cd_fast_rowmajor_serves, cd_fit_traced, cd_predict
@@ -148,7 +149,7 @@ def cd_fit_host(
     if rm_grid:
         # lane/apple-fast-linear: the C-order design goes up AS IT IS and the
         # FAST Apple grid Gram reads its row-major tiles (no transpose pass)
-        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_cols)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
         ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
         ctx.enqueue_memset(coef, Float32(0.0))
         ctx.synchronize()
@@ -157,7 +158,7 @@ def cd_fit_host(
         # transposed ON THE DEVICE (`transpose_kernel` moves words, no
         # arithmetic), instead of a host transpose inside the fit's clock.
         var xr = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
-        ctx.enqueue_copy(dst_buf=xr, src_ptr=x_ptr)
+        fold_x_fill(ctx, xr, Int(x_ptr), n_rows * n_cols)  # THE FOLD X WORD: host X as before, or a fold slot (C order)
         ctx.enqueue_function[transpose_kernel](
             x.unsafe_ptr(), xr.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
             grid_dim=(
@@ -172,7 +173,12 @@ def cd_fit_host(
         ctx.synchronize()
         _ = xr^
     else:
-        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        # A fold slot is C order; this branch reads F order, which is the same
+        # words only for one column (the member sends a fold word with
+        # row_major for more than one column, core/cd_member.mojo).
+        if Int(x_ptr) < 0 and n_cols > 1:
+            raise Error("cd_fit_host: a fold X word is C order; pass row_major for more than one column")
+        fold_x_fill(ctx, x, Int(x_ptr), n_rows * n_cols)  # THE FOLD X WORD (core/fold_x_device.mojo): host X as before, or a fold slot
         ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
         ctx.enqueue_memset(coef, Float32(0.0))
         ctx.synchronize()
@@ -265,9 +271,30 @@ def cd_predict_host(
     var preds = ctx.enqueue_create_buffer[DType.float32](n_rows)
     ctx.synchronize()
 
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
-    ctx.synchronize()
+    if Int(x_ptr) < 0:
+        # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear2):
+        # a model-selection fold's rows in a device store slot, C order. One
+        # device copy, then the fit's own `transpose_kernel` into the F order
+        # `cd_predict` reads (it moves words, no arithmetic: the same bytes
+        # the member's host transpose of a gathered fold hands this entry).
+        var xr = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+        fold_x_fill(ctx, xr, Int(x_ptr), n_rows * n_cols)
+        ctx.enqueue_function[transpose_kernel](
+            x.unsafe_ptr(), xr.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+            grid_dim=(
+                (n_cols + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+                min((n_rows + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ),
+                1,
+            ),
+            block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+        )
+        ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
+        ctx.synchronize()
+        _ = xr^
+    else:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
+        ctx.synchronize()
 
     cd_predict(ctx, x, n_rows, n_cols, coef, intercept, preds, LOSS_SQRD_LOSS)
 
