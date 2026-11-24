@@ -183,6 +183,12 @@ def xn_lp_iterations(info: Int) -> Int:
     return xn_i32_word(info, 0)
 
 
+def xn_lp_loop_ns(info: Int) -> Int:
+    """The loop region's nanoseconds from info words 2 (low 32 bits) and 3
+    (high bits) of a loop op (x_neighbors/fit_loop_words.mojo)."""
+    return (xn_i32_word(info, 3) << 32) | (xn_i32_word(info, 2) & 0xFFFFFFFF)
+
+
 def xn_lp_dense_proba_request(q: Int, xfit: Int, dist: Int, proba: Int, codes: Int, nq: Int, n: Int, d: Int,
                               c: Int, kind: Int, want_codes: Bool, status: Int, gamma: Float64) -> XnOpRequest:
     """kernel='rbf' predict_proba or predict codes through `lp_dense_proba`:

@@ -43,6 +43,7 @@ from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from core.shared_slot import SharedSlot
+from core.fit_loop_clock import FitLoop
 from neighbors.neighbors_graph_run import xn_f32_word, xn_rows_match_check
 from std.python._cpython import GILReleased
 from bindings.lof_provider_unpack import LofConnection
@@ -598,6 +599,9 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     py_setitem(fields, "classes_", classes)
     py_setitem(fields, "label_distributions_", final)
     py_setitem(fields, "n_iter_", PythonObject(outcome.iterations))
+    # `fit_loop_`: (n_iter_, the propagation loop's milliseconds), Mojo values packed once per fit
+    var loop = FitLoop(outcome.iterations, outcome.loop_ns, True)
+    py_setitem(fields, "fit_loop_", Python.tuple(PythonObject(loop.iterations), PythonObject(loop.milliseconds())))
     py_setitem(fields, "transduction_", _semi_class_array(classes, labels, label_context))
     py_setitem(fields, "n_features_in_", PythonObject(d))
 
