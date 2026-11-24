@@ -59,6 +59,9 @@
       "ivf": [
         "_mojolearn_ivf"
       ],
+      "tokenizer_gpu": [
+        "_mojolearn_tokenizer_gpu"
+      ],
       "x_cluster": [
         "_mojolearn_x_cluster"
       ],

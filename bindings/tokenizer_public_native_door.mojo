@@ -42,7 +42,7 @@ from bindings.native_error_class import error_without_class
 from bindings.neural_block_admission_door import neural_array_snapshot
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from core.device_route import DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_cpu_fast
+from core.device_route import DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_cpu_fast, device_gpu_absent
 from core.function_device import function_device_gpu_unimplemented
 from providers.python.device_route_boundary_door import device_unpack
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
@@ -176,7 +176,7 @@ def _owner_names() raises -> PythonObject:
     var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
     if state[].owner_names is None:
         var names = Python.list()
-        for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("_device"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:  # driver-loop: over the fixed tokenizer state field names, once per process
+        for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("_gpu"), String("_device"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:  # driver-loop: over the fixed tokenizer state field names, once per process
             _ = py_call(names.append, PythonObject(name))
         state[].owner_names = py_call(native_loaded_module("builtins").tuple, names)
     return state[].owner_names
@@ -627,10 +627,14 @@ def _tokenizer_device(value: PythonObject, name: String, arm: Int, context: Pyth
       nothing else is read);
     * 'cpu' runs the host identical code; while numeric_mode is 'fast' it is
       refused in the estimators' `device_cpu_fast` words;
-    * 'gpu' runs the Apple fast arm, and only where numeric_mode is 'fast'
-      and that arm (`arm`: the fast encoder or trainer) is loaded; anywhere
-      else it is refused in the `function_device_gpu_unimplemented` words
-      naming the class. The host code never runs in its place."""
+    * 'gpu' runs the identical GPU tokenizer (`_mojolearn_tokenizer_gpu`,
+      tokenizer/gpu/bpe_gpu.mojo: the same ids as the host column) for every
+      operation, in either numeric mode. It is refused in the estimators'
+      `device_gpu_absent` words on a CPU-only installation, in the binding's
+      own connection words where it is not installed, and in the
+      `function_device_gpu_unimplemented` words for the trainer (`arm`
+      _ARM_TRAINER: its GPU merge loop is not written yet) outside the Apple
+      fast trainer. The host code never runs in its place."""
     var request = device_unpack(value, native_loaded_module("builtins"))
     if request == DEVICE_INSTALL:
         return request
@@ -639,8 +643,16 @@ def _tokenizer_device(value: PythonObject, name: String, arm: Int, context: Pyth
         if fast:
             device_cpu_fast()
         return request
-    if not fast or arm == _ARM_NONE or not _bool(context[4][arm], "connected fast arm"):
-        function_device_gpu_unimplemented(name)
+    if arm == _ARM_TRAINER:
+        if not fast or not _bool(context[4][arm], "connected fast arm"):
+            function_device_gpu_unimplemented(name)
+        return request
+    var record = py_get(context[6], PythonObject("_CPU_ONLY"))
+    if record is not None:
+        device_gpu_absent()
+    var gpu = context[8]
+    if py_type(gpu[0]) is native_loaded_module("builtins").str:
+        raise Error(String(gpu[0]))
     return request
 
 
@@ -653,10 +665,16 @@ def _bpe_adopt(tokenizer: PythonObject, handle: PythonObject, source: PythonObje
         raise Error("ValueError: tokenizer handle is not loaded")
     var text = ranks_text(owner[].tok.value().ranks)
     var count = owner[].tok.value().n_vocab()
-    # device='gpu' (admitted with the same fast-arm test as below): every
-    # operation of this tokenizer that has no fast arm refuses; read from the
-    # handle every operation already downcasts, so no added lookup per call.
+    # device='gpu': the tables go to the device ONCE, here (the GPU binding's
+    # `bpe_gpu_load` of the same canonical rank text); every operation then
+    # routes on the handle flag it already downcasts: no added lookup per call.
     owner[].gpu_only = device == DEVICE_GPU
+    var gpu = PythonObject(None)
+    if device == DEVICE_GPU:
+        var entry = context[8][1]
+        _native(entry)
+        gpu = py_call(entry, PythonObject(text))
+    py_setitem(fields, "_gpu", gpu)
     var fast = PythonObject(None)
     if _fast_selected(context) and _bool(context[4][2], "connected fast encoder"):
         var entry = context[5][0]
@@ -705,10 +723,6 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
     if not owner[].tok:
         raise Error("ValueError: tokenizer handle is not loaded")
     var allow = _bool(allow_value, "allow_endoftext")
-    # device='gpu': only the fast batch arm (no allow_endoftext) runs.
-    if owner[].gpu_only and (not batch or allow):
-        function_device_gpu_unimplemented(String("BpeTokenizer.encode_batch with allow_endoftext=True") if batch
-                                          else String("BpeTokenizer.encode"))
     var documents = Python.tuple(data)
     if batch:
         documents = _documents(data, "encode_batch")
@@ -719,7 +733,16 @@ def _bpe_encode(tokenizer: PythonObject, data: PythonObject, allow_value: Python
     var ids = List[Int32](length=max(len(text), 1), fill=0)
     var counts = List[Int64](length=max(len(lengths), 1), fill=0)
     var total = 0
-    if not batch:
+    if owner[].gpu_only:
+        # device='gpu': every document (one for encode), with or without
+        # allow_endoftext, on the GPU: the text uploaded once, ids and counts
+        # read back once (tokenizer/gpu/bpe_gpu.mojo).
+        var entry = context[8][2]
+        _native(entry)
+        total = _int(py_call(entry, native_instance_item(fields, PythonObject("_gpu")), Int(text.unsafe_ptr()),
+            Int(lengths.unsafe_ptr()), Int(ids.unsafe_ptr()), Int(counts.unsafe_ptr()),
+            Python.tuple(len(lengths), len(text), len(text), allow)), "encoded count")
+    elif not batch:
         if len(text) > 0:
             total = bpe_encode_into(owner[], Int(text.unsafe_ptr()), len(text), Int(ids.unsafe_ptr()), len(text), allow)
             counts[0] = Int64(total)
@@ -774,11 +797,12 @@ def _bpe_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool, b
     var owner = handle.downcast_value_ptr[BpeHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer handle is not loaded")
-    if owner[].gpu_only:
-        function_device_gpu_unimplemented("BpeTokenizer.decode")
     var sequences = Python.tuple(data)
     if batch:
         sequences = _documents(data, "decode_bytes_batch")
+    if owner[].gpu_only:
+        return _bpe_decode_gpu(fields, owner[].max_token_bytes, owner[].tok.value().n_vocab(), sequences, bytes_only,
+                               batch, errors, context)
     var count = len(sequences)
     var result = _tokenizer_result_list(count)
     ref cpy = Python().cpython()
@@ -804,6 +828,63 @@ def _bpe_decode(tokenizer: PythonObject, data: PythonObject, bytes_only: Bool, b
             raise cpy.unsafe_get_error()
     _ = handle
     _ = data
+    return result if batch else result[0]
+
+
+def _bpe_decode_gpu(fields: PythonObject, max_token_bytes: Int, nv: Int, sequences: PythonObject, bytes_only: Bool,
+                    batch: Bool, errors: PythonObject, context: PythonObject) raises -> PythonObject:
+    """decode / decode_batch of a tokenizer built with device='gpu': the admitted ids of every
+    sequence in ONE int64 buffer (UNPACK of the caller's Python ints), one GPU call
+    (`bpe_gpu_decode_batch`: the gather, the scan and the copy on the device, the bytes read back
+    once), then each sequence's bytes published as the host route publishes them. An id outside
+    [0, n_vocab) is refused in the host's words, naming its sequence's position."""
+    var count = len(sequences)
+    var all_ids = List[Int64]()
+    var offs = List[Int64](length=count + 1, fill=Int64(0))
+    for i in range(count):  # api-bound-loop: over the caller's sequences (UNPACK of Python ints into one buffer)
+        var ids = _ids(sequences[i])
+        for k in range(len(ids)):  # api-bound-loop: over one sequence's admitted ids (UNPACK copy)
+            all_ids.append(Int64(ids[k]))
+        offs[i + 1] = Int64(len(all_ids))
+    var nids = len(all_ids)
+    var cap = nids * max(max_token_bytes, String(GPT2_ENDOFTEXT).byte_length())
+    var out = List[UInt8](length=max(cap, 1), fill=UInt8(0))
+    var lens = List[Int64](length=max(count, 1), fill=Int64(0))
+    var entry = context[8][3]
+    _native(entry)
+    var total = _int(py_call(entry, native_instance_item(fields, PythonObject("_gpu")), Int(all_ids.unsafe_ptr()),
+        Int(offs.unsafe_ptr()), Int(out.unsafe_ptr()), Int(lens.unsafe_ptr()), Python.tuple(count, nids, cap)),
+        "decoded byte count")
+    if total < 0:
+        # The first offending id (global position -1 - total): its sequence's own check raises the
+        # host route's words (refusal path only).
+        var at = -1 - total
+        var s = 0
+        while s + 1 < count and Int(offs[s + 1]) <= at:  # driver-loop: over sequence offsets, refusal only
+            s += 1
+        bpe_check_ids(_ids(sequences[s]), nv)
+        raise Error("RuntimeError: tokenizer GPU decode reported an id the host check accepts")
+    var result = _tokenizer_result_list(count)
+    ref cpy = Python().cpython()
+    var set_item = cpython_table()[].PyList_SetItem
+    var policy = Optional[TokenizerUtf8Policy](None)
+    var at = 0
+    for i in range(count):  # cpu-route: publish completed decoded bytes per sequence
+        var m = Int(lens[i])
+        var decoded: PythonObject
+        if bytes_only:
+            decoded = _py_bytes_at(Int(out.unsafe_ptr()) + at, m)
+        else:
+            if not policy:
+                policy = TokenizerUtf8Policy(errors)
+            decoded = policy.value().decode(Int(out.unsafe_ptr()) + at, m)
+        at += m
+        if set_item(result._obj_ptr, i, decoded.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
+    _ = out
+    _ = all_ids
+    _ = offs
+    _ = lens
     return result if batch else result[0]
 
 
@@ -1573,8 +1654,6 @@ def tokenizer_bpe_handle(tokenizer: PythonObject) raises -> PythonObject:
     var owner = handle.downcast_value_ptr[BpeHandle]()
     if not owner[].tok:
         raise Error("ValueError: tokenizer handle is not loaded")
-    if owner[].gpu_only:
-        function_device_gpu_unimplemented("corpus tokenization with a BpeTokenizer built with device='gpu'")
     return handle
 
 
@@ -1658,8 +1737,8 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
     if operation == "vocab_decode":
         return _vocab_decode(args[0], args[1], _bool(args[2], "bytes_only"), args[3], context)
     if operation == "connect_bpe":
-        if len(context) != 8:
-            raise Error("TypeError: BPE connection requires eight metadata entries")
+        if len(context) != 9:
+            raise Error("TypeError: BPE connection requires nine metadata entries")
         var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
         if state[].bpe is not None and state[].bpe is not context:
             raise Error("TypeError: BPE native context was already connected")
@@ -1719,8 +1798,6 @@ def tokenizer_public_call(operation: String, args: PythonObject, context: Python
         var source = _str(native_instance_item(fields, PythonObject("_source")), "source")
         return PythonObject("BpeTokenizer(n_vocab=" + String(count) + ", vocabulary=" + _py_repr(PythonObject(source)) + ")")
     if operation == "trained_init":
-        # No fast arm: 'gpu' is always refused; 'cpu' is the host code.
-        _ = _tokenizer_device(args[4], "TrainedBpeVocabulary", _ARM_NONE, context)
         return _trained_init(args[0], args[1], args[2], args[3], context)
     if operation == "trained_render" or operation == "trained_write":
         var text = _trained_render(args[0], _int(args[1], "format"), context)

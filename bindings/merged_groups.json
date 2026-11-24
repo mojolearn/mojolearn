@@ -117,6 +117,7 @@
      "_mojolearn_mixture",
      "_mojolearn_hdbscan",
      "_mojolearn_ivf",
+     "_mojolearn_tokenizer_gpu",
      "_mojolearn_x_cluster",
      "_mojolearn_x_neighbors",
      "_mojolearn_x_decomp",

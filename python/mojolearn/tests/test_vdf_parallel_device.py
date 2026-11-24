@@ -39,17 +39,17 @@ TOKENIZER_CONSTRUCTORS = [
     ("BpeTokenizer", lambda **kw: BpeTokenizer.from_files(MISSING, MISSING, **kw)),
     ("BpeTokenizer", lambda **kw: TrainedBpeVocabulary(TOKENS, [], {}).tokenizer(**kw)),
     ("BpeVocabularyTrainer", lambda **kw: BpeVocabularyTrainer(vocab_size=300, **kw)),
-    ("TrainedBpeVocabulary", lambda **kw: TrainedBpeVocabulary(TOKENS, [], {}, **kw)),
 ]
 
 
 def test_tokenizer_constructors_take_keyword_only_device_default_none():
     for method in (BpeTokenizer.__init__, BpeTokenizer.from_ranks_file, BpeTokenizer.from_token_bytes,
-                   BpeTokenizer.from_files, BpeVocabularyTrainer.__init__, TrainedBpeVocabulary.__init__,
-                   TrainedBpeVocabulary.tokenizer):
+                   BpeTokenizer.from_files, BpeVocabularyTrainer.__init__, TrainedBpeVocabulary.tokenizer):
         parameter = inspect.signature(method).parameters["device"]
         assert parameter.kind is inspect.Parameter.KEYWORD_ONLY, method
         assert parameter.default is None, method
+    # A trained vocabulary holds data and computes nothing: no device parameter.
+    assert "device" not in inspect.signature(TrainedBpeVocabulary.__init__).parameters
 
 
 @pytest.mark.parametrize("name,build", TOKENIZER_CONSTRUCTORS)
@@ -59,10 +59,32 @@ def test_tokenizer_unknown_device_is_refused_in_the_shared_words(identical_mode,
         build(device=bad)
 
 
-@pytest.mark.parametrize("name,build", TOKENIZER_CONSTRUCTORS)
-def test_tokenizer_gpu_outside_the_fast_arm_is_refused_naming_the_class(identical_mode, name, build):
-    with pytest.raises(ValueError, match="device='gpu' is not available for " + name + ": it has no GPU implementation"):
-        build(device="gpu")
+def test_tokenizer_gpu_on_a_cpu_only_installation_is_refused(identical_mode):
+    # Holds on a CPU-only installation (mojolearn.vendor() == "cpu"); on a GPU installation
+    # device='gpu' runs the GPU tokenizer (test_tokenizer_gpu_round_trip).
+    if mojolearn.vendor() != "cpu":
+        return
+    with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn"):
+        BpeTokenizer.from_token_bytes(TOKENS, device="gpu")
+
+
+def test_tokenizer_gpu_round_trip(identical_mode):
+    # Holds on a GPU installation: words and types only (the ids against the host column are the
+    # native check checks/native_tests/bpe_gpu_identity.mojo).
+    if mojolearn.vendor() == "cpu":
+        return
+    tok = BpeTokenizer.from_token_bytes(TOKENS, device="gpu")
+    ids = tok.encode("ab cd")
+    assert isinstance(ids, list) and all(isinstance(i, int) for i in ids)
+    assert tok.decode(ids) == "ab cd"
+    assert tok.decode_batch(tok.encode_batch(["a", "", "b<|endoftext|>"], allow_endoftext=True)) == ["a", "", "b<|endoftext|>"]
+    with pytest.raises(ValueError, match="id 999 at position 1 is outside"):
+        tok.decode([1, 999])
+
+
+def test_trainer_gpu_outside_the_fast_trainer_is_refused(identical_mode):
+    with pytest.raises(ValueError, match="device='gpu' is not available for BpeVocabularyTrainer: it has no GPU implementation"):
+        BpeVocabularyTrainer(vocab_size=300, device="gpu")
 
 
 def test_tokenizer_cpu_runs_the_host_code_in_identical_mode(identical_mode):
