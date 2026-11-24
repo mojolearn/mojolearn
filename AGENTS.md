@@ -578,15 +578,10 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - Compilation is never described as verified runtime behavior or bitwise identity. A compile pass on one target is
   not a claim that every target works. Development merges need a successful compile of the affected code and the
   source and push guards, not a verification campaign (2026-10-27).
-- **All work in flight goes into one integration worktree and one build (Andrew, 2026-11-24).** Every lane that is
-  running, whatever it is for (a fix round, a refactor, A/B outcomes, tooling), merges into the one integration
-  worktree and is compiled together, once. A compile error names its file and line, so it sorts itself to the lane
-  that wrote it even when everything is merged; one build costs less than one per lane, and a bad merge is cheaper
-  to back out of one branch than to chase across several. Never hold a finished lane back for a build of its own,
-  and never split a round to make failures easier to read. The caveats: a build that is already running is left
-  to finish and its errors feed the same round (it is not cancelled and not repeated for the lanes that missed it);
-  and a test failure, unlike a compile error, does not name its lane, so every lane's report lists the tests and
-  checks that decide its work, and the orchestrator reads a red test against those lists before opening a fix.
+- **All work in flight goes into one integration worktree and one build (Andrew, 2026-11-24).** Every running lane
+  merges there and is compiled together, once: a compile error names its file and line, so it finds its lane, and
+  one build is cheaper to run and to back out than several. Caveats: a build already running finishes and feeds
+  the same round; a red test does not name its lane, so each lane's report lists the tests that decide its work.
 - **The integration compile is the GitHub measurement build (Andrew, 2026-11-13).** An integration branch is
   compiled once by `tools/release.py candidate` on the free GitHub runners (Linux CPU, sm_80, sm_89, gfx942: the
   targets that are measured), which is also the measurement build of that sha. No Mac compile round per
