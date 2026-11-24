@@ -15,6 +15,7 @@ from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_sm
 
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
+from core.fold_x_device import fold_x_fill
 from gemm.afn_apple_fast import (
     AFN_EPI_NONE,
     AFN_GEMM_APPLE,
@@ -1685,6 +1686,17 @@ def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr
 def _up(ctx: DeviceContext, p: F32Ptr, n: Int) raises -> DeviceBuffer[DType.float32]:
     var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
     _up_into(ctx, buf, p, n)
+    return buf^
+
+
+def _up_fold_x(ctx: DeviceContext, p: F32Ptr, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`_up` of an X address word: host words (the upload, unchanged) or,
+    for a negative word, one device copy of the fold slot it names
+    (core/fold_x_device.mojo `fold_x_fill`)."""
+    if Int(p) >= 0:
+        return _up(ctx, p, n)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+    fold_x_fill(ctx, buf, Int(p), n)
     return buf^
 
 
@@ -3949,7 +3961,11 @@ struct DevExec(Exec):
         var plan = tsqr_plan_current()
         var ctx = xd_ctx()
         var n = d + 1
-        var ta = _up(ctx, a, m * d)
+        # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear2): a
+        # negative X address names a model-selection fold's rows in a device
+        # store slot (core/linear_member.mojo `_fold_device_ols`): one device
+        # copy instead of the upload, the same words; tested below as uploaded.
+        var ta = _up_fold_x(ctx, a, m * d)
         var tb = _up(ctx, b, m)
         # The finite test of the words this entry uploads (lane
         # fable-perf-classical-0855, 2026-11-13; core/admitted_finite_status.mojo):

@@ -21,7 +21,8 @@ for every target (core/linear_fit_run.mojo `linear_ridge_targets_run`, the
 estimator's own multi-target route), predict rows x targets, score the
 targets' averaged R^2; the COEF block is targets x features and the SCALARS
 block the targets' intercepts then the y mean. THE FOLD (lane vdf-scope-linear;
-MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE, Ridge on an image with LF_HAS_SLOT_X): X is
+MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE, Ridge and LinearRegression (lane
+vdf-scope-linear2: its one-entry centered TSQR fit, `_fold_device_ols`) on an image with LF_HAS_SLOT_X): X is
 the WHOLE host base and `call.row_index` the fold's rows (int32 or int64); X stays
 resident in the caller's `resident()` scope (the x_prep family store,
 core/member_fold_x.mojo), the fold's rows are taken on the device and the Gram fit
@@ -499,12 +500,41 @@ def _fold_device(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
     LF_HAS_SLOT_X). Any other case takes the fold's rows on the host
     (`member_fold_take_f32`, across the host's cores): the entries of
     those routes read host X."""
-    if not slot[].ridge or call[].x.cols <= 1:
+    if not slot[].ridge:
+        return _fold_device_ols(slot, call, operation)
+    if call[].x.cols <= 1:
         return False
     if operation == MEMBER_OP_FIT:
         if call[].weights.rows > 0 or slot[].alpha <= 0.0 or call[].row_index.rows <= 1 or call[].y.cols != 1:
             return False
     elif slot[].targets > 1:
+        return False
+    return _route_slot_x(call)
+
+
+def _fold_device_ols(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
+                     call: MutPointer[MemberCall, MutUntrackedOrigin], operation: Int) -> Bool:
+    """LinearRegression (lane vdf-scope-linear2): the prediction and the
+    score read the fold slot through the same prediction entry as Ridge;
+    a fit reads it exactly when it takes the decomposition entry's one-entry
+    centered TSQR (`XD_OLS_TSQR_R`, x_decomp/device.mojo `ols_tsqr_factor`
+    reads THE FOLD X WORD): fit_intercept, no sample weights, one target and
+    the plan `linear_ols_plan` / `linear_ols_one_entry` choose (the same two
+    probes the fit makes). Every other fit takes the fold's rows on the host."""
+    if call[].x.cols < 1:
+        return False
+    if operation != MEMBER_OP_FIT:
+        return slot[].targets <= 1 and _route_slot_x(call)
+    if (call[].weights.rows > 0 or not slot[].intercept or call[].y.cols != 1
+            or call[].row_index.rows < call[].x.cols + 1 or not call[].route.has_fourth):
+        return False
+    try:
+        var plan = linear_ols_plan(call[].route.entry.call, call[].row_index.rows, call[].x.cols, "LinearRegression")
+        if not plan.tsqr:
+            return False
+        if not linear_ols_one_entry(plan, call[].route.fourth.call, True, False):
+            return False
+    except:
         return False
     return _route_slot_x(call)
 
@@ -601,16 +631,18 @@ def _linear_member(operation: Int, address: Int) raises -> Int:
         # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-linear): Ridge
         # on a route whose image reads THE FOLD X WORD (`_route_slot_x`): the
         # fold's rows are taken on the device out of X kept resident in the
-        # caller's scope (`_fold_op`). LinearRegression keeps whole views (its
-        # TSQR route reads host X). The family's union includes them on such a
-        # route.
+        # caller's scope (`_fold_op`). LinearRegression too (lane
+        # vdf-scope-linear2; `_fold_device_ols`). The family's union includes
+        # them on such a route.
         comptime _FOLD = MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         if call[].state == 0:
             return _BOTH | MEMBER_CAN_MULTI_OUTPUT | (_FOLD if _route_slot_x(call) else 0)
         var kind = MutPointer[LinearMemberSlot, MutUntrackedOrigin](unsafe_from_address=_lookup(call[].state, False))
         if kind[].ridge:
             return _BOTH | MEMBER_CAN_MULTI_OUTPUT | (_FOLD if _route_slot_x(call) else 0)
-        return _BOTH
+        # LinearRegression (lane vdf-scope-linear2): its prediction entry and
+        # the one-entry TSQR fit read the fold slot (`_fold_device_ols`).
+        return _BOTH | (_FOLD if _route_slot_x(call) else 0)
     if operation == MEMBER_OP_NEW:
         if call[].param_count != 3 or not call[].params:
             raise Error("member ABI: a linear member takes three parameters (kind, fit_intercept, alpha)")
