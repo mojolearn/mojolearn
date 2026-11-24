@@ -90,7 +90,9 @@ into a new Array of the element type the member's OUTPUTS answers
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.member_boundary_door import member_admit_serving_labeled, member_pack, member_pack_labeled
+from bindings.member_boundary_door import (
+    member_admit_serving_labeled, member_admit_labeled, member_pack, member_pack_labeled,
+)
 from bindings.member_class_weight_unpack import member_cw_fill
 from core.member_class_weight import member_cw_start, member_cw_pending
 from bindings.member_held_door import MemberHeld, member_held, member_held_release, member_held_adopt
@@ -320,6 +322,78 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     _ = py_call(set.class_plans.append, plan)
     _ = owner.published
     return True
+
+
+#: The refusal of a class that is no Mojolearn estimator (lane mf-del8): a
+#: Mojolearn meta-estimator fits its members natively and never calls a
+#: Python estimator's own fit (AGENTS.md "No calls back into Python").
+comptime MEMBER_SET_FOREIGN = (
+    " is not a Mojolearn estimator: a Mojolearn meta-estimator fits its members natively and calls no Python"
+    " estimator's fit. Use the Mojolearn class of the same name, or scikit-learn's own meta-estimator for a"
+    " third-party estimator."
+)
+
+
+def member_set_admit_or_raise(mut set: MemberSet, estimator: PythonObject, target: Int, weights: Int,
+    row_draw: Int, row_count: Int, column_draw: Int, column_count: Int, classes: Int, context: PythonObject,
+    b: PythonObject) raises:
+    """`member_set_admit` for a caller with NO fit door behind it (lane
+    mf-del8, 2026-11-23: the meta-estimators' member fit doors are deleted):
+    the member is added, or the cause of the refusal is raised in the words
+    of whoever refuses it (`member_set_refusal`), with nothing added. One
+    extra admission runs only on that refusal path."""
+    if member_set_admit(set, estimator, target, weights, row_draw, row_count, column_draw, column_count, classes,
+                        context, b):
+        return
+    raise Error(member_set_refusal(set, estimator, weights, classes, context, b))
+
+
+def member_set_refusal(set: MemberSet, estimator: PythonObject, weights: Int, classes: Int, context: PythonObject,
+    b: PythonObject) raises -> String:
+    """The words of a `member_set_admit` that answered False (lane mf-del8),
+    in the order that function decides:
+      * no plan: a class that is not a Mojolearn estimator (a third-party or
+        a user's own Python class): MEMBER_SET_FOREIGN, naming the
+        alternatives;
+      * no member mark: a Mojolearn class whose fit takes no target (the
+        mf-member8 sweep found Cholesky only): Python's own TypeError for
+        `fit(X, y)`, as scikit-learn's meta fit raises it;
+      * the family's admission refuses: RAISED HERE in the family's own
+        words (the never-raising admission swallowed them; the raising one
+        is called again, once, on this path only);
+      * the family serves no fit for this configuration (its fill keeps no
+        member: a kind with no native fit, e.g. TSNE / HDBSCAN): a
+        NotImplementedError naming the class and the alternative;
+      * weights it does not read: scikit-learn's `_fit_single_estimator`
+        words; class codes for a family with no classifier: a ValueError;
+      * nothing left (a class_weight tail with no labels, which
+        `member_set_admit` never leaves): a RuntimeError naming the
+        invariant."""
+    var name = String(py_type(estimator).__name__)
+    var plan = prep_estimator_plan(estimator, context)
+    if plan is None:
+        return "TypeError: " + name + String(MEMBER_SET_FOREIGN)
+    if py_get(plan, "member") is None:
+        return "TypeError: " + name + ".fit() takes 2 positional arguments but 3 were given"
+    var member_context = plan["context"]
+    var fields = py_call(plan["fields_get"], estimator, py_type(estimator))
+    var labels = PythonObject(None)
+    if classes > 0:
+        labels = set.labels if set.labels is not None else py_call(b.list, py_call(b.range, PythonObject(classes)))
+    # Raises the family's own refusal words.
+    var owner = member_admit_labeled(estimator, fields, plan, member_context, b, labels)
+    if not owner.published:
+        return ("NotImplementedError: " + name + " with these parameters has no native member fit, so a Mojolearn"
+                + " meta-estimator cannot fit it. Fit " + name + " on its own, or use another estimator as the member.")
+    if not owner.plan.member.has(MEMBER_CAN_FIT):
+        return "AttributeError: '" + name + "' object has no attribute 'fit'"
+    if weights != 0 and not owner.plan.member.has(MEMBER_CAN_SAMPLE_WEIGHT):
+        return "TypeError: Underlying estimator " + name + " does not support sample weights."
+    if classes > 0 and not owner.plan.member.has(MEMBER_CAN_CLASSIFIER):
+        return ("ValueError: " + name + " is not a classifier: a classifier meta-estimator fits its members on class"
+                + " codes. Use a classifier as the member.")
+    return ("RuntimeError: member_set_admit refused " + name + " with no cause left (invariant: a class_weight"
+            + " table is always read over the caller's labels or the codes 0 .. classes-1)")
 
 
 def member_set_reads_given(set: MemberSet) -> Bool:

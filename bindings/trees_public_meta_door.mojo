@@ -32,7 +32,6 @@ from bindings.py_admitted_registry import (
     admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_deferred,
     admitted_hold_rows_of, admitted_is_held,
 )
-from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_FINITE, ARG_OUT_OF_RANGE
 from bindings.py_admitted_registry import admitted_held_index
 from bindings.admitted_meta_scope_unpack import admitted_held_verify
 from bindings.trees_public_inputs_run import trees_finite_f32
@@ -54,7 +53,7 @@ from bindings.trees_public_inputs_door import (
 from bindings.admitted_input_run import AdmittedXView
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admit_ids, admitted_words, admitted_array, admitted_vector,
-    admit_c_view, admitted_dtype, admitted_storage, admitted_unfilled,
+    admit_c_view, admitted_dtype, admitted_unfilled,
 )
 from bindings.classical_arrays_door import classical_address
 # TOMBSTONE: TreesView / _view_of_array / trees_view / trees_check_rank / trees_f32 / trees_check_sample_weight / trees_all_finite / trees_vector / trees_empty uses and _place_view (the trees admission aliases; internal Arrays are read as themselves) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -81,11 +80,12 @@ from bindings.trees_public_boost_door import (
 from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
 from bindings.member_set_door import (
-    MemberSet, member_set_admit, member_set_own_block, member_set_run, member_set_pack, member_set_release,
+    MemberSet, member_set_admit_or_raise, member_set_own_block, member_set_run, member_set_pack, member_set_release,
     member_set_notices, member_set_reads_given, member_set_given,
     member_set_resident, member_set_pins_take, member_set_pins_return,
 )
 from bindings.member_given_y_unpack import member_given_y
+from core.member_unit_classes import member_unit_classes, member_unit_recode
 from core.member_abi import (
     MemberMatrix, MEMBER_F64, MEMBER_I64,
     MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
@@ -126,12 +126,8 @@ from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.classical_pandas_door import native_pandas_exact
-from bindings.native_unit_threads_unpack import (
-    native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_jobs, NativeUnitFailure,
-    native_unit_gate_enter, native_unit_device_workers,
-)
-from bindings.native_unit_os_threads_run import native_unit_gate, native_unit_gate_leave
-from core.host_parallel import host_fp_env, host_fp_env_set, host_parallelize
+from bindings.native_unit_threads_unpack import native_unit_jobs, native_unit_device_workers
+from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from std.python._cpython import GILReleased
 from std.ffi import c_int, external_call
@@ -152,8 +148,8 @@ from bindings.trees_meta_ridge_run import RidgeMultiFit, ridge_multi_fit_run
 from bindings.py_optional import py_or_none
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_scatter, xt_device_folds, xt_transpose_f64,
-    xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows, xt_platt_fit,
-    xt_isotonic_fit, xt_platt_apply_strided, xt_isotonic_predict_strided, xt_complement_pairs,
+    xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows,
+    xt_platt_apply_strided, xt_isotonic_predict_strided, xt_complement_pairs,
     xt_ovr_assemble, xt_calibrated_proba, xt_scale,
 )
 from bindings.trees_keys_unpack import trees_keys
@@ -175,9 +171,11 @@ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 #: fb12-rows (2026-11-17), B arm of CalibratedClassifierCV's fold rows when
 #: the member cannot take a resident DeviceRows fold (or the folds run on
 #: several threads): the rows copied out of X on the host with the finite
-#: test in the same pass (`_fold_rows`), instead of `_gather`'s device round
-#: trip (X up, rows gathered, rows down) per fold side. Default off; owed A/B
-#: in docs/apple-fast/EXPERIMENTS.md (calibrated / stacking fit, NV).
+#: test in the same pass, instead of `_gather`'s device round trip (X up,
+#: rows gathered, rows down) per fold side. Default off; owed A/B in
+#: docs/apple-fast/EXPERIMENTS.md (calibrated / stacking fit, NV). Read by the
+#: typed RUN's plan (`CalFitPlan`) only: the door's own B arm `_fold_rows` went
+#: with the door fold units (lane mf-del8; recoverable at f1385f8f1c).
 comptime CALIB_FAST_HOST_FOLDS = is_defined["MOJOLEARN_CALIB_FAST_HOST_FOLDS"]()
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -456,44 +454,6 @@ def _one_col(xt: PythonObject, p: AdmittedXView, j: Int, context: PythonObject) 
     return _gather(xt, p.address, p.rows, p.cols, rows, col, context)
 
 
-def _fold_rows(xt: PythonObject, Xa: PythonObject, n: Int, d: Int, rows: PythonObject, cols: PythonObject,
-               context: PythonObject) raises -> PythonObject:
-    """Rows `rows` (an int32 Array) of the float32 C-order n x d `Xa` at
-    columns `cols`, which the caller makes as arange(d) (every column, the
-    cv folds' gather), as a new C-order Array, held for the member doors of
-    the open hold scope when finite.
-
-    The B arm under -D MOJOLEARN_CALIB_FAST_HOST_FOLDS (default off; a
-    member that takes DeviceRows reads its folds by row index out of the one
-    resident X, THE RESIDENT ROWS of xtrees/trees_calibrated_fit_run.mojo,
-    lane mf-cal7). fb12-rows (2026-11-17): a cv fold's X was `_gather` (xtrees
-    gather_f32_device on a GPU install): the WHOLE of X uploaded, the rows
-    gathered on the device and downloaded into a zero-filled Array, twice
-    per fold (train and test rows), so a k-fold CalibratedClassifierCV fit
-    moved 2k uploads and k downloads of X beside the members' own uploads of
-    their rows; each member door then scanned its fold on the host. The
-    rows are now copied out of X on the host (core/admitted_rows_gather.mojo,
-    row tasks over the cores, model selection's fold gather since R13) into
-    uninitialised storage, the copy testing the words as it goes, so a
-    finite fold is held and its members scan nothing. Same words in the same
-    order: no bit changes. The cost moved is per word (X's bytes over PCIe
-    twice and back once, against one host copy), so it holds for every shape.
-    An empty fold, or a column subset, keeps `_gather`."""
-    var r = Int(py=rows.shape[0])
-    if r < 1 or d < 1 or Int(py=cols.shape[0]) != d:
-        return _gather(xt, trees_address(Xa), n, d, rows, cols, context)
-    var out = admitted_storage(Python.tuple(r, d), "<f4", context, "C", True)
-    var dst = trees_address(out)
-    var status = admitted_gather_rows_f32[DType.int32](trees_address(Xa), n, d, trees_address(rows), r, dst)
-    _ = Xa  # keep the Python object alive through the native call above
-    _ = rows  # keep the Python object alive through the native call above
-    if status == ARG_OUT_OF_RANGE:
-        raise Error("x_trees gather: row index out of range")
-    if status == ARG_FINITE and admitted_scope_open():
-        admitted_hold(out, dst, r, d)
-    return out
-
-
 # ------------------------------------------------------------- x_trees glue
 
 
@@ -586,15 +546,6 @@ def _member_label_codes(member: PythonObject, Xa: PythonObject, context: PythonO
     return _i32_vec(meta_member_call(member, "predict", Python.tuple(Xa), context), "codes", context)
 
 
-def _fit_member(member: PythonObject, X: PythonObject, y: PythonObject, weights: PythonObject,
-                context: PythonObject) raises:
-    var keywords = Python.dict()
-    if weights is not None:
-        var nk = trees_keys()
-        py_setitem(keywords, nk[].k_sample_weight, weights)
-    _ = meta_member_call(member, "fit", Python.tuple(X, y), context, keywords)
-
-
 def _given_rows(view: MemberMatrix, rows_of: PythonObject, column: Int, unit_n: Int) raises -> List[Float64]:
     """THE GIVEN y of one unit (lane mf-tail5; bindings/member_given_y_unpack.mojo):
     the `unit_n` rows `rows_of` (int64 or int32 row numbers Array; None: every
@@ -649,19 +600,24 @@ def _given_rows(view: MemberMatrix, rows_of: PythonObject, column: Int, unit_n: 
     return out^
 
 
-def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonObject,
-                      float_targets: Bool, weights: PythonObject, counts: PythonObject, jobs: Int,
-                      context: PythonObject, givens: PythonObject) raises -> Bool:
+def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonObject, float_targets: Bool,
+               weights: PythonObject, counts: PythonObject, jobs: Int, context: PythonObject,
+               givens: PythonObject) raises:
     """Fit the unfitted `clones` as ONE NATIVE MEMBER SET (core/member_abi.mojo,
     bindings/member_set_door.mojo): every unit admitted once, the fits run
     with the GIL released on host workers (independent units in parallel,
     at most `jobs`; one worker when a member's route is a GPU), the fitted
-    states written into the clones as their own fit writes them. False, with
-    nothing published, when any clone is not a native member (its family has
-    not published, or its admit keeps the estimator's own doors) or any
-    member refuses its fit or its publication: the caller then runs its
-    `_fit_member` loop for all of them, which raises the estimator's own
-    words if the request is wrong (the fallback rule).
+    states written into the clones as their own fit writes them.
+
+    NO FIT DOOR IS LEFT (lane mf-del8, 2026-11-23; deleted: `_fit_member`,
+    the door loop this function fell back to, and `_fit_units_native`'s
+    False answers). Every refusal is raised before any fit, in the words of
+    whoever refuses: a class the set does not take (`member_set_admit_or_raise`:
+    a foreign class, a family's refused admission in its own words, a
+    configuration with no native member fit), a non-finite X or float target
+    (scikit-learn's check_array words, `admitted_finite_refuse`), a resident
+    scope that holds something else; and after it a member's refused fit or
+    publication in its own words (`member_set_run` / `member_set_pack`).
 
     Unit i: `xs[i]` its float32 C-order X Array of `d` columns (read by view:
     no copy; members of one cv fold share the fold's block), `targets[i]`
@@ -674,32 +630,65 @@ def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: P
     `MemberCall.y_given`) handed only to a member whose kind reads it, its
     rows gathered once per distinct row set.
 
-    A classifier unit whose rows lack a class of the ensemble (a cv fold) is
-    never fitted here: the set refuses before any fit
-    (bindings/member_set_door.mojo, the class-cover pass) and the door loop
-    fits the members on the classes they are given, as before, so the
-    callers' own checks (stacking's output width between folds) still fire."""
+    THE UNIT CLASSES (core/member_unit_classes.mojo): a classifier unit whose
+    rows lack a class of the ensemble (a cv fold) is fitted on the classes it
+    holds, as its fit door fitted it: its codes re-coded once per distinct
+    target onto them, its member packed labelled with the ensemble codes it
+    holds, so the callers' own checks (stacking's output width between
+    folds) still fire. That pass is the set's class-cover pass
+    (`skip_lacking`: the set makes no second one)."""
     var b = trees_builtins()
     var m = len(clones)
     if m == 0:
-        return False
+        return
     var set = MemberSet(trees_address(xs[0]), Int(py=xs[0].shape[0]), d, MEMBER_F32 if float_targets else MEMBER_I32,
                         MEMBER_I32)
     set.run.cap = jobs
     # The members keep their fitted states: this door's predict sites read
     # them (`_member_native`), so a member's first predict imports nothing.
     set.adopt = True
+    # THE UNIT CLASSES below read every classifier unit's classes once.
+    set.run.skip_lacking = counts is not None
     var given_blocks = List[List[Float64]]()  # THE GIVEN y's gathered rows (lane mf-tail5), FIT only
     var given_rows_last = PythonObject(None)
+    # THE UNIT CLASSES: per distinct target object, its held classes (empty:
+    # every class) and, for a lacking one, its re-coded codes.
+    var recoded = List[List[Int32]]()
+    var unit_labels = Python.list()  # per unit: the labels its codes stand for (None for regressors)
+    var classes_last = PythonObject(None)
+    var held_last = List[Int32]()
+    var recoded_last = -1
+    var labels_last = PythonObject(None)
     for i in range(m):  # driver-loop: over the units (admission, once each)
         var classes = 0
+        var target_address = trees_address(targets[i])
+        set.labels = PythonObject(None)
+        var labels = PythonObject(None)
         if counts is not None:
             classes = Int(py=counts[i])
+            if not (targets[i] is classes_last):
+                held_last = member_unit_classes(target_address, 0, False, Int(py=targets[i].shape[0]), classes)
+                classes_last = targets[i]
+                recoded_last = -1
+                labels_last = py_call(b.list, py_call(b.range, PythonObject(classes)))
+                if len(held_last) > 0:
+                    recoded.append(member_unit_recode(target_address, Int(py=targets[i].shape[0]), classes,
+                                                      held_last))
+                    recoded_last = len(recoded) - 1
+                    labels_last = Python.list()
+                    for c in range(len(held_last)):  # driver-loop: over the unit's held classes (a few labels)
+                        _ = py_call(labels_last.append, PythonObject(Int(held_last[c])))
+            labels = labels_last
+            if recoded_last >= 0:
+                target_address = Int(recoded[recoded_last].unsafe_ptr())
+                classes = len(held_last)
+                # A class_weight dict is read over the ensemble codes the unit holds (its fit door's labels).
+                set.labels = labels
+        _ = py_call(unit_labels.append, labels)
         var w_address = 0
         if weights[i] is not None:
             w_address = trees_address(weights[i])
-        if not member_set_admit(set, clones[i], trees_address(targets[i]), w_address, 0, 0, 0, 0, classes, context, b):
-            return False
+        member_set_admit_or_raise(set, clones[i], target_address, w_address, 0, 0, 0, 0, classes, context, b)
         member_set_own_block(set, trees_address(xs[i]), Int(py=xs[i].shape[0]))
         if float_targets and givens is not None and givens[i] is not None and member_set_reads_given(set):
             # THE GIVEN y of this unit (one gather per distinct row set: the
@@ -725,20 +714,18 @@ def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: P
                         member_set_given(set, Int(given_blocks[last].unsafe_ptr()), MEMBER_F64)
         # Inside `resident()` a member that reads a scope keeps its X block
         # on the device (bindings/member_set_door.mojo, THE RESIDENT SCOPE).
-        # A scope read that raises is the door loop's to refuse.
-        try:
-            member_set_resident(set, xs[i], context)
-        except:
-            return False
+        # A scope read that raises raises its own doors' words (nothing fitted).
+        member_set_resident(set, xs[i], context)
+    set.labels = PythonObject(None)
     # WHO REFUSES A NON-FINITE X OR y. X is held with its finite test
-    # deferred to the member doors (`_hold_deferred`), which this route does
-    # not run. A member whose kind tests its rows (`member_set_tests`,
-    # MEMBER_CAN_TEST_ROWS) refuses them in its own fit, from the pass its
-    # kernel already makes: nothing is scanned here for it, its refusal fails
-    # the set and the door loop raises the estimator's own words. For every
-    # other member each distinct X block and float target it reads is proven
-    # here (a held block's recorded verdict, else one host scan). Not finite:
-    # the door loop, whose first door refuses in the estimator's own words.
+    # deferred to the members (`_hold_deferred`). A member whose kind tests
+    # its rows (`member_set_tests`, MEMBER_CAN_TEST_ROWS) refuses them in its
+    # own fit, from the pass its kernel already makes: nothing is scanned
+    # here for it. For every other member each distinct X block and float
+    # target it reads is proven here (a held block's recorded verdict, else
+    # one host scan) and a non-finite one is refused before any fit in
+    # scikit-learn's check_array words (lane mf-del8: no fit door is left to
+    # refuse it).
     var proved_x = PythonObject(None)
     var proved_y = PythonObject(None)
     for i in range(m):  # driver-loop: over the units (one verdict per distinct block a non-testing member reads)
@@ -746,70 +733,40 @@ def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: P
             continue
         if not (xs[i] is proved_x):
             if not _x_finite(xs[i], d):
-                return False
+                member_set_release(set)
+                admitted_finite_refuse(1, String(py_type(clones[i]).__name__), "X")
             proved_x = xs[i]
         if float_targets and not (targets[i] is proved_y):
             var finite_y = trees_finite_f32(trees_address(targets[i]), Int(py=targets[i].shape[0]))
             _ = targets  # keep the Python objects alive through the scan above
             if not finite_y:
-                return False
+                member_set_release(set)
+                admitted_finite_refuse(1, String(py_type(clones[i]).__name__), "y")
             proved_y = targets[i]
-    var fitted = False
-    try:
-        member_set_run(set)   # a failing unit releases every state
-        fitted = True
-    except:
-        fitted = False
+    # A failing unit releases every state and raises its member's own words.
+    member_set_run(set)
     _ = xs  # keep the Python objects alive through the member fits above
     _ = targets
     _ = weights
     _ = givens
     _ = len(given_blocks)  # read through their addresses by the fits above (FIT only)
-    if not fitted:
-        return False
-    var packed = False
     try:
         for i in range(m):  # driver-loop: over the units (publication)
-            var codes = PythonObject(None)
-            if counts is not None:
-                codes = py_call(b.list, py_call(b.range, counts[i]))
-            _ = member_set_pack(set, i, codes, b)
-        packed = True
-    except:
-        packed = False
-    if packed:
-        # Every member's fit notices, once the whole set is published.
-        member_set_notices(set)
-    member_set_release(set)  # a failing publication leaves no state behind
+            _ = member_set_pack(set, i, unit_labels[i], b)
+    except error:
+        member_set_release(set)  # a failing publication leaves no state behind; its family's words
+        raise error^
+    # Every member's fit notices, once the whole set is published.
+    member_set_notices(set)
+    member_set_release(set)
     # THE LIFETIME RULE (core/member_abi.mojo): every block, target and weight
     # a member's fit was handed lives until its state was packed (exported,
-    # and made to own its rows when adopted) or released: to here.
+    # and made to own its rows when adopted) or released: to here. A
+    # borrowing member read its re-coded codes again at its pack.
     _ = xs
     _ = targets
     _ = weights
-    return packed
-
-
-def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonObject, float_targets: Bool,
-               weights: PythonObject, counts: PythonObject, jobs: Int, context: PythonObject,
-               givens: PythonObject) raises:
-    """Fit every unit: as one native member set when every member's family
-    has published its member entry (`_fit_units_native`), else one member
-    fit door call after the other (`_fit_member`)."""
-    if _fit_units_native(clones, xs, d, targets, float_targets, weights, counts, jobs, context, givens):
-        return
-    for i in range(len(clones)):  # driver-loop: over the units
-        _fit_member(clones[i], xs[i], targets[i], weights[i], context)
-
-
-def _fit_members_native(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets: PythonObject,
-                        float_targets: Bool, weights: PythonObject, counts: PythonObject, jobs: Int,
-                        context: PythonObject, givens: PythonObject) raises -> Bool:
-    """`_fit_units_native` for members that all read the one X (`n` x `d`)
-    and the one sample-weight Array (or None)."""
-    var m = len(clones)
-    return _fit_units_native(clones, _repeat(X, m), d, targets, float_targets, _repeat(weights, m), counts, jobs,
-                             context, givens)
+    _ = len(recoded)
 
 
 def _fit_members(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets: PythonObject, float_targets: Bool,
@@ -1192,27 +1149,22 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
     for i in range(m):  # driver-loop: over members
         _ = py_call(clones.append, _clone(active.ests[i], context))
     # Native members read typed targets: the class codes, or (regressors) y
-    # as float32 words. A y the float32 admission refuses keeps the member
-    # fit doors, which refuse it in their own words.
-    var native = False
+    # as float32 words (lane mf-del8: no member fit door is left; a y the
+    # float32 admission refuses raises its words, a y whose length is not
+    # X's scikit-learn's check_consistent_length words, before any fit).
     if classifier:
         var k = len(_attr(model, PythonObject("classes_"), Python.list()))
-        native = _fit_members_native(clones, Xa, _rows(Xa), _cols(Xa), _repeat(target, m), False, weights,
-                                     _repeat(PythonObject(k), m), jobs, context, PythonObject(None))
+        _fit_members(clones, Xa, _rows(Xa), _cols(Xa), _repeat(target, m), False, weights,
+                     _repeat(PythonObject(k), m), jobs, context, PythonObject(None))
     else:
-        var y32 = PythonObject(None)
-        try:
-            y32 = _f32_array(y, 1, "y", context)
-        except:
-            y32 = PythonObject(None)
-        if y32 is not None and _rows(y32) == _rows(Xa):
-            # THE GIVEN y (lane mf-tail5): y as given, every row, to a member that reads it
-            native = _fit_members_native(clones, Xa, _rows(Xa), _cols(Xa), _repeat(y32, m), True, weights,
-                                         PythonObject(None), jobs, context,
-                                         _repeat(Python.tuple(y, PythonObject(None), PythonObject(-1)), m))
+        var y32 = _f32_array(y, 1, "y", context)
+        if _rows(y32) != _rows(Xa):
+            raise Error("ValueError: Found input variables with inconsistent numbers of samples: ["
+                        + String(_rows(Xa)) + ", " + String(_rows(y32)) + "]")
+        # THE GIVEN y (lane mf-tail5): y as given, every row, to a member that reads it
+        _fit_members(clones, Xa, _rows(Xa), _cols(Xa), _repeat(y32, m), True, weights, PythonObject(None), jobs,
+                     context, _repeat(Python.tuple(y, PythonObject(None), PythonObject(-1)), m))
     for i in range(m):  # driver-loop: over members
-        if not native:
-            _fit_member(clones[i], Xa, target, weights, context)
         _ = py_call(fitted.append, clones[i])
     _set(model, "named_estimators_", _named(active.names, fitted))
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
@@ -2077,8 +2029,8 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
         _ = py_call(columns.append, yj)
         _ = py_call(clones.append, _clone(est, context))
         _ = py_call(column_given.append, Python.tuple(y, PythonObject(None), PythonObject(j)))
-    # The columns are independent members: one native member set (parallel)
-    # when the family has published, else one fit door call per column.
+    # The columns are independent members: one native member set (parallel;
+    # a member the set does not take is refused in its refuser's words).
     _fit_members(clones, Xa, n, _cols(Xa), columns, True, weights, PythonObject(None), jobs, context, column_given)
     for j in range(len(clones)):  # driver-loop: over the output columns (one member each)
         _ = py_call(fitted.append, clones[j])
@@ -2881,62 +2833,6 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
-def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, codes: PythonObject,
-                     which: List[Int], context: PythonObject) raises -> PythonObject:
-    """`CalibratedClassifierCV._fit_calibrators`: one calibrator per class
-    column of `which` (empty: every column; lane mf-cal3b, THE PLACEMENT
-    RULE's calibrated columns), the column and its 0/1 target made natively."""
-    var n = _rows(S)
-    var c = _cols(S)
-    var nk = trees_keys()
-    var sigmoid = String(_attr(model, nk[].k_method, PythonObject("sigmoid"))) == "sigmoid"
-    var St = S
-    var glue = _xr(xt)
-    if c > 1:
-        St = admitted_vector(c * n, "<f8", context)
-        _ = xt_transpose_f64(glue, trees_address(S), trees_address(St), n, c)
-        _ = St  # keep the Python object alive through the native call above
-    var yj = admitted_vector(n, "<i4", context)
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var y64 = Optional[PythonObject]()
-    if not sigmoid:
-        y64 = admitted_vector(n, "<f8", context)
-    var cals = Python.list()
-    var count = len(which) if len(which) > 0 else c
-    for q in range(count):  # driver-loop: over the calibrated class columns (one calibrator each)
-        var j = which[q] if len(which) > 0 else q
-        var cls = 1 if c == 1 else j
-        var f = trees_address(St) + 8 * j * n
-        _ = St  # keep the Python object alive through the native call above
-        _ = xt_indicator_codes(glue, trees_address(codes), trees_address(yj),
-                               trees_address(y64.value()) if Bool(y64) else 0, n, cls)
-        _ = yj  # keep the Python object alive through the native call above
-        _ = y64  # keep the Python object alive through the native call above
-        if sigmoid:
-            var ab = admitted_vector(2, "<f8", context)
-            _ = xt_platt_fit(glue, f, trees_address(yj), trees_address(ab), n)
-            _ = ab  # keep the Python object alive through the native call above
-            _ = yj  # keep the Python object alive through the native call above
-            _ = St  # keep the Python object alive through the native call above
-            _ = py_call(cals.append, Python.tuple(PythonObject("sigmoid"),
-                                                  Python.tuple(PythonObject(_f64_word(ab, 0)), PythonObject(_f64_word(ab, 1)))))
-        else:
-            var kx = admitted_vector(n, "<f8", context)
-            var ky = admitted_vector(n, "<f8", context)
-            var m = xt_isotonic_fit(glue, f, trees_address(py_or_none(y64)), trees_address(kx), trees_address(ky), n)
-            _ = ky  # keep the Python object alive through the native call above
-            _ = kx  # keep the Python object alive through the native call above
-            _ = y64  # keep the Python object alive through the native call above
-            _ = St  # keep the Python object alive through the native call above
-            _ = py_call(cals.append, Python.tuple(PythonObject("isotonic"),
-                                                  Python.tuple(_copy_block(kx, 0, m, "<f8", context),
-                                                               _copy_block(ky, 0, m, "<f8", context), PythonObject(m))))
-            _ = ky  # keep the Python object alive through the native call above
-            _ = kx  # keep the Python object alive through the native call above
-            _ = y64  # keep the Python object alive through the native call above
-    return cals
-
-
 def _calibrated_probs(model: PythonObject, xt: PythonObject, e: PythonObject, cals: PythonObject, Xa: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     """`CalibratedClassifierCV._calibrated`: the flat (n, k) probabilities of
@@ -2975,200 +2871,6 @@ def _calibrated_probs(model: PythonObject, xt: PythonObject, e: PythonObject, ca
     _ = xt_normalize_rows(glue, trees_address(acc), n, k)
     _ = acc  # keep the Python object alive through the native call above
     return acc
-
-
-struct _CalUnits(Movable):
-    """CalibratedClassifierCV's DOOR folds as units: fold f's member clone,
-    fit, test scores and (ensemble) calibrators, written to `results[f]`.
-    Every field is read and written with the GIL held. Every fold of a base
-    the native member set serves is the typed RUN's (`_cal_native`: lanes
-    mf-cal, mf-cal2, and mf-cal3, which moved the one-class folds and the
-    refusals there too; lane mf-cal7 moved the resident DeviceRows route,
-    GaussianNB and the discriminant classifiers, a measured winner kept as a
-    route of that RUN: THE RESIDENT ROWS, xtrees/trees_calibrated_fit_run.mojo,
-    and deleted these units' DeviceRows fold sides). These units fit the
-    folds of one kind of base only: a base the set does not serve
-    (`_CAL_NOT_MEMBER`: a class with no
-    member mark, or a META class whose admission keeps its door (since lane
-    mf-search4 GridSearchCV / RandomizedSearchCV and MultiOutputClassifier
-    are META kinds, see core/ensemble_member.mojo; since lane mf-search4b a
-    search keeps its door only for its own `device`, a splitter other than
-    our KFold / StratifiedKFold, or a scorer the typed RUN does not serve
-    (make_scorer's, average_precision, neg_brier_score, top_k_accuracy, a
-    pos_label that is not a label); since lane mf-split4 an AdaBoostClassifier
-    with a random-splitter DecisionTree or class_weight base is a META
-    member too),
-    CategoricalNB's door included where its kind is not admitted, a
-    meta-estimator base whose META admit keeps its door (since lane
-    mf-meta3b Voting, Stacking, OneVsRest, CalibratedClassifierCV and
-    Bagging bases are META members, since lane mf-meta3c the batched Bagging
-    route and metas nested at any depth too; since lane mf-split4b a
-    Calibrated base's index-list or KFold / StratifiedKFold cv, a Bagging
-    tree's class_weight on the per-member route and an AdaBoost base with
-    sample weights too, and a user's own splitter object is refused at the
-    admission; since lane mf-split5 every other of our splitters as a cv
-    too; still the door's: a
-    splitter setting the door reads in
-    another form (a long double shuffle size)), a configuration its family's
-    admit leaves to the estimator's door (a class_weight that is neither
-    None, 'balanced' nor an exact dict, which that door refuses in its
-    words; a GP kernel the member cannot address, ...), or a member kind
-    with no native scoring call; a hard VotingClassifier is refused natively
-    in scikit-learn's words, lane mf-meta3b). Lane mf-adm3: class_weight
-    'balanced' and dict (logistic, LinearSVC, SVC, SGD*, RidgeClassifier,
-    LogisticRegressionCV) and kernel='precomputed' (SVC, KernelRidge) are
-    native members now. Those folds are independent units whose fit doors
-    release the GIL, on n_jobs threads.
-    REMOVED (lane mf-cal3): `only()` / `todo` and the per-fold native fit
-    retry (`k`): no fold of a served base reaches a door now. Lane mf-cal3b:
-    the Host* classifiers (HostSVC, HostKNeighborsClassifier,
-    HostGaussianProcessClassifier) are native members now, on the host image
-    their own fit binds; before they had no plan and were refused before
-    any fold ("requires a mojolearn estimator"). Every unit places its
-    scores by THE PLACEMENT RULE (`_cal_scores`), as the native RUN does."""
-    var model: PythonObject
-    var xt: PythonObject
-    var base: PythonObject
-    var Xa: PythonObject
-    var splits: PythonObject
-    var codes: PythonObject
-    var cols: PythonObject
-    var n: Int
-    var d: Int
-    var ensemble: Bool
-    var context: PythonObject
-    var n_units: Int
-    var next: Int
-    var stop: Bool
-    var results: PythonObject
-    var failure: NativeUnitFailure
-    var fp_env: UInt64
-    # The x_trees gathers, scores and calibrators of a unit run one unit at
-    # a time (they share the owner's `xt` program state and can release the
-    # GIL inside); only the member fits overlap.
-    var gate: List[Int64]
-
-    def __init__(out self, model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject,
-                 splits: PythonObject, codes: PythonObject, cols: PythonObject, n: Int, d: Int, ensemble: Bool,
-                 context: PythonObject) raises:
-        self.model = model
-        self.xt = xt
-        self.base = base
-        self.Xa = Xa
-        self.splits = splits
-        self.codes = codes
-        self.cols = cols
-        self.n = n
-        self.d = d
-        self.ensemble = ensemble
-        self.context = context
-        self.n_units = len(splits)
-        self.next = 0
-        self.stop = False
-        self.results = Python.list()
-        for _ in range(self.n_units):  # driver-loop: over the cv folds (result slots)
-            _ = py_call(self.results.append, PythonObject(None))
-        self.failure = NativeUnitFailure()
-        self.fp_env = host_fp_env()
-        self.gate = native_unit_gate()
-
-    def fold_side(self, idx: PythonObject) raises -> PythonObject:
-        """Fold side `idx` (cv row indices) of X for the member: the host
-        copy (B arm) or `_gather`."""
-        comptime if CALIB_FAST_HOST_FOLDS:
-            return _fold_rows(self.xt, self.Xa, self.n, self.d, idx, self.cols, self.context)
-        return _gather(self.xt, trees_address(self.Xa), self.n, self.d, idx, self.cols, self.context)
-
-    def _enter(mut self):
-        native_unit_gate_enter(self.gate)
-
-    def unit(mut self, f: Int) raises:
-        var tr = self.splits[f][0]
-        var te = self.splits[f][1]
-        var e = _clone(self.base, self.context)
-        # The fold's rows are held for its member doors in a scope of this
-        # unit (dropped when the unit ends, so no fold's matrices outlive
-        # it); a hold belongs to the thread that opened the scope.
-        var mark = admitted_scope_begin()
-        try:
-            self._enter()
-            var xtr = PythonObject(None)
-            var ytr = PythonObject(None)
-            try:
-                xtr = self.fold_side(tr)
-                ytr = _gather_codes(self.xt, self.codes, tr, self.context)
-            finally:
-                native_unit_gate_leave(self.gate)
-            # The member's fit door (a base the native set does not serve).
-            # Outside the gate: the fits of different folds overlap, as the
-            # door fits do.
-            _fit_member(e, xtr, ytr, PythonObject(None), self.context)
-            self._enter()
-            try:
-                var Xte = self.fold_side(te)
-                var which = List[Int]()
-                var scores = _cal_scores(self.model, self.xt, e, Xte, self.context, self.ensemble, which,
-                                         Int(py=te.shape[0]))
-                if self.ensemble:
-                    var cals = _fit_calibrators(self.model, self.xt, scores,
-                                                _gather_codes(self.xt, self.codes, te, self.context), which,
-                                                self.context)
-                    py_setitem(self.results, PythonObject(f), Python.tuple(e, cals))
-                else:
-                    # the scores and the member's class count (THE PLACEMENT RULE's warning, in fold order)
-                    var nk = trees_keys()
-                    var held = len(_attr(e, nk[].k_classes_, Python.list()))
-                    py_setitem(self.results, PythonObject(f), Python.tuple(scores, PythonObject(held)))
-            finally:
-                native_unit_gate_leave(self.gate)
-        finally:
-            admitted_scope_end(mark)
-        _ = self.Xa  # keep the Python object alive through the native calls above
-
-    def drain(mut self):
-        while True:  # driver-loop: over the cv folds, pulled in order under the GIL
-            if self.stop or self.next >= self.n_units:
-                return
-            var u = self.next
-            self.next += 1
-            try:
-                self.unit(u)
-            except error:
-                self.stop = True
-                self.failure.record(u, error)
-
-
-def _cal_units_thread(arg: Int) abi("C") -> Int:
-    try:
-        var state = native_unit_gil_enter()
-        var run = MutPointer[_CalUnits, MutUntrackedOrigin](unsafe_from_address=arg)
-        var saved = host_fp_env()
-        host_fp_env_set(run[].fp_env)
-        run[].drain()
-        host_fp_env_set(saved)
-        native_unit_gil_leave(state)
-    except:
-        pass
-    return 0
-
-
-def _cal_units_run(mut units: _CalUnits, jobs: Int) raises:
-    """Fold 0 alone on the calling thread (lazy process state is created
-    single-threaded), the rest on min(jobs, folds - 1) threads; one at a time
-    when the member fits run on a GPU (`native_unit_device_workers`)."""
-    var workers = native_unit_device_workers(min(jobs, units.n_units - 1), units.context)
-    if units.n_units > 1 and workers > 1:
-        units.next = 1
-        try:
-            units.unit(0)
-        except error:
-            units.stop = True
-            units.failure.record(0, error)
-        if not units.stop:
-            native_unit_threads_run(_cal_units_thread, Int(UnsafePointer(to=units)), workers)
-    else:
-        units.drain()
-    units.failure.reraise()
 
 
 def _cal_rows_call(obj: PythonObject, op: String, args: PythonObject, mctx: PythonObject) raises -> PythonObject:
@@ -3242,12 +2944,11 @@ def _cal_pack(res: CalFitOut, first: Int, count: Int, context: PythonObject) rai
     return cals
 
 
-#: `_cal_native` answers: the fit is done; the base is not a member this
-#: route serves (its fit doors fit every fold, `_CalUnits`). Every other
-#: outcome is raised in the words the estimator's own fit raises (lane
-#: mf-cal3 removed `_CAL_DOORS`, the fallback to the door units).
-comptime _CAL_DONE = 0
-comptime _CAL_NOT_MEMBER = 1
+# TOMBSTONE (plain door path, no define): `_CalUnits`, `_cal_units_thread`,
+# `_cal_units_run`, `_CAL_DONE` and `_CAL_NOT_MEMBER` (CalibratedClassifierCV's
+# door fold units and the answer that sent a base to them) deleted 2026-11-23
+# by lane mf-del8: every base is the typed RUN's (`_cal_native`), or refused
+# there in its refuser's words; code recoverable at f1385f8f1c.
 
 
 def _cal_fit_words(set: MemberSet, plan: CalFitPlan, u: Int) -> String:
@@ -3257,7 +2958,7 @@ def _cal_fit_words(set: MemberSet, plan: CalFitPlan, u: Int) -> String:
     ABI): GaussianProcessClassifier (bindings/gp_classifier_native_door.mojo,
     after scikit-learn's _gpc.py: "... got 1 class (only class <label> is
     present)"), whose member says "... got 1 class"; the label is the fold's
-    one ensemble code, the y its fit door was given (`_CalUnits.unit`
+    one ensemble code, the y its fit door was given (the deleted door units
     passed the fold's codes)."""
     var words = set.run.errors[u].copy()
     if (u < plan.folds() and len(plan.fold_classes[u]) == 1 and set.run.plans[u].family == MEMBER_FAMILY_GP
@@ -3290,17 +2991,18 @@ def _cal_marker(base: PythonObject, classes: PythonObject, context: PythonObject
 
 def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject, n: Int, d: Int,
                 k: Int, codes: PythonObject, classes: PythonObject, splits: PythonObject, ensemble: Bool, jobs: Int,
-                pairs: PythonObject, context: PythonObject) raises -> Int:
+                pairs: PythonObject, context: PythonObject) raises:
     """CalibratedClassifierCV.fit as UNPACK / RUN / PACK over ONE native
     member set (lanes mf-cal, mf-cal2 and mf-cal3, 2026-11-23;
-    xtrees/trees_calibrated_fit_run.mojo module note). _CAL_DONE with
-    `pairs` filled in fold order exactly as the door's fold units filled
-    it; _CAL_NOT_MEMBER, nothing appended and no state left behind, when
-    the base is not a native member this route serves (its family has no
-    member entry, its admit keeps the doors, or its kind has no native call
-    for the scores: the caller's door units fit every fold). Every other
-    outcome RAISES, in the words the estimator's own fit raises (lane
-    mf-cal3: no door path is left behind a refusal):
+    xtrees/trees_calibrated_fit_run.mojo module note), `pairs` filled in
+    fold order exactly as the door's fold units filled it. Every other
+    outcome RAISES, nothing appended and no state left behind (lane mf-cal3;
+    lane mf-del8 deleted the door fold units, so no base is left to them):
+      * a base the set does not take (`member_set_admit_or_raise`: a foreign
+        class, its family's refused admission in its own words, a
+        configuration with no native member fit), and a base whose member
+        kind has no native call for the scores its class answers: before any
+        fit, in those words;
       * a fold with no train or no test rows (a user's cv), before any fit:
         scikit-learn's check_array words, the ones its fold's fit or
         predict raises ("Found array with 0 sample(s) ...");
@@ -3371,8 +3073,7 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
             var tr = splits[u][0]
             draw = trees_address(tr)
             count = Int(py=tr.shape[0])
-        if not member_set_admit(set, e, codes_address, 0, draw, count, 0, 0, k, context, b):
-            return _CAL_NOT_MEMBER
+        member_set_admit_or_raise(set, e, codes_address, 0, draw, count, 0, 0, k, context, b)
         if marker >= 0:
             var reads = ensemble or u == folds
             if reads:
@@ -3390,7 +3091,7 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     # `connect_members`: no method recipes, e.g. the explicit Host* classes of
     # lane mf-cal3b) has an empty method table, so `prep_estimator_has` read
     # "no decision_function" for HostSVC and the predict_proba scoring of a
-    # probability=False SVC sent the fit to `_CalUnits`, whose plan refused it
+    # probability=False SVC sent the fit to the door units, whose plan refused it
     # ("schema is pending migration"; gate 5645984a8f mf_cal svch rows). Its
     # methods are its member's (as bindings/trees_agnostic_native_door.mojo
     # `_member_only` reads them): the member kind's DECISION bit answers
@@ -3420,7 +3121,16 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
             # in its words (the door units fitted every fold and then failed).
             raise Error("AttributeError: " + String(py_type(base).__name__)
                         + " has none of the following attributes: decision_function, predict_proba.")
-        return _CAL_NOT_MEMBER  # its kind has no native call for the scores: its fit doors fit every fold
+        # Its class answers the scoring method but its member kind has no native
+        # call for it (lane mf-del8: the door fold units that fitted and scored
+        # such a base are deleted). No member kind of a classifier family is
+        # known to lack it (every classifier family's mask carries
+        # MEMBER_CAN_DECISION or MEMBER_CAN_PREDICT_PROBA as its class
+        # answers): refused natively, naming the gap, never answered by a
+        # Python call.
+        raise Error("NotImplementedError: CalibratedClassifierCV: " + String(py_type(base).__name__) + "'s native member has no "
+                    + ("decision_function" if decision else "predict_proba")
+                    + " call, which the calibration scores read. Use a base whose member serves it.")
     # A fold with no train or no test rows (only a user's cv iterable makes
     # one): scikit-learn's check_array refusal, raised by that fold's
     # `estimator.fit` (no train rows) or its `decision_function` /
@@ -3429,7 +3139,7 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     for f in range(folds):  # driver-loop: over the cv folds (two row counts each)
         if Int(py=splits[f][0].shape[0]) == 0 or Int(py=splits[f][1].shape[0]) == 0:
             admitted_rows_shape(0, d, String(py_type(base).__name__))
-    # WHO REFUSES A NON-FINITE X (`_fit_units_native`): a member whose kind
+    # WHO REFUSES A NON-FINITE X (as in `_fit_units`): a member whose kind
     # tests its rows refuses them itself; for any other X's verdict is read
     # ONCE here (every fold's rows are rows of X; the door scanned each fold)
     # and a non-finite X is refused in its doors' words (mf-cal2: the door
@@ -3534,9 +3244,8 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     if ensemble:
         for f in range(folds):  # driver-loop: over the cv folds (the pairs, in fold order)
             _ = py_call(pairs.append, Python.tuple(clones[f], _cal_pack(res, res.first[f], res.count[f], context)))
-        return _CAL_DONE
+        return
     _ = py_call(pairs.append, Python.tuple(clones[folds], _cal_pack(res, res.final_first, res.final_count, context)))
-    return _CAL_DONE
 
 
 def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -3569,16 +3278,11 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     var splits = _splits(xt, _attr(model, nk[].k_cv, PythonObject(None)), X, y, n, labels.codes, not ensemble, k, context)
     var pairs = Python.list()
     _set(model, "calibrated_classifiers_", pairs)
-    # Lane p3-msel-parallel-and-process-pool: the folds are independent
-    # units (_CalUnits) on n_jobs threads; each writes its own slot, so the
-    # pairs and the out-of-fold scores keep the fold order. REMOVED: the two
-    # serial fold loops and the n_jobs refusal. Same member fits, gathers and
-    # calibrators per fold: no bits change.
+    # The folds are independent units of ONE typed RUN (`_cal_native`,
+    # xtrees/trees_calibrated_fit_run.mojo, lane mf-cal; lane mf-del8 deleted
+    # the door fold units `_CalUnits`, so every base is fitted, scored and
+    # calibrated there, or refused there in its refuser's words).
     var jobs = native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), "CalibratedClassifierCV")
-    # Lane mf-cal (2026-11-23): a base whose family has a member entry is
-    # fitted, scored and calibrated as ONE typed RUN (`_cal_native`,
-    # xtrees/trees_calibrated_fit_run.mojo); the units below fit only a base
-    # it does not serve (`_CAL_NOT_MEMBER`, `_CalUnits`).
     # THE RESIDENT ROWS (lane mf-cal7; fb12-rows 2026-11-17, a measured
     # winner kept as a route of that RUN): for a base whose class takes
     # DeviceRows (the naive Bayes and discriminant classifiers, GaussianNB
@@ -3597,47 +3301,12 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     if _cal_rows_resident(base, Xa, n, d, context):
         mctx = prep_native_context(context)
         scope = _cal_scope_open(mctx)
-    var served = False
     try:
-        # Raises every refusal of a served base in its estimator's words
-        # (lane mf-cal3); _CAL_NOT_MEMBER: a base it does not serve, whose
-        # fit doors fit every fold below.
-        served = _cal_native(model, xt, base, Xa, n, d, k, labels.codes, labels.classes, splits, ensemble, jobs, pairs,
-                             context) == _CAL_DONE
+        # Raises every refusal in its refuser's words (lanes mf-cal3, mf-del8).
+        _cal_native(model, xt, base, Xa, n, d, k, labels.codes, labels.classes, splits, ensemble, jobs, pairs, context)
     finally:
         if scope is not None:
             _cal_scope_close(scope, mctx)
-    if served:
-        _set(model, "n_features_in_", PythonObject(d))
-        _set(model, "_fitted", PythonObject(True))
-        return model
-    var cols = _arange(xt, d, context)
-    var units = _CalUnits(model, xt, base, Xa, splits, labels.codes, cols, n, d, ensemble, context)
-    _cal_units_run(units, jobs)
-    if ensemble:
-        for f in range(len(splits)):  # driver-loop: over the cv folds (results only)
-            _ = py_call(pairs.append, units.results[f])
-    else:
-        var c = 1 if k == 2 else k
-        var S = _zeros(n * c, context)
-        for f in range(len(splits)):  # driver-loop: over the cv folds (placing each fold's scores)
-            var held = Int(py=units.results[f][1])
-            if held != k:
-                # scikit-learn's `_enforce_prediction_order` warning (lane mf-cal3b)
-                msel_warn(cal_lacking_warning(held, k), native_loaded_module("builtins").RuntimeWarning,
-                          prep_native_context(context))
-            var blk = admit_f32(units.results[f][0], 2, "scores", context, finite=False)
-            _ = _place(xt, S, n, c, blk.view(), splits[f][1], 0)
-            _ = blk^
-        var e = _clone(base, context)
-        # The one member over every row sees every class (the codes were
-        # encoded from this y): a native member fit when its family has
-        # published, else its fit door. (A fold of `_CalUnits` may lack a
-        # class: that fold's member takes its fit door, `_CalUnits.unit`.)
-        _fit_members(_repeat(e, 1), Xa, n, d, _repeat(labels.codes, 1), False, PythonObject(None),
-                     _repeat(PythonObject(k), 1), jobs, context, PythonObject(None))
-        _ = py_call(pairs.append, Python.tuple(e, _fit_calibrators(model, xt, trees_reshape(S, Python.tuple(n, c), context),
-                                                                   labels.codes, List[Int](), context)))
     _set(model, "n_features_in_", PythonObject(d))
     _set(model, "_fitted", PythonObject(True))
     return model
