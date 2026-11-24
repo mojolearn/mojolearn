@@ -45,7 +45,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_attr import py_attr
 from bindings.py_balanced import py_get
 from bindings.metrics_keys_unpack import metrics_keys
-from bindings.metrics_program_door import metric_route_open
+from bindings.metrics_program_door import MetricDoorProg, metric_route_open
 from core.native_descriptor_call import native_descriptor_call
 from core.cast_in import CAST_KIND_SIGNED
 from metrics.slot_ops import MS_ENCODE
@@ -251,3 +251,22 @@ def metric_resident_labels(values: PythonObject, mode: PythonObject, caller: Str
     _ = got^  # the view's buffer is read by address inside the step above
     _ = values
     return MetricResidentLabels(state^, binding, codes, n, classes)
+
+
+def metric_pin_codes(mut prog: MetricDoorProg, codes: Tuple[PythonObject, Int], owner: PythonObject):
+    """Pin a laid-out codes input: the device slot (`codes[1]` >= 0) read in
+    place with its label vector `owner`, else the host codes as this call's
+    temporary (`pin(x, False)`)."""
+    if codes[1] >= 0:
+        prog.pin_resident(owner, codes[1])
+    else:
+        prog.pin(codes[0], False)
+
+
+def metric_put_codes(mut prog: MetricDoorProg, codes: Tuple[PythonObject, Int], owner: PythonObject,
+                     n: Int) raises -> Int:
+    """`put_temp(codes[0])`, or `put_resident(owner, n, codes[1])` for the
+    `n` device code words: the input's offset."""
+    if codes[1] >= 0:
+        return prog.put_resident(owner, n, codes[1])
+    return prog.put_temp(codes[0])
