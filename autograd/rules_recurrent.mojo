@@ -922,6 +922,7 @@ struct AutogradRnnStep(RnnStep):
 def rnn_predict[E: Exec](
     mut ex: E, net: Net, task: Int, X: FP, N: Int, T: Int, Pin: FP,
     dst: FP, seq: FP, want_seq: Bool, chunk: Int, resident: Bool = False, lengths: Optional[FP] = None,
+    x_device: Bool = False,
 ) raises:
     """dst [N, O]: the head's output (task MSE) or its softmax (task CE);
     with want_seq, seq [N, T, H] is the top layer's h_1..h_T batch-first.
@@ -944,8 +945,15 @@ def rnn_predict[E: Exec](
         ex.upload(dL, lengths.value(), N)
         dL_opt = Optional[FP](dL)
     var bmax = chunk if chunk < N else N
-    var dX = ex.alloc(N * T * net.D)
-    ex.upload(dX, X, N * T * net.D)
+    # Lane vdf-scope-neural: `x_device`, X is already this executor's memory
+    # (a fold the member store took on the device), read in place: the same
+    # words, no upload; read only (the chunks gather from it), never freed here.
+    var dX: FP
+    if x_device:
+        dX = X
+    else:
+        dX = ex.alloc(N * T * net.D)
+        ex.upload(dX, X, N * T * net.D)
     # perf3-seq-neural: the identity row order is built on the executor
     # (OP_SEQ_IOTA, the fit's unshuffled order: p0[t] = t, exact below 2^24,
     # N < 2^24 is admitted by rnn_predict_impl), not by a host loop over the

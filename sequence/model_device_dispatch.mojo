@@ -25,7 +25,7 @@ from core.label_cast_device import device_unique_inverse_cast
 from core.shared_slot import SharedSlot
 
 
-def seq_x_slot_resolve(mut r: NeuralModelRequest) raises:
+def seq_x_slot_resolve(op: Int, mut r: NeuralModelRequest) raises:
     """Lane vdf-scope-neural: an MLP_FIT / MLP_PREDICT whose X word is
     `-(slot + 1)` reads slot `slot` of the image's member store
     (sequence/seq_member_store.mojo) in place: the word becomes the slot's
@@ -33,9 +33,16 @@ def seq_x_slot_resolve(mut r: NeuralModelRequest) raises:
     `r.x_device` is set. Any other X word is left as it is."""
     if len(r.addresses) == 0 or r.addresses[0] >= 0:
         return
-    if len(r.options) < 2:
-        raise Error("native model: a device-store X needs the row and column words")
-    var words = r.options[0] * r.options[1]
+    # MLP: ip = [N, D, ...]; RNN: ip = [cell, D, H, L, O, task, N, T, ...].
+    var words = 0
+    if op == RNN_FIT or op == RNN_PREDICT:
+        if len(r.options) < 8:
+            raise Error("native model: a device-store X needs the row, step and feature words")
+        words = r.options[6] * r.options[7] * r.options[1]
+    else:
+        if len(r.options) < 2:
+            raise Error("native model: a device-store X needs the row and column words")
+        words = r.options[0] * r.options[1]
     r.addresses[0] = seq_member_store_ptr(-r.addresses[0] - 1, words)
     r.x_device = True
 
@@ -161,8 +168,8 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
                 # other thread frees it in between (ne1-a-cluster-spectral).
                 # Lane vdf-scope-neural: an MLP X held in the member store
                 # (a fold taken on the device) is read in place.
-                if op == MLP_FIT or op == MLP_PREDICT:
-                    seq_x_slot_resolve(auxiliary)
+                if op == MLP_FIT or op == MLP_PREDICT or op == RNN_FIT or op == RNN_PREDICT:
+                    seq_x_slot_resolve(op, auxiliary)
                 var pinned = 0
                 if op == RNN_PREDICT:
                     pinned = seq_resident_resolve(ex, auxiliary.addresses, 4)

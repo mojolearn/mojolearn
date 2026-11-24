@@ -116,9 +116,9 @@ struct NeuralModelRequest(Movable):
 
 def neural_model_execute[E: Exec](mut ex: E, op: Int, r: NeuralModelRequest) raises -> Int:
     if op == RNN_FIT:
-        return rnn_fit_impl(ex, r.addresses, r.options, r.floats)
+        return rnn_fit_impl(ex, r.addresses, r.options, r.floats, r.x_device)
     if op == RNN_PREDICT:
-        return rnn_predict_impl(ex, r.addresses, r.options)
+        return rnn_predict_impl(ex, r.addresses, r.options, r.x_device)
     if op == MLP_FIT:
         return mlp_fit_impl(ex, r.addresses, r.options, r.floats, r.x_device)
     if op == MLP_PREDICT:

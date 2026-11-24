@@ -119,7 +119,8 @@ def rnn_lengths_of(addr: Int, N: Int, T: Int, operation: String) raises -> Optio
     return lens
 
 
-def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64]) raises -> Int:
+def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64],
+                          x_device: Bool = False) raises -> Int:
     """addrs = [X, y, params (in/out), losses, lrs (, lengths)];
     ip = [cell, D, H, L, O, task, N, T, epochs, bs, opt_kind, opt_flags,
     shuffle, seed_lo, seed_hi]; fp = [f1, f2, eps, weight_decay, f7,
@@ -170,15 +171,17 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
     # the backward runs on the tape (AutogradRnnStep)
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
+    if x_addr < 0 and not x_device:
+        raise Error("rnn_fit: a device-store X needs the device image's dispatch")
     rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
                              fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5), lengths,
-                             loop_words)
+                             loop_words, x_device)
     if profile:
         ag_profile_fit_end("rnn_fit cell=" + String(ival(ip, 0)))
     return net.n_params()
 
 
-def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
+def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], x_device: Bool = False) raises -> Int:
     """addrs = [X, params, out, seq (ignored unless want_seq)], optionally
     followed by the resident-block words (sequence/perf3_seq_resident_words.mojo);
     ip = [cell, D, H, L, O, task, N, T, chunk, want_seq (, lengths address:
@@ -200,8 +203,10 @@ def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
         raise Error("rnn_predict: N, T and chunk must be >= 1 and N < 2^24")
     var seq = fptr(seq_addr, "seq") if want else fptr(out_addr, "out")
     var lengths = rnn_lengths_of(ip[10] if len(ip) == 11 else 0, N, T, "predict")
+    if x_addr < 0 and not x_device:
+        raise Error("rnn_predict: a device-store X needs the device image's dispatch")
     rnn_predict(ex, net, task, fptr(x_addr, "X"), N, T, fptr(p_addr, "params"),
-                fptr(out_addr, "out"), seq, want, chunk, resident, lengths)
+                fptr(out_addr, "out"), seq, want, chunk, resident, lengths, x_device)
     return N * net.O
 
 
