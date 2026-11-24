@@ -6,7 +6,7 @@ from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from x_metrics.descriptor_schema import (
     METRICS_PROGRAM_ABI, MP_MODE, MP_VENDOR, MP_CAPABILITIES, MP_RUN,
-    MP_RUN_OUT, MP_RUN_RANGES, metrics_check_spans,
+    MP_RUN_OUT, MP_RUN_RANGES, MP_DEV_PUT, MP_DEV_FREE, MP_DEV_TAKE_ROWS, MP_DEV_LIVE, metrics_check_spans,
 )
 from x_metrics.host.program import run_program_host
 from x_metrics.host.out_ranges_impl import check_out_ranges
@@ -21,6 +21,12 @@ def metrics_program_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             value = GLOBAL_NUMERIC_MODE
         elif operation == MP_VENDOR or operation == MP_CAPABILITIES:
             value = 0
+        elif operation == MP_DEV_LIVE:
+            # no device store on the host column: nothing is ever resident
+            value = 0
+        elif operation == MP_DEV_PUT or operation == MP_DEV_FREE or operation == MP_DEV_TAKE_ROWS:
+            # MP_CAPABILITIES has no MP_HAS_STORE here: a runner never asks
+            raise Error("x_metrics: the host column has no device store")
         else:
             var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
             var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)

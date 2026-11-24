@@ -81,6 +81,9 @@ def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, sizes:
 
 # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
+# Lane vdf-xm-transport (2026-11-24): the store operations are back, typed, as operations of the program
+# entry `metrics_program_native_api_v1` (x_metrics/descriptor_schema.mojo MP_DEV_PUT/_FREE/_TAKE_ROWS/_LIVE,
+# x_metrics/descriptor_device.mojo); the Python entries stay deleted (the native runner calls the entry).
 
 
 # lane py-misc-metrics: the rest of DEVIATION 6106's O(n) epilogues

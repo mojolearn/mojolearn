@@ -58,8 +58,11 @@ def metrics_ctx() raises -> DeviceContext:
 
 
 #: The binding's resident input store (core/device_store.mojo; lane
-#: py-shared): `x_metrics_dev_put` / `_free` / `_live`, one per tier like
-#: the context whose buffers it holds.
+#: py-shared), one per tier like the context whose buffers it holds. Reached
+#: through the image's program entry (x_metrics/descriptor_schema.mojo
+#: `MP_DEV_PUT` / `_FREE` / `_TAKE_ROWS` / `_LIVE`; lane vdf-xm-transport,
+#: 2026-11-24: the deleted `x_metrics_dev_*` Python entries, typed) and read
+#: by `run_program_device_ranges` through `upload_ranges`.
 # V2 (lane linalg-owner, 2026-11-22): DeviceStore gained its lock word
 comptime _STORE_NAME = "MojolearnXMetricsStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXMetricsStoreFastV2"
 comptime X_METRICS_STORE = SharedSlot[DeviceStore, _STORE_NAME, 2]
