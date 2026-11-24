@@ -193,8 +193,9 @@ def test_member_route_serves_the_marked_predictor(device, name):
 @pytest.mark.parametrize("device", DEVICES)
 def test_member_only_class_is_refused_by_cross_validation_in_its_words(device):
     # A member-only plan (a registered mark without method recipes) its member cannot serve keeps the words it had
-    # before its mark, also under cross_validate's default error_score=nan (bindings/msel_cv_door.mojo
-    # msel_cv_units): the 2026-11-22 registration first turned the refusal into silent nan scores.
+    # before its mark, also under cross_validate's default error_score=nan (bindings/msel_member_units_door.mojo
+    # `_admission_refusal`, lane mf-r9b; it was the deleted units' check): the 2026-11-22 registration first turned
+    # the refusal into silent nan scores.
     _import_every_family()
     X, Y = _arm_cases.X, _arm_cases.Y
     with pytest.raises(RuntimeError, match="pending migration"):

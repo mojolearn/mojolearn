@@ -41,7 +41,7 @@ one (an empty side, no codes, no permutation).
   MH_PROBA_COLUMN          a [src, dst]                   p [code, n, k, col]    -> 0
   MH_SPLIT_TABLE_I32       a [perm, counts, table, sums]  p [m, n_test, n_train] -> 0
   MH_GROUP_FOLD_PERM_I32   a [counts, perm, dst, sizes]   p [m, n_folds]         -> 0
-  MH_STORE_FREE_BYTES      a []                           p []                   -> free device bytes, -1 on the host
+  (20 retired: MH_STORE_FREE_BYTES, see MH_RETIRED_20)
   MH_STORE_PUT             a [src]                        p [nbytes]             -> block id (a resident copy of host bytes)
   MH_STORE_TAKE_ROWS       a [dst]                        p [src_id, n_src, row_bytes, idx_id, n_idx] -> 0 (rows idx of block src to host)
 Each operation is the former Python export of the same name after its
@@ -79,7 +79,11 @@ comptime MH_SCATTER_ROWS = 16
 comptime MH_PROBA_COLUMN = 17
 comptime MH_SPLIT_TABLE_I32 = 18
 comptime MH_GROUP_FOLD_PERM_I32 = 19
-comptime MH_STORE_FREE_BYTES = 20
+#: 20 was MH_STORE_FREE_BYTES (the free device bytes that bounded how many
+#: Python cross-validation units ran at once; retired 2026-11-24 lane mf-r9b
+#: with those units, bindings/msel_cv_door.mojo `msel_cv_units`). The number
+#: stays reserved and is refused.
+comptime MH_RETIRED_20 = 20
 #: Layout V2 (lane arena, 2026-11-21): the two fold-store entries the arena
 #: resident owner calls as typed RUN (formerly the Python exports `msel_put`
 #: and `msel_take_rows` called through the instance dictionary).
@@ -217,8 +221,6 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
         return (2, 4)
     if operation == MH_SPLIT_TABLE_I32:
         return (4, 3)
-    if operation == MH_STORE_FREE_BYTES:
-        return (0, 0)
     if operation == MH_STORE_PUT:
         return (1, 1)
     if operation == MH_STORE_TAKE_ROWS:
@@ -229,7 +231,7 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
 def msel_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int, result: Int) raises:
     """Refuse a request whose spans do not match the operation's layout
     before any word is read."""
-    if operation < 0 or operation >= MH_OP_COUNT or operation == MH_RETIRED_5:
+    if operation < 0 or operation >= MH_OP_COUNT or operation == MH_RETIRED_5 or operation == MH_RETIRED_20:
         raise Error("model-selection helpers: unknown operation " + String(operation))
     if not result:
         raise Error("model-selection helpers: null result word")

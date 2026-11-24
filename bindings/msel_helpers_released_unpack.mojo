@@ -23,7 +23,6 @@ from core.msel_helpers_calls import (
     msel_store_free as _msel_store_free,
     msel_scatter_rows as _msel_scatter_rows,
     msel_proba_column as _msel_proba_column,
-    msel_store_free_bytes as _msel_store_free_bytes,
 )
 
 
@@ -77,8 +76,3 @@ def msel_proba_column(entry: EntryRef, src: Int, code: Int, n: Int, k: Int, col:
     return result
 
 
-def msel_store_free_bytes(entry: EntryRef) raises -> Int:
-    var result = 0
-    with GILReleased(Python()):
-        result = _msel_store_free_bytes(entry)
-    return result

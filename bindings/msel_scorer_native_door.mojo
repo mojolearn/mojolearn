@@ -581,10 +581,3 @@ def _signed_array(result: PythonObject, typestr: String, sign: Int, context: Pyt
     _ = result  # read through its address above
     _ = negated  # written through its address above
     return negated
-
-
-def msel_scorer_no_number(error: Error) -> Bool:
-    """Lane mf-score6: the scorer answered no number (`msel_scorer_value`'s
-    refusal, scikit-learn's `_score` words), which a numeric error_score
-    never replaces."""
-    return String(error).startswith("ValueError: scoring must return a number, got ")

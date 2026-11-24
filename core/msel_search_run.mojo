@@ -14,7 +14,7 @@ classifier, float32 targets for a regressor; one column), the int cv's fold
 count, the scoring word and the metric program route.
 
 The RUN, in the door's order (bindings/msel_search_door.mojo
-`msel_search_fit` over bindings/msel_cv_door.mojo `msel_cv_units`):
+`msel_search_fit`, as the deleted units of bindings/msel_cv_door.mojo ran it):
   1. THE FOLDS of the int cv, `check_cv(cv, y, classifier)`: StratifiedKFold
      over the codes for a classifier, KFold for a regressor, unshuffled, by
      xtrees/glue_calls.mojo `xt_device_folds` (the folds CalibratedClassifierCV

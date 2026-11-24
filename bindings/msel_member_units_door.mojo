@@ -496,7 +496,7 @@ def msel_member_fit_cloned(model: PythonObject, y: PythonObject, x: PythonObject
 
 
 def _admission_refusal(est: PythonObject, fields: PythonObject, plan: PythonObject, member_context: PythonObject,
-                       b: PythonObject, needs: Int, labels: PythonObject) raises -> String:
+                       b: PythonObject, needs: Int, labels: PythonObject, context: PythonObject) raises -> String:
     """The words of a serving admission that answered `published` False
     (THE REFUSAL RULE; bindings/member_set_door.mojo `member_set_refusal`'s
     order): the raising admission runs ONCE more, on this refusal path only,
@@ -504,7 +504,20 @@ def _admission_refusal(est: PythonObject, fields: PythonObject, plan: PythonObje
     its scorers, refit, cv, error_score, base and candidates); else a family
     that keeps no member for these parameters (`_no_member_fit_words`), a
     member with no fit (AttributeError, as `getattr(est, 'fit')` raises), or
-    one that exports no fitted state (`needs`: the PACK hands it back)."""
+    one that exports no fitted state (`needs`: the PACK hands it back).
+
+    A MEMBER-ONLY base (python/mojolearn/_native_msel_more.py
+    connect_members: a marked class registered from its mark, without
+    method recipes) of a search or cv tool its member did not serve is
+    refused FIRST, in the words the class had before its mark (lane
+    mf-r9b: moved here from the deleted units `msel_cv_units`, which raised
+    them once per operation whatever the cause; under a numeric
+    error_score the units' refusal had turned into silent nan scores,
+    proving suite 2026-11-22). One plan read, on this refusal path only."""
+    if _is_search(est):
+        var inner = py_get(fields, "estimator")
+        if inner is not None and py_get(msel_estimator_plan(inner, context), "member_only") is not None:
+            raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
     var name = String(py=py_type(est).__name__)
     var owner = member_admit_labeled(est, fields, plan, member_context, b, labels)
     if not owner.published:
@@ -659,7 +672,7 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
         admitted_labels = Python.list()  # what the deferred admission hands its family
         owner = member_admit_serving_deferred(est, fields, plan, member_context, b, needs)
     if not owner.published:
-        raise Error(_admission_refusal(est, fields, plan, member_context, b, needs, admitted_labels))
+        raise Error(_admission_refusal(est, fields, plan, member_context, b, needs, admitted_labels, context))
     _ = py_call(pins.append, owner.pins)
     var kind_mask = member_kind_capabilities(owner.plan)  # raises its own words
     if (kind_mask & MEMBER_CAN_FIT) == 0:

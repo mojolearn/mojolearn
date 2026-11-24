@@ -24,7 +24,7 @@ from core.msel_entry_table import (
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
     MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
-    MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32, MH_STORE_FREE_BYTES,
+    MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
 )
 from core.msel_helpers_host import (
@@ -253,15 +253,6 @@ def msel_store_take_rows_device_run(src_id: Int, n_src: Int, row_bytes: Int, idx
     return 0
 
 
-def msel_store_free_bytes_device_run() raises -> Int:
-    """Free bytes of the device the fold store lives on: the measured bound
-    of how many cross-validation units run at once (bindings/msel_cv_door.mojo
-    msel_cv_units, lane p3-msel-parallel-and-process-pool)."""
-    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
-    var mem = ctx.get_memory_info()
-    return Int(mem[0])
-
-
 def msel_scatter_rows_device_run(di: Int, nd: Int, dc: Int, sa: Int, sc: Int, ns: Int, w: Int, ix: Int) raises -> Int:
     """Rows of a host buffer cast into rows idx of a resident int64 or
     float64 block (cross_val_predict's placement)."""
@@ -351,8 +342,6 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_GROUP_FOLD_PERM_I32:
         return msel_group_fold_perm_device_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1),
                                                msel_word(aa, 1), msel_word(aa, 2), msel_word(aa, 3))
-    if op == MH_STORE_FREE_BYTES:
-        return msel_store_free_bytes_device_run()
     if op == MH_STORE_PUT:
         return msel_store_put_device_run(msel_word(aa, 0), msel_word(pp, 0))
     if op == MH_STORE_TAKE_ROWS:

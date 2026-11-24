@@ -17,14 +17,12 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.metrics_exp_common_unpack import mx_raise_obj
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
-from bindings.py_attr import py_attr
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.classical_arrays_door import classical_wrap_array
 from bindings.arena_materialize_native_door import _cast
 from bindings.family_common_unpack import (
     FAMILY_I64P,
     family_isinstance,
-    family_is_str,
     family_repr,
     family_str,
     family_type_name,
@@ -36,7 +34,7 @@ from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.msel_common_door import (
     msel_take_labels, msel_b, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool, msel_is_integral, msel_is_real,
     msel_int, msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr,
-    msel_p64, msel_pf64, msel_new, msel_new2, msel_f64_list, msel_f64_block, msel_i64_list, msel_i32_list,
+    msel_p64, msel_pf64, msel_new, msel_new2, msel_f64_list, msel_f64_block, msel_i64_list,
     msel_slice_i64, msel_index_i64, msel_get_scorer, msel_score, msel_admit, MselRng, MselGroups, msel_apply,
 )
 from bindings.msel_split_door import msel_truth, msel_flag_truth, msel_field, msel_cls, msel_sabotage
@@ -47,12 +45,11 @@ from bindings.msel_helpers_released_unpack import msel_gather_i64
 # lane calltable-msel: the score-table passes both base bindings exported,
 # linked into this door instead of called through CPython.
 from bindings.msel_search_stats_run import (
-    msel_row_means, msel_row_stds, msel_score_column, msel_rank_scores, msel_rank_best, msel_pvalue,
+    msel_row_means, msel_pvalue,
 )
 from bindings.family_common_unpack import FAMILY_I32P
 from bindings.msel_member_units_door import msel_member_refit, msel_member_fit_cloned, msel_text_rows
 from bindings.msel_cv_door import (
-    msel_clone,
     msel_cv_folds,
     msel_cv_splitter,
     msel_cv_folds_admitted,
@@ -61,20 +58,14 @@ from bindings.msel_cv_door import (
     msel_rows_scope_open,
     msel_rows_scope_close,
     msel_unit_jobs,
-    msel_cv_units,
     msel_scorers,
     MselFoldRows,
-    MselScores,
-    msel_cross_validate_run,
     msel_cv_by_search,
-    msel_fit,
-    msel_fit_planned,
-    msel_error_value,
 )
 from bindings.msel_cv_run import msel_seconds
-from bindings.msel_estimator_native_door import msel_native_clone_planned, msel_native_clone
+from bindings.msel_estimator_native_door import msel_native_clone
 
-from bindings.msel_estimator_native_door import msel_native_set_params, msel_estimator_plan
+from bindings.msel_estimator_native_door import msel_estimator_plan
 from bindings.msel_search_state_door import (
     msel_search_fields, msel_parameter_values, msel_search_update, msel_carrier_search,
 )
@@ -87,10 +78,6 @@ from core.msel_refusal_words import MSEL_REFIT_CALLBACK_WORDS
 
 
 # The candidates (grids, samplers) and the scalar admissions: bindings/msel_candidates_door.mojo.
-
-def _set_params(est: PythonObject, params: PythonObject, context: PythonObject) raises:
-    _ = msel_native_set_params(est, params, context)
-
 
 def _search_host_folds(fields: PythonObject, candidates: PythonObject, b: PythonObject,
                        context: PythonObject) raises -> Bool:
@@ -261,7 +248,9 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
             scope = msel_rows_scope_open(context)
     try:
         # raises every refusal in its words (THE REFUSAL RULE); lane mf-r9b:
-        # the units fallback that ran after a False is deleted
+        # the units fallback that ran after a False is deleted, with its
+        # refit site, which carried this marker:
+        # TOMBSTONE: MOJOLEARN_MSEL_MEMBER_UNITS_OFF (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
         _search_member_fit(model, fields, x_in, y_in, groups, context, b)
     finally:
         if scope is not None:

@@ -121,7 +121,7 @@ def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
 def msel_planned_call(model: PythonObject, plan: PythonObject, method: String, args: PythonObject,
                       context: PythonObject, scorer_response: Bool = False) raises -> PythonObject:
     """`msel_estimator_call` for a model whose plan the caller has just
-    checked (`msel_estimator_plan`) or made (`msel_native_clone_planned`), with
+    checked (`msel_estimator_plan`), with
     no Python code run since: the class, hook and instance checks are not
     repeated (lane perf-sweep-msel-nbr-svc: a fold's clone was checked by the
     clone, again by its fit and twice per score)."""
@@ -377,19 +377,6 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject, depth: Int 
     # debt rather than sharing mutable constructor or fitted state.
     sequential_admit_value(value, context)
     raise Error("RuntimeError: native cloning of this constructor parameter remains pending migration")
-
-
-def msel_native_clone_planned(model: PythonObject, context: PythonObject,
-                              depth: Int = 0) raises -> Tuple[PythonObject, PythonObject]:
-    """(clone, plan): the fresh clone has the checked class of `model` and
-    only the constructor state written here, so `plan` admits it as is."""
-    # Not part of the clone recursion: msel_clone_parameter <-> msel_native_clone
-    # recurse with a plain PythonObject result, as on main. With the recursion
-    # routed through this Tuple-returning function the compiler stopped with no
-    # CPU use and no diagnostic (2026-11-06, runtime_model_selection_host). The
-    # plan is a per-class record, so reading it again here is one lookup.
-    var clone = msel_native_clone(model, context, depth)
-    return (clone, msel_estimator_plan(model, context))
 
 
 def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:

@@ -296,13 +296,6 @@ def arena_rows(model: PythonObject, getter: PythonObject, cls: PythonObject) rai
     return ArenaRows(_rows_owner(model, getter, cls))
 
 
-def arena_rows_host_taken(model: PythonObject, getter: PythonObject, cls: PythonObject) raises -> Bool:
-    """Whether a route has already taken the fold's host rows."""
-    var view = _rows_owner(model, getter, cls)
-    var lease = ARENA_ROWS.acquire(arena_handle(view.word))
-    return lease[].host_pin() != 0
-
-
 def arena_rows_publish_host(word: Int, host: PythonObject, address: Int) raises -> PythonObject:
     """Publish the fold's host rows and return the rows kept: `host`, or the
     ones another thread published first (its own are then dropped). Called

@@ -22,14 +22,14 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, require
 from core.msel_convert import MSEL_F32, MSEL_F64
-from core.msel_entry_table import MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT, MH_ARANGE_I64, MH_RETIRED_5
+from core.msel_entry_table import MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT, MH_ARANGE_I64, MH_RETIRED_5, MH_RETIRED_20
 from core.msel_helpers_host import publish_msel_helpers_host
 from core.msel_helpers_calls import (
     msel_helpers_ref, msel_helper, msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8,
     msel_leave_range_i64, msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64,
     msel_gather_i32, msel_gather_i64, msel_first_seen_i32, msel_strat_fold_assign_i32, msel_store_alloc,
     msel_store_read, msel_store_free, msel_scatter_rows, msel_proba_column, msel_split_table_i32,
-    msel_group_fold_perm_i32, msel_store_free_bytes, msel_store_put, msel_store_take_rows,
+    msel_group_fold_perm_i32, msel_store_put, msel_store_take_rows,
 )
 
 comptime MSEL_HELPER_CASES = 18
@@ -345,7 +345,14 @@ def _operation(unit: Int) raises:
         _ = dst
         _ = sizes
     elif unit == 16:
-        require(msel_store_free_bytes(k) == -1, "host column free bytes")
+        # 20 was MH_STORE_FREE_BYTES (retired with the cv units, lane mf-r9b): the reserved number refuses.
+        # Fail-proof: drop `or operation == MH_RETIRED_20` from msel_check_spans: the call answers.
+        try:
+            var none: Array[Int, 0] = []
+            _ = msel_helper(k, MH_RETIRED_20, none, none)
+            raise Error("the retired operation 20 did not refuse")
+        except problem:
+            require("did not refuse" not in String(problem), String(problem))
     elif unit == 17:
         try:
             var dst: List[Int64] = [0]
