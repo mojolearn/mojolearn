@@ -18,7 +18,6 @@ from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner, member_mark, member_labels_hold, member_labels_take
 from bindings.member_leaf_boundary_door import member_leaf_fill, member_leaf_pack, member_leaf_state
 from bindings.py_balanced import py_setitem
-from bindings.member_class_weight_unpack import member_cw_fill_keyed
 from core.member_abi import MemberPlan, member_resolve_family, MEMBER_CAN_FIT
 from core.member_class_weight import member_cw_start, member_cw_pending
 from core.member_families import (
@@ -42,16 +41,19 @@ def member_admit(model: PythonObject, fields: PythonObject, plan: PythonObject, 
 
 
 def member_admit_labeled(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
-    b: PythonObject, labels: PythonObject) raises -> MemberOwner:
+    b: PythonObject, labels: PythonObject, serving: Bool = False) raises -> MemberOwner:
     """`member_admit` for a FIT caller that holds the labels of the codes it
     fits on (`labels`, in code order; None or an empty list: none known).
     A META family reads them from `owner.labels` and hands each nested
     estimator the labels ITS fit sees (lane mf-split4,
     providers/python/member_ensemble_boundary_door.mojo `_child_labels`), so
     a nested class_weight table is filled as `member_set_admit` fills a
-    leaf's; a leaf family does not read them (its caller fills its table)."""
+    leaf's; a leaf family does not read them (its caller fills its table).
+    `serving` (lane mf-door7): the caller only predicts on fitted state; a
+    META family then skips what only its FIT reads (`MemberOwner.serving`)."""
     var owner = MemberOwner()
     owner.labels = labels
+    owner.serving = serving
     var mark = member_mark(plan, b)
     if mark.family < 0:
         return owner^
@@ -103,7 +105,7 @@ def member_admit_serving_labeled(model: PythonObject, fields: PythonObject, plan
     a dict the estimator refuses raises its own words there (lane mf-adm3).
     Without labels a FIT admission of such a member is the fallback."""
     try:
-        var owner = member_admit_labeled(model, fields, plan, context, b, labels)
+        var owner = member_admit_labeled(model, fields, plan, context, b, labels, (needs & MEMBER_CAN_FIT) == 0)
         if owner.published and not owner.plan.member.has(needs):
             owner.published = False
         if owner.published and (needs & MEMBER_CAN_FIT) != 0 and labels is None:
@@ -130,34 +132,6 @@ def member_admit_serving_deferred(model: PythonObject, fields: PythonObject, pla
         return member_admit_serving_labeled(model, fields, plan, context, b, needs, Python.list())
     except:
         return member_admit_serving_labeled(model, fields, plan, context, b, needs, PythonObject(None))
-
-
-def member_admit_serving_valued(model: PythonObject, fields: PythonObject, plan: PythonObject,
-    context: PythonObject, b: PythonObject, needs: Int, mut refusal: String) -> MemberOwner:
-    """`member_admit_serving` for a FIT caller whose class labels are its
-    target's numeric values, known only in its RUN (IterativeImputer's
-    classifier steps): a class_weight dict is read into the KEYED tail here
-    (bindings/member_class_weight_unpack.mojo `member_cw_fill_keyed`), which
-    each step turns into its own table (core/member_class_weight.mojo
-    `member_cw_from_values`; a key that is not a number marks every step's
-    table absent). What that fill refuses (an invalid value, a value or a
-    key the family refuses) leaves the owner published with the
-    estimator's own words in `refusal`: the caller's RUN raises them at its
-    first classifier fit, where the estimator's own fit raised them (lane
-    mf-left4); before, such an estimator took the caller's door rounds."""
-    try:
-        var owner = member_admit(model, fields, plan, context, b)
-        if owner.published and not owner.plan.member.has(needs):
-            owner.published = False
-        if owner.published:
-            try:
-                if not member_cw_fill_keyed(owner, model, fields, context, b):
-                    owner.published = False
-            except error:
-                refusal = String(error)
-        return owner^
-    except:
-        return MemberOwner()
 
 
 def member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,

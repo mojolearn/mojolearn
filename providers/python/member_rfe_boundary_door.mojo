@@ -25,16 +25,19 @@ What both read once per admission, in the door's words and order:
     work-list (`_admit_nested`: the META estimator is one of RFE's `_meta_children`).
 
 No import of the member dispatch (bindings/member_boundary_door.mojo): this file is imported by the
-ensemble boundary, which that dispatch imports. A META estimator is an RFE base only through a dotted
-getter (`rfe_dotted_path`); with 'auto' / 'coef_' / 'feature_importances_' it exports no importance block
-(`rfe_base_admit` answers not served and the door's own path keeps it).
+ensemble boundary, which that dispatch imports. A META estimator is an RFE base through a dotted getter
+(`rfe_dotted_path`); with a plain getter it exports no importance block, so RFE's door admits it through the
+dispatch with the 'auto' / attrgetter refusal its first round raises (bindings/prep_select_native_door.mojo
+`_rfe_meta_base`, lane mf-rfe7: the door's own rounds over the estimator's doors are deleted).
 """
 from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner, member_mark
-from bindings.member_leaf_boundary_door import member_leaf_admit_serving_labeled, member_leaf_admit_serving
+from bindings.member_leaf_boundary_door import (
+    member_leaf_admit_serving_labeled, member_leaf_admit_serving, member_leaf_admit_labeled,
+)
 from core.ensemble_member import (
     META_RFE_CLASSIFIER, META_RFE_REGRESSOR, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR, META_STACK_CLASSIFIER,
-    META_STACK_REGRESSOR,
+    META_STACK_REGRESSOR, META_BLOCK_FORWARD,
 )
 from bindings.member_class_weight_unpack import member_cw_fill_plan
 from bindings.prep_native_estimator_door import prep_native_context
@@ -57,16 +60,16 @@ from bindings.arena_prog_native_door import _family_entries
 from bindings.x_prep_native_owner_door import xprep_key
 from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.prep_classify_prog_run import ClsRunPlan
-from bindings.prep_select_run import RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_SELECT_COUNT, rfe_member_source
+from bindings.prep_select_run import (
+    RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_SELECT_COUNT, rfe_member_source_named, rfe_block_of,
+)
 from core.member_abi import (
     MemberPlan, member_kind_capabilities,
     MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_CLASSIFIER, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
     MEMBER_CAN_SAMPLE_WEIGHT,
 )
 from core.member_families import (
-    MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_NAIVE_BAYES,
-    MEMBER_FAMILY_DISCRIMINANT,
-    MEMBER_FAMILY_GBDT, MEMBER_FAMILY_ENSEMBLE, MEMBER_FAMILY_XNEIGHBORS,
+    MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES, MEMBER_FAMILY_ENSEMBLE,
 )
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -92,13 +95,17 @@ struct RfeBase(Movable):
     var template: PythonObject
     var fields: PythonObject
     var member_context: PythonObject
-    # Lane mf-meta5b: a dotted importance_getter over a META estimator (RFE's door, `_rfe_dotted_base`):
+    # Lane mf-meta5b: a dotted importance_getter over a META estimator (RFE's door, `_rfe_meta_base`):
     # `meta` True, `block` the META kind's forwarded export and `hops` its words (each nested index along
     # the path, then the leaf's block); PACK packs a META member.
     var hops: List[Float64]
     var meta: Bool
+    # Lane mf-rfe7: `native` False, the words RFE's door raises (its own rounds through the estimator's
+    # doors are deleted); empty: the caller tries its next admission (a dotted path, a META estimator).
+    var why: String
 
     def __init__(out self):
+        self.why = String("")
         self.native = False
         self.owner = MemberOwner()
         self.mask = 0
@@ -128,65 +135,105 @@ def rfe_base_admit_labeled(estimator: PythonObject, g: PythonObject, context: Py
     block, squared, as the attribute path squares it). A published naive Bayes, discriminant or Gbdt kind
     that exports neither block (QDA, GaussianNB, MultinomialNB, BernoulliNB, ComplementNB,
     GradientBoosting and its adapters) is admitted with its refusal, which the first elimination round
-    raises before it fits (with no round the final fit runs, as in scikit-learn). A dotted getter path, a
-    META estimator, an admission the family refuses: not served. Never raises (the door's own path then
-    answers or refuses in its own words).
+    raises before it fits (with no round the final fit runs, as in scikit-learn); since lane mf-rfe7 every
+    kind with neither block is. A dotted getter path, a META estimator, an admission the family refuses:
+    not served. Never raises.
 
     `labels` (lane mf-meta5b; `member_leaf_admit_labeled`): None, or an empty list from RFE's own door,
     which encodes y after this admission and completes the plan over its classes itself (a class_weight
-    dict's table, LabelPropagation / LabelSpreading's unlabeled marker word: `rfe_plan_labels`)."""
-    var base = RfeBase()
+    dict's table, LabelPropagation / LabelSpreading's unlabeled marker word: `rfe_plan_labels`).
+
+    Lane mf-rfe7: any attribute name is read here (`rfe_member_source_named`: a named feature-wide block,
+    else attrgetter's words at the first round); a dotted getter or a META estimator is the caller's next
+    admission. THE RFE KIND keeps this never-raising form; RFE's door calls `rfe_base_admit_door`, which
+    raises the family's admission words and says, in `why`, why a class is not served."""
     try:
-        var getter = String(g)
-        var auto = getter == "auto"
-        if not auto and getter != "coef_" and getter != "feature_importances_":
-            return base^
-        var plan = prep_estimator_plan(estimator, context)
-        if plan is None or py_get(plan, "member") is None:
-            return base^
-        var classifier = Bool(py=plan["classifier"])
-        var template = prep_estimator_clone(estimator, context)
-        var member_context = plan["context"]
-        var fields = py_call(plan["fields_get"], template, py_type(template))
-        var owner = member_leaf_admit_serving_labeled(template, fields, plan, member_context, b,
-                                                      MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, labels)
-        if not owner.published or owner.plan.family == MEMBER_FAMILY_ENSEMBLE:
-            return base^
-        # A DecisionTree or RandomForest member computes its feature importances only when its parameter
-        # word [10] asks for them (core/forest_member_run.mojo); set before the mask is asked, unless the
-        # getter names `coef_`.
-        if ((owner.plan.family == MEMBER_FAMILY_TREE or owner.plan.family == MEMBER_FAMILY_FOREST)
-                and getter != "coef_" and len(owner.plan.params) > 10):
-            owner.plan.params[10] = 1.0
-            base.importance_word = True
-        # The mask of THIS kind (one state minted, asked and released).
-        var mask = member_kind_capabilities(owner.plan)
-        if ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
-            return base^
-        if (mask & MEMBER_CAN_FIT) == 0 or (mask & MEMBER_CAN_EXPORT) == 0:
-            return base^
-        var family = owner.plan.family
-        var name = (classical_estimator_name(estimator)
-                    if (family == MEMBER_FAMILY_NAIVE_BAYES or family == MEMBER_FAMILY_DISCRIMINANT
-                        or family == MEMBER_FAMILY_GBDT or family == MEMBER_FAMILY_XNEIGHBORS) else String(""))
-        var source = rfe_member_source(family, mask, getter, name)
-        if source.refusal.byte_length() == 0 and source.block == 0:
-            return base^
-        base.refusal = source.refusal.copy()
-        base.block = source.block
-        base.squared = source.squared
-        # THE GIL RULE (core/member_abi.mojo): the same answer says whether this kind's fit may run with the
-        # GIL released (one fit on the calling thread either way).
-        base.gil_free = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
-        base.mask = mask
-        base.classifier = classifier
-        base.owner = owner^
-        base.template = template
-        base.fields = fields
-        base.member_context = member_context
-        base.native = True
+        return _rfe_base_admit(estimator, g, context, b, labels, False)
     except:
         return RfeBase()
+
+
+def rfe_base_admit_door(estimator: PythonObject, g: PythonObject, context: PythonObject,
+                        b: PythonObject) raises -> RfeBase:
+    """RFE's door's admission (lane mf-rfe7): `rfe_base_admit_labeled` with deferred labels, raising the
+    family's admission refusals in their words (they raised from the estimator's own fit door's first fit,
+    which this admission replaces). `native` False: `why` holds the door's refusal, or is empty for a dotted
+    getter or a META estimator (the door's next admission, `_rfe_meta_base`)."""
+    return _rfe_base_admit(estimator, g, context, b, Python.list(), True)
+
+
+def _rfe_base_admit(estimator: PythonObject, g: PythonObject, context: PythonObject, b: PythonObject,
+                    labels: PythonObject, raising: Bool) raises -> RfeBase:
+    var base = RfeBase()
+    var getter = String(g)
+    if getter.find(".") >= 0:
+        return base^
+    var cls = String(py_type(estimator).__name__)
+    var plan = prep_estimator_plan(estimator, context)
+    if plan is None:
+        base.why = "TypeError: mojolearn: RFE requires a mojolearn estimator; got " + cls
+        return base^
+    if py_get(plan, "member") is None:
+        # The registered estimator classes with no member mark (lane mf-rfe7b, every class the
+        # python/mojolearn/_native_msel_*.py registrations name, against each class's own `_mojolearn_member`;
+        # the cross-validation splitters are registered too but have no fit): NearestNeighbors
+        # (python/mojolearn/neighbors.py:98), RadiusNeighbors (neighbors.py:842), OPTICS
+        # (_expansion_cluster.py:606), MDS (_expansion_decomp.py:2754), SpectralEmbedding (_spectral_impl.py:531),
+        # Cholesky (_cholesky_impl.py:87). None has coef_ or feature_importances_ or a fitted array with one value
+        # per feature, so scikit-learn's RFE fails at its first elimination round over each ('auto' raises; a
+        # named n-row array mis-indexes); Cholesky's fit refuses the non-square block of any round. Only a fit
+        # with no round (n_features_to_select >= n_features) works there: that needs a member kind of each class.
+        base.why =("TypeError: mojolearn: RFE requires an estimator with a native member; " + cls
+                    + " has none")
+        return base^
+    var classifier = Bool(py=plan["classifier"])
+    var template = prep_estimator_clone(estimator, context)
+    var member_context = plan["context"]
+    var fields = py_call(plan["fields_get"], template, py_type(template))
+    var owner = MemberOwner()
+    if raising:
+        owner = member_leaf_admit_labeled(template, fields, plan, member_context, b, labels)
+    else:
+        owner = member_leaf_admit_serving_labeled(template, fields, plan, member_context, b,
+                                                  MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, labels)
+    if owner.published and owner.plan.family == MEMBER_FAMILY_ENSEMBLE:
+        return base^  # a META estimator: the caller's next admission
+    if not owner.published:
+        # The leaf admission's mark is a META one, or no leaf family fills it: the caller's next admission
+        # (the member dispatch) answers, or refuses in `_rfe_meta_base`'s words.
+        return base^
+    # A DecisionTree or RandomForest member computes its feature importances only when its parameter
+    # word [10] asks for them (core/forest_member_run.mojo); set before the mask is asked, when the getter
+    # reads them.
+    if ((owner.plan.family == MEMBER_FAMILY_TREE or owner.plan.family == MEMBER_FAMILY_FOREST)
+            and (getter == "auto" or getter == "feature_importances_") and len(owner.plan.params) > 10):
+        owner.plan.params[10] = 1.0
+        base.importance_word = True
+    # The mask of THIS kind (one state minted, asked and released).
+    var mask = member_kind_capabilities(owner.plan)
+    if ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
+        base.why = ("TypeError: mojolearn: RFE: " + cls + "'s native member kind and its estimator type "
+                    + "disagree")
+        return base^
+    if (mask & MEMBER_CAN_FIT) == 0 or (mask & MEMBER_CAN_EXPORT) == 0:
+        base.why = ("TypeError: mojolearn: RFE requires an estimator whose native member fits and exports its "
+                    + "fitted state; " + cls + "'s does not")
+        return base^
+    var family = owner.plan.family
+    var source = rfe_member_source_named(family, owner.plan.kind, mask, getter, classical_estimator_name(estimator))
+    base.refusal = source.refusal.copy()
+    base.block = source.block
+    base.squared = source.squared
+    # THE GIL RULE (core/member_abi.mojo): the same answer says whether this kind's fit may run with the
+    # GIL released (one fit on the calling thread either way).
+    base.gil_free = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
+    base.mask = mask
+    base.classifier = classifier
+    base.owner = owner^
+    base.template = template
+    base.fields = fields
+    base.member_context = member_context
+    base.native = True
     return base^
 
 
@@ -220,12 +267,20 @@ struct RfeDottedPath(Movable):
     # Lane mf-rfe6: the leaf is a tree or forest read for feature_importances_, so the caller sets the leaf's
     # importance word in the nested plan it admits (core/ensemble_member.mojo `meta_plan_leaf_importances`).
     var leaf_word: Bool
+    # Lane mf-rfe7: `served` False, the words RFE's door raises (its rounds through the estimator's own
+    # attribute reads are deleted).
+    var why: String
+    # Lane mf-rfe7b: the RFE block code of THE FORWARDED EXPORT (META_BLOCK_FORWARD, plus the row of the leaf's
+    # block a named attribute is: bindings/prep_select_run.mojo `rfe_block_code`); `hops` ends with the plain block.
+    var forward_block: Int
 
     def __init__(out self):
+        self.forward_block = META_BLOCK_FORWARD
         self.served = False
         self.hops = List[Float64]()
         self.refusal = String("")
         self.leaf_word = False
+        self.why = String("")
 
 
 def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObject, b: PythonObject) -> RfeDottedPath:
@@ -239,19 +294,31 @@ def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObj
     member, a leaf with no serving member, a leaf path other than coef_ / feature_importances_. A tree or
     forest leaf's feature_importances_ is served with `leaf_word` (lane mf-rfe6): the caller sets the leaf's
     importance word in the nested plan after it admits the META estimator. The META estimator itself is
-    admitted by the caller. Never raises."""
+    admitted by the caller. Never raises.
+
+    Lane mf-rfe7: the leaf may be any attribute name (`rfe_member_source_named`: a named feature-wide block,
+    else attrgetter's words at the first round); a path not served says why in `why` (RFE's door raises it:
+    its own walk over the fitted estimator's attributes is deleted). A step that is not one fitted member of
+    a META kind (a list such as estimators_, a Pipeline's steps, an unfitted parameter) is refused there: the
+    deleted walk also found no connected native estimator at such a step and refused it."""
     var path = RfeDottedPath()
+    var last_why = String("")
     try:
+        var getter = String(py=g)
         var parts = py_call(g.split, ".")
         var count = len(parts)
         if count < 2:
             return path^
         var leaf_name = String(parts[count - 1])
-        if leaf_name != "coef_" and leaf_name != "feature_importances_":
-            return path^
         var hops = List[Float64]()
         var current = estimator
         for k in range(count - 1):  # driver-loop: over the attribute path's steps
+            var step = String(parts[k])
+            path.why = ("TypeError: mojolearn: RFE importance_getter '" + getter + "': '" + step
+                        + "' of " + String(py_type(current).__name__) + " is not one fitted estimator RFE can "
+                        + "follow natively (best_estimator_ of a search, estimator_ of an RFE, final_estimator_ "
+                        + "of a stacking estimator)")
+            last_why = path.why.copy()
             var step_plan = prep_estimator_plan(current, context)
             if step_plan is None or py_get(step_plan, "member") is None:
                 return path^
@@ -259,7 +326,7 @@ def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObj
             if mark.family != MEMBER_FAMILY_ENSEMBLE:
                 return path^
             var field = String("")
-            var at = rfe_hop(mark.kind, String(parts[k]), field)
+            var at = rfe_hop(mark.kind, step, field)
             if at < -1:
                 return path^
             var step_fields = py_call(step_plan["fields_get"], current, py_type(current))
@@ -268,6 +335,10 @@ def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObj
                 return path^
             hops.append(Float64(at))
             current = nested
+        var leaf_class = String(py_type(current).__name__)
+        path.why = ("TypeError: mojolearn: RFE importance_getter '" + getter + "': " + leaf_class
+                    + " has no native member that fits and exports its fitted state")
+        last_why = path.why.copy()
         var leaf_plan = prep_estimator_plan(current, context)
         if leaf_plan is None or py_get(leaf_plan, "member") is None:
             return path^
@@ -285,16 +356,18 @@ def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObj
                 and len(leaf.plan.params) > 10):
             leaf.plan.params[10] = 1.0
             path.leaf_word = True
-        var source = rfe_member_source(family, member_kind_capabilities(leaf.plan), leaf_name,
-                                       String(py_type(current).__name__))
-        if source.refusal.byte_length() == 0 and source.block == 0:
-            return path^
-        hops.append(Float64(source.block))
+        var source = rfe_member_source_named(family, leaf.plan.kind, member_kind_capabilities(leaf.plan), leaf_name,
+                                             leaf_class)
+        hops.append(Float64(rfe_block_of(source.block)))
+        path.forward_block = META_BLOCK_FORWARD + (source.block - rfe_block_of(source.block))
         path.hops = hops^
         path.refusal = source.refusal.copy()
+        path.why = String("")
         path.served = True
     except:
-        return RfeDottedPath()
+        var failed = RfeDottedPath()
+        failed.why = last_why^
+        return failed^
     return path^
 
 
@@ -392,19 +465,25 @@ def rfe_publish(fields: PythonObject, final: PythonObject, support: List[Float32
 
 
 # ---------------------------------------------------------------- the fit's labels and parameters (lane mf-meta5b)
-def rfe_plan_labels(mut base: RfeBase, classes: PythonObject, b: PythonObject) raises -> Bool:
+def rfe_plan_labels(mut base: RfeBase, classes: PythonObject, b: PythonObject) raises:
     """UNPACK, after the door's one label encode (`classes`: the class list in code order), for a base
     admitted with deferred labels (`rfe_base_admit_labeled` with an empty list), the way model selection's
     units complete theirs (bindings/msel_member_units_door.mojo): LabelPropagation / LabelSpreading get the
     code of the -1 marker in their word LP_MARKER_WORD (its rows take part in the graph and not in classes_,
     as the estimator's own fit reads them; PACK leaves it out of classes_), and a class_weight dict's table
     is read over the classes (`member_cw_fill_plan`: its refusals raise here in the estimator's words, where
-    its first fit raised them). False: a pending table it cannot complete (the door keeps the fit)."""
+    its first fit raised them).
+    Lane mf-rfe7: `member_cw_fill_plan` answers False only for a pending table without labels, or for a family
+    with a class-weight tail that reads no dict (none: core/member_class_weight.mojo `member_cw_start` gives a
+    tail to the five families bindings/member_class_weight_unpack.mojo `_dict_values` reads). RFE hands the
+    labels, so False cannot happen; it raises (REMOVED: the False answer that sent the fit to `_fit_clone`)."""
     if xneighbors_kind_reads_marker(base.owner.plan.family, base.owner.plan.kind):
         var marker = xneighbors_marker_index(classes)
         if marker >= 0 and len(base.owner.plan.params) > LP_MARKER_WORD:
             base.owner.plan.params[LP_MARKER_WORD] = Float64(marker)
-    return member_cw_fill_plan(base.owner.plan, base.template, base.fields, classes, base.member_context, b)
+    if not member_cw_fill_plan(base.owner.plan, base.template, base.fields, classes, base.member_context, b):
+        raise Error("RuntimeError: mojolearn: RFE: " + classical_estimator_name(base.template)
+                    + "'s class_weight table was left incomplete over the fit's classes")
 
 
 def rfe_fit_keywords(estimator: PythonObject, fit_params: PythonObject, context: PythonObject,
@@ -433,17 +512,15 @@ def rfe_fit_keywords(estimator: PythonObject, fit_params: PythonObject, context:
 
 
 struct RfeFitParams(Movable):
-    """RFE.fit's parameters for a member of any family but Gbdt (`rfe_member_fit_params`). `admitted`
-    False: a key the member does not carry (the door's own fit keeps it). True: `extras` the typed
-    addresses (the weights), `pins` their holder, `final_importances` a forest's feature_importances=True
-    (the final fit keeps its importance word, so estimator_ publishes them as that fit does)."""
-    var admitted: Bool
+    """RFE.fit's parameters for a member of any family but Gbdt (`rfe_member_fit_params`): `extras` the
+    typed addresses (the weights), `pins` their holder, `final_importances` a forest's
+    feature_importances=True (the final fit keeps its importance word, so estimator_ publishes them as that
+    fit does). REMOVED (lane mf-rfe7): `admitted`, whose False sent the fit to the estimator's own doors."""
     var extras: MemberFitExtras
     var pins: PythonObject
     var final_importances: Bool
 
     def __init__(out self):
-        self.admitted = False
         self.extras = MemberFitExtras()
         self.pins = PythonObject(None)
         self.final_importances = False
@@ -456,9 +533,9 @@ def rfe_member_fit_params(base: RfeBase, fit_params: PythonObject, n: Int, b: Py
     finiteness, sign and all-zero refusals in its words; None: no weights), handed to every member fit
     (the member re-checks what it reads, as for Bagging's and Voting's members); a forest's
     `feature_importances` (an exact bool: the rounds compute importances whatever it says, as before; True
-    keeps them on the final fit). Not admitted (the door's fit answers): weights for a kind without
-    MEMBER_CAN_SAMPLE_WEIGHT, any other key. A feature_importances value the forest's fit door refuses
-    raises its words here (lane mf-cal5)."""
+    keeps them on the final fit). A feature_importances value the forest's fit door refuses raises its
+    words here (lane mf-cal5). Lane mf-rfe7: weights for a kind without MEMBER_CAN_SAMPLE_WEIGHT and any
+    other key raise here too (the estimator's own fit door, which answered them, is no longer called)."""
     var got = RfeFitParams()
     var extras = MemberFitExtras()
     extras.rows = n
@@ -471,7 +548,18 @@ def rfe_member_fit_params(base: RfeBase, fit_params: PythonObject, n: Int, b: Py
             if value is None:
                 continue
             if (base.mask & MEMBER_CAN_SAMPLE_WEIGHT) == 0:
-                return got^
+                # Lane mf-rfe7 (the fit door no longer answers it): a kind whose fit reads no weights. The
+                # RandomForest / DecisionTree regressor with oob_score is such a kind: its fit keyword
+                # table takes sample_weight: its fit door refuses the pair before any work
+                # (bindings/trees_public_forest_door.mojo `_rf_fit_regressor`), so the deleted rounds raised
+                # these words at their first fit; scikit-learn fits it (a weighted out-of-bag fit is kernel
+                # work the forest family does not have, for its public fit too).
+                if ((base.owner.plan.family == MEMBER_FAMILY_FOREST or base.owner.plan.family == MEMBER_FAMILY_TREE)
+                        and not base.classifier):
+                    raise Error("NotImplementedError: sample_weight is not implemented together with oob_score "
+                                + "or a tree-ID shard")
+                raise Error("NotImplementedError: mojolearn: RFE: " + classical_estimator_name(base.template)
+                            + "'s native member fit reads no sample_weight")
             var w = admit_weight_words(value, n, base.member_context)
             weights = w.array
             extras.weights = w.address
@@ -489,8 +577,10 @@ def rfe_member_fit_params(base: RfeBase, fit_params: PythonObject, n: Int, b: Py
                     raise Error("feature_importances must be a boolean fit-output request")
                 got.final_importances = Bool(py=value)
         else:
-            return got^
+            # Lane mf-rfe7: a key the estimator's fit keyword table names (`rfe_fit_keywords` refused every
+            # other) that its member fit does not carry; the deleted rounds handed it to the fit door.
+            raise Error("TypeError: mojolearn: RFE: " + classical_estimator_name(base.template)
+                        + "'s native member fit takes no '" + name + "' parameter")
     got.pins = weights
     got.extras = extras^
-    got.admitted = True
     return got^

@@ -992,13 +992,19 @@ struct IterImpMember(Copyable, Movable):
     `code_dtype` (the member's MEMBER_OP_OUTPUTS answer, asked once).
     `cw_refusal` (set by the door, lane mf-left4): the estimator's own words
     for a class_weight it refuses, read at UNPACK; a classifier step raises
-    them before its fit, where the estimator's own fit raised them ("": none)."""
+    them before its fit, where the estimator's own fit raised them ("": none).
+    `marker_word` (set by the door, lane mf-iterimp7): for a kind that reads
+    -1 in y as unlabeled (LabelPropagation / LabelSpreading), the plan word
+    each classifier step writes its -1 class's code into
+    (`iterimp_marker_code`), as model selection's units write it after their
+    encode; -1: a kind without one."""
     var plan: MemberPlan
     var borrows: Bool
     var posterior: Bool
     var classifier: Bool
     var code_dtype: Int
     var cw_refusal: String
+    var marker_word: Int
 
     def __init__(out self, var plan: MemberPlan, borrows: Bool, posterior: Bool):
         self.plan = plan^
@@ -1007,6 +1013,18 @@ struct IterImpMember(Copyable, Movable):
         self.classifier = False
         self.code_dtype = MEMBER_I32
         self.cw_refusal = String("")
+        self.marker_word = -1
+
+
+def iterimp_marker_code(classes: List[Float32]) -> Int:
+    """The code of the unlabeled marker among a classifier step's ascending
+    class values: the class equal to -1 (the estimator's own test, `c == -1`
+    on a number; lane mf-iterimp7), or -1 when the step has none. The step's
+    fit and the door's PACK read it from the same classes."""
+    for c in range(len(classes)):  # driver-loop: over one step's classes (not rows)
+        if classes[c] == Float32(-1.0):
+            return c
+    return -1
 
 
 struct IterImpMemberFit(Movable):
@@ -1263,6 +1281,13 @@ def _member_step[R: IterImpRunner](mut runner: R, work_on: Bool, bounds: List[Fl
         raise Error(member.cw_refusal)
     var step_plan = member.plan.copy()
     step_plan.classes = len(classes)
+    if member.marker_word >= 0:
+        # LabelPropagation / LabelSpreading: the -1 class is the unlabeled
+        # marker (its rows join the graph, not classes_), as the estimator's
+        # own fit reads the step's target (lane mf-iterimp7)
+        var marker = iterimp_marker_code(classes)
+        if marker >= 0:
+            step_plan.params[member.marker_word] = Float64(marker)
     # A class_weight dict keyed by the target's values (lane mf-adm3): the
     # table over this step's classes, as the step's own fit reads the dict
     # against its labels ('balanced' reads the codes in the fit itself).

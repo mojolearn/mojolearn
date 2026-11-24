@@ -20,14 +20,26 @@ the candidates and their clones are read once per admission and kept by
 the search's identity, `_search_prepare`) and MultiOutputClassifier /
 MultiOutputRegressor (THE MULTI-OUTPUT KIND, (39, 12) / (39, 13):
 `_admit_multi` / `_multi_pack` / `_multi_state`). RandomTreesEmbedding
-carries no mark and keeps its door. A unit kind answers False, and its door keeps the estimator, for:
-a OneVsRest base whose kind lacks the scores its predict reads; a
-Calibrated cv that is a splitter of ours other than KFold / StratifiedKFold
-(since lane mf-split4b an index list and our KFold / StratifiedKFold are
-the kind's, as for a stack) or a base that takes the resident DeviceRows
-route (a measured winner); a
-Bagging base that is not a tree, forest or extra-trees member, or one that
-names another device. A Bagging configuration that may take the batched
+carries no mark (lane mf-door7: it is a transformer; no META kind holds
+one, since every kind here needs a predictor and scikit-learn's own fit of
+Voting, Stacking, Bagging, AdaBoost, OneVsRest, Calibrated, MultiOutput
+and a search with no `score` fails on it, and the one meta that holds a
+transformer, Pipeline, has no member entry:
+providers/python/member_pipeline_boundary_door.mojo). A unit kind answers
+False, and its door keeps the estimator, for: a OneVsRest base whose kind
+lacks the scores its predict reads; a Bagging base that is not a tree,
+forest or extra-trees member, or one that names another device. A
+Calibrated base that takes the resident DeviceRows route is the kind's
+since lane mf-door7 (the route, a measured winner, is
+CalibratedClassifierCV's own public fit's and never reaches this
+admission).
+
+A SERVING ADMISSION (lane mf-door7, `MemberOwner.serving`: a caller that
+only predicts on fitted state, `member_admit_serving` without
+MEMBER_CAN_FIT, and every nested admission of a META import) reads no
+setting only a fit reads: a Stacking or Calibrated cv (a user's splitter
+object too), a search's scorers, cv and candidates (`_admit_search_serving`:
+its fitted best), and a MultiOutputRegressor over Ridge is the kind. A Bagging configuration that may take the batched
 forest route (a measured winner, decided per fit by the weights and X's
 shape) is admitted with that forest as its second plan (lane mf-meta3c,
 `_batched_forest`); the kind takes the route per fit as the door does.
@@ -92,7 +104,7 @@ from bindings.trees_meta_validate_unpack import (
 from bindings.py_balanced import py_call, py_get, py_item, py_setattr, py_setitem, py_type, py_contains, py_fields
 from core.device_route import DeviceRoute, DEVICE_CPU
 from bindings.admitted_input_unpack import admitted_unfilled
-from bindings.native_unit_threads_unpack import native_unit_device_workers, native_unit_jobs
+from bindings.native_unit_threads_unpack import native_unit_jobs
 from core.ensemble_member import (
     meta_plan_mint_with, meta_state_plans, meta_state_notices,
     META_VOTE_CLASSIFIER, META_VOTE_REGRESSOR, META_STACK_CLASSIFIER, META_STACK_REGRESSOR, META_BLOCK_NESTED,
@@ -125,7 +137,7 @@ from core.ensemble_member import (
     meta_plan_metric, meta_plan_search_labels, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR, META_MULTI_CLASSIFIER, META_MULTI_REGRESSOR,
     META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
-from core.ensemble_member import meta_plan_leaf_importances
+from core.ensemble_member import meta_plan_leaf_importances, META_PARAM_SERVING
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
 from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64, msel_addr
 from bindings.classical_labels_door import labels_decode_labels
@@ -133,7 +145,7 @@ from bindings.family_common_pack import family_array
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
 from core.msel_scorer_run import (
     msel_scorer_code, msel_scorer_row, msel_scorer_regression, msel_scorer_positive, msel_scorer_positive_kind,
-    SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
+    msel_scorer_metric_code, SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
     SCORER_POSITIVE_MIXED,
     msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_top_k, msel_scorer_ap, msel_scorer_brier,
     msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions,
@@ -195,8 +207,8 @@ def _rfe(kind: Int) -> Bool:
 
 def _rfe_dotted(getter: String) -> Bool:
     """An RFE importance_getter that is an attribute path over its estimator (lane mf-del5b), not one of
-    the leaf getters `rfe_base_admit` reads."""
-    return getter != "auto" and getter != "coef_" and getter != "feature_importances_"
+    the leaf getters `rfe_base_admit` reads (lane mf-rfe7: any plain attribute name is a leaf getter)."""
+    return getter.find(".") >= 0
 
 
 def _search(kind: Int) -> Bool:
@@ -261,8 +273,10 @@ def _active(fields: PythonObject, b: PythonObject) raises -> _Active:
 
 
 def _stack_method(fields: PythonObject, est: PythonObject, classifier: Bool, context: PythonObject) raises -> Int:
-    """`_StackingBase._method` (the door's `_stack_method`): -1 for a value
-    the door refuses."""
+    """`_StackingBase._method` (the door's `_stack_method`). A value the
+    door refuses raises its words (lane mf-fitadm7; bindings/
+    trees_meta_validate_unpack.mojo `meta_stacking_validate`, one wording):
+    before, -1 and the caller kept the door, which raised them."""
     var method = py_get(fields, "stack_method")
     var name = String("auto") if method is None else String(method)
     if name == "auto":
@@ -278,7 +292,7 @@ def _stack_method(fields: PythonObject, est: PythonObject, classifier: Bool, con
         return STACK_DECISION
     if name == "predict":
         return STACK_PREDICT
-    return -1
+    raise Error("stack_method must be auto, predict_proba, decision_function or predict")
 
 
 def _stack_need(kind: Int) -> Int:
@@ -478,13 +492,19 @@ struct _Done(Movable):
 
 
 def _meta_children(est: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
-                   b: PythonObject, prepared: PythonObject) raises -> PythonObject:
+                   b: PythonObject, prepared: PythonObject, serving: Bool) raises -> PythonObject:
     """The nested estimators of an unfitted meta-estimator that its
     admission reads (and so may be meta-estimators themselves): the active
     voting / stacked members and the final estimator, a OneVsRest or
     Calibrated base. A Bagging base is a tree, forest or extra-trees member
-    (`_require_tree`): none."""
+    (`_require_tree`): none. A SERVING search (lane mf-door7,
+    `_admit_search_serving`): its one nested estimator, `_search_served`."""
     var out = Python.list()
+    if _search(kind) and serving:
+        var served = _search_served(fields)
+        if served is not None:
+            _ = py_call(out.append, served)
+        return out
     if _search(kind):
         # THE SEARCH KIND (lane mf-search4): its candidate clones, made once
         # here and kept in `prepared` for its admission.
@@ -571,7 +591,7 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         _ = py_call(order_labels.append, est_labels)
         order_kinds.append(est_kind)
         var child_labels = _child_labels(est_kind, est_labels, b)
-        var children = _meta_children(est, est_fields, est_kind, est_context, b, prepared)
+        var children = _meta_children(est, est_fields, est_kind, est_context, b, prepared, owner.serving)
         for c in range(len(children)):  # driver-loop: over one meta-estimator's nested estimators
             var child = children[c]
             var child_plan = prep_estimator_plan(child, est_context)
@@ -599,6 +619,7 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         var sub = MemberOwner()
         sub.plan.family = MEMBER_FAMILY_ENSEMBLE
         sub.plan.kind = order_kinds[i]
+        sub.serving = owner.serving  # a serving admission's nested meta-estimators serve too (lane mf-door7)
         var served = False
         try:
             served = _admit_one(order[i], order_fields[i], order_kinds[i], order_context[i], b, sub, done, prepared,
@@ -628,6 +649,8 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
     if _rfe(kind):
         return _admit_rfe(model, fields, context, b, owner, done, child)
     if _search(kind):
+        if owner.serving:
+            return _admit_search_serving(fields, context, b, owner, done, child)
         return _admit_search(model, fields, context, b, owner, done, prepared, child)
     if _multi(kind):
         return _admit_multi(fields, kind, context, b, owner, done)
@@ -691,8 +714,14 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
                 return False
     else:
         var cv = py_get(fields, "cv")
-        _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
-        if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
+        if not owner.serving:
+            _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
+        if owner.serving:
+            # A SERVING admission (lane mf-door7): the fitted stack predicts with no folds; its cv (a user's
+            # splitter object too) is read only by a fit. The folds word is cv=None's 5, which NEW checks and
+            # nothing here reads.
+            folds = 5
+        elif cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
             # A user's index list (lane mf-meta3b): its folds read ONCE into
             # typed int32 rows, checked against the fit's rows by the RUN as
             # the door's `_splits` checks them.
@@ -717,8 +746,6 @@ def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: Py
             # A classifier stacked with stack_method='predict' writes its
             # predicted codes (core/ensemble_member.mojo `_label_block`).
             var method = _stack_method(fields, active.ests[i], classifier, context)
-            if method < 0:
-                return False
             stack_kinds.append(method)
             if not _admit_nested(done, nested, active.ests[i], classifier, base_needs | _stack_need(method), context, b,
                                  child):
@@ -851,7 +878,9 @@ def _finish(fields: PythonObject, context: PythonObject, b: PythonObject, mut ow
             var words: List[Float64], var fold_train: List[List[Int32]], var fold_test: List[List[Int32]]) raises -> Bool:
     """The admission's tail for every kind: the x_trees image's route, the
     nested plans minted once into the plan store (released by the capsule
-    kept in the owner's pins), the parameter words."""
+    kept in the owner's pins), the parameter words. Never answers False
+    (lane mf-fitadm7, read: an image that is not connected raises
+    `_trees_key`'s words), so no caller's door is reached through it."""
     var cap = _cap_of(fields, b)
     var key = _trees_key(fields, context, b)
     var device = DEVICE_CPU
@@ -1277,6 +1306,7 @@ def ensemble_member_state(model: PythonObject, fields: PythonObject, context: Py
             var owner = MemberOwner()
             owner.plan.family = MEMBER_FAMILY_ENSEMBLE
             owner.plan.kind = order_kinds[i]
+            owner.serving = True  # an import of fitted state: nothing here fits (lane mf-door7)
             if not ensemble_member_admit(order[i], order_fields[i], order_kinds[i], order_context[i], b, owner):
                 raise Error("TypeError: mojolearn: a nested estimator cannot be imported")
             owner.plan.member = member_resolve_family(MEMBER_FAMILY_ENSEMBLE, owner.plan.route)
@@ -1611,24 +1641,23 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
     # its base's admission; Bagging's `_validate_params`, its max_samples / max_features readings, its
     # base's `_require_tree` and device. A value it refuses is a plan whose FIT raises the words first
     # (`_refuse_first`), where the caller fell back to the door to raise them.
-    var jobs = 0
     var bag_count = 0
     var bag_seed = 0
     var bag_samples = MetaCount(True, 0, 0.0)
     var bag_features = MetaCount(True, 0, 0.0)
     try:
         if kind == META_OVR:
-            jobs = meta_jobs(model, True)
+            _ = meta_jobs(model, True)  # its words only (the kind's fit runs its own workers)
             prep_estimator_admit(py_get(fields, "estimator"), meta_owner(model), context)
         elif kind == META_CALIBRATED:
             meta_calibrated_validate(model, context)
-            jobs = native_unit_jobs(py_get(fields, "n_jobs"), name)
+            _ = native_unit_jobs(py_get(fields, "n_jobs"), name)  # its words only
             var cal_base = _cal_base(fields, context)
             if cal_base is not None:
                 prep_estimator_admit(cal_base, meta_owner(model), context)
         else:
             meta_bagging_validate(fields, context)
-            jobs = native_unit_jobs(py_get(fields, "n_jobs"), name)
+            _ = native_unit_jobs(py_get(fields, "n_jobs"), name)  # its words only
             bag_count = Int(py=_int(py_get(fields, "n_estimators")))
             bag_seed = meta_seed(py_get(fields, "random_state"), context)
             bag_samples = meta_count_reading(py_get(fields, "max_samples"), "max_samples", context)
@@ -1663,10 +1692,16 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
         # fit over that fit's rows (core/ensemble_member.mojo `_split_folds`);
         # a user's own splitter object refused here.
         var cv = py_get(fields, "cv")
-        _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
+        if not owner.serving:
+            _refuse_cv_callback(cv, context, b, _CV_CALLBACK_WORDS, False)
         # scikit-learn's fold-count check reads an exact int cv (not None's 5): META_CAL_INT_CV.
         var int_cv = False
-        if cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
+        if owner.serving:
+            # A SERVING admission (lane mf-door7): the fitted calibration predicts through its pairs; its cv
+            # (a user's splitter object too) is read only by a fit. The folds word is cv=None's 5, which NEW
+            # checks and nothing here reads.
+            folds = 5
+        elif cv is not None and (py_type(cv) is b.list or py_type(cv) is b.tuple):
             _ = _user_folds(cv, b, fold_train, fold_test)
             folds = len(fold_test)
         elif cv is not None and py_type(cv) is not b.int:
@@ -1677,12 +1712,11 @@ def _admit_unit(model: PythonObject, fields: PythonObject, kind: Int, context: P
             int_cv = cv is not None
             if folds < 2:
                 _ = meta_cv_value(cv, context)  # the door's words (`meta_calibrated_validate` raised them first)
-        # The resident DeviceRows route (a measured winner) stays the door's.
-        var plan = prep_estimator_plan(base, context)
-        if plan is not None:
-            var rows = py_get(plan, "device_rows")
-            if rows is not None and _truthy(rows, b) and native_unit_device_workers(min(jobs, folds - 1), context) <= 1:
-                return False
+        # A base that takes the resident DeviceRows route (lane mf-door7): admitted as the kind's base. That
+        # route (a measured winner) is CalibratedClassifierCV's own public fit's (bindings/trees_public_meta_door.mojo
+        # `_CalUnits`), which never reaches this admission; a NESTED Calibrated (a member of a meta-estimator, a
+        # search candidate) and a fitted one held for predict run its member calls on host rows, as every other
+        # base. Before, this answered False and the caller kept its door (SHAP's `_DoorModel`, the meta doors).
         var decision = prep_estimator_has(base, "decision_function", context)
         var needs = base_needs | (MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA)
         if not _admit_cal_base(done, nested, base, needs, context, b, labels, whole):
@@ -2771,9 +2805,109 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                                                                py_call(b.getattr, got, PythonObject("_sign")))))
             kw = mine_kw^
             return name
+        # THE METRIC ROWS (lane mf-fitadm7; core/msel_scorer_run.mojo
+        # `msel_scorer_metric_code`): a make_scorer over a connected metric
+        # no get_scorer name holds, response 'predict', whose kwargs are
+        # only the ones its typed row reads: zero_one_loss's `normalize` (an
+        # exact bool), `sample_weight` (data, read once as the other rows'),
+        # `numeric_mode` None. Its row's sign is the metric's value: the
+        # flip is greater_is_better=False.
+        var plan = py_get(context["family_msel_metric_plans"], func)
+        if plan is None or py_type(got_method) is not b.str or String(py=got_method) != "predict":
+            return String("")
+        var metric = String(py=plan["name"])
+        var normalize = True
+        var metric_kw = _ScorerKw()
+        var given = py_call(b.list, py_call(got_kwargs.items))
+        for q in range(len(given)):  # small-loop(the scorer's options, once per admission)
+            var word = String(py=given[q][0]) if py_type(given[q][0]) is b.str else String("")
+            var value = given[q][1]
+            if word == "normalize" and metric == "zero_one_loss":
+                if py_type(value) is not b.bool:
+                    return String("")  # the metric's "normalize must be a bool": the door's words per side
+                normalize = Bool(py=value)
+            elif word == "sample_weight":
+                if value is not None:
+                    metric_kw.weights = value
+            elif word == "numeric_mode":
+                if value is not None:
+                    return String("")
+            else:
+                return String("")
+        var code = msel_scorer_metric_code(metric, normalize)
+        if code < 0:
+            return String("")
+        metric_kw.flip = Int(py=py_call(b.int, py_call(b.getattr, got, PythonObject("_sign")))) != 1
+        kw = metric_kw^
+        return String(msel_scorer_row(code).name)
     except:
         return String("")  # options no exact comparison reads: the door
     return String("")
+
+
+def _search_served(fields: PythonObject) raises -> PythonObject:
+    """The one nested estimator of a SERVING search admission: its fitted `best_estimator_`, else (an unfitted
+    search inside a fitted parent, whose fitted clones the parent's import reads) its `estimator`, the class
+    every candidate and the best are clones of."""
+    var best = py_get(fields, "best_estimator_")
+    if best is not None:
+        return best
+    var base = py_get(fields, "estimator")
+    return base
+
+
+def _admit_search_serving(fields: PythonObject, context: PythonObject, b: PythonObject, mut owner: MemberOwner,
+                          done: _Done, labels: PythonObject) raises -> Bool:
+    """UNPACK of THE SEARCH KIND for a caller that only predicts on fitted state (lane mf-door7,
+    `MemberOwner.serving`: SHAP's members, a meta-estimator's fitted member held for predict, a META import).
+    A fitted search predicts through its `best_estimator_` (scikit-learn's `BaseSearchCV.predict` /
+    `predict_proba` / `decision_function` delegate to it), so its scorers, cv, splitter object, candidates and
+    device, which only its fit reads, are not read: one nested plan, `_search_served`'s estimator, admitted
+    for predict, the head words of scoring=None with cv=None's 5 folds (which NEW checks; nothing fits), and
+    META_PARAM_SERVING set (`_search_state` imports the best as candidate 0). Before, every
+    scorer, splitter or candidate list the FIT admission does not take answered False here and the caller kept
+    its door (SHAP's `_DoorModel`). False only for a nested estimator with no serving member, or an x_trees
+    image that is not built."""
+    var base = _search_served(fields)
+    if base is None:
+        return False
+    var base_plan = prep_estimator_plan(base, context)
+    if base_plan is None or py_get(base_plan, "member") is None:
+        return False
+    var classifier = False
+    if member_mark(base_plan, b).family == MEMBER_FAMILY_ENSEMBLE:
+        var at = done.find(base)
+        if at < 0:
+            return False
+        classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
+    else:
+        classifier = Bool(py=base_plan["classifier"])
+    var needs = MEMBER_CAN_PREDICT | (MEMBER_CAN_CLASSIFIER if classifier else 0)
+    var nested = _Nested()
+    if not _admit_nested(done, nested, base, classifier, needs, context, b, labels):
+        return False
+    var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
+    if trees is None:
+        try:
+            trees = py_call(native_loaded_module("importlib").import_module,
+                            PythonObject("mojolearn._expansion_trees"))
+        except:
+            return False  # the x_trees image is not built: no META image to run on
+    var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
+    if trees_context is None:
+        return False
+    # The head words of a search that is never fitted here (`_admit_search`'s layout for scoring=None: scorer
+    # 0, no tolerance, no train scores, a grid's seed -1, refit True, refit scorer 0, count 0) and its one
+    # scorer group.
+    var words: List[Float64] = [0.0, 0.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0]
+    var sels = List[Int32]()
+    msel_scorer_group_words(words, 0, -1, MselScorerOptions(), sels)
+    var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
+    if not _finish(fields, trees_context, b, owner, nested, kind, 0.0, 5, List[Float64](), List[Int](), words^,
+                   List[List[Int32]](), List[List[Int32]]()):
+        return False
+    owner.plan.params[META_PARAM_SERVING] = 1.0
+    return True
 
 
 def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
@@ -3332,20 +3466,19 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
     # The META entry and its glue run on an x_trees image: the search's own
     # context is model selection's, so the image is the one the meta classes'
-    # context names (`_finish` reads its bindings; not loaded: the door).
+    # context names (`_finish` reads its bindings).
     var trees = py_call(native_loaded_module("sys").modules.get, PythonObject("mojolearn._expansion_trees"))
     if trees is None:
         # not imported yet (lane mf-ens6b): imported once, as the metrics
-        # module is below, where the door kept the search before; an image
-        # that is not built (its ImportError) keeps the door's units
-        try:
-            trees = py_call(native_loaded_module("importlib").import_module,
-                            PythonObject("mojolearn._expansion_trees"))
-        except:
-            return False
+        # module is below. AN IMAGE THAT IS NOT BUILT (lane mf-fitadm7): its
+        # loader's ImportError is raised as it stands (no image can run the
+        # search kind; before, the door's units fitted it).
+        trees = py_call(native_loaded_module("importlib").import_module, PythonObject("mojolearn._expansion_trees"))
     var trees_context = py_get(py_call(b.vars, trees), "_TREES_CONTEXT")
     if trees_context is None:
-        return False  # the x_trees image is not built: the door's units (no META image to run on)
+        # the x_trees image is not connected (lane mf-fitadm7): `_trees_key`'s
+        # words, the refusal every meta estimator's own fit raises
+        raise Error("ImportError: mojolearn: _mojolearn_x_trees is not connected to the tree owner")
     # THE CLUSTER LABEL-PAIR ENTRY (lane mf-cluster5): the default-mode
     # metrics image the public doors resolve (`estimator_binding_mode`), its
     # key read and its entry resolved ONCE; the image is pinned below. Not
@@ -3946,8 +4079,10 @@ def _search_state(fields: PythonObject, context: PythonObject, b: PythonObject, 
         block.x = MemberMatrix(Int(handles.unsafe_ptr()), 1, 1, MEMBER_I64)
         _ = member_call(plan.member, MEMBER_OP_IMPORT, block)
         handles = List[Int64]()  # the search state owns it now
-        # the META_BLOCK_SEARCH head (no tables: an imported search is not refitted here)
-        var words: List[Float64] = [Float64(Int(py=index)), 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0]
+        # the META_BLOCK_SEARCH head (no tables: an imported search is not refitted here). A SERVING plan
+        # (`_admit_search_serving`, META_PARAM_SERVING) holds one candidate, the fitted best: index 0.
+        var best_at = 0 if plan.params[META_PARAM_SERVING] != 0.0 else Int(py=index)
+        var words: List[Float64] = [Float64(best_at), 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 1.0]
         var search = MemberCall(plan.route, call.state)
         search.block = META_BLOCK_SEARCH
         search.x = MemberMatrix(Int(words.unsafe_ptr()), 1, len(words), MEMBER_F64)
@@ -3974,14 +4109,22 @@ def _admit_multi(fields: PythonObject, kind: Int, context: PythonObject, b: Pyth
                  mut owner: MemberOwner, done: _Done) raises -> Bool:
     """UNPACK of THE MULTI-OUTPUT KIND: the base admitted once through the
     LEAF dispatch. False (the door keeps it) for a plain Ridge base of a
-    MultiOutputRegressor (the door's one-program ridge route over every
-    output, a measured winner kept on the door) and a base with no serving
-    member."""
+    MultiOutputRegressor that may be FITTED here (the door's one-program
+    ridge route over every output, a measured winner kept on the door) and
+    a base with no serving member. A SERVING admission of one (lane
+    mf-door7: a fitted MultiOutputRegressor over Ridge as a member that
+    only predicts) is the kind: its import reads every fitted output Ridge
+    (`_multi_state`) and its predict is each output's Ridge member, the
+    plumbing around the same fitted coefficients."""
     var classifier = kind == META_MULTI_CLASSIFIER
     var base = py_get(fields, "estimator")
     if base is None:
+        # NO BASE (lane mf-fitadm7): the door's `_require_member` refusal, in
+        # its words (its fit refuses None before any column is fitted).
+        prep_estimator_admit(base, String("MultiOutputClassifier") if classifier else String("MultiOutputRegressor"),
+                             context)
         return False
-    if not classifier:
+    if not classifier and not owner.serving:
         var defaults = py_get(context, "native_estimator_defaults")
         var ridge = py_get(defaults, "Ridge") if defaults is not None else PythonObject(None)
         if ridge is not None and py_type(base) is py_type(ridge):
@@ -4136,7 +4279,7 @@ def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject,
         # nested plan the work-list minted (one admission per RFE: the work-list walked this estimator for it).
         if path.leaf_word and not meta_plan_leaf_importances(nested.plans[0], path.hops):
             return False
-        base.block = META_BLOCK_FORWARD
+        base.block = path.forward_block  # lane mf-rfe7b: META_BLOCK_FORWARD and a named attribute's row
         base.squared = True
         base.refusal = path.refusal.copy()
         base.hops = path.hops.copy()

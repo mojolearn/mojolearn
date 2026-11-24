@@ -13,37 +13,34 @@
 # which THE RFE KIND of core/ensemble_member.mojo runs too); its UNPACK and
 # PACK pieces are providers/python/member_rfe_boundary_door.mojo's.
 #
-# RFE runs its elimination rounds here (one driver loop over the rounds); its
-# estimator must be a mojolearn estimator with a connected native plan. Its
-# clone, fit, predict, predict_proba, decision_function and score run as the
-# plan's compiled operations (bindings/prep_native_estimator.mojo), so a round
-# never enters a Python method: neither the estimator's fit / predict nor its
-# get_params or constructor.
-# Its programs run on the shared arena runner (bindings/prep_classify_prog.mojo
-# `ClsProg`, the classifier owner's context `select_context`) because the
-# support mask and the ranking are in-out inputs, as `_Prog.put(inout=True)`
-# made them. The mutual-information programs and the selector transform run
-# on the encode owner's transport (bindings/prep_encode_native_door.mojo `EncProg`).
+# RFE's estimator must be a mojolearn estimator with a connected native plan and a native member (lane
+# mf-rfe7: every fit runs over the member; the door's own rounds through the plan's compiled fit and the
+# fitted estimator's attribute reads are deleted). Its fitted estimator_'s predict, predict_proba,
+# decision_function and score run as the plan's compiled operations (bindings/prep_native_estimator.mojo),
+# so nothing enters a Python method. The rounds' programs run on the classifier owner's arena runner
+# (`cls_borrowed_run` inside `rfe_fit_run`, the context `select_context`) because the support mask and the
+# ranking are in-out inputs. The mutual-information programs and the selector transform run on the encode
+# owner's transport (bindings/prep_encode_native_door.mojo `EncProg`).
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
 from bindings.member_leaf_boundary_door import member_leaf_pack, member_leaf_pack_labeled
-from bindings.member_boundary_door import member_pack, member_pack_labeled, member_admit_serving_labeled
+from bindings.member_boundary_door import member_pack, member_pack_labeled, member_admit_labeled
 from core.member_abi import (
     member_kind_capabilities, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_CLASSIFIER, MEMBER_GIL_FREE,
     MEMBER_GIL_DOOR,
 )
 from core.member_families import MEMBER_FAMILY_ENSEMBLE
-from core.ensemble_member import META_BLOCK_FORWARD, meta_plan_leaf_importances
+from core.ensemble_member import meta_plan_leaf_importances
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_abi import MemberCall, member_free, MEMBER_F32, MEMBER_I32, MEMBER_READS_Y_GIVEN
 from bindings.member_given_y_unpack import member_given_y
 from core.member_families import MEMBER_FAMILY_GBDT, MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 from bindings.trees_public_inputs_run import trees_finite_f32
 from providers.python.member_rfe_boundary_door import (
-    RfeBase, rfe_base_admit_labeled, rfe_count_words, rfe_image, rfe_publish, rfe_plan_labels, rfe_fit_keywords,
-    rfe_member_fit_params, rfe_dotted_path,
+    RfeBase, RfeDottedPath, rfe_base_admit_door, rfe_count_words, rfe_image, rfe_publish, rfe_plan_labels,
+    rfe_fit_keywords, rfe_member_fit_params, rfe_dotted_path,
 )
 from bindings.arena_owner_door import arena_pin, arena_unpin
 from bindings.x_prep_native_owner_door import xprep_resident
@@ -51,38 +48,31 @@ from core.member_set_run import MemberFitExtras
 from providers.python.member_gbdt_boundary_door import gbdt_member_fit_params, gbdt_member_label_check
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays_door import classical_address, classical_typed, classical_input
-from bindings.admitted_input_unpack import admit_x
-from bindings.py_admitted_registry import admitted_scope_begin, admitted_scope_end
-from bindings.admitted_meta_scope_unpack import admitted_hold_array_f32
+from bindings.classical_arrays_door import classical_address, classical_typed
 from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_labels_door import classical_encode_labels
+from bindings.classical_labels_door import classical_encode_labels, ClassicalLabels
 from bindings.admitted_input_unpack import admit_f32, admitted_vector
 from bindings.scaler_native_door import _ptr
 from bindings.scaler_lifecycle_native_door import _entries
 from bindings.x_prep_native_owner_door import xprep_values
-from bindings.prep_stateless_native_door import _select_transform, _select_gather, _support_columns, _words, _fam
+from bindings.prep_stateless_native_door import _select_transform, _select_gather, _support_columns, _fam
 from bindings.prep_encode_native_door import (
-    EncProg, _fit_categories, _take1, _take2, _default_mode, _seed64, _score_words, _category_build, _cat_block,
+    EncProg, _fit_categories, _take1, _take2, _default_mode, _seed64, _category_build, _cat_block,
     _record_sizes, IDN_STATS_BLOCKED)
 from bindings.prep_encode_cats_run import CatBlock
 from bindings.prep_select_run import (
     mi_check_neighbors, mi_check_shape, mi_mask_of_bools, mi_mask_of_indices, mi_columns, mi_gather_stage,
     mi_class_count_stage, mi_int_words, mi_class_check, mi_discrete_check, mi_stage, mi_scatter, MiProgram,
-    rfe_select_count, rfe_step_count, RfeKeys, rfe_first_stage, rfe_round_stage,
-    RfeFitPlan, RfeFitResult, rfe_fit_run, rfe_rows_gather,
+    rfe_select_count, rfe_step_count, RfeFitPlan, RfeFitResult, rfe_fit_run, rfe_rows_gather, RFE_NO_IMPORTANCES,
 )
 from bindings.x_prep_native_inputs_door import _rows_fields, _dense_values, _values
-from bindings.prep_classify_prog_door import ClsProg, f32_array
-from bindings.prep_classify_common_door import cls_x2d, cls_mode, XIn
+from bindings.prep_classify_common_door import cls_x2d, XIn
 from bindings.prep_classify_native_door import resident_enter_min, _resident_exit
-from bindings.py_optional import py_or_none, py_present
 from bindings.prep_native_estimator_door import (
-    prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_attribute,
-    prep_estimator_plan)
+    prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_plan)
 from bindings.prep_keys_unpack import (
     prep_keys,
     PREP_OPN_DECISION_FUNCTION, PREP_OPN_FIT, PREP_OPN_FIT_TRANSFORM, PREP_OPN_GET_SUPPORT,
@@ -91,7 +81,6 @@ from bindings.prep_keys_unpack import (
 from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
-comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 
 # ---------------------------------------------------------------- calls into estimators
@@ -123,148 +112,93 @@ def _class_name(value: PythonObject) raises -> String:
     return String(py_type(value).__name__)
 
 
-def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, fit_params: PythonObject,
-               context: PythonObject) raises -> PythonObject:
-    """RFE's `_clone(estimator).fit(x, y)`: the clone built from the
-    constructor schema and fitted by the plan's compiled fit (no Python
-    get_params, constructor or fit). Returns the fitted clone.
-
-    WHO STILL COMES HERE (lane mf-rfe6, after mf-del5b's audit): an estimator whose admission
-    `rfe_base_admit_labeled` / `_rfe_dotted_base` does not serve, chiefly a published kind that fits and
-    exports but carries neither importance block while its estimator answers one through the door's
-    attribute reads (SVC with kernel='linear': coef_ through the registered SVM coef_ operation; the
-    kernel-SVM member exports no coef block); a class_weight table `rfe_plan_labels` cannot complete; a fit
-    parameter the member does not carry (`gbdt_member_fit_params` / `rfe_member_fit_params` not admitted:
-    weights for a kind without MEMBER_CAN_SAMPLE_WEIGHT, such as a forest regressor with oob_score, a key
-    other than sample_weight / feature_importances, a cat_features index outside X). Each keeps the
-    estimator's own compiled fit door because only that door answers it. Moved off this door by lane mf-rfe6:
-    a tree or forest leaf's feature_importances_ under a META step (the leaf's importance word set in the
-    nested plan), X held as DeviceRows (THE DEVICE ROWS ROUTE in the RUN), the weighted RF-layout regressor's
-    importance fit (the forest member takes weights with it), the member-refusal fallback and the
-    encoder- or regressor-refused target (raised by the member path in the fit doors' words). Lane mf-cal5
-    moved off: a one-class target, a feature_importances value, a cat_features index outside X's words, a
-    class_weight equal to 'balanced' that is not a str (x_linear, SGD).
-    The audit of every admission that answers False: ~/mojolearn-evidence/briefs-20261122/mf-cal5-work/
-    fallback-audit.tsv."""
-    var est = prep_estimator_clone(estimator, context)
-    _ = prep_estimator_call(est, "fit", Python.tuple(x, y), context, fit_params)
-    return est
-
-
 # ---------------------------------------------------------------- RFE programs
 # TOMBSTONE: _gather_cls (one gather program per round plus one for the final fit, each putting X) deleted
 # 2026-11-09 by d6f2d5ed09 (lane w1-readmission-rfe); code recoverable at d6f2d5ed09^.
 # Restore: git apply experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch
-# The round programs are typed (lane bm-rest-sel, 2026-11-23): bindings/prep_select_run.mojo
-# `rfe_first_stage`, `rfe_round_stage`, `rfe_keys_stage`, `rfe_block_stage` stage what `_stage_block` and
-# `_keys_of` staged here over the Python-holding program, in the same order; this door gives each caller
-# buffer record its owner (`ClsProg.own`, record order).
-def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonObject, context: PythonObject,
-                     cc: PythonObject) raises -> RfeKeys:
-    """UNPACK of the fitted estimator's m column importances for the typed
-    key stages (`_stage_importance_keys(pr, est, m, getter)`): coef_
-    (squared, summed over rows when 2-D, on the device), else
-    feature_importances_ as given; a dotted attribute path picks the
-    importances instead (squared). The words become the round program's
-    first caller buffer."""
-    var b = native_loaded_module("builtins")
-    var auto = py_type(getter) is b.str and String(getter) == "auto"
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var coef = Optional[PythonObject]()
-    if not auto:
-        coef = py_present(prep_estimator_attribute(est, getter, context))
-    else:
-        coef = py_present(prep_estimator_attribute(est, PythonObject("coef_"), context))
-    if not coef and auto:
-        var imp = prep_estimator_attribute(est, PythonObject("feature_importances_"), context)
-        if imp is None:
-            raise Error("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
-        return _keys_of(pr, imp, False, m, context, cc)
-    return _keys_of(pr, py_or_none(coef), True, m, context, cc)
+# REMOVED (lane mf-rfe7, 2026-11-23): `_fit_clone` (RFE's `_clone(estimator).fit(x, y)` through the plan's
+# compiled fit door), the door half of `_rfe_rounds` (one ClsProg program per elimination round over the
+# estimator's own fit and attribute reads), `_importance_keys` / `_keys_of` (the fitted estimator's coef_ or
+# feature_importances_ read through `prep_estimator_attribute`), `_rfe_hold_block` and the admitted hold scope
+# of each round's block. Every RFE fit is THE ONE BODY over a native member (`_rfe_native`); each case the
+# door half served is a member route or a native refusal in the words that door raised (rows:
+# ~/mojolearn-evidence/briefs-20261122/mf-rfe7-work/rows.tsv). Plain door code, not an experiment define:
+# no tombstone patch; recoverable at the parent of the commit that removed it.
 
 
-def _keys_of(mut pr: ClsProg, values: PythonObject, squared: Bool, m: Int, context: PythonObject,
-             cc: PythonObject) raises -> RfeKeys:
-    """UNPACK of m column importances: `values` as given (their own words
-    and c2_key64 kind), or (`squared`: a coefficient block, 1-D or rows x m)
-    admitted as float32 rows. The words are owned by `pr` as the next
-    caller buffer; returns what `rfe_keys_stage` stages."""
-    if not squared:
-        var got = _score_words(values, m, context)
-        pr.own(got[0])
-        return RfeKeys(m, 1, False, got[1])
-    var coef = py_present(values)
-    # `as_f32_c(coef, ndim=None)` then `rows, d = (1, len) if 1-D else shape`
-    var raw = classical_input(py_or_none(coef), cc, "coef_")
-    var nd = Int(py=raw.ndim)
-    var rows = 1
-    var d = 0
-    if nd == 1:
-        d = Int(py=raw.shape[0])
-    elif nd == 2:
-        rows = Int(py=raw.shape[0])
-        d = Int(py=raw.shape[1])
-    elif nd == 0:
-        raise Error("not enough values to unpack (expected 2, got 0)")
-    else:
-        raise Error("too many values to unpack (expected 2)")
-    if d != m:
-        raise Error("mojolearn: RFE importances have " + String(d) + " columns, expected " + String(m))
-    pr.own(admit_x(py_or_none(coef), nd, "coef_", cc))
-    return RfeKeys(m, rows, True, 0)
-
-
-# ---------------------------------------------------------------- a dotted importance getter (lane mf-meta5b)
-def _rfe_dotted_base(estimator: PythonObject, g: PythonObject, context: PythonObject, b: PythonObject) -> RfeBase:
-    """UNPACK, once per RFE fit, of a dotted importance_getter: the path walked ONCE
-    (providers/python/member_rfe_boundary_door.mojo `rfe_dotted_path`, the walk THE RFE KIND's admission runs
-    too, lane mf-del5b) to THE FORWARDED EXPORT's hops and the leaf's attrgetter words, then the META
-    estimator admitted as a member through the member dispatch (no labels: a nested class_weight dict keeps
-    the door). Not served (the door keeps its attribute reads): whatever `rfe_dotted_path` does not serve,
-    a META estimator with no serving member. Never raises."""
+# ---------------------------------------------------------------- a META estimator (lanes mf-meta5b, mf-rfe7)
+def _rfe_meta_base(estimator: PythonObject, g: PythonObject, y: PythonObject, context: PythonObject,
+                   b: PythonObject, mut encoded: Optional[ClassicalLabels]) raises -> RfeBase:
+    """UNPACK, once per RFE fit, of an estimator the leaf admission does not hold (`rfe_base_admit_door`
+    answered not served with no words): a dotted importance_getter walked ONCE (providers/python/
+    member_rfe_boundary_door.mojo `rfe_dotted_path`, the walk THE RFE KIND's admission runs too) to THE
+    FORWARDED EXPORT's hops and the leaf's words, then the META estimator admitted as a member through the
+    member dispatch (`member_admit_labeled`: its family's refusals raise in their words, as the estimator's
+    own fit door raised them). A plain getter over a META estimator (a search, a stack, a calibration, a
+    Pipeline: none of them has coef_ or feature_importances_ in scikit-learn): admitted with the refusal its
+    first round raises (RFE_NO_IMPORTANCES for 'auto', attrgetter's words for a name), so with no round the
+    final fit runs, as in scikit-learn (lane mf-rfe7; before, the door's own rounds fitted it and raised the
+    same words after their first fit). The labels (lane mf-rfe7): y encoded once, as the classifier fit
+    doors encode it, and handed to the admission so a nested class_weight dict is read over them
+    (`_child_labels`); a target the encoder refuses is admitted with none (a regressor META). The encode is
+    handed back in `encoded` (the caller's classifier encode reuses it: one encode per fit). `native` False
+    never returns: every case not served raises its words here."""
     var base = RfeBase()
-    try:
-        var path = rfe_dotted_path(estimator, g, context, b)
+    var getter = String(py=g)
+    var dotted = getter.find(".") >= 0
+    var path = RfeDottedPath()
+    if dotted:
+        path = rfe_dotted_path(estimator, g, context, b)
         if not path.served:
-            return base^
-        var source_refusal = path.refusal.copy()
-        var hops = path.hops.copy()
-        var plan = prep_estimator_plan(estimator, context)
-        if plan is None:
-            return base^
-        var template = prep_estimator_clone(estimator, context)
-        var member_context = plan["context"]
-        var fields = py_call(plan["fields_get"], template, py_type(template))
-        var owner = member_admit_serving_labeled(template, fields, plan, member_context, b,
-                                                 MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, PythonObject(None))
-        if not owner.published or owner.plan.family != MEMBER_FAMILY_ENSEMBLE:
-            return base^
-        var mask = member_kind_capabilities(owner.plan)
-        # The estimator type is the META kind's (lane mf-del5b): a search's class says none of its own (its
-        # base decides, lane mf-search4), so its plan's word would have refused a search over a classifier;
-        # THE RFE KIND's admission reads the same mask.
-        var classifier = (mask & MEMBER_CAN_CLASSIFIER) != 0
-        if (mask & MEMBER_CAN_FIT) == 0 or (mask & MEMBER_CAN_EXPORT) == 0:
-            return base^
+            raise Error(path.why.copy())
+    var cls = String(py_type(estimator).__name__)
+    var plan = prep_estimator_plan(estimator, context)
+    if plan is None:
+        raise Error("TypeError: mojolearn: RFE requires a mojolearn estimator; got " + cls)
+    var labels = PythonObject(None)
+    try:
+        var got = classical_encode_labels(y, plan["context"])
+        labels = got.classes
+        encoded = got^
+    except:
+        labels = PythonObject(None)
+    var template = prep_estimator_clone(estimator, context)
+    var member_context = plan["context"]
+    var fields = py_call(plan["fields_get"], template, py_type(template))
+    var owner = member_admit_labeled(template, fields, plan, member_context, b, labels)
+    var words = String("TypeError: mojolearn: RFE requires an estimator whose native member fits and exports its "
+                       + "fitted state; " + cls + " has none")
+    if not owner.published or (dotted and owner.plan.family != MEMBER_FAMILY_ENSEMBLE):
+        raise Error(words)
+    var mask = member_kind_capabilities(owner.plan)
+    if (mask & MEMBER_CAN_FIT) == 0 or (mask & MEMBER_CAN_EXPORT) == 0:
+        raise Error(words)
+    # The estimator type is the META kind's (lane mf-del5b): a search's class says none of its own (its
+    # base decides, lane mf-search4), so its plan's word would have refused a search over a classifier;
+    # THE RFE KIND's admission reads the same mask.
+    var classifier = (mask & MEMBER_CAN_CLASSIFIER) != 0
+    if dotted:
         # A tree or forest leaf read for feature_importances_ (lane mf-rfe6): its importance word set in the
         # nested plan this admission minted, before any state is made.
-        if path.leaf_word and not meta_plan_leaf_importances(owner.plan, hops):
-            return base^
-        base.refusal = source_refusal^
-        base.block = META_BLOCK_FORWARD
+        if path.leaf_word and not meta_plan_leaf_importances(owner.plan, path.hops):
+            raise Error(words)
+        base.refusal = path.refusal.copy()
+        base.block = path.forward_block
         base.squared = True
-        base.hops = hops^
-        base.meta = True
-        base.gil_free = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
-        base.mask = mask
-        base.classifier = classifier
-        base.owner = owner^
-        base.template = template
-        base.fields = fields
-        base.member_context = member_context
-        base.native = True
-    except:
-        return RfeBase()
+        base.hops = path.hops.copy()
+    elif getter == "auto":
+        base.refusal = String(RFE_NO_IMPORTANCES)
+    else:
+        base.refusal = "AttributeError: '" + classical_estimator_name(estimator) + "' object has no attribute '" + getter + "'"
+    base.meta = True
+    base.gil_free = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
+    base.mask = mask
+    base.classifier = classifier
+    base.owner = owner^
+    base.template = template
+    base.fields = fields
+    base.member_context = member_context
+    base.native = True
     return base^
 
 
@@ -273,8 +207,8 @@ struct RfeMember(Movable):
     """RFE's hold on its estimator as a NATIVE MEMBER (core/member_abi.mojo), built once per fit
     (`_rfe_member`): the estimator admitted with no fit target (providers/python/member_rfe_boundary_door.mojo
     `rfe_base_admit`, which THE RFE KIND's admission runs too), then the fit's target and parameters.
-    `base.native` False: the estimator's own doors (`_fit_clone`, `prep_estimator_attribute`) keep every
-    round. `eval_rows` / `eval_keys` (lane mf-meta5b): a Gbdt fit with cat_features's held-out rows and
+    Lane mf-rfe7: the admission always serves or raises (the estimator's own doors, which kept every round
+    of a base not served, are deleted). `eval_rows` / `eval_keys` (lane mf-meta5b): a Gbdt fit with cat_features's held-out rows and
     keys; `final_importances`: a forest's feature_importances=True (the final fit keeps its importance word). `y` is the admitted target the RUN reads by address (float32 values for a regressor kind, the
     int32 class codes of `labels` for a classifier kind: encoded once per fit). `extras` (lane mf-gbdt5):
     RFE's fit parameters, admitted once with the estimator's fit door's checks and words (a Gbdt member:
@@ -313,29 +247,32 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
                 context: PythonObject, b: PythonObject) raises -> RfeMember:
     """UNPACK, once per RFE fit: the fit parameters' names and values in the estimator's compiled fit's
     words (`rfe_fit_keywords`: its refusals raise here, before any round, as `_fit_clone`'s first fit
-    raised them), the estimator as a native member (`rfe_base_admit_labeled`, its labels deferred: lane
+    raised them), the estimator as a native member (`rfe_base_admit_door`, its labels deferred: lane
     mf-meta5b), then its fit target: a classifier kind's labels encoded here, once, and the plan completed
     over them (`rfe_plan_labels`: LabelPropagation / LabelSpreading's -1 marker word, a class_weight dict's
     table; `gbdt_member_label_check`: the classifier adapter's multiclass refusal, in its fit door's place),
     a regressor kind's target checked as its member's fit door admits it. Then the fit parameters: a Gbdt
     member's (`gbdt_member_fit_params`: sample_weight, eval_set (with cat_features too), group_id, pairs,
     pairs_weight), any other family's (`rfe_member_fit_params`: sample_weight through the shared weight
-    admission, a forest's feature_importances); their refusals raise from here. What stays on the
-    estimator's own doors (`_fit_clone`): a class with no serving member, a class_weight table it cannot
-    complete, a key or value the member does not carry (weights for a kind that reads none, a cat_features
-    index outside X). A target the encoder or the regressor admission refuses raises its words here (lane
-    mf-rfe6: in the family's fit door's words, the tree, forest and Gbdt regressors' own). One class is
-    the member's (its family's fit decides, lane mf-cal5); a feature_importances value the forest door
-    refuses raises its words here (`rfe_member_fit_params`)."""
+    admission, a forest's feature_importances); their refusals raise from here. A target the encoder or the
+    regressor admission refuses raises its words here (lane mf-rfe6: in the family's fit door's words, the
+    tree, forest and Gbdt regressors' own). One class is the member's (its family's fit decides, lane
+    mf-cal5); a feature_importances value the forest door refuses raises its words here
+    (`rfe_member_fit_params`). Lane mf-rfe7: nothing stays on the estimator's own doors (`_fit_clone` is
+    deleted): the leaf admission (`rfe_base_admit_door`) raises its family's words or says why a class is not
+    served; a dotted getter or a META estimator is admitted through the member dispatch (`_rfe_meta_base`);
+    weights for a kind that reads none and a key the member does not carry raise (`rfe_member_fit_params`,
+    `gbdt_member_fit_params`)."""
     var member = RfeMember()
     var has_params = len(fit_params) != 0
     if has_params:
         rfe_fit_keywords(estimator, fit_params, context, b)
-    var base = rfe_base_admit_labeled(estimator, g, context, b, Python.list())
+    var base = rfe_base_admit_door(estimator, g, context, b)
+    var pre = Optional[ClassicalLabels]()  # a META admission's one label encode
     if not base.native:
-        base = _rfe_dotted_base(estimator, g, context, b)
-    if not base.native:
-        return member^
+        if base.why.byte_length() > 0:
+            raise Error(base.why.copy())
+        base = _rfe_meta_base(estimator, g, y, context, b, pre)
     # THE MEMBER'S REFUSALS ARE RAISED (lane mf-rfe6; THE FALLBACK RULE's last users went): the target is
     # admitted here in the words the estimator's own fit door admits it with, and a refusal raises from here,
     # where that door's first fit raised it (X is admitted already, so its target checks come first).
@@ -345,14 +282,13 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
         # class list it would publish and one int32 code per row. ONE class (lane mf-cal5): the member is
         # fitted on it, as scikit-learn's RFE fits the estimator on whatever y holds; a family that refuses
         # one class raises its fit door's words from its member fit.
-        var encoded = classical_encode_labels(y, base.member_context)
+        var encoded = classical_encode_labels(y, base.member_context) if not pre else pre.value().copy()
         var count = len(encoded.classes)
         if encoded.n != n:
             # The member's fit reads n codes: a shorter y is refused here, in scikit-learn's words.
             raise Error("ValueError: Found input variables with inconsistent numbers of samples: [" + String(n)
                         + ", " + String(encoded.n) + "]")
-        if not rfe_plan_labels(base, encoded.classes, b):
-            return member^
+        rfe_plan_labels(base, encoded.classes, b)
         base.owner.plan.classes = count
         member.y = encoded.codes
         member.y_dtype = MEMBER_I32
@@ -391,7 +327,11 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             var params = gbdt_member_fit_params(base.template, base.owner.plan, fit_params, y, member.labels, n, d,
                                                 base.member_context)
             if not params.admitted:
-                return member^
+                # Lane mf-rfe7: a key `rfe_fit_keywords` let through (the plan's fit keyword table names it) that
+                # the Gbdt kind's member fit does not carry; the deleted rounds handed it to the fit door.
+                raise Error("TypeError: mojolearn: RFE: " + classical_estimator_name(estimator)
+                            + "'s native member fit does not take these fit parameters: "
+                            + String(py_call(b.list, fit_params)))
             member.extras = params.extras.copy()
             member.pins = params.pins
             # By swap: the addresses in `extras` point into these lists' storage.
@@ -401,8 +341,6 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, d: Int, g: Pyt
             swap(member.eval_keys, params.eval_keys)
         else:
             var params = rfe_member_fit_params(base, fit_params, n, b)
-            if not params.admitted:
-                return member^
             member.extras = params.extras.copy()
             member.pins = params.pins
             member.final_importances = params.final_importances
@@ -503,7 +441,7 @@ def _rfe_native(member: RfeMember, arr: XIn, n: Int, d: Int, counts: List[Float6
     var call = MemberCall(res.final_plan.route, res.final_state)
     try:
         if member.base.meta:
-            # A dotted getter's META estimator (`_rfe_dotted_base`): its own family's PACK.
+            # A META estimator (`_rfe_meta_base`: a dotted getter, or a plain one): its own family's PACK.
             if member.labels is None:
                 member_pack(member.base.template, member.base.fields, member.base.member_context, b,
                             res.final_plan, res.final_state)
@@ -563,142 +501,47 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # (the classifier owner's native `with resident():`) spans the rounds
     # with min_words = n * d, so X (the same admitted value every round
     # program puts) goes up once and every later gather reads its device
-    # copy; the d-word support, ranking and column ids are in-out words of
-    # the round's program, not held. An enclosing user scope, when one is
-    # active, is the one used. The scope is required: the arena rows owner
-    # connects when the package imports model_selection, and entering it only
-    # records the scope, so the silent "no scope, put X every round" fallback
-    # is deleted with it.
-    # S4 (lane s1): X came through admit_x above (refused unless finite), so
-    # every round's block, columns gathered out of it, is finite: it is held
-    # in the admitted registry while that round's estimator fits, and the
-    # member door (in any binding: one registry per process) reads it with
-    # no view, check or scan. A fold's DeviceRows X was not tested here, so
-    # its blocks are not held.
-    var hold = py_type(args[0]) is not py_item(cc, nk[].k_maxabs_rows_class)
-    var mark = -1
+    # copy (`_rfe_native` pins X in it: THE PIN RULE). An enclosing user
+    # scope, when one is active, is the one used.
+    # REMOVED (lane mf-rfe7): the admitted hold scope of each round's block (S4, lane s1), which the deleted
+    # door rounds held while the estimator's own fit door read it; the member rounds hand the block by
+    # address (core/member_abi.mojo), and X itself is admitted finite by `cls_x2d`.
     var scope = resident_enter_min(cc, PythonObject(arr.n * arr.d))
     try:
-        _rfe_rounds(model, fields, estimator, g, y, fit_params, arr, context, cc, hold, mark)
+        _rfe_rounds(model, fields, estimator, g, y, fit_params, arr, context, cc)
     except error:
         try:
             _resident_exit(scope, cc)
         except ignored:
             _ = ignored^
-        if mark >= 0:
-            admitted_scope_end(mark)
         raise error^
-    try:
-        _resident_exit(scope, cc)
-    finally:
-        if mark >= 0:
-            admitted_scope_end(mark)
-
-
-def _rfe_hold_block(block: PythonObject, hold: Bool, mut mark: Int, cc: PythonObject) raises:
-    """Hold this round's block for its fit in the one RFE hold scope: the
-    previous round's scope (`mark`, -1 for none) is closed first, so one
-    block is held at a time; `_rfe_fit` closes the last one on any exit."""
-    if mark >= 0:
-        admitted_scope_end(mark)
-        mark = -1
-    if not hold or not classical_is_array(block, cc):
-        return
-    mark = admitted_scope_begin()
-    _ = admitted_hold_array_f32(block, False)
+    _resident_exit(scope, cc)
 
 
 def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObject, g: PythonObject,
                 y: PythonObject, fit_params: PythonObject, arr: XIn, context: PythonObject,
-                cc: PythonObject, hold: Bool, mut mark: Int) raises:
-    """The elimination rounds and the final fit of `_rfe_fit`, inside its resident scope: over a native
-    member, the typed RUN whole (`_rfe_native`); else the estimator's own doors per round."""
+                cc: PythonObject) raises:
+    """The elimination rounds and the final fit of `_rfe_fit`, inside its resident scope: the estimator
+    admitted as a native member once for the whole fit (`_rfe_member`, which serves it or raises), then the
+    typed RUN whole (`_rfe_native`: THE ONE BODY, bindings/prep_select_run.mojo `rfe_fit_run`, which THE RFE
+    KIND also runs) and the PACK of the fitted attributes. X held as DeviceRows (a fold's rows) is the RUN's
+    too since lane mf-rfe6 (THE DEVICE ROWS ROUTE). REMOVED (lane mf-rfe7): the door half, one ClsProg
+    program per round over the estimator's own fit door (`_fit_clone`) and attribute reads."""
     var b = native_loaded_module("builtins")
     var n = arr.n
     var d = arr.d
-    var mode = cls_mode(cc)
     # UNPACK of n_features_to_select and step (providers/python/member_rfe_boundary_door.mojo
     # `rfe_count_words`); their counts are typed (bindings/prep_select_run.mojo `rfe_select_count`,
-    # `rfe_step_count`).
+    # `rfe_step_count`, resolved in `_rfe_native`).
     var counts = rfe_count_words(fields, b)
-    var nsel = rfe_select_count(d, Int(counts[0]), counts[1], Int(counts[2]))
-    var step = rfe_step_count(d, counts[3] != 0.0, counts[4], Int(counts[5]))
-    # The estimator as a native member (admitted once for the whole fit) when its family has published
-    # what RFE reads: THE ONE BODY (bindings/prep_select_run.mojo `rfe_fit_run`, which THE RFE KIND also
-    # runs). A member that refuses raises its words (lane mf-rfe6: REMOVED the fallback rule's second fit
-    # through the estimator's own doors; the member fits raise their fit doors' words). X held as DeviceRows
-    # (a fold's rows) is the RUN's too since lane mf-rfe6 (`_rfe_native`: THE DEVICE ROWS ROUTE, the same
-    # programs gathering the fold's rows on the device).
+    # step's refusal first, in the door's order (before the estimator's admission).
+    _ = rfe_step_count(d, counts[3] != 0.0, counts[4], Int(counts[5]))
     var member = _rfe_member(estimator, y, n, d, g, fit_params, context, b)
-    if member.base.native:
-        var support = List[Float32]()
-        var ranking = List[Float32]()
-        var selected = 0
-        # THE FALLBACK RULE is gone (lane mf-rfe6): a member refusal raises its words (the family's member
-        # fit raises its fit door's), never a second fit through the estimator's own doors.
-        var final = _rfe_native(member, arr, n, d, counts, cc, b, support, ranking, selected)
-        rfe_publish(fields, final, support, ranking, selected, context)
-        return
-    # The estimator's own doors, one program per elimination round (lane w1-readmission-rfe): the fitted
-    # estimator's importance keys, c2_rfe_step on the support mask, c2_rfe_rank, then the next block staged
-    # from the updated mask (c2_rfe_keep + gather_cols). Program 0 stages the first block from the all-ones
-    # mask. The support, ranking and column ids ride each program as its in-out and output words (d words
-    # each). Each round drops exactly min(step, nsup - nsel) columns (c2_rfe_step's stable rank is a total
-    # order), so the round count and every block width are known before the program runs. The programs are
-    # the typed builders of bindings/prep_select_run.mojo; this door owns their caller buffers in record
-    # order. The rounds are serial by nature: a round's block is chosen from the previous round's
-    # importances.
-    var x_words = Int(py=arr.value.size)
-    var support = f32_array(d, cc)
-    var sp = _ptr(support)
-    var ranking = f32_array(d, cc)
-    var rp = _ptr(ranking)
-    for j in range(d):  # driver-loop: over the initial support and ranking (feature count)
-        sp[j] = 1.0
-        rp[j] = 1.0
-        _ = support  # keep the Python object alive through the native call above
-        _ = ranking  # keep the Python object alive through the native call above
-    var pr0 = ClsProg()
-    var first = rfe_first_stage(pr0.program, x_words, n, d)
-    pr0.own(support)
-    pr0.own(arr.value)
-    pr0.run(mode, cc)
-    var feat = pr0.get_i32(first.ids, d, cc)
-    var block = pr0.get(first.block, n, d, cc)
-    var nsup = d
-    # REMOVED (lane mf-rfe6): the round's native-refusal check; a native member never reaches these rounds now.
-    while nsup > nsel:  # driver-loop: over elimination rounds
-        var drop = min(step, nsup - nsel)
-        var k = nsup - drop
-        var pr = ClsProg()
-        _rfe_hold_block(block, hold, mark, cc)
-        var est = _fit_clone(estimator, block, y, fit_params, context)
-        var keys = _importance_keys(pr, est, nsup, g, context, cc)
-        var staged = rfe_round_stage(pr.program, keys, List[Float32](), x_words, n, d, nsup, drop, k)
-        pr.own(support)
-        pr.own(ranking)
-        pr.own(feat)
-        pr.own(arr.value)
-        pr.run(mode, cc)
-        support = pr.get(staged.support, d, 0, cc)
-        ranking = pr.get(staged.ranking, d, 0, cc)
-        feat = pr.get_i32(staged.next.ids, k, cc)
-        block = pr.get(staged.next.block, n, k, cc)
-        nsup = k
-    _rfe_hold_block(block, hold, mark, cc)
-    var final = _fit_clone(estimator, block, y, fit_params, context)
-    _ = member.base.native  # the member's pins outlive the admission above
-    var support_words = List[Float32](length=d, fill=0.0)
-    var ranking_words = List[Float32](length=d, fill=0.0)
-    var fs = _ptr(support)
-    var fr = _ptr(ranking)
-    for j in range(d):  # driver-loop: over the fitted support and ranking (feature count)
-        support_words[j] = fs[j]
-        ranking_words[j] = fr[j]
-        _ = support  # keep the Python object alive through the native call above
-        _ = ranking  # keep the Python object alive through the native call above
-    _ = mode
-    rfe_publish(fields, final, support_words, ranking_words, nsup, context)
+    var support = List[Float32]()
+    var ranking = List[Float32]()
+    var selected = 0
+    var final = _rfe_native(member, arr, n, d, counts, cc, b, support, ranking, selected)
+    rfe_publish(fields, final, support, ranking, selected, context)
 
 
 def _rfe_transform(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:

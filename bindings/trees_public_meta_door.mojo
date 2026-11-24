@@ -90,7 +90,9 @@ from core.member_abi import (
     MemberMatrix, MEMBER_F64, MEMBER_I64,
     MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
     MEMBER_CAN_DECISION, MEMBER_CAN_PREDICT_PROBA, member_kind_capabilities,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE,
 )
+from bindings.member_scope_door import member_pin_take, member_pin_return
 from core.member_set_run import MEMBER_SET_TURN_HELD, member_set_first_failure
 from core.member_families import MEMBER_FAMILY_GP, MEMBER_FAMILY_ENSEMBLE
 from core.admitted_rows_plan import admitted_rows_shape
@@ -461,9 +463,10 @@ def _fold_rows(xt: PythonObject, Xa: PythonObject, n: Int, d: Int, rows: PythonO
     cv folds' gather), as a new C-order Array, held for the member doors of
     the open hold scope when finite.
 
-    The B arm under -D MOJOLEARN_CALIB_FAST_HOST_FOLDS (default off; the
-    default for a member that takes DeviceRows is the resident fold,
-    `_CalUnits._dev_rows`). fb12-rows (2026-11-17): a cv fold's X was `_gather` (xtrees
+    The B arm under -D MOJOLEARN_CALIB_FAST_HOST_FOLDS (default off; a
+    member that takes DeviceRows reads its folds by row index out of the one
+    resident X, THE RESIDENT ROWS of xtrees/trees_calibrated_fit_run.mojo,
+    lane mf-cal7). fb12-rows (2026-11-17): a cv fold's X was `_gather` (xtrees
     gather_f32_device on a GPU install): the WHOLE of X uploaded, the rows
     gathered on the device and downloaded into a zero-filled Array, twice
     per fold (train and test rows), so a k-fold CalibratedClassifierCV fit
@@ -2992,12 +2995,12 @@ struct _CalUnits(Movable):
     Every field is read and written with the GIL held. Every fold of a base
     the native member set serves is the typed RUN's (`_cal_native`: lanes
     mf-cal, mf-cal2, and mf-cal3, which moved the one-class folds and the
-    refusals there too). These units fit the folds of exactly two kinds of
-    base, each for a reason that stays: the resident DeviceRows route
-    (GaussianNB and the discriminant classifiers, a measured winner, kept:
-    its member PREDICT doors gather the fold's test rows on the device,
-    which a member call cannot; one fold at a time on the calling thread);
-    and a base the set does not serve (`_CAL_NOT_MEMBER`: a class with no
+    refusals there too; lane mf-cal7 moved the resident DeviceRows route,
+    GaussianNB and the discriminant classifiers, a measured winner kept as a
+    route of that RUN: THE RESIDENT ROWS, xtrees/trees_calibrated_fit_run.mojo,
+    and deleted these units' DeviceRows fold sides). These units fit the
+    folds of one kind of base only: a base the set does not serve
+    (`_CAL_NOT_MEMBER`: a class with no
     member mark, or a META class whose admission keeps its door (since lane
     mf-search4 GridSearchCV / RandomizedSearchCV and MultiOutputClassifier
     are META kinds, see core/ensemble_member.mojo; since lane mf-search4b a
@@ -3016,7 +3019,7 @@ struct _CalUnits(Movable):
     tree's class_weight on the per-member route and an AdaBoost base with
     sample weights too, and a user's own splitter object is refused at the
     admission; since lane mf-split5 every other of our splitters as a cv
-    too; still the door's: a Calibrated base with a DeviceRows base, a
+    too; still the door's: a
     splitter setting the door reads in
     another form (a long double shuffle size)), a configuration its family's
     admit leaves to the estimator's door (a class_weight that is neither
@@ -3026,8 +3029,8 @@ struct _CalUnits(Movable):
     in scikit-learn's words, lane mf-meta3b). Lane mf-adm3: class_weight
     'balanced' and dict (logistic, LinearSVC, SVC, SGD*, RidgeClassifier,
     LogisticRegressionCV) and kernel='precomputed' (SVC, KernelRidge) are
-    native members now. The threads stay for the second kind: those folds are
-    independent units whose fit doors release the GIL, on n_jobs threads.
+    native members now. Those folds are independent units whose fit doors
+    release the GIL, on n_jobs threads.
     REMOVED (lane mf-cal3): `only()` / `todo` and the per-fold native fit
     retry (`k`): no fold of a served base reaches a door now. Lane mf-cal3b:
     the Host* classifiers (HostSVC, HostKNeighborsClassifier,
@@ -3056,15 +3059,6 @@ struct _CalUnits(Movable):
     # a time (they share the owner's `xt` program state and can release the
     # GIL inside); only the member fits overlap.
     var gate: List[Int64]
-    # The resident-fold route (fb12-rows, 2026-11-17; set by _calibrated_fit
-    # when the member takes `_arena_io.DeviceRows` and the folds run on the
-    # calling thread): each fold side is a DeviceRows over the one resident X
-    # (`mctx`: model selection's context, which owns the DeviceRows class and
-    # the resident store whose `take` a host route would materialize with).
-    var dev: Bool
-    var mctx: PythonObject
-    var rows_class: PythonObject
-    var rows_take: PythonObject
 
     def __init__(out self, model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject,
                  splits: PythonObject, codes: PythonObject, cols: PythonObject, n: Int, d: Int, ensemble: Bool,
@@ -3089,35 +3083,13 @@ struct _CalUnits(Movable):
         self.failure = NativeUnitFailure()
         self.fp_env = host_fp_env()
         self.gate = native_unit_gate()
-        self.dev = False
-        self.mctx = PythonObject(None)
-        self.rows_class = PythonObject(None)
-        self.rows_take = PythonObject(None)
 
     def fold_side(self, idx: PythonObject) raises -> PythonObject:
-        """Fold side `idx` (cv row indices) of X for the member: a resident
-        DeviceRows (no host words, no upload: the member's program gathers
-        the rows on the device out of X, put once for the whole fit by the
-        resident scope), else the host copy (B arm) or `_gather`."""
-        if self.dev and Int(py=idx.shape[0]) > 0:
-            return self._dev_rows(idx)
+        """Fold side `idx` (cv row indices) of X for the member: the host
+        copy (B arm) or `_gather`."""
         comptime if CALIB_FAST_HOST_FOLDS:
             return _fold_rows(self.xt, self.Xa, self.n, self.d, idx, self.cols, self.context)
         return _gather(self.xt, trees_address(self.Xa), self.n, self.d, idx, self.cols, self.context)
-
-    def _dev_rows(self, idx: PythonObject) raises -> PythonObject:
-        """`_arena_io.DeviceRows(Xa, idx as int64, take)`, made by its door
-        as model selection's `MselFoldRows.xrows` makes it."""
-        var r = Int(py=idx.shape[0])
-        var idx64 = idx
-        var kind = String(py=idx.dtype)
-        if kind != "<i8":
-            idx64 = admitted_storage(Python.tuple(r), "<i8", self.context, "C", True)
-            trees_cast(trees_address(idx), kind, trees_address(idx64), "<i8", r, self.context)
-            _ = idx  # keep the Python object alive through the native call above
-        var dr = native_storage_allocate(self.rows_class)
-        _ = _cal_rows_call(dr, "init", Python.tuple(self.Xa, idx64, self.rows_take), self.mctx)
-        return dr
 
     def _enter(mut self):
         native_unit_gate_enter(self.gate)
@@ -3139,10 +3111,9 @@ struct _CalUnits(Movable):
                 ytr = _gather_codes(self.xt, self.codes, tr, self.context)
             finally:
                 native_unit_gate_leave(self.gate)
-            # The member's fit door (a base the native set does not serve, or
-            # the resident DeviceRows route, whose member program gathers its
-            # rows on the device: tuned, untouched). Outside the gate: the
-            # fits of different folds overlap, as the door fits do.
+            # The member's fit door (a base the native set does not serve).
+            # Outside the gate: the fits of different folds overlap, as the
+            # door fits do.
             _fit_member(e, xtr, ytr, PythonObject(None), self.context)
             self._enter()
             try:
@@ -3213,31 +3184,48 @@ def _cal_units_run(mut units: _CalUnits, jobs: Int) raises:
 
 
 def _cal_rows_call(obj: PythonObject, op: String, args: PythonObject, mctx: PythonObject) raises -> PythonObject:
-    """One `_arena_io` DeviceRows / resident-scope operation through its
-    compiled door (model selection's `_arena_rows_call`, bindings/msel_cv_door.mojo)."""
+    """One `_arena_io` resident-scope operation through its compiled door
+    (model selection's `_arena_rows_call`, bindings/msel_cv_door.mojo)."""
     # call-table: member DeviceRows (arena rows door over the Python owner) has no native entry yet
     var nk = trees_keys()
     return family_call(py_item(mctx, nk[].k_family_msel_rows_entry), obj, PythonObject(op), args, py_item(mctx, nk[].k_family_msel_rows_context))
 
 
-def _cal_resident_op(res: PythonObject, op: String, mctx: PythonObject) raises:
-    """One `_Resident` lifecycle operation (msel_common_door `msel_resident_op`)."""
-    # call-table: member resident rows (arena_resident_native door over the Python _Resident) has no native entry yet
+def _cal_rows_resident(base: PythonObject, Xa: PythonObject, n: Int, d: Int, context: PythonObject) raises -> Bool:
+    """UNPACK, once per fit (THE RESIDENT ROWS, lane mf-cal7): whether the
+    fit runs inside a resident scope of its own: the base's class takes
+    DeviceRows (its plan's `device_rows` word: the naive Bayes and
+    discriminant classifiers) and X is a non-empty float32 C-order block.
+    Whether the fold members then read X by row index is their member's
+    answer on its image (`_cal_native`: MEMBER_CAN_ROW_INDEX and
+    MEMBER_CAN_SCOPE); a host image's member keeps the gathered rows."""
+    if n <= 0 or d <= 0 or String(py=Xa.dtype) != "<f4" or String(py=Xa.order) != "C":
+        return False
+    var plan = prep_estimator_plan(base, context)
     var nk = trees_keys()
-    _ = family_call(py_item(mctx, nk[].k_family_msel_resident_call), res, PythonObject(op), Python.tuple(),
-                    py_item(mctx, nk[].k_family_msel_resident_context))
+    return plan is not None and _truthy(py_get(plan, nk[].k_device_rows, PythonObject(False)))
 
 
-def _cal_admit_x_once(base: PythonObject, Xa: PythonObject, n: Int, d: Int) raises:
-    """X's finite test, once for the fit, on the resident-fold route (the
-    fold rows reach the member as DeviceRows, which its door does not scan):
-    the held row's verdict (one scan, recorded for the rest of the call),
-    or one scan of an unheld X; scikit-learn's refusal in the member's name."""
-    var held = admitted_held_index(Xa)
-    var finite = admitted_held_verify(held) if held >= 0 else trees_finite_f32(trees_address(Xa), n * d)
-    _ = Xa  # keep the Python object alive through the native call above
-    if not finite:
-        admitted_finite_refuse(1, String(py_type(base).__name__), "X")
+def _cal_scope_open(mctx: PythonObject) raises -> PythonObject:
+    """Enter a resident scope (`_arena_io.resident`) on this thread with the
+    DeviceRows floor: only a row-indexed base (the fold rows taken on the
+    device out of it) stays resident, no other program input across folds,
+    as model selection's `msel_rows_scope_open` enters its own. The caller
+    leaves it with `_cal_scope_close` on every path."""
+    var nk = trees_keys()
+    var b = trees_builtins()
+    var opened = native_storage_allocate(family_call(b.getattr, py_item(mctx, nk[].k_family_msel_arena_io),
+                                                     PythonObject("resident")))
+    # the floor goes to the native scope state with the enter call
+    _ = _cal_rows_call(opened, "scope_enter", Python.tuple(PythonObject(1 << 62)), mctx)
+    return opened
+
+
+def _cal_scope_close(scope: PythonObject, mctx: PythonObject) raises:
+    """Leave a scope `_cal_scope_open` entered: its caches and the references
+    they took are released."""
+    _ = _cal_rows_call(scope, "scope_exit", Python.tuple(PythonObject(None), PythonObject(None), PythonObject(None)),
+                       mctx)
 
 
 def _cal_f64(values: List[Float64], m: Int, context: PythonObject) raises -> PythonObject:
@@ -3436,6 +3424,14 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         raise Error("AttributeError: " + String(py_type(base).__name__)
                     + " has none of the following attributes: decision_function, predict_proba.")
     if not set.run.plans[0].member.can(scoring) or (kind_mask & scoring) == 0:
+        if (not decision and (kind_mask & (MEMBER_CAN_DECISION | MEMBER_CAN_PREDICT_PROBA)) == 0
+                and not prep_estimator_has(base, "predict_proba", context)):
+            # Neither its member kind nor its estimator has decision_function
+            # or predict_proba (lane mf-cal7): scikit-learn 1.9's
+            # `_check_response_method` refuses it, as for the hard vote above,
+            # in its words (the door units fitted every fold and then failed).
+            raise Error("AttributeError: " + String(py_type(base).__name__)
+                        + " has none of the following attributes: decision_function, predict_proba.")
         return _CAL_NOT_MEMBER  # its kind has no native call for the scores: its fit doors fit every fold
     # A fold with no train or no test rows (only a user's cv iterable makes
     # one): scikit-learn's check_array refusal, raised by that fold's
@@ -3464,6 +3460,20 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
         plan.fold(trees_address(te), Int(py=te.shape[0]))
         _ = te^  # `splits` owns the fold rows to the end of RUN; named past the call that stored its address
     plan.markers = markers^
+    # THE RESIDENT ROWS (lane mf-cal7; xtrees/trees_calibrated_fit_run.mojo
+    # module note): inside the scope `_calibrated_fit` opened for a DeviceRows
+    # base, a member whose image reads a row index and keeps X resident
+    # (every unit is a clone on one image: unit 0 answers) is scored over the
+    # whole X plus each fold's test rows, X's pin offered on each scoring call:
+    # one reference per fold, taken here with the GIL held and the ones no
+    # cache took returned after the RUN. Its fits already read their train
+    # rows by index (core/member_set_run.mojo, `member_set_resident` above).
+    var score_pin = 0
+    if (set.run.scope != MEMBER_SCOPE_NONE and (kind_mask & MEMBER_CAN_ROW_INDEX) != 0
+            and set.run.plans[0].member.can(MEMBER_CAN_ROW_INDEX) and set.run.plans[0].member.can(MEMBER_CAN_SCOPE)):
+        score_pin = member_pin_take(Xa, folds)
+        if score_pin != 0:
+            plan.resident(set.run.scope, score_pin)
     var glue = _xr(xt)
     var released = True
     for u in range(units):  # driver-loop: over the members (THE GIL RULE word of each)
@@ -3485,6 +3495,8 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
                 answered = calibrated_fit_run(glue, set.run, plan, res)
         finally:
             member_set_pins_return(set)
+            if score_pin != 0:
+                member_pin_return(score_pin, folds - plan.pins_taken())
     except error:
         # A refused scoring call (its member's words), every state released.
         failure = String(error)
@@ -3567,7 +3579,6 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     _set(model, "_cal_fast", PythonObject(None))
     var ensemble = _truthy(_attr(model, nk[].k_ensemble, PythonObject(True)))
     var splits = _splits(xt, _attr(model, nk[].k_cv, PythonObject(None)), X, y, n, labels.codes, not ensemble, k, context)
-    var cols = _arange(xt, d, context)
     var pairs = Python.list()
     _set(model, "calibrated_classifiers_", pairs)
     # Lane p3-msel-parallel-and-process-pool: the folds are independent
@@ -3576,91 +3587,45 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     # serial fold loops and the n_jobs refusal. Same member fits, gathers and
     # calibrators per fold: no bits change.
     var jobs = native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), "CalibratedClassifierCV")
-    var units = _CalUnits(model, xt, base, Xa, splits, labels.codes, cols, n, d, ensemble, context)
-    # fb12-rows (2026-11-17): the folds' X stays on the GPU. Each fold side
-    # was `_gather` (xtrees gather_f32_device): all of X uploaded, the rows
-    # gathered and DOWNLOADED, twice per fold, then each member uploaded its
-    # rows again and scanned them on the host (5 folds of a 1M x 220 X: 10
-    # uploads + 5 downloads of X beside 5 more uploads, and 5 X-sized scans).
-    # For a member whose class takes `_arena_io.DeviceRows` (the naive Bayes
-    # and discriminant classifiers, GaussianNB the default board member) the
-    # fold sides are now DeviceRows over X inside one resident scope, as
-    # model selection hands its folds (MselFoldRows): X goes up ONCE for the
-    # whole fit, each member program gathers its rows on the device
-    # (`x_prep_dev_take_rows`), nothing comes down, and X is tested finite
-    # once here. Same rows in the same order: no bit changes. Only on the
-    # calling thread (a resident scope belongs to the thread that opened it):
-    # parallel CPU units keep the per-fold rows.
-    var plan = prep_estimator_plan(base, context)
-    # A MEMBER-ONLY plan (no method recipes; CategoricalNB is one, its class
-    # still carries the DeviceRows word of its NB base) has no fit doors for
-    # the resident route's units, which refused it ("schema is pending
-    # migration": gate 5645984a8f mf_cal cnb n_jobs=1 rows, while n_jobs=4
-    # took the member set and raised the member's own words): it takes the
-    # member set on every n_jobs.
-    var dev = (plan is not None and _truthy(py_get(plan, nk[].k_device_rows, PythonObject(False))) and n > 0 and d > 0
-               and py_get(plan, PythonObject("member_only")) is None
-               and String(py=Xa.dtype) == "<f4" and String(py=Xa.order) == "C"
-               and native_unit_device_workers(min(jobs, len(splits) - 1), context) <= 1)
     # Lane mf-cal (2026-11-23): a base whose family has a member entry is
     # fitted, scored and calibrated as ONE typed RUN (`_cal_native`,
     # xtrees/trees_calibrated_fit_run.mojo); the units below fit only a base
-    # it does not serve (`_CalUnits`). The resident DeviceRows route stays
-    # as it is (a measured winner): its fold sides are DeviceRows the member's
-    # PREDICT door gathers on the device, and a member call reads host rows
-    # only (no row index on the predict side), so moving it would upload
-    # every fold's test rows again.
-    if not dev:
+    # it does not serve (`_CAL_NOT_MEMBER`, `_CalUnits`).
+    # THE RESIDENT ROWS (lane mf-cal7; fb12-rows 2026-11-17, a measured
+    # winner kept as a route of that RUN): for a base whose class takes
+    # DeviceRows (the naive Bayes and discriminant classifiers, GaussianNB
+    # the default board member) the fit runs inside one resident scope with
+    # the DeviceRows floor (`_cal_scope_open`), so the RUN hands every fold
+    # member's fit and scores the whole X plus the fold's row numbers: X goes
+    # up ONCE for the whole fit, each member program gathers its rows on the
+    # device (`x_prep_dev_take_rows`), nothing comes down, and X is tested
+    # finite once (`_cal_native`). Same rows in the same order as the door's
+    # DeviceRows fold units (deleted, lane mf-cal7): no bit changes. Before,
+    # each fold side was `_gather` (xtrees gather_f32_device): all of X
+    # uploaded, the rows gathered and DOWNLOADED, twice per fold, then each
+    # member uploaded its rows again and scanned them on the host.
+    var mctx = PythonObject(None)
+    var scope = PythonObject(None)
+    if _cal_rows_resident(base, Xa, n, d, context):
+        mctx = prep_native_context(context)
+        scope = _cal_scope_open(mctx)
+    var served = False
+    try:
         # Raises every refusal of a served base in its estimator's words
         # (lane mf-cal3); _CAL_NOT_MEMBER: a base it does not serve, whose
         # fit doors fit every fold below.
-        if _cal_native(model, xt, base, Xa, n, d, k, labels.codes, labels.classes, splits, ensemble, jobs, pairs,
-                       context) == _CAL_DONE:
-            _set(model, "n_features_in_", PythonObject(d))
-            _set(model, "_fitted", PythonObject(True))
-            return model
-    var mctx = PythonObject(None)
-    var res = PythonObject(None)
-    var scope = PythonObject(None)
-    if dev:
-        _cal_admit_x_once(base, Xa, n, d)
-        mctx = prep_native_context(context)
-        var b = trees_builtins()
-        res = native_storage_allocate(py_item(mctx, nk[].k_family_msel_resident_class))
-        _cal_resident_op(res, "msel_resident_init", mctx)
-        try:
-            # only DeviceRows bases enter this scope (`rows_slot` ignores the
-            # size floor), as in MselFoldRows
-            var opened = native_storage_allocate(family_call(b.getattr, py_item(mctx, nk[].k_family_msel_arena_io),
-                                                             PythonObject("resident")))
-            # the floor goes to the native scope state with the enter call
-            _ = _cal_rows_call(opened, "scope_enter", Python.tuple(PythonObject(1 << 62)), mctx)
-            scope = opened
-            units.rows_class = family_call(b.getattr, py_item(mctx, nk[].k_family_msel_arena_io), PythonObject("DeviceRows"))
-            units.rows_take = family_call(b.getattr, res, PythonObject("take"))
-        except error:
-            # lane fb16-audit: a scope already entered is exited before the
-            # store closes (a getattr after `scope_enter` raising left the
-            # thread inside the resident scope)
-            try:
-                if scope is not None:
-                    _ = _cal_rows_call(scope, "scope_exit",
-                                       Python.tuple(PythonObject(None), PythonObject(None), PythonObject(None)), mctx)
-            finally:
-                _cal_resident_op(res, "msel_resident_close", mctx)
-            raise error^
-        units.mctx = mctx
-        units.dev = True
-    try:
-        _cal_units_run(units, jobs)
+        served = _cal_native(model, xt, base, Xa, n, d, k, labels.codes, labels.classes, splits, ensemble, jobs, pairs,
+                             context) == _CAL_DONE
     finally:
-        if dev:
-            units.rows_take = PythonObject(None)
-            try:
-                _ = _cal_rows_call(scope, "scope_exit",
-                                   Python.tuple(PythonObject(None), PythonObject(None), PythonObject(None)), mctx)
-            finally:
-                _cal_resident_op(res, "msel_resident_close", mctx)
+        if scope is not None:
+            _cal_scope_close(scope, mctx)
+    if served:
+        _set(model, "n_features_in_", PythonObject(d))
+        _set(model, "_fitted", PythonObject(True))
+        return model
+    var cols = _arange(xt, d, context)
+    var units = _CalUnits(model, xt, base, Xa, splits, labels.codes, cols, n, d, ensemble, context)
+    _cal_units_run(units, jobs)
     if ensemble:
         for f in range(len(splits)):  # driver-loop: over the cv folds (results only)
             _ = py_call(pairs.append, units.results[f])

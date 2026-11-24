@@ -38,7 +38,8 @@ and returns the pins after it):
 
   * per native fold, in fold order: its test rows of X (the `_gather` glue
     op over every column, or the host row copy under the door's
-    MOJOLEARN_CALIB_FAST_HOST_FOLDS B arm: the same words), the fold
+    MOJOLEARN_CALIB_FAST_HOST_FOLDS B arm: the same words; or, THE
+    RESIDENT ROWS below, no gather at all), the fold
     member's scores through ONE member call on its fitted state
     (decision_function when the estimator has one, else predict_proba; a
     float64 answer rounded to float32 word by word, as the door's
@@ -64,6 +65,21 @@ and returns the pins after it):
     out-of-fold block (float32 words, as the door admitted them, then
     `x_trees_scatter`), and once every fold is placed the calibrators over
     the whole block and every code.
+
+THE RESIDENT ROWS (lane mf-cal7, 2026-11-23: the DeviceRows route, a measured
+winner kept as a route of this RUN, fb12-rows 2026-11-17). For a base whose
+member reads a row index and keeps X resident (`MEMBER_CAN_ROW_INDEX` and
+`MEMBER_CAN_SCOPE` on its image: GaussianNB and the other naive Bayes, LDA,
+QDA on an image that gathers on the device), the door opens a resident scope
+around the fit (`CalFitPlan.resident`). Every fold member's FIT then reads
+the whole X plus its train rows as a row index (core/member_set_run.mojo,
+the pin of X offered, so the scope's cache puts X on the device ONCE for the
+fit), and every fold's SCORING call reads the whole X plus its test rows
+(`VoteRows` THE INDEXED ROWS, one pin reference per fold): the member's own
+programs take the rows on the device (`x_prep_dev_take_rows`), no fold of X
+is gathered, downloaded or uploaded again, the same rows in the same order
+as the door units' DeviceRows fold sides (deleted). The
+calibrators read the scores on the host as before.
 
 SERIAL BY RULE over the folds in the scoring step: each member call splits
 its rows over the host cores itself, and the glue ops run on the x_trees
@@ -93,7 +109,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.member_abi import (
     member_call_of, member_outputs_of, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_F32, MEMBER_F64,
-    MEMBER_I64,
+    MEMBER_I64, MEMBER_SCOPE_NONE,
 )
 from core.member_class_weight import member_cw_subset
 from core.member_notices import member_lacking_warning, MEMBER_LACKING_STRATIFY
@@ -161,6 +177,19 @@ struct CalFitPlan(Movable):
     # over every row (ensemble=False) when it has a marker (empty: every class).
     var markers: List[Int]
     var full_held: List[Int32]
+    # THE RESIDENT ROWS (lane mf-cal7; module note): `indexed` True, set by
+    # UNPACK for a member whose kind reads a row index and keeps X resident
+    # in the caller's `scope` (the DeviceRows bases: GaussianNB and the other
+    # naive Bayes, LDA, QDA on an image that gathers on the device): every
+    # fold's scores are asked over the WHOLE X plus its int32 test rows, X's
+    # pin token `pin` offered on each scoring call (one reference per fold,
+    # taken by UNPACK). Written by the RUN: `took[f]` 1 when fold f's call
+    # handed its reference to the scope's cache (the caller returns the
+    # others).
+    var indexed: Bool
+    var scope: Int
+    var pin: Int
+    var took: List[UInt8]
 
     def __init__(out self, x: Int, n: Int, d: Int, codes: Int, k: Int, operation: Int, sigmoid: Bool,
                  ensemble: Bool, host_rows: Bool):
@@ -181,6 +210,25 @@ struct CalFitPlan(Movable):
         self.failed_scoring = False
         self.markers = List[Int]()
         self.full_held = List[Int32]()
+        self.indexed = False
+        self.scope = MEMBER_SCOPE_NONE
+        self.pin = 0
+        self.took = List[UInt8]()
+
+    def resident(mut self, scope: Int, pin: Int):
+        """THE RESIDENT ROWS: the scoring calls read X by row index in
+        `scope`, offering `pin` (one reference per fold)."""
+        self.indexed = True
+        self.scope = scope
+        self.pin = pin
+
+    def pins_taken(self) -> Int:
+        """How many of the scoring calls' references a cache took."""
+        var taken = 0
+        for f in range(len(self.took)):  # driver-loop: over the cv folds (one byte each)
+            if self.took[f] != UInt8(0):
+                taken += 1
+        return taken
 
     def marker_of(self, u: Int) -> Int:
         """Unit u's marker code (-1: none)."""
@@ -194,6 +242,7 @@ struct CalFitPlan(Movable):
         self.test_counts.append(count)
         self.fold_classes.append(List[Int32]())
         self.fold_codes.append(List[Int32]())
+        self.took.append(UInt8(0))
 
     def folds(self) -> Int:
         return len(self.test_rows)
@@ -672,20 +721,22 @@ def _cal_member_place(mut run: MemberSetRun, plan: CalFitPlan, f: Int) raises ->
     return place^
 
 
-def _cal_fold_scores(glue: EntryRef, mut run: MemberSetRun, plan: CalFitPlan, f: Int, iota: Int, xte: Int,
-                     nte: Int, mut s: List[Float64]) raises -> List[Int]:
+def _cal_fold_scores(glue: EntryRef, mut run: MemberSetRun, plan: CalFitPlan, f: Int, iota: Int, rows: VoteRows,
+                     mut s: List[Float64]) raises -> List[Int]:
     """Fold f's float64 nte x c scores (the door's `_cal_scores`) from ONE
-    call of its fitted member over its test rows at `xte`, into `s` (zero,
-    nte x c), placed by scikit-learn's rule (`cal_fold_place`, lane mf-cal3b);
-    returns the S columns that get a calibrator. A refusal of the call raises
-    the member's own words."""
+    call of its fitted member over its test rows (`rows`: the gathered host
+    block, or THE RESIDENT ROWS' whole X plus the fold's row index), into `s`
+    (zero, nte x c), placed by scikit-learn's rule (`cal_fold_place`, lane
+    mf-cal3b); returns the S columns that get a calibrator. A refusal of the
+    call raises the member's own words."""
     var k = plan.k
+    var nte = rows.n
     var place = _cal_member_place(run, plan, f)
     var cols = place.cols
     var dtype = place.dtype
     var keep = List[List[Float32]]()
     var member = VoteMember(Int(run.plans.unsafe_ptr() + f), run.states[f], plan.operation, cols, dtype, 0, 1.0)
-    var blk = member_f32_block(member, VoteRows(xte, nte, plan.d), keep)
+    var blk = member_f32_block(member, rows, keep)
     var acc = Int(s.unsafe_ptr())
     if k == 2:
         if place.pick == 0 and cols == 1:
@@ -743,15 +794,24 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
         res.count.append(0)
         var te = plan.test_rows[f]
         var nte = plan.test_counts[f]
-        var xte = List[Float32](length=nte * d, fill=0.0)
-        if plan.host_rows:
-            if admitted_gather_rows_f32[DType.int32](plan.x, n, d, te, nte, Int(xte.unsafe_ptr())) == ARG_OUT_OF_RANGE:
-                raise Error("x_trees gather: row index out of range")
-        else:
-            _ = xt_gather_f32(glue, plan.x, te, Int(cols.unsafe_ptr()), Int(xte.unsafe_ptr()), n, d, nte, d)
         var s = List[Float64](length=nte * c, fill=0.0)
-        var which = _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()), Int(xte.unsafe_ptr()), nte, s)
-        _ = len(xte)
+        var which = List[Int]()
+        if plan.indexed:
+            # THE RESIDENT ROWS: no host gather; the member's device takes the
+            # fold's test rows out of the one resident X.
+            var took_at = Int(plan.took.unsafe_ptr()) + f
+            which = _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()),
+                                     VoteRows(plan.x, n, d, te, nte, plan.scope, plan.pin, took_at), s)
+        else:
+            var xte = List[Float32](length=nte * d, fill=0.0)
+            if plan.host_rows:
+                if admitted_gather_rows_f32[DType.int32](plan.x, n, d, te, nte, Int(xte.unsafe_ptr())) == ARG_OUT_OF_RANGE:
+                    raise Error("x_trees gather: row index out of range")
+            else:
+                _ = xt_gather_f32(glue, plan.x, te, Int(cols.unsafe_ptr()), Int(xte.unsafe_ptr()), n, d, nte, d)
+            which = _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()), VoteRows(Int(xte.unsafe_ptr()), nte, d),
+                                     s)
+            _ = len(xte)
         if plan.ensemble:
             var codes_te = List[Int32](length=nte, fill=Int32(0))
             _ = xt_gather_i32(glue, plan.codes, te, Int(codes_te.unsafe_ptr()), n, nte)
