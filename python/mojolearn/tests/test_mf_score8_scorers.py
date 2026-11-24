@@ -51,7 +51,11 @@ def _folds(n):
 
 
 def _grid(estimator):
-    return {'alpha': [1.0]} if isinstance(estimator, ml.Ridge) else {'C': [1.0]}
+    if isinstance(estimator, ml.Ridge):
+        return {'alpha': [1.0]}
+    if isinstance(estimator, ml.GaussianNB):
+        return {'var_smoothing': [1e-9]}
+    return {'C': [1.0]}
 
 
 def _scores(estimator, X, y, scorer, error_score='raise'):
@@ -127,13 +131,13 @@ def test_classification_metric_rows_equal_sklearn(name, kw, greater, response):
     _check(got, want)
 
 
-@pytest.mark.parametrize('name', ['neg_mean_squared_error', 'r2', 'neg_mean_absolute_error', 'max_error'])
+@pytest.mark.parametrize('name', ['neg_mean_squared_error', 'r2', 'neg_mean_absolute_error', 'neg_max_error'])
 def test_regression_scorer_on_a_classifier_scores_the_labels_as_numbers(name):
     X, y = _cls_data()
     y = (y * 10 + 5).astype(np.int64)
     got, folds = _scores(ml.LogisticRegression(max_iter=50), X, y, name)
     metric = {'neg_mean_squared_error': sk.mean_squared_error, 'r2': sk.r2_score,
-              'neg_mean_absolute_error': sk.mean_absolute_error, 'max_error': sk.max_error}[name]
+              'neg_mean_absolute_error': sk.mean_absolute_error, 'neg_max_error': sk.max_error}[name]
     sign = 1.0 if name == 'r2' else -1.0
     want = _expected(lambda: ml.LogisticRegression(max_iter=50), X, y, folds, 'predict', metric, sign)
     _check(got, want)
@@ -170,3 +174,98 @@ def test_kappa_weights_refusal_is_the_doors_words():
     scorer = ms.make_scorer(metrics.cohen_kappa_score, weights='cubic')
     with pytest.raises(ValueError, match=r"weights must be None, 'linear' or 'quadratic'"):
         _scores(ml.LogisticRegression(max_iter=50), X, y, scorer)
+
+
+# ---------------------------------------------------------------- round b (lane mf-score8, 2026-11-23)
+
+
+def _binary_data():
+    X, y = _cls_data()
+    return X, (y == 2).astype(np.int32)
+
+
+@pytest.mark.parametrize('name,metric,sign', [
+    ('d2_log_loss_score', 'd2_log_loss_score', 1.0),
+    ('d2_brier_score', 'd2_brier_score', 1.0),
+    ('neg_max_error', 'max_error', -1.0),
+])
+def test_scikit_learn_19_named_scorers(name, metric, sign):
+    assert name in ms.get_scorer_names()
+    if name == 'neg_max_error':
+        X, y = _reg_data()
+        got, folds = _scores(ml.Ridge(), X, y, name)
+        want = _expected(ml.Ridge, X, y, folds, 'predict', getattr(sk, metric), sign)
+    else:
+        X, y = _binary_data()
+        make = lambda: ml.LogisticRegression(max_iter=50)
+        got, folds = _scores(make(), X, y, name)
+        want = _expected(make, X, y, folds, 'predict_proba', getattr(sk, metric), sign)
+    _check(got, want)
+
+
+def test_likelihood_ratio_scorers_equal_sklearn():
+    from sklearn.metrics import class_likelihood_ratios
+    X, y = _binary_data()
+    make = lambda: ml.LogisticRegression(max_iter=50)
+    for name, pick, sign in (('positive_likelihood_ratio', 0, 1.0), ('neg_negative_likelihood_ratio', 1, -1.0)):
+        got, folds = _scores(make(), X, y, name)
+        want = []
+        for train, test in folds:
+            est = make().fit(X[train], y[train])
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                want.append(sign * class_likelihood_ratios(y[test], est.predict(X[test]),
+                                                           replace_undefined_by=1.0)[pick])
+        _check(got, want)
+
+
+def test_hinge_loss_scorer_equals_sklearn():
+    X, y = _binary_data()
+    scorer = ms.make_scorer(metrics.hinge_loss, response_method='decision_function', greater_is_better=False)
+    make = lambda: ml.LogisticRegression(max_iter=50)
+    got, folds = _scores(make(), X, y, scorer)
+    want = _expected(make, X, y, folds, 'decision_function', sk.hinge_loss, -1.0)
+    _check(got, want)
+
+
+@pytest.mark.parametrize('kw,response', [
+    ({'max_fpr': 0.5}, 'predict_proba'),
+    ({'multi_class': 'ovr', 'average': 'micro'}, 'predict_proba'),
+])
+def test_roc_auc_options_equal_sklearn(kw, response):
+    X, y = _binary_data() if 'max_fpr' in kw else _cls_data()
+    scorer = ms.make_scorer(metrics.roc_auc_score, response_method=response, **kw)
+    make = lambda: ml.LogisticRegression(max_iter=50)
+    got, folds = _scores(make(), X, y, scorer)
+    want = _expected(make, X, y, folds, response, sk.roc_auc_score, 1.0, **kw)
+    _check(got, want)
+
+
+def test_average_precision_weighted_equals_sklearn():
+    X, y = _cls_data()
+    scorer = ms.make_scorer(metrics.average_precision_score, response_method='predict_proba', average='weighted')
+    make = lambda: ml.LogisticRegression(max_iter=50)
+    got, folds = _scores(make(), X, y, scorer)
+    want = _expected(make, X, y, folds, 'predict_proba', sk.average_precision_score, 1.0, average='weighted')
+    _check(got, want)
+
+
+def test_label_scorer_on_a_regressor_refuses_in_sklearns_words():
+    X, y = _reg_data()
+    with pytest.raises(ValueError, match=r"continuous is not supported"):
+        _scores(ml.Ridge(), X, y, 'accuracy')
+
+
+def test_multi_output_regressor_scored_by_r2_equals_sklearn():
+    X, y = _reg_data()
+    Y = np.stack([y, 2.0 * y + 1.0], axis=1).astype(np.float32)
+    got, folds = _scores(ml.Ridge(), X, Y, 'r2')
+    want = _expected(ml.Ridge, X, Y, folds, 'predict', sk.r2_score, 1.0)
+    _check(got, want)
+
+
+def test_missing_response_method_is_sklearns_words():
+    X, y = _cls_data()
+    scorer = ms.make_scorer(metrics.hinge_loss, response_method='decision_function')
+    with pytest.raises(AttributeError, match=r"has none of the following attributes: decision_function\."):
+        _scores(ml.GaussianNB(), X, y, scorer)

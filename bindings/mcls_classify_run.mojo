@@ -8,6 +8,7 @@
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run
 from bindings.mcls_common_run import MC_NONE
+from bindings.metrics_exp_rank_run import labels_rank
 from std.memory import bitcast
 
 # cm_epi kinds (x_metrics/cm_epi.mojo, op 59) and the NORM modes.
@@ -527,7 +528,17 @@ def log_loss_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, w: 
 
 def log_loss_options_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, w: Int,
                          normalize: Bool) raises -> Float64:
-    """`normalize` (lane mf-score8): log_loss's `normalize`, the rank_epi
+    """`log_loss_options_run` with labels None."""
+    return log_loss_options_run(route, truth, proba, n, k, w, normalize, 0, 0)
+
+
+def log_loss_options_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: Int, w: Int,
+                         normalize: Bool, sel_at: Int, sel_n: Int) raises -> Float64:
+    """`sel_at` / `sel_n` (lane mf-score8): log_loss's `labels` as int32
+    class codes in their given order (`mc_selected`, then `mc_map_order`;
+    a code >= k is a label no row holds); the door's checks in its order:
+    fewer than two labels, a y_true label outside them, then the columns.
+    `normalize` (lane mf-score8): log_loss's `normalize`, the rank_epi
     MEAN word `mc_log_loss_stages` stages (False: the summed loss).
     `w` (lane mf-score6): n float32 sample weights (0: none), the
     program's third input (`mc_log_loss_stages(weighted)`, the door's
@@ -539,28 +550,33 @@ def log_loss_options_run(route: MetricRoute, truth: Int, proba: Int, n: Int, k: 
     present in y_true, as `_log_loss` selects them, in its refusal words and
     order. No Python."""
     var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=truth)
-    var rank = List[Int32](length=max(k, 1), fill=Int32(-1))
-    for i in range(n):  # driver-loop: over the rows (the classes y_true holds)
-        var c = Int(t[i])
-        if c < 0 or c >= k:
-            raise Error("ValueError: y codes outside [0, n_classes)")
-        rank[c] = 0
+    var codes = List[Int32](length=max(n, 1), fill=Int32(0))
     var selected = 0
-    for c in range(k):  # driver-loop: over the class codes (their ranks among the selected)
-        if rank[c] == 0:
-            rank[c] = Int32(selected)
-            selected += 1
-    if selected < 2:
-        raise Error("log_loss requires at least two labels; pass labels for one observed class")
+    if sel_n > 0:
+        if sel_n < 2:
+            raise Error("log_loss requires at least two labels; pass labels for one observed class")
+        selected = labels_rank(truth, n, k, sel_at, sel_n, codes, "y_true contains a label missing from labels")
+    else:
+        var rank = List[Int32](length=max(k, 1), fill=Int32(-1))
+        for i in range(n):  # driver-loop: over the rows (the classes y_true holds)
+            var c = Int(t[i])
+            if c < 0 or c >= k:
+                raise Error("ValueError: y codes outside [0, n_classes)")
+            rank[c] = 0
+        for c in range(k):  # driver-loop: over the class codes (their ranks among the selected)
+            if rank[c] == 0:
+                rank[c] = Int32(selected)
+                selected += 1
+        if selected < 2:
+            raise Error("log_loss requires at least two labels; pass labels for one observed class")
+        for i in range(n):  # driver-loop: over the rows (the encoded labels)
+            codes[i] = rank[Int(t[i])]
     var binary = k == 2
     if binary:
         if selected != 2:
             raise Error("one-column probabilities require exactly two labels")
     elif k != selected:
         raise Error("probability columns must match the label count (at least two)")
-    var codes = List[Int32](length=max(n, 1), fill=Int32(0))
-    for i in range(n):  # driver-loop: over the rows (the encoded labels)
-        codes[i] = rank[Int(t[i])]
     var plan = MetricProgramPlan()
     var got = mc_log_loss_stages(plan, n, k, binary, w != 0, normalize)
     var addresses: List[Int] = [proba, Int(codes.unsafe_ptr())]
@@ -741,3 +757,71 @@ def kappa_run(route: MetricRoute, truth: Int, pred: Int, n: Int, k: Int, sel_at:
     elif (bits & KAPPA_ONE_COMMON) != 0:
         flags = KAPPA_ONE_COMMON
     return arena.f64(out + 2)
+
+
+# ---------------------------------------------------------------- class_likelihood_ratios, typed
+# Lane mf-score8 (2026-11-23): `_likelihood_ratios`' program (bindings/
+# metrics_exp_cls_door.mojo: the 2 x 2 confusion over the chosen labels, then
+# cm_epi CLR), one builder for the door and the search scorers'
+# 'positive_likelihood_ratio' / 'neg_negative_likelihood_ratio' rows.
+comptime _CM_CLR = 5
+#: `clr_run`'s flags (the slot's first word, the door's three warnings).
+comptime CLR_NO_POSITIVE = 1
+comptime CLR_POS_UNDEFINED = 2
+comptime CLR_NEG_UNDEFINED = 4
+
+
+def clr_stages(mut plan: MetricProgramPlan, n: Int, weighted: Bool) raises -> Int:
+    """`_likelihood_ratios`' program over its inputs: the true and the
+    predicted codes among the two chosen labels (n int32 words each, -1 for
+    a label outside them) and, weighted, the weights, in that order. The
+    6-word slot (flags, LR+ at +2, LR- at +4, binary64)."""
+    var a = plan.input(n)
+    var b = plan.input(n)
+    var key = plan.scratch(n)
+    plan.stage_op("pair_key", n, [a, b, key, 2, 0])
+    var w_off = MC_NONE
+    if weighted:
+        w_off = plan.input(n)
+    var g = plan.group(key, n, 4, MC_NONE, 1, w_off, 1)
+    var cells = g[1] if weighted else g[0]
+    var out = plan.want(plan.alloc(6), 6, -1, 1)
+    plan.stage_op("cm_epi", 1, [_CM_CLR, cells, 1 if weighted else 0, out])
+    return out
+
+
+def clr_run(route: MetricRoute, truth: Int, pred: Int, n: Int, k: Int, w: Int, pick: Int,
+            mut flags: Int) raises -> Float64:
+    """THE TYPED RUN of `class_likelihood_ratios(y_true, y_pred,
+    replace_undefined_by=1.0)[pick]` (pick 0 LR+, 1 LR-) over n int32 class
+    codes in 0 .. k-1 (and, `w` != 0, n float32 weights): the labels present
+    in either vector, the door's refusals in its order and words (more than
+    two: multiclass; one: not a 2 x 2 matrix), its program, then the
+    replacement 1.0 of an undefined ratio, as the door's dict
+    {'LR+': 1.0, 'LR-': 1.0} gives it; no positive sample answers NaN.
+    `flags`: the slot's warning bits (the caller raises the door's words)."""
+    flags = 0
+    var mt = List[Int32]()
+    var mp = List[Int32]()
+    var present = label_present_codes(truth, pred, n, k, mt, mp)
+    if present > 2:
+        raise Error("class_likelihood_ratios only supports binary classification problems, "
+                    + "got targets of type: multiclass")
+    if present != 2:
+        raise Error("class_likelihood_ratios needs a 2 x 2 confusion matrix")
+    var plan = MetricProgramPlan()
+    var out = clr_stages(plan, n, w != 0)
+    var addresses: List[Int] = [Int(mt.unsafe_ptr()), Int(mp.unsafe_ptr())]
+    var sizes: List[Int] = [n, n]
+    if w != 0:
+        addresses.append(w)
+        sizes.append(n)
+    var arena = metric_inputs_run(route, plan, addresses, sizes)
+    _ = len(mt)  # the program's inputs were copied from these codes above
+    _ = len(mp)
+    flags = arena.i32(out)
+    if (flags & CLR_NO_POSITIVE) != 0:
+        return bitcast[DType.float64](UInt64(0x7FF8000000000000))
+    if pick == 0:
+        return 1.0 if (flags & CLR_POS_UNDEFINED) != 0 else arena.f64(out + 2)
+    return 1.0 if (flags & CLR_NEG_UNDEFINED) != 0 else arena.f64(out + 4)

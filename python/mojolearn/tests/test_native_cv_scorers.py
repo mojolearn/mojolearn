@@ -16,7 +16,7 @@ def data():
 
 
 @pytest.mark.parametrize('name', ['r2', 'neg_mean_squared_error', 'neg_mean_absolute_error',
-                                  'explained_variance', 'max_error'])
+                                  'explained_variance', 'neg_max_error'])
 def test_named_scorer_public_cv_is_native(name):
     x, y = data()
     result = audit_native_call(ms.cross_val_score, ml.Ridge(), x, y, cv=3,

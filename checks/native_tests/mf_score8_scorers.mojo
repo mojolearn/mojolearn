@@ -27,6 +27,21 @@ scikit-learn's definitions computed by hand from the same inputs (worked in each
    top_k_accuracy k=2 normalize=False over four 3-class rows: 2.0 (normalize True: 0.5).
 8. The word group (`msel_scorer_group_words` / `msel_scorer_group_read`): the eight new words and two label value
    words per label round-trip; a refusal word is raised per side as its label word.
+ROUND b (each case's oracle worked by hand):
+9. hinge_loss: binary t [0, 1, 1, 0], decision [-1, 0.5, 2, 0.3]: (0 + 0.5 + 0 + 1.3) / 4 = 0.45; multiclass
+   t [0, 1, 2], decisions [[2, 1, 0], [0, 1, 3], [1, 0, 2]]: (0 + 3 + 0) / 3 = 1.0.
+10. positive / negative likelihood ratio: t [1, 1, 0, 0, 1], p [1, 0, 0, 1, 1] (tp 2, fn 1, tn 1, fp 1): LR+ 4/3,
+   neg_negative_likelihood_ratio -(2/3); three classes refuse in the door's words.
+11. d2_log_loss_score, binary one column t [0, 1, 1, 0], p1 [0.2, 0.7, 0.9, 0.4]: 1 - 0.29900116 / ln 2 =
+   0.568632511 (1e-5).
+12. A label row on a regressor's side: accuracy of y [1, 2, 2, 3] against p [1, 2, 3, 3] is 0.75; p [1.5, 2, 3, 3]
+   raises "ValueError: Classification metrics can't handle a mix of multiclass and continuous targets".
+13. roc_auc: max_fpr 1.0 given equals the default AUC; a multiclass side with max_fpr 0.5 raises the partial-AUC
+   words; top_k labels [0, 1] over y_true holding class 2 raises "'y_true' contains labels not in parameter
+   'labels'.".
+Round-b fail-proof edits: `hinge_run` always passes `multiclass` False (case 9); `clr_run` answers `out + 4` for
+pick 0 (case 10); `d2_proba_stages` stages _ROW_BRIER for logloss (case 11); `_target_type` answers 0 for a
+fraction (case 12); `roc_auc_options_run` ignores `partial` on a multiclass side (case 13).
 
 FAIL-PROOF EDITS (each must make a case fail): in `reg_metric_options_run` pass 0.5 instead of `alpha` to the
 PINBALL stages (case 0); drop `shown = param_shown.copy()` (case 1, the printed power); pass `True` for
@@ -50,7 +65,7 @@ from core.member_notices import MEMBER_NOTICE_METRIC_FEW, MEMBER_NOTICE_METRIC_K
 from core.entry_table import entry_ref_unresolved
 from x_metrics.descriptor_host import metrics_program_host_v1
 
-comptime CASES = 9
+comptime CASES = 14
 
 
 def _route() -> MetricRoute:
@@ -382,6 +397,130 @@ def check_group_words() raises:
     _ = len(y)
 
 
+def _raise_words(row: MselScorer, words: List[String], truth: Int, response: Int, count: Int, classes: Int,
+                 cols: Int) raises -> String:
+    var notes = List[Float64]()
+    try:
+        _ = msel_scorer_value(_route(), entry_ref_unresolved(), words, row, truth, response, count, classes, cols, -1,
+                              notes)
+    except e:
+        return String(e)
+    return String("")
+
+
+def check_hinge() raises:
+    var none = List[Int32]()
+    var row = _metric_row("hinge_loss", MselScorerOptions(), none)
+    var notes = List[Float64]()
+    var words = List[String]()
+    var t: List[Int32] = [0, 1, 1, 0]
+    var d: List[Float32] = [-1.0, 0.5, 2.0, 0.3]
+    _near(msel_scorer_value(_route(), entry_ref_unresolved(), words, row, Int(t.unsafe_ptr()), Int(d.unsafe_ptr()),
+                            4, 2, 1, -1, notes), 0.45, "binary hinge")
+    var t3: List[Int32] = [0, 1, 2]
+    var d3: List[Float32] = [2.0, 1.0, 0.0, 0.0, 1.0, 3.0, 1.0, 0.0, 2.0]
+    _near(msel_scorer_value(_route(), entry_ref_unresolved(), words, row, Int(t3.unsafe_ptr()), Int(d3.unsafe_ptr()),
+                            3, 3, 3, -1, notes), 1.0, "multiclass hinge")
+    _ = len(none)
+    _ = len(t)
+    _ = len(d)
+    _ = len(t3)
+    _ = len(d3)
+
+
+def check_likelihood_ratios() raises:
+    var none = List[Int32]()
+    var words = List[String]()
+    var notes = List[Float64]()
+    var t: List[Int32] = [1, 1, 0, 0, 1]
+    var p: List[Int32] = [1, 0, 0, 1, 1]
+    var pos = msel_scorer_row(msel_scorer_code("positive_likelihood_ratio", False), MselScorerOptions(),
+                              Int(none.unsafe_ptr()))
+    var neg = msel_scorer_row(msel_scorer_code("neg_negative_likelihood_ratio", False), MselScorerOptions(),
+                              Int(none.unsafe_ptr()))
+    _near(_value(pos, words, Int(t.unsafe_ptr()), Int(p.unsafe_ptr()), 5, 2, notes), 4.0 / 3.0, "LR+")
+    _near(_value(neg, words, Int(t.unsafe_ptr()), Int(p.unsafe_ptr()), 5, 2, notes), -2.0 / 3.0, "-LR-")
+    var t3: List[Int32] = [0, 1, 2]
+    var got = _raise_words(pos, words, Int(t3.unsafe_ptr()), Int(t3.unsafe_ptr()), 3, 3, 1)
+    require(got.startswith("class_likelihood_ratios only supports binary classification problems"), "words: " + got)
+    _ = len(none)
+    _ = len(t)
+    _ = len(p)
+    _ = len(t3)
+
+
+def check_d2_log_loss() raises:
+    var none = List[Int32]()
+    var words = List[String]()
+    var notes = List[Float64]()
+    var row = msel_scorer_row(msel_scorer_code("d2_log_loss_score", False), MselScorerOptions(), Int(none.unsafe_ptr()))
+    var t: List[Int32] = [0, 1, 1, 0]
+    var p1: List[Float32] = [0.2, 0.7, 0.9, 0.4]
+    # the label marks of the labels 0 and 1 (BRIER_MARK_ZERO | BRIER_MARK_ONE << 2): the positive is the label 1
+    var marks = 1 | (2 << 2)
+    _near(msel_scorer_value(_route(), entry_ref_unresolved(), words, row, Int(t.unsafe_ptr()), Int(p1.unsafe_ptr()),
+                            4, 2, 1, marks, notes), 0.5686325111679058, "d2_log_loss_score", 1e-5)
+    _ = len(none)
+    _ = len(t)
+    _ = len(p1)
+
+
+def check_regressor_labels() raises:
+    var none = List[Int32]()
+    var words = List[String]()
+    var notes = List[Float64]()
+    var row = msel_scorer_row(msel_scorer_code("accuracy", False), MselScorerOptions(), Int(none.unsafe_ptr()))
+    var y: List[Float32] = [1.0, 2.0, 2.0, 3.0]
+    var p: List[Float32] = [1.0, 2.0, 3.0, 3.0]
+    _near(_value(row, words, Int(y.unsafe_ptr()), Int(p.unsafe_ptr()), 4, 0, notes), 0.75, "accuracy of float labels")
+    var pc: List[Float32] = [1.5, 2.0, 3.0, 3.0]
+    var got = _raise_words(row, words, Int(y.unsafe_ptr()), Int(pc.unsafe_ptr()), 4, 0, 1)
+    require(got == "ValueError: Classification metrics can't handle a mix of multiclass and continuous targets",
+            "_check_targets words: " + got)
+    _ = len(none)
+    _ = len(y)
+    _ = len(p)
+    _ = len(pc)
+
+
+def check_roc_options() raises:
+    var none = List[Int32]()
+    var words = List[String]()
+    var notes = List[Float64]()
+    var t: List[Int32] = [0, 1, 1, 0, 1]
+    var s: List[Float32] = [0.1, 0.8, 0.4, 0.3, 0.9]
+    var plain = msel_scorer_row(msel_scorer_code("roc_auc", False), MselScorerOptions(), Int(none.unsafe_ptr()))
+    var full = _value(plain, words, Int(t.unsafe_ptr()), Int(s.unsafe_ptr()), 5, 2, notes)
+    var given = MselScorerOptions()
+    given.param = 1.0
+    given.param_word = 0
+    var shown: List[String] = ["1.0"]
+    var one = msel_scorer_row(msel_scorer_code("roc_auc", False), given, Int(none.unsafe_ptr()))
+    _near(_value(one, shown, Int(t.unsafe_ptr()), Int(s.unsafe_ptr()), 5, 2, notes), full, "max_fpr 1.0")
+    var half = MselScorerOptions()
+    half.param = 0.5
+    half.param_word = 0
+    var hw: List[String] = ["0.5"]
+    var ovr = msel_scorer_row(msel_scorer_code("roc_auc_ovr", False), half, Int(none.unsafe_ptr()))
+    var t3: List[Int32] = [0, 1, 2]
+    var p3: List[Float32] = [0.6, 0.2, 0.2, 0.1, 0.8, 0.1, 0.2, 0.2, 0.6]
+    var got = _raise_words(ovr, hw, Int(t3.unsafe_ptr()), Int(p3.unsafe_ptr()), 3, 3, 3)
+    require(got.startswith("Partial AUC computation not available in multiclass setting"), "partial words: " + got)
+    var sel: List[Int32] = [0, 1]
+    var listed = MselScorerOptions()
+    listed.sel_from = 0
+    listed.sel_n = 2
+    var topk = msel_scorer_row(msel_scorer_code("top_k_accuracy", False), listed, Int(sel.unsafe_ptr()))
+    got = _raise_words(topk, words, Int(t3.unsafe_ptr()), Int(p3.unsafe_ptr()), 3, 3, 3)
+    require(got == "'y_true' contains labels not in parameter 'labels'.", "top_k labels words: " + got)
+    _ = len(none)
+    _ = len(t)
+    _ = len(s)
+    _ = len(t3)
+    _ = len(p3)
+    _ = len(sel)
+
+
 def test_mf_score8_scorers() raises:
     def run_case(which: Int) raises:
         if which == 0:
@@ -400,8 +539,18 @@ def test_mf_score8_scorers() raises:
             check_regression_on_classifier()
         elif which == 7:
             check_normalize_flags()
-        else:
+        elif which == 8:
             check_group_words()
+        elif which == 9:
+            check_hinge()
+        elif which == 10:
+            check_likelihood_ratios()
+        elif which == 11:
+            check_d2_log_loss()
+        elif which == 12:
+            check_regressor_labels()
+        else:
+            check_roc_options()
     check_cases("mf_score8_scorers", CASES, run_case)
 
 

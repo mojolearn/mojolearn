@@ -298,7 +298,7 @@ def check_weight_refusals() raises:
     var opts = MselScorerOptions()
     opts.w_n = -1
     var sels = List[Int32]()
-    words = _refusal(msel_scorer_row(msel_scorer_code("max_error", False), opts, Int(sels.unsafe_ptr())), none,
+    words = _refusal(msel_scorer_row(msel_scorer_code("neg_max_error", False), opts, Int(sels.unsafe_ptr())), none,
                      Int(t.unsafe_ptr()), Int(p.unsafe_ptr()), 7, 0, 1, -1)
     require(words == "TypeError: native metric received an unexpected keyword argument", "no parameter: " + words)
     var empty = MselScorerOptions()

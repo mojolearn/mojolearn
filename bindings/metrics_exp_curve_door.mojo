@@ -42,7 +42,7 @@ from bindings.metrics_program_door import MetricDoorProg, metric_door_run, metri
 from bindings.metrics_exp_curve_run import (
     curve_fold_stages, curve_f32_bits, CURVE_CF_OUT, CURVE_CF_CHUNK, ap_fold_value, ap_binary_stages,
     ap_ovr_stages, ap_ovr_edge, ap_ovr_scores, ap_edge_average_plan, top_k_threshold, top_k_stages,
-    top_k_reads_scores, top_k_value,
+    top_k_reads_scores, top_k_value, ap_micro_stages,
 )
 from bindings.arena_prog_run import MetricArenaOwner
 from bindings.metrics_exp_common_unpack import (
@@ -300,16 +300,14 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
     if avg == "micro":
         # `_micro_inputs` + `_curves(s.reshape((n*k,)), ...)`: the row-major
         # one-hot flags and the repeated weights, formed by stages
-        var S = prog.put(s.a)
-        var C = prog.put_i32(codes)
-        var POS = prog.scratch(n * k)
-        prog.stage("onehot", n * k, [C, POS, n, k, 1])
-        var W = MX_NONE
+        # (lane mf-score8: ONE BODY, bindings/metrics_exp_curve_run.mojo
+        # `ap_micro_stages`, which the search scorers' RUN calls too; its
+        # pins in its input order)
+        var out = ap_micro_stages(prog.plan, n, k, w is not None)
+        prog.pins.append(s.a)
+        prog.pins.append(codes)
         if w is not None:
-            var W0 = prog.put(w)
-            W = prog.scratch(n * k)
-            prog.stage("rep_rows", n * k, [W0, W, k])
-        var out = curve_fold_stages(prog.plan, S, 1, POS, W, n * k, 1, False, False, 0.0, -1)
+            prog.pins.append(w)
         var arena = metric_door_run(prog, args[4], context)
         return PythonObject(_fold_ap(arena, out))
     # one-vs-rest: the class-major one-hot flags, the folds and the tail, by

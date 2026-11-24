@@ -112,6 +112,7 @@ from core.entry_table import EntryRef, entry_ref_unresolved
 from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, MselScorerOptions, msel_scorer_row, msel_scorer_value, msel_scorer_pos_words, msel_scorer_regression, msel_scorer_binary_column,
+    msel_scorer_float_labels,
     msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
     msel_scorer_labels_from_truth, msel_scorer_log_loss, msel_scorer_brier,
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND, SCORER_POSITIVE_MIXED,
@@ -1032,6 +1033,20 @@ def _run_start(rows: Int, count: Int) -> Int:
     return first
 
 
+def _regression_scorers(codes: List[Int], plan: MselSearchPlan) raises -> Bool:
+    """Lane mf-score8 round b: the member's own score alone, or every scorer
+    a regression row (a multi-output regressor's search)."""
+    if len(codes) == 1 and codes[0] == SEARCH_SCORE_MEMBER:
+        return True
+    for j in range(len(codes)):  # small-loop(the scorers)
+        if codes[j] == SEARCH_SCORE_MEMBER:
+            return False
+        if not msel_scorer_regression(msel_scorer_row(codes[j], plan.options[j] if j < len(plan.options) else
+                                                      MselScorerOptions(), Int(plan.selections.unsafe_ptr()))):
+            return False
+    return True
+
+
 def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     """The whole search fit over native members (module note). Raises the
     door's words for empty candidates, the folds' refusals and (error_score
@@ -1066,7 +1081,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         codes.append(SEARCH_SCORE_MEMBER)
     elif len(codes) == 0:
         codes.append(plan.scoring)
-    if y_cols > 1 and (classifier or len(codes) != 1 or codes[0] != SEARCH_SCORE_MEMBER):
+    if y_cols > 1 and (classifier or not _regression_scorers(codes, plan)):
+        # lane mf-score8 round b: a multi-output REGRESSOR may also be scored
+        # by regression rows (their programs take the outputs)
         raise Error("member ABI: a search over a multi-output member folds by KFold and scores by the member")
     if m == 0:
         raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")
@@ -1153,7 +1170,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             # clustering scorers only, on its predicted cluster ids.
             if not classifier and msel_scorer_cluster(row):
                 clusterer = True
-            elif msel_scorer_regression(row) == classifier and not (classifier and row.lv_n == k):
+            elif (msel_scorer_regression(row) == classifier and not (classifier and row.lv_n == k)
+                  and not (not classifier and msel_scorer_float_labels(row))):
                 # lane mf-score8: a regression scorer on a classifier reads its
                 # labels' value words (core/msel_scorer_run.mojo module note)
                 raise Error("member ABI: scorer '" + String(row.name) + "' does not score this kind of estimator")
@@ -1168,10 +1186,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 ops.append(row.op)
             op_of.append(at)
             rows_of.append(row)
-    if clusterer:
-        for j in range(len(rows_of)):  # small-loop(the scorers: a clusterer's are clustering scorers only)
-            if not msel_scorer_cluster(rows_of[j]):
-                raise Error("member ABI: a clusterer's search scores with clustering scorers only")
+    # lane mf-score8 round b: a clusterer scored by clustering scorers and
+    # others together (its ids read as numbers or labels, `MselScorer.ids`).
     var nsc = len(codes)
     var nops = len(ops)
     var positives = List[Int](length=max(nsc, 1), fill=-1)
@@ -1355,6 +1371,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             elif labels_out:
                 if dtype != MEMBER_I32 and dtype != MEMBER_I64:
                     raise Error("member ABI: a search scored by labels needs a member that predicts class codes")
+            elif ops[o] == MEMBER_OP_PREDICT and not classifier and (dtype == MEMBER_I32 or dtype == MEMBER_I64):
+                pass  # lane mf-score8 round b: a non-classifier's integer ids (narrowed to int32)
             elif dtype != MEMBER_F32 and dtype != MEMBER_F64:
                 raise Error("member ABI: a search scorer needs float32 or float64 member outputs")
             out_dtypes[c * nops + o] = dtype
@@ -1673,8 +1691,15 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                         continue
                     var o = op_of[j]
                     var notes = List[Float64]()
+                    # lane mf-score8 round b: a non-classifier's predict of
+                    # integer ids is read as ids (`MselScorer.ids`); one
+                    # flag word set on a copy of the row per score
+                    var scored = rows_of[j]
+                    var dt = out_dtypes[((u0 + t // sides) // used) * nops + o]
+                    scored.ids = (not classifier and scored.op == MEMBER_OP_PREDICT
+                                  and (dt == MEMBER_I32 or dt == MEMBER_I64))
                     try:
-                        values[at] = _scorer_side(plan.metric, plan.cluster, plan.label_words, rows_of[j], y_dst[s],
+                        values[at] = _scorer_side(plan.metric, plan.cluster, plan.label_words, scored, y_dst[s],
                                                   pred_at[t * nops + o], side_count[s], k, pred_cols[t * nops + o],
                                                   positives[j], held_addr[fold_of], held_count[fold_of], notes)
                     except error:

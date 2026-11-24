@@ -1115,7 +1115,11 @@ class _Scorer:
         return _NATIVE(self, "family_msel_scorer_call", (estimator, X, y, sample_weight, _memo), _NATIVE_CONTEXT)
 
 
-_BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss', 'top_k_accuracy'}
+# scikit-learn's `_get_response_values` hands a binary classifier's positive column to every predict_proba
+# scorer; the D^2 probability scorers too (lane mf-score8)
+_BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss', 'top_k_accuracy',
+                 'd2_log_loss_score', 'd2_brier_score', 'roc_auc_ovr', 'roc_auc_ovo', 'roc_auc_ovr_weighted',
+                 'roc_auc_ovo_weighted'}
 
 
 # TOMBSTONE: _proba_column1 (dead code: no caller; the native scorer reads column 1 itself) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
@@ -1163,6 +1167,7 @@ def _scorer_table():
     # glue: the fixed scorer table, built once at import (below) and read
     # natively by `get_scorer` and `get_scorer_names`.
     from . import _metrics_impl as m
+    from . import _expansion_metrics as x
     def s(fn, sign=1, rm='predict', name=None, **kw):
         return _Scorer(fn, sign, kw, rm, name)
     t = {
@@ -1180,7 +1185,13 @@ def _scorer_table():
         'roc_auc_ovo_weighted': s(m.roc_auc_score, rm='predict_proba', multi_class='ovo', average='weighted'),
         'matthews_corrcoef': s(m.matthews_corrcoef),
         'explained_variance': s(m.explained_variance_score), 'r2': s(m.r2_score),
-        'max_error': s(m.max_error, -1), 'neg_median_absolute_error': s(m.median_absolute_error, -1),
+        # scikit-learn 1.9's names (lane mf-score8): 'neg_max_error' (1.9 has no 'max_error'), the D^2
+        # probability scorers and the likelihood-ratio scorers
+        'neg_max_error': s(m.max_error, -1), 'neg_median_absolute_error': s(m.median_absolute_error, -1),
+        'd2_log_loss_score': s(m.d2_log_loss_score, rm='predict_proba'),
+        'd2_brier_score': s(m.d2_brier_score, rm='predict_proba'),
+        'positive_likelihood_ratio': s(x.positive_likelihood_ratio),
+        'neg_negative_likelihood_ratio': s(x.negative_likelihood_ratio, -1),
         'neg_mean_absolute_error': s(m.mean_absolute_error, -1),
         'neg_mean_absolute_percentage_error': s(m.mean_absolute_percentage_error, -1),
         'neg_mean_squared_error': s(m.mean_squared_error, -1),
