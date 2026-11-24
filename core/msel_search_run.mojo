@@ -112,7 +112,7 @@ from core.entry_table import EntryRef, entry_ref_unresolved
 from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, MselScorerOptions, msel_scorer_row, msel_scorer_value, msel_scorer_pos_words, msel_scorer_regression, msel_scorer_binary_column,
-    msel_scorer_float_labels, msel_scorer_float_roc,
+    msel_scorer_float_labels, msel_scorer_float_proba,
     msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
     msel_scorer_labels_from_truth, msel_scorer_log_loss, msel_scorer_brier,
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND, SCORER_POSITIVE_MIXED,
@@ -1294,10 +1294,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 clusterer = True
             elif (msel_scorer_regression(row) == classifier and not (classifier and row.lv_n == k)
                   and not (not classifier and msel_scorer_float_labels(row))
-                  and not (not classifier and y_cols == 1 and msel_scorer_float_roc(row))
+                  and not (not classifier and y_cols == 1 and msel_scorer_float_proba(row))
                   and not (multi_cls and row.op == MEMBER_OP_PREDICT_PROBA)):
-                # (lane mf-r9d: 'roc_auc' on a non-classifier's own decision or
-                # probability columns, `msel_scorer_float_roc`)
+                # (lane mf-r9d: a probability or decision row on a non-classifier's
+                # own columns, `msel_scorer_float_proba`)
                 # (lane mf-r9c: a multi-output classifier's probability row,
                 # `classes` 0, reads its outputs' label value words)
                 # lane mf-score8: a regression scorer on a classifier reads its

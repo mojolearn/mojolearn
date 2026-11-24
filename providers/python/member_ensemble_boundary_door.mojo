@@ -151,7 +151,7 @@ from core.msel_scorer_run import (
     msel_scorer_metric_code, SCORER_POSITIVE_LABEL_ONE, SCORER_POSITIVE_MARKS, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
     SCORER_POSITIVE_MIXED,
     msel_scorer_cluster, msel_scorer_cluster_entry, msel_scorer_top_k, msel_scorer_ap, msel_scorer_brier,
-    msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions, msel_scorer_float_roc,
+    msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions, msel_scorer_float_proba,
     msel_scorer_weighted, msel_scorer_caller, SCORER_WEIGHTS_EMPTY,
     msel_scorer_log_loss, SCORER_LABEL_NUMBER, SCORER_LABEL_TEXT, SCORER_LABEL_UNREAD,
     msel_scorer_roc_problem, msel_scorer_mi, msel_scorer_v_measure, msel_scorer_d2_proba, msel_scorer_decision_only,
@@ -4027,16 +4027,24 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # has that method (a mixture model's predict_proba, an outlier
             # detector's decision_function): scikit-learn 1.9 hands the raw
             # method answer to the metric (utils/_response.py line 232).
-            # LANE mf-r9d: 'roc_auc' (its binary row, either half) is typed
-            # over the member's own columns and the float targets
-            # (core/msel_scorer_run.mojo `_float_roc_value`; the RUN sizes the
-            # response by `member_outputs`). Not typed (mf-r9d-work/rows.tsv):
-            # the other probability / decision metrics over a non-classifier's
-            # raw columns (log_loss, average_precision, brier, top_k, hinge,
-            # the D^2 probability scores, roc_auc's multi_class rows), each a
-            # metric branch over float y_true no typed program reads yet.
-            if not msel_scorer_float_roc(row):
-                return False
+            # LANE mf-r9d: every such row (roc_auc and its multiclass rows,
+            # log_loss, average_precision, brier, top_k, hinge, the D^2
+            # probability scores) is typed over the member's own columns and
+            # the float targets (core/msel_scorer_run.mojo
+            # `_float_proba_value`; the RUN sizes the response by
+            # `member_outputs`). Every row whose `regression` flag differs
+            # from a non-classifier's is one of them: an invariant otherwise.
+            if not msel_scorer_float_proba(row):
+                raise Error("RuntimeError: search admission invariant: a non-classifier's probability or decision "
+                            + "row is no row `_float_proba_value` reads")
+            if kw.labels is not None:
+                # a `labels` kwarg over a non-classifier's float targets: no
+                # typed word carries float labels (the selection words are class
+                # codes of a classifier's fit labels); refused natively
+                raise Error("NotImplementedError: mojolearn: a make_scorer `labels` list on a probability or "
+                            + "decision scorer of a non-classifier (" + String(py=py_type(base).__name__) + ") is "
+                            + "not served natively by a search; omit `labels`, or score the search by a scorer "
+                            + "without it")
             others = True
         else:
             others = True
@@ -4044,7 +4052,15 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             cluster_entry = True
         var positive = -1
         var positive_kind = msel_scorer_positive_kind(row)
-        if not classifier and msel_scorer_positive(row):
+        var float_proba = not classifier and msel_scorer_float_proba(row)
+        if float_proba:
+            # LANE mf-r9d round b: a non-classifier's average_precision (pos_label
+            # 1 unless given) and brier / d2_brier (a given pos_label) read it
+            # once as the number each side compares with its float targets
+            # (`_float_positive`); no fit label code exists
+            if msel_scorer_ap(row) or ((msel_scorer_brier(row) or msel_scorer_d2_proba(row)) and kw.given_pos):
+                positive = _float_positive(kw, opts, extra_words, b)
+        elif not classifier and msel_scorer_positive(row):
             # A BINARY LABEL ROW ON A REGRESSOR (lane mf-rows8a): pos_label (1,
             # or the make_scorer's) read once as the number each side finds
             # among its float labels (core/msel_scorer_run.mojo
@@ -4159,7 +4175,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                     if code < 0:
                         opts.pos_word = n_labels + len(extra_words)
                         extra_words.append(String(py=py_call(b.str, kw.pos_label)))
-        if kw.labels is not None:
+        if kw.labels is not None and not float_proba:
             # AN AVERAGED ROW's `labels` (lane mf-tail5b): each label's class
             # code; a label of the targets' kind that no fit label equals is
             # one more code no row holds (`_selected_labels` keeps it). Mixed

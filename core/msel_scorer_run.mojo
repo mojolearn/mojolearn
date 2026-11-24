@@ -703,8 +703,10 @@ def msel_scorer_row(code: Int, opts: MselScorerOptions, sel_base: Int) raises ->
     if opts.param_word >= 0:
         # lane mf-rows8a: a binary label row on a non-classifier, its
         # pos_label's value (`msel_scorer_float_labels`)
+        # lane mf-r9d round b: a non-classifier's average_precision / brier /
+        # d2_brier pos_label value (`_float_proba_value`)
         var param_row = row.family == _F_KAPPA or row.family == _F_ROC or msel_scorer_v_measure(row) or (
-            row.family == _F_BINARY) or (
+            row.family == _F_BINARY) or row.family == _F_AP or row.family == _F_BRIER or row.family == _F_D2P or (
             row.family == _F_REG and (
             row.metric == REG_PINBALL or row.metric == REG_D2_PINBALL or row.metric == REG_TWEEDIE
             or row.metric == REG_D2_TWEEDIE))
@@ -1080,14 +1082,232 @@ def msel_scorer_d2_proba(row: MselScorer) -> Bool:
     return row.family == _F_D2P
 
 
-def msel_scorer_float_roc(row: MselScorer) -> Bool:
-    """Lane mf-r9d (door :3960): 'roc_auc' (its binary row, multi_class
-    'raise', either response half) on a NON-classifier whose class has the
-    response (an outlier detector's decision_function, a mixture model's
-    predict_proba): scikit-learn's scorer hands the raw answer to
-    roc_auc_score with the float targets (utils/_response.py line 232),
-    `_float_roc_value`."""
-    return row.family == _F_ROC and row.metric == ROC_BINARY
+def msel_scorer_float_proba(row: MselScorer) -> Bool:
+    """Lane mf-r9d round b (door :4039): every probability or decision row a
+    NON-classifier whose class has the response is scored by (scikit-learn
+    hands the raw answer and the float targets to the metric,
+    utils/_response.py line 232): roc_auc and its multiclass rows, log_loss,
+    average_precision, brier, top_k_accuracy, hinge_loss and the D^2
+    probability scores (`_float_proba_value`)."""
+    return (row.family == _F_ROC or row.family == _F_LOG_LOSS or row.family == _F_AP or row.family == _F_BRIER
+            or row.family == _F_TOP_K or row.family == _F_HINGE or row.family == _F_D2P)
+
+
+def _shape_text(count: Int, width: Int, two_d: Bool) -> String:
+    """A NumPy shape as Python prints it: (n,) or (n, k)."""
+    if two_d:
+        return "(" + String(count) + ", " + String(width) + ")"
+    return "(" + String(count) + ",)"
+
+
+def _py_float_text(v: Float64) -> String:
+    """`str()` of a NumPy float label (`lb.classes_[0]`): an integral value
+    prints with '.0'."""
+    if v - v == 0.0 and abs(v) < 1.0e15 and Float64(Int(v)) == v:
+        return String(Int(v)) + ".0"
+    return String(v)
+
+
+def _float_proba_value(route: MetricRoute, cluster: EntryRef, label_words: List[String], row: MselScorer,
+                       truth: Int, response: Int, count: Int, cols: Int, positive: Int,
+                       mut notices: List[Float64]) raises -> Float64:
+    """Lane mf-r9d round b (door :4039): a probability or decision metric over
+    a NON-classifier's raw answer (`cols` columns; a decision_function of one
+    column is 1-D, a predict_proba is 2-D) and its float targets, in
+    scikit-learn 1.9.1's order and words (metrics/_ranking.py `roc_auc_score`,
+    `_multiclass_roc_auc_score`, `average_precision_score`,
+    `top_k_accuracy_score`; metrics/_classification.py `log_loss`,
+    `brier_score_loss`, `hinge_loss`, `d2_log_loss_score`, `d2_brier_score`,
+    `_validate_multiclass_probabilistic_prediction`,
+    `_validate_binary_probabilistic_prediction`,
+    `_one_hot_encoding_multiclass_target`; utils/validation.py
+    `column_or_1d`): the structural checks of the metric first, then y_true
+    coded by its sorted distinct values (np.unique / LabelBinarizer /
+    LabelEncoder order) and the classifier row's own program over the codes
+    (a binary side hands its positive's column, as the classifier rows read
+    one). Not reproduced: the y_prob range checks and the sum-to-one warning
+    (a mixture model's responsibilities and the outlier decisions never reach
+    them), and continuous targets in LabelBinarizer print "Unknown label
+    type: continuous" (scikit-learn prints the array's repr)."""
+    if row.family == _F_ROC and row.metric == ROC_BINARY:
+        return _float_roc_value(route, cluster, label_words, row, truth, response, count, cols, positive, notices)
+    var t = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=truth)
+    var yt = List[Float64](capacity=max(count, 1))
+    for i in range(count):  # driver-loop: over the side's rows (the targets as numbers)
+        yt.append(Float64(t[i]))
+    var kt = _target_type(yt)
+    var kinds: List[String] = ["binary", "multiclass", "continuous"]
+    var width = max(cols, 1)
+    var two_d = row.op == MEMBER_OP_PREDICT_PROBA or width > 1
+    var union = List[Float64]()
+    for i in range(count):  # driver-loop: over the side's rows (the distinct values)
+        var seen = False
+        for j in range(len(union)):  # small-loop(the distinct values so far)
+            seen = seen or union[j] == yt[i]
+        if not seen:
+            union.append(yt[i])
+    for i in range(1, len(union)):  # small-loop(the distinct values: insertion sort, ascending)
+        var v = union[i]
+        var j = i - 1
+        while j >= 0 and union[j] > v:  # small-loop(shift the larger values)
+            union[j + 1] = union[j]
+            j -= 1
+        union[j + 1] = v
+    var n = len(union)
+    var codes = List[Int32](length=max(count, 1), fill=Int32(0))
+    for i in range(count):  # driver-loop: over the side's rows (their codes)
+        for j in range(n):  # small-loop(the distinct values)
+            if union[j] == yt[i]:
+                codes[i] = Int32(j)
+    var scored = row
+    var side_positive = -1
+    var binary_pick = False  # hand the positive's column (2 columns) as the binary classifier rows read it
+    if row.family == _F_ROC:
+        # a multiclass roc_auc row (multi_class 'ovr' / 'ovo')
+        if kt == 2:
+            raise Error("ValueError: continuous format is not supported")
+        if kt == 1 or width > 2:
+            if not two_d:
+                raise Error("ValueError: `y_score` needs to be of shape `(n_samples, n_classes)`, since `y_true` "
+                            + "contains multiple classes. Got `y_score.shape=" + _shape_text(count, width, two_d)
+                            + "`.")
+            if n != width:
+                raise Error("ValueError: Number of classes in y_true not equal to the number of columns in "
+                            + "'y_score'")
+        else:
+            # binary targets: roc_auc_score's binary branch ignores multi_class
+            return _float_roc_value(route, cluster, label_words, row, truth, response, count, cols, positive,
+                                    notices)
+    elif row.family == _F_LOG_LOSS or (row.family == _F_D2P and row.metric == 1) or (
+            (row.family == _F_BRIER or row.family == _F_D2P) and two_d and width > 1):
+        if row.family == _F_D2P and count < 2:
+            member_notice_add(notices, MEMBER_NOTICE_METRIC_FEW, 1.0)
+            return _nan64()
+        if kt == 2:
+            raise Error("ValueError: Unknown label type: continuous")
+        if n == 1:
+            raise Error("ValueError: y_true contains only one label (" + _py_float_text(union[0]) + "). Please "
+                        + "provide the list of all expected class labels explicitly through the labels argument.")
+        var wide = 2 if width == 1 else width
+        if n != wide:
+            raise Error("ValueError: y_true and y_prob contain different number of classes: "
+                        + String(n if n > 2 else 2) + " vs " + String(wide) + ". Please provide the true labels "
+                        + "explicitly through the labels argument. Classes found in y_true: "
+                        + _numpy_float_words(union))
+        binary_pick = n == 2 and width == 2
+        if (row.family == _F_BRIER or row.family == _F_D2P) and n == 2:
+            scored.pos_given = True
+            scored.pos_float = False
+            side_positive = 1
+    elif row.family == _F_BRIER or row.family == _F_D2P:
+        # one probability column: `_validate_binary_probabilistic_prediction`
+        if row.family == _F_D2P and count < 2:
+            member_notice_add(notices, MEMBER_NOTICE_METRIC_FEW, 1.0)
+            return _nan64()
+        if kt != 0:
+            raise Error("ValueError: The type of the target inferred from y_true is " + kinds[kt] + " but should "
+                        + "be binary according to the shape of y_prob.")
+        var pv: Float64
+        var matched = True
+        if row.pos_given and row.param_given:
+            pv = row.param
+        elif row.pos_given and positive == SCORER_POSITIVE_KIND:
+            pv = 0.0
+            matched = False  # a string pos_label: no float target equals it
+        else:
+            # pos_label None: 1 for {0, 1}, {-1, 1}, {0}, {-1}, {1}; else the
+            # largest value (`_check_pos_label_consistency` refused, classes[-1])
+            var standard = True
+            for j in range(n):  # small-loop(the distinct values, at most two)
+                standard = standard and (union[j] == 0.0 or union[j] == 1.0 or union[j] == -1.0)
+            if n == 2 and union[0] == -1.0 and union[1] == 0.0:
+                standard = False
+            pv = 1.0 if standard else union[n - 1]
+        for i in range(count):  # driver-loop: over the side's rows (positive or not)
+            codes[i] = Int32(1) if matched and yt[i] == pv else Int32(0)
+        n = 2
+        scored.pos_given = True
+        scored.pos_float = False
+        side_positive = 1
+    elif row.family == _F_AP:
+        if kt == 2:
+            raise Error("ValueError: continuous format is not supported")
+        var pv = row.param if row.param_given else 1.0
+        var absent = row.pos_float or positive == SCORER_POSITIVE_KIND
+        var shown = String("1")
+        if row.param_word >= 0 and row.param_word < len(label_words):
+            shown = label_words[row.param_word].copy()
+        if kt == 0:
+            var found = False
+            for j in range(n):  # small-loop(the present labels, at most two)
+                found = found or (not absent and union[j] == pv)
+            if n == 2 and not found:
+                raise Error("ValueError: pos_label=" + shown + " is not a valid label. It should be one of "
+                            + _numpy_float_words(union))
+            if two_d and width > 1:
+                raise Error("ValueError: y should be a 1d array, got an array of shape (" + String(count) + ", "
+                            + String(width) + ") instead.")
+            for i in range(count):  # driver-loop: over the side's rows (the positive's code)
+                codes[i] = Int32(1) if found and yt[i] == pv else Int32(0)
+            n = 2
+            side_positive = 1
+        else:
+            if absent or (row.param_given and pv != 1.0):
+                raise Error("ValueError: Parameter pos_label is fixed to 1 for multiclass y_true. Do not set "
+                            + "pos_label or set pos_label to 1.")
+            if not two_d or width != n:
+                raise Error("ValueError: `y_score` needs to be of shape `(n_samples, n_classes)`, since `y_true` "
+                            + "contains multiple classes. Got `y_score.shape=" + _shape_text(count, width, two_d)
+                            + "`.")
+    elif row.family == _F_TOP_K:
+        if kt == 2:
+            raise Error("ValueError: y type must be 'binary' or 'multiclass', got 'continuous' instead.")
+        var score_classes = width if two_d else 2
+        if kt == 0:
+            if two_d and width != 1:
+                raise Error("ValueError: `y_true` is binary while y_score is 2d with " + String(width) + " classes. "
+                            + "If `y_true` does not contain all the labels, `labels` must be provided.")
+            score_classes = 2
+        elif not two_d:
+            raise Error("ValueError: `y_score` needs to be of shape `(n_samples, n_classes)`, since `y_true` "
+                        + "contains multiple classes. Got `y_score.shape=" + _shape_text(count, width, two_d) + "`.")
+        if n != score_classes:
+            raise Error("ValueError: Number of classes in 'y_true' (" + String(n) + ") not equal to the number of "
+                        + "classes in 'y_score' (" + String(score_classes) + ").You can provide a list of all known "
+                        + "classes by assigning it to the `labels` parameter.")
+    elif row.family == _F_HINGE:
+        if n > 2:
+            if not two_d:
+                raise Error("ValueError: The shape of pred_decision cannot be 1d arraywith a multiclass target. "
+                            + "pred_decision shape must be (n_samples, n_classes), that is (" + String(count) + ", "
+                            + String(n) + "). Got: " + _shape_text(count, width, two_d))
+            if n != width:
+                raise Error("ValueError: Please include all labels in y_true or pass labels as third argument")
+        else:
+            if two_d and width > 1:
+                raise Error("ValueError: y should be a 1d array, got an array of shape (" + String(count) + ", "
+                            + String(width) + ") instead.")
+            if kt == 2:
+                raise Error("ValueError: Unknown label type: continuous")
+            n = 2
+    var classes = max(n, 2)
+    var pred = response
+    var pred_cols = width
+    var column = List[Float32]()
+    if binary_pick:
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=response)
+        column = List[Float32](length=max(count, 1), fill=0.0)
+        for i in range(count):  # driver-loop: over the side's rows (the positive's probability column)
+            column[i] = src[2 * i + 1]
+        pred = Int(column.unsafe_ptr())
+        pred_cols = 1
+    elif classes == 2 and width == 1:
+        pred_cols = 1
+    var value = msel_scorer_value(route, cluster, label_words, scored, Int(codes.unsafe_ptr()), pred, count,
+                                  classes, pred_cols, side_positive, notices)
+    _ = len(codes)  # read by the program above
+    _ = len(column)
+    return value
 
 
 def _float_roc_value(route: MetricRoute, cluster: EntryRef, label_words: List[String], row: MselScorer, truth: Int,
@@ -1290,9 +1510,10 @@ def msel_scorer_value(route: MetricRoute, cluster: EntryRef, label_words: List[S
     if row.samples:
         raise Error("NotImplementedError: mojolearn " + msel_scorer_caller(row) + ": average='samples' applies to "
                     + "multilabel targets, which are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
-    if classes == 0 and msel_scorer_float_roc(row):
-        # lane mf-r9d (door :3960): 'roc_auc' on a non-classifier's own columns
-        return _float_roc_value(route, cluster, label_words, row, truth, response, count, cols, positive, notices)
+    if classes == 0 and msel_scorer_float_proba(row):
+        # lane mf-r9d (door :3960, round b): a probability or decision row on a
+        # non-classifier's own columns
+        return _float_proba_value(route, cluster, label_words, row, truth, response, count, cols, positive, notices)
     if classes == 0 and msel_scorer_float_labels(row):
         # lane mf-score8 round b: a label row on a non-classifier's side
         return _float_label_value(route, cluster, label_words, row, truth, response, count, cols, positive, notices)
