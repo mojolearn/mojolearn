@@ -136,7 +136,6 @@ from bindings.hotpath_helpers_door import (
     uniform_init_f32_binding,
     normal_init_f32_binding,
     strat_fold_assign_i32_binding,
-    bincount2_i32_host_binding,
 )
 from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
 from bindings.array_helpers_pack import (
@@ -978,7 +977,7 @@ def build__mojolearn_core_host() -> PythonObject:
         # base binding has carried since DEVIATION 2500, so a CPU-only
         # install stops encoding labels in a Python loop.
         # The base helper table (core/base_entry_table.mojo) serves check_indices_i64,
-        # bincount_i64, reduce_stat, equal_elements, bincount2_i32, row_means_f64,
+        # bincount_i64, reduce_stat, equal_elements, row_means_f64,
         # assign_fold_i64, count_fold_hits_i64 and mark_split_roles_f32 to native
         # doors; their Python exports below remain for the Python package
         # (`_buffer._native` users) and the doors not yet converted
@@ -1015,11 +1014,8 @@ def build__mojolearn_core_host() -> PythonObject:
         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/adam_hyper_f64.patch
         module.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
-        # StratifiedGroupKFold's group x class table and group plan (the GPU
-        # base binding's bincount2_i32 / strat_group_plan_i32): a CPU-only
-        # install refused StratifiedGroupKFold.split without them (lane
-        # run-sabotage-arms, 2026-10-21: x-metrics-splitters on the host column)
-        module.def_function[bincount2_i32_host_binding]("bincount2_i32")
+        # bincount2_i32 (StratifiedGroupKFold's former group x class table) deleted 2026-11-24 by lane vdf-tail-b:
+        # no caller since lane vdf-scope-split2 (MH_GROUP_CLASS_COUNTS_RES of the model-selection helper table).
         module.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
         module.def_function[check_lengths_i64_binding]("check_lengths_i64")
         module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")

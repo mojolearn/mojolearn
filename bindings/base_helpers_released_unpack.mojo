@@ -16,7 +16,6 @@ from core.base_helpers_calls import (
     base_reduce_stat as _base_reduce_stat,
     base_reduce_stat_int as _base_reduce_stat_int,
     base_equal_elements as _base_equal_elements,
-    base_bincount2_i32 as _base_bincount2_i32,
     base_row_means_f64 as _base_row_means_f64,
     base_assign_fold_i64 as _base_assign_fold_i64,
     base_count_fold_hits_i64 as _base_count_fold_hits_i64,
@@ -56,13 +55,6 @@ def base_equal_elements(entry: EntryRef, a: Int, b: Int, code: Int, n: Int, dst:
     var result = 0
     with GILReleased(Python()):
         result = _base_equal_elements(entry, a, b, code, n, dst)
-    return result
-
-
-def base_bincount2_i32(entry: EntryRef, a: Int, b: Int, n: Int, ka: Int, kb: Int, counts: Int) raises -> Int:
-    var result = 0
-    with GILReleased(Python()):
-        result = _base_bincount2_i32(entry, a, b, n, ka, kb, counts)
     return result
 
 

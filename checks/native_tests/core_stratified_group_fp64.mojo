@@ -6,8 +6,9 @@ whole file).
 
 The split door (bindings/msel_split_door.mojo msel_strat_group_split, no
 shuffle) encodes the classes by first appearance, counts the group x class
-table (bincount2_i32: core/hotpath_impl_rows.mojo on the host column,
-core/hotpath_device.mojo device_bincount2_i32 on a GPU) and plans the folds
+table (group_class_counts_i32: core/hotpath_impl_rows.mojo on the host
+column; core/hotpath_device.mojo device_group_class_counts_on over the
+device codes on a GPU; was bincount2_i32, deleted 2026-11-24) and plans the folds
 on the host (strat_group_plan_i32). The independent oracle is the former
 test's `_reference_group_plan`, written here on its own: groups ordered by
 descending class-count deviation (stable), each placed in the fold whose
@@ -28,9 +29,9 @@ from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import fma, sqrt
 from std.memory import bitcast
-from core.hotpath_impl_rows import bincount2_i32, strat_group_plan_i32
+from core.hotpath_impl_rows import group_class_counts_i32, strat_group_plan_i32
 from max.gpu.host import DeviceContext
-from core.hotpath_device import device_bincount2_i32
+from core.hotpath_device import device_group_class_counts_on
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
@@ -187,7 +188,9 @@ def check_unit(unit: Int) raises:
     var enc = fs[0].copy()
     var k = fs[1]
     var dist = List[Int64](length=c.groups * k, fill=-1)
-    _ = bincount2_i32(Int(enc.unsafe_ptr()), Int(groups.unsafe_ptr()), c.rows, k, c.groups, Int(dist.unsafe_ptr()))
+    # The codes are in first-seen order already: no rank table (null address).
+    _ = group_class_counts_i32(Int(enc.unsafe_ptr()), c.rows, k, Int(groups.unsafe_ptr()), c.groups, 0, k,
+                               Int(dist.unsafe_ptr()))
     var folds = List[Int32](length=c.groups, fill=-1)
     var sizes = List[Int64](length=c.folds, fill=-1)
     var bad = strat_group_plan_i32(Int(dist.unsafe_ptr()), 0, Int(folds.unsafe_ptr()), Int(sizes.unsafe_ptr()), k, c.groups, c.folds)
@@ -201,7 +204,8 @@ def test_plan() raises:
     comptime if CPU_COLUMN_BUILD:
         check_cases("plan", STRATIFIED_GROUP_FIXTURES, check_unit)
     else:
-        # The group x class table on the device (device_bincount2_i32), the plan on the host as the door runs it;
+        # The group x class table on the device (device_group_class_counts_on over the codes put on the device
+        # once, as the door's stored-code route reads them), the plan on the host as the door runs it;
         # the cases run in order on one DeviceContext (each table is one kernel over all rows).
         var ctx = DeviceContext()
         for unit in range(STRATIFIED_GROUP_FIXTURES):  # driver-loop: ordered on one DeviceContext
@@ -213,8 +217,12 @@ def test_plan() raises:
                 var enc = fs[0].copy()
                 var k = fs[1]
                 var dist = List[Int64](length=c.groups * k, fill=-1)
-                require(device_bincount2_i32(ctx, Int(enc.unsafe_ptr()), Int(groups.unsafe_ptr()), c.rows, k, c.groups,
-                                             Int(dist.unsafe_ptr())), "the device table declined in-range codes")
+                var d_enc = ctx.enqueue_create_buffer[DType.int32](c.rows)
+                ctx.enqueue_copy(dst_buf=d_enc, src_ptr=enc.unsafe_ptr())
+                require(device_group_class_counts_on(ctx, Int(d_enc.unsafe_ptr()), c.rows, k, Int(groups.unsafe_ptr()),
+                                                     c.groups, 0, k, Int(dist.unsafe_ptr())),
+                        "the device table declined in-range codes")
+                _ = d_enc^  # the kernel read it; the call synchronized
                 var folds = List[Int32](length=c.groups, fill=-1)
                 var sizes = List[Int64](length=c.folds, fill=-1)
                 var bad = strat_group_plan_i32(Int(dist.unsafe_ptr()), 0, Int(folds.unsafe_ptr()), Int(sizes.unsafe_ptr()), k, c.groups, c.folds)

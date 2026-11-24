@@ -10,10 +10,11 @@ entangled-decompkit, 2026-11-12).
 solve and lu_solve keep a Python decision between two RUN pieces where the
 public behaviour needs one (the singular-matrix warning before the solve,
 and the right-hand side's admission, which depends on the factor's route)."""
+from std.memory import unsafe_memcpy
 from bindings.decomp_kit_run import DKit, DK_ADD, DK_SUB, DK_SQ, DK_SELECT, DK_RECIP, DK_MUL
 from x_decomp.descriptor_schema import (
     XD_RANDOMIZED_SVD, XD_DEV_LU_SOLVE, XD_LU_GESV, XD_DEV_LU_FACTOR, XD_TSQR_R, XD_DEV_TSQR_R, XD_DEV_LU_GESV,
-    XD_DEV_LU_FACTOR_IN, XD_DEV_LU_SOLVE_IN,
+    XD_DEV_LU_FACTOR_IN, XD_DEV_LU_SOLVE_IN, XD_DEV_FROM_TRAIN, XD_DEV_TO_TRAIN, XD_DEV_FINITE,
 )
 
 
@@ -66,6 +67,61 @@ def ld_dev_lu_pair_run(mut kit: DKit, a: Int, bm: Int, refine: Bool) raises -> T
     _ = kit.xd(XD_DEV_LU_SOLVE_IN, List[Int](), [buffers[1], buffers[2], da, kit.device(bm), kit.matrices[x].device,
                n, nrhs, 1 if refine else 0], List[Float64]())
     return (x, 0, buffers[1], buffers[2])
+
+
+def ld_dev_lu_factor_train_run(mut kit: DKit, a_handle: Int, da: Int, dlu: Int, dp: Int, n: Int) raises -> Int:
+    """`lu_factor` of a device operand on the resident pair route (lane vdf-tail-b): training handle `a_handle`'s
+    n x n words copied device to device into the pair's own pool id `da` (XD_DEV_FROM_TRAIN), tested finite there
+    (XD_DEV_FINITE, refused in the host admission's words), then XD_DEV_LU_FACTOR_IN into `dlu` / `dp`: the host
+    operand's XD_DEV_LU_FACTOR on the same words, with nothing going up and only info (one word) coming down.
+    Returns the singular diagonal number (0: regular)."""
+    var cells = n * n
+    _ = kit.xd(XD_DEV_FROM_TRAIN, List[Int](), [a_handle, da, cells], List[Float64]())
+    if kit.xd(XD_DEV_FINITE, List[Int](), [da, cells], List[Float64]()) != 0:
+        raise Error("a: input must be finite; NaN/inf are unsupported")
+    var info = kit.zeros(1, 1)
+    var addresses: List[Int] = [kit.at(info)]
+    _ = kit.xd(XD_DEV_LU_FACTOR_IN, addresses, [da, dlu, dp, n], List[Float64]())
+    return Int(kit.word(info))
+
+
+def ld_dev_lu_solve_pair_run(mut kit: DKit, da: Int, dlu: Int, dp: Int, bm: Int, refine: Bool) raises -> Int:
+    """`lu_solve` of a device right-hand side on a resident pair (lane vdf-tail-b): XD_DEV_LU_SOLVE_IN reads the
+    pair's LU, pivots and A (pool ids) and B (kit matrix bm, adopted) in place and writes X into a new pool matrix:
+    the host operand's XD_DEV_LU_SOLVE on the same words. Returns x."""
+    var n = kit.nrows(bm)
+    var nrhs = kit.ncols(bm)
+    var x = kit.device_output(n, nrhs)
+    _ = kit.xd(XD_DEV_LU_SOLVE_IN, List[Int](), [dlu, dp, da, kit.device(bm), kit.matrices[x].device, n, nrhs,
+               1 if refine else 0], List[Float64]())
+    return x
+
+
+def ld_pool_to_train(kit: DKit, id: Int, handle: Int, words: Int) raises:
+    """PACK pool id `id`'s first `words` 4-byte words into training handle `handle` (one device copy; an int32 array
+    is the same words)."""
+    _ = kit.xd(XD_DEV_TO_TRAIN, List[Int](), [id, handle, words], List[Float64]())
+
+
+def ld_train_pivots_down(mut kit: DKit, handle: Int, n: Int) raises -> Int:
+    """The n int32 pivots of training handle `handle` in a kit int store (its index): one device copy into a pool id
+    this kit owns, then n words down. The kit's own solve (`ld_lu_solve_run`) reads its pivots on the host, as for a
+    host pair."""
+    var id = kit.dev_alloc(n)
+    kit.allocations.append(id)
+    _ = kit.xd(XD_DEV_FROM_TRAIN, List[Int](), [handle, id, n], List[Float64]())
+    var store = kit.istore(n)
+    kit.dev_download(id, kit.iaddr(store), n)
+    return store
+
+
+def ld_pivots_to_train(mut kit: DKit, store: Int, handle: Int, n: Int) raises:
+    """PACK the n int32 pivots of kit int store `store` (the kit's own host factor) into training handle `handle`: the
+    words go into a kit matrix of n words and up once (`to_train`), bit for bit."""
+    var m = kit.zeros(n, 1)
+    unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=kit.at(m)),
+                  src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=kit.iaddr(store)), count=n)
+    kit.to_train(m, handle)
 
 
 def ld_dev_lu_factor_run(kit: DKit, a_address: Int, lu_address: Int, piv_address: Int, info_address: Int,

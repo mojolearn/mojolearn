@@ -199,15 +199,22 @@ def schedule_run(operation: Int, owner: PythonObject, values: PythonObject, cont
         var warmup = py_item(cfg, nk[].k_warmup_steps)
         var total = py_item(cfg, nk[].k_total_steps)
         var low = py_item(cfg, nk[].k_min_lr)
-        # Admit the four external values without a new Python tuple envelope.
+        # lane vdf-tail-d: `config()` carries the schedule's `device`; a
+        # configuration without it (saved before it existed) reads as None.
+        var device = py_get(cfg, nk[].k_device)
+        # Admit the external values without a new Python tuple envelope.
         opt_scalar(peak, context, 1)
         opt_scalar(warmup, context, 1)
         opt_scalar(total, context, 1)
         opt_scalar(low, context, 1)
+        opt_scalar(device, context, 1)
         var cls = py_item(context, nk[].k_schedules)[kind]
-        var label = String(py=py_call(py_item(context, nk[].k_type_name), cls)) + ": "
+        var name = String(py=py_call(py_item(context, nk[].k_type_name), cls))
+        var label = name + ": "
         var spec = _warmup_unpack(kind, peak, warmup, total, low, label, context)
         var result = native_storage_allocate(cls)
+        # admitted once, as the constructor admits it (bindings/schedule_device_unpack.mojo)
+        schedule_device_admit(result, device, name, context)
         _warmup_pack(result, spec)
         schedule_bind_block(result, kind, context)
         return result
@@ -278,8 +285,11 @@ def schedule_run(operation: Int, owner: PythonObject, values: PythonObject, cont
                             Python.list(spec.f0, spec.f1, spec.f2, spec.f3))
     if operation == OPTIMIZER_OPN_SCHEDULE_CONFIG:
         var fields = py_fields(owner)
+        # lane vdf-tail-d: the `device` word rides with the settings (None when
+        # the schedule has none, or was restored from state saved before it existed).
         return Python.dict(kind=optimizer_schedule_config_name(kind), peak_lr=py_item(fields, nk[].k_peak_lr), min_lr=py_item(fields, nk[].k_min_lr),
-                           warmup_steps=py_item(fields, nk[].k_warmup_steps), total_steps=py_item(fields, nk[].k_total_steps))
+                           warmup_steps=py_item(fields, nk[].k_warmup_steps), total_steps=py_item(fields, nk[].k_total_steps),
+                           device=py_get(fields, nk[].k_device))
     opt_scalar(values, context)
     var requested = optimizer_integer(values[0], context)
     var series = operation == OPTIMIZER_OPN_SCHEDULE_VALUES or operation == OPTIMIZER_OPN_SCHEDULE_LIST

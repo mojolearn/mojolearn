@@ -101,7 +101,6 @@ from core.label_device_steps import (
 from bindings.labels_stat_boundary_pack import labels_stat_pack
 from core.base_helpers_device import (
     IDN_HPDEV_FOLDS, check_indices_i64_device_run, equal_elements_device_run, bincount_i64_device_run,
-    bincount2_i32_device_run,
 )
 from core.hotpath_impl import HpStat
 # lane calltable-msel: the fold, index, mask and gather bodies these exports
@@ -213,27 +212,6 @@ def bincount_i64_binding(
     var status = 0
     with GILReleased(Python()):
         status = bincount_i64_device_run(s, c, count, kk, ca, acc)
-    return PythonObject(status)
-
-
-def bincount2_i32_binding(
-    a_addr: PythonObject, b_addr: PythonObject, dims: PythonObject, counts_addr: PythonObject,
-) raises -> PythonObject:
-    """dims = [n, ka, kb]: int64 counts[b * ka + a] over the n rows of two
-    int32 code columns, on the device (lane cpu4-python: StratifiedGroupKFold's
-    group x class table; there is no host route in this binding). Raises when
-    a code is outside [0, ka) x [0, kb)."""
-    if len(dims) != 3:
-        raise Error("bincount2_i32: dims [n, ka, kb]")
-    var count = Int(py=dims[0])
-    var ka = Int(py=dims[1])
-    var kb = Int(py=dims[2])
-    var ca = Int(py=counts_addr)
-    var a = Int(py=a_addr)
-    var b = Int(py=b_addr)
-    var status = 0
-    with GILReleased(Python()):
-        status = bincount2_i32_device_run(a, b, count, ka, kb, ca)
     return PythonObject(status)
 
 

@@ -116,6 +116,11 @@ comptime OPTIMIZER_OPN_IO = 95
 comptime OPTIMIZER_OPN_CLIP = 96
 comptime OPTIMIZER_OPN_ACCUMULATE = 97
 comptime OPTIMIZER_OPN_ALIGNED = 98
+# lane vdf-tail-d (2026-11-24): `lr_schedule` of the sequence optimizers, read
+# and attached through the owner (the attachment decides the device agreement
+# once); routed with the sequence optimizer operations.
+comptime OPTIMIZER_OPN_SEQ_SCHEDULE = 99
+comptime OPTIMIZER_OPN_SEQ_SCHEDULE_SET = 100
 
 
 struct OptimizerKeys(Defaultable, Movable):
@@ -513,6 +518,8 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     py_op_add(ops, "seq_export", OPTIMIZER_OPN_SEQ_EXPORT)
     py_op_add(ops, "seq_import", OPTIMIZER_OPN_SEQ_IMPORT)
     py_op_add(ops, "seq_finalize", OPTIMIZER_OPN_SEQ_FINALIZE)
+    py_op_add(ops, "seq_schedule", OPTIMIZER_OPN_SEQ_SCHEDULE)
+    py_op_add(ops, "seq_schedule_set", OPTIMIZER_OPN_SEQ_SCHEDULE_SET)
     py_op_add(ops, "device_construct", OPTIMIZER_OPN_DEVICE_CONSTRUCT)
     py_op_add(ops, "device_new", OPTIMIZER_OPN_DEVICE_NEW)
     py_op_add(ops, "device_upload", OPTIMIZER_OPN_DEVICE_UPLOAD)

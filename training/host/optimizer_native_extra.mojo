@@ -2,7 +2,9 @@
 """The host training image's public training operations of the optimizer
 native table (word layouts: training/optimizer_native_extra.mojo). The same
 host kernels the image's Python entries of the same names called. Residual
-dropout on training device arrays has no host kernel: refused in words."""
+dropout and Generator dropout (OPT_NATIVE_NEURAL_RNG_DEV) on training device
+arrays have no host form (the host image holds no device arrays): refused in
+the device-array words by the last branch."""
 from core.hostptr import f32_ptr
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report

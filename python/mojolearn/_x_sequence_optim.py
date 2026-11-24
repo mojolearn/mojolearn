@@ -48,6 +48,24 @@ class _ResidentState:
         return _SEQ_NATIVE("seq_state_set", self, (value,), None, _SEQ_CONTEXT)
 
     @property
+    def lr_schedule(self):
+        """The learning-rate schedule that sets `lr` before each step, or None.
+
+        Set it to a built-in schedule (`StepLR`, `ExponentialLR`, `OneCycleLR`, ...) or
+        None. A schedule constructed with a `device` other than this optimizer's raises
+        ValueError.
+        """
+        return _SEQ_NATIVE("seq_schedule", self, (), None, _SEQ_CONTEXT)
+
+    @lr_schedule.setter
+    def lr_schedule(self, value):
+        return _SEQ_NATIVE("seq_schedule_set", self, (value,), None, _SEQ_CONTEXT)
+
+    @lr_schedule.deleter
+    def lr_schedule(self):
+        return _SEQ_NATIVE("seq_schedule_set", self, (None,), None, _SEQ_CONTEXT)
+
+    @property
     def resident_(self):
         """Whether the optimizer state is resident on the device."""
         return _SEQ_NATIVE("seq_resident", self, (), None, _SEQ_CONTEXT)

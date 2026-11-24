@@ -217,12 +217,14 @@ def _gpr_fit_run(
     lp: MutPointer[Float32, MutUntrackedOrigin],
     dp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    x_word: Int = 0,
 ) raises -> Int:
     """The GIL-free half of `gpr_fit_binding`: everything after the
     Python objects have been read and before one is built. A separate
     function because `GPRegressor` has no default constructor to
-    pre-declare across a `with` block, and an `Int` does."""
-    var model = gpr_fit_host(x, n_train, n_features, y, spec, alpha)
+    pre-declare across a `with` block, and an `Int` does. `x_word` < 0
+    (lane vdf-tail-a): X is a fold store slot (`gpr_fit_host`), `x` empty."""
+    var model = gpr_fit_host(x, n_train, n_features, y, spec, alpha, x_word=x_word)
     copy_f32(model.l.unsafe_ptr(), lp, n_train * n_train)
     copy_f32(model.dual_coef.unsafe_ptr(), dp, n_train)
     # info, nb, logdet, ydotalpha, lml -- in that order, the same five
@@ -248,14 +250,18 @@ def _gpr_predict_run(
     unnorm: Bool = False,
     y_std: Float32 = Float32(1.0),
     y_mean: Float32 = Float32(0.0),
+    xt_word: Int = 0,
+    xs_word: Int = 0,
 ) raises -> Int:
     """The GIL-free half of `gpr_predict_binding`, for `_gpr_fit_run`'s
-    reason. The variance/std/clamp addresses are taken as `Int` and only
+    reason. `xt_word` / `xs_word` (lane vdf-tail-a): fold store slots for
+    X_train_ / the query (`gpr_predict_host`). The variance/std/clamp addresses are taken as `Int` and only
     resolved inside the `return_std` arm, so a caller that asked for the
     mean alone never has them dereferenced -- "safe to write or skip", and
     this side skips."""
     var pred = gpr_predict_host(
-        model, x_star, n_star, return_std, unnorm=unnorm, y_std=y_std, y_mean=y_mean
+        model, x_star, n_star, return_std, unnorm=unnorm, y_std=y_std, y_mean=y_mean, xt_word=xt_word,
+        xs_word=xs_word,
     )
     var mp = _f32_ptr(mean_addr)
     for i in range(n_star):
@@ -281,10 +287,13 @@ def _gpr_sample_y_run(
     unnorm: Bool = False,
     y_std: Float32 = Float32(1.0),
     y_mean: Float32 = Float32(0.0),
+    xt_word: Int = 0,
+    xs_word: Int = 0,
 ) raises:
-    """The GIL-free half of `gpr_sample_y_binding`."""
+    """The GIL-free half of `gpr_sample_y_binding` (fold words: lane vdf-tail-a)."""
     var y = gpr_sample_y_host(
-        model, x_star, n_star, n_samples, seed, unnorm=unnorm, y_std=y_std, y_mean=y_mean
+        model, x_star, n_star, n_samples, seed, unnorm=unnorm, y_std=y_std, y_mean=y_mean, xt_word=xt_word,
+        xs_word=xs_word,
     )
     copy_f32(y.unsafe_ptr(), _f32_ptr(out_addr), n_star * n_samples)
 
@@ -298,9 +307,12 @@ def _gpr_predict_cov_run(
     unnorm: Bool = False,
     y_std: Float32 = Float32(1.0),
     y_mean: Float32 = Float32(0.0),
+    xt_word: Int = 0,
+    xs_word: Int = 0,
 ) raises:
-    """The GIL-free half of `gpr_predict_cov_binding`."""
-    var r = gpr_predict_cov_host(model, x_star, n_star, unnorm=unnorm, y_std=y_std, y_mean=y_mean)
+    """The GIL-free half of `gpr_predict_cov_binding` (fold words: lane vdf-tail-a)."""
+    var r = gpr_predict_cov_host(model, x_star, n_star, unnorm=unnorm, y_std=y_std, y_mean=y_mean,
+                                 xt_word=xt_word, xs_word=xs_word)
     copy_f32(r.mean.unsafe_ptr(), _f32_ptr(mean_addr), n_star)
     copy_f32(r.cov.unsafe_ptr(), _f32_ptr(cov_addr), n_star * n_star)
 
@@ -346,9 +358,10 @@ def _gpc_fit_run(
     pp: MutPointer[Float32, MutUntrackedOrigin],
     wp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    x_word: Int = 0,
 ) raises -> Int:
-    """The GIL-free half of `gpc_fit_binding`."""
-    var fit = gpc_fit_binary_host(x, n_train, n_features, y, spec, max_iter_predict)
+    """The GIL-free half of `gpc_fit_binding` (`x_word`: a fold store slot, lane vdf-tail-a)."""
+    var fit = gpc_fit_binary_host(x, n_train, n_features, y, spec, max_iter_predict, x_word)
     for i in range(n_train * n_train):
         lp.unsafe_store(i, fit.l[i])
     for i in range(n_train):
@@ -376,11 +389,14 @@ def _gpc_predict_run(
     mean_addr: Int,
     var_addr: Int,
     proba_addr: Int,
+    xt_word: Int = 0,
+    xs_word: Int = 0,
 ) raises -> Int:
     """The GIL-free half of `gpc_predict_binding`. The variance and
-    probability addresses are resolved only when `want_proba`."""
+    probability addresses are resolved only when `want_proba`. Fold words:
+    lane vdf-tail-a (`gpc_predict_binary_host`)."""
     var lat = gpc_predict_binary_host(
-        xt, y, pi, wsr, l, n_train, n_features, spec, x_star, n_star, want_proba
+        xt, y, pi, wsr, l, n_train, n_features, spec, x_star, n_star, want_proba, xt_word, xs_word
     )
     var mp = _f32_ptr(mean_addr)
     for t in range(n_star):
@@ -434,9 +450,10 @@ def _gpr_lml_grad_run(
     alpha: Float32,
     gp: MutPointer[Float64, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    x_word: Int = 0,
 ) raises -> Int:
-    """The GIL-free half of `gpr_lml_grad_binding`."""
-    var r = gpr_lml_grad_host(x, n_train, n_features, y, spec, free, alpha)
+    """The GIL-free half of `gpr_lml_grad_binding` (`x_word`: a fold store slot, lane vdf-tail-a)."""
+    var r = gpr_lml_grad_host(x, n_train, n_features, y, spec, free, alpha, x_word=x_word)
     for i in range(len(r.grad)):
         gp.unsafe_store(i, Float64(r.grad[i]))
     sp.unsafe_store(0, Float64(r.info))

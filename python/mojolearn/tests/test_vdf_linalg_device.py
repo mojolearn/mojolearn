@@ -302,3 +302,27 @@ def test_linalg7_non_finite_device_array_is_refused():
     g = _device_array_or_skip(a)
     with pytest.raises(ValueError, match="a: input must be finite"):
         mojolearn.solve(g, _device_array_or_skip(_spd()))
+
+
+# lane vdf-tail-b: lu_factor and lu_solve read TrainDeviceArray operands in place (bindings/linalg_decomp_dev_door.mojo
+# `lu_factor_dev_call`, `lu_solve_dev_call`): the pair is two device arrays (float32 lu, int32 piv), lu_solve's X a
+# device array; device='cpu' and a host operand beside a device one are refused in words. Values are checked natively
+# (checks/native_tests/linalg_decomp_device_gpu.mojo `test_lu_factor_solve_device_operands`).
+def test_lu_device_array_with_device_cpu_is_refused():
+    g = _device_array_or_skip(_spd())
+    with pytest.raises(ValueError, match="is a TrainDeviceArray, which lives on the GPU"):
+        mojolearn.lu_factor(g, device="cpu")
+    lu, piv = mojolearn.lu_factor(g)
+    with pytest.raises(ValueError, match="is a TrainDeviceArray, which lives on the GPU"):
+        mojolearn.lu_solve((lu, piv), g, device="cpu")
+
+
+def test_lu_device_array_results_are_device_arrays():
+    g = _device_array_or_skip(_spd())
+    lu, piv = mojolearn.lu_factor(g)
+    assert type(lu) is type(g) and type(piv) is type(g)
+    for trans in (0, 1):
+        x = mojolearn.lu_solve((lu, piv), g, trans=trans)
+        assert type(x) is type(g)
+    with pytest.raises(TypeError, match="mojolearn.lu_solve: device and host arrays are mixed"):
+        mojolearn.lu_solve((lu, piv), _spd())

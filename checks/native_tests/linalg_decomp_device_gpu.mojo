@@ -11,6 +11,13 @@ column's, and every result copied into a training handle (`DKit.to_train`) must 
 XD_DEV_R_SIGNS == XD_R_SIGNS word for word (negative diagonals, -0.0), XD_DEV_TSQR_R's R id == its host R, a
 non-finite device operand refused in the host admission's words, and the adopted arrays left unchanged.
 
+lane vdf-tail-b: `lu_factor` / `lu_solve` of device arrays (bindings/linalg_decomp_dev_door.mojo
+`lu_factor_dev_call`, `lu_solve_dev_call`): the pair route's factor from a training handle
+(`ld_dev_lu_factor_train_run`) gives the host operand's XD_DEV_LU_FACTOR words (LU and the pivot bits, through
+training handles), its solve (`ld_dev_lu_solve_pair_run`) the host operand's XD_DEV_LU_SOLVE X, with and without
+the refinement; and the kit's own solve on a device LU and device pivots (`ld_train_pivots_down`) equals the host
+operand's on the GPU image and the host column's.
+
 A fast build has no host column to match (`fast` promises no bits across columns): there the column is the host
 operand on the GPU image again.
 """
@@ -32,6 +39,7 @@ from core.train_dev_pool import train_dev_alloc, train_dev_free, train_dev_put, 
 from bindings.decomp_kit_run import DKit, DK_HAS_DEV_SVD, DK_HAS_DEV_LU, DK_HAS_DEV_EIGH_TO, DK_HAS_DEV_CODE_ROWS
 from bindings.linalg_decomp_run import (
     LstsqOut, ld_gesv_run, ld_dev_gesv_run, ld_dev_lu_pair_run, ld_device_buffers, ld_lstsq_run,
+    ld_dev_lu_factor_train_run, ld_dev_lu_solve_pair_run, ld_pool_to_train, ld_train_pivots_down, ld_lu_solve_run,
 )
 from bindings.dict_learning_run import EncodeWords, Gram, dl_sparse_encode
 
@@ -325,6 +333,111 @@ def test_solve_device_operands() raises:
     a.close()
     b.close()
     v.close()
+
+
+def _factor_host(a: Operand, b: Operand, refine: Bool) raises -> Tuple[List[Float32], List[Float32], List[Float32]]:
+    """(LU, pivot words, X) of the host operand's resident pair on the GPU image."""
+    var kit = _kit(HOST_OP)
+    try:
+        var n = a.rows
+        var nrhs = b.cols
+        var ids = ld_device_buffers(kit, n)
+        var lu = List[Float32](length=n * n, fill=0.0)
+        var piv = List[Float32](length=n, fill=0.0)
+        var info = List[Float32](length=1, fill=0.0)
+        var addresses: List[Int] = [Int(a.words.unsafe_ptr()), Int(lu.unsafe_ptr()), Int(piv.unsafe_ptr()),
+                                    Int(info.unsafe_ptr())]
+        _ = kit.xd(XD_DEV_LU_FACTOR, addresses, [ids[0], ids[1], ids[2], n], List[Float64]())
+        if info[0] != 0.0:
+            raise Error("the lu_factor fixture must be regular")
+        var x = List[Float32](length=n * nrhs, fill=0.0)
+        var solve: List[Int] = [Int(b.words.unsafe_ptr()), Int(x.unsafe_ptr())]
+        _ = kit.xd(XD_DEV_LU_SOLVE, solve, [ids[1], ids[2], ids[0], n, nrhs, 1 if refine else 0], List[Float64]())
+        _ = info^
+        return (lu^, piv^, x^)
+    finally:
+        kit.close()
+
+
+def _factor_device(a: Operand, b: Operand, refine: Bool) raises -> Tuple[List[Float32], List[Float32], List[Float32]]:
+    """(LU, pivot words, X) of `lu_factor_dev_call`'s pair route and `lu_solve_dev_call`'s pair solve: A from its
+    training handle into the pair's pool ids (not the kit's: the door's holders own them), LU and the pivots out
+    through training handles."""
+    var kit = _kit(DEVICE_OP)
+    var ctx = xd_ctx()
+    var n = a.rows
+    var da = kit.dev_alloc(n * n)
+    var dlu = kit.dev_alloc(n * n)
+    var dp = kit.dev_alloc(n)
+    var lh = train_dev_alloc(ctx, n * n)
+    var ph = train_dev_alloc(ctx, n)
+    try:
+        if ld_dev_lu_factor_train_run(kit, a.handle, da, dlu, dp, n) != 0:
+            raise Error("the lu_factor fixture must be regular")
+        ld_pool_to_train(kit, dlu, lh, n * n)
+        ld_pool_to_train(kit, dp, ph, n)
+        var lu = List[Float32](length=n * n, fill=0.0)
+        var piv = List[Float32](length=n, fill=0.0)
+        train_dev_get(ctx, lh, _FP(unsafe_from_address=Int(lu.unsafe_ptr())), n * n)
+        train_dev_get(ctx, ph, _FP(unsafe_from_address=Int(piv.unsafe_ptr())), n)
+        var bm = kit.adopt(b.handle, b.rows, b.cols, "b")
+        var x = ld_dev_lu_solve_pair_run(kit, da, dlu, dp, bm, refine)
+        return (lu^, piv^, _words(kit, x, DEVICE_OP))
+    finally:
+        train_dev_free(ctx, lh)
+        train_dev_free(ctx, ph)
+        kit.dev_free(da)
+        kit.dev_free(dlu)
+        kit.dev_free(dp)
+        kit.close()
+
+
+def _kit_solve(source: Int, lu: Operand, piv: List[Float32], b: Operand, trans: Int) raises -> List[Float32]:
+    """The kit's own solve (`ld_lu_solve_run`) on LU and pivots: adopted and brought down from training handles
+    (the device door's route for a pair that is not lu_factor's resident one), or borrowed from host memory."""
+    var kit = _kit(source)
+    var ctx = xd_ctx()
+    var n = lu.rows
+    var ph = train_dev_alloc(ctx, n)
+    try:
+        var lm = _take(kit, source, lu, "lu")
+        var bm = _take(kit, source, b, "b")
+        var piv_address = Int(piv.unsafe_ptr())
+        if source == DEVICE_OP:
+            train_dev_put(ctx, ph, _FP(unsafe_from_address=Int(piv.unsafe_ptr())), n)
+            piv_address = kit.iaddr(ld_train_pivots_down(kit, ph, n))
+        var x = ld_lu_solve_run(kit, lm, piv_address, bm, trans, -1)
+        _ = piv  # read by address in the solve above
+        return _words(kit, x, source)
+    finally:
+        train_dev_free(ctx, ph)
+        kit.close()
+
+
+def test_lu_factor_solve_device_operands() raises:
+    var a = Operand(_fixture(6, 6, 5, 20.0), 6, 6)
+    var b = Operand(_fixture(6, 2, 6), 6, 2)
+    comptime if LU_RESIDENT_ENTRIES:
+        for ri in range(2):  # small-loop: IDN_LU_RESIDENT_PAIR (no refinement), LU_FAST_RESIDENT (one step)
+            var refine = ri == 1
+            var dev = _factor_device(a, b, refine)
+            var host = _factor_host(a, b, refine)
+            var tag = "lu_factor pair refine " + String(refine)
+            _same(tag + ": LU", dev[0], host[0])
+            _same(tag + ": pivot words", dev[1], host[1])
+            _same(tag + ": lu_solve X", dev[2], host[2])
+            if ri == 0:
+                # the kit's own solve on the same factor: device LU and pivots == host operand == host column
+                var lu = Operand(host[0].copy(), 6, 6)
+                for trans in range(2):  # small-loop: trans 0 and 1
+                    _three("lu_solve kit trans " + String(trans), _kit_solve(DEVICE_OP, lu, host[1], b, trans),
+                           _kit_solve(HOST_OP, lu, host[1], b, trans), _kit_solve(COLUMN, lu, host[1], b, trans))
+                lu.unchanged("lu_solve lu")
+                lu.close()
+    a.unchanged("lu_factor a")
+    b.unchanged("lu_solve b")
+    a.close()
+    b.close()
 
 
 def test_lstsq_device_operands() raises:

@@ -63,7 +63,10 @@ from bindings.linalg_keys_unpack import (
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 from bindings.linalg_dev_arrays_unpack import lin_train_device, lin_is_device_array
-from bindings.linalg_decomp_dev_door import solve_dev_call, lstsq_dev_call, randomized_svd_dev_call, rsvd_params
+from bindings.linalg_decomp_dev_door import (
+    solve_dev_call, lstsq_dev_call, randomized_svd_dev_call, rsvd_params, lu_factor_dev_call, lu_solve_dev_call,
+    lu_pair_items, lu_pair_on_device, _device_buffer, _lu_pair,
+)
 
 
 def randomized_svd_call(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
@@ -338,29 +341,8 @@ def lstsq_call(args: PythonObject, device: FunctionDevice, context: PythonObject
 # this call's float32 copy of A).
 
 
-def _device_buffer(kit: DKit, module: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
-    var nk = linalg_keys()
-    # `_DevBuf(raw, count)`: a pooled device buffer id, returned to the pool
-    # when the holder dies; the holder is assembled from its slots. The id
-    # comes from the image's table (XD_DEV_ALLOC; was a Python call of the
-    # module's x_decomp_dev_alloc): the same pool the holder frees into.
-    var bi = native_loaded_module("builtins")
-    var holder = py_call(bi.object.__new__, py_item(context, nk[].k_lu_device_buffer))
-    py_setattr(holder, "b", module)
-    py_setattr(holder, "n", PythonObject(count))
-    py_setattr(holder, "id", PythonObject(kit.dev_alloc(max(count, 1))))
-    return holder
-
-
-def _lu_pair(lu: PythonObject, piv: PythonObject, qfix_a: PythonObject, dev: PythonObject,
-             context: PythonObject) raises -> PythonObject:
-    var nk = linalg_keys()
-    # `_LUPair((lu, piv), qfix_a, dev=dev)`, assembled from its slots.
-    var bi = native_loaded_module("builtins")
-    var pair = py_call(bi.tuple.__new__, py_item(context, nk[].k_lu_pair_class), Python.tuple(lu, piv))
-    py_setattr(pair, "_qfix_a", qfix_a)
-    py_setattr(pair, "_dev", dev)
-    return pair
+# `_device_buffer`, `_lu_pair` and the pair's unpacking (`lu_pair_items`) live in bindings/linalg_decomp_dev_door.mojo
+# (lane vdf-tail-b): the device operand's lu_factor / lu_solve build and read the same pair.
 
 
 def lu_factor_call(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
@@ -453,17 +435,8 @@ def lu_solve_call(args: PythonObject, device: FunctionDevice, context: PythonObj
     var trans = args[2]
     if not py_contains(Python.tuple(0, 1, 2), trans):
         raise Error("trans must be 0, 1 or 2")
-    # `lu, piv = lu_and_piv`, with Python's unpacking refusals
     var pair = args[0]
-    var iterable = (Bool(py=py_call(bi.hasattr, pair, PythonObject("__iter__")))
-                    or Bool(py=py_call(bi.hasattr, pair, PythonObject("__getitem__"))))
-    if not iterable:
-        raise Error("TypeError: cannot unpack non-iterable " + String(py=py_type(pair).__name__) + " object")
-    var items = py_call(bi.tuple, pair)
-    if len(items) < 2:
-        raise Error("not enough values to unpack (expected 2, got " + String(len(items)) + ")")
-    if len(items) > 2:
-        raise Error("too many values to unpack (expected 2)")
+    var items = lu_pair_items(pair)
     var lu = items[0]
     var piv = items[1]
     var entries = ld_entries(device, args[3], context)
@@ -550,20 +523,28 @@ def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
             device = ld_device(item, _ld_public_name(operation), context)
         # lane vdf-linalg7: a TrainDeviceArray operand is read in place (bindings/linalg_decomp_dev_door.mojo); one
         # dictionary read and, for the three functions that take one, an identity compare or two per call.
+        # lane vdf-tail-b: lu_factor's a, and lu_solve's b or the (lu, piv) pair's lu (a tuple's first item, read only
+        # for an exact tuple or lu_factor's pair: no Python hook runs), one or two identity compares more.
         var held = lin_train_device(context)
         var on_device = False
         if held is not None:
-            if operation == LINALG_OPN_RANDOMIZED_SVD:
+            if operation == LINALG_OPN_RANDOMIZED_SVD or operation == LINALG_OPN_LU_FACTOR:
                 on_device = lin_is_device_array(args[0], held)
             elif operation == LINALG_OPN_SOLVE or operation == LINALG_OPN_LSTSQ:
                 on_device = lin_is_device_array(args[0], held) or lin_is_device_array(args[1], held)
+            elif operation == LINALG_OPN_LU_SOLVE:
+                on_device = lin_is_device_array(args[1], held) or lu_pair_on_device(args[0], held, context)
         if on_device:
             if operation == LINALG_OPN_RANDOMIZED_SVD:
                 result = randomized_svd_dev_call(args, device, held, context)
             elif operation == LINALG_OPN_SOLVE:
                 result = solve_dev_call(args, device, held, context)
-            else:
+            elif operation == LINALG_OPN_LSTSQ:
                 result = lstsq_dev_call(args, device, held, context)
+            elif operation == LINALG_OPN_LU_FACTOR:
+                result = lu_factor_dev_call(args, device, held, context)
+            else:
+                result = lu_solve_dev_call(args, device, held, context)
         elif operation == LINALG_OPN_RANDOMIZED_SVD:
             result = randomized_svd_call(args, device, context)
         elif operation == LINALG_OPN_SOLVE:

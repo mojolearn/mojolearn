@@ -70,6 +70,9 @@ def connect(pca_class):
     except (ImportError, AttributeError, TypeError, RuntimeError):
         fold = None
     context["pca_fold_factory"] = fold if isinstance(fold, BuiltinFunctionType) else None
+    # glue (lane vdf-tail-a): the base image of every mode imported now (its fold table published at init)
+    from ._native_decomp_device_bridge import connect_fold_bases
+    connect_fold_bases(context, "pca_fold_native_api_v1")
     # glue (lane vdf-scope-neural6): the GPU x_decomp image's device pool as a scope transport
     # (`x_decomp_store_v1`), per mode: a randomized PCA member takes a fold's rows there. A host-only
     # build exports none and the member keeps host rows.

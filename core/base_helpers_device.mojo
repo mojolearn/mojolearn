@@ -20,13 +20,13 @@ from checks.vendor import COMPILED_VENDOR
 from core.base_entry_table import (
     BaseEntryKey, base_table_publish, base_check_spans, base_word, base_entry_vendor,
     BASE_HELPERS_ABI, BH_OP_COUNT,
-    BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS, BH_BINCOUNT2_I32, BH_GATHER_ROWS_BYTES,
+    BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS, BH_GATHER_ROWS_BYTES,
 )
 from core.base_helpers_host import base_helpers_host_dispatch, base_stat_store, gather_rows_bytes_check
 from core.rows_bytes_device import device_gather_rows_bytes
 from core.hotpath_device import (
     HPD_F32, HPD_I32, HPD_I64, HPD_MAX_N, HPD_U8,
-    device_bincount_i64, device_bincount2_i32, device_check_indices_i64, device_equal_elements,
+    device_bincount_i64, device_check_indices_i64, device_equal_elements,
 )
 from core.hotpath_impl import check_indices_i64, equal_elements
 from core.hotpath_impl_rows import bincount_i64
@@ -78,27 +78,6 @@ def bincount_i64_device_run(s: Int, c: Int, count: Int, kk: Int, ca: Int, acc: B
     return bincount_i64(s, c, count, kk, ca, acc)
 
 
-def bincount2_i32_device_run(a: Int, b: Int, count: Int, ka: Int, kb: Int, ca: Int) raises -> Int:
-    """dims [n, ka, kb]: int64 counts[b * ka + a] over two int32 code
-    columns, on the device (this binding has no host route). Raises when a
-    code is outside [0, ka) x [0, kb)."""
-    if count < 0 or ka < 1 or kb < 1 or ka > HPD_MAX_N // kb or count > HPD_MAX_N:
-        raise Error("bincount2_i32: 0 <= n, 1 <= ka, kb and ka * kb within the device bound")
-    if ca == 0:
-        raise Error("bincount2_i32: null counts address")
-    if count == 0:
-        var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ca)
-        for j in range(ka * kb):  # small-loop(ka * kb: zero rows, the table is groups x classes): zeroes the empty table, no row data
-            cp.unsafe_store(j, Int64(0))
-        return 0
-    if a == 0 or b == 0:
-        raise Error("bincount2_i32: null code address")
-    var ctx = process_ctx[LABELS_DEVICE_CONTEXT]()
-    if not device_bincount2_i32(ctx, a, b, count, ka, kb, ca):
-        raise Error("bincount2_i32: a code is out of range")
-    return 0
-
-
 def base_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     """One base helper by its `BH_*` code over admitted spans."""
     if op == BH_CHECK_INDICES_I64:
@@ -112,9 +91,6 @@ def base_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == BH_EQUAL_ELEMENTS:
         return equal_elements_device_run(base_word(aa, 0), base_word(aa, 1), base_word(pp, 0), base_word(pp, 1),
                                          base_word(aa, 2))
-    if op == BH_BINCOUNT2_I32:
-        return bincount2_i32_device_run(base_word(aa, 0), base_word(aa, 1), base_word(pp, 0), base_word(pp, 1),
-                                        base_word(pp, 2), base_word(aa, 2))
     if op == BH_GATHER_ROWS_BYTES:
         return gather_rows_bytes_device_run(base_word(aa, 0), base_word(aa, 1), base_word(aa, 2), base_word(pp, 0),
                                             base_word(pp, 1), base_word(pp, 2))

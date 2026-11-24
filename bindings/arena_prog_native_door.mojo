@@ -39,7 +39,7 @@ from bindings.native_loaded_module_door import native_loaded_module, native_name
 from bindings.py_cpython_table import cpython_table
 from bindings.p3_array_arena_records_unpack import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
 from bindings.arena_prog_run import (
-    _switch, _add_input, _merge_pairs, _pad, MetricArenaOwner, MetricRoute, metric_inputs_run, metric_slots_run,
+    _switch, _add_input, _merge_pairs, _whole_arena_spans, _pad, MetricArenaOwner, MetricRoute, metric_inputs_run, metric_slots_run,
     metric_input_temp, metric_input_source,
 )
 from bindings.x_metrics_resident_door import (
@@ -271,7 +271,14 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
     var arena = _store(host_words, "f", True, context)
     var base = Int(py=arena[1])
     var t_alloc = Int(perf_counter_ns()) if profile else 0
-    var ranges = (dev_scratch or sc == 0) and _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_prep_run_ranges") is not None
+    # `range_entry`: the image has the range runner, the only entry that reads a store slot. The switch
+    # (`ranges`) is a measurement A/B arm: with it off, a device-resident input (a slot the scope keeps, the
+    # fold rows gathered on the device) is still read from its slot, through the range runner's whole-arena
+    # form below, so the arms differ only in what the switch decides (lane vdf-tail-b, as vdf-xm-wire4 did for
+    # x_metrics; was: the off arm copied resident inputs from the host and gathered DeviceRows on the host).
+    var range_entry = (dev_scratch or sc == 0) and py_get(entries, "x_prep_run_ranges") is not None
+    var ranges = range_entry and _switch("MOJOLEARN_ARENA_RANGES")
+    var any_slot = False
     # TOMBSTONE: MOJOLEARN_XPREP_FAST_DIRECT_OFF (B arm loses: host-arena staging of large inputs; A/B abn9 NVIDIA L40S, 48 cells 0.96-17.38 arm/base, median 1.75, 34 slower) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
     # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
     var direct_ok = py_get(entries, "x_prep_dev_put") is not None and py_get(entries, "x_prep_dev_free") is not None
@@ -316,20 +323,20 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
             if _is_rows(value, context):
                 # device-rows input (lane cpu4-misc): the fold's rows gathered
                 # on the device; a binding without the gather copies host rows
-                if ranges and _can_gather(entries, "x_prep"):
+                if range_entry and _can_gather(entries, "x_prep"):
                     if not resident_read:
                         resident = xprep_resident_of(entries, context)
                         resident_read = True
                     src = _rows_gather(value, entries, "x_prep", owned, resident, context)
                 if src < 0:
                     value = _values(value, context, True)
-            if src < 0 and ranges and not is_inout:
+            if src < 0 and range_entry and not is_inout:
                 if not resident_read:
                     resident = xprep_resident_of(entries, context)
                     resident_read = True
                 if resident.keeps(False, size):
                     src = resident.slot(value, Int(py=classical_address(value)), size)
-                elif direct_ok and size >= PREP_DIRECT_MIN_WORDS:
+                elif ranges and direct_ok and size >= PREP_DIRECT_MIN_WORDS:
                     # TOMBSTONE: lane fg-knn-nb G3 (MOJOLEARN_XPREP_NO_SLOT_HOP, x_prep_run_ranges_host host spans) deleted 2026-10-09
                     # (lane postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD 1.00x, taxi 1.02x / 1.03x
                     # (nv n0668->n0630, amd a1066->a1090), accuracy SAME, same digests; code recoverable at main 5c137b55e.
@@ -341,6 +348,8 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
                 # the copy reads `value` by address (a converted DeviceRows' host values have no other owner):
                 # named again so it outlives the copy (lane lastuse-addr-arg)
                 _ = value
+            if src >= 0:
+                any_slot = True
             _add_input(ins, off, off + size, src)
             if not is_inout:
                 _ = py_call(in_spans.append, Python.tuple(off, off + size))
@@ -359,24 +368,33 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
         py_setitem(fields, "_out", PythonObject(None))
         py_setitem(fields, "_out_at", obase)
         t_in = Int(perf_counter_ns()) if profile else 0
-        if ranges:
+        # The off arm with a slot input (`any_slot` without `ranges`): the range runner's whole-arena form, every
+        # host word of the arena up (as the off arm's entries upload it) except the slot spans, which are copied
+        # device to device, and the whole arena back (the off arm's download).
+        var whole_slots = any_slot and not ranges
+        if ranges or whole_slots:
             # the shared ranges runner (core/arena_io.mojo): the inputs go up,
             # the rest of the host arena starts zero on the device, and
             # everything but the inputs (and the in-out inputs) comes back
-            var pairs = List[Int]()
-            var at = 0
-            for i in range(len(ins) // 3):  # driver-loop: complement of the input ranges over the host arena
-                var lo = Int(ins[3 * i])
-                if lo > at:
+            var outs: List[Int32]
+            if whole_slots:
+                ins = _whole_arena_spans(ins, ha)
+                outs = [Int32(0), Int32(ha), Int32(-1), Int32(1)]
+            else:
+                var pairs = List[Int]()
+                var at = 0
+                for i in range(len(ins) // 3):  # driver-loop: complement of the input ranges over the host arena
+                    var lo = Int(ins[3 * i])
+                    if lo > at:
+                        pairs.append(at)
+                        pairs.append(lo)
+                    at = max(at, Int(ins[3 * i + 1]))
+                if at < ha:
                     pairs.append(at)
-                    pairs.append(lo)
-                at = max(at, Int(ins[3 * i + 1]))
-            if at < ha:
-                pairs.append(at)
-                pairs.append(ha)
-            for j in range(len(inout_pairs)):  # driver-loop: the in-out input ranges come back too
-                pairs.append(inout_pairs[j])
-            var outs = _merge_pairs(pairs^)
+                    pairs.append(ha)
+                for j in range(len(inout_pairs)):  # driver-loop: the in-out input ranges come back too
+                    pairs.append(inout_pairs[j])
+                outs = _merge_pairs(pairs^)
             var n_in = len(ins) // 3
             var n_out = len(outs) // 4
             var ia = _pad(ins.copy(), [Int32(0), Int32(0), Int32(-1)])

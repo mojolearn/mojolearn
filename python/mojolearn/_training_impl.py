@@ -1213,8 +1213,9 @@ class Generator(object):
 
         Parameters
         ----------
-        x : array of float32
-            Input.
+        x : array of float32 or TrainDeviceArray
+            Input. A `TrainDeviceArray` is read on the device and `y` is returned as a
+            `TrainDeviceArray`, with the same values as for the host array.
         p : float
             Drop probability in [0, 1); otherwise `ValueError`.
         offset : int, default 0
@@ -1225,13 +1226,17 @@ class Generator(object):
 
         Returns
         -------
-        y : array of float32
+        y : array of float32 or TrainDeviceArray
         key : dict
         """
         return _native_samba_bridge.RUNTIME.generator_draw("dropout", (self, x, p, offset, stream), _native_samba_bridge.CONTEXT)
 
     def dropout_backward(self, dy, key):
-        """Gradient of `dropout`: apply the mask and scale recorded in `key` to `dy`."""
+        """Gradient of `dropout`: apply the mask and scale recorded in `key` to `dy`.
+
+        A `TrainDeviceArray` `dy` is read on the device and the gradient is returned as a
+        `TrainDeviceArray`.
+        """
         return _native_samba_bridge.RUNTIME.generator_draw("dropout_backward", (self, dy, key), _native_samba_bridge.CONTEXT)
 
 
