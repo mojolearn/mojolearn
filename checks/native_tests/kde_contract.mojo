@@ -65,6 +65,15 @@ struct KDEWireOracle(KDENativeKernels):
         require(r.kernel == "kernel\0λ🙂" and r.metric == "metric\0世界", "KDE resident name spans")
         return -123.125 if r.want_total else 0.0
 
+    @staticmethod
+    def prepare_store(r: KDEPrepareRequest) raises -> Int:
+        # The resident-store forms (lane vdf-scope-cluster2b) carry the same words; this oracle has no store.
+        raise Error("KDE wire oracle: no resident store")
+
+    @staticmethod
+    def resident_store(r: KDEResidentQuery) raises -> Float64:
+        raise Error("KDE wire oracle: no resident store")
+
 
 def prepare(variant: Int) -> KDEPrepareRequest:
     return KDEPrepareRequest(11, 13, 17, 19, 0.10000000000000002, (variant & 1) != 0,
@@ -81,7 +90,7 @@ def missing_result(mut output: NativeCallOutput) raises:
 
 
 def fixture(unit: Int) raises:
-    comptime assert KDE_NATIVE_COUNT == 7 and KDE_MODE == 0 and KDE_VENDOR == 1 and KDE_CAPABILITIES == 2
+    comptime assert KDE_NATIVE_COUNT == 9 and KDE_MODE == 0 and KDE_VENDOR == 1 and KDE_CAPABILITIES == 2
     comptime assert KDE_PREPARE == 3 and KDE_RELEASE == 4 and KDE_QUERY == 5 and KDE_RESIDENT_QUERY == 6
     var driver = KDENativeDriver(kde_native_v1[KDEWireOracle])
     if unit == 0:

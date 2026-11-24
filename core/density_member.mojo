@@ -91,7 +91,10 @@ from core.admitted_input import admitted_check_weights_f32
 from core.admitted_refusals import admitted_finite_refuse
 from core.host_finite_scan import host_all_finite_f32
 from core.cluster_member_words import member_words_byte_slots, member_words_take_text
-from core.kde_native_api import KDENativeDriver, KDE_CAP_RESIDENT
+from core.kde_native_api import KDENativeDriver, KDE_CAP_RESIDENT, KDE_CAP_DEV_STORE
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_I64
+from core.member_scope_rows import MemberScopeRows, member_scope_rows, member_scope_rows_done
+from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
 from neighbors.neighbors_kde_run import (
     kde_fit_key, kde_prepare_request, kde_query_request, kde_resident_query, kde_refuse_unfitted, kde_refuse_features,
 )
@@ -433,7 +436,10 @@ def _predict(slot: _Slot, call: _Call) raises:
 # ---------------------------------------------------------------- KernelDensity
 def _kde_fit(slot: _Slot, call: _Call) raises:
     """`KernelDensity.fit`: the weights checks, then the training set is the
-    borrowed view (no copy)."""
+    borrowed view (no copy). Under a row index: `_kde_fit_indexed`."""
+    if call[].row_index.rows > 0:
+        _kde_fit_indexed(slot, call)
+        return
     _whole_x(call, "KernelDensity")
     if call[].fit_output != 0:
         member_unsupported("KernelDensity", call[].fit_output)
@@ -446,12 +452,7 @@ def _kde_fit(slot: _Slot, call: _Call) raises:
         if call[].weights.rows * call[].weights.cols != rows:
             raise Error("sample_weight.shape == (" + String(call[].weights.rows * call[].weights.cols)
                 + ",), expected (" + String(rows) + ",)!")
-        var w = _F32P(unsafe_from_address=call[].weights.data)
-        if not host_all_finite_f32(w, rows):
-            raise Error("Input sample_weight contains NaN or infinity.")
-        # The class's parallel sign test (a vector weight is not written).
-        if not admitted_check_weights_f32(w, w, rows, False):
-            raise Error("Sample weights must contain at least one non-zero number.")
+        _kde_weights_check(_F32P(unsafe_from_address=call[].weights.data), rows)
         weights = call[].weights.data
     _release_resident(slot, call)
     slot[].clear()
@@ -464,17 +465,125 @@ def _kde_fit(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
 
 
+comptime _KDE_PREFIX = "estimators"
+
+
+def _kde_weights_check(w: _F32P, rows: Int) raises:
+    if not host_all_finite_f32(w, rows):
+        raise Error("Input sample_weight contains NaN or infinity.")
+    # The class's parallel sign test (a vector weight is not written).
+    if not admitted_check_weights_f32(w, w, rows, False):
+        raise Error("Sample weights must contain at least one non-zero number.")
+
+
+def _kde_gather(call: _Call, base: Int, width: Int, dst: Int) raises:
+    """Rows `call.row_index` of the host base at `base` (`call.x.rows` rows of `width` words) into `dst`, in row
+    tasks across the host's cores; an index outside X is refused."""
+    var index = call[].row_index
+    var status: Int
+    if index.dtype == MEMBER_I32:
+        status = admitted_gather_rows_f32[DType.int32](base, call[].x.rows, width, index.data, index.rows, dst)
+    else:
+        status = admitted_gather_rows_f32[DType.int64](base, call[].x.rows, width, index.data, index.rows, dst)
+    if status == ARG_OUT_OF_RANGE:
+        raise Error("IndexError: a KernelDensity member's row index holds a row outside X's "
+            + String(call[].x.rows) + " rows")
+
+
+def _kde_store_ok(slot: _Slot, call: _Call) -> Bool:
+    """THE RESIDENT-STORE ROUTE of a KernelDensity call (lane vdf-scope-cluster2b): the GPU image with its store
+    (`KDE_CAP_DEV_STORE`, the transport entry in `route.second`), a resident image (`KDE_CAP_RESIDENT`), the
+    caller's scope with X's pin, and a metric without a host rule on the rows (cosine and sqeuclidean keep the
+    host form, kde/resident_fit.mojo `kde_host_rules_needed`)."""
+    var flags = call[].route.flags
+    return ((flags & KDE_CAP_DEV_STORE) != 0 and (flags & KDE_CAP_RESIDENT) != 0 and call[].route.has_second
+        and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0
+        and slot[].kde_metric != "cosine" and slot[].kde_metric != "sqeuclidean")
+
+
+def _kde_fit_indexed(slot: _Slot, call: _Call) raises:
+    """`KernelDensity.fit` over the rows of a host row index (MEMBER_CAN_ROW_INDEX, lane vdf-scope-cluster2b). The
+    state OWNS its training rows here (gathered on the host cores, and the weights' rows likewise), so nothing is
+    borrowed past the call. On the resident-store route the same rows are also taken ON THE DEVICE out of the
+    scope's one copy of X and prepared from that slot at once (`prepare_store`: no upload of the fold); the
+    prepared handle holds the same words the first query would have uploaded, so the same bits."""
+    if call[].fit_output != 0:
+        member_unsupported("KernelDensity", call[].fit_output)
+    if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE:
+        raise Error("TypeError: a KernelDensity member reads X as a dense host float32 view, no column index")
+    if not call[].x.dense_host(MEMBER_F32):
+        raise Error("TypeError: a KernelDensity member reads X as a dense host float32 view")
+    var index = call[].row_index
+    if index.home == MEMBER_HOME_DEVICE or (index.dtype != MEMBER_I32 and index.dtype != MEMBER_I64):
+        raise Error("TypeError: a KernelDensity member reads a host int32 or int64 row index")
+    var rows = index.rows
+    var d = call[].x.cols
+    var weights = List[Float32]()
+    if call[].weights.rows > 0:
+        if not call[].weights.dense_host(MEMBER_F32):
+            raise Error("TypeError: a KernelDensity member reads sample_weight as a dense host float32 view")
+        if call[].weights.rows * call[].weights.cols != call[].x.rows:
+            raise Error("sample_weight.shape == (" + String(call[].weights.rows * call[].weights.cols)
+                + ",), expected (" + String(call[].x.rows) + ",)!")
+        weights = List[Float32](unsafe_uninit_length=max(rows, 1))
+        _kde_gather(call, call[].weights.data, 1, Int(weights.unsafe_ptr()))
+        _kde_weights_check(_F32P(unsafe_from_address=Int(weights.unsafe_ptr())), rows)
+    _release_resident(slot, call)
+    slot[].clear()
+    # The state's own training rows: the index's rows of X, gathered on the host cores.
+    slot[].train_owned = List[Float32](unsafe_uninit_length=max(rows * d, 1))
+    _kde_gather(call, call[].x.data, d, Int(slot[].train_owned.unsafe_ptr()))
+    slot[].train = Int(slot[].train_owned.unsafe_ptr()) if rows > 0 else 0
+    if call[].weights.rows > 0:
+        slot[].weights_owned = weights^
+        slot[].weights = Int(slot[].weights_owned.unsafe_ptr())
+    slot[].rows = rows
+    slot[].features = d
+    var scalars: List[Float64] = [Float64(rows), Float64(d)]
+    slot[].scalars = scalars^
+    slot[].fitted = True
+    if not _kde_store_ok(slot, call):
+        return
+    var device = member_scope_rows(call[], _KDE_PREFIX, True, "KernelDensity")
+    try:
+        var key = kde_fit_key(device.source, rows, d, slot[].weights, slot[].kernel, slot[].kde_metric,
+            slot[].bandwidth)
+        slot[].handle = KDENativeDriver(call[].route.entry.call).prepare_store(
+            kde_prepare_request(key, slot[].weights != 0))
+    finally:
+        member_scope_rows_done(call[], device)
+
+
 def _kde_scores(slot: _Slot, call: _Call, want_total: Bool) raises:
     """`KernelDensity._scores`: the resident training set of a
     KDE_CAP_RESIDENT image (prepared once per fitted state), else the direct
-    query over the state's training rows."""
+    query over the state's training rows. Under a row index (lane
+    vdf-scope-cluster2b) the queries are the index's rows: taken on the device
+    out of the scope's one copy of X on the resident-store route
+    (`resident_store`, no upload), else gathered on the host cores."""
     if not slot[].fitted:
         kde_refuse_unfitted()
-    _whole_x(call, "KernelDensity")
+    var x = _kde_query_rows(slot, call)
+    try:
+        _kde_scores_rows(slot, call, x, want_total)
+    finally:
+        member_scope_rows_done(call[], x)
+
+
+def _kde_query_rows(slot: _Slot, call: _Call) raises -> MemberScopeRows:
+    if call[].row_index.rows == 0:
+        _whole_x(call, "KernelDensity")
+        return MemberScopeRows(call[].x.data, call[].x.rows, call[].x.cols, False, List[Float32]())
+    if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE:
+        raise Error("TypeError: a KernelDensity member reads X as a dense host float32 view, no column index")
+    return member_scope_rows(call[], _KDE_PREFIX, _kde_store_ok(slot, call), "KernelDensity")
+
+
+def _kde_scores_rows(slot: _Slot, call: _Call, x: MemberScopeRows, want_total: Bool) raises:
     var d = slot[].features
-    if call[].x.cols != d:
-        kde_refuse_features(String(call[].x.cols), String(d))
-    var queries = call[].x.rows
+    if x.cols != d:
+        kde_refuse_features(String(x.cols), String(d))
+    var queries = x.rows
     var scratch = List[Float32]()
     var dst = 0
     if want_total:
@@ -499,12 +608,13 @@ def _kde_scores(slot: _Slot, call: _Call, want_total: Bool) raises:
     var total = Float64(0)
     if slot[].handle >= 0:
         var status = List[Int32](length=1, fill=Int32(0))
-        total = driver.resident(kde_resident_query(slot[].handle, call[].x.data, dst, Int(status.unsafe_ptr()),
-            queries, d, slot[].bandwidth, want_total, slot[].kernel, slot[].kde_metric))
+        var request = kde_resident_query(slot[].handle, x.source, dst, Int(status.unsafe_ptr()),
+            queries, d, slot[].bandwidth, want_total, slot[].kernel, slot[].kde_metric)
+        total = driver.resident_store(request) if x.resident else driver.resident(request)
         admitted_finite_refuse(Int(status[0]), "KernelDensity")
         _ = status^
     else:
-        total = driver.query(kde_query_request(slot[].train, call[].x.data, slot[].weights, dst, slot[].rows,
+        total = driver.query(kde_query_request(slot[].train, x.source, slot[].weights, dst, slot[].rows,
             queries, d, slot[].bandwidth, has_weights, want_total, slot[].kernel, slot[].kde_metric))
     _ = scratch^
     if want_total:
@@ -681,8 +791,14 @@ def _density_member(operation: Int, address: Int) raises -> Int:
         # MEMBER_BORROWS_FIT: a fitted KernelDensity state reads the caller's
         # X and weights until an export (or MEMBER_EXPORT_OWN) copied them.
         # DBSCAN owns its state (its core rows are gathered at fit).
+        # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster2b): a KernelDensity call reads a host row index (its fit
+        # then owns the gathered rows); MEMBER_CAN_SCOPE only on the GPU image's route with its resident store,
+        # where a search's folds are taken on the device out of one copy of X. DBSCAN keeps gathered folds.
         var kde = (MEMBER_CAN_FIT | MEMBER_CAN_SCORE_SAMPLES | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-            | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT)
+            | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT | MEMBER_CAN_ROW_INDEX)
+        if ((call[].route.flags & KDE_CAP_DEV_STORE) != 0 and (call[].route.flags & KDE_CAP_RESIDENT) != 0
+                and call[].route.has_second):
+            kde |= MEMBER_CAN_SCOPE
         if call[].state != 0:
             var kind = _Slot(unsafe_from_address=_lookup(call[].state, False))[].kind
             return kde if kind == _KIND_KDE else dbscan
