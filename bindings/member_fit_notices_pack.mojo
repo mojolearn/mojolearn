@@ -18,7 +18,7 @@ from core.member_notices import (
     MEMBER_NOTICE_WORDS, MEMBER_NOTICE_FOREST, MEMBER_NOTICE_NYSTROEM_COMPONENTS, MEMBER_NOTICE_GP_RIDGE,
     MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST, MEMBER_NOTICE_METRIC_PRF, MEMBER_NOTICE_METRIC_JACCARD,
     MEMBER_NOTICE_METRIC_BALANCED, MEMBER_NOTICE_METRIC_FEW, MEMBER_NOTICE_METRIC_TOP_K, MEMBER_NOTICE_R2_FEW,
-    MEMBER_NOTICE_FOLD_LACKING, member_lacking_warning,
+    MEMBER_NOTICE_FOLD_LACKING, MEMBER_NOTICE_ONEHOT_UNKNOWN, member_lacking_warning,
 )
 from bindings.py_balanced import py_get
 
@@ -72,11 +72,26 @@ def member_fit_notices_raise_with(words: List[Float64], context: PythonObject,
     warnings are raised with (`metric_context`: the search's own, which
     carries the metrics' warning class, as its scorers' calls do)."""
     var count = len(words) // MEMBER_NOTICE_WORDS
+    var onehot_columns = List[Int]()
     for i in range(count):  # small-loop(a unit's notices: a few)
         var code = Int(words[MEMBER_NOTICE_WORDS * i])
         var a = words[MEMBER_NOTICE_WORDS * i + 1]
         var b = words[MEMBER_NOTICE_WORDS * i + 2]
-        if code == MEMBER_NOTICE_FOREST:
+        if code == MEMBER_NOTICE_ONEHOT_UNKNOWN:
+            # The encode door's `_onehot_transform` warning (lane mf-enc6):
+            # one UserWarning over the run of consecutive columns.
+            onehot_columns.append(Int(a))
+            if i + 1 == count or Int(words[MEMBER_NOTICE_WORDS * (i + 1)]) != MEMBER_NOTICE_ONEHOT_UNKNOWN:
+                var where = String("encoded as all zeros") if b != 0.0 else String("encoded as the infrequent category")
+                var shown = String("[")
+                for c in range(len(onehot_columns)):  # small-loop(the warned columns of one transform)
+                    shown += (", " if c > 0 else "") + String(onehot_columns[c])
+                classical_warning("Found unknown categories in columns " + shown + "]"
+                                  + " during transform. These unknown categories will be " + where + ".",
+                                  native_loaded_module("builtins").UserWarning, context, _km_warning_location(),
+                                  "UserWarning")
+                onehot_columns = List[Int]()
+        elif code == MEMBER_NOTICE_FOREST:
             rf_fit_notices_word(Int(a), context)
         elif code == MEMBER_NOTICE_NYSTROEM_COMPONENTS:
             # `km_nys_fit_unpack` / sklearn Nystroem.fit.

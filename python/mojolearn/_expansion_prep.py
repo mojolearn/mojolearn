@@ -557,8 +557,7 @@ class OrdinalEncoder(_PrepBase):
     """
     fit_transform = _EncodeFitTransform.fit_transform
     # Member ABI mark (family 35 Prep, kind 10; core/prep_member.mojo): callers
-    # run categories='auto' without infrequent grouping natively, else this
-    # class's own door.
+    # run every form natively (given categories, infrequent grouping; lane mf-enc6).
     _mojolearn_member = (35, 10)
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
@@ -664,8 +663,8 @@ class OneHotEncoder(_PrepBase):
     """
     fit_transform = _EncodeFitTransform.fit_transform
     # Member ABI mark (family 35 Prep, kind 11; core/prep_member.mojo): callers
-    # run categories='auto' without infrequent grouping, a drop word and a
-    # handle_unknown that does not warn natively, else this class's own door.
+    # run every form natively (given categories, infrequent grouping, a drop per
+    # column, every handle_unknown: the transform's warnings are notice words; lane mf-enc6).
     _mojolearn_member = (35, 11)
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.

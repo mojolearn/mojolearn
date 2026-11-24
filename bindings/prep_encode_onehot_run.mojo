@@ -166,3 +166,88 @@ def onehot_widths(sizes: List[Int], drops: List[Int]) -> List[Int]:
 
 def onehot_total(widths: List[Int]) -> Int:
     return _total(widths)
+
+
+# ---------------------------------------------------------------- the general fit's drops (lane mf-enc6)
+#: `drop` given as one category per column (an array-like: DATA, read once at UNPACK).
+comptime OH_DROP_GIVEN = 3
+
+
+struct OneHotDrops(Movable):
+    """`_set_drop_idx`'s fitted words: `none` for drop=None (both fields
+    None), else per column `after` (`_drop_after`, in grouped codes) and
+    `idx` (drop_idx_, in category indices), -1 for None."""
+    var none: Bool
+    var after: List[Int]
+    var idx: List[Int]
+
+    def __init__(out self):
+        self.none = True
+        self.after = List[Int]()
+        self.idx = List[Int]()
+
+
+def onehot_drop_index(word: Int, sizes: List[Int], columns: List[List[Float32]], groups: List[List[Int]],
+                      infrequent: List[List[Int]], given_nan: List[Bool], given: List[Float32],
+                      given_text: List[String]) raises -> OneHotDrops:
+    """`_set_drop_idx` in its order and words (one body: the encode door and
+    the Prep member call it). `word`: OH_DROP_*; `sizes`: the per-column
+    code counts after the grouping (`cat_grouped_sizes`); `columns`: each
+    column's fitted category words; `groups` / `infrequent`: the fitted
+    grouping (empty lists: a column not grouped); with OH_DROP_GIVEN, per
+    column the user's value (`given_nan`: a Python float NaN, else its
+    float32 word in `given`) and its str() text `given_text` for the
+    refusal."""
+    var out = OneHotDrops()
+    if word == OH_DROP_NONE:
+        return out^
+    out.none = False
+    var d = len(sizes)
+    if word == OH_DROP_FIRST or word == OH_DROP_IF_BINARY:
+        out.after = onehot_auto_drops(sizes, word)
+    else:
+        if len(given) != d:
+            raise Error("mojolearn: `drop` should have length equal to the number of features ("
+                        + String(d) + "), got " + String(len(given)))
+        var missing = String()
+        var any_missing = False
+        for j in range(d):  # driver-loop: validates the user drop argument (per-column drop arguments)
+            var cl = columns[j].copy()
+            var hit = -1
+            if given_nan[j]:
+                if len(cl) > 0 and cl[len(cl) - 1] != cl[len(cl) - 1]:
+                    hit = len(cl) - 1
+            else:
+                for i in range(len(cl)):  # driver-loop: finds the user drop category in its column
+                    if cl[i] == given[j]:
+                        hit = i
+                        break
+            if hit < 0:
+                missing += ("\n" if any_missing else "") + "Category: " + given_text[j] + ", Feature: " + String(j)
+                any_missing = True
+                continue
+            var i = hit
+            if j < len(groups) and len(groups[j]) > 0:
+                for k in range(len(infrequent[j])):  # driver-loop: over one column's infrequent categories
+                    if infrequent[j][k] == i:
+                        raise Error("mojolearn: Unable to drop category " + String(Float64(cl[i])) + " from feature "
+                                    + String(j) + " because it is infrequent")
+                i = groups[j][i]
+            out.after.append(i)
+        if any_missing:
+            raise Error("mojolearn: The following categories were supposed to be dropped, but were not "
+                        + "found in the training data.\n" + missing)
+    for j in range(d):  # driver-loop: maps drop indices through the grouping (per-column drop indices)
+        var a = out.after[j]
+        if a < 0 or j >= len(groups) or len(groups[j]) == 0:
+            out.idx.append(a)
+            continue
+        var found = -1
+        for i in range(len(groups[j])):  # driver-loop: over one column grouping
+            if groups[j][i] == a:
+                found = i
+                break
+        if found < 0:
+            raise Error(String(a) + " is not in list")
+        out.idx.append(found)
+    return out^
