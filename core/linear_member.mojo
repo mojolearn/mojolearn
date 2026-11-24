@@ -20,8 +20,16 @@ on its kind, as scikit-learn's Ridge): y rows x targets, fitted in ONE solve
 for every target (core/linear_fit_run.mojo `linear_ridge_targets_run`, the
 estimator's own multi-target route), predict rows x targets, score the
 targets' averaged R^2; the COEF block is targets x features and the SCALARS
-block the targets' intercepts then the y mean. Anything else is refused in words (a device-home
-view, a row or column index: the caller hands over gathered host words); the
+block the targets' intercepts then the y mean. THE FOLD (lane vdf-scope-linear;
+MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE, Ridge on an image with LF_HAS_SLOT_X): X is
+the WHOLE host base and `call.row_index` the fold's rows (int32 or int64); X stays
+resident in the caller's `resident()` scope (the x_prep family store,
+core/member_fold_x.mojo), the fold's rows are taken on the device and the Gram fit
+and the prediction entry read them there (core/fold_x_device.mojo); y and the
+weights are the base's columns taken through the index on the host. A case those
+entries do not cover (sample weights, alpha 0, one column, one row, several
+targets) takes the fold's rows on the host across its cores. Anything else is
+refused in words (a device-home view, a column index); the
 caller's UNPACK admits the data (finite, shapes) exactly as the estimator's
 own door does (MEMBER_CAN_TEST_ROWS clear: the fit and predict entries do
 not test finiteness). OUTPUTS answers PREDICT only: one float32 column
