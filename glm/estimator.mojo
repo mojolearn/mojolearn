@@ -166,7 +166,7 @@ def ols_fit_resident_host(
     var cells = n_rows * n_features
     var d_x = ctx.enqueue_create_buffer[DType.float32](cells)
     var d_y = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=x_ptr)
+    fold_x_fill(ctx, d_x, Int(x_ptr), n_rows * n_features)  # THE FOLD X WORD (lane vdf-scope-linear3): host X, or a fold slot
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=y_ptr)
     var w = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)

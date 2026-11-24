@@ -44,10 +44,14 @@ def linear_ols_run(entry: NativeDescriptorCall, decomp: NativeDescriptorCall,
     var result = LinearFitResult()
     var done = False
     try:
-        if request.x < 0 and not (plan.tsqr and center and not weighted and plan.one_entry):
-            # THE FOLD X WORD (core/fold_x_device.mojo) is read by the one-entry
-            # TSQR only (core/linear_member.mojo `_fold_device_ols`).
-            raise Error("RuntimeError: a LinearRegression fold X word reaches a route that reads host X")
+        # THE FOLD X WORD (core/fold_x_device.mojo; `request.x < 0`): every
+        # route below reads it on the device (lane vdf-scope-linear3): the
+        # resident OLS and LF_OLS uploads and the one-entry TSQR through
+        # `fold_x_fill`, LF_PREP's centering and row scaling
+        # (glm/impl/center_device.mojo), the uncentered XD_TSQR_R
+        # (x_decomp/device.mojo `tsqr_factor`). LF_PREP's prepared X comes
+        # back to host words, as on the host-input path, and the TSQR or
+        # LF_OLS uploads them again (that route's design, not the fold's).
         if plan.flags & LF_HAS_OLS_RESIDENT and not weighted:
             _ = native_descriptor_call(entry, LF_OLS_RESIDENT,
                 [request.x, request.y, request.coef, mean_address, Int(ymean.unsafe_ptr())],

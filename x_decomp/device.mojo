@@ -3919,12 +3919,16 @@ struct DevExec(Exec):
         # with keep, the five buffers move into a heap owner whose address is
         # the handle (lane linalg-owner, 2026-11-22; no process slot)
         var held = List[DeviceBuffer[DType.float32]]()
+        # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear3): a
+        # LinearRegression fold without the centered one-entry route (no
+        # intercept, unweighted) hands its slot here; `_up_fold_x` copies it
+        # on the device (host words: the upload, unchanged).
         if nrhs == 0:
-            var da = _up(ctx, a, m * n)
+            var da = _up_fold_x(ctx, a, m * n)
             held = ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
             _ = da^
         else:
-            var ta = _up(ctx, a, m * d)
+            var ta = _up_fold_x(ctx, a, m * d)
             var tb = _up(ctx, b, m * nrhs)
             var da = ts_pack_device(ctx, ta, tb, m, d, nrhs)
             comptime if IDN_XD_NO_WAIT:
