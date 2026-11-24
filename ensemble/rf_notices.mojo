@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The RandomForest fit notices: cuML's three user warnings
-(`randomforest_common.pyx:529-536`, `randomforest.cuh:301-306`,
-`randomforest_common.pyx:725-732`), one bit each.
+"""The RandomForest fit notices: two of cuML's user warnings
+(`randomforest.cuh:301-306`, `randomforest_common.pyx:725-732`), one bit
+each. cuML's third, the `n_bins` clamp warning
+(`randomforest_common.pyx:529-536`), is not raised (Andrew, 2026-11-24:
+noise the user cannot act on, it fired in every nested fit, scikit-learn
+never emits it); the fit still clamps the bins to the rows. Bit 2 was that
+notice and is now refused as unknown.
 
 A fit records the notices it raised as a bit mask on its result
 (`RandomForestMetaData.notices`, `RfHostForest.notices`). The bindings set
@@ -20,18 +24,13 @@ importer."""
 from std.sys import stderr
 
 comptime RF_NOTICE_OOB_PARTIAL = 1
-comptime RF_NOTICE_BINS_CLAMPED = 2
 comptime RF_NOTICE_MAX_SAMPLES_IGNORED = 4
-comptime RF_NOTICE_ALL = 7
+comptime RF_NOTICE_ALL = 5
 """Every defined notice bit; a metadata word outside it is refused."""
 
 comptime RF_NOTICE_OOB_PARTIAL_TEXT = (
     "Some inputs do not have OOB scores. This probably means too few trees"
     " were used to compute any reliable OOB estimates."
-)
-comptime RF_NOTICE_BINS_CLAMPED_TEXT = (
-    "The number of bins, `n_bins` is greater than the number of samples used"
-    " for training. Changing `n_bins` to number of training samples."
 )
 comptime RF_NOTICE_MAX_SAMPLES_IGNORED_TEXT = (
     "If bootstrap sampling is disabled, max_samples value is ignored and"
@@ -43,8 +42,6 @@ def rf_notice_text(code: Int) -> String:
     """The message of one notice bit; empty for an unknown bit."""
     if code == RF_NOTICE_OOB_PARTIAL:
         return String(RF_NOTICE_OOB_PARTIAL_TEXT)
-    if code == RF_NOTICE_BINS_CLAMPED:
-        return String(RF_NOTICE_BINS_CLAMPED_TEXT)
     if code == RF_NOTICE_MAX_SAMPLES_IGNORED:
         return String(RF_NOTICE_MAX_SAMPLES_IGNORED_TEXT)
     return String("")
