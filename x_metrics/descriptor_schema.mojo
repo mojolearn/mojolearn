@@ -8,7 +8,9 @@ entry: put, free, gather rows and the live count, the operations of the
 `x_metrics_dev_put/_free/_take_rows/_live` Python entries deleted as dead on
 2026-10-26 (c209716bf), now typed. A slot is consumed by `MP_RUN_RANGES`
 (an input triple [lo, hi, slot], core/arena_io.mojo `upload_ranges`: copied
-device to device). The host image publishes no store (`MP_HAS_STORE` clear)
+device to device). The two scans (vdf-xm-labels' core/metric_labels_device.mojo)
+are the door refusals' finiteness and sign checks of a resident input, run
+on the slot in place. The host image publishes no store (`MP_HAS_STORE` clear)
 and refuses the store operations."""
 comptime METRICS_PROGRAM_ABI = "mojolearn.metrics.program.v2"
 comptime MP_MODE = 0
@@ -21,9 +23,11 @@ comptime MP_DEV_PUT = 6         # a: [src]  i: [n_words]                  -> slo
 comptime MP_DEV_FREE = 7        # i: [slot]
 comptime MP_DEV_TAKE_ROWS = 8   # a: [idx]  i: [src_slot, row_words, n_idx] -> slot id
 comptime MP_DEV_LIVE = 9        # (none)                                  -> live slots of the store
+comptime MP_DEV_FIRST_NONFINITE = 10  # i: [slot, words] -> first NaN/inf index among the slot's words, or -1
+comptime MP_DEV_FIRST_NEGATIVE = 11   # i: [slot, words] -> first negative word's index, or -1
 comptime MP_HAS_RANGES = 1
 comptime MP_HAS_STORE = 2
-comptime MP_OPERATION_COUNT = 10
+comptime MP_OPERATION_COUNT = 12
 
 
 def metrics_check_spans(op: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int, result: Int) raises:
@@ -48,6 +52,8 @@ def metrics_check_spans(op: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int, re
     elif op == MP_DEV_TAKE_ROWS:
         addresses = 1
         ints = 3
+    elif op == MP_DEV_FIRST_NONFINITE or op == MP_DEV_FIRST_NEGATIVE:
+        ints = 2
     else:
         raise Error("x_metrics native ABI: unknown operation")
     if na != addresses or np != ints or nf != 0 or not result:
@@ -67,6 +73,10 @@ def metrics_check_spans(op: Int, aa: Int, na: Int, pp: Int, np: Int, nf: Int, re
     if op == MP_DEV_TAKE_ROWS:
         if not a[0] or p[0] < 0 or p[1] < 1 or p[2] < 1:
             raise Error("x_metrics: invalid row selection")
+        return
+    if op == MP_DEV_FIRST_NONFINITE or op == MP_DEV_FIRST_NEGATIVE:
+        if p[0] < 0 or p[1] < 0:
+            raise Error("x_metrics: invalid resident scan")
         return
     if addresses:
         if not a[0] or not a[1] or p[0] < 0 or p[1] < 0:

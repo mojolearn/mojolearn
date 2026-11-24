@@ -460,6 +460,13 @@ def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode:
 
 def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject], entries: PythonObject,
                              context: PythonObject) raises -> MetricArenaOwner:
+    """`metrics_run_plan_slots` with no slot a door already holds (an empty
+    List: no allocation)."""
+    return metrics_run_plan_slots(plan, inputs, List[Int](), entries, context)
+
+
+def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], given: List[Int],
+                           entries: PythonObject, context: PythonObject) raises -> MetricArenaOwner:
     """`_metrics_run_plan` on the connected entries of one x_metrics image the
     caller already holds: the selected mode's (above), or the CPU image a
     `device="cpu"` estimator's route names beside a device set (lane
@@ -472,9 +479,14 @@ def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject]
     read from its device copy; both reach the program as store slots, copied
     device to device. Elsewhere (host column, CPU-only install, ranges off)
     a DeviceRows input is its host base's rows, as before. The slots this
-    run put or gathered are freed after it, newest first, even on error."""
+    run put or gathered are freed after it, newest first, even on error.
+
+    `given` (empty, or one word per buffer input): a slot >= 0 the DOOR put
+    or gathered on this image's store and checked (bindings/metrics_program_door.mojo
+    `MetricDoorProg.put_resident`); the door owns and frees it, the input
+    object (its DeviceRows) is held here only as the pin."""
     var pin = metric_route_of(entries)
-    if len(inputs) != plan.buffer_inputs():
+    if len(inputs) != plan.buffer_inputs() or (len(given) > 0 and len(given) != len(inputs)):
         raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
     # UNPACK: each buffer input's address and word count (or its store slot),
     # its owner held across RUN.
@@ -492,8 +504,10 @@ def metrics_run_plan_entries(plan: MetricProgramPlan, inputs: List[PythonObject]
         for i in range(len(inputs)):  # driver-loop: over the program's buffer inputs
             var value = inputs[i]
             var size_i = Int(py=value.size)
-            var slot = -1
-            if size_i > 0 and pin.route.store:
+            var slot = given[i] if len(given) > 0 else -1
+            if slot >= 0 and not pin.route.store:
+                raise Error("RuntimeError: x_metrics: a door's resident input needs an image with a resident store")
+            if slot < 0 and size_i > 0 and pin.route.store:
                 var rows = _is_rows(value, context)
                 if not resident_read:
                     resident = metric_resident_of(pin.route.program, context)
