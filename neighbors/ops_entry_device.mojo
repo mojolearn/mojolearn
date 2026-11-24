@@ -14,7 +14,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.neighbors_entry_table import (
-    NB_OP_INDEX_PREPARE, NB_OP_INDEX_RELEASE, NB_OP_FOLD_READY, NB_OP_CLASSIFY, NB_OP_REGRESS,
+    NB_OP_INDEX_PREPARE, NB_OP_INDEX_RELEASE, NB_OP_FOLD_READY, NB_OP_INDEX_PREPARE_FOLD, NB_OP_CLASSIFY, NB_OP_REGRESS,
     NB_OP_CLASSIFY_RESIDENT, NB_OP_REGRESS_RESIDENT, NB_CLASSIFY_FIXED, NB_CLASSIFY_RESIDENT_FIXED,
     NB_OP_RADIUS_COUNT, NB_OP_RADIUS_FILL,
     NB_OP_SEARCH, NB_OP_SEARCH_RESIDENT, NB_OP_RBC_SEARCH, NB_OP_CLASSIFY_NEIGHBORS, NB_OP_REGRESS_NEIGHBORS,
@@ -23,7 +23,7 @@ from core.neighbors_entry_table import (
 )
 from neighbors.impl.multi_gpu import neighbors_device_plan
 from neighbors.resident_index import (
-    knn_fold_ready, knn_index_classify, knn_index_prepare, knn_index_regress, knn_index_release,
+    knn_fold_ready, knn_index_classify, knn_index_prepare, knn_index_prepare_fold, knn_index_regress, knn_index_release,
     knn_index_search,
 )
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
@@ -81,6 +81,11 @@ def nb_ops_device_run(operation: Int, a: MutPointer[Int, MutUntrackedOrigin], p:
         return 0
     if operation == NB_OP_FOLD_READY:
         return 1 if knn_fold_ready() else 0
+    if operation == NB_OP_INDEX_PREPARE_FOLD:
+        # Lane vdf-scope-cluster2a: the index from a device fold (no host words).
+        var status = nb_status_word(a[0])
+        var fold = nb_fold_words(1, p[0], p[1], p[2], status)
+        return knn_index_prepare_fold(fold[0], fold[1], fold[2], p[3], p[4], status)
     if operation == NB_OP_CLASSIFY:
         var n_classes = nb_class_counts(p, NB_CLASSIFY_FIXED, np, p[5])
         var ip = _f32(a[0])
