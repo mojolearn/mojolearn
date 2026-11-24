@@ -1227,10 +1227,23 @@ def _native_folds(xt: PythonObject, n_splits: Int, n: Int, codes: PythonObject, 
 
 def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject, n: Int, codes: PythonObject,
             partition: Bool, n_classes: Int, context: PythonObject) raises -> PythonObject:
-    """`_trees_splits`: [(train rows, test rows)] as int32 Arrays."""
+    """`_trees_splits`: [(train rows, test rows)] as int32 Arrays.
+
+    A DeviceRows X (a model-selection fold handed to an opted-in meta fit;
+    lane vdf-meta4): its row count is X's (`DoorRows.rows`, no host word of
+    the fold read), and a mojolearn splitter is handed `range(rows)` for X,
+    which is what its split reads of X (bindings/msel_split_door.mojo
+    `msel_split`: "Split algorithms consume only X's row count"; the
+    stratified kinds read y alone). The splits are fold positions, which the
+    meta fit composes inside the fold (`_meta_compose`). Before, the fold
+    reached `msel_input_count` and the splitter, which admit no DeviceRows
+    (a TypeError)."""
     var b = trees_builtins()
     var c = _cv_value(cv, context)
-    var n_x = msel_input_count(X, prep_native_context(context))
+    var x_rows = X
+    if door_is_device_rows(X, context):
+        x_rows = py_call(b.range, PythonObject(DoorRows(X, context).rows))
+    var n_x = msel_input_count(x_rows, prep_native_context(context))
     var n_y = n
     if codes is not None:
         var codes_view = codes
@@ -1243,7 +1256,7 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     var pairs = c
     var nk = trees_keys()
     if py_contains(py_item(prep_native_context(context), nk[].k_family_msel_splitter_layouts), py_type(c)):
-        pairs = prep_native_split(c, X, y, context)
+        pairs = prep_native_split(c, x_rows, y, context)
     var out = Python.list()
     var seen = admitted_vector(n if n > 1 else 1, "<i8", context)
     var seen_addr = trees_address(seen)
