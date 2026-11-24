@@ -1289,6 +1289,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (NOISE: NV L40S 3 cells, median 0.96, 0.96..0.99, all SAME) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NORM_FIXED_LANES.ab-outcome-2.patch
     comptime assert not is_defined["MOJOLEARN_IDN_NORM_FIXED_LANES"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): IDN_NORM_FIXED_LANES (RMSNorm / LayerNorm row statistics and the norm-backward dot as one 32-lane cell per row with a shuffle tree, every column) was NOISE: 3 cells, median 0.96, 0.96..0.99, all SAME (lm-forward 20.66 -> 20.39, lm-train-step 35.19 -> 33.90, transformer-forward 2.18 -> 2.10 ms); the one-thread serial row chain is kept; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_NORM_FIXED_LANES.ab-outcome-2.patch"
+    # TOMBSTONE: MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H (NOISE: NV L40S 1 cell, samba-train-step 33.58 -> 31.22 ms, 0.93, SAME) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H.ab-outcome-2.patch
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): MAMBA3_S16_QK_ARM_REGS2H (the half-page regs2h S16 q/k kernel forced on NVIDIA) was NOISE: 1 cell, samba-train-step 33.58 -> 31.22 ms (0.93), SAME; NVIDIA keeps `regs`, AMD and Apple keep their regs2h default; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2 (ab2-ngemm)
     return True
 

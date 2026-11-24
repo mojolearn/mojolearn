@@ -376,8 +376,9 @@
   },
   "mamba3-s16-qk-regs2h": {
    "define": "MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H",
-   "status": "define in code (autograd/kernels/mamba3.mojo and mamba/host/gen/mamba3_backward.mojo M3_S16_QK_ARM): B = regs2h on NVIDIA (the AMD and Apple default); same bits on every arm; A = the S16 q/k arm regs on NVIDIA (the former default). A transport/route choice: digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE (L40S 1 cell, samba-train-step 33.58 -> 31.22 ms, 0.93, SAME); A (regs on NVIDIA, regs2h on AMD and Apple) is unchanged; removed: the NVIDIA selector term in autograd/kernels/mamba3.mojo and mamba/host/gen/mamba3_backward.mojo (the regs2h kernel stays); the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_S16_QK_ARM_REGS2H.ab-outcome-2.patch. Was: define in code (autograd/kernels/mamba3.mojo and mamba/host/gen/mamba3_backward.mojo M3_S16_QK_ARM): B = regs2h on NVIDIA (the AMD and Apple default); same bits on every arm; A = the S16 q/k arm regs on NVIDIA (the former default). A transport/route choice: digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "optimizer-resident-off": {
    "define": "MOJOLEARN_OPTIMIZER_RESIDENT_OFF",
