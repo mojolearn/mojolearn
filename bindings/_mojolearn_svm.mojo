@@ -94,6 +94,7 @@ from isolation_forest.forest_io import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorError
+from core.forest_fit_request import fit_loop_put
 from core.iforest_entry import (
     IFExportRequest, IFForestRunRequest, IFForestSpans, IFImage, IFRunRequest, IF_CAP_DEVICE_SCAN,
     IF_CAP_RESIDENT, IF_CAP_SCORES_F64, if_entry_dispatch, if_entry_publish,
@@ -799,6 +800,8 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
             raise e
         if_resident_put(held)
         iforest_resident_info_run(res, ip)
+        # The fit loop words the door asked for (IF_A_LOOP; lane alm-forest).
+        fit_loop_put(r.loop, res.fit_loop)
         return r.n_query
     res = iforest_run_host(
         plan, train, r.n_train, r.n_features, query, r.n_query, r.n_estimators,
@@ -814,6 +817,7 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
     else:
         out_f32_word = r.out_f32
     iforest_outputs_run(res, want, out_i32_word, out_f32_word, r.n_query, ip)
+    fit_loop_put(r.loop, res.fit_loop)
     return r.n_query
 
 
