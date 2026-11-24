@@ -70,16 +70,23 @@ class UndefinedMetricWarning(UserWarning):
 # (DEVIATION 6100). Multilabel-indicator input and samplewise=True are
 # refused by name (metrics/NOT_IMPLEMENTED.tsv).
 def multilabel_confusion_matrix(y_true, y_pred, *, sample_weight=None, labels=None,
-                                samplewise=False, numeric_mode=None):
+                                samplewise=False, numeric_mode=None, device=None):
     """Per-label one-vs-rest 2x2 confusion matrices, ``[[tn, fp], [fn, tp]]``.
 
     Follows scikit-learn's `multilabel_confusion_matrix` for binary and multiclass 1-D
     targets (strings or integers). Unweighted counts are exact integers; with
     `sample_weight` they are float64. Multilabel-indicator input and ``samplewise=True``
     raise an error.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
     """
     return _NATIVE(None, _OP.family_mexp_cls_mlcm,
-                   (y_true, y_pred, sample_weight, labels, samplewise, numeric_mode),
+                   (y_true, y_pred, sample_weight, labels, samplewise, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -91,72 +98,135 @@ def multilabel_confusion_matrix(y_true, y_pred, *, sample_weight=None, labels=No
 # np.nan; average='samples' (multilabel) is refused by name.
 def precision_recall_fscore_support(y_true, y_pred, *, beta=1.0, labels=None, pos_label=1,
                                     average=None, warn_for=("precision", "recall", "f-score"),
-                                    sample_weight=None, zero_division="warn", numeric_mode=None):
+                                    sample_weight=None, zero_division="warn", numeric_mode=None, device=None):
     """Precision, recall, F-score and support for each label.
 
     Follows scikit-learn's `precision_recall_fscore_support` for binary and multiclass
     1-D targets. `zero_division` is ``'warn'``, 0.0, 1.0 or ``np.nan``.
     ``average='samples'`` (multilabel) raises an error.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
     """
     return _NATIVE(None, _OP.family_mexp_cls_prfs,
-                   (y_true, y_pred, beta, labels, pos_label, average, warn_for, sample_weight, zero_division, numeric_mode),
+                   (y_true, y_pred, beta, labels, pos_label, average, warn_for, sample_weight, zero_division, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
 def fbeta_score(y_true, y_pred, *, beta, labels=None, pos_label=1, average="binary",
-                sample_weight=None, zero_division="warn", numeric_mode=None):
+                sample_weight=None, zero_division="warn", numeric_mode=None, device=None):
     """scikit-learn 1.9 `fbeta_score` (binary / multiclass 1-D targets); see
-    precision_recall_fscore_support."""
+    precision_recall_fscore_support.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cls_fbeta,
-                   (y_true, y_pred, beta, labels, pos_label, average, sample_weight, zero_division, numeric_mode),
+                   (y_true, y_pred, beta, labels, pos_label, average, sample_weight, zero_division, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
 def jaccard_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
-                  sample_weight=None, zero_division="warn", numeric_mode=None):
+                  sample_weight=None, zero_division="warn", numeric_mode=None, device=None):
     """scikit-learn 1.9 `jaccard_score`, `tp / (tp + fp + fn)` per label,
     for binary and multiclass 1-D targets; see precision_recall_fscore_support
-    for the sums and the epilogue."""
+    for the sums and the epilogue.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cls_jaccard,
-                   (y_true, y_pred, labels, pos_label, average, sample_weight, zero_division, numeric_mode),
+                   (y_true, y_pred, labels, pos_label, average, sample_weight, zero_division, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def balanced_accuracy_score(y_true, y_pred, *, sample_weight=None, adjusted=False, numeric_mode=None):
+def balanced_accuracy_score(y_true, y_pred, *, sample_weight=None, adjusted=False, numeric_mode=None, device=None):
     """scikit-learn 1.9 `balanced_accuracy_score`: the mean per-class recall
     over the classes present in y_true (a class with no true weight is
-    dropped with sklearn's warning), chance-adjusted when `adjusted`."""
+    dropped with sklearn's warning), chance-adjusted when `adjusted`.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cls_balanced_accuracy,
-                   (y_true, y_pred, sample_weight, adjusted, numeric_mode),
+                   (y_true, y_pred, sample_weight, adjusted, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def matthews_corrcoef(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
+def matthews_corrcoef(y_true, y_pred, *, sample_weight=None, numeric_mode=None, device=None):
     """scikit-learn 1.9 `matthews_corrcoef` (binary and multiclass): the
-    covariance form over the per-class true / predicted sums and the trace."""
-    return _NATIVE(None, _OP.family_mexp_cls_matthews, (y_true, y_pred, sample_weight, numeric_mode), _NATIVE_CONTEXT)
+    covariance form over the per-class true / predicted sums and the trace.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_mexp_cls_matthews, (y_true, y_pred, sample_weight, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 def cohen_kappa_score(y1, y2, *, labels=None, weights=None, sample_weight=None,
-                      replace_undefined_by=float("nan"), numeric_mode=None):
+                      replace_undefined_by=float("nan"), numeric_mode=None, device=None):
     """scikit-learn 1.9 `cohen_kappa_score`: the (weighted) confusion matrix
     over `labels` on the device, the kappa in the binary64 epilogue;
-    weights None, 'linear' or 'quadratic'."""
+    weights None, 'linear' or 'quadratic'.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cls_kappa,
-                   (y1, y2, labels, weights, sample_weight, replace_undefined_by, numeric_mode),
+                   (y1, y2, labels, weights, sample_weight, replace_undefined_by, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def hamming_loss(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
+def hamming_loss(y_true, y_pred, *, sample_weight=None, numeric_mode=None, device=None):
     """scikit-learn 1.9 `hamming_loss` for binary / multiclass 1-D targets:
-    the (weighted) fraction of mismatched labels."""
-    return _NATIVE(None, _OP.family_mexp_cls_hamming, (y_true, y_pred, sample_weight, numeric_mode), _NATIVE_CONTEXT)
+    the (weighted) fraction of mismatched labels.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_mexp_cls_hamming, (y_true, y_pred, sample_weight, numeric_mode, device), _NATIVE_CONTEXT)
 
 
-def zero_one_loss(y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None):
-    """scikit-learn 1.9 `zero_one_loss` for binary / multiclass 1-D targets."""
+def zero_one_loss(y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None, device=None):
+    """scikit-learn 1.9 `zero_one_loss` for binary / multiclass 1-D targets.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cls_zero_one,
-                   (y_true, y_pred, sample_weight, normalize, numeric_mode),
+                   (y_true, y_pred, sample_weight, normalize, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -169,17 +239,25 @@ def accuracy_fraction(y_true, y_pred, sample_weight=None, numeric_mode=None):
     device, `_wsum_sf64`, no longer Float32 PairSums). Lane
     cgr4-py-compute: the estimators' `score` methods called this instead of
     a per-row Python comparison."""
-    return _NATIVE(None, _OP.family_mcls_accuracy_fraction, (y_true, y_pred, sample_weight, numeric_mode),
+    return _NATIVE(None, _OP.family_mcls_accuracy_fraction, (y_true, y_pred, sample_weight, numeric_mode, None),
                    _NATIVE_CONTEXT)
 
 
 def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
-                            replace_undefined_by=float("nan"), numeric_mode=None):
+                            replace_undefined_by=float("nan"), numeric_mode=None, device=None):
     """scikit-learn 1.9 `class_likelihood_ratios` (binary targets): LR+ and
     LR- from the 2 x 2 (weighted) confusion matrix; `replace_undefined_by`
-    np.nan, 1.0 or {'LR+': v, 'LR-': v}."""
+    np.nan, 1.0 or {'LR+': v, 'LR-': v}.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cls_likelihood_ratios,
-                   (y_true, y_pred, labels, sample_weight, replace_undefined_by, numeric_mode),
+                   (y_true, y_pred, labels, sample_weight, replace_undefined_by, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -188,7 +266,7 @@ def positive_likelihood_ratio(y_true, y_pred, *, numeric_mode=None):
     `class_likelihood_ratios(y_true, y_pred, replace_undefined_by=1.0)`, the
     metric of the 'positive_likelihood_ratio' scorer."""
     return _NATIVE(None, _OP.family_mexp_cls_likelihood_ratios,
-                   (y_true, y_pred, None, None, 1.0, numeric_mode, 0), _NATIVE_CONTEXT)
+                   (y_true, y_pred, None, None, 1.0, numeric_mode, 0, None), _NATIVE_CONTEXT)
 
 
 def negative_likelihood_ratio(y_true, y_pred, *, numeric_mode=None):
@@ -196,15 +274,23 @@ def negative_likelihood_ratio(y_true, y_pred, *, numeric_mode=None):
     `class_likelihood_ratios(y_true, y_pred, replace_undefined_by=1.0)`, the
     metric of the 'neg_negative_likelihood_ratio' scorer."""
     return _NATIVE(None, _OP.family_mexp_cls_likelihood_ratios,
-                   (y_true, y_pred, None, None, 1.0, numeric_mode, 1), _NATIVE_CONTEXT)
+                   (y_true, y_pred, None, None, 1.0, numeric_mode, 1, None), _NATIVE_CONTEXT)
 
 
 def classification_report(y_true, y_pred, *, labels=None, target_names=None, sample_weight=None,
-                          digits=2, output_dict=False, zero_division="warn", numeric_mode=None):
+                          digits=2, output_dict=False, zero_division="warn", numeric_mode=None, device=None):
     """scikit-learn 1.9 `classification_report` for binary / multiclass 1-D
-    targets, from precision_recall_fscore_support."""
+    targets, from precision_recall_fscore_support.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cls_report,
-                   (y_true, y_pred, labels, target_names, sample_weight, digits, output_dict, zero_division, numeric_mode),
+                   (y_true, y_pred, labels, target_names, sample_weight, digits, output_dict, zero_division, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -221,61 +307,117 @@ def regression_error_options(name, y_true, y_pred, sample_weight, multioutput, n
     with sample_weight, multioutput or 2-D targets (lane/metrics); the 1-D
     unweighted call keeps its original kernel and bits."""
     return _NATIVE(None, _OP.family_metric_regression_error,
-                   (name, y_true, y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
+                   (name, y_true, y_pred, sample_weight, multioutput, numeric_mode, None), _NATIVE_CONTEXT)
 
 
 def mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
-                           numeric_mode=None):
+                           numeric_mode=None, device=None):
     """scikit-learn 1.9 `mean_squared_log_error`: the mean of
     `(log1p(y) - log1p(p))^2` (portable log1p, IDENTITY_PATHS row 51);
-    values <= -1 are refused as scikit-learn refuses them."""
-    return _NATIVE(None, _OP.family_metric_msle, (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+    values <= -1 are refused as scikit-learn refuses them.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_msle, (y_true, y_pred, sample_weight, multioutput, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
 def root_mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
-                                numeric_mode=None):
-    """scikit-learn 1.9 `root_mean_squared_log_error` (per-output root, then averaged)."""
-    return _NATIVE(None, _OP.family_metric_rmsle, (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+                                numeric_mode=None, device=None):
+    """scikit-learn 1.9 `root_mean_squared_log_error` (per-output root, then averaged).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_rmsle, (y_true, y_pred, sample_weight, multioutput, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
 def mean_absolute_percentage_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
-                                   numeric_mode=None):
+                                   numeric_mode=None, device=None):
     """scikit-learn 1.9 `mean_absolute_percentage_error`: `|p - y| / max(|y|,
-    eps)` with numpy's float64 epsilon, averaged (not multiplied by 100)."""
-    return _NATIVE(None, _OP.family_metric_mape, (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+    eps)` with numpy's float64 epsilon, averaged (not multiplied by 100).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_mape, (y_true, y_pred, sample_weight, multioutput, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
 def mean_pinball_loss(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutput="uniform_average",
-                      numeric_mode=None):
-    """scikit-learn 1.9 `mean_pinball_loss` (alpha is rounded to Float32)."""
-    return _NATIVE(None, _OP.family_metric_pinball, (y_true, y_pred, sample_weight, multioutput, numeric_mode, alpha),
+                      numeric_mode=None, device=None):
+    """scikit-learn 1.9 `mean_pinball_loss` (alpha is rounded to Float32).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_pinball, (y_true, y_pred, sample_weight, multioutput, numeric_mode, alpha, device),
                    _NATIVE_CONTEXT)
 
 
 def median_absolute_error(y_true, y_pred, *, multioutput="uniform_average", sample_weight=None,
-                          numeric_mode=None):
+                          numeric_mode=None, device=None):
     """scikit-learn 1.9 `median_absolute_error`: the per-output median of
     ``|y - p|`` (the weighted percentile at 50 with averaging when weighted, the
-    same answer as numpy's median when not), from a stable device sort."""
-    return _NATIVE(None, _OP.family_metric_medae, (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+    same answer as numpy's median when not), from a stable device sort.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_medae, (y_true, y_pred, sample_weight, multioutput, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def max_error(y_true, y_pred, *, numeric_mode=None):
-    """scikit-learn 1.9 `max_error` (single output)."""
-    return _NATIVE(None, _OP.family_metric_max_error, (y_true, y_pred, numeric_mode), _NATIVE_CONTEXT)
+def max_error(y_true, y_pred, *, numeric_mode=None, device=None):
+    """scikit-learn 1.9 `max_error` (single output).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_max_error, (y_true, y_pred, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 def explained_variance_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
-                             force_finite=True, numeric_mode=None):
+                             force_finite=True, numeric_mode=None, device=None):
     """scikit-learn 1.9 `explained_variance_score`: `1 - Var(y - p) / Var(y)`
     with (weighted) means, one program (the means, then the centered
-    squares); force_finite=False returns scikit-learn's NaN / -inf by value."""
+    squares); force_finite=False returns scikit-learn's NaN / -inf by value.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_metric_explained_variance,
-                   (y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode), _NATIVE_CONTEXT)
+                   (y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 def r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode):
@@ -283,46 +425,94 @@ def r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, n
     (lane/metrics): `sum w (y - p)^2` over `sum w (y - avg)^2` per output;
     the 1-D default call keeps its original kernel and bits."""
     return _NATIVE(None, _OP.family_metric_r2_options,
-                   (y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode), _NATIVE_CONTEXT)
+                   (y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode, None), _NATIVE_CONTEXT)
 
 
-def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
+def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None, device=None):
     """scikit-learn 1.9 `mean_tweedie_deviance` (single output; the power is
-    rounded to Float32; pow/log are the portable row-12 functions)."""
-    return _NATIVE(None, _OP.family_metric_tweedie, (y_true, y_pred, sample_weight, numeric_mode, power),
+    rounded to Float32; pow/log are the portable row-12 functions).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_tweedie, (y_true, y_pred, sample_weight, numeric_mode, power, device),
                    _NATIVE_CONTEXT)
 
 
-def mean_poisson_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
-    """scikit-learn 1.9 `mean_poisson_deviance` (Tweedie power 1)."""
-    return _NATIVE(None, _OP.family_metric_poisson, (y_true, y_pred, sample_weight, numeric_mode), _NATIVE_CONTEXT)
+def mean_poisson_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None, device=None):
+    """scikit-learn 1.9 `mean_poisson_deviance` (Tweedie power 1).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_poisson, (y_true, y_pred, sample_weight, numeric_mode, device), _NATIVE_CONTEXT)
 
 
-def mean_gamma_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
-    """scikit-learn 1.9 `mean_gamma_deviance` (Tweedie power 2)."""
-    return _NATIVE(None, _OP.family_metric_gamma, (y_true, y_pred, sample_weight, numeric_mode), _NATIVE_CONTEXT)
+def mean_gamma_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None, device=None):
+    """scikit-learn 1.9 `mean_gamma_deviance` (Tweedie power 2).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_gamma, (y_true, y_pred, sample_weight, numeric_mode, device), _NATIVE_CONTEXT)
 
 
-def d2_tweedie_score(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
+def d2_tweedie_score(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None, device=None):
     """scikit-learn 1.9 `d2_tweedie_score`: `1 - dev(y, p) / dev(y, avg y)`
     in one program; a zero null deviance answers NaN (0/0) or -inf as
-    numpy's float division does."""
-    return _NATIVE(None, _OP.family_metric_d2_tweedie, (y_true, y_pred, sample_weight, numeric_mode, power),
+    numpy's float division does.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_d2_tweedie, (y_true, y_pred, sample_weight, numeric_mode, power, device),
                    _NATIVE_CONTEXT)
 
 
 def d2_pinball_score(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutput="uniform_average",
-                     numeric_mode=None):
+                     numeric_mode=None, device=None):
     """scikit-learn 1.9 `d2_pinball_score`: the pinball loss against the
-    (weighted, averaged) alpha-quantile of y_true per output, one program."""
-    return _NATIVE(None, _OP.family_metric_d2_pinball, (y_true, y_pred, sample_weight, multioutput, numeric_mode, alpha),
+    (weighted, averaged) alpha-quantile of y_true per output, one program.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_d2_pinball, (y_true, y_pred, sample_weight, multioutput, numeric_mode, alpha, device),
                    _NATIVE_CONTEXT)
 
 
 def d2_absolute_error_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
-                            numeric_mode=None):
-    """scikit-learn 1.9 `d2_absolute_error_score` (d2_pinball_score at alpha 0.5)."""
-    return _NATIVE(None, _OP.family_metric_d2_absolute, (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+                            numeric_mode=None, device=None):
+    """scikit-learn 1.9 `d2_absolute_error_score` (d2_pinball_score at alpha 0.5).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_metric_d2_absolute, (y_true, y_pred, sample_weight, multioutput, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -337,14 +527,21 @@ def d2_absolute_error_score(y_true, y_pred, *, sample_weight=None, multioutput="
 # cpu4-python: x_metrics/curve_out.mojo; an empty class's NaN rates
 # there too).
 def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=True,
-              numeric_mode=None):
+              numeric_mode=None, device=None):
     """Receiver operating characteristic curve for binary targets.
 
     Follows scikit-learn's `roc_curve`. Returns ``fpr``, ``tpr`` and ``thresholds`` as
     float64 arrays; the first threshold is ``+inf``. Computed on the GPU.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
     """
     return _NATIVE(None, _OP.family_mexp_curve_roc,
-                   (y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode),
+                   (y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -353,14 +550,21 @@ def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
 # device (lane cpu4-python: x_metrics/curve_out.mojo); a zero class
 # weight raises as the Python division by zero did.
 def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=False,
-              numeric_mode=None):
+              numeric_mode=None, device=None):
     """Detection error tradeoff curve for binary targets.
 
     Follows scikit-learn's `det_curve`. Returns ``fpr``, ``fnr`` and ``thresholds``,
     computed on the GPU. A zero class weight raises ``ZeroDivisionError``.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
     """
     return _NATIVE(None, _OP.family_mexp_curve_det,
-                   (y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode),
+                   (y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -371,76 +575,139 @@ def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
 # y[i-1]) / 2, summed as a float-float in fixed chunks (the host fsum
 # left the route); a non-finite term's IEEE answer. A list or an integer
 # buffer is converted to Float64 first.
-def auc(x, y):
+def auc(x, y, *, device=None):
     """Area under a curve by the trapezoid rule.
 
     Follows scikit-learn's `auc`. `x` must be monotonic. Lists and integer arrays are
     converted to float64 first. Computed on the GPU.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
     """
-    return _NATIVE(None, _OP.family_mexp_curve_auc, (x, y), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mexp_curve_auc, (x, y, device), _NATIVE_CONTEXT)
 
 
 def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sample_weight=None,
-                            numeric_mode=None):
+                            numeric_mode=None, device=None):
     """scikit-learn 1.9 `average_precision_score` (binary and multiclass
-    one-vs-rest; multilabel-indicator targets are refused by name)."""
+    one-vs-rest; multilabel-indicator targets are refused by name).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_curve_average_precision,
-                   (y_true, y_score, pos_label, sample_weight, numeric_mode, average),
+                   (y_true, y_score, pos_label, sample_weight, numeric_mode, average, device),
                    _NATIVE_CONTEXT)
 
 
 def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=None, labels=None,
-                         numeric_mode=None):
+                         numeric_mode=None, device=None):
     """scikit-learn 1.9 `top_k_accuracy_score`: a hit when the true class is
     among the k largest scores, ties ordered as numpy's stable argsort
-    reversed (the larger class index first)."""
+    reversed (the larger class index first).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_curve_top_k,
-                   (y_true, y_score, k, normalize, sample_weight, labels, numeric_mode),
+                   (y_true, y_score, k, normalize, sample_weight, labels, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
 def brier_score_loss(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None,
-                     scale_by_half="auto", numeric_mode=None):
+                     scale_by_half="auto", numeric_mode=None, device=None):
     """scikit-learn 1.9 `brier_score_loss` (binary vector or multiclass
     matrix): the mean of `sum_c (onehot - p)^2`, halved by default for the
-    binary case."""
+    binary case.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_rank_brier,
-                   (y_true, y_proba, sample_weight, pos_label, labels, scale_by_half, numeric_mode),
+                   (y_true, y_proba, sample_weight, pos_label, labels, scale_by_half, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def d2_log_loss_score(y_true, y_proba=None, *, sample_weight=None, labels=None, numeric_mode=None):
+def d2_log_loss_score(y_true, y_proba=None, *, sample_weight=None, labels=None, numeric_mode=None, device=None):
     """scikit-learn 1.9 `d2_log_loss_score`: one minus the log loss over the
-    log loss of the (weighted) class frequencies."""
+    log loss of the (weighted) class frequencies.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_rank_d2_log_loss,
-                   (y_true, y_proba, sample_weight, labels, None, numeric_mode),
+                   (y_true, y_proba, sample_weight, labels, None, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None, numeric_mode=None):
+def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None, numeric_mode=None, device=None):
     """scikit-learn 1.9 `d2_brier_score`: one minus the Brier score over the
-    Brier score of the (weighted) class frequencies."""
+    Brier score of the (weighted) class frequencies.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_rank_d2_brier,
-                   (y_true, y_proba, sample_weight, labels, pos_label, numeric_mode),
+                   (y_true, y_proba, sample_weight, labels, pos_label, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def hinge_loss(y_true, pred_decision, *, labels=None, sample_weight=None, numeric_mode=None):
+def hinge_loss(y_true, pred_decision, *, labels=None, sample_weight=None, numeric_mode=None, device=None):
     """scikit-learn 1.9 `hinge_loss`: binary (labels mapped to -1 / +1, the
-    larger class positive) or Crammer-Singer multiclass margins."""
+    larger class positive) or Crammer-Singer multiclass margins.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_rank_hinge,
-                   (y_true, pred_decision, labels, sample_weight, numeric_mode),
+                   (y_true, pred_decision, labels, sample_weight, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
 def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore_ties=False,
-              numeric_mode=None):
+              numeric_mode=None, device=None):
     """scikit-learn 1.9 `dcg_score`: tie-averaged gains by default;
     ignore_ties=True ranks tied scores by DESCENDING column index (numpy's
     `argsort(...)[::-1]` there, whose tie order its unstable sort leaves
-    unspecified; this one is fixed)."""
+    unspecified; this one is fixed).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_rank_dcg,
-                   (y_true, y_score, k, log_base, sample_weight, ignore_ties, numeric_mode),
+                   (y_true, y_score, k, log_base, sample_weight, ignore_ties, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -450,31 +717,62 @@ def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore
 # the per-row ratios (`rank_epi` NDCG_ROW: the binary64 quotient narrowed
 # to Float32), their (weighted) PairSum and the mean run in one device
 # program (lane cpu2-l7-metrics: no host epilogue over the rows).
-def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False, numeric_mode=None):
+def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False, numeric_mode=None, device=None):
     """Normalized discounted cumulative gain.
 
     Follows scikit-learn's `ndcg_score`: each row's DCG divided by its ideal DCG (0 when
     the row has no relevant item), averaged over rows, weighted when `sample_weight` is
     given. Computed on the GPU.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
     """
     return _NATIVE(None, _OP.family_mexp_rank_ndcg,
-                   (y_true, y_score, k, sample_weight, ignore_ties, numeric_mode),
+                   (y_true, y_score, k, sample_weight, ignore_ties, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def coverage_error(y_true, y_score, *, sample_weight=None, numeric_mode=None):
-    """scikit-learn 1.9 `coverage_error` (multilabel indicator y_true)."""
-    return _NATIVE(None, _OP.family_mexp_rank_coverage, (y_true, y_score, sample_weight, numeric_mode), _NATIVE_CONTEXT)
+def coverage_error(y_true, y_score, *, sample_weight=None, numeric_mode=None, device=None):
+    """scikit-learn 1.9 `coverage_error` (multilabel indicator y_true).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_mexp_rank_coverage, (y_true, y_score, sample_weight, numeric_mode, device), _NATIVE_CONTEXT)
 
 
-def label_ranking_average_precision_score(y_true, y_score, *, sample_weight=None, numeric_mode=None):
-    """scikit-learn 1.9 `label_ranking_average_precision_score`."""
-    return _NATIVE(None, _OP.family_mexp_rank_lrap, (y_true, y_score, sample_weight, numeric_mode), _NATIVE_CONTEXT)
+def label_ranking_average_precision_score(y_true, y_score, *, sample_weight=None, numeric_mode=None, device=None):
+    """scikit-learn 1.9 `label_ranking_average_precision_score`.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_mexp_rank_lrap, (y_true, y_score, sample_weight, numeric_mode, device), _NATIVE_CONTEXT)
 
 
-def label_ranking_loss(y_true, y_score, *, sample_weight=None, numeric_mode=None):
-    """scikit-learn 1.9 `label_ranking_loss` (tied scores count as misordered)."""
-    return _NATIVE(None, _OP.family_mexp_rank_loss, (y_true, y_score, sample_weight, numeric_mode), _NATIVE_CONTEXT)
+def label_ranking_loss(y_true, y_score, *, sample_weight=None, numeric_mode=None, device=None):
+    """scikit-learn 1.9 `label_ranking_loss` (tied scores count as misordered).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_mexp_rank_loss, (y_true, y_score, sample_weight, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -482,22 +780,38 @@ def label_ranking_loss(y_true, y_score, *, sample_weight=None, numeric_mode=None
 # ---------------------------------------------------------------------------
 
 
-def contingency_matrix(labels_true, labels_pred, *, eps=None, sparse=False, dtype="int64", numeric_mode=None):
+def contingency_matrix(labels_true, labels_pred, *, eps=None, sparse=False, dtype="int64", numeric_mode=None, device=None):
     """scikit-learn 1.9 `contingency_matrix` (dense): exact counts from the
     device grouping, rows the sorted classes, columns the sorted clusters;
     `eps` adds a constant and makes the result Float64. The result is always
-    dense; `sparse=True` raises `NotImplementedError`."""
+    dense; `sparse=True` raises `NotImplementedError`.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cluster_contingency,
-                   (labels_true, labels_pred, eps, sparse, dtype, numeric_mode),
+                   (labels_true, labels_pred, eps, sparse, dtype, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def pair_confusion_matrix(labels_true, labels_pred, *, numeric_mode=None):
+def pair_confusion_matrix(labels_true, labels_pred, *, numeric_mode=None, device=None):
     """scikit-learn 1.9 `pair_confusion_matrix`: the 2 x 2 Int64 pair counts
     from the exact contingency matrix (exact Int64 in the binding: every
-    pair count is below 2^62)."""
+    pair count is below 2^62).
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cluster_pair_confusion,
-                   (labels_true, labels_pred, numeric_mode),
+                   (labels_true, labels_pred, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
@@ -505,35 +819,66 @@ def pair_confusion_matrix(labels_true, labels_pred, *, numeric_mode=None):
 # scikit-learn 1.9 `normalized_mutual_info_score`, in nats as scikit-learn
 # (exact device contingency counts; the logarithms are the portable binary64
 # ones of `_portable_math`, DEVIATION 6106).
-def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
+def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None, device=None):
     """Normalized mutual information between two clusterings.
 
     Follows scikit-learn's `normalized_mutual_info_score`, in nats.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
     """
     return _NATIVE(None, _OP.family_mexp_cluster_nmi,
-                   (labels_true, labels_pred, average_method, numeric_mode),
+                   (labels_true, labels_pred, average_method, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
+def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None, device=None):
     """scikit-learn 1.9 `adjusted_mutual_info_score`: (MI - E[MI]) /
-    (mean(H) - E[MI]) with scikit-learn's epsilon guards."""
+    (mean(H) - E[MI]) with scikit-learn's epsilon guards.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_cluster_ami,
-                   (labels_true, labels_pred, average_method, numeric_mode),
+                   (labels_true, labels_pred, average_method, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
-def calinski_harabasz_score(X, labels, *, numeric_mode=None):
+def calinski_harabasz_score(X, labels, *, numeric_mode=None, device=None):
     """scikit-learn 1.9 `calinski_harabasz_score`: the between- over the
     within-cluster dispersion, scaled by (n - k) / (k - 1), in one device
-    program."""
-    return _NATIVE(None, _OP.family_mexp_cluster_calinski_harabasz, (X, labels, numeric_mode), _NATIVE_CONTEXT)
+    program.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_mexp_cluster_calinski_harabasz, (X, labels, numeric_mode, device), _NATIVE_CONTEXT)
 
 
-def davies_bouldin_score(X, labels, *, numeric_mode=None):
+def davies_bouldin_score(X, labels, *, numeric_mode=None, device=None):
     """scikit-learn 1.9 `davies_bouldin_score`: the mean over clusters of the
-    worst (s_i + s_j) / d(c_i, c_j), in one device program."""
-    return _NATIVE(None, _OP.family_mexp_cluster_davies_bouldin, (X, labels, numeric_mode), _NATIVE_CONTEXT)
+    worst (s_i + s_j) / d(c_i, c_j), in one device program.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
+    return _NATIVE(None, _OP.family_mexp_cluster_davies_bouldin, (X, labels, numeric_mode, device), _NATIVE_CONTEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -543,18 +888,34 @@ def davies_bouldin_score(X, labels, *, numeric_mode=None):
 
 def regression_report(y_true, y_pred, *, sample_weight=None,
                       multioutput="uniform_average", force_finite=True,
-                      numeric_mode="identical"):
-    """Return mean squared error, mean absolute error and R² together."""
+                      numeric_mode="identical", device=None):
+    """Return mean squared error, mean absolute error and R² together.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_metric_regression_report,
-                   (y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode),
+                   (y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 
 def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
-                   include_curves=False, numeric_mode="identical"):
-    """Return binary ROC AUC, average precision and optional curves together."""
+                   include_curves=False, numeric_mode="identical", device=None):
+    """Return binary ROC AUC, average precision and optional curves together.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
+    """
     return _NATIVE(None, _OP.family_mexp_curve_ranking_report,
-                   (y_true, y_score, pos_label, sample_weight, include_curves, numeric_mode),
+                   (y_true, y_score, pos_label, sample_weight, include_curves, numeric_mode, device),
                    _NATIVE_CONTEXT)
 
 

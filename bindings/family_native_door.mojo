@@ -14,14 +14,14 @@ from bindings.kmeans_native_pack import kmeans_operation, kmeans_unknown_operati
 from bindings.kernel_methods_native_door import kernel_methods_operation, kernel_methods_unknown_operation
 from bindings.linalg_native_door import linalg_operation, linalg_unknown_operation
 from bindings.neighbors_native_pack import neighbors_operation
-from bindings.metrics_reg_door import metrics_reg_operation, metrics_reg_unknown_operation
+from bindings.metrics_reg_door import metrics_reg_public, metrics_reg_unknown_operation
 from bindings.cluster_public_native_pack import cluster_operation
 from cluster.cluster_door_run import cluster_unknown_operation
 from bindings.svm_mixture_native_door import svm_mixture_operation, svm_mixture_unknown_operation
 from bindings.svc_native_pack import svc_operation, svc_unknown_operation
 from bindings.gp_native_pack import gp_operation, gp_unknown_operation
-from bindings.metrics_cls_native_unpack import metrics_cls_operation, metrics_cls_unknown_operation
-from bindings.metrics_exp_native_unpack import metrics_exp_operation, metrics_exp_unknown_operation
+from bindings.metrics_cls_native_unpack import metrics_cls_public, metrics_cls_unknown_operation
+from bindings.metrics_exp_native_unpack import metrics_exp_public, metrics_exp_unknown_operation
 from bindings.cluster_fit_public_native_pack import cluster_fit_a_operation
 from cluster.cluster_fit_door_run import cluster_fit_a_unknown_operation
 from providers.python.hdbscan_public_lifecycle_pyapi_pack import hdbscan_public_operation, hdbscan_unknown_operation
@@ -200,7 +200,8 @@ def _family_owner_first(model: PythonObject, owner: Int, leaf: Int, operation: S
     if owner == FR_METRIC:
         if leaf == OP_LEAF_NONE:
             metrics_reg_unknown_operation(operation)
-        return metrics_reg_operation(leaf, args, context)
+        # The public shells' tuple ends with `device` (lane vdf-metrics).
+        return metrics_reg_public(leaf, args, context)
     if owner == FR_XN:
         return neighbors_operation(model, operation, args, context)
     if owner == FR_CHOL:
@@ -237,11 +238,11 @@ def _family_owner_second(model: PythonObject, owner: Int, leaf: Int, operation: 
     if owner == FR_MCLS:
         if leaf == OP_LEAF_NONE:
             metrics_cls_unknown_operation(operation)
-        return metrics_cls_operation(model, leaf, args, context)
+        return metrics_cls_public(leaf, args, context)
     if owner == FR_MEXP:
         if leaf == OP_LEAF_NONE:
             metrics_exp_unknown_operation(operation)
-        return metrics_exp_operation(model, leaf, args, context)
+        return metrics_exp_public(leaf, args, context)
     if owner == FR_HDBSCAN_PUBLIC:
         if leaf == OP_LEAF_NONE:
             hdbscan_unknown_operation(operation)
