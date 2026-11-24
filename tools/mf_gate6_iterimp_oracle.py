@@ -40,10 +40,28 @@ continuous fixture, every integer fixture equal). Not the imputer and not split 
   * The imputer's storage dtype: given float64 X scikit-learn keeps Xt and every imputed target in float64; ours
     reads X as float32 (the estimator docstrings), as scikit-learn does when given float32 X (FLOAT_DTYPES keeps
     float32). The `_sk32` rows give scikit-learn the same float32 X, the like-for-like comparison.
-EXPECTED: `tree_allbins_*_sk32` equal (n_bins=1024 >= the step's rows makes every distinct value an edge, so the
-candidate partitions are scikit-learn's); a remaining `differs` there with a gross max_abs is a criterion near-tie
-flip (float accumulation order) and is a finding for the tree, not the imputer. `tree_*` and `tree_random_*` on the
-continuous fixtures stay `differs` by the documented split-search difference above; every int / ctree row equal.
+THREE MORE CAUSES, each enough alone to keep a continuous row `differs` (lane w3-fix-d2, 2026-11-24, from the code):
+  * Leaf values. Our regression histogram is Int32 fixed point (ensemble/decisiontree/batched_levelalgo/bins.mojo
+    DEVIATION 101b: each label truncated to a power-of-two scale from checks/fixed_point.mojo `choose_scale`, about
+    2^18 for a step's target), and the leaf is the dequantized sum over the count (objectives.mojo
+    RegressionObjectiveFunction.SetLeafVector). scikit-learn's leaf is the float64 mean. A one-row leaf (the common
+    leaf of a full-depth tree) is then trunc(y * 2^18) / 2^18 against y: about 4e-6 apart. Integer targets are exact
+    in the fixed point, which is the other reason every int row is equal.
+  * Thresholds. Ours publishes the bin edge (a training value, `x <= q[b]`); scikit-learn the midpoint
+    (sklearn/tree/_splitter.pyx node_split_best: `feature_values[p_prev] / 2.0 + feature_values[p] / 2.0`). Same
+    training partition, different routing of the imputed rows, whose values fall between training values.
+  * Tie order. A node whose rows every feature separates the same way (any two-row node) gives every feature the SAME
+    improvement. scikit-learn keeps the first feature its Fisher-Yates visit draws (rand_r over a seed from NumPy's
+    MT19937 `randint`, with the permutation carried in the splitter from node to node in depth-first order); ours keeps
+    the highest feature index (split.mojo `update`). The imputed rows routed through such a node follow different
+    features.
+EXPECTED on the current product: every int and ctree row equal; every continuous row (tree_*, tree_allbins_*,
+tree_random_*, f64 and _sk32) `differs` by the causes above, tree_allbins with the smallest max_abs (about 1e-5 where
+only the leaf quantization and the thresholds remain). `tree_random_*` uses scikit-learn's draw semantics already
+(extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo: uniform in [min, max) of the
+node's feature, max -> min, FEATURE_THRESHOLD) from our own stream: its continuous rows differ by stream, not by rule.
+No product route yet gives scikit-learn's values: that needs the decision recorded in
+~/mojolearn-evidence/briefs-20261122/w3-fix-d2-RESULT.md.
 
 Per case one line: `<case> equal` (bit-equal fit_transform, n_iter_, n_features_with_missing_ and step order), or
 `<case> differs cells=<k>/<n> max_abs=<x> n_iter=<ours>/<sklearn> missing=<ours>/<sklearn> order=<same|differs>`,
