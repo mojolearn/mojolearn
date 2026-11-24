@@ -2987,6 +2987,92 @@ def upload_dataset_labels_f32(
     return dataset^
 
 
+def class_codes_check_kernel(
+    ids: MutPointer[Int32, MutAnyOrigin],
+    first_bad: MutPointer[Int32, MutAnyOrigin],
+    n_rows: Int32,
+    n_classes: Int32,
+):
+    """Lane vdf-scope-trees3: `class_ids_device_kernel` for labels that are
+    already int32 class codes (the forest member's ExtraTrees classifier). A
+    code in `[0, n_classes)` is its own class id (the float path's truncation
+    of the same code's float32 gives it back: codes stay below 2^24); one
+    outside stores 0 and lowers `first_bad[0]` to its row (an integer
+    minimum: order-free), as that kernel does."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_rows):
+        return
+    var v = ids[unsafe_offset=i]
+    if v < Int32(0) or v >= n_classes:
+        ids[unsafe_offset=i] = Int32(0)
+        _ = Atomic[Int32].min(first_bad, Int32(i))
+
+
+def upload_dataset_codes_i32(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    codes_addr: Int,
+    n_rows: Int32,
+    n_cols: Int32,
+    n_classes: Int32,
+    x_addr: Int = 0,
+    x_row_major: Bool = False,
+    x_dev_rows: Int = 0,
+) raises -> DeviceDataset:
+    """`upload_dataset_labels_f32` for labels that are `n_rows` int32 class
+    codes at `codes_addr` (lane vdf-scope-trees3; the caller keeps them alive
+    through the call): they cross the bus once as the caller's int32 words
+    straight into the dataset's class ids, and their range is checked on the
+    device (`class_codes_check_kernel`). No host cast to float32 and no float
+    staging list: the same class ids, so the same forest. One Int32 comes
+    back: the first row whose code is out of range, refused by name."""
+    if codes_addr == 0:
+        raise Error("class codes: null int32 buffer address")
+    var dataset = upload_dataset(
+        ctx, x_col_major, List[Int32](), n_rows, n_cols, n_classes,
+        x_addr=x_addr, x_row_major=x_row_major, labels_on_device=True,
+        x_dev_rows=x_dev_rows,
+    )
+    var n = Int(n_rows)
+    var codes = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes_addr)
+    var h_ids = ctx.enqueue_create_host_buffer[DType.int32](n)
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.synchronize()
+    # DEVIATION 2481's bulk typed copy into pinned memory, then one upload.
+    unsafe_memcpy(dest=h_ids.unsafe_ptr(), src=codes, count=n)
+    var ids = dataset.d_labels.create_sub_buffer[DType.int32](0, n)
+    ctx.enqueue_copy(dst_buf=ids, src_ptr=h_ids.unsafe_ptr())
+    ctx.enqueue_memset(d_bad, Int32(n))
+    ctx.enqueue_function[class_codes_check_kernel](
+        dataset.d_labels.unsafe_ptr(),
+        d_bad.unsafe_ptr(),
+        n_rows,
+        n_classes,
+        grid_dim=ceildiv(n, 256),
+        block_dim=256,
+    )
+    ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
+    ctx.synchronize()
+    var bad = Int(h_bad.unsafe_ptr()[unsafe_offset=0])
+    _ = ids^
+    _ = h_ids^
+    _ = d_bad^
+    _ = h_bad^
+    if bad < n:
+        raise Error(
+            "class code "
+            + String(codes[bad])
+            + " at row "
+            + String(bad)
+            + " is outside [0, "
+            + String(n_classes)
+            + "). The device score kernel would index its shared"
+            " accumulator out of bounds; refused by name."
+        )
+    return dataset^
+
+
 def label_scale_exponent(scale: Float64) raises -> Int:
     """`e` with `scale == 2^e`: `choose_scale` returns a power of two
     (DEVIATION 135), read here from its binary64 exponent field."""

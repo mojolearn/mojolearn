@@ -629,8 +629,13 @@ def fit_extra_trees_classifier_device(
     tree_start: Int = 0,
     weights_addr: Int = 0,
     x_dev_rows: Int = 0,
+    codes_addr: Int = 0,
 ) raises -> FitResult:
     """`ExtraTreesClassifier.fit` with the split search on the GPU.
+
+    `codes_addr` (lane vdf-scope-trees3; 0: none): the labels are `n_rows`
+    int32 class codes at that address, borrowed through this call, in place
+    of `labels` (`fit_classification_device`).
 
     lane sk-kernels: `weights_addr` (0: none) is the per-row weight
     (scikit-learn's sample_weight times its class_weight row), `n_rows`
@@ -689,6 +694,7 @@ def fit_extra_trees_classifier_device(
             config.min_weight_fraction_leaf if weights_addr != 0 else 0.0
         ),
         x_dev_rows=x_dev_rows,
+        codes_addr=codes_addr,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)

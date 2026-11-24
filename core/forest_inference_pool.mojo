@@ -20,7 +20,7 @@ from core.device_fold import device_exclusive_scan_total
 from core.multi_gpu import transfer_bytes
 from core.forest_inference import (
     forest_add, reached_leaf, FOREST_PACKED_NODES, FOREST_FINITE_TPB, device_ptr_all_finite,
-    device_all_finite, launch_forest_argmax, forest_pack_resident, forest_validate_device,
+    device_all_finite, launch_forest_argmax, forest_count_equal, forest_pack_resident, forest_validate_device,
     _forest_tree_of,
 )
 
@@ -359,12 +359,53 @@ struct ForestGroveOwner(Movable):
         (groves it does not hold are +0.0; the root merges by grove mask)."""
         var first_row = first_item // outputs
         var rows = (first_item + items + outputs - 1) // outputs - first_row
-        var relative_item = first_item - first_row * outputs
         ref ctx = self.ctx.value()
         var dx = ctx.enqueue_create_buffer[DType.float32](rows * features)
-        var dt = ctx.enqueue_create_buffer[DType.float32](items * 32)
         try:
             ctx.enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_offset(first_row * features))
+        except e:
+            ctx.synchronize()
+            _ = dx^
+            raise e
+        return self._contribute[RF_INPUT](dx^, first_item, items, features, outputs, scan_input)
+
+    def contribution_rows[RF_INPUT: Bool](mut self, src_ctx: DeviceContext,
+        mut src: DeviceBuffer[DType.float32], first_item: Int, items: Int,
+        features: Int, outputs: Int, scan_input: Bool = False,
+    ) raises -> DeviceBuffer[DType.float32]:
+        """`contribution` on ROW-major rows already resident in `src` on
+        `src_ctx` (lane vdf-scope-trees3: the rows an image's device store
+        took on its context). This owner's slice of them crosses device to
+        device (`transfer_bytes`: a device copy, or the host-staged copy that
+        function documents for AMD across two devices), never through a host
+        list the caller fills. A byte copy, so the same bits as the host
+        upload of the same rows."""
+        var first_row = first_item // outputs
+        var rows = (first_item + items + outputs - 1) // outputs - first_row
+        ref ctx = self.ctx.value()
+        var dx = ctx.enqueue_create_buffer[DType.float32](rows * features)
+        try:
+            # the target exists before the source's stream writes it (as `peer_clone`)
+            ctx.synchronize()
+            var part = src.create_sub_buffer[DType.float32](first_row * features, rows * features)
+            transfer_bytes(src_ctx, ctx, part, dx, rows * features, Int(src_ctx.id()) != Int(ctx.id()))
+            _ = part^  # the copy above drained the source context
+        except e:
+            ctx.synchronize()
+            _ = dx^
+            raise e
+        return self._contribute[RF_INPUT](dx^, first_item, items, features, outputs, scan_input)
+
+    def _contribute[RF_INPUT: Bool](mut self, var dx: DeviceBuffer[DType.float32],
+        first_item: Int, items: Int, features: Int, outputs: Int, scan_input: Bool,
+    ) raises -> DeviceBuffer[DType.float32]:
+        """The grove totals of this owner's rows in `dx` (on its device)."""
+        var first_row = first_item // outputs
+        var rows = (first_item + items + outputs - 1) // outputs - first_row
+        var relative_item = first_item - first_row * outputs
+        ref ctx = self.ctx.value()
+        var dt = ctx.enqueue_create_buffer[DType.float32](items * 32)
+        try:
             if scan_input and not device_ptr_all_finite(
                     ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows * features):
                 raise Error("resident forest requires finite Float32 values")
@@ -491,14 +532,30 @@ struct PooledForest(Movable):
         """The item x 32 grove totals on owner 0's device: each owner's
         totals cross to it (`transfer_bytes`) and a mask kernel takes that
         owner's grove columns (the host merge loop is gone, lane cpu4-misc)."""
+        var no_ctx = Optional[DeviceContext]()
+        var no_src = Optional[DeviceBuffer[DType.float32]]()
+        return self._collect[RF_INPUT](x, no_ctx, no_src, first_item, items)
+
+    def _collect[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
+        src_ctx: Optional[DeviceContext], mut src: Optional[DeviceBuffer[DType.float32]],
+        first_item: Int, items: Int,
+    ) raises -> DeviceBuffer[DType.float32]:
+        """`collect_items_resident` over the host rows at `x`, or (`src`
+        given, lane vdf-scope-trees3) over rows resident in `src` on
+        `src_ctx`, each owner taking its slice device to device."""
         var cells = items * 32
         var totals = self.owners[0].ctx.value().enqueue_create_buffer[DType.float32](cells)
         var grid = (cells + FOREST_FINITE_TPB - 1) // FOREST_FINITE_TPB
         try:
             self.owners[0].ctx.value().enqueue_memset(totals, Float32(0.0))
             for rank in range(len(self.owners)):  # small-loop(owners: devices, at most 32): one contribution, transfer and merge launch per owner device
-                var local = self.owners[rank].contribution[RF_INPUT](
-                    x, first_item, items, self.features, self.outputs, rank == 0)
+                var local: DeviceBuffer[DType.float32]
+                if src:
+                    local = self.owners[rank].contribution_rows[RF_INPUT](
+                        src_ctx.value(), src.value(), first_item, items, self.features, self.outputs, rank == 0)
+                else:
+                    local = self.owners[rank].contribution[RF_INPUT](
+                        x, first_item, items, self.features, self.outputs, rank == 0)
                 var mask = self.owners[rank].mask
                 if rank == 0:
                     self.owners[0].ctx.value().enqueue_function[forest_merge_owner_groves_kernel](
@@ -526,6 +583,7 @@ struct PooledForest(Movable):
         return totals^
 
     def _finish_resident[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
+        src_ctx: Optional[DeviceContext], mut src: Optional[DeviceBuffer[DType.float32]],
         rows: Int,
     ) raises -> DeviceBuffer[DType.float32]:
         """Every row's finished output, resident on owner 0's device. The
@@ -539,7 +597,7 @@ struct PooledForest(Movable):
         var tile = min(4096, 64 * self.outputs)
         for first in range(0, rows * self.outputs, tile):
             var items = min(tile, rows * self.outputs - first)
-            var dt = self.collect_items_resident[RF_INPUT](x, first, items)
+            var dt = self._collect[RF_INPUT](x, src_ctx, src, first, items)
             ref ctx = self.owners[0].ctx.value()
             try:
                 ctx.enqueue_function[forest_finish_groves_kernel](dt.unsafe_ptr(),
@@ -562,7 +620,29 @@ struct PooledForest(Movable):
     ) raises:
         if rows <= 0:
             return
-        var dout = self._finish_resident[RF_INPUT](x, rows)
+        var no_ctx = Optional[DeviceContext]()
+        var no_src = Optional[DeviceBuffer[DType.float32]]()
+        self._votes_out[RF_INPUT](x, no_ctx, no_src, output, rows)
+
+    def predict_rows_into[RF_INPUT: Bool](mut self, src_ctx: DeviceContext,
+        var dx: DeviceBuffer[DType.float32], output: MutPointer[Float32, MutAnyOrigin], rows: Int,
+    ) raises:
+        """`predict_into` on ROW-major rows already resident in `dx` on
+        `src_ctx` (lane vdf-scope-trees3): each owner takes its rows device
+        to device (`contribution_rows`), no host read of the rows. `dx` is a
+        view; the caller keeps the rows' own buffer alive until return."""
+        if rows <= 0:
+            return
+        var ctx_given = Optional[DeviceContext](src_ctx.copy())
+        var src_given = Optional[DeviceBuffer[DType.float32]](dx^)
+        var unused = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(output))
+        self._votes_out[RF_INPUT](unused, ctx_given, src_given, output, rows)
+
+    def _votes_out[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
+        src_ctx: Optional[DeviceContext], mut src: Optional[DeviceBuffer[DType.float32]],
+        output: MutPointer[Float32, MutAnyOrigin], rows: Int,
+    ) raises:
+        var dout = self._finish_resident[RF_INPUT](x, src_ctx, src, rows)
         ref ctx = self.owners[0].ctx.value()
         try:
             ctx.enqueue_copy(dst_ptr=output, src_buf=dout)
@@ -580,13 +660,42 @@ struct PooledForest(Movable):
         resident votes (the host argmax loop is gone)."""
         if rows <= 0:
             return
-        var dout = self._finish_resident[RF_INPUT](x, rows)
+        var no_ctx = Optional[DeviceContext]()
+        var no_src = Optional[DeviceBuffer[DType.float32]]()
+        _ = self._labels_out[RF_INPUT](x, no_ctx, no_src, output, rows)
+
+    def predict_labels_rows_into[RF_INPUT: Bool](mut self, src_ctx: DeviceContext,
+        var dx: DeviceBuffer[DType.float32], output: MutPointer[Int32, MutAnyOrigin], rows: Int,
+        score: Bool = False,
+    ) raises -> Int:
+        """`predict_labels_into` on rows already resident in `dx` on
+        `src_ctx` (as `predict_rows_into`; lane vdf-scope-trees3); rows
+        written. `score`: `output` holds the rows' int32 true codes, compared
+        on owner 0's device (`forest_count_equal`); the matching row count."""
+        if rows <= 0:
+            return 0
+        var ctx_given = Optional[DeviceContext](src_ctx.copy())
+        var src_given = Optional[DeviceBuffer[DType.float32]](dx^)
+        var unused = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(output))
+        return self._labels_out[RF_INPUT](unused, ctx_given, src_given, output, rows, score)
+
+    def _labels_out[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
+        src_ctx: Optional[DeviceContext], mut src: Optional[DeviceBuffer[DType.float32]],
+        output: MutPointer[Int32, MutAnyOrigin], rows: Int, score: Bool = False,
+    ) raises -> Int:
+        """The codes (rows written) or, with `score`, the count of codes
+        equal to the true codes at `output` (read on owner 0's device)."""
+        var dout = self._finish_resident[RF_INPUT](x, src_ctx, src, rows)
         ref ctx = self.owners[0].ctx.value()
         var dlab = ctx.enqueue_create_buffer[DType.int32](rows)
+        var answer = rows
         try:
             launch_forest_argmax(ctx, dout, dlab, rows, self.outputs)
-            ctx.enqueue_copy(dst_ptr=output, src_buf=dlab)
-            ctx.synchronize()
+            if score:
+                answer = forest_count_equal(ctx, dlab, Int(output), rows)
+            else:
+                ctx.enqueue_copy(dst_ptr=output, src_buf=dlab)
+                ctx.synchronize()
         except e:
             ctx.synchronize()
             _ = dout^
@@ -594,3 +703,4 @@ struct PooledForest(Movable):
             raise e
         _ = dout^
         _ = dlab^
+        return answer

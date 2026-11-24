@@ -78,6 +78,7 @@ from spectral.impl.spectral_clustering import (
     fit_predict_connectivity_keep,
     fit_predict_dense_connectivity_keep,
     fit_predict_keep,
+    fit_predict_resident_keep,
 )
 from spectral.impl.spectral_embedding import (
     MLSpectralEmbeddingParams,
@@ -218,6 +219,56 @@ def spectral_fit_predict_dataset_host_keep(
     )
     fit_predict_keep(
         ctx, config, dataset, n_samples, n_features, labels, embedding, state, keep, trace
+    )
+    return len(embedding) // n_samples
+
+
+def spectral_fit_predict_dataset_resident_keep(
+    mut data: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+) raises -> Int:
+    """`spectral_fit_predict_dataset_host_keep` over rows already on this image's context (`data`: a slot of the
+    metrics image's resident store, a model-selection fold taken on the device; lane vdf-scope-cluster4,
+    2026-11-24). The same refusals, config, trace header and fit on the same words, so the same bits; no upload
+    of the rows."""
+    if n_samples <= 0 or n_features <= 0:
+        raise Error(
+            "spectral clustering: X must be n_samples x n_features with both"
+            " positive, got " + String(n_samples) + " x " + String(n_features)
+        )
+    if len(data) < n_samples * n_features:
+        raise Error(
+            "spectral clustering: X holds " + String(len(data))
+            + " floats, needs " + String(n_samples * n_features)
+        )
+    var config = _config(
+        n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed
+    )
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var trace = IdentityTrace()
+    trace.header(
+        "spectral clustering (dataset): n_samples=" + String(n_samples)
+        + " n_features=" + String(n_features)
+        + " n_clusters=" + String(n_clusters)
+        + " n_components=" + String(n_components)
+        + " n_init=" + String(n_init)
+        + " n_neighbors=" + String(n_neighbors)
+        + " eigen_tol=" + String(eigen_tol)
+        + " seed=" + String(seed)
+    )
+    fit_predict_resident_keep(
+        ctx, config, data, n_samples, n_features, labels, embedding, state, keep, trace
     )
     return len(embedding) // n_samples
 

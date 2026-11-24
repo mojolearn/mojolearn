@@ -54,7 +54,9 @@ from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
 from std.sys.compile import is_defined
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
-from neighbors.estimator import knn_search
+from neighbors.estimator import knn_search, knn_self_search_resident
+from core.admitted_finite_status import enqueue_finite_word
+from spectral.checks.device_io import download_u32
 from spectral.checks.device_io import download_f32, upload_f32
 from spectral.impl.spectral_predict_common import SpectralPredictionState
 from spectral.impl.sparse.coo import CooGraph
@@ -235,6 +237,68 @@ def create_connectivity_graph(
     trace.record_list_i32("spectral.knn.cols", knn.cols)
     # coo_symmetrize (:183-188), coo_sort (:190-197), coo_remove_scalar(0)
     # (:199-204)
+    var sym_raw = coo_symmetrize(ctx, knn)
+    var sym_sorted = coo_sort(sym_raw)
+    var graph = coo_remove_scalar(sym_sorted, Float32(0.0))
+    return graph^
+
+
+def create_connectivity_graph_resident(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    mut data: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    mut trace: IdentityTrace,
+) raises -> CooGraph:
+    """`create_connectivity_graph` over rows ALREADY ON THE DEVICE (`data`, on `ctx`: a model-selection fold taken
+    out of the metrics image's resident store, lane vdf-scope-cluster4, 2026-11-24). The same refusals (the
+    non-finite one from one device status word, without the index), the same search
+    (`knn_self_search_resident`: `knn_search`'s refusals, plan, norms, search and (distance, index) order on the
+    same bytes, L2SqrtExpanded), the indices read back once (the host form downloads them too), then the same
+    COO statements: the same graph, so the same bits. No upload of the rows (the host form staged and uploaded
+    them twice, index and queries)."""
+    var k_search = params.n_neighbors
+    if n_samples <= 0 or n_features <= 0:
+        raise Error("spectral: dataset must be n_samples x n_features with both positive")
+    if len(data) < n_samples * n_features:
+        raise Error("spectral: dataset length does not match n_samples x n_features")
+    if k_search < 1 or k_search > n_samples:
+        raise Error(
+            "spectral: n_neighbors=" + String(k_search)
+            + " must satisfy 1 <= n_neighbors <= n_samples (" + String(n_samples) + ")"
+        )
+    var d_status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_finite_word(ctx, data.unsafe_ptr(), n_samples * n_features, d_status, 0)
+    var h_status = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=h_status.unsafe_ptr(), src_buf=d_status)
+    ctx.synchronize()
+    var bad = h_status.unsafe_ptr().unsafe_load(0) != Int32(0)
+    _ = h_status^
+    _ = d_status^
+    if bad:
+        raise Error(
+            "spectral: dataset has a non-finite value -- refused by name (a NaN may not reach a card)"
+        )
+    var nnz = n_samples * k_search
+    var d_dist = ctx.enqueue_create_buffer[DType.float32](nnz)
+    var d_idx = ctx.enqueue_create_buffer[DType.uint32](nnz)
+    # `knn_search` records into its own fresh trace; so does this search.
+    var search_trace = IdentityTrace()
+    _ = knn_self_search_resident(ctx, search_trace, data, n_samples, n_features, k_search, d_dist, d_idx, True)
+    var idx = download_u32(ctx, d_idx, nnz)
+    _ = d_dist^
+    _ = d_idx^
+    # knn_cols = indices; knn_rows = idx / k_search; vals = 1.0f  (:161-176)
+    var rows = List[Int32](capacity=nnz)
+    var cols = List[Int32](capacity=nnz)
+    var vals = List[Float32](capacity=nnz)
+    for e in range(nnz):  # driver-loop: over the k-NN edges, the host form's COO build (same statements)
+        rows.append(Int32(e // k_search))
+        cols.append(Int32(idx[e]))
+        vals.append(Float32(1.0))
+    var knn = CooGraph(n_samples, rows^, cols^, vals^)
+    trace.record_list_i32("spectral.knn.cols", knn.cols)
     var sym_raw = coo_symmetrize(ctx, knn)
     var sym_sorted = coo_sort(sym_raw)
     var graph = coo_remove_scalar(sym_sorted, Float32(0.0))

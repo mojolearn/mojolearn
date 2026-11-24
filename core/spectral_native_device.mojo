@@ -3,12 +3,14 @@
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.spectral_native_api import (
     SpectralFitRequest, SpectralEmbeddingRequest, SpectralQueryShape,
-    SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_CAP_AFFINITY, SPECTRAL_RBF,
+    SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_CAP_AFFINITY, SPECTRAL_CAP_DEV_STORE, SPECTRAL_RBF,
 )
 from core.spectral_native_execution import (
     SpectralBackend, SpectralKernels, SpectralFitResult, SpectralEmbeddingResult,
 )
 from spectral.impl.spectral_predict_common import SpectralPredictionState, SpectralPrediction
+from core.metrics_store import metrics_store_buffer
+from spectral.estimator import spectral_fit_predict_dataset_resident_keep
 from spectral.estimator import (
     spectral_fit_predict_dataset_host_keep, spectral_fit_predict_graph_host_keep,
     spectral_fit_predict_dense_host_keep, spectral_embedding_dataset_host,
@@ -29,7 +31,9 @@ struct SpectralDeviceBackend(SpectralBackend):
 
     @staticmethod
     def capabilities() raises -> Int:
-        return SPECTRAL_CAP_DENSE | SPECTRAL_CAP_RESIDENT | SPECTRAL_CAP_AFFINITY
+        # SPECTRAL_CAP_DEV_STORE (lane vdf-scope-cluster4): fit's dataset route over a slot of the image's
+        # resident store (core/metrics_store.mojo).
+        return SPECTRAL_CAP_DENSE | SPECTRAL_CAP_RESIDENT | SPECTRAL_CAP_AFFINITY | SPECTRAL_CAP_DEV_STORE
 
     @staticmethod
     def dataset_copy_count(count: Int) -> Int:
@@ -68,6 +72,18 @@ struct SpectralDeviceBackend(SpectralBackend):
             UInt64(r.options.seed), result.labels, result.embedding, result.state,
             r.options.keep_state,
         )
+
+    @staticmethod
+    def fit_dataset_store(r: SpectralFitRequest, mut result: SpectralFitResult) raises:
+        """`fit_dataset` over the rows in slot `r.input.source` of the resident store (no upload)."""
+        var data = metrics_store_buffer(r.input.source, max(1, r.input.rows * r.input.features))
+        result.columns = spectral_fit_predict_dataset_resident_keep(
+            data, r.input.rows, r.input.features, r.options.clusters,
+            r.options.components, r.options.initializations, r.options.neighbors,
+            Float32(r.options.tolerance), UInt64(r.options.seed), result.labels,
+            result.embedding, result.state, r.options.keep_state,
+        )
+        _ = data^
 
     @staticmethod
     def fit_affinity(r: SpectralFitRequest, mut result: SpectralFitResult) raises:

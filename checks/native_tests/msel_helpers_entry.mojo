@@ -15,8 +15,8 @@ The cases are independent units and run across the native host worker pool
 (the host column publishes the host entry; the device entry's runs are
 exercised by the GPU columns' base binding, and the layout V3 stored-code
 operations on both columns by `msel_split_stratified_res`). The fold-store
-case and the layout V3 cases (10, 11, 18: each puts and frees its own
-blocks) touch the process store, whose bookkeeping is locked. Run in a fresh
+case, the layout V3 cases (10, 11, 18) and the layout V4 case (19; each
+puts and frees its own blocks) touch the process store, whose bookkeeping is locked. Run in a fresh
 process (the first check needs an unpublished table).
 """
 from core.entry_table import entry_ref_same
@@ -35,9 +35,10 @@ from core.msel_helpers_calls import (
     msel_gather_i32, msel_store_free, msel_proba_column, msel_split_table_i32,
     msel_group_fold_perm_i32, msel_store_put, msel_store_take_rows,
     msel_first_seen_res, msel_strat_fold_assign_res, msel_select_folds_res, msel_fold_ids_res,
+    msel_group_class_counts_res,
 )
 
-comptime MSEL_HELPER_CASES = 19
+comptime MSEL_HELPER_CASES = 20
 
 
 def _key() -> MselEntryKey:
@@ -434,6 +435,44 @@ def _operation(unit: Int) raises:
         _ = r1
         _ = tests
         _ = trains
+    elif unit == 19:
+        # Layout V4: the group x class table of stored codes, classes renumbered by a rank table
+        # (code 2 first seen, then 0, then 1), with an identity form and both refusals.
+        var codes: List[Int32] = [2, 0, 2, 1, 0, 2]
+        var groups: List[Int32] = [0, 0, 1, 1, 2, 2]
+        var rank: List[Int32] = [1, 2, 0]
+        var held = msel_store_put(k, _a32(codes), 24)
+        var dist: List[Int64] = [9, 9, 9, 9, 9, 9, 9, 9, 9]
+        _ = msel_group_class_counts_res(k, held, 6, 3, _a32(groups), 3, _a32(rank), 3, _a(dist))
+        # group 0: codes 2, 0 -> ranks 0, 1; group 1: codes 2, 1 -> 0, 2; group 2: codes 0, 2 -> 1, 0
+        var want: List[Int64] = [1, 1, 0, 1, 0, 1, 1, 1, 0]
+        for j in range(9):  # small-loop(nine literal cells)
+            require(dist[j] == want[j], "group_class_counts_res ranked cell " + String(j))
+        var plain: List[Int64] = [9, 9, 9, 9, 9, 9, 9, 9, 9]
+        _ = msel_group_class_counts_res(k, held, 6, 3, _a32(groups), 3, 0, 3, _a(plain))
+        var want_plain: List[Int64] = [1, 0, 1, 0, 1, 1, 1, 0, 1]
+        for j in range(9):  # small-loop(nine literal cells)
+            require(plain[j] == want_plain[j], "group_class_counts_res identity cell " + String(j))
+        var bad_groups: List[Int32] = [0, 0, 1, 1, 2, 3]
+        try:
+            _ = msel_group_class_counts_res(k, held, 6, 3, _a32(bad_groups), 3, _a32(rank), 3, _a(dist))
+            raise Error("a group out of range did not refuse")
+        except problem:
+            _refuses(problem, "a code is out of range")
+        try:
+            _ = msel_group_class_counts_res(k, held, 6, 2, _a32(groups), 3, 0, 2, _a(dist))
+            raise Error("a code out of range did not refuse")
+        except problem:
+            _refuses(problem, "a code is out of range")
+        _ = msel_store_free(k, held)
+        _ = codes
+        _ = groups
+        _ = rank
+        _ = dist
+        _ = plain
+        _ = want
+        _ = want_plain
+        _ = bad_groups
     else:
         raise Error("no model-selection helper case " + String(unit))
 

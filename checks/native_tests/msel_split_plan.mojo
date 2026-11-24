@@ -44,7 +44,7 @@ from checks.native_tests.testsuite_cases import require, fixture_i32
 
 def _route() raises -> MselSplitRoute:
     var none = entry_ref_unresolved()
-    return MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)), none, none.call, False, False)
+    return MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)), none.call, False, False)
 
 
 struct Filled(Movable):
@@ -239,8 +239,7 @@ comptime MSEL_TTS_DIR = "checks/native_tests/fixtures/msel_tts/"
 
 
 def _strat_split_rows(codes: List[Int32], k: Int, seed: UInt64) raises -> Filled:
-    var none = entry_ref_unresolved()
-    var route = MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)), none,
+    var route = MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)),
                                metrics_program_host_v1, False, False)
     var plan = msel_plan_strat_shuffle(route, MselCodes(Int(codes.unsafe_ptr()), len(codes), k), 1, 28, 13,
                                        MselSeed(seed, False))

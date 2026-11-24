@@ -89,9 +89,8 @@ comptime K = 3
 
 
 def _route() raises -> MselSplitRoute:
-    var none = entry_ref_unresolved()
     var mode = Int(GLOBAL_NUMERIC_MODE)
-    return MselSplitRoute(msel_helpers_ref(MselEntryKey(mode, 0)), base_helpers_ref(BaseEntryKey(mode, 0)),
+    return MselSplitRoute(msel_helpers_ref(MselEntryKey(mode, 0)),
                           metrics_program_host_v1, False, False)
 
 

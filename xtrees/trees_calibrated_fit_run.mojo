@@ -187,6 +187,16 @@ struct CalFitPlan(Movable):
     var scope: Int
     var pin: Int
     var took: List[UInt8]
+    # THE FOLD IN PLACE (lane vdf-meta4, 2026-11-24: a model-selection fold, `_arena_io.DeviceRows`, handed to
+    # CalibratedClassifierCV.fit): TWO INDEXES. `x` is then the fold's whole host BASE (`x_rows` rows) and the
+    # fit's `n` rows are the fold's; the units' row draws are base rows (the cv folds composed inside the
+    # fold, core/meta_fold_rows.mojo), so their targets are `draw_codes` (the fold's codes put at its base
+    # rows, `x_rows` words), and per fold `x_test_rows[f]` are its test rows in `x` (the rows the member's
+    # scores READ) while `test_rows[f]` stay fold positions (where the out-of-fold scores are PLACED and the
+    # test codes read, n-row blocks). Otherwise (`fold`): one index, `x_rows` = n, `draw_codes` = codes.
+    var x_rows: Int
+    var draw_codes: Int
+    var x_test_rows: List[Int]
 
     def __init__(out self, x: Int, n: Int, d: Int, codes: Int, k: Int, operation: Int, sigmoid: Bool,
                  ensemble: Bool):
@@ -210,6 +220,15 @@ struct CalFitPlan(Movable):
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
         self.took = List[UInt8]()
+        self.x_rows = n
+        self.draw_codes = codes
+        self.x_test_rows = List[Int]()
+
+    def in_base(mut self, x_rows: Int, draw_codes: Int):
+        """THE FOLD IN PLACE: `x` holds `x_rows` base rows, the units' targets
+        are `draw_codes` (base rows); call before the folds (`fold_in`)."""
+        self.x_rows = x_rows
+        self.draw_codes = draw_codes
 
     def resident(mut self, scope: Int, pin: Int):
         """THE RESIDENT ROWS: the scoring calls read X by row index in
@@ -234,7 +253,14 @@ struct CalFitPlan(Movable):
 
     def fold(mut self, rows: Int, count: Int):
         """The next fold's test rows (int32 numbers at `rows`, `count` of them)."""
-        self.test_rows.append(rows)
+        self.fold_in(rows, rows, count)
+
+    def fold_in(mut self, place: Int, read: Int, count: Int):
+        """THE FOLD IN PLACE: the next fold's test rows as fold positions
+        `place` (int32, where its scores go) and as rows of `x` `read` (int32,
+        what its member reads), `count` of each."""
+        self.test_rows.append(place)
+        self.x_test_rows.append(read)
         self.test_counts.append(count)
         self.fold_classes.append(List[Int32]())
         self.fold_codes.append(List[Int32]())
@@ -578,12 +604,12 @@ def cal_fold_classes_run(mut run: MemberSetRun, mut plan: CalFitPlan):
     before the RUN). Never raises."""
     var folds = plan.folds()
     var k = plan.k
-    var n = plan.n
+    var n = plan.x_rows  # the rows the draws number (THE FOLD IN PLACE: the base's)
     run.skip_lacking = True
     if folds == 0 or k <= 0:
         return
     var wide = run.index_dtype == MEMBER_I64
-    var codes = plan.codes
+    var codes = plan.draw_codes
     var seen = List[UInt8](length=folds * k, fill=UInt8(0))
     var seen_at = Int(seen.unsafe_ptr())
     var run_at = Int(UnsafePointer(to=run))
@@ -789,6 +815,7 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
         res.first.append(res.calibrators())
         res.count.append(0)
         var te = plan.test_rows[f]
+        var te_x = plan.x_test_rows[f]  # the same rows in `x` (THE FOLD IN PLACE: base rows)
         var nte = plan.test_counts[f]
         var s = List[Float64](length=nte * c, fill=0.0)
         var which = List[Int]()
@@ -797,10 +824,11 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
             # fold's test rows out of the one resident X.
             var took_at = Int(plan.took.unsafe_ptr()) + f
             which = _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()),
-                                     VoteRows(plan.x, n, d, te, nte, plan.scope, plan.pin, took_at), s)
+                                     VoteRows(plan.x, plan.x_rows, d, te_x, nte, plan.scope, plan.pin, took_at), s)
         else:
             var xte = List[Float32](length=nte * d, fill=0.0)
-            _ = xt_gather_f32(glue, plan.x, te, Int(cols.unsafe_ptr()), Int(xte.unsafe_ptr()), n, d, nte, d)
+            _ = xt_gather_f32(glue, plan.x, te_x, Int(cols.unsafe_ptr()), Int(xte.unsafe_ptr()), plan.x_rows, d, nte,
+                              d)
             which = _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()), VoteRows(Int(xte.unsafe_ptr()), nte, d),
                                      s)
             _ = len(xte)

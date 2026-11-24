@@ -104,7 +104,13 @@ struct VoteRows(Movable):
     one resident base (CalibratedClassifierCV's DeviceRows route); `scope`
     the caller's resident scope and `pin` X's pin token offered on the call
     (0: none), `took` the address of the byte written 1 when the member's
-    cache took the pin's reference (THE PIN RULE, core/member_abi.mojo)."""
+    cache took the pin's reference (THE PIN RULE, core/member_abi.mojo).
+
+    ONE REFERENCE PER CALL (lane vdf-meta4, 2026-11-24): `took_each` True
+    when the caller took one reference per MEMBER of a run over `rows` and
+    hands `took` as one byte per member (member j's call writes the byte at
+    `took + j`, `member_rows`), so two members' caches that each take the
+    pin each own a reference. False (the default): one byte, as before."""
     var x: Int
     var n: Int
     var d: Int
@@ -113,6 +119,7 @@ struct VoteRows(Movable):
     var scope: Int
     var pin: Int
     var took: Int
+    var took_each: Bool
 
     def __init__(out self, x: Int, n: Int, d: Int):
         self.x = x
@@ -123,6 +130,7 @@ struct VoteRows(Movable):
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
         self.took = 0
+        self.took_each = False
 
     def __init__(out self, base: Int, base_rows: Int, d: Int, index: Int, count: Int, scope: Int, pin: Int,
                  took: Int):
@@ -136,6 +144,17 @@ struct VoteRows(Movable):
         self.scope = scope
         self.pin = pin
         self.took = took
+        self.took_each = False
+
+    def member_rows(self, j: Int) -> VoteRows:
+        """The rows member j's call reads: these rows, and under `took_each`
+        its own answer byte (`took + j`). A few words, no allocation."""
+        if self.index == 0:
+            return VoteRows(self.x, self.n, self.d)
+        var r = VoteRows(self.x, self.base_rows, self.d, self.index, self.n, self.scope, self.pin, self.took)
+        if self.took_each and self.took != 0:
+            r.took = self.took + j
+        return r^
 
 
 def vote_rows_point(mut call: MemberCall, rows: VoteRows):
@@ -266,7 +285,7 @@ def vote_soft_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k: 
     var floats: List[Float64] = [Float64(rows.n), Float64(k)]
     var weights = List[Float64](capacity=len(members))
     for j in range(len(members)):  # driver-loop: over members
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         addrs.append(block)
@@ -296,7 +315,7 @@ def vote_codes_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k:
         var keep = List[List[Int32]]()
         var blocks = List[Int](capacity=len(members))
         for j in range(len(members)):  # driver-loop: over members (every member answers before any vote is cast)
-            var block = _member_codes(members[j], rows, keep)
+            var block = _member_codes(members[j], rows.member_rows(j), keep)
             if block == 0:
                 return j
             blocks.append(block)
@@ -315,7 +334,7 @@ def vote_regress_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
     var blocks = List[Int](capacity=len(members))
     var weights = List[Float64](capacity=len(members))
     for j in range(len(members)):  # driver-loop: over members (every member answers before the sum)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         blocks.append(block)
@@ -342,7 +361,7 @@ def vote_transform_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember]
     var keep = List[List[Float32]]()
     var blocks = List[Int](capacity=len(members))
     for j in range(len(members)):  # driver-loop: over members (every member answers before anything is placed)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         blocks.append(block)
@@ -382,7 +401,7 @@ def ovr_assemble_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
     var ints: List[Int] = [n, k, finish]
     var floats: List[Float64] = [Float64(n), Float64(k), Float64(finish)]
     for j in range(len(members)):  # driver-loop: over members (every member answers before anything is written)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         addrs.append(block)
@@ -405,7 +424,7 @@ def multioutput_codes_run(rows: VoteRows, members: List[VoteMember], dst: List[I
     native member that refuses is returned by index (outputs before it are
     final; the caller asks its door and runs again from it)."""
     for j in range(start, len(members)):  # driver-loop: over members (outputs)
-        if members[j].native and not _member_codes_into(members[j], rows, dst[j]):
+        if members[j].native and not _member_codes_into(members[j], rows.member_rows(j), dst[j]):
             return j
     return VOTE_ALL_ANSWERED
 
@@ -421,7 +440,7 @@ def multioutput_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMemb
     touched (blocks before it are final)."""
     var keep = List[List[Float32]]()
     for j in range(start, len(members)):  # driver-loop: over members (outputs)
-        var block = _member_f32(members[j], rows, keep)
+        var block = _member_f32(members[j], rows.member_rows(j), keep)
         if block == 0:
             return j
         _ = xt_accumulate_cols(glue, accs[j], block, members[j].class_cols, rows.n, ks[j], members[j].cols, 1.0)
@@ -569,7 +588,7 @@ def stack_place_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], k
         at += widths[j]
     for j in range(start, len(members)):  # driver-loop: over members
         var m = members[j]
-        var block = _member_f32(m, rows, keep)
+        var block = _member_f32(m, rows.member_rows(j), keep)
         if block == 0:
             return j
         var n = rows.n

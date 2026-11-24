@@ -6,10 +6,14 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from gemm.contract import GEMM_NUMERICAL_PROFILE_VERSION, LOWBIT_PROFILE_VERSION, INT15_PROFILE_VERSION
 from gemm.linalg_native import gemm_native, gemm_bf16_native, gemm_int8_native, quantize_int8_native, dequantize_int8_native, gemm_int15_native, quantize_int15_native, dequantize_int15_native, to_bf16_native, from_bf16_native, from_f16_native
 from gemm.linalg_fused_run import gemm_fused_native
+from gemm.linalg_dev_arrays import (
+    gemm_dev_native, to_bf16_dev_native, from_bf16_dev_native, quantize_int8_dev_native, dequantize_int8_dev_native,
+    gemm_bf16_dev_native, gemm_int8_dev_native,
+)
 from core.shared_slot import SharedSlot
 
 comptime LINALG_NATIVE_ABI_NAME = "mojolearn.linalg.v1"
-comptime LINALG_NATIVE_OPERATION_COUNT = 16
+comptime LINALG_NATIVE_OPERATION_COUNT = 23
 
 
 def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
@@ -80,6 +84,28 @@ def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
         if len(a) != 5:
             raise Error("linalg native ABI: invalid gemm_fused address count")
         return gemm_fused_native(a, p)
+    if op == 16:
+        # lane vdf-linalg4 (2026-11-24): `matmul` on training device arrays; the three words are pool handles
+        # (gemm/linalg_dev_arrays.mojo), read and written in place.
+        if len(a) != 3:
+            raise Error("linalg native ABI: invalid gemm_dev handle count")
+        return gemm_dev_native(a[0], a[1], a[2], p)
+    if op == 17 or op == 18:
+        if len(a) != 2:
+            raise Error("linalg native ABI: invalid bf16 conversion handle count")
+        return to_bf16_dev_native(a[0], a[1], p) if op == 17 else from_bf16_dev_native(a[0], a[1], p)
+    if op == 19 or op == 20:
+        if len(a) != 3:
+            raise Error("linalg native ABI: invalid int8 conversion handle count")
+        return quantize_int8_dev_native(a[0], a[1], a[2], p) if op == 19 else dequantize_int8_dev_native(a[0], a[1], a[2], p)
+    if op == 21:
+        if len(a) != 3:
+            raise Error("linalg native ABI: invalid gemm_bf16_dev handle count")
+        return gemm_bf16_dev_native(a[0], a[1], a[2], p)
+    if op == 22:
+        if len(a) != 5:
+            raise Error("linalg native ABI: invalid gemm_int8_dev handle count")
+        return gemm_int8_dev_native(a[0], a[1], a[2], a[3], a[4], p)
     raise Error("linalg native ABI: unknown operation")
 
 

@@ -94,6 +94,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     train_forest_regression_device,
     upload_dataset,
     upload_dataset_labels_f32,
+    upload_dataset_codes_i32,
     upload_dataset_labels_quantized,
     upload_dataset_labels_quantized_weighted,
 )
@@ -305,8 +306,15 @@ def fit_classification_device(
     weights_addr: Int = 0,
     min_weight_fraction: Float64 = 0.0,
     x_dev_rows: Int = 0,
+    codes_addr: Int = 0,
 ) raises -> Forest:
     """`randomforest.cuh:155-195` again, with the split search on the GPU.
+
+    `codes_addr` (lane vdf-scope-trees3; 0: none): `n_rows` int32 class
+    codes borrowed through this call stand in for `labels`; they cross the
+    bus as they are and their range is checked on the device
+    (`upload_dataset_codes_i32`): the class ids the float path makes from
+    the same codes, so the same forest.
 
     lane sk-kernels: `weights_addr` (0: none) is scikit-learn's per-row
     weight (sample_weight times the class_weight row), `n_rows` Float32
@@ -359,10 +367,17 @@ def fit_classification_device(
     # now split into `upload_dataset` and
     # `train_classification_device_resident`, with the old name kept as a
     # wrapper for single-tree callers.
-    var device_dataset = upload_dataset_labels_f32(
-        ctx, x_col_major, labels, n_rows, n_cols, n_classes, x_addr=x_addr,
-        x_row_major=x_row_major, x_dev_rows=x_dev_rows,
-    )
+    var device_dataset: DeviceDataset
+    if codes_addr != 0:
+        device_dataset = upload_dataset_codes_i32(
+            ctx, x_col_major, codes_addr, n_rows, n_cols, n_classes, x_addr=x_addr,
+            x_row_major=x_row_major, x_dev_rows=x_dev_rows,
+        )
+    else:
+        device_dataset = upload_dataset_labels_f32(
+            ctx, x_col_major, labels, n_rows, n_cols, n_classes, x_addr=x_addr,
+            x_row_major=x_row_major, x_dev_rows=x_dev_rows,
+        )
 
     # The count is resolved (and a bad one refused BY NAME) once for the
     # forest; the rows themselves are drawn ON THE DEVICE -- deviation 200

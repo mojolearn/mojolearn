@@ -226,15 +226,20 @@ def train_mlp_sessions_dev(ctx: DeviceContext, y_h: Int, input_handles: List[Int
     var total = 0
     var xs = List[DeviceBuffer[DType.float32]]()
     for s in range(len(rows)):  # driver-loop: over the caller's sessions (handles, not data)
-        if rows[s] < 1:
-            raise Error("ValueError: MLP sessions require at least one (rows, width) input")
+        if rows[s] < 0:
+            raise Error("neural MLP sessions: invalid session rows/address")
         total += rows[s]
-        xs.append(train_dev_view(ctx, input_handles[s], rows[s] * in_width, "session input"))
+        if rows[s] > 0:
+            xs.append(train_dev_view(ctx, input_handles[s], rows[s] * in_width, "session input"))
+        else:
+            # An empty session (the host entry accepts it): a one-float placeholder the forward never reads.
+            xs.append(ctx.enqueue_create_buffer[DType.float32](1))
     var dw1 = train_dev_view(ctx, w1_h, hidden * in_width, "weight1")
     var db1 = train_dev_view(ctx, b1_h, hidden, "bias1")
     var dw2 = train_dev_view(ctx, w2_h, out_width * hidden, "weight2")
     var db2 = train_dev_view(ctx, b2_h, out_width, "bias2")
-    var y = train_dev_view(ctx, y_h, total * out_width, "logits")
+    # All sessions empty: the door hands a one-float array (no logits rows); the body returns 0 after the weights.
+    var y = train_dev_view(ctx, y_h, max(1, total * out_width), "logits")
     var count = nn_mlp_sessions_resident(ctx, xs, rows, dw1, db1, dw2, db2, y, in_width, hidden, out_width)
     _ = xs^
     _ = dw1^

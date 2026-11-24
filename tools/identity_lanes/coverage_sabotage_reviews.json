@@ -53,7 +53,7 @@
    "product_check": "bindings/prep_encode_native_door.mojo, the user-cv admission of TargetEncoder (the loop over the folds after the row -> fold table is filled): every fold's training list must be exactly the rows outside its test fold, checked by its size and by the core check_indices_i64 and count_fold_hits_i64; any other list is refused by name.",
    "why_fault_reaches_check": "The patch stores fold labels 0 and 1 exchanged in assign_fold_i64 (core/hotpath_impl_rows.mojo) while count_fold_hits_i64 reads the table as written. For the valid partitions x-prep-user-objects passes, fold 0's table entries are then fold 1's test rows: either the fold sizes no longer match the training list sizes, or fold 0's training list (which holds fold 1's test rows) hits fold 0; both refuse with this line, and the clean build fits.",
    "error_match": "NotImplementedError: (NotImplementedError: )?mojolearn: TargetEncoder cv folds whose training rows are not every row outside the test fold are not implemented",
-   "patch_sha256": "745a622eaf224b6ca89323cfe04612bb29e80a8af1cf8bef6a7c57604fbac5ed"
+   "patch_sha256": "38dcb9817dc8fceb77b6c171446a77457cece41bac4f3ddf357404139ba84b08"
   }
  },
  "coverage-sequence-opt_public": {

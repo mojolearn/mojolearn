@@ -272,7 +272,7 @@ def _xl_int_spec(folds: Int, context: PythonObject, mut handle: Int) raises -> P
     spec.kind = MSEL_SPEC_KFOLD
     spec.k = folds
     spec.int_cv = True
-    var pin = msel_split_route(native, False, False)
+    var pin = msel_split_route(native, False)
     spec.route = pin.route
     return _xl_spec_pins(spec^, pin, context, handle)
 

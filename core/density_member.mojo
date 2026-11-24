@@ -100,8 +100,9 @@ from neighbors.neighbors_kde_run import (
 )
 from core.dbscan_native_api import (
     DBSCANNativeDriver, DBSCANFitWorkspace, DBSCANGatherRequest, DBSCANReferenceRequest, DBSCANQueryRequest,
-    DBSCANResidentQuery, DBSCAN_CAP_RESIDENT, dbscan_empty_labels,
+    DBSCANResidentQuery, DBSCAN_CAP_RESIDENT, DBSCAN_CAP_DEV_STORE, dbscan_empty_labels,
 )
+from cluster.dbscan_door_run import DBSCAN_METRIC_PRECOMPUTED
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
@@ -121,6 +122,9 @@ comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
 comptime _EST = "DBSCAN"
 comptime _KIND_DBSCAN = 1
+# The scope cache's family prefix of the estimators image's store (core/estimators_store.mojo
+# ESTIMATORS_STORE_PREFIX; not imported: that module is GPU-only), shared by KernelDensity and DBSCAN.
+comptime _KDE_PREFIX = "estimators"
 comptime _KIND_KDE = 0
 comptime _BLOCK_TRAIN = MEMBER_BLOCK_FAMILY + 4
 comptime _BLOCK_WEIGHTS = MEMBER_BLOCK_FAMILY + 5
@@ -351,43 +355,85 @@ def _labels_out(call: _Call, rows: Int) raises:
         raise Error("ValueError: the label buffer holds " + String(rows) + " x 1 values")
 
 
+def _dbscan_store_ok(slot: _Slot, call: _Call) -> Bool:
+    """THE RESIDENT-STORE ROUTE of a DBSCAN call (lane vdf-scope-cluster4): the GPU image with its store
+    (`DBSCAN_CAP_DEV_STORE`, the estimators image's transport entry in `route.second`), the caller's scope with
+    X's pin, and a metric other than 'precomputed' (a fold of a precomputed matrix is not square: the gathered
+    form keeps the door's refusal)."""
+    return ((call[].route.flags & DBSCAN_CAP_DEV_STORE) != 0 and call[].route.has_second
+        and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0
+        and slot[].metric != DBSCAN_METRIC_PRECOMPUTED)
+
+
+def _dbscan_rows(slot: _Slot, call: _Call, fit: Bool) raises -> MemberScopeRows:
+    """The X of a DBSCAN fit or predict: the whole host view without a row index; with one (MEMBER_CAN_ROW_INDEX,
+    lane vdf-scope-cluster4) a slot taken on the device out of the scope's one copy of X on the resident-store
+    route (fit only), else the index's rows gathered on the host cores."""
+    if call[].row_index.rows == 0:
+        _whole_x(call)
+        return MemberScopeRows(call[].x.data, call[].x.rows, call[].x.cols, False, List[Float32]())
+    if call[].column_index.rows > 0 or call[].x.home == MEMBER_HOME_DEVICE:
+        raise Error("TypeError: a DBSCAN member reads X as a dense host float32 view, no column index")
+    var store_ok = fit and _dbscan_store_ok(slot, call)
+    return member_scope_rows(call[], _KDE_PREFIX, store_ok, _EST)
+
+
 def _fit(slot: _Slot, call: _Call) raises:
-    _whole_x(call)
+    var x = _dbscan_rows(slot, call, True)
+    try:
+        _fit_rows(slot, call, x)
+    finally:
+        member_scope_rows_done(call[], x)
+
+
+def _fit_rows(slot: _Slot, call: _Call, x: MemberScopeRows) raises:
+    """The fit over `x`: host rows (the caller's whole X or a gathered fold) through DBSCAN_FIT /
+    DBSCAN_CORE_GATHER, or a resident slot through their store forms (the same kernels on the same words: the
+    same labels, core mask and core arrays)."""
     var output = call[].fit_output
-    var rows = call[].x.rows
-    var d = call[].x.cols
+    var rows = x.rows
+    var d = x.cols
     if output == MEMBER_OP_PREDICT:
         _labels_out(call, rows)
     elif output != 0:
         member_unsupported(_EST, output)
     # metric='precomputed': the door's square and sign refusals, before the
     # weights as `_dbscan_fit` makes them (the caller admitted X finite, so
-    # the finite scan is not repeated).
-    dbscan_check_x(call[].x.data, rows, d, True, slot[].metric)
+    # the finite scan is not repeated). A resident slot is never precomputed.
+    if not x.resident:
+        dbscan_check_x(x.source, rows, d, True, slot[].metric)
     var weights = 0
+    var weight_rows = List[Float32]()
     if call[].weights.rows > 0:
         if not call[].weights.dense_host(MEMBER_F32):
             raise Error("TypeError: a DBSCAN member reads sample_weight as a dense host float32 view")
-        if call[].weights.rows * call[].weights.cols != rows:
+        if call[].weights.rows * call[].weights.cols != call[].x.rows:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
         weights = call[].weights.data
+        if call[].row_index.rows > 0:
+            # The fold's weights: the index's rows of the caller's vector, gathered on the host cores.
+            weight_rows = List[Float32](unsafe_uninit_length=max(rows, 1))
+            _kde_gather(call, call[].weights.data, 1, Int(weight_rows.unsafe_ptr()), _EST)
+            weights = Int(weight_rows.unsafe_ptr())
     _release_resident(slot, call)
     slot[].clear()
     slot[].labels = List[Int32](length=rows, fill=0)
     var workspace = DBSCANFitWorkspace(rows)
     var driver = _driver(call)
     var labels_address = Int(slot[].labels.unsafe_ptr())
-    var request = dbscan_fit_request(call[].x.data, labels_address, weights, workspace.address(), rows, d,
+    var request = dbscan_fit_request(x.source, labels_address, weights, workspace.address(), rows, d,
         slot[].min_samples, slot[].budget, slot[].cap, slot[].method, slot[].metric, slot[].eps)
-    var n_iter = driver.fit(request)
+    var n_iter = driver.fit_store(request) if x.resident else driver.fit(request)
+    _ = weight_rows^
     # The class's own count and gather passes, in its order.
-    var m = driver.core_count(dbscan_core_request(call[].x.data, labels_address, workspace.address(), rows, d))
+    var m = driver.core_count(dbscan_core_request(x.source, labels_address, workspace.address(), rows, d))
     slot[].indices = List[Int32](length=m, fill=0)
     slot[].components = List[Float32](length=m * d, fill=0.0)
     slot[].core_labels = List[Int32](length=m, fill=0)
-    _ = driver.core_gather(DBSCANGatherRequest(call[].x.data, labels_address, workspace.address(),
+    var gather = DBSCANGatherRequest(x.source, labels_address, workspace.address(),
         Int(slot[].indices.unsafe_ptr()), Int(slot[].components.unsafe_ptr()), Int(slot[].core_labels.unsafe_ptr()),
-        rows, d, m))
+        rows, d, m)
+    _ = driver.core_gather_store(gather) if x.resident else driver.core_gather(gather)
     _ = workspace^
     var scalars: List[Float64] = [Float64(n_iter), Float64(d)]
     slot[].scalars = scalars^
@@ -406,11 +452,20 @@ def _predict(slot: _Slot, call: _Call) raises:
         raise Error("mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
                     + "DBSCAN(prediction_data=True), which keeps the core samples this "
                     + "rule needs (DEVIATION 2740)")
-    _whole_x(call)
-    var queries = call[].x.rows
+    var x = _dbscan_rows(slot, call, False)
+    try:
+        _predict_rows(slot, call, x)
+    finally:
+        member_scope_rows_done(call[], x)
+
+
+def _predict_rows(slot: _Slot, call: _Call, x: MemberScopeRows) raises:
+    """The predict over host query rows `x` (the caller's whole X or a gathered fold: the labeled-reference
+    kernels read host queries)."""
+    var queries = x.rows
     var d = slot[].features
-    if call[].x.cols != d:
-        raise Error("ValueError: DBSCAN.predict: X has " + String(call[].x.cols) + " features, the fit had "
+    if x.cols != d:
+        raise Error("ValueError: DBSCAN.predict: X has " + String(x.cols) + " features, the fit had "
             + String(d))
     _labels_out(call, queries)
     var m = len(slot[].core_labels)
@@ -422,13 +477,13 @@ def _predict(slot: _Slot, call: _Call) raises:
         slot[].handle = driver.prepare(DBSCANReferenceRequest(Int(slot[].components.unsafe_ptr()),
             Int(slot[].indices.unsafe_ptr()), Int(slot[].core_labels.unsafe_ptr()), m, d, slot[].metric))
     if slot[].handle >= 0:
-        _ = driver.resident(DBSCANResidentQuery(call[].x.data, call[].dst.data, slot[].handle, queries, d,
+        _ = driver.resident(DBSCANResidentQuery(x.source, call[].dst.data, slot[].handle, queries, d,
             slot[].metric, True, slot[].eps))
         return
     # The class's own scratch for the unused chosen reference (one per query).
     var chosen = List[Int32](length=queries, fill=0)
     _ = driver.query(DBSCANQueryRequest(Int(slot[].components.unsafe_ptr()), Int(slot[].indices.unsafe_ptr()),
-        Int(slot[].core_labels.unsafe_ptr()), call[].x.data, call[].dst.data, Int(chosen.unsafe_ptr()), m,
+        Int(slot[].core_labels.unsafe_ptr()), x.source, call[].dst.data, Int(chosen.unsafe_ptr()), m,
         queries, d, slot[].metric, True, slot[].eps))
     _ = chosen^
 
@@ -465,9 +520,6 @@ def _kde_fit(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
 
 
-comptime _KDE_PREFIX = "estimators"
-
-
 def _kde_weights_check(w: _F32P, rows: Int) raises:
     if not host_all_finite_f32(w, rows):
         raise Error("Input sample_weight contains NaN or infinity.")
@@ -476,7 +528,7 @@ def _kde_weights_check(w: _F32P, rows: Int) raises:
         raise Error("Sample weights must contain at least one non-zero number.")
 
 
-def _kde_gather(call: _Call, base: Int, width: Int, dst: Int) raises:
+def _kde_gather(call: _Call, base: Int, width: Int, dst: Int, est: String = "KernelDensity") raises:
     """Rows `call.row_index` of the host base at `base` (`call.x.rows` rows of `width` words) into `dst`, in row
     tasks across the host's cores; an index outside X is refused."""
     var index = call[].row_index
@@ -486,19 +538,18 @@ def _kde_gather(call: _Call, base: Int, width: Int, dst: Int) raises:
     else:
         status = admitted_gather_rows_f32[DType.int64](base, call[].x.rows, width, index.data, index.rows, dst)
     if status == ARG_OUT_OF_RANGE:
-        raise Error("IndexError: a KernelDensity member's row index holds a row outside X's "
+        raise Error("IndexError: a " + est + " member's row index holds a row outside X's "
             + String(call[].x.rows) + " rows")
 
 
 def _kde_store_ok(slot: _Slot, call: _Call) -> Bool:
     """THE RESIDENT-STORE ROUTE of a KernelDensity call (lane vdf-scope-cluster2b): the GPU image with its store
-    (`KDE_CAP_DEV_STORE`, the transport entry in `route.second`), a resident image (`KDE_CAP_RESIDENT`), the
-    caller's scope with X's pin, and a metric without a host rule on the rows (cosine and sqeuclidean keep the
-    host form, kde/resident_fit.mojo `kde_host_rules_needed`)."""
+    (`KDE_CAP_DEV_STORE`, the transport entry in `route.second`), a resident image (`KDE_CAP_RESIDENT`) and the
+    caller's scope with X's pin. Every metric: the cosine zero-row rule and the sqeuclidean bound run on the
+    device over the slot (kde/resident_fit.mojo `kde_device_row_rules`, lane vdf-scope-cluster4)."""
     var flags = call[].route.flags
     return ((flags & KDE_CAP_DEV_STORE) != 0 and (flags & KDE_CAP_RESIDENT) != 0 and call[].route.has_second
-        and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0
-        and slot[].kde_metric != "cosine" and slot[].kde_metric != "sqeuclidean")
+        and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0)
 
 
 def _kde_fit_indexed(slot: _Slot, call: _Call) raises:
@@ -788,12 +839,18 @@ def _density_member(operation: Int, address: Int) raises -> Int:
         # No MEMBER_CAN_TEST_ROWS: X is admitted finite by the caller (the
         # DBSCAN and KDE entries do not test it; only KDE weights are checked here).
         var dbscan = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+        # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster4): a DBSCAN call reads a host row index (its fold gathered on
+        # the host cores); MEMBER_CAN_SCOPE on the GPU image's route with the estimators store, where a search's
+        # fit folds are taken on the device out of one copy of X (`_dbscan_store_ok`).
+        dbscan |= MEMBER_CAN_ROW_INDEX
+        if (call[].route.flags & DBSCAN_CAP_DEV_STORE) != 0 and call[].route.has_second:
+            dbscan |= MEMBER_CAN_SCOPE
         # MEMBER_BORROWS_FIT: a fitted KernelDensity state reads the caller's
         # X and weights until an export (or MEMBER_EXPORT_OWN) copied them.
         # DBSCAN owns its state (its core rows are gathered at fit).
         # MEMBER_CAN_ROW_INDEX (lane vdf-scope-cluster2b): a KernelDensity call reads a host row index (its fit
         # then owns the gathered rows); MEMBER_CAN_SCOPE only on the GPU image's route with its resident store,
-        # where a search's folds are taken on the device out of one copy of X. DBSCAN keeps gathered folds.
+        # where a search's folds are taken on the device out of one copy of X.
         var kde = (MEMBER_CAN_FIT | MEMBER_CAN_SCORE_SAMPLES | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
             | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT | MEMBER_CAN_ROW_INDEX)
         if ((call[].route.flags & KDE_CAP_DEV_STORE) != 0 and (call[].route.flags & KDE_CAP_RESIDENT) != 0

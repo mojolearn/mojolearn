@@ -532,6 +532,72 @@ def device_bincount2_i32(
     return ok
 
 
+def _group_class_kernel(codes: _I32, groups: _I32, rank: _I32, n_: Int32, kk: Int32, has_rank: Int32, nc: Int32,
+                        m: Int32, cnt: _I32, status: _I32):
+    """cnt[g * nc + r] += 1, g = groups[i], r = rank[codes[i]] (codes[i]
+    when has_rank is 0); r >= nc is dropped (an absent class's column); a
+    code outside [0, kk) or a group outside [0, m) sets status[0]. Int32
+    atomics: exact in any order."""
+    var i = _tid()
+    if i >= Int(n_):
+        return
+    var c = Int(codes.unsafe_load(i))
+    var g = Int(groups.unsafe_load(i))
+    if c < 0 or c >= Int(kk) or g < 0 or g >= Int(m):
+        status.unsafe_store(0, Int32(1))
+        return
+    var r = c
+    if has_rank != 0:
+        r = Int(rank.unsafe_load(c))
+    if r < 0 or r >= Int(nc):
+        return
+    _ = Atomic[Int32].fetch_add(cnt + (g * Int(nc) + r), Int32(1))
+
+
+def device_group_class_counts_on(
+    ctx: DeviceContext, codes: Int, n: Int, kk: Int, groups_addr: Int, m: Int, rank_addr: Int, nc: Int,
+    counts_addr: Int,
+) raises -> Bool:
+    """StratifiedGroupKFold's group x class table over the n int32 codes at
+    DEVICE address `codes` (a stored code block of the model-selection
+    store, whose context `ctx` is; lane vdf-scope-split2, 2026-11-24): the
+    n int32 group codes and the k-word rank table (host; `rank_addr` null:
+    the codes are already in first-seen order) go up, the m x nc int64
+    counts[g * nc + rank[code]] come down. `n >= 1`, `m * nc >= 1`. False
+    (counts untouched) when a code or a group is out of range."""
+    var cells = m * nc
+    var d_cnt = ctx.enqueue_create_buffer[DType.int32](cells)
+    var d_base = ctx.enqueue_create_buffer[DType.int64](cells)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, d_cnt, Int32(0))
+    enqueue_fill(ctx, d_base, Int64(0))
+    enqueue_fill(ctx, d_status, Int32(0))
+    var d_groups = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_buf=d_groups, src_ptr=_I32(unsafe_from_address=groups_addr))
+    var d_rank = ctx.enqueue_create_buffer[DType.int32](kk if rank_addr != 0 else 1)
+    if rank_addr != 0:
+        ctx.enqueue_copy(dst_buf=d_rank, src_ptr=_I32(unsafe_from_address=rank_addr))
+    ctx.enqueue_function[_group_class_kernel](
+        _I32(unsafe_from_address=codes), d_groups.unsafe_ptr(), d_rank.unsafe_ptr(), Int32(n), Int32(kk),
+        Int32(1 if rank_addr != 0 else 0), Int32(nc), Int32(m), d_cnt.unsafe_ptr(), d_status.unsafe_ptr(),
+        grid_dim=_blocks(n), block_dim=HPD_TPB,
+    )
+    var ok = _read_status(ctx, d_status, 0) == 0
+    if ok:
+        ctx.enqueue_function[_widen_counts_kernel](
+            d_cnt.unsafe_ptr(), Int32(cells), d_base.unsafe_ptr(), Int32(0),
+            grid_dim=_blocks(cells), block_dim=HPD_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=counts_addr), src_buf=d_base)
+    ctx.synchronize()
+    _ = d_groups^
+    _ = d_rank^
+    _ = d_cnt^
+    _ = d_base^
+    _ = d_status^
+    return ok
+
+
 def _count_u8_kernel(mask: _U8, n_: Int32, total: _I32):
     """total[0] += the nonzero bytes this thread's grid-stride walk meets."""
     var i = _tid()

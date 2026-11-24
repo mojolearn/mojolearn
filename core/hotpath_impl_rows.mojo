@@ -167,6 +167,89 @@ def bincount2_i32(
     return 0
 
 
+#: The most int64 words the per-task tables of `group_class_counts_i32`
+#: take (tasks x groups x classes): past it the call runs fewer tasks.
+comptime _GCC_TABLE_WORDS = 1 << 24
+
+
+def group_class_counts_i32(
+    codes_addr: Int, count: Int, kk: Int, groups_addr: Int, m: Int, rank_addr: Int, nc: Int, counts_addr: Int,
+) raises -> Int:
+    """StratifiedGroupKFold's group x class table in first-seen class order
+    (lane vdf-scope-split2, 2026-11-24; the host column of the stored-code
+    form MH_GROUP_CLASS_COUNTS_RES): int64 counts[g * nc + r] over the n
+    rows, g = groups[i], r = rank[codes[i]] (the k int32 words at
+    `rank_addr`; a null address: r = codes[i]). A row whose r >= nc is
+    dropped (an absent class's column, empty by construction). A code
+    outside [0, k) or a group outside [0, m) raises before any count is
+    written, with `bincount2_i32`'s words. Was `bincount2_i32` over the raw
+    codes and a host permutation of its class columns.
+
+    The rows run in tasks across the host's cores, each counting into its
+    own table; the tables are added in task order (integers: the same table
+    in any order, the device column's bit for bit)."""
+    if count < 0 or kk < 1 or m < 1 or nc < 1:
+        raise Error("bincount2_i32: 0 <= n, 1 <= ka, kb")
+    var cells = m * nc
+    var cp = _ptr[DType.int64](counts_addr)
+    if count == 0:
+        for j in range(cells):  # small-loop(groups x classes: zero rows, the empty table)
+            cp.unsafe_store(j, 0)
+        return 0
+    var ap = _ptr[DType.int32](codes_addr)
+    var gp = _ptr[DType.int32](groups_addr)
+    var has_rank = rank_addr != 0
+    var rp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=rank_addr if has_rank else codes_addr)
+    var tasks = host_predict_task_count_work(count, count)
+    tasks = max(1, min(tasks, _GCC_TABLE_WORDS // cells))
+    var chunk = host_predict_chunk(count, tasks)
+    var tables = List[Int64](length=tasks * cells, fill=0)
+    var bad = List[Int](length=tasks, fill=0)
+    var tp = tables.unsafe_ptr()
+    var bp = bad.unsafe_ptr()
+
+    def _count(t: Int) {imm ap, imm gp, imm rp, imm has_rank, imm tp, imm bp, imm count, imm kk, imm m, imm nc,
+                        imm cells, imm chunk}:
+        var base = t * cells
+        for i in range(t * chunk, min((t + 1) * chunk, count)):  # parallel: this task's rows
+            var c = Int(ap.unsafe_load(i))
+            var g = Int(gp.unsafe_load(i))
+            if c < 0 or c >= kk or g < 0 or g >= m:
+                bp[t] = 1
+                return
+            var r = Int(rp.unsafe_load(c)) if has_rank else c
+            comptime if HOTPATH_SABOTAGE:
+                r = (r + 1) % nc
+            if r < 0 or r >= nc:
+                continue
+            tp[base + g * nc + r] += 1
+
+    if tasks <= 1:
+        _count(0)
+    else:
+        host_parallelize(_count, tasks)
+    for t in range(tasks):  # driver-loop: over the tasks' refusal flags
+        if bad[t] != 0:
+            raise Error("bincount2_i32: a code is out of range")
+    var merge_tasks = host_predict_task_count_work(cells, cells * tasks)
+    var merge_chunk = host_predict_chunk(cells, merge_tasks)
+
+    def _merge(u: Int) {imm cp, imm tp, imm cells, imm tasks, imm merge_chunk}:
+        for j in range(u * merge_chunk, min((u + 1) * merge_chunk, cells)):  # parallel: this task's cells
+            var acc = Int64(0)
+            for t in range(tasks):  # small-loop(host tasks: the task tables in order)
+                acc += tp[t * cells + j]
+            cp.unsafe_store(j, acc)
+
+    if merge_tasks <= 1:
+        _merge(0)
+    else:
+        host_parallelize(_merge, merge_tasks)
+    _ = tables  # the pointers above are not owners
+    _ = bad
+    return 0
+
+
 def assign_fold_i64(idx_addr: Int, count: Int, rows: Int, f: Int32, folds_addr: Int) raises -> Int:
     """folds[idx[i]] = fold for the m int64 test indices of one split.
     Returns 0, 1 when an index is outside [0, n), 2 on an overlap."""

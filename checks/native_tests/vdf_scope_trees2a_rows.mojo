@@ -159,10 +159,10 @@ def _same_resident[RF_INPUT: Bool]() raises:
                                                                     Int(va.unsafe_ptr()), n, _D, outputs)
         _ = forest_predict_resident_labels_gpu_native[RF_INPUT](handle, Int(xg.unsafe_ptr()),
                                                                 Int(la.unsafe_ptr()), n, _D, outputs)
-        var wrote = forest_resident_rows_native[RF_INPUT](store[], ctx, False, handle, sid,
+        var wrote = forest_resident_rows_native[RF_INPUT](store[], ctx, 0, handle, sid,
                                                           Int(fold.unsafe_ptr()), Int(vb.unsafe_ptr()), n, _D, outputs)
         _require(wrote == n, "device-rows resident vote: rows written")
-        wrote = forest_resident_rows_native[RF_INPUT](store[], ctx, True, handle, sid,
+        wrote = forest_resident_rows_native[RF_INPUT](store[], ctx, 1, handle, sid,
                                                       Int(fold.unsafe_ptr()), Int(lb.unsafe_ptr()), n, _D, outputs)
         _require(wrote == n, "device-rows resident labels: rows written")
     finally:

@@ -28,6 +28,7 @@ from core.msel_entry_table import (
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
     MH_STORE_PUT, MH_STORE_TAKE_ROWS,
     MH_FIRST_SEEN_RES, MH_STRAT_FOLD_ASSIGN_RES, MH_SELECT_FOLDS_RES, MH_FOLD_IDS_RES,
+    MH_GROUP_CLASS_COUNTS_RES,
 )
 from core.msel_helpers_host import (
     select_folds_i64_host_run, msel_proba_column_check, msel_split_table_check,
@@ -38,12 +39,15 @@ from core.hotpath_device import (
     device_kfold_ids, device_mask_from_indices_u8, device_select_fold_i64, device_select_folds_i64,
     device_select_mask_u8_i64, device_strat_fold_assign_i32, device_stratified_fold_ids,
     device_first_seen_on, device_strat_fold_assign_res, device_select_folds_on, device_stratified_fold_ids_on,
+    device_group_class_counts_on,
 )
 from core.hotpath_impl import (
     arange_i64, count_mask_u8, fold_ids, leave_range_i64, mask_from_indices_u8,
     select_fold_i64, select_mask_u8_i64,
 )
-from core.hotpath_impl_rows import bincount_i64, first_seen_i32, first_seen_rank_i32, strat_fold_assign_i32
+from core.hotpath_impl_rows import (
+    bincount_i64, first_seen_i32, first_seen_rank_i32, group_class_counts_i32, strat_fold_assign_i32,
+)
 from core.label_device_steps import LABELS_DEVICE_BASE, LABELS_DEVICE_ELEM, LABELS_DEVICE_CONTEXT
 from core.labels_native_api import LabelsGatherRequest
 from core.labels_native_device import LabelsDeviceKernels
@@ -417,6 +421,28 @@ def msel_fold_ids_res_device_run(codes_id: Int, rows: Int, kk: Int, splits: Int,
     return folds_id
 
 
+def msel_group_class_counts_res_device_run(codes_id: Int, rows: Int, kk: Int, m: Int, nc: Int, ga: Int, ra: Int,
+                                           da: Int) raises -> Int:
+    """MH_GROUP_CLASS_COUNTS_RES on the device (layout V4, lane
+    vdf-scope-split2, 2026-11-24): the group x class table counted on the
+    stored codes, classes ranked as they are counted; the n group codes and
+    the rank table go up, the m x n_classes table comes down."""
+    _res_dims(rows, kk)
+    if m < 1 or nc < 1 or ga == 0 or da == 0:
+        raise Error("bincount2_i32: 0 <= n, 1 <= ka, kb and non-null tables")
+    var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
+    comptime if MSEL_HPDEV_FOLDS:
+        if rows <= HPD_MAX_N and kk <= HPD_MAX_N and nc <= HPD_MAX_N // m:
+            var codes = msel_store()[].address(codes_id, 4 * rows)
+            if device_group_class_counts_on(ctx, codes, rows, kk, ga, m, ra, nc, da):
+                return 0
+            # A code or a group out of range: the host run below raises its own words.
+    var held = _res_words(ctx, codes_id, rows)  # cpu-route: no device twin for this call (build, bound or refusal words)
+    _ = group_class_counts_i32(Int(held.unsafe_ptr()), rows, kk, ga, m, ra, nc, da)
+    _ = held  # the address above is not an owner
+    return 0
+
+
 def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     """One model-selection helper by its `MH_*` code over admitted spans."""
     if op == MH_ARANGE_I64:
@@ -473,6 +499,10 @@ def msel_helpers_device_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_FOLD_IDS_RES:
         return msel_fold_ids_res_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2), msel_word(pp, 3),
                                             msel_word(aa, 0), msel_word(aa, 1))
+    if op == MH_GROUP_CLASS_COUNTS_RES:
+        return msel_group_class_counts_res_device_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                                      msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0),
+                                                      msel_word(aa, 1), msel_word(aa, 2))
     raise Error("model-selection helpers: unknown operation " + String(op))
 
 

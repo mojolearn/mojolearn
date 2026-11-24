@@ -40,6 +40,12 @@ def _dev_fields(value: PythonObject, name: String, where: PythonObject, entries:
                     + " shape does not match its stored element count")
     if shape_count(shape) == 0:
         raise Error("ValueError: mojolearn." + String(py=where) + ": " + name + " must be nonempty")
+    # A typed device array (the linalg low-bit outputs carry a dtype word; lane vdf-linalg4) is not a float32
+    # operand: refused, never reinterpreted.
+    var code = py_get(fields, nk[].k_dtype)
+    if code is not None and Int(py=code) != 0:
+        raise Error("TypeError: mojolearn." + String(py=where) + ": " + name + " is a typed device array (int8, "
+                    + "int32 or uint16 storage); this function takes float32 device arrays")
     return fields
 
 
