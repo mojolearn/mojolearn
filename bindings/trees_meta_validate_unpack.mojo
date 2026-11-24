@@ -226,21 +226,27 @@ def meta_ada_validate(fields: PythonObject, classifier: Bool, context: PythonObj
 
 struct MetaCount(Copyable, Movable):
     """`_BaggingBase._count`'s reading of max_samples / max_features before
-    the total is known: an integral count, or a fraction in (0, 1]."""
+    the total is known: an integral count, or a fraction in (0, 1]; `every`:
+    max_samples=None, every row (scikit-learn 1.9.1's default,
+    sklearn/ensemble/_bootstrap.py:44-45: n whatever the sample weights)."""
     var integral: Bool
     var count: Int
     var fraction: Float64
+    var every: Bool
 
-    def __init__(out self, integral: Bool, count: Int, fraction: Float64):
+    def __init__(out self, integral: Bool, count: Int, fraction: Float64, every: Bool = False):
         self.integral = integral
         self.count = count
         self.fraction = fraction
+        self.every = every
 
 
 def meta_count_reading(v: PythonObject, name: String, context: PythonObject) raises -> MetaCount:
     """`_BaggingBase._count`'s reading and the refusals that need no total
     (the door's `_count` then resolves the count and refuses it)."""
     var b = trees_builtins()
+    if v is None and name == "max_samples":
+        return MetaCount(True, 0, 0.0, True)
     if _is_integral(v, context) and not _is_bool(v):
         return MetaCount(True, Int(py=_int(v)), 0.0)
     if Bool(py=py_call(b.isinstance, v, context["trees_real_type"])):

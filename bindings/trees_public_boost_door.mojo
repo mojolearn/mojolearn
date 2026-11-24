@@ -52,7 +52,8 @@ from bindings.trees_public_inputs_door import (
     trees_class_rows_only,
 )
 from bindings.trees_public_inputs_run import TREES_NONFINITE, trees_finite_f32
-from core.bag_draws import BagWeights, bag_weights, bag_weighted_count, bag_draw_weighted, bag_counts_units
+from core.member_notices import member_notice_add, MEMBER_NOTICE_BAG_NO_BOOTSTRAP
+from core.bag_draws import BagWeights, bag_weights, bag_rows_count, bag_draw_units, bag_counts_units
 from core.admitted_refusals import admitted_finite_refuse
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
@@ -170,7 +171,7 @@ from xtrees.glue_calls import (
     xt_class_counts, xt_class_priors, xt_count_equal, xt_count_rows,
     xt_exact_sum, xt_fill_class_major_f64, xt_gather_f32, xt_gather_i32, xt_iota_i32,
     xt_leaf_numbering, xt_log64, xt_margin2, xt_normalize_rows, xt_onehot_leaves, xt_oob_r2, xt_positive_codes,
-    xt_put_f32, xt_sample_indices,
+    xt_put_f32,
     xt_softmax_rows, xt_stack_w64, xt_transpose_f32, xt_uniform, xt_unseen_rows, xt_weighted_median,
 )
 
@@ -325,23 +326,9 @@ def _class_major(xt: PythonObject, inits: PythonObject, n: Int, context: PythonO
     return out
 
 
-def _weighted_indices(weights: BagWeights, pool: Int, draw: Int, replace: Bool, seed: Int, stream: Int,
-                      context: PythonObject) raises -> PythonObject:
-    """`_indices` of a weighted Bagging fit: row i drawn with probability
-    w[i] / sum(w) (core/bag_draws.mojo `bag_draw_weighted`)."""
-    var out = admitted_vector(max(draw, 1), "<i4", context)
-    bag_draw_weighted(weights, pool, trees_address(out), draw, replace, seed, stream)
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _indices(xt: PythonObject, pool: Int, draw: Int, replace: Bool, seed: Int, stream: Int,
-             context: PythonObject) raises -> PythonObject:
-    var out = admitted_vector(draw, "<i4", context)
-    var glue = _xr(xt)
-    _ = xt_sample_indices(glue, trees_address(out), pool, draw, 1 if replace else 0, seed, stream)
-    _ = out  # keep the Python object alive through the native call above
-    return out
+# TOMBSTONE: _indices (one member's draw through the x_trees glue, serial in the admission loop) deleted 2026-11-24
+# by lane/w3f3-h: a wave's draws run on the host cores (core/bag_draws.mojo `bag_draw_units`, the same
+# `sample_indices` law); code recoverable at a5b8bf2008.
 
 
 # The gathers read trusted internal mojolearn Arrays (their `_addr` slot and
@@ -662,6 +649,8 @@ def _count(v: PythonObject, total: Int, name: String, context: PythonObject) rai
     """`_BaggingBase._count`."""
     # The reading and its refusals: one body with the META kind's admission (lane mf-refuse5).
     var reading = meta_count_reading(v, name, context)
+    if reading.every:
+        return total
     var k = reading.count
     if not reading.integral:
         k = Int(py=_int(_F(reading.fraction * Float64(total))))
@@ -683,6 +672,8 @@ def _bagging_batched_ok(fields: PythonObject, base: PythonObject, n_rows: Int, n
         return False
     if not _truthy(fields["bootstrap"]) and n_rows != n:
         return False
+    if n_rows > n:
+        return False  # the forest's max_samples is a fraction in (0, 1]: more rows than X has is the members' route
     return True
 
 
@@ -752,12 +743,17 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     var d = x.cols
     var xa = _as_array(x, Python.tuple(n, d), context)
     var seed = _seed(fields["random_state"], context)
-    # A float max_samples of a weighted fit is a fraction of sum(sample_weight)
-    # (scikit-learn 1.9.1 sklearn/ensemble/_bootstrap.py:49-59): resolved once
-    # the weights are admitted, below (the batched route takes no weights).
+    var bootstrap = _truthy(fields["bootstrap"])
+    # max_samples as scikit-learn 1.9.1 resolves it (core/bag_draws.mojo
+    # `bag_rows_count`): a float of a weighted fit is a fraction of
+    # sum(sample_weight), resolved once the weights are admitted, below (the
+    # batched route takes no weights).
     var rows_reading = meta_count_reading(fields["max_samples"], "max_samples", context)
-    var weighted_fraction = sample_weight is not None and not rows_reading.integral
-    var n_rows = 0 if weighted_fraction else _count(fields["max_samples"], n, "max_samples", context)
+    var weighted_fraction = sample_weight is not None and not rows_reading.integral and not rows_reading.every
+    var n_rows = 0
+    if not weighted_fraction:
+        n_rows = bag_rows_count(rows_reading.every, rows_reading.integral, rows_reading.count, rows_reading.fraction,
+                                n, Float64(n), bootstrap)
     var n_feat = _count(fields["max_features"], d, "max_features", context)
     var base = fields["estimator"]
     if base is None:
@@ -772,7 +768,6 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     if sample_weight is not None:
         sw = admit_weight_words(sample_weight, n, context)
     var xt = _xt(fields, context)
-    var bootstrap = _truthy(fields["bootstrap"])
     # THE DRAW WEIGHTS (core/bag_draws.mojo): the caller's sample_weight only
     # drives the row draw (scikit-learn 1.9.1 _bagging.py:82-93); a member
     # that takes sample_weight is handed the draw's counts, never it.
@@ -780,7 +775,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     if sw:
         bw = bag_weights(sw.value().address, n)
         if weighted_fraction:
-            n_rows = bag_weighted_count(rows_reading.fraction, bw.total, n, bootstrap)
+            n_rows = bag_rows_count(False, False, 0, rows_reading.fraction, n, bw.total, bootstrap)
     var members = Python.list()
     var features = Python.list()
     var oob_rows = Python.list()
@@ -843,6 +838,9 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     # Whether the members' kind takes sample_weight: asked ONCE per fit of a
     # probe clone (`member_set_reads_weights`), never per member.
     var by_weight = True
+    # The wave width: the host cores for a CPU route, else one (the probe's
+    # answer; every member is a clone of the same base on the same route).
+    var wave_width = 1
     if count > 0:
         var probe = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
         var probe_w = List[Float32](length=1, fill=1.0)
@@ -850,6 +848,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
             member_set_admit_or_raise(probe, _clone_from(base, template, _sub_seed(seed, 0), context), y_address,
                                       Int(probe_w.unsafe_ptr()), 0, 0, 0, 0, n_classes, context, b)
             by_weight = member_set_reads_weights(probe, 0)
+            wave_width = max(1, member_set_width(probe))
         finally:
             member_set_release(probe)
         _ = len(probe_w)
@@ -876,17 +875,27 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         var wave_labels = Python.list()
         var wave_rows = Python.list()
         var wave_cols = Python.list()
-        var width = 1
+        var end = min(count, done + wave_width)
+        # THE WAVE'S DRAWS (core/bag_draws.mojo `bag_draw_units`): each
+        # member's row and feature arrays, then every member's draws on the
+        # host cores (independent units; member k: streams 2k and 2k + 1).
+        var rows_at = List[Int](capacity=end - done)
+        var cols_at = List[Int](capacity=end - done)
+        for k in range(done, end):  # driver-loop: over this wave's members (their draw arrays)
+            var rows = _arange(xt, n, context) if all_rows else admitted_vector(max(n_rows, 1), "<i4", context)
+            var cols = _arange(xt, d, context) if all_cols else admitted_vector(max(n_feat, 1), "<i4", context)
+            rows_at.append(0 if all_rows else trees_address(rows))
+            cols_at.append(0 if all_cols else trees_address(cols))
+            _ = py_call(wave_rows.append, rows)
+            _ = py_call(wave_cols.append, cols)
+        bag_draw_units(rows_at, cols_at, done, bw, Bool(sw), n, n_rows, bootstrap, d, n_feat, bootstrap_features,
+                       seed)
+        _ = wave_rows  # the draws were written into these arrays above
+        _ = wave_cols
         var k = done
-        while k < count and k < done + width:  # driver-loop: over this wave's members (draws and admission)
-            var rows = PythonObject(None)
-            if all_rows:
-                rows = _arange(xt, n, context)
-            elif sw:
-                rows = _weighted_indices(bw, n, n_rows, bootstrap, seed, 2 * k, context)
-            else:
-                rows = _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
-            var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
+        while k < end:  # driver-loop: over this wave's members (admission)
+            var rows = wave_rows[k - done]
+            var cols = wave_cols[k - done]
             var member = _clone_from(base, template, _sub_seed(seed, k), context)
             var unit_w = 0
             var row_draw = 0 if all_rows else trees_address(rows)
@@ -921,10 +930,6 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
                     admitted_finite_refuse(1, owner, "y")
                 _ = y_all  # keep the Python object alive through the scans above
                 proven = True
-            _ = py_call(wave_rows.append, rows)
-            _ = py_call(wave_cols.append, cols)
-            if k == done:
-                width = member_set_width(set)
             k += 1
         # The wave's count weights, its units on the host cores (the draws
         # are this wave's `wave_rows`, alive to the wave's end).
@@ -963,6 +968,11 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         _ = set.count()
     py_setitem(fields, "n_features_in_", _P(d))
     _ = x^
+    if sample_weight is not None and not bootstrap:
+        # scikit-learn 1.9.1's UserWarning (_bagging.py:380-384), the PACK's notice
+        var notice = List[Float64]()
+        member_notice_add(notice, MEMBER_NOTICE_BAG_NO_BOOTSTRAP, 1.0 if classifier else 0.0)
+        member_fit_notices_raise(notice, context)
     var word = 0
     if count > 0:
         if proven:

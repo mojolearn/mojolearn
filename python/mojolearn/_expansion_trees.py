@@ -604,9 +604,11 @@ class BaggingClassifier(_BaggingBase):
         estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=10
         Number of members; must be at least 1.
-    max_samples : int or float, default=1.0
-        Rows drawn for each member: an int count, or a fraction in (0, 1] of
-        the rows.
+    max_samples : int, float or None, default=None
+        Rows drawn for each member: None draws as many rows as X has; an int
+        is a count (more rows than X has only with ``bootstrap=True``); a
+        float in (0, 1] is a fraction of the rows, or of the sum of
+        ``sample_weight`` when it is given.
     max_features : int or float, default=1.0
         Features drawn for each member: an int count, or a fraction in (0, 1]
         of the features.
@@ -675,7 +677,7 @@ class BaggingClassifier(_BaggingBase):
     #: no Python fit-tracking or output wrappers are installed
     _mojolearn_native_public = True
 
-    def __init__(self, estimator=None, n_estimators=10, *, max_samples=1.0, max_features=1.0,
+    def __init__(self, estimator=None, n_estimators=10, *, max_samples=None, max_features=1.0,
                  bootstrap=True, bootstrap_features=False, oob_score=False, warm_start=False,
                  n_jobs=None, random_state=None, verbose=0, numeric_mode=None):
         super().__init__(estimator, n_estimators, max_samples, max_features, bootstrap,
@@ -692,8 +694,10 @@ class BaggingClassifier(_BaggingBase):
         y : array-like of shape (n_samples,)
             Class labels; at least two classes are required.
         sample_weight : array-like of shape (n_samples,), default=None
-            Per-row weights, passed to each member for the rows it drew. The
-            member must accept ``sample_weight``.
+            Per-row weights. Rows are drawn with probability proportional to
+            their weight. A member that accepts ``sample_weight`` is fitted on
+            every row, weighted by how many times its draw holds it; any other
+            member is fitted on the rows it drew.
 
         Returns
         -------
@@ -732,9 +736,11 @@ class BaggingRegressor(_BaggingBase):
         estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=10
         Number of members; must be at least 1.
-    max_samples : int or float, default=1.0
-        Rows drawn for each member: an int count, or a fraction in (0, 1] of
-        the rows.
+    max_samples : int, float or None, default=None
+        Rows drawn for each member: None draws as many rows as X has; an int
+        is a count (more rows than X has only with ``bootstrap=True``); a
+        float in (0, 1] is a fraction of the rows, or of the sum of
+        ``sample_weight`` when it is given.
     max_features : int or float, default=1.0
         Features drawn for each member: an int count, or a fraction in (0, 1]
         of the features.
@@ -797,7 +803,7 @@ class BaggingRegressor(_BaggingBase):
     #: no Python fit-tracking or output wrappers are installed
     _mojolearn_native_public = True
 
-    def __init__(self, estimator=None, n_estimators=10, *, max_samples=1.0, max_features=1.0,
+    def __init__(self, estimator=None, n_estimators=10, *, max_samples=None, max_features=1.0,
                  bootstrap=True, bootstrap_features=False, oob_score=False, warm_start=False,
                  n_jobs=None, random_state=None, verbose=0, numeric_mode=None):
         super().__init__(estimator, n_estimators, max_samples, max_features, bootstrap,
@@ -814,9 +820,10 @@ class BaggingRegressor(_BaggingBase):
         y : array-like of shape (n_samples,)
             Target values, read as float32.
         sample_weight : array-like of shape (n_samples,), default=None
-            Per-row weights, passed to each member for the rows it drew. The
-            member must accept ``sample_weight`` (the default
-            ``DecisionTreeRegressor`` does not).
+            Per-row weights. Rows are drawn with probability proportional to
+            their weight. A member that accepts ``sample_weight`` is fitted on
+            every row, weighted by how many times its draw holds it; any other
+            member is fitted on the rows it drew.
 
         Returns
         -------

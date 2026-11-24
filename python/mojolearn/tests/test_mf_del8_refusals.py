@@ -70,6 +70,31 @@ def test_bagging_sample_weight_drives_the_draw():
     assert float(np.max(proba[:, 2])) == 0.0
 
 
+def test_bagging_max_samples_as_sklearn_resolves_it():
+    # scikit-learn 1.9.1 _bagging.py:299 (max_samples=None), _bootstrap.py:44-47 (None: n; an int as given) and
+    # _bagging.py:468-472: an int above n draws with replacement; without it, the refusal (sklearn's words, checked
+    # against BaggingClassifier(DecisionTreeClassifier()) on this fixture).
+    # Fail-proof: refuse k > n in core/bag_draws.mojo `bag_rows_count` whatever bootstrap is (the first fit raises).
+    X, y = _imbalanced()
+    assert ml.BaggingClassifier().max_samples is None
+    m = ml.BaggingClassifier(ml.DecisionTreeClassifier(random_state=0), n_estimators=4, max_samples=100,
+                             max_features=PER_MEMBER, random_state=0).fit(X, y)
+    assert len(m.estimators_) == 4
+    with pytest.raises(ValueError, match=r"Effective max_samples=100 must be <= n_samples=60 to be able to sample "
+                                         r"without replacement\."):
+        ml.BaggingClassifier(ml.DecisionTreeClassifier(), max_samples=100, bootstrap=False).fit(X, y)
+
+
+def test_bagging_weighted_without_bootstrap_warns():
+    # scikit-learn 1.9.1 _bagging.py:377-384: a weighted fit with bootstrap=False warns, in these words.
+    # Fail-proof: drop the MEMBER_NOTICE_BAG_NO_BOOTSTRAP notice in _bagging_fit_bags: no warning.
+    X, y = _imbalanced()
+    with pytest.warns(UserWarning, match=r"When fitting BaggingClassifier with sample_weight it is recommended to "
+                                         r"use bootstrap=True, got False\."):
+        ml.BaggingClassifier(ml.DecisionTreeClassifier(random_state=0), n_estimators=3, max_samples=0.5,
+                             bootstrap=False, random_state=0).fit(X, y, sample_weight=np.ones(len(y)))
+
+
 def test_bagging_same_answer_every_n_jobs():
     # Fail-proof: draw member k's rows on stream 2 * (k - done) instead of 2 * k in _bagging_fit_bags: the waves
     # differ in width between n_jobs=1 and n_jobs=4 and so do the draws.

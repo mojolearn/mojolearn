@@ -19,7 +19,8 @@ from core.member_notices import (
     MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST, MEMBER_NOTICE_METRIC_PRF, MEMBER_NOTICE_METRIC_JACCARD,
     MEMBER_NOTICE_METRIC_BALANCED, MEMBER_NOTICE_METRIC_FEW, MEMBER_NOTICE_METRIC_TOP_K, MEMBER_NOTICE_R2_FEW,
     MEMBER_NOTICE_FOLD_LACKING, MEMBER_NOTICE_ONEHOT_UNKNOWN, MEMBER_NOTICE_METRIC_KAPPA, MEMBER_NOTICE_METRIC_CLR,
-    MEMBER_NOTICE_METRIC_ROC_ONE, member_lacking_warning,
+    MEMBER_NOTICE_METRIC_ROC_ONE, member_lacking_warning, MEMBER_NOTICE_BAG_NO_BOOTSTRAP,
+    member_bag_bootstrap_warning,
 )
 from bindings.py_balanced import py_get
 
@@ -157,5 +158,8 @@ def member_fit_notices_raise_with(words: List[Float64], context: PythonObject,
             # a RuntimeWarning, as the calibration's ensemble=False PACK warns it.
             metric_warn(member_lacking_warning(Int(a), Int(b)), native_loaded_module("builtins").RuntimeWarning,
                         context)
+        elif code == MEMBER_NOTICE_BAG_NO_BOOTSTRAP:
+            # Bagging's own fit warning (lane w3f3-h, `BaseBagging.fit`).
+            metric_warn(member_bag_bootstrap_warning(a != 0.0), native_loaded_module("builtins").UserWarning, context)
         else:
             raise Error("member ABI: unknown fit notice code " + String(code))

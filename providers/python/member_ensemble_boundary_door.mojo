@@ -1440,8 +1440,11 @@ def _count_words(reading: MetaCount, mut words: List[Float64]):
     """`_BaggingBase._count`'s two readings of max_samples / max_features
     (bindings/trees_meta_validate_unpack.mojo `meta_count_reading`, one
     body with the door): an integral count (1.0, its value) or a fraction
-    in (0, 1] (0.0, its value)."""
-    if reading.integral:
+    in (0, 1] (0.0, its value); max_samples=None, every row (2.0, 0.0)."""
+    if reading.every:
+        words.append(2.0)
+        words.append(0.0)
+    elif reading.integral:
         words.append(1.0)
         words.append(Float64(reading.count))
     else:

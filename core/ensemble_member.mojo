@@ -116,7 +116,7 @@ UNPACK as the door's fit reads them:
     PLACEMENT RULE `cal_fold_place` for a pair that lacks a class), then the
     row argmax for predict.
   * Bagging (`_bagging_fit_bags`, the per-member route): unit k draws its
-    rows (`xt_sample_indices`, stream 2k) and features (stream 2k + 1) and
+    rows (core/bag_draws.mojo `bag_draw_units`, stream 2k) and features (stream 2k + 1) and
     holds the seed `_sub_seed(seed, k)` in its seed words
     (xtrees/trees_ada_fit_run.mojo `ADA_MEMBER_SEED_WORD`, the RF and ET
     layouts' `random_state` slot); a weighted fit draws its rows with
@@ -248,12 +248,12 @@ from core.member_families import (
 from core.member_notices import member_notices_take
 from core.array_helpers_impl import class_ratio_f64
 from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan
-from core.bag_draws import BagWeights, bag_weights, bag_weighted_count, bag_draw_weighted, bag_counts_units
+from core.bag_draws import BagWeights, bag_weights, bag_rows_count, bag_draw_units, bag_counts_units
 from core.label_weights_native_api import (
     LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS,
 )
 from xtrees.label_weights_native import label_weights_native_v1
-from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST
+from core.member_notices import member_notice_add, MEMBER_NOTICE_SPLIT_LEAST, MEMBER_NOTICE_BAG_NO_BOOTSTRAP
 from bindings.msel_split_spec_run import (
     MselSplitSpec, MselGroupCodes, MselSides, MSEL_SPEC_NONE, MSEL_SPEC_LOO, MSEL_SPEC_STRATIFIED_SHUFFLE, msel_spec_sides, msel_sides_i32,
     msel_group_codes_run, msel_spec_has_n_splits, msel_spec_sides_targets, msel_spec_stratified,
@@ -270,7 +270,7 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.trees_entry_table import TreesEntryKey
 from xtrees.glue_calls import (
     xt_ref, xt_device_folds, xt_gather_f32, xt_scatter, xt_indicator_codes, xt_binary_proba, xt_argmax_rows,
-    xt_sample_indices, xt_unseen_rows, xt_transpose_f32, xt_exact_sum,
+    xt_unseen_rows, xt_transpose_f32, xt_exact_sum,
 )
 from xtrees.trees_ada_fit_run import (
     ADA_MEMBER_SEED_WORD, AdaFitPlan, AdaFitResult, ada_fit_run, ada_release_handles, ada_release_members,
@@ -348,7 +348,7 @@ comptime META_CAL_INT_CV = 3            # cv was an exact int (1.0; scikit-learn
 comptime META_CAL_WORDS = 4
 comptime META_BAG_COUNT = 0             # n_estimators
 comptime META_BAG_SEED = 1              # `_seed(random_state)`
-comptime META_BAG_ROWS_INT = 2          # max_samples is an int (1.0) or a fraction (0.0)
+comptime META_BAG_ROWS_INT = 2          # max_samples is an int (1.0), a fraction (0.0) or None (2.0: every row)
 comptime META_BAG_ROWS = 3              # its value
 comptime META_BAG_COLS_INT = 4          # max_features is an int (1.0) or a fraction (0.0)
 comptime META_BAG_COLS = 5              # its value
@@ -2586,7 +2586,7 @@ def _tree_class_rows(words: List[Float64], at: Int, codes: Int, n: Int, k: Int, 
 
 def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     """`_bagging_fit_bags`' per-member route as ONE set: unit u's draws
-    (`xt_sample_indices`, streams 2u and 2u + 1) and seed `_sub_seed(seed,
+    (`bag_draw_units`, streams 2u and 2u + 1) and seed `_sub_seed(seed,
     u)`, the door's order and words; then the out-of-bag outputs
     (oob_score)."""
     var classifier = slot[].kind == META_BAG_CLASSIFIER
@@ -2598,22 +2598,27 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     var x = call[].x.data
     var y = call[].y.data
     var weights = call[].weights.data if call[].weights.given() else 0
-    var glue = slot[].glue
     var count = Int(slot[].words[META_BAG_COUNT])
     var seed = Int(slot[].words[META_BAG_SEED])
     var bootstrap = slot[].words[META_BAG_BOOTSTRAP] != 0.0
     # THE DRAW WEIGHTS (core/bag_draws.mojo): the caller's weights drive the
     # row draw only; a float max_samples of a weighted fit is a fraction of
     # their sum (scikit-learn 1.9.1 sklearn/ensemble/_bootstrap.py:49-59).
-    var rows_int = slot[].words[META_BAG_ROWS_INT] != 0.0
+    var rows_every = slot[].words[META_BAG_ROWS_INT] == 2.0
+    var rows_int = slot[].words[META_BAG_ROWS_INT] == 1.0
     var bw = BagWeights()
-    var n_rows = 0
+    var total = Float64(n)
     if weights != 0:
         bw = bag_weights(weights, n)
-    if weights != 0 and not rows_int:
-        n_rows = bag_weighted_count(slot[].words[META_BAG_ROWS], bw.total, n, bootstrap)
-    else:
-        n_rows = _bag_count(rows_int, slot[].words[META_BAG_ROWS], n, "max_samples")
+        total = bw.total
+        if not bootstrap:
+            # scikit-learn's UserWarning (_bagging.py:380-384), raised by the PACK
+            var words = List[Float64]()
+            member_notice_add(words, MEMBER_NOTICE_BAG_NO_BOOTSTRAP, 1.0 if classifier else 0.0)
+            slot[].notice_owner.append(0)
+            slot[].notice_words.append(words^)
+    var n_rows = bag_rows_count(rows_every, rows_int, Int(slot[].words[META_BAG_ROWS]), slot[].words[META_BAG_ROWS],
+                                n, total, bootstrap)
     var n_feat = _bag_count(slot[].words[META_BAG_COLS_INT] != 0.0, slot[].words[META_BAG_COLS], d, "max_features")
     var bootstrap_features = slot[].words[META_BAG_BOOTSTRAP_FEATURES] != 0.0
     var all_rows = n_rows == n and not bootstrap
@@ -2621,7 +2626,7 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     # THE BATCHED ROUTE (`_bagging_batched_ok`, decided per fit as the door
     # decides it): no weights, every feature, and bootstrap or every row.
     if (slot[].words[META_BAG_BATCHED] != 0.0 and weights == 0 and n_feat == d and not bootstrap_features
-            and (bootstrap or n_rows == n)):
+            and (bootstrap or n_rows == n) and n_rows <= n):
         _fit_bag_batched(slot, call, k, n_rows, bootstrap)
         return
     _expand(slot, count)
@@ -2629,25 +2634,18 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].unit_cols = List[List[Int32]](capacity=count)
     var draw_at = List[Int](capacity=count)
     var draw_n = List[Int](capacity=count)
-    for u in range(count):  # driver-loop: over the member estimators (their draws and seeds, the door's order)
-        var rows = List[Int32]()
-        if not all_rows:
-            rows = List[Int32](length=max(n_rows, 1), fill=Int32(0))
-            if weights != 0:
-                bag_draw_weighted(bw, n, Int(rows.unsafe_ptr()), n_rows, bootstrap, seed, 2 * u)
-            else:
-                _ = xt_sample_indices(glue, Int(rows.unsafe_ptr()), n, n_rows, 1 if bootstrap else 0, seed, 2 * u)
-        var cols = List[Int32]()
-        if not all_cols:
-            cols = List[Int32](length=max(n_feat, 1), fill=Int32(0))
-            _ = xt_sample_indices(glue, Int(cols.unsafe_ptr()), d, n_feat, 1 if bootstrap_features else 0, seed,
-                                  2 * u + 1)
+    for u in range(count):  # driver-loop: over the member estimators (their draw words and seeds, the door's order)
+        slot[].unit_rows.append(List[Int32](length=max(n_rows, 1), fill=Int32(0)) if not all_rows else List[Int32]())
+        slot[].unit_cols.append(List[Int32](length=max(n_feat, 1), fill=Int32(0)) if not all_cols else List[Int32]())
         _seed_words(slot[].plans[u], _sub_seed(seed, u))
-        slot[].unit_rows.append(rows^)
-        slot[].unit_cols.append(cols^)
+    var cols_at = List[Int](capacity=count)
     for u in range(count):  # driver-loop: over the member estimators (their draws' addresses, now final)
         draw_at.append(0 if all_rows else Int(slot[].unit_rows[u].unsafe_ptr()))
         draw_n.append(0 if all_rows else n_rows)
+        cols_at.append(0 if all_cols else Int(slot[].unit_cols[u].unsafe_ptr()))
+    # Every unit's draws on the host cores (core/bag_draws.mojo `bag_draw_units`; unit u: streams 2u and 2u + 1,
+    # the door's law and order).
+    bag_draw_units(draw_at, cols_at, 0, bw, weights != 0, n, n_rows, bootstrap, d, n_feat, bootstrap_features, seed)
     # THE MEMBER'S ROWS (lane w3f3-h, scikit-learn 1.9.1 _bagging.py:164-178):
     # a unit whose kind takes sample_weight (the units' kind-exact mask) reads
     # every row and the whole y, weighted by its draw's counts (`bag_counts_units`)
