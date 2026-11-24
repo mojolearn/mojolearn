@@ -82,7 +82,10 @@ def main():
             test_id = "tests/proving/test_proving_categories.py::__no_such_test__"
         child = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--one", test_id, str(tests)],
                                capture_output=True, text=True, timeout=900)
-        kept = [line for line in child.stdout.splitlines() if line.startswith(("ORDER", "  "))]
+        # Only the ORDER line and the case lines under it: pytest's own output also has indented lines.
+        lines = child.stdout.splitlines()
+        start = next((i for i, line in enumerate(lines) if line.startswith("ORDER")), None)
+        kept = [] if start is None else [lines[start]] + [line for line in lines[start + 1:] if line.startswith("  ")]
         if not any(line.startswith("ORDER") for line in kept):
             kept = [f"ORDER {test_id} ERROR rc={child.returncode} " + (child.stderr.strip().splitlines() or [""])[-1]]
         return kept
