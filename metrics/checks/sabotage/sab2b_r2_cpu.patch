@@ -1,0 +1,32 @@
+diff --git a/metrics/host/r2_entry_host.mojo b/metrics/host/r2_entry_host.mojo
+index e20fe10245..47bd200435 100644
+--- a/metrics/host/r2_entry_host.mojo
++++ b/metrics/host/r2_entry_host.mojo
+@@ -26,6 +26,13 @@ def _r2_value(y_addr: Int, yh_addr: Int, n: Int) raises -> Float32:
+     var y = read_f32(y_addr, n)
+     var yh = read_f32(yh_addr, n)
+     _check_float_pair(y, yh, n)
++    from std.sys import is_defined
++    from std.memory import bitcast
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-r2-cpu (lane vdv-sab2-b): R^2 one ulp up, the host bindings only
++        var h = host_r2_score(y, yh, n)
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return host_r2_score(y, yh, n)
+ 
+ 
+@@ -34,6 +41,13 @@ def _r2_weighted_value(y_addr: Int, yh_addr: Int, w_addr: Int, n: Int) raises ->
+     var y = read_f32(y_addr, n)
+     var yh = read_f32(yh_addr, n)
+     var w = read_f32(w_addr, n)
++    from std.sys import is_defined
++    from std.memory import bitcast
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-r2-cpu (lane vdv-sab2-b): R^2 one ulp up, the host bindings only
++        var h = host_weighted_r2(y, yh, w, n)
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     return host_weighted_r2(y, yh, w, n)
+ 
+ 

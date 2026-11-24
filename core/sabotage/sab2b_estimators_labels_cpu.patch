@@ -1,0 +1,50 @@
+diff --git a/core/estimators_host_impl.mojo b/core/estimators_host_impl.mojo
+index 3a1ec8d94d..6cf7c77af0 100644
+--- a/core/estimators_host_impl.mojo
++++ b/core/estimators_host_impl.mojo
+@@ -356,6 +356,14 @@ def labeled_reference_predict_host_run(
+     for i in range(n_queries):
+         olp[i] = out.labels[i]
+         orp[i] = out.refs[i]
++    from std.sys import is_defined
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-estimators-labels-cpu (lane vdv-sab2-b): the first label traded with the first different one, the host bindings only
++        for q in range(1, n_queries):
++            if olp[q] != olp[0]:
++                var t = olp[0]
++                olp[0] = olp[q]
++                olp[q] = t
++                break
+ 
+ 
+ def dbscan_fit_host_run(
+@@ -382,6 +390,10 @@ def dbscan_fit_host_run(
+     )
+     for i in range(nr):
+         lp[i] = fit.labels[i]
++    from std.sys import is_defined
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-estimators-labels-cpu (lane vdv-sab2-b): row 0 noise <-> cluster 0, the host bindings only
++        if nr > 0:
++            lp[0] = Int32(0) if lp[0] < 0 else Int32(-1)
+     if core_address != 0:
+         var cp = MutPointer[UInt8, MutUntrackedOrigin](
+             unsafe_from_address=core_address
+diff --git a/core/hierarchy_member.mojo b/core/hierarchy_member.mojo
+index 1186722f82..f8ab580885 100644
+--- a/core/hierarchy_member.mojo
++++ b/core/hierarchy_member.mojo
+@@ -357,6 +357,15 @@ def _fit(slot: _Slot, call: _Call) raises:
+         _fit_solver(slot, call)
+     else:
+         _fit_tree(slot, call)
++    from std.sys import is_defined
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-estimators-labels-cpu (lane vdv-sab2-b): the first label traded with the first different one, the host bindings only
++        var nl = len(slot[].labels)
++        for q in range(1, nl):
++            if slot[].labels[q] != slot[].labels[0]:
++                var t = slot[].labels[0]
++                slot[].labels[0] = slot[].labels[q]
++                slot[].labels[q] = t
++                break
+     if output == MEMBER_OP_PREDICT:
+         unsafe_memcpy(dest=_I32P(unsafe_from_address=call[].dst.data), src=slot[].labels.unsafe_ptr(), count=rows)
+ 

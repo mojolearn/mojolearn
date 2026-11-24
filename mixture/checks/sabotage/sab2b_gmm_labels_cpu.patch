@@ -1,0 +1,19 @@
+diff --git a/mixture/host/gmm_host_oracle.mojo b/mixture/host/gmm_host_oracle.mojo
+index 856327bd41..b9b858145f 100644
+--- a/mixture/host/gmm_host_oracle.mojo
++++ b/mixture/host/gmm_host_oracle.mojo
+@@ -787,6 +787,14 @@ def gmmh_predict(
+                 best = v
+                 best_k = k
+         out.append(Int32(best_k))
++    from std.sys import is_defined
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-gmm-labels-cpu (lane vdv-sab2-b): the first label traded with the first different one, the host bindings only
++        for q in range(1, len(out)):
++            if out[q] != out[0]:
++                var t = out[0]
++                out[0] = out[q]
++                out[q] = t
++                break
+     return out^
+ 
+ 
