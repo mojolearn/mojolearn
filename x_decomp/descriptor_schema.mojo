@@ -312,7 +312,7 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_FA_QUERY:
         return (6, 5, 0)
     if op == XD_LDA:
-        return (9, 13, 7)
+        return (9, 14, 7)  # int word 13: X's resident pool id, -1 none (lane vdf-scope-neural3)
     if op == XD_RP_FIT:
         return (3, 7, 1)
     if op == XD_RP_PROJECT:

@@ -116,7 +116,7 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
                                                                              p[4])
         return 0
     if op == XD_LDA:
-        var x = xd_f32(a[0])
+        var x = _x_word(a[0], p[13])
         var n = xd_dim(p[1])
         var v = xd_dim(p[2])
         var nc = xd_dim(p[3])
@@ -134,7 +134,7 @@ def xd_factor_op[E: Exec, D: RDev, RES: Bool, X: DecompDev](op: Int, a: List[Int
         var nbi = FactorInt(unsafe_from_address=a[7])[0]
         var text = _lda_refusal(p[12])
         var got = lda_run[E, D, RES, X](p[0], x, n, v, nc, p[4] != 0, args, draw, nbi, p[5] != 0, ci, ei, co, eo,
-                                        dst, text)
+                                        dst, text, p[13])
         FactorInt(unsafe_from_address=a[6])[0] = draw
         FactorInt(unsafe_from_address=a[7])[0] = nbi
         FactorF64(unsafe_from_address=a[8])[0] = got[1]

@@ -569,7 +569,7 @@ def _whole(call: _Call, estimator: String) raises:
 # SparsePCA, MiniBatchSparsePCA fit; every kit query), the robust covariance kit (EllipticEnvelope / MinCovDet
 # fit and queries), and the manifold kit (Isomap, LLE, MDS fit; Isomap / LLE transform).
 # Kinds left on the whole host view (their typed drivers take a host X address; no pool word yet):
-# IncrementalPCA, NMF, LatentDirichletAllocation. SparseCoder's fit reads X's width only (its transform is a kit
+# IncrementalPCA and NMF. LatentDirichletAllocation reads the X pool id through XD_LDA int word 13. SparseCoder's fit reads X's width only (its transform is a kit
 # query). FastICA and FactorAnalysis
 # read the X pool id through the last int word of XD_ICA_FIT / XD_ICA_PROJECT / XD_FA_FIT / XD_FA_QUERY.
 comptime XDECOMP_STORE_PREFIX = "x_decomp"
@@ -577,7 +577,8 @@ comptime XDECOMP_STORE_PREFIX = "x_decomp"
 
 def _rows_kind(kind: Int) -> Bool:
     """The kinds that read X through `_rows` (the note above)."""
-    return (_is_rp(kind) or kind == XDECOMP_KIND_ICA or kind == XDECOMP_KIND_FA or _is_kit(kind)
+    return (_is_rp(kind) or kind == XDECOMP_KIND_ICA or kind == XDECOMP_KIND_FA or kind == XDECOMP_KIND_LDA
+            or _is_kit(kind)
             or kind == XDECOMP_KIND_ENVELOPE or _is_mani(kind))
 
 
@@ -1757,21 +1758,31 @@ comptime _LDA_SCORE = 3
 
 def _lda_request(slot: _Slot, call: _Call, op: Int, comps_in: Int, exp_in: Int, comps_out: Int, exp_out: Int,
                  dst: Int, nc: Int, fresh: Bool, total: Float64, refusal: Int, draw: Int, n_batch_iter: Int,
-                 doc: Float64, topic: Float64) -> LDARequest:
+                 doc: Float64, topic: Float64, held: SeqRows) -> LDARequest:
     var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
     var online = op == _LDA_FIT and w[4] != 0.0
-    return LDARequest(op, call[].x.data, comps_in, exp_in, comps_out, exp_out, dst, call[].x.rows, call[].x.cols,
+    return LDARequest(op, _host_x(held), comps_in, exp_in, comps_out, exp_out, dst, held.n, held.d,
                       nc, fresh, op == _LDA_TRANSFORM, Int(w[6]), online, Int(w[5]) if online else 1, Int(w[7]),
                       Int(w[8]), Int(w[9]), refusal, draw, n_batch_iter, doc, topic, w[10], w[11], w[12], total,
-                      w[14])
+                      w[14], _pool_of(held))
 
 
 def _fit_lda(slot: _Slot, call: _Call) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural3): `_fit_lda_rows` over the call's rows (`_rows`)."""
+    var estimator = _name(slot)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _fit_lda_rows(slot, call, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _fit_lda_rows(slot: _Slot, call: _Call, held: SeqRows) raises:
     """`lda_fit` over the caller's X (fresh state: draw 0, n_batch_iter 1,
     total_samples = rows); fit_output TRANSFORM = fit_transform's normalized
     transform of the same X."""
     var estimator = _name(slot)
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     if call[].weights.rows > 0:
         raise Error("TypeError: a " + estimator + " member takes no sample_weight")
@@ -1784,8 +1795,8 @@ def _fit_lda(slot: _Slot, call: _Call) raises:
     slot[].blocks.append(List[Float32](length=max(nc * v, 1), fill=Float32(0)))
     var spare = _address(slot, 0)
     var request = _lda_request(slot, call, _LDA_FIT, spare, spare, _address(slot, 0), _address(slot, 1), spare, nc,
-                               True, Float64(call[].x.rows), LDA_REFUSAL_FIT, 0, 1, slot[].words[2],
-                               slot[].words[3])
+                               True, Float64(held.n), LDA_REFUSAL_FIT, 0, 1, slot[].words[2],
+                               slot[].words[3], held)
     var answer = lda_call(call[].route.entry, request)
     var scalars = _four(nc, v, answer.iterations, answer.draw)
     scalars.append(Float64(answer.n_batch_iter))
@@ -1797,22 +1808,32 @@ def _fit_lda(slot: _Slot, call: _Call) raises:
     slot[].features = v
     slot[].fitted = True
     if call[].fit_output == MEMBER_OP_TRANSFORM:
-        _query_lda(slot, call, _LDA_TRANSFORM)
+        _query_lda_rows(slot, call, _LDA_TRANSFORM, held)
 
 
 def _query_lda(slot: _Slot, call: _Call, op: Int) raises:
+    """THE RESIDENT ROUTE wrapper (lane vdf-scope-neural3): `_query_lda_rows` over the call's rows (`_rows`)."""
+    var estimator = _name(slot)
+    _dense(call[].x, "X", estimator)
+    var held = _rows(call, estimator)
+    try:
+        _query_lda_rows(slot, call, op, held)
+    finally:
+        seq_rows_close(call, held)
+
+
+def _query_lda_rows(slot: _Slot, call: _Call, op: Int, held: SeqRows) raises:
     """`lda_project`: transform (normalize=True, rows x n_components_)
     or score (the approximate bound into `call.value`)."""
     var estimator = _name(slot)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
-    _whole(call, estimator)
     _dense(call[].x, "X", estimator)
     var nc = slot[].count
     var dst = _address(slot, 0)
     if op == _LDA_TRANSFORM:
         _dense(call[].dst, "the output buffer", estimator)
-        if call[].dst.rows != call[].x.rows or call[].dst.cols != nc:
+        if call[].dst.rows != held.n or call[].dst.cols != nc:
             raise Error("ValueError: the output buffer holds " + String(nc) + " values per row of X")
         dst = call[].dst.data
     elif call[].weights.rows > 0 or call[].y.rows > 0:
@@ -1820,7 +1841,7 @@ def _query_lda(slot: _Slot, call: _Call, op: Int) raises:
     var spare = _address(slot, 0)
     var request = _lda_request(slot, call, op, _address(slot, 0), _address(slot, 1), spare, spare, dst, nc, False,
                                slot[].words[13], LDA_REFUSAL_TRANSFORM, Int(slot[].scalars[3]),
-                               Int(slot[].scalars[4]), slot[].scalars[6], slot[].scalars[7])
+                               Int(slot[].scalars[4]), slot[].scalars[6], slot[].scalars[7], held)
     var answer = lda_call(call[].route.entry, request)
     if op == _LDA_SCORE:
         call[].value = answer.value

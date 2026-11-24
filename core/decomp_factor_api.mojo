@@ -125,6 +125,7 @@ struct LDARequest(Copyable, Movable):
     var mean_change_tol: Float64
     var total_samples: Float64
     var perp_tol: Float64
+    var source_pool: Int   # X's resident pool id (`source` unread), -1: X is `source` (lane vdf-scope-neural3)
 
 
 @fieldwise_init
@@ -207,8 +208,8 @@ def lda_call(entry: EntryRef, r: LDARequest) raises -> LDAResult:
     var counters_address = Int(counters.unsafe_ptr())
     var a: Array[Int, 9] = [r.source, r.components_in, r.exp_in, r.components_out, r.exp_out, r.dst,
         counters_address, counters_address + 8, Int(value.unsafe_ptr())]
-    var p: Array[Int, 13] = [r.operation, r.rows, r.words, r.count, Int(r.fresh), Int(r.flag), r.max_iter,
-        Int(r.online), r.batch_size, r.max_doc_update_iter, r.seed, r.evaluate_every, r.refusal]
+    var p: Array[Int, 14] = [r.operation, r.rows, r.words, r.count, Int(r.fresh), Int(r.flag), r.max_iter,
+        Int(r.online), r.batch_size, r.max_doc_update_iter, r.seed, r.evaluate_every, r.refusal, r.source_pool]
     var f: Array[Float64, 7] = [r.doc_prior, r.topic_prior, r.offset, r.decay, r.mean_change_tol,
         r.total_samples, r.perp_tol]
     var iterations = entry_ref_call(entry, XD_LDA, a, p, f)
