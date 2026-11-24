@@ -304,7 +304,7 @@ _native_archive_bridge.register(HDBSCAN, _HDBSCAN_FORMAT, (
 
 
 # cuML `approximate_predict` (`hdbscan.pyx:1264`, `predict.cuh:220-262`).
-def approximate_predict(clusterer, points_to_predict):
+def approximate_predict(clusterer, points_to_predict, *, device=None):
     """Predict the cluster of new points under a fitted clustering.
 
     Follows cuML's `approximate_predict`. The labels are those of the
@@ -318,6 +318,11 @@ def approximate_predict(clusterer, points_to_predict):
         A model fitted with `prediction_data=True`.
     points_to_predict : array-like of shape (n_samples, n_features)
         New points, read as float32, with the fitted number of features.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None runs where `clusterer` runs; 'gpu' or
+        'cpu' must name that same side (a clusterer constructed with
+        ``device=None`` runs on this installation's device). Any other value,
+        or a side that differs from the clusterer's, raises ValueError.
 
     Returns
     -------
@@ -342,7 +347,7 @@ def approximate_predict(clusterer, points_to_predict):
     >>> model = mojolearn.HDBSCAN(prediction_data=True).fit(X)
     >>> labels, strengths = mojolearn.hdbscan.approximate_predict(model, X[:10])
     """
-    return _NATIVE(clusterer, "family_hdbscan_public_approximate_predict", (points_to_predict,), _NATIVE_CONTEXT)
+    return _NATIVE(clusterer, "family_hdbscan_public_approximate_predict", (points_to_predict, device), _NATIVE_CONTEXT)
 
 
 
@@ -351,7 +356,7 @@ def approximate_predict(clusterer, points_to_predict):
 # Float32 on every column (DEVIATION 1616,
 # `hdbscan/impl/detail/soft_clustering.mojo`): cuML computes four seams in
 # float64.
-def membership_vector(clusterer, points_to_predict, batch_size=4096):
+def membership_vector(clusterer, points_to_predict, batch_size=4096, *, device=None):
     """Soft cluster membership of new points.
 
     Follows cuML's `membership_vector`. Row `i` gives, for each selected cluster `j`, the probability that point
@@ -373,6 +378,11 @@ def membership_vector(clusterer, points_to_predict, batch_size=4096):
     batch_size : int, default 4096
         Maximum number of points computed per call. Rows are independent, so
         it does not change the result. Must be positive.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None runs where `clusterer` runs; 'gpu' or
+        'cpu' must name that same side (a clusterer constructed with
+        ``device=None`` runs on this installation's device). Any other value,
+        or a side that differs from the clusterer's, raises ValueError.
 
     Returns
     -------
@@ -395,12 +405,13 @@ def membership_vector(clusterer, points_to_predict, batch_size=4096):
     >>> model = mojolearn.HDBSCAN(prediction_data=True).fit(X)
     >>> soft = mojolearn.hdbscan.membership_vector(model, X[:10])
     """
-    return _NATIVE(clusterer, "family_hdbscan_public_membership_vector", (points_to_predict, batch_size), _NATIVE_CONTEXT)
+    return _NATIVE(clusterer, "family_hdbscan_public_membership_vector", (points_to_predict, batch_size, device),
+                   _NATIVE_CONTEXT)
 
 
 # cuML `all_points_membership_vectors` (`hdbscan.pyx:1114`,
 # `soft_clustering.cuh:385-482`). Float32 on every column (DEVIATION 1616).
-def all_points_membership_vectors(clusterer, batch_size=4096):
+def all_points_membership_vectors(clusterer, batch_size=4096, *, device=None):
     """Soft cluster membership of every training point.
 
     Follows cuML's `all_points_membership_vectors`, using the fact that the
@@ -415,6 +426,11 @@ def all_points_membership_vectors(clusterer, batch_size=4096):
     batch_size : int, default 4096
         Maximum number of training rows computed per call. Rows are
         independent, so it does not change the result. Must be positive.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None runs where `clusterer` runs; 'gpu' or
+        'cpu' must name that same side (a clusterer constructed with
+        ``device=None`` runs on this installation's device). Any other value,
+        or a side that differs from the clusterer's, raises ValueError.
 
     Returns
     -------
@@ -438,7 +454,8 @@ def all_points_membership_vectors(clusterer, batch_size=4096):
     >>> model = mojolearn.HDBSCAN(prediction_data=True).fit(X)
     >>> soft = mojolearn.hdbscan.all_points_membership_vectors(model)
     """
-    return _NATIVE(clusterer, "family_hdbscan_public_all_points_membership_vectors", (batch_size,), _NATIVE_CONTEXT)
+    return _NATIVE(clusterer, "family_hdbscan_public_all_points_membership_vectors", (batch_size, device),
+                   _NATIVE_CONTEXT)
 
 
 __all__ = ["HDBSCAN", "approximate_predict", "membership_vector", "all_points_membership_vectors"]

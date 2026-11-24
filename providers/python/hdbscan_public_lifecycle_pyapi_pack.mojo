@@ -31,6 +31,9 @@ from bindings.operation_names_hdbscan import (
     HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_FIT_PREDICT, HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_APPROXIMATE_PREDICT,
     HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_MEMBERSHIP_VECTOR, HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_ALL_POINTS_MEMBERSHIP_VECTORS)
 from bindings.cluster_keys_unpack import cluster_keys
+from providers.python.function_device_boundary_door import function_device_admit
+from providers.python.device_route_boundary_door import device_request
+from core.function_device_fitted import function_device_fitted
 
 
 def _record(model: PythonObject, slot: String, key: PythonObject, binding: PythonObject,
@@ -73,6 +76,12 @@ def _query(model: PythonObject, operation: Int, args: PythonObject, fields: Pyth
     return output
 
 
+# HDBSCAN has a device image and a CPU identical image (`_mojolearn_hdbscan`'s
+# host route, the one HDBSCAN(device="cpu") runs).
+comptime _HDBSCAN_HAS_GPU = True
+comptime _HDBSCAN_HAS_CPU = True
+
+
 def hdbscan_unknown_operation(operation: String) raises:
     """A `family_hdbscan_public_*` name the operation table does not hold
     (the shells pass table names only). The name chain had no refusal of
@@ -99,6 +108,22 @@ def hdbscan_public_operation(model: PythonObject, operation: Int, args: PythonOb
         return hdbscan_initialize(model, args, context)
     var fitting = operation > HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_BINDING and operation <= HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_FIT_PREDICT
     var query = operation >= HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_APPROXIMATE_PREDICT
+    if query:
+        # The query function's `device` (lane vdf-misc), its last argument
+        # item, admitted first in the shared words. A query runs where the
+        # fitted clusterer lives (its own route, below); an explicit word that
+        # disagrees with that side is refused before any work
+        # (core/function_device_fitted.mojo). None is one identity compare.
+        var word = args[len(args) - 1]
+        if word is not None:
+            var name = String("approximate_predict")
+            if operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_MEMBERSHIP_VECTOR:
+                name = "membership_vector"
+            elif operation == HDBSCAN_OPN_FAMILY_HDBSCAN_PUBLIC_ALL_POINTS_MEMBERSHIP_VECTORS:
+                name = "all_points_membership_vectors"
+            var device = function_device_admit(word, name, _HDBSCAN_HAS_GPU, _HDBSCAN_HAS_CPU, context, b)
+            function_device_fitted(device, device_request(py_fields(model), b), name,
+                                   classical_estimator_name(model))
     var key = _record_key(model, context) if query else PythonObject(None)
     var recorded = _admit(model, context, fitting, key)
     var fields = py_fields(model)
