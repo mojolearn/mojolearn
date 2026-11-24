@@ -480,7 +480,7 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     _ = msel_unit_jobs(args[8], args[9], "validation_curve", context)  # n_jobs and error_score words
     if len(param_range) == 0:
         # scikit-learn 1.9 validation_curve (model_selection/_validation.py
-        # 2484-2510): the split runs, no fit, then `_aggregate_score_dicts([])`
+        # 2493-2510): the split runs, no fit, then `_aggregate_score_dicts([])`
         # reads `scores[0]`. The door's split checks first, then those words.
         _ = msel_cv_folds(estimator, args[1], args[2], args[6], args[5], True, context)
         raise Error("IndexError: list index out of range")
@@ -545,6 +545,69 @@ def _one_scorer_check(caller: String, scoring_in: PythonObject, context: PythonO
                                   + "}, a callable or None. Got " + family_repr(scoring_in) + " instead."))
 
 
+def _train_sizes(requested: PythonObject, n_max: Int, context: PythonObject) raises -> List[Int]:
+    """scikit-learn 1.9's `_translate_train_sizes(train_sizes, n_max)`
+    (model_selection/_validation.py 2114-2179), over the admitted scalars:
+    an empty list is NumPy's reduction words (`np.min` of a zero-size
+    array); any float makes every value a fraction (np.asarray's float
+    dtype), all in (0, 1] or the fractions words with min and max as `%f`,
+    then int(fraction * n_max) clipped to [1, n_max]; integers all in
+    (0, n_max] or the absolute words with min and max; the unique sizes,
+    sorted, with the RuntimeWarning when duplicates were dropped. Lane
+    mf-r9b (each value was refused alone in the absolute words before, and
+    an empty list ran no fit)."""
+    var b = msel_b()
+    var count = len(requested)
+    if count == 0:
+        raise Error("ValueError: zero-size array to reduction operation minimum which has no identity")
+    var values = Python.list()
+    var fractions = False
+    for i in range(count):  # driver-loop: over the requested train sizes (admitted once)
+        var s = _search_scalar(requested[i], "train_sizes", context)
+        fractions = fractions or py_type(s) is b.float
+        _ = py_call(values.append, s)
+    var low = family_call(b.min, values)
+    var high = family_call(b.max, values)
+    var chosen = List[Int](capacity=count)
+    if fractions:
+        var lo = Float64(py=family_call(b.float, low))
+        var hi = Float64(py=family_call(b.float, high))
+        if lo <= 0.0 or hi > 1.0:
+            var fmt = PythonObject("%f")
+            raise Error("ValueError: train_sizes has been interpreted as fractions of the maximum number of training"
+                        + " samples and must be within (0, 1], but is within ["
+                        + String(py=family_call(msel_op("mod"), fmt, PythonObject(lo))) + ", "
+                        + String(py=family_call(msel_op("mod"), fmt, PythonObject(hi))) + "].")
+        for i in range(count):  # driver-loop: over the requested fractions
+            var a = Int(Float64(py=family_call(b.float, values[i])) * Float64(n_max))  # astype(int): truncation
+            chosen.append(min(max(a, 1), n_max))
+    else:
+        var lo = msel_int(low)
+        var hi = msel_int(high)
+        if lo <= 0 or hi > n_max:
+            raise Error("ValueError: train_sizes has been interpreted as absolute numbers of training samples and"
+                        + " must be within (0, " + String(n_max) + "], but is within [" + String(lo) + ", "
+                        + String(hi) + "].")
+        for i in range(count):  # driver-loop: over the requested sizes
+            chosen.append(msel_int(values[i]))
+    for i in range(1, count):  # driver-loop: insertion sort of the few requested sizes (np.unique's order)
+        var v = chosen[i]
+        var j = i - 1
+        while j >= 0 and chosen[j] > v:  # driver-loop: shift the larger sizes right
+            chosen[j + 1] = chosen[j]
+            j -= 1
+        chosen[j + 1] = v
+    var sizes = List[Int](capacity=count)
+    for i in range(count):  # driver-loop: over the sorted sizes (np.unique)
+        if i == 0 or chosen[i] != chosen[i - 1]:
+            sizes.append(chosen[i])
+    if len(sizes) < count:
+        msel_warn("Removed duplicate entries from 'train_sizes'. Number of ticks will be less than the size of"
+                  + " 'train_sizes': " + String(len(sizes)) + " instead of " + String(count) + ".",
+                  b.RuntimeWarning, context)
+    return sizes^
+
+
 def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`learning_curve(estimator, X, y, groups, train_sizes, cv, scoring,
     n_jobs, shuffle, random_state, error_score, return_times)`."""
@@ -562,27 +625,12 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var y = got[1]
     var folds = got[2]
     var nf = len(folds)
+    # scikit-learn 1.9 learning_curve (model_selection/_validation.py 2035-2036):
+    # n_max_training_samples is the FIRST fold's train size; a larger size of
+    # a shorter fold takes all its rows (`train[:n]`, clamped below). Lane
+    # mf-r9b: the minimum over folds before.
     var n_max = Int(py=folds[0][0].size)
-    for f in range(nf):  # driver-loop: over folds
-        n_max = min(n_max, Int(py=folds[f][0].size))
-    var chosen = Python.list()
-    var requested = msel_parameter_values(args[4], context)
-    var math = native_loaded_module("math")
-    for i in range(len(requested)):  # driver-loop: over the requested train sizes
-        var s = _search_scalar(requested[i], "train_sizes", context)
-        var a = 0
-        if py_type(s) is b.float:
-            a = msel_int(family_call(math.floor, family_call(msel_op("mul"), s, PythonObject(n_max))))
-        else:
-            a = msel_int(s)
-        if not (0 < a and a <= n_max):
-            raise Error("train_sizes has been interpreted as absolute numbers of training samples and "
-                        + "must be within (0, " + String(n_max) + "], but is within [" + String(a) + ", " + String(a) + "].")
-        _ = py_call(chosen.append, PythonObject(a))
-    var sizes_py = family_call(b.sorted, py_call(b.set, chosen))
-    var sizes = List[Int]()
-    for i in range(len(sizes_py)):  # driver-loop: over train sizes
-        sizes.append(Int(py=sizes_py[i]))
+    var sizes = _train_sizes(msel_parameter_values(args[4], context), n_max, context)
     var orders = Python.list()
     if shuffle:
         var rng = MselRng(seed, context)
@@ -609,17 +657,14 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
             _ = py_call(orders.append, msel_index_i64(folds[f][0], context))
     var scoring = args[6]
     var error_score = args[10]
-    # Lane p3-msel-parallel-and-process-pool: every (train size, fold) is a
-    # unit of msel_cv_units, size-major, so the results keep the old order.
-    # The fold rows stay on the host gather (device_rows False), as before:
-    # each unit's fit sees the same arrays, so no bits change. REMOVED: the
-    # serial size x fold loop and its own resident plan; the test rows are
-    # now gathered per unit (they were gathered once per fold for every
-    # size): the price of independent units, RUN OWED in the A/B.
+    # Every (train size, fold) is one given fold of the carrier, size-major,
+    # so the results keep the old order (sklearn's fold-major units reshaped
+    # to the same (sizes, folds) blocks).
     var unit_folds = Python.list()
     for si in range(len(sizes)):  # driver-loop: over train sizes
         for f in range(nf):  # driver-loop: over folds
-            _ = py_call(unit_folds.append, Python.tuple(msel_slice_i64(orders[f], 0, sizes[si], context), folds[f][1]))
+            var take = min(sizes[si], Int(py=orders[f].size))  # `train[:n]` of a shorter fold: all its rows
+            _ = py_call(unit_folds.append, Python.tuple(msel_slice_i64(orders[f], 0, take, context), folds[f][1]))
     var tr_s = List[Float64]()
     var te_s = List[Float64]()
     var ft = List[Float64]()
@@ -627,40 +672,20 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     # THE ONE TYPED SEARCH RUN (lane mf-msel5, bindings/msel_cv_door.mojo
     # `msel_cv_by_search`): the size-major units as one candidate's given
     # folds (each size's train rows the fold's first `size` of its order),
-    # one gathered test block per fold (the RUN's `_same_rows`, as
-    # `reuse_test` below), the units' fit and test-score seconds. One
-    # scorer only (several: the units' TypeError below).
-    var by = PythonObject(None)
-    if msel_scorers(scoring, context) is None:
-        by = msel_cv_by_search(estimator, x, y, unit_folds, scoring, args[7], error_score, True, False,
+    # one gathered test block per fold (the RUN's `_same_rows`), the units'
+    # fit and test-score seconds. Lane mf-r9b: the only route (one scorer,
+    # `_one_scorer_check`; the kind refuses what it does not fit in its words).
+    var by = msel_cv_by_search(estimator, x, y, unit_folds, scoring, args[7], error_score, True, False,
                                PythonObject(None), False, context)
-    if by is not None:
-        var te_by = by["test"][0]
-        var tr_by = by["train"][0]
-        var ft_by = by["fit_time"]
-        var st_by = by["score_time"]
-        for u in range(len(unit_folds)):  # driver-loop: over size x fold units (results only)
-            tr_s.append(Float64(py=tr_by[u]))
-            te_s.append(Float64(py=te_by[u]))
-            ft.append(Float64(py=ft_by[u]))
-            st.append(Float64(py=st_by[u]))
-    else:
-        var rows = MselFoldRows(x, y, unit_folds, False, context)
-        # Every size of a fold scores on the same test rows; they are gathered
-        # once per fold (bindings/msel_cv_door.mojo `_take_reusing_test`, the
-        # default since 2026-11-20; its _OFF old path was deleted 2026-11-23).
-        rows.reuse_test = True
-        try:
-            var r = msel_cross_validate_run(estimator, y, rows, scoring, True, False, False, error_score, context, jobs)
-            if len(r.names) != 1:
-                raise Error("TypeError: learning_curve takes one scorer")
-            for u in range(len(r.fit_time)):  # driver-loop: over size x fold units
-                tr_s.append(r.train[0][u])
-                te_s.append(r.test[0][u])
-                ft.append(r.fit_time[u])
-                st.append(r.score_time[u])
-        finally:
-            rows.close(context)
+    var te_by = by["test"][0]
+    var tr_by = by["train"][0]
+    var ft_by = by["fit_time"]
+    var st_by = by["score_time"]
+    for u in range(len(unit_folds)):  # driver-loop: over size x fold units (results only)
+        tr_s.append(Float64(py=tr_by[u]))
+        te_s.append(Float64(py=te_by[u]))
+        ft.append(Float64(py=ft_by[u]))
+        st.append(Float64(py=st_by[u]))
     var out = Python.list()
     _ = py_call(out.append, msel_i64_list(sizes, context))
     _ = py_call(out.append, msel_f64_block(tr_s, len(sizes), nf, context))
