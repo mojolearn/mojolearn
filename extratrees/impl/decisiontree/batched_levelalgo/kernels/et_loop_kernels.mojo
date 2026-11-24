@@ -8,8 +8,9 @@ children on the host (`NodeQueue::Push`, `:91-143`). The merged-frontier ET
 forest (DEVIATION 211) did the same over one host queue per in-flight tree.
 These kernels keep the whole frontier on the device, so the host enqueues K
 batches per drain and reads back one fixed-size header, never a node list.
-The RandomForest form is `ensemble/.../kernels/level_loop_kernels.mojo`
-(`IDN_RF_DEVICE_LOOP`); this is its forest-batched ExtraTrees counterpart.
+The RandomForest form (`ensemble/.../kernels/level_loop_kernels.mojo`,
+`IDN_RF_DEVICE_LOOP`) lost its A/Bs and was deleted 2026-11-24; this was its
+forest-batched ExtraTrees counterpart.
 
 ONE FIFO PER GROUP. The group's trees share one device FIFO of work items
 (`ETL_Q_INTS` Int32 each: `[idx, depth, begin, count, slot, gpos]`). The host
@@ -23,10 +24,15 @@ tree is preserved exactly:
     shared FIFO's per-tree subsequence IS that tree's own FIFO), and
   * a tree's node ids are assigned in that order: `left = n_nodes(tree) +
     2 * rank`, rank = valid splits of the SAME tree earlier in the batch
-    (`etl_push_rank_kernel`), exactly `NodeQueue.push`'s `len(sparsetree)`.
+    (the push kernels), exactly `NodeQueue.push`'s `len(sparsetree)`.
 So node ids, ranges, draws and the tree are the host queue's, bit for bit,
 and the host column (`train_tree_exact`, which pushes per tree in the same
 FIFO order) needs no change.
+
+Since 2026-11-24 the FIFO pop and push kernels are deleted with the
+depth-wise device loop (it lost two A/Bs; depth-wise growth runs the host
+queue): the device loop runs best-first growth only, whose frontier kernels
+live in the builder. The ordering argument above is the one they keep.
 
 THE HOST DOES NOT KNOW THE LIVE COUNT. Every per-batch kernel is launched at
 a bound the host proves from the last header (`n_bound` items, a block-map
@@ -68,7 +74,6 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels impo
     InstanceRange,
     NodeWorkItem,
     WorkloadInfo,
-    split_not_valid,
 )
 
 comptime ETL_TPB = 256
@@ -218,119 +223,9 @@ def etl_init_kernel(
         queue[unsafe_offset = q + 5] = Int32(s)
 
 
-def etl_pop_kernel[
-    TPB: Int
-](
-    hdr: MutPointer[Int32, MutAnyOrigin],
-    queue: MutPointer[Int32, MutAnyOrigin],
-    b_items: MutPointer[NodeWorkItem, MutAnyOrigin],
-    b_slot: MutPointer[Int32, MutAnyOrigin],
-    b_gpos: MutPointer[Int32, MutAnyOrigin],
-    n_bound: Int32,
-    bound_s: Int32,
-    tile_s: Int32,
-    bound_p: Int32,
-    tile_p: Int32,
-):
-    """`NodeQueue.pop` for the shared FIFO. ONE block.
-
-    Takes the longest FIFO prefix of at most `n_bound` items whose search
-    map (tile `tile_s`) and partition map (tile `tile_p`) fit `bound_s` /
-    `bound_p` entries, copies it to the batch arrays, and pads the batch to
-    `n_bound` with dummies. The clamp keeps every later launch inside its
-    bound; the items it leaves stay at the FIFO head for the next batch,
-    which cannot move a tree (see the module doc)."""
-    comptime assert 2 * 4 <= ETL_SHARED_FITS, "pop header page"
-    var tid = Int(thread_idx.x)
-    var sh = stack_allocation[
-        2, Scalar[DType.int32], address_space=AddressSpace.SHARED
-    ]()
-    if tid == 0:
-        sh[unsafe_offset=0] = hdr[unsafe_offset=ETL_H_HEAD]
-        sh[unsafe_offset=1] = hdr[unsafe_offset=ETL_H_TAIL]
-    barrier()
-    var head = Int(sh[unsafe_offset=0])
-    var tail = Int(sh[unsafe_offset=1])
-    var lim = tail - head
-    if lim > Int(n_bound):
-        lim = Int(n_bound)
-    if lim < 0:
-        lim = 0
-    var cur = 0
-    var run_s = 0
-    var run_p = 0
-    var my_rows = 0
-    var c = 0
-    while c < lim:
-        var j = c + tid
-        var cnt = 0
-        var ns = Int32(0)
-        var np = Int32(0)
-        if j < lim:
-            cnt = Int(queue[unsafe_offset = (head + j) * ETL_Q_INTS + 3])
-            ns = Int32(etl_blocks(cnt, Int(tile_s)))
-            np = Int32(etl_blocks(cnt, Int(tile_p)))
-        var ex_s = Int(block_prefix_sum[block_size=TPB, exclusive=True](ns))
-        var ex_p = Int(block_prefix_sum[block_size=TPB, exclusive=True](np))
-        var tot_s = Int(block_sum[block_size=TPB, broadcast=True](ns))
-        var tot_p = Int(block_sum[block_size=TPB, broadcast=True](np))
-        var fits = (
-            j < lim
-            and run_s + ex_s + Int(ns) <= Int(bound_s)
-            and run_p + ex_p + Int(np) <= Int(bound_p)
-        )
-        var nfit = Int(
-            block_sum[block_size=TPB, broadcast=True](
-                Int32(1) if fits else Int32(0)
-            )
-        )
-        if fits:
-            my_rows += cnt
-        cur += nfit
-        run_s += tot_s
-        run_p += tot_p
-        var width = lim - c
-        if width > TPB:
-            width = TPB
-        if nfit < width:
-            break
-        c += TPB
-    var rows = Int(block_sum[block_size=TPB, broadcast=True](Int32(my_rows)))
-    var j2 = tid
-    while j2 < Int(n_bound):
-        if j2 < cur:
-            var q = (head + j2) * ETL_Q_INTS
-            b_items[unsafe_offset=j2] = NodeWorkItem(
-                queue[unsafe_offset=q],
-                queue[unsafe_offset = q + 1],
-                InstanceRange(
-                    queue[unsafe_offset = q + 2], queue[unsafe_offset = q + 3]
-                ),
-            )
-            b_slot[unsafe_offset=j2] = queue[unsafe_offset = q + 4]
-            b_gpos[unsafe_offset=j2] = queue[unsafe_offset = q + 5]
-        else:
-            b_items[unsafe_offset=j2] = etl_dummy_item()
-            b_slot[unsafe_offset=j2] = Int32(0)
-            b_gpos[unsafe_offset=j2] = Int32(-1)
-        j2 += TPB
-    if tid == 0:
-        hdr[unsafe_offset=ETL_H_HEAD] = Int32(head + cur)
-        hdr[unsafe_offset=ETL_H_CUR] = Int32(cur)
-        hdr[unsafe_offset=ETL_H_ROWS] = hdr[unsafe_offset=ETL_H_ROWS] - Int32(
-            rows
-        )
-        hdr[unsafe_offset=ETL_H_STAT_NODES] = hdr[
-            unsafe_offset=ETL_H_STAT_NODES
-        ] + Int32(cur)
-        if cur > 0:
-            hdr[unsafe_offset=ETL_H_STAT_BATCHES] = hdr[
-                unsafe_offset=ETL_H_STAT_BATCHES
-            ] + Int32(1)
-        elif lim > 0:
-            # The head item alone does not fit the host's bound: a host
-            # bound bug. Raised at the next drain rather than spinning.
-            hdr[unsafe_offset=ETL_H_OVERFLOW] = Int32(3)
+# TOMBSTONE: MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.06) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+# (`etl_pop_kernel`: the FIFO pop of the depth-wise device loop, which only that loop ran.)
 
 
 def etl_stage_kernel[
@@ -572,342 +467,11 @@ def etl_merge_kernel(
     _ = Atomic.fetch_add(hdr.unsafe_offset(ETL_H_STAT_RESCUED), Int32(1))
 
 
-def etl_push_rank_kernel[
-    TPB: Int
-](
-    hdr: MutPointer[Int32, MutAnyOrigin],
-    b_items: MutPointer[NodeWorkItem, MutAnyOrigin],
-    b_slot: MutPointer[Int32, MutAnyOrigin],
-    b_splits: MutPointer[Split, MutAnyOrigin],
-    cnt: MutPointer[Int32, MutAnyOrigin],
-    p_rank: MutPointer[Int32, MutAnyOrigin],
-    p_valid: MutPointer[Int32, MutAnyOrigin],
-    n_bound: Int32,
-    g_in: Int32,
-    min_impurity_decrease: Float32,
-    min_samples_leaf: Int32,
-):
-    """`NodeQueue.push`, step 1: which items split, and each one's rank among
-    the SAME tree's valid items earlier in its chunk of `TPB` batch slots.
-    Block `c` is chunk `c`. The chunk's slots and flags go through
-    threadgroup memory; each valid item also counts itself into
-    `cnt[c * g + slot]` (integer atomics: an exact count in any order), which
-    `etl_push_slot_kernel` turns into the earlier chunks' per-tree offsets.
-    `cnt` must be zero for the launch's chunks."""
-    comptime assert 2 * TPB * 4 <= ETL_SHARED_FITS, "push rank pages"
-    var sh_slot = stack_allocation[
-        TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED
-    ]()
-    var sh_valid = stack_allocation[
-        TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED
-    ]()
-    var c = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var j = c * TPB + tid
-    var g = Int(g_in)
-    var cur = Int(hdr[unsafe_offset=ETL_H_CUR])
-    var valid = Int32(0)
-    var slot = Int32(-1)
-    if j < cur and j < Int(n_bound):
-        var item = b_items[unsafe_offset=j]
-        slot = b_slot[unsafe_offset=j]
-        if item.instances.count > Int32(0) and not split_not_valid(
-            b_splits[unsafe_offset=j],
-            min_impurity_decrease,
-            min_samples_leaf,
-            item.instances.count,
-        ):
-            valid = Int32(1)
-    sh_slot[unsafe_offset=tid] = slot
-    sh_valid[unsafe_offset=tid] = valid
-    barrier()
-    var rank = Int32(0)
-    if valid != Int32(0):
-        for i in range(tid):
-            if (
-                sh_valid[unsafe_offset=i] != Int32(0)
-                and sh_slot[unsafe_offset=i] == slot
-            ):
-                rank += Int32(1)
-        _ = Atomic.fetch_add(
-            cnt.unsafe_offset(c * g + Int(slot)), Int32(1)
-        )
-    if j < Int(n_bound):
-        p_rank[unsafe_offset=j] = rank
-        p_valid[unsafe_offset=j] = valid
-
-
-def etl_push_slot_kernel(
-    cnt: MutPointer[Int32, MutAnyOrigin],
-    slot_stat: MutPointer[Int32, MutAnyOrigin],
-    slot_base: MutPointer[Int32, MutAnyOrigin],
-    n_chunks: Int32,
-    g_in: Int32,
-    max_leaves: Int32,
-):
-    """`NodeQueue.push`, step 2, one thread per tree: the exclusive prefix of
-    the tree's valid counts over the batch's chunks (in place in `cnt`), the
-    tree's counters BEFORE this batch (`slot_base`: nodes, leaves), and the
-    counters after it. cuML's `max_leaves` break (`push`'s `break` once
-    `leaf_counter >= max_leaves`) accepts exactly the first
-    `max_leaves - leaves` valid items of the tree, in batch order."""
-    var s = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var g = Int(g_in)
-    if s >= g:
-        return
-    var running = Int32(0)
-    for c in range(Int(n_chunks)):
-        var v = cnt[unsafe_offset = c * g + s]
-        cnt[unsafe_offset = c * g + s] = running
-        running += v
-    var bn = slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_NODES]
-    var bl = slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_LEAVES]
-    slot_base[unsafe_offset = 2 * s] = bn
-    slot_base[unsafe_offset = 2 * s + 1] = bl
-    var acc = running
-    if max_leaves != Int32(-1):
-        var room = max_leaves - bl
-        if room < Int32(0):
-            room = Int32(0)
-        if acc > room:
-            acc = room
-    slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_NODES] = (
-        bn + Int32(2) * acc
-    )
-    slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_LEAVES] = bl + acc
-
-
-def etl_push_mark_kernel[
-    TPB: Int
-](
-    b_items: MutPointer[NodeWorkItem, MutAnyOrigin],
-    b_slot: MutPointer[Int32, MutAnyOrigin],
-    b_splits: MutPointer[Split, MutAnyOrigin],
-    cnt: MutPointer[Int32, MutAnyOrigin],
-    p_rank: MutPointer[Int32, MutAnyOrigin],
-    p_valid: MutPointer[Int32, MutAnyOrigin],
-    slot_base: MutPointer[Int32, MutAnyOrigin],
-    slot_stat: MutPointer[Int32, MutAnyOrigin],
-    p_left: MutPointer[Int32, MutAnyOrigin],
-    p_kids: MutPointer[Int32, MutAnyOrigin],
-    p_aoff: MutPointer[Int32, MutAnyOrigin],
-    p_eoff: MutPointer[Int32, MutAnyOrigin],
-    x_chunk: MutPointer[Int32, MutAnyOrigin],
-    n_bound: Int32,
-    g_in: Int32,
-    max_depth: Int32,
-    min_samples_split: Int32,
-    max_leaves: Int32,
-):
-    """`NodeQueue.push`, step 3, block `c` = chunk `c`: for each accepted
-    item its left child's LOCAL id (`n_nodes(tree) + 2 * rank`, push's
-    `len(sparsetree)`), which children are expandable (`is_expandable` with
-    the tree's `leaf_counter` as push sees it right after this split:
-    `leaves + rank + 1`), the depth counter (integer `max`), and the chunk's
-    exclusive prefixes of arena records (2 per accepted item), FIFO entries
-    (expandable children) and FIFO rows."""
-    var c = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var j = c * TPB + tid
-    var g = Int(g_in)
-    var a = Int32(0)
-    var e = Int32(0)
-    var r = Int32(0)
-    var left = Int32(-1)
-    var kids = Int32(0)
-    if j < Int(n_bound) and p_valid[unsafe_offset=j] != Int32(0):
-        var slot = Int(b_slot[unsafe_offset=j])
-        var rank = p_rank[unsafe_offset=j] + cnt[unsafe_offset = c * g + slot]
-        var bl = slot_base[unsafe_offset = 2 * slot + 1]
-        if max_leaves == Int32(-1) or bl + rank < max_leaves:
-            var item = b_items[unsafe_offset=j]
-            var sp = b_splits[unsafe_offset=j]
-            left = slot_base[unsafe_offset = 2 * slot] + Int32(2) * rank
-            var nl = sp.n_left
-            var nr = item.instances.count - nl
-            var d1 = item.depth + Int32(1)
-            var leaf_after = bl + rank + Int32(1)
-            var budget_ok = max_leaves == Int32(-1) or leaf_after < max_leaves
-            var ok_l = d1 < max_depth and nl >= min_samples_split and budget_ok
-            var ok_r = d1 < max_depth and nr >= min_samples_split and budget_ok
-            a = Int32(2)
-            if ok_l:
-                kids |= Int32(1)
-                e += Int32(1)
-                r += nl
-            if ok_r:
-                kids |= Int32(2)
-                e += Int32(1)
-                r += nr
-            Atomic.max(
-                slot_stat.unsafe_offset(slot * ETL_STAT_INTS + ETL_ST_DEPTH),
-                d1,
-            )
-    var ex_a = block_prefix_sum[block_size=TPB, exclusive=True](a)
-    var ex_e = block_prefix_sum[block_size=TPB, exclusive=True](e)
-    var tot_a = block_sum[block_size=TPB, broadcast=True](a)
-    var tot_e = block_sum[block_size=TPB, broadcast=True](e)
-    var tot_r = block_sum[block_size=TPB, broadcast=True](r)
-    if j < Int(n_bound):
-        p_left[unsafe_offset=j] = left
-        p_kids[unsafe_offset=j] = kids
-        p_aoff[unsafe_offset=j] = ex_a
-        p_eoff[unsafe_offset=j] = ex_e
-    if tid == 0:
-        x_chunk[unsafe_offset = 3 * c + 0] = tot_a
-        x_chunk[unsafe_offset = 3 * c + 1] = tot_e
-        x_chunk[unsafe_offset = 3 * c + 2] = tot_r
-
-
-def etl_push_commit_kernel[
-    TPB: Int
-](
-    hdr: MutPointer[Int32, MutAnyOrigin],
-    x_chunk: MutPointer[Int32, MutAnyOrigin],
-    n_chunks: Int32,
-    node_cap: Int32,
-    queue_cap: Int32,
-):
-    """`NodeQueue.push`, step 4, ONE block: each chunk's ABSOLUTE first arena
-    record and first FIFO entry (in place in `x_chunk`), then the header's
-    node count, FIFO tail and FIFO rows. Overflow is flagged for the host
-    (whose capacity growth makes it unreachable) and the writes clip."""
-    comptime assert 3 * 4 <= ETL_SHARED_FITS, "commit header page"
-    var tid = Int(thread_idx.x)
-    var sh = stack_allocation[
-        3, Scalar[DType.int32], address_space=AddressSpace.SHARED
-    ]()
-    if tid == 0:
-        sh[unsafe_offset=0] = hdr[unsafe_offset=ETL_H_NODES]
-        sh[unsafe_offset=1] = hdr[unsafe_offset=ETL_H_TAIL]
-        sh[unsafe_offset=2] = hdr[unsafe_offset=ETL_H_ROWS]
-    barrier()
-    var run_a = Int(sh[unsafe_offset=0])
-    var run_e = Int(sh[unsafe_offset=1])
-    var rows0 = Int(sh[unsafe_offset=2])
-    var run_r = 0
-    var c0 = 0
-    while c0 < Int(n_chunks):
-        var c = c0 + tid
-        var a = Int32(0)
-        var e = Int32(0)
-        var r = Int32(0)
-        if c < Int(n_chunks):
-            a = x_chunk[unsafe_offset = 3 * c + 0]
-            e = x_chunk[unsafe_offset = 3 * c + 1]
-            r = x_chunk[unsafe_offset = 3 * c + 2]
-        var ex_a = Int(block_prefix_sum[block_size=TPB, exclusive=True](a))
-        var ex_e = Int(block_prefix_sum[block_size=TPB, exclusive=True](e))
-        var tot_a = Int(block_sum[block_size=TPB, broadcast=True](a))
-        var tot_e = Int(block_sum[block_size=TPB, broadcast=True](e))
-        var tot_r = Int(block_sum[block_size=TPB, broadcast=True](r))
-        if c < Int(n_chunks):
-            x_chunk[unsafe_offset = 3 * c + 0] = Int32(run_a + ex_a)
-            x_chunk[unsafe_offset = 3 * c + 1] = Int32(run_e + ex_e)
-        run_a += tot_a
-        run_e += tot_e
-        run_r += tot_r
-        c0 += TPB
-    if tid == 0:
-        hdr[unsafe_offset=ETL_H_NODES] = Int32(run_a)
-        hdr[unsafe_offset=ETL_H_TAIL] = Int32(run_e)
-        hdr[unsafe_offset=ETL_H_ROWS] = Int32(rows0 + run_r)
-        if run_a > Int(node_cap) or run_e > Int(queue_cap):
-            hdr[unsafe_offset=ETL_H_OVERFLOW] = Int32(1)
-
-
-def etl_push_write_kernel[
-    TPB: Int
-](
-    b_items: MutPointer[NodeWorkItem, MutAnyOrigin],
-    b_slot: MutPointer[Int32, MutAnyOrigin],
-    b_gpos: MutPointer[Int32, MutAnyOrigin],
-    b_splits: MutPointer[Split, MutAnyOrigin],
-    p_left: MutPointer[Int32, MutAnyOrigin],
-    p_kids: MutPointer[Int32, MutAnyOrigin],
-    p_aoff: MutPointer[Int32, MutAnyOrigin],
-    p_eoff: MutPointer[Int32, MutAnyOrigin],
-    x_chunk: MutPointer[Int32, MutAnyOrigin],
-    g_nodes: MutPointer[SparseTreeNode[DType.float32], MutAnyOrigin],
-    g_meta: MutPointer[Int32, MutAnyOrigin],
-    queue: MutPointer[Int32, MutAnyOrigin],
-    n_bound: Int32,
-    node_cap: Int32,
-    queue_cap: Int32,
-):
-    """`NodeQueue.push`, step 5, block `c` = chunk `c`: the parent becomes a
-    split node (`CreateSplitNode(colid, quesval, gain, left, count)`), the
-    two children are appended as leaves (`CreateLeafNode(n_left)`,
-    `CreateLeafNode(count - n_left)`, adjacent: right = left + 1) with their
-    ranges carved from the parent's, and the expandable children join the
-    FIFO left before right, in batch order."""
-    var c = Int(block_idx.x)
-    var j = c * TPB + Int(thread_idx.x)
-    if j >= Int(n_bound):
-        return
-    var left = p_left[unsafe_offset=j]
-    if left < Int32(0):
-        return
-    var item = b_items[unsafe_offset=j]
-    var sp = b_splits[unsafe_offset=j]
-    var slot = b_slot[unsafe_offset=j]
-    var gpos = Int(b_gpos[unsafe_offset=j])
-    var kids = p_kids[unsafe_offset=j]
-    var begin = item.instances.begin
-    var count = item.instances.count
-    var nl = sp.n_left
-    var nr = count - nl
-    var d1 = item.depth + Int32(1)
-    var gl = Int(x_chunk[unsafe_offset = 3 * c + 0]) + Int(
-        p_aoff[unsafe_offset=j]
-    )
-    if gl + 2 > Int(node_cap) or gpos < 0:
-        return
-    g_nodes[unsafe_offset=gpos] = SparseTreeNode[
-        DType.float32
-    ].CreateSplitNode(
-        sp.colid,
-        sp.quesval,
-        sp.best_metric_val,
-        Int64(Int(left)),
-        count,
-    )
-    g_nodes[unsafe_offset=gl] = SparseTreeNode[DType.float32].CreateLeafNode(
-        nl
-    )
-    g_meta[unsafe_offset = gl * ETL_META_INTS + 0] = slot
-    g_meta[unsafe_offset = gl * ETL_META_INTS + 1] = left
-    g_meta[unsafe_offset = gl * ETL_META_INTS + 2] = begin
-    g_meta[unsafe_offset = gl * ETL_META_INTS + 3] = nl
-    g_nodes[unsafe_offset = gl + 1] = SparseTreeNode[
-        DType.float32
-    ].CreateLeafNode(nr)
-    g_meta[unsafe_offset = (gl + 1) * ETL_META_INTS + 0] = slot
-    g_meta[unsafe_offset = (gl + 1) * ETL_META_INTS + 1] = left + Int32(1)
-    g_meta[unsafe_offset = (gl + 1) * ETL_META_INTS + 2] = begin + nl
-    g_meta[unsafe_offset = (gl + 1) * ETL_META_INTS + 3] = nr
-    var q = Int(x_chunk[unsafe_offset = 3 * c + 1]) + Int(
-        p_eoff[unsafe_offset=j]
-    )
-    if (kids & Int32(1)) != Int32(0):
-        if q < Int(queue_cap):
-            var o = q * ETL_Q_INTS
-            queue[unsafe_offset = o + 0] = left
-            queue[unsafe_offset = o + 1] = d1
-            queue[unsafe_offset = o + 2] = begin
-            queue[unsafe_offset = o + 3] = nl
-            queue[unsafe_offset = o + 4] = slot
-            queue[unsafe_offset = o + 5] = Int32(gl)
-        q += 1
-    if (kids & Int32(2)) != Int32(0):
-        if q < Int(queue_cap):
-            var o = q * ETL_Q_INTS
-            queue[unsafe_offset = o + 0] = left + Int32(1)
-            queue[unsafe_offset = o + 1] = d1
-            queue[unsafe_offset = o + 2] = begin + nl
-            queue[unsafe_offset = o + 3] = nr
-            queue[unsafe_offset = o + 4] = slot
-            queue[unsafe_offset = o + 5] = Int32(gl + 1)
+# TOMBSTONE: MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT (NOISE: NV L40S 6 cells, median 1.00, 0.99..1.06) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+# (`etl_push_rank_kernel`, `etl_push_slot_kernel`, `etl_push_mark_kernel`,
+# `etl_push_commit_kernel`, `etl_push_write_kernel`: the FIFO push of the
+# depth-wise device loop, which only that loop ran.)
 
 
 def etl_tree_base_kernel[

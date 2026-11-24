@@ -184,7 +184,6 @@ from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.os import getenv
-from std.sys.compile import is_defined
 from std.memory import bitcast
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G01, AFT_G02
@@ -1007,21 +1006,22 @@ def compute_hist2_non_binary_dev[
     var multiplier = pw_block_multiplier(nx, ny, nz, size, sm_count)
     var int_slots = False
     comptime if bits == 8 and not PW_PRIVATE_DOC_SLOTS and HIST_BUILD_MODE != NUMERIC_FAST:
-        if pw_int_slots_on():
-            var est = estimate_block_per_feature_multiplier(nx, ny, nz, size, sm_count)
-            # a check's lever: a forced power-of-two split (the cells cannot
-            # depend on it; MOJOLEARN_PW_INT_SLOTS_FORCE=4 proves that)
-            var force = String(getenv("MOJOLEARN_PW_INT_SLOTS_FORCE"))
-            if force != "":
-                try:
-                    est = Int(force)
-                except:
-                    pass
-            if est > PW_MAX_MULTIPLIER:
-                est = PW_MAX_MULTIPLIER
-            if est > 1 and (est & (est - 1)) == 0:
-                multiplier = est
-                int_slots = True
+        # TOMBSTONE: MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF (old path, LOSER: NV L40S 9 cells, old path 2.44x / 3.24x / 9.07x slower on pairlogit istella, symmetric istella, symmetric taxi fit) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+        var est = estimate_block_per_feature_multiplier(nx, ny, nz, size, sm_count)
+        # a check's lever: a forced power-of-two split (the cells cannot
+        # depend on it; MOJOLEARN_PW_INT_SLOTS_FORCE=4 proves that)
+        var force = String(getenv("MOJOLEARN_PW_INT_SLOTS_FORCE"))
+        if force != "":
+            try:
+                est = Int(force)
+            except:
+                pass
+        if est > PW_MAX_MULTIPLIER:
+            est = PW_MAX_MULTIPLIER
+        if est > 1 and (est & (est - 1)) == 0:
+            multiplier = est
+            int_slots = True
 
     # `:242` -- sizes the LAUNCH, over EVERY one-byte feature
     nx = (
@@ -1207,11 +1207,13 @@ def launch_pw_fold_doc_slots[
 # one-block writeback. The cell is the multiplier-1 cell at every
 # multiplier, so the split follows the device's SM count. The ordered
 # levels launched 32-64 blocks on a 142-SM L40S at 4.1M rows.
-# `-D MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF` restores the one-block launch
-# (lane fx-env-dead, 2026-11-18: was the run-time env read
-# MOJOLEARN_PW_INT_SLOTS=0 per hist launch; default unchanged, A/B owed).
-def pw_int_slots_on() -> Bool:
-    return not is_defined["MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF"]()
+# The one-block launch stays for a width whose estimate is not a power of
+# two above 1 (the split needs one); the switch that forced it everywhere is
+# gone (A/B nvc1-0002, NVIDIA L40S: the forced one-block launch was 2.44x
+# slower on pairlogit istella fit, 3.24x on symmetric istella, 9.07x on
+# symmetric taxi).
+# TOMBSTONE: MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF (old path, LOSER: NV L40S 9 cells, old path 2.44x / 3.24x / 9.07x slower on pairlogit istella, symmetric istella, symmetric taxi fit) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
 
 
 def pw_fold_int_slots_kernel(
@@ -1492,19 +1494,20 @@ def compute_hist2_binary[
         # lane/neural-pass124: the fixed-point cells are exact in any order,
         # so the documents split at the device's estimate (as 8-bit's)
         multiplier = 1
-        if pw_int_slots_on():
-            var est = estimate_block_per_feature_multiplier(nx, ny, nz, size, sm_count)
-            var force = String(getenv("MOJOLEARN_PW_INT_SLOTS_FORCE"))
-            if force != "":
-                try:
-                    est = Int(force)
-                except:
-                    pass
-            if est > PW_MAX_MULTIPLIER:
-                est = PW_MAX_MULTIPLIER
-            if est > 1 and (est & (est - 1)) == 0:
-                multiplier = est
-                int_slots = True
+        # TOMBSTONE: MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF (old path, LOSER: NV L40S 9 cells, old path 2.44x / 3.24x / 9.07x slower on pairlogit istella, symmetric istella, symmetric taxi fit) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+        var est = estimate_block_per_feature_multiplier(nx, ny, nz, size, sm_count)
+        var force = String(getenv("MOJOLEARN_PW_INT_SLOTS_FORCE"))
+        if force != "":
+            try:
+                est = Int(force)
+            except:
+                pass
+        if est > PW_MAX_MULTIPLIER:
+            est = PW_MAX_MULTIPLIER
+        if est > 1 and (est & (est - 1)) == 0:
+            multiplier = est
+            int_slots = True
     nx *= multiplier
     if is_grid_empty(nx, ny, nz):
         return
@@ -1775,19 +1778,20 @@ def compute_hist2_half_byte[
         # lane/neural-pass124: the fixed-point cells are exact in any order,
         # so the documents split at the device's estimate (as 8-bit's)
         multiplier = 1
-        if pw_int_slots_on():
-            var est = estimate_block_per_feature_multiplier(nx, ny, nz, size, sm_count)
-            var force = String(getenv("MOJOLEARN_PW_INT_SLOTS_FORCE"))
-            if force != "":
-                try:
-                    est = Int(force)
-                except:
-                    pass
-            if est > PW_MAX_MULTIPLIER:
-                est = PW_MAX_MULTIPLIER
-            if est > 1 and (est & (est - 1)) == 0:
-                multiplier = est
-                int_slots = True
+        # TOMBSTONE: MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF (old path, LOSER: NV L40S 9 cells, old path 2.44x / 3.24x / 9.07x slower on pairlogit istella, symmetric istella, symmetric taxi fit) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
+        var est = estimate_block_per_feature_multiplier(nx, ny, nz, size, sm_count)
+        var force = String(getenv("MOJOLEARN_PW_INT_SLOTS_FORCE"))
+        if force != "":
+            try:
+                est = Int(force)
+            except:
+                pass
+        if est > PW_MAX_MULTIPLIER:
+            est = PW_MAX_MULTIPLIER
+        if est > 1 and (est & (est - 1)) == 0:
+            multiplier = est
+            int_slots = True
     nx *= multiplier
     if is_grid_empty(nx, ny, nz):
         return

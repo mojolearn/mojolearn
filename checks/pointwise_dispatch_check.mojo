@@ -199,7 +199,6 @@ from gbdt.methods.pointwise_kernels import (
     compute_hist2,
     compute_hist2_non_binary,
     folds_histogram_from_folds,
-    pw_int_slots_on,
 )
 
 # 24,000 rows is not decoration. `EstimateBlockPerFeatureMultiplier` refuses
@@ -802,7 +801,8 @@ def test_pointwise_dispatch() raises:
         var est = m_2c
         if est > PW_MAX_MULTIPLIER:
             est = PW_MAX_MULTIPLIER
-        int_slot_store = pw_int_slots_on() and est > 1 and (est & (est - 1)) == 0
+        # MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF deleted 2026-11-24 (lane ab-outcome-2): the split is always offered
+        int_slot_store = est > 1 and (est & (est - 1)) == 0
     var want2c = zeros(line2)
     for k in range(line2):
         if int_slot_store:
