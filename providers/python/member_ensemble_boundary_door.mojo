@@ -3217,7 +3217,10 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
             return String(py=items[i][0])
     var func = py_call(b.getattr, got, PythonObject("_score_func"), PythonObject(None))
     if func is None:
-        return String("")
+        # lane mf-r9d round b: `msel_get_scorer` admitted it, which reads its
+        # `_score_func` and that metric's connected plan (a Python callable is
+        # refused there in the native scorer door's words)
+        raise Error("RuntimeError: search admission invariant: an admitted native scorer has no _score_func")
     # LANE mf-rows8a: a kwarg the metric does not take (or one of its
     # positional inputs): the native scorer door refuses it on every score
     # (`_kwarg_refusal`); a stand-in row raises those words per side.
@@ -3304,8 +3307,12 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 if word == "beta" and fbeta and theirs is not missing and msel_scorer_f_row(typed):
                     var beta = _real_word(theirs, b)
                     if not (beta >= 0.0):
-                        same = False  # the door raises its F-beta words
-                        break
+                        # lane mf-r9d round b: the fbeta door's `_check_beta`
+                        # words (bindings/metrics_exp_cls_door.mojo), per side;
+                        # the row's F words stand in (no metric runs)
+                        _refuse(mine_kw, "beta should be >=0 in the F-beta score")
+                        mine_kw.beta = 1.0
+                        continue
                     mine_kw.beta = beta
                     continue
                 if word == "sample_weight" and theirs is not missing and theirs is not None:
@@ -3348,8 +3355,7 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                     if py_type(theirs) is b.str and String(py=theirs) == "samples":
                         mine_kw.samples = True
                         continue
-                if mine is not missing and theirs is not missing and Bool(py=py_call(b.bool, py_call(eq, mine,
-                                                                                                    theirs))):
+                if mine is not missing and theirs is not missing and _same_kwarg(mine, theirs, eq, b):
                     continue
                 if word == "pos_label" and theirs is not missing:
                     if pos_row:
@@ -3358,11 +3364,16 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                         continue
                     if theirs is None or (py_type(theirs) is b.int and Int(py=theirs) == 1):
                         continue  # scikit-learn ignores pos_label on an averaged row
-                if word == "k" and ranked and py_type(theirs) is b.int:
-                    mine_kw.top_k = Int(py=theirs)
-                    if mine_kw.top_k < 1:
-                        same = False  # the metric refuses it in its words: the door
-                        break
+                if word == "k" and ranked and theirs is not missing:
+                    # lane mf-r9d round b: the top_k door's check
+                    # (bindings/metrics_exp_curve_door.mojo `_top_k`: a bool,
+                    # a non-integral or a k below 1 refuses in its words, per side)
+                    var integral = py_type(theirs) is not b.bool and Bool(py=py_call(
+                        b.isinstance, theirs, native_loaded_module("numbers").Integral))
+                    if not integral or Int(py=py_call(b.int, theirs)) < 1:
+                        _refuse(mine_kw, "k must be a positive integer")
+                        continue
+                    mine_kw.top_k = Int(py=py_call(b.int, theirs))
                     continue
                 if word == "zero_division" and label_row > 0 and theirs is not missing:
                     if py_type(theirs) is b.str and String(py=theirs) == "warn":
@@ -3380,7 +3391,10 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
             if not same:
                 continue
             if fbeta and mine_kw.beta < 0.0:
-                continue  # fbeta_score without its beta: the door raises its words
+                # lane mf-r9d round b: fbeta_score without its keyword-only beta:
+                # the call's TypeError, per side (Python's words)
+                _refuse(mine_kw, "TypeError: fbeta_score() missing 1 required keyword-only argument: 'beta'")
+                mine_kw.beta = 1.0
             mine_kw.flip = not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_sign")),
                                                                py_call(b.getattr, got, PythonObject("_sign")))))
             if mine_kw.mclass > 0:
@@ -3399,18 +3413,28 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
         # flip is greater_is_better=False.
         var plan = py_get(context["family_msel_metric_plans"], func)
         if plan is None:
-            return String("")
+            # lane mf-r9d round b: `msel_get_scorer` admitted the metric's plan
+            # (a Python metric callable is refused there, the native
+            # alternative named)
+            raise Error("RuntimeError: search admission invariant: an admitted native scorer's metric has no plan")
         # lane mf-r9d (door :3789): a response_method TUPLE of method names
         # (the native scorer door takes a str or a tuple of str,
         # `_scorer_response`): the admission resolves it against the class
         # (`resp_tuple`); a list or another value is no response the door takes
         var tupled = py_type(got_method) is b.tuple
+        # lane mf-r9d round b: a response_method the native scorer door's
+        # `_scorer_response` refuses on every score: its words per side
+        # through the stand-in row (the scorer's try, as the door raises them)
         if tupled:
             for q in range(len(got_method)):  # small-loop(the scorer's response methods)
                 if py_type(got_method[q]) is not b.str:
-                    return String("")
+                    kw.refuse_text = String("TypeError: native scorer response method names must be exact strings")
+                    kw.stand_in = True
+                    return String("accuracy")
         elif py_type(got_method) is not b.str:
-            return String("")
+            kw.refuse_text = String("TypeError: native scorer response_method requires a string or tuple of strings")
+            kw.stand_in = True
+            return String("accuracy")
         var metric = String(py=plan["name"])
         var normalize = True
         var metric_kw = _ScorerKw()
@@ -3432,10 +3456,18 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 if mode == 1:
                     _refuse(metric_kw, "ValueError: numeric_mode must be 'fast' or 'identical'")
             elif not _metric_row_kwarg(metric, word, value, metric_kw, normalize, context, b):
-                return String("")
+                # lane mf-r9d round b: a kwarg of the connected metric that no
+                # typed word of its row carries: refused natively, named
+                raise Error("NotImplementedError: mojolearn: make_scorer(" + metric + ", " + word + "=...) is not "
+                            + "served natively by a search: no native scorer row reads that option; use a scoring "
+                            + "name, or make_scorer(" + metric + ") without it")
         var code = msel_scorer_metric_code(metric, normalize)
         if code < 0:
-            return String("")
+            # lane mf-r9d round b: a connected metric with no typed scorer row
+            # (no scalar score of 1-D targets: the curves, the ranking and
+            # multilabel metrics, the reports): refused natively, named
+            raise Error("NotImplementedError: mojolearn: make_scorer(" + metric + ") is not served natively by a "
+                        + "search: no native scorer row computes that metric; use one of get_scorer_names()")
         # lane mf-score8 round b: the make_scorer's response is the row's
         # (predict; hinge_loss's decision_function; the D^2 probability
         # scores' predict_proba)
@@ -3447,20 +3479,35 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
             metric_kw.resp_tuple = True
         elif String(py=got_method) != wanted:
             # lane mf-r9c (door :3670): a regression metric row over the
-            # make_scorer's own non-predict response
-            if not (op == MEMBER_OP_PREDICT and msel_scorer_regression(msel_scorer_row(code))
-                    and _non_predict_response(got_method, b)):
-                return String("")
-            metric_kw.resp_any = True
+            # make_scorer's own non-predict response. LANE mf-r9d round b:
+            # any other response is resolved at the admission as a tuple's
+            # (`resp_tuple`: the metric over that answer, `opts.wrong`)
+            if op == MEMBER_OP_PREDICT and msel_scorer_regression(msel_scorer_row(code)) and _non_predict_response(
+                    got_method, b):
+                metric_kw.resp_any = True
+            else:
+                metric_kw.resp_tuple = True
         # lane mf-score8: the row's sign is its get_scorer sign (or +1 for a
         # metric row); the flip is a make_scorer sign that differs from it
         var row_sign = Int(msel_scorer_row(code).sign)
         metric_kw.flip = Int(py=py_call(b.int, py_call(b.getattr, got, PythonObject("_sign")))) != row_sign
         kw = metric_kw^
         return String(msel_scorer_row(code).name)
+    except error:
+        # lane mf-r9d round b: no "" answer is left; a failure reading the
+        # scorer's options raises its own words (kwarg values compare through
+        # `_same_kwarg`, which answers False for a comparison that raises)
+        raise error^
+
+
+def _same_kwarg(mine: PythonObject, theirs: PythonObject, eq: PythonObject, b: PythonObject) -> Bool:
+    """UNPACK (lane mf-r9d round b): `bool(mine == theirs)` of two kwarg
+    values, False when the comparison raises (an array kwarg: its truth value
+    is ambiguous), so the row is not matched by that option."""
+    try:
+        return Bool(py=py_call(b.bool, py_call(eq, mine, theirs)))
     except:
-        return String("")  # options no exact comparison reads: the door
-    return String("")
+        return False
 
 
 def _search_served(fields: PythonObject) raises -> PythonObject:
@@ -3816,25 +3863,22 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         var kw = _ScorerKw()
         var name = _scorer_name(givens[j], context, b, kw)
         var scorer = msel_get_scorer(givens[j], context)
-        var no_method = _response_refusal(scorer, base, b)
+        # lane mf-r9d round b: a response_method the native scorer door refuses
+        # (`_scorer_response`'s words, the stand-in row) is read before the
+        # class's methods are asked
+        var bad_method = kw.stand_in and kw.refuse_text.startswith("TypeError: native scorer response")
+        var no_method = kw.refuse_text.copy() if bad_method else _response_refusal(scorer, base, b)
         if no_method.byte_length() == 0 and kw.stand_in:
             # lane mf-rows8a: a kwarg the metric does not take (`_kwarg_refusal`),
             # raised per side after the response is asked, as the door does
             no_method = kw.refuse_text.copy()
         if name.byte_length() == 0 and no_method.byte_length() == 0:
-            # a native scorer no table row holds. Lane mf-r9c typed roc_auc's
-            # multi_class on its dual row (`_multi_class_row`) and a regression
-            # row over a predict_proba / decision_function response
-            # (`resp_any`); LANE mf-r9d the other numeric_mode tier (its own
-            # route, `_other_tier`), a predict_log_proba response over a
-            # regression row (`opts.log`) and a response tuple on a metric row
-            # (`resp_tuple`). Left (mf-r9d-work/rows.tsv, `_scorer_name`'s ""
-            # answers): a scorer with no `_score_func`, a metric with no
-            # connected plan or no typed row, a kwarg of a connected metric
-            # that no typed word carries (`_metric_row_kwarg` False), fbeta
-            # without a beta or a beta / k the metric refuses, a list
-            # response_method, an option no exact comparison reads.
-            return False
+            # LANE mf-r9d round b: `_scorer_name` answers a row name for every
+            # admitted scorer, or raises (each cause typed or refused there:
+            # the other numeric_mode tier, a log or tuple response, the fbeta /
+            # top_k refusals, an untyped kwarg or metric refused natively); an
+            # empty name is an invariant (was the False exit to the door's units)
+            raise Error("RuntimeError: search admission invariant: an admitted scorer matched no scorer row")
         if no_method.byte_length() > 0:
             # A CLASS WITH NONE OF THE SCORER'S RESPONSE METHODS (lane mf-score8
             # round b): scikit-learn's scorer raises `_check_response_method`'s
