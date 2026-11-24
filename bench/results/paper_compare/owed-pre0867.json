@@ -139,8 +139,9 @@
   },
   "tsqr-wy-pair-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF",
-   "status": "define in code (x_decomp/tsqr_core.mojo TS_WY_PAIR): B = the single-panel WY update (before 3c5c5592a0); A = the paired-panel WY update (default since 2026-10-08, never A/B'd)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): old path LOSER (L40S 10 cells, median 1.03; istella lstsq 283 -> 373 ms (1.32), ols 510 -> 683 ms (1.34), qr / svd 1.11); A (the paired-panel WY update, the IDENTICAL default) is unchanged; removed: the switch term (TS_WY_PAIR = IDENTICAL; the per-panel update stays for FAST builds); grid control tsqr_wy_pair moved to removed (gap-tsqr.json); the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at 4ce303e41b, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.ab-outcome-3.patch. Was: define in code (x_decomp/tsqr_core.mojo TS_WY_PAIR): B = the single-panel WY update (before 3c5c5592a0); A = the paired-panel WY update (default since 2026-10-08, never A/B'd)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "tsqr-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
@@ -150,8 +151,9 @@
   },
   "tsqr-wy-pair-tree-par-off": {
    "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_IDN_TSQR_TREE_PAR_OFF",
-   "status": "both defines together: the whole pre-3c5c5592a0 TSQR (x_decomp/tsqr_core.mojo)",
-   "owed": "RUN"
+   "status": "DECIDED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): both old paths together were slower (L40S 10 cells, median 1.00; istella lstsq 1.31, ols 1.33, svd 1.11 slower); decided by the two deletions of MOJOLEARN_IDN_TSQR_TREE_PAR_OFF and MOJOLEARN_IDN_TSQR_WY_PAIR_OFF (both refused in core/experiment_guards_decomposition.mojo; patches ~/mojolearn-evidence/experiments-removed/<DEFINE>.ab-outcome-3.patch). Was: both defines together: the whole pre-3c5c5592a0 TSQR (x_decomp/tsqr_core.mojo)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "ols-predict-tiled": {
    "define": "MOJOLEARN_IDN_OLS_PREDICT_TILED",
@@ -1899,7 +1901,9 @@
     "tsqr-tree-par-off",
     "tsqr-wy-pair-tree-par-off"
    ],
-   "decides": "keep the defaults (A) unless an _OFF arm wins on the NVIDIA + AMD average (one cell each on record: ols taxi fit AMD 7.9 -> 12.2 ms after the switch, NV 17.5 -> 14.3 ms, ols istella NV 1029 -> 653, qr istella NV 1177 -> 850); bits change between arms on every column"
+   "decides": "keep the defaults (A) unless an _OFF arm wins on the NVIDIA + AMD average (one cell each on record: ols taxi fit AMD 7.9 -> 12.2 ms after the switch, NV 17.5 -> 14.3 ms, ols istella NV 1029 -> 653, qr istella NV 1177 -> 850); bits change between arms on every column",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "ols-predict-tiled",

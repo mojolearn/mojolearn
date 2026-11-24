@@ -44,7 +44,6 @@ way decomposition/host/pca_full_oracle.mojo restates it. A zero column
 (||x|| flushed to 0) is a zero diagonal and tau = 0 (DEVIATION 588): no
 refusal, its reflector's stored tail is zeroed so no later product reads it.
 """
-from std.sys.compile import is_defined
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -72,8 +71,8 @@ comptime TS_MAX_N = 512
 # only; a FAST build keeps the per-panel forms. Both switches change bits, on
 # every vendor and in the host replay together.
 #
-# TS_WY_PAIR (`-D MOJOLEARN_IDN_TSQR_WY_PAIR_OFF` restores the per-panel
-# update): two consecutive panels (2 TS_NB reflectors, TS_W2 wide) share ONE
+# TS_WY_PAIR (IDENTICAL; the per-panel update stays for FAST builds; its `_OFF`
+# switch was deleted 2026-11-24, see below): two consecutive panels (2 TS_NB reflectors, TS_W2 wide) share ONE
 # blocked update of the trailing columns and ONE pass of Q C. Panel a is
 # factored, its block reflector is applied to panel b's columns only (the
 # words panel b saw before), panel b is factored, and the pair's compact WY
@@ -99,8 +98,9 @@ comptime TS_MAX_N = 512
 # reflector staged the same way. Bits change in the tree's norms only; the
 # column updates keep their chains.
 #
-# MEASUREMENT OWED (lane restore-classical-measured-routes, 2026-11-13): both
-# switches went in as IDENTICAL defaults (3c5c5592a0, 2026-10-08) with no
+# MEASURED 2026-11-24 (A/B nvc-ab-20261124T115722Z-d8f8b2, NVIDIA L40S; both `_OFF`
+# switches deleted, see the TOMBSTONEs below). History (lane restore-classical-measured-routes,
+# 2026-11-13): both switches went in as IDENTICAL defaults (3c5c5592a0, 2026-10-08) with no
 # recorded A/B. Board cells on record, one each: ols taxi fit AMD 7.915 ms
 # (de2b2b739, before) -> 12.18 (0a7b206f1, after) -> 14.19 (candidate
 # 4c2340386abc); NVIDIA went the other way (17.51 -> 14.33 ms), ols istella
@@ -114,7 +114,13 @@ comptime TS_MAX_N = 512
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_WY_PAIR_OFF (old path, EXP:479 run owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 094d2402ca.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_WY_PAIR_OFF (old path LOSER: NV L40S 10 cells, median 1.03, istella lstsq 283 -> 373 ms, ols 510 -> 683 ms) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at 4ce303e41b.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.ab-outcome-3.patch
+# Measured (A/B nvc-ab-20261124T115722Z-d8f8b2, NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): the
+# per-panel update was slower (10 cells, old / default median 1.03; istella lstsq 283 -> 373 ms (1.32),
+# ols 510 -> 683 ms (1.34), qr / svd 1.11; with TREE_PAR_OFF as well: lstsq 1.31, ols 1.33, svd 1.11),
+# so the switch went; the per-panel update stays for FAST builds. AMD not measured (NVIDIA-only campaign).
+comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_TREE_PAR_OFF (old path, EXP:479 run owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at bc3f9433a3.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.

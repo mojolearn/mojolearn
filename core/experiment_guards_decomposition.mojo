@@ -299,6 +299,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_TSQR_TREE_PAR_OFF (old path no faster: NV L40S 10 cells, median 1.00, 0.89..1.08) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at a58cf59d32.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.ab-outcome-3.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"](), "removed 2026-11-24 (lane/o3-decomp of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, one run per arm): IDN_TSQR_TREE_PAR_OFF (the serial TSQR tree-combine norm and untiled Q C apply) was no faster: 10 cells, median 1.00, 0.89..1.08; the lane-parallel tree fold stays the IDENTICAL default (the serial forms stay for FAST builds); code at a58cf59d32; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_IDN_TSQR_WY_PAIR_OFF (old path LOSER: NV L40S 10 cells, median 1.03, istella lstsq 283 -> 373 ms, ols 510 -> 683 ms) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at 4ce303e41b.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.ab-outcome-3.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"](), "removed 2026-11-24 (lane/o3-decomp of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, one run per arm): IDN_TSQR_WY_PAIR_OFF (the per-panel TSQR WY update) was slower: 10 cells, median 1.03, istella lstsq 283 -> 373 ms (1.32), ols 510 -> 683 ms (1.34), qr / svd 1.11; the paired-panel update stays the IDENTICAL default (the per-panel update stays for FAST builds); code at 4ce303e41b; see docs/TOMBSTONES.md"
     # ---- end lane ab-outcome-3 / o3-decomp
     return True
 
