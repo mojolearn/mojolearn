@@ -214,7 +214,9 @@ def ann_tsne_fit_host_run(a: List[Int], p: List[Int], f: List[Float64]) raises -
         return 1
     var y = List[Float32]()
     var kl = Float32(0.0)
-    tsne_fit_host(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl)
+    # a[4] (optional): one int64 that receives the gradient loop's nanoseconds (`fit_loop_`)
+    tsne_fit_host(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl,
+                  a[4] if len(a) > 4 else 0)
     var kl_words: List[Float32] = [kl]
     out_f32_to(tsne_first_components(y, n, k), a[2])
     out_f32_to(kl_words, a[3])
