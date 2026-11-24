@@ -84,6 +84,17 @@ published in `core/forest_entry_table.mojo`; descriptor shape of
                       Bagging META member's predict, which the door staged
                       through the Python entry `forest_stage_input_gpu`).
   XF_UNSTAGE_INPUT    no words: end the staged input. Returns 0.
+  XF_FIT_ROWS         (lane vdf-scope-trees, 2026-11-24; XF_CAP_DEV_ROWS)
+                      addrs XF_FIT_WORDS: x = int64 row ids (host,
+                      params[0] of them, repeats allowed), `session` = the
+                      slot id in the image's DEVICE STORE of the WHOLE X
+                      (row-major float32, params[1] words a row, put by the
+                      store transport entry), y / weights the fit rows' own
+                      (host, in the ids' order). The rows are taken on the
+                      device (DeviceStore.take_rows), transposed there as
+                      XF_FIT's row-major upload is, and fitted by the same
+                      body: the bytes `fit_forest` reads equal XF_FIT's on
+                      the host-gathered rows. Returns an export handle.
 
 The caller owns every buffer until the synchronous call returns.
 """
@@ -91,7 +102,8 @@ from std.memory import bitcast
 from core.fit_loop_clock import FitLoop
 
 # v2 (lane alm-forest, 2026-11-24): XF_W_LOOP joined the XF_FIT words.
-comptime FOREST_ENTRY_ABI = "mojolearn.trees.forest.v2"
+# v3 (lane vdf-scope-trees, 2026-11-24): XF_FIT_ROWS appended.
+comptime FOREST_ENTRY_ABI = "mojolearn.trees.forest.v3"
 
 comptime XF_CAPS = 0
 comptime XF_NUMERIC_MODE = 1
@@ -117,7 +129,8 @@ comptime XF_ADA_OPEN = 20
 comptime XF_FIT_ADA_ROUND = 21
 comptime XF_STAGE_INPUT = 22
 comptime XF_UNSTAGE_INPUT = 23
-comptime XF_OP_COUNT = 24
+comptime XF_FIT_ROWS = 24
+comptime XF_OP_COUNT = 25
 
 #: capability bits (XF_CAPS)
 comptime XF_CAP_DEVICE_SCAN = 1      # the fits refuse a non-finite X cell on the device
@@ -128,6 +141,7 @@ comptime XF_CAP_STRICT = 16           # the host strict snapshot (XF_STRICT_*)
 comptime XF_CAP_DART = 32             # XF_FIT_DART is served
 comptime XF_CAP_SESSION = 64          # XF_SESSION_* and XF_FIT_SESSION are served
 comptime XF_CAP_ADA = 128             # XF_ADA_OPEN and XF_FIT_ADA_ROUND are served
+comptime XF_CAP_DEV_ROWS = 256        # XF_FIT_ROWS and the store transport entry (forest_store_transport_ref)
 
 #: XF_FIT request words: addrs[k]
 comptime XF_W_X = 0

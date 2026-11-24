@@ -506,6 +506,12 @@ struct EtGpuForest(ForestImage):
         resident_unstage_input[False]()
 
 
+    @staticmethod
+    def fit_rows(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        # XF_FIT_ROWS (lane vdf-scope-trees): the ExtraTrees GPU image keeps no device store
+        # (no XF_CAP_DEV_ROWS), so no caller sends it.
+        raise Error("RuntimeError: mojolearn: this forest image fits no device-store rows (XF_FIT_ROWS)")
+
 def et_gpu_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     """This image's published forest entry (core/forest_entry_table.mojo)."""
