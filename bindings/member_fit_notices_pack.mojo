@@ -19,7 +19,7 @@ from core.member_notices import (
     MEMBER_NOTICE_PLS_RESIDUAL, MEMBER_NOTICE_SPLIT_LEAST, MEMBER_NOTICE_METRIC_PRF, MEMBER_NOTICE_METRIC_JACCARD,
     MEMBER_NOTICE_METRIC_BALANCED, MEMBER_NOTICE_METRIC_FEW, MEMBER_NOTICE_METRIC_TOP_K, MEMBER_NOTICE_R2_FEW,
     MEMBER_NOTICE_FOLD_LACKING, MEMBER_NOTICE_ONEHOT_UNKNOWN, MEMBER_NOTICE_METRIC_KAPPA, MEMBER_NOTICE_METRIC_CLR,
-    member_lacking_warning,
+    MEMBER_NOTICE_METRIC_ROC_ONE, member_lacking_warning,
 )
 from bindings.py_balanced import py_get
 
@@ -68,6 +68,11 @@ def _metric_notice(code: Int, a: Float64, b: Float64, context: PythonObject) rai
             metric_undefined("`y2` contains no labels that are present in both `y1` and `labels`.", context)
         else:
             metric_undefined("`y1`, `y2` and `labels` have only one label in common.", context)
+    elif code == MEMBER_NOTICE_METRIC_ROC_ONE:
+        # lane mf-score8 round b: `_ROC_ONE_CLASS`, once per one-class fold or class
+        for _ in range(Int(a)):  # driver-loop: over the one-class folds (one warning each)
+            metric_undefined("Only one class is present in y_true. ROC AUC score is not defined in that case.",
+                             context)
     elif code == MEMBER_NOTICE_METRIC_CLR:
         # lane mf-score8 round b: `_likelihood_ratios`' warnings, in its order
         var bits = Int(a)
@@ -131,7 +136,8 @@ def member_fit_notices_raise_with(words: List[Float64], context: PythonObject,
                         + "than n_splits=" + String(Int(b)) + ".",
                         native_loaded_module("builtins").UserWarning, context, 2)
         elif ((code >= MEMBER_NOTICE_METRIC_PRF and code <= MEMBER_NOTICE_METRIC_TOP_K)
-              or code == MEMBER_NOTICE_METRIC_KAPPA or code == MEMBER_NOTICE_METRIC_CLR):
+              or code == MEMBER_NOTICE_METRIC_KAPPA or code == MEMBER_NOTICE_METRIC_CLR
+              or code == MEMBER_NOTICE_METRIC_ROC_ONE):
             _metric_notice(code, a, b, metric_context)
         elif code == MEMBER_NOTICE_R2_FEW:
             # RidgeCV's split path (bindings/x_linear_cv_pack.mojo

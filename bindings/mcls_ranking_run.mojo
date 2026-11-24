@@ -411,5 +411,143 @@ def roc_auc_run(route: MetricRoute, problem: Int, truth: Int, scores: Int, n: In
     return got.value
 
 
+#: Lane mf-score8: the one-vs-rest averages the table does not name.
+comptime ROC_OVR_MICRO = 5
+comptime ROC_OVR_NONE = 6
+#: `roc_auc_options_run`'s `undefined` answer: a fold of one class (the door
+#: warns `_ROC_ONE_CLASS` and answers NaN).
+comptime ROC_ONE_CLASS_WORDS = _ROC_ONE_CLASS_WORDS
+
+
+def roc_auc_options_run(route: MetricRoute, problem: Int, truth: Int, scores: Int, n: Int, k: Int, w: Int,
+                        cols: Int, max_fpr: Float64, max_fpr_shown: String, sel_at: Int, sel_n: Int,
+                        mut per_class: List[Float64], mut undefined: Int) raises -> Float64:
+    """THE TYPED RUN of `roc_auc_score` with a make_scorer's options (lane
+    mf-score8), in bindings/mcls_ranking_door.mojo `_roc_options`' order:
+    a side of at most two classes with 1-D scores (`cols` 1: the column a
+    binary member hands every predict_proba scorer, or its decision) is the
+    binary arm (`_roc_binary`: a one-class side answers NaN, `undefined` 1;
+    `max_fpr` > 0 and != 1 the partial AUC, McClish-corrected); otherwise
+    multiclass: a partial `max_fpr` refuses (`max_fpr_shown` its words),
+    the binary problem refuses as multi_class='raise', `labels` (`sel_at` /
+    `sel_n`, their given order; one-vs-rest checks they cover y_true's) are
+    the classes, then ROC_OVR / _WEIGHTED / _MICRO / _NONE (the per-class
+    AUCs in `per_class`, answering the first) or ROC_OVO / _WEIGHTED. No
+    Python."""
+    undefined = 0
+    var t = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=truth)
+    var rank = List[Int32](length=max(k, 1), fill=Int32(-1))
+    for i in range(n):  # driver-loop: over the rows (the classes y_true holds)
+        var c = Int(t[i])
+        if c < 0 or c >= k:
+            raise Error("ValueError: y codes outside [0, n_classes)")
+        rank[c] = 0
+    var present = 0
+    for c in range(k):  # driver-loop: over the class codes (their ranks)
+        if rank[c] == 0:
+            rank[c] = Int32(present)
+            present += 1
+    var partial = max_fpr > 0.0 and max_fpr != 1.0
+    var multiclass = present > 2 or cols > 2
+    if not multiclass:
+        if cols != 1:
+            raise Error("mojolearn roc_auc_score: y_score must be 1-D, got shape (" + String(n) + ", "
+                        + String(cols) + ")")
+        if present != 2:
+            undefined = 1
+            return _roc_nan()
+        if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=scores), n):
+            raise Error("mojolearn roc_auc_score: y_score must be finite")
+        var flags = List[Int32](length=max(n, 1), fill=Int32(0))
+        for i in range(n):  # driver-loop: over the rows (y_true == the second present class)
+            flags[i] = rank[Int(t[i])]
+        var plan = MetricProgramPlan()
+        var out = mc_roc_binary_stages(plan, n, w != 0, partial, max_fpr if partial else 0.0)
+        var addresses: List[Int] = [scores, Int(flags.unsafe_ptr())]
+        var sizes: List[Int] = [n, n]
+        if w != 0:
+            addresses.append(w)
+            sizes.append(n)
+        var arena = metric_inputs_run(route, plan, addresses, sizes)
+        _ = len(flags)
+        var got = mc_fold_auc_value(arena, out, partial, max_fpr if partial else 0.0)
+        if not got.defined:
+            undefined = 1
+            return _roc_nan()
+        return got.value
+    if partial:
+        raise Error("Partial AUC computation not available in multiclass setting, 'max_fpr' must be "
+                    + "set to `None`, received `max_fpr=" + max_fpr_shown + "` instead")
+    if problem == ROC_BINARY:
+        raise Error("multi_class must be in ('ovo', 'ovr')")
+    var ovo = problem == ROC_OVO or problem == ROC_OVO_WEIGHTED
+    var nclasses = present
+    var codes = List[Int32](length=max(n, 1), fill=Int32(0))
+    if sel_n > 0:
+        var sel = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=sel_at)
+        var span = k
+        for j in range(sel_n):  # small-loop(the caller's labels)
+            span = max(span, Int(sel[j]) + 1)
+        var at = List[Int32](length=max(span, 1), fill=Int32(-1))
+        for j in range(sel_n):  # small-loop(the caller's labels: their places)
+            at[Int(sel[j])] = Int32(j)
+        for c in range(k):  # small-loop(the classes y_true holds: each among the labels)
+            if rank[c] >= 0 and at[c] < 0 and not ovo:
+                raise Error("'y_true' contains labels not in parameter 'labels'")
+        for i in range(n):  # driver-loop: over the rows (their places among the labels; -1 outside)
+            codes[i] = at[Int(t[i])]
+        nclasses = sel_n
+    else:
+        for i in range(n):  # driver-loop: over the rows (the codes over the present classes)
+            codes[i] = rank[Int(t[i])]
+    if nclasses != cols:
+        raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=scores), n * cols):
+        raise Error("mojolearn roc_auc_score: y_score must be finite")
+    if ovo:
+        if w != 0:
+            raise Error("sample_weight is not supported for multiclass one-vs-one ROC AUC, "
+                        + "'sample_weight' must be None in this case.")
+        var got = roc_ovo_run(route, scores, Int(codes.unsafe_ptr()), n, cols, problem == ROC_OVO_WEIGHTED)
+        _ = len(codes)
+        if got.status == ROC_OVO_ROWS:
+            raise Error(_ROC_ROWS_WORDS)
+        if got.status == ROC_OVO_LABEL:
+            raise Error("mojolearn roc_auc_score: a y_true label is not among the classes")
+        undefined = got.undefined
+        return got.value
+    if problem == ROC_OVR_MICRO:
+        var micro = roc_ovr_micro_run(route, scores, n * cols, Int(codes.unsafe_ptr()), n, w, n if w != 0 else -1, n,
+                                      cols)
+        _ = len(codes)
+        if not micro.rows_ok:
+            raise Error(_ROC_ROWS_WORDS)
+        if not micro.auc.defined:
+            undefined = 1
+            return _roc_nan()
+        return micro.auc.value
+    var plan = MetricProgramPlan()
+    var averaged = problem != ROC_OVR_NONE
+    var slots = mc_roc_ovr_stages(plan, n, cols, w != 0, averaged, problem == ROC_OVR_WEIGHTED)
+    var addresses: List[Int] = [scores, Int(codes.unsafe_ptr())]
+    var sizes: List[Int] = [n * cols, n]
+    if w != 0:
+        addresses.append(w)
+        sizes.append(n)
+    var arena = metric_inputs_run(route, plan, addresses, sizes)
+    _ = len(codes)
+    if arena.i32(slots.rows) != 0:
+        raise Error(_ROC_ROWS_WORDS)
+    for c in range(cols):  # small-loop(the classes: one warning per class without both labels)
+        if arena.i32(slots.fl + c) == 1:
+            undefined += 1
+    if not averaged:
+        per_class = List[Float64](capacity=cols)
+        for c in range(cols):  # small-loop(the classes: their AUCs)
+            per_class.append(arena.f64(slots.sc + 2 * c))
+        return per_class[0]
+    return arena.f64(slots.res)
+
+
 def _roc_nan() -> Float64:
     return bitcast[DType.float64](UInt64(0x7FF8000000000000))

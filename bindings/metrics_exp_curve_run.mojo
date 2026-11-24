@@ -233,6 +233,7 @@ comptime AP_MACRO = 0
 comptime AP_WEIGHTED = 1
 comptime AP_MICRO = 2
 comptime AP_NONE = 3
+comptime AP_SAMPLES = 4
 
 
 def ap_micro_stages(mut plan: MetricProgramPlan, n: Int, k: Int, weighted: Bool) raises -> Int:
@@ -258,12 +259,16 @@ def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, c
                           positive: Int, w: Int) raises -> Float64:
     """`average_precision_run` with average 'macro'."""
     var per_class = List[Float64]()
-    return average_precision_run(route, truth, scores, n, cols, k, positive, w, AP_MACRO, per_class)
+    return average_precision_run(route, truth, scores, n, cols, k, positive, w, AP_MACRO, False, per_class)
 
 
 def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, cols: Int, k: Int,
-                          positive: Int, w: Int, avg: Int, mut per_class: List[Float64]) raises -> Float64:
-    """`avg` (lane mf-score8): the multiclass average (AP_*; a side of at
+                          positive: Int, w: Int, avg: Int, pos_not_one: Bool,
+                          mut per_class: List[Float64]) raises -> Float64:
+    """`pos_not_one` (lane mf-score8): a given pos_label that is not 1; a
+    side of more than two classes then refuses in the door's words ("fixed
+    to 1 for multiclass"), before its average.
+    `avg` (lane mf-score8): the multiclass average (AP_*; a side of at
     most two classes takes the binary curve whatever it is, as the door
     does): 'weighted' the support-weighted mean, 'micro' the door's micro
     program (`ap_micro_stages`), None the per-class values in `per_class`
@@ -308,6 +313,13 @@ def average_precision_run(route: MetricRoute, truth: Int, scores: Int, n: Int, c
         if zero:
             raise Error("ZeroDivisionError: float division by zero")
         return value
+    if pos_not_one:
+        raise Error("Parameter pos_label is fixed to 1 for multiclass y_true. Do not set pos_label "
+                    + "or set pos_label to 1.")
+    if avg == AP_SAMPLES:
+        # the door's multiclass refusal (a side of at most two classes took the binary curve above)
+        raise Error("NotImplementedError: mojolearn average_precision_score: average='samples' applies to "
+                    + "multilabel targets, which are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
     if cols < 2:
         raise Error("mojolearn " + caller + ": y_score must be 2-D, got shape (" + String(n) + ",)")
     if not host_all_finite_f32(_CRF32P(unsafe_from_address=scores), n * cols):

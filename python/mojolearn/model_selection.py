@@ -1118,7 +1118,8 @@ class _Scorer:
 # scikit-learn's `_get_response_values` hands a binary classifier's positive column to every predict_proba
 # scorer; the D^2 probability scorers too (lane mf-score8)
 _BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss', 'top_k_accuracy',
-                 'd2_log_loss_score', 'd2_brier_score'}
+                 'd2_log_loss_score', 'd2_brier_score', 'roc_auc_ovr', 'roc_auc_ovo', 'roc_auc_ovr_weighted',
+                 'roc_auc_ovo_weighted'}
 
 
 # TOMBSTONE: _proba_column1 (dead code: no caller; the native scorer reads column 1 itself) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.

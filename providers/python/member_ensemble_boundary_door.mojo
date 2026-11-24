@@ -151,7 +151,11 @@ from core.msel_scorer_run import (
     msel_scorer_label_row, msel_scorer_f_row, msel_scorer_group_words, MselScorerOptions,
     msel_scorer_weighted, msel_scorer_caller, SCORER_WEIGHTS_EMPTY,
     msel_scorer_log_loss, SCORER_LABEL_NUMBER, SCORER_LABEL_TEXT, SCORER_LABEL_UNREAD,
+    msel_scorer_roc_problem, msel_scorer_mi, msel_scorer_v_measure, msel_scorer_d2_proba, msel_scorer_decision_only,
+    msel_scorer_float_labels,
+    MselScorer,
 )
+from bindings.mcls_ranking_run import ROC_BINARY, ROC_OVR, ROC_OVR_WEIGHTED
 # lane mf-score6: a make_scorer's sample_weight read as float32 words
 from std.memory import bitcast
 from bindings.family_common_unpack import family_shape_repr
@@ -2637,6 +2641,9 @@ struct _ScorerKw(Movable):
     var refuse_text: String
     var flag: Int
     var wmode: Int
+    # lane mf-score8 round b: another row's name the kwargs select (roc_auc's
+    # multiclass averages; "": the matched row)
+    var rename: String
 
     def __init__(out self):
         self.flip = False
@@ -2658,6 +2665,154 @@ struct _ScorerKw(Movable):
         self.refuse_text = String("")
         self.flag = -1
         self.wmode = 0
+        self.rename = String("")
+
+
+def _sorted_labels(value: PythonObject, b: PythonObject) raises -> PythonObject:
+    """UNPACK (lane mf-score8): a `labels` value in sorted order, as the
+    doors that sort it read it (`mx_sorted(mx_selected(...))`); a list that
+    does not sort (mixed kinds) is kept as given (the kinds' refusal then
+    reads it)."""
+    var listed = py_call(b.list, value)
+    try:
+        return py_call(b.sorted, listed)
+    except:
+        return listed
+
+
+def _is_sorted(value: PythonObject, b: PythonObject) raises -> Bool:
+    """UNPACK (lane mf-score8): `labels == sorted(labels)` (False for one
+    that does not sort)."""
+    var listed = py_call(b.list, value)
+    try:
+        return Bool(py=py_call(b.bool, py_call(native_loaded_module("operator").eq, listed,
+                                               py_call(b.sorted, listed))))
+    except:
+        return False
+
+
+def _refuse(mut kw: _ScorerKw, words: String):
+    """The first refused kwarg's words (raised per side)."""
+    if kw.refuse_text.byte_length() == 0:
+        kw.refuse_text = words
+
+
+def _table_row_kwarg(typed: MselScorer, word: String, theirs: PythonObject, mut kw: _ScorerKw,
+                     b: PythonObject) raises -> Bool:
+    """UNPACK of a get_scorer row's kwarg the row reads as a word (lane
+    mf-score8 round b), as its metric's door reads it: True when consumed.
+    roc_auc: `max_fpr` (a real in (0, 1], else the door's words), `labels`
+    (the multiclass rows: one-vs-rest checks they are ordered), `average`
+    (the one-vs-rest / one-vs-one averages select their rows; None names the
+    scorer; the binary row validates and ignores it); average_precision:
+    `average`; log_loss: `labels` (given order); brier / the D^2 probability
+    scores: `labels` (sorted); top_k: `labels` (ordered, else the door's
+    words); NMI / AMI: `average_method`; v_measure: `beta`; fowlkes_mallows:
+    `sparse` (it changes no value)."""
+    var roc = msel_scorer_roc_problem(typed)
+    if roc >= 0:
+        if word == "max_fpr":
+            if theirs is None:
+                return True
+            var v = _real_word(theirs, b)
+            if not (v > 0.0 and v <= 1.0):
+                _refuse(kw, "Expected max_fpr in range (0, 1], got: " + String(py=py_call(b.repr, theirs)))
+                return True
+            kw.param = v
+            kw.has_param = True
+            kw.param_text = String(py=py_call(b.str, theirs))
+            return True
+        if word == "labels":
+            if theirs is None or roc == ROC_BINARY:
+                return True  # the binary arm reads no labels
+            if (roc == ROC_OVR or roc == ROC_OVR_WEIGHTED) and not _is_sorted(theirs, b):
+                _refuse(kw, "Parameter 'labels' must be ordered")
+                return True
+            kw.labels = theirs
+            return True
+        if word == "average":
+            if roc == ROC_BINARY:
+                var ok = theirs is None
+                if not ok and py_type(theirs) is b.str:
+                    var a = String(py=theirs)
+                    ok = a == "micro" or a == "macro" or a == "samples" or a == "weighted"
+                if not ok:
+                    _refuse(kw, "average has to be one of (None, 'micro', 'macro', 'weighted', 'samples')")
+                return True
+            var ovr = roc == ROC_OVR or roc == ROC_OVR_WEIGHTED
+            var text = String("") if theirs is None or py_type(theirs) is not b.str else String(py=theirs)
+            if theirs is None:
+                if ovr:
+                    kw.rename = String("roc_auc(multi_class='ovr', average=None)")
+                    kw.avg_none = True
+                else:
+                    _refuse(kw, "NotImplementedError: average=None is not implemented for multi_class='ovo'.")
+            elif text == "macro":
+                kw.rename = String("roc_auc_ovr") if ovr else String("roc_auc_ovo")
+            elif text == "weighted":
+                kw.rename = String("roc_auc_ovr_weighted") if ovr else String("roc_auc_ovo_weighted")
+            elif text == "micro" and ovr:
+                kw.rename = String("roc_auc(multi_class='ovr', average='micro')")
+            elif ovr:
+                _refuse(kw, "average must be one of ('micro', 'macro', 'weighted', None) for multiclass problems")
+            else:
+                _refuse(kw, "average must be one of ('macro', 'weighted', None) for multiclass problems")
+            return True
+        return False
+    if msel_scorer_ap(typed) and word == "average":
+        if theirs is None:
+            kw.flag = 3
+            kw.avg_none = True
+            return True
+        var a = String(py=theirs) if py_type(theirs) is b.str else String("")
+        if a == "macro":
+            return True
+        if a == "weighted":
+            kw.flag = 1
+        elif a == "micro":
+            kw.flag = 2
+        elif a == "samples":
+            kw.flag = 4
+        else:
+            _refuse(kw, "average has to be one of (None, 'micro', 'macro', 'weighted', 'samples')")
+        return True
+    if word == "labels" and (msel_scorer_log_loss(typed) or msel_scorer_brier(typed) or msel_scorer_top_k(typed)):
+        if theirs is None:
+            return True
+        if msel_scorer_log_loss(typed):
+            kw.labels = theirs
+        elif msel_scorer_top_k(typed):
+            if not _is_sorted(theirs, b):
+                _refuse(kw, "Parameter 'labels' must be ordered.")
+                return True
+            kw.labels = theirs
+        else:
+            kw.labels = _sorted_labels(theirs, b)
+        return True
+    if word == "average_method" and msel_scorer_mi(typed):
+        var m = String(py=theirs) if py_type(theirs) is b.str else String("")
+        if m == "min":
+            kw.flag = 0
+        elif m == "geometric":
+            kw.flag = 1
+        elif m == "arithmetic":
+            kw.flag = 2
+        elif m == "max":
+            kw.flag = 3
+        else:
+            _refuse(kw, "'average_method' must be 'min', 'geometric', 'arithmetic', or 'max'")
+        return True
+    if word == "beta" and msel_scorer_v_measure(typed):
+        var beta = _real_word(theirs, b)
+        if beta != beta:
+            return False  # not a real number: no typed word reads it
+        kw.param = beta
+        kw.has_param = True
+        kw.param_text = String(py=py_call(b.str, theirs))
+        return True
+    if word == "sparse" and String(typed.name) == "fowlkes_mallows_score":
+        return True  # deprecated, reads no value
+    return False
 
 
 def _bool_word(value: PythonObject, b: PythonObject) raises -> Int:
@@ -2743,6 +2898,16 @@ def _metric_row_kwarg(metric: String, word: String, value: PythonObject, mut kw:
         return True
     if word == "adjusted" and metric == "balanced_accuracy_score":
         kw.flag = 1 if Bool(py=py_call(b.bool, value)) else 0  # the door's `mx_truthy(adjusted)`
+        return True
+    if word == "labels" and (metric == "hinge_loss" or metric == "d2_log_loss_score" or metric == "d2_brier_score"):
+        # lane mf-score8 round b: sorted, as `_hinge` / `_proba` sort them
+        if value is not None:
+            kw.labels = _sorted_labels(value, b)
+        return True
+    if word == "pos_label" and metric == "d2_brier_score":
+        if value is not None:
+            kw.given_pos = True
+            kw.pos_label = value
         return True
     if metric == "cohen_kappa_score":
         if word == "labels":
@@ -2870,6 +3035,8 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 var mine = py_call(row_kwargs.get, key, missing)
                 var theirs = py_call(got_kwargs.get, key, missing)
                 var word = String(py=key) if py_type(key) is b.str else String("")
+                if theirs is not missing and _table_row_kwarg(typed, word, theirs, mine_kw, b):
+                    continue  # lane mf-score8 round b: a typed word of the row
                 if word == "labels" and theirs is not missing and label_row > 0:
                     # read first: an array compares no other way (labels None is the row's)
                     if theirs is not None and label_row == 2:
@@ -2957,6 +3124,8 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 continue  # fbeta_score without its beta: the door raises its words
             mine_kw.flip = not Bool(py=py_call(b.bool, py_call(eq, py_call(b.getattr, row, PythonObject("_sign")),
                                                                py_call(b.getattr, got, PythonObject("_sign")))))
+            if mine_kw.rename.byte_length() > 0:
+                name = mine_kw.rename.copy()  # lane mf-score8: the row the kwargs select
             kw = mine_kw^
             return name
         # THE METRIC ROWS (lane mf-fitadm7; core/msel_scorer_run.mojo
@@ -2967,7 +3136,7 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
         # `numeric_mode` None. Its row's sign is the metric's value: the
         # flip is greater_is_better=False.
         var plan = py_get(context["family_msel_metric_plans"], func)
-        if plan is None or py_type(got_method) is not b.str or String(py=got_method) != "predict":
+        if plan is None or py_type(got_method) is not b.str:
             return String("")
         var metric = String(py=plan["name"])
         var normalize = True
@@ -2987,6 +3156,14 @@ def _scorer_name(scorer: PythonObject, context: PythonObject, b: PythonObject, m
                 return String("")
         var code = msel_scorer_metric_code(metric, normalize)
         if code < 0:
+            return String("")
+        # lane mf-score8 round b: the make_scorer's response is the row's
+        # (predict; hinge_loss's decision_function; the D^2 probability
+        # scores' predict_proba)
+        var op = msel_scorer_row(code).op
+        var wanted = String("decision_function") if op == MEMBER_OP_DECISION else (
+            String("predict_proba") if op == MEMBER_OP_PREDICT_PROBA else String("predict"))
+        if String(py=got_method) != wanted:
             return String("")
         # lane mf-score8: the row's sign is its get_scorer sign (or +1 for a
         # metric row); the flip is a make_scorer sign that differs from it
@@ -3322,6 +3499,28 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         if name.byte_length() == 0:
             return False  # a native scorer no table row holds (another metric or kwargs)
         var scorer = msel_get_scorer(givens[j], context)
+        var no_method = _response_refusal(scorer, base, b)
+        if no_method.byte_length() > 0:
+            # A CLASS WITH NONE OF THE SCORER'S RESPONSE METHODS (lane mf-score8
+            # round b): scikit-learn's scorer raises `_check_response_method`'s
+            # AttributeError on every score, inside the score's try (so a
+            # numeric error_score replaces it). The scorer's slot is a stand-in
+            # row over `predict` (accuracy, or r2 for a regressor: no metric
+            # runs) whose refusal word raises those words per side.
+            var stand = msel_scorer_code("accuracy", False) if classifier else msel_scorer_code("r2", False)
+            var ropts = MselScorerOptions()
+            ropts.refuse_word = _next_word(labels, classifier, extra_words, b)
+            extra_words.append(no_method)
+            codes.append(stand)
+            positives.append(-1)
+            options.append(ropts)
+            others = True
+            var seen_p = False
+            for o in range(len(responses)):  # small-loop(the distinct responses, at most three)
+                seen_p = seen_p or responses[o] == MEMBER_OP_PREDICT
+            if not seen_p:
+                responses.append(MEMBER_OP_PREDICT)
+            continue
         var method = String(py=msel_scorer_response(scorer, base_plan, context))
         var code = msel_scorer_code(name, method == "decision_function")
         if code < 0:
@@ -3359,6 +3558,14 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         # its printed words, and a refused kwarg's door words, each one more
         # label word.
         opts.mo = kw.mo
+        if kw.mo == 1 and opts.none_word < 0:
+            # 'raw_values' (lane mf-score8 round b): over several outputs no
+            # number; the scorer's words name it in scikit-learn's refusal
+            opts.none_word = _next_word(labels, classifier, extra_words, b)
+            if many:
+                extra_words.append(keys[j])
+            else:
+                extra_words.append(String(py=py_call(b.str, givens[j])))
         opts.ff = kw.ff
         opts.flag = kw.flag
         opts.wmode = kw.wmode
@@ -3381,10 +3588,15 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 return False  # a classifier admitted with no fit labels known: nothing to map (guard)
             _label_values(labels, sels, opts, b)
             others = True
+        elif not classifier and msel_scorer_float_labels(row):
+            # A LABEL SCORER ON A NON-CLASSIFIER (lane mf-score8 round b): each
+            # side checks its targets and predictions as `_check_targets` does
+            # (continuous refuses in its words, integral values score as labels)
+            others = True
         elif msel_scorer_regression(row) == classifier:
-            # a label scorer on a regressor: scikit-learn's `_check_targets`
-            # decides per side from the values (continuous targets refuse,
-            # integral floats score): no typed check of that yet
+            # the binary label rows on a non-classifier: their pos_label=1 among
+            # float labels and the refusal words that print them (NumPy's
+            # float reprs) have no typed words yet
             return False
         else:
             others = True
@@ -3406,7 +3618,13 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                 # own word appended to the label words.
                 var n_labels = len(py_call(b.list, labels))
                 if msel_scorer_ap(row) and n_labels > 2:
-                    return False  # multiclass AP fixes pos_label=1: its door's words
+                    # lane mf-score8 round b: per side, as the AP door decides
+                    # it from the side's classes: more than two refuse a
+                    # pos_label other than 1 ("fixed to 1"); two or fewer
+                    # take it as the binary curve's (`wmode` 1 marks it)
+                    if not Bool(py=py_call(b.bool, py_call(native_loaded_module("operator").eq, kw.pos_label,
+                                                           PythonObject(1)))):
+                        opts.wmode = 1
                 opts.pos_given = True
                 positive = _label_code(labels, kw.pos_label, b)
                 # A FLOAT pos_label (lane mf-score6). The binary label rows'
@@ -3435,8 +3653,8 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                     if fit_kind == -1:
                         return False
                     var same_kind = (kind == 1) == (fit_kind == SCORER_POSITIVE_ABSENT)
-                    if not msel_scorer_positive(row) and not (msel_scorer_ap(row) and n_labels == 2):
-                        return False
+                    if not msel_scorer_positive(row) and not msel_scorer_ap(row):
+                        return False  # guard: only the binary label rows and AP read a pos_label here
                     positive = SCORER_POSITIVE_ABSENT if (same_kind or msel_scorer_ap(row)) else SCORER_POSITIVE_KIND
                     opts.pos_word = n_labels + len(extra_words)
                     if real:
@@ -3536,8 +3754,9 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             needs |= MEMBER_CAN_PREDICT_PROBA
         elif row.op == MEMBER_OP_DECISION:
             needs |= MEMBER_CAN_DECISION
-    if clusterer and others:
-        return False  # a clusterer is scored by clustering scorers only
+    # lane mf-score8 round b: a clusterer scored by clustering scorers and
+    # others together: its ids are read as numbers or labels per side (the
+    # RUN's `MselScorer.ids`).
     var tool_ids = False
     # A multi-output classifier's predicted labels (lane mf-msel5c): 0 none,
     # 1 integers (an int64 block), 2 reals (a float64 block).
@@ -3550,7 +3769,13 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             return False
     for c in range(len(nested.plans)):  # driver-loop: over the candidates (their responses' element types)
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
-        if multi and (len(codes) > 0 or msel_spec_stratified(split.spec.kind)):
+        if multi and len(codes) > 0 and not classifier and not msel_spec_stratified(split.spec.kind):
+            # lane mf-score8 round b: a multi-output regressor scored by
+            # regression rows (each side's rows x outputs)
+            for q in range(len(codes)):  # small-loop(the scorers)
+                if not msel_scorer_regression(msel_scorer_row(codes[q])):
+                    return False  # a label scorer on multi-output targets: no typed rows (see rows.tsv)
+        elif multi and (len(codes) > 0 or msel_spec_stratified(split.spec.kind)):
             return False  # a multi-output target is scored by the member itself, folded by KFold
         if multi and tool_respond >= 0 and tool_respond != MEMBER_OP_PREDICT and not (
                 classifier and tool_respond == MEMBER_OP_PREDICT_PROBA and not tool_log
@@ -3581,9 +3806,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             var dtype = member_output_dtype(probe, response, 1, 1, MEMBER_I32 if labels_out else MEMBER_F32)
             # cross_val_predict of a non-classifier's predict (lane mf-msel5b):
             # float values, or a clusterer's integer ids
-            var ids = (not labels_out and tool_respond == MEMBER_OP_PREDICT and not classifier
+            # integer ids of a non-classifier's predict (a clusterer): a cv
+            # tool's answer, or (lane mf-score8 round b) the side words a label
+            # or regression scorer reads as numbers
+            var ids = (not labels_out and response == MEMBER_OP_PREDICT and not classifier
                        and (dtype == MEMBER_I32 or dtype == MEMBER_I64))
-            if ids:
+            if ids and tool_respond == MEMBER_OP_PREDICT:
                 tool_ids = True
             if labels_out and dtype != MEMBER_I32 and dtype != MEMBER_I64:
                 return False  # a member whose predict is not class codes
@@ -3834,6 +4062,28 @@ def _weight_words(source: PythonObject, caller: String, word: Int, context: Pyth
         sels.append(bitcast[DType.int32](words[i]))
     _ = w  # read through its address above
     _ = view^
+
+
+def _response_refusal(scorer: PythonObject, base: PythonObject, b: PythonObject) raises -> String:
+    """UNPACK (lane mf-score8 round b): scikit-learn's `_check_response_method`
+    (sklearn 1.9 utils/validation.py): an estimator class with none of the
+    scorer's response methods fails every score in these words (an
+    AttributeError, raised inside each score's try). "": the class has one.
+    One attribute read per method, once per admission."""
+    var methods = py_call(b.getattr, scorer, PythonObject("_response_method"), PythonObject("predict"))
+    var listed = Python.list()
+    if py_type(methods) is b.str:
+        _ = py_call(listed.append, methods)
+    else:
+        listed = py_call(b.list, methods)
+    for i in range(len(listed)):  # small-loop(the scorer's response methods)
+        if py_call(b.getattr, base, listed[i], PythonObject(None)) is not None:
+            return String("")
+    var shown = String("")
+    for i in range(len(listed)):  # small-loop(the scorer's response methods: their names)
+        shown += (", " if i > 0 else "") + String(py=py_call(b.str, listed[i]))
+    return ("AttributeError: " + String(py=py_type(base).__name__) + " has none of the following attributes: "
+            + shown + ".")
 
 
 def _label_values(labels: PythonObject, mut sels: List[Int32], mut opts: MselScorerOptions, b: PythonObject) raises:

@@ -415,7 +415,21 @@ def reg_metric_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, w: I
 def reg_metric_options_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, w: Int, mo: Int,
                            force_finite: Bool, param: Float64, param_given: Bool, param_shown: String,
                            mut warn: Int) raises -> Float64:
-    """THE ONE BODY of the 1-D regression metrics with their options (lane
+    """`reg_metric_options_run` over one output."""
+    var per_output = List[Float64]()
+    return reg_metric_options_run(route, metric, y, p, n, 1, w, mo, force_finite, param, param_given, param_shown,
+                                  per_output, warn)
+
+
+def reg_metric_options_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: Int, d: Int, w: Int, mo: Int,
+                           force_finite: Bool, param: Float64, param_given: Bool, param_shown: String,
+                           mut per_output: List[Float64], mut warn: Int) raises -> Float64:
+    """`d` (lane mf-score8 round b): the outputs, y and p n x d float32
+    words (row-major, as the door's (n, d) arrays): `_Reg(n, d)`, the door's
+    per-output stages and its multioutput rule; 'raw_values' over d > 1
+    fills `per_output` (answering the first). max_error and the Tweedie
+    family refuse d > 1 in the door's words.
+    THE ONE BODY of the 1-D regression metrics with their options (lane
     mf-score8): `mo` the multioutput rule (REG_MO_*: the door's `_reg_new`
     `mo` string, whose AVG stage or raw values the builders stage; on one
     output every rule answers the output's value, but the program is the
@@ -463,12 +477,16 @@ def reg_metric_options_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: I
         mo_words = String("variance_weighted")
     if n == 0:
         raise Error("mojolearn " + caller + ": y_true must be a nonempty (n,) or (n, n_outputs) array")
-    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y), n):
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y), n * d):
         raise Error("mojolearn " + caller + ": y_true contains NaN or infinity")
-    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=p), n):
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=p), n * d):
         raise Error("mojolearn " + caller + ": y_pred contains NaN or infinity")
     var addresses: List[Int] = [y, p]
-    var sizes: List[Int] = [n, n]
+    var sizes: List[Int] = [n * d, n * d]
+    if d > 1 and metric == REG_MAX_ERROR:
+        raise Error("Multioutput not supported in max_error")
+    if d > 1 and (metric == REG_TWEEDIE or metric == REG_D2_TWEEDIE or metric == REG_POISSON or metric == REG_GAMMA):
+        raise Error("Multioutput not supported in " + caller)
     if metric == REG_MAX_ERROR:
         if w != 0:
             raise Error("TypeError: native metric received an unexpected keyword argument")
@@ -483,7 +501,7 @@ def reg_metric_options_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: I
     if w != 0:
         addresses.append(w)
         sizes.append(n)
-    var r = _Reg(n, 1, w != 0, mo_words, List[Float64]())
+    var r = _Reg(n, d, w != 0, mo_words, List[Float64]())
     var out = _NONE
     var flag = _NONE
     var tw = RegTweedie(_NONE, _NONE, _NONE)
@@ -533,6 +551,8 @@ def reg_metric_options_run(route: MetricRoute, metric: Int, y: Int, p: Int, n: I
     if tw.fy != _NONE:
         tweedie_check(tw.fy, tw.fp, power, shown, arena)
     var value = arena.f64(out)
+    if d > 1 and mo == REG_MO_RAW:
+        per_output = reg_raw_values(r, out, arena)
     _ = r^
     return value
 

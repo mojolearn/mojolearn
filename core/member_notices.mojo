@@ -84,6 +84,9 @@ comptime MEMBER_NOTICE_METRIC_KAPPA = 14
 #: the slot's flag bits (1 no positive sample; 2 LR+ undefined; 4 LR-
 #: undefined), each bit one UndefinedMetricWarning in that order.
 comptime MEMBER_NOTICE_METRIC_CLR = 15
+#: roc_auc_score with options (lane mf-score8 round b; bindings/mcls_ranking_door.mojo
+#: `_ROC_ONE_CLASS`): a = how many folds or classes saw one class, one warning each.
+comptime MEMBER_NOTICE_METRIC_ROC_ONE = 16
 
 #: The words scikit-learn's cross_val_predict adds to its imbalanced-fold
 #: warning and refusals (model_selection/_validation.py
