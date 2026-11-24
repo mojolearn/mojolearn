@@ -486,18 +486,21 @@
   },
   "causal-lm-resident-forward-off": {
    "define": "MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF",
-   "status": "define in code (bindings/causal_lm_public_door.mojo CAUSAL_LM_RESIDENT_FORWARD: B = CausalLM per-call layer setup; A = resident forward. board row: causal-lm-generate (greedy))",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): old path no faster (L40S 2 cells, median 1.00); the resident forward default is unchanged; removed: the switch; the per-layer route stays for the models the resident check refuses; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 1e8aa88da1, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF.ab-outcome-2.patch. Was: define in code (bindings/causal_lm_public_door.mojo CAUSAL_LM_RESIDENT_FORWARD: B = CausalLM per-call layer setup; A = resident forward. board row: causal-lm-generate (greedy))",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "generation-route-legacy": {
    "define": "MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY",
-   "status": "define in code (core/generation_kv_policy.mojo EXPERIMENT_GENERATION_ROUTE: B = the legacy host read loop for every generate read; A = auto (the decode program where it serves). board row: causal-lm-generate (greedy))",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): LOSER (L40S 2 cells, median 2.29: 162m generate 887 -> 2978 ms, smollm2 1.22); route auto is unchanged; removed: the legacy route arm and its term in _read; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY.ab-outcome-2.patch. Was: define in code (core/generation_kv_policy.mojo EXPERIMENT_GENERATION_ROUTE: B = the legacy host read loop for every generate read; A = auto (the decode program where it serves). board row: causal-lm-generate (greedy))",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "generation-native-engine-off": {
    "define": "MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF",
-   "status": "define in code (core/generation_kv_policy.mojo GENERATION_NATIVE_ENGINE: B = engine 0 (also -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE = engine 1); A = auto. board row: causal-lm-generate (greedy))",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): old path no faster (L40S 2 cells, median 1.00); engine auto is unchanged; removed: the switch and its engine \"0\" value; the per-layer route stays for what the engine refuses; the define is refused (core/experiment_guards_neural.mojo); code recoverable at 070015d016, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF.ab-outcome-2.patch. Was: define in code (core/generation_kv_policy.mojo GENERATION_NATIVE_ENGINE: B = engine 0 (also -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE = engine 1); A = auto. board row: causal-lm-generate (greedy))",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "resident-sampling-fp32": {
    "define": "MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32",
@@ -3782,7 +3785,8 @@
    "b_arms": [
     "causal-lm-resident-forward-off"
    ],
-   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move"
+   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move",
+   "owed": "DECIDED"
   },
   {
    "id": "generation-route-legacy-generate",
@@ -3798,7 +3802,8 @@
    "b_arms": [
     "generation-route-legacy"
    ],
-   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move"
+   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move",
+   "owed": "DECIDED"
   },
   {
    "id": "generation-native-engine-off-generate",
@@ -3814,7 +3819,8 @@
    "b_arms": [
     "generation-native-engine-off"
    ],
-   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move"
+   "decides": "keep A unless B is at least as fast at equal quality on the NVIDIA L40S; generated ids must not move",
+   "owed": "DECIDED"
   },
   {
    "id": "adaboost-reencode-rows",

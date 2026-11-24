@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 # envgate-neural-lm (2026-11-15); this file set them in the environment, per
 # process and between reads. Now one wheel holds one combination, named by
 # MOJOLEARN_TEST_BUILD_DEFINES (python/mojolearn/tests/_build_arms.py):
-#   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY / _RESIDENT   the route
+#   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_RESIDENT             the route
 #   -D MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32                 fp32 sampling
 #   -D MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE               KV upload reuse
 #   -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE                    engine "1"
@@ -27,7 +27,11 @@ pytestmark = pytest.mark.skipif(
 # checkpoint resume, cross wheels through MOJOLEARN_TWO_BUILD_RECORD / _REFERENCE.
 # The misspelled-route refusal is a compile-time assert now (at most one route
 # define), so no process can reach it.
-LEGACY = "MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY"
+# TOMBSTONE: MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY (LOSER: NV L40S 2 cells, median 2.29, mojolearn-162m generate 3.36x slower) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at ba83d4655f.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_LEGACY.ab-outcome-2.patch
+# Its two legacy-only cases (the explicit legacy route's upload policy, and the
+# explicit legacy reuse failure) went with it; the checkpoint case runs on
+# every FP32 + REUSE wheel and the weight read-only case on every wheel.
 RESIDENT = "MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_RESIDENT"
 FP32 = "MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32"
 REUSE = "MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE"
@@ -77,27 +81,6 @@ def _run(tmp_path, mode):
     return records, tokens
 
 
-def _sampling_mode():
-    return "fp32" if built_with(FP32) else "f64"
-
-
-@requires_build(LEGACY, *TRACED)
-@pytest.mark.parametrize("greedy", [True, False])
-def test_explicit_legacy_route_has_independent_upload_policy(tmp_path, greedy):
-    mode = "greedy" if greedy else _sampling_mode()
-    records, tokens = _run(tmp_path, mode)
-    assert {r["route"] for r in records} == {"legacy_forward"}
-    assert all(r["engine_requested"] == "1" for r in records)
-    if built_with(REUSE):
-        assert [r["kv_policy"] for r in records] == ["reused", "reused"]
-        assert [int(r["kv_uploads_skipped"]) for r in records] == [3, 3]
-    else:
-        assert [r["kv_policy"] for r in records] == ["off", "off"]
-        assert [int(r["kv_uploads_skipped"]) for r in records] == [0, 0]
-    # Reuse off against reuse on: the two wheels' tokens are the same.
-    two_build_compare("generation_route_legacy_" + mode, tokens)
-
-
 @requires_build(RESIDENT, *TRACED)
 @pytest.mark.parametrize("greedy", [True, False])
 def test_resident_route_does_not_manufacture_reload_off_arm(tmp_path, greedy):
@@ -123,14 +106,12 @@ def test_incompatible_explicit_resident_route_does_not_fallback(tmp_path):
 
 
 @requires_build(FP32, REUSE)
-@pytest.mark.parametrize("route", [RESIDENT, LEGACY])
-def test_checkpoint_sampling_policy_survives_route_changes(tmp_path, route):
-    # The resident wheel and the legacy wheel (both FP32 + REUSE) give the
-    # same six tokens; the checkpoint taken after two keeps the fp32 policy and
-    # resumes to the same words in its own wheel. Resuming one wheel's
-    # checkpoint on the other is OWED as a two-build artifact check.
-    if not built_with(route):
-        pytest.skip("needs a wheel built with -D " + route)
+def test_checkpoint_sampling_policy_survives_route_changes(tmp_path):
+    # Every FP32 + REUSE wheel (the default route, or -D RESIDENT) gives the
+    # same six tokens (two_build_compare across them); the checkpoint taken
+    # after two keeps the fp32 policy and resumes to the same words in its own
+    # wheel. Resuming one wheel's checkpoint on the other is OWED as a
+    # two-build artifact check.
     import numpy as np
     from mojolearn.tests.test_generation_native import load_fixture
     model = load_fixture(tmp_path, "llama", uniform=False)
@@ -148,7 +129,6 @@ def test_checkpoint_sampling_policy_survives_route_changes(tmp_path, route):
     two_build_compare("generation_route_checkpoint_policy", expected.tolist())
 
 
-@requires_build(LEGACY)
 def test_exposed_weights_are_read_only_after_use(tmp_path):
     # Resident weight copies are keyed by address and the weight epoch
     # (core/weight_epoch.mojo): a weight a kernel has read is read-only, so
@@ -165,22 +145,3 @@ def test_exposed_weights_are_read_only_after_use(tmp_path):
         np.asarray(model._head)[:] = 0
     np.testing.assert_array_equal(np.asarray(model.stream(prompt, 3).read(3)), reference)
     assert model._resident_busy is False
-
-
-@requires_build(LEGACY, REUSE, FP32)
-@default_build_only("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF")
-def test_explicit_legacy_reuse_failure_preserves_progress_and_cleans_owner(tmp_path):
-    import numpy as np
-    from mojolearn.tests.test_generation_native import load_fixture
-    model = load_fixture(tmp_path, "llama", uniform=True)
-    stream = model.stream(np.array([[33, 34]], dtype="i4"), 5,
-                          greedy=False, seed=17, top_k=4)
-    old = model.max_positions
-    model.max_positions = 3
-    with pytest.raises(Exception, match="exceeds max_positions"):
-        stream.read(5)
-    assert stream.info()["generated_tokens"] == 2
-    assert stream.info()["usable"] is False
-    assert model._resident_busy is False
-    model.max_positions = old
-    assert np.asarray(model.stream(np.array([[1]], dtype="i4"), 2).read(2)).shape == (1,2)
