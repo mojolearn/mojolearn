@@ -97,7 +97,7 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.forest_fit_request import fit_loop_put
 from core.iforest_entry import (
     IFExportRequest, IFForestRunRequest, IFForestSpans, IFImage, IFRunRequest, IF_CAP_DEVICE_SCAN,
-    IF_CAP_RESIDENT, IF_CAP_SCORES_F64, IF_CAP_SLOT_X, if_entry_dispatch, if_entry_publish,
+    IF_CAP_RESIDENT, IF_CAP_SCORES_F64, IF_CAP_SLOT_X, IF_CAP_FIT_SLOT_X, if_entry_dispatch, if_entry_publish,
 )
 
 # Lane p3-svm-gp-kernel: the resident forest on every tier. `IDN_IF_RESIDENT`
@@ -752,8 +752,9 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
             want -= _IF_WANT_WIDE_BASE
     if r.n_train <= 0 or r.n_features <= 0 or r.n_query <= 0:
         raise Error("iforest_run: n_train, n_features and n_query must all be positive")
-    if r.train < 0:
-        raise Error("iforest_run: the training matrix is a host address (a fold slot is a query only)")
+    if r.train < 0 and r.device_count > 1:
+        # THE FOLD X WORD (lane vdf-scope-trees4): a fold slot trains one device
+        raise Error("iforest_run: a fold slot training matrix runs on one device")
     if r.query < 0 and r.device_count > 1:
         raise Error("iforest_run: a fold slot query runs on one device")
     var tp = f32_ptr(r.train)
@@ -780,8 +781,9 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
     var plan = _iforest_plan(r)
     var res = IFRunOutputs()
     if r.resident:
+        # keyed on the training WORD (a host address, or a member's fold slot)
         var key = IFResidentKey(
-            Int(tp), r.n_train, r.n_features, r.n_estimators, r.max_samples_mode,
+            r.train, r.n_train, r.n_features, r.n_estimators, r.max_samples_mode,
             r.max_samples_int, r.max_samples_frac, r.max_depth, r.max_features_mode,
             r.max_features_int, r.max_features_frac, r.bootstrap, r.random_state,
             r.contamination_auto, r.contamination,
@@ -812,7 +814,7 @@ def _iforest_run(r: IFRunRequest) raises -> Int:
         r.max_samples_mode, r.max_samples_int, r.max_samples_frac, r.max_depth,
         r.max_features_mode, r.max_features_int, r.max_features_frac,
         r.bootstrap, r.random_state, r.contamination_auto, r.contamination,
-        want, train_addr=Int(tp), query_addr=q_addr,
+        want, train_addr=r.train, query_addr=q_addr,
     )
     var out_i32_word = 0
     var out_f32_word = 0
@@ -839,6 +841,11 @@ struct _SvmIForestImage(IFImage):
         # `_upload_rowmajor_query_device`, which reads THE FOLD X WORD.
         comptime if IDN_IF_QUERY_DEVICE:
             bits |= IF_CAP_SLOT_X
+        # IF_CAP_FIT_SLOT_X (lane vdf-scope-trees4): the fit's training upload
+        # (`_upload_rowmajor_as_colmajor_device` / `_upload_rowmajor_fast`)
+        # reads THE FOLD X WORD too, on the resident route
+        comptime if _IF_RESIDENT_ROUTE and (IF_DEVICE_TRANSPOSE or IF_FAST_ROWMAJOR):
+            bits |= IF_CAP_FIT_SLOT_X
         return bits
 
     @staticmethod

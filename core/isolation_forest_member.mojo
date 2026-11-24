@@ -70,7 +70,7 @@ from std.memory import unsafe_memcpy
 from std.sys.info import size_of
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.iforest_entry import (
-    IFForestRunRequest, IFForestSpans, IFRunRequest, IF_CAP_RESIDENT, IF_CAP_SCORES_F64, IF_CAP_SLOT_X, IF_EXPORT_INFO,
+    IFForestRunRequest, IFForestSpans, IFRunRequest, IF_CAP_RESIDENT, IF_CAP_SCORES_F64, IF_CAP_SLOT_X, IF_CAP_FIT_SLOT_X, IF_EXPORT_INFO,
     if_entry_caps, if_entry_export, if_entry_forest_run, if_entry_release, if_entry_run,
 )
 from core.member_abi import (
@@ -87,6 +87,7 @@ from core.member_fold_x import (
     MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
     member_fold_store_ready,
 )
+from bindings.arena_cache_run import arena_cache_free
 from core.member_families import MEMBER_FAMILY_ISOLATION_FOREST
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -168,6 +169,14 @@ struct IsolationForestMemberSlot(Copyable, Defaultable, Movable):
     """The fold's training rows of a FIT over a row index (`_fold_op`): the
     state's training view then (the forest is keyed on it and refits from
     it), owned here because the caller's view is the whole X."""
+    var fold_store: EntryRef
+    var fold_slot: Int
+    """The fold slot of a device FIT over a row index (lane vdf-scope-trees4;
+    -1: none): the fold's training rows taken ON THE DEVICE into the x_prep
+    store `fold_store`, the state's training word (`train` =
+    `fold_x_word(fold_slot)`) for the state's life, so a refit after an
+    eviction and the export's refit read it there. Freed at the state's next
+    fit, import or FREE."""
 
     def __init__(out self):
         self.generation = 0
@@ -189,6 +198,8 @@ struct IsolationForestMemberSlot(Copyable, Defaultable, Movable):
         self.forest = IsolationForestMemberForest()
         self.devices = List[Int]()
         self.fold_train = List[Float32]()
+        self.fold_store = entry_ref_unresolved()
+        self.fold_slot = -1
 
 
 struct IsolationForestMemberStore(Defaultable, Movable):
@@ -240,17 +251,19 @@ def _mint(words: IFRunRequest) raises -> Int:
         slot[].token = 0
         slot[].train = 0
         slot[].fold_train = List[Float32]()  # a previous state's fold rows
+        slot[].fold_slot = -1  # FREE handed a previous state's fold slot back
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
         shared_slot_unlock(lock)
 
 
 def _lookup(handle: Int, release: Bool, mut token: Int, mut entry: EntryRef,
-            mut dropped: IsolationForestMemberForest) raises -> Int:
+            mut dropped: IsolationForestMemberForest, mut fold_store: EntryRef, mut fold_slot: Int) raises -> Int:
     """The slot address of a live handle. A released handle, a handle of
     another store or a made-up integer is refused: never a stale read. On
     release, `token` / `entry` receive the resident forest to drop and
-    `dropped` the slot's compact forest (both freed after the lock)."""
+    `dropped` the slot's compact forest, `fold_store` / `fold_slot` its fold
+    slot (-1: none; all freed after the lock)."""
     var store = _STORE.get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
@@ -271,6 +284,9 @@ def _lookup(handle: Int, release: Bool, mut token: Int, mut entry: EntryRef,
             slot[].train = 0
             slot[].imported = False
             swap(slot[].forest, dropped)
+            fold_store = slot[].fold_store
+            fold_slot = slot[].fold_slot
+            slot[].fold_slot = -1
             store[].free.append(index)
         return address
     finally:
@@ -292,9 +308,15 @@ def _whole(call: MutPointer[MemberCall, MutUntrackedOrigin]) raises:
 # upload into its own buffer (isolation_forest/impl/isolation_forest.mojo
 # `_upload_rowmajor_query_device`, IF_CAP_SLOT_X): the rows never visit the
 # host. FIT: the forest is keyed on, and refits after an eviction from, its
-# training view, which the state must therefore own; the fold's rows are taken
-# on the host (`member_fold_take_f32`, row chunks across the host's cores, as
-# the caller's gather did) into `fold_train`, uploaded by the fit as before.
+# training view, which the state must therefore own. Lane vdf-scope-trees4: on
+# an image with IF_CAP_FIT_SLOT_X and a one-device plan the fold's rows are
+# taken ON THE DEVICE into a fold slot the STATE keeps (`fold_slot`, freed at
+# its next fit, import or FREE), and the fit, a refit after an eviction and the
+# export's refit read that slot as their training word (one device-to-device
+# copy into the fit's upload). Otherwise (a multi-device plan, an image without
+# the bit) the fold's rows are taken on the host (`member_fold_take_f32`, row
+# chunks across the host's cores, as the caller's gather did) into
+# `fold_train`, uploaded by the fit as before.
 # An imported state scores through IF_OP_FOREST_RUN (host rows, taken
 # likewise). Same bytes either way (a byte copy of the same rows in the same
 # order: no bit moves).
@@ -328,8 +350,19 @@ def _fold_op(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
     var x = call[].x
     var index = call[].row_index
     var fold = MemberFoldX()
-    var device = (operation != MEMBER_OP_FIT and slot[].fitted and not slot[].imported
-                  and len(slot[].devices) <= 1 and _route_slot_x(call))
+    var device: Bool
+    if operation == MEMBER_OP_FIT:
+        # lane vdf-scope-trees4: the fit's training rows stay on the device
+        # (IF_CAP_FIT_SLOT_X) on a one-device plan (the shards read host rows)
+        var caps = 0
+        try:
+            caps = if_entry_caps(call[].route.entry)
+        except:
+            caps = 0
+        device = ((caps & IF_CAP_FIT_SLOT_X) != 0 and (caps & IF_CAP_RESIDENT) != 0
+                  and not (call[].device_count > 1 and call[].devices != 0) and member_fold_store_ready(call))
+    else:
+        device = (slot[].fitted and not slot[].imported and len(slot[].devices) <= 1 and _route_slot_x(call))
     var host_x = List[Float32]()
     var failure = String("")
     try:
@@ -345,9 +378,17 @@ def _fold_op(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
         call[].row_index = MemberMatrix()
         if operation == MEMBER_OP_FIT:
             _fit(slot, call)
-            # the state's training view from now on (a swap moves the
-            # buffer, its address unchanged)
-            swap(slot[].fold_train, host_x)
+            if device:
+                # the state's training word from now on (lane
+                # vdf-scope-trees4): the fold slot is the state's, freed at
+                # its next fit, import or FREE, not at the close below
+                slot[].fold_store = fold.store
+                slot[].fold_slot = fold.slot
+                fold.slot = -1
+            else:
+                # the state's training view from now on (a swap moves the
+                # buffer, its address unchanged)
+                swap(slot[].fold_train, host_x)
         else:
             _query(slot, call, operation)
     except error:
@@ -445,6 +486,9 @@ def _fit(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
     # A refit of this state drops the forest the previous fit kept.
     if slot[].fitted and slot[].resident and slot[].token != 0:
         if_entry_release(slot[].entry, slot[].token)
+    # ... and the training rows it kept (lane vdf-scope-trees4); a fold FIT
+    # installs its own after this returns (`_fold_op`)
+    _drop_fold(slot)
     slot[].fitted = False
     slot[].imported = False
     slot[].forest = IsolationForestMemberForest()  # a previous EXPORT's read-out or IMPORT's forest
@@ -474,6 +518,16 @@ def _fit(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
     else:
         member_unsupported(_NAME, output)
     slot[].fitted = True
+
+
+def _drop_fold(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin]) raises:
+    """Free the state's fold slot and fold rows (a new fit or import
+    replaces the training view)."""
+    slot[].fold_train = List[Float32]()
+    if slot[].fold_slot >= 0:
+        var held = slot[].fold_slot
+        slot[].fold_slot = -1
+        arena_cache_free(slot[].fold_store, held)
 
 
 def _query(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
@@ -609,6 +663,7 @@ def _import(slot: MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin],
         # old addresses can never match the old resident key.
         if slot[].fitted and slot[].resident and slot[].token != 0:
             if_entry_release(slot[].entry, slot[].token)
+        _drop_fold(slot)  # an imported state has no training view (lane vdf-scope-trees4)
         slot[].fitted = False
         slot[].imported = True
         slot[].token = 0
@@ -708,17 +763,23 @@ def _isolation_forest_member(operation: Int, address: Int) raises -> Int:
         var token = 0
         var entry = entry_ref_unresolved()
         var dropped = IsolationForestMemberForest()
-        _ = _lookup(call[].state, True, token, entry, dropped)
+        var fold_store = entry_ref_unresolved()
+        var fold_slot = -1
+        _ = _lookup(call[].state, True, token, entry, dropped, fold_store, fold_slot)
         call[].state = 0
         if token != 0:
             if_entry_release(entry, token)
+        if fold_slot >= 0:
+            arena_cache_free(fold_store, fold_slot)  # the state's fold rows (lane vdf-scope-trees4)
         _ = dropped^  # the slot's compact forest, freed after the lock
         return 0
     var token = 0
     var entry = entry_ref_unresolved()
     var unused = IsolationForestMemberForest()
+    var unused_store = entry_ref_unresolved()
+    var unused_slot = -1
     var slot = MutPointer[IsolationForestMemberSlot, MutUntrackedOrigin](
-        unsafe_from_address=_lookup(call[].state, False, token, entry, unused))
+        unsafe_from_address=_lookup(call[].state, False, token, entry, unused, unused_store, unused_slot))
     if call[].row_index.rows > 0 and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT
             or operation == MEMBER_OP_DECISION or operation == MEMBER_OP_SCORE_SAMPLES):
         _fold_op(slot, call, operation)

@@ -89,8 +89,15 @@ comptime IF_CAP_DEVICE_SCAN = 4
 comptime IF_CAP_SLOT_X = 8
 """The scoring of a one-device run reads THE FOLD X WORD as its query
 (core/fold_x_device.mojo: a negative query address names a fold slot of the
-x_prep store; lane vdf-scope-trees2b). The training address stays a host
-address."""
+x_prep store; lane vdf-scope-trees2b). The training address is a fold slot
+only on an image with IF_CAP_FIT_SLOT_X."""
+comptime IF_CAP_FIT_SLOT_X = 16
+"""The FIT of a one-device run (and its refit after an eviction, and the
+export's refit) reads THE FOLD X WORD as its TRAINING address: a negative
+`train` names a fold slot of the x_prep store, copied device to device into
+the fit's upload (isolation_forest/impl/isolation_forest.mojo
+`_upload_rowmajor_as_colmajor_device`; lane vdf-scope-trees4). The member
+keeps that slot alive for the state's life."""
 
 # IF_OP_RUN addresses.
 comptime IF_A_TRAIN = 0
