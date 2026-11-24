@@ -362,11 +362,20 @@ def mc_resident_order(binding: PythonObject, codes: Int, n: Int, table: PythonOb
     C-contiguous int32 array of k words, the `mc_map_order` table) ON THE
     DEVICE into a fresh slot the call owns (MS_GATHER); its id. The table is
     O(k) host words, uploaded once."""
+    return mc_resident_gather(binding, codes, n, table, state)[0]
+
+
+def mc_resident_gather(binding: PythonObject, codes: Int, n: Int, table: PythonObject,
+                       mut state: McSlots) raises -> Tuple[Int, Int]:
+    """`mc_resident_order` with MS_GATHER's answer: (the mapped slot, the
+    first row the table mapped to -1, or -1). Lane vdf-xm-wire2: a table
+    that marks a class set with -1 answers whether any row's label is in it
+    (confusion_matrix's "at least one label in y_true"), on the device."""
     var dst = state.codes(binding, n)
     var addrs: List[Int] = [0]
     var slots: List[Int] = [codes]
     var ints: List[Int] = [n, Int(py=table.size), dst]
     var outs: List[Int] = [Int(py=classical_address(table))]
-    _ = mc_slots_step(binding, MS_GATHER, addrs, slots, ints, List[Float64](), outs, state)
+    var first = Int(py=mc_slots_step(binding, MS_GATHER, addrs, slots, ints, List[Float64](), outs, state))
     _ = table  # read by address inside the step above
-    return dst
+    return (dst, first)
