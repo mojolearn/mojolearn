@@ -119,10 +119,12 @@ UNPACK as the door's fit reads them:
     rows (`xt_sample_indices`, stream 2k) and features (stream 2k + 1) and
     holds the seed `_sub_seed(seed, k)` in its seed words
     (xtrees/trees_ada_fit_run.mojo `ADA_MEMBER_SEED_WORD`, the RF and ET
-    layouts' `random_state` slot). A classifier unit whose draw lacks a
-    class is fitted on the classes it drew, re-coded (the door's member fit
-    on its drawn codes), its probability columns placed at their ensemble
-    codes. oob_score: each unit's out-of-bag rows (`xt_unseen_rows`) and
+    layouts' `random_state` slot); a weighted fit draws its rows with
+    probability w / sum(w) (core/bag_draws.mojo). A unit whose kind takes
+    sample_weight is fitted on every row and the whole y with the draw's
+    counts as its weights (times the tree's class_weight rows over y), so
+    it holds every class (scikit-learn 1.9.1 _bagging.py:164-172); a unit
+    whose kind takes none is fitted on its gathered draw. oob_score: each unit's out-of-bag rows (`xt_unseen_rows`) and
     `bag_oob_run`, then `bag_oob_classifier_finish` / `bag_oob_r2_run`.
     predict / predict_proba: `bag_predict_run` over each unit's feature
     subset of X, then the row argmax for a classifier's predict; X staged
@@ -245,7 +247,8 @@ from core.member_families import (
 )
 from core.member_notices import member_notices_take
 from core.array_helpers_impl import class_ratio_f64
-from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan, class_weight_dict_refused
+from core.class_weight_plan import ClassWeightInputs, class_weight_rows_plan
+from core.bag_draws import BagWeights, bag_weights, bag_weighted_count, bag_draw_weighted, bag_counts_units
 from core.label_weights_native_api import (
     LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS,
 )
@@ -452,7 +455,7 @@ comptime META_BLOCK_FORWARD = MEMBER_BLOCK_FAMILY + 9
 #: THE CLASS-WEIGHT TAIL of a tree base (lane mf-split4): appended after a
 #: Bagging's META_BAG_WORDS (its batched forest's or per-member tree's
 #: class_weight) and an AdaBoost's META_ADA_WORDS (its base's): [mode, K,
-#: all-one, K weights] and, for a dict, K named flags (lane mf-split4b).
+#: all-one, K weights].
 #: Mode META_CW_NONE, META_CW_BALANCED (the FIT computes the ratios from its
 #: codes) or META_CW_DICT (the dict's weights over the codes' labels, read at
 #: UNPACK with the forest door's admission; K = -1: no labels were known, the
@@ -1394,7 +1397,13 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             mask |= MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
         elif kind == META_OVR and (base & MEMBER_CAN_PREDICT_PROBA) != 0:
             mask |= MEMBER_CAN_PREDICT_PROBA
-        if (_bag_kind(kind) or _multi_kind(kind)) and (base & MEMBER_CAN_SAMPLE_WEIGHT) != 0:
+        if _multi_kind(kind) and (base & MEMBER_CAN_SAMPLE_WEIGHT) != 0:
+            mask |= MEMBER_CAN_SAMPLE_WEIGHT
+        if _bag_kind(kind):
+            # Bagging (lane w3f3-h, scikit-learn 1.9.1 _bagging.py:82-93,
+            # 164-178): the caller's weights only drive the row draw; a base
+            # that takes sample_weight is handed the draw's counts, one that
+            # takes none the gathered draw, so the base's bit is not read.
             mask |= MEMBER_CAN_SAMPLE_WEIGHT
         if _ada_kind(kind):
             # AdaBoost (lane mf-split4b): the caller's float32 sample weights
@@ -2500,12 +2509,10 @@ def _seed_words(mut plan: MemberPlan, seed: Int) raises:
 
 
 def _cw_tail_words(words: List[Float64], at: Int) -> Int:
-    """The class-weight tail's length at `at`: its head, K weights and, for a
-    dict, K named flags (lane mf-split4b: 1.0 where the dict names that
-    class; the per-member route's absent-label refusal reads them)."""
+    """The class-weight tail's length at `at`: its head and K weights (the
+    dict's K named flags were deleted 2026-11-24 by lane/w3f3-h with their
+    one reader, `_bag_class_rows`)."""
     var count = max(Int(words[at + META_CW_K]), 0)
-    if Int(words[at + META_CW_MODE]) == META_CW_DICT:
-        return META_CW_HEAD + 2 * count
     return META_CW_HEAD + count
 
 
@@ -2572,144 +2579,9 @@ def _tree_class_rows(words: List[Float64], at: Int, codes: Int, n: Int, k: Int, 
     return Int(rows.unsafe_ptr())
 
 
-def _bag_class_rows(words: List[Float64], at: Int, y: Int, k: Int, n: Int, weights: Int, draw_at: List[Int],
-                    draw_n: List[Int], held: List[List[Int32]], recoded: List[List[Int32]],
-                    mut unit_w: List[List[Float32]], mut unit_w_at: List[Int]) raises:
-    """THE PER-MEMBER ROUTE OF A TREE WITH A CLASS_WEIGHT (lane mf-split4b):
-    each unit's float32 row weights as the tree's fit door makes them over
-    the rows the door's loop gives it (`_bagging_fit_bags`: the draw's codes
-    and, weighted, the draw's sample weights; bindings/
-    trees_public_inputs_door.mojo `trees_class_rows_only` /
-    `trees_weighted_rows`): the classes its draw holds (a lacking draw's
-    own classes, as the door's member encodes them), 'balanced' over the
-    draw's class counts (scikit-learn's ratios, `class_ratio_f64` over the
-    draw's rows), a dict's weights of those classes, refused in the door's
-    words when it names a class the draw lacks and leaves a held class
-    unweighted (`class_weight_dict_refused`) ("class_weight contains
-    labels absent from y", `class_weight_dictionary_values`); the per-class
-    float32 plan (`class_weight_rows_plan`) gathered at each drawn row,
-    times the caller's float32 weight (one float32 product per row, the
-    door's LABEL_WEIGHTS_MULTIPLY) when weighted. A unit whose class
-    weights are all one reads the caller's weights (`unit_w_at` stays).
-    Each unit's words are `n` long (the set gathers them with the draw); the
-    counts and the rows on the host cores, one task per unit. No Python."""
-    var units = len(draw_at)
-    var balanced = _cw_mode(words, at) == META_CW_BALANCED
-    var table = Int(words[at + META_CW_K])
-    if not balanced:
-        if table < 0:
-            raise Error("TypeError: mojolearn: a member whose tree has a class_weight dict is fitted only by a "
-                        + "caller that hands over its labels")
-        if table != k:
-            raise Error("member ABI: the class_weight table has " + String(table) + " entries for " + String(k)
-                        + " classes")
-    # 1. The draws' class counts (in the ensemble codes), one task per unit.
-    var counts = List[Int64](length=max(units * k, 1), fill=Int64(0))
-    var counts_at = Int(counts.unsafe_ptr())
-    var draws_at = Int(draw_at.unsafe_ptr())
-    var draws_n = Int(draw_n.unsafe_ptr())
-
-    def _count(u: Int) {imm counts_at, imm draws_at, imm draws_n, imm y, imm k, imm n}:
-        var draw = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=draws_at)[u]
-        var m = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=draws_n)[u]
-        var rows = m if draw != 0 else n
-        var picks = _I32P(unsafe_from_address=draw)
-        var codes = _I32P(unsafe_from_address=y)
-        var dst = _I64P(unsafe_from_address=counts_at + 8 * u * k)
-        for i in range(rows):  # small-loop(one pass over one unit's drawn rows)
-            var c = Int(codes[Int(picks[i]) if draw != 0 else i])
-            if c >= 0 and c < k:
-                dst[c] += 1
-
-    if balanced:
-        host_parallelize(_count, units)
-    # 2. Each unit's per-class plan (k words each, on the calling thread: the
-    # plan steps split their own work).
-    var plans = List[List[Float32]](capacity=units)
-    var weighted = List[Bool](capacity=units)
-    for u in range(units):  # driver-loop: over the member estimators (their class plans)
-        var classes = _held_classes(held[u], k)
-        var inputs = ClassWeightInputs()
-        if balanced:
-            var wide = List[Int64](length=max(classes, 1), fill=Int64(0))
-            for j in range(classes):  # small-loop(the unit's held classes' counts)
-                var c = Int(held[u][j]) if len(held[u]) > 0 else j
-                wide[j] = counts[u * k + c]
-            var rows = draw_n[u] if draw_at[u] != 0 else n
-            inputs.values = List[Float64](length=classes, fill=0.0)
-            if classes > 0 and class_ratio_f64(_I64P(unsafe_from_address=Int(wide.unsafe_ptr())),
-                                               _F64P(unsafe_from_address=Int(inputs.values.unsafe_ptr())), classes,
-                                               rows, 0) != 0:
-                raise Error("ZeroDivisionError: division by zero")
-            _ = len(wide)
-        else:
-            if len(held[u]) > 0:
-                # the door's member sees only the draw's classes: a dict naming another is refused when
-                # it also leaves a held class unweighted (`class_weight_dict_refused`, the door's rule)
-                var mark = List[Bool](length=max(k, 1), fill=False)
-                var unweighted = 0
-                for j in range(len(held[u])):  # small-loop(the unit's held classes)
-                    mark[Int(held[u][j])] = True
-                    if words[at + META_CW_HEAD + k + Int(held[u][j])] == 0.0:
-                        unweighted += 1
-                var unknown = 0
-                for c in range(k):  # small-loop(the dict's named classes)
-                    if words[at + META_CW_HEAD + k + c] != 0.0 and not mark[c]:
-                        unknown += 1
-                if class_weight_dict_refused(unknown, unweighted):
-                    raise Error("class_weight contains labels absent from y")
-            for j in range(classes):  # small-loop(the dict weights of the unit's classes)
-                var c = Int(held[u][j]) if len(held[u]) > 0 else j
-                var value = words[at + META_CW_HEAD + c]
-                inputs.append(value, value == 1.0)
-        var plan = class_weight_rows_plan(inputs, balanced)
-        weighted.append(not plan.all_one)
-        plans.append(plan.words.copy() if not plan.all_one else List[Float32]())
-    # 3. The rows: unit u's plan word at each drawn row (times the caller's weight).
-    unit_w = List[List[Float32]](capacity=units)
-    for u in range(units):  # driver-loop: over the member estimators (their row words)
-        unit_w.append(List[Float32](length=max(n, 1), fill=0.0) if weighted[u] else List[Float32]())
-    var plan_at = List[Int](length=max(units, 1), fill=0)
-    var dst_at = List[Int](length=max(units, 1), fill=0)
-    var codes_at = List[Int](length=max(units, 1), fill=y)
-    for u in range(units):  # driver-loop: over the member estimators (their final addresses)
-        if weighted[u]:
-            plan_at[u] = Int(plans[u].unsafe_ptr())
-            dst_at[u] = Int(unit_w[u].unsafe_ptr())
-            unit_w_at[u] = dst_at[u]
-            if len(held[u]) > 0:
-                codes_at[u] = Int(recoded[u].unsafe_ptr())
-    var plan_list = Int(plan_at.unsafe_ptr())
-    var dst_list = Int(dst_at.unsafe_ptr())
-    var code_list = Int(codes_at.unsafe_ptr())
-
-    def _rows(u: Int) {imm plan_list, imm dst_list, imm code_list, imm draws_at, imm draws_n, imm weights, imm n}:
-        var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=dst_list)[u]
-        if dst == 0:
-            return
-        var plan = _F32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=plan_list)[u])
-        var codes = _I32P(unsafe_from_address=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=code_list)[u])
-        var out = _F32P(unsafe_from_address=dst)
-        var draw = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=draws_at)[u]
-        var m = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=draws_n)[u]
-        var rows = m if draw != 0 else n
-        var picks = _I32P(unsafe_from_address=draw)
-        var given = _F32P(unsafe_from_address=weights)
-        for i in range(rows):  # small-loop(one pass over one unit's drawn rows)
-            var r = Int(picks[i]) if draw != 0 else i
-            var value = plan[Int(codes[r])]
-            out[r] = value * given[r] if weights != 0 else value
-
-    host_parallelize(_rows, units)
-    _ = len(counts)  # read through the tasks above
-    _ = len(plans)
-    _ = len(plan_at)
-    _ = len(dst_at)
-    _ = len(codes_at)
-    _ = len(held)
-    _ = len(recoded)
-    _ = len(draw_at)
-    _ = len(draw_n)
+# TOMBSTONE: _bag_class_rows (the per-draw class_weight rows of a Bagging unit fitted on its draw's classes) deleted
+# 2026-11-24 by lane/w3f3-h: a unit that takes sample_weight is now fitted on the whole y (scikit-learn 1.9.1
+# _bagging.py:164-172), its class_weight rows over y (`_tree_class_rows`); code recoverable at a5b8bf2008.
 
 
 def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
@@ -2729,9 +2601,20 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     var glue = slot[].glue
     var count = Int(slot[].words[META_BAG_COUNT])
     var seed = Int(slot[].words[META_BAG_SEED])
-    var n_rows = _bag_count(slot[].words[META_BAG_ROWS_INT] != 0.0, slot[].words[META_BAG_ROWS], n, "max_samples")
-    var n_feat = _bag_count(slot[].words[META_BAG_COLS_INT] != 0.0, slot[].words[META_BAG_COLS], d, "max_features")
     var bootstrap = slot[].words[META_BAG_BOOTSTRAP] != 0.0
+    # THE DRAW WEIGHTS (core/bag_draws.mojo): the caller's weights drive the
+    # row draw only; a float max_samples of a weighted fit is a fraction of
+    # their sum (scikit-learn 1.9.1 sklearn/ensemble/_bootstrap.py:49-59).
+    var rows_int = slot[].words[META_BAG_ROWS_INT] != 0.0
+    var bw = BagWeights()
+    var n_rows = 0
+    if weights != 0:
+        bw = bag_weights(weights, n)
+    if weights != 0 and not rows_int:
+        n_rows = bag_weighted_count(slot[].words[META_BAG_ROWS], bw.total, n, bootstrap)
+    else:
+        n_rows = _bag_count(rows_int, slot[].words[META_BAG_ROWS], n, "max_samples")
+    var n_feat = _bag_count(slot[].words[META_BAG_COLS_INT] != 0.0, slot[].words[META_BAG_COLS], d, "max_features")
     var bootstrap_features = slot[].words[META_BAG_BOOTSTRAP_FEATURES] != 0.0
     var all_rows = n_rows == n and not bootstrap
     var all_cols = n_feat == d and not bootstrap_features
@@ -2750,7 +2633,10 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
         var rows = List[Int32]()
         if not all_rows:
             rows = List[Int32](length=max(n_rows, 1), fill=Int32(0))
-            _ = xt_sample_indices(glue, Int(rows.unsafe_ptr()), n, n_rows, 1 if bootstrap else 0, seed, 2 * u)
+            if weights != 0:
+                bag_draw_weighted(bw, n, Int(rows.unsafe_ptr()), n_rows, bootstrap, seed, 2 * u)
+            else:
+                _ = xt_sample_indices(glue, Int(rows.unsafe_ptr()), n, n_rows, 1 if bootstrap else 0, seed, 2 * u)
         var cols = List[Int32]()
         if not all_cols:
             cols = List[Int32](length=max(n_feat, 1), fill=Int32(0))
@@ -2762,42 +2648,48 @@ def _fit_bag(slot: _SlotPtr, call: _CallPtr) raises:
     for u in range(count):  # driver-loop: over the member estimators (their draws' addresses, now final)
         draw_at.append(0 if all_rows else Int(slot[].unit_rows[u].unsafe_ptr()))
         draw_n.append(0 if all_rows else n_rows)
-    var held = List[List[Int32]]()
-    var recoded = List[List[Int32]]()
-    if classifier:
-        _held_and_codes(y, k, n, draw_at, draw_n, held, recoded)
-    # A CLASS_WEIGHT ON THE TREE (lane mf-split4b): each unit's row weights,
-    # as the tree's fit door makes them over the rows it was given
-    # (`_bag_class_rows`); else every unit reads the caller's weights.
-    var unit_w = List[List[Float32]]()
-    var unit_w_at = List[Int](length=max(count, 1), fill=weights)
+    # THE MEMBER'S ROWS (lane w3f3-h, scikit-learn 1.9.1 _bagging.py:164-178):
+    # a unit whose kind takes sample_weight (the units' kind-exact mask) reads
+    # every row and the whole y, weighted by its draw's counts (`bag_counts_units`)
+    # times the tree's class_weight rows over y (as the tree's own fit
+    # multiplies them over the y it is given); every class is held. A unit
+    # whose kind takes none reads its gathered draw, unweighted but for the
+    # class_weight rows (gathered with it).
+    var by_weight = (slot[].masks[0] & MEMBER_CAN_SAMPLE_WEIGHT) != 0 if count > 0 else True
+    var cw_rows = List[Float32]()
+    var cw_at = 0
     if classifier and _cw_mode(slot[].words, META_BAG_WORDS) != META_CW_NONE:
-        _bag_class_rows(slot[].words, META_BAG_WORDS, y, k, n, weights, draw_at, draw_n, held, recoded, unit_w,
-                        unit_w_at)
+        cw_at = _tree_class_rows(slot[].words, META_BAG_WORDS, y, n, k, cw_rows)
+    var unit_w = List[List[Float32]](capacity=count)
+    var unit_w_at = List[Int](length=max(count, 1), fill=cw_at)
+    if by_weight and not all_rows:
+        for u in range(count):  # driver-loop: over the member estimators (their count weights' words)
+            unit_w.append(List[Float32](length=max(n, 1), fill=0.0))
+        for u in range(count):  # driver-loop: over the member estimators (their weights' addresses, now final)
+            unit_w_at[u] = Int(unit_w[u].unsafe_ptr())
+        bag_counts_units(unit_w_at, draw_at, draw_n, n, cw_at)
+    var held = List[List[Int32]](capacity=count)
+    for _ in range(count):  # driver-loop: over the member estimators (every class held)
+        held.append(List[Int32]())
     var run = _set_of(slot, x, n, d, MEMBER_I32 if classifier else MEMBER_F32)
-    # A classifier's held classes were read above: no second cover pass.
-    run.skip_lacking = classifier
+    # A unit over the whole y holds every class: no cover pass to make. A
+    # gathered classifier draw keeps it (a draw lacking a class is refused).
+    run.skip_lacking = classifier and by_weight
     for u in range(count):  # driver-loop: over the member estimators (admission, once each)
-        var target = y
-        var classes = 0
-        if classifier:
-            classes = k
-            if len(held[u]) > 0:
-                target = Int(recoded[u].unsafe_ptr())
-                classes = len(held[u])
-        _add_drawn(slot, run, u, classes, target, unit_w_at[u], draw_at[u], draw_n[u],
-                   0 if all_cols else Int(slot[].unit_cols[u].unsafe_ptr()), 0 if all_cols else n_feat)
+        _add_drawn(slot, run, u, k if classifier else 0, y, unit_w_at[u], 0 if by_weight else draw_at[u],
+                   0 if by_weight else draw_n[u], 0 if all_cols else Int(slot[].unit_cols[u].unsafe_ptr()),
+                   0 if all_cols else n_feat)
     member_set_fit(run)
     slot[].states = List[Int](length=count, fill=0)
     _keep_states(slot, run, 0)
-    var drawn = List[Bool](length=count, fill=not (all_rows and all_cols))
+    var drawn = List[Bool](length=count, fill=not ((all_rows or by_weight) and all_cols))
     try:
         _own_drawn(slot, drawn)
     finally:
         member_set_run_release(run)
-    _ = len(recoded)  # the re-coded targets are read through the fits and the ownership above
-    _ = len(unit_w)  # the units' class rows are read through the fits and the ownership above
+    _ = len(unit_w)  # the units' count weights are read through the fits and the ownership above
     _ = len(unit_w_at)
+    _ = len(cw_rows)  # the class rows are read through the counts, the fits and the ownership above
     slot[].unit_held = held^
     slot[].classes = k
     _nested_outputs(slot)

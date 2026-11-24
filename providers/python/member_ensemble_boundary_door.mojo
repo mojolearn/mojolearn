@@ -1595,7 +1595,7 @@ def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: Py
                    mut words: List[Float64]) raises -> Bool:
     """UNPACK of a tree base's class_weight (lane mf-split4), appended as the
     kind's class-weight tail (core/ensemble_member.mojo META_CW_*): [mode,
-    K, all-one, the K dict weights, the K named flags]. None: mode 0. 'balanced': mode 1 (the
+    K, all-one, the K dict weights]. None: mode 0. 'balanced': mode 1 (the
     FIT computes the ratios from its codes). A dict: mode 2, its weights
     over `labels` (the labels of the codes the trees are fitted on, in code
     order) read with the forest door's own admission
@@ -1630,11 +1630,8 @@ def _tree_cw_words(class_weight: PythonObject, labels: PythonObject, context: Py
     words.append(1.0 if inputs.all_one else 0.0)
     for c in range(len(inputs.values)):  # driver-loop: over the classes (one weight each, UNPACK once)
         words.append(inputs.values[c])
-    # The K named flags (lane mf-split4b): 1.0 where the dict names the
-    # class (a Bagging unit whose draw lacks a named class is refused in
-    # the tree door's words, core/ensemble_member.mojo `_bag_class_rows`).
-    for c in range(len(inputs.values)):  # driver-loop: over the classes (one membership test each, UNPACK once)
-        words.append(1.0 if py_contains(class_weight, labels[c]) else 0.0)
+    # TOMBSTONE: the K named flags (lane mf-split4b, read only by `_bag_class_rows`'s absent-label refusal) deleted
+    # 2026-11-24 by lane/w3f3-h with it; code recoverable at a5b8bf2008.
     return True
 
 

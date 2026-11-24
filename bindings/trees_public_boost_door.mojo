@@ -52,7 +52,7 @@ from bindings.trees_public_inputs_door import (
     trees_class_rows_only,
 )
 from bindings.trees_public_inputs_run import TREES_NONFINITE, trees_finite_f32
-from core.member_unit_classes import member_unit_classes, member_unit_recode
+from core.bag_draws import BagWeights, bag_weights, bag_weighted_count, bag_draw_weighted, bag_counts_units
 from core.admitted_refusals import admitted_finite_refuse
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
@@ -62,7 +62,7 @@ from bindings.member_given_y_unpack import member_given_y
 from bindings.member_set_door import (
     MemberSet, member_set_admit_or_raise, member_set_width, member_set_run, member_set_pack, member_set_release,
     member_set_notices, member_set_resident, member_set_reads_given, member_set_given,
-    member_set_tests, member_set_host, member_marked, member_held_open, member_held_run, member_held_close,
+    member_set_tests, member_set_host, member_marked, member_set_reads_weights, member_held_open, member_held_run, member_held_close,
     MemberHeldCall,
 )
 from core.member_abi import MemberMatrix, MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
@@ -322,6 +322,16 @@ def _class_major(xt: PythonObject, inits: PythonObject, n: Int, context: PythonO
         _ = xt_fill_class_major_f64(glue, trees_address(vals_array), trees_address(out), n, k)
         _ = out  # keep the Python object alive through the native call above
         _ = vals_array  # keep the Python object alive through the native call above
+    return out
+
+
+def _weighted_indices(weights: BagWeights, pool: Int, draw: Int, replace: Bool, seed: Int, stream: Int,
+                      context: PythonObject) raises -> PythonObject:
+    """`_indices` of a weighted Bagging fit: row i drawn with probability
+    w[i] / sum(w) (core/bag_draws.mojo `bag_draw_weighted`)."""
+    var out = admitted_vector(max(draw, 1), "<i4", context)
+    bag_draw_weighted(weights, pool, trees_address(out), draw, replace, seed, stream)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -742,7 +752,12 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     var d = x.cols
     var xa = _as_array(x, Python.tuple(n, d), context)
     var seed = _seed(fields["random_state"], context)
-    var n_rows = _count(fields["max_samples"], n, "max_samples", context)
+    # A float max_samples of a weighted fit is a fraction of sum(sample_weight)
+    # (scikit-learn 1.9.1 sklearn/ensemble/_bootstrap.py:49-59): resolved once
+    # the weights are admitted, below (the batched route takes no weights).
+    var rows_reading = meta_count_reading(fields["max_samples"], "max_samples", context)
+    var weighted_fraction = sample_weight is not None and not rows_reading.integral
+    var n_rows = 0 if weighted_fraction else _count(fields["max_samples"], n, "max_samples", context)
     var n_feat = _count(fields["max_features"], d, "max_features", context)
     var base = fields["estimator"]
     if base is None:
@@ -757,6 +772,15 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     if sample_weight is not None:
         sw = admit_weight_words(sample_weight, n, context)
     var xt = _xt(fields, context)
+    var bootstrap = _truthy(fields["bootstrap"])
+    # THE DRAW WEIGHTS (core/bag_draws.mojo): the caller's sample_weight only
+    # drives the row draw (scikit-learn 1.9.1 _bagging.py:82-93); a member
+    # that takes sample_weight is handed the draw's counts, never it.
+    var bw = BagWeights()
+    if sw:
+        bw = bag_weights(sw.value().address, n)
+        if weighted_fraction:
+            n_rows = bag_weighted_count(rows_reading.fraction, bw.total, n, bootstrap)
     var members = Python.list()
     var features = Python.list()
     var oob_rows = Python.list()
@@ -764,7 +788,6 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     py_setitem(fields, "_batched", PythonObject(None))
     py_setitem(fields, "estimators_features_", features)
     py_setitem(fields, "_oob_rows", oob_rows)
-    var bootstrap = _truthy(fields["bootstrap"])
     var bootstrap_features = _truthy(fields["bootstrap_features"])
     var oob = _truthy(fields["oob_score"])
     var all_rows = n_rows == n and not bootstrap
@@ -784,14 +807,17 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     # route's one forest) is deleted): a member the set does not take is
     # refused before any fit of its wave in its refuser's words
     # (`member_set_admit_or_raise`), a member's refused fit or publication
-    # raises its own words. Same draws, same seeds, same member order.
+    # raises its own words. Same seeds, same member order.
+    # THE MEMBER'S ROWS (lane w3f3-h, scikit-learn 1.9.1 _bagging.py:164-178):
+    # a member whose kind takes sample_weight (every tree member but the
+    # RandomForestRegressor with oob_score) is fitted on EVERY row and the
+    # whole y with the draw's counts as its weights (`bag_counts_units`), so its
+    # classes_ is every class, as the batched route's trees; a member that
+    # takes none is fitted on the gathered draw, unweighted.
     var done = 0
     var b = trees_builtins()
     var n_classes = len(fields["classes_"]) if classifier else 0
     var codes = py_call(b.list, py_call(b.range, PythonObject(n_classes))) if classifier else PythonObject(None)
-    var w_address = 0
-    if sw:
-        w_address = sw.value().address
     var jobs = native_unit_jobs(fields["n_jobs"], "Bagging")
     # WHO REFUSES A NON-FINITE X OR y. X (and a regressor's targets) reach
     # this door untested. A member whose kind tests its rows
@@ -814,6 +840,19 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
     if not classifier:
         given = member_given_y(y_given, n, 1, context["array_class"])
     var y_address = trees_address(y_all)
+    # Whether the members' kind takes sample_weight: asked ONCE per fit of a
+    # probe clone (`member_set_reads_weights`), never per member.
+    var by_weight = True
+    if count > 0:
+        var probe = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
+        var probe_w = List[Float32](length=1, fill=1.0)
+        try:
+            member_set_admit_or_raise(probe, _clone_from(base, template, _sub_seed(seed, 0), context), y_address,
+                                      Int(probe_w.unsafe_ptr()), 0, 0, 0, 0, n_classes, context, b)
+            by_weight = member_set_reads_weights(probe, 0)
+        finally:
+            member_set_release(probe)
+        _ = len(probe_w)
     while done < count:  # driver-loop: over the waves of member estimators
         var set = MemberSet(x.address, n, d, MEMBER_I32 if classifier else MEMBER_F32, MEMBER_I32)
         set.run.cap = jobs
@@ -823,46 +862,49 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         # device copy of X through their doors and the states are freed.
         set.adopt = True
         set.adopt_trees = True
-        # THE UNIT CLASSES (core/member_unit_classes.mojo): each classifier
-        # draw's classes are read once below (the set's class-cover pass, so
-        # the set makes no second one). A draw that lacks a class of the
-        # ensemble is fitted on the classes it drew, as its fit door fitted
-        # it: its codes re-coded onto them, the member packed labelled with
-        # the ensemble codes it holds (the predicts place its columns by its
-        # classes_, `_sub_cols`).
-        set.run.skip_lacking = classifier
-        var recoded = List[List[Int32]]()
+        # Every member that takes weights reads the whole y, which holds every
+        # class: the set's class-cover pass would find nothing to refuse. A
+        # gathered classifier draw keeps the pass (a draw lacking a class is
+        # refused in the set's words).
+        set.run.skip_lacking = classifier and by_weight
+        # The members' count weights (n words each), read through the fits
+        # and kept to the wave's end (THE LIFETIME RULE, below).
+        var unit_counts = List[List[Float32]]()
+        var counts_at = List[Int]()
+        var counts_draw = List[Int]()
+        var counts_n = List[Int]()
         var wave_labels = Python.list()
         var wave_rows = Python.list()
         var wave_cols = Python.list()
         var width = 1
         var k = done
         while k < count and k < done + width:  # driver-loop: over this wave's members (draws and admission)
-            var rows = _arange(xt, n, context) if all_rows else _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
+            var rows = PythonObject(None)
+            if all_rows:
+                rows = _arange(xt, n, context)
+            elif sw:
+                rows = _weighted_indices(bw, n, n_rows, bootstrap, seed, 2 * k, context)
+            else:
+                rows = _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
             var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
             var member = _clone_from(base, template, _sub_seed(seed, k), context)
-            var target = y_address
-            var classes = n_classes
-            var labels = codes
-            set.labels = PythonObject(None)
-            if classifier:
-                var held = member_unit_classes(y_address, 0 if all_rows else trees_address(rows), False,
-                                               n if all_rows else n_rows, n_classes)
-                if len(held) > 0:
-                    recoded.append(member_unit_recode(y_address, n, n_classes, held))
-                    target = Int(recoded[len(recoded) - 1].unsafe_ptr())
-                    classes = len(held)
-                    labels = Python.list()
-                    for c in range(len(held)):  # driver-loop: over the draw's held classes (a few labels)
-                        _ = py_call(labels.append, PythonObject(Int(held[c])))
-                    # a class_weight dict is read over the ensemble codes the draw holds
-                    set.labels = labels
-            member_set_admit_or_raise(set, member, target, w_address,
-                                      0 if all_rows else trees_address(rows), 0 if all_rows else n_rows,
+            var unit_w = 0
+            var row_draw = 0 if all_rows else trees_address(rows)
+            var row_count = 0 if all_rows else n_rows
+            if by_weight and not all_rows:
+                # every row, weighted by the draw's counts (a draw of every
+                # row without replacement: all ones, no weights)
+                unit_counts.append(List[Float32](length=max(n, 1), fill=0.0))
+                unit_w = Int(unit_counts[len(unit_counts) - 1].unsafe_ptr())
+                counts_at.append(unit_w)
+                counts_draw.append(row_draw)
+                counts_n.append(n_rows)
+                row_draw = 0
+                row_count = 0
+            member_set_admit_or_raise(set, member, y_address, unit_w, row_draw, row_count,
                                       0 if all_cols else trees_address(cols), 0 if all_cols else n_feat,
-                                      classes, context, b)
-            set.labels = PythonObject(None)
-            _ = py_call(wave_labels.append, labels)
+                                      n_classes, context, b)
+            _ = py_call(wave_labels.append, codes)
             if given.given() and member_set_reads_given(set):
                 member_set_given(set, given.data, given.dtype)
             # Inside `resident()` a member that reads a scope keeps X on the
@@ -884,17 +926,16 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
             if k == done:
                 width = member_set_width(set)
             k += 1
+        # The wave's count weights, its units on the host cores (the draws
+        # are this wave's `wave_rows`, alive to the wave's end).
+        if len(counts_at) > 0:
+            bag_counts_units(counts_at, counts_draw, counts_n, n, 0)
         # A member that refuses its fit publishes nothing: every state of the
         # wave is released and its own words are raised.
         member_set_run(set)
         _ = x  # keep the admitted X alive through the member fits above
         _ = y_all
-        _ = sample_weight
-        # THE ADMITTED WEIGHTS: `sw` owns the float32 copy a float64 (or any
-        # non-float32) sample_weight is admitted as, and `w_address` points
-        # into it; its last named use was the address read above, so without
-        # this use the copy is freed before the members read it.
-        _ = sw
+        _ = len(unit_counts)  # the members read their count weights through the fits above
         _ = wave_rows
         _ = wave_cols
         try:
@@ -911,14 +952,12 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
             # weights and this wave's draws were handed to the members' fits
             # and live until every state of the wave was packed (exported,
             # and made to own its rows when adopted) or released: to here. A
-            # borrowing member read its re-coded codes again at its pack.
+            # borrowing member read its count weights again at its pack.
             _ = x
             _ = y_all
-            _ = sample_weight
-            _ = sw
             _ = wave_rows
             _ = wave_cols
-            _ = len(recoded)
+            _ = len(unit_counts)
         kept = kept and set.kept_all and member_set_host(set)
         done += set.count()
         _ = set.count()

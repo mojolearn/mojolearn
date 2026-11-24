@@ -4,8 +4,9 @@
 Before, a member the native member set did not take (a draw or a cv fold lacking a class, a non-finite X, a y the
 float32 admission refused, a member the set refused) was fitted by its member's Python fit door, which raised the
 estimator's words or fitted the classes it was given. Now:
-  * a bagging draw or a cv fold that lacks a class is fitted natively on the classes it holds (THE UNIT CLASSES,
-    core/member_unit_classes.mojo), its member labelled with the ensemble codes it holds, as scikit-learn fits it;
+  * a cv fold that lacks a class is fitted natively on the classes it holds (THE UNIT CLASSES,
+    core/member_unit_classes.mojo), as scikit-learn fits it; a bagging member is fitted on the whole y with its
+    draw's counts as weights and holds every class (scikit-learn 1.9.1 _bagging.py:164-172; lane w3f3-h);
   * every refusal is raised natively before any fit, in its refuser's words (scikit-learn's check_array /
     check_consistent_length words, the forest door's TREES_NONFINITE, the member's own words).
 Each test names the edit that must make it fail (its fail-proof).
@@ -20,41 +21,58 @@ def _imbalanced(n=60, d=4, seed=3):
     rng = np.random.default_rng(seed)
     X = rng.normal(size=(n, d)).astype(np.float32)
     y = np.zeros(n, dtype=np.int64)
-    y[:3] = 2  # three rows of class 2: small draws often lack it
+    y[:3] = 2  # three rows of class 2: small draws often lack it (a cv fold's or a bag's)
     y[3:20] = 1
     X[:, 0] += y
     return X, y
 
 
 #: Bagging's max_features for the per-member route: a bag of best-splitter trees over EVERY feature, unweighted and
-#: without out-of-bag scoring, is fitted as ONE forest (`_bagging_batched_ok`, bindings/trees_public_boost_door.mojo),
-#: whose trees hold every class. These tests are about the per-member route (`_bagging_fit_bags`' native set), which a
-#: bag drawing fewer features than X has reaches.
+#: without out-of-bag scoring, is fitted as ONE forest (`_bagging_batched_ok`, bindings/trees_public_boost_door.mojo).
+#: A bag drawing fewer features than X has reaches the per-member route (`_bagging_fit_bags`' native set).
 PER_MEMBER = 3
 
 
-def test_bagging_draws_lacking_a_class_fit_the_classes_they_hold():
-    # Fail-proof: make member_unit_classes return an empty list always (core/member_unit_classes.mojo): the set's
-    # cover pass is skipped, the lacking draws are fitted with k classes and their classes_ become [0, 1, 2].
+@pytest.mark.parametrize("max_features", [PER_MEMBER, 1.0])
+def test_bagging_members_hold_every_class(max_features):
+    # scikit-learn 1.9.1 sklearn/ensemble/_bagging.py:164-172: a member that takes sample_weight (every tree member)
+    # is fitted on the WHOLE y with sample_weight = np.bincount(draw), so its classes_ is every class of y even when
+    # its draw lacks one (sklearn's own BaggingClassifier(DecisionTreeClassifier) over this fixture: [0, 1, 2] for
+    # all 12 members). Both routes: the per-member set (PER_MEMBER) and the one forest (1.0).
+    # Fail-proof: in _bagging_fit_bags hand a weight-taking member its gathered draw (row_draw / row_count kept)
+    # instead of every row with the draw's counts: the set's cover pass then refuses the first draw lacking class 2.
     X, y = _imbalanced()
     m = ml.BaggingClassifier(ml.DecisionTreeClassifier(random_state=0), n_estimators=12, max_samples=6,
-                             max_features=PER_MEMBER, bootstrap=True, random_state=0).fit(X, y)
-    narrowed = 0
+                             max_features=max_features, bootstrap=True, random_state=0).fit(X, y)
     for est in m.estimators_:
-        held = np.asarray(est.classes_)
-        assert set(held.tolist()) <= {0, 1, 2}
-        assert list(held) == sorted(held.tolist())
-        narrowed += int(len(held) < 3)
-    assert narrowed > 0, "no draw lacked a class: the fixture no longer exercises the re-code"
+        assert np.asarray(est.classes_).tolist() == [0, 1, 2]
     proba = m.predict_proba(X)
     assert proba.shape == (len(y), 3)
     np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=1e-5)
     assert set(np.unique(m.predict(X)).tolist()) <= {0, 1, 2}
 
 
-def test_bagging_lacking_draws_same_answer_every_n_jobs():
-    # Fail-proof: drop `set.run.skip_lacking = classifier` in _bagging_fit_bags: the set's own cover pass then
-    # raises MEMBER_SET_LACKING for the first lacking draw.
+def test_bagging_sample_weight_drives_the_draw():
+    # scikit-learn 1.9.1 sklearn/ensemble/_bagging.py:82-93: a weighted fit draws row i with probability
+    # w[i] / sum(w), so a zero-weight row is never drawn; the member gets the draw's counts only (:169-170). With
+    # every class-2 row weighted 0, no member sees class 2 with weight: its probability column is 0 everywhere, and
+    # every member still holds [0, 1, 2] (sklearn's own fit of this fixture: max proba[:, 2] = 0.0, both routes).
+    # Fail-proof: in _bagging_fit_bags draw a weighted fit's rows with `_indices` (uniform) instead of
+    # `_weighted_indices`: some member draws a class-2 row and proba[:, 2] is no longer 0.
+    X, y = _imbalanced()
+    sw = np.where(y == 2, 0.0, 1.0)
+    m = ml.BaggingClassifier(ml.DecisionTreeClassifier(random_state=0), n_estimators=8, max_samples=0.5,
+                             max_features=PER_MEMBER, random_state=0).fit(X, y, sample_weight=sw)
+    for est in m.estimators_:
+        assert np.asarray(est.classes_).tolist() == [0, 1, 2]
+    proba = m.predict_proba(X)
+    assert proba.shape == (len(y), 3)
+    assert float(np.max(proba[:, 2])) == 0.0
+
+
+def test_bagging_same_answer_every_n_jobs():
+    # Fail-proof: draw member k's rows on stream 2 * (k - done) instead of 2 * k in _bagging_fit_bags: the waves
+    # differ in width between n_jobs=1 and n_jobs=4 and so do the draws.
     X, y = _imbalanced()
     one = ml.BaggingClassifier(ml.DecisionTreeClassifier(random_state=0), n_estimators=8, max_samples=6,
                                max_features=PER_MEMBER, random_state=1, n_jobs=1).fit(X, y)
