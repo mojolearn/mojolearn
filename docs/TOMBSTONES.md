@@ -23720,7 +23720,7 @@ Arms decided by the A/B of wheel 0.8.67.dev0+4519097d380a (A = main 4519097d38) 
 - Verdict (A/B nvc-ab-20261124T070727Z-69dac2, NVIDIA L40S, job nvc1-0001): the old path is no faster. 12 cells (gbdt-symmetric, gbdt-symmetric-1000 full), arm / base median 1.00, range 0.99..1.01. Quality: not read for a change (the default is kept). AMD not measured (NVIDIA-only campaign).
 - Removed: the `is_defined["MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF"]` term (`GBDT_DEVICE_ROUNDS_BUILD` is `not EST_APPLE_ANY`). What stays: the host round loop itself, which still runs every fit the device rounds refuse (grouped and multiclass losses, Exact / Simple estimation, several permutations, feature sampling, random strength, traces, multi-device, Depthwise / Lossguide, the FAST + Apple build). Default unchanged: no bits move.
 - Files: `gbdt/methods/doc_parallel_boosting.mojo`. No grid_controls entry, no test, no sabotage row.
-- Patch: `~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF.ab-outcome-1.patch`. Deleted by lane/ab-outcome-1; code recoverable at d81b6ba708. Refusal: `core/experiment_guards_trees.mojo`.
+- Patch: `~/mojolearn-evidence/experiments-removed/MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF.ab-outcome-1.patch` (apply the MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF patch first: the later deletion edited the same comment block). Deleted by lane/ab-outcome-1; code recoverable at d81b6ba708. Refusal: `core/experiment_guards_trees.mojo`.
 
 ### mojolearn_gbdt_greedy_device_rounds_off (ab-outcome-1)
 
