@@ -32,6 +32,20 @@ def _error_text(error):
     return "RuntimeError: " + str(error)
 
 
+def _connect_store(backend, mode):
+    # glue: import-time connection, once per mode. A GPU metric image keeps
+    # its resident inputs in the x_prep image's store and reaches it through
+    # the x_prep transport table that image publishes when it loads; loading
+    # it here, with the metric image, means a run never meets an unpublished
+    # table (bindings/x_metrics_resident_door.mojo `metric_store_ref` and
+    # bindings/metrics_slot_door.mojo `McSlots` refuse one in words). A load
+    # failure is left for that refusal to name.
+    try:
+        backend.binding("_mojolearn_x_prep", mode)
+    except Exception:  # noqa: BLE001 - the run that needs the store refuses in words
+        pass
+
+
 def connect(family, prog_class, scratch_class=None, op_names=None):
     # glue: compiled entries and plain metadata are retained during import
     import mmap
@@ -57,6 +71,8 @@ def connect(family, prog_class, scratch_class=None, op_names=None):
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"arena programs require compiled {name}")
             entries.update(prog_family=family, arena_binding=module, arena_binding_id=id(module))
+            if family == "x_metrics":
+                _connect_store(_backend, mode)
             connected[mode] = entries
         except Exception as error:  # glue: the per-mode connection error is raised by the run that asks for that mode
             connected[mode] = _error_text(error)

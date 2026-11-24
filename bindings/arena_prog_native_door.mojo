@@ -476,12 +476,13 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
 
     The x_metrics resident transport (lane vdf-xm-transport, 2026-11-24; the
     one x_prep store, lane vdf-xm-wire; bindings/x_metrics_resident_door.mojo):
-    on an image with the store (`route.store` and an x_prep image of its tier
-    and vendor connected) a DeviceRows input is gathered on the device out of
+    on an image with the store (`route.store`; an x_prep image of its tier
+    and vendor not connected is refused in words, lane vdf-xm-wire2) a
+    DeviceRows input is gathered on the device out of
     its once-put base, and a host input the active `resident()` scope keeps
     is read from its device copy; both reach the program as store slots,
     copied device to device. Elsewhere (host column, CPU-only install, ranges
-    off, no x_prep image) a DeviceRows input is its host base's rows, as
+    off) a DeviceRows input is its host base's rows, as
     before. The slots this run put or gathered are freed after it, newest
     first, even on error.
 
@@ -525,15 +526,16 @@ def metrics_run_plan_slots(plan: MetricProgramPlan, inputs: List[PythonObject], 
                     resident_read = True
                     var scope = metric_scope_word(context)
                     if scope >= 0:
-                        store = metric_store_ref(pin.route.program)
+                        # an x_prep image that is not connected raises in
+                        # words here (lane vdf-xm-wire2), never the host route
+                        store = Optional[EntryRef](metric_store_ref(pin.route.program))
                         store_read = True
-                        if store:
-                            resident = metric_resident_of(scope, store.value())
+                        resident = metric_resident_of(scope, store.value())
                 if rows and not store_read:
-                    store = metric_store_ref(pin.route.program)
+                    store = Optional[EntryRef](metric_store_ref(pin.route.program))
                     store_read = True
                 if not store:
-                    pass  # no x_prep image of this tier and vendor connected: the host route
+                    pass  # outside resident() and not a DeviceRows: a host input, copied as before
                 elif rows:
                     slot = metric_rows_gather(value, store.value(), owned, resident, context)
                 elif resident.keeps(False, size_i):

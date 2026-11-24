@@ -201,7 +201,7 @@ def metric_door_rows_slot(value: PythonObject, mode: PythonObject, context: Pyth
     `resident()` scope's x_prep cache keeps the base), into a slot the
     door owns (appended to `owned`; free with `metric_slot_release` after
     the run). Anything else (a host array, the host column, a CPU-only
-    install, ranges off, no x_prep image, a base that is not float32)
+    install, ranges off, a base that is not float32)
     returns slot -1 and the
     door admits X on the host, as before. One type compare for a host X."""
     var nk = metrics_keys()
@@ -214,16 +214,15 @@ def metric_door_rows_slot(value: PythonObject, mode: PythonObject, context: Pyth
     if not pin.route.store:
         return MetricRowsSlot(-1, 0, 0, none.call, none)
     var program = pin.route.program
+    # an x_prep image that is not connected raises in words (lane vdf-xm-wire2)
     var store = metric_store_ref(program)
-    if not store:
-        return MetricRowsSlot(-1, 0, 0, none.call, none)
-    var resident = metric_resident_of(metric_scope_word(prog_context), store.value())
+    var resident = metric_resident_of(metric_scope_word(prog_context), store)
     var shape = value.shape
-    var slot = metric_rows_gather(value, store.value(), owned, resident, prog_context)
+    var slot = metric_rows_gather(value, store, owned, resident, prog_context)
     _ = pin^
     if slot < 0:
         return MetricRowsSlot(-1, 0, 0, none.call, none)
-    return MetricRowsSlot(slot, Int(py=shape[0]), Int(py=shape[1]), program, store.value())
+    return MetricRowsSlot(slot, Int(py=shape[0]), Int(py=shape[1]), program, store)
 
 
 def metric_slot_first_nonfinite(rows: MetricRowsSlot) raises -> Int:

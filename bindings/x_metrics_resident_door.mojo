@@ -12,8 +12,9 @@ x_metrics GPU image runs on that store's context (x_metrics/device.mojo
 `metrics_ctx`), so a program metric and a kernel metric read the SAME slot in
 place, and one `resident()` block uploads an X once whichever metric family
 reads it. Put, gather and free go through the x_prep transport entry of the
-program image's tier and vendor (`metric_store_ref`); no x_prep image
-connected in the process means no store: the host route below.
+program image's tier and vendor (`metric_store_ref`); on an image with the
+store, an x_prep image that is not connected is refused in words (lane
+vdf-xm-wire2), never read as "no store".
 
 On an image with the store (`MetricRoute.store` and `metric_store_ref`), a
 program input is read from it in place:
@@ -31,7 +32,7 @@ The slot reaches the program through the range route's input triple
 (core/arena_io.mojo `upload_ranges`, device to device on the store's context).
 
 The host column, a CPU-only install and `MOJOLEARN_ARENA_RANGES=0` have no
-store: their routes read host words exactly as before (a DeviceRows is its
+store (`MetricRoute.store` false, the store is never asked for): their routes read host words exactly as before (a DeviceRows is its
 host base's rows, the parent decision on addendum 3 item 4).
 
 Where a word travels moves no bit: a slot holds exactly the host words the
@@ -49,6 +50,7 @@ from bindings.x_prep_native_owner_door import XprepResident, xprep_resident_none
 from bindings.arena_scope_door import arena_scope_active
 from bindings.arena_cache_run import arena_scope_floor
 from core.entry_table import EntryRef
+from bindings.metric_store_refusal import metric_store_refusal
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
@@ -58,18 +60,23 @@ from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
 comptime _INT32_MAX = 2147483647
 
 
-def metric_store_ref(program: NativeDescriptorCall) -> Optional[EntryRef]:
+def metric_store_ref(program: NativeDescriptorCall) raises -> EntryRef:
     """The x_prep transport entry of the program image's tier and vendor (two
     entry calls, then the process table read): the one resident store's
-    door. None when no x_prep image of that tier and vendor is connected in
-    the process: the run takes the host route (as a CPU-only install does).
-    Once per run, at its first input that could be resident."""
+    door. Asked only on an image that has the store (`MetricRoute.store`),
+    once per run, at its first input that could be resident. A table refusal
+    is raised in words (`metric_store_refusal`): the selector refuses, it
+    never widens to the host route (lane vdf-xm-wire2; before, it returned
+    None and the run silently copied the input from the host). The x_prep
+    image of each tier is connected with the x_metrics image at import
+    (python/mojolearn/_native_arena_prog.py `connect`), so a refusal here
+    means mismatched or missing binaries."""
+    var mode = native_descriptor_call(program, MP_MODE, [], [], [])
+    var vendor = native_descriptor_call(program, MP_VENDOR, [], [], [])
     try:
-        var mode = native_descriptor_call(program, MP_MODE, [], [], [])
-        var vendor = native_descriptor_call(program, MP_VENDOR, [], [], [])
-        return Optional[EntryRef](xp_transport_ref(PrepEntryKey(mode, vendor)))
-    except:
-        return Optional[EntryRef]()
+        return xp_transport_ref(PrepEntryKey(mode, vendor))
+    except error:
+        raise Error(metric_store_refusal("x_metrics", mode, vendor, String(error)))
 
 
 def metric_scope_word(context: PythonObject) raises -> Int:

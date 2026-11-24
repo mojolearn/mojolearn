@@ -21,10 +21,13 @@ old by-name entry, so `device=None` on host inputs outside `resident()` is
 today's route plus one context read and one thread-local scope read per
 call (`mc_slots_open`), the same reads the program runner makes per run.
 
-Only the GPU image publishes `metrics_cluster_key`; the host image (a
-CPU-only install, or `device="cpu"` beside a GPU set) has none, so it never
-takes a slot: a DeviceRows input is read from its host base there, by the
-doors' existing admission (the parent decision of addendum 3, item 4).
+The host image (a CPU-only install, or `device="cpu"` beside a GPU set)
+publishes `metrics_cluster_key` with vendor 0 and has no device store to
+reach: a DeviceRows input is read from its host base there, by the doors'
+existing admission (the parent decision of addendum 3, item 4). A GPU image
+whose x_prep store cannot be reached is refused in words
+(bindings/metric_store_refusal.mojo; lane vdf-xm-wire2), never read on the
+host.
 """
 from std.python import Python, PythonObject
 from core.entry_table import EntryRef, entry_ref_unresolved
@@ -37,6 +40,7 @@ from bindings.x_prep_native_owner_door import XprepResident, xprep_resident, xpr
 from bindings.x_prep_native_inputs_door import _rows_fields
 from bindings.family_common_pack import family_call
 from bindings.mcls_common_unpack import mc_entry, mc_class_list
+from bindings.metric_store_refusal import metric_store_refusal
 from metrics.slot_ops import MS_ENCODE_PAIR, MS_GATHER
 from core.cast_in import CAST_KIND_SIGNED
 
@@ -78,10 +82,18 @@ struct McSlots(Movable):
             key = binding.metrics_cluster_key
         except:
             return False  # the host image: no device store
+        var mode = Int(py=key[0])
+        var vendor = Int(py=key[1])
         try:
-            self.store = xp_transport_ref(PrepEntryKey(Int(py=key[0]), Int(py=key[1])))
-        except:
-            return False  # no x_prep image connected: the host route
+            self.store = xp_transport_ref(PrepEntryKey(mode, vendor))
+        except error:
+            if vendor == 0:
+                return False  # the host image (vendor 0): no device store to reach
+            # A GPU image whose store cannot be reached is refused in words,
+            # never sent to the host route (lane vdf-xm-wire2; the x_prep
+            # image is connected with the metrics image at import,
+            # python/mojolearn/_native_labels_bridge.py `_metrics`).
+            raise Error(metric_store_refusal("metrics", mode, vendor, String(error)))
         self.resident.store = self.store
         self.live = True
         return True
