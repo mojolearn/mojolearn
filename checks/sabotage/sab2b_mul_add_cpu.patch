@@ -1,0 +1,29 @@
+diff --git a/checks/numerics.mojo b/checks/numerics.mojo
+index dd46ef33b9..7bb647acbe 100644
+--- a/checks/numerics.mojo
++++ b/checks/numerics.mojo
+@@ -236,6 +236,11 @@ def ftz(x: Float32) -> Float32:
+ 
+ def identical_mul_add(a: Float32, b: Float32, c: Float32) -> Float32:
+     """IDENTITY_PATHS row 9's construction: the contraction pin."""
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-mul_add-cpu (lane vdv-sab2-b): a normal finite result one ulp up, the host bindings only
++        var h = _fma_f32(a, b, c)
++        if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++        return h
+     comptime if not ROW_CONTRACT_FREE:
+         return _fma_f32(a, b, c)
+     return a * b + c
+@@ -954,6 +959,12 @@ def identical_mul_add_simd[
+     c: SIMD[DType.float32, w],
+ ) -> SIMD[DType.float32, w]:
+     """`identical_mul_add`, lane by lane: ONE rounding under IDENTICAL, the naive chain under FAST."""
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-mul_add-cpu (lane vdv-sab2-b): every normal finite lane one ulp up, the host bindings only
++        var h = _fma_f32_simd[w](a, b, c)
++        var bits = bitcast[DType.uint32](h)
++        var e = bits & SIMD[DType.uint32, w](0x7F800000)
++        var normal = e.ne(SIMD[DType.uint32, w](0)) & e.ne(SIMD[DType.uint32, w](0x7F800000))
++        return bitcast[DType.float32](normal.select(bits + SIMD[DType.uint32, w](1), bits))
+     comptime if not ROW_CONTRACT_FREE:
+         return _fma_f32_simd[w](a, b, c)
+     return a * b + c

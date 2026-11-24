@@ -1,0 +1,27 @@
+diff --git a/svm/host/svm_host_impl.mojo b/svm/host/svm_host_impl.mojo
+index 9f34a5be93..759f9b8b81 100644
+--- a/svm/host/svm_host_impl.mojo
++++ b/svm/host/svm_host_impl.mojo
+@@ -472,12 +472,22 @@ def _iforest_host_query(
+     for i in range(n_query * n_features):
+         query[i] = ftz(query[i])
+     var paper = _iforest_host_scores(fitted.forest, query, n_query, n_features)
++    from std.sys import is_defined
++    from std.memory import bitcast
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-iforest-cpu (lane vdv-sab2-b): every normal path score one ulp up, the host bindings only
++        for i in range(len(paper)):
++            var h = paper[i]
++            if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++                paper[i] = bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
+     var offset_ = fitted.offset_
+     if want == IF_WANT_PREDICT:
+         var threshold = Float32(-offset_)
+         for i in range(n_query):
+             var raw = Int32(1) if paper[i] > threshold else Int32(-1)
+             labels.append(-raw)
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-iforest-cpu (lane vdv-sab2-b): the first predicted label flipped, the host bindings only
++            if len(labels) > 0:
++                labels[0] = -labels[0]
+     elif want == IF_WANT_DECISION_FUNCTION:
+         var off = Float32(offset_)
+         for i in range(n_query):

@@ -1,0 +1,23 @@
+diff --git a/metrics/host/cluster_entry_host.mojo b/metrics/host/cluster_entry_host.mojo
+index b61a1dbe9f..2deecdbff9 100644
+--- a/metrics/host/cluster_entry_host.mojo
++++ b/metrics/host/cluster_entry_host.mojo
+@@ -29,6 +29,18 @@ from metrics.mojolearn_metrics_host_run import homogeneity_completeness_v_measur
+ 
+ def metrics_cluster_host_run(operation: Int, yt_addr: Int, yp_addr: Int, n: Int, lower_word: Int, upper_word: Int,
+                              beta: Float64, dst: ClusterFloatPtr) raises -> Int:
++    """SABOTAGE sab2b-cluster-metrics-cpu (lane vdv-sab2-b): every float64 word one ulp up, the host bindings only."""
++    from std.sys import is_defined
++    from std.memory import bitcast
++    var count = _sab2b_metrics_cluster_host_run_clean(operation, yt_addr, yp_addr, n, lower_word, upper_word, beta, dst)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        for c in range(count):
++            dst[c] = bitcast[DType.float64](bitcast[DType.uint64](dst[c]) + UInt64(1))
++    return count
++
++
++def _sab2b_metrics_cluster_host_run_clean(operation: Int, yt_addr: Int, yp_addr: Int, n: Int, lower_word: Int, upper_word: Int,
++                             beta: Float64, dst: ClusterFloatPtr) raises -> Int:
+     """The host body of one operation (module note); answers the float64
+     words written at `dst`."""
+     var lower = Int32(lower_word)

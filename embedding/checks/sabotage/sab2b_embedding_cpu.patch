@@ -1,0 +1,36 @@
+diff --git a/embedding/host/embedding_host.mojo b/embedding/host/embedding_host.mojo
+index ab8bb2c920..8c49728372 100644
+--- a/embedding/host/embedding_host.mojo
++++ b/embedding/host/embedding_host.mojo
+@@ -68,6 +68,7 @@ tools/identity_break.py on the embedding and embedding-sort lanes is the
+ measurement.
+ """
+ from std.sys.compile import is_defined
++from std.memory import bitcast
+ 
+ from checks.numerics import ftz
+ from core.host_lanes import host_row_tasks
+@@ -118,6 +119,8 @@ def host_embedding_forward(
+                 # table's CPU lookup (the shipped embedding_infer binding) is
+                 # seen to fail its recorded bytes.
+                 v = (v + 1) % vocab
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-embedding-cpu (lane vdv-sab2-b): gather the NEXT row, the host bindings only
++                v = (v + 1) % vocab
+             for j in range(width):
+                 yp.unsafe_store(t * width + j, ftz(ftz(weight.unsafe_load(v * width + j))))
+ 
+@@ -297,7 +300,13 @@ def host_embedding_backward(
+                 for r in range(lo, hi):
+                     var t = Int(pp[r])
+                     acc = ftz(ftz(acc) + ftz(dy.unsafe_load(t * width + j)))
+-                dw.unsafe_store(cell, ftz(acc))
++                comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-embedding-cpu (lane vdv-sab2-b): every normal folded gradient cell one ulp up, the host bindings only
++                    var h = ftz(acc)
++                    if abs(h) >= Float32(1.17549435e-38) and h - h == Float32(0):
++                        h = bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
++                    dw.unsafe_store(cell, h)
++                else:
++                    dw.unsafe_store(cell, ftz(acc))
+ 
+     if tasks <= 1:
+         _fold_rows(0)

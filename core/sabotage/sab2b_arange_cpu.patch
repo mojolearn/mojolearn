@@ -1,0 +1,14 @@
+diff --git a/core/hotpath_impl.mojo b/core/hotpath_impl.mojo
+index f3d3834485..86e181424b 100644
+--- a/core/hotpath_impl.mojo
++++ b/core/hotpath_impl.mojo
+@@ -784,6 +784,9 @@ def arange_i64(dst_addr: Int, start: Int, count: Int) raises -> Int:
+             dp.unsafe_store(i, lo + Int64(count - 1 - i))
+         else:
+             dp.unsafe_store(i, lo + Int64(i))
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-arange-cpu (lane vdv-sab2-b): the range written descending, the host bindings only
++        for i in range(count):
++            dp.unsafe_store(i, lo + Int64(count - 1 - i))
+     return 0
+ 
+ 

@@ -1,0 +1,15 @@
+diff --git a/x_metrics/cm_epi.mojo b/x_metrics/cm_epi.mojo
+index 1ec744ad8b..0bfd7902d7 100644
+--- a/x_metrics/cm_epi.mojo
++++ b/x_metrics/cm_epi.mojo
+@@ -198,6 +198,10 @@ def _count(f: FP, q: IP):
+         st64(f, OUT + 8, SF64_NAN)
+     else:
+         st64(f, OUT + 8, sf64_div(hit, total))
++    from std.sys import is_defined
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE sab2b-accuracy-count-cpu (lane vdv-sab2-b): the matched fraction one binary64 ulp up, the host bindings only
++        if not zero:
++            st64(f, OUT + 8, sf64_div(hit, total) + UInt64(1))
+ 
+ 
+ @always_inline
