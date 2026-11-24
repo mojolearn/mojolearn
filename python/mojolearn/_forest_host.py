@@ -217,7 +217,7 @@ class HostForest:
 
 # Maintainer note (moved from the docstring): HostGBDT lives in
 # `_gbdt_host.py`; the classical and knn host models in `_classical_host.py`.
-def host_model(path):
+def host_model(path, *, device=None):
     """Load a saved model for prediction on the CPU.
 
     Chooses the CPU model from the file's format: a `HostForest` for a random
@@ -232,6 +232,9 @@ def host_model(path):
     ----------
     path : str or path-like
         The saved model file.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'cpu' run on the CPU; 'gpu'
+        raises ValueError. Other values raise ValueError.
 
     Returns
     -------
@@ -245,10 +248,10 @@ def host_model(path):
     >>> mojolearn.RandomForestRegressor(n_estimators=20).fit(X, X[:, 0]).save("rf.npz")
     >>> pred = mojolearn.host_model("rf.npz").predict(X)
     """
-    return _native_host_archive(None, "host_archive_model", (path,), _ARCHIVE_CONTEXT)
+    return _native_host_archive(None, "host_archive_model", (path, device), _ARCHIVE_CONTEXT)
 
 
-def host_predict(path, X):
+def host_predict(path, X, *, device=None):
     """Predict on the CPU with a saved model: `host_model(path).predict(X)`.
 
     Parameters
@@ -257,16 +260,19 @@ def host_predict(path, X):
         The saved model file.
     X : array-like of shape (n_samples, n_features)
         Input data.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'cpu' run on the CPU; 'gpu'
+        raises ValueError. Other values raise ValueError.
 
     Returns
     -------
     Array or list of shape (n_samples,)
         Predictions, as the saved model's `predict` returns them.
     """
-    return _native_host_archive(None, "host_archive_predict", (path, X), _ARCHIVE_CONTEXT)
+    return _native_host_archive(None, "host_archive_predict", (path, X, device), _ARCHIVE_CONTEXT)
 
 
-def host_predict_proba(path, X):
+def host_predict_proba(path, X, *, device=None):
     """Class probabilities on the CPU from a saved classifier:
     `host_model(path).predict_proba(X)`.
 
@@ -276,13 +282,16 @@ def host_predict_proba(path, X):
         The saved model file.
     X : array-like of shape (n_samples, n_features)
         Input data.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'cpu' run on the CPU; 'gpu'
+        raises ValueError. Other values raise ValueError.
 
     Returns
     -------
     Array of shape (n_samples, n_classes)
         Class probabilities.
     """
-    return _native_host_archive(None, "host_archive_predict_proba", (path, X), _ARCHIVE_CONTEXT)
+    return _native_host_archive(None, "host_archive_predict_proba", (path, X, device), _ARCHIVE_CONTEXT)
 
 
 # Fixed public archive owner connected at import, after host classes exist.

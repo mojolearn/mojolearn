@@ -320,7 +320,7 @@ _BOOST_FROM_AVERAGE_LOSSES = ("RMSE", "MAE", "Quantile", "MAPE")
 
 
 def catboost_auto_learning_rate(loss, n_rows, iterations, use_best_model,
-                                boost_from_average, table=None):
+                                boost_from_average, table=None, *, device=None):
     """The learning rate ``GradientBoosting`` picks when ``learning_rate`` is unset.
 
     It is CatBoost's automatic learning rate for its GPU learner:
@@ -342,6 +342,9 @@ def catboost_auto_learning_rate(loss, n_rows, iterations, use_best_model,
         Whether the fit starts from the target average.
     table : dict, optional
         Coefficient table to use instead of the GPU learner's.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None and 'cpu' run on the CPU; 'gpu'
+        raises ValueError. Other values raise ValueError.
 
     Returns
     -------
@@ -355,7 +358,8 @@ def catboost_auto_learning_rate(loss, n_rows, iterations, use_best_model,
     >>> ensemble.catboost_auto_learning_rate('Logloss', 10000, 1000, False, False)
     0.029701
     """
-    return _TREES(None, "trees_gbdt_auto_lr", (loss, n_rows, iterations, use_best_model, boost_from_average, table),
+    return _TREES(None, "trees_gbdt_auto_lr", (loss, n_rows, iterations, use_best_model, boost_from_average, table,
+                                                device),
                   _TREES_CONTEXT)
 
 

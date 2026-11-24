@@ -7,6 +7,8 @@
 # the steps, their order, the contexts they read and the error mapping are
 # the ones the classical door ran before: moved unchanged.
 from std.python import PythonObject
+from providers.python.function_device_boundary_door import function_device_admit
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from bindings.classical_error_boundary_pack import classical_python_error
 from bindings.classical_caller_unpack import classical_caller_outside
@@ -108,6 +110,12 @@ def _trees_coded(model: PythonObject, code: Int, args: PythonObject, context: Py
     return _trees_routed(model, table[].routes[code], table[].leaves[code], table[].names[code], args, context)
 
 
+def _host_function_device(word: PythonObject, name: String, context: PythonObject) raises:
+    """UNPACK of a host-by-name function's `device=` (lane vdf-misc), in the
+    shared words, before any work: HAS_GPU False, HAS_CPU True."""
+    _ = function_device_admit(word, name, False, True, context, native_loaded_module("builtins"))
+
+
 def _trees_leaf(model: PythonObject, operation: Int, name: String, args: PythonObject,
                 context: PythonObject) raises -> PythonObject:
     """The tree door's exact operations by their leaf
@@ -137,12 +145,23 @@ def _trees_leaf(model: PythonObject, operation: Int, name: String, args: PythonO
         return host_knn_predict(model, args[0], operation == CLASSICAL_OPN_ARCHIVE_KNN_CLASSIFIER, Bool(py=args[1]),
                                 py_item(context, nk[].k_host_archive_predict_context))
     if operation == CLASSICAL_OPN_HOST_ARCHIVE_PREDICT or operation == CLASSICAL_OPN_HOST_ARCHIVE_PREDICT_PROBA:
+        # args[2] is the call's `device` (lane vdf-misc): host_predict and
+        # host_predict_proba are host by name, so "gpu" is refused naming the
+        # function and None / "cpu" run today's host route.
+        if args[2] is not None:
+            _host_function_device(args[2], "host_predict" if operation == CLASSICAL_OPN_HOST_ARCHIVE_PREDICT
+                                  else "host_predict_proba", context)
         var predict_context = py_get(context, nk[].k_host_archive_predict_context)
         if predict_context is None:
             raise Error("RuntimeError: native host archive schemas are not connected")
         return host_archive_predict(args[0], args[1], operation == CLASSICAL_OPN_HOST_ARCHIVE_PREDICT_PROBA, predict_context)
     if (operation == CLASSICAL_OPN_HOST_ARCHIVE_MODEL or operation == CLASSICAL_OPN_HOST_ARCHIVE_LOAD
             or operation == CLASSICAL_OPN_HOST_ARCHIVE_CLASSICAL_MODEL):
+        if operation == CLASSICAL_OPN_HOST_ARCHIVE_MODEL and args[1] is not None:
+            # host_model(path, *, device): args[1] is its `device` (lane
+            # vdf-misc), host by name as above. `load` and the classical
+            # loader pass the path alone.
+            _host_function_device(args[1], "host_model", context)
         var archive_context = py_get(context, nk[].k_host_archive_context)
         if archive_context is None:
             raise Error("RuntimeError: native host archive schemas are not connected")
