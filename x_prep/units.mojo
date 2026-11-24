@@ -57,7 +57,7 @@ from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
-from x_prep.cat_cls2 import CAT_CLS2_PACK, cat_zero_unit, cat_present_unit, pres_count_unit, pres_write_unit, cat_pack_unit
+from x_prep.cat_cls2 import CAT_CLS2_PACK, CAT_PACK_OPS, cat_zero_unit, cat_present_unit, pres_count_unit, pres_write_unit, cat_pack_unit
 from x_prep.calib import (
     CALIB_FOLDS, cal_fold_part_unit, cal_fold_scan_unit, cal_fold_rank_unit, cal_fold_assign_unit,
     cal_lofo_merge_unit, cal_eps_folds_unit, cal_params_folds_unit, cal_jll_folds_unit, cal_platt_init_unit,
@@ -82,8 +82,8 @@ comptime IDN_FAM_OPS = IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED
 #: statistics, csbm_*) were tried and deleted 2026-10-08 (run ge123e6f9: gaussian-nb / lda-clf
 #: NV 1.38-1.58x, AMD 1.02-1.11x SLOWER, quality SAME); recoverable at main bc10b8b56.
 comptime N_OPS = 178 if C08_DICTIONARY else (177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))))
-#: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
-#: CAT_CLS2_PACK (FAST + Apple default)
+#: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist under CAT_PACK_OPS
+#: (CAT_CLS2_PACK, the FAST + Apple default, or IDN_LABEL, every IDENTICAL image)
 # TOMBSTONE: MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF (old path; the pack is the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel2-09-base (comment only here); code recoverable at ddfc18c027.
 # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
 
@@ -406,7 +406,11 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
             cal_platt_ls_pick_unit(t, f, q)
         comptime if OP == 156:
             cal_sigmoid_avg_unit(t, f, q)
-    comptime if CAT_CLS2_PACK or IDN_LABEL:
+    # lane w3-fix-c (2026-11-23): op 161 is in every image that has the presence ops 157-160
+    # (CAT_PACK_OPS), so the CAT_FIT_PACK_* routes the encoder members accept run whole there;
+    # before, the identical images compiled 157-160 but left 161 an empty unit and a packed fit
+    # returned an unwritten (zero) category block.
+    comptime if CAT_PACK_OPS:
         comptime if OP == 157:
             cat_zero_unit(t, f, q)
         comptime if OP == 158:
@@ -415,7 +419,6 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
             pres_count_unit(t, f, q)
         comptime if OP == 160:
             pres_write_unit(t, f, q)
-    comptime if CAT_CLS2_PACK:
         comptime if OP == 161:
             cat_pack_unit(t, f, q)
     comptime if IDN_NB_ONEPASS:

@@ -1275,7 +1275,10 @@ def _drop_states(slot: _SlotPtr):
     slot[].rfe_ranking = List[Float32]()
     slot[].rfe_columns = List[Int32]()
     slot[].rfe_words = List[Float64]()
-    slot[].rfe_hops = List[Float64]()
+    # lane w3-fix-c (2026-11-23): `rfe_hops` is NEW's (the plan entry's dotted-getter path, as `rfe_run` and
+    # `refusal`), not fitted state: FIT's `_drop_states` emptied it before `_fit_rfe` read it, so the rounds'
+    # forwarded export read the base plan's NEW words (META_RFE_CLASSIFIER 14) as its first hop. The release
+    # (`_lookup(handle, True)`, a whole new slot) still clears it.
 
 
 # --------------------------------------------------------------- the masks
