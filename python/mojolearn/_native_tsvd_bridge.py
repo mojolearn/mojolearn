@@ -37,6 +37,17 @@ def connect(tsvd_class):
     except (ImportError, AttributeError, TypeError, RuntimeError):
         fold = None
     context["tsvd_fold_factory"] = fold if isinstance(fold, BuiltinFunctionType) else None
+    # glue (lane vdf-scope-neural5): the GPU x_decomp image's device pool as a scope transport
+    # (`x_decomp_store_v1`), per mode: a randomized TruncatedSVD member takes a fold's rows there. A host-only
+    # build exports none and the member keeps host rows.
+    store = {}
+    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed native provider images
+        try:
+            factory = getattr(_backend.binding("_mojolearn_x_decomp", mode), "x_decomp_store_v1")
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError):
+            factory = None
+        store[mode] = factory if isinstance(factory, BuiltinFunctionType) else None
+    context["tsvd_decomp_store"] = store
     context.update(tsvd_class=tsvd_class, tsvd_bindings=connected, tsvd_decomp=decomp,
                    tsvd_host_factory="ImportError: Mojolearn host TruncatedSVD provider is unavailable")
     # glue: the CPU images of `device="cpu"`, registered now and loaded at the first device="cpu" admission (fx-host-import)

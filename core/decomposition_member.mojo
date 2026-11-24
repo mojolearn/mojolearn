@@ -89,7 +89,9 @@ from core.seq_member_rows import SEQ_ROUTE_STORE, seq_rows_route, seq_rows_targe
 from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_I32, MEMBER_I64
 from core.host_parallel import host_widen_index_i64
 from core.tsvd_native_api import TSVD_FOLD
-from bindings.arena_cache_run import arena_scope_store_put, arena_cache_put, arena_cache_free
+from bindings.arena_cache_run import (
+    arena_scope_store_put, arena_cache_put, arena_cache_free, arena_store_take_rows, arena_scope_floor,
+)
 
 comptime DECOMP_KIND_PCA = 0
 comptime DECOMP_KIND_TSVD = 1
@@ -116,6 +118,14 @@ comptime DECOMP_ROUTE_RESIDENT = 16
 comptime DECOMP_ROUTE_FOLD = SEQ_ROUTE_STORE
 #: The scope cache's family prefix of the fold store.
 comptime DECOMP_STORE_PREFIX = "msel_fold"
+#: Lane vdf-scope-neural5: `route.third` is the GPU x_decomp image's device
+#: pool as a scope transport (x_decomp/member_store.mojo `x_decomp_store_v1`):
+#: a randomized TruncatedSVD fit takes its fold's rows there and hands the
+#: randomized driver the pool id (`source` = `-(id + 1)`).
+comptime DECOMP_ROUTE_XD_STORE = 32
+#: The scope cache's family prefix of that store (the XDecomp members' prefix:
+#: one cached X per scope serves both).
+comptime DECOMP_XD_STORE_PREFIX = "x_decomp"
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N: the widest X the TSQR takes (the
 #: TruncatedSVD door's `_tsqr_connection` rule, a kernel width limit).
@@ -354,6 +364,9 @@ struct _Rows(Movable):
     var base_rows: Int
     var index: Int
     var gathered: List[Int32]
+    # Lane vdf-scope-neural5: the fold's rows taken in the x_decomp store
+    # (`route.third`), freed by `_rows_close`; -1 none.
+    var xd_taken: Int
 
     def __init__(out self, n: Int, x: Int):
         self.n = n
@@ -362,6 +375,7 @@ struct _Rows(Movable):
         self.base_rows = 0
         self.index = -1
         self.gathered = List[Int32]()
+        self.xd_taken = -1
 
     def fold(self) -> PCAFoldStore:
         return PCAFoldStore(self.base, self.base_rows, self.index) if self.index >= 0 else PCAFoldStore()
@@ -407,8 +421,56 @@ def _rows_open(call: _Call, device: Bool) raises -> _Rows:
     return rows^
 
 
+def _rows_open_xd(call: _Call) raises -> _Rows:
+    """The rows of a randomized TruncatedSVD fit (lane vdf-scope-neural5): on a route holding the x_decomp store
+    (`route.third`, DECOMP_ROUTE_XD_STORE) with the caller's scope and pin, the whole X is found or put ONCE in
+    the scope's x_decomp cache (prefix "x_decomp", the XDecomp members' cache of the same X) and a row index's
+    rows are taken there on the device (one gather); `x` is then `-(id + 1)` of that pool id, read in place by
+    the randomized driver. Otherwise `_rows_open(call, False)` (X itself, or the fold gathered on the host)."""
+    var route = call[].route
+    if (route.flags & DECOMP_ROUTE_XD_STORE) == 0 or not route.has_third or call[].scope < 0 or call[].pin == 0:
+        return _rows_open(call, False)
+    var index = call[].row_index
+    var base_rows = call[].x.rows
+    var d = call[].x.cols
+    if index.rows == 0:
+        var plain = _Rows(base_rows, call[].x.data)
+        if base_rows * d < arena_scope_floor(call[].scope):
+            return plain^
+        var whole = arena_scope_store_put(call[].scope, route.third, String(DECOMP_XD_STORE_PREFIX),
+                                          call[].x.data, base_rows * d, call[].pin)
+        if whole.pinned:
+            call[].pin_kept = 1
+        plain.x = -(whole.store_id + 1)
+        return plain^
+    if not ((index.dtype == MEMBER_I32 or index.dtype == MEMBER_I64) and index.cols == 1
+            and index.dense_host(index.dtype)):
+        raise Error("TypeError: a decomposition member reads its row index as one host int32 or int64 column")
+    var n = index.rows
+    var rows = _Rows(n, 0)
+    var put = arena_scope_store_put(call[].scope, route.third, String(DECOMP_XD_STORE_PREFIX), call[].x.data,
+                                    base_rows * d, call[].pin)
+    if put.pinned:
+        call[].pin_kept = 1
+    var idx = index.data
+    var wide = List[Int64]()
+    if index.dtype == MEMBER_I32:
+        wide = List[Int64](unsafe_uninit_length=n)
+        host_widen_index_i64(index.data, Int(wide.unsafe_ptr()), n)
+        idx = Int(wide.unsafe_ptr())
+    rows.xd_taken = arena_store_take_rows(route.third, put.store_id, d, idx, n)
+    _ = len(wide)  # the widened words live past the take
+    rows.x = -(rows.xd_taken + 1)
+    return rows^
+
+
 def _rows_close(call: _Call, mut rows: _Rows) raises:
-    """Free the fold's index slot an operation put (its run is done)."""
+    """Free the fold's index slot an operation put (its run is done), and the rows it took in the x_decomp
+    store."""
+    if rows.xd_taken >= 0:
+        var xd = rows.xd_taken
+        rows.xd_taken = -1
+        arena_cache_free(call[].route.third, xd)
     if rows.index >= 0:
         var taken = rows.index
         rows.index = -1
@@ -562,7 +624,8 @@ def _fit_tsvd(slot: _Slot, call: _Call) raises:
     # THE RESIDENT ROUTE: a non-randomized fit reads a fold of the scope's
     # resident X through the fold entry (the door's DeviceRows fold route,
     # bindings/tsvd_native_door.mojo TSVD_FOLD); every other fit host rows.
-    var held = _rows_open(call, Int(slot[].words[4]) != 2)
+    var randomized = Int(slot[].words[4]) == 2
+    var held = _rows_open_xd(call) if randomized else _rows_open(call, True)
     try:
         _fit_tsvd_rows(slot, call, held, rows, cols, nc)
     finally:

@@ -53,7 +53,14 @@ struct TSVDDecompKernels[E: Exec, D: RDev, RES: Bool](TSVDNativeKernels):
         _decomp_dimension(r.rows)
         _decomp_dimension(r.features)
         _decomp_dimension(r.count)
-        var xp = _decomp_pointer(r.source)
+        # Lane vdf-scope-neural5: a randomized fit's `source` may be `-(id + 1)` of a resident x_decomp pool id
+        # (a fold the decomposition member took on the device; GPU image only).
+        var x_dev = -1
+        if r.source < 0:
+            if r.route != TSVD_RANDOMIZED or not Self.RES:
+                raise Error("TruncatedSVD decomposition provider reads a resident X only in a GPU randomized fit")
+            x_dev = -(r.source + 1)
+        var xp = _decomp_pointer(r.source) if x_dev < 0 else F32Ptr(unsafe_from_address=0)
         var cp = _decomp_pointer(r.components)
         var sp = _decomp_pointer(r.singular)
         if r.route == TSVD_RANDOMIZED:
@@ -62,7 +69,7 @@ struct TSVDDecompKernels[E: Exec, D: RDev, RES: Bool](TSVDNativeKernels):
             var word = List[Int32](length=1, fill=0)
             tsvd_randomized_fit_run[Self.E, Self.D, Self.RES](xp, cp, sp, vp, rp,
                 r.rows, r.features, r.count, r.oversamples, r.iterations, r.auto_iterations, r.seed,
-                Int(word.unsafe_ptr()) if r.test_finite else 0)
+                Int(word.unsafe_ptr()) if r.test_finite else 0, x_dev)
             return TSVDFitResult(Int(word[0]), 0)
         var word = List[Int32](length=1, fill=0)
         tsvd_tsqr_components_run[Self.E, Self.D, Self.RES](xp, cp, sp, r.rows, r.features, r.count,
