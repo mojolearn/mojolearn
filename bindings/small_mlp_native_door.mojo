@@ -24,7 +24,7 @@ admission checks passive class storage and reads its handle without invoking
 Python descriptors. Shared exact input admission precedes native buffer reads;
 balanced call helpers retain original owners without leaking references.
 """
-from bindings.host_class_device import host_class_device
+from bindings.host_class_device_unpack import host_class_device
 from std.math import isfinite
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
@@ -1441,7 +1441,7 @@ def _inference_operation(operation: Int, args: PythonObject) raises -> PythonObj
     var cls = py_item(b[].inference, nk[].k_class)
     if operation == SMALL_MLP_OPN_INFERENCE_CHECKPOINT:
         _small_class(args[0], cls)
-        # `device=` (lane vdf-parallel, 2026-11-24; bindings/host_class_device.mojo),
+        # `device=` (lane vdf-parallel, 2026-11-24; bindings/host_class_device_unpack.mojo),
         # the last item, once: host only, "gpu" refused naming the class.
         _ = host_class_device(args[2], "MLPInference", b[].bi)
         var entries = _inference_entries()

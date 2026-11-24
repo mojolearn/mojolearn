@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """One compiled Samba boundary for public and distributed model operations."""
-from bindings.host_class_device import host_class_device
+from bindings.host_class_device_unpack import host_class_device
 from bindings.torch_parameter_form_pack import torch_parameter_form
 from std.python import Python, PythonObject
 from bindings.samba_keys_unpack import samba_keys
@@ -292,7 +292,7 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         elif operation == SAMBA_OPN_CHECKPOINT_READ:
             result = samba_checkpoint_read(values[0], context)
         elif operation == SAMBA_OPN_INFERENCE_CONSTRUCT:
-            # `device=` (lane vdf-parallel, 2026-11-24; bindings/host_class_device.mojo),
+            # `device=` (lane vdf-parallel, 2026-11-24; bindings/host_class_device_unpack.mojo),
             # the last item, once: host only, "gpu" refused naming the class.
             _ = host_class_device(values[3], "SambaInference", native_loaded_module("builtins"))
             result = samba_inference_construct(values[0], values[1], values[2], context)

@@ -4,7 +4,7 @@ calls of `LanguageModelInference` (python/mojolearn/_byte_lm_host.py), the
 CPU forward over the host oracles. CPU training is
 `LanguageModelTrainer(device="cpu")` (bindings/byte_lm_trainer_native_door.mojo).
 """
-from bindings.host_class_device import host_class_device
+from bindings.host_class_device_unpack import host_class_device
 from std.python import Python, PythonObject
 from std.memory import bitcast, unsafe_memcpy
 from std.python._cpython import PyObjectPtr
@@ -210,7 +210,7 @@ def byte_lm_host_inference_construct(mut mods: NativeModules, model: PythonObjec
     var bi = mods.module("builtins")
     if py_type(model) is not context["byte_lm_host_inference_class"]:
         raise Error("TypeError: host inference requires the connected native inference class")
-    # `device=` (lane vdf-parallel, 2026-11-24; bindings/host_class_device.mojo):
+    # `device=` (lane vdf-parallel, 2026-11-24; bindings/host_class_device_unpack.mojo):
     # the last item, read once before any work. Host only: None and "cpu" are
     # today's route, "gpu" is refused naming the class.
     _ = host_class_device(args[4], "LanguageModelInference", bi)
