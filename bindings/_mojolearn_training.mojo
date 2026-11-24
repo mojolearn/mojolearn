@@ -111,6 +111,7 @@ from training.dev_tensors import (
 # lane vdf-linalg2 (2026-11-24): the RMS-normalization and embedding layers on device arrays
 from training.dev_tensors_layers import (
     train_rms_norm_forward_dev, train_rms_norm_backward_dev, train_embedding_forward_dev, train_embedding_backward_dev,
+    train_chunked_lm_head_dev,
 )
 # lane fam2-neural (2026-10-04): parameters and gradients resident across steps
 from training.estimator import (
@@ -475,6 +476,25 @@ def _ce_row_ptr(row_addr: PythonObject, reduction: Int) raises -> Optional[MutPo
     if address == 0 and reduction != 0:
         return None
     return _f32_ptr(address)
+
+
+def chunked_lm_head_dev_binding(handles: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`chunked_lm_head_loss` on device arrays (lane vdf-linalg3, 2026-11-24). handles = [d_hidden (written), d_weight
+    (written), hidden, weight] (the two gradient handles are not read without the gradient); params = [loss address
+    (one float32, host), targets address (rows int32, host), rows, vocab, width, with_grad]. Returns rows."""
+    var hs = _handles(handles, 4, "chunked_lm_head_dev")
+    _params(params, 6, "chunked_lm_head_dev")
+    var lp = _f32_ptr(Int(py=params[0]))
+    var tp = _i32_ptr(Int(py=params[1]))
+    var rows = Int(py=params[2])
+    var vocab = Int(py=params[3])
+    var width = Int(py=params[4])
+    var with_grad = Int(py=params[5]) != 0
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_chunked_lm_head_dev(ctx, lp, hs[0], hs[1], hs[2], hs[3], tp, rows, vocab, width, with_grad)
+    return PythonObject(count)
 
 
 def ce_loss_dev_binding(
@@ -1088,6 +1108,7 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[rms_norm_backward_dev_binding]("rms_norm_backward_dev")
             m.def_function[embedding_forward_dev_binding]("embedding_forward_dev")
             m.def_function[embedding_backward_dev_binding]("embedding_backward_dev")
+            m.def_function[chunked_lm_head_dev_binding]("chunked_lm_head_dev")
             # lane ne3-c-blocks-embedding (row N117): residual dropout on device arrays
             # TOMBSTONE: residual_dropout_dev, residual_dropout_backward_dev exports (dead native entries: the door calls OPT_NATIVE_RESIDUAL_DROPOUT_DEV / _BACKWARD_DEV of optimizer_native_api_v1, training/optimizer_native_extra_gpu.mojo) deleted 2026-11-21 by lane/dw-autograd-seq; code recoverable at 6184091ce8.
             # Restore: git show 6184091ce8:bindings/residual_dropout_boundary_pack.mojo (the two `_dev_binding` functions) and bindings/residual_dropout_boundary_unpack.mojo.

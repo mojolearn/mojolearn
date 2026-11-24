@@ -179,6 +179,7 @@ struct OptimizerKeys(Defaultable, Movable):
     var k_rms_norm_backward_dev: PythonObject
     var k_embedding_forward_dev: PythonObject
     var k_embedding_backward_dev: PythonObject
+    var k_chunked_lm_head_dev: PythonObject
     var k_lr: PythonObject
     var k_lr_at: PythonObject
     var k_lr_schedule: PythonObject
@@ -287,6 +288,7 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k_rms_norm_backward_dev = PythonObject(None)
         self.k_embedding_forward_dev = PythonObject(None)
         self.k_embedding_backward_dev = PythonObject(None)
+        self.k_chunked_lm_head_dev = PythonObject(None)
         self.k_lr = PythonObject(None)
         self.k_lr_at = PythonObject(None)
         self.k_lr_schedule = PythonObject(None)
@@ -399,6 +401,7 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     nk[].k_rms_norm_backward_dev = py_key("rms_norm_backward_dev")
     nk[].k_embedding_forward_dev = py_key("embedding_forward_dev")
     nk[].k_embedding_backward_dev = py_key("embedding_backward_dev")
+    nk[].k_chunked_lm_head_dev = py_key("chunked_lm_head_dev")
     nk[].k_lr = py_key("lr")
     nk[].k_lr_at = py_key("lr_at")
     nk[].k_lr_schedule = py_key("lr_schedule")

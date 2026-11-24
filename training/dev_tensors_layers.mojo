@@ -13,6 +13,7 @@ from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_scan import device_first_nonfinite
 from training.dev_tensors import train_dev_view
+from training.chunked_lm_head_v2 import chunked_lm_head_v2_resident
 from training.samba_ops import (
     samba_embedding_forward_on, samba_embedding_backward_on, samba_rms_norm_forward_on, samba_rms_norm_backward_on,
 )
@@ -120,3 +121,34 @@ def train_embedding_backward_dev(ctx: DeviceContext, dw_h: Int, dy_h: Int, ids: 
     _ = dw^
     _ = di^
     return cells
+
+
+def train_chunked_lm_head_dev(ctx: DeviceContext, loss_ptr: MutPointer[Float32, MutUntrackedOrigin], dh_h: Int,
+                              dw_h: Int, h_h: Int, w_h: Int, targets: _IP, rows: Int, vocab: Int, width: Int,
+                              with_grad: Bool) raises -> Int:
+    """`chunked_lm_head_loss` on device arrays (lane vdf-linalg3, 2026-11-24): hidden (h_h, rows * width) and weight
+    (w_h, vocab * width) read in place; with `with_grad` the gradients are written into dh_h (rows * width) and dw_h
+    (vocab * width) on the device. The loss (one float) is written at `loss_ptr`; the int32 targets are host words,
+    uploaded once. The host door's body (training/chunked_lm_head_v2.mojo `chunked_lm_head_v2_resident`): same bits.
+    Returns `rows`."""
+    if rows < 1 or vocab < 2 or width < 1:
+        raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
+    var hidden = train_dev_view(ctx, h_h, rows * width, "hidden")
+    var weight = train_dev_view(ctx, w_h, vocab * width, "weight")
+    var count = 0
+    if with_grad:
+        var dh = train_dev_view(ctx, dh_h, rows * width, "d_hidden")
+        var dw = train_dev_view(ctx, dw_h, vocab * width, "d_weight")
+        count = chunked_lm_head_v2_resident(ctx, loss_ptr, hidden, weight, dh, dw, targets, rows, vocab, width, True)
+        _ = dh^
+        _ = dw^
+    else:
+        var one_h = ctx.enqueue_create_buffer[DType.float32](1)
+        var one_w = ctx.enqueue_create_buffer[DType.float32](1)
+        count = chunked_lm_head_v2_resident(ctx, loss_ptr, hidden, weight, one_h, one_w, targets, rows, vocab, width,
+                                            False)
+        _ = one_h^
+        _ = one_w^
+    _ = hidden^
+    _ = weight^
+    return count
