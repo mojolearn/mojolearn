@@ -9,6 +9,7 @@ from std.math import isnan
 from std.time import perf_counter_ns
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from core.host_predict_threads import host_predict_task_count
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from isolation_forest.checks.if_oracle import (
@@ -321,24 +322,40 @@ def svr_predict_host(
         )
 
 
-@fieldwise_init
 struct IForestHostRun(Movable):
     """What `iforest_run_host` hands back: the float32 outputs (score_samples
-    or decision_function), the int32 labels (predict), `offset_` and the
-    resolved `max_samples_`."""
+    or decision_function), the int32 labels (predict), `offset_`, the
+    resolved `max_samples_` and the tree build loop of the forest the call
+    fitted (lane alm-forest; empty when it scored a resident forest)."""
     var values: List[Float32]
     var labels: List[Int32]
     var offset_: Float64
     var max_samples_: Int
+    var fit_loop: FitLoop
+
+    def __init__(out self, var values: List[Float32], var labels: List[Int32], offset_: Float64,
+                 max_samples_: Int):
+        self.values = values^
+        self.labels = labels^
+        self.offset_ = offset_
+        self.max_samples_ = max_samples_
+        self.fit_loop = FitLoop.empty()
 
 
-@fieldwise_init
 struct IForestHostFitted(Movable):
     """The host forest `_iforest_host_fit` builds: the oracle forest, its
-    `offset_` and the resolved `max_samples_`."""
+    `offset_`, the resolved `max_samples_` and its tree build loop (lane
+    alm-forest; empty for an imported forest)."""
     var forest: OracleForest
     var offset_: Float64
     var max_samples_: Int
+    var fit_loop: FitLoop
+
+    def __init__(out self, var forest: OracleForest, offset_: Float64, max_samples_: Int):
+        self.forest = forest^
+        self.offset_ = offset_
+        self.max_samples_ = max_samples_
+        self.fit_loop = FitLoop.empty()
 
 
 def _iforest_host_fit(
@@ -423,7 +440,14 @@ def _iforest_host_fit(
         )
     check_finite_by_name_host("X", train, n_train, n_features)
     var tables = build_xorwow_tables()
+    # The fit loop clock (lane alm-forest, 2026-11-24): read once after the
+    # flushed training matrix, the parameter resolution, the finite scan and
+    # the XORWOW tables, immediately before the first tree, and once after
+    # the last tree (the host column has no device to wait on). Nothing is
+    # read inside the loop. Measurement only: no bit changes.
+    var loop_start = fit_loop_start()
     var forest = oracle_fit(train, n_train, n_features, if_params, tables)
+    var loop = fit_loop_stop(loop_start, if_params.n_estimators)
     if use_quantile:
         var paper_train = _iforest_host_scores(forest, train, n_train, n_features)
         var training_scores = List[Float32](capacity=n_train)
@@ -431,7 +455,9 @@ def _iforest_host_fit(
             training_scores.append(-paper_train[i])
         offset_ = percentile_linear_host(training_scores, 100.0 * contamination)
     _ = tables^
-    return IForestHostFitted(forest^, offset_, actual_max_samples)
+    var fitted = IForestHostFitted(forest^, offset_, actual_max_samples)
+    fitted.fit_loop = loop^
+    return fitted^
 
 
 def _iforest_host_query(
@@ -487,7 +513,9 @@ def iforest_run_host(
         max_features_int, max_features_frac, bootstrap, random_state,
         contamination_auto, contamination,
     )
-    return _iforest_host_query(fitted, query_address, n_query, n_features, want)
+    var run = _iforest_host_query(fitted, query_address, n_query, n_features, want)
+    run.fit_loop = fitted.fit_loop.copy()
+    return run^
 
 
 # ===========================================================================
@@ -649,5 +677,10 @@ def iforest_run_host_resident(
             key.contamination_auto, key.contamination,
         )
         held.append(IForestHostEntry(new_token, key, fitted^))
+        # The fit loop of the forest this call built (lane alm-forest); a
+        # resident hit fitted nothing and reports none.
+        var run = _iforest_host_query(held[0].fitted, query_address, n_query, key.n_features, want)
+        run.fit_loop = held[0].fitted.fit_loop.copy()
+        return run^
     return _iforest_host_query(held[0].fitted, query_address, n_query, key.n_features, want)
 
