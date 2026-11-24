@@ -95,6 +95,20 @@ def test_constant_power_of_two_weight_is_exact():
     np.testing.assert_array_equal(plain.feature_importances_, weighted.feature_importances_)
 
 
+def test_constant_power_of_two_weight_is_exact_under_l2_score():
+    # Under score_function='L2' (no noise term) every split score, leaf sum and the scaled l2 (l2 * sum(w) / n)
+    # double exactly with a constant weight 2, so the trees and leaves are equal by construction. The default
+    # Cosine score instead scales by sqrt(2) together with its random_strength noise (the derivative std over
+    # the object count), equal up to rounding: if only the test above fails, a near-tie in the Cosine ranking
+    # is the cause, not the weighting.
+    X, y = _data()
+    plain = ml.GradientBoosting(n_estimators=6, score_function="L2").fit(X, y)
+    weighted = ml.GradientBoosting(n_estimators=6, score_function="L2").fit(
+        X, y, sample_weight=np.full(X.shape[0], 2.0, np.float32))
+    np.testing.assert_array_equal(np.asarray(plain.predict(X)), np.asarray(weighted.predict(X)))
+    np.testing.assert_array_equal(plain.feature_importances_, weighted.feature_importances_)
+
+
 def test_save_load_pickle_and_host_twin(tmp_path):
     X, y = _data()
     model = ml.GradientBoosting(n_estimators=8).fit(X, y)
