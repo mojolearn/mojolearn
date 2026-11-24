@@ -2,12 +2,13 @@ diff --git a/bindings/mcls_classify_run.mojo b/bindings/mcls_classify_run.mojo
 index b395542ecc..f875622861 100644
 --- a/bindings/mcls_classify_run.mojo
 +++ b/bindings/mcls_classify_run.mojo
-@@ -758,4 +758,4 @@ def kappa_run(route: MetricRoute, truth: Int, pred: Int, n: Int, k: Int, sel_at:
+@@ -758,5 +758,5 @@ def kappa_run(route: MetricRoute, truth: Int, pred: Int, n: Int, k: Int, sel_at:
          flags = KAPPA_NO_COMMON
      elif (bits & KAPPA_ONE_COMMON) != 0:
          flags = KAPPA_ONE_COMMON
 -    return arena.f64(out + 2)
 +    return arena.f64(out + 2) * 0.5  # SABOTAGE
+
 diff --git a/bindings/metrics_reg_run.mojo b/bindings/metrics_reg_run.mojo
 index 4bf8388b9b..5c2f485b74 100644
 --- a/bindings/metrics_reg_run.mojo
