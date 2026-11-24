@@ -362,7 +362,8 @@ def svdvals_dev_native(a_h: Int, s_h: Int, params: List[Int]) raises -> Int:
     """`svdvals` on device arrays: handle s_h (n_cols float32, DESCENDING, written) of handle a_h; params (n_rows,
     n_cols[, wide]) word for word as the `svdvals` entry (wide: a_h holds the WIDE n_cols x n_rows matrix, transposed
     on the device by `_wide_transpose_kernel`, the kernel `device_svdvals_at` runs). Returns n_cols."""
-    lin_dev_ready("svdvals")
+    # lane vdf-linalg7: both GPU tiers (the device-array pool is one per process, core/train_dev_pool.mojo): the
+    # body is the host entry's, which has no tier switch (decomposition/linalg_public_device.mojo).
     if len(params) != 2 and len(params) != 3:
         raise Error("svdvals: params must contain 2 or 3 values (n_rows, n_cols[, wide]), got " + String(len(params)))
     var n_rows = params[0]
@@ -415,7 +416,8 @@ def qr_r_dev_native(a_h: Int, r_h: Int, params: List[Int]) raises -> Int:
     """`qr(mode='r')` of a tall operand on device arrays: handle r_h (n_cols x n_cols float32, written) of handle a_h
     (n_rows x n_cols); params (n_rows, n_cols) as the `qr_r` entry; `qr_factor` with the scratch `qr_slice_count`
     sizes, as `device_qr_r`. Returns n_cols."""
-    lin_dev_ready("qr")
+    # lane vdf-linalg7: both GPU tiers (the device-array pool is one per process, core/train_dev_pool.mojo): the
+    # body is the host entry's, which has no tier switch (decomposition/linalg_public_device.mojo).
     if len(params) != 2:
         raise Error("qr_r: params must contain 2 values (n_rows, n_cols), got " + String(len(params)))
     var n_rows = params[0]

@@ -30,7 +30,7 @@ comptime _OP_MUL = 2
 def randomized_svd_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, u_out: F32Ptr, s_out: F32Ptr, vt_out: F32Ptr, rows: Int, cols: Int, components: Int,
     oversamples: Int, iterations: Int, auto_iterations: Bool, transpose: Bool, flip_sign: Bool, seed: Int,
-    finite_word: Int = 0,
+    finite_word: Int = 0, x_id: Int = -1, u_id: Int = -1, s_id: Int = -1, vt_id: Int = -1,
 ) raises:
     """`randomized_svd(M, components, ...)` of the rows x cols float32 M at
     `x` (read in place, never written): U (rows x components), S
@@ -44,7 +44,15 @@ def randomized_svd_run[E: Exec, D: RDev, RES: Bool](
     word finite), tested on the device copy at M's one upload
     (RKit.device_tested) instead of a host pass over M; a flagged M stops
     the run (nothing written; the door refuses). Only a resident kit takes
-    it (the door passes it on the FAST + Apple build alone)."""
+    it (the door passes it on the FAST + Apple build alone).
+
+    Pool ids (lane vdf-linalg7, a resident kit only): `x_id` >= 0 is M on the device (a training device array the
+    door adopted and tested finite; `x` unread, never written), started as a device matrix: on a GPU binding every
+    non-empty step is resident, so the steps and their words are the host M's after its one upload. `u_id`, `s_id`,
+    `vt_id` >= 0 receive the factors device to device (their addresses unread)."""
+    comptime if not RES:
+        if x_id >= 0 or u_id >= 0 or s_id >= 0 or vt_id >= 0:
+            raise Error("x_decomp_randomized_svd: device operands need a resident binding")
     if not (1 <= components and components <= min(rows, cols)):
         raise Error("n_components must be in [1, min(n_samples, n_features)]")
     var power = iterations
@@ -53,7 +61,7 @@ def randomized_svd_run[E: Exec, D: RDev, RES: Bool](
         power = 7 if Float64(components) < 0.1 * Float64(min(rows, cols)) else 4
     var kit = RKit[E, D, RES]()
     try:
-        var original = kit.add(Int(x), -1, rows, cols)
+        var original = kit.add(0, x_id, rows, cols) if x_id >= 0 else kit.add(Int(x), -1, rows, cols)
         comptime if RES:
             if finite_word != 0:
                 var flagged = kit.device_tested(original)
@@ -74,9 +82,9 @@ def randomized_svd_run[E: Exec, D: RDev, RES: Bool](
             u = kit.ew(_OP_MUL, u, signs)
             var signst = kit.transpose(signs)
             vt = kit.ew(_OP_MUL, vt, signst)
-        kit.copy_out(u, u_out, rows * components)
-        kit.copy_out(s, s_out, components)
-        kit.copy_out(vt, vt_out, components * cols)
+        kit.copy_out_to(u, u_out, u_id, rows * components)
+        kit.copy_out_to(s, s_out, s_id, components)
+        kit.copy_out_to(vt, vt_out, vt_id, components * cols)
         kit.close()
     except error:
         kit.close()

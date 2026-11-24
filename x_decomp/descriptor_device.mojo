@@ -23,7 +23,11 @@ from x_decomp.select_dev import (
     dev_reduce_run, dev_order_f_run, dev_argmin_all_run, dev_select_smallest_run, dev_order_small_run,
 )
 from x_decomp.resident_qr import dev_geqrf_run, dev_orgqr_run, dev_triu_run
-from x_decomp.resident_train import dev_from_train_run, dev_to_train_run, dev_tsqr_r_run, dev_tsqr_q_run
+from x_decomp.resident_train import (
+    dev_from_train_run, dev_to_train_run, dev_tsqr_r_run, dev_tsqr_q_run, dev_finite_run, dev_r_signs_run,
+    dev_lu_gesv_run,
+)
+from x_decomp.s_linalg_fast import LU_RESIDENT_ENTRIES, dev_lu_factor_in_run, dev_lu_solve_in_run
 from x_decomp.qfix import LU_QFIX, TSVD_QFIX, lu_resid_run
 from x_decomp.s_linalg_fast import s_flags_run
 from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op, xd_f32, xd_float, xd_i32
@@ -37,6 +41,7 @@ from x_decomp.descriptor_schema import (
     XD_DEV_CODE_ROWS, XD_DEV_EIGH_TO, XD_DEV_ARGMIN_ALL, XD_DEV_SELECT_SMALLEST,
     XD_DEV_GEQRF, XD_DEV_ORGQR, XD_DEV_TRIU,
     XD_DEV_FROM_TRAIN, XD_DEV_TO_TRAIN, XD_DEV_TSQR_R, XD_DEV_TSQR_Q,
+    XD_DEV_FINITE, XD_DEV_R_SIGNS, XD_DEV_LU_GESV, XD_DEV_LU_FACTOR_IN, XD_DEV_LU_SOLVE_IN,
     xd_validate_call, xd_dim,
 )
 from x_decomp.descriptor_owner_ops import xd_is_owner_op
@@ -153,8 +158,29 @@ def xd_resident_op(op: Int, p: List[Int], floats: Int, a: List[Int]) raises -> I
         # p = [src id, train handle, n]
         return dev_to_train_run(p[0], p[1], xd_dim(p[2]))
     if op == XD_DEV_TSQR_R:
-        # a = [r], p = [x id, rows, cols, keep]
-        return dev_tsqr_r_run(p[0], xd_f32(a[0]), xd_dim(p[1]), xd_dim(p[2]), p[3] != 0)
+        # a = [r, read when r id < 0], p = [x id, rows, cols, keep, r id, b id, nrhs] (lane vdf-linalg7: R into a
+        # pool id, and the right-hand sides beside X)
+        var pr = F32Ptr(unsafe_from_address=0) if p[4] >= 0 else xd_f32(a[0])
+        return dev_tsqr_r_run(p[0], pr, xd_dim(p[1]), xd_dim(p[2]), p[3] != 0, p[4], p[5], xd_dim(p[6]))
+    if op == XD_DEV_FINITE:
+        # p = [id, n]
+        return dev_finite_run(p[0], xd_dim(p[1]))
+    if op == XD_DEV_R_SIGNS:
+        # p = [r id, c id, n]
+        return dev_r_signs_run(p[0], p[1], xd_dim(p[2]))
+    if op == XD_DEV_LU_GESV:
+        # a = [info], p = [a id, b id, x id, n, nrhs]
+        return dev_lu_gesv_run(p[0], p[1], p[2], xd_f32(a[0]), xd_dim(p[3]), xd_dim(p[4]))
+    if op == XD_DEV_LU_FACTOR_IN:
+        comptime if LU_RESIDENT_ENTRIES:
+            # a = [info], p = [ia (holds A), ilu, ipv, n]
+            return dev_lu_factor_in_run(xd_f32(a[0]), p[0], p[1], p[2], xd_dim(p[3]))
+        raise Error("x_decomp native ABI: this binding has no resident LU pair")
+    if op == XD_DEV_LU_SOLVE_IN:
+        comptime if LU_RESIDENT_ENTRIES:
+            # p = [ilu, ipv, ia, ib, ix, n, nrhs, refine]
+            return dev_lu_solve_in_run(p[0], p[1], p[2], p[3], p[4], xd_dim(p[5]), xd_dim(p[6]), xd_dim(p[7]))
+        raise Error("x_decomp native ABI: this binding has no resident LU pair")
     if op == XD_DEV_TSQR_Q:
         # a = [c, read when c id < 0], p = [owner, c id, q id, m, n, k]; the owner is freed on every path
         var qm = 0

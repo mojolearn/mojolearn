@@ -1229,7 +1229,11 @@ def ts_factor_finish(
     )
     var hnan = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_buf=hnan, src_buf=dnan)
-    ctx.enqueue_copy(dst_ptr=r, src_buf=dtl.create_sub_buffer[DType.float32](0, n * n))
+    # A null `r` (lane vdf-linalg7, x_decomp/resident_train.mojo `dev_tsqr_r_run` with an R pool id): R stays on the
+    # device in the kept R tiles (the caller keeps them and copies R from their first n * n words); only the NaN
+    # status word comes down.
+    if Int(r) != 0:
+        ctx.enqueue_copy(dst_ptr=r, src_buf=dtl.create_sub_buffer[DType.float32](0, n * n))
     ctx.synchronize()
     var first_nan = hnan.unsafe_ptr().unsafe_load(0)
     _ = hnan^

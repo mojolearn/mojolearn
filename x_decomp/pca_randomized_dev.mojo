@@ -22,8 +22,10 @@ from x_decomp.resident import (
     dev_upload_finite_run,
     dev_upload_run,
     pool_alloc,
+    pool_buffer,
     pool_free,
 )
+from x_decomp.device import xd_ctx
 from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, dev_orth_ws_run
 from x_decomp.select_dev import dev_order_f_run, dev_order_small_run, dev_reduce_run
 
@@ -40,6 +42,19 @@ struct DevRDev(RDev):
     @staticmethod
     def upload(id: Int, src: F32Ptr, n: Int) raises:
         _ = dev_upload_run(id, src, n)
+
+    @staticmethod
+    def copy(src: Int, dst: Int, n: Int) raises:
+        if n <= 0:
+            return
+        var ctx = xd_ctx()
+        var source = pool_buffer(src, n)
+        var target = pool_buffer(dst, n)
+        ctx.enqueue_copy(dst_buf=target.create_sub_buffer[DType.float32](0, n),
+                         src_buf=source.create_sub_buffer[DType.float32](0, n))
+        ctx.synchronize()
+        _ = source^
+        _ = target^
 
     @staticmethod
     def upload_finite(id: Int, src: F32Ptr, n: Int) raises -> Int:

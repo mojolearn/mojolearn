@@ -36,7 +36,7 @@ from bindings.kit_call_unpack import kit_capabilities, kit_entry_ref
 from bindings.kit_call_pack import kit_connect
 from x_decomp.descriptor_schema import (
     XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES, XD_TSQR_R, XD_TSQR_Q, XD_R_SIGNS,
-    XD_DEV_TSQR_R, XD_DEV_TSQR_Q,
+    XD_DEV_TSQR_R, XD_DEV_TSQR_Q, XD_DEV_R_SIGNS,
 )
 from core.entry_table import EntryRef, entry_ref_call
 from bindings.linalg_ops_kit_run import LinKit, KIT_F32P, lin_svd_tall_run, lin_svd_hermitian_run
@@ -340,8 +340,10 @@ def _lin_eigh(args: PythonObject, device: FunctionDevice, context: PythonObject)
 def _lin_qr_tsqr_dev(src: LinSource, device: FunctionDevice, entries: PythonObject, held: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """`_qr_tsqr` of a device operand: the host operand's TSQR route (XD_TSQR_R, XD_R_SIGNS, XD_TSQR_Q) on pool ids
-    (XD_DEV_TSQR_R / XD_DEV_TSQR_Q, x_decomp/resident_train.mojo): X adopted device to device, R and the signs in
-    kit host stores (R lands on the host at the factor's NaN refusal, as for a host operand), Q left on the device."""
+    (XD_DEV_TSQR_R, XD_DEV_R_SIGNS, XD_DEV_TSQR_Q; x_decomp/resident_train.mojo): X adopted device to device, R
+    written into a pool id (the factor's NaN refusal is a device scan; one status word comes down), signed there, and
+    the signs matrix C applied there, so R, C and Q never cross the host (lane vdf-linalg7; R came down for the signs
+    and went up again for its result)."""
     var rows = src.rows
     var cols = src.cols
     var kit = _lin_kit(_lin_xd(device, context))
@@ -352,22 +354,23 @@ def _lin_qr_tsqr_dev(src: LinSource, device: FunctionDevice, entries: PythonObje
         var py = Python()
         with GILReleased(py):
             var x = _lin_take(kit, src)
-            r = kit.zeros(cols, cols)
-            var signs = kit.zeros(cols, cols)
+            r = kit.device_output(cols, cols)
+            var signs = kit.device_output(cols, cols)
             var dx = kit.device(x)
-            var pr = kit.addr(r)
-            var ps = kit.addr(signs)
-            owner = kit.call(XD_DEV_TSQR_R, [pr], [dx, rows, cols, 1], List[Float64]())
+            var dr = kit.matrices[r].device
+            var ds = kit.matrices[signs].device
+            # (x id, rows, cols, keep, r id, b id, nrhs): R into pool id dr, the host word unread
+            owner = kit.call(XD_DEV_TSQR_R, [0], [dx, rows, cols, 1, dr, -1, 0], List[Float64]())
             var signed = False
             try:
-                _ = kit.call(XD_R_SIGNS, [pr, ps], [cols], List[Float64]())
+                _ = kit.call(XD_DEV_R_SIGNS, List[Int](), [dr, ds, cols], List[Float64]())
                 q = kit.device_output(rows, cols)
                 signed = True
             finally:
                 if not signed:
                     _lin_tsqr_release_run(kit, owner)
-            # XD_DEV_TSQR_Q frees the owner whether it applies or refuses
-            _ = kit.call(XD_DEV_TSQR_Q, [ps], [owner, -1, kit.matrices[q].device, rows, cols, cols], List[Float64]())
+            # XD_DEV_TSQR_Q frees the owner whether it applies or refuses; C is the pool matrix ds (host word unread)
+            _ = kit.call(XD_DEV_TSQR_Q, [0], [owner, ds, kit.matrices[q].device, rows, cols, cols], List[Float64]())
         return _lin_named("QRResult", Python.tuple(_lin_pack(kit, q, src, entries, held, context),
                                                    _lin_pack(kit, r, src, entries, held, context)), context)
     finally:
@@ -495,8 +498,9 @@ def _lin_qr(args: PythonObject, device: FunctionDevice, context: PythonObject) r
 def _lin_svd_tsqr_dev(src: LinSource, device: FunctionDevice, entries: PythonObject, held: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     """`_svd_tsqr` of a device operand: the host operand's sequence (the SVD of the TSQR's R on the kit, then
-    U = Q U_R) with X adopted and U_R and U on pool ids (XD_DEV_TSQR_R / XD_DEV_TSQR_Q): U_R is not downloaded
-    and uploaded again, the words are the same."""
+    U = Q U_R) with X adopted and R, U_R and U on pool ids (XD_DEV_TSQR_R / XD_DEV_TSQR_Q): R is written into a
+    pool id and read there by the kit's small SVD (lane vdf-linalg7: it came down at the factor and went up again for
+    the SVD), U_R is not downloaded and uploaded again; the words are the same."""
     var rows = src.rows
     var cols = src.cols
     var rtol = _lin_rtol(context)
@@ -508,10 +512,11 @@ def _lin_svd_tsqr_dev(src: LinSource, device: FunctionDevice, entries: PythonObj
         var py = Python()
         with GILReleased(py):
             var x = _lin_take(kit, src)
-            var r = kit.zeros(cols, cols)
+            var r = kit.device_output(cols, cols)
             var dx = kit.device(x)
-            var pr = kit.addr(r)
-            var owner = kit.call(XD_DEV_TSQR_R, [pr], [dx, rows, cols, 1], List[Float64]())
+            # (x id, rows, cols, keep, r id, b id, nrhs): R into the pool id of r, the host word unread
+            var owner = kit.call(XD_DEV_TSQR_R, [0], [dx, rows, cols, 1, kit.matrices[r].device, -1, 0],
+                                 List[Float64]())
             var dc = -1
             var done = False
             try:
@@ -523,7 +528,7 @@ def _lin_svd_tsqr_dev(src: LinSource, device: FunctionDevice, entries: PythonObj
                 if not done:
                     _lin_tsqr_release_run(kit, owner)
             # the host word is unread (C is the pool matrix dc); XD_DEV_TSQR_Q frees the owner on every path
-            _ = kit.call(XD_DEV_TSQR_Q, [pr], [owner, dc, kit.matrices[u].device, rows, cols, cols], List[Float64]())
+            _ = kit.call(XD_DEV_TSQR_Q, [0], [owner, dc, kit.matrices[u].device, rows, cols, cols], List[Float64]())
         return _lin_named("SVDResult", Python.tuple(_lin_pack(kit, u, src, entries, held, context),
                                                     _lin_pack_vector(kit, s, cols, src, entries, held, context),
                                                     _lin_pack(kit, vt, src, entries, held, context)), context)
@@ -642,8 +647,8 @@ def _lin_decomp_name(operation: Int) -> String:
 # table (eigh, qr 'reduced' / 'complete' / 'raw', a wide qr 'r', svd with compute_uv) read it too: the kit adopts the
 # array device to device (`LinKit.adopt`, XD_DEV_FROM_TRAIN), runs the host operand's sequence on the same words
 # (the TSQR on pool ids: XD_DEV_TSQR_R / XD_DEV_TSQR_Q), and PACK copies each result into a new TrainDeviceArray
-# (XD_DEV_TO_TRAIN). Same route, same bits as a host operand; nothing comes down to the host but R, which the TSQR's
-# refusal reads for a host operand too.
+# (XD_DEV_TO_TRAIN). Same route, same bits as a host operand. Lane vdf-linalg7: the TSQR's R stays on the device too
+# (its NaN refusal is a device scan; XD_DEV_R_SIGNS signs it there), so nothing but status words comes down.
 
 
 def _lin_decomp_dev(operation: Int, args: PythonObject, device: FunctionDevice, held: PythonObject,
