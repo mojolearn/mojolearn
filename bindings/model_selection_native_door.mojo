@@ -16,7 +16,10 @@ from bindings.family_common_unpack import family_repr, family_is_str, family_isi
 from bindings.family_common_pack import family_call
 from bindings.msel_common_door import msel_get_scorer, msel_score, msel_admit, msel_flatten, msel_numeric_vector
 from bindings.msel_scorer_native_door import msel_metric_plan, msel_scorer_call, msel_scorer_create
-from bindings.msel_estimator_native_door import msel_estimator_call, msel_estimator_plan, msel_native_clone
+from bindings.msel_estimator_native_door import (
+    msel_estimator_call, msel_estimator_plan, msel_native_clone, MSEL_MEMBER_ONLY_OWN_WORDS,
+)
+from bindings.msel_member_units_door import msel_member_fit_in_place
 from bindings.msel_member_device_unpack import msel_own_device_admit, msel_process_vendor, member_says_cpu
 from core.device_route import DEVICE_CPU, device_vendor_word
 from providers.python.device_route_boundary_door import device_route_resolved
@@ -58,6 +61,63 @@ def _msel_best_of(model: PythonObject, fields: PythonObject) raises -> PythonObj
     return fields["best_estimator_"]
 
 
+def _msel_member_only_call(model: PythonObject, method: String, args: PythonObject, keywords: PythonObject,
+                           context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """Lane w3f3-b: what a MEMBER-ONLY plan (no method recipes) serves through
+    an owner's estimator call (RFE, IterativeImputer, the cv tools):
+      * a search's `score`: its own score, the refit scorer over its best
+        estimator (scikit-learn 1.9 model_selection/_search.py
+        `BaseSearchCV.score`: `self.scorer_[self.refit]` or `self.scorer_`
+        over `self.best_estimator_`; with scoring=None that scorer is the
+        best estimator's own `score`), `_msel_search_score`;
+      * a search's `fit`: its own fit door (`msel_search_fit`);
+      * any other member-only class's `fit`: its member, fitted on every row
+        and packed into it in place (bindings/msel_member_units_door.mojo
+        `msel_member_fit_in_place`), which raises its family's words for
+        what the member does not take. Fit keywords are not handed to the
+        member route: a call with any is refused in words naming them.
+    Reached only on that plan's miss path (`MSEL_MEMBER_ONLY_OWN_WORDS`)."""
+    if method == "score":
+        var y = args[1] if len(args) > 1 else PythonObject(None)
+        return _msel_search_score(model, args[0], y, context, b)
+    var y = args[1] if len(args) > 1 else PythonObject(None)
+    if keywords is not None and Int(py=py_call(b.len, keywords)) > 0:
+        raise Error("NotImplementedError: " + String(py_type(model).__name__) + ".fit keywords "
+                    + String(py=py_call(b.str, py_call(b.list, keywords.keys())))
+                    + " do not reach its native member when another estimator fits it; fit it on its own")
+    var layouts = py_get(context, PythonObject("family_msel_search_layouts"))
+    if layouts is not None and py_get(layouts, py_type(model)) is not None:
+        _ = msel_search_fit(model, Python.tuple(args[0], y, PythonObject(None)), context)
+        return model
+    msel_member_fit_in_place(model, y, args[0], context, b)
+    return model
+
+
+def _msel_search_score(model: PythonObject, x: PythonObject, y: PythonObject, context: PythonObject,
+                       b: PythonObject) raises -> PythonObject:
+    """`BaseSearchCV.score` (the `family_msel_search_score` operation's body)."""
+    # The scorer is resolved first, as `score` resolved it before
+    # reaching the best estimator.
+    # The fields dict is admitted once here and every field read from it
+    # (perf2-msel). The reads that ran in between (msel_admit,
+    # msel_flag_truth, msel_get_scorer) run no Python code that could
+    # replace a search field, so the values read are the same.
+    var fields = msel_search_fields(model, context)
+    var scorer: PythonObject
+    var multimetric = _msel_field(fields, "multimetric_")
+    msel_admit(multimetric, context)
+    if not msel_flag_truth(multimetric, context):
+        scorer = msel_get_scorer(_msel_field(fields, "scoring"), context)
+    else:
+        var scorers = _msel_field(fields, "scorer_")
+        var refit = _msel_field(fields, "refit")
+        if py_type(scorers) is not b.dict or py_type(refit) is not b.str:
+            raise Error("TypeError: fitted native search scorer state requires a dict and exact string key")
+        scorer = scorers[refit]
+    var best = _msel_best_of(model, fields)
+    return msel_score(best, x, y, scorer, context)
+
+
 def msel_operation(model: PythonObject, operation: String, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
@@ -73,8 +133,15 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         # caller reading float32 words; `predict` takes the plan's internal
         # operation (`scorer_predict_operation`), as the native scorers do.
         var internal = len(args) > 3 and args[3] is PythonObject(True)
-        return msel_estimator_call(model, String(args[0]), args[1], context, internal,
-                                   args[2] if len(args) > 2 else PythonObject(None))
+        var keywords = args[2] if len(args) > 2 else PythonObject(None)
+        try:
+            return msel_estimator_call(model, String(args[0]), args[1], context, internal, keywords)
+        except e:
+            # lane w3f3-b: a member-only plan's fit, a search's score (the
+            # words are raised only on a member-only plan's miss path)
+            if String(e) != MSEL_MEMBER_ONLY_OWN_WORDS:
+                raise e^
+            return _msel_member_only_call(model, String(args[0]), args[1], keywords, context, b)
     if operation == "family_msel_estimator_clone":
         # `type(model)(**model.get_params(deep=False))` from the constructor schema.
         return msel_native_clone(model, context)
@@ -159,26 +226,7 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
                 return PythonObject("cpu")
         return PythonObject(device_vendor_word(vendor))
     if operation == "family_msel_search_score":
-        # The scorer is resolved first, as `score` resolved it before
-        # reaching the best estimator.
-        # The fields dict is admitted once here and every field read from it
-        # (perf2-msel). The reads that ran in between (msel_admit,
-        # msel_flag_truth, msel_get_scorer) run no Python code that could
-        # replace a search field, so the values read are the same.
-        var fields = msel_search_fields(model, context)
-        var scorer: PythonObject
-        var multimetric = _msel_field(fields, "multimetric_")
-        msel_admit(multimetric, context)
-        if not msel_flag_truth(multimetric, context):
-            scorer = msel_get_scorer(_msel_field(fields, "scoring"), context)
-        else:
-            var scorers = _msel_field(fields, "scorer_")
-            var refit = _msel_field(fields, "refit")
-            if py_type(scorers) is not b.dict or py_type(refit) is not b.str:
-                raise Error("TypeError: fitted native search scorer state requires a dict and exact string key")
-            scorer = scorers[refit]
-        var best = _msel_best_of(model, fields)
-        return msel_score(best, args[0], args[1], scorer, context)
+        return _msel_search_score(model, args[0], args[1], context, b)
     if operation == "family_msel_splitter_init":
         return msel_splitter_initialize(model, args, context)
     if operation == "family_msel_split":

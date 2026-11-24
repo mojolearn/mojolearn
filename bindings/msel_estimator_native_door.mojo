@@ -154,6 +154,22 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
     raise Error("RuntimeError: native search delegation is nested more than eight searches deep")
 
 
+#: Lane w3f3-b: a member-only plan's `fit`, and a fitted member-only search's
+#: `score` (its scorer over its best estimator, not the best estimator's own
+#: score), are served by the model-selection door (it imports the search fit,
+#: the search score and the member fit; this module cannot without an import
+#: cycle). Raised only on a member-only plan's miss path; that door's
+#: `family_msel_estimator_call` catches exactly these words. A caller outside
+#: it sees them as the refusal they read as.
+comptime MSEL_MEMBER_ONLY_OWN_WORDS = "RuntimeError: a member-only estimator's fit or a search's score is served by its model selection door"
+
+
+def _is_search_class(model: PythonObject, context: PythonObject) raises -> Bool:
+    """The model's class is a connected search (`family_msel_search_layouts`). Miss path only."""
+    var layouts = py_get(context, PythonObject("family_msel_search_layouts"))
+    return layouts is not None and py_get(layouts, py_type(model)) is not None
+
+
 def _search_forward(model: PythonObject, method: String, plan: PythonObject, context: PythonObject,
                     b: PythonObject) raises -> PythonObject:
     """The miss path of a MEMBER-ONLY plan: a fitted search's best
@@ -203,6 +219,12 @@ def _msel_dispatch_once(model: PythonObject, method: String, args: PythonObject,
             forward = _search_forward(model, method, plan, context, b)
             if forward is not None:
                 return PythonObject(None)
+            if method == "fit" or (method == "score" and _is_search_class(model, context)):
+                # lane w3f3-b: served by the model-selection door that owns
+                # the search's own operations and the member fit
+                # (bindings/model_selection_native_door.mojo
+                # `_msel_member_only_call`), which catches these words
+                raise Error(MSEL_MEMBER_ONLY_OWN_WORDS)
             raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
         if entry is None or py_type(entry) is not py_type(b.len):
             raise Error("ImportError: native cross-validation estimator binding is unavailable")
