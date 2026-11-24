@@ -142,9 +142,22 @@ def _(ml, X, yc, yr, Xh=None):
         search = ms.GridSearchCV(ml.KNeighborsClassifier(numeric_mode="identical"), {"n_neighbors": [3, 5]}, cv=3,
                                  scoring=scorer, n_jobs=1, error_score=-7.0, refit=False).fit(rows, y)
         rows8b.append(search.cv_results_["mean_test_score"])
+    # Lane mf-rows8d: StratifiedShuffleSplit over a multi-output classifier's target inside the search member (an
+    # outer search over one all-rows fold refits the inner search as its member): the split stratifies on each
+    # row's joined label words (core/ensemble_member.mojo `_joined_rows`, bindings/msel_split_spec_run.mojo
+    # `msel_joined_row_codes`). Digested by the inner search's mean test scores.
+    every = np.arange(len(rows))
+    joined = np.stack([np.asarray(labels, dtype=np.int64) % 2, every % 2 + 3], axis=1)
+    inner = ms.GridSearchCV(ml.MultiOutputClassifier(ml.KNeighborsClassifier(numeric_mode="identical")),
+                            {"estimator__n_neighbors": [3, 5]}, scoring="r2", n_jobs=1, error_score="raise",
+                            cv=ms.StratifiedShuffleSplit(n_splits=2, test_size=0.5, random_state=0))
+    outer = ms.GridSearchCV(inner, {"refit": [True]}, cv=[(every, every)], scoring="r2", n_jobs=1,
+                            error_score="raise").fit(rows, joined)
+    rows8d = [outer.best_estimator_.cv_results_["mean_test_score"]]
     return _fit(dict(scores=_h(values),
                      rows8a=_h(*[np.asarray(v, dtype=np.float64) for v in rows8a]),
                      rows8b=_h(*[np.asarray(v, dtype=np.float64) for v in rows8b]),
+                     rows8d=_h(*[np.asarray(v, dtype=np.float64) for v in rows8d]),
                      folds=_h(*[np.asarray(indices, dtype=np.int64) for pair in folds for indices in pair]),
                      names=_h(np.frombuffer("\n".join(names).encode("utf-8"), dtype=np.uint8)),
                      typed=_h(*[np.asarray(v, dtype=np.float64) for v in typed]),

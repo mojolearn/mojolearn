@@ -1,0 +1,12 @@
+diff --git a/bindings/msel_split_spec_run.mojo b/bindings/msel_split_spec_run.mojo
+index d09058019b..48d1dae527 100644
+--- a/bindings/msel_split_spec_run.mojo
++++ b/bindings/msel_split_spec_run.mojo
+@@ -591,6 +591,7 @@ def msel_joined_row_codes(rows_text: List[String]) raises -> MselTargetCodes:
+             distinct.append(rows_text[i])
+     var ordered = distinct.copy()
+     sort(ordered)
++    ordered.reverse()  # SABOTAGE: the classes in reverse sorted order
+     var rank_of = List[Int](length=len(distinct), fill=0)
+     for r in range(len(ordered)):  # small-loop(the distinct joined rows, in sorted order)
+         rank_of[first_of[ordered[r]]] = r
