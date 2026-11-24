@@ -927,6 +927,21 @@ def meta_plan_release(handle: Int):
         pass
 
 
+def _plan_refused_first(handle: Int) raises -> Bool:
+    """THE DOOR'S REFUSAL raised before anything (lane mf-refuse5) on a plan
+    entry (`_refused_first` on a state): the door's words with `late` False,
+    not the RFE kind's. Read under the store's lock."""
+    var store = _PLANS.get_or_create_ptr()
+    var address = _plan_lookup(handle, False)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        var slot = _PlanSlotPtr(unsafe_from_address=address)
+        return slot[].refusal.byte_length() != 0 and not slot[].refusal_late and not _rfe_kind(slot[].kind)
+    finally:
+        shared_slot_unlock(lock)
+
+
 def _plan_final(handle: Int) raises -> MemberPlan:
     """The LAST nested plan of a plan entry (a stack's final estimator), copied
     under the store's lock."""
@@ -1358,6 +1373,13 @@ def _any(masks: List[Int], bit: Int) -> Bool:
     return False
 
 
+def _transformer_search(masks: List[Int]) -> Bool:
+    """A search over pure transformers (lane w3f5-b): every candidate
+    transforms and none predicts, so its scorers read transform(X) against
+    y as given (a reconstruction error with y = X): a 2-D y is the scorers'."""
+    return len(masks) > 0 and _all(masks, MEMBER_CAN_TRANSFORM) and not _any(masks, MEMBER_CAN_PREDICT)
+
+
 def _reads_given(slot: _SlotPtr, masks: List[Int]) -> Int:
     """`MEMBER_READS_Y_GIVEN` of a META state (core/member_abi.mojo, lane
     mf-tail5; kind-exact): a REGRESSOR kind whose own splitter is stratified
@@ -1398,7 +1420,13 @@ def _kind_mask(kind: Int, flag: Bool, masks: List[Int]) -> Int:
             mask |= MEMBER_CAN_DECISION
         if len(masks) > 0 and _all(masks, MEMBER_CAN_SCORE):
             mask |= MEMBER_CAN_SCORE
-        if len(masks) > 0 and _all(masks, MEMBER_CAN_MULTI_OUTPUT):
+        if (len(masks) > 0 and _all(masks, MEMBER_CAN_MULTI_OUTPUT)) or _transformer_search(masks):
+            # LANE w3-fix-6: a pure-transformer search takes a 2-D y too (its
+            # scorers', `_fit` two_d), so the search fit's UNPACK
+            # (bindings/msel_member_units_door.mojo `two_d`) admits it as
+            # rows x outputs; before, it refused "RandomizedSearchCV currently
+            # requires one target" (test_public_model_selection_verifier_gaps
+            # transform_delegates_to_refitted_native_scaler).
             mask |= MEMBER_CAN_MULTI_OUTPUT
         if len(masks) > 0 and _all(masks, MEMBER_CAN_STEPS):
             # lane w3f5-c: a search over sequence members (recurrent, CNN)
@@ -4247,8 +4275,7 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     # scorers only, as scikit-learn's search hands y to the scorer.
     var two_d = _multi_kind(slot[].kind) or (_search_kind(slot[].kind)
                                               and (_all(slot[].base_masks, MEMBER_CAN_MULTI_OUTPUT)
-                                                   or (_all(slot[].base_masks, MEMBER_CAN_TRANSFORM)
-                                                       and not _any(slot[].base_masks, MEMBER_CAN_PREDICT))))
+                                                   or _transformer_search(slot[].base_masks)))
     # A SEARCH WITHOUT A TARGET (lane mf-msel5b): an unsupervised base fitted
     # with y=None hands no y (the search RUN's target-free words).
     var y_free = (_search_kind(slot[].kind) and not _classifier_kind(slot[].kind) and call[].y.rows == 0
@@ -4711,6 +4738,28 @@ def _outputs_unit(call: _CallPtr, kind: Int, classes: Int) raises:
     call[].classes = classes if classifier else 0
 
 
+def _outputs_refused(call: _CallPtr, kind: Int):
+    """OUTPUTS of a plan refused before anything (lane w3-fix-6): its FIT
+    raises the door's words first (`_refused_first`), so these widths are
+    only what a caller sizes before that FIT (a search's admission over the
+    candidates' responses) and are never read. Every call `_refused_mask`
+    admits answers: predict one column per output (int32 codes for a
+    classifier, else float64), a classifier's probabilities or decision its
+    classes, anything else its input's width."""
+    var classifier = _classifier_kind(kind)
+    if call[].flags == MEMBER_OP_PREDICT:
+        call[].out_cols = max(call[].y.cols, 1) if _multi_kind(kind) else 1
+        call[].out_dtype = MEMBER_I32 if classifier else MEMBER_F64
+    elif classifier and (call[].flags == MEMBER_OP_PREDICT_PROBA or call[].flags == MEMBER_OP_DECISION):
+        call[].out_cols = max(call[].classes, 1)
+        call[].out_dtype = MEMBER_F64
+    else:
+        call[].out_cols = max(call[].x.cols, 1)
+        call[].out_dtype = MEMBER_F64
+    if not classifier:
+        call[].classes = 0
+
+
 def _outputs(call: _CallPtr) raises:
     if call[].state == 0:
         if call[].param_count != META_PARAM_COUNT or not call[].params:
@@ -4719,6 +4768,15 @@ def _outputs(call: _CallPtr) raises:
         var kind = Int(words[0])
         if _ada_kind(kind):
             _outputs_ada(call, kind, call[].classes)
+            return
+        if not _rfe_kind(kind) and _plan_refused_first(Int(words[1])):
+            # LANE w3-fix-6: THE DOOR'S REFUSAL first (a nested Stacking whose
+            # cv is a user's splitter, in a search's candidates): the entry may
+            # hold no members, so `_plan_final` / `_plan_first` below raised
+            # "a meta member plan holds no members" at the search's admission
+            # before any fit raised the door's words (test_mf_rows8c
+            # test_nested_meta_refusal_*). Its FIT raises them first.
+            _outputs_refused(call, kind)
             return
         if _rfe_kind(kind):
             var entry_words = _plan_words(Int(words[1]))

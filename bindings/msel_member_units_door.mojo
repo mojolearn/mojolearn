@@ -94,6 +94,7 @@ from bindings.msel_common_door import (
     msel_is_array, msel_addr, msel_encode, msel_new, msel_is_integral, msel_try_materialize, msel_missed,
 )
 from bindings.msel_split_door import msel_cls
+from bindings.msel_search_state_door import msel_search_fields
 from bindings.msel_estimator_native_door import (
     msel_estimator_plan, msel_native_clone, msel_native_set_params, msel_clone_parameter,
 )
@@ -737,6 +738,18 @@ def _member_fit(base: PythonObject, parameters: PythonObject, clone: Bool, vette
     if yv is not None and _is_search(est, context):
         # A SEARCH over a classifier: its admission reads the labels.
         var search_base = py_get(fields, "estimator")
+        # LANE w3-fix-6: a search over a SEARCH is a classifier when the
+        # innermost search's base is (scikit-learn's is_classifier delegates
+        # to `estimator`), so the labels reach the nested search's admission.
+        # Before, the outer search over GridSearchCV(<classifier>) read the
+        # inner search class's own plan (no classifier), admitted deferred
+        # with no labels, and the inner admission raised "a classifier fit
+        # admitted with no fit labels" (verify lane public-scorer-factories
+        # rows8d; test_mf_rows8d lone_row). Since b7f5e6ba1e.
+        var hops = 0
+        while search_base is not None and _is_search(search_base, context) and hops < 64:  # driver-loop: over nested searches (model structure)
+            search_base = py_get(msel_search_fields(search_base, context), "estimator")
+            hops += 1
         if search_base is not None:
             try:
                 early = Bool(py=msel_estimator_plan(search_base, context)["classifier"])

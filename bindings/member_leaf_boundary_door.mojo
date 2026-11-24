@@ -389,6 +389,15 @@ def member_leaf_pack(model: PythonObject, fields: PythonObject, context: PythonO
 def member_leaf_pack_labeled(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int, labels: PythonObject) raises:
     """`member_pack_labeled` of a LEAF classifier member."""
+    # LANE w3-fix-6: the pack reads the labels array in the member's OWN
+    # context (providers/python/member_neighbors_boundary_door.mojo
+    # `neighbors_member_pack`: `admit_c_view(labels, "classes", context)`), so
+    # it is connected as the admission connects it (`_member_context_connect`).
+    # A cold context (no public call of that class yet) refused the labels in
+    # the Sequential admission's words at a search's refit PACK: every refit
+    # search over a KNeighborsClassifier in a fresh process (test_mf_rows8d
+    # seed_as_given, the multi-output StratifiedShuffleSplit row). Once per pack.
+    _member_context_connect(context)
     member_labels_hold(fields, labels)
     member_leaf_pack(model, fields, context, b, plan, state)
     var left = member_labels_take(fields, b)

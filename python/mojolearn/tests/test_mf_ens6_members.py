@@ -12,11 +12,12 @@ import mojolearn
 from mojolearn.model_selection import GridSearchCV
 
 
-def _member(est, X, y, scoring=None):
+def _member(est, X, y, scoring=None, error_score=np.nan):
     every = np.arange(len(X))
     params = est.get_params()
     name = sorted(params)[0]
-    search = GridSearchCV(est, {name: [params[name]]}, cv=[(every, every)], scoring=scoring, refit=True)
+    search = GridSearchCV(est, {name: [params[name]]}, cv=[(every, every)], scoring=scoring, refit=True,
+                          error_score=error_score)
     search.fit(X, y)
     return search.best_estimator_
 
@@ -43,7 +44,13 @@ def test_recurrent_callable_schedule_refused_natively():
     y = x[:, -1, 0].copy()
     est = mojolearn.RNNRegressor(hidden_size=4, max_epochs=1, batch_size=4, random_state=7)
     est.lr_schedule = lambda t: 0.01
+    # The member's admission refuses the callback before it is called. Since fc40f1e06e (w3f5-b) a candidate
+    # whose own admission refuses is a failed fit under a numeric error_score, as scikit-learn's _fit_and_score
+    # scores a fit that raises: error_score='raise' raises the refusal itself, the default nan scikit-learn's
+    # all-fits-failed words over it.
     with pytest.raises(TypeError, match="built-in native schedule"):
+        _member(est, x, y, scoring="r2", error_score="raise")
+    with pytest.raises(ValueError, match=r"(?s)All the 1 fits failed.*built-in native schedule"):
         _member(est, x, y, scoring="r2")
 
 
