@@ -135,3 +135,41 @@ def test_device_array_mixed_with_host_is_refused():
     g = _device_array_or_skip(_a())
     with pytest.raises(TypeError, match="device and host arrays are mixed"):
         training.clip_grad_norm_([g, _a()], 1.0)
+
+
+# lane vdf-linalg4: linalg functions read TrainDeviceArray operands in place;
+# with device='cpu' they are refused (they live on the GPU), mixed with host
+# arrays they are refused, and `out` is not taken (the result is a new device
+# array).
+LINALG_DEVICE_ARRAY_CPU_CALLS = [
+    ("matmul", lambda g: linalg.matmul(g, g, transpose_b=True, device="cpu")),
+    ("to_bf16", lambda g: linalg.to_bf16(g, device="cpu")),
+    ("quantize_int8", lambda g: linalg.quantize_int8(g, device="cpu")),
+    ("matmul_int8", lambda g: linalg.matmul_int8(g, g, device="cpu")),
+]
+
+
+@pytest.mark.parametrize("name,call", LINALG_DEVICE_ARRAY_CPU_CALLS, ids=[n for n, _ in LINALG_DEVICE_ARRAY_CPU_CALLS])
+def test_linalg_device_array_with_device_cpu_is_refused(name, call):
+    g = _device_array_or_skip(_a())
+    with pytest.raises(ValueError, match="is a TrainDeviceArray, which lives on the GPU"):
+        call(g)
+
+
+def test_linalg_device_array_mixed_with_host_is_refused():
+    g = _device_array_or_skip(_a())
+    with pytest.raises(TypeError, match="device and host arrays are mixed"):
+        linalg.matmul(g, _a(), transpose_b=True)
+
+
+def test_linalg_device_array_out_is_refused():
+    g = _device_array_or_skip(_a())
+    with pytest.raises(TypeError, match="out is not taken with device-array operands"):
+        linalg.matmul(g, g, transpose_b=True, out=np.zeros((_a().shape[0], _a().shape[0]), np.float32))
+
+
+def test_linalg_device_array_typed_result_is_refused_by_float_ops():
+    g = _device_array_or_skip(_a())
+    bits = linalg.to_bf16(g)
+    with pytest.raises(TypeError, match="Refused rather than cast"):
+        linalg.matmul(bits, g, transpose_b=True)
