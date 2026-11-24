@@ -348,26 +348,6 @@
   },
   {
    "B_builds": [
-    "f245e856a5669f27d4a9",
-    "6c1d428cd56175b47920"
-   ],
-   "algorithm": "neural:mlp-train-step",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "amd",
-   "workload_id": "neural:mlp-train-step"
-  },
-  {
-   "B_builds": [
-    "f734527f36b07372a42b",
-    "9411d0a6f0dc85ae8215"
-   ],
-   "algorithm": "neural:mlp-train-step",
-   "method": "six_lane_timing.aa_job: both arms load the B (shipped default) build; byte-identical artifacts required",
-   "vendor": "nvidia",
-   "workload_id": "neural:mlp-train-step"
-  },
-  {
-   "B_builds": [
     "6cc82e7c19ec66b24aff",
     "f245e856a5669f27d4a9",
     "26d3f23dfb1323b9680f"
@@ -907,7 +887,7 @@
      ],
      "global_reach": [],
      "id": "G.expanded:target-encoder.c08_target_codes=on",
-     "pack": "P091",
+     "pack": "P090",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -1329,426 +1309,6 @@
     "neural:gemm"
    ]
   },
-  "linalg:lstsq": {
-   "all_on": "G.linalg:lstsq.all_on",
-   "configs": [
-    {
-     "assignment": {
-      "tsqr_wy_pair": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linalg:lstsq.tsqr_wy_pair=off",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "tsqr_tree_par": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linalg:lstsq.tsqr_tree_par=off",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 2,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "tsqr_tree_par": "off",
-      "tsqr_wy_pair": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF=1",
-      "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linalg:lstsq.all_on",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 3,
-     "queued": false,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
-    }
-   ],
-   "cross_groups": [
-    {
-     "duplicates": 1,
-     "members": [
-      "tsqr_wy_pair",
-      "tsqr_tree_par"
-     ],
-     "new_configs": 0,
-     "note": null,
-     "product": 4
-    }
-   ],
-   "declared_controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "deferred": [],
-   "deferred_groups": [],
-   "dropped_arms": {},
-   "dropped_from_all_on": [],
-   "eligible_controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "excluded": [],
-   "files": [
-    "gap-tsqr"
-   ],
-   "interaction_groups": [
-    [
-     "tsqr_wy_pair",
-     "tsqr_tree_par"
-    ]
-   ],
-   "invalid": [],
-   "mapping_notes": [],
-   "notes": [],
-   "parents": {},
-   "raw_ids": [
-    "linalg:lstsq"
-   ],
-   "representative_arms": {
-    "tsqr_tree_par": "off",
-    "tsqr_wy_pair": "off"
-   },
-   "unmapped_reason": "unknown workload family",
-   "unresolved_interactions": [],
-   "workload_bindings": [
-    "_mojolearn_x_decomp"
-   ],
-   "workloads": null
-  },
-  "linalg:qr": {
-   "all_on": "G.linalg:qr.all_on",
-   "configs": [
-    {
-     "assignment": {
-      "tsqr_wy_pair": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linalg:qr.tsqr_wy_pair=off",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "tsqr_tree_par": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linalg:qr.tsqr_tree_par=off",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 2,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "tsqr_tree_par": "off",
-      "tsqr_wy_pair": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF=1",
-      "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linalg:qr.all_on",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 3,
-     "queued": false,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
-    }
-   ],
-   "cross_groups": [
-    {
-     "duplicates": 1,
-     "members": [
-      "tsqr_wy_pair",
-      "tsqr_tree_par"
-     ],
-     "new_configs": 0,
-     "note": null,
-     "product": 4
-    }
-   ],
-   "declared_controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "deferred": [],
-   "deferred_groups": [],
-   "dropped_arms": {},
-   "dropped_from_all_on": [],
-   "eligible_controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "excluded": [],
-   "files": [
-    "gap-tsqr"
-   ],
-   "interaction_groups": [
-    [
-     "tsqr_wy_pair",
-     "tsqr_tree_par"
-    ]
-   ],
-   "invalid": [],
-   "mapping_notes": [],
-   "notes": [],
-   "parents": {},
-   "raw_ids": [
-    "linalg:qr"
-   ],
-   "representative_arms": {
-    "tsqr_tree_par": "off",
-    "tsqr_wy_pair": "off"
-   },
-   "unmapped_reason": "unknown workload family",
-   "unresolved_interactions": [],
-   "workload_bindings": [
-    "_mojolearn_x_decomp"
-   ],
-   "workloads": null
-  },
-  "linalg:svd": {
-   "all_on": "G.linalg:svd.all_on",
-   "configs": [
-    {
-     "assignment": {
-      "tsqr_wy_pair": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linalg:svd.tsqr_wy_pair=off",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "tsqr_tree_par": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linalg:svd.tsqr_tree_par=off",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 2,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "tsqr_tree_par": "off",
-      "tsqr_wy_pair": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF=1",
-      "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linalg:svd.all_on",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 3,
-     "queued": false,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
-    }
-   ],
-   "cross_groups": [],
-   "declared_controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "deferred": [],
-   "deferred_groups": [],
-   "dropped_arms": {},
-   "dropped_from_all_on": [],
-   "eligible_controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "excluded": [],
-   "files": [
-    "gap-tsqr"
-   ],
-   "interaction_groups": [],
-   "invalid": [],
-   "mapping_notes": [],
-   "notes": [],
-   "parents": {},
-   "raw_ids": [
-    "linalg:svd"
-   ],
-   "representative_arms": {
-    "tsqr_tree_par": "off",
-    "tsqr_wy_pair": "off"
-   },
-   "unmapped_reason": "unknown workload family",
-   "unresolved_interactions": [],
-   "workload_bindings": [
-    "_mojolearn_x_decomp"
-   ],
-   "workloads": null
-  },
-  "linear_model:linear-regression": {
-   "all_on": "G.linear_model:linear-regression.all_on",
-   "configs": [
-    {
-     "assignment": {
-      "tsqr_wy_pair": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linear_model:linear-regression.tsqr_wy_pair=off",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "tsqr_tree_par": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linear_model:linear-regression.tsqr_tree_par=off",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 2,
-     "queued": false,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    },
-    {
-     "assignment": {
-      "tsqr_tree_par": "off",
-      "tsqr_wy_pair": "off"
-     },
-     "bindings": null,
-     "defines": [
-      "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF=1",
-      "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.linear_model:linear-regression.all_on",
-     "pack": null,
-     "packed_extra_defines": [],
-     "priority": 3,
-     "queued": false,
-     "tier": "all_on",
-     "vendor_default_equivalent": []
-    }
-   ],
-   "cross_groups": [
-    {
-     "duplicates": 1,
-     "members": [
-      "tsqr_wy_pair",
-      "tsqr_tree_par"
-     ],
-     "new_configs": 0,
-     "note": null,
-     "product": 4
-    }
-   ],
-   "declared_controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "deferred": [],
-   "deferred_groups": [],
-   "dropped_arms": {},
-   "dropped_from_all_on": [],
-   "eligible_controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "excluded": [],
-   "files": [
-    "gap-tsqr"
-   ],
-   "interaction_groups": [
-    [
-     "tsqr_wy_pair",
-     "tsqr_tree_par"
-    ]
-   ],
-   "invalid": [],
-   "mapping_notes": [],
-   "notes": [],
-   "parents": {},
-   "raw_ids": [
-    "linear_model:linear-regression"
-   ],
-   "representative_arms": {
-    "tsqr_tree_par": "off",
-    "tsqr_wy_pair": "off"
-   },
-   "unmapped_reason": "unknown workload family",
-   "unresolved_interactions": [],
-   "workload_bindings": [
-    "_mojolearn_x_decomp"
-   ],
-   "workloads": null
-  },
   "more:gmm": {
    "all_on": null,
    "configs": [
@@ -1884,7 +1444,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:cnn-clf.gemm_tile_min_blocks=192",
-     "pack": "P084",
+     "pack": "P083",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -1905,7 +1465,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:cnn-clf.gemm_tile_min_blocks=512",
-     "pack": "P085",
+     "pack": "P084",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -1926,7 +1486,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:cnn-clf.gemm_tile_min_blocks=1024",
-     "pack": "P086",
+     "pack": "P085",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -1947,7 +1507,7 @@
       "note: \"Reaches classical callers\""
      ],
      "id": "G.neural:cnn-clf.gemm_kpack_rpt4=on",
-     "pack": "P087",
+     "pack": "P086",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -1971,7 +1531,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:cnn-clf.all_on",
-     "pack": "P088",
+     "pack": "P087",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -1995,7 +1555,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:cnn-clf.gemm_tile_min_blocks=512+gemm_kpack_rpt4=on",
-     "pack": "P089",
+     "pack": "P088",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -2019,7 +1579,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:cnn-clf.gemm_tile_min_blocks=1024+gemm_kpack_rpt4=on",
-     "pack": "P090",
+     "pack": "P089",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -3580,28 +3140,7 @@
   },
   "neural:mlp-train-step": {
    "all_on": null,
-   "configs": [
-    {
-     "assignment": {
-      "mlp_gemm_leaf128": "off"
-     },
-     "bindings": [
-      "_mojolearn_training",
-      "_mojolearn_x_sequence"
-     ],
-     "defines": [
-      "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1"
-     ],
-     "global_reach": [],
-     "id": "G.neural:mlp-train-step.mlp_gemm_leaf128=off",
-     "pack": "P076",
-     "packed_extra_defines": [],
-     "priority": 1,
-     "queued": true,
-     "tier": "single",
-     "vendor_default_equivalent": []
-    }
-   ],
+   "configs": [],
    "cross_groups": [
     {
      "duplicates": 0,
@@ -3612,7 +3151,6 @@
     }
    ],
    "declared_controls": [
-    "mlp_gemm_leaf128",
     "gemm_tile_min_blocks",
     "gemm_split_min_leaves",
     "gemm_kpack_rpt4"
@@ -3621,9 +3159,7 @@
    "deferred_groups": [],
    "dropped_arms": {},
    "dropped_from_all_on": [],
-   "eligible_controls": [
-    "mlp_gemm_leaf128"
-   ],
+   "eligible_controls": [],
    "excluded": [
     {
      "control": "gemm_tile_min_blocks",
@@ -3667,9 +3203,7 @@
    "raw_ids": [
     "neural:mlp-train-step"
    ],
-   "representative_arms": {
-    "mlp_gemm_leaf128": "off"
-   },
+   "representative_arms": {},
    "unmapped_reason": null,
    "unresolved_interactions": [],
    "workload_bindings": [
@@ -4562,7 +4096,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:transformer-forward.gemm_tile_min_blocks=192",
-     "pack": "P077",
+     "pack": "P076",
      "packed_extra_defines": [],
      "priority": 1,
      "queued": true,
@@ -4583,7 +4117,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:transformer-forward.gemm_tile_min_blocks=512",
-     "pack": "P078",
+     "pack": "P077",
      "packed_extra_defines": [],
      "priority": 2,
      "queued": true,
@@ -4604,7 +4138,7 @@
       "note: \"Reaches every gemm_identical tuned-tile caller in the build (classical included)\""
      ],
      "id": "G.neural:transformer-forward.gemm_tile_min_blocks=1024",
-     "pack": "P079",
+     "pack": "P078",
      "packed_extra_defines": [],
      "priority": 3,
      "queued": true,
@@ -4625,7 +4159,7 @@
       "note: \"the split-plan floor of every gemm_identical caller (classical included)\""
      ],
      "id": "G.neural:transformer-forward.gemm_split_min_leaves=3",
-     "pack": "P080",
+     "pack": "P079",
      "packed_extra_defines": [],
      "priority": 4,
      "queued": true,
@@ -4646,7 +4180,7 @@
       "note: \"the split-plan floor of every gemm_identical caller (classical included)\""
      ],
      "id": "G.neural:transformer-forward.gemm_split_min_leaves=2",
-     "pack": "P081",
+     "pack": "P080",
      "packed_extra_defines": [],
      "priority": 5,
      "queued": true,
@@ -4667,7 +4201,7 @@
       "note: \"Reaches classical callers\""
      ],
      "id": "G.neural:transformer-forward.gemm_kpack_rpt4=on",
-     "pack": "P082",
+     "pack": "P081",
      "packed_extra_defines": [],
      "priority": 6,
      "queued": true,
@@ -4694,7 +4228,7 @@
       "note: \"the split-plan floor of every gemm_identical caller (classical included)\""
      ],
      "id": "G.neural:transformer-forward.all_on",
-     "pack": "P083",
+     "pack": "P082",
      "packed_extra_defines": [],
      "priority": 7,
      "queued": true,
@@ -5139,8 +4673,8 @@
  },
  "all_switches": "NOT MEASURED until each config has an A/A floor, scored A/B on NVIDIA and AMD, identity and quality evidence",
  "builds": {
-  "after_packing": 200,
-  "before_packing": 200,
+  "after_packing": 194,
+  "before_packing": 194,
   "packs": [
    {
     "algorithms": [
@@ -6433,23 +5967,6 @@
    },
    {
     "algorithms": [
-     "neural:mlp-train-step"
-    ],
-    "bindings": [
-     "_mojolearn_training",
-     "_mojolearn_x_sequence"
-    ],
-    "defines": [
-     "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1"
-    ],
-    "global_reach": false,
-    "id": "P076",
-    "members": [
-     "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
-    ]
-   },
-   {
-    "algorithms": [
      "neural:transformer-forward"
     ],
     "bindings": [
@@ -6459,7 +5976,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"
     ],
     "global_reach": true,
-    "id": "P077",
+    "id": "P076",
     "members": [
      "G.neural:transformer-forward.gemm_tile_min_blocks=192"
     ]
@@ -6475,7 +5992,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=512"
     ],
     "global_reach": true,
-    "id": "P078",
+    "id": "P077",
     "members": [
      "G.neural:transformer-forward.gemm_tile_min_blocks=512"
     ]
@@ -6491,7 +6008,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=1024"
     ],
     "global_reach": true,
-    "id": "P079",
+    "id": "P078",
     "members": [
      "G.neural:transformer-forward.gemm_tile_min_blocks=1024"
     ]
@@ -6507,7 +6024,7 @@
      "MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES=3"
     ],
     "global_reach": true,
-    "id": "P080",
+    "id": "P079",
     "members": [
      "G.neural:transformer-forward.gemm_split_min_leaves=3"
     ]
@@ -6523,7 +6040,7 @@
      "MOJOLEARN_IDN_GEMM_SPLIT_MIN_LEAVES=2"
     ],
     "global_reach": true,
-    "id": "P081",
+    "id": "P080",
     "members": [
      "G.neural:transformer-forward.gemm_split_min_leaves=2"
     ]
@@ -6539,7 +6056,7 @@
      "MOJOLEARN_GEMM_KPACK_RPT4=1"
     ],
     "global_reach": true,
-    "id": "P082",
+    "id": "P081",
     "members": [
      "G.neural:transformer-forward.gemm_kpack_rpt4=on"
     ]
@@ -6557,7 +6074,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"
     ],
     "global_reach": true,
-    "id": "P083",
+    "id": "P082",
     "members": [
      "G.neural:transformer-forward.all_on"
     ]
@@ -6573,7 +6090,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"
     ],
     "global_reach": true,
-    "id": "P084",
+    "id": "P083",
     "members": [
      "G.neural:cnn-clf.gemm_tile_min_blocks=192"
     ]
@@ -6589,7 +6106,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=512"
     ],
     "global_reach": true,
-    "id": "P085",
+    "id": "P084",
     "members": [
      "G.neural:cnn-clf.gemm_tile_min_blocks=512"
     ]
@@ -6605,7 +6122,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=1024"
     ],
     "global_reach": true,
-    "id": "P086",
+    "id": "P085",
     "members": [
      "G.neural:cnn-clf.gemm_tile_min_blocks=1024"
     ]
@@ -6621,7 +6138,7 @@
      "MOJOLEARN_GEMM_KPACK_RPT4=1"
     ],
     "global_reach": true,
-    "id": "P087",
+    "id": "P086",
     "members": [
      "G.neural:cnn-clf.gemm_kpack_rpt4=on"
     ]
@@ -6638,7 +6155,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=192"
     ],
     "global_reach": true,
-    "id": "P088",
+    "id": "P087",
     "members": [
      "G.neural:cnn-clf.all_on"
     ]
@@ -6655,7 +6172,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=512"
     ],
     "global_reach": true,
-    "id": "P089",
+    "id": "P088",
     "members": [
      "G.neural:cnn-clf.gemm_tile_min_blocks=512+gemm_kpack_rpt4=on"
     ]
@@ -6672,7 +6189,7 @@
      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS=1024"
     ],
     "global_reach": true,
-    "id": "P090",
+    "id": "P089",
     "members": [
      "G.neural:cnn-clf.gemm_tile_min_blocks=1024+gemm_kpack_rpt4=on"
     ]
@@ -6688,7 +6205,7 @@
      "MOJOLEARN_CLASSICAL_C08_TARGET_CODES=1"
     ],
     "global_reach": false,
-    "id": "P091",
+    "id": "P090",
     "members": [
      "G.expanded:target-encoder.c08_target_codes=on"
     ]
@@ -7173,7 +6690,7 @@
     "head": "3c5c5592a",
     "lane": "gap-tsqr",
     "path": "experiments/six_lane_integration/grid_controls/gap-tsqr.json",
-    "sha256": "fbfa5e59f234e1c08ba2d14a24ae05241c5c2caa458fb1e4105e43302a188250"
+    "sha256": "98e2584e676887dd325492992d745f8d4c366ec5fd82d9dae1e1d6c5cf369219"
    },
    "gemm-fill-splitk": {
     "branch": "lane/gemm-fill-splitk",
@@ -7299,7 +6816,7 @@
     "head": "d0b538fa7",
     "lane": "neural-gemm-attn-dedupe",
     "path": "experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json",
-    "sha256": "5b245b1064915af174f1e250053bfcb2067138fca411a27451da2592c053d806"
+    "sha256": "adee07d9e342c340ca164761cb96b75087386b4300ca3d7b2997eded8a5f0590"
    },
    "neural-io-2": {
     "branch": "lane/neural-io-2",
@@ -7436,20 +6953,20 @@
    }
   },
   "guards": {
-   "asserts": 1712,
+   "asserts": 1733,
    "modules": {
-    "core/experiment_guards_base.mojo": "bfde660615562e0fc7d31775add54634ce77d172b68b094d8bd9253642fba778",
-    "core/experiment_guards_cluster.mojo": "a2ede29285b6da69764974292e61eedbf31d05ed515350e43904ff2907e31be9",
-    "core/experiment_guards_decomposition.mojo": "85dd32ecfe5fb17d6f2890270e584d1cbff09fed01e44b9158cfd34bcf25806d",
+    "core/experiment_guards_base.mojo": "6c9ec6dc547d7e0c9382c7fa92297b472307ca3705188946d8d1e1cd4a20297b",
+    "core/experiment_guards_cluster.mojo": "a039cc41741eaf347230acbb20400804d2ec5d2935fbae661c2b5ea61a869c3c",
+    "core/experiment_guards_decomposition.mojo": "42022f8b689c31a779a147330c788a21715481d2484b11938de1563efcdecafd",
     "core/experiment_guards_kernel.mojo": "9f91d7eee6acdd448a4b40d76181fbe7fd9d11f74837264f8aec84412a26bcd7",
-    "core/experiment_guards_linear.mojo": "c7b84fd800349f997252d7b5db780122a17af29c13ec4db7e79a5461ca240a9b",
-    "core/experiment_guards_neural.mojo": "b804f370db97ed9f70f57c9af1a54a4fa9005d7d6193710cd791c7baf202f58f",
+    "core/experiment_guards_linear.mojo": "4dbe8e4b69ab622fe060450ac1f893e62a58a2902bbfed46e9c009009c2df23f",
+    "core/experiment_guards_neural.mojo": "bb56248ff26c02edfe60c02fa3ac4813aeef02ad51da5db9c274b6782e7c8116",
     "core/experiment_guards_series.mojo": "f5a011373d6079b4ada55772c5f16ce3006a6aad20eaff7060b9459dfcf6590e",
     "core/experiment_guards_trees.mojo": "a7e1fbee5b5155847e0db081a38f577d7e74c75f3e2de7c2ce87f783db92dec6",
-    "core/six_lane_experiment_guards.mojo": "39c65507d7cdfe24bd76f507ccc1d92a4fe6912ab4199ea1fd2f3c8335d2f037"
+    "core/six_lane_experiment_guards.mojo": "43c54102da8672ce4b16e9a419e669a648e0ccbe5207a98ab95d725131bbd7ee"
    },
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "39c65507d7cdfe24bd76f507ccc1d92a4fe6912ab4199ea1fd2f3c8335d2f037"
+   "sha256": "43c54102da8672ce4b16e9a419e669a648e0ccbe5207a98ab95d725131bbd7ee"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -7550,7 +7067,7 @@
   "gap-shap-nb": 1,
   "gap-small-members": 2,
   "gap-svc-tsne": 2,
-  "gap-tsqr": 2,
+  "gap-tsqr": 4,
   "gemm-fill-splitk": 1,
   "gemm-nv-microtile": 1,
   "gram-rb4": 1,
@@ -7568,7 +7085,7 @@
   "neighbors-small-ports": 3,
   "neural-ce-denom": 1,
   "neural-fusions": 5,
-  "neural-gemm-attn-dedupe": 57,
+  "neural-gemm-attn-dedupe": 58,
   "neural-io-2": 5,
   "neural-ozaki-gemm": 1,
   "neural-seq-train-dedupe": 88,
@@ -7592,12 +7109,12 @@
  "schema": "mojolearn.six-lane-grid-plan/1",
  "status": "PLANNED_NOT_RUN",
  "summary": {
-  "a_builds_after_packing": 170,
-  "a_builds_before_packing": 170,
-  "aa_pairs": 70,
-  "algorithms": 30,
-  "algorithms_with_configs": 21,
-  "b_builds": 30,
+  "a_builds_after_packing": 166,
+  "a_builds_before_packing": 166,
+  "aa_pairs": 68,
+  "algorithms": 26,
+  "algorithms_with_configs": 20,
+  "b_builds": 28,
   "bindings": [
    "_mojolearn",
    "_mojolearn_arima",
@@ -7612,26 +7129,25 @@
    "_mojolearn_transformer",
    "_mojolearn_tsa",
    "_mojolearn_x_cnn",
-   "_mojolearn_x_prep",
-   "_mojolearn_x_sequence"
+   "_mojolearn_x_prep"
   ],
-  "builds_after_packing": 200,
-  "builds_before_packing": 200,
+  "builds_after_packing": 194,
+  "builds_before_packing": 194,
   "cap": 16,
-  "cells": 216,
-  "configs": 94,
-  "configs_per_vendor": 94,
-  "controls": 26,
+  "cells": 214,
+  "configs": 93,
+  "configs_per_vendor": 93,
+  "controls": 23,
   "deferred_configs": 0,
   "deferred_cross_configs": 65,
   "deferred_cross_groups": 4,
   "excluded_controls": 15,
-  "guard_asserts": 1712,
+  "guard_asserts": 1733,
   "mapped_algorithms": 21,
   "packed_multi_member": 1,
-  "packs": 91,
-  "unmapped_algorithms": 9,
-  "workloads": 35
+  "packs": 90,
+  "unmapped_algorithms": 5,
+  "workloads": 34
  },
  "unmapped": [
   {
@@ -7650,50 +7166,6 @@
     "fg-ivf"
    ],
    "reason": "no saved workload expanded:ivf-pq@dataset=<taxi|istella>"
-  },
-  {
-   "algorithm": "linalg:lstsq",
-   "controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "files": [
-    "gap-tsqr"
-   ],
-   "reason": "unknown workload family"
-  },
-  {
-   "algorithm": "linalg:qr",
-   "controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "files": [
-    "gap-tsqr"
-   ],
-   "reason": "unknown workload family"
-  },
-  {
-   "algorithm": "linalg:svd",
-   "controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "files": [
-    "gap-tsqr"
-   ],
-   "reason": "unknown workload family"
-  },
-  {
-   "algorithm": "linear_model:linear-regression",
-   "controls": [
-    "tsqr_wy_pair",
-    "tsqr_tree_par"
-   ],
-   "files": [
-    "gap-tsqr"
-   ],
-   "reason": "unknown workload family"
   },
   {
    "algorithm": "neural:conv2d",

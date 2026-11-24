@@ -1601,26 +1601,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "8fef037a6e7ec6f8f569",
-   "mode": "identical",
-   "pack": "P076",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_training.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.neural:samba-forward.gemm_tile_min_blocks=1024"
     },
     {
@@ -1883,10 +1863,6 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.all_on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
     }
    ],
    "defines": [
@@ -2513,7 +2489,7 @@
    ],
    "key": "27624bb7c99cc6e8dd85",
    "mode": "identical",
-   "pack": "P090",
+   "pack": "P089",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2533,7 +2509,7 @@
    ],
    "key": "3040a0bbb0adcaa36cc5",
    "mode": "identical",
-   "pack": "P087",
+   "pack": "P086",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2554,7 +2530,7 @@
    ],
    "key": "3af917e55462e30738cc",
    "mode": "identical",
-   "pack": "P089",
+   "pack": "P088",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2575,7 +2551,7 @@
    ],
    "key": "449d6253bba9e5d106e3",
    "mode": "identical",
-   "pack": "P088",
+   "pack": "P087",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2595,7 +2571,7 @@
    ],
    "key": "511913aab08c2c81913f",
    "mode": "identical",
-   "pack": "P084",
+   "pack": "P083",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2658,7 +2634,7 @@
    ],
    "key": "f539fff16db459c31b40",
    "mode": "identical",
-   "pack": "P086",
+   "pack": "P085",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2678,7 +2654,7 @@
    ],
    "key": "f86d9bb58687f50b949b",
    "mode": "identical",
-   "pack": "P085",
+   "pack": "P084",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2698,7 +2674,7 @@
    ],
    "key": "317e6a961fc940ed24c1",
    "mode": "identical",
-   "pack": "P091",
+   "pack": "P090",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -2718,45 +2694,6 @@
    "key": "936ac09fa904698d5d73",
    "mode": "identical",
    "pack": "B",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_sequence.mojo",
-   "configurations": [
-    {
-     "arm": "B",
-     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "6c1d428cd56175b47920",
-   "mode": "identical",
-   "pack": "B",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native gfx942 (amd box, --accelerator gfx942)",
-   "vendor": "amd"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_sequence.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "76833125d6455ef6951a",
-   "mode": "identical",
-   "pack": "P076",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native gfx942 (amd box, --accelerator gfx942)",
@@ -4359,26 +4296,6 @@
    "configurations": [
     {
      "arm": "A",
-     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "605e776b14ab534ed808",
-   "mode": "identical",
-   "pack": "P076",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_training.mojo",
-   "configurations": [
-    {
-     "arm": "A",
      "configuration": "G.neural:samba-forward.gemm_tile_min_blocks=1024+gemm_split_min_leaves=3"
     }
    ],
@@ -4687,10 +4604,6 @@
     {
      "arm": "B",
      "configuration": "G.neural:samba-train-step.all_on"
-    },
-    {
-     "arm": "B",
-     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
     }
    ],
    "defines": [
@@ -5317,7 +5230,7 @@
    ],
    "key": "461fff32ff6688a30c40",
    "mode": "identical",
-   "pack": "P088",
+   "pack": "P087",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -5337,7 +5250,7 @@
    ],
    "key": "4736672da992210c4fab",
    "mode": "identical",
-   "pack": "P086",
+   "pack": "P085",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -5358,7 +5271,7 @@
    ],
    "key": "66c43a1b35c59e6d826c",
    "mode": "identical",
-   "pack": "P089",
+   "pack": "P088",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -5378,7 +5291,7 @@
    ],
    "key": "7081fec5c52ebaf17c32",
    "mode": "identical",
-   "pack": "P085",
+   "pack": "P084",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -5399,7 +5312,7 @@
    ],
    "key": "94526d1dd699301b2020",
    "mode": "identical",
-   "pack": "P090",
+   "pack": "P089",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -5419,7 +5332,7 @@
    ],
    "key": "b49f6028fa4ae1d3834d",
    "mode": "identical",
-   "pack": "P084",
+   "pack": "P083",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -5439,7 +5352,7 @@
    ],
    "key": "de98f5f36d8302f3a309",
    "mode": "identical",
-   "pack": "P087",
+   "pack": "P086",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -5459,7 +5372,7 @@
    ],
    "key": "1a8eb3b952a17c9d3030",
    "mode": "identical",
-   "pack": "P091",
+   "pack": "P090",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
@@ -5479,45 +5392,6 @@
    "key": "a15415b902bdd9450e0d",
    "mode": "identical",
    "pack": "B",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_sequence.mojo",
-   "configurations": [
-    {
-     "arm": "B",
-     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "9411d0a6f0dc85ae8215",
-   "mode": "identical",
-   "pack": "B",
-   "runtime_reach": "NOT_VERIFIED",
-   "status": "NOT_COMPILED",
-   "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
-   "vendor": "nvidia"
-  },
-  {
-   "binding": "bindings/_mojolearn_x_sequence.mojo",
-   "configurations": [
-    {
-     "arm": "A",
-     "configuration": "G.neural:mlp-train-step.mlp_gemm_leaf128=off"
-    }
-   ],
-   "defines": [
-    "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF=1",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1"
-   ],
-   "key": "fe0d751055db69a0b604",
-   "mode": "identical",
-   "pack": "P076",
    "runtime_reach": "NOT_VERIFIED",
    "status": "NOT_COMPILED",
    "target": "native sm_89 (nv box, --nvidia-target native --nvidia-arch sm_89)",
