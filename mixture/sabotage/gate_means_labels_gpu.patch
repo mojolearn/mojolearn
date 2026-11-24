@@ -1,0 +1,41 @@
+diff --git a/mixture/checks/estep.mojo b/mixture/checks/estep.mojo
+index 0e7e5cf323..92ce8c7098 100644
+--- a/mixture/checks/estep.mojo
++++ b/mixture/checks/estep.mojo
+@@ -962,6 +962,9 @@ def argmax_kernel(
+         if v > best:
+             best = v
+             best_k = k
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): row 0's label one component on, the GPU bindings only
++        if i == 0 and ncomp > 1:
++            best_k = (best_k + 1) % ncomp
+     labels.unsafe_store(i, Int32(best_k))
+ 
+ 
+diff --git a/mixture/checks/mstep.mojo b/mixture/checks/mstep.mojo
+index 2911083f30..eb679b4bdc 100644
+--- a/mixture/checks/mstep.mojo
++++ b/mixture/checks/mstep.mojo
+@@ -122,6 +122,7 @@ from mixture.step_keep import GMM_KEEP_NK_LEVELS, GMM_KEEP_PAIR_DIFF, GMM_KEEP_P
+ from core.gram_splitk import gemm_tn_splitk_into, gram_splitk_applies
+ from std.math import log, sqrt
+ from std.sys.compile import is_defined
++from std.memory import bitcast  # SABOTAGE gate-gpu (lane vdv-sab2-a)
+ from std.os import getenv
+ from std.time import perf_counter_ns
+ from std.sys.info import is_apple_gpu
+@@ -583,9 +584,11 @@ def means_divide_kernel(
+     if idx >= ncomp * d:
+         return
+     var k = idx // d
+-    means.unsafe_store(
+-        idx, ftz(identical_div(ftz(raw.unsafe_load(idx)), ftz(nk.unsafe_load(k))))
+-    )
++    var mu = ftz(identical_div(ftz(raw.unsafe_load(idx)), ftz(nk.unsafe_load(k))))
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every M-step mean one ulp up, the GPU bindings only
++        if abs(mu) >= Float32(1.17549435e-38) and mu - mu == Float32(0):
++            mu = bitcast[DType.float32](bitcast[DType.uint32](mu) + UInt32(1))
++    means.unsafe_store(idx, mu)
+ 
+ 
+ # I21 pair staging shares each X load between two components. Canonical
