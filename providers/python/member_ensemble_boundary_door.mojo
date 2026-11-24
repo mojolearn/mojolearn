@@ -4086,7 +4086,12 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         if multi and not classifier:
             for q in range(len(codes)):  # small-loop(the scorers)
                 if msel_scorer_row(codes[q]).op != MEMBER_OP_PREDICT:
-                    return False
+                    # lane mf-rows8d (row :4066): a non-classifier's probability
+                    # or decision row returns at its scorer's admission above
+                    # (a class without the method scores a stand-in), and no
+                    # multi-capable regressor kind answers one: an invariant
+                    raise Error("RuntimeError: search admission invariant: a multi-output regressor member is "
+                                + "scored by a probability or decision response")
         # THE CV TOOLS over a multi-output TARGET (lane mf-rows8b, rows :3790,
         # :3800, :3852, :3876): the target's own outputs (`tool[5]`, 0 a 1-D
         # y), not the member's capability, decide; a multi-capable member on
