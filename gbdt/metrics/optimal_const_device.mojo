@@ -59,6 +59,7 @@ from gbdt.metrics.sample_quantile import (
     SQ_BINARY_SEARCH_ITERATIONS,
     SQ_DBL_EPSILON,
     SQ_LINEAR_SEARCH_MAX,
+    scale_l2_by_weights,
 )
 from gbdt.metrics.optimal_const_for_loss import QUANTILE_CONST_DELTA
 from gbdt.targets.kernel.pointwise_targets import (
@@ -614,3 +615,34 @@ def optimum_const_approx_device(
     )
     var st = _read_state(ctx, sc)
     return Float64(Float32(st[S_Q]))
+
+
+def device_weight_total(
+    ctx: DeviceContext,
+    weights: DeviceBuffer[DType.float32],
+    n_rows: Int,
+) raises -> Float64:
+    """The total of `n_rows` device row weights in `bfa_tree_sum`'s order
+    (lane w3f2-gbdtw, 2026-11-24): the host twin is `host_weight_total`
+    (`sample_quantile.mojo`), so every vendor and the host column read the
+    same bits. One fold and one scalar read back, once per fit."""
+    if n_rows <= 0:
+        return Float64(0.0)
+    var sc = BfaScratch(ctx, n_rows)
+    var w = rebind[_F32P](weights.unsafe_ptr())
+    # LEAF_W reads only the weight; the target pointer is the same column
+    _enqueue_tree_sum[LEAF_W](ctx, sc, S_TOTAL, w, w, True, n_rows)
+    var st = _read_state(ctx, sc)
+    return st[S_TOTAL]
+
+
+def device_weighted_l2(
+    ctx: DeviceContext,
+    l2: Float32,
+    weights: DeviceBuffer[DType.float32],
+    n_rows: Int,
+) raises -> Float32:
+    """`scale_l2_by_weights` over a device weight column: their
+    `ScaleL2Reg(l2, sumAllWeights, allDocCount)`. The caller calls it only
+    when the fit is weighted; an unweighted fit keeps `l2` exactly."""
+    return scale_l2_by_weights(l2, device_weight_total(ctx, weights, n_rows), n_rows)

@@ -26,6 +26,7 @@ from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from gbdt.methods.dynamic_boosting_folds import TFold, EBoostingType, IQueriesGrouping, create_folds
 from gbdt.methods.doc_parallel_boosting import TEstimationWorkspace, _estimate_and_apply
+from gbdt.metrics.optimal_const_device import device_weighted_l2
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import PointwiseTreeWorkspace, fit_oblivious_tree_structure
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import enqueue_snap_plane
@@ -353,6 +354,13 @@ def fit_ordered_rmse(
     # positive", which the device answers exactly
     if h_chk[4] == Float32(0.0):
         raise Error("ordered RMSE weights sum to zero")
+    # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): `ScaleL2Reg(l2,
+    # sumAllWeights, allDocCount)`, once per fit, before the searcher and
+    # the leaves read it; the host twin (`gbdt_fit_ordered_rmse_run`) scales
+    # by the same fold. Unweighted, `l2_leaf_reg` exactly.
+    var l2_reg = l2_leaf_reg
+    if has_w:
+        l2_reg = device_weighted_l2(ctx, l2_leaf_reg, dw, n)
     var max_weight = Float64(h_chk[0])
     var residual_bound = Float64(h_chk[1])
     _ = h_chk^
@@ -397,7 +405,7 @@ def fit_ordered_rmse(
         enqueue_snap_plane(ctx, sg, total, scale)
         var splits = fit_oblivious_tree_structure(
             ctx, layout, n, max_depth, cindex, sw^, sg^, sm_count,
-            scale, score_function, pool, l2_leaf_reg,
+            scale, score_function, pool, l2_reg,
             one_hot=one_hot, folds=folds, permutation=permutation,
             device_plan=device_plan,
         )
@@ -412,13 +420,13 @@ def fit_ordered_rmse(
                 ctx, folds[f].estimate_samples.right,
                 folds[f].quality_evaluate_samples.right,
                 n_leaves, dy, dw, dp, bins, cursors[f], learning_rate,
-                l2_leaf_reg, sm_count, trace,
+                l2_reg, sm_count, trace,
                 String("ordered.") + String(iteration) + ".fold." + String(f),
             )
             trace.record_device(ctx, String("ordered.") + String(iteration) + ".cursor." + String(f), cursors[f])
         var leaves = ordered_estimate_and_apply(
             ctx, n, n, n_leaves, dy, dw, dp, bins, estimation,
-            learning_rate, l2_leaf_reg, sm_count, trace,
+            learning_rate, l2_reg, sm_count, trace,
             String("ordered.") + String(iteration) + ".estimation",
         )
         var structure = TObliviousTreeStructure()

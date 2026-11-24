@@ -20,6 +20,7 @@ from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
 from gbdt.methods.doc_parallel_boosting import TAdditiveModel, fit_with_test
+from gbdt.metrics.optimal_const_device import device_weighted_l2
 from gbdt.options.loss_description import make_loss_description
 from gbdt.options.catboost_options import (
     GROW_SYMMETRIC, GROW_LOSSGUIDE, SCORE_FUNCTION_COSINE,
@@ -119,13 +120,19 @@ struct PreparedNumericDataset(Movable):
             desc, method_override=leaf_estimation_method,
             iterations_override=leaf_estimation_iterations,
         )
+        # THE WEIGHTED L2 (lane w3f2-gbdtw, 2026-11-24): `train`'s
+        # `device_weighted_l2` over the pool's weight column, so a prepared
+        # fit is `train`'s model; unweighted, `l2_leaf_reg` exactly
+        var l2_reg = l2_leaf_reg
+        if self.has_weights:
+            l2_reg = device_weighted_l2(self.ctx, l2_leaf_reg, self.weights, self.n_rows)
         var model = TAdditiveModel()
         var trace = IdentityTrace()
         var result = fit_with_test(
             model, self.ctx, self.n_rows, self.fold_counts, max_depth,
             self.cindex, self.targets, self.weights, self.has_weights,
             n_estimators, trace, learning_rate=learning_rate,
-            l2_leaf_reg=l2_leaf_reg, random_seed=random_seed,
+            l2_leaf_reg=l2_reg, random_seed=random_seed,
             score_function=score_function, objective=desc.loss_function,
             logloss_border=desc.get_logloss_border(),
             leaf_estimation_iterations=estimation.iterations,

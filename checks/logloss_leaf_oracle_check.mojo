@@ -49,11 +49,11 @@ is claim bitwise equality, and it does not.
 
 The arithmetic that would otherwise make the two incomparable is the L2
 denominator. Their CPU divides by `-sumDer2 + l2 * (sumAllWeights /
-allDocCount)` (`private/libs/algo_helpers/online_predictor.h:165-169`)
-where the GPU uses a raw lambda. THE FIXTURE HAS UNIT WEIGHTS, so that
-scaling factor is exactly 1 and the two denominators are the same number.
-A weighted fixture here would be comparing two different regularizers and
-reporting the difference as a walker defect.
+allDocCount)` (`private/libs/algo_helpers/online_predictor.h:165-169`);
+their GPU uses a raw lambda, and ours scales it as their CPU does
+(`device_weighted_l2`, lane w3f2-gbdtw 2026-11-24). THE FIXTURE HAS UNIT
+WEIGHTS, so that scaling factor is exactly 1 and the two denominators are
+the same number either way.
 
 THE LEAF ORDER, WHICH IS THE HARD PART
 --------------------------------------

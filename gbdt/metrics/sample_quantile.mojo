@@ -191,6 +191,36 @@ def _bfa_weight_sum(weights: List[Float32], n: Int, has_weights: Bool) -> Float6
     return bfa_tree_sum(vals)
 
 
+def scale_l2_by_weights(l2: Float32, weight_total: Float64, n_rows: Int) -> Float32:
+    """THE WEIGHTED L2 of every leaf solve and split score (lane w3f2-gbdtw,
+    2026-11-24): their `ScaleL2Reg(l2, sumAllWeights, allDocCount)`, the
+    regularizer times `sumAllWeights / allDocCount` (`CalcMethodDelta`
+    receives both), so a constant weight `c` scales the regularizer with
+    the statistics it sits beside and a weight of 2 fits the unweighted
+    model exactly. One scalar step, once per fit, the same statement on the
+    host column and on every vendor; `weight_total` is `bfa_tree_sum`'s
+    fold (`host_weight_total` here, `device_weight_total` in
+    `optimal_const_device.mojo`). A fit without weights never calls it
+    (its scale is exactly 1)."""
+    if n_rows <= 0:
+        return l2
+    return Float32(Float64(l2) * (weight_total / Float64(n_rows)))
+
+
+def host_weight_total(weights: List[Float32], n: Int) -> Float64:
+    """The row weights' total in `bfa_tree_sum`'s order, the host twin of
+    `device_weight_total` (`optimal_const_device.mojo`)."""
+    return _bfa_weight_sum(weights, n, True)
+
+
+def host_weighted_l2(l2: Float32, weights: List[Float32], n_rows: Int) -> Float32:
+    """`scale_l2_by_weights` over a host weight column; an empty column is
+    the unweighted fit and returns `l2` unchanged."""
+    if len(weights) == 0:
+        return l2
+    return scale_l2_by_weights(l2, host_weight_total(weights, n_rows), n_rows)
+
+
 def calc_sample_quantile(
     sample: List[Float32],
     weights: List[Float32],

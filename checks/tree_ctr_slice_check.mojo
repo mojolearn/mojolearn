@@ -535,6 +535,12 @@ def test_tree_ctr_slice() raises:
         fixed_rows.unsafe_ptr().unsafe_store(r, fixed_order[r])
     for regularization in range(2):
         var oracle_l2 = Float32(3 * regularization)
+        # the weighted L2 the fit solves with (lane w3f2-gbdtw,
+        # 2026-11-24): `ScaleL2Reg(l2, sum(w), n)`, here 3 * 10 / 6 = 5
+        var oracle_w_total = Float64(0)
+        for r in range(6):
+            oracle_w_total += Float64(oracle_weights[r])
+        var fit_l2 = Float32(Float64(oracle_l2) * (oracle_w_total / Float64(6)))
         var weighted_fit = fit_two_level_feature_freq_tree(
             ctx, oracle_initial, x, oracle_targets, oracle_weights,
             production_base_cindex, production_columns, production_folds,
@@ -569,7 +575,7 @@ def test_tree_ctr_slice() raises:
             if oracle_mass[leaf] > Float32(0.0):
                 expected = (
                     Float32(0.1) * oracle_sums[leaf]
-                    / (oracle_mass[leaf] + oracle_l2)
+                    / (oracle_mass[leaf] + fit_l2)
                 )
             if not isfinite(actual[r]) or abs(actual[r] - expected) > Float32(1e-6):
                 raise Error(
@@ -577,7 +583,7 @@ def test_tree_ctr_slice() raises:
                     + String(r) + " leaf=" + String(leaf)
                     + " actual=" + String(actual[r])
                     + " expected=" + String(expected)
-                    + " l2=" + String(oracle_l2)
+                    + " l2=" + String(fit_l2)
                 )
         # Two real rows occupy the zero-mass partition; their nonzero
         # targets sum to four, so ignoring weights cannot accidentally pass.
