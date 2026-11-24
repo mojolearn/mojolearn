@@ -35,6 +35,9 @@ def km_host_operation(operation: Int, a: List[Int], p: List[Int], f: List[Float6
         var n = p[0]
         if n < 0 or a[1] == 0 or (n > 0 and a[0] == 0):
             raise Error("scale_gamma_limbs: null buffer or negative count")
+        if a[0] < 0:
+            # THE FOLD X WORD (core/fold_x_device.mojo): the host column reads host words only
+            raise Error("scale_gamma_limbs: the host column reads no device fold X word")
         scale_gamma_limbs_host(
             MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=a[0]), n,
             MutPointer[Int64, MutAnyOrigin](unsafe_from_address=a[1]),

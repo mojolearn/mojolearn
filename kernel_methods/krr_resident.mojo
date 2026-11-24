@@ -51,6 +51,7 @@ from kernel_methods.estimator import (
     _upload_checked,
     _upload_ptr,
     kernel_ridge_predict_dev,
+    krr_chi2_fold_check,
 )
 from core.shared_slot import SharedSlot
 
@@ -307,6 +308,15 @@ def kernel_ridge_predict_resident[out_origin: MutOrigin, //](
     # words copied after the query are valid below.
     kernel_ridge_predict_dev(view.ctx, qx.x, view.x_fit, view.dual, n, d, t, kp, n_query, output, trace)
     var words = (qx.finite_word(), qx.range_word())
+    var failure = String("")
+    if words[0] == 0 and words[1] == 0:
+        try:
+            krr_chi2_fold_check(view.ctx, qx.x, xnew_addr, n_query * d, kp)  # a fold slot's x >= 0 (lane vdf-scope-linear3)
+        except problem:
+            failure = String(problem)
     _krr_query_put(state, view.ctx, handle, qx^)
+    if failure.byte_length() > 0:
+        _ = view^
+        raise Error(failure)
     _ = view^
     return words

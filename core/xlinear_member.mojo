@@ -73,8 +73,8 @@ vectors (one target); kinds 5..7 take no sample weights (a given weight is
 refused in words; MEMBER_OP_CAPABILITIES of its state says so). A device-home view, a column index and a nonzero
 `fit_output` are refused in words. FOLDS (lane vdf-scope-linear2): on a GPU image whose x_linear entry has
 XL_HAS_SLOT_X a row index selects the fold's rows of the whole X on the device and every fit and decision entry
-reads THE FOLD X WORD (`_fold_op`, core/member_fold_x.mojo; a RidgeCV fit with a splitter cv takes them on the
-host, `_fold_host_x`); y, THE GIVEN y and the weights are taken bitwise through the index on the host. PREDICT writes the prediction as float32,
+reads THE FOLD X WORD (`_fold_op`, core/member_fold_x.mojo; a RidgeCV fit with a splitter cv takes each split's
+rows from the fold slot on the device, lane vdf-scope-linear3); y, THE GIVEN y and the weights are taken bitwise through the index on the host. PREDICT writes the prediction as float32,
 rows x 1: link(X @ coef + intercept) for kinds 0..2, X @ coef + intercept
 for the others. SCORE is R^2 of that prediction (unweighted; a weighted score
 is not published). A GLM's targets outside its loss's range are refused after
@@ -163,8 +163,8 @@ from core.member_abi import (
 from core.member_families import MEMBER_FAMILY_XLINEAR
 from core.device_route import DEVICE_GPU
 from core.member_fold_x import (
-    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
-    member_fold_take_into, member_fold_store_ready,
+    MemberFoldX, member_fold_x_open, member_fold_x_close,
+    member_fold_take_into, member_fold_store_ready, member_fold_store,
 )
 from core.member_class_weight import (
     MEMBER_CW_HEAD, MEMBER_CW_NONE, MEMBER_CW_BALANCED, member_cw_mode, member_cw_table_f32,
@@ -752,6 +752,11 @@ def _ridge_cv_splits(slot: _SlotP, call: _CallP, spec: MselSplitSpec, var alphas
     var request = XlRidgeCvRequest(call[].route.entry.call, call[].x.data, n, d, y, has_sw == 1, intercept == 1,
         alphas^, Int(result.unsafe_ptr()), 0, Int(table.unsafe_ptr()), Int(means.unsafe_ptr()), k,
         call[].route.fifth.call, spec.rows_helpers)
+    if call[].x.data < 0:
+        # THE FOLD X WORD (lane vdf-scope-linear3): the split path takes each
+        # split's rows from the fold slot on the device (x_linear/door_run.mojo
+        # `_xl_split_take`) on the same x_prep store.
+        request.fold_store = member_fold_store(call)
     var ran = xl_ridge_cv_splits_run(request, words, Int(fit_words.unsafe_ptr()), Int(status_word.unsafe_ptr()),
         estimator)
     var undefined = False
@@ -1894,23 +1899,15 @@ def _route_slot_x(call: _CallP) -> Bool:
     return member_fold_store_ready(call)
 
 
-def _fold_host_x(slot: _SlotP, operation: Int) -> Bool:
-    """Whether this operation takes the fold's X rows on the HOST: a
-    RidgeCV fit with a splitter cv. Its split path gathers each split's rows
-    from X by the base helper table (x_linear/door_run.mojo
-    `xl_ridge_cv_splits_run`, `base_gather_rows_bytes`), which reads host X.
-    Every other fit and query reads the fold slot."""
-    return operation == MEMBER_OP_FIT and _kind(slot) == XL_MEMBER_RIDGE_CV and slot[].params[3] != 0.0
-
-
 def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
     """An operation over the rows `call.row_index` of the WHOLE host X
     (core/member_fold_x.mojo): X resident in the caller's scope, the fold's
     rows taken on the device and read by the x_linear fit and decision
     entries (THE FOLD X WORD); y (values or int32 class codes), THE GIVEN y
     and the weights are the base's columns taken bitwise through the index on
-    the host. `_fold_host_x` names the one case whose X rows are taken on the
-    host (in parallel). Views restored before this returns or raises."""
+    the host. Every fit and query reads the fold slot (lane vdf-scope-linear3:
+    RidgeCV's split path takes each split's rows from it on the device).
+    Views restored before this returns or raises."""
     var estimator = _name(slot)
     var x = call[].x
     var y = call[].y
@@ -1918,20 +1915,13 @@ def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
     var weights = call[].weights
     var index = call[].row_index
     var fold = MemberFoldX()
-    var host_x = List[Float32]()
     var host_y = List[UInt64]()
     var host_g = List[UInt64]()
     var host_w = List[UInt64]()
     var failure = String("")
     try:
-        if _fold_host_x(slot, operation):
-            member_fold_index(call, fold, estimator)
-            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
-            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
-            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
-        else:
-            member_fold_x_open(call, fold, estimator)
-            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        member_fold_x_open(call, fold, estimator)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
         if y.rows > 0 and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_SCORE):
             if not y.dense_host(y.dtype) or y.rows != x.rows:
                 raise Error("ValueError: X and y have different numbers of rows")
@@ -1957,7 +1947,6 @@ def _fold_op(slot: _SlotP, call: _CallP, operation: Int) raises:
     except close_error:
         if failure.byte_length() == 0:
             failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
-    _ = host_x^
     _ = host_y^
     _ = host_g^
     _ = host_w^

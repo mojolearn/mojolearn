@@ -520,21 +520,15 @@ def _fold_device_ols(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin],
     centered TSQR (`XD_OLS_TSQR_R`, x_decomp/device.mojo `ols_tsqr_factor`
     reads THE FOLD X WORD): fit_intercept, no sample weights, one target and
     the plan `linear_ols_plan` / `linear_ols_one_entry` choose (the same two
-    probes the fit makes). Every other fit takes the fold's rows on the host."""
+    probes the fit makes). Lane vdf-scope-linear3: every other fit route
+    reads it too (weighted, fit_intercept=False, the resident OLS, LF_OLS and
+    the LF_PREP centering; core/linear_ols_run.mojo), so a fit of one target
+    always reads the fold on the device."""
     if call[].x.cols < 1:
         return False
     if operation != MEMBER_OP_FIT:
         return slot[].targets <= 1 and _route_slot_x(call)
-    if (call[].weights.rows > 0 or not slot[].intercept or call[].y.cols != 1
-            or call[].row_index.rows < call[].x.cols + 1 or not call[].route.has_fourth):
-        return False
-    try:
-        var plan = linear_ols_plan(call[].route.entry.call, call[].row_index.rows, call[].x.cols, "LinearRegression")
-        if not plan.tsqr:
-            return False
-        if not linear_ols_one_entry(plan, call[].route.fourth.call, True, False):
-            return False
-    except:
+    if call[].y.cols != 1:
         return False
     return _route_slot_x(call)
 

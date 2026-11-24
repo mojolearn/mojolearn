@@ -68,8 +68,7 @@ from core.member_abi import (
 from core.member_families import MEMBER_FAMILY_KERNEL_APPROX
 from core.device_route import DEVICE_GPU
 from core.member_fold_x import (
-    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
-    member_fold_store_ready,
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_store_ready,
 )
 from core.member_notices import member_notice_add, MEMBER_NOTICE_NYSTROEM_COMPONENTS, MEMBER_NOTICE_WORDS
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
@@ -344,47 +343,44 @@ def _fit(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
 
 
-def _fold_device(slot: _Slot, call: _Call, operation: Int) -> Bool:
-    """Whether this fold operation reads THE FOLD X WORD: the provider's
-    pointer entries (`_upload_checked`, which tests the words on the device)
-    on a GPU image: the transforms with flags bit 3, Nystroem's fit with bit
-    2, RBFSampler's fit (it reads no X but its width) always; never the
-    chi2 kernels (their x >= 0 test reads host X) nor gamma='scale' (its
-    exact limbs read host X)."""
-    if call[].route.device != DEVICE_GPU or not member_fold_store_ready(call):
+def _route_fold(call: _Call) -> Bool:
+    """Whether every fold operation of this route reads THE FOLD X WORD (lane
+    vdf-scope-linear3): a GPU image with the x_prep store whose transforms
+    read X by address (flags bit 3) and, for Nystroem (or no state: the
+    family's union), whose fit does too (bit 2; RBFSampler's fit reads X
+    only for gamma='scale', through the limbs entry, which reads the word).
+    The chi2 kernels' x >= 0 test (kernel_methods/estimator.mojo
+    `nys_chi2_fold_check`) and gamma='scale''s limbs
+    (svm/impl/scale_gamma_device.mojo) read the slot on the device."""
+    if call[].route.device != DEVICE_GPU or (call[].route.flags & 4) == 0 or not member_fold_store_ready(call):
         return False
-    var kernel = Int(slot[].params[1])
-    if _nystroem(slot) and (kernel == _KERNEL_CHI2 or kernel == _KERNEL_ADDITIVE_CHI2):
-        return False
-    var flags = call[].route.flags
-    if operation == MEMBER_OP_FIT:
-        if Int(slot[].params[3]) == 2:
+    var nystroem = True
+    if call[].state != 0:
+        try:
+            nystroem = _nystroem(_Slot(unsafe_from_address=_lookup(call[].state, False)))
+        except:
             return False
-        return (flags & 2) != 0 if _nystroem(slot) else True
-    return (flags & 4) != 0
+    return (call[].route.flags & 2) != 0 or not nystroem
 
 
 def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
     """FIT / TRANSFORM over the rows `call.row_index` of the WHOLE host X
     (core/member_fold_x.mojo): X resident in the caller's scope, the fold's
-    rows taken on the device and read by the provider (THE FOLD X WORD,
-    `_fold_device`); any other case takes the rows on the host across its
-    cores. Views restored before this returns or raises."""
+    rows taken on the device and read by the provider (THE FOLD X WORD;
+    `_route_fold`: every operation of the route reads it, lane
+    vdf-scope-linear3, so no host take is left). Views restored before
+    this returns or raises."""
     var estimator = _name(slot)
     var x = call[].x
     var index = call[].row_index
     var fold = MemberFoldX()
-    var host_x = List[Float32]()
+    if not _route_fold(call):
+        raise Error("TypeError: a " + estimator + " member reads a row index only on a GPU route whose fit and "
+                    + "transforms read X by address")
     var failure = String("")
     try:
-        if _fold_device(slot, call, operation):
-            member_fold_x_open(call, fold, estimator)
-            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
-        else:
-            member_fold_index(call, fold, estimator)
-            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
-            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
-            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        member_fold_x_open(call, fold, estimator)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
         call[].row_index = MemberMatrix()
         if operation == MEMBER_OP_FIT:
             _fit(slot, call)
@@ -399,7 +395,6 @@ def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
     except close_error:
         if failure.byte_length() == 0:
             failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
-    _ = host_x^
     if failure.byte_length() > 0:
         raise Error(failure)
 
@@ -553,8 +548,10 @@ def _kernel_approx_member(operation: Int, address: Int) raises -> Int:
             | MEMBER_CAN_NOTICES)
         # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-linear2): a GPU
         # image whose transforms read X by address (flags bit 3) reads THE
-        # FOLD X WORD (`_upload_checked`); `_fold_op`, `_fold_device`.
-        if call[].route.device == DEVICE_GPU and (call[].route.flags & 4) != 0 and member_fold_store_ready(call):
+        # FOLD X WORD (`_upload_checked`); `_fold_op`, `_route_fold`. Lane
+        # vdf-scope-linear3: only where EVERY operation reads it (Nystroem's
+        # fit by address too, flags bit 2).
+        if _route_fold(call):
             bits |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         return bits
     if operation == MEMBER_OP_NEW:

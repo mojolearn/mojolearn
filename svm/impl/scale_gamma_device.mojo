@@ -13,6 +13,7 @@ The Python entry points are in `providers/python/svm_impl_scale_gamma_device_pya
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.fold_x_device import fold_x_fill
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -104,6 +105,15 @@ def scale_gamma_limbs_device(ctx: DeviceContext, x_addr: Int, count: Int, dst_ad
     if count == 0:
         for k in range(SG_SLOTS):
             dst[k] = 0
+        return
+    if x_addr < 0:
+        # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear3): a
+        # member fold's rows in a device store slot, one device copy; the
+        # same kernels over the same bits.
+        var d_f = ctx.enqueue_create_buffer[DType.float32](count)
+        fold_x_fill(ctx, d_f, x_addr, count)
+        _scale_gamma_limbs_run(ctx, Int(d_f.unsafe_ptr()), count, dst_addr)
+        _ = d_f^
         return
     var d_x = ctx.enqueue_create_buffer[DType.uint32](count)
     ctx.enqueue_copy(dst_buf=d_x, src_ptr=_U32P(unsafe_from_address=x_addr))

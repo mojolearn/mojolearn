@@ -14,6 +14,7 @@ total once to float64 bits. Center and scale: one thread per cell."""
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.fold_x_device import fold_x_fill
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
@@ -128,7 +129,7 @@ def col_sums_device(ctx: DeviceContext, x: Int, dst: Int, rows: Int, cols: Int) 
     var rb = cs_rows_per_block(rows)
     var nrb = (rows + rb - 1) // rb
     var d_x = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=F32P(unsafe_from_address=x))
+    fold_x_fill(ctx, d_x, x, cells)  # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear3): host X, or a fold slot
     var d_p = ctx.enqueue_create_buffer[DType.int64](nrb * cols * CS_WORDS)
     var d_o = ctx.enqueue_create_buffer[DType.uint64](cols)
     var threads = nrb * cols
@@ -151,7 +152,7 @@ def center_device(ctx: DeviceContext, x: Int, mu: Int, dst: Int, rows: Int, cols
     var d_x = ctx.enqueue_create_buffer[DType.float32](cells)
     var d_m = ctx.enqueue_create_buffer[DType.float32](cols)
     var d_o = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=F32P(unsafe_from_address=x))
+    fold_x_fill(ctx, d_x, x, cells)  # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear3): host X, or a fold slot
     ctx.enqueue_copy(dst_buf=d_m, src_ptr=F32P(unsafe_from_address=mu))
     ctx.enqueue_function[center_kernel](d_x.unsafe_ptr(), d_m.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
                                         grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
@@ -170,7 +171,7 @@ def scale_rows_device(ctx: DeviceContext, x: Int, w: Int, dst: Int, rows: Int, c
     var d_x = ctx.enqueue_create_buffer[DType.float32](cells)
     var d_w = ctx.enqueue_create_buffer[DType.float32](rows)
     var d_o = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=F32P(unsafe_from_address=x))
+    fold_x_fill(ctx, d_x, x, cells)  # THE FOLD X WORD (core/fold_x_device.mojo, lane vdf-scope-linear3): host X, or a fold slot
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=F32P(unsafe_from_address=w))
     ctx.enqueue_function[scale_rows_kernel](d_x.unsafe_ptr(), d_w.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
                                             grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
@@ -293,7 +294,7 @@ def col_sums_pair_device(ctx: DeviceContext, x: Int, y: Int, sx: Int, sy: Int, r
     var dy = ctx.enqueue_create_buffer[DType.float32](rows)
     var dsx = ctx.enqueue_create_buffer[DType.uint64](cols)
     var dsy = ctx.enqueue_create_buffer[DType.uint64](1)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=F32P(unsafe_from_address=x))
+    fold_x_fill(ctx, dx, x, rows * cols)  # THE FOLD X WORD (lane vdf-scope-linear3): host X, or a fold slot
     ctx.enqueue_copy(dst_buf=dy, src_ptr=F32P(unsafe_from_address=y))
     col_sums_pair_buf(ctx, dx, dy, dsx, dsy, rows, cols)
     ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=sx), src_buf=dsx)

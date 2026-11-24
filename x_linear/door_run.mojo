@@ -23,7 +23,10 @@ from core.admitted_refusals import admitted_finite_refuse
 from core.admitted_f32_plan import admitted_weights_run
 from core.host_finite_scan import host_all_finite_f32
 from core.metrics_entry_table import MR_R2, MR_R2_WEIGHTED
-from core.entry_table import EntryRef
+from core.entry_table import EntryRef, entry_ref_unresolved
+from core.prep_entry_table import xp_transport_call
+from core.fold_x_device import fold_x_slot, fold_x_word
+from x_prep.transport_abi import XP_DEV_TAKE_ROWS, XP_DEV_FREE
 from core.base_helpers_calls import (
     base_assign_fold_i64, base_check_indices_i64, base_count_fold_hits_i64, base_mark_split_roles_f32,
     base_row_means_f64, base_reduce_stat, base_reduce_stat_int, base_gather_rows_bytes,
@@ -724,6 +727,12 @@ struct XlRidgeCvRequest(Movable):
     var k: Int
     var r2: NativeDescriptorCall
     var helpers: EntryRef
+    #: THE FOLD X WORD's store (lane vdf-scope-linear3): when `x` is a fold
+    #: word (negative, core/fold_x_device.mojo) the caller sets the x_prep
+    #: family store holding its slot, and the split path takes each split's
+    #: rows from that slot on the device (`_xl_split_take`). Unresolved
+    #: otherwise (host X: the base helper gathers).
+    var fold_store: EntryRef
 
     def __init__(out self, entry: NativeDescriptorCall, x: Int, n: Int, d: Int, y: Int, weighted: Bool,
                  fit_intercept: Bool, var alphas: List[Float64], dst: Int, folds: Int, scores: Int, means: Int,
@@ -743,6 +752,7 @@ struct XlRidgeCvRequest(Movable):
         self.k = k
         self.r2 = r2
         self.helpers = helpers
+        self.fold_store = entry_ref_unresolved()
 
 
 def xl_ridge_out(d: Int, grid: Int) -> Int:
@@ -975,15 +985,34 @@ def _xl_ridge_split_run(request: XlRidgeCvRequest, splits: XlSplitWords, s: Int,
     var n_te = splits.test_sizes[s]
     var tr = splits.train[s]
     var te = splits.test[s]
-    var x_train = List[Float32](length=n_tr * d if n_tr * d > 0 else 1, fill=0.0)
+    var on_device = request.x < 0
+    var x_train = List[Float32](length=n_tr * d if (n_tr * d > 0 and not on_device) else 1, fill=0.0)
     var y_train = List[Float32](length=2 * n_tr if weighted else n_tr, fill=0.0)
-    var x_test = List[Float32](length=n_te * d if n_te * d > 0 else 1, fill=0.0)
+    var x_test = List[Float32](length=n_te * d if (n_te * d > 0 and not on_device) else 1, fill=0.0)
     var y_test = List[Float32](length=n_te, fill=0.0)
     var w_test = List[Float32](length=n_te if weighted else 1, fill=0.0)
     var pred = List[Float32](length=n_te, fill=0.0)
-    base_gather_rows_bytes(request.helpers, request.x, Int(x_train.unsafe_ptr()), tr, n, n_tr, 4 * d)
+    var x_train_at = Int(x_train.unsafe_ptr())
+    var x_test_at = Int(x_test.unsafe_ptr())
+    var train_slot = -1
+    var test_slot = -1
+    if on_device:
+        # THE FOLD X WORD (lane vdf-scope-linear3): the split's rows of the
+        # fold slot taken ON THE DEVICE (the x_prep store's take, the same
+        # bytes in the same order as the gather); the fit and the decision
+        # entries read the new slots through `fold_x_fill`.
+        train_slot = _xl_split_take(request, tr, n_tr)
+        try:
+            test_slot = _xl_split_take(request, te, n_te)
+        except problem:
+            _xl_split_free(request, train_slot)
+            raise problem^
+        x_train_at = fold_x_word(train_slot)
+        x_test_at = fold_x_word(test_slot)
+    else:
+        base_gather_rows_bytes(request.helpers, request.x, x_train_at, tr, n, n_tr, 4 * d)
+        base_gather_rows_bytes(request.helpers, request.x, x_test_at, te, n, n_te, 4 * d)
     base_gather_rows_bytes(request.helpers, request.y, Int(y_train.unsafe_ptr()), tr, n, n_tr, 4)
-    base_gather_rows_bytes(request.helpers, request.x, Int(x_test.unsafe_ptr()), te, n, n_te, 4 * d)
     base_gather_rows_bytes(request.helpers, request.y, Int(y_test.unsafe_ptr()), te, n, n_te, 4)
     var w_test_at = 0
     if weighted:
@@ -991,10 +1020,24 @@ def _xl_ridge_split_run(request: XlRidgeCvRequest, splits: XlSplitWords, s: Int,
         base_gather_rows_bytes(request.helpers, weights, Int(y_train.unsafe_ptr()) + 4 * n_tr, tr, n, n_tr, 4)
         base_gather_rows_bytes(request.helpers, weights, Int(w_test.unsafe_ptr()), te, n, n_te, 4)
         w_test_at = Int(w_test.unsafe_ptr())
-    var fold = XlRidgeFoldRequest(Int(x_train.unsafe_ptr()), n_tr, Int(y_train.unsafe_ptr()),
-                                  Int(x_test.unsafe_ptr()), n_te, Int(y_test.unsafe_ptr()), w_test_at, fit,
+    var fold = XlRidgeFoldRequest(x_train_at, n_tr, Int(y_train.unsafe_ptr()),
+                                  x_test_at, n_te, Int(y_test.unsafe_ptr()), w_test_at, fit,
                                   Int(pred.unsafe_ptr()), status, s)
-    var singular = xl_ridge_cv_fold_run(request, fold, est)
+    var singular = -1
+    var failure = String("")
+    try:
+        singular = xl_ridge_cv_fold_run(request, fold, est)
+    except problem:
+        failure = String(problem)
+    # the entries synchronized their streams before they returned
+    try:
+        _xl_split_free(request, train_slot)
+        _xl_split_free(request, test_slot)
+    except free_problem:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: RidgeCV: a split's device rows were not freed: " + String(free_problem)
+    if failure.byte_length() > 0:
+        raise Error(failure)
     # the gathered rows are read through the fold's RUN above
     _ = len(x_train)
     _ = len(y_train)
@@ -1003,6 +1046,22 @@ def _xl_ridge_split_run(request: XlRidgeCvRequest, splits: XlSplitWords, s: Int,
     _ = len(w_test)
     _ = len(pred)
     return singular >= 0
+
+
+def _xl_split_take(request: XlRidgeCvRequest, rows: Int, count: Int) raises -> Int:
+    """Rows `rows` (int64, `count` of them) of the fold slot `request.x`
+    names, d words a row, taken on the device into a fresh slot of
+    `request.fold_store` (its id; `take_rows` waited for the store's context)."""
+    var source: List[Int] = [rows]
+    var counts: List[Int] = [fold_x_slot(request.x), request.d, count]
+    return xp_transport_call(request.fold_store, XP_DEV_TAKE_ROWS, source, counts)
+
+
+def _xl_split_free(request: XlRidgeCvRequest, slot: Int) raises:
+    """Free a slot `_xl_split_take` returned (no-op for -1)."""
+    if slot >= 0:
+        var ids: List[Int] = [slot]
+        _ = xp_transport_call(request.fold_store, XP_DEV_FREE, List[Int](), ids)
 
 
 def xl_ridge_cv_choose_run(request: XlRidgeCvRequest, undefined: Bool) raises -> Int:

@@ -76,7 +76,7 @@ from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
 from core.member_families import MEMBER_FAMILY_KERNEL_RIDGE
 from core.device_route import DEVICE_GPU
 from core.member_fold_x import (
-    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
+    MemberFoldX, member_fold_x_open, member_fold_x_close,
     member_fold_take_into, member_fold_store_ready,
 )
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
@@ -529,7 +529,11 @@ def _kernel_ridge_member(operation: Int, address: Int) raises -> Int:
         # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-linear2): a
         # GPU image's pointer fit and device predict read THE FOLD X WORD
         # through DeviceQueryX (core/device_query_x.mojo); `_fold_op`.
-        if _route_fold(call):
+        # Lane vdf-scope-linear3: the chi2 kernels too (their x >= 0 test of a
+        # fold slot runs on the device, kernel_methods/estimator.mojo
+        # `krr_chi2_fold_check`); a 'precomputed' state answers no fold: its X
+        # is a kernel matrix, whose fold is a row AND column take.
+        if _route_fold(call) and not (call[].state != 0 and _precomputed_state(call[].state)):
             bits |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
         return bits
     if operation == MEMBER_OP_NEW:
@@ -583,36 +587,44 @@ def _route_fold(call: _Call) -> Bool:
     return call[].route.device == DEVICE_GPU and (call[].route.flags & 1) != 0 and member_fold_store_ready(call)
 
 
+def _precomputed_state(state: Int) -> Bool:
+    """Whether the live state's kernel is 'precomputed' (False on a bad word:
+    the capability answer stays the family's)."""
+    try:
+        var held = _Slot(unsafe_from_address=_lookup(state, False))
+        return Int(held[].params[0]) == _KERNEL_PRECOMPUTED
+    except:
+        return False
+
+
 def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
     """FIT / PREDICT over the rows `call.row_index` of the WHOLE host X
     (core/member_fold_x.mojo): X resident in the caller's scope, the fold's
     rows taken on the device and read by DeviceQueryX in the provider's
-    entries (THE FOLD X WORD; its finite test on the device). The chi2
-    kernels (their x >= 0 test reads host X) and 'precomputed' (a kernel
-    matrix, not rows of a design) take the fold's rows on the host across
-    its cores. y and the weights are taken bitwise through the index on
-    the host. Views restored before this returns or raises."""
+    entries (THE FOLD X WORD; its finite test, and for the chi2 kernels its
+    x >= 0 test, on the device: lane vdf-scope-linear3). 'precomputed' is
+    refused: its X is a kernel matrix, a row-only fold of it is no kernel
+    matrix of the fold (the caller takes rows and columns itself; the
+    member answers no fold for it). y and the weights are taken bitwise
+    through the index on the host. Views restored before this returns or
+    raises."""
     var x = call[].x
     var y = call[].y
     var weights = call[].weights
     var index = call[].row_index
     var fold = MemberFoldX()
-    var host_x = List[Float32]()
     var host_y = List[UInt64]()
     var host_w = List[UInt64]()
-    var kernel = Int(slot[].params[0])
-    var device = (_route_fold(call) and kernel != _KERNEL_CHI2 and kernel != _KERNEL_ADDITIVE_CHI2
-        and kernel != _KERNEL_PRECOMPUTED)
+    if Int(slot[].params[0]) == _KERNEL_PRECOMPUTED:
+        raise Error("TypeError: a KernelRidge member with kernel='precomputed' takes no row index (its X is the "
+                    + "kernel matrix: the caller selects its rows and columns)")
+    if not _route_fold(call):
+        raise Error("TypeError: a KernelRidge member reads a row index only on a GPU route with the pointer fit "
+                    + "and the x_prep store")
     var failure = String("")
     try:
-        if device:
-            member_fold_x_open(call, fold, _WHERE)
-            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
-        else:
-            member_fold_index(call, fold, _WHERE)
-            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
-            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
-            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        member_fold_x_open(call, fold, _WHERE)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
         if operation == MEMBER_OP_FIT:
             if not y.dense_host(MEMBER_F32) or y.rows != x.rows:
                 raise Error("mojolearn KernelRidge: y has " + String(y.rows) + " rows, X has " + String(x.rows))
@@ -624,8 +636,6 @@ def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
         call[].row_index = MemberMatrix()
         if operation == MEMBER_OP_FIT:
             _fit(slot, call)
-            if not device:
-                _own_fit(slot)  # the host fold buffer dies below: the state owns X_fit_
         else:
             _predict(slot, call)
     except error:
@@ -639,7 +649,6 @@ def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
     except close_error:
         if failure.byte_length() == 0:
             failure = "RuntimeError: a KernelRidge member's fold slot was not freed: " + String(close_error)
-    _ = host_x^
     _ = host_y^
     _ = host_w^
     if failure.byte_length() > 0:
