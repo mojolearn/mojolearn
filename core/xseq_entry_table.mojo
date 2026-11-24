@@ -42,6 +42,7 @@ numerical work to split.
 """
 from core.entry_table import EntryRef, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
+from x_prep.transport_abi import XP_OP_COUNT
 
 comptime XSEQ_GLUE_ABI = "mojolearn.sequence.x_sequence.glue.v1"
 comptime XS_THETA = 0
@@ -62,6 +63,12 @@ comptime XS_STL = 14
 comptime XS_OP_COUNT = 15
 
 comptime XSEQ_ENTRY_GLUE = 0
+# Lane vdf-scope-neural (2026-11-24): entry 1 of a GPU image's table is its
+# member device store (sequence/seq_member_store.mojo `seq_member_store_v1`),
+# a transport entry with the x_prep numbering (x_prep/transport_abi.mojo). A
+# host image publishes the glue entry only: `xseq_store_ref` refuses there.
+comptime XSEQ_ENTRY_STORE = 1
+comptime XSEQ_STORE_ABI = "mojolearn.sequence.x_sequence.member_store.v1"
 
 
 @fieldwise_init
@@ -91,10 +98,25 @@ def _xseq_key_check(key: XseqEntryKey) raises:
 
 
 def xseq_table_publish(key: XseqEntryKey, publisher: Int, glue: NativeDescriptorCall) raises:
-    _xseq_key_check(key)
     var schemas: List[String] = [String(XSEQ_GLUE_ABI)]
     var operations: List[Int] = [XS_OP_COUNT]
     var entries: List[NativeDescriptorCall] = [glue]
+    _xseq_table_publish(key, publisher, schemas, operations, entries)
+
+
+def xseq_table_publish(key: XseqEntryKey, publisher: Int, glue: NativeDescriptorCall,
+                       store: NativeDescriptorCall) raises:
+    """The GPU image's table: the glue entry and its member device store
+    (`XSEQ_ENTRY_STORE`)."""
+    var schemas: List[String] = [String(XSEQ_GLUE_ABI), String(XSEQ_STORE_ABI)]
+    var operations: List[Int] = [XS_OP_COUNT, XP_OP_COUNT]
+    var entries: List[NativeDescriptorCall] = [glue, store]
+    _xseq_table_publish(key, publisher, schemas, operations, entries)
+
+
+def _xseq_table_publish(key: XseqEntryKey, publisher: Int, schemas: List[String], operations: List[Int],
+                        entries: List[NativeDescriptorCall]) raises:
+    _xseq_key_check(key)
     if key.mode == 1 and key.vendor == 0:
         entry_table_publish["MojolearnEntriesXSequenceIdenticalCPUV1"](key.mode, key.vendor, publisher, schemas, operations, entries)
     elif key.mode == 0 and key.vendor == 0:
@@ -141,6 +163,14 @@ def xseq_table_entry(key: XseqEntryKey, index: Int, schema: String, operations: 
 
 def xseq_glue_entry(key: XseqEntryKey) raises -> NativeDescriptorCall:
     return xseq_table_entry(key, XSEQ_ENTRY_GLUE, String(XSEQ_GLUE_ABI), XS_OP_COUNT)
+
+
+def xseq_store_ref(key: XseqEntryKey) raises -> EntryRef:
+    """The GPU image's member device store (`XSEQ_ENTRY_STORE`), resolved
+    once by a member's UNPACK; raises on an image that publishes none (the
+    host image): the caller then answers no row index."""
+    return EntryRef(xseq_table_entry(key, XSEQ_ENTRY_STORE, String(XSEQ_STORE_ABI), XP_OP_COUNT),
+                    entry_ref_word(key.mode, key.vendor, XP_OP_COUNT))
 
 
 def xseq_glue_ref(key: XseqEntryKey) raises -> EntryRef:

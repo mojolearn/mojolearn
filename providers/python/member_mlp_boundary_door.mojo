@@ -39,6 +39,7 @@ from bindings.xseq_neural_native_door import (
 from bindings.xseq_score_native_door import _metrics_key
 from providers.python.device_route_boundary_door import DeviceRouteOwner
 from core.entry_table import EntryRef
+from core.seq_member_rows import seq_rows_admit
 from core.metrics_entry_table import metrics_r2_entry
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -76,6 +77,7 @@ def mlp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
             route.has_third = True
         except:
             route.has_third = False
+    seq_rows_admit(route)
     owner.plan.route = route
     var activation = xseq_int(py_item(context, nk[].k_xseq_mlp_activations)[py_item(fields, nk[].k_activation)])
     var solver = xseq_int(py_item(context, nk[].k_xseq_mlp_solvers)[py_item(fields, nk[].k_solver)])
