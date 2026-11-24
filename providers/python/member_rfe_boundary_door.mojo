@@ -62,6 +62,7 @@ from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.prep_classify_prog_run import ClsRunPlan
 from bindings.prep_select_run import (
     RFE_SELECT_HALF, RFE_SELECT_FRACTION, RFE_SELECT_COUNT, rfe_member_source_named, rfe_block_of, RfeSource,
+    RFE_COMPUTED_BAYES_SIGMA,
 )
 from core.member_abi import (
     MemberPlan, member_kind_capabilities,
@@ -379,6 +380,12 @@ def rfe_dotted_path(estimator: PythonObject, g: PythonObject, context: PythonObj
             path.leaf_word = True
         var source = rfe_member_source_named(family, leaf.plan.kind, member_kind_capabilities(leaf.plan), leaf_name,
                                              leaf_class)
+        if source.block >= RFE_COMPUTED_BAYES_SIGMA:
+            # Round b (lane mf-member8): a computed attribute (BayesianRidge sigma_, X_scale_) is served on a leaf
+            # base only; through a META path it has no forwarded block.
+            path.why = ("TypeError: mojolearn: RFE importance_getter '" + String(g) + "' is not one fitted "
+                        + "estimator RFE can follow natively (a computed attribute of a nested estimator)")
+            return path^
         hops.append(Float64(rfe_block_of(source.block)))
         path.forward_block = META_BLOCK_FORWARD + (source.block - rfe_block_of(source.block))
         path.hops = hops^

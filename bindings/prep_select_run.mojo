@@ -58,7 +58,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_own,
     MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES, MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF,
-    MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_BLOCK_FAMILY,
+    MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_SCALARS,
 )
 from core.member_families import (
     MEMBER_FAMILY_NAIVE_BAYES, MEMBER_FAMILY_DISCRIMINANT, MEMBER_FAMILY_KERNEL_SVM, MEMBER_FAMILY_KERNEL_RIDGE,
@@ -67,6 +67,7 @@ from core.member_families import (
     MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_PLS, MEMBER_FAMILY_XNEIGHBORS,
 )
 from core.member_notices import member_notices_take
+from x_linear.door_run import xl_bayes_sigma_run
 from core.member_set_run import MemberFitExtras, member_fit_extras_apply, member_fit_extras_clear
 
 comptime SEL_F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -505,6 +506,13 @@ def rfe_member_source(family: Int, mask: Int, getter: String, estimator: String)
 # deleted door's words there (`_keys_of`: "RFE importances have k columns, expected m").
 comptime _ROW_SHIFT = 65536
 comptime _F = MEMBER_BLOCK_FAMILY
+# Round b (lane mf-member8): attributes a PACK computes rather than copies, served natively by the getter (no
+# block code): BayesianRidge's sigma_ (V diag(1 / (alpha_ ev + lambda_)) V', formed from the factor block and the
+# scalars as its first read forms it: x_linear/door_run.mojo `xl_bayes_sigma_run`), and the X_scale_ of
+# BayesianRidge / ARDRegression (ones, as PACK writes them).
+comptime RFE_COMPUTED_BAYES_SIGMA = 1099511627776   # 2^40
+comptime RFE_COMPUTED_ONES = 2199023255552          # 2^41
+comptime _XL_BLOCK_FACTOR = MEMBER_BLOCK_FAMILY + 10  # core/xlinear_member.mojo XL_MEMBER_BLOCK_FACTOR
 
 
 def rfe_block_code(block: Int, row: Int) -> Int:
@@ -692,6 +700,12 @@ def rfe_named_block(family: Int, kind: Int, name: String) -> Int:
     if family == MEMBER_FAMILY_XLINEAR:
         if kind == 5 and name == "lambda_":
             return _F + 1  # XL_MEMBER_BLOCK_LAMBDA (ARDRegression)
+        if kind == 5 and name == "sigma_":
+            return _F + 8  # XL_MEMBER_BLOCK_SIGMA (ARDRegression, kept x kept: the width check decides)
+        if kind == 4 and name == "sigma_":
+            return RFE_COMPUTED_BAYES_SIGMA
+        if (kind == 4 or kind == 5) and name == "X_scale_":
+            return RFE_COMPUTED_ONES
         return _F + 9 if ((kind == 4 or kind == 5) and name == "X_offset_") else 0  # XL_MEMBER_BLOCK_X_OFFSET
     if family == MEMBER_FAMILY_XNEIGHBORS and kind == 0:
         # Round b (lane mf-member8): NearestCentroid (core/xneighbors_member.mojo NC_BLOCK_*): centroids_ and
@@ -765,6 +779,12 @@ def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: In
     nothing was staged."""
     rfe_member_fit(plan, call, x, n, m, y, y_dtype, extras, columns)
     member_notices_take(plan, call.state, notices)
+    if block == RFE_COMPUTED_ONES:
+        # X_scale_: m ones (squared, m ones), as PACK writes it.
+        rows = 1
+        return List[Float32](length=m, fill=1.0)
+    if block == RFE_COMPUTED_BAYES_SIGMA:
+        return _rfe_bayes_sigma(plan, call, m, rows)
     # A block code (lane mf-rfe7b, `rfe_block_code`): the block, and the row a named attribute is of it.
     var row = rfe_row_of(block)
     call.block = rfe_block_of(block)
@@ -814,6 +834,29 @@ def rfe_member_importances(plan: MemberPlan, mut call: MemberCall, x: Int, n: In
             words[i] = Float32(src[i])
     else:
         raise Error("TypeError: mojolearn: RFE importances must be a numeric host block")
+    return words^
+
+
+def _rfe_bayes_sigma(plan: MemberPlan, mut call: MemberCall, m: Int, mut rows: Int) raises -> List[Float32]:
+    """BayesianRidge's sigma_ of the round's fitted state (m x m words, `rows` = m), formed from its factor block
+    ((m + 1) x m: V, then the clamped eigenvalues) and its scalars [intercept, alpha_, lambda_, n_iter] by the
+    property's own RUN (`xl_bayes_sigma_run`, parallel over the cells)."""
+    call.flags = 0
+    call.block = MEMBER_BLOCK_SCALARS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    if not call.dst.dense_host(MEMBER_F64) or call.dst.rows * call.dst.cols < 3:
+        raise Error("mojolearn: RFE: a BayesianRidge member's scalars are [intercept, alpha_, lambda_, n_iter]")
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    var alpha = scalars[1]
+    var lam = scalars[2]
+    call.block = _XL_BLOCK_FACTOR
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var view = call.dst
+    if view.cols != m or view.rows != m + 1 or not view.dense_host(MEMBER_F32):
+        raise Error("mojolearn: RFE importances have " + String(view.cols) + " columns, expected " + String(m))
+    var words = List[Float32](length=m * m, fill=0)
+    xl_bayes_sigma_run(view.data, view.data + 4 * m * m, m, alpha, lam, Int(words.unsafe_ptr()))
+    rows = m
     return words^
 
 
