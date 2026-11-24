@@ -68,7 +68,8 @@ from core.member_abi import (
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_STD, MEMBER_CAN_CLASSIFIER, MEMBER_BORROWS_FIT,
     MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_IMPORT,
 )
-from core.member_families import MEMBER_FAMILY_GP, MEMBER_FAMILY_XLINEAR
+from core.member_families import MEMBER_FAMILY_GP, MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_TREE
+from bindings.trees_public_forest_door import forest_kind, forest_dt_random_inner, forest_dt_random_adopt
 from bindings.member_held_door import MemberHeld, member_held, member_held_adopt, member_held_release
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -452,6 +453,11 @@ struct _Member(Movable):
     var code_dtype: Int
     var cw_refusal: String
     var marker_word: Int
+    # A DecisionTree* splitter='random' estimator (lane w3f2-cal): `template`
+    # is its clone's inner ExtraTrees forest; `dt_context` the tree's family
+    # context, which builds each later step's inner forest at PACK.
+    var dt_random: Bool
+    var dt_context: PythonObject
 
     def __init__(out self):
         self.cw_refusal = String("")
@@ -466,6 +472,8 @@ struct _Member(Movable):
         self.classifier = False
         self.code_dtype = MEMBER_I32
         self.marker_word = -1
+        self.dt_random = False
+        self.dt_context = PythonObject(None)
 
 
 def _posterior_family(family: Int) -> Bool:
@@ -507,6 +515,28 @@ def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonOb
     var member_context = plan["context"]
     var fields_get = plan["fields_get"]
     var fields = py_call(fields_get, template, py_type(template))
+    # A DecisionTree* splitter='random' (lane w3f2-cal): the tree's own fit
+    # grows its inner one-tree ExtraTrees forest (bindings/trees_public_forest_door.mojo
+    # `dt_random_fit`), so its member is that inner forest's, as AdaBoost's
+    # member rounds admit it (providers/python/member_ensemble_boundary_door.mojo,
+    # `forest_dt_random_inner`): the template becomes the clone's unfitted
+    # inner forest, admitted below as an extra-trees member; PACK packs each
+    # step into a clone's inner forest, which the clone adopts (`_member_pack`).
+    # Once per fit; the same rows, seed and settings the tree's own fit hands
+    # its inner forest.
+    var tree_mark = member_mark(plan, b)
+    if tree_mark.family == MEMBER_FAMILY_TREE:
+        var splitter = py_get(fields, "splitter")
+        if splitter is not None and py_type(splitter) is b.str and String(splitter) == "random":
+            out.dt_random = True
+            out.dt_context = member_context
+            template = forest_dt_random_inner(template, forest_kind(template, member_context), member_context)
+            plan = prep_estimator_plan(template, context)
+            if plan is None or py_get(plan, "member") is None:
+                raise Error("TypeError: mojolearn: IterativeImputer requires a mojolearn estimator; got " + name)
+            member_context = plan["context"]
+            fields_get = plan["fields_get"]
+            fields = py_call(fields_get, template, py_type(template))
     # LabelPropagation / LabelSpreading read -1 in y as unlabeled: admitted
     # with deferred labels (an empty list: the codes 0 .. classes-1), each
     # step writes its -1 class's code into the marker word (RUN), as model
@@ -583,11 +613,25 @@ def _member_pack(estimator: PythonObject, member: _Member, mut fit: IterImpMembe
     for s in range(len(fit.states)):  # driver-loop: over the fitted imputation steps (one clone and one pack each)
         var est = member.template
         var fields = member.fields
-        if s > 0:
+        var published_est = est
+        if member.dt_random:
+            # A random-splitter tree (lane w3f2-cal, `_member`): the step's
+            # tree clone, its inner forest built as the tree's own fit builds
+            # it; the step packs into the inner forest, the tree adopts it
+            # (`forest_dt_random_adopt`, its own fit's PACK) before the held
+            # state is handed over, and the tree is the published estimator.
+            published_est = prep_estimator_clone(estimator, context)
+            est = forest_dt_random_inner(published_est, forest_kind(published_est, member.dt_context),
+                                         member.dt_context)
+            fields = py_call(member.fields_get, est, py_type(est))
+        elif s > 0:
             est = prep_estimator_clone(estimator, context)
             fields = py_call(member.fields_get, est, py_type(est))
+            published_est = est
         if len(fit.classes[s]) == 0:
             member_pack(est, fields, member.member_context, b, member.owner.plan, fit.states[s])
+            if member.dt_random:
+                forest_dt_random_adopt(published_est, est)
             if member_held_adopt(est, member.plan_key, member.member_context, member.owner.pins, member.owner.plan,
                                  fit.states[s]):
                 fit.states[s] = 0  # the estimator's now
@@ -606,11 +650,13 @@ def _member_pack(estimator: PythonObject, member: _Member, mut fit: IterImpMembe
                 _ = py_call(values.append, PythonObject(Float64(fit.classes[s][c])))
             var published = _public_labels(values, member.member_context)
             member_pack_labeled(est, fields, member.member_context, b, plan, fit.states[s], published)
+            if member.dt_random:
+                forest_dt_random_adopt(published_est, est)
             if member_held_adopt(est, member.plan_key, member.member_context, member.owner.pins, plan,
                                  fit.states[s]):
                 fit.states[s] = 0  # the estimator's now
             _ = py_call(labels.append, published)
-        _ = py_call(seq.append, Python.tuple(fit.seq_j[s], _int_list(fit.seq_nbl[s]), est))
+        _ = py_call(seq.append, Python.tuple(fit.seq_j[s], _int_list(fit.seq_nbl[s]), published_est))
     return seq
 
 
@@ -851,6 +897,17 @@ def _held_steps(sequence: PythonObject, step_classes: PythonObject, posterior: B
                 raise Error(_unheld(s, est, "that is not a native member"))
             var member_context = plan["context"]
             var fields = py_call(plan["fields_get"], est, py_type(est))
+            # A random-splitter tree's step (lane w3f2-cal) predicts through
+            # its fitted inner ExtraTrees forest, which holds the step's
+            # member state (`_member_pack`), as the tree's own predict does.
+            var inner = py_get(fields, "_random_inner")
+            if inner is not None:
+                est = inner
+                plan = prep_estimator_plan(est, context)
+                if plan is None or py_get(plan, "member") is None:
+                    raise Error(_unheld(s, est, "that is not a native member"))
+                member_context = plan["context"]
+                fields = py_call(plan["fields_get"], est, py_type(est))
             var held = member_held(est, fields, plan, member_context, b, needs)
             if not held.published:
                 held = _held_marker_import(est, fields, plan, member_context, b, step_classes, s, needs)
