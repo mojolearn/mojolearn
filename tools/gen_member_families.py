@@ -244,7 +244,6 @@ from std.python import Python, PythonObject
 from bindings.member_owner_unpack import MemberOwner, member_mark, member_labels_hold, member_labels_take
 from bindings.member_leaf_boundary_door import member_leaf_fill, member_leaf_pack, member_leaf_state
 from bindings.py_balanced import py_setitem
-from bindings.member_class_weight_unpack import member_cw_fill_keyed
 from core.member_abi import MemberPlan, member_resolve_family, MEMBER_CAN_FIT
 from core.member_class_weight import member_cw_start, member_cw_pending
 from core.member_families import (
@@ -341,34 +340,6 @@ def member_admit_serving_deferred(model: PythonObject, fields: PythonObject, pla
     plan with `member_cw_fill_plan` over the encode's classes before any
     fit, and an invalid value or a refused dict raises there."""
     return member_admit_serving_labeled(model, fields, plan, context, b, needs, Python.list())
-
-
-def member_admit_serving_valued(model: PythonObject, fields: PythonObject, plan: PythonObject,
-    context: PythonObject, b: PythonObject, needs: Int, mut refusal: String) -> MemberOwner:
-    """`member_admit_serving` for a FIT caller whose class labels are its
-    target's numeric values, known only in its RUN (IterativeImputer's
-    classifier steps): a class_weight dict is read into the KEYED tail here
-    (bindings/member_class_weight_unpack.mojo `member_cw_fill_keyed`), which
-    each step turns into its own table (core/member_class_weight.mojo
-    `member_cw_from_values`; a key that is not a number marks every step's
-    table absent). What that fill refuses (an invalid value, a value or a
-    key the family refuses) leaves the owner published with the
-    estimator's own words in `refusal`: the caller's RUN raises them at its
-    first classifier fit, where the estimator's own fit raised them (lane
-    mf-left4); before, such an estimator took the caller's door rounds."""
-    try:
-        var owner = member_admit(model, fields, plan, context, b)
-        if owner.published and not owner.plan.member.has(needs):
-            owner.published = False
-        if owner.published:
-            try:
-                if not member_cw_fill_keyed(owner, model, fields, context, b):
-                    owner.published = False
-            except error:
-                refusal = String(error)
-        return owner^
-    except:
-        return MemberOwner()
 
 
 def member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,

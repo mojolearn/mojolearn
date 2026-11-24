@@ -4,8 +4,8 @@
 host classes carry their own member marks, so their steps are fitted through
 the native member on the CPU image their own methods bind. On the CPU route
 the answer is the public class's with device="cpu", bit for bit. A host class
-whose member cannot fit (an inference-only host image) is refused in the
-words it had before its mark."""
+whose member cannot fit (an inference-only host image) is refused in its own
+fit's words (lane mf-iterimp7)."""
 import numpy as np
 import mojolearn as ml
 from mojolearn import _classical_host as host
@@ -58,13 +58,22 @@ def test_host_logistic_member():
 
 
 def test_host_inference_only_refused():
-    # HostLasso's own fit refuses (its host image predicts a saved model only), so its member does not
-    # serve the fit: the refusal it had before its mark
+    # HostLasso's own fit refuses (its host image predicts a saved model only). Since lane mf-iterimp7
+    # (no door rounds) the member admission raises that fit door's own words, where scikit-learn's
+    # first step fit would raise the estimator's: the same words as HostLasso().fit(X, y).
+    X = _data(0)
     try:
-        ml.IterativeImputer(estimator=host.HostLasso()).fit(_data(0))
-        raise AssertionError("no TypeError")
-    except TypeError as error:
-        assert "IterativeImputer requires a mojolearn estimator; got HostLasso" in str(error), error
+        Z = np.nan_to_num(X)
+        host.HostLasso().fit(Z[:, :2], Z[:, 2])
+        raise AssertionError("no ImportError from HostLasso.fit")
+    except ImportError as error:
+        own = str(error)
+    try:
+        ml.IterativeImputer(estimator=host.HostLasso()).fit(X)
+        raise AssertionError("no ImportError")
+    except ImportError as error:
+        assert str(error) == own, (str(error), own)
+        assert "no CPU implementation of the HostLasso fit" in str(error), error
 
 
 if __name__ == "__main__":
