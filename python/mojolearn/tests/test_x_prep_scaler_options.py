@@ -1,14 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """StandardScaler / MinMaxScaler option parity (prep lane item 5): NaN in fit
-and transform, StandardScaler sample_weight, partial_fit for both (the first
-batch equals fit's bits) and copy=False, against scikit-learn. A NaN-free,
+and transform, StandardScaler sample_weight, partial_fit for both, against scikit-learn
+(copy=False, refusals and save/load moved to test_prep_boundary.py). A NaN-free,
 unweighted fit stays the binding's own path and bits (the identity lanes
 standard-scaler*, minmax-scaler* hold those). Run on the GPU binding and with
 MOJOLEARN_VENDOR=cpu on the host binding."""
-import os
-import tempfile
-
 import numpy as np
 import pytest
 
@@ -37,38 +34,6 @@ def _b(a):
 def _close(ours, ref, msg):
     np.testing.assert_allclose(np.asarray(ours, dtype=np.float64), np.asarray(ref, dtype=np.float64),
                                rtol=RTOL, atol=ATOL, err_msg=msg)
-
-
-def test_standard_nan_fit_and_transform():
-    X, Xn = _data()
-    ours = ml.StandardScaler().fit(Xn)
-    ref = skp.StandardScaler().fit(Xn.astype(np.float64))
-    _close(ours.mean_, ref.mean_, "mean_")
-    _close(ours.var_, ref.var_, "var_")
-    _close(ours.scale_, ref.scale_, "scale_")
-    assert np.array_equal(np.asarray(ours.n_samples_seen_), ref.n_samples_seen_)
-    assert np.asarray(ours.var_)[3] == 0 and np.asarray(ours.scale_)[3] == 1
-    T = np.asarray(ours.transform(Xn))
-    R = ref.transform(Xn.astype(np.float64))
-    assert np.array_equal(np.isnan(T), np.isnan(Xn))
-    _close(np.nan_to_num(T), np.nan_to_num(R), "transform")
-    I = np.asarray(ours.inverse_transform(T))
-    assert np.array_equal(np.isnan(I), np.isnan(Xn))
-    # A finite entry takes the binding's own transform arithmetic: the same
-    # bits as the NaN-free transform of the same row.
-    clean = np.asarray(ours.transform(X))
-    ok = ~np.isnan(Xn)
-    assert _b(T[ok]) == _b(clean[ok])
-
-
-def test_standard_nan_free_fit_is_the_binding_path():
-    X, _ = _data()
-    a = ml.StandardScaler().fit(X)
-    assert isinstance(a.n_samples_seen_, int) and a.n_samples_seen_ == X.shape[0]
-    b = ml.StandardScaler().partial_fit(X)
-    for name in ("mean_", "var_", "scale_"):
-        assert _b(getattr(a, name)) == _b(getattr(b, name)), name
-    assert b.n_samples_seen_ == a.n_samples_seen_
 
 
 def test_standard_sample_weight():
@@ -172,59 +137,6 @@ def test_minmax_nan_and_partial_fit():
     q = ml.MinMaxScaler().fit(X[20:]).partial_fit(Z)
     r = skp.MinMaxScaler().fit(X[20:].astype(np.float64)).partial_fit(Z.astype(np.float64))
     assert np.isnan(np.asarray(q.scale_)[4]) and np.isnan(r.scale_[4])
-
-
-def test_copy_false_writes_in_place():
-    X, Xn = _data()
-    for est in (ml.StandardScaler(copy=False), ml.MinMaxScaler(copy=False)):
-        est.fit(X)
-        expect = np.asarray(type(est)().fit(X).transform(X))
-        buf = X.copy()
-        out = est.transform(buf)
-        assert out is buf
-        assert _b(buf) == _b(expect)
-        bufn = Xn.copy()
-        outn = est.transform(bufn)
-        assert outn is bufn and np.array_equal(np.isnan(bufn), np.isnan(Xn))
-    # a float64 input is converted, so it is not written (the reference copies too)
-    X64 = X.astype(np.float64)
-    before = X64.copy()
-    s = ml.StandardScaler(copy=False).fit(X)
-    with pytest.raises(TypeError):
-        s.transform(X64)
-    assert np.array_equal(X64, before)
-    # StandardScaler.transform(copy=True) on a copy=False scaler leaves X alone
-    buf = X.copy()
-    s.transform(buf, copy=True)
-    assert _b(buf) == _b(X)
-
-
-def test_inf_refused_nan_allowed():
-    X, _ = _data()
-    Xi = X.copy()
-    Xi[3, 1] = np.inf
-    for est in (ml.StandardScaler(), ml.MinMaxScaler()):
-        with pytest.raises(ValueError):
-            est.fit(Xi)
-    s = ml.StandardScaler().fit(X)
-    with pytest.raises(ValueError):
-        s.transform(Xi)
-    with pytest.raises(ValueError):
-        ml.StandardScaler().fit(X, sample_weight=np.full(X.shape[0], np.nan, np.float32))
-
-
-def test_save_load_vector_counts():
-    _, Xn = _data()
-    w = np.random.default_rng(1).uniform(0.5, 2, size=Xn.shape[0]).astype(np.float32)
-    for est in (ml.StandardScaler().fit(Xn), ml.StandardScaler().fit(Xn, sample_weight=w),
-                ml.StandardScaler().fit(np.nan_to_num(Xn), sample_weight=w)):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "s.npz")
-            est.save(path)
-            back = ml.StandardScaler.load(path)
-        assert np.array_equal(np.asarray(back.n_samples_seen_), np.asarray(est.n_samples_seen_))
-        assert type(back.n_samples_seen_) is type(est.n_samples_seen_)
-        assert _b(back.transform(Xn)) == _b(est.transform(Xn))
 
 
 if __name__ == "__main__":

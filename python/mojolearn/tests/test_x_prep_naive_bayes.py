@@ -31,26 +31,7 @@ def _check(m, r, X, Xh, attrs, rtol=2e-4, atol=2e-5):
 
 # test_gaussian, test_multinomial, test_bernoulli and test_complement moved to
 # checks/native_tests/prep_naive_bayes.mojo::test_gaussian, ::test_multinomial, ::test_bernoulli and ::test_complement
-# (lane py-delete, 2026-11-23).
-
-
-def test_categorical():
-    rng = np.random.default_rng(4)
-    n, d = 500, 4
-    y = rng.integers(0, 3, n)
-    X = np.clip(rng.integers(0, 4, (n, d)) + (y[:, None] > 0) * rng.integers(0, 2, (n, d)), 0, 4).astype(np.float32)
-    Xh = np.clip(rng.integers(0, 5, (100, d)), 0, 4).astype(np.float32)
-    Xh = np.minimum(Xh, X.max(axis=0))
-    m, r = ml.CategoricalNB(alpha=0.5).fit(X, y), sknb.CategoricalNB(alpha=0.5).fit(X, y)
-    for a, b in zip(m.feature_log_prob_, r.feature_log_prob_):
-        np.testing.assert_allclose(np.asarray(a), b, rtol=2e-4, atol=2e-5)
-    np.testing.assert_allclose(np.asarray(m.predict_proba(Xh)), r.predict_proba(Xh), rtol=1e-3, atol=1e-5)
-    assert np.mean(np.asarray(m.predict(Xh)) == r.predict(Xh)) > 0.99
-
-
-if __name__ == "__main__":
-    test_categorical()
-    print("PASS test_x_prep_naive_bayes (categorical)")
+# (lane py-delete, 2026-11-23). test_categorical: verify lane x-prep-categorical-nb (vdv-pytest-b, 2026-11-24).
 
 
 def test_sample_weight_and_min_categories():
