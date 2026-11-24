@@ -246,9 +246,16 @@ def parse_nodes(repo, paths):
 
 
 def planner_workers():
-    """Planner threads: the allocation's cores (available_resources reads the
-    cgroup and affinity on Linux), never the host's visible CPU count."""
-    return max(1, int(available_resources()[0]))
+    """Planner threads: the allocation's cores (affinity lowered to the cgroup
+    quota on Linux), never the host's visible CPU count. Cores only: a planner
+    thread reserves nothing, so it never calls available_resources (the
+    compiler reservation; a warm build must not touch it)."""
+    if sys.platform == "linux":
+        from build_sizing import cgroup_cpu_limit
+        cores = len(os.sched_getaffinity(0))
+        quota = cgroup_cpu_limit()
+        return max(1, int(min(cores, quota) if quota is not None else cores))
+    return max(1, os.cpu_count() or 1)
 
 
 def parallel_map(function, items, workers):
