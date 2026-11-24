@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # native-check: cpu gpu
-"""Float64 -> float32 narrowing and float32 transposes, moved from
+"""Float64 -> float32 narrowing, moved from
 test_native_convert.py (the native functions of that file).
 
 Every comparison is on raw float32 words, never a tolerance (the narrowing is
 one round-to-nearest-even per element). The oracle is `rne_word` below: an
 integer rounding of the float64 significand written from the IEEE 754 rules,
 independent of the product loops and of the compiler's own cast. NaN payloads
-are not promised: a NaN answer accepts any NaN. A transpose is a pure move, so
-it is compared word for word including NaN payloads and signed zeros.
+are not promised: a NaN answer accepts any NaN.
 
 Fixtures (CONVERT_FIXTURES):
   0..12   flat cast over each of the 13 shapes (`cast_f64_to_f32`)
-  13..25  fused cast and column-major transpose over each shape
-          (`cast_colmajor_f64_to_f32`)
-  26..38  float32 transpose over each shape, both directions (`transpose_f32`)
-  39      every edge value alone, through the flat and the fused helper
-  40      the ties: round to nearest EVEN, never half away from zero
-  41      every tail length 1..39 with a tie in the head and one in the tail
+  13      every edge value alone
+  14      the ties: round to nearest EVEN, never half away from zero
+  15      every tail length 1..39 with a tie in the head and one in the tail
+
+(The fused cast-and-transpose and float32 transpose fixtures went with the
+`cast_colmajor_f64_to_f32` and `transpose_f32` exports, deleted 2026-11-23 on
+lane/sab-host-missed-cls: no product caller.)
 
 The matrices are seeded float64 data (a SplitMix64 stream regenerated here; the
 former NumPy PCG64 stream is not needed because the oracle is computed in this
@@ -31,31 +31,26 @@ from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import cos, log, sqrt
 from std.memory import bitcast
-from core.core_host_impl import transpose_to_f32
 from core.host_helpers_impl import cast_f64_to_f32
 from core.hostptr import f32_ptr, f64_ptr
-from core.mojolearn_shell_impl import cast_f64_to_f32_host, tiled_transpose_to_f32
-from core.hotpath_device_run import hpdev_try_cast_f64_to_f32, hpdev_try_transpose_to_f32
+from core.mojolearn_shell_impl import cast_f64_to_f32_host
+from core.hotpath_device_run import hpdev_try_cast_f64_to_f32
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
 
 
 comptime CONVERT_SHAPES = 13
-comptime CONVERT_FIXTURES = 3 * CONVERT_SHAPES + 3
-comptime CONVERT_EDGE_FIXTURE = 3 * CONVERT_SHAPES
-comptime CONVERT_TIES_FIXTURE = 3 * CONVERT_SHAPES + 1
-comptime CONVERT_TAIL_FIXTURE = 3 * CONVERT_SHAPES + 2
+comptime CONVERT_FIXTURES = CONVERT_SHAPES + 3
+comptime CONVERT_EDGE_FIXTURE = CONVERT_SHAPES
+comptime CONVERT_TIES_FIXTURE = CONVERT_SHAPES + 1
+comptime CONVERT_TAIL_FIXTURE = CONVERT_SHAPES + 2
 
 
 trait ConvertCalls:
-    """The three product operations, on raw addresses."""
+    """The product narrowing, on raw addresses."""
     @staticmethod
     def cast(src: Int, dst: Int, n: Int) raises: ...
-    @staticmethod
-    def cast_colmajor(src: Int, dst: Int, rows: Int, cols: Int) raises: ...
-    @staticmethod
-    def transpose(src: Int, dst: Int, rows: Int, cols: Int) raises: ...
 
 
 # ------------------------------------------------------------------ the oracle
@@ -250,66 +245,16 @@ def _flat[C: ConvertCalls](index: Int) raises:
     _ = x^
 
 
-def _colmajor[C: ConvertCalls](index: Int) raises:
-    var shape = convert_shape(index)
-    var rows = shape[0]
-    var cols = shape[1]
-    var x = seeded_matrix(rows, cols, rows * 7 + cols * 13)
-    var dst = List[Float32](length=rows * cols, fill=0)
-    C.cast_colmajor(_addr64(x), _addr32(dst), rows, cols)
-    for r in range(rows):
-        for c in range(cols):
-            require_word(dst[c * rows + r], x[r * cols + c],
-                         "colmajor cast " + String(rows) + "x" + String(cols) + " at " + String(r) + "," + String(c))
-    _ = x^
-
-
-def _transpose[C: ConvertCalls](index: Int) raises:
-    var shape = convert_shape(index)
-    var rows = shape[0]
-    var cols = shape[1]
-    var wide = seeded_matrix(rows, cols, rows * 3 + cols * 31)
-    var n = rows * cols
-    var x = List[Float32](length=n, fill=0)
-    for i in range(n):
-        x[i] = bitcast[DType.float32](rne_word(wide[i]))
-    # NaN payloads and both signed zeros: a pure move keeps every bit.
-    if n >= 3:
-        x[0] = bitcast[DType.float32](UInt32(0x7FC0BEEF))
-        x[1] = bitcast[DType.float32](UInt32(0x80000000))
-        x[2] = bitcast[DType.float32](UInt32(0xFFA00001))
-    var dst = List[Float32](length=n, fill=0)
-    C.transpose(_addr32(x), _addr32(dst), rows, cols)
-    for r in range(rows):
-        for c in range(cols):
-            require(bitcast[DType.uint32](dst[c * rows + r]) == bitcast[DType.uint32](x[r * cols + c]),
-                    "transpose " + String(rows) + "x" + String(cols) + " at " + String(r) + "," + String(c))
-    # The other direction: the column-major block as a C [cols, rows] source.
-    var back = List[Float32](length=n, fill=0)
-    C.transpose(_addr32(dst), _addr32(back), cols, rows)
-    for i in range(n):
-        require(bitcast[DType.uint32](back[i]) == bitcast[DType.uint32](x[i]),
-                "transpose back " + String(rows) + "x" + String(cols) + " at " + String(i))
-    # dst is read through its address by the back transpose; Mojo frees a local at its last named
-    # use (the `_addr32(dst)` argument), so without this the call read freed heap (word 0 wrong).
-    _ = dst^
-
-
 def _edges_alone[C: ConvertCalls]() raises:
-    """Each edge value as a one-element buffer, through both helpers, so a
-    failure names the value rather than a position."""
+    """Each edge value as a one-element buffer, so a failure names the value
+    rather than a position."""
     var edges = edge_values()
     for v in edges:
         var src: List[Float64] = [v]
         var d1: List[Float32] = [0.0]
-        var d2: List[Float32] = [0.0]
         C.cast(_addr64(src), _addr32(d1), 1)
-        C.cast_colmajor(_addr64(src), _addr32(d2), 1, 1)
-        # src is read through its address by both calls: keep it alive past the second one
-        # (freed at its last named use, the colmajor call read freed heap).
-        _ = src^
+        _ = src^  # read through its address by the call above
         require_word(d1[0], v, "edge value alone, flat")
-        require_word(d2[0], v, "edge value alone, colmajor")
 
 
 def _ties[C: ConvertCalls]() raises:
@@ -353,10 +298,6 @@ def run_convert_fixture[C: ConvertCalls](fixture_id: Int) raises:
     require(fixture_id >= 0 and fixture_id < CONVERT_FIXTURES, "unknown convert fixture")
     if fixture_id < CONVERT_SHAPES:
         _flat[C](fixture_id)
-    elif fixture_id < 2 * CONVERT_SHAPES:
-        _colmajor[C](fixture_id - CONVERT_SHAPES)
-    elif fixture_id < 3 * CONVERT_SHAPES:
-        _transpose[C](fixture_id - 2 * CONVERT_SHAPES)
     elif fixture_id == CONVERT_EDGE_FIXTURE:
         _edges_alone[C]()
     elif fixture_id == CONVERT_TIES_FIXTURE:
@@ -366,25 +307,16 @@ def run_convert_fixture[C: ConvertCalls](fixture_id: Int) raises:
 
 
 # ---- The host column (was core_convert_cpu_suite.mojo) ----
-# The host narrowing and transposes, every fixture through both host routes,
-# run across host cores.
+# The host narrowing, every fixture through both host routes, run across
+# host cores.
 #
 # Route 0 is the host bindings' column (core/host_helpers_impl.mojo
-# `cast_f64_to_f32`, core/core_host_impl.mojo `transpose_to_f32`); route 1 is
-# the base binding's host loop (core/mojolearn_shell_impl.mojo
-# `cast_f64_to_f32_host`, `tiled_transpose_to_f32`).
+# `cast_f64_to_f32`); route 1 is the base binding's host loop
+# (core/mojolearn_shell_impl.mojo `cast_f64_to_f32_host`).
 struct HostHelpersConvert(ConvertCalls):
     @staticmethod
     def cast(src: Int, dst: Int, n: Int) raises:
         cast_f64_to_f32(f64_ptr(src), f32_ptr(dst), n)
-
-    @staticmethod
-    def cast_colmajor(src: Int, dst: Int, rows: Int, cols: Int) raises:
-        transpose_to_f32[DType.float64](f64_ptr(src), f32_ptr(dst), rows, cols)
-
-    @staticmethod
-    def transpose(src: Int, dst: Int, rows: Int, cols: Int) raises:
-        transpose_to_f32[DType.float32](f32_ptr(src), f32_ptr(dst), rows, cols)
 
 
 struct HostShellConvert(ConvertCalls):
@@ -392,19 +324,10 @@ struct HostShellConvert(ConvertCalls):
     def cast(src: Int, dst: Int, n: Int) raises:
         cast_f64_to_f32_host(f64_ptr(src), f32_ptr(dst), n)
 
-    @staticmethod
-    def cast_colmajor(src: Int, dst: Int, rows: Int, cols: Int) raises:
-        tiled_transpose_to_f32[DType.float64](f64_ptr(src), f32_ptr(dst), rows, cols)
-
-    @staticmethod
-    def transpose(src: Int, dst: Int, rows: Int, cols: Int) raises:
-        tiled_transpose_to_f32[DType.float32](f32_ptr(src), f32_ptr(dst), rows, cols)
-
 
 # ---- The device column (was core_convert_gpu_suite.mojo) ----
-# The device narrowing and transposes the GPU base binding takes
-# (core/hotpath_device_run.mojo `hpdev_try_cast_f64_to_f32`,
-# `hpdev_try_transpose_to_f32`), every fixture in order.
+# The device narrowing the GPU base binding takes
+# (core/hotpath_device_run.mojo `hpdev_try_cast_f64_to_f32`), every fixture in order.
 #
 # Both entries use the one process-wide device context of the base binding,
 # so fixtures are submitted in order; each operation is one thread per element.
@@ -414,14 +337,6 @@ struct DeviceConvert(ConvertCalls):
     @staticmethod
     def cast(src: Int, dst: Int, n: Int) raises:
         require(hpdev_try_cast_f64_to_f32(src, dst, n), "device cast_f64_to_f32 not taken for n=" + String(n))
-
-    @staticmethod
-    def cast_colmajor(src: Int, dst: Int, rows: Int, cols: Int) raises:
-        require(hpdev_try_transpose_to_f32(src, dst, rows, cols, True), "device cast_colmajor not taken")
-
-    @staticmethod
-    def transpose(src: Int, dst: Int, rows: Int, cols: Int) raises:
-        require(hpdev_try_transpose_to_f32(src, dst, rows, cols, False), "device transpose_f32 not taken")
 
 
 def _helpers_fixture(unit: Int) raises:
@@ -444,7 +359,7 @@ def test_fixtures() raises:
         check_cases("helpers fixture", CONVERT_FIXTURES, _helpers_fixture)
         check_cases("shell fixture", CONVERT_FIXTURES, _shell_fixture)
     else:
-        # The device narrowing and transposes use the base binding's one process-wide device context, so fixtures are
+        # The device narrowing uses the base binding's one process-wide device context, so fixtures are
         # submitted in order; a False return (a sabotage build, or a size outside the device twin) fails the fixture.
         for unit in range(CONVERT_FIXTURES):  # driver-loop: ordered on the one device context
             try:

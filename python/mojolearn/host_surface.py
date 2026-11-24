@@ -536,9 +536,10 @@ TRAINING_LANE_NAMES = {
     # core host binding.
     "spectral-precomputed": "spectral clustering on a precomputed affinity",
     # lane/expose-spectral-embedding (2026-09-20): SpectralEmbedding and
-    # manifold.spectral_embedding, through spectral_embedding_dataset and
-    # spectral_embedding_graph in the metrics host binding over
-    # host_spectral_embedding_dataset and host_spectral_embedding_coo.
+    # manifold.spectral_embedding, through spectral_native_api_v1 in the
+    # metrics host binding over host_spectral_embedding_dataset and
+    # host_spectral_embedding_coo (the by-name spectral_embedding_dataset /
+    # spectral_embedding_graph exports were deleted 2026-11-23: no caller).
     "spectral-embedding": "spectral embedding (Laplacian eigenmaps)",
     # Workstream E, the gp host lane (2026-09-14): the Gaussian process fit
     # and predict through gaussian_process/host/gpr_oracle.mojo over
@@ -1996,8 +1997,8 @@ FAMILIES = (
             "activity_begin", "activity_end",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "kmeans_native_api_v1",
-            "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
-            "cast_colmajor_f64_to_f32", "spectral_preparation_native_api_v1", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
+            "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search",
+            "spectral_preparation_native_api_v1", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
             "argmax_rows_f64",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
@@ -2302,7 +2303,6 @@ FAMILIES = (
             # 2860), so a saved model predicts from the inference wheel.
             "spectral_fit_predict_dataset_state", "spectral_fit_predict_graph_state",
             "spectral_predict",
-            "spectral_embedding_dataset", "spectral_embedding_graph",
             "umap_fit_transform", "umap_transform", "umap_numeric_mode",
             "umap_fit_transform_ex",
             "rand_score", "mean_squared_error", "mean_absolute_error",

@@ -92,9 +92,7 @@ from metrics.estimator import (
     homogeneity_completeness_v_measure_host,
 )
 from spectral.estimator import (
-    spectral_embedding_dataset_host,
     spectral_embedding_dense_host,
-    spectral_embedding_graph_host,
     spectral_fit_predict_dataset_host,
     spectral_fit_predict_dataset_host_keep,
     spectral_fit_predict_dense_host_keep,
@@ -780,108 +778,8 @@ def spectral_fit_predict_graph_binding(
     return PythonObject(n_out)
 
 
-# SpectralEmbedding (lane/expose-spectral-embedding, 2026-09-20): cuML's
-# `ML::SpectralEmbedding::transform`, the dataset and the COO overloads.
-
-
-def spectral_embedding_dataset_binding(
-    x_addr: PythonObject,
-    embedding_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`SpectralEmbedding` on a DATASET (`affinity='nearest_neighbors'`).
-    Writes the `n_samples x n_cols` row-major embedding; returns `n_out`.
-
-    `params`, in this exact order (matched in
-    `python/mojolearn/_spectral_impl.py`):
-
-        0  n_samples
-        1  n_features
-        2  n_lanczos      (n_components, plus one when drop_first)
-        3  n_cols         (columns the output buffer was sized for)
-        4  n_neighbors
-        5  norm_laplacian (0 or 1)
-        6  drop_first     (0 or 1)
-        7  seed
-        8  eigen_tol      (optional float, the Lanczos tolerance; absent
-                           means cuVS's 1e-5)
-    """
-    if len(params) != 9:
-        _want(String("spectral_embedding_dataset"), params, 8)
-    var tolerance = Float32(1e-5)
-    if len(params) == 9:
-        tolerance = Float32(Float64(py=params[8]))
-    var n_samples = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_lanczos = Int(py=params[2])
-    var n_cols = Int(py=params[3])
-    var n_neighbors = Int(py=params[4])
-    var norm_laplacian = Int(py=params[5]) != 0
-    var drop_first = Int(py=params[6]) != 0
-    var seed = UInt64(Int(py=params[7]))
-    var x = _load_f32(Int(py=x_addr), n_samples * n_features)
-    var ep = _f32_ptr(Int(py=embedding_addr))
-    var embedding = List[Float32]()
-    var n_out = 0
-    with GILReleased(Python()):
-        n_out = spectral_embedding_dataset_host(
-            x, n_samples, n_features, n_lanczos, n_neighbors, norm_laplacian,
-            drop_first, seed, embedding, tolerance,
-        )
-    _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    _spectral_write_embedding(embedding, ep)
-    return PythonObject(n_out)
-
-
-def spectral_embedding_graph_binding(
-    rows_addr: PythonObject,
-    cols_addr: PythonObject,
-    vals_addr: PythonObject,
-    embedding_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`SpectralEmbedding` on a PRECOMPUTED affinity given as COO triples.
-    Writes the `n_samples x n_cols` row-major embedding; returns `n_out`.
-
-    `params`, in this exact order (matched in
-    `python/mojolearn/_spectral_impl.py`):
-
-        0  n_samples
-        1  nnz            (length of rows, cols and vals)
-        2  n_lanczos      (n_components, plus one when drop_first)
-        3  n_cols         (columns the output buffer was sized for)
-        4  norm_laplacian (0 or 1)
-        5  drop_first     (0 or 1)
-        6  seed
-        7  eigen_tol      (optional float, the Lanczos tolerance; absent
-                           means cuVS's 1e-5)
-    """
-    if len(params) != 8:
-        _want(String("spectral_embedding_graph"), params, 7)
-    var tolerance = Float32(1e-5)
-    if len(params) == 8:
-        tolerance = Float32(Float64(py=params[7]))
-    var n_samples = Int(py=params[0])
-    var nnz = Int(py=params[1])
-    var n_lanczos = Int(py=params[2])
-    var n_cols = Int(py=params[3])
-    var norm_laplacian = Int(py=params[4]) != 0
-    var drop_first = Int(py=params[5]) != 0
-    var seed = UInt64(Int(py=params[6]))
-    var rows = _load_i32(Int(py=rows_addr), nnz)
-    var cols = _load_i32(Int(py=cols_addr), nnz)
-    var vals = _load_f32(Int(py=vals_addr), nnz)
-    var ep = _f32_ptr(Int(py=embedding_addr))
-    var embedding = List[Float32]()
-    var n_out = 0
-    with GILReleased(Python()):
-        n_out = spectral_embedding_graph_host(
-            rows, cols, vals, n_samples, n_lanczos, norm_laplacian,
-            drop_first, seed, embedding, tolerance,
-        )
-    _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    _spectral_write_embedding(embedding, ep)
-    return PythonObject(n_out)
+# TOMBSTONE: the by-name spectral_embedding_dataset / spectral_embedding_graph exports deleted 2026-11-23 on lane/sab-host-missed-cls
+# (no caller: SpectralEmbedding runs spectral_native_api_v1); code recoverable at 4519097d38.
 
 
 # lane/spectral-predict (2026-09-15, DEVIATION 2860): the fit entries that
@@ -1419,8 +1317,6 @@ def build__mojolearn_metrics() -> PythonObject:
         m.def_function[spectral_predict_resident_binding]("spectral_predict_resident")
         m.def_function[spectral_predict_release_binding]("spectral_predict_release")
         m.def_function[spectral_predict_count_binding]("spectral_predict_count")
-        m.def_function[spectral_embedding_dataset_binding]("spectral_embedding_dataset")
-        m.def_function[spectral_embedding_graph_binding]("spectral_embedding_graph")
         m.def_function[spectral_fit_predict_dense_binding]("spectral_fit_predict_dense")
         m.def_function[spectral_embedding_dense_binding]("spectral_embedding_dense")
         var published_module = m.finalize()

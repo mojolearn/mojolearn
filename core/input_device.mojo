@@ -8,7 +8,6 @@ The GPU base binding (`bindings/_mojolearn.mojo`, through
 to run on every fit, transform and predict entry:
 
   device_all_finite        `all_finite_f32` / `all_finite_f64`
-  device_transpose_to_f32  `transpose_f32` / `cast_colmajor_f64_to_f32`
   device_strided_copy      `strided_copy_bytes`
   device_check_lengths     `check_lengths_i64`
   device_ragged_rows       `ragged_rows_bytes`
@@ -34,11 +33,9 @@ below 2^31 (`IND_MAX_N`).
 
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import bitcast
 from std.sys.info import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.soft_f64 import sf64_is_nan, sf64_to_f32
 from core.device_zero import enqueue_fill
 
 comptime IND_TPB = 256
@@ -142,78 +139,7 @@ def device_all_finite(ctx: DeviceContext, addr: Int, n: Int, is_f64: Bool) raise
     return bad == 0
 
 
-# ===========================================================================
-# transpose_f32 / cast_colmajor_f64_to_f32
-# ===========================================================================
-
-
-@always_inline
-def _narrow_word(w: UInt64) -> UInt32:
-    """The float32 word a hardware double-to-float conversion gives: round to
-    nearest even (`sf64_to_f32`); a NaN keeps its sign and the top 22 payload
-    bits and is quieted. The same rule as `core/hotpath_device.mojo`'s
-    `_narrow_f64_kernel` (the device `cast_f64_to_f32`)."""
-    if sf64_is_nan(w):
-        var sign = UInt32((w >> 63) << 31)
-        var payload = UInt32((w >> 29) & UInt64(0x003FFFFF))
-        return sign | UInt32(0x7FC00000) | payload
-    return bitcast[DType.uint32](sf64_to_f32(w))
-
-
-def _transpose_u32_kernel(src: _U32, nr_: Int32, nc_: Int32, dst: _U32):
-    """dst[c * nr + r] = src[r * nc + c]: one thread per output word."""
-    var i = _tid()
-    var nr = Int(nr_)
-    var nc = Int(nc_)
-    if i >= nr * nc:
-        return
-    var c = i // nr
-    var r = i - c * nr
-    dst.unsafe_store(i, src.unsafe_load(r * nc + c))
-
-
-def _transpose_narrow_kernel(src: _U64, nr_: Int32, nc_: Int32, dst: _U32):
-    """dst[c * nr + r] = Float32(src[r * nc + c]) as words."""
-    var i = _tid()
-    var nr = Int(nr_)
-    var nc = Int(nc_)
-    if i >= nr * nc:
-        return
-    var c = i // nr
-    var r = i - c * nr
-    dst.unsafe_store(i, _narrow_word(src.unsafe_load(r * nc + c)))
-
-
-def device_transpose_to_f32(
-    ctx: DeviceContext, src_addr: Int, dst_addr: Int, nr: Int, nc: Int, is_f64: Bool,
-) raises:
-    """`transpose_f32` (float32 in) or `cast_colmajor_f64_to_f32` (float64
-    in): the C-order `[nr, nc]` matrix at `src` goes up, its column-major
-    float32 layout comes down to `dst` (`1 <= nr * nc <= IND_MAX_N`)."""
-    var n = nr * nc
-    var d_d = ctx.enqueue_create_buffer[DType.uint32](n)
-    if is_f64:
-        var d_s = ctx.enqueue_create_buffer[DType.uint64](n)
-        ctx.enqueue_copy(dst_buf=d_s, src_ptr=_U64(unsafe_from_address=src_addr))
-        ctx.enqueue_function[_transpose_narrow_kernel](
-            d_s.unsafe_ptr(), Int32(nr), Int32(nc), d_d.unsafe_ptr(),
-            grid_dim=_blocks(n), block_dim=IND_TPB,
-        )
-        ctx.enqueue_copy(dst_ptr=_U32(unsafe_from_address=dst_addr), src_buf=d_d)
-        ctx.synchronize()
-        _ = d_s^
-        _ = d_d^
-        return
-    var d_s = ctx.enqueue_create_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_buf=d_s, src_ptr=_U32(unsafe_from_address=src_addr))
-    ctx.enqueue_function[_transpose_u32_kernel](
-        d_s.unsafe_ptr(), Int32(nr), Int32(nc), d_d.unsafe_ptr(),
-        grid_dim=_blocks(n), block_dim=IND_TPB,
-    )
-    ctx.enqueue_copy(dst_ptr=_U32(unsafe_from_address=dst_addr), src_buf=d_d)
-    ctx.synchronize()
-    _ = d_s^
-    _ = d_d^
+# TOMBSTONE: the device transpose_f32 / cast_colmajor_f64_to_f32 twin (_narrow_word, _transpose_u32_kernel, _transpose_narrow_kernel, device_transpose_to_f32) deleted 2026-11-23 on lane/sab-host-missed-cls (no product caller); code recoverable at 4519097d38.
 
 
 # ===========================================================================
