@@ -106,8 +106,8 @@ from bindings.member_set_door import (
 )
 from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, vote_regress_run, vote_transform_run,
-    ovr_assemble_run, multioutput_codes_run, multioutput_proba_run, stack_place_run, STACK_PREDICT, STACK_PROBA,
-    STACK_DECISION,
+    ovr_assemble_run, ovr_binary_proba_run, multioutput_codes_run, multioutput_proba_run, stack_place_run,
+    STACK_PREDICT, STACK_PROBA, STACK_DECISION,
     # nn-integrate (compile fix): lane bm-meta-3's calibrated predict RUN names, used below and never imported
     CalPair, CalFit, calibrated_proba_run,
 )
@@ -3402,6 +3402,90 @@ def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int
     return out
 
 
+def _ovr_fused_fold(xt: PythonObject, members: PythonObject, mx: _MetaX, scope: Int, k: Int, decision: Bool,
+                    finish: Int, context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `_ovr_fused` over a fold
+    `mx`, every member reading the fold by number out of the resident base
+    (`_fold_open`, `_FoldPin`; RUN `ovr_assemble_run`, the same program over
+    the same blocks). None, nothing published, when a member is not served
+    that way or a call refuses: the caller admits the fold's rows and runs
+    `_ovr_fused` (whose doors raise the members' words)."""
+    var n = mx.n
+    var out = admitted_vector(n, "<i4", context) if finish == 2 else admitted_vector(n * k, "<f8", context)
+    var got = _VoteUnpack()
+    var at = List[Int]()
+    var answered = False
+    try:
+        var opened_all = True
+        for j in range(len(members)):  # driver-loop: over members (admission, once each)
+            var words = ovr_member_words(members[j], decision, context)
+            at.append(words[1])
+            var operation = MEMBER_OP_DECISION if words[0] else MEMBER_OP_PREDICT_PROBA
+            if not _fold_open(got, members[j], mx.x, operation, True, 0, 0, 1.0, True, context):
+                opened_all = False
+                break
+        if opened_all:
+            _fold_plans(got)
+            var glue = _xr(xt)
+            var address = trees_address(out)
+            var pin = _FoldPin(mx.x, len(got.members))
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = ovr_assemble_run(glue, rows, got.members, at, k, finish, address)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    if not answered:
+        return PythonObject(None)
+    return out
+
+
+def _ovr_binary_fold(xt: PythonObject, member: PythonObject, mx: _MetaX, scope: Int,
+                     context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): binary OneVsRest
+    predict_proba over a fold `mx`: the one member's predict_proba read by
+    number out of the resident base, its column of code 1 (zeros when it
+    never saw code 1) and the rows (1 - p, p) (RUN `ovr_binary_proba_run`:
+    `_proba_positive` and `_trees_binary_proba` over the same words). None
+    when the member is not served that way or refuses."""
+    var n = mx.n
+    var out = admitted_vector(2 * n, "<f8", context)
+    var got = _VoteUnpack()
+    var answered = False
+    try:
+        var at = _index_of_one(member, context)
+        if _fold_open(got, member, mx.x, MEMBER_OP_PREDICT_PROBA, True, 0, 0, 1.0, True, context):
+            _fold_plans(got)
+            var glue = _xr(xt)
+            var address = trees_address(out)
+            var pin = _FoldPin(mx.x, 1)
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = ovr_binary_proba_run(glue, rows, got.members[0], at, address)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    if not answered:
+        return PythonObject(None)
+    return trees_reshape(out, Python.tuple(n, 2), context)
+
+
 def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = trees_keys()
     return trees_decode_labels(_attr(model, nk[].k_classes_, PythonObject(None)), _ovr_codes(model, X, context), context)
@@ -3409,14 +3493,28 @@ def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
 
 def _ovr_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`OneVsRestClassifier.predict` before its decode: int32 codes into
-    `classes_`."""
-    var Xa = _check_x(model, X, context)
+    `classes_`. THE FOLD FROM THE STORE (lane vdf-meta5): a model-selection
+    fold is read by number out of its resident base (`_codes_fold` for the
+    binary member, `_ovr_fused_fold` for k members); a fold its members do
+    not serve that way is admitted (`_x_array`) as before."""
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var nk = trees_keys()
     var classes = _attr(model, nk[].k_classes_, PythonObject(None))
     var k = len(classes)
     var members = _attr(model, nk[].k_estimators_, Python.list())
+    var scope = _fold_scope(mx, context)
+    if scope != MEMBER_SCOPE_NONE:
+        if k == 2:
+            var codes = _codes_fold(Python.list(members[0]), mx, scope, context)
+            if codes is not None:
+                return codes[0]
+        elif len(members) == k:
+            var codes = _ovr_fused_fold(xt, members, mx, scope, k, True, 2, context)
+            if codes is not None:
+                return codes
+    var Xa = mx.x if mx.draw is None else _x_array(X, context)
     if k == 2:
         return _member_label_codes(members[0], Xa, context)
     if len(members) == k:
@@ -3431,13 +3529,24 @@ def _ovr_codes(model: PythonObject, X: PythonObject, context: PythonObject) rais
 
 
 def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var Xa = _check_x(model, X, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var nk = trees_keys()
     var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var members = _attr(model, nk[].k_estimators_, Python.list())
     var glue = _xr(xt)
+    var scope = _fold_scope(mx, context)
+    if scope != MEMBER_SCOPE_NONE:
+        if k == 2:
+            var proba = _ovr_binary_fold(xt, members[0], mx, scope, context)
+            if proba is not None:
+                return proba
+        elif len(members) == k:
+            var proba = _ovr_fused_fold(xt, members, mx, scope, k, False, 1, context)
+            if proba is not None:
+                return trees_reshape(proba, Python.tuple(n, k), context)
+    var Xa = mx.x if mx.draw is None else _x_array(X, context)
     if k == 2:
         # `_trees_binary_proba`: rows (1 - p, p) of the positive column
         var p = _f32_array(_proba_positive(xt, members[0], Xa, context), 1, "p", context)

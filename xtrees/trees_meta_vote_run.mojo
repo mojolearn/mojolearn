@@ -31,7 +31,7 @@ from xtrees.trees_meta_run import CalibratedProgram
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_cols_many, xt_accumulate_onehot, xt_argmax_rows, xt_scale,
     xt_scatter, xt_ovr_assemble, xt_accumulate_rows, xt_count_rows, xt_normalize_rows, xt_count_equal, xt_oob_r2,
-    xt_calibrated_proba, xt_margin2, xt_softmax_rows, xt_weighted_median, xt_put_f32,
+    xt_calibrated_proba, xt_margin2, xt_softmax_rows, xt_weighted_median, xt_put_f32, xt_binary_proba,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -414,6 +414,32 @@ def ovr_assemble_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
     return VOTE_ALL_ANSWERED
 
 
+def ovr_binary_proba_run(glue: EntryRef, rows: VoteRows, member: VoteMember, at: Int, out_words: Int) raises -> Int:
+    """Binary `OneVsRestClassifier.predict_proba` (lane vdf-meta5, the fold
+    read by number): the one member's float32 predict_proba block over
+    `rows`, its column `at` (the column of code 1; -1: a member that never
+    saw code 1, whose column is zeros), then the glue's
+    `x_trees_binary_proba` into `out_words` (float64 n x 2 rows (1 - p, p)):
+    the door's `_proba_positive` (a column copy) and `_trees_binary_proba`
+    over the same words, so no bits change. A native member that refuses
+    is returned as 0 before anything is written."""
+    var keep = List[List[Float32]]()
+    var block = _member_f32(member, rows.member_rows(0), keep)
+    if block == 0:
+        return 0
+    var n = rows.n
+    var col = List[Float32](length=n, fill=Float32(0.0))
+    if at >= 0:
+        var b = _F32P(unsafe_from_address=block)
+        var c = member.cols
+        for i in range(n):  # small-loop(one column copy of one member's block, as the door's `_one_col` made)
+            col[i] = b[i * c + at]
+    _ = xt_binary_proba(glue, Int(col.unsafe_ptr()), out_words, n)
+    _ = col^  # read through the program above
+    _ = keep^
+    return VOTE_ALL_ANSWERED
+
+
 def multioutput_codes_run(rows: VoteRows, members: List[VoteMember], dst: List[Int], start: Int) -> Int:
     """`MultiOutputClassifier` predict and score before the decode (lane
     bm-meta-3, 2026-11-23): member j's int32 codes into output j's fitted
@@ -675,7 +701,7 @@ def calibrated_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMembe
     var keep = List[List[Float32]]()
     var blocks = List[Int](capacity=len(members))
     for i in range(len(members)):  # driver-loop: over the (member, calibrators) pairs (every member answers first)
-        var block = _member_f32(members[i], rows, keep)
+        var block = _member_f32(members[i], rows.member_rows(i), keep)
         if block == 0:
             return i
         blocks.append(block)
