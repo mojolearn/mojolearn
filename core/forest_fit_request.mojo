@@ -23,7 +23,11 @@ published in `core/forest_entry_table.mojo`; descriptor shape of
   XF_FIT_DART         views. Returns an export handle owned by the image
                       until XF_EXPORT_RELEASE. XF_FIT_DART is the rf images'
                       DART member fit on a DART session (x = bag rows, y =
-                      sampled columns, `session`, `cls`).
+                      sampled columns, `session`, `cls`). `loop` (XF_W_LOOP,
+                      0: not asked) is the address of two Int words the
+                      XF_FIT image writes after the fit: the trees its loop
+                      built and the loop region's nanoseconds
+                      (core/fit_loop_clock.mojo; the estimator's `fit_loop_`).
   XF_EXPORT_SIZES     addrs [handle, out (Int, 4 + XF_META_MAX)]: writes
                       [trees, nodes, outputs, n_meta, meta...].
   XF_EXPORT_INTO      addrs [handle, offsets, colid, quesval, left, leaves];
@@ -84,8 +88,10 @@ published in `core/forest_entry_table.mojo`; descriptor shape of
 The caller owns every buffer until the synchronous call returns.
 """
 from std.memory import bitcast
+from core.fit_loop_clock import FitLoop
 
-comptime FOREST_ENTRY_ABI = "mojolearn.trees.forest.v1"
+# v2 (lane alm-forest, 2026-11-24): XF_W_LOOP joined the XF_FIT words.
+comptime FOREST_ENTRY_ABI = "mojolearn.trees.forest.v2"
 
 comptime XF_CAPS = 0
 comptime XF_NUMERIC_MODE = 1
@@ -144,7 +150,10 @@ comptime XF_W_LAST = 15        # 1: the fit's last round
 comptime XF_W_ROUND_SEED = 16  # AdaBoost.R2: the ensemble's seed,
 comptime XF_W_ROUND = 17       # the round (the draw's stream)
 comptime XF_W_LOSS = 18        # and the loss code
-comptime XF_FIT_WORDS = 19
+#: the fit loop words (XF_FIT; 0 in every other fit and when not asked):
+#: Int[2] = [iterations, loop nanoseconds], written by the image
+comptime XF_W_LOOP = 19
+comptime XF_FIT_WORDS = 20
 
 #: the params slot holding the fit's tree count in both layouts (the RF
 #: list of `_RandomForestBase._fit_params` and the ET list of
@@ -186,6 +195,9 @@ struct ForestFitArgs(Movable, Sized):
     var round_seed: Int
     var round: Int
     var loss: Int
+    #: XF_W_LOOP: the address of the caller's two fit loop words, 0 when the
+    #: caller does not ask (`fit_loop_put`).
+    var loop: Int
     #: True: the caller holds no GIL (a member's worker; the operation word
     #: carried `ENTRY_OP_GIL_FREE`), so the image's fit runs its body bare.
     #: False (a door): the fit releases the GIL around its body. Set by
@@ -216,6 +228,7 @@ struct ForestFitArgs(Movable, Sized):
         self.round_seed = 0
         self.round = 0
         self.loss = 0
+        self.loop = 0
         self.gil_free = False
 
     def __len__(self) -> Int:
@@ -280,6 +293,7 @@ def forest_fit_words(args: ForestFitArgs, shape: Int) -> List[Int]:
     words[XF_W_ROUND_SEED] = args.round_seed
     words[XF_W_ROUND] = args.round
     words[XF_W_LOSS] = args.loss
+    words[XF_W_LOOP] = args.loop
     return words^
 
 
@@ -314,7 +328,20 @@ def forest_fit_args_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int) raises -> Fo
     args.round_seed = a[XF_W_ROUND_SEED]
     args.round = a[XF_W_ROUND]
     args.loss = a[XF_W_LOSS]
+    args.loop = a[XF_W_LOOP]
     return args^
+
+
+def fit_loop_put(address: Int, loop: FitLoop):
+    """The fit loop words a caller asked for (`address` nonzero: XF_W_LOOP,
+    or the iforest run's loop address): `[iterations, loop nanoseconds]`.
+    A loop that was not recorded (no fit ran) leaves the caller's words as
+    they are. Called once after the fit, never inside its loop."""
+    if address == 0 or not loop.recorded:
+        return
+    var words = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=address)
+    words[0] = loop.iterations
+    words[1] = loop.loop_ns
 
 
 def forest_export_sizes_into(out_addr: Int, trees: Int, nodes: Int, outputs: Int, meta: List[Int64]) raises:
