@@ -54,6 +54,7 @@ is row tasks across the cores (core/host_finite_scan.mojo).
 from std.memory import unsafe_memcpy
 from std.sys.info import size_of
 from core.admitted_refusals import admitted_finite_wording
+from core.scale_gamma_exact import SGX_BAD
 from core.family_cast_impl import family_min_f32
 from core.host_finite_scan import host_all_finite_f32
 from core.member_abi import (
@@ -230,6 +231,18 @@ def _run(entry: NativeDescriptorCall, call: KmCall) raises -> Int:
     return native_descriptor_leased_call(entry, 0, call.operation, call.a, call.p, call.f)
 
 
+def _limbs(entry: NativeDescriptorCall, x: Int, cells: Int) raises -> List[Int64]:
+    """The provider's exact limb words of the `cells` float32 cells at `x`
+    (a host address or THE FOLD X WORD): operation 16."""
+    var words = km_scale_gamma_words()
+    var limbs = KmCall(KM_OP_SCALE_GAMMA_LIMBS, 1, 0)
+    limbs.address(x)
+    limbs.address(Int(words.unsafe_ptr()))
+    limbs.p[0] = cells
+    _ = _run(entry, limbs)
+    return words^
+
+
 def _nystroem(slot: _Slot) -> Bool:
     return Int(slot[].params[0]) == _KIND_NYSTROEM
 
@@ -287,6 +300,7 @@ def _fit(slot: _Slot, call: _Call) raises:
     var kernel = Int(slot[].params[1])
     var route = call[].route
     var gamma = slot[].params[4]
+    var fold_rbf = call[].x.data < 0 and not _nystroem(slot)
     if gamma_kind == 1:
         gamma = 1.0 if kernel == _KERNEL_CHI2 else 1.0 / Float64(d)
     elif gamma_kind == 2:
@@ -295,13 +309,21 @@ def _fit(slot: _Slot, call: _Call) raises:
         var cells = n * d
         if cells == 0:
             raise Error("gamma='scale' needs at least one cell of X")
-        var words = km_scale_gamma_words()
-        var limbs = KmCall(KM_OP_SCALE_GAMMA_LIMBS, 1, 0)
-        limbs.address(call[].x.data)
-        limbs.address(Int(words.unsafe_ptr()))
-        limbs.p[0] = cells
-        _ = _run(route.entry.call, limbs)
+        var words = _limbs(route.entry.call, call[].x.data, cells)
+        if fold_rbf and words[SGX_BAD] != 0:
+            # The fold's admission test in the host test's wording (`_x`).
+            raise Error("ValueError: " + admitted_finite_wording(_name(slot), "X"))
         gamma = km_scale_gamma_value(words, cells, d)
+    if fold_rbf and gamma_kind != 2:
+        # RBFSampler's fit reads no X, but the estimator refuses a NaN or an
+        # infinity at fit (lane vdf-scope-linear4): a fold slot is tested ON
+        # THE DEVICE by the limbs entry, whose non-finite word counts every
+        # cell that is not finite (svm/impl/scale_gamma_device.mojo; the
+        # entry reads THE FOLD X WORD). One pass over the fold's rows on the
+        # device, one small download of the words; the gamma is not read.
+        var cells = n * d
+        if cells > 0 and _limbs(route.entry.call, call[].x.data, cells)[SGX_BAD] != 0:
+            raise Error("ValueError: " + admitted_finite_wording(_name(slot), "X"))
     slot[].clear()
     slot[].gamma = gamma
     slot[].cols = d
