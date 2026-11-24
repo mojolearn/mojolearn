@@ -131,7 +131,8 @@ from core.native_descriptor_abi import NativeDescriptorCall
 #: `MemberPlan.class_counts`): one y layout for every caller, `y.cols` outputs.
 #: Words APPENDED to the end of `MemberCall` (round 5: out_dtype, scope, pin, devices, device_count; round 6:
 #: pin_kept; lane mf-img3: groups; lane mf-left4: eval_x, eval_y, pairs, pairs_weight, cat_keys,
-#: eval_cat_keys; lane mf-hostent5: permutation; lane mf-tail5: y_given) do not
+#: eval_cat_keys; lane mf-hostent5: permutation; lane mf-tail5: y_given; lane vdf-scope-pins: y_pin, y_pin_kept,
+#: weights_pin, weights_pin_kept) do not
 #: bump it: every image of one build compiles this file, and a member that does not read them is unchanged.
 comptime MEMBER_CALL_LAYOUT = 4
 
@@ -496,6 +497,32 @@ struct MemberCall(Movable):
     # it when FIT returns). Not given (rows 0): the float32 `y` widened is
     # the given y (a float32 y was given, or the caller has no other).
     var y_given: MemberMatrix
+    # APPENDED 2026-11-24 (lane vdf-scope-pins). THE PER-INPUT PINS: THE PIN
+    # RULE above (at `pin`), word for word, for the host words of `y` and of
+    # `weights` (the KMeans weight vector is `weights`). `y_pin`: one
+    # reference the caller took on the object that owns the words of `y`
+    # (the WHOLE base view when `row_index` selects its rows), 0: none;
+    # `weights_pin` the same for `weights`. A member with MEMBER_CAN_SCOPE
+    # may then keep that column resident in `scope` (bindings/arena_cache_run.mojo
+    # `arena_scope_store_put(scope, store, prefix, view.data, words, y_pin)`)
+    # and take a fold's rows of it on the device with `arena_store_take_rows`
+    # exactly as X; it writes `y_pin_kept` / `weights_pin_kept` nonzero the
+    # moment its cache PUBLISHED an entry holding that token, never the
+    # token itself, and publishes at most one entry per token. Every other
+    # outcome leaves the kept word 0 and the reference the caller's
+    # (`member_y_pin_settle` / `member_weights_pin_settle` after every call
+    # that offered one, returned or raised). The pin keeps the owner alive
+    # while the entry lives, so its address cannot be reused by another
+    # buffer inside the scope (a cache is keyed by address and words): a
+    # caller offers a pin only for words it never rewrites in place, and
+    # never for a buffer it rebuilt for one call (a fold's re-coded codes, a
+    # permutation's shuffled y written into a reused buffer): such a call
+    # offers 0. A member that reads only X's pin is unchanged (additive; the
+    # layout word does not move, as for every appended word).
+    var y_pin: Int
+    var y_pin_kept: Int
+    var weights_pin: Int
+    var weights_pin_kept: Int
 
     def __init__(out self, route: DeviceRoute, state: Int = 0):
         self.layout = MEMBER_CALL_LAYOUT
@@ -531,6 +558,10 @@ struct MemberCall(Movable):
         self.eval_cat_keys = MemberMatrix()
         self.permutation = MemberMatrix()
         self.y_given = MemberMatrix()
+        self.y_pin = 0
+        self.y_pin_kept = 0
+        self.weights_pin = 0
+        self.weights_pin_kept = 0
 
     def on_cpu(self) -> Bool:
         """The member's RESOLVED device is the CPU (its route says so; no
@@ -580,6 +611,10 @@ struct MemberPlan(Copyable, Movable):
     # `MemberCall.scope`); the caller's UNPACK writes them after admit.
     var scope: Int
     var pin: Int
+    # APPENDED 2026-11-24 (lane vdf-scope-pins): the y and weights pins of
+    # this public operation (`MemberCall.y_pin`), 0: none offered.
+    var y_pin: Int
+    var weights_pin: Int
 
     def __init__(out self):
         self.family = -1
@@ -592,6 +627,8 @@ struct MemberPlan(Copyable, Movable):
         self.devices = List[Int]()
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
+        self.y_pin = 0
+        self.weights_pin = 0
 
 
 def member_publish[family: Int](mode: Int, vendor: Int, publisher: Int, entry: NativeDescriptorCall) raises:
@@ -651,6 +688,8 @@ def member_call_of(plan: MemberPlan, state: Int = 0) raises -> MemberCall:
     call.device_count = len(plan.devices)
     call.scope = plan.scope
     call.pin = plan.pin
+    call.y_pin = plan.y_pin
+    call.weights_pin = plan.weights_pin
     return call^
 
 
@@ -674,6 +713,29 @@ def member_pin_settle(mut call: MemberCall) -> Int:
     call.pin = 0
     call.pin_kept = 0
     return taken
+
+
+def member_y_pin_settle(mut call: MemberCall) -> Int:
+    """`member_pin_settle` for `call.y_pin` (THE PER-INPUT PINS at
+    `MemberCall.y_pin`): 1 when the member's cache took that reference."""
+    var taken = 1 if call.y_pin != 0 and call.y_pin_kept != 0 else 0
+    call.y_pin = 0
+    call.y_pin_kept = 0
+    return taken
+
+
+def member_weights_pin_settle(mut call: MemberCall) -> Int:
+    """`member_pin_settle` for `call.weights_pin`: 1 when the member's cache
+    took that reference."""
+    var taken = 1 if call.weights_pin != 0 and call.weights_pin_kept != 0 else 0
+    call.weights_pin = 0
+    call.weights_pin_kept = 0
+    return taken
+
+
+def member_pins_offered(call: MemberCall) -> Bool:
+    """Any of the three tokens (X, y, weights) is offered on `call`."""
+    return call.pin != 0 or call.y_pin != 0 or call.weights_pin != 0
 
 
 def member_kind_capabilities(plan: MemberPlan) raises -> Int:
