@@ -244,6 +244,12 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
+from core.member_abi import MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE
+from core.device_route import DEVICE_GPU
+# lane vdf-scope-cluster3: THE FOLD X WORD (core/fold_x_device.mojo), the member side (lane vdf-scope-linear).
+from core.member_fold_x import (
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_take_view, member_fold_store_ready,
+)
 from core.member_families import MEMBER_FAMILY_XNEIGHBORS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -2675,6 +2681,87 @@ comptime _LABEL_PROP = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT
     | MEMBER_CAN_IMPORT | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS)
 
 
+def _fold_kind(kind: Int) -> Bool:
+    """The kinds whose every read of X is an upload through the device ops'
+    `_buf` (x_neighbors/device_ops.mojo, THE FOLD X WORD) during the call,
+    with no host read of X and no borrow of X past the call (lane
+    vdf-scope-cluster3): NearestCentroid. LocalOutlierFactor, KernelPCA,
+    LabelPropagation / LabelSpreading and a KNNImputer borrow the fit X as
+    their fitted rows; OneClassSVM gathers its support vectors from host X
+    (core/ocsvm_plan.mojo `oc_take_rows_into`); the samplers and SVGP are
+    left on the host gather (vdf-scope-cluster3-RESULT.md)."""
+    return kind == XNEIGHBORS_KIND_NEAREST_CENTROID
+
+
+def _fold_bits(call: _CallPtr) -> Int:
+    """MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE on a GPU route whose image
+    ships the x_prep family store (the fold's rows taken there), else 0:
+    the CPU column keeps its host path (the caller gathers)."""
+    if call[].route.device == DEVICE_GPU and member_fold_store_ready(call):
+        return MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+    return 0
+
+
+def _nc_fold_op(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
+    """A NearestCentroid FIT / PREDICT / DECISION / PREDICT_PROBA over the
+    rows `call.row_index` of the WHOLE host X (MEMBER_CAN_ROW_INDEX |
+    MEMBER_CAN_SCOPE, lane vdf-scope-cluster3; the pattern of
+    core/logistic_member.mojo `_fold_op`): X found in the caller's scope's
+    x_prep cache, or put ONCE and published with the pin (THE PIN RULE:
+    `call.pin_kept`), or, outside a scope, put into a slot this call owns;
+    the fold's rows taken ON THE DEVICE into a fresh slot
+    (`member_fold_x_open`), and every device op of the RUN uploads them
+    from there (THE FOLD X WORD at `_buf`): no host gather of X, no per-fold
+    upload of X. The fit's class codes are y's rows taken through the same
+    index on the host (4-byte words, bit for bit, row chunks across the
+    host's cores). Same rows in the same order as the host gather: the same
+    bytes as the host-index path and the CPU column. The call's views are
+    restored and the fold slot freed whether the operation returns or
+    raises. The fitted state keeps only its own words (centroids, std,
+    deviations, priors): nothing points into the slot after the call."""
+    if not _fold_kind(slot[].kind):
+        raise Error("TypeError: a " + _name(slot) + " member reads whole host views (no row or column index)")
+    var estimator = _name(slot)
+    var x = call[].x
+    var y = call[].y
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var host_y = List[Int32]()
+    var failure = String("")
+    try:
+        member_fold_x_open(call, fold, estimator)
+        call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        if operation == MEMBER_OP_FIT:
+            _dense(y, MEMBER_I32, "y (class codes)", estimator)
+            if y.rows != x.rows or y.cols != 1:
+                raise Error("X and y have different numbers of rows")
+            host_y = List[Int32](length=max(fold.rows, 1), fill=Int32(0))
+            member_fold_take_view(y, fold.index, fold.rows, Int(host_y.unsafe_ptr()))
+            call[].y = MemberMatrix(Int(host_y.unsafe_ptr()), fold.rows, 1, MEMBER_I32)
+        call[].row_index = MemberMatrix()
+        if operation == MEMBER_OP_FIT:
+            _nc_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _nc_predict(slot, call)
+        elif operation == MEMBER_OP_DECISION:
+            _nc_decision(slot, call)
+        else:
+            _nc_proba(slot, call)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].y = y
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
+    _ = host_y^
+    if failure.byte_length() > 0:
+        raise Error(failure)
+
+
 def _capabilities(slot: _SlotPtr) -> Int:
     # MEMBER_BORROWS_FIT, kind-exact: LocalOutlierFactor, KernelPCA and a
     # KNNImputer without a masked copy read the caller's fit X as their
@@ -2807,8 +2894,10 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER | _SVGP | _LABEL_PROP | MEMBER_BORROWS_FIT
-        return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False)))
+            return (_NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER | _SVGP | _LABEL_PROP | MEMBER_BORROWS_FIT
+                | _fold_bits(call))
+        var held = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+        return _capabilities(held) | (_fold_bits(call) if _fold_kind(held[].kind) else 0)
     if operation == MEMBER_OP_NEW:
         _new(call)
         return 0
@@ -3002,6 +3091,11 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             _lof_import(slot, call)
         else:
             member_unsupported(_name(slot), operation)
+        return 0
+    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
+            and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION
+            or operation == MEMBER_OP_PREDICT_PROBA)):
+        _nc_fold_op(slot, call, operation)
         return 0
     if operation == MEMBER_OP_FIT:
         _nc_fit(slot, call)
