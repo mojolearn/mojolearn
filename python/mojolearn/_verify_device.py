@@ -61,6 +61,8 @@ NON_COMPUTING = frozenset((
     # header entry and the parameter-grid sampler (it draws settings, not data)
     "Kernel", "ConstantKernel", "WhiteKernel", "RBF", "Matern",
     "TrainedBpeVocabulary", "ByteLanguageModelConfig", "TensorInfo", "ParameterSampler",
+    # a predicate over two integers (whether a microbatch split keeps the bits)
+    "accumulation_is_aligned",
 ))
 
 
