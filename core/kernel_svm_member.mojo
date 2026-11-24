@@ -67,6 +67,17 @@ FITTED-STATE BLOCKS, in index order (count 9 + 3 x machines):
 An import needs blocks 0, 7, 8 (with probability) and each machine's three;
 the rest default to the machines' own (binary and SVR) or stay empty.
 
+BY NAME only (lane mf-rfe7; not in the index walk, so a PACK or an import
+never sees it): `MEMBER_BLOCK_COEF` float32 machines x features, the public
+coef_ of kernel='linear' (MEMBER_CAN_COEF is set for that kernel only): one
+dual GEMV per machine, its duals times its support rows, the same table op
+and sign word the estimator's own coef_ operation runs
+(bindings/svc_kernel_native_door.mojo `_linear_coef`, svm/svc_kernel_native_run.mojo
+`svc_coef_run`: sign 1 for a multiclass SVC's pair machines, else 0), so the
+words are the door's on every column. Any other kernel refuses it in that
+operation's words. RFE reads it (bindings/prep_select_run.mojo
+`rfe_member_source`).
+
 The fitted state is OWNED here, in a process-wide store of fixed chunks
 (the linear member's store): the lock covers only mint, free and lookup.
 Serial by nature here: the store's bookkeeping; the SVM RUN's pair and fold
@@ -88,8 +99,9 @@ from core.member_abi import (
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE,
-    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
+    MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_COEF,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
+    MEMBER_BLOCK_COEF,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_KERNEL_SVM
@@ -107,6 +119,7 @@ from svm.svc_kernel_fit_run import (
 )
 from svm.svc_kernel_native_run import (
     SvcMachine, SvcQueryPlan, svc_query_run, svc_gather_columns_run, SVC_EPILOGUE_NONE, SVC_KERNEL_PRECOMPUTED,
+    SvcCoefRow, svc_coef_run,
 )
 
 comptime _CHUNK = 256
@@ -114,6 +127,8 @@ comptime _INDEX_SPAN = 16777216
 comptime _PARAMS = 17
 comptime _KIND_SVC = 0
 comptime _KIND_SVR = 1
+# The kernel word [1]'s linear code (python/mojolearn/_svm_impl.py `_KERNEL_LINEAR`, the family's kernel table).
+comptime _KERNEL_LINEAR = 0
 # `svc_pair_epilogue`'s per-row modes (svm/impl/svc_rows.mojo; the same
 # words as bindings/svc_kernel_rows_unpack.mojo _EPI_*: plain words here so
 # this RUN file imports no binding).
@@ -175,6 +190,8 @@ struct KernelSvmMemberSlot(Copyable, Movable, Defaultable):
     var prob: List[Float64]
     var scalars: List[Float64]
     var table: List[Float64]
+    # MEMBER_BLOCK_COEF's words (lane mf-rfe7): kernel='linear' coef_, machines x features, made per export.
+    var coef: List[Float32]
     # The device-resident copies of the machines (the estimator's own lease,
     # svm/svm_resident_state.mojo): opened on the first GPU query, closed
     # through `lease_entry` (the SVR table's LEASE_CLOSE) before a refit, an
@@ -203,6 +220,7 @@ struct KernelSvmMemberSlot(Copyable, Movable, Defaultable):
         self.prob = List[Float64]()
         self.scalars = List[Float64]()
         self.table = List[Float64]()
+        self.coef = List[Float32]()
         self.lease = 0
         self.lease_entry = entry_ref_unresolved()
 
@@ -220,6 +238,7 @@ struct KernelSvmMemberSlot(Copyable, Movable, Defaultable):
         self.prob = List[Float64]()
         self.scalars = List[Float64]()
         self.table = List[Float64]()
+        self.coef = List[Float32]()
 
 
 struct KernelSvmMemberStore(Defaultable, Movable):
@@ -945,6 +964,26 @@ def _block_view(slot: _Slot, block: Int) raises -> MemberMatrix:
     raise Error("member ABI: a kernel SVM member has no fitted block " + String(block))
 
 
+def _coef_view(slot: _Slot, call: _Call) raises -> MemberMatrix:
+    """MEMBER_BLOCK_COEF, by name only (module docstring): kernel='linear' coef_ (machines x features), one
+    dual GEMV per machine on the route's SVC table, as `svc_coef_run` runs it for the estimator's own coef_
+    operation (the same rows, sign word and op, so the same words on every column). The words live in the
+    slot until the next export, fit, import or free."""
+    if Int(slot[].params[1]) != _KERNEL_LINEAR:
+        raise Error("AttributeError: mojolearn " + _name(slot) + ": coef_ is only available for kernel='linear'")
+    var machines = len(slot[].machines)
+    var d = slot[].features
+    # The estimator's operation: sign 1 over a multiclass SVC's pair machines (its `_pairs` state), else 0.
+    var sign = 1 if (_svc(slot) and slot[].classes > 2) else 0
+    var rows = List[SvcCoefRow](capacity=machines)
+    for q in range(machines):  # driver-loop: over the fitted machines (one GEMV row each)
+        rows.append(SvcCoefRow(_f32(slot[].machines[q].dual), _f32(slot[].machines[q].vectors),
+                               slot[].machines[q].supports))
+    slot[].coef = List[Float32](length=machines * d, fill=Float32(0))
+    svc_coef_run(_drivers(call), rows, d, sign, _f32(slot[].coef))
+    return MemberMatrix(_f32(slot[].coef), machines, d)
+
+
 def _export(slot: _Slot, call: _Call) raises:
     """A view of one fitted block. The slot owns the words; they stay valid
     until this state's next fit, import or free."""
@@ -952,6 +991,11 @@ def _export(slot: _Slot, call: _Call) raises:
         raise Error("NotFittedError: this " + _name(slot) + " member is not fitted yet")
     var count = _FIXED_BLOCKS + 3 * len(slot[].machines)
     var block = call[].block
+    if block == MEMBER_BLOCK_COEF and (call[].flags & MEMBER_BLOCK_BY_INDEX) == 0:
+        # By name only (lane mf-rfe7): not one of the `count` indexed blocks.
+        call[].dst = _coef_view(slot, call)
+        call[].out_cols = count
+        return
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         if block < 0 or block >= count:
             raise Error("member ABI: this kernel SVM member has " + String(count) + " fitted blocks")
@@ -1093,13 +1137,18 @@ def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
         if call[].state == 0:
             if call[].param_count >= _PARAMS and call[].params:
                 # Kind-exact from the NEW words: SVR has no classifier bits,
-                # SVC with probability=False no predict_proba.
+                # SVC with probability=False no predict_proba; coef_ (lane
+                # mf-rfe7) with kernel='linear' only.
                 var named = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+                if Int(named[1]) == _KERNEL_LINEAR:
+                    common |= MEMBER_CAN_COEF
                 if named[0] != 0.0:
                     return common
                 return common | svc if named[12] != 0.0 else (common | svc) & ~MEMBER_CAN_PREDICT_PROBA
-            return common | svc
+            return common | svc | MEMBER_CAN_COEF
         var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
+        if Int(slot[].params[1]) == _KERNEL_LINEAR:
+            common |= MEMBER_CAN_COEF
         if not _svc(slot):
             return common
         # A fitted state answers from what it holds (an imported one may
