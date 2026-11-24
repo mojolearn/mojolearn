@@ -125,6 +125,7 @@ from core.ensemble_member import (
     meta_plan_metric, meta_plan_search_labels, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR, META_MULTI_CLASSIFIER, META_MULTI_REGRESSOR,
     META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
+from core.ensemble_member import meta_plan_leaf_importances
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
 from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64, msel_addr
 from bindings.classical_labels_door import labels_decode_labels
@@ -4128,6 +4129,10 @@ def _admit_rfe(model: PythonObject, fields: PythonObject, context: PythonObject,
         var classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
         if not _admit_nested(done, nested, estimator, classifier, MEMBER_CAN_FIT | MEMBER_CAN_EXPORT, context, b,
                              labels):
+            return False
+        # A tree or forest leaf read for feature_importances_ (lane mf-rfe6): its importance word set in the
+        # nested plan the work-list minted (one admission per RFE: the work-list walked this estimator for it).
+        if path.leaf_word and not meta_plan_leaf_importances(nested.plans[0], path.hops):
             return False
         base.block = META_BLOCK_FORWARD
         base.squared = True

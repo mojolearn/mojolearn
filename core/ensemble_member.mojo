@@ -699,6 +699,72 @@ def meta_plan_rfe(handle: Int, run: ClsRunPlan, var refusal: String, var hops: L
         shared_slot_unlock(lock)
 
 
+#: The tree / forest member's importance word (core/forest_member_run.mojo FM_WORD_IMPORTANCES): set, its FIT
+#: computes the feature importances its EXPORT MEMBER_BLOCK_FEATURE_IMPORTANCES hands out.
+comptime META_LEAF_IMPORTANCE_WORD = 10
+
+
+def meta_plan_leaf_importances(plan: MemberPlan, hops: List[Float64]) raises -> Bool:
+    """UNPACK, once per admission (lane mf-rfe6): a dotted importance_getter that ends in a tree or forest
+    leaf's `feature_importances_` ('best_estimator_.feature_importances_', ...). The leaf computes them only
+    when its importance word asks (META_LEAF_IMPORTANCE_WORD), and the word lives in the nested plan this
+    admission minted, so it is set there, in the plan store, before any state is made: every state NEW makes
+    copies it, and THE FORWARDED EXPORT reads the leaf's block after each round's fit. `plan`: the META
+    estimator's admitted plan; `hops`: META_BLOCK_FORWARD's words (each step's nested index, -1 the last,
+    then the leaf's block). A search step sets it on every candidate (any may be best_estimator_). False: a
+    step this store does not hold, or a leaf that is not a tree or forest with the word (not served)."""
+    var steps = len(hops) - 1
+    if steps < 1 or plan.family != MEMBER_FAMILY_ENSEMBLE or len(plan.params) < 2:
+        return False
+    var store = _PLANS.get_or_create_ptr()
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    var kinds: List[Int] = [Int(plan.params[0])]
+    var handles: List[Int] = [Int(plan.params[1])]
+    for s in range(steps):  # driver-loop: over the attribute path's steps
+        var last = s == steps - 1
+        var next_kinds = List[Int]()
+        var next_handles = List[Int]()
+        for h in range(len(handles)):  # driver-loop: over this step's plan entries (a search's candidates)
+            var address = _plan_lookup(handles[h], False)
+            var served = True
+            shared_slot_lock(lock)
+            try:
+                var entry = _PlanSlotPtr(unsafe_from_address=address)
+                var count = len(entry[].plans)
+                var lo = Int(hops[s])
+                if lo < 0:
+                    lo = count - 1
+                var hi = lo + 1
+                if _search_kind(kinds[h]):
+                    lo = 0
+                    hi = count
+                if lo < 0 or hi > count or lo >= hi:
+                    served = False
+                else:
+                    for u in range(lo, hi):  # driver-loop: over the step's nested plans
+                        var family = entry[].plans[u].family
+                        if last:
+                            if ((family != MEMBER_FAMILY_TREE and family != MEMBER_FAMILY_FOREST)
+                                    or len(entry[].plans[u].params) <= META_LEAF_IMPORTANCE_WORD):
+                                served = False
+                        elif family != MEMBER_FAMILY_ENSEMBLE or len(entry[].plans[u].params) < 2:
+                            served = False
+                    if served:
+                        for u in range(lo, hi):  # driver-loop: over the step's nested plans
+                            if last:
+                                entry[].plans[u].params[META_LEAF_IMPORTANCE_WORD] = 1.0
+                            else:
+                                next_kinds.append(Int(entry[].plans[u].params[0]))
+                                next_handles.append(Int(entry[].plans[u].params[1]))
+            finally:
+                shared_slot_unlock(lock)
+            if not served:
+                return False
+        kinds = next_kinds^
+        handles = next_handles^
+    return True
+
+
 def meta_plan_refuse(handle: Int, var words: String, late: Bool) raises:
     """UNPACK (lane mf-refuse5, THE DOOR'S REFUSAL; not the RFE kind, whose `refusal` is
     `meta_plan_rfe`'s): the meta door's words for a constructor value it refuses, raised by every

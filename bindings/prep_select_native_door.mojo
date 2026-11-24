@@ -35,7 +35,7 @@ from core.member_abi import (
     MEMBER_GIL_DOOR,
 )
 from core.member_families import MEMBER_FAMILY_ENSEMBLE
-from core.ensemble_member import META_BLOCK_FORWARD
+from core.ensemble_member import META_BLOCK_FORWARD, meta_plan_leaf_importances
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from core.member_abi import MemberCall, member_free, MEMBER_F32, MEMBER_I32, MEMBER_READS_Y_GIVEN
 from bindings.member_given_y_unpack import member_given_y
@@ -240,6 +240,10 @@ def _rfe_dotted_base(estimator: PythonObject, g: PythonObject, context: PythonOb
         # THE RFE KIND's admission reads the same mask.
         var classifier = (mask & MEMBER_CAN_CLASSIFIER) != 0
         if (mask & MEMBER_CAN_FIT) == 0 or (mask & MEMBER_CAN_EXPORT) == 0:
+            return base^
+        # A tree or forest leaf read for feature_importances_ (lane mf-rfe6): its importance word set in the
+        # nested plan this admission minted, before any state is made.
+        if path.leaf_word and not meta_plan_leaf_importances(owner.plan, hops):
             return base^
         base.refusal = source_refusal^
         base.block = META_BLOCK_FORWARD
