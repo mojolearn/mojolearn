@@ -106,18 +106,32 @@ def _xd_store_route(context: PythonObject, key: String, mut route: DeviceRoute) 
     route.flags |= DECOMP_ROUTE_XD_STORE
 
 
-def _fold_route(mut route: DeviceRoute, which: Int):
+def _fold_base_loaded(context: PythonObject, mode: Int) raises -> Bool:
+    """Whether the family's import loaded the base image of `mode` (1 identical, 0 `fast`) with its fold entry
+    (python/mojolearn/_native_decomp_device_bridge.py `connect_fold_bases`, `context["decomp_fold_bases"]`)."""
+    var bases = py_get(context, PythonObject("decomp_fold_bases"))
+    if bases is None:
+        return False
+    var got = py_get(bases, PythonObject("identical" if mode == 1 else "fast"))
+    return got is not None and Bool(py=got)
+
+
+def _fold_route(context: PythonObject, mut route: DeviceRoute, which: Int) raises:
     """Lane vdf-scope-neural2: THE RESIDENT ROUTE of the PCA / TruncatedSVD
     members. On a GPU route (identical, or `fast` since lane
     vdf-scope-neural6: the `fast` base image's table, its fold entries run
     `fast` kernels), the base image's resident-fold entry
     of the kind (`which`, core/estimators_entry_table.mojo DECOMP_FOLD_PCA /
     DECOMP_FOLD_TSVD) in `route.fourth` and the fold store's transport entry
-    in `route.fifth` with DECOMP_ROUTE_FOLD, resolved once here; any other
-    route (host, a build without the base binding's table of the route's
-    mode) is kept as it was, so its kind answers no row index."""
+    in `route.fifth` with DECOMP_ROUTE_FOLD, resolved once here. The family's
+    import loaded the base image of every mode (lane vdf-tail-a,
+    `connect_fold_bases`), so its table is published before this reads it: a
+    loaded image with no table refuses here, never a quiet host-rows member.
+    A host route, or an install without the base image of the route's mode,
+    is kept as it was, so its kind answers no row index."""
     if (route.mode != 1 and route.mode != 0) or route.vendor <= 0:
         return
+    var loaded = _fold_base_loaded(context, route.mode)
     try:
         var key = EstimatorsEntryKey(route.mode, route.vendor)
         var fold = decomp_fold_entry(key, which)
@@ -128,8 +142,10 @@ def _fold_route(mut route: DeviceRoute, which: Int):
         route.fifth = EntryRef(store, entry_ref_word(route.mode, route.vendor, XP_OP_COUNT))
         route.has_fifth = True
         route.flags |= DECOMP_ROUTE_FOLD
-    except:
-        pass
+    except error:
+        if loaded:
+            raise Error("mojolearn: the " + (String("identical") if route.mode == 1 else String("fast"))
+                        + " base image is loaded but its decomposition fold table is not readable: " + String(error))
 
 
 def _randomized_words(fields: PythonObject, power_name: String, context: PythonObject,
@@ -204,7 +220,7 @@ def _pca_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     var route = _route_of(held, vendor)
     route.entry = EntryRef(pca_driver(connection).entry, entry_ref_word(route.mode, route.vendor, PCA_NATIVE_COUNT))
     route.flags = capabilities
-    _fold_route(route, DECOMP_FOLD_PCA)
+    _fold_route(context, route, DECOMP_FOLD_PCA)
     if randomized:
         # Lane vdf-scope-neural6: the randomized fit takes its fold in the x_decomp store; the estimators image's
         # randomized driver reads that process-wide pool (x_decomp/resident.mojo X_DECOMP_POOL) in place.
@@ -267,7 +283,7 @@ def _tsvd_admit(model: PythonObject, fields: PythonObject, context: PythonObject
         if (second & TSVD_CAP_RANDOMIZED) != 0:
             flags |= DECOMP_ROUTE_RANDOMIZED
     route.flags = flags
-    _fold_route(route, DECOMP_FOLD_TSVD)
+    _fold_route(context, route, DECOMP_FOLD_TSVD)
     if randomized and (flags & DECOMP_ROUTE_RANDOMIZED) != 0:
         _xd_store_route(context, "tsvd_decomp_store", route)
     owner.plan.route = route

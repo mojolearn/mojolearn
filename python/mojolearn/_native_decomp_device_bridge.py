@@ -9,6 +9,29 @@ X_DECOMP_HOST = "_mojolearn_x_decomp_host"
 ESTIMATORS_HOST = "_mojolearn_estimators_host"
 
 
+def connect_fold_bases(context, export):
+    """Import the GPU base image (`_mojolearn`) of each numeric mode now, at
+    the family's import, so its init publishes that mode's decomposition
+    fold table (core/mojolearn_run.mojo `decomp_fold_table_publish`) before
+    any member admission reads it (lane vdf-tail-a: a `fast` member's fold
+    route no longer depends on whether something else imported the `fast`
+    base image first). `context["decomp_fold_bases"]` records, per mode,
+    whether that image loaded and exports `export` (its fold entry): the
+    member door refuses a GPU route whose loaded image published no table,
+    and only an install without the image keeps host rows."""
+    # glue: import-time connection of the fixed native base images, once per family context
+    from types import BuiltinFunctionType
+    from . import _backend
+    bases = {}
+    for mode in ("identical", "fast"):  # glue: fixed numeric-mode images
+        try:
+            factory = getattr(_backend.binding("_mojolearn", mode), export)
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError):
+            factory = None
+        bases[mode] = isinstance(factory, BuiltinFunctionType)
+    context["decomp_fold_bases"] = bases
+
+
 def connect_cpu_device(context, basename, tables):
     """Register the CPU descriptor factories of `device="cpu"` beside the
     device factories already in `context`: the host image loads at the first

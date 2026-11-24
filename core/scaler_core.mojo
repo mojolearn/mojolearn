@@ -68,10 +68,13 @@ trait ScalerCalls:
         ...
 
     def run_slot(self, arena: Int, words: Int, program: Int, stages: Int, x_slot: Int, x_words: Int,
-                 out_lo: Int, out_hi: Int) raises:
+                 host_hi: Int, out_lo: Int, out_hi: Int, keep_lo: Int, keep_hi: Int, keep_slot: Int) raises:
         """Lane vdf-scope-neural6: `run` with arena words [0, x_words) filled from x_prep store slot `x_slot`
-        device to device, the rest from the host arena, and only [out_lo, out_hi) brought back (the x_prep
-        ranges runner). A caller without a GPU x_prep entry refuses."""
+        device to device, [x_words, host_hi) from the host arena (every later word starts zero on the device,
+        as the host's do), and only [out_lo, out_hi) brought back (the x_prep ranges runner). Lane vdf-tail-a:
+        with `keep_slot` >= 0 the words [keep_lo, keep_hi) inside it go device to device into that x_prep
+        store slot instead (core/arena_io.mojo slot outputs) and never come back. A caller without a GPU
+        x_prep entry refuses."""
         ...
 
 
@@ -134,17 +137,21 @@ struct ScalerTableCalls(ScalerCalls, ImplicitlyCopyable, Movable):
         _ = entry_ref_call(self.xprep, XP_RUN, a, p, f)
 
     def run_slot(self, arena: Int, words: Int, program: Int, stages: Int, x_slot: Int, x_words: Int,
-                 out_lo: Int, out_hi: Int) raises:
-        # Input triples (lo, hi, src: a slot id or -1 host) and one output quad (lo, hi, -1 no count, 1),
-        # core/arena_io.mojo; no scratch, no output region.
+                 host_hi: Int, out_lo: Int, out_hi: Int, keep_lo: Int, keep_hi: Int, keep_slot: Int) raises:
+        # Input triples (lo, hi, src: a slot id or -1 host) and output quads (lo, hi, -1 no count, 1; a slot
+        # output's CNT is -slot - 2), core/arena_io.mojo; no scratch, no output region.
         var ins: List[Int32] = [Int32(0), Int32(x_words), Int32(x_slot)]
-        if words > x_words:
+        if host_hi > x_words:
             ins.append(Int32(x_words))
-            ins.append(Int32(words))
+            ins.append(Int32(host_hi))
             ins.append(Int32(-1))
         var outs: List[Int32] = [Int32(out_lo), Int32(out_hi), Int32(-1), Int32(1)]
+        if keep_slot >= 0:
+            outs = [Int32(out_lo), Int32(keep_lo), Int32(-1), Int32(1),
+                    Int32(keep_lo), Int32(keep_hi), Int32(-keep_slot - 2), Int32(1),
+                    Int32(keep_hi), Int32(out_hi), Int32(-1), Int32(1)]
         var a: Array[Int, 5] = [arena, program, 0, Int(ins.unsafe_ptr()), Int(outs.unsafe_ptr())]
-        var p: Array[Int, 6] = [words, 0, 0, stages, len(ins) // 3, 1]
+        var p: Array[Int, 6] = [words, 0, 0, stages, len(ins) // 3, len(outs) // 4]
         var f: Array[Float64, 0] = []
         _ = entry_ref_call(self.xprep, XP_RUN_RANGES, a, p, f)
         _ = len(ins) + len(outs)  # the address words are not owners
@@ -165,21 +172,35 @@ def _run_x[C: ScalerCalls](calls: C, mut arena: List[Float32], program: List[Int
         _run(calls, arena, program)
         return
     calls.run_slot(Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16,
-                   x_slot, x_words, out_lo, len(arena))
+                   x_slot, x_words, len(arena), out_lo, len(arena), 0, 0, -1)
     _ = arena
     _ = program
 
 
-def _arena_after_x(size: Int, x_words: Int, x: F32P, x_slot: Int) -> List[Float32]:
+def _run_x_keep[C: ScalerCalls](calls: C, mut arena: List[Float32], program: List[Int32], x_slot: Int,
+                                x_words: Int, host_hi: Int, keep_lo: Int, keep_slot: Int) raises:
+    """Lane vdf-tail-a: the ranges run of `_run_x` (X from x_prep slot `x_slot`, host words [x_words, host_hi),
+    the rest zero on the device) whose block [keep_lo, keep_lo + x_words) goes device to device into x_prep
+    slot `keep_slot`; every other word from x_words on comes back. Same stages on the same words."""
+    calls.run_slot(Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16,
+                   x_slot, x_words, host_hi, x_words, len(arena), keep_lo, keep_lo + x_words, keep_slot)
+    _ = arena
+    _ = program
+
+
+def _arena_after_x(size: Int, x_words: Int, x: F32P, x_slot: Int, zero_hi: Int = -1) -> List[Float32]:
     """A zeroed `size`-word host arena with X's `x_words` at 0 (copied from `x`), or, for a slot (lane
-    vdf-scope-neural6), those words left unset: the device fills them from the slot and they never come back."""
+    vdf-scope-neural6), those words left unset: the device fills them from the slot and they never come back.
+    `zero_hi` >= 0 (a slot, lane vdf-tail-a): only [x_words, zero_hi) is zeroed (the host input range of
+    `_run_x_keep`); the later words start zero on the device and are either brought back or never read."""
     if x_slot < 0:
         var arena = List[Float32](length=size, fill=0)
         unsafe_memcpy(dest=arena.unsafe_ptr(), src=x, count=x_words)
         return arena^
     var arena = List[Float32](unsafe_uninit_length=size)
     var ap = arena.unsafe_ptr()
-    for i in range(x_words, size):  # small-loop(host arena words after X: the zero fill the host path's List does)
+    var hi = size if zero_hi < 0 else min(zero_hi, size)
+    for i in range(x_words, hi):  # small-loop(host arena words after X: the zero fill the host path's List does)
         ap[i] = Float32(0)
     return arena^
 
@@ -295,19 +316,15 @@ def scaler_minmax_keep_extrema[C: ScalerCalls](calls: C, stats: F32P, colnan: In
 
 
 def scaler_minmax_fit_core[C: ScalerCalls](calls: C, x: F32P, n: Int, d: Int, lower: Float32,
-                                           upper: Float32, x_slot: Int = -1) raises -> List[Float32]:
+                                           upper: Float32) raises -> List[Float32]:
     """MinMaxScaler.fit of the C-ordered (n, d) Float32 block at `x`: the
     published rows (5*d, `scaler_minmax_keep_extrema`). NaN columns take the
     fill program (1, 24, 266) and the refusing kernel on the filled block.
-    `x_slot` (lane vdf-scope-neural6): X is that x_prep store slot and the
-    caller's direct slot fit found it non-finite: the fill program reads X
-    there; the filled block comes back for the refusing kernel's host entry."""
+    A member's fold slot takes `scaler_minmax_fill_slot` (lane vdf-tail-a)."""
     var output = List[Float32](length=5 * d, fill=0)
     var op = F32P(unsafe_from_address=_addr(output))
-    var finite = x_slot < 0
-    if x_slot >= 0:
-        pass
-    elif calls.direct():
+    var finite: Bool
+    if calls.direct():
         finite = calls.minmax_fit(MinMaxFitRequest(Int(x), Int(op), n, d, lower, upper, True)) != 0
     else:
         finite = scaler_all_finite(x, n * d)
@@ -321,20 +338,56 @@ def scaler_minmax_fit_core[C: ScalerCalls](calls: C, x: F32P, n: Int, d: Int, lo
     var keep = st + 6 * d
     var dest = keep + d
     var cn = dest + n * d
-    var arena = _arena_after_x(cn + d, n * d, x, x_slot)
+    var arena = _arena_after_x(cn + d, n * d, x, -1)
     var ap = F32P(unsafe_from_address=_addr(arena))
     scaler_feature_indices(ap + keep, d)
-    var program = List[Int32]()
-    _stage(program, 1, d, 0, n, d, st)
-    _stage(program, 24, n * d, 0, n, d, st + 3 * d, dest, keep, d)
-    _stage(program, 266, d, st, cn)
-    _run_x(calls, arena, program, x_slot, n * d, n * d)
+    var program = _minmax_fill_program(n, d)
+    _run(calls, arena, program)
     scaler_refuse_infinite_columns(ap, st, d)
     _ = calls.minmax_fit(MinMaxFitRequest(Int(ap + dest), Int(op), n, d, lower, upper, False))
     var rows = scaler_minmax_keep_extrema(calls, op, Int(ap + cn), d)
     _ = arena^
     _ = output^
     return rows^
+
+
+def _minmax_fill_program(n: Int, d: Int) -> List[Int32]:
+    """The MinMax NaN fill program (1, 24, 266) over the arena of `scaler_minmax_fit_core`: X at 0, the column
+    statistics at n*d (6d), the feature indices (d), the filled block (n*d), the column-NaN flags (d)."""
+    var st = n * d
+    var keep = st + 6 * d
+    var dest = keep + d
+    var cn = dest + n * d
+    var program = List[Int32]()
+    _stage(program, 1, d, 0, n, d, st)
+    _stage(program, 24, n * d, 0, n, d, st + 3 * d, dest, keep, d)
+    _stage(program, 266, d, st, cn)
+    return program^
+
+
+def scaler_minmax_fill_colnan(n: Int, d: Int) -> Int:
+    """Where `scaler_minmax_fill_slot`'s arena holds the d column-NaN flags."""
+    return n * d + 6 * d + d + n * d
+
+
+def scaler_minmax_fill_slot[C: ScalerCalls](calls: C, n: Int, d: Int, x_slot: Int, fill_slot: Int) raises -> List[Float32]:
+    """MinMaxScaler.fit's NaN fill (`scaler_minmax_fit_core`'s program, the same stages on the same words) of X
+    in x_prep store slot `x_slot` (lane vdf-tail-a: a member's fold whose direct slot fit found a NaN or an
+    infinity), the filled (n, d) block written device to device into x_prep slot `fill_slot` (n*d words): it
+    never comes to the host. An infinite column is refused. Returns the arena (the column statistics and the
+    column-NaN flags at `scaler_minmax_fill_colnan`); the caller fits the filled slot with the direct kernel
+    (the refusing kernel's body) and publishes with `scaler_minmax_keep_extrema`."""
+    var st = n * d
+    var keep = st + 6 * d
+    var dest = keep + d
+    var cn = dest + n * d
+    var arena = _arena_after_x(cn + d, n * d, F32P(unsafe_from_address=0), x_slot, dest)
+    var ap = F32P(unsafe_from_address=_addr(arena))
+    scaler_feature_indices(ap + keep, d)
+    var program = _minmax_fill_program(n, d)
+    _run_x_keep(calls, arena, program, x_slot, n * d, dest, dest, fill_slot)
+    scaler_refuse_infinite_columns(ap, st, d)
+    return arena^
 
 
 def scaler_minmax_partial_fit_run[C: ScalerCalls](calls: C, old_min: F32P, old_max: F32P, fitted_d: Int, x: F32P,
@@ -408,25 +461,48 @@ def scaler_nan_fill_offset(n: Int, d: Int) -> Int:
     return n * d + 8 * d
 
 
-def scaler_nan_fill[C: ScalerCalls](calls: C, x: F32P, n: Int, d: Int, x_slot: Int = -1) raises -> List[Float32]:
-    """The (n, d) block with each NaN replaced by its column statistic (the
-    stage 1 + 24 program), at `scaler_nan_fill_offset` of the returned
-    arena; an infinite column is refused. `x_slot` (lane vdf-scope-neural6):
-    X read from that x_prep store slot (`_run_x`); only the statistics and
-    the filled block come back."""
+def _nan_fill_program(n: Int, d: Int) -> List[Int32]:
+    """The transform's NaN fill program (stages 1, 24) over `scaler_nan_fill`'s arena."""
     var st = n * d
     var keep = st + 6 * d
     var stat = keep + d
     var dest = stat + d
-    var arena = _arena_after_x(dest + n * d, n * d, x, x_slot)
-    var ap = F32P(unsafe_from_address=_addr(arena))
-    scaler_feature_indices(ap + keep, d)
     var program = List[Int32]()
     _stage(program, 1, d, 0, n, d, st)
     _stage(program, 24, n * d, 0, n, d, stat, dest, keep, d)
-    _run_x(calls, arena, program, x_slot, n * d, n * d)
+    return program^
+
+
+def scaler_nan_fill[C: ScalerCalls](calls: C, x: F32P, n: Int, d: Int) raises -> List[Float32]:
+    """The (n, d) block with each NaN replaced by its column statistic (the
+    stage 1 + 24 program), at `scaler_nan_fill_offset` of the returned
+    arena; an infinite column is refused."""
+    var st = n * d
+    var keep = st + 6 * d
+    var dest = keep + 2 * d
+    var arena = _arena_after_x(dest + n * d, n * d, x, -1)
+    var ap = F32P(unsafe_from_address=_addr(arena))
+    scaler_feature_indices(ap + keep, d)
+    var program = _nan_fill_program(n, d)
+    _run(calls, arena, program)
     scaler_refuse_infinite_columns(ap, st, d)
     return arena^
+
+
+def scaler_nan_fill_slot[C: ScalerCalls](calls: C, n: Int, d: Int, x_slot: Int, fill_slot: Int) raises:
+    """`scaler_nan_fill` of X in x_prep store slot `x_slot` (lane vdf-tail-a: a member's fold), the filled
+    (n, d) block written device to device into x_prep slot `fill_slot` (n*d words) and never brought to the
+    host: only the column statistics come back (the infinite-column refusal). The same stages on the same words."""
+    var st = n * d
+    var keep = st + 6 * d
+    var dest = keep + 2 * d
+    var arena = _arena_after_x(dest + n * d, n * d, F32P(unsafe_from_address=0), x_slot, dest)
+    var ap = F32P(unsafe_from_address=_addr(arena))
+    scaler_feature_indices(ap + keep, d)
+    var program = _nan_fill_program(n, d)
+    _run_x_keep(calls, arena, program, x_slot, n * d, dest, dest, fill_slot)
+    scaler_refuse_infinite_columns(ap, st, d)
+    _ = arena^
 
 
 @fieldwise_init
@@ -491,22 +567,12 @@ def scaler_transform_core[C: ScalerCalls](calls: C, spec: ScalerTransformSpec, r
         _transform_restore(calls, rows, x, -1, n, d, dst)
 
 
-def scaler_transform_slot_finish[C: ScalerCalls](calls: C, spec: ScalerTransformSpec, rows: F32P, x_slot: Int,
-                                                 n: Int, d: Int, dst: F32P, finite: Bool) raises:
-    """The rest of `scaler_transform_core`'s direct route for X in x_prep store slot `x_slot` (lane
-    vdf-scope-neural6): the caller ran the direct transform on its member store slot (finite: written; else X
-    holds a NaN or an infinity). A non-finite X: the NaN fill program reads X from the slot, the direct kernel
-    transforms the filled block (the core's host-entry call); then, as the core, the per-column NaN restore with
-    X from the slot. The same programs, stages and kernels on the same words."""
-    var name = String("MinMaxScaler") if spec.minmax else String("StandardScaler")
-    if not finite:
-        var filled = scaler_nan_fill(calls, F32P(unsafe_from_address=0), n, d, x_slot)
-        var fp = F32P(unsafe_from_address=_addr(filled)) + scaler_nan_fill_offset(n, d)
-        if _transform_call(calls, spec, True, fp, rows, n, d, dst) != 1:
-            raise Error(name + " transform overflowed in Float32")
-        _ = filled^
-    if not finite or bitcast[DType.int32](rows[7 * d]) != 0:
-        _transform_restore(calls, rows, F32P(unsafe_from_address=0), x_slot, n, d, dst)
+def scaler_transform_slot_restore[C: ScalerCalls](calls: C, rows: F32P, x_slot: Int, n: Int, d: Int,
+                                                  dst: F32P) raises:
+    """`scaler_transform_core`'s per-column NaN restore of `dst` with X in x_prep store slot `x_slot` (lane
+    vdf-scope-neural6; lane vdf-tail-a: the member runs the NaN fill into a slot (`scaler_nan_fill_slot`) and the
+    direct slot transform itself, then calls this). The same program on the same words."""
+    _transform_restore(calls, rows, F32P(unsafe_from_address=0), x_slot, n, d, dst)
 
 
 def _transform_restore[C: ScalerCalls](calls: C, rows: F32P, x: F32P, x_slot: Int, n: Int, d: Int,

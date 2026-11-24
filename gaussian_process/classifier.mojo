@@ -68,7 +68,10 @@ from gaussian_process.estimator import (
     _download,
     _length_scale_table,
     _upload,
+    _x_device,
     gp_validate_data,
+    GP_FOLD_TEST_NONE,
+    GP_FOLD_TEST_ROWS,
 )
 # Keep device-module extension imports at module scope: importing the resident
 # module inside a function duplicates DeviceContext enqueue overload candidates.
@@ -230,6 +233,7 @@ def _gpc_fit_binary_device(
     y: List[Float32],
     kernel: GPKernelSpec,
     max_iter_predict: Int,
+    x_word: Int = 0,
 ) raises -> GPCBinaryFit:
     """The Laplace Newton loop with every step on the device: K from the
     kernel launch's own buffer, then `gpc_newton_device`
@@ -241,7 +245,7 @@ def _gpc_fit_binary_device(
     var t_k0 = Int(perf_counter_ns())
     var n = n_train
     var ctx = _family_ctx()
-    var dk = _gpc_kernel_self_dev(ctx, x, n_train, n_features, kernel)
+    var dk = _gpc_kernel_self_dev(ctx, x, n_train, n_features, kernel, x_word)
     var t_kernel = Int(perf_counter_ns()) - t_k0
     var db = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dy = _upload(ctx, y)
@@ -275,6 +279,7 @@ def gpc_fit_binary_host(
     y: List[Float32],
     kernel: GPKernelSpec,
     max_iter_predict: Int,
+    x_word: Int = 0,
 ) raises -> GPCBinaryFit:
     """`_BinaryGaussianProcessClassifierLaplace(kernel, optimizer=None).fit`
     with `y` already encoded to 0 and 1 (`_gpc.py:171-267`): the kernel
@@ -282,13 +287,16 @@ def gpc_fit_binary_host(
     refused). Refuses by name: non-finite X, a kernel the constructors
     refuse, a target outside {0, 1} or a single class, max_iter_predict
     below 1, and a factorization of `B` that fails (it cannot for finite
-    inputs, `B`'s eigenvalues are at least 1)."""
-    gp_validate_data(x, n_train, n_features, String("X"))
+    inputs, `B`'s eigenvalues are at least 1). `x_word` (lane vdf-tail-a):
+    a negative word is THE FOLD X WORD (`x` empty): one device copy of the
+    fold's rows, tested finite on the device in the member's wording."""
+    if x_word >= 0:
+        gp_validate_data(x, n_train, n_features, String("X"))
     gpc_validate_labels(y, n_train)
     gp_validate_kernel(kernel, n_features)
     gpc_validate_max_iter(max_iter_predict)
 
-    return _gpc_fit_binary_device(x, n_train, n_features, y, kernel, max_iter_predict)
+    return _gpc_fit_binary_device(x, n_train, n_features, y, kernel, max_iter_predict, x_word)
 
 
 def gpc_validate_model(
@@ -326,6 +334,8 @@ def gpc_predict_binary_host(
     x_star: List[Float32],
     n_star: Int,
     want_variance: Bool,
+    xt_word: Int = 0,
+    xs_word: Int = 0,
 ) raises -> GPCLatent:
     """`latent_mean_and_variance(X_star)` (`_gpc.py:434-441`); the mean
     alone when `want_variance` is False (`predict`, `_gpc.py:287-290`).
@@ -334,21 +344,30 @@ def gpc_predict_binary_host(
         mean   = K_star^T (y - pi)                gemm at OP_TN
         v      = solve(L, W_sr[:, None] K_star)   trsm_lower in place
         var    = kernel.diag(X_star) - sum_i v_i^2
+
+    `xt_word` / `xs_word` (lane vdf-tail-a): THE FOLD X WORD for a
+    fold-fitted X_train_ slot (`x_train` empty) / a fold's query rows
+    (`x_star` empty, tested finite on the device in the member's
+    wording); 0 reads the lists. One device copy each, the same bytes.
     """
     if n_star <= 0:
         raise Error(
             "gpc_predict_host: n_star must be positive, got " + String(n_star)
         )
-    gp_validate_data(x_train, n_train, n_features, String("X_train"))
-    gp_validate_data(x_star, n_star, n_features, String("X_star"))
+    if xt_word >= 0:
+        gp_validate_data(x_train, n_train, n_features, String("X_train"))
+    if xs_word >= 0:
+        gp_validate_data(x_star, n_star, n_features, String("X_star"))
     gp_validate_kernel(kernel, n_features)
     gpc_validate_model(y, pi, wsr, l, n_train)
     var kss = gp_kernel_diag(kernel)
 
     var trace = IdentityTrace()
     var ctx = _family_ctx()
-    var dx = _upload(ctx, x_train)
-    var dxs = _upload(ctx, x_star)
+    var dx = _x_device(ctx, x_train, xt_word, n_train, n_features, String("X_train"), GP_FOLD_TEST_NONE,
+                       String("GaussianProcessClassifier"))
+    var dxs = _x_device(ctx, x_star, xs_word, n_star, n_features, String("X_star"), GP_FOLD_TEST_ROWS,
+                        String("GaussianProcessClassifier"))
     var dls = _upload(ctx, _length_scale_table(kernel))
     # y - pi on the device (gpc_items.gpc_residual_item, the host column's)
     var dyt = _upload(ctx, y)

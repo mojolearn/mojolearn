@@ -34,7 +34,9 @@ and transform read it in place (core/scaler_native_api.mojo
 SCALER_OP_FIT_SLOT / SCALER_OP_TRANSFORM_SLOT); a NaN X, sample weights or a
 fitted state with an all-NaN column run the cores' x_prep programs over an
 x_prep copy of the slot (lane vdf-scope-neural6, core/scaler_slot_runs.mojo:
-one device-to-device copy, the runner's slot range); a route without a pin
+one device-to-device copy, the runner's slot range), and a NaN-filled block
+goes back to the member store for the direct slot kernels the same way (lane
+vdf-tail-a: the runner's slot outputs, never the host); a route without a pin
 reads the fold's rows on the host (gathered in host row tasks), as the
 host-input route. `call.fit_output = MEMBER_OP_TRANSFORM`
 writes the training rows' transform to `dst` (rows x features) in the same
@@ -66,9 +68,11 @@ from std.memory import unsafe_memcpy, bitcast
 from core.scaler_core import (
     ScalerTableCalls, ScalerStandardFit, ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core,
     scaler_minmax_keep_extrema, scaler_transform_rows, scaler_transform_core, SCALER_SEEN_INT,
-    scaler_transform_slot_finish,
+    scaler_transform_slot_restore, scaler_minmax_fill_slot, scaler_minmax_fill_colnan, scaler_nan_fill_slot,
 )
-from core.scaler_slot_runs import scaler_slot_to_xprep, scaler_xprep_free
+from core.scaler_slot_runs import (
+    scaler_slot_to_xprep, scaler_xprep_free, scaler_xprep_create, scaler_xprep_to_prep, scaler_prep_free,
+)
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
@@ -333,9 +337,11 @@ def _fit_rows(slot: _Slot, call: _Call, calls: ScalerTableCalls, mut held: SeqRo
             slot[].seen = fit.seen.copy()
             slot[].scalars = [Float64(d), Float64(fit.seen_kind), fit.seen_scalar]
             _ = fit^
+        elif x_slot >= 0:
+            slot[].stats = _minmax_fill_fit_slot(slot, calls, x_slot, n, d)
+            slot[].scalars = [Float64(d), Float64(n)]
         else:
-            slot[].stats = scaler_minmax_fit_core(calls, x, n, d, Float32(slot[].words[3]), Float32(slot[].words[4]),
-                                                  x_slot)
+            slot[].stats = scaler_minmax_fit_core(calls, x, n, d, Float32(slot[].words[3]), Float32(slot[].words[4]))
             slot[].scalars = [Float64(d), Float64(n)]
     finally:
         if x_slot >= 0:
@@ -343,6 +349,36 @@ def _fit_rows(slot: _Slot, call: _Call, calls: ScalerTableCalls, mut held: SeqRo
     slot[].features = d
     slot[].fitted = True
     return False
+
+
+def _minmax_fill_fit_slot(slot: _Slot, calls: ScalerTableCalls, x_slot: Int, n: Int, d: Int) raises -> List[Float32]:
+    """Lane vdf-tail-a: MinMaxScaler.fit of a NaN X held in x_prep slot `x_slot` (a fold whose direct slot fit
+    found a NaN or an infinity). The core's fill program writes the filled block into an x_prep slot
+    (`scaler_minmax_fill_slot`), one device-to-device copy puts it in the member store, and the direct slot fit
+    (SCALER_OP_FIT_SLOT: `minmax_fit_on`, the refusing kernel's body) reads it in place; the five rows are
+    published with the column-NaN flags as `scaler_minmax_fit_core` does. The filled block never visits the
+    host. The same stages and kernels on the same words."""
+    var fill_xp = scaler_xprep_create(n * d)
+    try:
+        var arena = scaler_minmax_fill_slot(calls, n, d, x_slot, fill_xp)
+        var prep_id = scaler_xprep_to_prep(fill_xp, n * d)
+        try:
+            var stats = List[Float32](length=5 * d, fill=0)
+            var a: Array[Int, 1] = [Int(stats.unsafe_ptr())]
+            var p: Array[Int, 6] = [prep_id, n, d, 1, 1, 1]
+            var f: Array[Float64, 2] = [Float64(Float32(slot[].words[3])), Float64(Float32(slot[].words[4]))]
+            if entry_ref_call(calls.scaler, SCALER_OP_FIT_SLOT, a, p, f) == 0:
+                # `minmax_fit_refusing`'s error: a filled block still holds a NaN (an all-NaN column).
+                raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+            var colnan = Int(arena.unsafe_ptr()) + 4 * scaler_minmax_fill_colnan(n, d)
+            var rows = scaler_minmax_keep_extrema(calls, _F32P(unsafe_from_address=Int(stats.unsafe_ptr())), colnan, d)
+            _ = stats^
+            _ = arena^  # the column-NaN flags live past the publication
+            return rows^
+        finally:
+            scaler_prep_free(prep_id)
+    finally:
+        scaler_xprep_free(fill_xp)
 
 
 def _fit_transform_once(slot: _Slot, call: _Call, calls: ScalerTableCalls, x: Int, n: Int, d: Int) raises -> Bool:
@@ -452,10 +488,25 @@ def _transform_held(slot: _Slot, call: _Call, mut held: SeqRows, inverse: Bool) 
             return
         # -1: X holds a NaN or an infinity (or a column was all NaN at the
         # fit): the core's NaN fill and restore over an x_prep copy of the slot.
+        # Lane vdf-tail-a: the filled block goes into an x_prep slot, then the
+        # member store, and the direct slot transform reads it there (the
+        # core's direct host-entry call on the same words): it never visits the host.
         var x_slot = scaler_slot_to_xprep(-held.x - 1, n * d)
         try:
-            scaler_transform_slot_finish(calls, spec, rows, x_slot, n, d, _F32P(unsafe_from_address=call[].dst.data),
-                                         got == 1)
+            if got != 1:
+                var fill_xp = scaler_xprep_create(n * d)
+                try:
+                    scaler_nan_fill_slot(calls, n, d, x_slot, fill_xp)
+                    var prep_id = scaler_xprep_to_prep(fill_xp, n * d)
+                    try:
+                        p[0] = prep_id
+                        if entry_ref_call(calls.scaler, SCALER_OP_TRANSFORM_SLOT, a, p, f) != 1:
+                            raise Error(estimator + " transform overflowed in Float32")
+                    finally:
+                        scaler_prep_free(prep_id)
+                finally:
+                    scaler_xprep_free(fill_xp)
+            scaler_transform_slot_restore(calls, rows, x_slot, n, d, _F32P(unsafe_from_address=call[].dst.data))
         finally:
             scaler_xprep_free(x_slot)
         return
