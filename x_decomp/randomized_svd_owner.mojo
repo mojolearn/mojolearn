@@ -61,7 +61,11 @@ def randomized_svd_run[E: Exec, D: RDev, RES: Bool](
         power = 7 if Float64(components) < 0.1 * Float64(min(rows, cols)) else 4
     var kit = RKit[E, D, RES]()
     try:
-        var original = kit.add(0, x_id, rows, cols) if x_id >= 0 else kit.add(Int(x), -1, rows, cols)
+        var original: Int
+        if x_id >= 0:
+            original = kit.add(0, x_id, rows, cols)
+        else:
+            original = kit.add(Int(x), -1, rows, cols)
         comptime if RES:
             if finite_word != 0:
                 var flagged = kit.device_tested(original)

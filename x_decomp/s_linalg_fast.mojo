@@ -231,10 +231,11 @@ def dev_lu_factor_in_run(pinf: F32Ptr, ida: Int, idl: Int, idp: Int, n: Int) rai
 
 def _lu_solve_resident(
     ctx: DeviceContext, mut db: DeviceBuffer[DType.float32], mut dx: DeviceBuffer[DType.float32], il: Int, ip: Int,
-    ida: Int, n: Int, nrhs: Int, refine: Bool,
+    ida: Int, n: Int, nrhs: Int, refine: Bool, px: F32Ptr,
 ) raises:
     """`dev_lu_solve_run`'s solve once B is in `db` (read, never written): X (n x nrhs) into `dx` on the device
-    factor il / ip, with LU_FAST_RESIDENT's one refinement step against A (ida) when `refine`. Enqueued and waited."""
+    factor il / ip, with LU_FAST_RESIDENT's one refinement step against A (ida) when `refine`; X then down into `px`
+    unless it is null (a device result stays). Enqueued, then one wait, as before."""
     var dl = _ptr(il, n * n)
     var dp = I32Ptr(unsafe_from_address=Int(_ptr(ip, n)))
     var da = _ptr(ida, n * n)
@@ -263,6 +264,8 @@ def _lu_solve_resident(
         ctx.synchronize()
         _ = dr^
         _ = dd^
+    if Int(px) != 0:
+        _down(ctx, dx, px, n * nrhs)
     ctx.synchronize()
     _ = dbs^
     _ = didx^
@@ -278,9 +281,7 @@ def dev_lu_solve_run(
     var ctx = xd_ctx()
     var db = _up(ctx, pb, cells)
     var dx = ctx.enqueue_create_buffer[DType.float32](cells)
-    _lu_solve_resident(ctx, db, dx, il, ip, ida, n, nrhs, rf != 0)
-    _down(ctx, dx, px, cells)
-    ctx.synchronize()
+    _lu_solve_resident(ctx, db, dx, il, ip, ida, n, nrhs, rf != 0, px)
     _ = db^
     _ = dx^
     return cells
@@ -295,7 +296,7 @@ def dev_lu_solve_in_run(il: Int, ip: Int, ida: Int, ib: Int, ix: Int, n: Int, nr
     var ctx = xd_ctx()
     var db = pool_buffer(ib, cells)
     var dx = pool_buffer(ix, cells)
-    _lu_solve_resident(ctx, db, dx, il, ip, ida, n, nrhs, rf != 0)
+    _lu_solve_resident(ctx, db, dx, il, ip, ida, n, nrhs, rf != 0, F32Ptr(unsafe_from_address=0))
     _ = db^
     _ = dx^
     return cells

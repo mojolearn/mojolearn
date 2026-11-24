@@ -401,7 +401,9 @@ def _sparse_encode_dev(args: PythonObject, device: FunctionDevice, held: PythonO
         var out = -1
         var py = Python()
         with GILReleased(py):
-            var init = kit.adopt(w0.handle, w0.dim(0), w0.dim(1), "init") if has_init else -1
+            var init = -1
+            if has_init:
+                init = kit.adopt(w0.handle, w0.dim(0), w0.dim(1), "init")
             var xm = kit.adopt(x.handle, x.dim(0), x.dim(1), "X")
             var dm = kit.adopt(d.handle, d.dim(0), d.dim(1), "dictionary")
             var gram = Gram(-1)
