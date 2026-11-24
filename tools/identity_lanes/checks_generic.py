@@ -290,3 +290,10 @@ def _(ml, X, yc, yr, Xh=None):
     if failed:
         raise AssertionError(f"check-function ({side} side): " + "; ".join(failed))
     return _fit(dict(ridge=part, rows=_h(np.asarray([result["fit_rows"], result["fit_rows_given"]], dtype=np.int64))))
+
+
+_batch_decl("n/a:verification-check (the lane runs mojolearn's own GPU-against-CPU check per class; it has no "
+            "out-of-sample probe of its own, and the batch part of each class is measured on that class's own lane)",
+            "check-generic-prep", "check-generic-decomp", "check-generic-linear", "check-generic-trees",
+            "check-generic-neighbors", "check-generic-cluster", "check-generic-sequence", "check-generic-other",
+            "check-function")
