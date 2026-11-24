@@ -40,6 +40,7 @@ from bindings.classical_arrays_door import classical_wrap_array
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.msel_search_state_door import msel_parameter_values
+from bindings.msel_member_device_unpack import msel_own_device_admit
 from bindings.family_common_unpack import family_str
 from bindings.family_common_pack import family_call
 from bindings.label_input_sources_unpack import labels_list_integer_storage
@@ -338,8 +339,18 @@ def msel_splitter_initialize(model: PythonObject, args: PythonObject,
         py_setitem(updates, "test_fold", values)
     elif kind == "iterable":
         py_setitem(updates, "_pairs", msel_index_pairs(args[1], context))
-    else:
+    elif kind != "device":
         raise Error("ValueError: unknown native splitter constructor")
+    # device= (lane vdf-msel): the last item of every public constructor's
+    # tuple ("device": a constructor that stores its other parameters itself).
+    # Admitted where given, in the estimators' words; stored only when given,
+    # so a splitter built with device=None has the fields, get_params and repr
+    # it had before (its split reads an absent device as None).
+    if kind != "iterable":
+        var device = args[len(args) - 1]
+        if device is not None:
+            msel_own_device_admit(device, msel_b(), context)
+            py_setitem(updates, "device", device)
     var keys = py_call(msel_b().list, updates)
     for i in range(len(keys)):  # driver-loop: refuse custom finalizers before releasing overwritten state
         if py_contains(fields, keys[i]) and fields[keys[i]] is not updates[keys[i]]:

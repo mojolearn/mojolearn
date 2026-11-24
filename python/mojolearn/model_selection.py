@@ -144,7 +144,7 @@ _SPLIT_DESCRIPTOR_SCHEMA = 'mojolearn.split_descriptor.v1'
 # stratified folds as plain KFold ones.
 
 
-def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
+def split_descriptor(X, y, *, estimator=None, cv=None, groups=None, device=None):
     """Describe a cross-validation split so a run can be reproduced.
 
     The scores from ``cross_val_score`` depend on the order of the rows in
@@ -175,6 +175,10 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
         integer-index pairs.
     groups : array-like of shape (n_samples,), default None
         Group labels, when the splitter reads them.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -205,10 +209,10 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
     >>> scores = cross_val_score(model, X, y)
     >>> record = split_descriptor(X, y, estimator=model)
     """
-    return _NATIVE(None, "family_msel_split_descriptor", (X, y, estimator, cv, groups), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_msel_split_descriptor", (X, y, estimator, cv, groups, device), _NATIVE_CONTEXT)
 
 
-def default_folds(y, n_splits=5, *, classifier=False):
+def default_folds(y, n_splits=5, *, classifier=False, device=None):
     """The folds ``cross_val_score`` and ``cross_validate`` use for an
     integer ``cv``.
 
@@ -226,6 +230,10 @@ def default_folds(y, n_splits=5, *, classifier=False):
         a classifier, at most the size of the largest class).
     classifier : bool, default False
         True for the stratified folds a classifier gets.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -241,11 +249,11 @@ def default_folds(y, n_splits=5, *, classifier=False):
     >>> len(folds)
     5
     """
-    return _NATIVE(None, "family_msel_default_folds", (y, n_splits, classifier), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_msel_default_folds", (y, n_splits, classifier, device), _NATIVE_CONTEXT)
 
 
 def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
-                    n_jobs=None, error_score='raise'):
+                    n_jobs=None, error_score='raise', device=None):
     """Evaluate an estimator by cross-validation and return one score per fold.
 
     For each fold, a fresh clone of ``estimator`` is fit on the training rows
@@ -291,6 +299,12 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
         depend on it.
     error_score : 'raise', default 'raise'
         Only ``'raise'`` is supported: an error in a fit or score propagates.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs, the estimator's fits included. None uses
+        this installation's device (and the estimator's own ``device``),
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. An
+        estimator constructed with a different ``device`` raises ValueError,
+        as do other values.
 
     Returns
     -------
@@ -313,7 +327,7 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     >>> y = rng.random(1000, dtype=np.float32)
     >>> scores = cross_val_score(mojolearn.Ridge(alpha=1.0), X, y, cv=5)
     """
-    return _NATIVE(None, "family_msel_cross_val_score", (estimator, X, y, cv, scoring, groups, n_jobs, error_score),
+    return _NATIVE(None, "family_msel_cross_val_score", (estimator, X, y, cv, scoring, groups, n_jobs, error_score, device),
                    _NATIVE_CONTEXT)
 
 
@@ -391,8 +405,9 @@ class _Splitter:
 
 
 class _KFoldBase(_Splitter):
-    def __init__(self, n_splits=5, *, shuffle=False, random_state=None):
-        return _NATIVE(self, "family_msel_splitter_init", ("kfold", n_splits, shuffle, random_state), _NATIVE_CONTEXT)
+    def __init__(self, n_splits=5, *, shuffle=False, random_state=None, device=None):
+        return _NATIVE(self, "family_msel_splitter_init", ("kfold", n_splits, shuffle, random_state, device),
+                       _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of splits, ``n_splits``."""
@@ -417,6 +432,10 @@ class KFold(_KFoldBase):
     random_state : int or None, default None
         Seed for the shuffle. Setting it with ``shuffle=False`` raises
         ``ValueError``, as in scikit-learn.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -454,6 +473,10 @@ class StratifiedKFold(_KFoldBase):
     random_state : int or None, default None
         Seed for the shuffle. Setting it with ``shuffle=False`` raises
         ``ValueError``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -492,6 +515,10 @@ class GroupKFold(_KFoldBase):
     random_state : int or None, default None
         Seed for the shuffle (mojolearn's counter-based generator). Setting
         it with ``shuffle=False`` raises ``ValueError``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -529,6 +556,10 @@ class StratifiedGroupKFold(_KFoldBase):
     random_state : int or None, default None
         Seed for the shuffle (mojolearn's counter-based generator). Setting
         it with ``shuffle=False`` raises ``ValueError``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -568,6 +599,10 @@ class TimeSeriesSplit(_Splitter):
     gap : int, default 0
         Rows left out between the end of each training window and its test
         block.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -577,8 +612,9 @@ class TimeSeriesSplit(_Splitter):
     >>> folds = list(TimeSeriesSplit(n_splits=5, gap=10).split(X))
     """
 
-    def __init__(self, n_splits=5, *, max_train_size=None, test_size=None, gap=0):
-        return _NATIVE(self, "family_msel_splitter_init", ("time", n_splits, max_train_size, test_size, gap), _NATIVE_CONTEXT)
+    def __init__(self, n_splits=5, *, max_train_size=None, test_size=None, gap=0, device=None):
+        return _NATIVE(self, "family_msel_splitter_init", ("time", n_splits, max_train_size, test_size, gap, device),
+                       _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of splits, ``n_splits``."""
@@ -597,7 +633,14 @@ class LeaveOneOut(_Splitter):
     """Leave-one-out cross-validator.
 
     Each row is the test set once, with every other row as the training set.
-    Follows scikit-learn's ``LeaveOneOut``. It takes no parameters.
+    Follows scikit-learn's ``LeaveOneOut``.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -606,6 +649,9 @@ class LeaveOneOut(_Splitter):
     >>> X = np.random.default_rng(0).random((20, 4), dtype=np.float32)
     >>> folds = list(LeaveOneOut().split(X))
     """
+
+    def __init__(self, *, device=None):
+        return _NATIVE(self, "family_msel_splitter_init", ("device", device), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of rows of ``X`` (``X`` is required)."""
@@ -631,6 +677,10 @@ class LeavePOut(_Splitter):
     ----------
     p : int
         Size of each test set; must be less than the number of rows.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -640,8 +690,9 @@ class LeavePOut(_Splitter):
     >>> folds = list(LeavePOut(2).split(X))
     """
 
-    def __init__(self, p):
+    def __init__(self, p, *, device=None):
         self.p = p
+        return _NATIVE(self, "family_msel_splitter_init", ("device", device), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return ``n_samples choose p``."""
@@ -660,7 +711,14 @@ class LeaveOneGroupOut(_Splitter):
 
     Each distinct group is the test set once, in sorted group order, with
     the rows of every other group as the training set. Follows
-    scikit-learn's ``LeaveOneGroupOut``. It takes no parameters.
+    scikit-learn's ``LeaveOneGroupOut``.
+
+    Parameters
+    ----------
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -671,6 +729,9 @@ class LeaveOneGroupOut(_Splitter):
     >>> groups = rng.integers(0, 5, 1000)
     >>> folds = list(LeaveOneGroupOut().split(X, groups=groups))
     """
+
+    def __init__(self, *, device=None):
+        return _NATIVE(self, "family_msel_splitter_init", ("device", device), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of distinct values in ``groups``."""
@@ -697,6 +758,10 @@ class LeavePGroupsOut(_Splitter):
     n_groups : int
         Number of groups in each test set; must be less than the number of
         distinct groups.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -708,8 +773,9 @@ class LeavePGroupsOut(_Splitter):
     >>> folds = list(LeavePGroupsOut(n_groups=2).split(X, groups=groups))
     """
 
-    def __init__(self, n_groups):
+    def __init__(self, n_groups, *, device=None):
         self.n_groups = n_groups
+        return _NATIVE(self, "family_msel_splitter_init", ("device", device), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return ``n_distinct_groups choose n_groups``."""
@@ -758,6 +824,10 @@ class RepeatedKFold(_Repeated):
         Number of repeats, at least 1.
     random_state : int or None, default None
         Seed that fixes every repeat's shuffle.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -767,8 +837,9 @@ class RepeatedKFold(_Repeated):
     >>> folds = list(RepeatedKFold(n_splits=5, n_repeats=3, random_state=0).split(X))
     """
 
-    def __init__(self, *, n_splits=5, n_repeats=10, random_state=None):
-        return _NATIVE(self, "family_msel_splitter_init", ("repeated", n_splits, n_repeats, random_state), _NATIVE_CONTEXT)
+    def __init__(self, *, n_splits=5, n_repeats=10, random_state=None, device=None):
+        return _NATIVE(self, "family_msel_splitter_init", ("repeated", n_splits, n_repeats, random_state, device),
+                       _NATIVE_CONTEXT)
 
 
 class RepeatedStratifiedKFold(_Repeated):
@@ -786,6 +857,10 @@ class RepeatedStratifiedKFold(_Repeated):
         Number of repeats, at least 1.
     random_state : int or None, default None
         Seed that fixes every repeat's shuffle.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -798,8 +873,9 @@ class RepeatedStratifiedKFold(_Repeated):
     >>> folds = list(cv.split(X, y))
     """
 
-    def __init__(self, *, n_splits=5, n_repeats=10, random_state=None):
-        return _NATIVE(self, "family_msel_splitter_init", ("repeated", n_splits, n_repeats, random_state), _NATIVE_CONTEXT)
+    def __init__(self, *, n_splits=5, n_repeats=10, random_state=None, device=None):
+        return _NATIVE(self, "family_msel_splitter_init", ("repeated", n_splits, n_repeats, random_state, device),
+                       _NATIVE_CONTEXT)
 
 
 class ShuffleSplit(_Splitter):
@@ -825,6 +901,10 @@ class ShuffleSplit(_Splitter):
         absolute count. None means the complement of ``test_size``.
     random_state : int or None, default None
         Seed for the permutations.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -835,11 +915,12 @@ class ShuffleSplit(_Splitter):
     """
     _default_test_size = 0.1
 
-    def __init__(self, n_splits=10, *, test_size=None, train_size=None, random_state=None):
+    def __init__(self, n_splits=10, *, test_size=None, train_size=None, random_state=None, device=None):
         self.n_splits = n_splits
         self.test_size = test_size
         self.train_size = train_size
         self.random_state = random_state
+        return _NATIVE(self, "family_msel_splitter_init", ("device", device), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of splits, ``n_splits``."""
@@ -874,6 +955,10 @@ class GroupShuffleSplit(ShuffleSplit):
         complement of ``test_size``.
     random_state : int or None, default None
         Seed for the permutations (mojolearn's counter-based generator).
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -917,6 +1002,10 @@ class StratifiedShuffleSplit(ShuffleSplit):
         complement of ``test_size``.
     random_state : int or None, default None
         Seed for the permutations.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -954,6 +1043,10 @@ class PredefinedSplit(_Splitter):
     ----------
     test_fold : array-like of int, shape (n_samples,)
         The fold of each row, or -1.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where ``split`` and ``get_n_splits`` run. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a GPU
+        installation. Other values raise ValueError.
 
     Examples
     --------
@@ -963,8 +1056,8 @@ class PredefinedSplit(_Splitter):
     >>> folds = list(cv.split())
     """
 
-    def __init__(self, test_fold):
-        return _NATIVE(self, "family_msel_splitter_init", ("predefined", test_fold), _NATIVE_CONTEXT)
+    def __init__(self, test_fold, *, device=None):
+        return _NATIVE(self, "family_msel_splitter_init", ("predefined", test_fold, device), _NATIVE_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of distinct fold values other than -1."""
@@ -986,7 +1079,7 @@ class _IterableCV(_Splitter):
         return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
-def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None):
+def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None, device=None):
     """Turn a ``cv`` argument into a splitter.
 
     Follows scikit-learn's ``check_cv``. An integer (or None, meaning 5)
@@ -1010,6 +1103,11 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
         Passed to the ``KFold`` or ``StratifiedKFold`` built from an integer.
     random_state : int or None, default None
         Seed for that splitter, used only when ``shuffle`` is true.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the label check runs; a splitter built here keeps it for its
+        ``split``. None uses this installation's device, 'cpu' runs on the
+        CPU and 'gpu' requires a GPU installation. Other values raise
+        ValueError.
 
     Returns
     -------
@@ -1030,11 +1128,11 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
     >>> y = np.random.default_rng(0).integers(0, 2, 1000)
     >>> cv = check_cv(5, y, classifier=True)
     """
-    return _NATIVE(None, "family_msel_check_cv", (cv, y, classifier, shuffle, random_state), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_msel_check_cv", (cv, y, classifier, shuffle, random_state, device), _NATIVE_CONTEXT)
 
 
 def train_test_split(*arrays, test_size=None, train_size=None, random_state=None, shuffle=True,
-                     stratify=None):
+                     stratify=None, device=None):
     """Split arrays into random train and test subsets.
 
     Follows scikit-learn's ``train_test_split``. With ``shuffle=True`` the
@@ -1062,6 +1160,10 @@ def train_test_split(*arrays, test_size=None, train_size=None, random_state=None
     stratify : array-like or None, default None
         Class labels to stratify by. Requires ``shuffle=True``; with
         ``shuffle=False`` it raises ``ValueError``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device,
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. Other
+        values raise ValueError.
 
     Returns
     -------
@@ -1086,7 +1188,7 @@ def train_test_split(*arrays, test_size=None, train_size=None, random_state=None
     ...     X, y, test_size=0.2, random_state=0)
     """
     return _NATIVE(None, "family_msel_train_test_split",
-                   (arrays, test_size, train_size, random_state, shuffle, stratify), _NATIVE_CONTEXT)
+                   (arrays, test_size, train_size, random_state, shuffle, stratify, device), _NATIVE_CONTEXT)
 
 
 # ---------------------------------------------------------------- fold rows
@@ -1269,7 +1371,7 @@ def get_scorer(scoring):
 
 def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, n_jobs=None,
                    return_train_score=False, return_estimator=False, return_indices=False,
-                   error_score=float('nan')):
+                   error_score=float('nan'), device=None):
     """Evaluate one or more scores by cross-validation, with fit and score times.
 
     Follows scikit-learn's ``cross_validate``. For each fold, a fresh clone
@@ -1309,6 +1411,12 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
         ``'raise'`` propagates a fit or scoring error; a number is recorded
         as the fold's score instead (every score of a failed fit, the one
         score that failed otherwise).
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs, the estimator's fits included. None uses
+        this installation's device (and the estimator's own ``device``),
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. An
+        estimator constructed with a different ``device`` raises ValueError,
+        as do other values.
 
     Returns
     -------
@@ -1330,10 +1438,11 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
     """
     return _NATIVE(None, "family_msel_cross_validate",
                    (estimator, X, y, groups, scoring, cv, n_jobs, return_train_score, return_estimator,
-                    return_indices, error_score), _NATIVE_CONTEXT)
+                    return_indices, error_score, device), _NATIVE_CONTEXT)
 
 
-def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None, method='predict'):
+def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None, method='predict',
+                      device=None):
     """Return each row's prediction from the fold that held it out.
 
     Follows scikit-learn's ``cross_val_predict``. For each fold, a fresh
@@ -1362,6 +1471,12 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
         depend on it.
     method : str, default 'predict'
         Estimator method to call, for example ``'predict_proba'``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs, the estimator's fits included. None uses
+        this installation's device (and the estimator's own ``device``),
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. An
+        estimator constructed with a different ``device`` raises ValueError,
+        as do other values.
 
     Returns
     -------
@@ -1380,7 +1495,7 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
     >>> y = rng.random(1000, dtype=np.float32)
     >>> pred = cross_val_predict(mojolearn.Ridge(alpha=1.0), X, y, cv=5)
     """
-    return _NATIVE(None, "family_msel_cross_val_predict", (estimator, X, y, groups, cv, n_jobs, method),
+    return _NATIVE(None, "family_msel_cross_val_predict", (estimator, X, y, groups, cv, n_jobs, method, device),
                    _NATIVE_CONTEXT)
 
 
@@ -1792,7 +1907,7 @@ class RandomizedSearchCV(_BaseSearch):
 
 
 def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, cv=None, scoring=None,
-                     n_jobs=None, error_score=float('nan')):
+                     n_jobs=None, error_score=float('nan'), device=None):
     """Training and test scores for each value of one parameter.
 
     Follows scikit-learn's ``validation_curve``. For each value in
@@ -1824,6 +1939,12 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
     error_score : 'raise' or float, default nan
         ``'raise'`` propagates a fit or scoring error; a number is recorded
         instead.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs, the estimator's fits included. None uses
+        this installation's device (and the estimator's own ``device``),
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. An
+        estimator constructed with a different ``device`` raises ValueError,
+        as do other values.
 
     Returns
     -------
@@ -1841,13 +1962,13 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
     ...                                param_range=[0.1, 1.0, 10.0], cv=5)
     """
     return _NATIVE(None, "family_msel_validation_curve",
-                   (estimator, X, y, param_name, param_range, groups, cv, scoring, n_jobs, error_score),
+                   (estimator, X, y, param_name, param_range, groups, cv, scoring, n_jobs, error_score, device),
                    _NATIVE_CONTEXT)
 
 
 def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.55, 0.775, 1.0), cv=None,
                    scoring=None, n_jobs=None, shuffle=False, random_state=None, error_score=float('nan'),
-                   return_times=False):
+                   return_times=False, device=None):
     """Training and test scores for growing training-set sizes.
 
     Follows scikit-learn's ``learning_curve``, without
@@ -1888,6 +2009,12 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
         that failed, instead.
     return_times : bool, default False
         Also return fit and score times.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs, the estimator's fits included. None uses
+        this installation's device (and the estimator's own ``device``),
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. An
+        estimator constructed with a different ``device`` raises ValueError,
+        as do other values.
 
     Returns
     -------
@@ -1911,11 +2038,11 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     """
     return _NATIVE(None, "family_msel_learning_curve",
                    (estimator, X, y, groups, train_sizes, cv, scoring, n_jobs, shuffle, random_state, error_score,
-                    return_times), _NATIVE_CONTEXT)
+                    return_times, device), _NATIVE_CONTEXT)
 
 
 def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutations=100, n_jobs=None,
-                           random_state=0, verbose=0, scoring=None, fit_params=None, params=None):
+                           random_state=0, verbose=0, scoring=None, fit_params=None, params=None, device=None):
     """Test the significance of a cross-validated score by permuting y.
 
     Follows scikit-learn's ``permutation_test_score``. The mean
@@ -1950,6 +2077,12 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
         As in ``cross_val_score``.
     fit_params, params : dict or None, default None
         Accepted for compatibility; not passed to ``fit``.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs, the estimator's fits included. None uses
+        this installation's device (and the estimator's own ``device``),
+        'cpu' runs on the CPU and 'gpu' requires a GPU installation. An
+        estimator constructed with a different ``device`` raises ValueError,
+        as do other values.
 
     Returns
     -------
@@ -1973,7 +2106,7 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
     """
     return _NATIVE(None, "family_msel_permutation_test_score",
                    (estimator, X, y, groups, cv, n_permutations, n_jobs, random_state, verbose, scoring, fit_params,
-                    params), _NATIVE_CONTEXT)
+                    params, device), _NATIVE_CONTEXT)
 
 
 # Import-time connection; constructing and sizing DeviceRows each hand off once.
