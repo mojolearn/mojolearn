@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""CPU kernel variants: degree transport through save and reload, row
-invariance of the reloaded model, and the degree range refusal.
+"""CPU kernel variants: degree transport through save and reload and row
+invariance of the reloaded model (the degree range refusal is in
+test_kernel_methods_boundary.py).
 
 Cross-vendor identity is established by recorded harness lanes, not by these
 single-machine tests. They must run with the newly built kernel host binding.
@@ -51,11 +52,3 @@ def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
                             np.asarray(getattr(restored, method)(Q[2:]))])
     alone = np.concatenate([np.asarray(getattr(restored, method)(Q[i:i+1])) for i in range(len(Q))])
     assert bits(expected) == bits(split) == bits(alone)
-
-
-@pytest.mark.parametrize('degree', [-1, 33])
-def test_host_rejects_out_of_range_polynomial_degree(degree):
-    cpu()
-    X = np.eye(3, dtype='float32')
-    with pytest.raises(Exception, match='degree'):
-        ml.KernelRidge(kernel='poly', degree=degree).fit(X, np.ones(3, dtype='float32'))

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Brute-force k-NN under canberra, braycurtis, correlation, jensenshannon and
-inner_product (lane x-neighbors-metrics, 2026-09-27). Refusals always run;
-value checks skip, saying so, without a binding. scikit-learn / scipy are
+inner_product (lane x-neighbors-metrics, 2026-09-27). The refusals are in
+test_neighbors_boundary.py; value checks skip, saying so, without a binding. scikit-learn / scipy are
 compared to a tolerance; repeat calls must be the same bits. The
 inner-product search against float64 products is the Mojo check
 checks/native_tests/neighbors_knn_metrics.mojo."""
@@ -27,18 +27,6 @@ def _nn_or_skip(metric, x, k=5):
         return ml.NearestNeighbors(n_neighbors=k, metric=metric).fit(x)
     except (ImportError, NotImplementedError) as exc:
         pytest.skip(f"no k-NN binding on this install: {exc}")
-
-
-def test_refusals():
-    x = _data()
-    with pytest.raises(ValueError, match="haversine"):
-        ml.NearestNeighbors(metric="haversine").fit(x[:, :2])
-    with pytest.raises(ValueError, match="X >= 0"):
-        ml.NearestNeighbors(metric="jensenshannon").fit(x)
-    with pytest.raises(ValueError, match="brute force only"):
-        ml.NearestNeighbors(metric="canberra", algorithm="rbc").fit(x)
-    with pytest.raises(ValueError, match="similarity"):
-        ml.KNeighborsRegressor(metric="inner_product", weights="distance").fit(x, x[:, 0])
 
 
 @pytest.mark.parametrize("metric", ["canberra", "braycurtis", "correlation", "jensenshannon"])

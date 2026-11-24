@@ -3,8 +3,8 @@
 
 Construction, refusals, `set_params`, clone and pickle of the parameter itself are covered for every class that takes
 `device=` by `test_device_parameter.py`. Here: on a GPU installation `device="cpu"` runs the CPU binaries beside the GPU
-ones in one process (`vendor_used() == "cpu"`, nothing launched on the GPU, `score` included); in `identical` mode it
-returns the bits the GPU returns; `check` compares the two devices in this process. What needs two devices is skipped
+ones in one process (`vendor_used() == "cpu"`, nothing launched on the GPU, `score` included; that it
+returns the bits the GPU returns is the verify lanes gp, gpc, gp-score and gpc-methods on both sides); `check` compares the two devices in this process. What needs two devices is skipped
 by name on a CPU-only installation.
 """
 import pickle
@@ -82,25 +82,6 @@ def test_cpu_device_does_nothing_on_the_gpu(cls):
     assert activity is not None
     assert activity["launches"] == 0, activity["launch_names"]
     assert activity["upload_calls"] == 0 and activity["download_calls"] == 0
-
-
-@two_devices
-@pytest.mark.parametrize("cls", CLASSES)
-def test_identical_mode_cpu_device_returns_the_gpu_bits(cls):
-    if mojolearn.numeric_mode() != "identical":
-        pytest.skip("bits are promised in identical mode only")
-    x, y = data(cls)
-    gpu = cls(numeric_mode="identical").fit(x, y)
-    cpu = cls(numeric_mode="identical", device="cpu").fit(x, y)
-    assert answer(gpu, x).tobytes() == answer(cpu, x).tobytes()
-    assert float(gpu.score(x, y)).hex() == float(cpu.score(x, y)).hex()
-    if cls is GaussianProcessClassifier:
-        assert np.asarray(gpu.predict_proba(x)).tobytes() == np.asarray(cpu.predict_proba(x)).tobytes()
-    else:
-        assert np.asarray(gpu.alpha_).tobytes() == np.asarray(cpu.alpha_).tobytes()
-        gpu_mean, gpu_std = gpu.predict(x, return_std=True)
-        cpu_mean, cpu_std = cpu.predict(x, return_std=True)
-        assert np.asarray(gpu_std).tobytes() == np.asarray(cpu_std).tobytes()
 
 
 @two_devices

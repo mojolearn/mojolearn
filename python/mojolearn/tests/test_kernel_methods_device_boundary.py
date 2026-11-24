@@ -6,7 +6,8 @@ Construction, refusals, `set_params`, clone and pickle of the parameter itself a
 two transformers (which have no `predict`), every fit route of the door (fit then transform, the one-call
 fit_transform, gamma='scale', a weighted and a multi-target ridge), and KernelRidge's resident copy of the fit when
 the estimator moves to the other device. On a GPU installation `device="cpu"` runs the CPU binary beside the GPU one
-in one process; in `identical` mode it returns the bits the GPU returns. What needs two devices is skipped by name on
+in one process (that it returns the bits the GPU returns is the verify lanes nystroem*, rbf-sampler*, kernel-ridge*
+and x-neighbors-krr-options on both sides). What needs two devices is skipped by name on
 a CPU-only installation.
 """
 import pickle
@@ -109,20 +110,6 @@ def test_cpu_device_does_nothing_on_the_gpu(spec):
     assert activity is not None
     assert activity["launches"] == 0, activity["launch_names"]
     assert activity["upload_calls"] == 0 and activity["download_calls"] == 0
-
-
-@two_devices
-@case
-def test_identical_mode_cpu_device_returns_the_gpu_bits(spec):
-    if mojolearn.numeric_mode() != "identical":
-        pytest.skip("bits are promised in identical mode only")
-    x, y = data()
-    gpu = spec[3](build(spec, numeric_mode="identical"), x, y)
-    cpu = spec[3](build(spec, numeric_mode="identical", device="cpu"), x, y)
-    assert len(gpu) == len(cpu)
-    for left, right in zip(gpu, cpu):
-        assert left.dtype == right.dtype and left.shape == right.shape
-        assert left.tobytes() == right.tobytes()
 
 
 @case
