@@ -106,8 +106,8 @@ from bindings.member_set_door import (
 )
 from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, vote_regress_run, vote_transform_run,
-    ovr_assemble_run, multioutput_codes_run, multioutput_proba_run, stack_place_run, STACK_PREDICT, STACK_PROBA,
-    STACK_DECISION,
+    ovr_assemble_run, ovr_binary_proba_run, multioutput_codes_run, multioutput_proba_run, stack_place_run,
+    STACK_PREDICT, STACK_PROBA, STACK_DECISION,
     # nn-integrate (compile fix): lane bm-meta-3's calibrated predict RUN names, used below and never imported
     CalPair, CalFit, calibrated_proba_run,
 )
@@ -137,7 +137,7 @@ from bindings.native_array_storage_door import native_array_from_values
 from bindings.msel_inputs_unpack import msel_admit, msel_input_count
 from bindings.msel_common_door import msel_warn
 from bindings.trees_meta_admission_door import meta_admit_configuration
-from bindings.trees_staged_input_door import trees_stage_members, trees_unstage
+from bindings.trees_staged_input_door import trees_stage_members, trees_stage_wanted, trees_stage_tables, trees_unstage
 from bindings.trees_side_records_unpack import trees_side_get, trees_side_put
 from bindings.base_helpers_key_unpack import base_helpers_key
 from bindings.base_helpers_released_unpack import (
@@ -145,7 +145,13 @@ from bindings.base_helpers_released_unpack import (
 )
 from core.linear_entry_table import LinearEntryKey
 from core.entry_table import EntryRef
-from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict
+from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict, rm_predict_slot
+from core.entry_table import entry_ref_word
+from bindings.arena_cache_run import arena_scope_store_put, arena_store_take_rows, arena_cache_free
+from providers.python.neural_descriptor_pyapi_door import (
+    NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
+)
+from x_prep.transport_abi import XP_TRANSPORT_ABI, XP_OP_COUNT
 from bindings.trees_meta_ridge_run import RidgeMultiFit, ridge_multi_fit_run
 from bindings.py_optional import py_or_none
 from xtrees.glue_calls import (
@@ -1566,6 +1572,93 @@ def _check_meta_x(model: PythonObject, X: PythonObject, context: PythonObject) r
     return mx^
 
 
+def _fold_scope(mx: _MetaX, context: PythonObject) raises -> Int:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): the resident scope a
+    predict / transform / score over `mx` reads its fold in, model
+    selection's (`family_msel_rows_context`), or MEMBER_SCOPE_NONE when `mx`
+    holds no fold (nothing is indexed). One slot read per public operation."""
+    if mx.draw is None:
+        return MEMBER_SCOPE_NONE
+    return member_scope_word(py_item(prep_native_context(context), PythonObject("family_msel_rows_context")))
+
+
+def _fold_open(mut got: _VoteUnpack, member: PythonObject, x: PythonObject, operation: Int, classifier: Bool,
+               regressor_width: Int, class_cols: Int, weight: Float64, check_kind: Bool,
+               context: PythonObject) -> Bool:
+    """THE FOLD FROM THE STORE (lane vdf-meta5; the admission vdf-meta4's
+    `_vote_run_indexed` made inline, now shared by every meta predict that
+    reads a fold by number): one fitted member opened on its held native
+    state over the fold's base `x` and appended to `got` as a native
+    `VoteMember`, True; False, with nothing appended and the opened state
+    closed, when its family does not serve it without the GIL or (when
+    `check_kind`: once per member per public operation) its kind does not
+    read a row index and a scope (`member_kind_capabilities`, kind-exact).
+    The caller then admits the fold's rows and runs its gathered path.
+    Never raises."""
+    var opened = _member_open(member, x, operation, classifier, context, regressor_width)
+    if not (opened.served and opened.gil_free):
+        if opened.served:
+            member_held_close(opened)
+        return False
+    if check_kind:
+        var mask = 0
+        try:
+            mask = member_kind_capabilities(opened.held.plan)
+        except:
+            mask = 0
+        if (mask & MEMBER_CAN_ROW_INDEX) == 0 or (mask & MEMBER_CAN_SCOPE) == 0:
+            member_held_close(opened)
+            return False
+    got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols, opened.dtype,
+                                  class_cols, weight))
+    got.native += 1
+    got.opened.append(opened^)
+    return True
+
+
+def _fold_plans(mut got: _VoteUnpack):
+    """The native members' plans by address, once `got.opened` is final
+    (RUN reads them in place)."""
+    for i in range(len(got.members)):  # driver-loop: over members
+        if got.members[i].native:
+            got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
+
+
+struct _FoldPin(Movable):
+    """THE PIN RULE, ONE REFERENCE PER CALL (lane vdf-meta4's accounting,
+    shared by every indexed meta RUN since lane vdf-meta5): `calls`
+    references on the owner of X's host words, one per member call of the
+    RUN, each member's answer in its own byte (`VoteRows.took_each`);
+    `settle` returns the references no cache took, after the RUN, whether it
+    returned or raised."""
+    var took: List[UInt8]
+    var pin: Int
+    var calls: Int
+
+    def __init__(out self, source: PythonObject, calls: Int):
+        self.calls = calls
+        self.took = List[UInt8](length=max(calls, 1), fill=UInt8(0))
+        self.pin = member_pin_take(source, calls)
+
+    def rows(self, x: Int, base_rows: Int, d: Int, index: Int, count: Int, scope: Int) -> VoteRows:
+        """THE INDEXED ROWS: `count` int32 row numbers at `index` of the base
+        at `x` (`base_rows` x `d`), the scope and this pin offered on every
+        member call, one answer byte per member."""
+        var rows = VoteRows(x, base_rows, d, index, count, scope, self.pin,
+                            Int(self.took.unsafe_ptr()) if self.pin != 0 else 0)
+        rows.took_each = True
+        return rows^
+
+    def settle(mut self):
+        var taken = 0
+        for j in range(self.calls):  # driver-loop: over the member calls (one answer byte each)
+            if self.took[j] != UInt8(0):
+                taken += 1
+        member_pin_return(self.pin, self.calls - taken)
+        self.pin = 0
+        self.calls = 0
+
+
 def _vote_run_indexed(model: PythonObject, mx: _MetaX, kind: Int, classifier: Bool, soft: Bool, k: Int,
                       weights: PythonObject, glue: EntryRef, acc: Int, codes: Int, width: Int, scope: Int,
                       context: PythonObject) raises -> Bool:
@@ -1577,12 +1670,11 @@ def _vote_run_indexed(model: PythonObject, mx: _MetaX, kind: Int, classifier: Bo
     device takes the fold's rows out of the base model selection keeps
     resident: no row of the fold is gathered on the host. Asked only when
     every member is served natively without the GIL and its kind reads a row
-    index and a scope (`member_kind_capabilities`, kind-exact, once per
-    member per call); False, with `acc` zeroed and nothing else written,
-    otherwise or when a member call refuses: the caller then admits the
-    fold's rows (`_x_array`) and runs the vote as before (the fallback rule,
-    whose doors raise the members' own words). Same rows in the same order
-    as the gathered block: same bits."""
+    index and a scope (`_fold_open`); False, with `acc` zeroed and nothing
+    else written, otherwise or when a member call refuses: the caller then
+    admits the fold's rows (`_x_array`) and runs the vote as before (the
+    fallback rule, whose doors raise the members' own words). Same rows in
+    the same order as the gathered block: same bits."""
     if kind == _VOTE_BLOCK and classifier:
         return False  # a classifier's transform block is its door's
     var nk = trees_keys()
@@ -1591,52 +1683,30 @@ def _vote_run_indexed(model: PythonObject, mx: _MetaX, kind: Int, classifier: Bo
     var got = _VoteUnpack()
     var answered = False
     try:
+        var opened_all = True
         for i in range(len(members)):  # driver-loop: over members (admission, once each)
             var e = members[i]
             var weight = Float64(py=weights[i]) if weights is not None else 1.0
-            var opened = _member_open(e, mx.x, operation, classifier and kind != _VOTE_BLOCK, context,
-                                      1 if kind == _VOTE_REGRESS else 0)
-            if not (opened.served and opened.gil_free):
-                if opened.served:
-                    member_held_close(opened)
-                _vote_close(got)
-                return False
-            var mask = member_kind_capabilities(opened.held.plan)
-            if (mask & MEMBER_CAN_ROW_INDEX) == 0 or (mask & MEMBER_CAN_SCOPE) == 0:
-                member_held_close(opened)
-                _vote_close(got)
-                return False
             var class_cols = 0
             if kind == _VOTE_SOFT:
                 var cols = _sub_cols(e, context)
                 _ = py_call(got.keep.append, cols)
                 class_cols = trees_address(cols)
-            got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols,
-                                          opened.dtype, class_cols, weight))
-            got.native += 1
-            got.opened.append(opened^)
-        for i in range(len(got.members)):  # driver-loop: over members
-            got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
-        # THE PIN RULE, one reference per member call (`VoteRows.took_each`).
-        var calls = len(got.members)
-        var took = List[UInt8](length=max(calls, 1), fill=UInt8(0))
-        var took_at = Int(took.unsafe_ptr())
-        var pin = member_pin_take(mx.x, calls)
-        var rows = VoteRows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), mx.n, scope, pin,
-                            took_at if pin != 0 else 0)
-        rows.took_each = True
-        var refused = VOTE_ALL_ANSWERED
-        try:
-            with GILReleased(Python()):
-                refused = _vote_dispatch(glue, rows, got.members, kind, soft, k, acc, codes, width)
-        finally:
-            var taken = 0
-            for j in range(calls):  # driver-loop: over the member calls (one answer byte each)
-                if took[j] != UInt8(0):
-                    taken += 1
-            member_pin_return(pin, calls - taken)
-            _ = len(took)  # written through `took_at` by the member calls above
-        answered = refused == VOTE_ALL_ANSWERED
+            if not _fold_open(got, e, mx.x, operation, classifier and kind != _VOTE_BLOCK,
+                              1 if kind == _VOTE_REGRESS else 0, class_cols, weight, True, context):
+                opened_all = False
+                break
+        if opened_all:
+            _fold_plans(got)
+            var pin = _FoldPin(mx.x, len(got.members))
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), mx.n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = _vote_dispatch(glue, rows, got.members, kind, soft, k, acc, codes, width)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
     except e:
         _vote_close(got)
         raise e^
@@ -1661,7 +1731,7 @@ def _vote_run_x(model: PythonObject, X: PythonObject, mx: _MetaX, kind: Int, cla
     if mx.draw is None:
         _vote_run(model, mx.x, kind, classifier, soft, k, weights, glue, acc, codes, width, context)
         return
-    var scope = member_scope_word(py_item(prep_native_context(context), PythonObject("family_msel_rows_context")))
+    var scope = _fold_scope(mx, context)
     if scope != MEMBER_SCOPE_NONE and _vote_run_indexed(model, mx, kind, classifier, soft, k, weights, glue, acc,
                                                         codes, width, scope, context):
         return
@@ -1872,22 +1942,25 @@ def _stack_place(glue: EntryRef, members: PythonObject, kinds: List[Int], Xs: Py
 
 def _stack_place_indexed(glue: EntryRef, members: PythonObject, kinds: List[Int], Xa: PythonObject, n: Int, d: Int,
                          rows_at: PythonObject, place: PythonObject, scope: Int, k: Int, binary: Bool, meta: Int,
-                         meta_rows: Int, width: Int, mut widths: List[Int], context: PythonObject) raises -> Bool:
-    """THE FOLD ROWS BY NUMBER (lane vdf-meta3): `_stack_place` of a cv fold's
-    test rows `rows_at` (int32 row numbers of the whole X `Xa`, `n` x `d`)
-    without gathering them: every member is opened on its held native state
-    and handed X, the row index, the resident `scope` and X's pin
-    (xtrees/trees_meta_vote_run.mojo THE INDEXED ROWS), so its device takes
-    the rows out of the X the fold fits already left resident. The caller
-    asks only when every member's kind reads a row index and a scope (its
-    mask, once per fit). False, with nothing placed that a gathered
-    `_stack_place` does not place again, when a member is not served
-    natively without the GIL or a member call refuses: the caller then
-    gathers the fold's test block and runs `_stack_place` (the fallback
-    rule, whose doors raise the members' own words). Same rows in the same
-    order as the gathered block: same bits. `place`: the int32 rows of the
-    meta block the outputs go to (the fold's test positions; `rows_at` is
-    the same rows in X as the members read it)."""
+                         meta_rows: Int, width: Int, mut widths: List[Int], check_kind: Bool,
+                         context: PythonObject) raises -> Bool:
+    """THE FOLD ROWS BY NUMBER (lane vdf-meta3): `_stack_place` of the rows
+    `rows_at` (int32 row numbers of the whole X `Xa`, `n` x `d`: a cv fold's
+    test rows inside fit, a model-selection fold's rows at predict, lane
+    vdf-meta5) without gathering them: every member is opened on its held
+    native state and handed X, the row index, the resident `scope` and one
+    pin reference per member call (xtrees/trees_meta_vote_run.mojo THE
+    INDEXED ROWS, `_FoldPin`), so its device takes the rows out of the X the
+    scope keeps resident. `check_kind`: each member's kind is asked whether
+    it reads a row index and a scope (`_fold_open`); False when the caller
+    already asked (fit: its mask, once per fit). False, with nothing placed
+    that a gathered `_stack_place` does not place again, when a member is
+    not served natively without the GIL or a member call refuses: the caller
+    then gathers the rows and runs `_stack_place` (the fallback rule, whose
+    doors raise the members' own words). Same rows in the same order as the
+    gathered block: same bits. `place`: the int32 rows of the meta block the
+    outputs go to (the fold's positions; `rows_at` is the same rows in X as
+    the members read them)."""
     var count = Int(py=rows_at.shape[0])
     var got = _VoteUnpack()
     var counts = List[Int](capacity=len(members))
@@ -1907,42 +1980,20 @@ def _stack_place_indexed(glue: EntryRef, members: PythonObject, kinds: List[Int]
             counts.append(held)
             var operation = MEMBER_OP_PREDICT if kind == STACK_PREDICT else (
                 MEMBER_OP_PREDICT_PROBA if kind == STACK_PROBA else MEMBER_OP_DECISION)
-            var opened = _member_open(e, Xa, operation, classifier, context)
-            if not (opened.served and opened.gil_free):
-                if opened.served:
-                    member_held_close(opened)
+            if not _fold_open(got, e, Xa, operation, classifier, 0, class_cols, 1.0, check_kind, context):
                 _vote_close(got)
                 return False
-            got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols,
-                                          opened.dtype, class_cols, 1.0))
-            got.native += 1
-            got.opened.append(opened^)
-        for i in range(len(got.members)):  # driver-loop: over members
-            got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
-        # THE PIN RULE, ONE REFERENCE PER CALL (lane vdf-meta4: the vdf-meta3 doubt): one reference per
-        # member call of the fold, each member's answer in its own byte (`VoteRows.took_each`), so two
-        # members whose caches each take the pin (two families' stores of one scope) each own one; the
-        # references no cache took are returned. Before, one reference was offered to every call with one
-        # byte: two takers released it twice.
-        var calls = len(got.members)
-        var took = List[UInt8](length=max(calls, 1), fill=UInt8(0))
-        var took_at = Int(took.unsafe_ptr())
-        var pin = member_pin_take(Xa, calls)
-        var rows = VoteRows(trees_address(Xa), n, d, trees_address(rows_at), count, scope, pin,
-                            took_at if pin != 0 else 0)
-        rows.took_each = True
+        _fold_plans(got)
+        var pin = _FoldPin(Xa, len(got.members))
+        var rows = pin.rows(trees_address(Xa), n, d, trees_address(rows_at), count, scope)
+        var place_at = trees_address(place)
         var refused = VOTE_ALL_ANSWERED
         try:
             with GILReleased(Python()):
                 refused = stack_place_run(glue, rows, got.members, kinds, counts, k, binary, meta, meta_rows, width,
-                                          trees_address(place), 0, widths, 0)
+                                          place_at, 0, widths, 0)
         finally:
-            var taken = 0
-            for j in range(calls):  # driver-loop: over the fold's member calls (one answer byte each)
-                if took[j] != UInt8(0):
-                    taken += 1
-            member_pin_return(pin, calls - taken)
-            _ = len(took)  # written through `took_at` by the member calls above
+            pin.settle()
         placed = refused == VOTE_ALL_ANSWERED
     except e:
         _vote_close(got)
@@ -2167,7 +2218,7 @@ def _stacking_fit_run(model: PythonObject, mx: _MetaX, y_full: PythonObject, cod
             var placed = False
             if indexable:
                 placed = _stack_place_indexed(glue, fold_members, kinds, Xa, nb, d, te_rows, te_view, scope_word,
-                                              k_classes, binary, trees_address(meta_view), n, width, got, context)
+                                              k_classes, binary, trees_address(meta_view), n, width, got, False, context)
             if not placed:
                 var Xte = _gather(xt, trees_address(x_view), nb, d, te_rows, cols_view, context)
                 _ = Xa  # keep the Python object alive through the native call above
@@ -2249,12 +2300,22 @@ def stacking_layout(model: PythonObject, d: Int, context: PythonObject) raises -
 
 
 def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_StackingBase.transform`: the meta features (float64)."""
-    var Xa = _check_x(model, X, context)
+    """`_StackingBase.transform`: the meta features (float64).
+
+    THE FOLD FROM THE STORE (lane vdf-meta5; the classes opt in with
+    `_mojolearn_device_rows`): a model-selection fold (`_check_meta_x`) is
+    stacked by number (`_stack_place_indexed` over its host base and its
+    rows, inside model selection's resident scope): each member's device
+    takes the fold's rows out of the resident base, no row is gathered on
+    the host. A member that is not served that way, or a refusal, admits
+    the fold's rows (`_x_array`, the gather every call made before) and
+    stacks them as before; passthrough reads the admitted rows (the meta
+    block is host float64 by the members' output ABI). Same rows in the
+    same order: same bits."""
+    var mx = _check_meta_x(model, X, context)
     var xt = _xt(py_fields(model), context)
-    var x_view = Xa
-    var n = Int(py=x_view.shape[0])
-    var d = Int(py=x_view.shape[1])
+    var n = mx.n
+    var d = mx.d
     var layout = stacking_layout(model, d, context)
     var passthrough = layout.passthrough
     var width = layout.width
@@ -2265,23 +2326,38 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
     var col0 = 0
     var members = layout.members
     var k = layout.k
+    var indexed = False
+    if len(members) > 0:
+        var scope = _fold_scope(mx, context)
+        if scope != MEMBER_SCOPE_NONE:
+            var widths = List[Int]()
+            indexed = _stack_place_indexed(_xr(xt), members, layout.kinds, mx.x, mx.base_rows, d, mx.draw,
+                                           rows_view, scope, k, binary, trees_address(meta_view), n, width, widths,
+                                           True, context)
+            if indexed:
+                for i in range(len(widths)):  # driver-loop: over members
+                    col0 += widths[i]
+    var Xa = mx.x
+    if mx.draw is not None and ((len(members) > 0 and not indexed) or passthrough):
+        Xa = _x_array(X, context)  # the fold's rows, admitted as before
     # Lane bm-meta-3: UNPACK + RUN `stack_place_run` (members fitted on
     # every row saw every class: no class columns read).
-    if len(members) > 0:
+    if len(members) > 0 and not indexed:
         var got = _stack_place(_xr(xt), members, layout.kinds, Xa, k, binary, trees_address(meta_view), n,
                                width, trees_address(rows_view), 0, False, context)
         for i in range(len(got)):  # driver-loop: over members
             col0 += got[i]
     _ = meta_view  # written through the RUN above
     _ = rows_view  # read through the RUN above
+    _ = mx.x
+    _ = mx.draw
     if passthrough:
-        var xb = admitted_words(Xa, trees_address(x_view), n, d)
+        var xb = admitted_words(Xa, trees_address(Xa), n, d)
         _ = Xa  # keep the Python object alive through the native call above
         _ = _place(xt, meta_view, n, width, xb.view(), rows_view, col0)
         _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
         _ = Xa  # keep the Python object alive through the native call above
-    _ = x_view
     return trees_reshape(meta, Python.tuple(n, width), context)
 
 
@@ -2398,14 +2474,15 @@ def _estimators_key(table: PythonObject) raises -> LinearEntryKey:
     return LinearEntryKey(Int(py=key[0]), Int(py=key[1]))
 
 
-def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonObject, Ya: PythonObject,
-                           device: PythonObject, origin: String, context: PythonObject) raises -> PythonObject:
+def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonObject, n: Int, d: Int,
+                           Ya: PythonObject, slot: Int, device: PythonObject, origin: String,
+                           context: PythonObject) raises -> PythonObject:
     """`MultiOutputRegressor._fit_ridge_multi`: every target in one ridge
-    program (glm/impl/ridge_multi.mojo)."""
+    program (glm/impl/ridge_multi.mojo) over X (`n` x `d`): the host Array
+    `Xa`, or (`slot` >= 0, lane vdf-meta5, `Xa` unread) the estimators
+    image's resident store slot holding a model-selection fold's rows."""
     # UNPACK: the dimensions, the member's two parameters, the image's entry
     # and the buffers RUN writes (allocated here, published in PACK).
-    var n = _rows(Xa)
-    var d = _cols(Xa)
     var m = _cols(Ya)
     var nk = trees_keys()
     var est = _attr(model, nk[].k_estimator, PythonObject(None))
@@ -2413,7 +2490,11 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     # the member's alpha as Python's float() reads it
     var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, nk[].k_alpha, PythonObject(1.0))))
     var key = ridge_multi_ref(_estimators_key(table))  # resolved once for the fit
-    var request = RidgeMultiFit(trees_address(Xa), trees_address(Ya), n, d, m, alpha, intercept)
+    var x_at = 0
+    if slot < 0:
+        x_at = trees_address(Xa)
+    var request = RidgeMultiFit(x_at, trees_address(Ya), n, d, m, alpha, intercept)
+    request.slot = slot
     var xm = admitted_vector(d, "<f4", context)
     var coef = admitted_vector(m * d, "<f4", context)
     var ymean = admitted_vector(m, "<f4", context)
@@ -2429,10 +2510,11 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     if intercept:
         sums = _zeros(d, context)
         m64 = _zeros(d, context)
-        work_x = admitted_array(Python.tuple(n, d), "<f4", context)
         request.sums = trees_address(sums)
         request.means64 = trees_address(m64)
-        request.work = trees_address(work_x)
+        if slot < 0:  # a slot's centered X stays on the device
+            work_x = admitted_array(Python.tuple(n, d), "<f4", context)
+            request.work = trees_address(work_x)
     # RUN: the image's four programs on plain values, the GIL released once
     # for all of them (it was released and retaken around each)
     with GILReleased(Python()):
@@ -2494,14 +2576,23 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     _set(model, "_multi_ridge", PythonObject(None))
     var table = _ridge_multi_entry(model, est, weights, context)
     if table is not None and _cols(Ya) > 0:
-        # The one-program ridge (FAST + Apple only, glm/impl/ridge_multi.mojo MULTIOUT_RIDGE) reads dense host
-        # words: a fold's rows are gathered ONCE here, as the admission gathered them before (owed: its four
-        # programs reading the estimators store's slot of the base, the fold taken on the device).
-        var Xr = mx.x
+        # The one-program ridge (FAST + Apple only, glm/impl/ridge_multi.mojo MULTIOUT_RIDGE). THE FOLD FROM
+        # THE STORE (lane vdf-meta5): a model-selection fold's base is kept ONCE per scope in the estimators
+        # image's resident store and the fold's rows are taken there on the device (`_ridge_store_take`); the
+        # four programs read that slot (`rm_fit_slot`). Before, the fold was gathered here (`_gather`: the
+        # base uploaded, the rows gathered and downloaded) and uploaded again by each program. A fold with no
+        # store (an image without `estimators_store_v1`, no resident scope) is gathered as before.
         if mx.draw is not None:
-            Xr = _gather(xt, trees_address(mx.x), mx.base_rows, mx.d, mx.draw, _arange(xt, mx.d, context), context)
+            var scope = _fold_scope(mx, context)
+            if scope != MEMBER_SCOPE_NONE:
+                var fitted = _ridge_store_fit(model, table, mx, Ya, scope, device, origin, context)
+                if fitted is not None:
+                    return fitted
+            var Xr = _gather(xt, trees_address(mx.x), mx.base_rows, mx.d, mx.draw, _arange(xt, mx.d, context),
+                             context)
             _ = mx.x  # read through its address above
-        return _multioutput_ridge_fit(model, table, Xr, Ya, device, origin, context)
+            return _multioutput_ridge_fit(model, table, Xr, mx.n, mx.d, Ya, -1, device, origin, context)
+        return _multioutput_ridge_fit(model, table, mx.x, mx.n, mx.d, Ya, -1, device, origin, context)
     var n = mx.n
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
@@ -2526,12 +2617,114 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     return model
 
 
+def _estimators_store(table: PythonObject) raises -> Tuple[EntryRef, PythonObject]:
+    """UNPACK, once per operation (lane vdf-meta5): the estimators image's
+    resident store as a scope transport entry (`estimators_store_v1`,
+    core/estimators_store.mojo; the connection KernelDensity's member
+    boundary makes, providers/python/family_store_route_door.mojo) and its
+    provider, which the caller keeps through every call. Raises when the
+    image has no store (a CPU image) or no native key."""
+    var factory = trees_entry(table, "estimators_store_v1")
+    if factory is None:
+        raise Error("the estimators image has no resident store")
+    var key = _estimators_key(table)
+    var provider = neural_descriptor_connect_factory_once(factory, String(XP_TRANSPORT_ABI), XP_OP_COUNT)
+    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
+    return (EntryRef(entry, entry_ref_word(key.mode, key.vendor, XP_OP_COUNT)), provider)
+
+
+def _ridge_store_take(store: EntryRef, mx: _MetaX, scope: Int, context: PythonObject) -> Int:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): a model-selection fold
+    `mx`'s rows in the estimators store: the WHOLE base kept once per
+    `scope` in the scope's "estimators" cache (`arena_scope_store_put`, a
+    hit after the first put; the family prefix of core/estimators_store.mojo
+    ESTIMATORS_STORE_PREFIX, not imported: that module is GPU-only), then
+    the fold's rows taken on the device into a fresh slot
+    (`arena_store_take_rows`), whose id the caller frees
+    (`arena_cache_free`). THE PIN RULE: one reference on the base's owner,
+    kept by the cache when it took it, else returned. -1 when the store
+    refuses (the caller gathers the fold as before). Never raises."""
+    var slot = -1
+    var pin = member_pin_take(mx.x, 1)
+    var kept = False
+    try:
+        var wide = _index_i64(mx.draw, context)
+        var put = arena_scope_store_put(scope, store, String("estimators"), trees_address(mx.x),
+                                        mx.base_rows * mx.d, pin)
+        kept = put.pinned
+        slot = arena_store_take_rows(store, put.store_id, mx.d, trees_address(wide), mx.n)
+        _ = wide  # read through its address above
+    except:
+        slot = -1
+    member_pin_return(pin, 0 if kept else 1)
+    _ = mx.x
+    return slot
+
+
+def _ridge_store_fit(model: PythonObject, table: PythonObject, mx: _MetaX, Ya: PythonObject, scope: Int,
+                    device: PythonObject, origin: String, context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): the one-program ridge fit
+    over a model-selection fold `mx`, its rows taken in the estimators store
+    (`_ridge_store_take`) and read there by the four programs
+    (`rm_fit_slot`). None when the image has no store or the store refuses
+    (the caller gathers the fold as before)."""
+    var store_got: Tuple[EntryRef, PythonObject]
+    try:
+        store_got = _estimators_store(table)
+    except:
+        return PythonObject(None)
+    var slot = _ridge_store_take(store_got[0], mx, scope, context)
+    if slot < 0:
+        return PythonObject(None)
+    var fitted = PythonObject(None)
+    try:
+        fitted = _multioutput_ridge_fit(model, table, PythonObject(None), mx.n, mx.d, Ya, slot, device, origin,
+                                        context)
+    finally:
+        arena_cache_free(store_got[0], slot)
+    _ = store_got[1]  # the store's provider, pinned through the fit
+    return fitted
+
+
 def multioutput_ridge_ref(members: PythonObject, context: PythonObject) raises -> EntryRef:
     """X-FREE UNPACK of a MultiOutputRegressor fitted as one multi-output ridge (`_multi_ridge`; lane mf-shap3,
     2026-11-23: `_multioutput_regressor_predict` and Kernel / Permutation SHAP): the ridge multi entry of the
     estimators image its first member's tier names, resolved once per operation."""
     var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
     return ridge_multi_ref(_estimators_key(table))
+
+
+def _ridge_store_predict(members: PythonObject, mr: PythonObject, mx: _MetaX, scope: Int, outputs: Int,
+                        context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): the one-program ridge's
+    predict over a model-selection fold `mx`, its rows taken in the
+    estimators store (`_ridge_store_take`) and read there
+    (`rm_predict_slot`, the kernel of `rm_predict`). None when the image
+    has no store or the store refuses (the caller admits the fold)."""
+    var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
+    var store_got: Tuple[EntryRef, PythonObject]
+    try:
+        store_got = _estimators_store(table)
+    except:
+        return PythonObject(None)
+    var slot = _ridge_store_take(store_got[0], mx, scope, context)
+    if slot < 0:
+        return PythonObject(None)
+    var n = mx.n
+    var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
+    try:
+        var rm_key = multioutput_ridge_ref(members, context)
+        var p_coef = trees_address(mr[0])
+        var p_icpt = trees_address(mr[1])
+        var p_out = trees_address(out)
+        var d = mx.d
+        with GILReleased(Python()):
+            rm_predict_slot(rm_key, slot, p_coef, p_icpt, p_out, n, d, outputs)
+    finally:
+        arena_cache_free(store_got[0], slot)
+    _ = mr  # keep the coef and intercept stores alive through the native call above
+    _ = store_got[1]  # the store's provider, pinned through the call
+    return out
 
 
 def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -2543,11 +2736,19 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     var m = len(members)
     var mr = _attr(model, nk[].k__multi_ridge, PythonObject(None))
     if mr is not None:
-        # The one-program ridge (FAST + Apple) reads dense host rows: a fold's are admitted (owed with its fit).
+        # The one-program ridge (FAST + Apple). THE FOLD FROM THE STORE (lane vdf-meta5): a model-selection
+        # fold is predicted from the estimators store's slot of its rows (`rm_predict_slot`, as the fit); a
+        # fold with no store is admitted as before.
+        var outputs = Int(py=mr[2])
+        if mx.draw is not None:
+            var scope = _fold_scope(mx, context)
+            if scope != MEMBER_SCOPE_NONE:
+                var got = _ridge_store_predict(members, mr, mx, scope, outputs, context)
+                if got is not None:
+                    return got
         var Xa = mx.x
         if mx.draw is not None:
             Xa = _x_array(X, context)
-        var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
         var rm_key = multioutput_ridge_ref(members, context)
         var p_x = trees_address(Xa)
@@ -2716,16 +2917,79 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
     return model
 
 
-def _multioutput_member_codes(model: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
+def _multioutput_member_codes(model: PythonObject, X: PythonObject, mx: _MetaX,
+                              context: PythonObject) raises -> PythonObject:
     """Each output's member codes (int32, into that output's `classes_[j]`;
     the members were fitted on the column codes), lane bm-meta-3: UNPACK
     `_vote_unpack` (kind _VOTE_HARD: per member its held native state, else
     its door's codes, `_member_label_codes`'s routes in its order), RUN
     `multioutput_codes_run` (no Python; the GIL released when a member is
     native) into one int32 Array per output allocated here (PACK), which the
-    native call writes directly, as `member_held_run`'s new Array was."""
+    native call writes directly, as `member_held_run`'s new Array was.
+    THE FOLD FROM THE STORE (lane vdf-meta5): over a model-selection fold
+    `mx` the members read the fold by number (`_codes_fold`); a fold they
+    do not serve is admitted (`_x_array`) as before."""
     var nk = trees_keys()
-    return _codes_of(_attr(model, nk[].k_estimators_, Python.list()), Xa, context)
+    return _codes_of_x(_attr(model, nk[].k_estimators_, Python.list()), X, mx, context)
+
+
+def _codes_of_x(members: PythonObject, X: PythonObject, mx: _MetaX, context: PythonObject) raises -> PythonObject:
+    """`_codes_of` over `_check_meta_x`'s `mx`: a fold inside model
+    selection's resident scope FROM THE STORE (`_codes_fold`), else the
+    fold's rows admitted (`_x_array`), else `mx.x` itself."""
+    if mx.draw is None:
+        return _codes_of(members, mx.x, context)
+    var scope = _fold_scope(mx, context)
+    if scope != MEMBER_SCOPE_NONE:
+        var got = _codes_fold(members, mx, scope, context)
+        if got is not None:
+            return got
+    return _codes_of(members, _x_array(X, context), context)
+
+
+def _codes_fold(members: PythonObject, mx: _MetaX, scope: Int, context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `_codes_of` over a fold
+    `mx` with every member opened on its held native state over the base
+    (`_fold_open`) and handed the fold's row index, `scope` and one pin
+    reference per call (`_FoldPin`): its device takes the fold's rows out of
+    the resident base. None, nothing published, when a member is not served
+    that way or a call refuses: the caller admits the fold's rows and asks
+    `_codes_of` (whose doors raise the members' words). Same rows, same
+    order: same codes."""
+    var got = _VoteUnpack()
+    var out = Python.list()
+    var answered = False
+    try:
+        var opened_all = True
+        for i in range(len(members)):  # driver-loop: over members (admission, once each)
+            if not _fold_open(got, members[i], mx.x, MEMBER_OP_PREDICT, True, 0, 0, 1.0, True, context):
+                opened_all = False
+                break
+        if opened_all:
+            _fold_plans(got)
+            var dst = List[Int](capacity=len(got.members))
+            for j in range(len(got.members)):  # driver-loop: over members (outputs)
+                var col = admitted_vector(mx.n, "<i4", context)
+                _ = py_call(out.append, col)
+                dst.append(trees_address(col))
+            var pin = _FoldPin(mx.x, len(got.members))
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), mx.n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = multioutput_codes_run(rows, got.members, dst, 0)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    if not answered:
+        return PythonObject(None)
+    return out
 
 
 def _codes_of(members: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -2772,18 +3036,17 @@ def _codes_of(members: PythonObject, Xa: PythonObject, context: PythonObject) ra
 
 
 def _multioutput_classifier_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var Xa = _check_x(model, X, context)
-    return _multioutput_assemble(model, Xa, _multioutput_member_codes(model, Xa, context), context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
+    return _multioutput_assemble(model, mx.n, _multioutput_member_codes(model, X, mx, context), context)
 
 
-def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonObject,
+def _multioutput_assemble(model: PythonObject, n: Int, codes: PythonObject,
                           context: PythonObject) raises -> PythonObject:
-    """`MultiOutputClassifier.predict` from each output's member codes: the
-    decoded columns stacked into one (n, m) Array, or per-row label lists
-    for label objects no Array holds."""
+    """`MultiOutputClassifier.predict` from each output's member codes (`n`
+    rows): the decoded columns stacked into one (n, m) Array, or per-row
+    label lists for label objects no Array holds."""
     var b = trees_builtins()
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
     var nk = trees_keys()
     var classes = _attr(model, nk[].k_classes_, Python.list())
     var cols = Python.list()
@@ -2858,13 +3121,75 @@ def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context:
     its door's float32 probabilities and class columns, `_member_scores`'s
     routes), RUN `multioutput_proba_run` into one float64 zero block per
     output allocated here, PACK the (n, k_j) views of them."""
-    var Xa = _check_x(model, X, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
     var nk = trees_keys()
     var ks = List[Int]()
     var classes = _attr(model, nk[].k_classes_, Python.list())
     for j in range(len(classes)):  # driver-loop: over members (outputs)
         ks.append(len(classes[j]))
-    return _probas_of(model, _attr(model, nk[].k_estimators_, Python.list()), ks, Xa, context)
+    var members = _attr(model, nk[].k_estimators_, Python.list())
+    if mx.draw is None:
+        return _probas_of(model, members, ks, mx.x, context)
+    var scope = _fold_scope(mx, context)
+    if scope != MEMBER_SCOPE_NONE:
+        var got = _probas_fold(model, members, ks, mx, scope, context)
+        if got is not None:
+            return got
+    return _probas_of(model, members, ks, _x_array(X, context), context)
+
+
+def _probas_fold(model: PythonObject, members: PythonObject, ks: List[Int], mx: _MetaX, scope: Int,
+                 context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `_probas_of` over a fold
+    `mx`, every member reading the fold by number out of the resident base
+    (`_fold_open`, `_FoldPin`; RUN `multioutput_proba_run`). None, nothing
+    published, when a member is not served that way or a call refuses (the
+    caller admits the fold's rows and asks `_probas_of`). Same rows, same
+    order, same accumulation: same bits."""
+    var xt = _xt(py_fields(model), context)
+    var n = mx.n
+    var got = _VoteUnpack()
+    var blocks = Python.list()
+    var answered = False
+    try:
+        var opened_all = True
+        for i in range(len(members)):  # driver-loop: over members (admission, once each)
+            var cols = _sub_cols(members[i], context)
+            _ = py_call(got.keep.append, cols)
+            if not _fold_open(got, members[i], mx.x, MEMBER_OP_PREDICT_PROBA, True, 0, trees_address(cols), 1.0,
+                              True, context):
+                opened_all = False
+                break
+        if opened_all:
+            _fold_plans(got)
+            var accs = List[Int](capacity=len(got.members))
+            for j in range(len(got.members)):  # driver-loop: over members (outputs)
+                var acc = _zeros(n * ks[j], context)
+                _ = py_call(blocks.append, acc)
+                accs.append(trees_address(acc))
+            var glue = _xr(xt)
+            var pin = _FoldPin(mx.x, len(got.members))
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = multioutput_proba_run(glue, rows, got.members, ks, accs, 0)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    _ = got.keep  # the class columns are read through RUN
+    if not answered:
+        return PythonObject(None)
+    var out = Python.list()
+    for j in range(len(blocks)):  # driver-loop: over members (outputs)
+        _ = py_call(out.append, trees_reshape(blocks[j], Python.tuple(n, ks[j]), context))
+    return out
 
 
 def _probas_of(model: PythonObject, members: PythonObject, ks: List[Int], Xa: PythonObject,
@@ -2917,13 +3242,13 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     """`MultiOutputClassifier.score`: the (weighted) fraction of rows whose
     every output matches."""
     var b = trees_builtins()
-    var Xa = _check_x(model, X, context)
-    var codes = _multioutput_member_codes(model, Xa, context)
-    var pred = _multioutput_assemble(model, Xa, codes, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
+    var codes = _multioutput_member_codes(model, X, mx, context)
+    var pred = _multioutput_assemble(model, mx.n, codes, context)
     var nk = trees_keys()
     if py_type(pred) is not py_item(context, nk[].k_array_class):
         # Label objects no Array holds (str classes): scored in codes.
-        return _multioutput_score_codes(model, codes, _rows(Xa), y, sample_weight, context)
+        return _multioutput_score_codes(model, codes, mx.n, y, sample_weight, context)
     var truth = admit_c_view(y, "y", context)
     var shown = py_call(b.tuple, pred.shape)
     var truth_shape = Python.list()
@@ -3208,6 +3533,90 @@ def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int
     return out
 
 
+def _ovr_fused_fold(xt: PythonObject, members: PythonObject, mx: _MetaX, scope: Int, k: Int, decision: Bool,
+                    finish: Int, context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `_ovr_fused` over a fold
+    `mx`, every member reading the fold by number out of the resident base
+    (`_fold_open`, `_FoldPin`; RUN `ovr_assemble_run`, the same program over
+    the same blocks). None, nothing published, when a member is not served
+    that way or a call refuses: the caller admits the fold's rows and runs
+    `_ovr_fused` (whose doors raise the members' words)."""
+    var n = mx.n
+    var out = admitted_vector(n, "<i4", context) if finish == 2 else admitted_vector(n * k, "<f8", context)
+    var got = _VoteUnpack()
+    var at = List[Int]()
+    var answered = False
+    try:
+        var opened_all = True
+        for j in range(len(members)):  # driver-loop: over members (admission, once each)
+            var words = ovr_member_words(members[j], decision, context)
+            at.append(words[1])
+            var operation = MEMBER_OP_DECISION if words[0] else MEMBER_OP_PREDICT_PROBA
+            if not _fold_open(got, members[j], mx.x, operation, True, 0, 0, 1.0, True, context):
+                opened_all = False
+                break
+        if opened_all:
+            _fold_plans(got)
+            var glue = _xr(xt)
+            var address = trees_address(out)
+            var pin = _FoldPin(mx.x, len(got.members))
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = ovr_assemble_run(glue, rows, got.members, at, k, finish, address)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    if not answered:
+        return PythonObject(None)
+    return out
+
+
+def _ovr_binary_fold(xt: PythonObject, member: PythonObject, mx: _MetaX, scope: Int,
+                     context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): binary OneVsRest
+    predict_proba over a fold `mx`: the one member's predict_proba read by
+    number out of the resident base, its column of code 1 (zeros when it
+    never saw code 1) and the rows (1 - p, p) (RUN `ovr_binary_proba_run`:
+    `_proba_positive` and `_trees_binary_proba` over the same words). None
+    when the member is not served that way or refuses."""
+    var n = mx.n
+    var out = admitted_vector(2 * n, "<f8", context)
+    var got = _VoteUnpack()
+    var answered = False
+    try:
+        var at = _index_of_one(member, context)
+        if _fold_open(got, member, mx.x, MEMBER_OP_PREDICT_PROBA, True, 0, 0, 1.0, True, context):
+            _fold_plans(got)
+            var glue = _xr(xt)
+            var address = trees_address(out)
+            var pin = _FoldPin(mx.x, 1)
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = ovr_binary_proba_run(glue, rows, got.members[0], at, address)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    if not answered:
+        return PythonObject(None)
+    return trees_reshape(out, Python.tuple(n, 2), context)
+
+
 def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = trees_keys()
     return trees_decode_labels(_attr(model, nk[].k_classes_, PythonObject(None)), _ovr_codes(model, X, context), context)
@@ -3215,14 +3624,28 @@ def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
 
 def _ovr_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`OneVsRestClassifier.predict` before its decode: int32 codes into
-    `classes_`."""
-    var Xa = _check_x(model, X, context)
+    `classes_`. THE FOLD FROM THE STORE (lane vdf-meta5): a model-selection
+    fold is read by number out of its resident base (`_codes_fold` for the
+    binary member, `_ovr_fused_fold` for k members); a fold its members do
+    not serve that way is admitted (`_x_array`) as before."""
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var nk = trees_keys()
     var classes = _attr(model, nk[].k_classes_, PythonObject(None))
     var k = len(classes)
     var members = _attr(model, nk[].k_estimators_, Python.list())
+    var scope = _fold_scope(mx, context)
+    if scope != MEMBER_SCOPE_NONE:
+        if k == 2:
+            var codes = _codes_fold(Python.list(members[0]), mx, scope, context)
+            if codes is not None:
+                return codes[0]
+        elif len(members) == k:
+            var codes = _ovr_fused_fold(xt, members, mx, scope, k, True, 2, context)
+            if codes is not None:
+                return codes
+    var Xa = mx.x if mx.draw is None else _x_array(X, context)
     if k == 2:
         return _member_label_codes(members[0], Xa, context)
     if len(members) == k:
@@ -3237,13 +3660,24 @@ def _ovr_codes(model: PythonObject, X: PythonObject, context: PythonObject) rais
 
 
 def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var Xa = _check_x(model, X, context)
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var nk = trees_keys()
     var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var members = _attr(model, nk[].k_estimators_, Python.list())
     var glue = _xr(xt)
+    var scope = _fold_scope(mx, context)
+    if scope != MEMBER_SCOPE_NONE:
+        if k == 2:
+            var proba = _ovr_binary_fold(xt, members[0], mx, scope, context)
+            if proba is not None:
+                return proba
+        elif len(members) == k:
+            var proba = _ovr_fused_fold(xt, members, mx, scope, k, False, 1, context)
+            if proba is not None:
+                return trees_reshape(proba, Python.tuple(n, k), context)
+    var Xa = mx.x if mx.draw is None else _x_array(X, context)
     if k == 2:
         # `_trees_binary_proba`: rows (1 - p, p) of the positive column
         var p = _f32_array(_proba_positive(xt, members[0], Xa, context), 1, "p", context)
@@ -4021,6 +4455,60 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
+def _calibrated_fused_fold(model: PythonObject, xt: PythonObject, pairs: PythonObject, mx: _MetaX, scope: Int,
+                           k: Int, context: PythonObject) raises -> PythonObject:
+    """THE FOLD FROM THE STORE (lane vdf-meta5): `_calibrated_fused` over a
+    model-selection fold `mx`, every pair's member reading the fold by
+    number out of the resident base (`_fold_open`, `_FoldPin`; RUN
+    `calibrated_proba_run`, the same program over the same blocks). None,
+    nothing published, when a member is not served that way or a call
+    refuses: the caller admits the fold's rows and runs `_calibrated_fused`
+    (whose doors raise the members' words)."""
+    var n = mx.n
+    var acc = admitted_vector(n * k, "<f8", context)
+    var got = _VoteUnpack()
+    var cal_pairs = List[CalPair](capacity=len(pairs))
+    var cals = List[CalFit]()
+    var answered = False
+    try:
+        var opened_all = True
+        for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs (admission, once each)
+            var e = pairs[i][0]
+            var fitted = pairs[i][1]
+            var decision = _cal_member_decision(e, context)
+            var codes = calibrated_pair_codes(e, k, got.keep, context)
+            var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA
+            if not _fold_open(got, e, mx.x, operation, True, 0, codes[0], 1.0, True, context):
+                opened_all = False
+                break
+            calibrated_pair_words(e, fitted, k, got.members[len(got.members) - 1].cols, codes[0], codes[1], got.keep,
+                                  cal_pairs, cals, context)
+        if opened_all:
+            _fold_plans(got)
+            var glue = _xr(xt)
+            var acc_at = trees_address(acc)  # read with the GIL held
+            var pin = _FoldPin(mx.x, len(got.members))
+            var rows = pin.rows(trees_address(mx.x), mx.base_rows, mx.d, trees_address(mx.draw), n, scope)
+            var refused = VOTE_ALL_ANSWERED
+            try:
+                with GILReleased(Python()):
+                    refused = calibrated_proba_run(glue, rows, got.members, cal_pairs, cals, k, acc_at)
+            finally:
+                pin.settle()
+            answered = refused == VOTE_ALL_ANSWERED
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = acc  # written through RUN
+    _ = mx.x  # the rows are read through RUN
+    _ = mx.draw
+    _ = got.keep  # the class codes and knots are read through RUN
+    if not answered:
+        return PythonObject(None)
+    return trees_reshape(acc, Python.tuple(n, k), context)
+
+
 def _scale(xt: PythonObject, acc: PythonObject, divisor: Float64) raises:
     # The mean over the calibrated pairs (moved here from trees_public_boost_door when lane mf-oob3 deleted its
     # other users there; this is its one caller).
@@ -4030,12 +4518,23 @@ def _scale(xt: PythonObject, acc: PythonObject, divisor: Float64) raises:
 
 
 def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
-    var Xa = _check_x(model, X, context)
+    """`CalibratedClassifierCV.predict_proba`. THE FOLD FROM THE STORE (lane
+    vdf-meta5): a model-selection fold is scored by number out of its
+    resident base (`_calibrated_fused_fold`); a fold its members do not
+    serve that way is admitted (`_x_array`) as before."""
+    var mx = _check_meta_x(model, X, context)  # a fold from the store (lane vdf-meta5)
     var xt = _xt(py_fields(model), context)
-    var n = _rows(Xa)
+    var n = mx.n
     var nk = trees_keys()
     var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var pairs = _attr(model, nk[].k_calibrated_classifiers_, Python.list())
+    if k >= 2:
+        var scope = _fold_scope(mx, context)
+        if scope != MEMBER_SCOPE_NONE:
+            var proba = _calibrated_fused_fold(model, xt, pairs, mx, scope, k, context)
+            if proba is not None:
+                return proba
+    var Xa = mx.x if mx.draw is None else _x_array(X, context)
     if k >= 2:
         return _calibrated_fused(model, xt, pairs, Xa, n, k, context)
     var acc = _class_zero(xt, n * k, context)
@@ -4196,7 +4695,33 @@ def _staged_input(model: PythonObject, kind: String, X: PythonObject, context: P
     path runs first; on the converted Array it returns that Array) and staged
     as the one device copy its forest members share (bindings/trees_staged_input.mojo).
     Any refusal here leaves `(X, [])`: the operation then raises it itself,
-    in its own order and words."""
+    in its own order and words.
+
+    THE FOLD FROM THE STORE (lane vdf-meta5): a model-selection fold
+    (DeviceRows on a GPU route) is left UNREAD when no forest binary would
+    be staged (`trees_stage_wanted`, at the fitted width): the operation
+    then reads it out of its host base (`_check_meta_x`) and its native
+    members take the fold's rows on the device. Before, this admission
+    gathered every fold on the host first, so no meta predict ever saw the
+    fold (vdf-meta4's Voting / MultiOutputRegressor predicts from the store
+    included). A fold that two or more forest members predict through is
+    admitted and staged once, as before."""
+    var nk = trees_keys()
+    if not (py_get(context, nk[].k_device_cpu_context) is context) and door_is_device_rows(X, context):
+        var wanted = Python.list()
+        try:
+            wanted = trees_stage_wanted(_member_list(model, kind),
+                                        Int(py=_attr(model, nk[].k_n_features_in_, PythonObject(0))), context)
+        except:
+            return Python.tuple(X, Python.list())
+        if len(wanted) == 0:
+            return Python.tuple(X, Python.list())
+        var Xf: PythonObject
+        try:
+            Xf = _check_x(model, X, context)
+        except:
+            return Python.tuple(X, Python.list())
+        return Python.tuple(Xf, trees_stage_tables(wanted, trees_address(Xf), _rows(Xf), _cols(Xf)))
     var Xa: PythonObject
     try:
         Xa = _check_x(model, X, context)
