@@ -61,8 +61,8 @@ class _ResidentState:
 
 
 class _SeqOptimizer(_ResidentState):
-    def __init__(self, params, lr, options, numeric_mode=None):
-        return _SEQ_NATIVE("seq_construct", self, (params, lr, options), numeric_mode, _SEQ_CONTEXT)
+    def __init__(self, params, lr, options, numeric_mode=None, *, device=None):
+        return _SEQ_NATIVE("seq_construct", self, (params, lr, options, device), numeric_mode, _SEQ_CONTEXT)
 
     def state_dict(self):
         """Return an independent checkpoint of the step, learning rate and state."""
@@ -99,6 +99,9 @@ class RMSprop(_SeqOptimizer):
         Normalize by the estimated gradient variance.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Attributes
     ----------
@@ -131,8 +134,8 @@ class RMSprop(_SeqOptimizer):
     _NAME = "rmsprop"
 
     def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-8, weight_decay=0.0, momentum=0.0,
-                 centered=False, numeric_mode=None):
-        return _SEQ_NATIVE("seq_construct", self, (params, lr, (alpha, eps, weight_decay, momentum, centered)), numeric_mode, _SEQ_CONTEXT)
+                 centered=False, numeric_mode=None, *, device=None):
+        return _SEQ_NATIVE("seq_construct", self, (params, lr, (alpha, eps, weight_decay, momentum, centered), device), numeric_mode, _SEQ_CONTEXT)
 
     @property
     def square_avg(self):
@@ -163,6 +166,9 @@ class Adagrad(_SeqOptimizer):
         Term added to the denominator.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Attributes
     ----------
@@ -194,8 +200,8 @@ class Adagrad(_SeqOptimizer):
     _NAME = "adagrad"
 
     def __init__(self, params, lr=1e-2, lr_decay=0.0, weight_decay=0.0, initial_accumulator_value=0.0,
-                 eps=1e-10, numeric_mode=None):
-        return _SEQ_NATIVE("seq_construct", self, (params, lr, (lr_decay, weight_decay, initial_accumulator_value, eps)), numeric_mode, _SEQ_CONTEXT)
+                 eps=1e-10, numeric_mode=None, *, device=None):
+        return _SEQ_NATIVE("seq_construct", self, (params, lr, (lr_decay, weight_decay, initial_accumulator_value, eps), device), numeric_mode, _SEQ_CONTEXT)
 
     @property
     def sum(self):
@@ -222,6 +228,9 @@ class Lion(_SeqOptimizer):
         Decoupled weight decay.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Attributes
     ----------
@@ -252,8 +261,8 @@ class Lion(_SeqOptimizer):
     """
     _NAME = "lion"
 
-    def __init__(self, params, lr=1e-4, betas=(0.9, 0.99), weight_decay=0.0, numeric_mode=None):
-        return _SEQ_NATIVE("seq_construct", self, (params, lr, (betas, weight_decay)), numeric_mode, _SEQ_CONTEXT)
+    def __init__(self, params, lr=1e-4, betas=(0.9, 0.99), weight_decay=0.0, numeric_mode=None, *, device=None):
+        return _SEQ_NATIVE("seq_construct", self, (params, lr, (betas, weight_decay), device), numeric_mode, _SEQ_CONTEXT)
 
     @property
     def exp_avg(self):
@@ -282,6 +291,9 @@ class Adamax(_SeqOptimizer):
         L2 penalty added to the gradient.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Attributes
     ----------
@@ -310,8 +322,8 @@ class Adamax(_SeqOptimizer):
     """
     _NAME = "adamax"
 
-    def __init__(self, params, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, numeric_mode=None):
-        return _SEQ_NATIVE("seq_construct", self, (params, lr, (betas, eps, weight_decay)), numeric_mode, _SEQ_CONTEXT)
+    def __init__(self, params, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, numeric_mode=None, *, device=None):
+        return _SEQ_NATIVE("seq_construct", self, (params, lr, (betas, eps, weight_decay), device), numeric_mode, _SEQ_CONTEXT)
 
 
 class NAdam(_SeqOptimizer):
@@ -340,6 +352,9 @@ class NAdam(_SeqOptimizer):
         Apply weight decay to the parameters directly instead of the gradient.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode of the update. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Attributes
     ----------
@@ -369,8 +384,8 @@ class NAdam(_SeqOptimizer):
     _NAME = "nadam"
 
     def __init__(self, params, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, momentum_decay=4e-3,
-                 decoupled_weight_decay=False, numeric_mode=None):
-        return _SEQ_NATIVE("seq_construct", self, (params, lr, (betas, eps, weight_decay, momentum_decay, decoupled_weight_decay)), numeric_mode, _SEQ_CONTEXT)
+                 decoupled_weight_decay=False, numeric_mode=None, *, device=None):
+        return _SEQ_NATIVE("seq_construct", self, (params, lr, (betas, eps, weight_decay, momentum_decay, decoupled_weight_decay), device), numeric_mode, _SEQ_CONTEXT)
 
 
 class Adafactor(_ResidentState):
@@ -378,11 +393,14 @@ class Adafactor(_ResidentState):
     weight decay, a factored second moment (row and column means of g^2) for
     matrices and a full one for vectors, the update clipped by its RMS over
     d. Parameters are float32 NumPy arrays of 1 or 2 dimensions, updated in
-    place; defaults are torch's. `sequence/adafactor.mojo`."""
+    place; defaults are torch's. `sequence/adafactor.mojo`. `device` is where
+    the computation runs: None uses this installation's device, 'cpu' runs on
+    the CPU and 'gpu' requires a GPU installation; other values raise
+    ValueError."""
 
     def __init__(self, params, lr=1e-2, beta2_decay=-0.8, eps=(None, 1e-3), d=1.0, weight_decay=0.0,
-                 maximize=False, numeric_mode=None):
-        return _SEQ_NATIVE("seq_construct", self, (params, lr, (beta2_decay, eps, d, weight_decay, maximize)), numeric_mode, _SEQ_CONTEXT)
+                 maximize=False, numeric_mode=None, *, device=None):
+        return _SEQ_NATIVE("seq_construct", self, (params, lr, (beta2_decay, eps, d, weight_decay, maximize), device), numeric_mode, _SEQ_CONTEXT)
 
 
 class LAMB(_SeqOptimizer):
@@ -391,12 +409,15 @@ class LAMB(_SeqOptimizer):
     (max_grad_norm), Adam moments with bias correction, update
     m_hat / (sqrt(v_hat) + eps) + weight_decay p, scaled per tensor by the
     trust ratio ||p|| / ||update|| (1 when either is 0; at most 1 with
-    trust_clip) when weight_decay != 0 or always_adapt. Defaults are timm's."""
+    trust_clip) when weight_decay != 0 or always_adapt. Defaults are timm's.
+    `device` is where the computation runs: None uses this installation's
+    device, 'cpu' runs on the CPU and 'gpu' requires a GPU installation;
+    other values raise ValueError."""
 
     def __init__(self, params, lr=1e-3, bias_correction=True, betas=(0.9, 0.999), eps=1e-6,
                  weight_decay=0.01, grad_averaging=True, max_grad_norm=1.0, trust_clip=False,
-                 always_adapt=False, numeric_mode=None):
-        return _SEQ_NATIVE("seq_construct", self, (params, lr, (bias_correction, betas, eps, weight_decay, grad_averaging, max_grad_norm, trust_clip, always_adapt)), numeric_mode, _SEQ_CONTEXT)
+                 always_adapt=False, numeric_mode=None, *, device=None):
+        return _SEQ_NATIVE("seq_construct", self, (params, lr, (bias_correction, betas, eps, weight_decay, grad_averaging, max_grad_norm, trust_clip, always_adapt), device), numeric_mode, _SEQ_CONTEXT)
 
     #: bit0 trust_clip, bit1 always_adapt, bit2 grad_averaging, bit3
     #: bias_correction, bit4 the global gradient-norm clip

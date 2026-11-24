@@ -78,6 +78,9 @@ class MoEBlock:
         Seed of the N(0, 0.02**2) weight initialization.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the computation runs. None uses this installation's device, 'cpu' runs on
+        the CPU and 'gpu' requires a GPU installation. Other values raise ValueError.
 
     Attributes
     ----------
@@ -144,10 +147,10 @@ class MoEBlock:
         return _SEQ_NATIVE("seqmoe_release", self, (), None, _SEQ_CONTEXT)
 
     def __init__(self, hidden_size, intermediate_size, num_experts=8, top_k=2, norm_topk_prob=True,
-                 hidden_act="silu", random_state=0, numeric_mode=None):
+                 hidden_act="silu", random_state=0, numeric_mode=None, *, device=None):
         return _SEQ_NATIVE("seqmoe_initialize", self,
                            (hidden_size, intermediate_size, num_experts, top_k, norm_topk_prob,
-                            hidden_act, random_state), numeric_mode, _SEQ_CONTEXT)
+                            hidden_act, random_state, device), numeric_mode, _SEQ_CONTEXT)
 
     def load_state_dict(self, sd):
         """Load `router`, `gate_up_proj` and `down_proj` from a dict of arrays; returns self.
