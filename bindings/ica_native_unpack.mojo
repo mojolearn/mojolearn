@@ -22,6 +22,7 @@ from bindings.decomp_owner_common_unpack import (
 )
 from bindings.decomp_kit_native_door import decomp_entries_routed, decomp_entries_ref
 from core.decomp_factor_api import ICAFitRequest, ICAProjectRequest, ica_fit_call, ica_project_call
+from core.fit_loop_clock import FitLoop
 
 
 def _address(array: PythonObject) raises -> Int:
@@ -94,12 +95,15 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
     var mean = decomp_f32(Python.tuple(d), context) if code != 0 else PythonObject(None)
     var sources = decomp_f32(Python.tuple(n, nc), context) if project else PythonObject(None)
     var spare = _address(components)
+    # the fixed-point loop's nanoseconds (`fit_loop_`)
+    var loop_ns = List[Int](length=1, fill=0)
     var request = ICAFitRequest(
         _address(x), _address(winit.value()) if Bool(winit) else 0, spare, _address(mixing),
         _address(whitening) if code != 0 else spare, _address(mean) if code != 0 else spare,
         _address(sources) if project else spare,
         n, d, nc, code, seed, 0 if decomp_eq(algorithm, PythonObject("parallel")) else 1, fun_code,
-        decomp_int(fields["max_iter"]), project, decomp_float(alpha), decomp_float(fields["tol"]))
+        decomp_int(fields["max_iter"]), project, decomp_float(alpha), decomp_float(fields["tol"]),
+        Int(loop_ns.unsafe_ptr()))
     var it = 0
     with GILReleased(Python()):
         it = ica_fit_call(entry, request)
@@ -111,6 +115,9 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
     _ = winit  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", PythonObject(it))
+    # `fit_loop_`: (n_iter_, the fixed-point loop's milliseconds), Mojo values packed once per fit
+    var loop = FitLoop(it, loop_ns[0], True)
+    py_setitem(fields, "fit_loop_", Python.tuple(PythonObject(loop.iterations), PythonObject(loop.milliseconds())))
     if code != 0:
         py_setitem(fields, "whitening_", whitening)
         py_setitem(fields, "mean_", mean)

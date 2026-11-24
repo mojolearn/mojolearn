@@ -54,10 +54,12 @@ struct NMFProviderKernels[E: Exec, D: RDev, RES: Bool, X: DecompDev](NMFNativeKe
         var w_output = _nmf_pointer(r.w_output)
         var h_output = _nmf_pointer(r.h_output)
         var word = List[Int32](length=1, fill=Int32(0))
+        # the solver loop's nanoseconds (the fit's `fit_loop_`)
+        var loop_ns = List[Int](length=1, fill=0)
         var result = nmf_run[Self.E, Self.D, Self.RES, Self.X](source, r.rows, r.features, r.components, r.initialization,
             w_initial, h_initial, r.args.seed, r.solver, a, w_output, h_output,
-            Int(word.unsafe_ptr()) if r.test_finite else 0)
-        return NMFFitResult(result[0], result[1], Int(word[0]))
+            Int(word.unsafe_ptr()) if r.test_finite else 0, Int(loop_ns.unsafe_ptr()))
+        return NMFFitResult(result[0], result[1], Int(word[0]), loop_ns[0])
 
     @staticmethod
     def inverse(r: NMFInverseRequest) raises:

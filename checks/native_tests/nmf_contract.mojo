@@ -44,7 +44,7 @@ struct NMFWireOracle(NMFNativeKernels):
         require(r.args.beta == 1.5 and r.args.max_iter == 47 and r.args.tol == 0.0625
                 and r.args.l1w == 0.125 and r.args.l1h == 0.25 and r.args.l2w == 0.5
                 and r.args.l2h == 0.75 and r.args.seed == 53, "NMF native options and Float64 slots")
-        return NMFFitResult(59, -0.0, Int(r.args.update_h) + 2 * Int(r.args.shuffle) + 4 * Int(r.test_finite))
+        return NMFFitResult(59, -0.0, Int(r.args.update_h) + 2 * Int(r.args.shuffle) + 4 * Int(r.test_finite), 61)
 
     @staticmethod
     def inverse(r: NMFInverseRequest) raises:
@@ -116,6 +116,7 @@ def fixture(unit: Int) raises:
         var variant = unit - 1
         var answer = driver.fit(fit_request(variant))
         require(answer.iterations == 59 and answer.finite == variant, "NMF fit integer result slots")
+        require(answer.loop_ns == 61, "NMF fit loop nanoseconds slot")
         require(bitcast[DType.uint64](answer.error) == UInt64(0x8000000000000000),
                 "NMF independent Float64 result preserves signed zero")
     elif unit == 9:

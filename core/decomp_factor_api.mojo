@@ -45,6 +45,7 @@ struct ICAFitRequest(Copyable, Movable):
     var project: Bool
     var alpha: Float64
     var tol: Float64
+    var loop_out: Int      # 0, or one int64: the fixed-point loop's nanoseconds (`fit_loop_`)
 
 
 @fieldwise_init
@@ -74,6 +75,7 @@ struct FAFitRequest(Copyable, Movable):
     var max_iter: Int
     var rotation: Int      # 0 None, 1 varimax, 2 quartimax
     var tol: Float64
+    var loop_out: Int      # 0, or one int64: the EM loop's nanoseconds (`fit_loop_`)
 
 
 @fieldwise_init
@@ -158,7 +160,7 @@ struct RPProjectRequest(Copyable, Movable):
 
 def ica_fit_call(entry: EntryRef, r: ICAFitRequest) raises -> Int:
     """FastICA fit / fit_transform; returns n_iter_."""
-    var a: Array[Int, 7] = [r.source, r.w_init, r.components, r.mixing, r.whitening, r.mean, r.sources]
+    var a: Array[Int, 8] = [r.source, r.w_init, r.components, r.mixing, r.whitening, r.mean, r.sources, r.loop_out]
     var p: Array[Int, 9] = [r.rows, r.features, r.count, r.whiten, r.seed, r.algorithm, r.fun, r.max_iter,
         Int(r.project)]
     var f: Array[Float64, 2] = [r.alpha, r.tol]
@@ -175,7 +177,7 @@ def ica_project_call(entry: EntryRef, r: ICAProjectRequest) raises:
 
 def fa_fit_call(entry: EntryRef, r: FAFitRequest) raises -> Int:
     """FactorAnalysis fit; returns n_iter_."""
-    var a: Array[Int, 6] = [r.source, r.psi0, r.components, r.noise, r.mean, r.loglike]
+    var a: Array[Int, 7] = [r.source, r.psi0, r.components, r.noise, r.mean, r.loglike, r.loop_out]
     var p: Array[Int, 5] = [r.rows, r.features, r.count, r.max_iter, r.rotation]
     var f: Array[Float64, 1] = [r.tol]
     return entry_ref_call(entry, XD_FA_FIT, a, p, f)

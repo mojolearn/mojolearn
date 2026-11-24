@@ -60,6 +60,8 @@ struct NMFFitResult(Copyable, Movable):
     var iterations: Int
     var error: Float64
     var finite: Int
+    # the solver loop's nanoseconds (core/fit_loop_clock.mojo; `fit_loop_`)
+    var loop_ns: Int
 
 
 @fieldwise_init
@@ -115,6 +117,7 @@ def nmf_native_dispatch[K: NMFNativeKernels](operation: Int,
             var words = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=a[5])
             words[0] = answer.iterations
             words[1] = answer.finite
+            words[2] = answer.loop_ns
             MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[6])[] = answer.error
         elif operation == NMF_INVERSE:
             if na != 3 or np != 3 or nf != 0 or aa == 0 or pp == 0:
@@ -143,7 +146,7 @@ struct NMFNativeDriver(Copyable, Movable):
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: NMFFitRequest) raises -> NMFFitResult:
-        var words = List[Int](length=2, fill=0)
+        var words = List[Int](length=3, fill=0)
         var error = List[Float64](length=1, fill=0.0)
         var a: Array[Int, 7] = [r.source, r.w_initial, r.h_initial, r.w_output, r.h_output,
             Int(words.unsafe_ptr()), Int(error.unsafe_ptr())]
@@ -151,7 +154,7 @@ struct NMFNativeDriver(Copyable, Movable):
             Int(r.args.update_h), r.args.max_iter, Int(r.args.shuffle), r.args.seed, Int(r.test_finite)]
         var f: Array[Float64, 6] = [r.args.beta, r.args.tol, r.args.l1w, r.args.l1h, r.args.l2w, r.args.l2h]
         _ = native_descriptor_call_fixed(self.entry, NMF_FIT, a, p, f)
-        return NMFFitResult(words[0], error[0], words[1])
+        return NMFFitResult(words[0], error[0], words[1], words[2])
 
     def inverse(self, r: NMFInverseRequest) raises:
         var a: Array[Int, 3] = [r.source, r.components, r.dst]

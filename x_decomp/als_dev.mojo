@@ -7,6 +7,7 @@ si = items: no transpose), the CG route on C and C^T (`als_cg_kernel`), the
 same cells for the loss with its three words home. GPU binding only."""
 from x_decomp.als import AlsArgs
 from x_decomp.cells import F32Ptr
+from core.fit_loop_clock import FitLoop, fit_loop_start, fit_loop_stop
 from x_decomp.device import TPB, _blocks, als_cg_kernel, als_scratch, launch_als_rows
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADD, OP_ADDS, OP_GTS, OP_MUL, OP_SCALE, OP_SELECT, OP_SQ, mat_from,
@@ -65,9 +66,13 @@ def als_loss_dev(mut k: DKit, C: DMat, X: DMat, Y: DMat, reg: Float64) raises ->
 
 
 def als_fit_dev_run(
-    pc: F32Ptr, px: F32Ptr, py_: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int, nf: Int, a: AlsArgs
+    pc: F32Ptr, px: F32Ptr, py_: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int, nf: Int, a: AlsArgs,
+    mut loop: FitLoop,
 ) raises -> Int:
-    """`als_fit_run` on the resident kit."""
+    """`als_fit_run` on the resident kit; `loop` receives the sweep loop's
+    clock: read after the uploads (and the CG path's transpose) before the
+    first sweep, and after ONE synchronization behind the last sweep's last
+    launch, before the factors are read back."""
     if n * m > 2147483647 or n * nf > 2147483647 or m * nf > 2147483647:
         raise Error("x_decomp: als shape out of range")
     var cnt = 0
@@ -79,19 +84,24 @@ def als_fit_dev_run(
     # one write-only sink for every half-sweep's per-row flags / step counts
     # (was a fresh buffer per half-sweep)
     var sink = DMat(max(max(n, m), 1), 1)
+    var loop_start = 0
     if a.use_cg:
         var Ct = k.t(C)
+        loop_start = fit_loop_start()
         for _ in range(a.iterations):
             X = als_cg_half_dev(k, C, Y, X, a.reg, a.cg_steps, sink)
             Y = als_cg_half_dev(k, Ct, X, Y, a.reg, a.cg_steps, sink)
             if a.calc_loss:
                 losses.append(als_loss_dev(k, C, X, Y, a.reg))
     else:
+        loop_start = fit_loop_start()
         for _ in range(a.iterations):
             X = als_half_dev(k, C, Y, a.reg, False, sink)
             Y = als_half_dev(k, C, X, a.reg, True, sink)
             if a.calc_loss:
                 losses.append(als_loss_dev(k, C, X, Y, a.reg))
+    k.sync()
+    loop = fit_loop_stop(loop_start, max(a.iterations, 0))
     var hx = k.get(X)
     var hy = k.get(Y)
     k.sync()
