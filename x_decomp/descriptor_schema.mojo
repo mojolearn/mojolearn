@@ -117,7 +117,7 @@ comptime XD_PLS_FIT = 65          # a: [x, y, xw, yw, xs, ys, xl, yl, its(int32)
 comptime XD_LU_GESV = 66          # a: [a, b, info] i: [n, nrhs]
 comptime XD_DEV_LU_FACTOR = 67    # a: [a, lu, piv(int32), info] i: [ia, ilu, ipv, n]   (LU_RESIDENT_ENTRIES)
 comptime XD_DEV_LU_SOLVE = 68     # a: [b, x] i: [ilu, ipv, ia, n, nrhs, refine]        (LU_RESIDENT_ENTRIES)
-comptime XD_RANDOMIZED_SVD = 69   # a: [x, u, s, vt] i: [rows, cols, nc, oversamples, iterations, auto, transpose, flip_sign, seed, deferred]
+comptime XD_RANDOMIZED_SVD = 69   # a: [x, u, s, vt] i: [rows, cols, nc, oversamples, iterations, auto, transpose, flip_sign, seed, deferred, x id, u id, s id, vt id] (an id >= 0, lane vdf-linalg7: that pool id in place of the address, which is unread; GPU images only)
 # lane entangled-kits (2026-11-12): the order_small doors the linalg kit
 # (bindings/linalg_ops_kit_run.mojo) called as Python entries
 # (`x_decomp_order_small`, `x_decomp_dev_order_small`), appended.
@@ -154,10 +154,19 @@ comptime XD_DEV_TRIU = 83         # i: [h, dst, r, c]   (dst r x c: the first r 
 # TrainDeviceArray in place on the host input's route. GPU image only (identical); the host image refuses them.
 comptime XD_DEV_FROM_TRAIN = 84   # i: [train handle, dst id, n]
 comptime XD_DEV_TO_TRAIN = 85     # i: [src id, train handle, n]
-comptime XD_DEV_TSQR_R = 86       # a: [r] i: [x id, rows, cols, keep]  -> the owner handle with keep, else cols
+comptime XD_DEV_TSQR_R = 86       # a: [r (read when r id < 0)] i: [x id, rows, cols, keep, r id (-1: host r), b id, nrhs]  -> the owner handle with keep, else cols + nrhs
 comptime XD_DEV_TSQR_Q = 87       # a: [c (read when c id < 0)] i: [owner, c id (-1: host c), q id, m, n, k]  (frees the owner)
+# lane vdf-linalg7 (2026-11-24): the device operand's finite test, qr's R signs on pool ids, solve's gesv and the
+# resident LU pair (factor, solve) with every operand on a pool id (x_decomp/resident_train.mojo,
+# x_decomp/s_linalg_fast.mojo), so solve / lstsq / randomized_svd / sparse_encode read a TrainDeviceArray in place and
+# qr / svd keep the TSQR's R on the device. GPU images (identical and fast); the host image refuses them.
+comptime XD_DEV_FINITE = 88       # i: [id, n]  -> 0 every word finite, 1 otherwise
+comptime XD_DEV_R_SIGNS = 89      # i: [r id, c id, n]
+comptime XD_DEV_LU_GESV = 90      # a: [info] i: [a id, b id, x id, n, nrhs]
+comptime XD_DEV_LU_FACTOR_IN = 91 # a: [info] i: [ia (holds A), ilu, ipv, n]   (LU_RESIDENT_ENTRIES)
+comptime XD_DEV_LU_SOLVE_IN = 92  # i: [ilu, ipv, ia, ib, ix, n, nrhs, refine]  (LU_RESIDENT_ENTRIES)
 # lane entangled-mkit (2026-11-12): the manifold kit's operations 120 ..
-# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 87) (x_decomp/descriptor_mani_schema.mojo).
+# XD_MANI_OPERATION_END - 1 (above every operation here, 0 .. 92) (x_decomp/descriptor_mani_schema.mojo).
 comptime XD_OPERATION_COUNT = XD_MANI_OPERATION_END
 
 comptime XD_CAP_HOST = 1       # the host-address operations
@@ -293,7 +302,7 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_DEV_LU_SOLVE:
         return (2, 6, 0)
     if op == XD_RANDOMIZED_SVD:
-        return (4, 10, 0)
+        return (4, 14, 0)
     if op == XD_ORDER_SMALL:
         return (2, 1, 0)
     if op == XD_DEV_ORDER_SMALL:
@@ -307,9 +316,19 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == XD_DEV_FROM_TRAIN or op == XD_DEV_TO_TRAIN:
         return (0, 3, 0)
     if op == XD_DEV_TSQR_R:
-        return (1, 4, 0)
+        return (1, 7, 0)
     if op == XD_DEV_TSQR_Q:
         return (1, 6, 0)
+    if op == XD_DEV_FINITE:
+        return (0, 2, 0)
+    if op == XD_DEV_R_SIGNS:
+        return (0, 3, 0)
+    if op == XD_DEV_LU_GESV:
+        return (1, 5, 0)
+    if op == XD_DEV_LU_FACTOR_IN:
+        return (1, 4, 0)
+    if op == XD_DEV_LU_SOLVE_IN:
+        return (0, 8, 0)
     if op == XD_TSQR_Q:
         return (2, 4, 0)
     if op == XD_R_SIGNS:

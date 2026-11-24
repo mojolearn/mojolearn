@@ -138,6 +138,7 @@ def _mlp() raises:
     var ob = List[Float32](length=n, fill=Float32(0))
     _ = mlp_predict_impl(ea, [Int(host_x.unsafe_ptr()), Int(pa.unsafe_ptr()), Int(oa.unsafe_ptr())], pi)
     _ = mlp_predict_impl(eb, [slot_x, Int(pa.unsafe_ptr()), Int(ob.unsafe_ptr())], pi, True)
+    _ = pa^
     _same(oa, ob, "MLP predictions")
     _seq_free(ids)
     _ = whole^
@@ -171,9 +172,11 @@ def _rnn() raises:
     var ea = DeviceExec()
     _ = rnn_fit_impl(ea, [Int(host_x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(pa.unsafe_ptr()),
                           Int(la.unsafe_ptr()), Int(ra.unsafe_ptr())], ints, floats)
+    _ = ra^
     var eb = DeviceExec()
     _ = rnn_fit_impl(eb, [slot_x, Int(y.unsafe_ptr()), Int(pb.unsafe_ptr()), Int(lb.unsafe_ptr()),
                           Int(rb.unsafe_ptr())], ints, floats, True)
+    _ = rb^
     _same(pa, pb, "RNN fit parameters")
     _same(la, lb, "RNN minibatch losses")
     _seq_free(ids)
@@ -271,6 +274,7 @@ def _scalers() raises:
     var store = PREP_MEMBER_STORE.get_or_create_ptr()
     var base = store[].put(ctx, Int(whole.unsafe_ptr()), n_whole * d)
     var taken = store[].take_rows(ctx, base, d, Int(idx.unsafe_ptr()), n)
+    _ = idx^
     # StandardScaler (with_mean, with_std): the three rows, then the transform with them.
     var sa = List[Float32](length=3 * d, fill=Float32(0))
     var sb = List[Float32](length=3 * d, fill=Float32(0))
@@ -288,6 +292,7 @@ def _scalers() raises:
             "StandardScaler direct transform")
     require(prep_slot_transform(taken, n, d, False, 0, 1, 1, 0, 0.0, 1.0, mean, scale, Int(tb.unsafe_ptr())) == 1,
             "StandardScaler slot transform")
+    _ = sa^
     _same(ta, tb, "StandardScaler transform")
     # MinMaxScaler (feature_range (0, 1), no clip): the five rows, then the transform with scale_ / min_.
     var ma = List[Float32](length=5 * d, fill=Float32(0))
@@ -304,6 +309,7 @@ def _scalers() raises:
             "MinMaxScaler direct transform")
     require(prep_slot_transform(taken, n, d, True, 0, 1, 1, 0, 0.0, 1.0, mscale, moffset, Int(tb.unsafe_ptr())) == 1,
             "MinMaxScaler slot transform")
+    _ = ma^
     _same(ta, tb, "MinMaxScaler transform")
     store[].free(ctx, taken)
     store[].free(ctx, base)
@@ -324,6 +330,7 @@ def _decomposition() raises:
     var store = msel_fold_store()
     var base = store[].put(ctx, Int(whole.unsafe_ptr()), n_whole * d * 4)
     var index = store[].put(ctx, Int(idx.unsafe_ptr()), n * 8)
+    _ = idx^
     var fold = PCAFoldStore(base, n_whole, index)
     # PCA, covariance route, integer n_components.
     var comp_a = List[Float32](length=k * d, fill=Float32(0))
@@ -354,6 +361,8 @@ def _decomposition() raises:
         Int(comp_a.unsafe_ptr()), 0, Int(pa.unsafe_ptr()), n, d, k, n, False, False, PCAFoldStore()))
     var status = PCAFoldKernels.query(PCAQueryRequest(0, Int(mean_a.unsafe_ptr()), Int(comp_a.unsafe_ptr()), 0,
         Int(pb.unsafe_ptr()), n, d, k, n, False, False, fold))
+    _ = comp_a^
+    _ = mean_a^
     require(status.finite == 0 and status.in_range == 0, "PCA fold transform status")
     _same(pa, pb, "PCA transform")
     # TruncatedSVD: the device gram fit then its explained step == the fold fit.
@@ -404,6 +413,7 @@ def _refusals() raises:
     except error:
         fold_refused = String(error).find("no take_rows") >= 0
     require(fold_refused, "model-selection fold store: TAKE_ROWS is refused")
+    _ = bad^
     _ = whole^
 
 

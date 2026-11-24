@@ -24,6 +24,28 @@ from std.math import isfinite
 from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
 
 
+def cosine_row_norm2(address: Int, n_cols: Int) -> Float32:
+    """One row's squared norm (the float32 words at `address`) in `cosine_unit_rows`' fold order (also the
+    device kernel's, dbscan/estimator.mojo `cosine_unit_rows_kernel`)."""
+    var row = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
+    var n2 = Float32(0)
+    for f in range(n_cols):
+        var v = ftz(row[f])
+        n2 = ftz(n2 + ftz(identical_mul(v, v)))
+    return n2
+
+
+def cosine_row_refusal(what: String, row: Int, n2: Float32) -> Error:
+    """`cosine_unit_rows`' refusal of row `row` (squared norm `n2`)."""
+    return Error(
+        what + ": metric='cosine' needs every row to have a positive,"
+        " finite norm; row " + String(row) + " has squared norm "
+        + String(n2) + ". The cosine distance of a zero row is"
+        " undefined (cuML divides by zero and carries NaN), so it is"
+        " refused by name"
+    )
+
+
 def cosine_unit_rows(
     src: List[Float32], n_rows: Int, n_cols: Int, what: String
 ) raises -> List[Float32]:
@@ -32,18 +54,9 @@ def cosine_unit_rows(
     var out = List[Float32](length=n_rows * n_cols, fill=Float32(0))
     for i in range(n_rows):
         var base = i * n_cols
-        var n2 = Float32(0)
-        for f in range(n_cols):
-            var v = ftz(src[base + f])
-            n2 = ftz(n2 + ftz(identical_mul(v, v)))
+        var n2 = cosine_row_norm2(Int(src.unsafe_ptr()) + base * 4, n_cols)
         if not (n2 > Float32(0)) or not isfinite(n2):
-            raise Error(
-                what + ": metric='cosine' needs every row to have a positive,"
-                " finite norm; row " + String(i) + " has squared norm "
-                + String(n2) + ". The cosine distance of a zero row is"
-                " undefined (cuML divides by zero and carries NaN), so it is"
-                " refused by name"
-            )
+            raise cosine_row_refusal(what, i, n2)
         var norm = identical_sqrt(n2)
         for f in range(n_cols):
             out[base + f] = ftz(identical_div(ftz(src[base + f]), norm))

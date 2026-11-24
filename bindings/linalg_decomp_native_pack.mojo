@@ -62,6 +62,8 @@ from bindings.linalg_keys_unpack import (
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
+from bindings.linalg_dev_arrays_unpack import lin_train_device, lin_is_device_array
+from bindings.linalg_decomp_dev_door import solve_dev_call, lstsq_dev_call, randomized_svd_dev_call, rsvd_params
 
 
 def randomized_svd_call(args: PythonObject, device: FunctionDevice, context: PythonObject) raises -> PythonObject:
@@ -73,10 +75,7 @@ def randomized_svd_call(args: PythonObject, device: FunctionDevice, context: Pyt
     # mode's binding on resident matrices; M is admitted once here (the one
     # admission path: borrowed when C float32, else one parallel cast) and
     # uploaded once by the driver.
-    var b = native_loaded_module("builtins")
     var entries = ld_entries(device, args[8], context)
-    var transpose_arg = args[5]
-    var auto_transpose = Bool(py=py_call(b.isinstance, transpose_arg, b.str)) and String(py=transpose_arg) == "auto"
     # RSVD_FAST_DEVSCAN (x_decomp/s_linalg_fast.mojo, `x_decomp_s_flags` bit
     # 1; the FAST + Apple default, rab15: istella 490.1 -> 435.1 ms; deleted
     # 2026-11-08 by lane a3, restored 2026-11-09 by lane
@@ -89,31 +88,17 @@ def randomized_svd_call(args: PythonObject, device: FunctionDevice, context: Pyt
     var array = decomp_input(args[0], "M", context, defer_finite=devscan)
     var rows = Int(py=array.shape[0])
     var cols = Int(py=array.shape[1])
-    var normalizer = args[4]
-    var known = False
-    if Bool(py=py_call(b.isinstance, normalizer, b.str)):
-        var name = String(py=normalizer)
-        known = name == "auto" or name == "QR" or name == "LU" or name == "none"
-    if not known:
-        raise Error("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
-    var kc = decomp_int(args[1])
-    var oversamples = decomp_int(args[2])
-    var n_iter = args[3]
-    var auto_iterations = Bool(py=py_call(b.isinstance, n_iter, b.str)) and String(py=n_iter) == "auto"
-    var iterations = 0 if auto_iterations else decomp_int(n_iter)
-    var transpose = (rows < cols) if auto_transpose else Bool(py=transpose_arg)
-    if not (1 <= kc and kc <= min(rows, cols)):
-        raise Error("n_components must be in [1, min(n_samples, n_features)]")
-    var seed = decomp_seed_word(decomp_seed(args[7]))
+    # the option words: one body with the device form (bindings/linalg_decomp_dev_door.mojo `rsvd_params`)
+    var params = rsvd_params(args, rows, cols, devscan)
+    var kc = params[2]
     var output = py_item(context, nk[].k_output_context)
     var u = classical_typed(Python.tuple(rows, kc), "<f4", output)
     var s = classical_typed(Python.tuple(kc), "<f4", output)
     var vt = classical_typed(Python.tuple(kc, cols), "<f4", output)
-    # XD_RANDOMIZED_SVD (was the Python entry x_decomp_randomized_svd)
+    # XD_RANDOMIZED_SVD (was the Python entry x_decomp_randomized_svd); the four pool-id words stay -1 (lane
+    # vdf-linalg7: they are the device form's)
     var addresses: List[Int] = [Int(py=classical_address(array)), Int(py=classical_address(u)),
                                 Int(py=classical_address(s)), Int(py=classical_address(vt))]
-    var params: List[Int] = [rows, cols, kc, oversamples, iterations, Int(auto_iterations), Int(transpose),
-                             Int(Bool(py=args[6])), seed, Int(devscan)]
     var py = Python()
     with GILReleased(py):
         ld_rsvd_run(kit, addresses, params)
@@ -563,7 +548,23 @@ def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var item = args[len(args) - 1]
         if item is not None:
             device = ld_device(item, _ld_public_name(operation), context)
-        if operation == LINALG_OPN_RANDOMIZED_SVD:
+        # lane vdf-linalg7: a TrainDeviceArray operand is read in place (bindings/linalg_decomp_dev_door.mojo); one
+        # dictionary read and, for the three functions that take one, an identity compare or two per call.
+        var held = lin_train_device(context)
+        var on_device = False
+        if held is not None:
+            if operation == LINALG_OPN_RANDOMIZED_SVD:
+                on_device = lin_is_device_array(args[0], held)
+            elif operation == LINALG_OPN_SOLVE or operation == LINALG_OPN_LSTSQ:
+                on_device = lin_is_device_array(args[0], held) or lin_is_device_array(args[1], held)
+        if on_device:
+            if operation == LINALG_OPN_RANDOMIZED_SVD:
+                result = randomized_svd_dev_call(args, device, held, context)
+            elif operation == LINALG_OPN_SOLVE:
+                result = solve_dev_call(args, device, held, context)
+            else:
+                result = lstsq_dev_call(args, device, held, context)
+        elif operation == LINALG_OPN_RANDOMIZED_SVD:
             result = randomized_svd_call(args, device, context)
         elif operation == LINALG_OPN_SOLVE:
             result = solve_call(args, device, context)

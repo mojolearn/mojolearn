@@ -27,7 +27,7 @@ Python layer only trims.
 """
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceContext, DeviceBuffer
 
 from checks.soft_f64 import sf64_from_f32
 from decomposition.estimator import (
@@ -35,7 +35,10 @@ from decomposition.estimator import (
     pca_fit_host,
     pca_transform_host,
     pca_whiten_transform_host,
+    pca_whiten_transform_x,
 )
+from decomposition.impl.linalg.detail.pca import pca_transform
+from x_decomp.resident import pool_buffer
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from decomposition.impl.pca_rank import pca_rank_finish
 from x_decomp.cells import F32Ptr
@@ -152,6 +155,76 @@ def pca_project_owned(
     ctx.synchronize()
 
 
+def pca_project_x(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    whiten: Bool,
+) raises:
+    """`pca_project_owned` over X already on the device (`x` on `ctx`, n_rows x n_features words; lane
+    vdf-scope-neural4 wrote it in decomposition/pca_fold.mojo for the exact fold fit, lane vdf-scope-neural6
+    moved it here for the randomized fit over a resident pool id as well): the whitened projection (scaled by
+    the fit's own row count, with its dimension refusals in its words) or the unwhitened one; nothing to write
+    when no component is kept. The fit tested X finite. The same kernels on the same words as the host-address
+    projection: no bit change."""
+    if whiten:
+        if n_rows < 1 or n_features < 1 or n_components < 1 or n_components > n_features or n_rows < 2:
+            raise Error("PCA whitening requires positive rows/features/components and fit_rows>=2")
+        if n_rows > 2147483647 or n_features > 2147483647 or n_components > 2147483647:
+            raise Error("PCA whitening dimensions exceed Int32")
+        if n_rows > 2147483647 // n_features or n_components > 2147483647 // n_features:
+            raise Error("PCA whitening matrix cell count exceeds Int32")
+        pca_whiten_transform_x(ctx, x, mean_ptr, components_ptr, singular_ptr, out_ptr,
+            n_rows, n_features, n_components, n_rows, device_checks=True)
+    elif n_components > 0:
+        var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
+        var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
+        var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+        ctx.enqueue_copy(dst_buf=mu, src_ptr=mean_ptr)
+        ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+        pca_transform(ctx, x, mu, components, out, n_rows, n_features, n_components)
+        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
+        ctx.synchronize()
+        _ = mu^
+        _ = components^
+        _ = out^
+
+
+def pca_project_pool(
+    ctx: DeviceContext,
+    x_dev: Int,
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    whiten: Bool,
+) raises:
+    """THE CONTEXT DIFFERENCE (lane vdf-scope-neural6): the randomized driver read X from x_decomp pool id
+    `x_dev` on the pool's context (x_decomp/device.mojo `xd_ctx`); the projection runs on this binding's `ctx`.
+    One device-to-device copy of the pool's n_rows x n_features words into a `ctx` buffer (enqueued on `ctx`, as
+    core/fold_x_device.mojo `fold_x_fill` copies a store slot across contexts; the store's take synchronized the
+    pool's context before the member got the id, and the driver only read it), then `pca_project_x` on it. The
+    rows never visit the host; the same words in the same order as the host upload: no bit change."""
+    var words = n_rows * n_features
+    var src = pool_buffer(x_dev, words)
+    var x = ctx.enqueue_create_buffer[DType.float32](words)
+    ctx.enqueue_copy(dst_buf=x, src_buf=src.create_sub_buffer[DType.float32](0, words))
+    pca_project_x(ctx, x, mean_ptr, components_ptr, singular_ptr, out_ptr, n_rows, n_features, n_components, whiten)
+    # No component kept writes nothing: the copy above still completes before the pool id is freed.
+    ctx.synchronize()
+    _ = x^
+    _ = src^  # the pool buffer stays referenced past the queued copy
+
+
 def pca_keep_finish(
     ctx: DeviceContext,
     explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -250,19 +323,27 @@ def pca_randomized_owned(
     project: Bool,
     whiten: Bool,
     finite_word: Int = 0,
+    x_dev: Int = -1,
 ) raises -> Float64:
     """`svd_solver='randomized'`: the five arrays written at `n_components`
     by the decomp lane's resident driver, then with `project` X's
     projection. Returns the noise variance. `finite_word` (lane a8d): as
-    `pca_randomized_fit_run`'s; a flagged X is neither fit nor projected."""
+    `pca_randomized_fit_run`'s; a flagged X is neither fit nor projected.
+    `x_dev` (lane vdf-scope-neural6): X as a resident x_decomp pool id (a
+    model-selection fold taken on the device; `x_ptr` unused), read in place
+    by the driver and projected through `pca_project_pool`; -1: host X."""
     var noise = pca_randomized_fit_run[DevExec, DevRDev, True](
         _f32_at(Int(x_ptr)), _f32_at(Int(components_ptr)), _f32_at(Int(mean_ptr)),
         _f32_at(Int(explained_ptr)), _f32_at(Int(ratio_ptr)), _f32_at(Int(singular_ptr)),
-        n_rows, n_features, n_components, oversamples, iterations, auto_iterations, seed, finite_word,
+        n_rows, n_features, n_components, oversamples, iterations, auto_iterations, seed, finite_word, x_dev,
     )
     if finite_word != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] != 0:
         return 0.0
-    if project:
+    if project and x_dev >= 0:
+        pca_project_pool(
+            ctx, x_dev, mean_ptr, components_ptr, singular_ptr, out_ptr, n_rows, n_features, n_components, whiten
+        )
+    elif project:
         pca_project_owned(
             ctx, x_ptr, mean_ptr, components_ptr, singular_ptr, out_ptr, n_rows, n_features, n_components, whiten
         )

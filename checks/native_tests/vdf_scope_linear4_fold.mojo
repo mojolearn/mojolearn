@@ -156,9 +156,11 @@ def _device_case(case: Int) raises:
                 ols_prep_device(ctx, word, Int(y_fold.unsafe_ptr()), 0, Int(box.unsafe_ptr()), Int(wya.unsafe_ptr()),
                     Int(m64a.unsafe_ptr()), Int(m32a.unsafe_ptr()), Int(y64a.unsafe_ptr()), Int(y32a.unsafe_ptr()),
                     n, FD, True, OLS_PREP_SEPARATE)
+                _ = y32a^
                 ols_prep_device(ctx, Int(gathered.unsafe_ptr()), Int(y_fold.unsafe_ptr()), 0, Int(wxb.unsafe_ptr()),
                     Int(wyb.unsafe_ptr()), Int(m64b.unsafe_ptr()), Int(m32b.unsafe_ptr()), Int(y64b.unsafe_ptr()),
                     Int(y32b.unsafe_ptr()), n, FD, True, OLS_PREP_SEPARATE)
+                _ = y32b^
                 require(Int(box[0]) < 0, "the fold prep left no prepared X slot")
                 store[].read(ctx, fold_x_slot(Int(box[0])), Int(wxa.unsafe_ptr()), n * FD)
                 store[].free(ctx, fold_x_slot(Int(box[0])))

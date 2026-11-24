@@ -31,9 +31,12 @@ names rows of the WHOLE X (and of the whole sample weights); with the
 caller's scope and pin the whole X stays resident in the scope's
 "preprocessing" cache, the fold is taken on the device and the direct fit
 and transform read it in place (core/scaler_native_api.mojo
-SCALER_OP_FIT_SLOT / SCALER_OP_TRANSFORM_SLOT); a NaN X, sample weights, a
-fitted state with an all-NaN column or a route without a pin read the fold's
-rows on the host (gathered in host row tasks), as the host-input route. `call.fit_output = MEMBER_OP_TRANSFORM`
+SCALER_OP_FIT_SLOT / SCALER_OP_TRANSFORM_SLOT); a NaN X, sample weights or a
+fitted state with an all-NaN column run the cores' x_prep programs over an
+x_prep copy of the slot (lane vdf-scope-neural6, core/scaler_slot_runs.mojo:
+one device-to-device copy, the runner's slot range); a route without a pin
+reads the fold's rows on the host (gathered in host row tasks), as the
+host-input route. `call.fit_output = MEMBER_OP_TRANSFORM`
 writes the training rows' transform to `dst` (rows x features) in the same
 call: on a direct route with no weights, the door's ONE combined kernel call
 (SCALER_OP_STANDARD_FIT_TRANSFORM / SCALER_OP_MINMAX_FIT_TRANSFORM: one upload
@@ -63,7 +66,9 @@ from std.memory import unsafe_memcpy, bitcast
 from core.scaler_core import (
     ScalerTableCalls, ScalerStandardFit, ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core,
     scaler_minmax_keep_extrema, scaler_transform_rows, scaler_transform_core, SCALER_SEEN_INT,
+    scaler_transform_slot_finish,
 )
+from core.scaler_slot_runs import scaler_slot_to_xprep, scaler_xprep_free
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
@@ -303,24 +308,38 @@ def _fit_rows(slot: _Slot, call: _Call, calls: ScalerTableCalls, mut held: SeqRo
     """The fit over the operation's rows `held` (a store slot or host
     words). True when the training rows' transform was written too (the
     door's ONE combined call); otherwise the caller runs the transform."""
+    var x_slot = -1
     if held.x < 0:
         if weight == 0 and calls.direct() and _fit_slot(slot, call, calls, -held.x - 1, n, d):
             return False
-    var x = _F32P(unsafe_from_address=seq_rows_host(call, held))
-    if call[].fit_output == MEMBER_OP_TRANSFORM:
-        if calls.direct() and weight == 0 and _fit_transform_once(slot, call, calls, Int(x), n, d):
-            return True
-    if slot[].kind() == SCALER_KIND_STANDARD:
-        var fit = scaler_standard_fit_core(calls, x, n, d, slot[].words[1] != 0.0, slot[].words[2] != 0.0, weight)
-        # Copies of the fit's two short rows (3d and d words): no field is
-        # moved out of the result (AGENTS.md part 6).
-        slot[].stats = fit.stats.copy()
-        slot[].seen = fit.seen.copy()
-        slot[].scalars = [Float64(d), Float64(fit.seen_kind), fit.seen_scalar]
-        _ = fit^
-    else:
-        slot[].stats = scaler_minmax_fit_core(calls, x, n, d, Float32(slot[].words[3]), Float32(slot[].words[4]))
-        slot[].scalars = [Float64(d), Float64(n)]
+        # Lane vdf-scope-neural6: the program route (sample weights, or the
+        # direct slot fit found a NaN or an infinity) reads the fold from an
+        # x_prep copy of the slot (core/scaler_slot_runs.mojo), never from a
+        # host gather. Without the direct entries an unweighted fit keeps the
+        # host rows (its finite X takes the host kernel, not the program).
+        if weight != 0 or calls.direct():
+            x_slot = scaler_slot_to_xprep(-held.x - 1, n * d)
+    try:
+        var x = _F32P(unsafe_from_address=0 if x_slot >= 0 else seq_rows_host(call, held))
+        if x_slot < 0 and call[].fit_output == MEMBER_OP_TRANSFORM:
+            if calls.direct() and weight == 0 and _fit_transform_once(slot, call, calls, Int(x), n, d):
+                return True
+        if slot[].kind() == SCALER_KIND_STANDARD:
+            var fit = scaler_standard_fit_core(calls, x, n, d, slot[].words[1] != 0.0, slot[].words[2] != 0.0,
+                                               weight, x_slot)
+            # Copies of the fit's two short rows (3d and d words): no field is
+            # moved out of the result (AGENTS.md part 6).
+            slot[].stats = fit.stats.copy()
+            slot[].seen = fit.seen.copy()
+            slot[].scalars = [Float64(d), Float64(fit.seen_kind), fit.seen_scalar]
+            _ = fit^
+        else:
+            slot[].stats = scaler_minmax_fit_core(calls, x, n, d, Float32(slot[].words[3]), Float32(slot[].words[4]),
+                                                  x_slot)
+            slot[].scalars = [Float64(d), Float64(n)]
+    finally:
+        if x_slot >= 0:
+            scaler_xprep_free(x_slot)
     slot[].features = d
     slot[].fitted = True
     return False
@@ -409,10 +428,16 @@ def _transform_held(slot: _Slot, call: _Call, mut held: SeqRows, inverse: Bool) 
         spec = ScalerTransformSpec(True, inverse, True, True, slot[].words[1] != 0.0, Float32(slot[].words[3]),
             Float32(slot[].words[4]))
     var rows = _F32P(unsafe_from_address=Int(slot[].rows.unsafe_ptr()))
-    # THE RESIDENT ROUTE: valid rows with no all-NaN column read the slot in
-    # place; the core's refusals, its NaN fill and its per-column NaN restore
-    # (host programs over host words) take the host rows below.
-    if held.x < 0 and calls.direct() and scaler_transform_rows_valid(rows, d) and bitcast[DType.int32](rows[7 * d]) == 0:
+    # THE RESIDENT ROUTE: valid rows read the slot in place (the direct
+    # transform); lane vdf-scope-neural6: a NaN X's fill and the per-column
+    # NaN restore run their programs over an x_prep copy of the slot
+    # (`scaler_transform_slot_finish`), and invalid rows take the core's
+    # refusals, which read no X.
+    if held.x < 0 and calls.direct() and not scaler_transform_rows_valid(rows, d):
+        scaler_transform_core(calls, spec, rows, _F32P(unsafe_from_address=0), n, d,
+            _F32P(unsafe_from_address=call[].dst.data))
+        raise Error(estimator + ": the fitted statistics were refused")  # not reached: the core raised
+    if held.x < 0 and calls.direct():
         var a: Array[Int, 3] = [Int(rows + 3 * d) if not standard else Int(rows + 2 * d),
                                 Int(rows + 2 * d) if not standard else Int(rows + 3 * d), call[].dst.data]
         var p: Array[Int, 8] = [-held.x - 1, n, d, 0 if standard else 1, 1 if inverse else 0,
@@ -422,9 +447,18 @@ def _transform_held(slot: _Slot, call: _Call, mut held: SeqRows, inverse: Bool) 
         var got = entry_ref_call(calls.scaler, SCALER_OP_TRANSFORM_SLOT, a, p, f)
         if got == 0:
             raise Error(estimator + " transform overflowed in Float32")
-        if got == 1:
+        var colnan = bitcast[DType.int32](rows[7 * d]) != 0
+        if got == 1 and not colnan:
             return
-        # -1: X holds a NaN or an infinity: the core's NaN route on the host rows.
+        # -1: X holds a NaN or an infinity (or a column was all NaN at the
+        # fit): the core's NaN fill and restore over an x_prep copy of the slot.
+        var x_slot = scaler_slot_to_xprep(-held.x - 1, n * d)
+        try:
+            scaler_transform_slot_finish(calls, spec, rows, x_slot, n, d, _F32P(unsafe_from_address=call[].dst.data),
+                                         got == 1)
+        finally:
+            scaler_xprep_free(x_slot)
+        return
     scaler_transform_core(calls, spec, rows, _F32P(unsafe_from_address=seq_rows_host(call, held)), n, d,
         _F32P(unsafe_from_address=call[].dst.data))
 

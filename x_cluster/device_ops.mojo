@@ -57,7 +57,7 @@ from x_cluster.bodies import (
     lance_williams,
     LINK_WARD,
 )
-from cluster.estimator import kmeans_fit, kmeans_fit_rows, kmeans_fit_rows_resident
+from cluster.estimator import kmeans_fit, kmeans_fit_rows, kmeans_fit_rows_resident, kmeans_fit_device
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_TN
@@ -2109,6 +2109,28 @@ struct DeviceOps(ClusterOps):
         _ = xc^
         _ = w^
         self._ph1("kmeans")
+        return r.inertia
+
+    def kmeans_slot(
+        mut self, xs: Int, n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
+        seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32], mut labels: List[Int32],
+    ) raises -> Float64:
+        """`kmeans` over the words already in float slot `xs`: `kmeans_fit_device` (cluster/estimator.mojo,
+        statement for statement `kmeans_fit` after its upload, so the same bits), no host X and no upload."""
+        self._ph0()
+        centers = List[Float32](length=k * d, fill=Float32(0))
+        labels = List[Int32](length=n, fill=Int32(0))
+        var head = self.f[xs].create_sub_buffer[DType.float32](0, n * d)
+        var w = self.ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        var r = kmeans_fit_device(
+            self.ctx, head, w, False, n, d, k,
+            centers.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            labels.unsafe_ptr().bitcast[UInt32]().unsafe_origin_cast[MutUntrackedOrigin](),
+            max_iter, tol, seed, n_init, init, METRIC_L2_EXPANDED, 2.0,
+        )
+        _ = head^
+        _ = w^
+        self._ph1("kmeans_slot")
         return r.inertia
 
     def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:

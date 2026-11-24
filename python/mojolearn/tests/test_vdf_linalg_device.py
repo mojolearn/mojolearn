@@ -251,3 +251,54 @@ def test_linalg5_typed_device_array_is_refused_by_training_ops():
     bits = linalg.to_bf16(g)
     with pytest.raises(TypeError, match="typed device array"):
         training.clip_grad_norm_([bits], 1.0)
+
+
+# lane vdf-linalg7: solve, lstsq, randomized_svd and sparse_encode read TrainDeviceArray operands in place
+# (bindings/linalg_decomp_dev_door.mojo); with device='cpu' they are refused in the same words, a host operand beside a
+# device one is refused, and every array result is a new device array. Values are checked natively
+# (checks/native_tests/linalg_decomp_device_gpu.mojo).
+def _spd():
+    return (np.eye(3, dtype=np.float32) * 4.0 + 0.5).astype(np.float32)
+
+
+LINALG7_DEVICE_ARRAY_CPU_CALLS = [
+    ("solve", lambda g: mojolearn.solve(g, g, device="cpu")),
+    ("lstsq", lambda g: mojolearn.lstsq(g, g, device="cpu")),
+    ("randomized_svd", lambda g: mojolearn.randomized_svd(g, 1, device="cpu")),
+    ("sparse_encode", lambda g: mojolearn.sparse_encode(g, g, algorithm="threshold", device="cpu")),
+]
+
+
+@pytest.mark.parametrize("name,call", LINALG7_DEVICE_ARRAY_CPU_CALLS, ids=[n for n, _ in LINALG7_DEVICE_ARRAY_CPU_CALLS])
+def test_linalg7_device_array_with_device_cpu_is_refused(name, call):
+    g = _device_array_or_skip(_spd())
+    with pytest.raises(ValueError, match="is a TrainDeviceArray, which lives on the GPU"):
+        call(g)
+
+
+def test_linalg7_device_array_mixed_with_host_is_refused():
+    g = _device_array_or_skip(_spd())
+    with pytest.raises(TypeError, match="mojolearn.solve: device and host arrays are mixed"):
+        mojolearn.solve(g, _spd())
+    with pytest.raises(TypeError, match="mojolearn.lstsq: device and host arrays are mixed"):
+        mojolearn.lstsq(_spd(), g)
+
+
+def test_linalg7_device_array_results_are_device_arrays():
+    g = _device_array_or_skip(_spd())
+    x = mojolearn.solve(g, g)
+    assert type(x) is type(g)
+    solution, residues, rank, values = mojolearn.lstsq(g, g)
+    assert type(solution) is type(g) and type(values) is type(g) and isinstance(rank, int)
+    u, s, vt = mojolearn.randomized_svd(g, 1, random_state=0)
+    assert type(u) is type(g) and type(s) is type(g) and type(vt) is type(g)
+    code = mojolearn.sparse_encode(g, g, algorithm="threshold")
+    assert type(code) is type(g)
+
+
+def test_linalg7_non_finite_device_array_is_refused():
+    a = _spd()
+    a[1, 1] = np.inf
+    g = _device_array_or_skip(a)
+    with pytest.raises(ValueError, match="a: input must be finite"):
+        mojolearn.solve(g, _device_array_or_skip(_spd()))

@@ -190,6 +190,7 @@ def _device_cases() raises:
         _ = metric_slot_run(MS_MSE, [0, Int(other.unsafe_ptr())], [put, -1], ints, no_floats, no_outs, from_slot)
         _ = metric_slot_run(MS_MSE, [Int(x.unsafe_ptr()), Int(other.unsafe_ptr())], [-1, -1], ints, no_floats,
                             no_outs, from_host)
+        _ = x^
         require(len(from_slot) == 1 and len(from_host) == 1, "case 5: one value each")
         require(bitcast[DType.uint64](from_slot[0]) == bitcast[DType.uint64](from_host[0]),
                 "case 5: kernel entry on the program's slot vs host words")

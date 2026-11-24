@@ -21,7 +21,6 @@ carries the element dtype; the native side only ever sees words and the typed vi
 """
 from std.sys import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.shared_slot import SharedSlot
 
 comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
@@ -63,7 +62,13 @@ struct _DevPool(Defaultable, Movable):
 
 # The name is unchanged from training/dev_tensors.mojo (same struct, same layout): images built before and after the
 # move share one pool.
-comptime _DEV_POOL_NAME = "MojolearnTrainingDevTensorsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTrainingDevTensorsFastV1"
+# ONE pool per process, whatever the image's tier (lane vdf-linalg7, 2026-11-24): device arrays are made by the
+# identical GPU training binding only (bindings/optimizer_device_native_door.mojo `device_entries`), and a fast image
+# (the fast x_decomp kit of linalg.eigh / qr / svd, solve, lstsq, randomized_svd, sparse_encode; the fast linalg
+# image's svdvals / qr 'r' device entries) reads and writes those same handles. The name was keyed on the image's
+# tier, so a fast image looked in an empty pool of its own ("...FastV1") and the fast tier had to refuse device
+# arrays. The words are float32 storage; the tier changes kernels, never the storage.
+comptime _DEV_POOL_NAME = "MojolearnTrainingDevTensorsIdenticalV1"
 comptime _DEV_POOL = SharedSlot[_DevPool, _DEV_POOL_NAME]
 
 

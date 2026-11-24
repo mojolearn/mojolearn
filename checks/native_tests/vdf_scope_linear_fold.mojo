@@ -124,6 +124,7 @@ def _host_case(case: Int) raises:
         require(refused, "a two-column index was not refused")
         _ = narrow^
         _ = two^
+        _ = x^
         return
     # case 2: the family's union on a route with no image
     var probe = MemberCall(DeviceRoute(0))
@@ -198,6 +199,7 @@ def _device_case(case: Int) raises:
                     MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(gathered.unsafe_ptr())),
                     MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(coef.unsafe_ptr())),
                     Int(out_b.unsafe_ptr()), n, FD, Float32(0.75), True)
+                _ = coef^
                 require(ra == rb and ra == 0, "finite status differs")
                 _same(out_a, out_b, "predictions")
         except error:

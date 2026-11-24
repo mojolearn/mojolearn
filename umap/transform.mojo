@@ -33,10 +33,10 @@ per row, and the refinement epoch count does not read the request size, so a
 batch of N is the concatenation of N batches of one, bitwise
 (`umap/checks/batch_determinism_check.mojo`, `batch_epoch_cliff_check.mojo`).
 
-Residual (neighbors family): `knn_search_resident` writes its result to host
-pointers, so the n x k distances and indices make one host round trip, and
-the queries are uploaded twice (once for the finiteness check, once by the
-k-NN). A k-NN entry that leaves its result on the device removes both.
+Residual (neighbors family): the k-NN writes its result to host pointers, so
+the n x k distances and indices make one host round trip. The queries go up
+once (lane vdf-scope-cluster7: the k-NN reads the uploaded block on the
+device, `knn_search_slot_queries`).
 """
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
@@ -44,7 +44,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.memory import bitcast
-from neighbors.estimator import knn_search_resident
+from neighbors.estimator import knn_search_slot_queries
 from umap.params import UMAPParams
 from umap.transform_rows import (
     TR_EMBED_NONFINITE,
@@ -158,10 +158,48 @@ def transform(
     queries: List[Float32], n_train: Int, n_queries: Int, n_features: Int,
     params: UMAPParams,
 ) raises -> List[Float32]:
+    """The host-input transform: the training block and the queries go up
+    once (bulk copies through pinned staging), then `transform_device` on
+    those buffers (lane vdf-scope-cluster7: the k-NN reads the uploaded
+    queries on the device, where they used to go up a second time)."""
     params.validate(n_train)
     if n_queries < 1 or n_features < 1 or (params.n_components < 1 or params.n_components > 32):
         raise Error("UMAP transform supports nonempty dense queries and 1 to 32 output dimensions")
     if len(training_data) != n_train * n_features or len(queries) != n_queries * n_features or len(training_embedding) != n_train * params.n_components:
+        raise Error("UMAP transform input shape mismatch")
+    var n_x = len(training_data)
+    var n_q = len(queries)
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n_x)
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](n_q)
+    ctx.synchronize()
+    copy_f32(training_data.unsafe_ptr(), hx.unsafe_ptr(), n_x)
+    copy_f32(queries.unsafe_ptr(), hq.unsafe_ptr(), n_q)
+    var dx = ctx.enqueue_create_buffer[DType.float32](n_x)
+    var dq = ctx.enqueue_create_buffer[DType.float32](n_q)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dq, src_ptr=hq.unsafe_ptr())
+    var result = transform_device(ctx, dx, dq, training_embedding, n_train, n_queries, n_features, params)
+    _ = hx^
+    _ = hq^
+    _ = dx^
+    _ = dq^
+    return result^
+
+
+def transform_device(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dq: DeviceBuffer[DType.float32],
+    training_embedding: List[Float32], n_train: Int, n_queries: Int, n_features: Int,
+    params: UMAPParams,
+) raises -> List[Float32]:
+    """The transform over a training block and queries ALREADY ON THE DEVICE
+    (each at least its rows x `n_features` float32 on `ctx`: the host form's
+    uploads, or the metrics store's fitted-rows and fold slots, lane
+    vdf-scope-cluster7). The refusals in the host form's order, the same
+    kernels on the same words; neither block comes home."""
+    params.validate(n_train)
+    if n_queries < 1 or n_features < 1 or (params.n_components < 1 or params.n_components > 32):
+        raise Error("UMAP transform supports nonempty dense queries and 1 to 32 output dimensions")
+    if len(training_embedding) != n_train * params.n_components:
         raise Error("UMAP transform input shape mismatch")
     var k = params.n_neighbors
     var comps = params.n_components
@@ -170,54 +208,42 @@ def transform(
     if n_train >= 2147483647 or n_queries * k >= 2147483647 or n_queries * comps >= 2147483647:
         raise Error("UMAP transform: sizes are past the Int32 launch arguments")
 
-    # The inputs up once (bulk copies through pinned staging, which the
-    # k-NN's host-pointer interface also reads); finiteness checked on the
+    # The fitted embedding up once; finiteness of all three checked on the
     # device.
-    var n_x = len(training_data)
-    var n_q = len(queries)
+    var n_x = n_train * n_features
+    var n_q = n_queries * n_features
     var n_e = len(training_embedding)
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](n_x)
-    var hq = ctx.enqueue_create_host_buffer[DType.float32](n_q)
     var he = ctx.enqueue_create_host_buffer[DType.float32](n_e)
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
     ctx.synchronize()
-    copy_f32(training_data.unsafe_ptr(), hx.unsafe_ptr(), n_x)
-    copy_f32(queries.unsafe_ptr(), hq.unsafe_ptr(), n_q)
     copy_f32(training_embedding.unsafe_ptr(), he.unsafe_ptr(), n_e)
     var flags = ctx.enqueue_create_buffer[DType.int32](TR_FLAGS)
     ctx.enqueue_memset(flags, Int32(0))
-    var dx = ctx.enqueue_create_buffer[DType.float32](n_x)
-    var dq = ctx.enqueue_create_buffer[DType.float32](n_q)
     var de = ctx.enqueue_create_buffer[DType.float32](n_e)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dq, src_ptr=hq.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=de, src_ptr=he.unsafe_ptr())
     _tr_flag_nonfinite(ctx, dx, n_x, flags, TR_TRAIN_NONFINITE)
     _tr_flag_nonfinite(ctx, dq, n_q, flags, TR_QUERY_NONFINITE)
     _tr_flag_nonfinite(ctx, de, n_e, flags, TR_EMBED_NONFINITE)
     _tr_check(ctx, flags)
-    _ = dq^
     _ = he^
 
-    # The k-NN over the uploaded training block (host query pointer and
-    # host result pointers: the neighbors family's interface).
+    # The k-NN over the device training block and the device queries (host
+    # result pointers: the neighbors family's interface).
     if params.metric == -1:
-        _ = knn_search_resident(ctx, dx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
-                                n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr())
+        _ = knn_search_slot_queries(ctx, dx, n_train, dq, n_queries, n_features, k, hd.unsafe_ptr(),
+                                    hi.unsafe_ptr())
     else:
-        _ = knn_search_resident(ctx, dx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
-                                n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr(),
-                                metric=params.metric, metric_arg=params.metric_arg)
+        _ = knn_search_slot_queries(ctx, dx, n_train, dq, n_queries, n_features, k, hd.unsafe_ptr(),
+                                    hi.unsafe_ptr(), metric=params.metric, metric_arg=params.metric_arg)
     ctx.synchronize()
     var edges = n_queries * k
     var dd = ctx.enqueue_create_buffer[DType.float32](edges)
     var di = ctx.enqueue_create_buffer[DType.uint32](edges)
     ctx.enqueue_copy(dst_buf=dd, src_ptr=hd.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=di, src_ptr=hi.unsafe_ptr())
-    _ = dx^
-    _ = hx^
-    _ = hq^
+    _ = dx.unsafe_ptr()
+    _ = dq.unsafe_ptr()
 
     # Memberships, starting coordinates, schedule ratios, row keys.
     var dw = ctx.enqueue_create_buffer[DType.float32](edges)

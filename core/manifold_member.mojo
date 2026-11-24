@@ -41,8 +41,21 @@ MEMBER_OP_NEW parameters (33 Float64 words):
       (`bitcast`; words 1, 3 and 8 hold the same values rounded to Float64,
       so an integer at or above 2**53 is carried exactly)
 
-Views (all host, dense row-major; a device-home view, a row or column index
-and a sample weight are refused in words): X float32 rows x features. y
+Views (all host, dense row-major; a device-home view, a column index and a
+sample weight are refused in words): X float32 rows x features, whole or
+under a host int32 / int64 ROW INDEX (MEMBER_CAN_ROW_INDEX, lane
+vdf-scope-cluster7: a fold's rows; y is read through the same index).
+THE RESIDENT-STORE ROUTE (MEMBER_CAN_SCOPE on a GPU metrics image, which
+publishes its store, core/metrics_store_ref.mojo): inside a `resident()`
+scope with X's pin, a fold's rows are taken ON THE DEVICE out of the scope's
+one copy of X in the metrics store (core/member_scope_rows.mojo) and the
+entries read that slot (the slot form of core/neighbors_entry_table_umap.mojo:
+the same bodies on the same words, so the same bits). A fold fit KEEPS its
+slot as THE FITTED-ROWS SLOT, which a fold transform reads device to device;
+it is freed at the next fit, an import of the rows, the free, or the first
+export of the rows block (read home once, UMAP_OP_ROWS_READ). Otherwise (no
+scope, no pin, a host image, init='pca') the rows are gathered on the host
+cores into rows the state owns. y
 (optional): an l2 target, float32 rows x dims; a categorical target is
 refused at FIT in "member ABI" words (its codes and the unknown label -1
 are not member words) so a caller falls back to the estimator's door.
@@ -52,7 +65,10 @@ TRANSFORM writes float32 rows x n_components. MEMBER_CAN_TEST_ROWS: every
 operation that reads X or y refuses non-finite words itself, in the door's
 words (x_ann/mani_umap_run.mojo:34 `umap_check_input` at fit, :101
 `umap_continuous_target_dims` for y, :128 `umap_check_transform_input` at
-transform), so a caller makes no finite scan of its own.
+transform), so a caller makes no finite scan of its own. On a slot the device
+entry makes the same test on the device in the same words (after the
+neighbor-count check rather than before it: a fold that fails both refuses
+with the neighbor words).
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
 `MEMBER_BLOCK_FAMILY` (64) float32 rows x features, the training rows;
@@ -101,6 +117,16 @@ from x_ann.mani_umap_run import (
 from std.memory import bitcast
 from bindings.mani_kit_run import MRun, MImage
 from bindings.mani_umap_init_run import umap_random_start_run, umap_pca_start_run
+from core.member_abi import (
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, MEMBER_HOME_DEVICE, MEMBER_I32, MEMBER_I64,
+)
+from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_mode, entry_ref_vendor
+from core.metrics_store_ref import metrics_store_find, METRICS_STORE_PREFIX
+from core.member_scope_rows import MemberScopeRows, member_scope_rows_in, member_scope_rows_done_in
+from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
+from core.fold_x_word import fold_x_word
+from bindings.arena_cache_run import arena_cache_free
+from core.neighbors_entry_table_umap import umap_rows_read_call
 
 comptime MANIFOLD_KIND_UMAP = 0
 comptime MANIFOLD_PARAM_COUNT = 33
@@ -118,7 +144,8 @@ comptime _INDEX_SPAN = 16777216
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _CAPABILITIES = (MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-    | MEMBER_CAN_TEST_ROWS)
+    | MEMBER_CAN_TEST_ROWS | MEMBER_CAN_ROW_INDEX)
+comptime _EST = "UMAP"
 
 
 struct ManifoldMemberSlot(Copyable, Movable, Defaultable):
@@ -132,6 +159,8 @@ struct ManifoldMemberSlot(Copyable, Movable, Defaultable):
     var n: Int
     var features: Int
     var embedding_rows: Int     # rows of the embedding block an import gave (checked at DONE)
+    var rows_slot: Int          # THE FITTED-ROWS SLOT of a fold fit on the metrics store (-1: none)
+    var rows_store: EntryRef    # the store that slot is in
 
     def __init__(out self):
         self.generation = 0
@@ -144,6 +173,8 @@ struct ManifoldMemberSlot(Copyable, Movable, Defaultable):
         self.n = 0
         self.features = 0
         self.embedding_rows = 0
+        self.rows_slot = -1
+        self.rows_store = entry_ref_unresolved()
 
 
 struct ManifoldMemberStore(Defaultable, Movable):
@@ -198,6 +229,7 @@ def _mint(words: _F64P, count: Int) raises -> Int:
         slot[].n = 0
         slot[].features = 0
         slot[].embedding_rows = 0
+        slot[].rows_slot = -1
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
         shared_slot_unlock(lock)
@@ -221,6 +253,7 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             slot[].live = False
             slot[].fitted = False
             slot[].rows_addr = 0
+            slot[].rows_slot = -1
             slot[].rows = List[Float32]()
             slot[].embedding = List[Float32]()
             slot[].params = List[Float64]()
@@ -230,9 +263,50 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
         shared_slot_unlock(lock)
 
 
-def _whole(call: _CallPtr) raises:
-    if call[].row_index.rows > 0 or call[].column_index.rows > 0:
-        raise Error("TypeError: a UMAP member reads whole host views (no row or column index)")
+def _no_columns(call: _CallPtr) raises:
+    if call[].column_index.rows > 0 or (call[].row_index.rows > 0 and call[].x.home == MEMBER_HOME_DEVICE):
+        raise Error("TypeError: a UMAP member reads host views under a host row index (no column index)")
+
+
+def _store(slot: _SlotPtr, call: _CallPtr, fit: Bool) -> Optional[EntryRef]:
+    """THE RESIDENT-STORE ROUTE (lane vdf-scope-cluster7): the metrics image's store published for the route's
+    (mode, vendor) (core/metrics_store_ref.mojo; a host image publishes none), under the caller's scope with X's
+    pin. A fit with init='pca' keeps the gathered form (its start reads host rows)."""
+    if call[].scope == MEMBER_SCOPE_NONE or call[].pin == 0:
+        return Optional[EntryRef]()
+    if fit and Int(slot[].params[MF_INIT_WORD]) == MANIFOLD_INIT_PCA:
+        return Optional[EntryRef]()
+    return metrics_store_find(entry_ref_mode(call[].route.entry), entry_ref_vendor(call[].route.entry))
+
+
+def _fold_y(call: _CallPtr, mut words: List[Float32]) raises -> MemberMatrix:
+    """The target's rows under the call's row index, gathered on the host cores (y is a parameter-sized block
+    the entry uploads itself; X never crosses here)."""
+    var y = call[].y
+    var index = call[].row_index
+    _dense(y, "y")
+    var n = index.rows
+    words = List[Float32](unsafe_uninit_length=max(n * y.cols, 1))
+    var status: Int
+    if index.dtype == MEMBER_I64:
+        status = admitted_gather_rows_f32[DType.int64](y.data, y.rows, y.cols, index.data, n,
+            Int(words.unsafe_ptr()))
+    elif index.dtype == MEMBER_I32:
+        status = admitted_gather_rows_f32[DType.int32](y.data, y.rows, y.cols, index.data, n,
+            Int(words.unsafe_ptr()))
+    else:
+        raise Error("TypeError: a UMAP member reads a host int32 or int64 row index")
+    if status == ARG_OUT_OF_RANGE:
+        raise Error("UMAP continuous y must be finite with one row per sample")
+    return MemberMatrix(Int(words.unsafe_ptr()), n, y.cols)
+
+
+def _drop_rows_slot(slot: _SlotPtr) raises:
+    """Free THE FITTED-ROWS SLOT (a new fit's rows, an import, a free or the first export replace it)."""
+    if slot[].rows_slot >= 0:
+        var held = slot[].rows_slot
+        slot[].rows_slot = -1
+        arena_cache_free(slot[].rows_store, held)
 
 
 def _dense(view: MemberMatrix, what: String) raises:
@@ -253,13 +327,14 @@ def _config(slot: _SlotPtr) -> UmapConfigWords:
         w[9], w[10], Int(w[11]), Int(w[12]), w[13], w[14], w[15])
 
 
-def _start(slot: _SlotPtr, call: _CallPtr, n: Int, nc: Int, mut words: List[Float32]) raises -> Int:
+def _start(slot: _SlotPtr, call: _CallPtr, x_word: Int, d: Int, n: Int, nc: Int, mut words: List[Float32]) raises -> Int:
     """The door's `_umap_initial` (bindings/mani_umap_native_door.mojo): 0 for
     'spectral'; 'random' / 'pca' run the start on the two x_decomp images
     (`route.second` the 'identical' one, `route.third` the default mode's)
     into `words` (the door's `mk_out2` host copy) and answer its address; an
     array is the pinned matrix, after the door's shape refusal and finite
-    test (lane mf-nbr6)."""
+    test (lane mf-nbr6). `x_word`: the host rows of the fit (pca reads them;
+    a resident fit never runs pca, `_store`)."""
     var code = Int(slot[].params[MF_INIT_WORD])
     if code == MANIFOLD_INIT_SPECTRAL:
         return 0
@@ -287,7 +362,7 @@ def _start(slot: _SlotPtr, call: _CallPtr, n: Int, nc: Int, mut words: List[Floa
         else:
             var hk = run.image(MImage(call[].route.third, Int(w[MF_INIT_WORD + 9]), Int(w[MF_INIT_WORD + 7]),
                 w[MF_INIT_WORD + 8] != 0.0, -1))
-            start = umap_pca_start_run(run, k, hk, call[].x.data, call[].x.rows, call[].x.cols, 2, n, nc, seed_word)
+            start = umap_pca_start_run(run, k, hk, x_word, n, d, 2, n, nc, seed_word)
         var count = n * nc
         words = List[Float32](length=max(count, 1), fill=Float32(0.0))
         if count > 0:
@@ -298,40 +373,73 @@ def _start(slot: _SlotPtr, call: _CallPtr, n: Int, nc: Int, mut words: List[Floa
 
 
 def _fit(slot: _SlotPtr, call: _CallPtr) raises:
-    """`_umap_fit`: the door's checks in its order, its start (`_start`),
-    then the legacy or extended fit entry into the slot's embedding."""
-    _whole(call)
+    """`_umap_fit` over the whole X, or (MEMBER_CAN_ROW_INDEX, lane vdf-scope-cluster7) over a fold's rows: THE
+    RESIDENT-STORE ROUTE takes them on the device out of the scope's one copy of X in the metrics store and the
+    fit entry reads that slot (the slot form, core/neighbors_entry_table_umap.mojo), which the state then keeps
+    as its fitted rows; otherwise they are gathered on the host cores into rows the state owns."""
+    _no_columns(call)
+    if call[].row_index.rows == 0:
+        _dense(call[].x, "X")
+        _fit_rows(slot, call, call[].x.data, call[].x.rows, call[].x.cols, -1, entry_ref_unresolved(),
+            List[Float32](), call[].y)
+        return
+    var y = call[].y
+    var y_words = List[Float32]()
+    if y.rows > 0 and slot[].params[16] == 1.0:
+        y = _fold_y(call, y_words)
+    var store = _store(slot, call, True)
+    if store:
+        var taken = member_scope_rows_in(call[], store.value(), METRICS_STORE_PREFIX, True, _EST)
+        try:
+            _fit_rows(slot, call, fold_x_word(taken.source), taken.rows, taken.cols, taken.source, store.value(),
+                List[Float32](), y)
+        except problem:
+            member_scope_rows_done_in(store.value(), taken)
+            raise problem^
+        _ = y_words^
+        return
+    var gathered = member_scope_rows_in(call[], call[].route.entry, METRICS_STORE_PREFIX, False, _EST)
+    # The gathered words move to the state (a swap: the aggregate stays whole); their address is unchanged.
+    var owned = List[Float32]()
+    swap(owned, gathered.gathered)
+    _fit_rows(slot, call, gathered.source, gathered.rows, gathered.cols, -1, entry_ref_unresolved(), owned^, y)
+    _ = y_words^
+
+
+def _fit_rows(slot: _SlotPtr, call: _CallPtr, x_word: Int, n: Int, d: Int, rows_slot: Int, rows_store: EntryRef,
+              var owned: List[Float32], y: MemberMatrix) raises:
+    """The door's checks in its order, its start (`_start`), then the legacy or extended fit entry into the
+    slot's embedding. `x_word`: host rows (the caller's whole X, or `owned`'s gathered words), or a negative slot
+    word of the metrics store (`rows_slot`, kept by the state on success): the entry then makes the finite test
+    on the device, in the same words."""
     if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
         member_unsupported("UMAP", call[].fit_output)
     if call[].weights.rows > 0:
         raise Error("TypeError: a UMAP member fits no sample_weight")
-    _dense(call[].x, "X")
-    var n = call[].x.rows
-    var d = call[].x.cols
     var cfg = _config(slot)
     var nc = cfg.n_components
     if call[].fit_output == MEMBER_OP_TRANSFORM:
         _dense(call[].dst, "the embedding buffer")
         if call[].dst.rows != n or call[].dst.cols != nc:
             raise Error("ValueError: the embedding buffer holds " + String(nc) + " components per row of X")
-    umap_check_input(call[].x.data, n * d)
+    if x_word >= 0:
+        umap_check_input(x_word, n * d)
     umap_check_neighbors(cfg.n_neighbors, n)
     # The start (lane mf-nbr6): `_umap_initial`, then the spectral-sample check with its answer.
     var start_words = List[Float32]()
-    var start = _start(slot, call, n, nc, start_words)
+    var start = _start(slot, call, x_word, d, n, nc, start_words)
     var initial = Int(slot[].params[MF_INIT_WORD]) != MANIFOLD_INIT_SPECTRAL
     umap_check_spectral_samples(initial, n, nc)
-    var has_target = call[].y.rows > 0
+    var has_target = y.rows > 0
     var target = UmapTargetWords.none()
     if has_target:
         if slot[].params[16] != 1.0:
             raise Error("member ABI: a UMAP member reads an l2 / euclidean target only; a categorical target "
                 + "(its label codes and the unknown label -1) or a refused target setting stays with the "
                 + "estimator's own fit")
-        _dense(call[].y, "y")
-        var dims = umap_continuous_target_dims(2, call[].y.rows, call[].y.cols, n, call[].y.data,
-            call[].y.rows * call[].y.cols)
-        target = UmapTargetWords(2, dims, Int(slot[].params[17]), slot[].params[18], call[].y.data)
+        _dense(y, "y")
+        var dims = umap_continuous_target_dims(2, y.rows, y.cols, n, y.data, y.rows * y.cols)
+        target = UmapTargetWords(2, dims, Int(slot[].params[17]), slot[].params[18], y.data)
     slot[].fitted = False
     # Zero-filled, as the door's `family_array` output.
     var embedding = List[Float32](length=n * nc, fill=Float32(0.0))
@@ -339,15 +447,23 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     var entry = call[].route.entry.call
     var columns = 0
     if umap_legacy_abi(initial, has_target, cfg.default_extras(), nc):
-        columns = umap_fit_call(entry, call[].x.data, embedding_address, n, d, cfg, not cfg.legacy_rates())
+        columns = umap_fit_call(entry, x_word, embedding_address, n, d, cfg, not cfg.legacy_rates())
     else:
-        columns = umap_fit_ex_call(entry, call[].x.data, embedding_address, start, n, d, cfg, target)
+        columns = umap_fit_ex_call(entry, x_word, embedding_address, start, n, d, cfg, target)
     _ = len(start_words)   # the start's words stay alive through the fit call above
     umap_check_embedding(columns == nc, embedding_address, n * nc)
-    # Borrow, never copy (LIFETIME in the module docstring). A copy a
-    # previous import or export left in the slot is dropped.
-    slot[].rows = List[Float32]()
-    slot[].rows_addr = call[].x.data
+    # The whole X is borrowed, never copied (LIFETIME in the module docstring); a fold's rows are the state's
+    # own (gathered words, or THE FITTED-ROWS SLOT). A copy or slot a previous fit, import or export left is
+    # dropped.
+    _drop_rows_slot(slot)
+    slot[].rows = owned^
+    if len(slot[].rows) > 0:
+        slot[].rows_addr = Int(slot[].rows.unsafe_ptr())
+    else:
+        slot[].rows_addr = x_word
+    if rows_slot >= 0:
+        slot[].rows_slot = rows_slot
+        slot[].rows_store = rows_store
     slot[].embedding = embedding^
     slot[].n = n
     slot[].features = d
@@ -358,24 +474,44 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
 
 
 def _transform(slot: _SlotPtr, call: _CallPtr) raises:
-    """`_umap_transform` after the door's refit refusal (the PACK / state
-    path compares settings): the door's checks, the same-input reuse of the
-    fitted embedding, else the transform entry with the door's tail."""
+    """`_umap_transform` after the door's refit refusal (the PACK / state path compares settings), over the
+    whole X or (MEMBER_CAN_ROW_INDEX) a fold's rows: taken on the device from the metrics store when the state
+    holds THE FITTED-ROWS SLOT and the call carries the scope with X's pin, else gathered on the host cores."""
     if not slot[].fitted:
         raise Error("UMAP transform requires a successful fit")
-    _whole(call)
-    _dense(call[].x, "X")
+    _no_columns(call)
+    if call[].row_index.rows == 0:
+        _dense(call[].x, "X")
+        _transform_rows(slot, call, call[].x.data, call[].x.rows, call[].x.cols)
+        return
+    if slot[].rows_slot >= 0 and call[].scope != MEMBER_SCOPE_NONE and call[].pin != 0:
+        var store = slot[].rows_store
+        var taken = member_scope_rows_in(call[], store, METRICS_STORE_PREFIX, True, _EST)
+        try:
+            _transform_rows(slot, call, fold_x_word(taken.source), taken.rows, taken.cols)
+        finally:
+            member_scope_rows_done_in(store, taken)
+        return
+    var gathered = member_scope_rows_in(call[], call[].route.entry, METRICS_STORE_PREFIX, False, _EST)
+    _transform_rows(slot, call, gathered.source, gathered.rows, gathered.cols)
+    _ = gathered.rows  # the gathered queries stay alive through the transform call above
+
+
+def _transform_rows(slot: _SlotPtr, call: _CallPtr, q_word: Int, nq: Int, d: Int) raises:
+    """The door's checks, the same-input reuse of the fitted embedding, else the transform entry with the
+    door's tail. With the training rows (or the queries) in the metrics store the entry takes the slot form and
+    makes the finite and reuse tests on the device words itself."""
     var cfg = _config(slot)
     var nc = cfg.n_components
-    var nq = call[].x.rows
-    var d = call[].x.cols
     _dense(call[].dst, "the transform buffer")
     if call[].dst.rows != nq or call[].dst.cols != nc:
         raise Error("ValueError: the transform buffer holds " + String(nc) + " components per row of X")
     umap_check_transform_state(slot[].n, nc, slot[].n, nc, d, slot[].features)
-    umap_check_transform_input(call[].x.data, nq * d)
     var count = nq * nc
-    if umap_transform_reuses_fit(call[].x.data, slot[].rows_addr, nq, slot[].n, d):
+    var host_rows = slot[].rows_addr >= 0 and q_word >= 0
+    if q_word >= 0:
+        umap_check_transform_input(q_word, nq * d)
+    if host_rows and umap_transform_reuses_fit(q_word, slot[].rows_addr, nq, slot[].n, d):
         if count > 0:
             unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=slot[].embedding.unsafe_ptr(),
                 count=count)
@@ -390,17 +526,23 @@ def _transform(slot: _SlotPtr, call: _CallPtr) raises:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=zeros.unsafe_ptr(), count=count)
         _ = zeros^
     var columns = umap_transform_call(call[].route.entry.call, slot[].rows_addr, Int(slot[].embedding.unsafe_ptr()),
-        call[].x.data, call[].dst.data, slot[].n, nq, d, cfg, tail)
+        q_word, call[].dst.data, slot[].n, nq, d, cfg, tail)
     umap_check_transform_output(columns == nc, call[].dst.data, count)
 
 
-def _own_rows(slot: _SlotPtr):
-    """Copy the borrowed training rows into the slot once (first export)."""
+def _own_rows(slot: _SlotPtr, call: _CallPtr) raises:
+    """Copy the borrowed training rows into the slot once (first export); THE FITTED-ROWS SLOT is read home
+    once through the device entry (UMAP_OP_ROWS_READ) and freed, and the state reads its host copy from then
+    on."""
     var count = slot[].n * slot[].features
     if slot[].rows_addr == Int(slot[].rows.unsafe_ptr()) and len(slot[].rows) == count:
         return
     var owned = List[Float32](length=count, fill=Float32(0.0))
-    if count > 0:
+    if slot[].rows_slot >= 0:
+        if count > 0:
+            _ = umap_rows_read_call(call[].route.entry.call, slot[].rows_addr, Int(owned.unsafe_ptr()), count)
+        _drop_rows_slot(slot)
+    elif count > 0:
         unsafe_memcpy(dest=owned.unsafe_ptr(), src=_F32P(unsafe_from_address=slot[].rows_addr), count=count)
     slot[].rows = owned^
     slot[].rows_addr = Int(slot[].rows.unsafe_ptr())
@@ -413,7 +555,7 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
         raise Error("NotFittedError: this UMAP member is not fitted yet")
     if (call[].flags & MEMBER_EXPORT_OWN) != 0:
         # THE LIFETIME RULE: the training rows, once; no view is answered.
-        _own_rows(slot)
+        _own_rows(slot, call)
         return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
@@ -421,7 +563,7 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("member ABI: a UMAP member has two fitted blocks")
         block = MF_BLOCK_ROWS + block
     if block == MF_BLOCK_ROWS:
-        _own_rows(slot)
+        _own_rows(slot, call)
         call[].dst = MemberMatrix(Int(slot[].rows.unsafe_ptr()), slot[].n, slot[].features)
     elif block == MF_BLOCK_EMBEDDING:
         call[].dst = MemberMatrix(Int(slot[].embedding.unsafe_ptr()), slot[].n, Int(slot[].params[2]))
@@ -441,6 +583,7 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
             unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
         slot[].fitted = False
         if call[].block == MF_BLOCK_ROWS:
+            _drop_rows_slot(slot)
             slot[].rows = words^
             slot[].rows_addr = Int(slot[].rows.unsafe_ptr())
             slot[].n = call[].x.rows
@@ -467,18 +610,30 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
 def _manifold_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        var borrows = MEMBER_BORROWS_FIT
         if call[].state != 0:
-            _ = _lookup(call[].state, False)
+            var held = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
+            if held[].fitted and (held[].rows_slot >= 0 or len(held[].rows) > 0):
+                borrows = 0
         # MEMBER_BORROWS_FIT: a fitted UMAP state reads the caller's X (its
         # training rows) until an export of the rows block, or
         # MEMBER_EXPORT_OWN, copied them (LIFETIME in the module docstring).
+        # A fold-fitted state owns its rows (gathered, or THE FITTED-ROWS
+        # SLOT) and borrows nothing.
+        # MEMBER_CAN_ROW_INDEX / MEMBER_CAN_SCOPE (lane vdf-scope-cluster7):
+        # a fold's rows under a host row index; SCOPE when the route's image
+        # published the metrics store (a GPU metrics image), so a search's
+        # folds are taken on the device out of one copy of X.
         # MEMBER_GIL_DOOR (THE GIL RULE; fx-gil-RESULT.md, round 4): one
         # operation at a time on the public thread, the caller releasing the
         # GIL around it as the UMAP door does around the same calls
         # (`umap_fit_call`, `umap_fit_ex_call`, `umap_transform_call`); the
         # `umap_check_*` helpers read the call's own words; the store has
         # its own lock. NOT `MEMBER_GIL_FREE` (the image is not traced).
-        return _CAPABILITIES | MEMBER_BORROWS_FIT | MEMBER_GIL_DOOR
+        var caps = _CAPABILITIES | borrows | MEMBER_GIL_DOOR
+        if metrics_store_find(entry_ref_mode(call[].route.entry), entry_ref_vendor(call[].route.entry)):
+            caps |= MEMBER_CAN_SCOPE
+        return caps
     if operation == MEMBER_OP_NEW:
         if call[].param_count != MANIFOLD_PARAM_COUNT or not call[].params:
             raise Error("member ABI: a UMAP member takes thirty-three parameters (kind, the eleven config words, "
@@ -490,6 +645,7 @@ def _manifold_member(operation: Int, address: Int) raises -> Int:
         call[].state = _mint(words, MANIFOLD_PARAM_COUNT)
         return 0
     if operation == MEMBER_OP_FREE:
+        _drop_rows_slot(_SlotPtr(unsafe_from_address=_lookup(call[].state, False)))
         _ = _lookup(call[].state, True)
         call[].state = 0
         return 0

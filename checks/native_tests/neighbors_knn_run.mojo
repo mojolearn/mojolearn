@@ -119,7 +119,7 @@ def fixture(unit: Int) raises:
         _ = y
     elif unit == 9:
         require(knn_metric_reads_host_queries(KNN_DIST_JS), "js reads host queries")
-        require(knn_metric_reads_host_queries(KNN_DIST_COSINE), "cosine reads host queries")
+        require(not knn_metric_reads_host_queries(KNN_DIST_COSINE), "cosine's refusals run on the device fold")
         require(not knn_metric_reads_host_queries(KNN_DIST_LP), "minkowski does not")
     elif unit == 10:
         try:

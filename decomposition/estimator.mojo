@@ -1059,6 +1059,32 @@ def pca_whiten_inverse_transform_host(
     var scores = ctx.enqueue_create_buffer[DType.float32](
         n_rows * n_components
     )
+    ctx.enqueue_copy(dst_buf=scores, src_ptr=scores_ptr)
+    pca_whiten_inverse_transform_scores(
+        ctx, scores, components_ptr, singular_ptr, mean_ptr, out_ptr,
+        n_rows, n_features, n_components, n_fit_rows, device_checks,
+    )
+    _ = scores^
+
+
+def pca_whiten_inverse_transform_scores(
+    ctx: DeviceContext,
+    mut scores: DeviceBuffer[DType.float32],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    n_fit_rows: Int,
+    device_checks: Bool = False,
+) raises:
+    """`pca_whiten_inverse_transform_host` over scores already on the device (`scores`, n_rows x n_components
+    words, enqueued on `ctx` before this call; lane vdf-scope-neural6: the host entry's upload, or a
+    model-selection fold of scores gathered on the device, decomposition/pca_fold.mojo
+    `pca_whiten_inverse_transform_fold`). The same buffers, checks and kernels in the same order: the same
+    words."""
     var components = ctx.enqueue_create_buffer[DType.float32](
         n_components * n_features
     )
@@ -1071,7 +1097,6 @@ def pca_whiten_inverse_transform_host(
     var singular = ctx.enqueue_create_buffer[DType.float32](n_components)
     var mean = ctx.enqueue_create_buffer[DType.float32](n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=scores, src_ptr=scores_ptr)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     ctx.enqueue_copy(dst_buf=singular, src_ptr=singular_ptr)
     ctx.enqueue_copy(dst_buf=mean, src_ptr=mean_ptr)

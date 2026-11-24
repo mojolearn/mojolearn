@@ -292,9 +292,12 @@ def knn_check_metric_input(cls_name: String, metric: Int, x_address: Int, count:
 
 
 def knn_metric_reads_host_queries(metric: Int) -> Bool:
-    """Cosine's zero-row refusal and Jensen-Shannon's sign check read host
-    query words, so a device-gathered fold cannot serve them."""
-    return metric == KNN_DIST_JS or metric == KNN_DIST_COSINE
+    """Jensen-Shannon's sign check reads host query words (its refusal names
+    the estimator), so a device-gathered fold cannot serve it. Cosine's
+    zero-row refusals run on the device rows of a fold (lane
+    vdf-scope-cluster7: neighbors/estimator.mojo `_knn_search_on_device_index`,
+    neighbors/zero_row_device.mojo; the host scans' rows and words)."""
+    return metric == KNN_DIST_JS
 
 
 # ------------------------------------------------------------------ weights

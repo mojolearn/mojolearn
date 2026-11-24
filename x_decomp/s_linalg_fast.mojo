@@ -159,6 +159,34 @@ def lur_add_kernel(x: F32Ptr, d: F32Ptr, count: Int32):
         x.unsafe_store(i, x.unsafe_load(i) + d.unsafe_load(i))
 
 
+def _lu_factor_resident(
+    ctx: DeviceContext, mut source: DeviceBuffer[DType.float32], mut factor: DeviceBuffer[DType.float32],
+    mut pivots: DeviceBuffer[DType.float32], plu: F32Ptr, ppv: F32Ptr, pinf: F32Ptr, n: Int,
+) raises:
+    """The resident factor of `dev_lu_factor_run` once A is in `source`: LU = A copied into `factor`, the factor
+    with its pivots in `pivots` (int32 words), then LU, piv and info down; LU and piv only where `plu` / `ppv` are
+    not null (lane vdf-linalg7: a device operand's solve reads only the device factor), info always (one word)."""
+    var dl = F32Ptr(unsafe_from_address=Int(factor.unsafe_ptr()))
+    var dp = I32Ptr(unsafe_from_address=Int(pivots.unsafe_ptr()))
+    ctx.enqueue_copy(
+        dst_buf=factor.create_sub_buffer[DType.float32](0, n * n),
+        src_buf=source.create_sub_buffer[DType.float32](0, n * n),
+    )
+    var di = ctx.enqueue_create_buffer[DType.float32](1)
+    var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
+    var dact = ctx.enqueue_create_buffer[DType.float32](n)
+    launch_lu(ctx, dl, dp, _p(di), _p(ds), _p(dact), n)
+    if Int(plu) != 0:
+        _down(ctx, factor, plu, n * n)
+    if Int(ppv) != 0:
+        _down(ctx, pivots, ppv, n)
+    _down(ctx, di, pinf, 1)
+    ctx.synchronize()
+    _ = di^
+    _ = ds^
+    _ = dact^
+
+
 def dev_lu_factor_run(
     src: F32Ptr, plu: F32Ptr, ppv: F32Ptr, pinf: F32Ptr, ida: Int, idl: Int, idp: Int, n: Int
 ) raises -> Int:
@@ -169,29 +197,13 @@ def dev_lu_factor_run(
     var source = pool_buffer(ida, n * n)
     var factor = pool_buffer(idl, n * n)
     var pivots = pool_buffer(idp, n)
-    var dl = F32Ptr(unsafe_from_address=Int(factor.unsafe_ptr()))
-    var dp = I32Ptr(unsafe_from_address=Int(pivots.unsafe_ptr()))
     var rc = 0
     var ctx = xd_ctx()
     _up_into(ctx, source, src, n * n)
     if device_first_nonfinite(ctx, source, n * n) >= 0:
         rc = -1
     else:
-        ctx.enqueue_copy(
-            dst_buf=factor.create_sub_buffer[DType.float32](0, n * n),
-            src_buf=source.create_sub_buffer[DType.float32](0, n * n),
-        )
-        var di = ctx.enqueue_create_buffer[DType.float32](1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
-        var dact = ctx.enqueue_create_buffer[DType.float32](n)
-        launch_lu(ctx, dl, dp, _p(di), _p(ds), _p(dact), n)
-        _down(ctx, factor, plu, n * n)
-        _down(ctx, pivots, ppv, n)
-        _down(ctx, di, pinf, 1)
-        ctx.synchronize()
-        _ = di^
-        _ = ds^
-        _ = dact^
+        _lu_factor_resident(ctx, source, factor, pivots, plu, ppv, pinf, n)
     ctx.synchronize()
     _ = source^
     _ = factor^
@@ -199,23 +211,38 @@ def dev_lu_factor_run(
     return rc
 
 
-def dev_lu_solve_run(
-    pb: F32Ptr, px: F32Ptr, il: Int, ip: Int, ida: Int, n: Int, nrhs: Int, rf: Int
-) raises -> Int:
-    """`dev_lu_solve_py`'s typed body (see the door); rf != 0 refines."""
-    var refine = rf != 0
-    if n <= 0 or nrhs <= 0 or n * n > 2147483647 or n * nrhs > 2147483647:
-        raise Error("x_decomp: dev_lu_solve needs 0 < n, nrhs and n * n inside Int32")
+def dev_lu_factor_in_run(pinf: F32Ptr, ida: Int, idl: Int, idp: Int, n: Int) raises -> Int:
+    """XD_DEV_LU_FACTOR_IN (lane vdf-linalg7): `dev_lu_factor_run` with A already in pool matrix ida (a device
+    operand adopted into the pool and tested finite by the door, XD_DEV_FINITE), so nothing goes up and only info (one
+    word) comes down: the same factor on the same words. Returns 0."""
+    if n <= 0 or n * n > 2147483647:
+        raise Error("x_decomp: dev_lu_factor needs 0 < n and n * n inside Int32")
+    var source = pool_buffer(ida, n * n)
+    var factor = pool_buffer(idl, n * n)
+    var pivots = pool_buffer(idp, n)
+    var ctx = xd_ctx()
+    _lu_factor_resident(ctx, source, factor, pivots, F32Ptr(unsafe_from_address=0), F32Ptr(unsafe_from_address=0),
+                        pinf, n)
+    _ = source^
+    _ = factor^
+    _ = pivots^
+    return 0
+
+
+def _lu_solve_resident(
+    ctx: DeviceContext, mut db: DeviceBuffer[DType.float32], mut dx: DeviceBuffer[DType.float32], il: Int, ip: Int,
+    ida: Int, n: Int, nrhs: Int, refine: Bool, px: F32Ptr,
+) raises:
+    """`dev_lu_solve_run`'s solve once B is in `db` (read, never written): X (n x nrhs) into `dx` on the device
+    factor il / ip, with LU_FAST_RESIDENT's one refinement step against A (ida) when `refine`; X then down into `px`
+    unless it is null (a device result stays). Enqueued, then one wait, as before."""
     var dl = _ptr(il, n * n)
     var dp = I32Ptr(unsafe_from_address=Int(_ptr(ip, n)))
     var da = _ptr(ida, n * n)
     var cells = n * nrhs
-    var ctx = xd_ctx()
-    var db = _up(ctx, pb, cells)
     var dbs = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=dbs, src_buf=db)
+    ctx.enqueue_copy(dst_buf=dbs, src_buf=db.create_sub_buffer[DType.float32](0, cells))
     var didx = ctx.enqueue_create_buffer[DType.float32](n)
-    var dx = ctx.enqueue_create_buffer[DType.float32](cells)
     # launch_lu_solve uses its b as scratch: the copy keeps b for the residual
     launch_lu_solve(ctx, dl, dp, _p(dbs), _p(didx), _p(dx), n, nrhs, 0)
     if refine:
@@ -237,11 +264,40 @@ def dev_lu_solve_run(
         ctx.synchronize()
         _ = dr^
         _ = dd^
-    _down(ctx, dx, px, cells)
+    if Int(px) != 0:
+        _down(ctx, dx, px, n * nrhs)
     ctx.synchronize()
-    _ = db^
     _ = dbs^
     _ = didx^
+
+
+def dev_lu_solve_run(
+    pb: F32Ptr, px: F32Ptr, il: Int, ip: Int, ida: Int, n: Int, nrhs: Int, rf: Int
+) raises -> Int:
+    """`dev_lu_solve_py`'s typed body (see the door); rf != 0 refines."""
+    if n <= 0 or nrhs <= 0 or n * n > 2147483647 or n * nrhs > 2147483647:
+        raise Error("x_decomp: dev_lu_solve needs 0 < n, nrhs and n * n inside Int32")
+    var cells = n * nrhs
+    var ctx = xd_ctx()
+    var db = _up(ctx, pb, cells)
+    var dx = ctx.enqueue_create_buffer[DType.float32](cells)
+    _lu_solve_resident(ctx, db, dx, il, ip, ida, n, nrhs, rf != 0, px)
+    _ = db^
+    _ = dx^
+    return cells
+
+
+def dev_lu_solve_in_run(il: Int, ip: Int, ida: Int, ib: Int, ix: Int, n: Int, nrhs: Int, rf: Int) raises -> Int:
+    """XD_DEV_LU_SOLVE_IN (lane vdf-linalg7): `dev_lu_solve_run` with B read from pool matrix ib and X written into
+    pool matrix ix (a device operand's solve: nothing crosses the host). The same launches on the same words."""
+    if n <= 0 or nrhs <= 0 or n * n > 2147483647 or n * nrhs > 2147483647:
+        raise Error("x_decomp: dev_lu_solve needs 0 < n, nrhs and n * n inside Int32")
+    var cells = n * nrhs
+    var ctx = xd_ctx()
+    var db = pool_buffer(ib, cells)
+    var dx = pool_buffer(ix, cells)
+    _lu_solve_resident(ctx, db, dx, il, ip, ida, n, nrhs, rf != 0, F32Ptr(unsafe_from_address=0))
+    _ = db^
     _ = dx^
     return cells
 

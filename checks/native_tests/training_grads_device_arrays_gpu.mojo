@@ -96,6 +96,10 @@ def test_chunked_lm_head_device_arrays() raises:
                         Int(dh_c.unsafe_ptr()), Int(dw_c.unsafe_ptr()), Int(hidden.unsafe_ptr()),
                         Int(weight.unsafe_ptr()), Int(targets.unsafe_ptr())]
     _ = chunked_lm_head_v2_train_host_into(a, rows, vocab, width)
+    _ = dn_c^
+    _ = hidden^
+    _ = mx_c^
+    _ = weight^
     _same("lm head loss device vs host column", loss_h, loss_c)
     _same("lm head d_hidden device vs host column", dh_h, dh_c)
     _same("lm head d_weight device vs host column", dw_h, dw_c)
@@ -172,6 +176,7 @@ def test_accumulate_device_arrays() raises:
     var out_c = List[Float32](length=n, fill=0.0)
     var words: List[Int] = [Int(out_c.unsafe_ptr()), Int(parts.unsafe_ptr())]
     _ = accumulate_host_into(words, n, a, -1)
+    _ = parts^
     _same("accumulate device vs host column", out_h, out_c)
     for h in ins:  # small-loop: the handles above
         train_dev_free(ctx, h)

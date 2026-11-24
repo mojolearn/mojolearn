@@ -36,7 +36,7 @@ from x_decomp.descriptor_schema import (
     XD_RAND, XD_LU, XD_LU_SOLVE, XD_EIGH, XD_LASSO_ROWS, XD_LARS_ROWS, XD_OMP_ROWS, XD_LU_AUX, XD_ABSMAX_SIGN,
     XD_REDUCE, XD_SELECT_SMALLEST, XD_ARGMIN_ALL, XD_LU_RESID, XD_S_FLAGS, XD_QFIX_FLAGS, XD_DEV_RAND,
     XD_DEV_ABSMAX, XD_DEV_LU, XD_DEV_LU_AUX, XD_DEV_CODE_ROWS, XD_DEV_EIGH_TO, XD_DEV_ARGMIN_ALL,
-    XD_DEV_SELECT_SMALLEST,
+    XD_DEV_SELECT_SMALLEST, XD_DEV_FROM_TRAIN, XD_DEV_TO_TRAIN, XD_DEV_FINITE,
 )
 
 comptime DKitF32 = MutPointer[Float32, MutUntrackedOrigin]
@@ -289,6 +289,33 @@ struct DKit(Movable):
         self.matrices[index].on_device = False
         admitted_finite_refuse(word, est)
         return index
+
+    def adopt(mut self, handle: Int, rows: Int, cols: Int, name: String) raises -> Int:
+        """A training device array (core/train_dev_pool.mojo handle `handle`, C order, rows * cols >= 1 floats) as a
+        kit matrix (lane vdf-linalg7): its words copied device to device into a pool id this kit owns
+        (XD_DEV_FROM_TRAIN), then the admission's finite test on the device (XD_DEV_FINITE, one status word), refused
+        in `decomp_input`'s words. It starts as a host matrix by route (`on_device` False, as `borrow_device` and
+        `borrow_tested` leave theirs), so every route is the one a host operand's `borrow` gives; a host step that
+        reads its words downloads them once (`host`). The training array is never written."""
+        var n = rows * cols
+        if n < 1:
+            return self.zeros(rows, cols)
+        var id = self.dev_alloc(n)
+        self.allocations.append(id)
+        _ = self.xd(XD_DEV_FROM_TRAIN, List[Int](), [handle, id, n], List[Float64]())
+        if self.xd(XD_DEV_FINITE, List[Int](), [id, n], List[Float64]()) != 0:
+            raise Error(name + ": input must be finite; NaN/inf are unsupported")
+        var index = self.add(-1, rows, cols, id)
+        self.matrices[index].on_device = False
+        return index
+
+    def to_train(mut self, a: Int, handle: Int) raises:
+        """PACK into a device array: matrix a's words into training handle `handle` (a fresh device array of a's
+        element count), one device copy (XD_DEV_TO_TRAIN); a host matrix (a small host-made result) goes up once
+        first (`device`)."""
+        var n = self.size(a)
+        if n:
+            _ = self.xd(XD_DEV_TO_TRAIN, List[Int](), [self.device(a), handle, n], List[Float64]())
 
     def add_resident(mut self, address: Int, handle: Int, rows: Int, cols: Int) -> Int:
         """A fitted operand whose device copy the door's UNPACK served from (or
