@@ -61,7 +61,7 @@ from bindings.generation_buffers_door import (
 )
 from bindings.native_array_snapshot_door import native_array_slots, NativeArrayAdmission
 from core.generation_policy_impl import GenerationSamplingScratch
-from core.generation_kv_policy import GenerationReadControl, GENERATION_NATIVE_ENGINE_FORCE, GENERATION_NATIVE_ENGINE_OFF
+from core.generation_kv_policy import GenerationReadControl, GENERATION_NATIVE_ENGINE_FORCE
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
 from core.native_archive_write import NativeArchiveMember, archive_owned, archive_text_bytes
@@ -1847,12 +1847,12 @@ def _use_native_generation_engine(mut mods: NativeModules, words: CausalModelWor
     # Select once at a public operation boundary, never in the token/layer
     # loop. No failed native admission/execution is caught and retried through
     # the object route: a selected engine keeps its original refusal semantics.
-    # -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE / _OFF (was the run-time
-    # MOJOLEARN_GENERATION_NATIVE_ENGINE=1 / 0, default auto).
+    # -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE (was the run-time
+    # MOJOLEARN_GENERATION_NATIVE_ENGINE=1, default auto).
     comptime if GENERATION_NATIVE_ENGINE_FORCE:
         return True
-    comptime if GENERATION_NATIVE_ENGINE_OFF:
-        return False
+    # TOMBSTONE: MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 070015d016.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF.ab-outcome-2.patch
     # TOMBSTONE: MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF (removed without measurement: plumbing, rule 2026-11-22; the by-name CPython entry calls ran the same compiled entries with the same words) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF.patch; record in docs/TOMBSTONES.md.
     # The model half is typed (`causal_engine_candidate`: a local fp32 model

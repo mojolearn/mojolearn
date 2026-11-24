@@ -12,7 +12,6 @@ from std.sys.compile import is_defined
 #   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_RESIDENT  route resident
 #   -D MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_NATIVE_ENGINE  route native_engine
 #   -D MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE         engine "1" (was ENGINE=1)
-#   -D MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF           engine "0" (was ENGINE=0)
 comptime EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE = is_defined["MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE"]()
 comptime _ROUTE_RESIDENT = is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_RESIDENT"]()
 comptime _ROUTE_NATIVE_ENGINE = is_defined["MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_NATIVE_ENGINE"]()
@@ -24,10 +23,9 @@ comptime EXPERIMENT_GENERATION_ROUTE: StaticString = (
     )
 )
 comptime GENERATION_NATIVE_ENGINE_FORCE = is_defined["MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE"]()
-comptime GENERATION_NATIVE_ENGINE_OFF = is_defined["MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF"]()
-comptime GENERATION_NATIVE_ENGINE: StaticString = (
-    "1" if GENERATION_NATIVE_ENGINE_FORCE else ("0" if GENERATION_NATIVE_ENGINE_OFF else "auto")
-)
+# TOMBSTONE: MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF (old path no faster: NV L40S 2 cells, median 1.00) deleted 2026-11-24 by lane/ab-outcome-2; code recoverable at 070015d016.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF.ab-outcome-2.patch
+comptime GENERATION_NATIVE_ENGINE: StaticString = "1" if GENERATION_NATIVE_ENGINE_FORCE else "auto"
 
 
 struct GenerationKVUploadPolicy(Copyable, Movable):
@@ -77,9 +75,6 @@ struct GenerationReadControl(Copyable, Movable):
         self.greedy = greedy
         comptime assert Int(_ROUTE_RESIDENT) + Int(_ROUTE_NATIVE_ENGINE) <= 1, (
             "at most one MOJOLEARN_EXPERIMENT_GENERATION_ROUTE_* define"
-        )
-        comptime assert not (GENERATION_NATIVE_ENGINE_FORCE and GENERATION_NATIVE_ENGINE_OFF), (
-            "MOJOLEARN_GENERATION_NATIVE_ENGINE_FORCE and _OFF are exclusive"
         )
         self.engine_setting = String(GENERATION_NATIVE_ENGINE)
         self.route = String(EXPERIMENT_GENERATION_ROUTE)
