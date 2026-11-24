@@ -19,6 +19,14 @@ struct HdbscanQueryHostBackend(HdbscanQueryBackend):
         return True
 
     @staticmethod
+    def prepare(mut state: HdbscanQueryState) raises -> Int:
+        raise Error("HDBSCAN query ABI: a fitted snapshot is unavailable in the host image")
+
+    @staticmethod
+    def release(handle: Int) raises:
+        raise Error("HDBSCAN query ABI: a fitted snapshot is unavailable in the host image")
+
+    @staticmethod
     def run(mut state: HdbscanQueryState) raises -> Int:
         var r = state.request.copy()
         var d = r.dimensions.copy()

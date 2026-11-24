@@ -6,12 +6,18 @@ from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 
 comptime HDBSCAN_QUERY_ABI = "mojolearn.hdbscan_query.native.v1"
-comptime HDBSCAN_QUERY_COUNT = 5
+comptime HDBSCAN_QUERY_COUNT = 7
 comptime HDBSCAN_QUERY_MODE = 0
 comptime HDBSCAN_QUERY_HOST = 1
 comptime HDBSCAN_QUERY_APPROXIMATE = 2
 comptime HDBSCAN_QUERY_MEMBERSHIP = 3
 comptime HDBSCAN_QUERY_ALL_POINTS = 4
+#: Lane vdf-misc4 (2026-11-24): take the fitted arrays of a prepared plan
+#: (its `kind` names the query they serve) ONCE onto the device; returns the
+#: snapshot's handle (hdbscan/impl/detail/resident.mojo). Device image only.
+comptime HDBSCAN_QUERY_PREPARE = 5
+#: Release a snapshot handle (one integer); quiet for a released handle.
+comptime HDBSCAN_QUERY_RELEASE = 6
 
 
 @fieldwise_init
@@ -85,6 +91,12 @@ struct HdbscanQueryState(Movable):
     var request: HdbscanQueryRequest
     var operation: Int
     var host: Bool
+    #: The fitted snapshot a device query reads (0: none, the per-call
+    #: route); for HDBSCAN_QUERY_PREPARE, 0.
+    var handle: Int
+    #: The query kind: `operation` for a query, the kind the snapshot serves
+    #: for HDBSCAN_QUERY_PREPARE.
+    var kind: Int
     var training: List[Float32]
     var core_distances: List[Float32]
     var labels: List[Int32]
@@ -97,10 +109,13 @@ struct HdbscanQueryState(Movable):
     var offsets: List[Int32]
     var query: List[Float32]
 
-    def __init__(out self, request: HdbscanQueryRequest, operation: Int, host: Bool):
+    def __init__(out self, request: HdbscanQueryRequest, operation: Int, host: Bool,
+                 handle: Int = 0, kind: Int = -1):
         self.request = request.copy()
         self.operation = operation
         self.host = host
+        self.handle = handle
+        self.kind = operation if kind < 0 else kind
         self.training = List[Float32]()
         self.core_distances = List[Float32]()
         self.labels = List[Int32]()
@@ -119,9 +134,19 @@ struct HdbscanQueryState(Movable):
         var r = self.request.copy()
         var d = r.dimensions.copy()
         var b = r.buffers.copy()
-        r.validate(self.operation)
-        var approximate = self.operation == HDBSCAN_QUERY_APPROXIMATE
-        var all_points = self.operation == HDBSCAN_QUERY_ALL_POINTS
+        r.validate(self.kind)
+        var approximate = self.kind == HDBSCAN_QUERY_APPROXIMATE
+        var all_points = self.kind == HDBSCAN_QUERY_ALL_POINTS
+        if self.operation == HDBSCAN_QUERY_PREPARE or self.handle != 0:
+            # Lane vdf-misc4: a snapshot reads the fitted arrays in place
+            # once (PREPARE) or not at all (a query on a handle): no host
+            # copies. The queries and outputs are read through their spans.
+            if self.host:
+                raise Error("HDBSCAN query ABI: a fitted snapshot is a device-image route")
+            if not approximate and r.batch < 1 and self.operation != HDBSCAN_QUERY_PREPARE:
+                var which = String("hdbscan_all_points_membership_vectors") if all_points else String("hdbscan_membership_vector")
+                raise Error(which + ": batch size must be positive; refused by name")
+            return
         if self.host and all_points:
             _ = f32_ptr(b.training.address)
         else:
@@ -163,9 +188,10 @@ struct HdbscanQueryState(Movable):
 struct HdbscanQueryPlan(Movable):
     var storage: List[HdbscanQueryState]
 
-    def __init__(out self, request: HdbscanQueryRequest, operation: Int, host: Bool) raises:
+    def __init__(out self, request: HdbscanQueryRequest, operation: Int, host: Bool,
+                 handle: Int = 0, kind: Int = -1) raises:
         self.storage = List[HdbscanQueryState]()
-        self.storage.append(HdbscanQueryState(request, operation, host))
+        self.storage.append(HdbscanQueryState(request, operation, host, handle, kind))
         self.storage[0].capture()
 
     def address(self) -> Int:
@@ -189,3 +215,9 @@ struct HdbscanQueryDriver(Copyable, Movable):
         var answer = native_descriptor_call_fixed(self.entry, plan.storage[0].operation, a, p, f)
         _ = plan
         return answer
+
+    def release(self, handle: Int) raises:
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 1] = [handle]
+        var f: Array[Float64, 0] = []
+        _ = native_descriptor_call_fixed(self.entry, HDBSCAN_QUERY_RELEASE, a, p, f)

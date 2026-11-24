@@ -4,6 +4,7 @@ from core.native_descriptor_call import native_descriptor_report
 from core.hdbscan_query_api import (
     HdbscanQueryState, HDBSCAN_QUERY_MODE, HDBSCAN_QUERY_HOST,
     HDBSCAN_QUERY_APPROXIMATE, HDBSCAN_QUERY_MEMBERSHIP, HDBSCAN_QUERY_ALL_POINTS,
+    HDBSCAN_QUERY_PREPARE, HDBSCAN_QUERY_RELEASE,
 )
 
 
@@ -17,6 +18,12 @@ trait HdbscanQueryBackend:
     @staticmethod
     def run(mut state: HdbscanQueryState) raises -> Int: ...
 
+    @staticmethod
+    def prepare(mut state: HdbscanQueryState) raises -> Int: ...
+
+    @staticmethod
+    def release(handle: Int) raises: ...
+
 
 def hdbscan_query_dispatch[K: HdbscanQueryBackend](operation: Int,
     aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
@@ -29,7 +36,12 @@ def hdbscan_query_dispatch[K: HdbscanQueryBackend](operation: Int,
             if na != 0 or np != 0 or nf != 0:
                 raise Error("HDBSCAN query ABI: metadata takes no arguments")
             answer = K.mode() if operation == HDBSCAN_QUERY_MODE else Int(K.host())
-        elif operation == HDBSCAN_QUERY_APPROXIMATE or operation == HDBSCAN_QUERY_MEMBERSHIP or operation == HDBSCAN_QUERY_ALL_POINTS:
+        elif operation == HDBSCAN_QUERY_RELEASE:
+            if na != 0 or np != 1 or nf != 0 or pp == 0:
+                raise Error("HDBSCAN query ABI: release requires one integer")
+            K.release(Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)[0])
+        elif (operation == HDBSCAN_QUERY_APPROXIMATE or operation == HDBSCAN_QUERY_MEMBERSHIP
+              or operation == HDBSCAN_QUERY_ALL_POINTS or operation == HDBSCAN_QUERY_PREPARE):
             if na != 1 or np != 0 or nf != 0 or aa == 0:
                 raise Error("HDBSCAN query ABI: invalid prepared request")
             var address = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)[0]
@@ -38,7 +50,7 @@ def hdbscan_query_dispatch[K: HdbscanQueryBackend](operation: Int,
             var state = MutPointer[HdbscanQueryState, MutUntrackedOrigin](unsafe_from_address=address)
             if state[].operation != operation or state[].host != K.host():
                 raise Error("HDBSCAN query ABI: prepared request belongs to a different route")
-            answer = K.run(state[])
+            answer = K.prepare(state[]) if operation == HDBSCAN_QUERY_PREPARE else K.run(state[])
         else:
             raise Error("HDBSCAN query ABI: unknown operation")
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = answer
