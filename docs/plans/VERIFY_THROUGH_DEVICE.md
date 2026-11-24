@@ -27,6 +27,11 @@ State on `lane/w3-integrate` 3cda8a05b3 (coverage audit of the round-6 gate):
    work (Andrew, 2026-11-24): it is not refused and not left owed. Of the 272 functions and constructors without
    `device`, 252 already have a GPU side. The other 20 are settings and config readers, file and data containers,
    the CPU-inference classes and the verify tools: they take no `device` at all. Classes whose constructor lacks `device` gain it the same way.
+   **Data already on the GPU (Andrew, 2026-11-24).** With the GPU side selected, a function consumes a
+   device-resident input in place: no download and no re-upload anywhere in the call; a host input is uploaded
+   once. Model-selection tools select fold rows on the device and fit and score the members there. The functions
+   follow the one convention the estimators have for device-resident inputs and results. A GPU side that today
+   downloads its inputs or computes part of its result on the host is fixed in the same work.
 2. **Verify passes `device=`.** Each lane runs its endpoint with `device="cpu"` and `device="gpu"`; the digests are
    compared with the reference columns as today. The `MOJOLEARN_VENDOR=cpu` switch inside verify goes in the same
    change; the variable itself stays in the product (see the inventory below); its 80 verify-only sites go ("remove what a change made
