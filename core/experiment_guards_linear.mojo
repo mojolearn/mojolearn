@@ -381,6 +381,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.ab-outcome-2.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_KDE_QTILE_FORCE"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): the query-tile KDE pass at every width lost to the L1 cost rule kde_qtile_applies: 2 cells, median 1.12, kde istella fit 28.16 -> 34.70 ms (1.23), taxi 5.49 -> 5.54 ms (1.01); the cost rule is the only form; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.ab-outcome-2.patch"
     # ---- end lane ab-outcome-2
+    # ---- lane ab-outcome-3 / o3-trees (2026-11-24): A/B nvc-ab-20261124T115722Z-d8f8b2 decisions (NVIDIA L40S only, job nvc1-0003)
+    # TOMBSTONE: MOJOLEARN_SGD_FAST_PS_PRELOAD (SPLIT, inherent: NV L40S 16 cells, median 1.01; istella fits 0.87..0.92, taxi fits 1.10..1.15 slower) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at 2a10031298.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_FAST_PS_PRELOAD.ab-outcome-3.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_SGD_FAST_PS_PRELOAD"](), "removed 2026-11-24 (lane/ab-outcome-3 o3-trees, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, one run per arm): the per-sample warp kernel's register preload of sample r + 1 was SPLIT: 16 cells (pa-clf, pa-reg, perceptron, sgd-ocsvm istella and taxi full), median 1.01, istella fits 0.87..0.92 (pa-clf 113672 -> 99467 ms), taxi fits 1.10..1.15 slower (perceptron 59490 -> 68189 ms); the 2 x 32-word register double buffer is a fixed per-sample cost that a one-line row does not repay, and a width rule is not allowed; the plain loads are the only form; code at 2a10031298; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SGD_FAST_PS_PRELOAD.ab-outcome-3.patch"
+    # ---- end lane ab-outcome-3 / o3-trees
     return True
 
 

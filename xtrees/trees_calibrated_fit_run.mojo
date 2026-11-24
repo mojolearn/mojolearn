@@ -37,9 +37,7 @@ and returns the pins after it):
     GPU, then the other members' turns on this thread);
 
   * per native fold, in fold order: its test rows of X (the `_gather` glue
-    op over every column, or the host row copy under the door's
-    MOJOLEARN_CALIB_FAST_HOST_FOLDS B arm: the same words; or, THE
-    RESIDENT ROWS below, no gather at all), the fold
+    op over every column; or, THE RESIDENT ROWS below, no gather at all), the fold
     member's scores through ONE member call on its fitted state
     (decision_function when the estimator has one, else predict_proba; a
     float64 answer rounded to float32 word by word, as the door's
@@ -117,7 +115,8 @@ from core.member_set_run import (
     MemberSetRun, member_set_prepare, member_set_fit_free, member_set_turn, member_set_first_failure,
     member_set_run_release, MEMBER_SET_WORKER,
 )
-from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_OUT_OF_RANGE
+# TOMBSTONE: MOJOLEARN_CALIB_FAST_HOST_FOLDS (NOISE: NV L40S 4 cells, median 1.00, 0.97..1.04) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at c23cb55fda.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CALIB_FAST_HOST_FOLDS.ab-outcome-3.patch
 from xtrees.trees_meta_vote_run import VoteMember, VoteRows, member_f32_block
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_gather_f32, xt_gather_i32, xt_scatter, xt_transpose_f64,
@@ -139,9 +138,8 @@ struct CalFitPlan(Movable):
     host words; `codes`: the ensemble's int32 class codes (n), `k` classes;
     `operation`: MEMBER_OP_DECISION or MEMBER_OP_PREDICT_PROBA; `sigmoid`:
     Platt calibrators (else isotonic); `ensemble`: one (member, calibrators)
-    pair per fold (else the out-of-fold block and one pair over every row);
-    `host_rows`: the fold's test rows are copied on the host (the door's B
-    arm) instead of the `_gather` glue op. Per fold: the address and count of
+    pair per fold (else the out-of-fold block and one pair over every row).
+    Per fold: the address and count of
     its int32 test rows. The caller keeps every buffer alive through RUN.
 
     Written by the RUN (`cal_fold_classes_run`), per fold: `fold_classes[f]`
@@ -159,7 +157,6 @@ struct CalFitPlan(Movable):
     var operation: Int
     var sigmoid: Bool
     var ensemble: Bool
-    var host_rows: Bool
     var test_rows: List[Int]
     var test_counts: List[Int]
     var fold_classes: List[List[Int32]]
@@ -192,7 +189,7 @@ struct CalFitPlan(Movable):
     var took: List[UInt8]
 
     def __init__(out self, x: Int, n: Int, d: Int, codes: Int, k: Int, operation: Int, sigmoid: Bool,
-                 ensemble: Bool, host_rows: Bool):
+                 ensemble: Bool):
         self.x = x
         self.n = n
         self.d = d
@@ -201,7 +198,6 @@ struct CalFitPlan(Movable):
         self.operation = operation
         self.sigmoid = sigmoid
         self.ensemble = ensemble
-        self.host_rows = host_rows
         self.test_rows = List[Int]()
         self.test_counts = List[Int]()
         self.fold_classes = List[List[Int32]]()
@@ -804,11 +800,7 @@ def calibrated_fit_scores_run(glue: EntryRef, mut run: MemberSetRun, plan: CalFi
                                      VoteRows(plan.x, n, d, te, nte, plan.scope, plan.pin, took_at), s)
         else:
             var xte = List[Float32](length=nte * d, fill=0.0)
-            if plan.host_rows:
-                if admitted_gather_rows_f32[DType.int32](plan.x, n, d, te, nte, Int(xte.unsafe_ptr())) == ARG_OUT_OF_RANGE:
-                    raise Error("x_trees gather: row index out of range")
-            else:
-                _ = xt_gather_f32(glue, plan.x, te, Int(cols.unsafe_ptr()), Int(xte.unsafe_ptr()), n, d, nte, d)
+            _ = xt_gather_f32(glue, plan.x, te, Int(cols.unsafe_ptr()), Int(xte.unsafe_ptr()), n, d, nte, d)
             which = _cal_fold_scores(glue, run, plan, f, Int(iota.unsafe_ptr()), VoteRows(Int(xte.unsafe_ptr()), nte, d),
                                      s)
             _ = len(xte)

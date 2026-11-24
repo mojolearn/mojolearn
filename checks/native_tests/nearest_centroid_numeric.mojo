@@ -22,12 +22,12 @@ from checks.native_tests.testsuite_cases import require
 def test_nearest_centroid_numeric() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
     var failures = String("")
-    for unit in range(11):  # driver-loop: over fixtures, in order
+    for unit in range(7):  # driver-loop: over fixtures, in order
         try:
-            if unit < 8:
+            if unit < 4:
                 fixture(xn_native_v1, unit)
             else:
-                empty_case(xn_native_v1, unit - 8)
+                empty_case(xn_native_v1, unit - 4)
         except error:
             failures += "\n      row " + String(unit) + ": " + String(error)
     if failures.byte_length() > 0:
