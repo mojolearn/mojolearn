@@ -295,8 +295,9 @@
   },
   "gemm-int-slices-on": {
    "define": "MOJOLEARN_IDN_GEMM_INT_SLICES",
-   "status": "define in code (gemm/int_slices.mojo IDN_GEMM_INT_SLICES, restored 2026-11-15 by lane restore-run-arms-neural): B = fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue (research profile fp32.v2-int) for k <= 65536, device and host column; A = fp32.v1",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-2): NOISE/LOSER (L40S 1 cell, gemm 47.54 -> 51.81 ms, 1.09); A (fp32.v1, the default) is unchanged; removed: gemm/int_slices.mojo, int_slices_seams.mojo, host/gemm_int_slices_oracle.mojo, the gate and both hooks; the define is refused (core/experiment_guards_neural.mojo); code recoverable at ba83d4655f, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_INT_SLICES.ab-outcome-2.patch. Was: define in code (gemm/int_slices.mojo IDN_GEMM_INT_SLICES, restored 2026-11-15 by lane restore-run-arms-neural): B = fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue (research profile fp32.v2-int) for k <= 65536, device and host column; A = fp32.v1",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T095727Z-92fd9f (NVIDIA L40S, wheel 4519097d380a, job nvc1-0002): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "ssd-occupancy-on": {
    "define": "MOJOLEARN_IDN_SSD_OCCUPANCY",

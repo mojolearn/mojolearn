@@ -45,7 +45,6 @@ autograd/checks/optim_cpu.mojo
 x_neighbors/checks/fold_check.mojo
 x_neighbors/checks/model_check.mojo
 gemm/checks/gemm_gather_ftz_check.mojo
-gemm/checks/gemm_int_slices_check.mojo
 glm/checks/qn_scalar_ieee_check.mojo
 x_ann/checks/ivf_pq_check.mojo
 training/checks/byte_lm_block_copy_check.mojo

@@ -467,7 +467,6 @@ gbdt_step_cost_check	gpu	53.2	1221
 gbdt_tree_ctr_host_check	gpu	223.5	2953
 gbdt_tree_metadata	gpu	9.8	479
 gemm_gemm_gather_ftz_check	gpu	55.7	1755
-gemm_gemm_int_slices_check	gpu	18.6	765
 gemm_gemm_production_dispatch_check	gpu	9.3	434
 gemm_gemm_rtf_boundary_check	gpu	55.5	1726
 gemm_gemm_stage_ftz_check	gpu	56.2	1743

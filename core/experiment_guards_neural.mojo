@@ -518,6 +518,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_NN12"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_NN12 (unmeasured opt-in arm) is gone; the default is kept; code at a9cf951197; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.patch
     comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_NN16"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_NN16 (unmeasured opt-in arm) is gone; the default is kept; code at 1362c86435; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_INT_SLICES_FORCE_FLAT (force the FLAT plan on a unit column; opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at e62e7376e0. (Marker moved here 2026-11-24 by lane/ab-outcome-2 when gemm/int_slices.mojo, which held it, was deleted with MOJOLEARN_IDN_GEMM_INT_SLICES.)
     # Restore: git apply experiments/removed/MOJOLEARN_INT_SLICES_FORCE_FLAT.patch
     comptime assert not is_defined["MOJOLEARN_INT_SLICES_FORCE_FLAT"](), "removed 2026-11-15 (lane/expdel2-25-neural): INT_SLICES_FORCE_FLAT (unmeasured opt-in arm) is gone; the default is kept; code at e62e7376e0; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch
@@ -1281,6 +1282,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED.ab-outcome-1.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): SEQ_FAST_RNN_SCAN_GATED (GRU and LSTM layers on the scan, SCAN_MAX_GATES 4) was a LOSER: 18 cells, median 1.18, 0.92..4.54, gru / lstm infer 4.2-4.5x slower, fit higgs 1.17-1.20; the chain stays their route (SCAN_MAX_GATES 1); code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_RNN_SCAN_GATED.ab-outcome-1.patch"
     # ---- end lane ab-outcome-1
+    # ---- lane ab-outcome-2 (2026-11-24): A/B nvc-ab-20261124T095727Z-92fd9f decisions (NVIDIA L40S only; sub-lane ab2-ngemm)
+    # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (NOISE/LOSER: NV L40S 1 cell, gemm 47.54 -> 51.81 ms, 1.09) deleted 2026-11-24 by lane/ab-outcome-2 (ab2-ngemm); code recoverable at ba83d4655f.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_INT_SLICES.ab-outcome-2.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_GEMM_INT_SLICES"](), "removed 2026-11-24 (lane/ab-outcome-2, A/B nvc-ab-20261124T095727Z-92fd9f NVIDIA L40S, wheel 4519097d380a, job nvc1-0002, one run per arm): IDN_GEMM_INT_SLICES (research profile fp32.v2-int: fp32 GEMM as four int8 planes on the tuned IMMA kernel plus the one-rounding epilogue, device and host column) was NOISE/LOSER: gemm full 47.54 -> 51.81 ms (1.09); fp32.v1 stays the linalg GEMM on every column; code at ba83d4655f; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_GEMM_INT_SLICES.ab-outcome-2.patch"
+    # ---- end lane ab-outcome-2 (ab2-ngemm)
     return True
 
 
