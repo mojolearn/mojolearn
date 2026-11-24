@@ -321,6 +321,11 @@ class LSTMRegressor(_RecurrentRegressor):
         Sequence length seen in `fit`.
     n_iter_ : int
         Number of optimizer steps taken.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (each epoch is
+        ``ceil(n_samples / batch_size)`` optimizer steps) and the time in
+        milliseconds its training loop took, from the start of the first
+        epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
     params_ : ndarray
@@ -417,6 +422,11 @@ class LSTMClassifier(_RecurrentClassifier):
         Sequence length seen in `fit`.
     n_iter_ : int
         Number of optimizer steps taken.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (each epoch is
+        ``ceil(n_samples / batch_size)`` optimizer steps) and the time in
+        milliseconds its training loop took, from the start of the first
+        epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
     params_ : ndarray
@@ -514,6 +524,11 @@ class GRURegressor(_RecurrentRegressor):
         Sequence length seen in `fit`.
     n_iter_ : int
         Number of optimizer steps taken.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (each epoch is
+        ``ceil(n_samples / batch_size)`` optimizer steps) and the time in
+        milliseconds its training loop took, from the start of the first
+        epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
     params_ : ndarray
@@ -610,6 +625,11 @@ class GRUClassifier(_RecurrentClassifier):
         Sequence length seen in `fit`.
     n_iter_ : int
         Number of optimizer steps taken.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (each epoch is
+        ``ceil(n_samples / batch_size)`` optimizer steps) and the time in
+        milliseconds its training loop took, from the start of the first
+        epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
     params_ : ndarray
@@ -707,6 +727,11 @@ class RNNRegressor(_RecurrentRegressor):
         Sequence length seen in `fit`.
     n_iter_ : int
         Number of optimizer steps taken.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (each epoch is
+        ``ceil(n_samples / batch_size)`` optimizer steps) and the time in
+        milliseconds its training loop took, from the start of the first
+        epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
     params_ : ndarray
@@ -804,6 +829,11 @@ class RNNClassifier(_RecurrentClassifier):
         Sequence length seen in `fit`.
     n_iter_ : int
         Number of optimizer steps taken.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran (each epoch is
+        ``ceil(n_samples / batch_size)`` optimizer steps) and the time in
+        milliseconds its training loop took, from the start of the first
+        epoch to the end of the last.
     loss_curve_ : ndarray
         Training loss at every optimizer step.
     params_ : ndarray

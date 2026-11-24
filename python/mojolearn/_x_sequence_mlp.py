@@ -146,6 +146,10 @@ class MLPRegressor(_BaseMLP):
         Loss of every epoch.
     n_iter_ : int
         Number of epochs run.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran and the time in milliseconds
+        its epoch loop took, from the start of the first epoch to the end of
+        the last.
     t_ : int
         Number of training samples seen.
     n_features_in_ : int
@@ -283,6 +287,10 @@ class MLPClassifier(_BaseMLP):
         Loss of every epoch.
     n_iter_ : int
         Number of epochs run.
+    fit_loop_ : tuple of (int, float)
+        The number of epochs the last fit ran and the time in milliseconds
+        its epoch loop took, from the start of the first epoch to the end of
+        the last.
     t_ : int
         Number of training samples seen.
     n_features_in_ : int
