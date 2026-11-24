@@ -3,6 +3,11 @@ native META members (or native leaf members) now. Host column. One line per conf
 sha256 of the output bytes (dtype and shape included); a refusal is digested by its words, and the warnings a fit
 raised by their category and words, in order. Base: origin/lane/member-fits b0c2f733fd (the door paths), head
 lane/mf-split4. Test tool, never product runtime.
+Lane mf-gate6: a `_warnings` line is `<hash> words=[[<category>: <message>, <count>], ...]` (run this version of the
+tool on both builds: an older file holds the hash only). Gate note, base main d67c21591e: the adacw_* rows gain the
+DecisionTree / RandomForest fit notice (bindings/rf_fit_notices_pack.mojo, cuML's n_bins clamp words, raised when a
+round's rows are fewer than n_bins=128: the cv=3 folds of 160 rows) that the estimator's own fit raises; the base's
+AdaBoost route raised none (967ba35740 restored them per round). Read the words to confirm.
 
 EQUAL (every line expected):
   * `bagcw_*` (item 0): a BaggingClassifier whose DecisionTree carries a class_weight (dict keyed by codes, and
@@ -58,6 +63,7 @@ Configurations are independent: one process each across the host cores.
 """
 from concurrent.futures import ProcessPoolExecutor
 import hashlib
+import json
 import os
 import sys
 import warnings
@@ -125,7 +131,13 @@ def _lines(tag, call):
         except Exception as e:  # noqa: BLE001 - the words are the digest
             out = [(tag + "_raised", f"{type(e).__name__}: {e}")]
     words = sorted(f"{w.category.__name__}: {w.message}" for w in caught)
-    out.append((tag + "_warnings", _digest(np.asarray(words, dtype=str)) if words else "none"))
+    # Lane mf-gate6: the words beside the hash (the gate saw only hashes move): each distinct warning once with its
+    # count, in sorted order, JSON on the same line, so a diff shows what was raised.
+    counted = {}
+    for word in words:
+        counted[word] = counted.get(word, 0) + 1
+    text = json.dumps([[word, count] for word, count in counted.items()], ensure_ascii=True)
+    out.append((tag + "_warnings", f"{_digest(np.asarray(words, dtype=str))} words={text}" if words else "none"))
     return out
 
 
@@ -514,9 +526,16 @@ def _run(index):
     return []
 
 
+def _cores():
+    try:
+        return len(os.sched_getaffinity(0))  # the allocation, not the host's visible CPUs
+    except AttributeError:
+        return os.cpu_count() or 1
+
+
 def main():
     total = sum(len(table) for table, _ in SECTIONS)
-    with ProcessPoolExecutor(max_workers=min(total, os.cpu_count() or 1)) as pool:
+    with ProcessPoolExecutor(max_workers=min(total, _cores())) as pool:
         for lines in pool.map(_run, range(total)):
             for name, value in lines:
                 print(name, value)
