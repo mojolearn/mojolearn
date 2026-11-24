@@ -2,7 +2,8 @@
 """Typed NearestCentroid orchestration over the existing neighbor kernels.
 
 Public buffers are borrowed descriptors; only private scratch lives here. Each
-request uses fixed native words. The fused/split kernel choices are unchanged.
+request uses fixed native words. Euclidean fits take the fused statistics
+(`nc_stats`, `nc_shrink_d`); manhattan fits the medians, `nc_std` and `nc_shrink`.
 """
 from std.math import isinf
 from core.neighbors_native_driver import XnDriver as NcDriver
@@ -164,18 +165,16 @@ struct NcFitPlan(Movable):
     var features: Int
     var classes: Int
     var euclidean: Bool
-    var split: Bool
     var counts: List[Float32]
     var wide_counts: List[Int64]
     var centroids: List[Float32]
     var dataset_centroid: List[Float32]
 
-    def __init__(out self, rows: Int, features: Int, classes: Int, euclidean: Bool = True, split: Bool = False):
+    def __init__(out self, rows: Int, features: Int, classes: Int, euclidean: Bool = True):
         self.rows = rows
         self.features = features
         self.classes = classes
         self.euclidean = euclidean
-        self.split = split
         self.counts = List[Float32](length=classes, fill=0)
         self.wide_counts = List[Int64](length=classes, fill=0)
         self.centroids = List[Float32]()
@@ -195,12 +194,9 @@ struct NcFitPlan(Movable):
         # Rejected priors never allocate the potentially large centroid scratch.
         self.centroids = List[Float32](length=self.classes * self.features, fill=0)
         var f: Array[Float64, 0] = []
-        if self.euclidean:
-            if self.split:
-                var a: Array[Int, 3] = [x, labels, nc_scratch_address(self.centroids)]
-                var p: Array[Int, 3] = [self.rows, self.features, self.classes]
-                _ = driver.run("group_mean", a, p, f)
-        else:
+        # TOMBSTONE: MOJOLEARN_NC_SPLIT_OPS (LOSER: NV L40S 4 cells, median 5.76, nearest-centroid fit istella 59.45 -> 625 ms, taxi 16.58 -> 290 ms) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees); code recoverable at a0324a1c4c.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NC_SPLIT_OPS.ab-outcome-3.patch
+        if not self.euclidean:
             var offsets = nc_class_offsets(Int(self.wide_counts.unsafe_ptr()), self.classes)
             var steps = nc_power_steps(self.rows)
             var a: Array[Int, 4] = [x, labels, Int(offsets.unsafe_ptr()), nc_scratch_address(self.centroids)]
@@ -209,7 +205,7 @@ struct NcFitPlan(Movable):
             _ = offsets^
         var status = List[Int32](length=1, fill=0)
         var p: Array[Int, 4] = [self.rows, self.features, self.classes, Int(status.unsafe_ptr())]
-        if self.euclidean and not self.split:
+        if self.euclidean:
             self.dataset_centroid = List[Float32](length=self.features, fill=0)
             var a: Array[Int, 6] = [x, labels, Int(self.counts.unsafe_ptr()),
                 nc_scratch_address(self.centroids), stats, nc_scratch_address(self.dataset_centroid)]
@@ -238,7 +234,7 @@ struct NcFitPlan(Movable):
 
     def shrink(mut self, driver: NcDriver, x: Int, stats: Int, dst: Int, deviations: Int,
                median: Float64, threshold: Float64) raises:
-        var fused = self.euclidean and not self.split
+        var fused = self.euclidean
         var a: Array[Int, 6] = [nc_scratch_address(self.dataset_centroid) if fused else x,
             nc_scratch_address(self.centroids), Int(self.counts.unsafe_ptr()), stats, dst, deviations]
         var p: Array[Int, 4] = [self.rows, self.features, self.classes, 1 if threshold != 0 else 0]

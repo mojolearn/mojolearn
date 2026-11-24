@@ -11,8 +11,8 @@
 # neighbors/knn_imputer_run.mojo. The A/B arms the module
 # read at import (MOJOLEARN_XN_UNFUSED_KNN, MOJOLEARN_XN_UNCOMPACT_IMPUTE,
 # MOJOLEARN_XN_OLD_ITEMS) are the import-time values in the context
-# (`family_xn_loc_flags`); NC_SPLIT_OPS is a build constant
-# (`-D MOJOLEARN_NC_SPLIT_OPS`, neighbors/neighbors_local_run.mojo). The opt-in lazy output map (MOJOLEARN_XN_LAZY_OUT) is a
+# (`family_xn_loc_flags`). MOJOLEARN_NC_SPLIT_OPS (the split NearestCentroid fit) was deleted 2026-11-24
+# (lane ab-outcome-3, LOSER; docs/TOMBSTONES.md). The opt-in lazy output map (MOJOLEARN_XN_LAZY_OUT) is a
 # memory arm only: outputs are zero-filled Arrays either way, same values.
 # Scalars derived on the host (the contamination percentile, the prior
 # checks) are the same binary64 operations in the same order; products that

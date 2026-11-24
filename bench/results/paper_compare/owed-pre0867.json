@@ -454,8 +454,9 @@
   },
   "nc-split-ops": {
    "define": "MOJOLEARN_NC_SPLIT_OPS",
-   "status": "define in code (neighbors/neighbors_local_run.mojo NC_SPLIT_OPS): B = NearestCentroid fit as the three separate ops (the former MOJOLEARN_NC_SPLIT_OPS=1); A = the fused fit (the default since c0047c99be). Digests must not move.",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): LOSER (L40S 4 cells, median 5.76; fit istella 59.45 -> 625 ms, taxi 16.58 -> 290 ms); A (the fused fit) is unchanged; the define is refused (core/six_lane_experiment_guards.mojo); code recoverable at a0324a1c4c, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NC_SPLIT_OPS.ab-outcome-3.patch. Was: define in code (neighbors/neighbors_local_run.mojo NC_SPLIT_OPS): B = NearestCentroid fit as the three separate ops (the former MOJOLEARN_NC_SPLIT_OPS=1); A = the fused fit (the default since c0047c99be). Digests must not move.",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "byte-lm-layer-sync-off": {
    "define": "MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF",
@@ -2968,7 +2969,10 @@
    "b_arms": [
     "nc-split-ops"
    ],
-   "decides": "keep the fused fit (A) unless the split ops (B) are at least as fast on fit at equal quality; digests must not move"
+   "decides": "keep the fused fit (A) unless the split ops (B) are at least as fast on fit at equal quality; digests must not move",
+   "owed": "DECIDED",
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-trees): nc-split-ops LOSER (L40S 4 cells, median 5.76); B deleted, the fused fit (A) kept.",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "r1-transformer-prefill",

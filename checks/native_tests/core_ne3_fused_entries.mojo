@@ -230,7 +230,7 @@ struct NcFitted(Movable):
 
 
 def _nc_fit(driver: XnDriver, b: Blobs, euclidean: Bool, empirical: Bool) raises -> NcFitted:
-    """`_nc_fit` at shrink_threshold None (the MOJOLEARN_NC_SPLIT_OPS default off)."""
+    """`_nc_fit` at shrink_threshold None (the fused statistics, the only form)."""
     var n = b.n
     var d = b.d
     var c = b.k

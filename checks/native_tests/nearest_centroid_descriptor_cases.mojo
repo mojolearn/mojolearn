@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Bounded fit/query plan fixtures using the selected real native descriptor.
 
-Eight metric/split/shrink combinations and three empty-query contracts run
+Four metric/shrink combinations and three empty-query contracts run
 independently across host workers.
 No `main()` and no `test_*`: the shared cases of the nearest_centroid_native (both columns) and
 nearest_centroid_numeric (ordered device) checks.
@@ -15,8 +15,9 @@ from checks.native_tests.testsuite_cases import require
 
 def fixture(entry: NativeDescriptorCall, unit: Int) raises:
     var euclidean = unit % 2 == 0
-    var split = (unit // 2) % 2 != 0
-    var threshold = 0.0 if unit < 4 else 0.3
+    # TOMBSTONE: MOJOLEARN_NC_SPLIT_OPS (LOSER) deleted 2026-11-24 by lane/ab-outcome-3 (o3-trees): the split units went with NcFitPlan.split; code recoverable at a0324a1c4c.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NC_SPLIT_OPS.ab-outcome-3.patch
+    var threshold = 0.0 if unit < 2 else 0.3
     var x: List[Float32] = [-3.0, -1.0, -3.0, 1.0, -1.0, -1.0, -1.0, 1.0,
                             1.0, -1.0, 1.0, 1.0, 3.0, -1.0, 3.0, 1.0]
     var labels: List[Int32] = [0, 0, 0, 0, 1, 1, 1, 1]
@@ -24,7 +25,7 @@ def fixture(entry: NativeDescriptorCall, unit: Int) raises:
     var centers = List[Float32](length=4, fill=0)
     var deviations = List[Float32](length=4, fill=0)
     var driver = NcDriver(entry)
-    var plan = NcFitPlan(8, 2, 2, euclidean, split)
+    var plan = NcFitPlan(8, 2, 2, euclidean)
     require(len(plan.centroids) == 0 and len(plan.dataset_centroid) == 0, "centroid scratch allocated before priors")
     plan.count(driver, Int(labels.unsafe_ptr()))
     require(plan.counts[0] == 4 and plan.counts[1] == 4, "class counts")
