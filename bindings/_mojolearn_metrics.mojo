@@ -97,6 +97,9 @@ from metrics.estimator import (
     homogeneity_completeness_v_measure_host,
 )
 from spectral.impl.spectral_predict_resident import spectral_resident_count
+from metrics.slot_entry_device import metric_slot_run
+from metrics.slot_ops import MS_HCV
+from metrics.slot_inputs import metric_slot_create
 
 
 def _want(name: String, params: PythonObject, k: Int) raises:
@@ -638,6 +641,59 @@ def trustworthiness_binding(
     return PythonObject(out)
 
 
+# ===========================================================================
+# Device-resident inputs (lane vdf-xm-kernels, 2026-11-24): one export over
+# metrics/slot_entry_device.mojo for every entry above. Each input is a pair
+# (host address, store slot): slot >= 0 is read IN PLACE from the resident
+# store (`resident()` / `DeviceRows`), else the host words go up once. The
+# doors call it only when an input of the call is device-resident.
+# ===========================================================================
+
+
+def _words(values: PythonObject) raises -> List[Int]:
+    var out = List[Int](capacity=len(values))
+    for i in range(len(values)):  # small-loop(values: the address / slot / integer words of one entry call, at most 6)
+        out.append(Int(py=values[i]))
+    return out^
+
+
+def metric_slots_binding(
+    op: PythonObject, addrs: PythonObject, slots: PythonObject, ints: PythonObject, floats: PythonObject,
+    outs: PythonObject,
+) raises -> PythonObject:
+    """`metric_slots(op, addrs, slots, ints, floats, outs)`: the operation
+    table of metrics/slot_entry_device.mojo. Answers the entry's value: a
+    float (scalars, the silhouette mean), a 3-tuple (MS_HCV) or the written
+    count (curve, confusion, prfs, encode)."""
+    var o = Int(py=op)
+    var a = _words(addrs)
+    var s = _words(slots)
+    var i = _words(ints)
+    var o_words = _words(outs)
+    var f = List[Float64](capacity=len(floats))
+    for j in range(len(floats)):  # small-loop(floats: at most one float word, beta)
+        f.append(Float64(py=floats[j]))
+    var values = List[Float64]()
+    var count = 0
+    with GILReleased(Python()):
+        count = metric_slot_run(o, a, s, i, f, o_words, values)
+    if o == MS_HCV:
+        return Python.tuple(PythonObject(values[0]), PythonObject(values[1]), PythonObject(values[2]))
+    if len(values) > 0:
+        return PythonObject(values[0])
+    return PythonObject(count)
+
+
+def metric_slot_create_binding(n_words: PythonObject) raises -> PythonObject:
+    """A new resident-store slot of `n_words` words (a resident label
+    encode's codes); the caller frees it with `x_prep_dev_free`."""
+    var n = Int(py=n_words)
+    var id = 0
+    with GILReleased(Python()):
+        id = metric_slot_create(n)
+    return PythonObject(id)
+
+
 # TOMBSTONE: the by-name spectral exports (spectral_fit_predict_dataset/_graph/_dataset_state/_graph_state, spectral_fit_predict_dense,
 # spectral_predict, spectral_predict_prepare/_resident/_release, spectral_embedding_dataset/_graph, spectral_embedding_dense) and their state writer deleted 2026-11-23 on
 # lane/sab-host-missed-cls: no caller (SpectralClustering and SpectralEmbedding run spectral_native_api_v1; the
@@ -858,6 +914,8 @@ def build__mojolearn_metrics() -> PythonObject:
         m.def_function[silhouette_binding]("silhouette")
         m.def_function[trustworthiness_binding]("trustworthiness")
         m.def_function[spectral_predict_count_binding]("spectral_predict_count")
+        m.def_function[metric_slots_binding]("metric_slots")
+        m.def_function[metric_slot_create_binding]("metric_slot_create")
         var published_module = m.finalize()
         _publish_umap_ops(published_module)
         # SpectralClustering's member entry (core/spectral_member.mojo): its predict runs on this

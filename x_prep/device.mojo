@@ -272,47 +272,9 @@ comptime OP_SORT_COLS = 0
 comptime BLOCK = 128
 
 
-struct _PrepContext(Defaultable, Movable):
-    """ONE process-lifetime DeviceContext for every `x_prep_run` (the x_cnn
-    `_Global` pattern; CURRENT DIRECTIVES, 2026-09-27: a context per call hung
-    the SECOND call of x_cluster / x_neighbors on an RTX 4090, and on Metal a
-    context per call exhausts the per-process command queues). The slot keeps
-    a reference for the life of the process, so every call's buffers die
-    inside it. One slot per numeric tier, so a FAST and an IDENTICAL .so in
-    one process never share it. Context lifetime moves no bit."""
-    var ctx: Optional[DeviceContext]
-    #: Lane fx-gil (2026-11-21): the first creation was serialized by the
-    #: GIL, which a door releases around its kernels and a member's worker
-    #: never holds. Held for the test, the creation and the handle copy.
-    var ctx_lock: List[Int64]
-
-    def __init__(out self):
-        self.ctx = Optional[DeviceContext]()
-        self.ctx_lock = List[Int64](length=1, fill=Int64(0))
-
-
-comptime _CTX_NAME = "MojolearnXPrepContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepContextFastV4"
-comptime X_PREP_CONTEXT = SharedSlot[_PrepContext, _CTX_NAME, 2]
-
-
-def x_prep_ctx() raises -> DeviceContext:
-    """The shared context, created on first use."""
-    var slot = X_PREP_CONTEXT.get_or_create_ptr()
-    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].ctx_lock.unsafe_ptr())
-    shared_slot_lock(word)
-    try:
-        if not slot[].ctx:
-            slot[].ctx = DeviceContext()
-        return slot[].ctx.value().copy()
-    finally:
-        shared_slot_unlock(word)
-
-
-#: The binding's resident input store (core/device_store.mojo; lane
-#: py-shared): `x_prep_dev_put` / `_free` / `_live`, one per tier.
-# V2 (lane linalg-owner, 2026-11-22): DeviceStore gained its lock word
-comptime _STORE_NAME = "MojolearnXPrepStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepStoreFastV2"
-comptime X_PREP_STORE = SharedSlot[DeviceStore, _STORE_NAME, 2]
+# The context and the resident store moved to x_prep/store_slot.mojo (lane vdf-xm-kernels, 2026-11-24),
+# unchanged, so a binding that reads a resident slot in place imports them without this runner.
+from x_prep.store_slot import _PrepContext, X_PREP_CONTEXT, x_prep_ctx, X_PREP_STORE
 
 
 def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int,
