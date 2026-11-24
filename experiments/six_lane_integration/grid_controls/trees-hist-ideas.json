@@ -24,51 +24,6 @@
    "bits_change": false,
    "status": "new",
    "reach": "SymmetricTree two-stat 8-bit blocks from run_tree_layout_traced / TSynchronizedSymmetricLevelState (symmetric_policy=True); FG in {2,4} only when ceil(columns/FG)*live_parts >= 2*SM count, else incumbent"
-  },
-  "hist_packed_gh": {
-   "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_HIST_PACKED_GH"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_hist_switches.mojo:33",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:111",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:180",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:240"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "owed",
-   "reach": "every fused 8-bit two-stat histogram launch (>128 folds, stat_count 2): symmetric, depthwise, lossguide, rank; NVIDIA/AMD only",
-   "note": "RESTORED 2026-11-15 (lane/restore-run-arms-trees, docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md): deleted unmeasured by expdel2, restored as an opt-in arm; A/B owed on NVIDIA L40S (bench/results/paper_compare/owed-pre0867.json)."
-  },
-  "hist_warp_agg": {
-   "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_HIST_WARP_AGG"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_hist_switches.mojo:42",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:117",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:203",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:555",
-    "gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo:814"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": false,
-   "status": "owed",
-   "reach": "body loop of the fused 8-bit kernels (direct + gather); whole-wave same-bin aggregation only; NVIDIA/AMD only",
-   "note": "RESTORED 2026-11-15 (lane/restore-run-arms-trees, docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md): deleted unmeasured by expdel2, restored as an opt-in arm; A/B owed on NVIDIA L40S (bench/results/paper_compare/owed-pre0867.json)."
   }
  },
  "algorithms": {
@@ -76,15 +31,11 @@
    "binding": "_mojolearn_gbdt",
    "route": "fit: doc_parallel_boosting -> run_tree_layout_traced -> launch_histograms_for_blocks -> launch_hist2_8bit (254 borders, I32 mode) -> hist2_8bit_kernel/gather_kernel; switch on: launch_hist2_8bit_wide[2,FG]",
    "controls": [
-    "hist_sym_feature_parallel",
-    "hist_packed_gh",
-    "hist_warp_agg"
+    "hist_sym_feature_parallel"
    ],
    "interaction_groups": [
     [
-     "hist_sym_feature_parallel",
-     "hist_packed_gh",
-     "hist_warp_agg"
+     "hist_sym_feature_parallel"
     ]
    ]
   },
@@ -92,15 +43,11 @@
    "binding": "_mojolearn_gbdt",
    "route": "as trees/gbdt-symmetric",
    "controls": [
-    "hist_sym_feature_parallel",
-    "hist_packed_gh",
-    "hist_warp_agg"
+    "hist_sym_feature_parallel"
    ],
    "interaction_groups": [
     [
-     "hist_sym_feature_parallel",
-     "hist_packed_gh",
-     "hist_warp_agg"
+     "hist_sym_feature_parallel"
     ]
    ]
   },
@@ -108,15 +55,11 @@
    "binding": "_mojolearn_gbdt",
    "route": "SymmetricTree greedy (run_tree_layout_traced); two-stat 8-bit path assumed, stat_count not re-verified",
    "controls": [
-    "hist_sym_feature_parallel",
-    "hist_packed_gh",
-    "hist_warp_agg"
+    "hist_sym_feature_parallel"
    ],
    "interaction_groups": [
     [
-     "hist_sym_feature_parallel",
-     "hist_packed_gh",
-     "hist_warp_agg"
+     "hist_sym_feature_parallel"
     ]
    ]
   },
@@ -124,15 +67,11 @@
    "binding": "_mojolearn_gbdt",
    "route": "as trees/gbdt-rank-yetirank",
    "controls": [
-    "hist_sym_feature_parallel",
-    "hist_packed_gh",
-    "hist_warp_agg"
+    "hist_sym_feature_parallel"
    ],
    "interaction_groups": [
     [
-     "hist_sym_feature_parallel",
-     "hist_packed_gh",
-     "hist_warp_agg"
+     "hist_sym_feature_parallel"
     ]
    ]
   }
@@ -146,6 +85,16 @@
    "define": "MOJOLEARN_TREES_HIST_MULTISTAT",
    "control": "hist_multistat",
    "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser, both arms. arm/off ms ratio NV/AMD on gbdt-multiclass: =4 istella 1.038/1.410, taxi 1.066/1.110 (1.147x combined); =8 istella 0.994/1.311, taxi 1.106/1.136 (1.131x combined); accuracy and mlogloss SAME. The MultiClass >128-bin blocks take launch_one_byte[8] again; the wide kernel stays for HIST_SYM_FEATURE_PARALLEL. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
+   "control": "hist_packed_gh",
+   "reason": "DELETED 2026-11-24 (lane ab-outcome-1): LOSER, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S (wheel 4519097d380a), 39 cells, median arm/base 1.00, 0.92..1.71: depthwise istella fit 6337 -> 10814 ms, lossguide istella 12172 -> 18237, taxi 1.19; AMD not measured (NVIDIA-only campaign). Default (two Int32 atomics) kept, no bit change. Code recoverable at d81b6ba708; define refused in core/experiment_guards_trees.mojo."
+  },
+  {
+   "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
+   "control": "hist_warp_agg",
+   "reason": "DELETED 2026-11-24 (lane ab-outcome-1): NOISE/LOSER, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S (wheel 4519097d380a), 39 cells, median arm/base 1.00, 0.96..1.10: lossguide istella fit 12145 -> 13360 ms; AMD not measured (NVIDIA-only campaign). Default (per-lane atomics) kept, no bit change. Code recoverable at d81b6ba708; define refused in core/experiment_guards_trees.mojo."
   }
  ]
 }

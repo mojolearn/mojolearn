@@ -676,6 +676,14 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_FAST_ADABOOST_REENCODE.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_TREES_FAST_ADABOOST_REENCODE"](), "removed 2026-11-21 (lane/fx-verdicts7, A/B abn9 NVIDIA L40S, wheel 3880db30a6af, job nvc-ab-20261121T003518Z-d38466, one run per arm; NOISE: adaboost-clf on istella and taxi, 4 cells 0.98-1.04 arm/base): the label re-encode per member is gone; the labels are encoded once per fit. Remove -D MOJOLEARN_TREES_FAST_ADABOOST_REENCODE; see docs/TOMBSTONES.md."
     # ---- end lane fx-verdicts7
+    # ---- lane ab-outcome-1 (2026-11-24): A/B nvc-ab-20261124T070727Z-69dac2 decisions (NVIDIA L40S only)
+    # TOMBSTONE: MOJOLEARN_TREES_HIST_PACKED_GH (LOSER: NV L40S 39 cells, median 1.00, 0.92..1.71, depthwise istella fit 6337 -> 10814 ms) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_PACKED_GH.ab-outcome-1.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_HIST_PACKED_GH"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): TREES_HIST_PACKED_GH (grad and hess of one point in one 64-bit shared atomic in the fused 8-bit histogram) was a LOSER: 39 cells, median 1.00, 0.92..1.71, depthwise istella fit 6337 -> 10814 ms, lossguide istella 12172 -> 18237 ms; the two Int32 atomics default is kept; code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_PACKED_GH.ab-outcome-1.patch"
+    # TOMBSTONE: MOJOLEARN_TREES_HIST_WARP_AGG (NOISE/LOSER: NV L40S 39 cells, median 1.00, 0.96..1.10, lossguide istella fit 12145 -> 13360 ms) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_WARP_AGG.ab-outcome-1.patch
+    comptime assert not is_defined["MOJOLEARN_TREES_HIST_WARP_AGG"](), "removed 2026-11-24 (lane/ab-outcome-1, A/B nvc-ab-20261124T070727Z-69dac2 NVIDIA L40S, wheel 4519097d380a, one run per arm): TREES_HIST_WARP_AGG (wave-aggregated one-byte histogram atomics) was NOISE/LOSER: 39 cells, median 1.00, 0.96..1.10, lossguide istella fit 12145 -> 13360 ms; the per-lane atomics default is kept; code at d81b6ba708; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_WARP_AGG.ab-outcome-1.patch"
+    # ---- end lane ab-outcome-1
     return True
 
 

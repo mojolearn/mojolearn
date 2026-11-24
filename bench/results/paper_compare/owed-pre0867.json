@@ -263,13 +263,15 @@
   },
   "hist-packed-gh": {
    "define": "MOJOLEARN_TREES_HIST_PACKED_GH",
-   "status": "define in code (gbdt/trees_hist_switches.mojo HIST_PACKED_GH, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_PACKED): B = grad+hess of a cell in one Int64 shared atomic (NVIDIA/AMD); A = two Int32 atomics",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-1): LOSER (L40S 39 cells, median 1.00, depthwise istella fit 6337 -> 10814 ms); A (the default) is unchanged; removed: the packed atomic and its unpack; the define is refused (core/experiment_guards_trees.mojo); code recoverable at d81b6ba708, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_PACKED_GH.ab-outcome-1.patch. Was: define in code (gbdt/trees_hist_switches.mojo HIST_PACKED_GH, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_PACKED): B = grad+hess of a cell in one Int64 shared atomic (NVIDIA/AMD); A = two Int32 atomics",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T070727Z-69dac2 (NVIDIA L40S, wheel 4519097d380a): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "hist-warp-agg": {
    "define": "MOJOLEARN_TREES_HIST_WARP_AGG",
-   "status": "define in code (gbdt/trees_hist_switches.mojo HIST_WARP_AGG, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_WAVE_AGG / h8_add_point_wave): B = when a whole wave holds the same bin, one shuffle-tree sum and one atomic per stat (NVIDIA/AMD); A = one atomic per lane",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-1): NOISE/LOSER (L40S 39 cells, median 1.00, lossguide istella fit 12145 -> 13360 ms); A (the default) is unchanged; removed: the wave-aggregated atomics; the define is refused (core/experiment_guards_trees.mojo); code recoverable at d81b6ba708, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_WARP_AGG.ab-outcome-1.patch. Was: define in code (gbdt/trees_hist_switches.mojo HIST_WARP_AGG, gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo H8_WAVE_AGG / h8_add_point_wave): B = when a whole wave holds the same bin, one shuffle-tree sum and one atomic per stat (NVIDIA/AMD); A = one atomic per lane",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T070727Z-69dac2 (NVIDIA L40S, wheel 4519097d380a): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "lg-level-rounds": {
    "define": "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
@@ -1071,10 +1073,9 @@
    "owed": "RUN"
   },
   "set-b03": {
-   "define": "MOJOLEARN_TREES_HIST_PACKED_GH,MOJOLEARN_IDN_TSQR_TREE_PAR_OFF,MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
+   "define": "MOJOLEARN_IDN_TSQR_TREE_PAR_OFF,MOJOLEARN_DBSCAN_FAST_BRUTE_EPS_FILTER,MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF",
    "owed": "RUN",
    "combined": [
-    "hist-packed-gh",
     "tsqr-tree-par-off",
     "dbscan-brute-eps-filter",
     "xprep-sort-quad-off"
@@ -1082,10 +1083,9 @@
    "status": "COMBINED B SET, build only (lane ab-prep (2026-11-23; ~/mojolearn-evidence/ab-plan-20261123.md, ab-run-20261123.md)): tools/release.py candidate --owed-arm set-b03 builds one wheel set with every member arm's define; stage that one dir under each member's name (--b-arm <member>=<dir>@<sha>; measure_candidate refuses a wheel that lacks the member's define). Never staged under its own name: no row names it. Members: rnn-scan-gated, hist-packed-gh, tsqr-tree-par-off, dbscan-brute-eps-filter, xprep-sort-quad-off"
   },
   "set-b04": {
-   "define": "MOJOLEARN_TREES_HIST_WARP_AGG,MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_SGD_FAST_PS_PRELOAD,MOJOLEARN_XC_SQDIST_TILED_OFF,MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL",
+   "define": "MOJOLEARN_IDN_TSQR_WY_PAIR_OFF,MOJOLEARN_SGD_FAST_PS_PRELOAD,MOJOLEARN_XC_SQDIST_TILED_OFF,MOJOLEARN_PREP_FAST_TAKE_VIEW_ALL",
    "owed": "RUN",
    "combined": [
-    "hist-warp-agg",
     "tsqr-wy-pair-off",
     "sgd-ps-preload",
     "xc-sqdist-tiled-off",
@@ -2255,7 +2255,8 @@
    "b_arms": [
     "hist-packed-gh"
    ],
-   "decides": "B is promoted only when it is faster on the boosted fit rows (gbdt-depthwise, gbdt-lossguide, gbdt-multiclass, gbdt-rank-pairlogit, gbdt-symmetric fit, istella and taxi) on NVIDIA L40S; digests must not move (exact integer pair: same cells)"
+   "decides": "B is promoted only when it is faster on the boosted fit rows (gbdt-depthwise, gbdt-lossguide, gbdt-multiclass, gbdt-rank-pairlogit, gbdt-symmetric fit, istella and taxi) on NVIDIA L40S; digests must not move (exact integer pair: same cells)",
+   "owed": "DECIDED"
   },
   {
    "id": "rr-hist-warp-agg",
@@ -2274,7 +2275,8 @@
    "b_arms": [
     "hist-warp-agg"
    ],
-   "decides": "B is promoted only when it is faster on the boosted fit rows (gbdt-depthwise, gbdt-lossguide, gbdt-multiclass, gbdt-rank-pairlogit, gbdt-symmetric fit, istella and taxi) on NVIDIA L40S; digests must not move (integer adds: same cells); time it also crossed with hist-packed-gh (both defines) as one more B set when the box has room"
+   "decides": "B is promoted only when it is faster on the boosted fit rows (gbdt-depthwise, gbdt-lossguide, gbdt-multiclass, gbdt-rank-pairlogit, gbdt-symmetric fit, istella and taxi) on NVIDIA L40S; digests must not move (integer adds: same cells); time it also crossed with hist-packed-gh (both defines) as one more B set when the box has room",
+   "owed": "DECIDED"
   },
   {
    "id": "rr-lg-level-rounds",

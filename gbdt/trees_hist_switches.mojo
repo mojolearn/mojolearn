@@ -14,8 +14,6 @@ NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
 
 | define | kind | legal values | gates |
 |---|---|---|---|
-| MOJOLEARN_TREES_HIST_PACKED_GH   | switch   | on/off        | hist_2_one_byte_8bit.mojo `h8_add_point` |
-| MOJOLEARN_TREES_HIST_WARP_AGG    | switch   | on/off        | hist_2_one_byte_8bit.mojo body loops |
 | MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL | switch | on/off | greedy_search_helper.mojo `replication_for` |
 """
 from std.sys.compile import is_defined
@@ -30,7 +28,8 @@ comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.patch
 # (Sweep 2026-11-15: the unread HIST_PACKED_GH constant was removed.)
 # RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #10 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
-comptime HIST_PACKED_GH = _IDN and is_defined["MOJOLEARN_TREES_HIST_PACKED_GH"]()
+# TOMBSTONE: MOJOLEARN_TREES_HIST_PACKED_GH (LOSER: NV L40S 39 cells, median 1.00, 0.92..1.71, depthwise istella fit 6337 -> 10814 ms) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_PACKED_GH.ab-outcome-1.patch
 
 # Idea 2: wave-aggregated atomics. When every lane of a hardware wave holds
 # the same (feature, bin) cell, the wave sums its addends with one shuffle
@@ -39,7 +38,8 @@ comptime HIST_PACKED_GH = _IDN and is_defined["MOJOLEARN_TREES_HIST_PACKED_GH"](
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.patch
 # (Sweep 2026-11-15: the unread HIST_WARP_AGG constant was removed.)
 # RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #9 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
-comptime HIST_WARP_AGG = _IDN and is_defined["MOJOLEARN_TREES_HIST_WARP_AGG"]()
+# TOMBSTONE: MOJOLEARN_TREES_HIST_WARP_AGG (NOISE/LOSER: NV L40S 39 cells, median 1.00, 0.96..1.10, lossguide istella fit 12145 -> 13360 ms) deleted 2026-11-24 by lane/ab-outcome-1; code recoverable at d81b6ba708.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_TREES_HIST_WARP_AGG.ab-outcome-1.patch
 
 # Tried 2026-10-08 (MOJOLEARN_TREES_HIST_MULTISTAT = 4 | 8, run ge123e6f9): MultiClass one-byte histograms, one cindex
 # walk per 4 or 8 stat planes (launch_hist2_8bit_wide[NS, 1]); NV/AMD gbdt-multiclass istella 1.04x/1.41x (4), 0.99x/1.31x (8),
