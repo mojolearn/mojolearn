@@ -133,7 +133,7 @@ from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
 from x_decomp.rr_svd import RS_TPB
 from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
-from x_decomp.svd_ops import so_desc_commit_kernel, so_desc_rank_kernel, svd_op_tall
+from x_decomp.svd_ops import so_desc_commit_kernel, so_desc_rank_kernel
 from x_decomp.lle_local import hessian_ncy
 from x_decomp.lle_device import (
     lle_apply_kernel,
@@ -222,26 +222,13 @@ comptime XD_NO_FLAG = Int32(2147483647)
 comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP
 comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
 
-#: Lane m3-linalg-and-housekeeping (2026-11-09): -D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK
-#: routes `DevExec._svd_on` (PCA / TruncatedSVD / randomized_svd /
-#: linalg.svd through `x_decomp_svd` and `x_decomp_dev_svd`) through the
-#: executor op `svd_op_tall` (x_decomp/svd_ops.mojo: the same QR, the
-#: Jacobi's rounds as ONE gated block with the sweep test on the device, the
-#: descending order on the device, one status read) instead of the round
-#: launches below (one launch per round, a wait every XD_SVD_GROUP sweeps).
-#: Default off: today's round launches. Lane perf-decomp-eigh (2026-11-13): the
-#: switch also covers the resident kit's `DKit.svd` (x_decomp/kit_device.mojo),
-#: which n9b had put on the op unconditionally (factor-analysis/istella fit 2.45x
-#: NVIDIA, 4.76x AMD vs 0.8.66). Two SVD paths exist; the A/B on
-#: pca / tsvd / randomized-svd (owed row svd-tall-vs-rounds, B arm
-#: svd-one-block) decides which one is deleted. Bits: the op's module note
-#: says the words are the rounds' (the same pairs, fold and tree); s and v
-#: come out already in the descending order every caller sorts into.
+#: `DevExec._svd_on` and the kit's `DKit.svd` take the round launches.
 # TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (unmeasured opt-in arm, EXP:2366 PENDING) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0564fdef0e.
 # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch; record in docs/TOMBSTONES.md.
 # (Sweep 2026-11-15: comptime XD_FAST_SVD_ONE_BLOCK removed with its reader in x_decomp/kit_device.mojo.)
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime XD_FAST_SVD_ONE_BLOCK = is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"]()
+# TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (NOISE: NV L40S 8 cells, median 1.00, 0.97..1.05) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at c23cb55fda.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch
 # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
 
@@ -3352,9 +3339,8 @@ struct DevExec(Exec):
         QR): s (n) and v (n x n) out to host memory, every launch waited for.
         `svd_cells` and the resident entry (x_decomp/resident.mojo
         `dev_svd_py`, lane fam-decomp) both call it: one launch sequence."""
-        comptime if XD_FAST_SVD_ONE_BLOCK:
-            DevExec._svd_on_op(ctx, da, m, n, s, v)
-            return
+        # TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (NOISE: NV L40S 8 cells, median 1.00, 0.97..1.05) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at c23cb55fda.
+        # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch
         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
         DevExec._svd_rounds(ctx, da, m, n, qr_cells, s_buf, vt)
@@ -3382,7 +3368,7 @@ struct DevExec(Exec):
         device matrix in `da` (m x n, consumed) with the outputs left on the
         device in the descending order every caller sorts into: s_out (n,
         descending, ties in index order) and vt_out (n x n, row a the right
-        singular vector of s_out[a]), by `svd_op_tall`'s order kernels
+        singular vector of s_out[a]), by x_decomp/svd_ops.mojo's order kernels
         (`so_desc_rank_kernel`, `so_desc_commit_kernel`: `svd_order`'s
         words). A NaN singular value raises (one wait, `_svd_on`'s test).
 
@@ -3390,8 +3376,9 @@ struct DevExec(Exec):
         (x_decomp/kit_device.mojo `DKit.svd`; FactorAnalysis EM every
         iteration, LLE's subspace iteration, PLS) ran `svd_op_tall`, the
         Jacobi of R in ONE block, by default since lane n9b-device-svd-qr
-        (2026-11-09), while that route is the owed B arm
-        MOJOLEARN_XD_FAST_SVD_ONE_BLOCK of `_svd_on`. Measured against
+        (2026-11-09), while that route was the B arm
+        MOJOLEARN_XD_FAST_SVD_ONE_BLOCK of `_svd_on` (deleted 2026-11-24,
+        no faster on the NVIDIA L40S). Measured against
         0.8.66: factor-analysis/istella fit NVIDIA 6525 -> 15992 ms (2.45x),
         AMD 4143 -> 19733 ms (4.76x). This is 0.8.66's solve (round
         launches over the whole grid) with n9b's resident order."""
@@ -3499,41 +3486,6 @@ struct DevExec(Exec):
         _ = flags^
         _ = dfirst^
         _ = hfirst^
-
-    @staticmethod
-    def _svd_on_op(
-        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, s: F32Ptr, v: F32Ptr
-    ) raises:
-        """`_svd_on` through the executor op `svd_op_tall` (the A/B arm of
-        -D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK): s (n, descending) and v (n x n,
-        column a the right singular vector of s[a], the layout `_svd_on`
-        writes) out to host memory, one wait. The op's status word carries
-        both refusals of `_svd_on` (no convergence in X_DECOMP_SVD_SWEEPS
-        sweeps, a NaN value)."""
-        var gate = step_gate_open_word(ctx)
-        var ds = ctx.enqueue_create_buffer[DType.float32](n)
-        var dvt = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var status = ctx.enqueue_create_buffer[DType.int32](1)
-        var hstatus = ctx.enqueue_create_host_buffer[DType.int32](1)
-        svd_op_tall(ctx, gate, da, ds, dvt, status, m, n)
-        ctx.enqueue_function[pj_transpose_kernel](_p(dvt), _p(dv), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
-        _down(ctx, ds, s, n)
-        _down(ctx, dv, v, n * n)
-        ctx.enqueue_copy(dst_buf=hstatus, src_buf=status)
-        ctx.synchronize()
-        if Int(hstatus.unsafe_ptr().unsafe_load(0)) != 0:
-            raise Error(
-                "x_decomp svd: the one-sided Jacobi did not converge in " + String(X_DECOMP_SVD_SWEEPS)
-                + " sweeps at n_cols = " + String(n) + ", or a singular value is NaN (a device launch cut short, or a"
-                " NaN input). An unconverged decomposition is not returned as if it were one; see DEVIATION 590."
-            )
-        _ = gate^
-        _ = ds^
-        _ = dvt^
-        _ = dv^
-        _ = status^
-        _ = hstatus^
 
     @staticmethod
     def lasso_rows(

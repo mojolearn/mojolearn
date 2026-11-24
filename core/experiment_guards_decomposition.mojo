@@ -292,6 +292,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MCD_CHOL.ab-prep.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_MCD_CHOL"](), "removed 2026-11-23 (lane/ab-prep-classical, A/B ab1 2026-11-18 NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, one run per arm; EXP:479): the blocked Cholesky C-step was faster (min-cov-det and elliptic-envelope taxi fit 0.55, istella 0.84-0.86) but elliptic-envelope taxi support Jaccard vs scikit-learn fell 0.9636 -> 0.9258: LOSER on quality; the LU + Jacobi pinvh C-step stays; code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MCD_CHOL.ab-prep.patch"
     # ---- end lane ab-prep-classical
+    # ---- lane ab-outcome-3 / o3-decomp (2026-11-24)
+    # TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (NOISE: NV L40S 8 cells, median 1.00, 0.97..1.05) deleted 2026-11-24 by lane/o3-decomp (ab-outcome-3); code recoverable at c23cb55fda.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch
+    comptime assert not is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"](), "removed 2026-11-24 (lane/o3-decomp of ab-outcome-3, A/B nvc-ab-20261124T115722Z-d8f8b2 NVIDIA L40S, wheel 4519097d380a, job nvc1-0003, one run per arm): XD_FAST_SVD_ONE_BLOCK (the SVD as the executor op svd_op_tall, the Jacobi in ONE block) was NOISE: 8 cells, median 1.00, 0.97..1.05; the round launches stay the default; code at c23cb55fda; see docs/TOMBSTONES.md"
+    # ---- end lane ab-outcome-3 / o3-decomp
     return True
 
 

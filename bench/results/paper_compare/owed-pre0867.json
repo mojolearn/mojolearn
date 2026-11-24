@@ -29,8 +29,9 @@
   },
   "svd-one-block": {
    "define": "MOJOLEARN_XD_FAST_SVD_ONE_BLOCK",
-   "status": "define in code (x_decomp/device.mojo:227): B routes DevExec._svd_on (pca / tsvd / randomized-svd through x_decomp_svd and x_decomp_dev_svd) through svd_op_tall; A = today's round launches",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-24 (lane ab-outcome-3, sub-lane o3-decomp): NOISE (L40S 8 cells, median 1.00, 0.97..1.05); A (DevExec._svd_on and DKit.svd on the round launches, the default) is unchanged; removed: the switch, DevExec._svd_on_op, DKit's one-block branch and its sticky status word (dk_eig_sticky_kernel, svd_word / svd_host_word / svd_pending), svd_op_tall and so_status_kernel (x_decomp/svd_ops.mojo), rs_block_gated_kernel (x_decomp/rr_svd_device.mojo); the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at c23cb55fda, ~/mojolearn-evidence/experiments-removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.ab-outcome-3.patch. Was: define in code (x_decomp/device.mojo:227): B routes DevExec._svd_on (pca / tsvd / randomized-svd through x_decomp_svd and x_decomp_dev_svd) through svd_op_tall; A = today's round launches",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   "small-mlp-generic": {
    "define": "MOJOLEARN_SMALL_MLP_GENERIC_OPS",
@@ -1285,7 +1286,9 @@
    "b_arms": [
     "svd-one-block"
    ],
-   "decides": "two SVD paths exist: delete the slower (A = DevExec._svd_on round launches, B = svd_op_tall one gated block)"
+   "decides": "two SVD paths exist: delete the slower (A = DevExec._svd_on round launches, B = svd_op_tall one gated block)",
+   "owed": "DECIDED",
+   "evidence": "A/B nvc-ab-20261124T115722Z-d8f8b2 (NVIDIA L40S, wheel 4519097d380a, job nvc1-0003): ~/mojolearn-evidence/ab-4519097d380a/DECISIONS.md"
   },
   {
    "id": "decode-n-vs-step",
