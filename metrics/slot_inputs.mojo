@@ -96,13 +96,11 @@ struct MetricInputs(Movable):
     that reads one of its views (`_ = inputs^` after the result read)."""
     var ctx: DeviceContext
     var held: List[DeviceBuffer[DType.float32]]
-    var uploads_i: List[DeviceBuffer[DType.int32]]
     var status: List[DeviceBuffer[DType.int32]]
 
     def __init__(out self) raises:
         self.ctx = x_prep_ctx()
         self.held = List[DeviceBuffer[DType.float32]]()
-        self.uploads_i = List[DeviceBuffer[DType.int32]]()
         self.status = List[DeviceBuffer[DType.int32]]()
 
     def _slot_address(mut self, slot: Int, n: Int) raises -> Int:
@@ -183,6 +181,13 @@ struct MetricInputs(Movable):
         _ = st^
         return out^
 
-    def keep_i32(mut self, var buf: DeviceBuffer[DType.int32]):
-        """Hold a buffer the call made (an output) until the call ends."""
-        self.uploads_i.append(buf^)
+
+
+def metric_slot_create(n_words: Int) raises -> Int:
+    """A new slot of `n_words` words in the resident store, on its context,
+    its words unspecified (a stage writes all of them before any read): the
+    codes slot of a resident label encode. The caller frees it
+    (`x_prep_dev_free`) when its call ends."""
+    if n_words < 1:
+        raise Error("metrics: a slot holds at least one word")
+    return X_PREP_STORE.get_or_create_ptr()[].create(x_prep_ctx(), n_words)

@@ -229,6 +229,20 @@ struct DeviceStore(Defaultable, Movable):
         finally:
             shared_slot_unlock(word)
 
+    def create(mut self, ctx: DeviceContext, n_words: Int) raises -> Int:
+        """A new slot of `n_words` words with no upload, for a device stage
+        that writes every word before any read (lane vdf-xm-kernels: a
+        resident label vector's codes). Its words are unspecified."""
+        if n_words < 1:
+            raise Error("device store: create needs at least one word")
+        var buf = self._new_buffer_locked(ctx, n_words)
+        var word = self._word()
+        shared_slot_lock(word)
+        try:
+            return self._add(buf^, n_words)
+        finally:
+            shared_slot_unlock(word)
+
     def _add(mut self, var buf: DeviceBuffer[DType.float32], n_words: Int) -> Int:
         """Files `buf` (n_words words) under a fresh or released id."""
         var id: Int
