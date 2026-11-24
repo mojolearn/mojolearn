@@ -1228,9 +1228,17 @@ def _rows_dev_download(slot: _SlotPtr, call: _CallPtr, count: Int) raises -> Lis
 def _rows_fold_kind(kind: Int) -> Bool:
     """The kinds that keep the fit X as their fitted rows and read X ONLY through the x_neighbors ops' uploads
     (`_buf`, `_up_direct`, `op_knn_sq_tiled`: THE FOLD X WORD), so a fold fit keeps its rows in THE FITTED-ROWS
-    SLOT: LocalOutlierFactor and KernelPCA (lane vdf-scope-cluster5). LabelPropagation / LabelSpreading and the
-    KNNImputer are not audited for host reads of X (`lp_fit_run`, the imputer's masked copy and NaN cells):
-    the caller gathers (vdf-scope-cluster5-RESULT.md)."""
+    SLOT: LocalOutlierFactor and KernelPCA (lane vdf-scope-cluster5). OneClassSVM reads X the same way (gamma's
+    variance, the Gram / resident solve, its query ops) and gathers its support vectors ON THE DEVICE from the
+    fold slot (`oc_take_rows_into`: the x_neighbors `take_rows` op over the fold word; only supports x features
+    words come back, into the state's own vectors), so its fold slot is freed after the call. LabelPropagation /
+    LabelSpreading and the KNNImputer are not audited for host reads of X (`lp_fit_run`, the imputer's masked
+    copy and NaN cells): the caller gathers (vdf-scope-cluster5-RESULT.md)."""
+    return kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_KERNEL_PCA or kind == XNEIGHBORS_KIND_OCSVM
+
+
+def _rows_kept(kind: Int) -> Bool:
+    """The `_rows_fold_kind` kinds whose fitted state reads its fit rows past the fit (THE FITTED-ROWS SLOT)."""
     return kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_KERNEL_PCA
 
 
@@ -1248,7 +1256,7 @@ def _rows_fold_operation(kind: Int, operation: Int) -> Bool:
     through the kind's own `_whole`)."""
     if operation == MEMBER_OP_FIT:
         return True
-    if kind == XNEIGHBORS_KIND_LOF:
+    if kind == XNEIGHBORS_KIND_LOF or kind == XNEIGHBORS_KIND_OCSVM:
         return (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION
                 or operation == MEMBER_OP_SCORE_SAMPLES)
     return operation == MEMBER_OP_TRANSFORM
@@ -1264,6 +1272,15 @@ def _rows_fold_dispatch(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
             _lof_query(slot, call, LOF_RESULT_DECISION, "decision_function")
         else:
             _lof_query(slot, call, LOF_RESULT_SCORES, "score_samples")
+    elif slot[].kind == XNEIGHBORS_KIND_OCSVM:
+        if operation == MEMBER_OP_FIT:
+            _oc_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _oc_query(slot, call, LOF_RESULT_LABELS, "predict")
+        elif operation == MEMBER_OP_DECISION:
+            _oc_query(slot, call, LOF_RESULT_DECISION, "decision_function")
+        else:
+            _oc_query(slot, call, LOF_RESULT_SCORES, "score_samples")
     elif operation == MEMBER_OP_FIT:
         _kp_fit(slot, call)
     else:
@@ -1271,14 +1288,16 @@ def _rows_fold_dispatch(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
 
 
 def _rows_fold_op(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
-    """A LocalOutlierFactor FIT / PREDICT / DECISION / SCORE_SAMPLES or a KernelPCA FIT / TRANSFORM over the rows
+    """A LocalOutlierFactor or OneClassSVM FIT / PREDICT / DECISION / SCORE_SAMPLES or a KernelPCA FIT / TRANSFORM
+    over the rows
     `call.row_index` of the WHOLE host X (MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE on a GPU route; the pattern of
     `_nc_fold_op`, lane vdf-scope-cluster5): X found in the caller's scope's x_prep cache, or put ONCE and
     published with the pin (THE PIN RULE), or, outside a scope, put into a slot this call owns; the fold's rows
     taken ON THE DEVICE into a fresh slot (`member_fold_x_open`) and every x_neighbors op of the RUN reads them
     there (THE FOLD X WORD). A FIT then KEEPS that slot as the state's fitted rows (THE FITTED-ROWS SLOT: the
     rows the model reads at every later query stay resident, the scope's X can be released, and nothing points
-    into the caller's X: no MEMBER_BORROWS_FIT); a query frees it after the call. Same rows in the same order
+    into the caller's X: no MEMBER_BORROWS_FIT); a query, and a OneClassSVM fit (its support vectors are gathered
+    from the slot into its own words), free it after the call. Same rows in the same order
     as the host gather: the same bytes as the host-index path and the CPU column. A KernelPCA fit on the
     eigensolver's resident route takes its rows on the host (`_rows_fold_kp_host`). The call's views are
     restored and an unkept fold slot freed whether the operation returns or raises."""
@@ -1308,7 +1327,7 @@ def _rows_fold_op(slot: _SlotPtr, call: _CallPtr, operation: Int) raises:
             call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
             call[].row_index = MemberMatrix()
             _rows_fold_dispatch(slot, call, operation)
-            if operation == MEMBER_OP_FIT:
+            if operation == MEMBER_OP_FIT and _rows_kept(slot[].kind):
                 # THE FITTED-ROWS SLOT: the fold slot becomes the state's (the fit set `rows_addr` to its word).
                 slot[].rows_slot = fold.slot
                 slot[].rows_store = fold.store

@@ -9,7 +9,8 @@ later query reads the fitted rows from that slot (a negative X word). Claims, pe
   device: (case 0, fused tiled k-NN; case 1, the old-items `knn_sq`) the fit over the fold word == the fit over
           the host-gathered rows (root distances, densities, scores bits, offset bits); score_samples and
           decision_function of the test fold, with the query AND the fitted rows as slot words == with both as
-          host rows (float32 bits); the export's download of the resident rows (`take_rows` with the identity
+          host rows (float32 bits); OneClassSVM's support-vector gather over the fold word == the host rows'
+          words; the export's download of the resident rows (`take_rows` with the identity
           index over the slot word) == the host-gathered rows (bits).
   host:   the host take of the fold == a serial gather, and the same LocalOutlierFactor RUN over it on the host
           entry (the CPU column of the verify digest).
@@ -176,6 +177,19 @@ def _device_case(case: Int) raises:
             _ = driver.run("take_rows", a, p, f)
             _same_f32(down, train_rows, "export download of the resident rows")
             _ = identity^
+            # OneClassSVM's support vectors gathered on the device from the fold slot (`oc_take_rows_into`'s op):
+            # rows 5, 0, 11 of the fold, out of order.
+            var support: List[Int32] = [5, 0, 11]
+            var vectors = List[Float32](length=3 * _D, fill=0.0)
+            var sa: Array[Int, 3] = [fold_x_word(train_slot), Int(support.unsafe_ptr()), Int(vectors.unsafe_ptr())]
+            var sp: Array[Int, 3] = [3, _D, nt]
+            _ = driver.run("take_rows", sa, sp, f)
+            var want = List[Float32](capacity=3 * _D)
+            for r in range(3):  # small-loop(support rows)
+                for c in range(_D):  # small-loop(row words)
+                    want.append(train_rows[Int(support[r]) * _D + c])
+            _same_f32(vectors, want, "support vectors gathered from the fold slot")
+            _ = support^
         except error:
             failure = String(error)
         store[].free(store_ctx, test_slot)
