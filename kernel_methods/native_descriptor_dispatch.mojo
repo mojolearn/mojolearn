@@ -32,10 +32,10 @@ from kernel_methods.descriptor_schema import KERNEL_METHOD_ABI, KERNEL_METHOD_OP
 from core.shared_slot import SharedSlot
 
 def km_native_kernel_ridge_fit(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
-    if len(a) != 4 and len(a) != 5:
+    if len(a) != 4 and len(a) != 5 and len(a) != 6:
         raise Error(
             "kernel_ridge_fit: addrs must contain 4 addresses (x, y,"
-            " dual_out, scalars_out) and optionally sw, got "
+            " dual_out, scalars_out) and optionally sw (0: none) and x_fit_out (0: none), got "
             + String(len(a))
         )
     if len(p) != 8:
@@ -48,6 +48,10 @@ def km_native_kernel_ridge_fit(a: List[Int], p: List[Int], f: List[Float64]) rai
     var yp = _f32_ptr(a[1])
     var dp = _f32_ptr(a[2])
     var sp = _f64_ptr(a[3])
+    # x_fit_out (lane vdf-scope-linear2): the n x d words of X as the fit
+    # read them, copied back to the caller (a member fold's X_fit_: THE FOLD
+    # X WORD, core/fold_x_device.mojo, read on the device by DeviceQueryX).
+    var xfit_out = a[5] if len(a) == 6 else 0
     var n = p[0]
     var d = p[1]
     var t = p[2]
@@ -136,7 +140,7 @@ def km_native_kernel_ridge_fit_ptr(a: List[Int], p: List[Int], f: List[Float64])
     var alpha = Float32(f[7])
     var sw = List[Float32]()
     var waddr = 0
-    if len(a) == 5:
+    if len(a) >= 5 and a[4] != 0:
         # cpu2-l6-bindings: the per-row factors sqrt(sample_weight) are
         # formed and refused on the device from the caller's float64
         # weights (`_krr_sqrt_weights_dev`), not in a host loop
@@ -148,8 +152,12 @@ def km_native_kernel_ridge_fit_ptr(a: List[Int], p: List[Int], f: List[Float64])
     # (bindings/kernel_methods_native.mojo `_krr_fit`, lane a8a): the status
     # words are all zero here, and no fold reaches this route.
     var result = kernel_ridge_fit_ptr_into(
-        xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr, QueryFold.none(), 0
+        xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr, QueryFold.none(), xfit_out
     )
+    if xaddr < 0 and Int(result[1]) != 0:
+        # A fold X word is tested on the device as it is copied (the host
+        # door's test cannot read it): the status word refuses it here.
+        raise Error("ValueError: Input X contains NaN or infinity.")
     var info = result[0]
     sp.unsafe_store(0, Float64(info))
     return info
@@ -186,7 +194,10 @@ def km_native_kernel_ridge_predict_ptr(a: List[Int], p: List[Int], f: List[Float
     # The descriptor door tests the query on the host before this call
     # (bindings/kernel_methods_native.mojo, lane a7a): the status words are
     # all zero here.
-    _ = kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace)
+    var words = kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace)
+    if xnaddr < 0 and Int(words[0]) != 0:
+        # a fold X word (core/fold_x_device.mojo) is tested on the device only
+        raise Error("ValueError: Input X contains NaN or infinity.")
     return 0
 
 
@@ -237,7 +248,10 @@ def km_native_kernel_ridge_predict_resident(original: List[Int], p: List[Int], f
     var h = handle
     var trace = IdentityTrace()
     # Tested on the host by the descriptor door (lane a7a), as above.
-    _ = kernel_ridge_predict_resident(h, xnaddr, n, d, t, kp, q, op, trace)
+    var words = kernel_ridge_predict_resident(h, xnaddr, n, d, t, kp, q, op, trace)
+    if xnaddr < 0 and Int(words[0]) != 0:
+        # a fold X word (core/fold_x_device.mojo) is tested on the device only
+        raise Error("ValueError: Input X contains NaN or infinity.")
     return 0
 
 

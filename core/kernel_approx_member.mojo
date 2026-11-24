@@ -61,10 +61,16 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_TRANSFORM,
     MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_TEST_ROWS,
+    MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SCOPE,
     MEMBER_CAN_NOTICES, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_BLOCK_NOTICES,
     MEMBER_IMPORT_DONE, member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_KERNEL_APPROX
+from core.device_route import DEVICE_GPU
+from core.member_fold_x import (
+    MemberFoldX, member_fold_x_open, member_fold_x_close, member_fold_index, member_fold_take_f32,
+    member_fold_store_ready,
+)
 from core.member_notices import member_notice_add, MEMBER_NOTICE_NYSTROEM_COMPONENTS, MEMBER_NOTICE_WORDS
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_leased_call
@@ -257,7 +263,8 @@ def _x(slot: _Slot, call: _Call) raises:
     if not call[].x.dense_host(MEMBER_F32):
         raise Error("TypeError: a " + estimator + " member reads X as a dense host float32 view")
     var count = call[].x.rows * call[].x.cols
-    if count == 0:
+    if count == 0 or call[].x.data < 0:
+        # a fold X word (`_fold_op`): the provider's `_upload_checked` tests it on the device
         return
     if not host_all_finite_f32(_f32p(call[].x.data), count):
         raise Error("ValueError: " + admitted_finite_wording(estimator, "X"))
@@ -335,6 +342,66 @@ def _fit(slot: _Slot, call: _Call) raises:
         slot[].second = offset^
     slot[].components = q
     slot[].fitted = True
+
+
+def _fold_device(slot: _Slot, call: _Call, operation: Int) -> Bool:
+    """Whether this fold operation reads THE FOLD X WORD: the provider's
+    pointer entries (`_upload_checked`, which tests the words on the device)
+    on a GPU image: the transforms with flags bit 3, Nystroem's fit with bit
+    2, RBFSampler's fit (it reads no X but its width) always; never the
+    chi2 kernels (their x >= 0 test reads host X) nor gamma='scale' (its
+    exact limbs read host X)."""
+    if call[].route.device != DEVICE_GPU or not member_fold_store_ready(call):
+        return False
+    var kernel = Int(slot[].params[1])
+    if _nystroem(slot) and (kernel == _KERNEL_CHI2 or kernel == _KERNEL_ADDITIVE_CHI2):
+        return False
+    var flags = call[].route.flags
+    if operation == MEMBER_OP_FIT:
+        if Int(slot[].params[3]) == 2:
+            return False
+        return (flags & 2) != 0 if _nystroem(slot) else True
+    return (flags & 4) != 0
+
+
+def _fold_op(slot: _Slot, call: _Call, operation: Int) raises:
+    """FIT / TRANSFORM over the rows `call.row_index` of the WHOLE host X
+    (core/member_fold_x.mojo): X resident in the caller's scope, the fold's
+    rows taken on the device and read by the provider (THE FOLD X WORD,
+    `_fold_device`); any other case takes the rows on the host across its
+    cores. Views restored before this returns or raises."""
+    var estimator = _name(slot)
+    var x = call[].x
+    var index = call[].row_index
+    var fold = MemberFoldX()
+    var host_x = List[Float32]()
+    var failure = String("")
+    try:
+        if _fold_device(slot, call, operation):
+            member_fold_x_open(call, fold, estimator)
+            call[].x = MemberMatrix(fold.word(), fold.rows, fold.cols)
+        else:
+            member_fold_index(call, fold, estimator)
+            host_x = List[Float32](unsafe_uninit_length=max(fold.rows * fold.cols, 1))
+            member_fold_take_f32(x.data, fold.index, fold.rows, fold.cols, Int(host_x.unsafe_ptr()))
+            call[].x = MemberMatrix(Int(host_x.unsafe_ptr()), fold.rows, fold.cols)
+        call[].row_index = MemberMatrix()
+        if operation == MEMBER_OP_FIT:
+            _fit(slot, call)
+        else:
+            _transform(slot, call)
+    except error:
+        failure = String(error)
+    call[].x = x
+    call[].row_index = index
+    try:
+        member_fold_x_close(fold)
+    except close_error:
+        if failure.byte_length() == 0:
+            failure = "RuntimeError: a " + estimator + " member's fold slot was not freed: " + String(close_error)
+    _ = host_x^
+    if failure.byte_length() > 0:
+        raise Error(failure)
 
 
 def _transform(slot: _Slot, call: _Call) raises:
@@ -482,8 +549,14 @@ def _kernel_approx_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         # TEST_ROWS: `_x` tests X at fit and transform (no y, no weights).
         # NOTICES: Nystroem's n_components clamp (RBFSampler's are always empty).
-        return (MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_TEST_ROWS
+        var bits = (MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_TEST_ROWS
             | MEMBER_CAN_NOTICES)
+        # MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE (lane vdf-scope-linear2): a GPU
+        # image whose transforms read X by address (flags bit 3) reads THE
+        # FOLD X WORD (`_upload_checked`); `_fold_op`, `_fold_device`.
+        if call[].route.device == DEVICE_GPU and (call[].route.flags & 4) != 0 and member_fold_store_ready(call):
+            bits |= MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE
+        return bits
     if operation == MEMBER_OP_NEW:
         if call[].param_count != _PARAMS or not call[].params:
             raise Error("member ABI: a kernel approximation member takes " + String(_PARAMS) + " parameters")
@@ -529,6 +602,10 @@ def _kernel_approx_member(operation: Int, address: Int) raises -> Int:
         call[].classes = 0
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
+    if (call[].row_index.rows > 0 and call[].column_index.rows == 0 and call[].route.device == DEVICE_GPU
+            and (operation == MEMBER_OP_FIT or operation == MEMBER_OP_TRANSFORM)):
+        _fold_op(slot, call, operation)
+        return 0
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:
