@@ -2380,9 +2380,11 @@ def _multi_classes(row: MselScorer, label_words: List[String], mut widths: List[
         var held_n = 0
         var held = 0
         if row.mheld_at != 0:
-            var lists = MutPointer[List[Int32], MutUntrackedOrigin](unsafe_from_address=row.mheld_at)
-            held_n = len(lists[row.fold * outs + j])
-            held = Int(lists[row.fold * outs + j].unsafe_ptr())
+            # the plan's held-class lists (owned by the caller for the whole RUN)
+            held_n = len(MutPointer[List[Int32], MutUntrackedOrigin](unsafe_from_address=row.mheld_at)[
+                row.fold * outs + j])
+            held = Int(MutPointer[List[Int32], MutUntrackedOrigin](unsafe_from_address=row.mheld_at)[
+                row.fold * outs + j].unsafe_ptr())
         var w = held_n if held_n > 0 else counts[j]
         widths[j] = w
         var h = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=held)
