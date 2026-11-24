@@ -1,0 +1,16 @@
+diff --git a/core/forest_inference.mojo b/core/forest_inference.mojo
+index 271b1c7157..d4b826a053 100644
+--- a/core/forest_inference.mojo
++++ b/core/forest_inference.mojo
+@@ -95,6 +95,11 @@ def _afcl_rf_block[RF_INPUT: Bool]() -> Int:
+ 
+ @always_inline
+ def forest_add(a: Float32, b: Float32) -> Float32:
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every forest predict sum one ulp up, the GPU bindings only
++        var s = ftz(ftz(a) + ftz(b))
++        if abs(s) >= Float32(1.17549435e-38) and s - s == Float32(0):
++            s = bitcast[DType.float32](bitcast[DType.uint32](s) + UInt32(1))
++        return s
+     return ftz(ftz(a) + ftz(b))
+ 
+ 

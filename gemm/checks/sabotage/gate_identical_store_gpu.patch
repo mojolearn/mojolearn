@@ -1,0 +1,64 @@
+diff --git a/core/gemm.mojo b/core/gemm.mojo
+index d8fa57ff6c..89e4819bd5 100644
+--- a/core/gemm.mojo
++++ b/core/gemm.mojo
+@@ -13,6 +13,7 @@ from gemm.afn_apple_fast import afn_gemm_fp32_ragged_k_ptr_into
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.memory import stack_allocation
++from std.memory import bitcast  # SABOTAGE gate-gpu (lane vdv-sab2-a)
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ 
+@@ -89,7 +90,11 @@ def pinned_gemm_nt_kernel(
+             ftz(y.unsafe_load(j * k + p)),
+             acc,
+         )
+-    z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
++    var zc = ftz(Float32(0.0) + ftz(acc))
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every pinned_gemm_nt cell one ulp up, the GPU bindings only
++        if abs(zc) >= Float32(1.17549435e-38) and zc - zc == Float32(0):
++            zc = bitcast[DType.float32](bitcast[DType.uint32](zc) + UInt32(1))
++    z.unsafe_store(cell, zc)
+ 
+ 
+ 
+@@ -190,7 +195,11 @@ def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
+             var i = i0 + ty_ * RM + rr
+             var j = j0 + tx_ * RN + cc
+             if i < m and j < n:
+-                z[i * n + j] = ftz(Float32(0.0) + ftz(acc[rr * RN + cc]))
++                var zt = ftz(Float32(0.0) + ftz(acc[rr * RN + cc]))
++                comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every tiled gemm_nt cell one ulp up, the GPU bindings only
++                    if abs(zt) >= Float32(1.17549435e-38) and zt - zt == Float32(0):
++                        zt = bitcast[DType.float32](bitcast[DType.uint32](zt) + UInt32(1))
++                z[i * n + j] = zt
+ 
+ 
+ # TOMBSTONE: MOJOLEARN_APPLE_GEMM_NT_MMA_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at ea1e949b3d.
+@@ -322,7 +331,11 @@ def pinned_gemv_n_kernel(
+         acc = rtf_mul_add(
+             ftz(x.unsafe_load(i * k + p)), ftz(y.unsafe_load(p)), acc
+         )
+-    z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
++    var zv = ftz(Float32(0.0) + ftz(acc))
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every pinned_gemv_n value one ulp up, the GPU bindings only
++        if abs(zv) >= Float32(1.17549435e-38) and zv - zv == Float32(0):
++            zv = bitcast[DType.float32](bitcast[DType.uint32](zv) + UInt32(1))
++    z.unsafe_store(i, zv)
+ 
+ 
+ #: `pinned_gemv_n_tiled_kernel`: rows per block (one thread each) and the
+@@ -384,7 +397,11 @@ def pinned_gemv_n_tiled_kernel(
+         barrier()
+         p0 += GEMV_TILE_K
+     if i < m:
+-        z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
++        var zw = ftz(Float32(0.0) + ftz(acc))
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every tiled gemv_n value one ulp up, the GPU bindings only
++            if abs(zw) >= Float32(1.17549435e-38) and zw - zw == Float32(0):
++                zw = bitcast[DType.float32](bitcast[DType.uint32](zw) + UInt32(1))
++        z.unsafe_store(i, zw)
+ 
+ 
+ # TOMBSTONE: MOJOLEARN_537_GEMM_IDENT_SWAP (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 33a25f5e7e.

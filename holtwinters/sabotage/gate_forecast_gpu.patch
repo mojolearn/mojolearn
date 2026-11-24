@@ -1,0 +1,29 @@
+diff --git a/holtwinters/impl/internal/hw_forecast.mojo b/holtwinters/impl/internal/hw_forecast.mojo
+index 95e42a16f8..b25ae24ab6 100644
+--- a/holtwinters/impl/internal/hw_forecast.mojo
++++ b/holtwinters/impl/internal/hw_forecast.mojo
+@@ -15,6 +15,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from holtwinters.impl.internal.hw_utils import SAB_NO_FTZ
+ from checks.numerics import ftz, identical_mul_add
++from std.sys.compile import is_defined  # SABOTAGE gate-gpu (lane vdv-sab2-a)
++from std.memory import bitcast  # SABOTAGE gate-gpu (lane vdv-sab2-a)
+ 
+ 
+ @always_inline
+@@ -47,10 +49,11 @@ def holtwinters_seasonal_forecast_kernel(
+         for i in range(h):
+             var season = season_coef.unsafe_load(tid + (i % frequency) * batch_size)
+             var lt = _f(identical_mul_add(trend, Float32(i + 1), level))
+-            if additive_in != 0:
+-                forecast.unsafe_store(tid + i * batch_size, _f(lt + season))
+-            else:
+-                forecast.unsafe_store(tid + i * batch_size, _f(lt * season))
++            var fc = _f(lt + season) if additive_in != 0 else _f(lt * season)
++            comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every forecast value one ulp up, the GPU bindings only
++                if abs(fc) >= Float32(1.17549435e-38) and fc - fc == Float32(0):
++                    fc = bitcast[DType.float32](bitcast[DType.uint32](fc) + UInt32(1))
++            forecast.unsafe_store(tid + i * batch_size, fc)
+ 
+ 
+ def holtwinters_forecast_gpu(

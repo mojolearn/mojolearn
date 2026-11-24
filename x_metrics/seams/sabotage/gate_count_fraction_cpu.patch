@@ -1,0 +1,43 @@
+diff --git a/x_metrics/cm_epi.mojo b/x_metrics/cm_epi.mojo
+index 1ec744ad8b..778bf4e17f 100644
+--- a/x_metrics/cm_epi.mojo
++++ b/x_metrics/cm_epi.mojo
+@@ -28,6 +28,7 @@ from checks.soft_f64 import (
+ )
+ from x_metrics.common import FP, IP, p, ld, ldi, sti
+ from x_metrics.tail import st64, ld64, is0, cnt_at, sum_at
++from std.sys.compile import is_defined  # SABOTAGE gate-cpu (lane vdv-sab2-a)
+ 
+ comptime OP_CM_EPI = 59
+ 
+@@ -151,6 +152,16 @@ def _mcc(f: FP, q: IP):
+     st64(f, OUT + 2, sf64_div(cov_ytyp, sf64_sqrt(prod)))
+ 
+ 
++@always_inline
++def _sab_count_fraction(v: UInt64) -> UInt64:
++    """SABOTAGE gate-cpu (lane vdv-sab2-a): a normal finite binary64 fraction one ulp up, the host bindings only."""
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        var e = (v >> UInt64(52)) & UInt64(0x7FF)
++        if e != UInt64(0) and e != UInt64(0x7FF):
++            return v + UInt64(1)
++    return v
++
++
+ @always_inline
+ def _count(f: FP, q: IP):
+     """q = [KIND, TP, k, WEIGHTED, TOT, OUT]; one unit. hit = the matches'
+@@ -193,11 +204,11 @@ def _count(f: FP, q: IP):
+     else:
+         st64(f, OUT + 6, sf64_div(miss, total))
+     if not weighted and tot == 0:
+-        st64(f, OUT + 8, sf64_div(hit, SF64_ONE))
++        st64(f, OUT + 8, _sab_count_fraction(sf64_div(hit, SF64_ONE)))
+     elif zero:
+         st64(f, OUT + 8, SF64_NAN)
+     else:
+-        st64(f, OUT + 8, sf64_div(hit, total))
++        st64(f, OUT + 8, _sab_count_fraction(sf64_div(hit, total)))
+ 
+ 
+ @always_inline

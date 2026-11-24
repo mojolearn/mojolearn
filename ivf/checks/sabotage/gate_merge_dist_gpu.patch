@@ -1,0 +1,22 @@
+diff --git a/ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo b/ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo
+index d324ae0c98..a9d08f7172 100644
+--- a/ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo
++++ b/ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo
+@@ -34,6 +34,7 @@ from core.classical_identical_controls.graph_controls import IVF_DIRECT_DISTANCE
+ from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
+ from max.gpu.primitives.warp import shuffle_xor
+ from std.memory import bitcast, stack_allocation
++from std.sys.compile import is_defined  # SABOTAGE gate-gpu (lane vdv-sab2-a)
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from checks.numerics import ftz, identical_mul_add
+@@ -263,3 +264,9 @@ def identical_ivf_merge_kernel[KM: Int](
+     for r in range(k):
+         out_dist[q * k + r] = td[r]
+         out_idx[q * k + r] = ti[r]
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every merged IVF distance one ulp up, the GPU bindings only
++        for r in range(k):
++            var od = out_dist[q * k + r]
++            if abs(od) >= Float32(1.17549435e-38) and od - od == Float32(0):
++                od = bitcast[DType.float32](bitcast[DType.uint32](od) + UInt32(1))
++            out_dist[q * k + r] = od

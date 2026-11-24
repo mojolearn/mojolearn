@@ -1,0 +1,45 @@
+diff --git a/preprocessing/minmax.mojo b/preprocessing/minmax.mojo
+index a50f736ca6..151691c400 100644
+--- a/preprocessing/minmax.mojo
++++ b/preprocessing/minmax.mojo
+@@ -15,6 +15,7 @@ rejects nonfinite statistics/results and nonpositive scale; no CPU reduction.
+ """
+ from max.gpu import block_idx, block_dim, thread_idx
+ from std.memory import bitcast, stack_allocation
++from std.sys.compile import is_defined  # SABOTAGE gate-gpu (lane vdv-sab2-a)
+ from max.gpu.host import DeviceContext, DeviceBuffer
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -176,6 +177,9 @@ def minmax_transform_kernel(
+                 # numpy's clip keeps a NaN (sklearn's transform propagates
+                 # missing values); max/min would replace it with `lower`
+                 value = min(max(value,lower),upper)
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every min-max-scaler transform value one ulp up, the GPU bindings only
++            if abs(value) >= Float32(1.17549435e-38) and value - value == Float32(0):
++                value = bitcast[DType.float32](bitcast[DType.uint32](value) + UInt32(1))
+         output.unsafe_store(i,value)
+ 
+ 
+diff --git a/preprocessing/standard.mojo b/preprocessing/standard.mojo
+index ba8c91f987..3a091e9e66 100644
+--- a/preprocessing/standard.mojo
++++ b/preprocessing/standard.mojo
+@@ -15,6 +15,8 @@ Finite inputs/statistics/output only. Unused statistics are not computed.
+ """
+ from max.gpu import block_idx, block_dim, thread_idx
+ from std.memory import stack_allocation
++from std.memory import bitcast  # SABOTAGE gate-gpu (lane vdv-sab2-a)
++from std.sys.compile import is_defined  # SABOTAGE gate-gpu (lane vdv-sab2-a)
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from core.classical_identical_controls.shared_controls import C02_STATS_PAIR
+@@ -136,6 +138,9 @@ def standard_transform_kernel(
+                 value = ftz(ftz(value)-ftz(mean.unsafe_load(c)))
+             if with_std != 0:
+                 value = ftz(identical_div(ftz(value),ftz(scale.unsafe_load(c))))
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every standard-scaler transform value one ulp up, the GPU bindings only
++            if abs(value) >= Float32(1.17549435e-38) and value - value == Float32(0):
++                value = bitcast[DType.float32](bitcast[DType.uint32](value) + UInt32(1))
+         output.unsafe_store(i,value)
+ 
+ 

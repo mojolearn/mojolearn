@@ -1,0 +1,29 @@
+diff --git a/x_cluster/bodies.mojo b/x_cluster/bodies.mojo
+index 5cce4978af..9ee7eb3dd2 100644
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -408,6 +408,10 @@ def gauss_q_cell[REV: Bool = False](x: FPtr, d: Int, means: FPtr, pchol: FPtr, k
+             var diff = ftz(ftz(x[i * d + a]) - ftz(means[k * d + a]))
+             y = ftz(y + ftz(identical_mul(diff, pchol[k * d * d + a * d + j])))
+         acc = ftz(acc + ftz(identical_mul(y, y)))
++    from std.sys import is_defined
++    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): every Mahalanobis cell one ulp up, the GPU bindings only
++        if abs(acc) >= Float32(1.17549435e-38) and acc - acc == Float32(0):
++            acc = bitcast[DType.float32](bitcast[DType.uint32](acc) + UInt32(1))
+     dst[cell] = acc
+ 
+ 
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index 80e10addc1..ad6a62eb7d 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -793,6 +793,9 @@ def _argmax_kernel(src: FPtr, n: Int32, kc: Int32, dst: IPtr):
+     var t = _tid()
+     if t < Int(n):
+         argmax_row(src, Int(kc), dst, t)
++        comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # SABOTAGE gate-gpu (lane vdv-sab2-a): row 0's device argmax label one column on, the GPU bindings only
++            if t == 0 and Int(kc) > 1:
++                dst[0] = Int32((Int(dst[0]) + 1) % Int(kc))
+ 
+ 
+ def _nk_kernel(resp: FPtr, n: Int32, kc: Int32, dst: FPtr):
