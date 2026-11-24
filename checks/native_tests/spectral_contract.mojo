@@ -134,8 +134,8 @@ def wire_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: 
             var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
             var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
             if operation == 2 or operation == 3:
-                require(na == (10 if operation == 2 else 5) and np == 10 and nf == 1 and ff != 0,
-                    "Spectral fit/embed fixed envelope")
+                require(na == (10 if operation == 2 else 7) and np == 10 and nf == (1 if operation == 2 else 2)
+                    and ff != 0, "Spectral fit/embed fixed envelope")
                 var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
                 require(a[0] == 11 and a[1] == 13 and a[2] == 17 and a[3] == 19,
                     "Spectral prescribed source/graph address order")
@@ -149,6 +149,8 @@ def wire_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: 
                         and p[8] == 4294967295 and (p[9] == 0 or p[9] == 1), "Spectral fit options and Boolean encoding")
                     value = WIDE_HANDLE + 2 * p[0] + p[9]
                 else:
+                    # lane vdf-misc3: the generated-affinity words (output, status, gamma) follow
+                    require(a[5] == 0 and a[6] == 0 and f[1] == 0.0, "Spectral embedding affinity words absent")
                     require(a[4] == 29 and p[4] == 4 and p[5] == 3 and p[6] == 8
                         and (p[7] == 0 or p[7] == 1) and (p[8] == 0 or p[8] == 1)
                         and p[9] == 4294967295, "Spectral embedding widths/flags/seed order")

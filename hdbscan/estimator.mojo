@@ -35,6 +35,7 @@ WHAT IS REFUSED, AND WHERE
   the SPARSE mutual reachability graph  `reachability.mojo` (DEVIATION 1600)
 """
 
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -198,9 +199,10 @@ def hdbscan_approximate_predict_host(
         ctx, trace, x_train, m, n, core_dists, labels, tree_lambdas, pd,
         queries, n_prediction_points, min_samples,
     )
-    for i in range(n_prediction_points):
-        labels_out.unsafe_store(i, out.labels[i])
-        probs_out.unsafe_store(i, out.probabilities[i])
+    # lane vdf-misc3: the results go out in two bulk copies (was a host loop
+    # over the query rows inside the GPU call).
+    unsafe_memcpy(dest=labels_out, src=out.labels.unsafe_ptr(), count=n_prediction_points)
+    unsafe_memcpy(dest=probs_out, src=out.probabilities.unsafe_ptr(), count=n_prediction_points)
 
 
 def hdbscan_membership_vector_host(
@@ -239,8 +241,7 @@ def hdbscan_membership_vector_host(
         ctx, trace, x_train, m, n, core_dists, labels, parents, tree_lambdas,
         pd, queries, n_prediction_points, min_samples,
     )
-    for i in range(n_prediction_points * n_selected):
-        out_ptr.unsafe_store(i, mv[i])
+    unsafe_memcpy(dest=out_ptr, src=mv.unsafe_ptr(), count=n_prediction_points * n_selected)
 
 
 def hdbscan_all_points_membership_vectors_host(
@@ -274,8 +275,7 @@ def hdbscan_all_points_membership_vectors_host(
     var mv = all_points_membership_vectors(
         ctx, trace, x_train, m, n, parents, tree_lambdas, pd, row0, n_rows,
     )
-    for i in range(n_rows * n_selected):
-        out_ptr.unsafe_store(i, mv[i])
+    unsafe_memcpy(dest=out_ptr, src=mv.unsafe_ptr(), count=n_rows * n_selected)
 
 
 def n_rows_leaves(m: Int) -> Int:

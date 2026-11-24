@@ -565,71 +565,51 @@ def permutation_ranks_host(key: UInt64, r: Int, n_pooled: Int) -> List[Int32]:
     return out^
 
 
-def utils_first_by_key_into(
-    keys: MutPointer[UInt64, MutUntrackedOrigin],
+@always_inline
+def permutation_merge_place(
+    dst: MutPointer[Int32, MutAnyOrigin],
+    src: MutPointer[Int32, MutAnyOrigin],
+    keys: MutPointer[UInt64, MutAnyOrigin],
     n: Int,
-    count: Int,
-    dst: MutPointer[Int32, MutUntrackedOrigin],
+    width: Int,
+    i: Int,
 ):
-    """`utils_first_by_key` reading the `n` keys at `keys` and writing the
-    first `count` positions into `dst` (count int32 slots): the caller's
-    buffer, so no List holds the keys or the result (lane ne2-b-rounds,
-    N053). The same bottom-up merge sort over positions, integer compares
-    only, so it is the same order on every host."""
-    var a = List[Int](capacity=n)
-    for j in range(n):
-        a.append(j)
-    var b = List[Int](length=n, fill=0)
-    var width = 1
-    while width < n:
-        var lo = 0
-        while lo < n:
-            var mid = min(lo + width, n)
-            var hi = min(lo + 2 * width, n)
-            var i = lo
-            var j = mid
-            var k = lo
-            while i < mid and j < hi:
-                if permutation_key_lt(keys[a[j]], a[j], keys[a[i]], a[i]):
-                    b[k] = a[j]
-                    j += 1
-                else:
-                    b[k] = a[i]
-                    i += 1
-                k += 1
-            while i < mid:
-                b[k] = a[i]
-                i += 1
-                k += 1
-            while j < hi:
-                b[k] = a[j]
-                j += 1
-                k += 1
-            lo += 2 * width
-        var t = a^
-        a = b^
-        b = t^
-        width *= 2
-    for q in range(count):
-        dst[q] = Int32(a[q])
+    """Slot `i` of one bottom-up merge pass over the positions `src` holds,
+    in the TOTAL order `permutation_key_lt` (key, then position): the pass
+    merges adjacent runs of `width`; the position at slot `i` goes to
+    `dst[base + (its offset in its own run) + (how many positions of the
+    partner run are below it)]`, found by binary search in the partner run.
+    The order is total, so every position has one destination and the
+    passes give the one sorted order whatever runs them: the device column
+    (`resample/gather_fast.mojo` `permutation_merge_kernel`, one thread per
+    slot) and the host column (`resample/host/resample_host.mojo`
+    `host_permutation_order`, slot ranges over the host cores) share this
+    body, so they write the same integers."""
+    var base = (i // (2 * width)) * (2 * width)
+    var mid = min(base + width, n)
+    var end = min(base + 2 * width, n)
+    var other_lo = mid if i < mid else base
+    var other_hi = end if i < mid else mid
+    var own_lo = base if i < mid else mid
+    var position = Int(src[i])
+    var key = keys[position]
+    var lo = other_lo
+    var hi = other_hi
+    while lo < hi:
+        var probe = (lo + hi) // 2
+        var opponent = Int(src[probe])
+        if permutation_key_lt(keys[opponent], opponent, key, position):
+            lo = probe + 1
+        else:
+            hi = probe
+    dst[base + (i - own_lo) + (lo - other_lo)] = Int32(position)
 
 
-def utils_first_by_key(keys: List[UInt64], n: Int, count: Int) -> List[Int32]:
-    """`rng.permutation(n)[:count]`'s positional spelling (sklearn.utils.resample
-    replace=False): the positions `0..n-1` ordered by the TOTAL order
-    `permutation_key_lt` (key, then position), the first `count` kept. A
-    bottom-up merge sort over positions, host only, integer compares only,
-    so it is the same order on every host. One implementation:
-    `utils_first_by_key_into` over the List's storage."""
-    var out = List[Int32](length=max(count, 0), fill=0)
-    if n > 0 and count > 0:
-        utils_first_by_key_into(
-            MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(keys.unsafe_ptr())),
-            n,
-            count,
-            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(out.unsafe_ptr())),
-        )
-    return out^
+# lane vdf-misc3 (2026-11-24): `utils_first_by_key` / `utils_first_by_key_into`
+# (the serial host merge sort the GPU call ran on one host thread after
+# downloading the n keys) are gone: the device sorts with
+# `permutation_merge_kernel` and the host column with
+# `host_permutation_order`, both over `permutation_merge_place`.
 
 
 def utils_validate(n: Int, count: Int, replace: Bool) raises:
