@@ -3973,6 +3973,14 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
                         MEMBER_OP_PREDICT if method == "predict" else MEMBER_OP_PREDICT_PROBA)
                     opts.log = method == "predict_log_proba"
                     row.op = opts.resp
+                    if hinge_metric and method == "predict":
+                        # lane w3f3-b: hinge_loss over predicted labels scores
+                        # their values (core/msel_scorer_run.mojo
+                        # `_wrong_response_value`): each fit label's value read once
+                        if labels is None:
+                            raise Error("RuntimeError: search admission invariant: a classifier fit admitted with "
+                                        + "no fit labels (a FIT caller hands its labels)")
+                        _label_values(labels, sels, opts, b)
         if kw.resp_any and method != "predict":
             # LANE mf-r9c (door :3670): a regression row over the make_scorer's
             # own response the class has (core/msel_scorer_run.mojo
